@@ -9,10 +9,11 @@ const (
 	// buildTBC is the earliest TBC client build (~2.0.1). Adds sockets, gems,
 	// RequiredDisenchantSkill, and ArmorDamageModifier. Damage slots shrink from 5→2.
 	buildTBC = 6180
-	// buildWotLK is the earliest WotLK client build (~3.0.1). Adds Flags2,
+	// buildWotLK is the earliest WotLK client build (3.0.1 beta). Adds Flags2,
 	// variable StatsCount, ScalingStatDistribution/Value, Duration,
-	// ItemLimitCategory, and HolidayID.
-	buildWotLK = 8606
+	// ItemLimitCategory, and HolidayID. Build 8606 is TBC 2.4.3 and still uses
+	// the TBC item cache layout.
+	buildWotLK = 8622
 )
 
 // Item represents a parsed item from itemcache.wdb.
@@ -21,7 +22,7 @@ type Item struct {
 	Entry                   uint32
 	Class                   uint32
 	SubClass                uint32
-	SoundOverrideSubClass   int32  // build >= 6022
+	SoundOverrideSubClass   int32 // build >= 6022
 	Name                    string
 	Name2, Name3, Name4     string
 	DisplayID               uint32
@@ -48,8 +49,8 @@ type Item struct {
 	StatsCount              uint32 // WotLK only; vanilla/TBC always write 10 pairs
 	StatType                [10]uint32
 	StatValue               [10]int32
-	ScalingStatDistribution int32 // build >= 8606 (WotLK)
-	ScalingStatValue        int32 // build >= 8606 (WotLK)
+	ScalingStatDistribution int32      // build >= 8622 (WotLK)
+	ScalingStatValue        int32      // build >= 8622 (WotLK)
 	DmgMin                  [5]float32 // vanilla: 5 slots; TBC+: only [0:2] populated
 	DmgMax                  [5]float32
 	DmgType                 [5]uint32
@@ -87,15 +88,15 @@ type Item struct {
 	Map                     uint32
 	BagFamily               uint32
 	TotemCategory           uint32
-	SocketColor             [3]uint32  // build >= 6180 (TBC)
-	SocketContent           [3]uint32  // build >= 6180 (TBC)
-	SocketBonus             uint32     // build >= 6180 (TBC)
-	GemProperties           uint32     // build >= 6180 (TBC)
-	RequiredDisenchantSkill int32      // build >= 6180 (TBC)
-	ArmorDamageModifier     float32    // build >= 6180 (TBC)
-	Duration                int32      // build >= 8606 (WotLK)
-	ItemLimitCategory       int32      // build >= 8606 (WotLK)
-	HolidayID               int32      // build >= 8606 (WotLK)
+	SocketColor             [3]uint32 // build >= 6180 (TBC)
+	SocketContent           [3]uint32 // build >= 6180 (TBC)
+	SocketBonus             uint32    // build >= 6180 (TBC)
+	GemProperties           uint32    // build >= 6180 (TBC)
+	RequiredDisenchantSkill int32     // build >= 6180 (TBC)
+	ArmorDamageModifier     float32   // build >= 6180 (TBC)
+	Duration                int32     // build >= 8622 (WotLK)
+	ItemLimitCategory       int32     // build >= 8622 (WotLK)
+	HolidayID               int32     // build >= 8622 (WotLK)
 }
 
 // ParseItem parses a single item record from itemcache.wdb.
@@ -106,10 +107,34 @@ func ParseItem(rec Record, build uint32) (Item, error) {
 	r := newReader(rec.Data)
 	var err error
 
-	u := func() uint32 { var v uint32; if err == nil { v, err = r.Uint32() }; return v }
-	i := func() int32 { var v int32; if err == nil { v, err = r.Int32() }; return v }
-	f := func() float32 { var v float32; if err == nil { v, err = r.Float32() }; return v }
-	s := func() string { var v string; if err == nil { v, err = r.String() }; return v }
+	u := func() uint32 {
+		var v uint32
+		if err == nil {
+			v, err = r.Uint32()
+		}
+		return v
+	}
+	i := func() int32 {
+		var v int32
+		if err == nil {
+			v, err = r.Int32()
+		}
+		return v
+	}
+	f := func() float32 {
+		var v float32
+		if err == nil {
+			v, err = r.Float32()
+		}
+		return v
+	}
+	s := func() string {
+		var v string
+		if err == nil {
+			v, err = r.String()
+		}
+		return v
+	}
 
 	it.Class = u()
 	it.SubClass = u()
