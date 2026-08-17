@@ -228,7 +228,7 @@ var (
 
 	TempleOfAhnQirajFactory = &CommonFactory{
 		Name:      "Temple of Ahn'Qiraj",
-		ZoneNames: []string{"ahn'qiraj", "temple of ahn'qiraj", "ahn'qiraj temple", "安其拉神庙"},
+		ZoneNames: []string{"ahn'qiraj", "temple of ahn'qiraj", "ahn'qiraj temple", "安其拉神庙", "安其拉"},
 		MapIDs:    []uint32{531},
 		Hostiles:  FromMap(TempleOfAhnQirajHostiles()),
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
