@@ -36,6 +36,9 @@ const AURA_STATE_REMOVED: AuraState = 2;
 /** Max stacks of Sunder Armor */
 const MAX_SUNDER_STACKS = 5;
 
+/** Maximum delay between a Wrath cast-success event and its aura update. */
+const SUNDER_CONFIRMATION_WINDOW_MS = 500;
+
 /** Whether the target currently has any supported rank of Expose Armor. */
 function hasExposedArmor(
   state: AuraProcessorState,
@@ -55,6 +58,11 @@ function hasExposedArmor(
   return false;
 }
 
+function isSunderArmorAura(event: AuraProcessorEvent): boolean {
+  return event.spellName === SUNDER_ARMOR_SPELL_NAME
+    || (event.spellId != null && SUNDER_SPELL_IDS.has(event.spellId));
+}
+
 function isExposeArmorAura(event: AuraProcessorEvent): boolean {
   return event.spellName === EXPOSE_ARMOR_SPELL_NAME
     || (event.spellId != null && EXPOSE_ARMOR_SPELL_IDS.has(event.spellId));
@@ -69,6 +77,9 @@ interface SunderEventData {
   targetName: string;
   encounterId: string;
 }
+
+/** A Wrath cast-success event waiting for a matching aura stack update. */
+type PendingSunder = SunderEventData;
 
 /** A confirmed sunder (has affliction) */
 export interface ConfirmedSunder {
@@ -133,6 +144,8 @@ export interface SunderResult {
   _targetStacks: Record<string, number>;
   /** Aura tracking state for Exposed Armor detection */
   _auraState: AuraProcessorState;
+  /** Wrath cast-success events awaiting an aura application or stack update */
+  _pendingSunders: PendingSunder[];
 }
 
 type SunderEvent = AuraCastProcessorEvent | SpellGoProcessorEvent | AuraProcessorEvent | SlainProcessorEvent;
@@ -151,6 +164,7 @@ export const sunderProcessor: PanelProcessor<SunderResult, SunderEvent> = {
     _encounterStarts: {},
     _targetStacks: {},
     _auraState: createAuraProcessorState(),
+    _pendingSunders: [],
   }),
   
   processEvent: (
@@ -171,6 +185,8 @@ export const sunderProcessor: PanelProcessor<SunderResult, SunderEvent> = {
     }
     
     const timestampMs = encounterStartMs + event.offsetMilli;
+
+    expirePendingSunders(state, timestampMs);
     
     // Feed aura/slain events to aura tracker for Exposed Armor detection
     if ((streamType === "aura" && event.type === "aura") || (streamType === "slain" && event.type === "slain")) {
@@ -182,7 +198,7 @@ export const sunderProcessor: PanelProcessor<SunderResult, SunderEvent> = {
     } else if (streamType === "spell_go" && event.type === "spell_go") {
       processSpellGoEvent(state, event, timestampMs, encounterID, context);
     } else if (streamType === "aura" && event.type === "aura") {
-      processAuraEvent(state, event);
+      processAuraEvent(state, event, timestampMs, encounterID);
     }
   },
 };
@@ -319,15 +335,54 @@ function processAuraCastEvent(
 }
 
 /**
- * Process Aura events - reset stack count when Sunder Armor is removed.
+ * Process Aura events. Wrath reports Sunder applications and stack changes here,
+ * while the accompanying synthetic AuraCast lacks the vanilla effect metadata.
  */
 function processAuraEvent(
   state: SunderResult,
   event: AuraProcessorEvent,
+  timestampMs: number,
+  encounterId: string,
 ): void {
-  // Reset sunder stacks when Sunder Armor is removed
-  if (event.state === AURA_STATE_REMOVED && event.spellName === SUNDER_ARMOR_SPELL_NAME) {
-    delete state._targetStacks[event.target];
+  if (isSunderArmorAura(event)) {
+    if (event.state === AURA_STATE_REMOVED || event.amount <= 0) {
+      delete state._targetStacks[event.target];
+      return;
+    }
+
+    const pendingIndex = state._pendingSunders.findIndex((pending) =>
+      pending.encounterId === encounterId
+      && pending.targetGuid === event.target
+      && timestampMs >= pending.timestampMs
+      && timestampMs - pending.timestampMs <= SUNDER_CONFIRMATION_WINDOW_MS
+    );
+    if (pendingIndex === -1) return;
+
+    const [pending] = state._pendingSunders.splice(pendingIndex, 1);
+    const currentStack = state._targetStacks[event.target] ?? 0;
+    const stackCount = Math.min(event.amount, MAX_SUNDER_STACKS);
+    const target = getOrCreateTarget(state, pending);
+    const offsetMs = timestampMs - (state._encounterStarts[encounterId] ?? timestampMs);
+
+    if (stackCount <= currentStack) {
+      target.debugEvents.push({
+        offsetMs,
+        type: "refreshed",
+        casterName: pending.casterName,
+        stackCount: currentStack,
+      });
+      recordRefreshSunder(state, pending);
+      return;
+    }
+
+    target.debugEvents.push({
+      offsetMs,
+      type: "landed",
+      casterName: pending.casterName,
+      stackCount,
+    });
+    recordEffectiveSunder(state, { ...pending, timestampMs }, stackCount);
+    return;
   }
   
   // Reset sunder stacks when Expose Armor is applied (mutually exclusive — sunders drop)
@@ -337,9 +392,9 @@ function processAuraEvent(
 }
 
 /**
- * Process SPELL_GO events - a sunder failed when:
- * - spell ID is a sunder rank
- * - numHits === 0 AND numMisses === 1
+ * Process SPELL_GO events. Vanilla records explicit hit/miss counts. Wrath
+ * records cast success as zero hits and zero misses, so those casts wait for a
+ * matching aura application or stack update before they are credited.
  */
 function processSpellGoEvent(
   state: SunderResult,
@@ -348,62 +403,81 @@ function processSpellGoEvent(
   encounterId: string,
   context: ProcessorContext,
 ): void {
-  // Check for sunder spell
   if (!SUNDER_SPELL_IDS.has(event.spell.id)) return;
+  if (!event.target) return;
   
-  // Failed sunder: numHits=0, numMisses=1
-  if (event.numHits !== 0 || event.numMisses !== 1) return;
-  
-  // Only track player casters
   const casterPlayer = context.players[event.caster];
   if (!casterPlayer) return;
   
-  // Filter by selected enemies (if any are selected)
   const { entitySelection } = context;
-  if (entitySelection.enemyIds.size > 0 && event.target && !entitySelection.enemyIds.has(event.target)) {
+  if (entitySelection.enemyIds.size > 0 && !entitySelection.enemyIds.has(event.target)) {
     return;
   }
   
-  const targetGuid = event.target || "";
-  const targetUnit = context.units?.[targetGuid];
-  const casterName = casterPlayer.name;
-  const targetName = targetUnit?.name ?? targetGuid;
-  
-  // Calculate offset from encounter start for debug
+  const targetUnit = context.units?.[event.target];
+  const data: SunderEventData = {
+    timestampMs,
+    casterGuid: event.caster,
+    casterName: casterPlayer.name,
+    targetGuid: event.target,
+    targetName: targetUnit?.name ?? event.target,
+    encounterId,
+  };
+
+  if (event.numHits === 0 && event.numMisses === 0) {
+    state._pendingSunders.push(data);
+    return;
+  }
+
+  if (event.numHits !== 0 || event.numMisses !== 1) return;
+
+  const target = getOrCreateTarget(state, data);
   const encounterStartMs = state._encounterStarts[encounterId] ?? timestampMs;
-  const offsetMs = timestampMs - encounterStartMs;
-  
-  // Ensure target exists (if we have a target)
-  if (targetGuid && !(targetGuid in state.targets)) {
-    state.targets[targetGuid] = {
-      guid: targetGuid,
-      name: targetName,
-      encounterId,
+  target.debugEvents.push({
+    offsetMs: timestampMs - encounterStartMs,
+    type: "failed",
+    casterName: data.casterName,
+  });
+  recordFailedSunder(state, data);
+}
+
+function expirePendingSunders(state: SunderResult, timestampMs: number): void {
+  const stillPending: PendingSunder[] = [];
+
+  for (const pending of state._pendingSunders) {
+    if (timestampMs - pending.timestampMs <= SUNDER_CONFIRMATION_WINDOW_MS) {
+      stillPending.push(pending);
+      continue;
+    }
+
+    const target = getOrCreateTarget(state, pending);
+    const encounterStartMs = state._encounterStarts[pending.encounterId] ?? pending.timestampMs;
+    target.debugEvents.push({
+      offsetMs: pending.timestampMs - encounterStartMs,
+      type: "failed",
+      casterName: pending.casterName,
+    });
+    recordFailedSunder(state, pending);
+  }
+
+  state._pendingSunders = stillPending;
+}
+
+function getOrCreateTarget(state: SunderResult, data: SunderEventData): TargetSunderStats {
+  let target = state.targets[data.targetGuid];
+  if (!target) {
+    target = {
+      guid: data.targetGuid,
+      name: data.targetName,
+      encounterId: data.encounterId,
       timeToFiveStacksMs: null,
       first5Contributors: [],
       totalSunders: 0,
       debugEvents: [],
     };
+    state.targets[data.targetGuid] = target;
   }
-  
-  // Log failed event for debug
-  if (targetGuid) {
-    state.targets[targetGuid].debugEvents.push({
-      offsetMs,
-      type: "failed",
-      casterName,
-    });
-  }
-  
-  // Record the failed sunder
-  recordFailedSunder(state, {
-    timestampMs,
-    casterGuid: event.caster,
-    casterName,
-    targetGuid,
-    targetName,
-    encounterId,
-  });
+  return target;
 }
 
 function getOrCreateWarrior(state: SunderResult, guid: string, name: string): WarriorSunderStats {

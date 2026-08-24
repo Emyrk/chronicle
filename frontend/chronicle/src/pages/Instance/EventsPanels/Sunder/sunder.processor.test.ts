@@ -30,7 +30,10 @@ function createContext(): ProcessorContext {
   };
 }
 
-function createAuraCastEvent(spellId: number): AuraCastProcessorEvent {
+function createAuraCastEvent(
+  spellId: number,
+  overrides: Partial<AuraCastProcessorEvent> = {},
+): AuraCastProcessorEvent {
   return {
     type: "aura_cast",
     index: 0,
@@ -47,10 +50,14 @@ function createAuraCastEvent(spellId: number): AuraCastProcessorEvent {
     durationMS: 30000,
     capStatus: 0,
     effectAuraName: 0,
+    ...overrides,
   };
 }
 
-function createAuraEvent(spellId: number): AuraProcessorEvent {
+function createAuraEvent(
+  spellId: number,
+  overrides: Partial<AuraProcessorEvent> = {},
+): AuraProcessorEvent {
   return {
     type: "aura",
     index: 0,
@@ -65,10 +72,14 @@ function createAuraEvent(spellId: number): AuraProcessorEvent {
     amount: 1,
     application: AuraApplication.Gains,
     state: AuraState.Added,
+    ...overrides,
   };
 }
 
-function createSpellGoEvent(spellId: number): SpellGoProcessorEvent {
+function createSpellGoEvent(
+  spellId: number,
+  overrides: Partial<SpellGoProcessorEvent> = {},
+): SpellGoProcessorEvent {
   return {
     type: "spell_go",
     index: 0,
@@ -83,6 +94,7 @@ function createSpellGoEvent(spellId: number): SpellGoProcessorEvent {
     numMisses: 1,
     itemId: null,
     corpseOwner: null,
+    ...overrides,
   };
 }
 
@@ -101,6 +113,111 @@ describe("sunderProcessor", () => {
 
     expect(state.warriors[CASTER_GUID]?.effectiveSunders).toBe(1);
     expect(state.targets[TARGET_GUID]?.totalSunders).toBe(1);
+  });
+
+  it("correlates Wrath cast successes with Sunder aura stack updates", () => {
+    const state = sunderProcessor.createState();
+    const context = createContext();
+
+    for (let stack = 1; stack <= 5; stack++) {
+      const offsetMilli = stack * 1000;
+      sunderProcessor.processEvent(
+        state,
+        createSpellGoEvent(7386, { offsetMilli, numHits: 0, numMisses: 0 }),
+        ENCOUNTER_ID,
+        FIRST_TIMESTAMP,
+        "spell_go",
+        context,
+      );
+
+      if (stack === 1) {
+        // Wrath emits this synthetic AuraCast without vanilla effect metadata.
+        sunderProcessor.processEvent(
+          state,
+          createAuraCastEvent(7386, { offsetMilli, effect: 0, effectMiscValue: 0 }),
+          ENCOUNTER_ID,
+          FIRST_TIMESTAMP,
+          "aura_cast",
+          context,
+        );
+      }
+
+      sunderProcessor.processEvent(
+        state,
+        createAuraEvent(7386, {
+          offsetMilli: offsetMilli + 10,
+          spellName: "Sunder Armor",
+          amount: stack,
+          state: stack === 1 ? AuraState.Added : AuraState.Modified,
+        }),
+        ENCOUNTER_ID,
+        FIRST_TIMESTAMP,
+        "aura",
+        context,
+      );
+    }
+
+    expect(state.warriors[CASTER_GUID]?.effectiveSunders).toBe(5);
+    expect(state.targets[TARGET_GUID]?.totalSunders).toBe(5);
+    expect(state.targets[TARGET_GUID]?.timeToFiveStacksMs).toBe(5010);
+    expect(state._targetStacks[TARGET_GUID]).toBe(5);
+  });
+
+  it("records a Wrath Sunder refresh when the aura stack does not increase", () => {
+    const state = sunderProcessor.createState();
+    const context = createContext();
+    state._targetStacks[TARGET_GUID] = 5;
+
+    sunderProcessor.processEvent(
+      state,
+      createSpellGoEvent(47467, { numHits: 0, numMisses: 0 }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "spell_go",
+      context,
+    );
+    sunderProcessor.processEvent(
+      state,
+      createAuraEvent(47467, {
+        offsetMilli: 1010,
+        spellName: "Sunder Armor",
+        amount: 1,
+        state: AuraState.Modified,
+      }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura",
+      context,
+    );
+
+    expect(state.warriors[CASTER_GUID]?.effectiveSunders).toBe(0);
+    expect(state.warriors[CASTER_GUID]?.refreshSunders).toBe(1);
+    expect(state._targetStacks[TARGET_GUID]).toBe(5);
+  });
+
+  it("marks an unconfirmed Wrath cast as failed after the confirmation window", () => {
+    const state = sunderProcessor.createState();
+    const context = createContext();
+
+    sunderProcessor.processEvent(
+      state,
+      createSpellGoEvent(47467, { numHits: 0, numMisses: 0 }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "spell_go",
+      context,
+    );
+    sunderProcessor.processEvent(
+      state,
+      createAuraEvent(11198, { offsetMilli: 1600, spellName: "Expose Armor" }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura",
+      context,
+    );
+
+    expect(state.warriors[CASTER_GUID]?.failedSunders).toBe(1);
+    expect(state._pendingSunders).toHaveLength(0);
   });
 
   it("tracks failed rank 7 Sunder Armor casts", () => {
