@@ -12,13 +12,17 @@
 
 import type { PanelProcessor, AuraCastProcessorEvent, SpellGoProcessorEvent, AuraProcessorEvent, SlainProcessorEvent, ProcessorContext, AuraState } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
-import { createAuraProcessorState, applyAuraEvent, hasAura, type AuraProcessorState, type AuraRef } from "../processors/auraProcessor";
+import { createAuraProcessorState, applyAuraEvent, hasAura, type AuraProcessorState } from "../processors/auraProcessor";
 
-/** Sunder Armor spell IDs (ranks 1-5) */
-const SUNDER_SPELL_IDS = new Set([7386, 7405, 8380, 11596, 11597]);
+/** Sunder Armor spell IDs (ranks 1-7) */
+const SUNDER_SPELL_IDS = new Set([7386, 7405, 8380, 11596, 11597, 25225, 47467]);
 
-/** Sunder Armor spell name for aura removal detection */
+/** Expose Armor spell IDs (ranks 5-7) */
+const EXPOSE_ARMOR_SPELL_IDS = new Set([11198, 26866, 48669]);
+
+/** Armor reduction spell names for aura lifecycle fallback detection */
 const SUNDER_ARMOR_SPELL_NAME = "Sunder Armor";
+const EXPOSE_ARMOR_SPELL_NAME = "Expose Armor";
 
 /** AURA_CAST effect value indicating sunder application */
 const AURA_EFFECT_SUNDER = 6;
@@ -32,8 +36,29 @@ const AURA_STATE_REMOVED: AuraState = 2;
 /** Max stacks of Sunder Armor */
 const MAX_SUNDER_STACKS = 5;
 
-/** Exposed Armor aura reference — when present, sunders are wasted */
-const EXPOSED_ARMOR_AURA: AuraRef = { spellName: "Expose Armor" };
+/** Whether the target currently has any supported rank of Expose Armor. */
+function hasExposedArmor(
+  state: AuraProcessorState,
+  encounterId: string,
+  targetGuid: string,
+): boolean {
+  if (hasAura(state, encounterId, targetGuid, { spellName: EXPOSE_ARMOR_SPELL_NAME })) {
+    return true;
+  }
+
+  for (const spellId of EXPOSE_ARMOR_SPELL_IDS) {
+    if (hasAura(state, encounterId, targetGuid, { spellId })) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isExposeArmorAura(event: AuraProcessorEvent): boolean {
+  return event.spellName === EXPOSE_ARMOR_SPELL_NAME
+    || (event.spellId != null && EXPOSE_ARMOR_SPELL_IDS.has(event.spellId));
+}
 
 /** Data for a sunder event (used for both effective and ineffective) */
 interface SunderEventData {
@@ -168,7 +193,7 @@ export const sunderProcessor: PanelProcessor<SunderResult, SunderEvent> = {
  * A sunder lands when:
  * - effect === 6
  * - effectMiscValue === 1
- * - spell ID is a sunder rank (7386, 7405, 8380, 11596, 11597)
+ * - spell ID is a supported Sunder Armor rank
  * 
  * If already at 5 stacks, it's a "refresh" (counts as ineffective).
  */
@@ -206,7 +231,7 @@ function processAuraCastEvent(
   const offsetMs = timestampMs - encounterStartMs;
   
   // Check if target has Exposed Armor — sunders are wasted
-  if (hasAura(state._auraState, encounterId, event.target, EXPOSED_ARMOR_AURA)) {
+  if (hasExposedArmor(state._auraState, encounterId, event.target)) {
     if (!(event.target in state.targets)) {
       state.targets[event.target] = {
         guid: event.target,
@@ -305,8 +330,8 @@ function processAuraEvent(
     delete state._targetStacks[event.target];
   }
   
-  // Reset sunder stacks when Exposed Armor is applied (mutually exclusive — sunders drop)
-  if (event.spellName === "Expose Armor" && event.state !== AURA_STATE_REMOVED) {
+  // Reset sunder stacks when Expose Armor is applied (mutually exclusive — sunders drop)
+  if (isExposeArmorAura(event) && event.state !== AURA_STATE_REMOVED) {
     delete state._targetStacks[event.target];
   }
 }
