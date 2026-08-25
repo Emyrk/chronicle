@@ -1,5 +1,5 @@
 import { ExternalLink } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import type { RankingsEntry } from "@/api/typesGenerated"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
 
@@ -39,6 +39,8 @@ function metricTitle(entry: RankedEntry, metric: "dps" | "hps"): string | undefi
 }
 
 export function RankingsTable({ entries, metric = "dps" }: RankingsTableProps) {
+  const navigate = useNavigate()
+
   if (entries.length === 0) {
     return (
       <div className="rounded-xl border p-8 text-center text-muted-foreground">
@@ -52,9 +54,10 @@ export function RankingsTable({ entries, metric = "dps" }: RankingsTableProps) {
       {/* Mobile card rows */}
       <div className="divide-y overflow-hidden rounded-xl border md:hidden">
         {entries.map((entry, i) => (
-          <div
+          <Link
             key={`${entry.player_name}-${entry.killed_at}-${i}`}
-            className={`flex items-start gap-2.5 px-3 py-3 ${i % 2 === 1 ? "bg-muted/20" : ""}`}
+            to={`/instances/${entry.log_hashed_slug}`}
+            className={`flex items-start gap-2.5 px-3 py-3 transition-colors hover:bg-muted/40 ${i % 2 === 1 ? "bg-muted/20" : ""}`}
           >
             <div className="w-7 shrink-0 pt-0.5 text-center">
               {MEDAL_ICONS[entry.rank] ?? (
@@ -84,7 +87,7 @@ export function RankingsTable({ entries, metric = "dps" }: RankingsTableProps) {
                 </span>
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 
@@ -108,9 +111,18 @@ export function RankingsTable({ entries, metric = "dps" }: RankingsTableProps) {
             {entries.map((entry, i) => (
               <tr
                 key={`${entry.player_name}-${entry.killed_at}-${i}`}
-                className={`border-b last:border-b-0 transition-colors hover:bg-muted/40 ${
+                className={`cursor-pointer border-b last:border-b-0 transition-colors hover:bg-muted/40 ${
                   i % 2 === 1 ? "bg-muted/20" : ""
                 }`}
+                onClick={() => navigate(`/instances/${entry.log_hashed_slug}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    navigate(`/instances/${entry.log_hashed_slug}`)
+                  }
+                }}
+                role="link"
+                tabIndex={0}
               >
                 <td className="px-4 py-3 text-center font-medium">
                   {MEDAL_ICONS[entry.rank] ?? (
@@ -148,14 +160,8 @@ export function RankingsTable({ entries, metric = "dps" }: RankingsTableProps) {
                 <td className="px-4 py-3 text-right text-muted-foreground">
                   {formatDate(entry.killed_at)}
                 </td>
-                <td className="px-4 py-3 text-center">
-                  <Link
-                    to={`/instances/${entry.log_hashed_slug}`}
-                    className="text-muted-foreground transition-colors hover:text-foreground"
-                    title="View instance"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Link>
+                <td className="px-4 py-3 text-center text-muted-foreground">
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                 </td>
               </tr>
             ))}
