@@ -935,6 +935,17 @@ CREATE TABLE log_instance_encounters (
     kill_type kill_type NOT NULL
 );
 
+CREATE TABLE log_instance_encounter_phases (
+    id uuid NOT NULL,
+    encounter_id uuid NOT NULL,
+    key text NOT NULL,
+    name text NOT NULL,
+    phase_order integer NOT NULL,
+    start_offset_ms bigint NOT NULL,
+    end_offset_ms bigint NOT NULL
+);
+
+
 CREATE TABLE log_instance_events (
     instance_id uuid NOT NULL,
     type log_instance_event_type NOT NULL,

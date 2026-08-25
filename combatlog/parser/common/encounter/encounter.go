@@ -41,6 +41,9 @@ type Encounter struct {
 	KillType  KillType
 	Remaining []guid.GUID
 	Boss      bool
+
+	// Phases are optional sub-ranges within the encounter, ordered by Phase.Order.
+	Phases []Phase
 }
 
 func (e Encounter) NamedString(db *unitdb.Units) string {

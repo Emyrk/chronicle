@@ -141,7 +141,18 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights)
+	phases, err := db.GetEncounterPhasesByInstanceID(ctx, inst.ID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch encounter phases",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	out := db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights, phases)
 	out.DatasetID = api.Opts.Dataset.ResolveDatasetForRealm(ctx, inst.RealmID)
 	if ds, err := api.Opts.Dataset.GetDataset(ctx, out.DatasetID); err == nil {
 		out.IconBaseURL = ds.IconBaseUrl

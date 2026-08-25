@@ -127,6 +127,24 @@ FROM
 WHERE
   encounter_id IN (SELECT id FROM log_instance_encounters WHERE instance_id = $1)
 ;
+-- name: InsertEncounterPhase :exec
+INSERT INTO
+  log_instance_encounter_phases (id, encounter_id, key, name, phase_order, start_offset_ms, end_offset_ms)
+VALUES
+  ($1, $2, $3, $4, $5, $6, $7)
+;
+
+-- name: GetEncounterPhasesByInstanceID :many
+SELECT
+  *
+FROM
+  log_instance_encounter_phases
+WHERE
+  encounter_id IN (SELECT id FROM log_instance_encounters WHERE instance_id = $1)
+ORDER BY
+  encounter_id, phase_order
+;
+
 
 -- name: InstanceUnitsByInstanceID :many
 SELECT

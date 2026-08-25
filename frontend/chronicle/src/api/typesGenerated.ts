@@ -3831,8 +3831,19 @@ export type WoWEncounterType = "BOSS" | "TRASH" | "UNKNOWN";
 export const WoWEncounterTypes: WoWEncounterType[] = ["BOSS", "TRASH", "UNKNOWN"];
 
 // From chroniclesdk/log.go
+export interface WoWEncounterPhase {
+    readonly id: string;
+    readonly key: string;
+    readonly name: string;
+    readonly order: number;
+    readonly start_offset_ms: number;
+    readonly end_offset_ms: number;
+}
+
+// From chroniclesdk/log.go
 export interface WoWEncounterWithHostiles extends WoWEncounter {
     readonly hostiles: readonly WoWEncounterHostile[];
+    readonly phases?: readonly WoWEncounterPhase[];
 }
 
 // From types/constants.go

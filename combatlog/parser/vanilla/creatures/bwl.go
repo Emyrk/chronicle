@@ -106,13 +106,7 @@ func (c *RazorAdCharacter) bumpRazorgore(m messages.Message) {
 }
 
 func NewRazorgore(flavor database.WoWFlavor) func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
-	eggThreshold := 0
-	switch {
-	case flavor.Has(database.FlavorNightmareOfUrsol):
-		eggThreshold = 20
-	case flavor.Has(database.FlavorVanillaPlus):
-		eggThreshold = 30
-	}
+	eggThreshold := RazorgoreEggThreshold(flavor)
 	return func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 		if entry, ok := id.GetEntry(); !ok || entry != 12435 {
 			return nil, false

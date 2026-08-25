@@ -68,6 +68,9 @@ type CommonFactory struct {
 	FlavoredRankings func(flavor database.WoWFlavor) *rankings.Rankings
 	// Preprocessors creates fresh message preprocessors for each parsed instance.
 	Preprocessors func() []instancehook.Preprocessor
+	// PhaseDetectorFactories returns per-fight phase detector factories for this
+	// instance, parameterized by the active flavor.
+	PhaseDetectorFactories func(flavor database.WoWFlavor) []encounter.PhaseDetectorFactory
 }
 
 // MatchZone returns true if z matches any of the factory's zone names

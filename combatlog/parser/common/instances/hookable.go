@@ -88,6 +88,10 @@ type Hookable struct {
 	finalizing      bool
 	finalized       bool
 
+	// Phase detectors
+	phaseDetectorFactories []encounter.PhaseDetectorFactory
+	activePhaseDetectors   []encounter.PhaseDetector
+
 	// finalized references
 	g              *armory.Tracker
 	p              *participants.Tracker
@@ -102,6 +106,10 @@ type InstanceParams struct {
 	Rankings      *rankings.Rankings
 	Preprocessors []instancehook.Preprocessor
 	ExtraHooks    []instancehook.Hook
+
+	// PhaseDetectorFactories creates per-fight phase detectors that process
+	// messages during a fight and emit phases at finalization.
+	PhaseDetectorFactories []encounter.PhaseDetectorFactory
 }
 
 func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, flavor database.WoWFlavor) *Hookable {
@@ -117,12 +125,17 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	if f.Preprocessors != nil {
 		preprocessors = f.Preprocessors()
 	}
+	var phaseFactories []encounter.PhaseDetectorFactory
+	if f.PhaseDetectorFactories != nil {
+		phaseFactories = f.PhaseDetectorFactories(flavor)
+	}
 	return NewHookable(ctx, logger, db, z, InstanceParams{
-		Name:          name,
-		MatchesZone:   f.MatchZone,
-		Idf:           f.Hostiles(flavor),
-		Rankings:      r,
-		Preprocessors: preprocessors,
+		Name:                   name,
+		MatchesZone:            f.MatchZone,
+		Idf:                    f.Hostiles(flavor),
+		Rankings:               r,
+		Preprocessors:          preprocessors,
+		PhaseDetectorFactories: phaseFactories,
 	})
 }
 
@@ -214,27 +227,28 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	}
 
 	c := &Hookable{
-		name:              ip.Name,
-		logger:            logger,
-		units:             db,
-		preprocessors:     ip.Preprocessors,
-		CurrentZone:       z,
-		MatchesZoneF:      ip.MatchesZone,
-		Characters:        chrs,
-		Identifier:        ip.Idf,
-		events:            encounterevents.NewEvents(),
-		g:                 g,
-		p:                 p,
-		lootTracking:      lootTracking,
-		hooks:             hooks,
-		engagementTracker: engagementTracker,
-		overviewTracker:   overviewTracker,
-		speedrunTracker:   speedrunTracker,
-		dpsTracker:        dpsTracker,
-		rankingRules:      ip.Rankings,
-		verbose:           parseoptions.IsVerbose(ctx),
-		timings:           timings.New(),
-		completedFights:   make([]encounter.Fight, 0),
+		name:                   ip.Name,
+		logger:                 logger,
+		units:                  db,
+		preprocessors:          ip.Preprocessors,
+		CurrentZone:            z,
+		MatchesZoneF:           ip.MatchesZone,
+		Characters:             chrs,
+		Identifier:             ip.Idf,
+		events:                 encounterevents.NewEvents(),
+		g:                      g,
+		p:                      p,
+		lootTracking:           lootTracking,
+		hooks:                  hooks,
+		engagementTracker:      engagementTracker,
+		overviewTracker:        overviewTracker,
+		speedrunTracker:        speedrunTracker,
+		dpsTracker:             dpsTracker,
+		rankingRules:           ip.Rankings,
+		phaseDetectorFactories: ip.PhaseDetectorFactories,
+		verbose:                parseoptions.IsVerbose(ctx),
+		timings:                timings.New(),
+		completedFights:        make([]encounter.Fight, 0),
 	}
 
 	cie.emit = func(evt *messages.Combatant) {
@@ -487,6 +501,13 @@ func (h *Hookable) process(m messages.Message) (finalError error) {
 		})
 	}
 
+	// Feed messages to active phase detectors during a fight.
+	if h.currentFight != nil && h.currentFight.active() {
+		for _, det := range h.activePhaseDetectors {
+			det.ProcessMessage(m)
+		}
+	}
+
 	err = timings.Do1(h.timings, timingsProcessOngoingFightProcess, func() error {
 		return h.currentFight.Process(m)
 	})
@@ -551,6 +572,12 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 	}
 
 	if !wasActive && h.currentFight.active() {
+		// Create fresh phase detectors for this fight.
+		h.activePhaseDetectors = h.activePhaseDetectors[:0]
+		for _, factory := range h.phaseDetectorFactories {
+			h.activePhaseDetectors = append(h.activePhaseDetectors, factory())
+		}
+
 		for _, hook := range h.hooks {
 			hook.FightStarted(h.currentFight.EncounterID, m)
 		}
@@ -694,14 +721,26 @@ func (h *Hookable) fightEncounter(fight encounter.Fight) (encounter.Encounter, e
 		}
 	}
 
-	return encounter.Encounter{
+	enc := encounter.Encounter{
 		Name:      encName.Name(),
 		Type:      encName.Type(),
 		Combat:    fight,
 		KillType:  killType,
 		Remaining: rr.Timeouts,
 		Boss:      encName.IsBossFight(),
-	}, nil
+	}
+
+	// Finalize phase detectors that match this encounter name, then reset all.
+	for _, det := range h.activePhaseDetectors {
+		if det.EncounterName() == enc.Name {
+			if phases := det.Finalize(fight.Start, fight.End); len(phases) > 0 {
+				enc.Phases = phases
+			}
+		}
+		det.Reset()
+	}
+
+	return enc, nil
 }
 
 func (h *Hookable) drainOpenFight(ctx context.Context) error {

@@ -551,6 +551,22 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 					return fmt.Errorf("insert encounter character fights: %w", err)
 				}
 
+				// Persist encounter phases.
+				for _, phase := range enc.Phases {
+					err := tx.InsertEncounterPhase(ctx, database.InsertEncounterPhaseParams{
+						ID:            phase.ID,
+						EncounterID:   dbencounter.ID,
+						Key:           phase.Key,
+						Name:          phase.Name,
+						PhaseOrder:    int32(phase.Order),
+						StartOffsetMs: phase.StartOffsetMs,
+						EndOffsetMs:   phase.EndOffsetMs,
+					})
+					if err != nil {
+						return fmt.Errorf("insert encounter phase %q: %w", phase.Key, err)
+					}
+				}
+
 				sdkEncounters = append(sdkEncounters, db2sdk.WoWEncounter(dbencounter))
 			}
 

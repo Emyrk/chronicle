@@ -1435,6 +1435,16 @@ type LogInstanceEncounterHostile struct {
 	Periods     Periods   `db:"periods" json:"periods"`
 	Boss        bool      `db:"boss" json:"boss"`
 }
+type LogInstanceEncounterPhase struct {
+	ID            uuid.UUID `db:"id" json:"id"`
+	EncounterID   uuid.UUID `db:"encounter_id" json:"encounter_id"`
+	Key           string    `db:"key" json:"key"`
+	Name          string    `db:"name" json:"name"`
+	PhaseOrder    int32     `db:"phase_order" json:"phase_order"`
+	StartOffsetMs int64     `db:"start_offset_ms" json:"start_offset_ms"`
+	EndOffsetMs   int64     `db:"end_offset_ms" json:"end_offset_ms"`
+}
+
 
 type LogInstanceEvent struct {
 	InstanceID uuid.UUID            `db:"instance_id" json:"instance_id"`

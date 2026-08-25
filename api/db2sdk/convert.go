@@ -255,11 +255,12 @@ func WowDecoratedInstance(instance database.LogInstancesGuild,
 	players []database.LogInstancePlayer,
 	encounters []database.LogInstanceEncounter,
 	fights []database.LogInstanceEncounterHostile,
+	phases []database.LogInstanceEncounterPhase,
 ) chroniclesdk.WoWParsedInstance {
 	ret := chroniclesdk.WoWParsedInstance{
 		WoWInstance: WoWInstance(instance),
 		RealmName:   instance.RealmName,
-		Encounters:  WoWEncountersWithHostiles(encounters, fights),
+		Encounters:  WoWEncountersWithHostiles(encounters, fights, phases),
 		Units: maps.MapFromSlice(units, func(u database.LogInstanceUnit) guid.GUID { return u.UnitGuid }, func(u database.LogInstanceUnit) chroniclesdk.InstanceUnit {
 			return chroniclesdk.InstanceUnit{
 				Name:  u.Name,
@@ -624,15 +625,30 @@ func WoWEncounter(encounter database.LogInstanceEncounter) chroniclesdk.WoWEncou
 	}
 }
 
-func WoWEncountersWithHostiles(encounter []database.LogInstanceEncounter, hostiles []database.LogInstanceEncounterHostile) []chroniclesdk.WoWEncounterWithHostiles {
+func WoWEncounterPhase(phase database.LogInstanceEncounterPhase) chroniclesdk.WoWEncounterPhase {
+	return chroniclesdk.WoWEncounterPhase{
+		ID:            phase.ID,
+		Key:           phase.Key,
+		Name:          phase.Name,
+		Order:         int(phase.PhaseOrder),
+		StartOffsetMs: phase.StartOffsetMs,
+		EndOffsetMs:   phase.EndOffsetMs,
+	}
+}
+
+func WoWEncountersWithHostiles(encounter []database.LogInstanceEncounter, hostiles []database.LogInstanceEncounterHostile, phases []database.LogInstanceEncounterPhase) []chroniclesdk.WoWEncounterWithHostiles {
 	output := make([]chroniclesdk.WoWEncounterWithHostiles, 0, len(encounter))
 	for _, e := range encounter {
-		output = append(output, chroniclesdk.WoWEncounterWithHostiles{
+		enc := chroniclesdk.WoWEncounterWithHostiles{
 			WoWEncounter: WoWEncounter(e),
 			Hostiles: slice.List(slice.Filter(hostiles, func(h database.LogInstanceEncounterHostile) bool {
 				return h.EncounterID == e.ID
 			}), WoWHostile),
-		})
+			Phases: slice.List(slice.Filter(phases, func(p database.LogInstanceEncounterPhase) bool {
+				return p.EncounterID == e.ID
+			}), WoWEncounterPhase),
+		}
+		output = append(output, enc)
 	}
 	return output
 }
