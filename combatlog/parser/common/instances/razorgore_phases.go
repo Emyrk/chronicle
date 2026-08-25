@@ -18,10 +18,6 @@ const (
 	destroyEggSpellID      = chrondbc.SpellID(19873)
 )
 
-// razorgorePhaseNS is a fixed UUID namespace used with the encounter ID to
-// produce stable phase IDs that remain unique across pulls.
-var razorgorePhaseNS = uuid.MustParse("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-
 // BWLPhaseDetectorFactories returns the per-fight phase detector factories for
 // Blackwing Lair. If the flavor is unsupported for phases, it returns nil.
 func BWLPhaseDetectorFactories(flavor database.WoWFlavor) []encounter.PhaseDetectorFactory {
@@ -67,15 +63,11 @@ func (d *razorgorePhaseDetector) ProcessMessage(m messages.Message) {
 	}
 }
 
-func (d *razorgorePhaseDetector) Finalize(encounterID uuid.UUID, encounterStart, encounterEnd time.Time) []encounter.Phase {
-	phaseID := func(key string) uuid.UUID {
-		return uuid.NewSHA1(razorgorePhaseNS, []byte(encounterID.String()+":"+key))
-	}
-
+func (d *razorgorePhaseDetector) Finalize(encounterStart, encounterEnd time.Time) []encounter.Phase {
 	if d.transitionMsg == nil {
 		return []encounter.Phase{
 			encounter.PhaseFromTimes(
-				phaseID("razorgore_p1"),
+				uuid.New(),
 				"razorgore_p1",
 				"Phase 1 – Adds",
 				0,
@@ -89,7 +81,7 @@ func (d *razorgorePhaseDetector) Finalize(encounterID uuid.UUID, encounterStart,
 	transitionTime := d.transitionMsg.Date()
 	return []encounter.Phase{
 		encounter.PhaseFromTimes(
-			phaseID("razorgore_p1"),
+			uuid.New(),
 			"razorgore_p1",
 			"Phase 1 – Adds",
 			0,
@@ -98,7 +90,7 @@ func (d *razorgorePhaseDetector) Finalize(encounterID uuid.UUID, encounterStart,
 			transitionTime,
 		),
 		encounter.PhaseFromTimes(
-			phaseID("razorgore_p2"),
+			uuid.New(),
 			"razorgore_p2",
 			"Phase 2 – Boss",
 			1,

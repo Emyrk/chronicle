@@ -3,8 +3,6 @@ package encounter
 import (
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 )
 
@@ -18,7 +16,7 @@ type PhaseDetector interface {
 	ProcessMessage(m messages.Message)
 	// Finalize returns the detected phases for the completed encounter.
 	// It is called once when the encounter is complete.
-	Finalize(encounterID uuid.UUID, encounterStart, encounterEnd time.Time) []Phase
+	Finalize(encounterStart, encounterEnd time.Time) []Phase
 	// Reset clears all state for a new fight.
 	Reset()
 }

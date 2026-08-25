@@ -4,8 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -75,7 +73,6 @@ func TestRazorgorePhaseDetector_Threshold20(t *testing.T) {
 	require.Len(t, factories, 1)
 
 	det := factories[0]()
-	encounterID := uuid.New()
 	start := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	end := start.Add(5 * time.Minute)
 
@@ -83,7 +80,7 @@ func TestRazorgorePhaseDetector_Threshold20(t *testing.T) {
 	for i := 0; i < 19; i++ {
 		det.ProcessMessage(razorgoreSpellGo(start.Add(time.Duration(i) * time.Second)))
 	}
-	phases := det.Finalize(encounterID, start, end)
+	phases := det.Finalize(start, end)
 	require.Len(t, phases, 1)
 	assert.Equal(t, "razorgore_p1", phases[0].Key)
 	assert.Equal(t, int64(0), phases[0].StartOffsetMs)
@@ -96,9 +93,12 @@ func TestRazorgorePhaseDetector_Threshold20(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		det.ProcessMessage(razorgoreSpellGo(start.Add(time.Duration(i) * time.Second)))
 	}
-	phases = det.Finalize(encounterID, start, end)
+	phases = det.Finalize(start, end)
 	require.Len(t, phases, 2)
 
+	assert.NotEqual(t, [16]byte{}, [16]byte(phases[0].ID))
+	assert.NotEqual(t, [16]byte{}, [16]byte(phases[1].ID))
+	assert.NotEqual(t, phases[0].ID, phases[1].ID)
 	assert.Equal(t, "razorgore_p1", phases[0].Key)
 	assert.Equal(t, "Phase 1 – Adds", phases[0].Name)
 	assert.Equal(t, 0, phases[0].Order)
@@ -124,7 +124,7 @@ func TestRazorgorePhaseDetector_DuplicateCastsIgnored(t *testing.T) {
 		det.ProcessMessage(razorgoreSpellGo(start.Add(time.Duration(i) * time.Second)))
 	}
 
-	phases := det.Finalize(uuid.New(), start, end)
+	phases := det.Finalize(start, end)
 	require.Len(t, phases, 2)
 	// Phase 2 start should match the 20th cast, not a later one.
 	assert.Equal(t, int64(19000), phases[1].StartOffsetMs)
@@ -141,7 +141,7 @@ func TestRazorgorePhaseDetector_Reset(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		det.ProcessMessage(razorgoreSpellGo(start.Add(time.Duration(i) * time.Second)))
 	}
-	require.Len(t, det.Finalize(uuid.New(), start, end), 2)
+	require.Len(t, det.Finalize(start, end), 2)
 
 	det.Reset()
 
@@ -149,7 +149,7 @@ func TestRazorgorePhaseDetector_Reset(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		det.ProcessMessage(razorgoreSpellGo(start.Add(time.Duration(i) * time.Second)))
 	}
-	phases := det.Finalize(uuid.New(), start, end)
+	phases := det.Finalize(start, end)
 	require.Len(t, phases, 1)
 	assert.Equal(t, "razorgore_p1", phases[0].Key)
 }
@@ -170,7 +170,7 @@ func TestRazorgorePhaseDetector_WrongSpell(t *testing.T) {
 			SpellData:   &chrondbc.Spell{ID: 22425}, // different spell
 		})
 	}
-	phases := det.Finalize(uuid.New(), start, end)
+	phases := det.Finalize(start, end)
 	require.Len(t, phases, 1)
 	assert.Equal(t, "razorgore_p1", phases[0].Key)
 }
@@ -191,7 +191,7 @@ func TestRazorgorePhaseDetector_WrongCaster(t *testing.T) {
 			SpellData:   &chrondbc.Spell{ID: 19873},
 		})
 	}
-	phases := det.Finalize(uuid.New(), start, end)
+	phases := det.Finalize(start, end)
 	require.Len(t, phases, 1)
 	assert.Equal(t, "razorgore_p1", phases[0].Key)
 }

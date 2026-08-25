@@ -733,7 +733,7 @@ func (h *Hookable) fightEncounter(fight encounter.Fight) (encounter.Encounter, e
 	// Finalize phase detectors that match this encounter name, then reset all.
 	for _, det := range h.activePhaseDetectors {
 		if det.EncounterName() == enc.Name {
-			if phases := det.Finalize(fight.EncounterID, fight.Start, fight.End); len(phases) > 0 {
+			if phases := det.Finalize(fight.Start, fight.End); len(phases) > 0 {
 				enc.Phases = phases
 			}
 		}
