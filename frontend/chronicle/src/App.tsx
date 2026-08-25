@@ -88,6 +88,7 @@ import { DatasetsTab } from "./pages/GameData/DatasetsTab"
 import { LeaderboardsPage, LeaderboardRedirect, RankingsRedirect } from "./pages/Leaderboards/LeaderboardsPage"
 import { CensusPage } from "./pages/Census/CensusPage"
 import { APIExplorer } from "./pages/APIExplorer/APIExplorer"
+import { ToolsPage } from "./pages/Tools/ToolsPage"
 import { Layout } from "./components/Layout/Layout"
 import { TenantDatasetLayout } from "./components/Layout/TenantDatasetLayout"
 
@@ -139,6 +140,7 @@ function App() {
         <Route path="/apply" element={<ApplyPage />} />
         <Route path="/apply/:id" element={<ApplicationPage />} />
         <Route path="/census" element={<CensusPage />} />
+        <Route path="/tools" element={<ToolsPage />} />
         <Route path="/developers/api" element={<APIExplorer />} />
         <Route path="/debug/proto" element={<ProtoDecode />} />
         <Route path="/admin" element={<AdminLayout />}>

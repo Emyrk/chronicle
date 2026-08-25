@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
+import { useAuth } from "@/hooks/useAuth"
+import { Button } from "@/components/ui/button"
 import { YouTubeSyncPage } from "../YouTubeSync/YouTubeSyncPage"
 import { YouTubeSyncV2Player } from "../YouTubeSyncV2/YouTubeSyncV2Player"
 import { getYouTubeSyncV2Channel } from "../YouTubeSyncV2/channel"
@@ -52,7 +55,26 @@ function Player() {
 }
 
 export function YouTubeSyncV3Page() {
+  const { isAuthenticated, isLoading } = useAuth()
   const params = new URLSearchParams(window.location.search)
+
+  if (isLoading) {
+    return <main className="flex h-screen items-center justify-center text-muted-foreground">Loading…</main>
+  }
+
+  if (!isAuthenticated) {
+    const loginUrl = `/login?from=${encodeURIComponent("/youtube-sync-v3" + window.location.search)}`
+    return (
+      <main className="flex h-screen flex-col items-center justify-center gap-4 text-center">
+        <h1 className="text-xl font-semibold">Sign in required</h1>
+        <p className="text-muted-foreground">You need to be logged in to use YouTube Sync.</p>
+        <Button asChild>
+          <Link to={loginUrl}>Sign in</Link>
+        </Button>
+      </main>
+    )
+  }
+
   if (params.get("role") === "controls") {
     const sessionId = params.get("session") || localStorage.getItem(ACTIVE_SESSION_KEY)
     if (!sessionId) return <main className="p-8 text-center">Reopen the wizard from the main player window.</main>
