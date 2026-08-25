@@ -29,9 +29,9 @@ export function ClassSpecFilter({
   }, [])
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5">
       {/* Class buttons */}
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="-mx-3 flex items-center gap-1.5 overflow-x-auto px-3 pb-2 styled-scrollbar sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
         {visibleClasses.map((cls) => {
           const active = selectedClass === cls
           const color = CLASS_CSS_VAR[cls]
@@ -40,7 +40,7 @@ export function ClassSpecFilter({
               key={cls}
               onClick={() => onClassSelect(active ? null : cls)}
               className={cn(
-                "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-all",
+                "flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-all sm:px-2 sm:py-1",
                 active
                   ? "border-white/25 bg-white/10 text-foreground"
                   : selectedClass
@@ -63,11 +63,11 @@ export function ClassSpecFilter({
 
       {/* Spec sub-buttons (shown when a class is selected) */}
       {selectedClass && specs && (
-        <div className="flex flex-wrap items-center gap-1 pl-1">
+        <div className="-mx-3 flex items-center gap-1 overflow-x-auto px-3 pb-2 styled-scrollbar sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-1 sm:pb-0">
           <button
             onClick={() => onSpecSelect(null)}
             className={cn(
-              "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
+              "shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors sm:px-2 sm:py-0.5",
               !selectedSpec
                 ? "border-[#5F8FA6] bg-[#5F8FA6]/20 text-foreground"
                 : "border-white/10 text-muted-foreground hover:text-foreground hover:bg-white/5",
@@ -82,7 +82,7 @@ export function ClassSpecFilter({
                 key={spec}
                 onClick={() => onSpecSelect(active ? null : spec)}
                 className={cn(
-                  "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                  "shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors sm:px-2 sm:py-0.5",
                   active
                     ? "border-[#5F8FA6] bg-[#5F8FA6]/20 text-foreground"
                     : "border-white/10 text-muted-foreground hover:text-foreground hover:bg-white/5",
