@@ -61,3 +61,42 @@ func TestZoneReentryDoesNotReuseDifferentDifficulty(t *testing.T) {
 	require.Equal(t, 25, state.Instances[1].CurrentZone.MaxPlayers)
 	require.Same(t, state.Instances[1], state.CurrentInstance)
 }
+
+func TestVersionsApplyAcrossLogInstances(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+		return instances.NewHookable(ctx, logger, db, firstZone, instances.InstanceParams{
+			Name: firstZone.Name,
+			MatchesZone: func(z zone.Zone) bool {
+				return z.Name == firstZone.Name
+			},
+			Idf: identifier.NewIdentifier(map[uint32]instances.Identity{}),
+		})
+	})
+
+	seen := time.Date(2026, 8, 25, 20, 0, 0, 0, time.UTC)
+	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "Obsidian Sanctum"}})
+	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen.Add(time.Hour), Name: "Naxxramas"}})
+
+	versions := map[string]string{
+		"addon":                     "0.7.0",
+		"chronicle_companion_wotlk": "0.7.0",
+		"wow":                       "3.3.5a",
+	}
+	require.NoError(t, state.Process(&messages.Versions{
+		MessageBase: messages.Base(seen.Add(time.Hour + time.Minute)),
+		Versions:    versions,
+	}))
+
+	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen.Add(2 * time.Hour), Name: "Eye of Eternity"}})
+	require.Len(t, state.Instances, 3)
+
+	for _, instance := range state.Instances {
+		finalized, err := instance.Finalize(ctx)
+		require.NoError(t, err)
+		require.Equal(t, versions, finalized.Versions)
+	}
+}
