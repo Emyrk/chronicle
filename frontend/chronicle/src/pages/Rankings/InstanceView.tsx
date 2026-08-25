@@ -1044,6 +1044,7 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
   for (let v = 0; v <= scaleMax; v += step) ticks.push(v)
   if (ticks[ticks.length - 1] < scaleMax) ticks.push(Math.ceil(scaleMax / step) * step)
   const axisMax = ticks[ticks.length - 1]
+  const mobileTicks = [0, axisMax / 2, axisMax]
 
   if (stats.length === 0) {
     return (
@@ -1054,10 +1055,10 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
   }
 
   return (
-    <div className="rounded-xl border bg-card p-5">
-      <h3 className="mb-5 text-sm font-medium text-muted-foreground">Kill Time by Encounter</h3>
+    <div className="rounded-xl border bg-card p-3 sm:p-5">
+      <h3 className="mb-3 text-sm font-medium text-muted-foreground sm:mb-5">Kill Time by Encounter</h3>
       {/* Column header */}
-      <div className="flex items-center gap-3 px-1 pb-1">
+      <div className="hidden items-center gap-3 px-1 pb-1 sm:flex">
         <div className="w-40 shrink-0" />
         <div className="flex-1" />
         <div className="w-28 shrink-0 text-right text-[10px] text-muted-foreground/60">Avg (sample count)</div>
@@ -1070,12 +1071,19 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
           return (
             <Tooltip key={s.encounter_name}>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-3 px-1 py-1.5 rounded-md hover:bg-muted/20 transition-colors cursor-default">
-                  {/* Label */}
-                  <div className="w-40 shrink-0 text-xs font-medium truncate">{s.encounter_name}</div>
+                <div className="relative h-10 rounded-md border-l-2 border-[#5F8FA6] pl-2 transition-colors hover:bg-muted/20 cursor-default sm:flex sm:h-auto sm:items-center sm:gap-3 sm:border-l-0 sm:px-1 sm:py-1.5">
+                  {/* Encounter name and mobile median overlap the top of the plot. */}
+                  <div className="absolute inset-x-2 top-0 z-10 flex items-center text-xs sm:static sm:w-40 sm:shrink-0">
+                    <span className="min-w-0 truncate bg-card/90 pr-2 font-medium backdrop-blur-[1px] sm:bg-transparent sm:pr-0 sm:backdrop-blur-none">
+                      {s.encounter_name}
+                    </span>
+                    <span className="ml-auto shrink-0 bg-card/90 pl-2 font-mono font-semibold tabular-nums text-foreground backdrop-blur-[1px] sm:hidden">
+                      {formatTime(s.median_secs)}
+                    </span>
+                  </div>
 
                   {/* Box plot */}
-                  <div className="relative flex-1 h-7">
+                  <div className="absolute inset-x-2 bottom-0 h-7 sm:relative sm:inset-auto sm:flex-1">
                     {/* Whisker */}
                     <div
                       className="absolute top-1/2 h-px -translate-y-1/2 bg-muted-foreground/30"
@@ -1096,8 +1104,8 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
                     />
                   </div>
 
-                  {/* Avg (sample count) */}
-                  <div className="w-28 shrink-0 text-right text-xs text-muted-foreground">
+                  {/* Desktop median (sample count) */}
+                  <div className="hidden w-28 shrink-0 text-right text-xs text-muted-foreground sm:block">
                     <span className="font-mono font-semibold text-foreground">{formatTime(s.median_secs)}</span>
                     {" "}
                     <span className="text-muted-foreground/60">({s.count})</span>
@@ -1130,20 +1138,31 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
         })}
 
         {/* X-axis */}
-        <div className="flex items-center gap-3 pt-2">
-          <div className="w-40 shrink-0" />
-          <div className="relative flex-1 h-5">
+        <div className="flex items-center gap-3 pt-2 sm:px-1">
+          <div className="hidden w-40 shrink-0 sm:block" />
+          <div className="relative h-5 flex-1">
+            {mobileTicks.map((v, i) => (
+              <span
+                key={`mobile-${v}`}
+                className={`absolute font-mono text-[10px] text-muted-foreground/60 sm:hidden ${
+                  i === 0 ? "" : i === mobileTicks.length - 1 ? "-translate-x-full" : "-translate-x-1/2"
+                }`}
+                style={{ left: `${(v / axisMax) * 100}%` }}
+              >
+                {formatTime(v)}
+              </span>
+            ))}
             {ticks.map((v) => (
               <span
                 key={v}
-                className="absolute -translate-x-1/2 text-[10px] text-muted-foreground/60 font-mono"
+                className="absolute hidden -translate-x-1/2 font-mono text-[10px] text-muted-foreground/60 sm:block"
                 style={{ left: `${(v / axisMax) * 100}%` }}
               >
                 {formatTime(v)}
               </span>
             ))}
           </div>
-          <div className="w-28 shrink-0" />
+          <div className="hidden w-28 shrink-0 sm:block" />
         </div>
       </div>
       </TooltipProvider>
@@ -1177,18 +1196,27 @@ function SuccessRateContent({ rates }: { rates: RankingsSuccessRate[] }) {
   }
 
   return (
-    <div className="rounded-xl border bg-card p-5">
-      <h3 className="mb-5 text-sm font-medium text-muted-foreground">Success Rate by Encounter</h3>
-      <div className="space-y-2">
+    <div className="rounded-xl border bg-card p-3 sm:p-5">
+      <h3 className="mb-3 text-sm font-medium text-muted-foreground sm:mb-5">Success Rate by Encounter</h3>
+      <div className="space-y-1.5 sm:space-y-2">
         {rates.map((r) => {
           const successPct = r.total > 0 ? Math.round((r.kills / r.total) * 100) : 0
           return (
-            <div key={r.encounter_name} className="flex items-center gap-3 px-1 py-1.5 rounded-md hover:bg-muted/20 transition-colors">
-              {/* Label */}
-              <div className="w-40 shrink-0 text-xs font-medium truncate">{r.encounter_name}</div>
+            <div key={r.encounter_name} className="relative h-10 rounded-md border-l-2 border-green-500/70 pl-2 transition-colors hover:bg-muted/20 sm:flex sm:h-auto sm:items-center sm:gap-3 sm:border-l-0 sm:px-1 sm:py-1.5">
+              {/* Encounter and mobile counts overlap the top of the bar. */}
+              <div className="absolute inset-x-2 top-0 z-10 flex items-center text-xs sm:static sm:w-40 sm:shrink-0">
+                <span className="min-w-0 truncate bg-card/90 pr-2 font-medium backdrop-blur-[1px] sm:bg-transparent sm:pr-0 sm:backdrop-blur-none">
+                  {r.encounter_name}
+                </span>
+                <span className="ml-auto shrink-0 bg-card/90 pl-2 text-[11px] backdrop-blur-[1px] sm:hidden">
+                  <span className="text-green-400">{r.kills}</span>
+                  {" / "}
+                  <span className="text-red-400">{r.wipes}</span>
+                </span>
+              </div>
 
               {/* Bar */}
-              <div className="relative flex-1 h-6 rounded-md bg-muted/20 overflow-hidden">
+              <div className="absolute inset-x-2 bottom-0 h-6 overflow-hidden rounded-md bg-muted/20 sm:relative sm:inset-auto sm:flex-1">
                 {/* Success portion */}
                 <div
                   className="absolute inset-y-0 left-0 rounded-md bg-green-500/70 transition-all duration-500"
@@ -1207,12 +1235,12 @@ function SuccessRateContent({ rates }: { rates: RankingsSuccessRate[] }) {
                 </div>
               </div>
 
-              {/* Counts */}
-              <div className="w-28 shrink-0 text-right text-xs text-muted-foreground">
+              {/* Desktop counts */}
+              <div className="hidden w-28 shrink-0 text-right text-xs text-muted-foreground sm:block">
                 <span className="text-green-400">{r.kills}</span>
                 {" / "}
                 <span className="text-red-400">{r.wipes}</span>
-                <span className="hidden sm:inline text-muted-foreground/60"> ({r.total})</span>
+                <span className="text-muted-foreground/60"> ({r.total})</span>
               </div>
             </div>
           )
