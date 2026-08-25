@@ -1,5 +1,5 @@
 import { ExternalLink } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import type { KillTimeLeaderboardEntry } from "@/api/typesGenerated"
 
 const MEDAL_ICONS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
@@ -30,6 +30,8 @@ interface KillTimeTableProps {
 }
 
 export function KillTimeTable({ entries }: KillTimeTableProps) {
+  const navigate = useNavigate()
+
   if (entries.length === 0) {
     return (
       <div className="rounded-xl border p-8 text-center text-muted-foreground">
@@ -43,9 +45,10 @@ export function KillTimeTable({ entries }: KillTimeTableProps) {
       {/* Mobile card rows */}
       <div className="md:hidden divide-y border-y">
         {entries.map((entry, i) => (
-          <div
+          <Link
             key={`${entry.encounter_name}-${entry.killed_at}-${i}`}
-            className={`flex items-center gap-3 px-4 py-3 ${i % 2 === 1 ? "bg-muted/20" : ""}`}
+            to={`/instances/${entry.log_hashed_slug}`}
+            className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 ${i % 2 === 1 ? "bg-muted/20" : ""}`}
           >
             <div className="w-8 shrink-0 text-center">
               {MEDAL_ICONS[entry.rank] ?? (
@@ -64,7 +67,7 @@ export function KillTimeTable({ entries }: KillTimeTableProps) {
                 <span className="ml-auto">{formatDate(entry.killed_at)}</span>
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 
@@ -85,9 +88,18 @@ export function KillTimeTable({ entries }: KillTimeTableProps) {
             {entries.map((entry, i) => (
               <tr
                 key={`${entry.encounter_name}-${entry.killed_at}-${i}`}
-                className={`border-b last:border-b-0 transition-colors hover:bg-muted/40 ${
+                className={`cursor-pointer border-b last:border-b-0 transition-colors hover:bg-muted/40 ${
                   i % 2 === 1 ? "bg-muted/20" : ""
                 }`}
+                onClick={() => navigate(`/instances/${entry.log_hashed_slug}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    navigate(`/instances/${entry.log_hashed_slug}`)
+                  }
+                }}
+                role="link"
+                tabIndex={0}
               >
                 <td className="px-4 py-3 text-center font-medium">
                   {MEDAL_ICONS[entry.rank] ?? (
@@ -102,16 +114,8 @@ export function KillTimeTable({ entries }: KillTimeTableProps) {
                 <td className="px-4 py-3 text-right text-muted-foreground">
                   {formatDate(entry.killed_at)}
                 </td>
-                <td className="px-4 py-3 text-center">
-                  {entry.log_hashed_slug && (
-                    <Link
-                      to={`/instances/${entry.log_hashed_slug}`}
-                      className="text-muted-foreground transition-colors hover:text-foreground"
-                      title="View instance"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Link>
-                  )}
+                <td className="px-4 py-3 text-center text-muted-foreground">
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                 </td>
               </tr>
             ))}
