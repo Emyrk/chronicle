@@ -32,12 +32,10 @@ function simItem(partial: Partial<SimItem>): SimItem {
 }
 
 describe("STAT_KEYS", () => {
-  it("has unique keys and unique itemMods", () => {
+  it("has unique keys and assigns each itemMod once", () => {
     const keys = STAT_KEYS.map((s) => s.key);
     expect(new Set(keys).size).toBe(keys.length);
-    const mods = STAT_KEYS.filter((s) => s.itemMod !== undefined).map(
-      (s) => s.itemMod,
-    );
+    const mods = STAT_KEYS.flatMap((s) => s.itemMods ?? []);
     expect(new Set(mods).size).toBe(mods.length);
   });
 });
@@ -91,6 +89,27 @@ describe("itemStatValues", () => {
       ],
     });
     expect(itemStatValues(item)).toEqual({ stamina: 12 });
+  });
+
+  it("normalizes split combat ratings and pre-Wrath spell damage", () => {
+    const item = simItem({
+      stats: [
+        { type: 18, value: 12 }, // spell hit rating
+        { type: 19, value: 9 }, // melee crit rating
+        { type: 30, value: 7 }, // spell haste rating
+        { type: 42, value: 44 }, // pre-Wrath spell damage
+      ],
+    });
+    expect(itemStatValues(item)).toEqual({
+      hit: 12,
+      crit: 9,
+      haste: 7,
+      spell_power: 44,
+    });
+  });
+
+  it("counts a shield's base block as block value", () => {
+    expect(itemStatValues(simItem({ block: 55 }))).toEqual({ block_value: 55 });
   });
 });
 
@@ -200,6 +219,10 @@ describe("parseWeights", () => {
     });
     expect(parseWeights({ strength: 2, zero: 0, bad: "x", nan: NaN })).toEqual({
       strength: 2,
+    });
+    expect(parseWeights({ spell_damage: 1.5 })).toEqual({ spell_power: 1.5 });
+    expect(parseWeights({ spell_damage: 1, spell_power: 2 })).toEqual({
+      spell_power: 3,
     });
     expect(parseWeights("{nope")).toEqual({});
     expect(parseWeights(null)).toEqual({});
