@@ -29,6 +29,19 @@ export interface EnemyUnit {
   periods: readonly ActivityPeriod[]; // activity periods for debugging
 }
 
+/** A named sub-range within an encounter (e.g. boss phases). */
+export interface EncounterPhase {
+  id: string;
+  encounter_id: string;
+  key: string;
+  name: string;
+  order: number;
+  start_offset_ms: number;
+  end_offset_ms: number;
+  start_time: string;
+  end_time: string;
+}
+
 export interface Encounter {
   id: string;
   name: string;
@@ -38,6 +51,8 @@ export interface Encounter {
   end_time: string;
   enemies?: EnemyUnit[];
   remaining?: string[]; // GUIDs of enemies that did not die
+  /** Optional phases within this encounter (sorted by order). */
+  phases?: EncounterPhase[];
 }
 
 export interface Instance {

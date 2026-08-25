@@ -6,7 +6,7 @@
 
 import { FastDamageCursor, FastHealCursor, FastResourceChangeCursor, FastExtraAttackCursor, FastSlainCursor, FastResurrectionCursor, FastCastCursor, FastAuraCursor, FastSpellGoCursor, FastAuraCastCursor, FastSpellStartCursor, FastSpellFailCursor, FastUnitClassificationCursor, FastDispelCursor, FastInterruptCursor, FastCombatantInfoCursor, FastAbsorbedCursor, FastConsumeCursor, type ReusableDamage, type ReusableHeal, type ReusableResourceChange, type ReusableExtraAttack, type ReusableSlain, type ReusableResurrection, type ReusableCast, type ReusableAura, type ReusableSpellGo, type ReusableAuraCast, type ReusableSpellStart, type ReusableSpellFail, type ReusableUnitClassification, type ReusableDispel, type ReusableInterrupt, type ReusableCombatantInfo, type ReusableAbsorbed, type ReusableConsume } from "@/api/protodecode/decode";
 import { processorRegistry } from "./processors";
-import type { WorkerRequest, WorkerResponse, PanelProcessor, ProcessorContext, SerializableProcessorContext } from "./processorTypes";
+import type { WorkerRequest, WorkerResponse, PanelProcessor, ProcessorContext, SerializableProcessorContext, SelectedPhaseRange } from "./processorTypes";
 import { compileFilters } from "./processors/filters";
 import { UnitState } from "./processors/unitState";
 import type { UnitClassificationProcessorEvent } from "./processorTypes";
@@ -21,6 +21,7 @@ function deserializeContext(ctx: SerializableProcessorContext): ProcessorContext
     units: ctx.units,
     vehicleControlIntervals: ctx.vehicleControlIntervals,
     selectedEncounterIds: new Set(ctx.selectedEncounterIds),
+    selectedPhaseRanges: ctx.selectedPhaseRanges,
     entitySelection: {
       enemyIds: new Set(ctx.entitySelection.enemyIds),
       playerIds: new Set(ctx.entitySelection.playerIds),
@@ -31,6 +32,29 @@ function deserializeContext(ctx: SerializableProcessorContext): ProcessorContext
     capabilities: ctx.capabilities,
     filters: ctx.filters,
   };
+}
+
+/**
+ * Check whether an event at the given offset within a specific encounter
+ * passes phase range filtering.  Returns true when no phase filtering is
+ * active or the event falls within a selected phase [start, end).
+ */
+function passesPhaseFilter(
+  encounterID: string,
+  offsetMs: number,
+  phaseRanges: readonly SelectedPhaseRange[] | undefined,
+): boolean {
+  if (!phaseRanges || phaseRanges.length === 0) return true;
+
+  let hasRangeForEncounter = false;
+  for (const r of phaseRanges) {
+    if (r.encounterID !== encounterID) continue;
+    hasRangeForEncounter = true;
+    if (offsetMs >= r.startOffsetMs && offsetMs < r.endOffsetMs) return true;
+  }
+
+  // No phase ranges for this encounter → whole encounter passes
+  return !hasRangeForEncounter;
 }
 
 /**
@@ -222,6 +246,14 @@ function processStreams<TResult>(
       // Stamp globalOffsetMilli before filtering so time_range filter works across encounters
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (minPeeked.event as any).globalOffsetMilli = encounterBaseOffset + minPeeked.event.offsetMilli;
+
+      // Phase range filtering: skip events outside selected phase ranges.
+      // This runs before panel filters and processEvent so all downstream
+      // code only sees events within the selected time windows.
+      if (!passesPhaseFilter(currentEncounterID, minPeeked.event.offsetMilli, context.selectedPhaseRanges)) {
+        consumePeeked(minCursor);
+        continue;
+      }
 
       unitState.setCurrentTimestamp(
         minPeeked.firstTimestamp.getTime() + minPeeked.event.offsetMilli,

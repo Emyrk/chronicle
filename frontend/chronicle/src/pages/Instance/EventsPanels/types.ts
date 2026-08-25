@@ -29,8 +29,11 @@ export interface PanelContext {
   /** The full instance data (players, encounters, metadata) */
   instance: Instance;
   
-  /** Currently selected encounter IDs */
+  /** Currently selected encounter IDs (includes parent encounters of selected phases) */
   selectedEncounterIds: string[];
+
+  /** Currently selected phase IDs (empty when whole encounters are selected) */
+  selectedPhaseIds: string[];
   
   /** Currently selected entity GUIDs for filtering display */
   entitySelection: EntitySelection;

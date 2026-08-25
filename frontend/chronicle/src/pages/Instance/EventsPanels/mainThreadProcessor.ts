@@ -152,6 +152,7 @@ function deserializeContext(ctx: SerializableProcessorContext): ProcessorContext
     units: ctx.units,
     vehicleControlIntervals: ctx.vehicleControlIntervals,
     selectedEncounterIds: new Set(ctx.selectedEncounterIds),
+    selectedPhaseRanges: ctx.selectedPhaseRanges,
     entitySelection: {
       enemyIds: new Set(ctx.entitySelection.enemyIds),
       playerIds: new Set(ctx.entitySelection.playerIds),
@@ -545,6 +546,26 @@ export async function processIncrementally<TResult>(
         }
       }
       
+      // Phase range filtering: skip events outside selected phase ranges.
+      // Runs before timestamp cutoff and panel filters.
+      if (context.selectedPhaseRanges && context.selectedPhaseRanges.length > 0) {
+        let passesPhase = true;
+        let hasRangeForEnc = false;
+        for (const r of context.selectedPhaseRanges) {
+          if (r.encounterID !== currentEncounterID) continue;
+          hasRangeForEnc = true;
+          if (minPeeked.event.offsetMilli >= r.startOffsetMs && minPeeked.event.offsetMilli < r.endOffsetMs) {
+            passesPhase = true;
+            break;
+          }
+          passesPhase = false;
+        }
+        if (hasRangeForEnc && !passesPhase) {
+          consumePeeked(minCursor);
+          continue;
+        }
+      }
+
       // Check timestamp cutoff BEFORE processing
       if (stopAtTimestamp) {
         if (eventTime > stopAtTimestamp.getTime()) {

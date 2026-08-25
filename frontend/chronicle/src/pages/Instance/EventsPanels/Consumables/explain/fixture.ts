@@ -153,6 +153,7 @@ export function getFixturePanelContext(): PanelContext {
   const entitySelection: EntitySelection = { enemyIds: new Set(), playerIds: new Set() };
   return {
     instance: getFixtureInstance(),
+    selectedPhaseIds: [],
     selectedEncounterIds: [...ENCOUNTERS],
     entitySelection,
   };

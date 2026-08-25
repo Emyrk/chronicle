@@ -34,6 +34,7 @@ function getEncounterDurationMs(encounter: typeof bossEncounter): number {
 const mockContext: PanelContext = {
   instance: fixtureInstance,
   selectedEncounterIds: bossEncounter ? [bossEncounter.id] : [],
+  selectedPhaseIds: [],
   entitySelection: { enemyIds: new Set(), playerIds: new Set() },
   onSelectEncounters: () => {},
   onTogglePlayer: () => {},
