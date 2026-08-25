@@ -1931,7 +1931,6 @@ func GnomereganHostiles() map[uint32]Identity {
 		7849:  "Mobile Alert System",
 		7850:  "Kernobee",
 		7897:  "Alarm-a-bomb 2600",
-		7998:  "Blastmaster Emi Shortfuse",
 		13876: "Mekgineer Trigger",
 		7915:  "Walking Bomb",
 	})
@@ -1943,6 +1942,13 @@ func GnomereganHostiles() map[uint32]Identity {
 		7079: "Viscous Fallout",
 		7800: "Mekgineer Thermaplugg",
 	})
+
+	hostile[7998] = Identity{
+		Affiliation:     types.AffiliationFriendly,
+		Name:            "Blastmaster Emi Shortfuse",
+		Boss:            false,
+		EncounterNameFn: nil,
+	}
 	return hostile
 }
 
