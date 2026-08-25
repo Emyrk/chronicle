@@ -3825,12 +3825,10 @@ export interface WoWEncounterHostile {
     readonly periods: readonly ActivityPeriod[];
 }
 
-// From types/constants.go
-export type WoWEncounterType = "BOSS" | "TRASH" | "UNKNOWN";
-
-export const WoWEncounterTypes: WoWEncounterType[] = ["BOSS", "TRASH", "UNKNOWN"];
-
 // From chroniclesdk/log.go
+/**
+ * WoWEncounterPhase represents a named sub-range within an encounter.
+ */
 export interface WoWEncounterPhase {
     readonly id: string;
     readonly key: string;
@@ -3839,6 +3837,11 @@ export interface WoWEncounterPhase {
     readonly start_offset_ms: number;
     readonly end_offset_ms: number;
 }
+
+// From types/constants.go
+export type WoWEncounterType = "BOSS" | "TRASH" | "UNKNOWN";
+
+export const WoWEncounterTypes: WoWEncounterType[] = ["BOSS", "TRASH", "UNKNOWN"];
 
 // From chroniclesdk/log.go
 export interface WoWEncounterWithHostiles extends WoWEncounter {

@@ -6,7 +6,12 @@ CREATE TABLE log_instance_encounter_phases (
     phase_order INT NOT NULL,
     start_offset_ms BIGINT NOT NULL,
     end_offset_ms BIGINT NOT NULL,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    UNIQUE (encounter_id, key),
+    UNIQUE (encounter_id, phase_order),
+    CHECK (phase_order >= 0),
+    CHECK (start_offset_ms >= 0),
+    CHECK (end_offset_ms > start_offset_ms)
 );
 
 CREATE INDEX idx_log_instance_encounter_phases_encounter_id

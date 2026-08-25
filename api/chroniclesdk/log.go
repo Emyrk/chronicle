@@ -168,6 +168,7 @@ type WoWEncounterHostile struct {
 	Boss    bool             `json:"boss"`
 	Periods []ActivityPeriod `json:"periods"`
 }
+
 // WoWEncounterPhase represents a named sub-range within an encounter.
 type WoWEncounterPhase struct {
 	ID            uuid.UUID `json:"id"`
@@ -177,7 +178,6 @@ type WoWEncounterPhase struct {
 	StartOffsetMs int64     `json:"start_offset_ms"`
 	EndOffsetMs   int64     `json:"end_offset_ms"`
 }
-
 
 type WoWLogGroupState struct {
 	WoWLogGroup

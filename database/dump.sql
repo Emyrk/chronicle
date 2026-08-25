@@ -946,6 +946,31 @@ CREATE TABLE log_instance_encounter_phases (
 );
 
 
+ALTER TABLE ONLY log_instance_encounter_phases
+    ADD CONSTRAINT log_instance_encounter_phases_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY log_instance_encounter_phases
+    ADD CONSTRAINT log_instance_encounter_phases_encounter_key_key UNIQUE (encounter_id, key);
+
+ALTER TABLE ONLY log_instance_encounter_phases
+    ADD CONSTRAINT log_instance_encounter_phases_encounter_order_key UNIQUE (encounter_id, phase_order);
+
+ALTER TABLE log_instance_encounter_phases
+    ADD CONSTRAINT log_instance_encounter_phases_order_check CHECK (phase_order >= 0);
+
+ALTER TABLE log_instance_encounter_phases
+    ADD CONSTRAINT log_instance_encounter_phases_start_check CHECK (start_offset_ms >= 0);
+
+ALTER TABLE log_instance_encounter_phases
+    ADD CONSTRAINT log_instance_encounter_phases_end_check CHECK (end_offset_ms > start_offset_ms);
+
+
+ALTER TABLE ONLY log_instance_encounter_phases
+    ADD CONSTRAINT log_instance_encounter_phases_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;
+
+CREATE INDEX idx_log_instance_encounter_phases_encounter_id ON log_instance_encounter_phases USING btree (encounter_id);
+
+
 CREATE TABLE log_instance_events (
     instance_id uuid NOT NULL,
     type log_instance_event_type NOT NULL,

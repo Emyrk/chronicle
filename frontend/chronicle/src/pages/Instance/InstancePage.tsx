@@ -175,6 +175,15 @@ function transformToInstance(
       players,
       enemies,
       remaining: enc.remaining as string[] | undefined,
+      phases: normalizeArray(enc.phases).map((phase) => ({
+        id: phase.id,
+        encounter_id: phase.encounter_id,
+        key: phase.key,
+        name: phase.name,
+        order: phase.order,
+        start_offset_ms: phase.start_offset_ms,
+        end_offset_ms: phase.end_offset_ms,
+      })),
     };
   });
 

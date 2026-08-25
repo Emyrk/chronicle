@@ -18,7 +18,8 @@ const (
 	destroyEggSpellID      = chrondbc.SpellID(19873)
 )
 
-// razorgorePhaseNS is a fixed UUID namespace for deterministic phase IDs.
+// razorgorePhaseNS is a fixed UUID namespace used with the encounter ID to
+// produce stable phase IDs that remain unique across pulls.
 var razorgorePhaseNS = uuid.MustParse("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
 
 // BWLPhaseDetectorFactories returns the per-fight phase detector factories for
@@ -66,16 +67,29 @@ func (d *razorgorePhaseDetector) ProcessMessage(m messages.Message) {
 	}
 }
 
-func (d *razorgorePhaseDetector) Finalize(encounterStart, encounterEnd time.Time) []encounter.Phase {
+func (d *razorgorePhaseDetector) Finalize(encounterID uuid.UUID, encounterStart, encounterEnd time.Time) []encounter.Phase {
+	phaseID := func(key string) uuid.UUID {
+		return uuid.NewSHA1(razorgorePhaseNS, []byte(encounterID.String()+":"+key))
+	}
+
 	if d.transitionMsg == nil {
-		// Threshold was never reached – emit no phases.
-		return nil
+		return []encounter.Phase{
+			encounter.PhaseFromTimes(
+				phaseID("razorgore_p1"),
+				"razorgore_p1",
+				"Phase 1 – Adds",
+				0,
+				encounterStart,
+				encounterStart,
+				encounterEnd,
+			),
+		}
 	}
 
 	transitionTime := d.transitionMsg.Date()
 	return []encounter.Phase{
 		encounter.PhaseFromTimes(
-			uuid.NewSHA1(razorgorePhaseNS, []byte("razorgore_p1")),
+			phaseID("razorgore_p1"),
 			"razorgore_p1",
 			"Phase 1 – Adds",
 			0,
@@ -84,7 +98,7 @@ func (d *razorgorePhaseDetector) Finalize(encounterStart, encounterEnd time.Time
 			transitionTime,
 		),
 		encounter.PhaseFromTimes(
-			uuid.NewSHA1(razorgorePhaseNS, []byte("razorgore_p2")),
+			phaseID("razorgore_p2"),
 			"razorgore_p2",
 			"Phase 2 – Boss",
 			1,

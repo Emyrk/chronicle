@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -14,10 +16,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
 func phaseTestCreatureGUID(entry uint32, seed uint32) guid.GUID {
 	return guid.GUID(0xF130000000000000 | uint64(entry&0xFFFFFF)<<24 | uint64(seed&0xFFFFFF))
 }
-
 
 func razorgoreSpellGo(ts time.Time) *messages.SpellGo {
 	caster := phaseTestCreatureGUID(12435, 1)
@@ -32,9 +34,9 @@ func TestRazorgoreEggThreshold_Flavors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		flavor    database.WoWFlavor
-		expected  int
+		name     string
+		flavor   database.WoWFlavor
+		expected int
 	}{
 		{"Nightmare of Ursol", database.WoWFlavor{database.FlavorNightmareOfUrsol}, 20},
 		{"VanillaPlus", database.WoWFlavor{database.FlavorVanillaPlus}, 30},
@@ -73,15 +75,19 @@ func TestRazorgorePhaseDetector_Threshold20(t *testing.T) {
 	require.Len(t, factories, 1)
 
 	det := factories[0]()
+	encounterID := uuid.New()
 	start := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	end := start.Add(5 * time.Minute)
 
-	// Feed 19 casts – no phases yet.
+	// Feed 19 casts – the encounter remains entirely Phase 1.
 	for i := 0; i < 19; i++ {
 		det.ProcessMessage(razorgoreSpellGo(start.Add(time.Duration(i) * time.Second)))
 	}
-	phases := det.Finalize(start, end)
-	assert.Empty(t, phases)
+	phases := det.Finalize(encounterID, start, end)
+	require.Len(t, phases, 1)
+	assert.Equal(t, "razorgore_p1", phases[0].Key)
+	assert.Equal(t, int64(0), phases[0].StartOffsetMs)
+	assert.Equal(t, end.Sub(start).Milliseconds(), phases[0].EndOffsetMs)
 
 	det.Reset()
 
@@ -90,7 +96,7 @@ func TestRazorgorePhaseDetector_Threshold20(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		det.ProcessMessage(razorgoreSpellGo(start.Add(time.Duration(i) * time.Second)))
 	}
-	phases = det.Finalize(start, end)
+	phases = det.Finalize(encounterID, start, end)
 	require.Len(t, phases, 2)
 
 	assert.Equal(t, "razorgore_p1", phases[0].Key)
@@ -118,7 +124,7 @@ func TestRazorgorePhaseDetector_DuplicateCastsIgnored(t *testing.T) {
 		det.ProcessMessage(razorgoreSpellGo(start.Add(time.Duration(i) * time.Second)))
 	}
 
-	phases := det.Finalize(start, end)
+	phases := det.Finalize(uuid.New(), start, end)
 	require.Len(t, phases, 2)
 	// Phase 2 start should match the 20th cast, not a later one.
 	assert.Equal(t, int64(19000), phases[1].StartOffsetMs)
@@ -135,15 +141,17 @@ func TestRazorgorePhaseDetector_Reset(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		det.ProcessMessage(razorgoreSpellGo(start.Add(time.Duration(i) * time.Second)))
 	}
-	require.Len(t, det.Finalize(start, end), 2)
+	require.Len(t, det.Finalize(uuid.New(), start, end), 2)
 
 	det.Reset()
 
-	// After reset, 5 casts should not produce phases.
+	// After reset, 5 casts should produce only the always-present Phase 1.
 	for i := 0; i < 5; i++ {
 		det.ProcessMessage(razorgoreSpellGo(start.Add(time.Duration(i) * time.Second)))
 	}
-	assert.Empty(t, det.Finalize(start, end))
+	phases := det.Finalize(uuid.New(), start, end)
+	require.Len(t, phases, 1)
+	assert.Equal(t, "razorgore_p1", phases[0].Key)
 }
 
 func TestRazorgorePhaseDetector_WrongSpell(t *testing.T) {
@@ -162,7 +170,9 @@ func TestRazorgorePhaseDetector_WrongSpell(t *testing.T) {
 			SpellData:   &chrondbc.Spell{ID: 22425}, // different spell
 		})
 	}
-	assert.Empty(t, det.Finalize(start, end))
+	phases := det.Finalize(uuid.New(), start, end)
+	require.Len(t, phases, 1)
+	assert.Equal(t, "razorgore_p1", phases[0].Key)
 }
 
 func TestRazorgorePhaseDetector_WrongCaster(t *testing.T) {
@@ -181,7 +191,9 @@ func TestRazorgorePhaseDetector_WrongCaster(t *testing.T) {
 			SpellData:   &chrondbc.Spell{ID: 19873},
 		})
 	}
-	assert.Empty(t, det.Finalize(start, end))
+	phases := det.Finalize(uuid.New(), start, end)
+	require.Len(t, phases, 1)
+	assert.Equal(t, "razorgore_p1", phases[0].Key)
 }
 
 func TestPhaseFromTimes(t *testing.T) {
