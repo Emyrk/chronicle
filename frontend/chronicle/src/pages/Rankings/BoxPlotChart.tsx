@@ -28,27 +28,33 @@ function BoxPlotRow({ stats, scaleMax, onClick }: BoxPlotRowProps) {
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className={`group flex items-center gap-3 rounded-md px-1 py-1.5 transition-colors hover:bg-muted/20 ${onClick ? "cursor-pointer" : "cursor-default"}`}
+          className={`group relative h-10 rounded-md border-l-2 pl-2 transition-colors hover:bg-muted/20 sm:flex sm:h-auto sm:items-center sm:gap-3 sm:border-l-0 sm:px-1 sm:py-1.5 ${onClick ? "cursor-pointer" : "cursor-default"}`}
+          style={{ borderLeftColor: color }}
           onClick={onClick}
           role={onClick ? "button" : undefined}
           tabIndex={onClick ? 0 : undefined}
           onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } } : undefined}
         >
-          {/* Class label */}
-          <div className="flex w-32 shrink-0 items-center gap-1.5 text-xs">
-            <img
-              src={`/c/icons/class_${stats.player_class.toLowerCase()}.png`}
-              alt={CLASS_DISPLAY[stats.player_class] ?? stats.player_class}
-              className="h-4 w-4 shrink-0 rounded-sm"
-              onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
-            />
-            <span className="truncate font-medium" style={{ color }}>
-              {stats.player_spec || CLASS_DISPLAY[stats.player_class]}
+          {/* Class label and mobile median overlap the top of the plot. */}
+          <div className="absolute inset-x-2 top-0 z-10 flex items-center text-xs sm:static sm:w-32 sm:shrink-0">
+            <span className="flex min-w-0 items-center gap-1.5 bg-card/90 pr-2 backdrop-blur-[1px] sm:bg-transparent sm:pr-0 sm:backdrop-blur-none">
+              <img
+                src={`/c/icons/class_${stats.player_class.toLowerCase()}.png`}
+                alt={CLASS_DISPLAY[stats.player_class] ?? stats.player_class}
+                className="h-4 w-4 shrink-0 rounded-sm"
+                onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
+              />
+              <span className="truncate font-medium" style={{ color }}>
+                {stats.player_spec || CLASS_DISPLAY[stats.player_class]}
+              </span>
+            </span>
+            <span className="ml-auto shrink-0 bg-card/90 pl-2 font-mono font-semibold tabular-nums text-foreground backdrop-blur-[1px] sm:hidden">
+              {Math.round(stats.median_dps).toLocaleString()}
             </span>
           </div>
 
           {/* Box plot */}
-          <div className="relative flex-1 h-7">
+          <div className="absolute inset-x-2 bottom-0 h-7 sm:relative sm:inset-auto sm:flex-1">
             {/* Whisker line: min → max */}
             <div
               className="absolute top-1/2 h-px -translate-y-1/2"
@@ -90,12 +96,12 @@ function BoxPlotRow({ stats, scaleMax, onClick }: BoxPlotRowProps) {
             />
           </div>
 
-          {/* Count + median value */}
-          <div className="w-24 shrink-0 text-right text-xs text-muted-foreground">
+          {/* Desktop count + median value */}
+          <div className="hidden w-24 shrink-0 text-right text-xs text-muted-foreground sm:block">
             <span className="font-mono font-semibold text-foreground">
               {Math.round(stats.median_dps).toLocaleString()}
             </span>{" "}
-            <span className="hidden sm:inline">({stats.count})</span>
+            <span>({stats.count})</span>
           </div>
         </div>
       </TooltipTrigger>
@@ -172,9 +178,11 @@ export function BoxPlotChart({ stats, title = "DPS Distribution by Class", subti
     return { values: result, max: finalMax }
   }, [scaleMax])
 
+  const mobileTicks = [0, ticks.max / 2, ticks.max]
+
   return (
-    <div className="rounded-xl border bg-card p-5">
-      <div className="mb-5 flex items-baseline justify-between gap-4">
+    <div className="rounded-xl border bg-card p-3 sm:p-5">
+      <div className="mb-3 flex flex-col gap-1 sm:mb-5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
         <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
         {subtitle && (
           <span className="text-xs text-muted-foreground/70">{subtitle}</span>
@@ -198,15 +206,26 @@ export function BoxPlotChart({ stats, title = "DPS Distribution by Class", subti
             ))}
 
             {/* X-axis ticks */}
-            <div className="flex items-center gap-3 pt-2">
-              <div className="w-32 shrink-0" />
-              <div className="relative flex-1 h-5">
+            <div className="flex items-center gap-3 pt-2 sm:px-1">
+              <div className="hidden w-32 shrink-0 sm:block" />
+              <div className="relative h-5 flex-1">
+                {mobileTicks.map((v, i) => (
+                  <span
+                    key={`mobile-${v}`}
+                    className={`absolute font-mono text-[10px] text-muted-foreground/60 sm:hidden ${
+                      i === 0 ? "" : i === mobileTicks.length - 1 ? "-translate-x-full" : "-translate-x-1/2"
+                    }`}
+                    style={{ left: `${(v / ticks.max) * 100}%` }}
+                  >
+                    {Math.round(v).toLocaleString()}
+                  </span>
+                ))}
                 {ticks.values.map((v) => {
                   const pct = (v / ticks.max) * 100
                   return (
                     <span
                       key={v}
-                      className="absolute -translate-x-1/2 text-[10px] text-muted-foreground/60 font-mono"
+                      className="absolute hidden -translate-x-1/2 font-mono text-[10px] text-muted-foreground/60 sm:block"
                       style={{ left: `${pct}%` }}
                     >
                       {v.toLocaleString()}
@@ -214,7 +233,7 @@ export function BoxPlotChart({ stats, title = "DPS Distribution by Class", subti
                   )
                 })}
               </div>
-              <div className="w-24 shrink-0" />
+              <div className="hidden w-24 shrink-0 sm:block" />
             </div>
           </div>
         </TooltipProvider>
