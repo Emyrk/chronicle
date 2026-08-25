@@ -122,6 +122,13 @@ func (s *State) Process(m messages.Message) error {
 		s.CurrentRealm = &typed.Info
 	case *messages.Versions:
 		s.CurrentVersions = typed
+		// Addon headers are log-wide metadata, but they may be emitted while a
+		// later instance is active. Backfill missing metadata on instances already
+		// discovered without replacing an instance's own header. New instances
+		// receive CurrentVersions in matchOrCreateInstance.
+		for _, instance := range s.Instances {
+			instance.SetVersionsIfUnset(typed.Versions, typed.Player)
+		}
 	case *messages.Zone:
 		if s.instanceResolver != nil {
 			zoneStart := time.Now()
