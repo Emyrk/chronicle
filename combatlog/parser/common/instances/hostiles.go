@@ -1933,8 +1933,11 @@ func GnomereganHostiles() map[uint32]Identity {
 		7897:  "Alarm-a-bomb 2600",
 		7998:  "Blastmaster Emi Shortfuse",
 		13876: "Mekgineer Trigger",
+		7915:  "Walking Bomb",
 	})
 	LoadBosses(hostile, map[uint32]string{
+		7361: "Grubbis",
+		6215: "Grubbis", // "Chomper",
 		6229: "Crowd Pummeler 9-60",
 		6235: "Electrocutioner 6000",
 		7079: "Viscous Fallout",
