@@ -79,6 +79,8 @@ func TestVersionsApplyAcrossLogInstances(t *testing.T) {
 
 	seen := time.Date(2026, 8, 25, 20, 0, 0, 0, time.UTC)
 	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "Obsidian Sanctum"}})
+	originalVersions := map[string]string{"addon": "0.6.0"}
+	state.CurrentInstance.SetVersions(originalVersions, nil)
 	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen.Add(time.Hour), Name: "Naxxramas"}})
 
 	versions := map[string]string{
@@ -94,9 +96,10 @@ func TestVersionsApplyAcrossLogInstances(t *testing.T) {
 	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen.Add(2 * time.Hour), Name: "Eye of Eternity"}})
 	require.Len(t, state.Instances, 3)
 
-	for _, instance := range state.Instances {
+	wantVersions := []map[string]string{originalVersions, versions, versions}
+	for i, instance := range state.Instances {
 		finalized, err := instance.Finalize(ctx)
 		require.NoError(t, err)
-		require.Equal(t, versions, finalized.Versions)
+		require.Equal(t, wantVersions[i], finalized.Versions)
 	}
 }

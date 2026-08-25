@@ -351,6 +351,13 @@ func (h *Hookable) SetVersions(versions map[string]string, player *guid.GUID) {
 	h.recorderGUID = player
 }
 
+func (h *Hookable) SetVersionsIfUnset(versions map[string]string, player *guid.GUID) {
+	if h.versions != nil {
+		return
+	}
+	h.SetVersions(versions, player)
+}
+
 // MatchesZone
 // TODO: Should we care about the instance ID here?
 func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.MatchesZoneF(z) }
