@@ -659,8 +659,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           variant="default"
           size="icon"
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="fixed bottom-8 left-8 z-50 h-14 w-14 rounded-full shadow-lg"
+          className="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-50 h-11 w-11 rounded-full border border-white/10 shadow-xl sm:right-6 sm:h-12 sm:w-12"
           title={sidebarOpen ? "Close encounters" : "Show encounters"}
+          aria-label={sidebarOpen ? "Close encounter filters" : "Show encounter filters"}
         >
           {sidebarOpen ? <X className="h-5 w-5" /> : <List className="h-5 w-5" />}
         </Button>,
@@ -674,27 +675,27 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         </div>
       )}
       {isPlayerMetric && isMobile && sidebarOpen && (
-        <div className="fixed inset-y-0 left-0 z-50 w-64 bg-background border-r shadow-lg pl-4 pt-4 overflow-y-auto styled-scrollbar">
+        <div className="fixed inset-y-0 left-0 z-50 w-[min(20rem,88vw)] overflow-y-auto border-r bg-background px-4 pt-4 shadow-2xl styled-scrollbar">
           {sidebarContent}
         </div>
       )}
 
       {/* Main area */}
-      <div className={cn("min-w-0 flex-1 space-y-5", !isMobile && "pl-6")}>
+      <div className={cn("min-w-0 flex-1 space-y-4 sm:space-y-5", !isMobile && "pl-6")}>
         {/* Hero header with instance background */}
-        <div className="rounded-lg border relative overflow-hidden">
+        <div className="relative overflow-hidden rounded-xl border">
           {/* Background image */}
           <div className="absolute inset-0 z-0">
             <img
               src={getInstanceBackground(instanceName)}
               alt=""
-              className="h-full w-full object-cover opacity-70"
+              className="h-full w-full object-cover opacity-45 sm:opacity-70"
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/50" />
+            <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/75 to-background/95 sm:bg-gradient-to-r sm:from-background/90 sm:via-background/70 sm:to-background/50" />
           </div>
 
           {/* Header content — two columns, both touch bottom */}
-          <div className="relative z-10 p-4 flex flex-col sm:flex-row gap-4">
+          <div className="relative z-10 flex flex-col gap-4 p-3 sm:flex-row sm:p-4">
             {/* Left: back, title, dropdowns */}
             <div className="flex-1 flex flex-col justify-between gap-2">
               <div>
@@ -705,18 +706,18 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   <ArrowLeft className="h-3.5 w-3.5" />
                   Back to Rankings
                 </button>
-                <h1 className="text-2xl font-bold">
-                  {instanceName}
+                <h1 className="flex flex-wrap items-baseline gap-x-2 text-xl font-bold leading-tight sm:text-2xl">
+                  <span>{instanceName}</span>
                   {headerDifficulty && (
-                    <span className="ml-2 text-lg font-normal text-muted-foreground">{headerDifficulty}</span>
+                    <span className="text-sm font-normal text-muted-foreground sm:text-lg">{headerDifficulty}</span>
                   )}
                 </h1>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[120px] justify-between">
+                    <Button variant="outline" size="sm" className="h-8 w-full min-w-0 justify-between gap-1.5 px-2 text-xs sm:h-7 sm:w-auto sm:min-w-[120px] sm:px-3">
                       {metric === "dps" ? "DPS Rankings" : metric === "hps" ? "HPS Rankings" : metric === "killtime" ? "Kill Time" : "Success Rate"}
                       <ChevronDown className="h-3 w-3 opacity-50" />
                     </Button>
@@ -734,7 +735,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 {isPlayerMetric && (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[80px] justify-between">
+                      <Button variant="outline" size="sm" className="h-8 w-full min-w-0 justify-between gap-1.5 px-2 text-xs sm:h-7 sm:w-auto sm:min-w-[80px] sm:px-3">
                         {filterRole === "" ? "All Roles" : filterRole === "dps" ? "DPS" : filterRole === "heal" ? "Healer" : "Tank"}
                         <ChevronDown className="h-3 w-3 opacity-50" />
                       </Button>
@@ -753,7 +754,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 {availableDifficulties.length > 1 && (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[130px] justify-between">
+                      <Button variant="outline" size="sm" className="h-8 w-full min-w-0 justify-between gap-1.5 px-2 text-xs sm:h-7 sm:w-auto sm:min-w-[130px] sm:px-3">
                         {selectedDifficulties.size === 0
                           ? "All Difficulties"
                           : selectedDifficulties.size === 1
@@ -786,7 +787,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 {isPlayerMetric && availableRealms.length > 1 && (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[110px] justify-between">
+                      <Button variant="outline" size="sm" className="h-8 w-full min-w-0 justify-between gap-1.5 px-2 text-xs sm:h-7 sm:w-auto sm:min-w-[110px] sm:px-3">
                         {selectedRealms.size === 0
                           ? "All Realms"
                           : selectedRealms.size === 1
@@ -826,7 +827,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   </DropdownMenu>
                 )}
 
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                <label className="flex min-h-8 items-center gap-2 rounded-md border border-white/5 bg-black/20 px-2 text-xs text-muted-foreground cursor-pointer select-none sm:min-h-0 sm:border-0 sm:bg-transparent sm:px-0">
                   <Checkbox
                     checked={hideUnknowns}
                     onCheckedChange={() => handleToggleUnknowns()}
@@ -836,7 +837,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 </label>
 
                 {isPlayerMetric && dpsSubTab === "boxplot" && (
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                  <label className="flex min-h-8 items-center gap-2 rounded-md border border-white/5 bg-black/20 px-2 text-xs text-muted-foreground cursor-pointer select-none sm:min-h-0 sm:border-0 sm:bg-transparent sm:px-0">
                     <Checkbox
                       checked={groupByClass}
                       onCheckedChange={() => handleToggleGroupByClass()}
@@ -849,9 +850,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
             </div>
 
             {/* Right: sub-tabs + time period, bottom-aligned */}
-            <div className="flex flex-col justify-end items-end gap-2 shrink-0">
+            <div className="flex w-full shrink-0 flex-col justify-end gap-2 sm:w-auto sm:items-end">
               {(isPlayerMetric || metric === "killtime") && (
-                <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
+                <div className="flex w-full gap-1 rounded-lg border border-white/10 bg-black/20 p-1 sm:w-auto">
                   {(["boxplot", "leaderboard"] as const).map((t) => (
                     <button
                       key={t}
@@ -861,7 +862,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                           : handleKillTimeSubTabChange(t)
                       }
                       className={cn(
-                        "rounded-md px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                        "flex-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors sm:flex-none sm:py-0.5",
                         (isPlayerMetric ? dpsSubTab : killTimeSubTab) === t
                           ? "bg-white/15 text-foreground"
                           : "text-muted-foreground hover:text-foreground",
@@ -873,7 +874,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 </div>
               )}
 
-              <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
+              <div className="flex w-full gap-1 rounded-lg border border-white/10 bg-black/30 p-1 sm:w-auto">
                 {([
                   { value: "all" as const, label: "All Time" },
                   { value: "90d" as const, label: "90d" },
@@ -884,7 +885,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                     key={opt.value}
                     onClick={() => handleTimePeriodChange(opt.value)}
                     className={cn(
-                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                      "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:flex-none sm:px-3 sm:py-1",
                       timePeriod === opt.value
                         ? "bg-[#5F8FA6] text-white"
                         : "text-muted-foreground hover:text-foreground",
@@ -900,7 +901,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
         {/* Multi-encounter notice */}
         {isPlayerMetric && selectedEncounters.size > 1 && (
-          <p className="text-xs text-muted-foreground/70 italic">
+          <p className="rounded-lg border border-white/5 bg-muted/20 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:text-xs sm:italic">
             Showing combined {valueMetric.toUpperCase()} across {selectedEncounters.size} encounters per run.
             Runs missing any selected encounter are excluded.
           </p>

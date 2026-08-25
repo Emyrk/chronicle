@@ -34,8 +34,8 @@ export function LeaderboardsPage() {
       <div className="w-full">
         {/* Tab bar */}
         <div className="border-b bg-background/95 backdrop-blur sticky top-0 z-10">
-          <div className="container mx-auto px-4">
-            <div className="flex items-center gap-1">
+          <div className="container mx-auto px-2 sm:px-4">
+            <div className="flex w-full items-center gap-1 sm:w-auto">
               <TabButton
                 active={tab === "dps"}
                 onClick={() => setTab("dps")}
@@ -53,7 +53,7 @@ export function LeaderboardsPage() {
         </div>
 
         {tab === "dps" ? (
-          <div className="container mx-auto px-4 py-8">
+          <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-8">
             <InstanceView instanceName={instance} />
           </div>
         ) : (
@@ -105,7 +105,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+      className={`flex flex-1 items-center justify-center gap-2 px-3 py-3 text-sm font-medium border-b-2 transition-colors sm:flex-none sm:px-4 ${
         active
           ? "border-[#5F8FA6] text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
