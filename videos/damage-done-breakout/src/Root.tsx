@@ -46,6 +46,7 @@ import ConsumablesViewAllVideo from "../../../frontend/chronicle/src/pages/Insta
 import ConsumablesRaidWideVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/RaidWide.video";
 import ConsumablesInspectItemVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/InspectItem.video";
 import ConsumablesUnresolvedVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/Unresolved.video";
+import EncounterPhasesDiscordVideo from "../../../frontend/chronicle/src/pages/Instance/videos/EncounterPhasesDiscord.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -57,7 +58,10 @@ import ConsumablesUnresolvedVideo from "../../../frontend/chronicle/src/pages/In
 export const RemotionRoot: React.FC = () => {
   return (
     <>
-    <Folder name="DamageDoneLessons">
+      <Folder name="FeatureDemos">
+        <Composition id="EncounterPhasesDiscord" component={EncounterPhasesDiscordVideo} durationInFrames={650} fps={30} width={1280} height={720} />
+      </Folder>
+      <Folder name="DamageDoneLessons">
       <Composition
         id="PinBreakout"
         component={PinBreakoutVideo}
