@@ -525,6 +525,33 @@ func TestNefarianPhaseTransition_ResetsWithEncounter(t *testing.T) {
 	require.Len(t, transitions, 2, "a new pull should emit a fresh phase transition")
 }
 
+func TestNefarianPhaseTransition_ResetsAfterInactivityWipe(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	var transitions []phases.Transition
+	chars.SetPhaseTransitionCallback(func(t phases.Transition) {
+		transitions = append(transitions, t)
+	})
+
+	player := guid.GUID(0x1)
+	nef := creatureGUID(11583, 0x1)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, nef))
+	require.NoError(t, err)
+	require.Len(t, transitions, 1)
+
+	// The next pull's first hit arrives after the previous activity period timed
+	// out. It must both reset the transition state and emit P2 for the new pull.
+	_, err = chars.Process(damage(base.Add(2*time.Minute), player, nef))
+	require.NoError(t, err)
+	require.Len(t, transitions, 2, "a pull after an inactivity wipe should emit a fresh phase transition")
+}
+
 func TestNefarianPhaseDefinitions_PhaseProvider(t *testing.T) {
 	t.Parallel()
 

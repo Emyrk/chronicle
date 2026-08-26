@@ -63,6 +63,15 @@ func (c *nefarian) PhaseDefinitions() *phases.EncounterPhases {
 }
 
 func (c *nefarian) Process(m messages.Message) error {
+	// Resolve inactivity before inspecting this message. A new pull's first hit
+	// can arrive after the previous pull timed out, ending and restarting the
+	// activity period on the same message.
+	if current, ok := c.Activity.Current(); ok {
+		current.HandleTimeout(m.Date())
+	}
+	if !c.IsActive() {
+		c.p2Emitted = false
+	}
 	wasActive := c.IsActive()
 
 	if damage, ok := m.(*messages.Damage); ok &&
