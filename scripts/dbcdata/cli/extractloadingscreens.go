@@ -123,6 +123,11 @@ func extractLoadingScreens(wc *dbcdb.WoWClient, clientPath, outDir string, stdou
 	return nil
 }
 
+func webpOutputName(blpPath string) string {
+	name := filepath.Base(strings.ReplaceAll(blpPath, `\`, "/"))
+	return strings.TrimSuffix(strings.ToLower(name), ".blp") + ".webp"
+}
+
 // extractBLPToWebP reads a BLP file, decodes it, and writes a WebP file to
 // outDir. Returns true on success, false if skipped.
 func extractBLPToWebP(readFile func(string) ([]byte, error), blpPath, outDir string, stdout io.Writer) bool {
@@ -138,13 +143,7 @@ func extractBLPToWebP(readFile func(string) ([]byte, error), blpPath, outDir str
 		return false
 	}
 
-	const prefix = `Interface\Glues\LoadingScreens\`
-	name := strings.TrimPrefix(blpPath, prefix)
-	if name == blpPath {
-		// Unexpected path format; use the full basename.
-		name = filepath.Base(blpPath)
-	}
-	name = strings.TrimSuffix(strings.ToLower(name), ".blp") + ".webp"
+	name := webpOutputName(blpPath)
 	outPath := filepath.Join(outDir, name)
 
 	out, err := os.Create(outPath)
