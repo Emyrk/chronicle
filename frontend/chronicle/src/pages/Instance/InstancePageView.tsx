@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { cn } from "@/lib/utils";
 import type { Instance, Encounter, EncounterPhase, EnemyUnit } from "./InstancePage";
-import { activePhaseForTimeRange, phaseTimeRangeSelection } from "./phaseTimeRange";
+import { activePhaseForTimeRange, phaseShortLabel, phaseTimeRangeSelection, phaseWidthPercent } from "./phaseTimeRange";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { PANELS } from "./EventsPanels/EventsPanel";
@@ -352,6 +352,21 @@ function mergeEnemiesByGuid(encounters: Encounter[]): MergedEnemy[] {
   return enemies.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+function phaseTone(order: number, active: boolean): string {
+  const tones = [
+    active
+      ? "border-violet-400/80 bg-violet-500/35 text-violet-50 shadow-[inset_0_0_0_1px_rgba(196,181,253,0.12)]"
+      : "border-violet-400/55 bg-violet-500/15 text-violet-200",
+    active
+      ? "border-amber-400/80 bg-amber-500/30 text-amber-50 shadow-[inset_0_0_0_1px_rgba(253,230,138,0.12)]"
+      : "border-amber-400/55 bg-amber-500/10 text-amber-200",
+    active
+      ? "border-cyan-400/80 bg-cyan-500/30 text-cyan-50"
+      : "border-cyan-400/55 bg-cyan-500/10 text-cyan-200",
+  ];
+  return tones[order % tones.length];
+}
+
 // ============================================================================
 // Enemy status helpers (killed / reset / alive)
 // ============================================================================
@@ -426,6 +441,8 @@ function EncounterSidebar({
     .filter(g => g.encounters.some(e => selectedIds.includes(e.id)))
     .map(g => g.name);
   const hasSelectedTrash = groupsWithSelectedTrash.length > 0;
+
+  const multipleEncountersSelected = selectedIds.length > 1;
 
   const [trashOpen, setTrashOpen] = useState(false);
   const [manualExpandedGroup, setManualExpandedGroup] = useState<string | null>(null);
@@ -671,9 +688,17 @@ function EncounterSidebar({
           const isSelected = selectedIds.includes(encounter.id);
           const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
           const phases = [...(encounter.phases ?? [])].sort((a, b) => a.order - b.order);
-          
+          const showCompactPhases = isSelected && phases.length > 0 && multipleEncountersSelected;
+          const showExpandedPhases = isSelected && phases.length > 0 && !multipleEncountersSelected;
+
           return (
-            <div key={encounter.id}>
+            <div
+              key={encounter.id}
+              className={cn(
+                "rounded-md transition-all duration-150",
+                isSelected && "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm",
+              )}
+            >
               <div
                 role="button"
                 tabIndex={0}
@@ -686,10 +711,8 @@ function EncounterSidebar({
                 }}
                 className={cn(
                   "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-all duration-150 cursor-pointer",
-                  isSelected
-                    ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
-                    : "hover:bg-accent/50 hover:translate-x-0.5",
-                  isWipeOrReset && !isSelected && "opacity-60"
+                  !isSelected && "hover:bg-accent/50 hover:translate-x-0.5",
+                  isWipeOrReset && !isSelected && "opacity-60",
                 )}
               >
                 {encounter.kill_type === "clean" ? (
@@ -701,10 +724,27 @@ function EncounterSidebar({
                 ) : (
                   <Skull className="h-4 w-4 shrink-0 text-red-500" />
                 )}
-                <span className="truncate flex-1">{encounter.name}</span>
-                <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
-                  {formatEncounterTime(encounter)}
-                </span>
+                <span className={cn("truncate flex-1", isSelected && "font-semibold")}>{encounter.name}</span>
+                {showCompactPhases ? (
+                  <div className="flex shrink-0 items-center gap-1" aria-label="Encounter phases">
+                    {phases.map((phase) => (
+                      <span
+                        key={phase.id}
+                        title={`${phase.name}: ${formatDurationMs(phase.end_offset_ms - phase.start_offset_ms)}`}
+                        className={cn(
+                          "inline-flex h-5 w-9 items-center justify-center rounded border text-[10px] font-semibold leading-none",
+                          phaseTone(phase.order, false),
+                        )}
+                      >
+                        {phaseShortLabel(phase)}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
+                    {formatEncounterTime(encounter)}
+                  </span>
+                )}
                 {isDebug && (
                   <button
                     onClick={(e) => {
@@ -718,36 +758,38 @@ function EncounterSidebar({
                   </button>
                 )}
               </div>
-              {/* Nested phase rows */}
-              {phases.length > 0 && isSelected && (
-                <div className="ml-6 mt-0.5 space-y-0.5">
+
+              {showExpandedPhases && (
+                <div className="flex gap-1.5 px-2 pb-2" aria-label="Apply encounter phase time range">
                   {phases.map((phase) => {
                     const phaseSelected = activePhaseId === phase.id;
                     const durationMs = phase.end_offset_ms - phase.start_offset_ms;
+                    const widthPercent = phaseWidthPercent(phase, encounter);
+                    const showFullName = widthPercent >= 34;
+                    const showDuration = widthPercent >= 42;
                     return (
-                      <div
-                        role="button"
-                        tabIndex={0}
+                      <button
+                        type="button"
                         key={phase.id}
                         onClick={() => onSelectPhase(phase, encounter.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            onSelectPhase(phase, encounter.id);
-                          }
-                        }}
+                        title={`Apply ${phase.name} time range (${formatDurationMs(durationMs)})`}
+                        aria-pressed={phaseSelected}
                         className={cn(
-                          "w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left transition-all duration-150 cursor-pointer",
-                          phaseSelected
-                            ? "bg-primary-darker text-primary-foreground border-l-2 border-l-primary-foreground/70"
-                            : "opacity-60 hover:opacity-80"
+                          "flex h-7 min-w-12 items-center justify-center gap-2 overflow-hidden rounded border px-2 text-[11px] font-semibold transition-all duration-150",
+                          "hover:-translate-y-px hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          phaseTone(phase.order, phaseSelected),
                         )}
+                        style={{ flexGrow: Math.max(widthPercent, 16), flexBasis: 0 }}
                       >
-                        <span className="truncate flex-1">{phase.name}</span>
-                        <span className="text-[10px] font-mono opacity-70">
-                          {formatDurationMs(durationMs)}
+                        <span className="truncate">
+                          {showFullName ? phase.name : phaseShortLabel(phase)}
                         </span>
-                      </div>
+                        {showDuration && (
+                          <span className="shrink-0 font-mono text-[10px] opacity-65">
+                            {formatDurationMs(durationMs)}
+                          </span>
+                        )}
+                      </button>
                     );
                   })}
                 </div>

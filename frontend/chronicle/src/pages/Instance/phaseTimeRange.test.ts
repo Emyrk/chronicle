@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Encounter, EncounterPhase } from "./InstancePage";
-import { activePhaseForTimeRange, phaseTimeRangeSelection } from "./phaseTimeRange";
+import {
+  activePhaseForTimeRange,
+  phaseShortLabel,
+  phaseTimeRangeSelection,
+  phaseWidthPercent,
+} from "./phaseTimeRange";
 
 const phase1: EncounterPhase = {
   id: "phase-1",
@@ -36,6 +41,23 @@ const encounter: Encounter = {
   end_time: "2026-01-01T00:00:40.000Z",
   phases: [phase1, phase2],
 };
+
+describe("phase display helpers", () => {
+  it("uses stable short labels based on phase order", () => {
+    expect(phaseShortLabel(phase1)).toBe("P1");
+    expect(phaseShortLabel(phase2)).toBe("P2");
+  });
+
+  it("sizes phase cards by their share of encounter duration", () => {
+    expect(phaseWidthPercent(phase1, encounter)).toBe(50);
+    expect(phaseWidthPercent(phase2, encounter)).toBe(50);
+  });
+
+  it("clamps invalid phase shares", () => {
+    expect(phaseWidthPercent({ ...phase1, end_offset_ms: 80_000 }, encounter)).toBe(100);
+    expect(phaseWidthPercent({ ...phase1, end_offset_ms: -1 }, encounter)).toBe(0);
+  });
+});
 
 describe("phaseTimeRangeSelection", () => {
   it("single-selects the parent encounter and uses the phase offsets", () => {
