@@ -25,21 +25,24 @@ export interface GearAnalysisState {
 export function useGearAnalysis(
   stage: GearStage | undefined,
   savedProfileId?: string,
-  onProfileIdChange?: (profileId: string | null) => void,
+  embeddedProfile?: AnalysisProfile,
+  onProfileChange?: (profile: AnalysisProfile | null) => void,
 ): GearAnalysisState {
   const [searchParams, setSearchParams] = useSearchParams();
-  const profileId = searchParams.get("profile") ?? savedProfileId ?? null;
-  const [selection, setSelectionState] = useState<AnalysisProfile | null>(null);
+  const profileId = searchParams.get("profile") ?? savedProfileId ?? embeddedProfile?.id ?? null;
+  const [selection, setSelectionState] = useState<AnalysisProfile | null>(
+    embeddedProfile ?? null,
+  );
   const setSelection = useCallback(
     (profile: AnalysisProfile | null) => {
       setSelectionState(profile);
-      onProfileIdChange?.(profile?.id ?? null);
+      onProfileChange?.(profile);
       const next = new URLSearchParams(searchParams);
       if (profile) next.set("profile", profile.id);
       else next.delete("profile");
       setSearchParams(next, { replace: true });
     },
-    [onProfileIdChange, searchParams, setSearchParams],
+    [onProfileChange, searchParams, setSearchParams],
   );
 
   const itemIds =

@@ -1151,6 +1151,28 @@ export interface GearProgression {
 
 // From chroniclesdk/gear_progression.go
 /**
+ * GearProgressionAnalysisProfile is a portable snapshot of a stat-weight profile.
+ */
+export interface GearProgressionAnalysisProfile {
+    readonly id: string;
+    readonly name: string;
+    readonly description?: string;
+    readonly weights: Record<string, number>;
+    readonly targets?: readonly GearProgressionAnalysisTarget[];
+}
+
+// From chroniclesdk/gear_progression.go
+/**
+ * GearProgressionAnalysisTarget is a raw-stat minimum or maximum constraint.
+ */
+export interface GearProgressionAnalysisTarget {
+    readonly stat: string;
+    readonly type: string;
+    readonly value: number;
+}
+
+// From chroniclesdk/gear_progression.go
+/**
  * GearProgressionPayload is the versioned document stored in
  * GearProgression.Payload. Best-per-slot for the leveling axis is derived
  * from Pool at render time and never stored.
@@ -1163,9 +1185,14 @@ export interface GearProgressionPayload {
      */
     readonly stages: readonly GearListStage[];
     /**
-     * AnalysisProfileID selects the stat-weight/target profile used by this set.
+     * AnalysisProfileID retains the source profile for owner-side selection.
      */
     readonly analysis_profile_id?: string;
+    /**
+     * AnalysisProfile snapshots the selected profile so shared progressions can
+     * score gear without access to the owner's private stat-weight records.
+     */
+    readonly analysis_profile?: GearProgressionAnalysisProfile;
     /**
      * LevelingDisabled turns the progressive-gear (levelling) half off
      * for the whole document; everything assumes the level cap.

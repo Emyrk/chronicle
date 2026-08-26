@@ -238,6 +238,46 @@ describe("parseProgressionPayload", () => {
     expect(parsed.tags).toEqual(["Horde", "Level 60"]);
   });
 
+  it("parses an embedded analysis profile for shared scoring", () => {
+    const parsed = parseProgressionPayload({
+      version: 1,
+      pool: [],
+      stages: [],
+      analysis_profile_id: "private-profile",
+      analysis_profile: {
+        id: "private-profile",
+        name: "My weights",
+        description: "Snapshot",
+        weights: { agility: 2.5, hit: 1.2, invalid: "nope" },
+        targets: [
+          { stat: "hit", type: "minimum", value: 8 },
+          { stat: "unknown", type: "minimum", value: 1 },
+        ],
+      },
+    });
+
+    expect(parsed.analysis_profile).toEqual({
+      id: "private-profile",
+      name: "My weights",
+      description: "Snapshot",
+      weights: { agility: 2.5, hit: 1.2 },
+      targets: [{ stat: "hit", type: "minimum", value: 8 }],
+    });
+  });
+
+  it("drops malformed embedded profiles without affecting legacy IDs", () => {
+    const parsed = parseProgressionPayload({
+      version: 1,
+      pool: [],
+      stages: [],
+      analysis_profile_id: "legacy-profile",
+      analysis_profile: { id: "legacy-profile", name: "No weights", weights: {} },
+    });
+
+    expect(parsed.analysis_profile_id).toBe("legacy-profile");
+    expect(parsed.analysis_profile).toBeUndefined();
+  });
+
   it("accepts a JSON string", () => {
     const parsed = parseProgressionPayload(
       '{"version":1,"pool":[{"item_id":7}],"stages":[]}',
@@ -289,9 +329,20 @@ describe("analysis profile selection", () => {
     });
     expect(parsed.analysis_profile_id).toBe("preset:warrior-fury");
 
-    const changed = setProgressionAnalysisProfile(parsed, "profile-2");
+    const profile = {
+      id: "profile-2",
+      name: "Fury",
+      description: "Shared weights",
+      weights: { strength: 2.5, hit: 1.2 },
+      targets: [{ stat: "hit", type: "minimum" as const, value: 8 }],
+    };
+    const changed = setProgressionAnalysisProfile(parsed, profile);
     expect(changed.analysis_profile_id).toBe("profile-2");
-    expect(setProgressionAnalysisProfile(changed, null).analysis_profile_id).toBeUndefined();
+    expect(changed.analysis_profile).toEqual(profile);
+
+    const cleared = setProgressionAnalysisProfile(changed, null);
+    expect(cleared.analysis_profile_id).toBeUndefined();
+    expect(cleared.analysis_profile).toBeUndefined();
   });
 });
 

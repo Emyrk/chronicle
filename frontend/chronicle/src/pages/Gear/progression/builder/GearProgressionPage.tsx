@@ -39,7 +39,10 @@ import {
 import { ArmoryDoll } from "@/pages/Gear/builder/ArmoryDoll";
 import { BuilderDoll } from "@/pages/Gear/builder/BuilderDoll";
 import { SetSummaryBar } from "@/pages/Gear/builder/SetSummaryBar";
-import { GearAnalysisSheet } from "@/pages/Gear/builder/GearAnalysisSheet";
+import {
+  GearAnalysisSheet,
+  type AnalysisProfile,
+} from "@/pages/Gear/builder/GearAnalysisSheet";
 import { useGearAnalysis } from "@/pages/Gear/builder/useGearAnalysis";
 import {
   SlotEditorPanel,
@@ -472,13 +475,21 @@ function ProgressionView({
     [items, payload],
   );
   const activeStage = effectiveStages[activeIndex] ?? resolvedActiveStage;
+  const embeddedProfile = useMemo<AnalysisProfile | undefined>(
+    () =>
+      payload.analysis_profile
+        ? { ...payload.analysis_profile, mine: false }
+        : undefined,
+    [payload.analysis_profile],
+  );
   const analysis = useGearAnalysis(
     activeStage,
     payload.analysis_profile_id,
+    embeddedProfile,
     isOwner
-      ? (profileId) =>
+      ? (profile) =>
           editor.update((current) =>
-            setProgressionAnalysisProfile(current, profileId),
+            setProgressionAnalysisProfile(current, profile),
           )
       : undefined,
   );

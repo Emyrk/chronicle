@@ -12,6 +12,12 @@
  * availability is evaluated at the deployment's level cap.
  */
 import {
+  parseTargets,
+  parseWeights,
+  type StatTarget,
+  type StatWeights,
+} from "../builder/gearScoring";
+import {
   COSMETIC_SLOTS,
   GEAR_PAYLOAD_VERSION,
   MAX_STAGES,
@@ -46,14 +52,26 @@ export interface ProgressionPoolItem {
   note?: string;
 }
 
+export interface EmbeddedAnalysisProfile {
+  id: string;
+  name: string;
+  description: string;
+  weights: StatWeights;
+  targets: StatTarget[];
+}
+
+export type AnalysisProfileSnapshotSource = EmbeddedAnalysisProfile;
+
 export interface ProgressionPayload {
   version: number;
   pool: ProgressionPoolItem[];
   stages: GearStage[];
   /** Free-form labels shown under the progression title. */
   tags?: string[];
-  /** Stat-weight/target profile selected for this progression. */
+  /** Source profile ID retained for owner-side profile selection. */
   analysis_profile_id?: string;
+  /** Portable snapshot used when the source profile is private or unavailable. */
+  analysis_profile?: EmbeddedAnalysisProfile;
 }
 
 // ─── Level caps ──────────────────────────────────────────────
@@ -126,6 +144,10 @@ export function parseProgressionPayload(raw: unknown): ProgressionPayload {
   if (typeof analysisProfileId === "string" && analysisProfileId) {
     doc.analysis_profile_id = analysisProfileId.slice(0, 128);
   }
+  const embeddedProfile = parseEmbeddedAnalysisProfile(
+    (value as { analysis_profile?: unknown }).analysis_profile,
+  );
+  if (embeddedProfile) doc.analysis_profile = embeddedProfile;
   const tagsRaw = (value as { tags?: unknown }).tags;
   if (Array.isArray(tagsRaw)) {
     const tags: string[] = [];
@@ -168,6 +190,43 @@ function parsePoolItem(raw: unknown): ProgressionPoolItem | null {
   return entry;
 }
 
+function parseEmbeddedAnalysisProfile(raw: unknown): EmbeddedAnalysisProfile | null {
+  if (!raw || typeof raw !== "object") return null;
+  const profile = raw as Record<string, unknown>;
+  if (
+    typeof profile.id !== "string" ||
+    !profile.id ||
+    typeof profile.name !== "string" ||
+    !profile.name
+  ) {
+    return null;
+  }
+  const weights = parseWeights(profile.weights);
+  if (Object.keys(weights).length === 0) return null;
+  return {
+    id: profile.id.slice(0, 128),
+    name: profile.name.slice(0, 128),
+    description:
+      typeof profile.description === "string"
+        ? profile.description.slice(0, 2000)
+        : "",
+    weights,
+    targets: parseTargets(profile.targets),
+  };
+}
+
+export function embeddedAnalysisProfile(
+  profile: AnalysisProfileSnapshotSource,
+): EmbeddedAnalysisProfile {
+  return {
+    id: profile.id.slice(0, 128),
+    name: profile.name.slice(0, 128),
+    description: profile.description.slice(0, 2000),
+    weights: { ...profile.weights },
+    targets: profile.targets.map((target) => ({ ...target })),
+  };
+}
+
 export function serializeProgressionPayload(
   payload: ProgressionPayload,
 ): string {
@@ -176,11 +235,16 @@ export function serializeProgressionPayload(
 
 export function setProgressionAnalysisProfile(
   payload: ProgressionPayload,
-  profileId: string | null,
+  profile: AnalysisProfileSnapshotSource | null,
 ): ProgressionPayload {
   const next = { ...payload };
-  if (profileId) next.analysis_profile_id = profileId.slice(0, 128);
-  else delete next.analysis_profile_id;
+  if (profile) {
+    next.analysis_profile_id = profile.id.slice(0, 128);
+    next.analysis_profile = embeddedAnalysisProfile(profile);
+  } else {
+    delete next.analysis_profile_id;
+    delete next.analysis_profile;
+  }
   return next;
 }
 

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -36,14 +37,18 @@ const (
 	maxPayloadBytes     = 262144
 
 	// Payload document limits.
-	payloadVersion          = 1
-	maxPoolItems            = 400
-	maxStages               = 16
-	maxStageNameLen         = 64
-	maxSlotIndex            = 18 // PlayerOutfit has 19 slots, 0-18
-	maxNoteLen              = 500
-	maxAlternatesLen        = 8
-	maxAnalysisProfileIDLen = 128
+	payloadVersion               = 1
+	maxPoolItems                 = 400
+	maxStages                    = 16
+	maxStageNameLen              = 64
+	maxSlotIndex                 = 18 // PlayerOutfit has 19 slots, 0-18
+	maxNoteLen                   = 500
+	maxAlternatesLen             = 8
+	maxAnalysisProfileIDLen      = 128
+	maxAnalysisProfileNameLen    = 128
+	maxAnalysisProfileWeights    = 50
+	maxAnalysisProfileTargets    = 20
+	maxAnalysisProfileStatKeyLen = 64
 )
 
 // Handler owns all gear progression routes.
@@ -284,6 +289,44 @@ func validateTitle(title string) error {
 	return nil
 }
 
+func validateAnalysisProfile(profile *chroniclesdk.GearProgressionAnalysisProfile) error {
+	if len(profile.ID) == 0 || len(profile.ID) > maxAnalysisProfileIDLen {
+		return fmt.Errorf("analysis profile snapshot ID must be 1-%d characters", maxAnalysisProfileIDLen)
+	}
+	if len(profile.Name) == 0 || len(profile.Name) > maxAnalysisProfileNameLen {
+		return fmt.Errorf("analysis profile snapshot name must be 1-%d characters", maxAnalysisProfileNameLen)
+	}
+	if len(profile.Description) > maxDescriptionLen {
+		return fmt.Errorf("analysis profile snapshot description too long, maximum is %d characters", maxDescriptionLen)
+	}
+	if len(profile.Weights) == 0 || len(profile.Weights) > maxAnalysisProfileWeights {
+		return fmt.Errorf("analysis profile snapshot must have 1-%d weights", maxAnalysisProfileWeights)
+	}
+	for stat, weight := range profile.Weights {
+		if len(stat) == 0 || len(stat) > maxAnalysisProfileStatKeyLen {
+			return fmt.Errorf("analysis profile snapshot has an invalid stat key")
+		}
+		if math.IsNaN(weight) || math.IsInf(weight, 0) {
+			return fmt.Errorf("analysis profile snapshot weight %q must be finite", stat)
+		}
+	}
+	if len(profile.Targets) > maxAnalysisProfileTargets {
+		return fmt.Errorf("analysis profile snapshot has too many targets, maximum is %d", maxAnalysisProfileTargets)
+	}
+	for i, target := range profile.Targets {
+		if len(target.Stat) == 0 || len(target.Stat) > maxAnalysisProfileStatKeyLen {
+			return fmt.Errorf("analysis profile snapshot target %d has an invalid stat key", i+1)
+		}
+		if target.Type != "minimum" && target.Type != "maximum" {
+			return fmt.Errorf("analysis profile snapshot target %d has an invalid type", i+1)
+		}
+		if math.IsNaN(target.Value) || math.IsInf(target.Value, 0) {
+			return fmt.Errorf("analysis profile snapshot target %d value must be finite", i+1)
+		}
+	}
+	return nil
+}
+
 // validatePayload structurally checks the progression document. It mirrors
 // the gear-list payload check for the stage half and adds pool limits.
 func validatePayload(payload json.RawMessage) error {
@@ -306,6 +349,11 @@ func validatePayload(payload json.RawMessage) error {
 	}
 	if len(doc.AnalysisProfileID) > maxAnalysisProfileIDLen {
 		return fmt.Errorf("analysis profile ID too long, maximum is %d characters", maxAnalysisProfileIDLen)
+	}
+	if doc.AnalysisProfile != nil {
+		if err := validateAnalysisProfile(doc.AnalysisProfile); err != nil {
+			return err
+		}
 	}
 	if len(doc.Pool) > maxPoolItems {
 		return fmt.Errorf("too many pool items, maximum is %d", maxPoolItems)
