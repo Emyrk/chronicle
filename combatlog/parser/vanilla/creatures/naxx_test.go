@@ -9,9 +9,10 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -254,6 +255,93 @@ func TestKelThuzadRoom_AddIsFinalizedWhenBossEngagesOrDies(t *testing.T) {
 	bossChar, ok := chars.Get(kelThuzad)
 	require.True(t, ok)
 	require.False(t, bossChar.IsActive())
+}
+
+func TestKelThuzadPhaseTransition_EmitsWhenBossTakesDamage(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	var transitions []phases.Transition
+	chars.SetPhaseTransitionCallback(func(t phases.Transition) {
+		transitions = append(transitions, t)
+	})
+
+	player := guid.GUID(0x1)
+	kelThuzad := creatureGUID(15990, 0x50)
+	soldier := creatureGUID(16427, 0x51)
+	base := time.Date(2026, time.January, 2, 4, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, soldier))
+	require.NoError(t, err)
+	require.Empty(t, transitions, "damage to a phase-1 add should not start phase 2")
+
+	zeroDamage := damage(base.Add(time.Second), player, kelThuzad)
+	zeroDamage.Amount = 0
+	_, err = chars.Process(zeroDamage)
+	require.NoError(t, err)
+	require.Empty(t, transitions, "zero damage should not start phase 2")
+
+	transitionTime := base.Add(2 * time.Second)
+	_, err = chars.Process(damage(transitionTime, player, kelThuzad))
+	require.NoError(t, err)
+	require.Len(t, transitions, 1)
+	require.Equal(t, creatures.KelThuzadPhaseKeyP2, transitions[0].ToPhaseKey)
+	require.Equal(t, transitionTime, transitions[0].Timestamp)
+	require.Equal(t, kelThuzad, transitions[0].SourceGUID)
+
+	_, err = chars.Process(damage(base.Add(3*time.Second), player, kelThuzad))
+	require.NoError(t, err)
+	require.Len(t, transitions, 1, "later damage should not emit duplicate transitions")
+}
+
+func TestKelThuzadPhaseTransition_ResetsAfterInactivityWipe(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	var transitions []phases.Transition
+	chars.SetPhaseTransitionCallback(func(t phases.Transition) {
+		transitions = append(transitions, t)
+	})
+
+	player := guid.GUID(0x1)
+	kelThuzad := creatureGUID(15990, 0x52)
+	base := time.Date(2026, time.January, 2, 5, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, kelThuzad))
+	require.NoError(t, err)
+	require.Len(t, transitions, 1)
+
+	_, err = chars.Process(damage(base.Add(2*time.Minute), player, kelThuzad))
+	require.NoError(t, err)
+	require.Len(t, transitions, 2, "a pull after an inactivity wipe should emit a fresh phase transition")
+}
+
+func TestKelThuzadPhaseDefinitions_PhaseProvider(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	kelThuzad := creatureGUID(15990, 0x53)
+	base := time.Date(2026, time.January, 2, 6, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, kelThuzad))
+	require.NoError(t, err)
+
+	kelThuzadChar, ok := chars.Get(kelThuzad)
+	require.True(t, ok)
+	pp, ok := kelThuzadChar.(phases.PhaseProvider)
+	require.True(t, ok, "kel'thuzad should implement PhaseProvider through its wrappers")
+
+	defs := pp.PhaseDefinitions()
+	require.NotNil(t, defs)
+	require.Equal(t, "Kel'Thuzad", defs.EncounterName)
+	require.Equal(t, []phases.Definition{
+		{Key: creatures.KelThuzadPhaseKeyP1, Name: "Adds", Order: 0},
+		{Key: creatures.KelThuzadPhaseKeyP2, Name: "Boss", Order: 1},
+	}, defs.Definitions)
 }
 
 func TestNewGothikParty_MatchesOnlyExpectedEntries(t *testing.T) {
