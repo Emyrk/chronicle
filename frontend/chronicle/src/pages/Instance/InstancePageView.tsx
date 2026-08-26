@@ -737,7 +737,7 @@ function EncounterSidebar({
                         key={phase.id}
                         title={phase.name}
                         aria-label={`Phase ${phase.order + 1}: ${phase.name}`}
-                        className={cn("h-2 w-2 rounded-full", phaseDotTone(phase.order))}
+                        className={cn("inline-block h-2 w-2 shrink-0 rounded-full", phaseDotTone(phase.order))}
                       />
                     ))}
                   </div>
