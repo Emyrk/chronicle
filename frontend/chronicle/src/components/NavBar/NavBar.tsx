@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, Database, Server, Users, Compass, Sparkles } from "lucide-react";
+import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, Database, Server, Users, Compass, Sparkles, Shirt } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { useAuth } from "@/hooks/useAuth";
@@ -159,6 +159,14 @@ export function NavBar() {
                 <Sparkles className="h-4 w-4" />
                 Talent Builder
               </Link>
+              <Link
+                to="/gear/progression"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+              >
+                <Shirt className="h-4 w-4" />
+                Gear Builder
+              </Link>
               {isAuthenticated && (
                 <>
                   <div className="border-t my-2" />
@@ -257,6 +265,12 @@ export function NavBar() {
               <Link to="/talents" className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
                 Talent Builder
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/gear/progression" className="flex items-center gap-2">
+                <Shirt className="h-4 w-4" />
+                Gear Builder
               </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>

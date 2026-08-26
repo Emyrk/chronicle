@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Swords, FileText, Youtube, Code, Shirt } from "lucide-react"
+import { Swords, FileText, Youtube, Code, Shirt, Users } from "lucide-react"
 
 const tools = [
   {
@@ -19,6 +19,12 @@ const tools = [
     description: "Plan gear sets and upgrades across progression stages.",
     to: "/gear/progression",
     icon: <Shirt className="h-6 w-6" />,
+  },
+  {
+    name: "Census",
+    description: "Explore character population, classes, races, and levels.",
+    to: "/census",
+    icon: <Users className="h-6 w-6" />,
   },
   {
     name: "YouTube Sync",
