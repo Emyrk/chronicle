@@ -458,13 +458,6 @@ export interface ProcessorPagination {
   targetFilter?: string;
 }
 
-/** A selected phase range within an encounter for event filtering. */
-export interface SelectedPhaseRange {
-  encounterID: string;
-  startOffsetMs: number;
-  endOffsetMs: number;
-}
-
 /**
  * Serializable context sent to worker via postMessage.
  */
@@ -480,12 +473,6 @@ export interface SerializableProcessorContext {
 
   /** Currently selected encounter IDs */
   selectedEncounterIds: string[];
-
-  /**
-   * Phase ranges to filter events by offset within each encounter.
-   * Empty array or undefined means no phase-level filtering (full encounters).
-   */
-  selectedPhaseRanges?: SelectedPhaseRange[];
   
   /** Currently selected entity GUIDs for filtering (arrays for serialization) */
   entitySelection: SerializableEntitySelection;
@@ -521,12 +508,6 @@ export interface ProcessorContext {
 
   /** Currently selected encounter IDs */
   selectedEncounterIds: Set<string>;
-
-  /**
-   * Phase ranges to filter events by offset within each encounter.
-   * Empty array or undefined means no phase-level filtering (full encounters).
-   */
-  selectedPhaseRanges?: SelectedPhaseRange[];
   
   /** Currently selected entity GUIDs for filtering */
   entitySelection: ProcessorEntitySelection;

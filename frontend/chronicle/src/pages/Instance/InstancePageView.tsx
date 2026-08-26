@@ -32,8 +32,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { cn } from "@/lib/utils";
-import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
-import { deriveEffectiveEncounterIds, computeSelectedDuration, encounterSelectionState } from "./phaseHelpers";
+import type { Instance, Encounter, EncounterPhase, EnemyUnit } from "./InstancePage";
+import { activePhaseForTimeRange, phaseTimeRangeSelection } from "./phaseTimeRange";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { PANELS } from "./EventsPanels/EventsPanel";
@@ -103,8 +103,6 @@ function toLayoutActionBarSlots(slots: ActionBarSlotsResponse | null | undefined
 
 type LocalInstanceViewState = {
   encounters: string[];
-  /** Selected phase IDs (empty when only whole encounters are selected) */
-  phases: string[];
   enemies: Set<string>;
   players: Set<string>;
   panels: PanelType[];
@@ -390,7 +388,7 @@ function EncounterSidebar({
   encounters,
   trashGroups,
   selectedIds,
-  selectedPhaseIds,
+  activePhaseId,
   onSelect,
   onSelectMany,
   onSelectPhase,
@@ -404,10 +402,10 @@ function EncounterSidebar({
   encounters: Encounter[];
   trashGroups: TrashGroup[];
   selectedIds: string[];
-  selectedPhaseIds: string[];
+  activePhaseId: string | null;
   onSelect: (id: string, mode: 'single' | 'toggle') => void;
   onSelectMany: (ids: string[]) => void;
-  onSelectPhase: (phaseId: string, encounterId: string, mode: 'single' | 'toggle') => void;
+  onSelectPhase: (phase: EncounterPhase, encounterId: string) => void;
   onCollapse: () => void;
   isMobile: boolean;
   showHints: boolean;
@@ -670,12 +668,9 @@ function EncounterSidebar({
       {/* Boss encounters */}
       <div className="space-y-1">
         {bossEncounters.map((encounter) => {
-          const encState = encounterSelectionState(encounter.id, selectedIds, selectedPhaseIds, encounter);
-          const isSelected = encState === "full";
-          const isPartial = encState === "partial" || encState === "all-phases";
+          const isSelected = selectedIds.includes(encounter.id);
           const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
           const phases = [...(encounter.phases ?? [])].sort((a, b) => a.order - b.order);
-          const phaseSet = new Set(selectedPhaseIds);
           
           return (
             <div key={encounter.id}>
@@ -693,10 +688,8 @@ function EncounterSidebar({
                   "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-all duration-150 cursor-pointer",
                   isSelected
                     ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
-                    : isPartial
-                      ? "bg-primary-darker/50 text-primary-foreground/80 border-l-3 border-l-primary-foreground/40"
-                      : "hover:bg-accent/50 hover:translate-x-0.5",
-                  isWipeOrReset && !isSelected && !isPartial && "opacity-60"
+                    : "hover:bg-accent/50 hover:translate-x-0.5",
+                  isWipeOrReset && !isSelected && "opacity-60"
                 )}
               >
                 {encounter.kill_type === "clean" ? (
@@ -709,7 +702,7 @@ function EncounterSidebar({
                   <Skull className="h-4 w-4 shrink-0 text-red-500" />
                 )}
                 <span className="truncate flex-1">{encounter.name}</span>
-                <span className={cn("text-xs shrink-0 font-mono", isSelected || isPartial ? "opacity-70" : "text-muted-foreground")}>
+                <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
                   {formatEncounterTime(encounter)}
                 </span>
                 {isDebug && (
@@ -726,34 +719,28 @@ function EncounterSidebar({
                 )}
               </div>
               {/* Nested phase rows */}
-              {phases.length > 0 && (isSelected || isPartial) && (
+              {phases.length > 0 && isSelected && (
                 <div className="ml-6 mt-0.5 space-y-0.5">
                   {phases.map((phase) => {
-                    const phaseSelected = phaseSet.has(phase.id);
+                    const phaseSelected = activePhaseId === phase.id;
                     const durationMs = phase.end_offset_ms - phase.start_offset_ms;
                     return (
                       <div
                         role="button"
                         tabIndex={0}
                         key={phase.id}
-                        onClick={(e) => {
-                          const mode = e.metaKey || e.ctrlKey ? 'toggle' : 'single';
-                          onSelectPhase(phase.id, encounter.id, mode);
-                        }}
+                        onClick={() => onSelectPhase(phase, encounter.id)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            const mode = e.metaKey || e.ctrlKey ? 'toggle' : 'single';
-                            onSelectPhase(phase.id, encounter.id, mode);
+                            onSelectPhase(phase, encounter.id);
                           }
                         }}
                         className={cn(
                           "w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left transition-all duration-150 cursor-pointer",
                           phaseSelected
                             ? "bg-primary-darker text-primary-foreground border-l-2 border-l-primary-foreground/70"
-                            : isSelected
-                              ? "opacity-60 hover:opacity-80"
-                              : "hover:bg-accent/50 opacity-50 hover:opacity-70"
+                            : "opacity-60 hover:opacity-80"
                         )}
                       >
                         <span className="truncate flex-1">{phase.name}</span>
@@ -1239,8 +1226,6 @@ function PoppedOutLayoutContent({
 interface EncounterDetailProps {
   instance: Instance;
   encounters: Encounter[];
-  /** Selected phase IDs (empty when only whole encounters are selected) */
-  selectedPhaseIds: string[];
   players: Record<string, InstancePlayer>;
   entitySelection: EntitySelection;
   layoutItems: GridEditorItem[];
@@ -1276,7 +1261,6 @@ interface EncounterDetailProps {
 function EncounterDetail({
   instance,
   encounters,
-  selectedPhaseIds,
   players,
   entitySelection,
   layoutItems,
@@ -1365,12 +1349,13 @@ function EncounterDetail({
 
 
   
-  // Phase-aware duration: full encounters + selected phase durations
-  const encounterIdsForDuration = useMemo(() => encounters.map(e => e.id), [encounters]);
-  const totalDurationMs = useMemo(
-    () => computeSelectedDuration(encounterIdsForDuration, selectedPhaseIds, instance.encounters),
-    [encounterIdsForDuration, selectedPhaseIds, instance.encounters],
-  );
+  const totalDurationMs = useMemo(() => {
+    return encounters.reduce((acc, enc) => {
+      const start = new Date(enc.start_time).getTime();
+      const end = new Date(enc.end_time).getTime();
+      return acc + (end - start);
+    }, 0);
+  }, [encounters]);
   
   // Compute elapsed time (from first encounter start to last encounter end)
   const elapsedTimeMs = useMemo(() => {
@@ -1380,11 +1365,7 @@ function EncounterDetail({
     return Math.max(...endTimes) - Math.min(...startTimes);
   }, [encounters]);
   
-  // Derive effective encounter IDs: includes parents of selected phases
-  const selectedEncounterIDs = useMemo(
-    () => deriveEffectiveEncounterIds(encounters.map(e => e.id), selectedPhaseIds, instance.encounters),
-    [encounters, selectedPhaseIds, instance.encounters],
-  );
+  const selectedEncounterIDs = useMemo(() => encounters.map((e) => e.id), [encounters]);
 
   // Defer entity selection for panels so the chip UI updates immediately
   const deferredEntitySelection = useDeferredValue(entitySelection);
@@ -1394,7 +1375,6 @@ function EncounterDetail({
     () => ({
       instance,
       selectedEncounterIds: selectedEncounterIDs,
-      selectedPhaseIds,
       entitySelection: deferredEntitySelection,
       onSelectEncounters,
       onTogglePlayer,
@@ -1403,7 +1383,6 @@ function EncounterDetail({
     [
       instance,
       selectedEncounterIDs,
-      selectedPhaseIds,
       deferredEntitySelection,
       onSelectEncounters,
       onTogglePlayer,
@@ -2084,7 +2063,6 @@ export function InstancePageView({
 
   const createDefaultViewState = useCallback((): LocalInstanceViewState => ({
     encounters: instance.encounters.filter(e => e.kill_type !== "wipe" && e.kill_type !== "reset").map(e => e.id),
-    phases: [],
     enemies: new Set<string>(),
     players: new Set<string>(),
     panels: defaultOrderedPanels,
@@ -2121,12 +2099,7 @@ export function InstancePageView({
   }, [createDefaultViewState, defaultLayoutId, instance.id]);
 
   const setEncounters = useCallback((ids: string[]) => {
-    // Selecting whole encounters clears any phase selection
-    setViewState((prev) => ({ ...prev, encounters: ids, phases: [] }));
-  }, []);
-
-  const setPhases = useCallback((ids: string[]) => {
-    setViewState((prev) => ({ ...prev, phases: ids }));
+    setViewState((prev) => ({ ...prev, encounters: ids }));
   }, []);
 
   const setIncludeWipes = useCallback((value: boolean) => {
@@ -2474,13 +2447,32 @@ export function InstancePageView({
     }
   }, [_selectedEncounterIds, internalSelectedIds, setEncounters]);
 
-  // Reset time range selection when selected encounters change
+  const pendingPhaseRangeRef = useRef<{
+    encounterId: string;
+    startOffsetMs: number;
+    endOffsetMs: number;
+  } | null>(null);
+
+  // Reset the time range on ordinary encounter changes. Phase shortcuts stage
+  // their range until the parent encounter becomes the sole selection.
   const prevEncounterIdsRef = useRef(internalSelectedIds);
   useEffect(() => {
-    if (prevEncounterIdsRef.current !== internalSelectedIds) {
-      prevEncounterIdsRef.current = internalSelectedIds;
-      timeRange?.reset();
+    if (prevEncounterIdsRef.current === internalSelectedIds) return;
+    prevEncounterIdsRef.current = internalSelectedIds;
+
+    const pending = pendingPhaseRangeRef.current;
+    if (
+      pending &&
+      internalSelectedIds.length === 1 &&
+      internalSelectedIds[0] === pending.encounterId
+    ) {
+      pendingPhaseRangeRef.current = null;
+      timeRange?.setRange(pending.startOffsetMs, pending.endOffsetMs);
+      return;
     }
+
+    pendingPhaseRangeRef.current = null;
+    timeRange?.reset();
   }, [internalSelectedIds, timeRange]);
   
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
@@ -2594,37 +2586,23 @@ export function InstancePageView({
     }
   };
 
-  const handleSelectPhase = useCallback((phaseId: string, encounterId: string, mode: 'single' | 'toggle') => {
-    const currentPhases = viewState.phases;
-    if (mode === 'toggle') {
-      // Toggle phase in/out of selection
-      if (currentPhases.includes(phaseId)) {
-        const remaining = currentPhases.filter(id => id !== phaseId);
-        if (remaining.length === 0) {
-          // No phases left → select the parent encounter instead
-          setInternalSelectedIds([encounterId]);
-          setPhases([]);
-        } else {
-          setPhases(remaining);
-        }
-      } else {
-        // Add this phase; remove parent encounter from full selection
-        const newEncs = selectedIds.filter(id => id !== encounterId);
-        if (newEncs.length !== selectedIds.length) {
-          setInternalSelectedIds(newEncs.length > 0 ? newEncs : selectedIds);
-        }
-        setPhases([...currentPhases, phaseId]);
-      }
-    } else {
-      // Single select: select only this phase, remove its parent from full encounters
-      const newEncs = selectedIds.filter(id => id !== encounterId);
-      setViewState(prev => ({
-        ...prev,
-        encounters: newEncs.length > 0 ? newEncs : [],
-        phases: [phaseId],
-      }));
+  const handleSelectPhase = useCallback((phase: EncounterPhase, encounterId: string) => {
+    const selection = phaseTimeRangeSelection(phase, encounterId);
+
+    // Time-range offsets are based on the first selected encounter, so phase
+    // shortcuts always single-select their parent encounter first.
+    if (selectedIds.length === 1 && selectedIds[0] === encounterId) {
+      timeRange?.setRange(selection.startOffsetMs, selection.endOffsetMs);
+      return;
     }
-  }, [viewState.phases, selectedIds, setPhases, setInternalSelectedIds, setViewState]);
+
+    pendingPhaseRangeRef.current = {
+      encounterId,
+      startOffsetMs: selection.startOffsetMs,
+      endOffsetMs: selection.endOffsetMs,
+    };
+    setInternalSelectedIds(selection.encounterIds);
+  }, [selectedIds, setInternalSelectedIds, timeRange]);
 
   const handlePanelTypeChangeByID = useCallback((itemID: string, type: EventsPanelType) => {
     const idx = activeLayoutItems.findIndex((item) => item.id === itemID);
@@ -3062,15 +3040,16 @@ export function InstancePageView({
     };
   }, [applySharedViewPayload, instance.id, searchParams, setSearchParams]);
 
-  // Derive effective encounter list: includes parents of selected phases
-  const effectiveEncounterIds = useMemo(
-    () => deriveEffectiveEncounterIds(selectedIds, viewState.phases, instance.encounters),
-    [selectedIds, viewState.phases, instance.encounters],
-  );
   const selectedEncounters = useMemo(
-    () => instance.encounters.filter((e) => effectiveEncounterIds.includes(e.id)),
-    [instance.encounters, effectiveEncounterIds],
+    () => instance.encounters.filter((e) => selectedIds.includes(e.id)),
+    [instance.encounters, selectedIds],
   );
+  const activePhaseId = useMemo(() => activePhaseForTimeRange(
+    selectedEncounters,
+    timeRange?.enabled ?? false,
+    timeRange?.startOffsetMs ?? null,
+    timeRange?.endOffsetMs ?? null,
+  ), [selectedEncounters, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs]);
   const trashGroups = groupTrashEncounters(instance.encounters);
 
   const headerBg = getInstanceBackground(instance.name);
@@ -3081,10 +3060,13 @@ export function InstancePageView({
     : null;
   const totalDuration = elapsedDurationMs !== null ? formatDurationMs(elapsedDurationMs) : null;
     
-  // Phase-aware total combat duration for selected encounters/phases
   const totalDurationMs = useMemo(() => {
-    return computeSelectedDuration(selectedIds, viewState.phases, instance.encounters);
-  }, [selectedIds, viewState.phases, instance.encounters]);
+    return selectedEncounters.reduce((acc, enc) => {
+      const start = new Date(enc.start_time).getTime();
+      const end = new Date(enc.end_time).getTime();
+      return acc + (end - start);
+    }, 0);
+  }, [selectedEncounters]);
 
   // Instance-wide combat duration (all encounters, for header)
   const instanceCombatDurationMs = useMemo(() => {
@@ -3099,7 +3081,6 @@ export function InstancePageView({
   const explainerPanelContext: PanelContext = useMemo(() => ({
     instance,
     selectedEncounterIds: selectedEncounters.map(e => e.id),
-    selectedPhaseIds: viewState.phases,
     entitySelection: {
       enemyIds: viewState.enemies,
       playerIds: viewState.players,
@@ -3107,7 +3088,7 @@ export function InstancePageView({
     onSelectEncounters: setInternalSelectedIds,
     onTogglePlayer: togglePlayerSelection,
     onTogglePlayers: togglePlayersSelection,
-  }), [instance, selectedEncounters, viewState.phases, viewState.enemies, viewState.players, setInternalSelectedIds, togglePlayerSelection, togglePlayersSelection]);
+  }), [instance, selectedEncounters, viewState.enemies, viewState.players, setInternalSelectedIds, togglePlayerSelection, togglePlayersSelection]);
   
   // If explainer mode is active on desktop, show only the explainer view
   if (explainerPanelType && !isMobile) {
@@ -3438,7 +3419,7 @@ export function InstancePageView({
             encounters={instance.encounters}
             trashGroups={trashGroups}
             selectedIds={selectedIds}
-            selectedPhaseIds={viewState.phases}
+            activePhaseId={activePhaseId}
             onSelect={handleSelect}
             onSelectMany={(ids) => {
               setInternalSelectedIds(ids);
@@ -3478,7 +3459,6 @@ export function InstancePageView({
           <EncounterDetail
             instance={instance}
             encounters={selectedEncounters}
-            selectedPhaseIds={viewState.phases}
             players={instance.players ?? {}}
             entitySelection={entitySelection}
             layoutItems={activeLayoutItems}

@@ -724,10 +724,8 @@ export type PanelOptions = (string | null)[];
  * View state structure for the Instance page
  */
 export interface InstanceViewState {
-  /** Selected encounter IDs (whole-encounter selection; excludes encounters with phase-only selection) */
+  /** Selected encounter IDs */
   encounters: string[];
-  /** Selected phase IDs (flat; phases from any encounter) */
-  phases: string[];
   /** Selected enemy IDs */
   enemies: Set<string>;
   /** Selected player IDs */
@@ -741,8 +739,8 @@ export interface InstanceViewState {
 }
 
 export interface InstanceViewStateConfig {
-  /** All encounters in the instance (with optional phases for flat indexing) */
-  encounters: readonly { id: string; boss: boolean; phases?: readonly { id: string; order: number }[] }[];
+  /** All encounters in the instance */
+  encounters: readonly { id: string; boss: boolean }[];
   /** All enemies (sorted by GUID for stable indexing) */
   enemies: readonly { id: string }[];
   /** All players */
@@ -783,7 +781,6 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
   state: InstanceViewState;
   setViewState: (next: InstanceViewState | ((prev: InstanceViewState) => InstanceViewState)) => void;
   setEncounters: (ids: string[] | ((prev: string[]) => string[])) => void;
-  setPhases: (ids: string[] | ((prev: string[]) => string[])) => void;
   setEnemies: (ids: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   setPlayers: (ids: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   setPanelType: (index: number, type: PanelType) => void;
@@ -805,21 +802,7 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
       idToIdx.set(e.id, idx);
       idxToId.set(idx, e.id);
     });
-
-    // Flat phase index maps (encounter order × phase order)
-    const phaseIdToFlatIdx = new Map<string, number>();
-    const flatIdxToPhaseId = new Map<number, string>();
-    let flatIdx = 0;
-    for (const enc of config.encounters) {
-      const sorted = [...(enc.phases ?? [])].sort((a, b) => a.order - b.order);
-      for (const p of sorted) {
-        phaseIdToFlatIdx.set(p.id, flatIdx);
-        flatIdxToPhaseId.set(flatIdx, p.id);
-        flatIdx++;
-      }
-    }
-
-    return { allIds: all, bossIds: bosses, trashIds: trash, idToIndex: idToIdx, indexToId: idxToId, phaseIdToFlatIdx, flatIdxToPhaseId };
+    return { allIds: all, bossIds: bosses, trashIds: trash, idToIndex: idToIdx, indexToId: idxToId };
   }, [config.encounters]);
   
   // Build lookup maps for enemies
@@ -854,21 +837,10 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
     const raw = searchParams.get('v');
     const layoutCode = searchParams.get('l');
     const layout: LayoutType = CODE_TO_LAYOUT[layoutCode ?? ''] ?? 'standard';
-
-    // Parse phases from separate URL param
-    const phasesRaw = searchParams.get('p');
-    const phases: string[] = phasesRaw
-      ? phasesRaw.split('-')
-          .map((s) => parseInt(s, 10))
-          .filter((n) => !isNaN(n))
-          .map((idx) => encounterMaps.flatIdxToPhaseId.get(idx))
-          .filter((id): id is string => id !== undefined)
-      : [];
     
     if (!raw) {
       return {
         encounters: config.defaults.encounterIds,
-        phases: [],
         enemies: new Set(),
         players: new Set(),
         panels: config.defaults.panels,
@@ -933,11 +905,10 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
 
       const panelOptions: PanelOptions = Array.from({ length: panels.length }, (_, i) => parsedPanels[i]?.option ?? null);
 
-      return { encounters, phases, enemies, players, panels, panelOptions, layout };
+      return { encounters, enemies, players, panels, panelOptions, layout };
     } catch {
       return {
         encounters: config.defaults.encounterIds,
-        phases: [],
         enemies: new Set(),
         players: new Set(),
         panels: config.defaults.panels,
@@ -993,7 +964,6 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
     const selectedEncs = new Set(s.encounters);
     const defaultPanels = config.defaults.panels;
     return setsEqual(selectedEncs, defaultEncs) &&
-      s.phases.length === 0 &&
       s.enemies.size === 0 &&
       s.players.size === 0 &&
       s.panels.length === defaultPanels.length &&
@@ -1016,19 +986,9 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
       } else {
         newParams.set('l', LAYOUT_CODES[newState.layout]);
       }
-      // Handle phases as a separate URL param
-      if (newState.phases.length > 0) {
-        const phaseIndices = newState.phases
-          .map(id => encounterMaps.phaseIdToFlatIdx.get(id))
-          .filter((idx): idx is number => idx !== undefined)
-          .sort((a, b) => a - b);
-        newParams.set('p', phaseIndices.join('-'));
-      } else {
-        newParams.delete('p');
-      }
       return newParams;
     }, { replace: true });
-  }, [setSearchParams, serializeState, isDefaultState, encounterMaps.phaseIdToFlatIdx]);
+  }, [setSearchParams, serializeState, isDefaultState]);
 
   const setViewState = useCallback((next: InstanceViewState | ((prev: InstanceViewState) => InstanceViewState)) => {
     const resolved = typeof next === 'function' ? next(state) : next;
@@ -1038,13 +998,7 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
   // Individual setters
   const setEncounters = useCallback((value: string[] | ((prev: string[]) => string[])) => {
     const newEncounters = typeof value === 'function' ? value(state.encounters) : value;
-    // Selecting whole encounters clears any phase selection (quick-select semantics)
-    updateUrl({ ...state, encounters: newEncounters, phases: [] });
-  }, [state, updateUrl]);
-
-  const setPhases = useCallback((value: string[] | ((prev: string[]) => string[])) => {
-    const newPhases = typeof value === 'function' ? value(state.phases) : value;
-    updateUrl({ ...state, phases: newPhases });
+    updateUrl({ ...state, encounters: newEncounters });
   }, [state, updateUrl]);
 
   const setEnemies = useCallback((value: Set<string> | ((prev: Set<string>) => Set<string>)) => {
@@ -1093,5 +1047,5 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
     updateUrl({ ...state, enemies: new Set(), players: new Set() });
   }, [state, updateUrl]);
 
-  return { state, setViewState, setEncounters, setPhases, setEnemies, setPlayers, setPanelType, setPanelOption, setPanels, setLayout, clearEntitySelection };
+  return { state, setViewState, setEncounters, setEnemies, setPlayers, setPanelType, setPanelOption, setPanels, setLayout, clearEntitySelection };
 }

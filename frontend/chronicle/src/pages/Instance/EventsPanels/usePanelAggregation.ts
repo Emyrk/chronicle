@@ -12,8 +12,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useInstanceEventsContext, type StreamType, type CachedStream } from "@/hooks/instanceEvents";
 import type { PanelDefinition, PanelContext } from "./types";
-import type { WorkerRequest, SerializableProcessorContext, SelectedPhaseRange } from "./processorTypes";
-import { buildPhaseRanges } from "../phaseHelpers";
+import type { WorkerRequest, SerializableProcessorContext } from "./processorTypes";
 import { executeRequest } from "./workerPool";
 import { useSyncModeContextOptional } from "../SyncModeContext";
 import { processIncrementally, timestampMovedBackward, type IncrementalProcessorState } from "./mainThreadProcessor";
@@ -83,17 +82,11 @@ function toSerializableContext(
     releasedAtMs: interval.released_at_ms ?? null,
   }));
 
-  // Build phase ranges from selected phase IDs
-  const phaseRanges: SelectedPhaseRange[] = ctx.selectedPhaseIds.length > 0
-    ? buildPhaseRanges(ctx.selectedPhaseIds, ctx.instance.encounters)
-    : [];
-
   return {
     players,
     units,
     vehicleControlIntervals,
     selectedEncounterIds: ctx.selectedEncounterIds,
-    selectedPhaseRanges: phaseRanges.length > 0 ? phaseRanges : undefined,
     entitySelection: {
       enemyIds: Array.from(ctx.entitySelection.enemyIds),
       playerIds: Array.from(ctx.entitySelection.playerIds),
@@ -245,14 +238,12 @@ export function usePanelAggregation<TResult>(
   // Create stable key for panel context to avoid re-processing on object identity changes
   const panelContextKey = useMemo(() => {
     const encounterIds = panelContext.selectedEncounterIds.slice().sort().join(",");
-    const phaseIds = panelContext.selectedPhaseIds.slice().sort().join(",");
     const playerIds = Array.from(panelContext.entitySelection.playerIds).sort().join(",");
     const enemyIds = Array.from(panelContext.entitySelection.enemyIds).sort().join(",");
-    return `${panelContext.instance.id}|${encounterIds}|${phaseIds}|${playerIds}|${enemyIds}|${panelOption ?? ""}|${panelContextKeyData ?? ""}`;
+    return `${panelContext.instance.id}|${encounterIds}|${playerIds}|${enemyIds}|${panelOption ?? ""}|${panelContextKeyData ?? ""}`;
   }, [
     panelContext.instance.id,
     panelContext.selectedEncounterIds,
-    panelContext.selectedPhaseIds,
     panelContext.entitySelection.playerIds,
     panelContext.entitySelection.enemyIds,
     panelOption,

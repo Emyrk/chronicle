@@ -475,7 +475,6 @@ export function getFixturePanelContext(): PanelContext {
 
   return {
     instance,
-    selectedPhaseIds: [],
     selectedEncounterIds: [ENCOUNTER_ID],
     entitySelection,
   };
