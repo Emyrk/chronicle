@@ -19,6 +19,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { SLOT_INVENTORY_TYPES } from "./gearListModel";
+import {
+  itemPickerLevelOptions,
+  parseItemPickerLevel,
+} from "./itemPickerLevel";
 import type { GearTrendsSlot, ItemSearchResult } from "@/api/typesGenerated";
 import { formatEquipRate } from "../trends/trendsModel";
 import {
@@ -66,10 +70,9 @@ interface ItemPickerPanelProps {
   stageStats?: StatWeights;
   targets?: readonly StatTarget[];
   /**
-   * Character level the results should be wearable at. Adds a level
-   * filter (on by default) that the user can switch off — without it,
-   * high-level quest and raid gear drowns out everything a levelling
-   * character can actually equip.
+   * Highest selectable character level for item-search filtering. The picker
+   * defaults to Any; selecting a level only returns items with an explicit
+   * required level at or below that value.
    */
   characterLevel?: number;
 }
@@ -97,7 +100,7 @@ export function ItemPickerPanel({
   const [query, setQuery] = useState("");
   const [quality, setQuality] = useState("");
   const [sort, setSort] = useState<string>("item_level_desc");
-  const [ignoreLevel, setIgnoreLevel] = useState(false);
+  const [levelFilter, setLevelFilter] = useState("any");
   const rawQuery = query.trim();
   const debouncedQuery = useDebouncedValue(rawQuery, 175);
   // Clearing the input and the one-character guard react immediately. Only
@@ -107,8 +110,7 @@ export function ItemPickerPanel({
 
   // Filtering happens in SQL, before the result cap — a client-side pass
   // over an already-capped page would leave the list nearly empty.
-  const levelCeiling =
-    characterLevel && !ignoreLevel ? characterLevel : undefined;
+  const levelCeiling = parseItemPickerLevel(levelFilter, characterLevel);
 
   const slotFilter = useMemo(
     () => (SLOT_INVENTORY_TYPES[slotIndex] ?? []).join(","),
@@ -213,23 +215,25 @@ export function ItemPickerPanel({
           </button>
         ))}
         {characterLevel != null && (
-          <button
-            type="button"
-            onClick={() => setIgnoreLevel((prev) => !prev)}
-            title={
-              ignoreLevel
-                ? "Only show items wearable at this level"
-                : "Show items above this level too"
-            }
-            className={cn(
-              "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-              ignoreLevel
-                ? "border-zinc-700 text-zinc-400 hover:text-zinc-200"
-                : "border-blue-500 bg-blue-500/10 text-white",
-            )}
-          >
-            {ignoreLevel ? "Any level" : `Usable at ${characterLevel}`}
-          </button>
+          <label className="inline-flex h-7 items-center gap-1.5 rounded-full border border-blue-500 bg-blue-500/10 px-2.5 text-xs text-white">
+            <span>Level</span>
+            <select
+              aria-label="Maximum required item level"
+              title="Only show items usable at or below this character level"
+              value={levelFilter}
+              onChange={(event) => setLevelFilter(event.target.value)}
+              className="bg-transparent font-mono text-white outline-none"
+            >
+              <option value="any" className="bg-zinc-900">
+                Any
+              </option>
+              {itemPickerLevelOptions(characterLevel).map((level) => (
+                <option key={level} value={level} className="bg-zinc-900">
+                  {level}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
         <div className="flex-1" />
         <select

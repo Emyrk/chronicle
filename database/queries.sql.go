@@ -16960,9 +16960,12 @@ WHERE wit.dataset_id = $1
   AND (array_length($3::int[], 1) IS NULL OR wit.quality = ANY($3))
   AND (array_length($4::int[], 1) IS NULL OR wit.inventory_type = ANY($4))
   AND (array_length($5::int[], 1) IS NULL OR wit.class = ANY($5))
-  -- 0 disables the filter; a character is never below level 1, so no
-  -- meaningful cap collides with the sentinel.
-  AND ($6::int = 0 OR wit.required_level <= $6)
+  -- 0 disables the filter. With a cap selected, exclude level-0 items:
+  -- those render as having no level requirement ("-") rather than usable gear.
+  AND (
+    $6::int = 0
+    OR (wit.required_level > 0 AND wit.required_level <= $6)
+  )
 ORDER BY
   CASE WHEN $7::bool THEN wit.quality END DESC,
   CASE WHEN $8::bool THEN wit.item_level END DESC,
