@@ -126,13 +126,19 @@ func NewRazorgore(flavor database.WoWFlavor) func(id guid.GUID, all *characters.
 	}
 }
 
+// Phase key constants for Razorgore.
+const (
+	RazorgorePhaseKeyP1 = "razorgore_p1"
+	RazorgorePhaseKeyP2 = "razorgore_p2"
+)
+
 // RazorgorePhaseDefinitions returns the encounter phase definitions for Razorgore.
 // Exported for testing.
 var RazorgorePhaseDefinitions = &phases.EncounterPhases{
 	EncounterName: "Razorgore the Untamed",
 	Definitions: []phases.Definition{
-		{Key: "razorgore_p1", Name: "Phase 1 – Adds", Order: 0},
-		{Key: "razorgore_p2", Name: "Phase 2 – Boss", Order: 1},
+		{Key: RazorgorePhaseKeyP1, Name: "Phase 1 – Adds", Order: 0},
+		{Key: RazorgorePhaseKeyP2, Name: "Phase 2 – Boss", Order: 1},
 	},
 }
 
@@ -170,7 +176,7 @@ func (c *razorgore) Process(m messages.Message) error {
 				// Emit phase transition to P2 at the threshold crossing.
 				c.all.EmitPhaseTransition(phases.Transition{
 					SourceGUID: c.ID(),
-					ToPhaseKey: "razorgore_p2",
+					ToPhaseKey: RazorgorePhaseKeyP2,
 					Timestamp:  m.Date(),
 				})
 			}
@@ -194,8 +200,8 @@ func (c *razorgore) killEggAds(m messages.Message) {
 		12416, // Blackwing Legionnaire
 		12420, // Blackwing Mage
 		12422, // Death Talon Dragonspawn
-
 		50142, // Blackwing Marksman
+		52153, // Death Talon Scorcher
 		14456, // Blackwing Guardian
 	} {
 		for _, add := range c.all.ByEntry[entry] {

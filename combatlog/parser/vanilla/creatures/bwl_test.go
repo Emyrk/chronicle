@@ -344,7 +344,7 @@ func TestRazorgorePhaseTransition_EmitsOnThreshold(t *testing.T) {
 	_, err = chars.Process(eggCast(transitionTime, razor, destroyEggSpellID))
 	require.NoError(t, err)
 	require.Len(t, transitions, 1, "should emit exactly one transition at threshold")
-	require.Equal(t, "razorgore_p2", transitions[0].ToPhaseKey)
+	require.Equal(t, creatures.RazorgorePhaseKeyP2, transitions[0].ToPhaseKey)
 	require.Equal(t, transitionTime, transitions[0].Timestamp)
 	require.Equal(t, razor, transitions[0].SourceGUID)
 
@@ -397,7 +397,7 @@ func TestRazorgorePhaseTransition_ResetsOnBossReset(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Len(t, transitions, 1, "should emit transition on second pull after reset")
-	require.Equal(t, "razorgore_p2", transitions[0].ToPhaseKey)
+	require.Equal(t, creatures.RazorgorePhaseKeyP2, transitions[0].ToPhaseKey)
 }
 
 // TestRazorgorePhaseDefinitions_PhaseProvider verifies that the razorgore
@@ -427,8 +427,8 @@ func TestRazorgorePhaseDefinitions_PhaseProvider(t *testing.T) {
 	require.NotNil(t, defs)
 	require.Equal(t, "Razorgore the Untamed", defs.EncounterName)
 	require.Len(t, defs.Definitions, 2)
-	require.Equal(t, "razorgore_p1", defs.Definitions[0].Key)
-	require.Equal(t, "razorgore_p2", defs.Definitions[1].Key)
+	require.Equal(t, creatures.RazorgorePhaseKeyP1, defs.Definitions[0].Key)
+	require.Equal(t, creatures.RazorgorePhaseKeyP2, defs.Definitions[1].Key)
 }
 
 // TestRazorgorePhaseDefinitions_UnsupportedFlavor verifies that an unsupported
