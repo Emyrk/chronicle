@@ -48,9 +48,13 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewNexusLord,
 			NewScionOfEternity,
 			NewPowerSpark,
+
+			// Ulduar
+			NewYoggSaronEncounterCharacter,
 		)
-		// Vortex uses a vehicle GUID, so it must not be wrapped by CreatureFactories.
-		wrath = append(wrath, NewVortex)
+		// Vortex and Yogg-Saron use vehicle GUIDs, so they must not rely solely on
+		// the CreatureFactories-wrapped registrations above.
+		wrath = append(wrath, NewVortex, NewYoggSaronEncounterCharacter)
 		cres = append(wrath, cres...)
 	}
 

@@ -3,6 +3,7 @@ package instances
 import (
 	"context"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
@@ -570,6 +571,15 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		34272: "XD-175 Compactobot",
 		34273: "XB-488 Disposalbot",
 		34274: "XB-488 Disposalbot",
+		33136: "Guardian of Yogg-Saron",
+		33433: "Suit of Armor",
+		33567: "Deathsworn Zealot",
+		33716: "Consort",
+		33717: "Consort",
+		33718: "Consort",
+		33719: "Consort",
+		33720: "Consort",
+		33943: "Influence Tentacle",
 		33985: "Corruptor Tentacle",
 		33966: "Crusher Tentacle",
 		33983: "Constrictor Tentacle",
@@ -591,7 +601,6 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33054: "Thorim Trap Bunny",
 		33113: "Flame Leviathan",
 		33118: "Ignis the Furnace Master",
-		33134: "Sara",
 		33147: "Thorim",
 		33186: "Razorscale",
 		33190: "Ignis the Furnace Master",
@@ -621,10 +630,45 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		34003: "Flame Leviathan",
 		34106: "Leviathan Mk II",
 		34175: "Auriaya",
-		34332: "Sara",
-		33890: "Brain of Yogg-Saron",
 		33288: "Yogg-Saron",
 	})
+
+	yoggSaronEncounter := func(encounter.Fight) *identifier.EncounterFuncResult {
+		return &identifier.EncounterFuncResult{
+			EncounterName: "Yogg-Saron",
+			Bosses:        []uint32{33288},
+		}
+	}
+	for entry, name := range map[uint32]string{
+		33134: "Sara",
+		34332: "Sara",
+		33890: "Brain of Yogg-Saron",
+		33136: "Guardian of Yogg-Saron",
+		33433: "Suit of Armor",
+		33567: "Deathsworn Zealot",
+		33716: "Consort",
+		33717: "Consort",
+		33718: "Consort",
+		33719: "Consort",
+		33720: "Consort",
+		33943: "Influence Tentacle",
+		33966: "Crusher Tentacle",
+		33983: "Constrictor Tentacle",
+		33985: "Corruptor Tentacle",
+		33988: "Immortal Guardian",
+	} {
+		hostile[entry] = instances.Identity{
+			Affiliation:     types.AffiliationHostile,
+			Name:            name,
+			EncounterNameFn: yoggSaronEncounter,
+		}
+	}
+	for _, entry := range []uint32{33134, 34332, 33890} {
+		identity := hostile[entry]
+		identity.Boss = true
+		identity.EncounterName = "Yogg-Saron"
+		hostile[entry] = identity
+	}
 	return hostile
 }
 
