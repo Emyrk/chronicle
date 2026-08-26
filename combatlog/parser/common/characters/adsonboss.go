@@ -1,8 +1,9 @@
 package characters
 
 import (
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 type AdsGoWithBoss struct {
@@ -48,6 +49,16 @@ func NewAdsGoWithBossCustomCharacter(c CharacterBase, all *Characters, bossEntry
 
 type CanDie interface {
 	Died(reason string, m messages.Message)
+}
+
+// PhaseDefinitions delegates to the embedded CharacterBase if it implements
+// phases.PhaseProvider, so wrapping a character in AdsGoWithBoss preserves
+// its phase definitions.
+func (c *AdsGoWithBoss) PhaseDefinitions() *phases.EncounterPhases {
+	if pp, ok := c.CharacterBase.(phases.PhaseProvider); ok {
+		return pp.PhaseDefinitions()
+	}
+	return nil
 }
 
 func (c *AdsGoWithBoss) Process(m messages.Message) error {

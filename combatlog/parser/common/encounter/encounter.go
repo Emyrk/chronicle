@@ -8,11 +8,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 )
 
 // KillType represents the outcome of an encounter.
@@ -41,6 +41,9 @@ type Encounter struct {
 	KillType  KillType
 	Remaining []guid.GUID
 	Boss      bool
+
+	// Phases are optional sub-ranges within the encounter, ordered by Phase.Order.
+	Phases []Phase
 }
 
 func (e Encounter) NamedString(db *unitdb.Units) string {
@@ -77,6 +80,14 @@ type Fight struct {
 	// that belong to this fight.
 	Hostiles     map[guid.GUID]CharacterFight
 	PlayerDeaths []messages.Message
+
+	// Phases holds live-materialized encounter phases. Populated during the
+	// fight by the phase tracker and copied at finalization. The final phase's
+	// KillType is assigned by fightEncounter after the outcome is computed.
+	Phases []Phase
+	// PhaseEncounterName identifies the encounter definition that produced Phases.
+	// fightEncounter only attaches the phases when the resolved name matches.
+	PhaseEncounterName string
 
 	// Start is the earliest start time across all hostile activity periods.
 	Start time.Time

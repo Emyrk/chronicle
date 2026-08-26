@@ -29,6 +29,20 @@ export interface EnemyUnit {
   periods: readonly ActivityPeriod[]; // activity periods for debugging
 }
 
+/** A named sub-range within an encounter (e.g. boss phases). */
+export interface EncounterPhase {
+  id: string;
+  encounter_id: string;
+  key: string;
+  name: string;
+  order: number;
+  start_offset_ms: number;
+  end_offset_ms: number;
+  start_time: string;
+  end_time: string;
+  kill_type: KillType;
+}
+
 export interface Encounter {
   id: string;
   name: string;
@@ -38,6 +52,8 @@ export interface Encounter {
   end_time: string;
   enemies?: EnemyUnit[];
   remaining?: string[]; // GUIDs of enemies that did not die
+  /** Optional phases within this encounter (sorted by order). */
+  phases?: EncounterPhase[];
 }
 
 export interface Instance {
@@ -160,6 +176,18 @@ function transformToInstance(
       players,
       enemies,
       remaining: enc.remaining as string[] | undefined,
+      phases: normalizeArray(enc.phases).map((phase) => ({
+        id: phase.id,
+        encounter_id: enc.id,
+        key: phase.key,
+        name: phase.name,
+        order: phase.order,
+        start_offset_ms: phase.start_offset_ms,
+        end_offset_ms: phase.end_offset_ms,
+        start_time: new Date(new Date(enc.start_time).getTime() + phase.start_offset_ms).toISOString(),
+        end_time: new Date(new Date(enc.start_time).getTime() + phase.end_offset_ms).toISOString(),
+        kill_type: phase.kill_type,
+      })),
     };
   });
 

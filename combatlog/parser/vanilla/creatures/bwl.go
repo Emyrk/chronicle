@@ -5,6 +5,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 )
@@ -107,13 +108,7 @@ func (c *RazorAdCharacter) bumpRazorgore(m messages.Message) {
 }
 
 func NewRazorgore(flavor database.WoWFlavor) func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
-	eggThreshold := 0
-	switch {
-	case flavor.Has(database.FlavorNightmareOfUrsol):
-		eggThreshold = 20
-	case flavor.Has(database.FlavorVanillaPlus):
-		eggThreshold = 30
-	}
+	eggThreshold := RazorgoreEggThreshold(flavor)
 	return func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 		if entry, ok := id.GetEntry(); !ok || entry != 12435 {
 			return nil, false
@@ -132,12 +127,36 @@ func NewRazorgore(flavor database.WoWFlavor) func(id guid.GUID, all *characters.
 	}
 }
 
+// Phase key constants for Razorgore.
+const (
+	RazorgorePhaseKeyP1 = "razorgore_p1"
+	RazorgorePhaseKeyP2 = "razorgore_p2"
+)
+
+// RazorgorePhaseDefinitions returns the encounter phase definitions for Razorgore.
+// Exported for testing.
+var RazorgorePhaseDefinitions = &phases.EncounterPhases{
+	EncounterName: "Razorgore the Untamed",
+	Definitions: []phases.Definition{
+		{Key: RazorgorePhaseKeyP1, Name: "Adds", Order: 0},
+		{Key: RazorgorePhaseKeyP2, Name: "Boss", Order: 1},
+	},
+}
+
 type razorgore struct {
 	*characters.Common
 	all          *characters.Characters
 	eggThreshold int
 	eggCount     int
 	adsGone      bool
+}
+
+// PhaseDefinitions implements phases.PhaseProvider.
+func (c *razorgore) PhaseDefinitions() *phases.EncounterPhases {
+	if c.eggThreshold == 0 {
+		return nil
+	}
+	return RazorgorePhaseDefinitions
 }
 
 func (c *razorgore) Process(m messages.Message) error {
@@ -155,6 +174,12 @@ func (c *razorgore) Process(m messages.Message) error {
 			if c.eggCount >= c.eggThreshold {
 				c.killEggAds(m)
 				c.adsGone = true
+				// Emit phase transition to P2 at the threshold crossing.
+				c.all.EmitPhaseTransition(phases.Transition{
+					SourceGUID: c.ID(),
+					ToPhaseKey: RazorgorePhaseKeyP2,
+					Timestamp:  m.Date(),
+				})
 			}
 		}
 	}
@@ -176,8 +201,8 @@ func (c *razorgore) killEggAds(m messages.Message) {
 		12416, // Blackwing Legionnaire
 		12420, // Blackwing Mage
 		12422, // Death Talon Dragonspawn
-
 		50142, // Blackwing Marksman
+		52153, // Death Talon Scorcher
 		14456, // Blackwing Guardian
 	} {
 		for _, add := range c.all.ByEntry[entry] {

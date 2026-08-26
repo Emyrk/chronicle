@@ -6014,6 +6014,46 @@ func (q *sqlQuerier) FindDuplicateInstanceCandidates(ctx context.Context, arg Fi
 	return items, nil
 }
 
+const getEncounterPhasesByInstanceID = `-- name: GetEncounterPhasesByInstanceID :many
+SELECT
+  id, encounter_id, key, name, phase_order, start_offset_ms, end_offset_ms, kill_type
+FROM
+  log_instance_encounter_phases
+WHERE
+  encounter_id IN (SELECT id FROM log_instance_encounters WHERE instance_id = $1)
+ORDER BY
+  encounter_id, phase_order
+`
+
+func (q *sqlQuerier) GetEncounterPhasesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterPhase, error) {
+	rows, err := q.db.Query(ctx, getEncounterPhasesByInstanceID, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogInstanceEncounterPhase
+	for rows.Next() {
+		var i LogInstanceEncounterPhase
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncounterID,
+			&i.Key,
+			&i.Name,
+			&i.PhaseOrder,
+			&i.StartOffsetMs,
+			&i.EndOffsetMs,
+			&i.KillType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEncounterSummariesByInstanceID = `-- name: GetEncounterSummariesByInstanceID :many
 SELECT
     lie.id,
@@ -6236,6 +6276,38 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		&i.KillType,
 	)
 	return i, err
+}
+
+const insertEncounterPhase = `-- name: InsertEncounterPhase :exec
+INSERT INTO
+  log_instance_encounter_phases (id, encounter_id, key, name, phase_order, start_offset_ms, end_offset_ms, kill_type)
+VALUES
+  ($1, $2, $3, $4, $5, $6, $7, $8)
+`
+
+type InsertEncounterPhaseParams struct {
+	ID            uuid.UUID `db:"id" json:"id"`
+	EncounterID   uuid.UUID `db:"encounter_id" json:"encounter_id"`
+	Key           string    `db:"key" json:"key"`
+	Name          string    `db:"name" json:"name"`
+	PhaseOrder    int32     `db:"phase_order" json:"phase_order"`
+	StartOffsetMs int64     `db:"start_offset_ms" json:"start_offset_ms"`
+	EndOffsetMs   int64     `db:"end_offset_ms" json:"end_offset_ms"`
+	KillType      KillType  `db:"kill_type" json:"kill_type"`
+}
+
+func (q *sqlQuerier) InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error {
+	_, err := q.db.Exec(ctx, insertEncounterPhase,
+		arg.ID,
+		arg.EncounterID,
+		arg.Key,
+		arg.Name,
+		arg.PhaseOrder,
+		arg.StartOffsetMs,
+		arg.EndOffsetMs,
+		arg.KillType,
+	)
+	return err
 }
 
 const insertInstance = `-- name: InsertInstance :one

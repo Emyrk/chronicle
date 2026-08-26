@@ -2,9 +2,10 @@ package instances
 
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/google/uuid"
 )
 
@@ -15,6 +16,14 @@ type ongoingFight struct {
 
 	// PlayerDeaths helps track a reset vs a "wipe".
 	PlayerDeaths []messages.Message
+
+	// Phases tracks live encounter phase state. Initialized when a fight
+	// starts and a participating hostile provides phase definitions.
+	// Nil when the encounter has no phases.
+	Phases *phaseTracker
+	// StagedPhaseTransitions holds signals emitted before the phase provider
+	// becomes active. They are applied immediately after tracker initialization.
+	StagedPhaseTransitions []phases.Transition
 
 	Start *period.Moment
 	End   *period.Moment

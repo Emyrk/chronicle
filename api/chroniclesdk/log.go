@@ -160,12 +160,24 @@ type WoWEncounter struct {
 type WoWEncounterWithHostiles struct {
 	WoWEncounter
 	Hostiles []WoWEncounterHostile `json:"hostiles"`
+	Phases   []WoWEncounterPhase   `json:"phases,omitempty"`
 }
 
 type WoWEncounterHostile struct {
 	ID      guid.GUID        `json:"id"`
 	Boss    bool             `json:"boss"`
 	Periods []ActivityPeriod `json:"periods"`
+}
+
+// WoWEncounterPhase represents a named sub-range within an encounter.
+type WoWEncounterPhase struct {
+	ID            uuid.UUID `json:"id"`
+	Key           string    `json:"key"`
+	Name          string    `json:"name"`
+	Order         int       `json:"order"`
+	StartOffsetMs int64     `json:"start_offset_ms"`
+	EndOffsetMs   int64     `json:"end_offset_ms"`
+	KillType      KillType  `json:"kill_type"`
 }
 
 type WoWLogGroupState struct {

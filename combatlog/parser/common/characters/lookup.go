@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
@@ -55,6 +56,16 @@ type Characters struct {
 	// TODO: unroll hooks?
 	hooks           []SetHook
 	activityChanged map[Character]struct{}
+
+	// phaseTransitionCb is set by hookable to record phase transitions on the
+	// active ongoingFight. Characters call EmitPhaseTransition which forwards
+	// here when set.
+	phaseTransitionCb phases.TransitionCallback
+
+	// stagedTransitions holds transitions emitted during Characters.Process
+	// before the fight detection callback is installed. Hookable drains these
+	// after fight start to apply them to the live phase tracker.
+	stagedTransitions []phases.Transition
 }
 
 func NewCharacters(db *unitdb.Units, factories []CharacterFactory, id *identifier.Identifier) *Characters {
@@ -70,6 +81,35 @@ func NewCharacters(db *unitdb.Units, factories []CharacterFactory, id *identifie
 
 func (c *Characters) RegisterHook(hook SetHook) {
 	c.hooks = append(c.hooks, hook)
+}
+
+// SetPhaseTransitionCallback installs the callback that specialized characters
+// use to emit phase transitions. Hookable sets this so transitions are recorded
+// on the active ongoingFight.
+func (c *Characters) SetPhaseTransitionCallback(cb phases.TransitionCallback) {
+	c.phaseTransitionCb = cb
+}
+
+// EmitPhaseTransition forwards a phase transition to the installed callback.
+// When no callback is installed, the transition is staged so that hookable can
+// drain it after fight detection on the same message.
+func (c *Characters) EmitPhaseTransition(t phases.Transition) {
+	if c.phaseTransitionCb != nil {
+		c.phaseTransitionCb(t)
+	} else {
+		c.stagedTransitions = append(c.stagedTransitions, t)
+	}
+}
+
+// DrainStagedTransitions returns and clears any transitions that were staged
+// because they were emitted before a fight callback was installed.
+func (c *Characters) DrainStagedTransitions() []phases.Transition {
+	if len(c.stagedTransitions) == 0 {
+		return nil
+	}
+	staged := c.stagedTransitions
+	c.stagedTransitions = nil
+	return staged
 }
 
 func (c *Characters) Save(key string, value any) {

@@ -32,7 +32,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { cn } from "@/lib/utils";
-import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
+import type { Instance, Encounter, EncounterPhase, EnemyUnit } from "./InstancePage";
+import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } from "./phaseTimeRange";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { PANELS } from "./EventsPanels/EventsPanel";
@@ -259,14 +260,6 @@ function formatPeriodsTooltip(guid: string, periods: readonly ActivityPeriod[]):
   );
 }
 
-function computeTotalDuration(encounters: Encounter[]): number {
-  return encounters.reduce((total, e) => {
-    const start = new Date(e.start_time).getTime();
-    const end = new Date(e.end_time).getTime();
-    return total + (end - start);
-  }, 0);
-}
-
 function formatDurationMs(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
@@ -359,6 +352,21 @@ function mergeEnemiesByGuid(encounters: Encounter[]): MergedEnemy[] {
   return enemies.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+function phaseTone(order: number, active: boolean): string {
+  const tones = [
+    active
+      ? "border-violet-400/80 bg-violet-500/35 text-violet-50 shadow-[inset_0_0_0_1px_rgba(196,181,253,0.12)]"
+      : "border-violet-400/55 bg-violet-500/15 text-violet-200",
+    active
+      ? "border-amber-400/80 bg-amber-500/30 text-amber-50 shadow-[inset_0_0_0_1px_rgba(253,230,138,0.12)]"
+      : "border-amber-400/55 bg-amber-500/10 text-amber-200",
+    active
+      ? "border-cyan-400/80 bg-cyan-500/30 text-cyan-50"
+      : "border-cyan-400/55 bg-cyan-500/10 text-cyan-200",
+  ];
+  return tones[order % tones.length];
+}
+
 // ============================================================================
 // Enemy status helpers (killed / reset / alive)
 // ============================================================================
@@ -395,8 +403,10 @@ function EncounterSidebar({
   encounters,
   trashGroups,
   selectedIds,
+  activePhaseId,
   onSelect,
   onSelectMany,
+  onSelectPhase,
   onCollapse,
   isMobile,
   showHints,
@@ -407,8 +417,10 @@ function EncounterSidebar({
   encounters: Encounter[];
   trashGroups: TrashGroup[];
   selectedIds: string[];
+  activePhaseId: string | null;
   onSelect: (id: string, mode: 'single' | 'toggle') => void;
   onSelectMany: (ids: string[]) => void;
+  onSelectPhase: (phase: EncounterPhase, encounterId: string) => void;
   onCollapse: () => void;
   isMobile: boolean;
   showHints: boolean;
@@ -429,6 +441,8 @@ function EncounterSidebar({
     .filter(g => g.encounters.some(e => selectedIds.includes(e.id)))
     .map(g => g.name);
   const hasSelectedTrash = groupsWithSelectedTrash.length > 0;
+
+  const multipleEncountersSelected = selectedIds.length > 1;
 
   const [trashOpen, setTrashOpen] = useState(false);
   const [manualExpandedGroup, setManualExpandedGroup] = useState<string | null>(null);
@@ -673,51 +687,106 @@ function EncounterSidebar({
         {bossEncounters.map((encounter) => {
           const isSelected = selectedIds.includes(encounter.id);
           const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
-          
+          const phases = [...(encounter.phases ?? [])].sort((a, b) => a.order - b.order);
+          const showExpandedPhases = isSelected && phases.length > 0 && !multipleEncountersSelected;
+
           return (
             <div
-              role="button"
-              tabIndex={0}
               key={encounter.id}
-              onClick={(e) => handleClick(encounter.id, e)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleClick(encounter.id, e);
-                }
-              }}
               className={cn(
-                "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-all duration-150 cursor-pointer",
-                isSelected
-                  ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
-                  : "hover:bg-accent/50 hover:translate-x-0.5",
-                isWipeOrReset && !isSelected && "opacity-60"
+                "rounded-md transition-all duration-150",
+                isSelected && "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm",
               )}
             >
-              {encounter.kill_type === "clean" ? (
-                <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
-              ) : encounter.kill_type === "partial" ? (
-                <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500" />
-              ) : encounter.kill_type === "reset" ? (
-                <RotateCcw className="h-4 w-4 shrink-0 text-orange-500" />
-              ) : (
-                <Skull className="h-4 w-4 shrink-0 text-red-500" />
-              )}
-              <span className="truncate flex-1">{encounter.name}</span>
-              <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
-                {formatEncounterTime(encounter)}
-              </span>
-              {isDebug && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    copyEncounterTimes(encounter.start_time, encounter.end_time);
-                  }}
-                  className="p-1 hover:bg-accent rounded"
-                  title="Copy encounter times"
-                >
-                  <Copy className="h-3 w-3" />
-                </button>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={(e) => handleClick(encounter.id, e)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleClick(encounter.id, e);
+                  }
+                }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-all duration-150 cursor-pointer",
+                  !isSelected && "hover:bg-accent/50 hover:translate-x-0.5",
+                  isWipeOrReset && !isSelected && "opacity-60",
+                )}
+              >
+                {encounter.kill_type === "clean" ? (
+                  <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
+                ) : encounter.kill_type === "partial" ? (
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500" />
+                ) : encounter.kill_type === "reset" ? (
+                  <RotateCcw className="h-4 w-4 shrink-0 text-orange-500" />
+                ) : (
+                  <Skull className="h-4 w-4 shrink-0 text-red-500" />
+                )}
+                <span className={cn("truncate flex-1", isSelected && "font-semibold")}>{encounter.name}</span>
+                <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
+                  {formatEncounterTime(encounter)}
+                </span>
+                {isDebug && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyEncounterTimes(encounter.start_time, encounter.end_time);
+                    }}
+                    className="p-1 hover:bg-accent rounded"
+                    title="Copy encounter times"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+
+              {showExpandedPhases && (
+                <div className="flex gap-1.5 px-2 pb-2" aria-label="Apply encounter phase time range">
+                  {phases.map((phase) => {
+                    const phaseSelected = activePhaseId === phase.id;
+                    const durationMs = phase.end_offset_ms - phase.start_offset_ms;
+                    const widthPercent = phaseWidthPercent(phase, encounter);
+                    return (
+                      <Tooltip key={phase.id}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => onSelectPhase(phase, encounter.id)}
+                            aria-label={`Filter to phase ${phase.order + 1}: ${phase.name}`}
+                            aria-pressed={phaseSelected}
+                            className={cn(
+                              "flex h-7 min-w-12 cursor-pointer items-center justify-center overflow-hidden rounded border px-2 text-[11px] font-semibold transition-all duration-150",
+                              "hover:-translate-y-px hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              phaseTone(phase.order, phaseSelected),
+                            )}
+                            style={{ flexGrow: Math.max(widthPercent, 16), flexBasis: 0 }}
+                          >
+                            <span className="truncate">{phase.name}</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          sideOffset={8}
+                          hideArrow
+                          className="w-[232px] rounded-lg border border-border/80 bg-popover p-3.5 text-foreground shadow-2xl"
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <p className="truncate text-sm font-semibold">
+                              Phase {phase.order + 1} — {phase.name}
+                            </p>
+                            <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                              {formatDurationMs(durationMs)}
+                            </span>
+                          </div>
+                          <p className="mt-2 border-t border-border/70 pt-2 text-[11px] font-medium text-amber-500">
+                            Click to filter this phase <span aria-hidden>→</span>
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
               )}
             </div>
           );
@@ -1316,7 +1385,13 @@ function EncounterDetail({
 
 
   
-  const totalDurationMs = computeTotalDuration(encounters);
+  const totalDurationMs = useMemo(() => {
+    return encounters.reduce((acc, enc) => {
+      const start = new Date(enc.start_time).getTime();
+      const end = new Date(enc.end_time).getTime();
+      return acc + (end - start);
+    }, 0);
+  }, [encounters]);
   
   // Compute elapsed time (from first encounter start to last encounter end)
   const elapsedTimeMs = useMemo(() => {
@@ -2408,13 +2483,32 @@ export function InstancePageView({
     }
   }, [_selectedEncounterIds, internalSelectedIds, setEncounters]);
 
-  // Reset time range selection when selected encounters change
+  const pendingPhaseRangeRef = useRef<{
+    encounterId: string;
+    startOffsetMs: number;
+    endOffsetMs: number;
+  } | null>(null);
+
+  // Reset the time range on ordinary encounter changes. Phase shortcuts stage
+  // their range until the parent encounter becomes the sole selection.
   const prevEncounterIdsRef = useRef(internalSelectedIds);
   useEffect(() => {
-    if (prevEncounterIdsRef.current !== internalSelectedIds) {
-      prevEncounterIdsRef.current = internalSelectedIds;
-      timeRange?.reset();
+    if (prevEncounterIdsRef.current === internalSelectedIds) return;
+    prevEncounterIdsRef.current = internalSelectedIds;
+
+    const pending = pendingPhaseRangeRef.current;
+    if (
+      pending &&
+      internalSelectedIds.length === 1 &&
+      internalSelectedIds[0] === pending.encounterId
+    ) {
+      pendingPhaseRangeRef.current = null;
+      timeRange?.setRange(pending.startOffsetMs, pending.endOffsetMs);
+      return;
     }
+
+    pendingPhaseRangeRef.current = null;
+    timeRange?.reset();
   }, [internalSelectedIds, timeRange]);
   
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
@@ -2523,10 +2617,28 @@ export function InstancePageView({
         setInternalSelectedIds([...selectedIds, id]);
       }
     } else {
-      // Single select replaces
+      // Single select replaces — also clears any phase selection
       setInternalSelectedIds([id]);
     }
   };
+
+  const handleSelectPhase = useCallback((phase: EncounterPhase, encounterId: string) => {
+    const selection = phaseTimeRangeSelection(phase, encounterId);
+
+    // Time-range offsets are based on the first selected encounter, so phase
+    // shortcuts always single-select their parent encounter first.
+    if (selectedIds.length === 1 && selectedIds[0] === encounterId) {
+      timeRange?.setRange(selection.startOffsetMs, selection.endOffsetMs);
+      return;
+    }
+
+    pendingPhaseRangeRef.current = {
+      encounterId,
+      startOffsetMs: selection.startOffsetMs,
+      endOffsetMs: selection.endOffsetMs,
+    };
+    setInternalSelectedIds(selection.encounterIds);
+  }, [selectedIds, setInternalSelectedIds, timeRange]);
 
   const handlePanelTypeChangeByID = useCallback((itemID: string, type: EventsPanelType) => {
     const idx = activeLayoutItems.findIndex((item) => item.id === itemID);
@@ -2968,6 +3080,12 @@ export function InstancePageView({
     () => instance.encounters.filter((e) => selectedIds.includes(e.id)),
     [instance.encounters, selectedIds],
   );
+  const activePhaseId = useMemo(() => activePhaseForTimeRange(
+    selectedEncounters,
+    timeRange?.enabled ?? false,
+    timeRange?.startOffsetMs ?? null,
+    timeRange?.endOffsetMs ?? null,
+  ), [selectedEncounters, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs]);
   const trashGroups = groupTrashEncounters(instance.encounters);
 
   const headerBg = getInstanceBackground(instance.name);
@@ -2978,7 +3096,6 @@ export function InstancePageView({
     : null;
   const totalDuration = elapsedDurationMs !== null ? formatDurationMs(elapsedDurationMs) : null;
     
-  // Compute total combat duration for selected encounters (used by explainer/panels)
   const totalDurationMs = useMemo(() => {
     return selectedEncounters.reduce((acc, enc) => {
       const start = new Date(enc.start_time).getTime();
@@ -3338,10 +3455,12 @@ export function InstancePageView({
             encounters={instance.encounters}
             trashGroups={trashGroups}
             selectedIds={selectedIds}
+            activePhaseId={activePhaseId}
             onSelect={handleSelect}
             onSelectMany={(ids) => {
               setInternalSelectedIds(ids);
             }}
+            onSelectPhase={handleSelectPhase}
             isMobile={isMobile}
             showHints={showHints}
             includeWipes={viewState.includeWipes}

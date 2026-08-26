@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
@@ -302,4 +303,158 @@ func TestRazorgoreEggs_CountResetsOnBossReset(t *testing.T) {
 		require.True(t, add.IsActive(),
 			"%s should survive: egg count must reset on boss reset", name)
 	}
+}
+
+// TestRazorgorePhaseTransition_EmitsOnThreshold verifies that the razorgore
+// character emits a phase transition via the Characters callback when the egg
+// threshold is crossed, and does not emit duplicates for extra casts.
+func TestRazorgorePhaseTransition_EmitsOnThreshold(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(flavor),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	var transitions []phases.Transition
+	chars.SetPhaseTransitionCallback(func(t phases.Transition) {
+		transitions = append(transitions, t)
+	})
+
+	player := guid.GUID(0x1)
+	razor := creatureGUID(razorgoreEntry, 0x1)
+	legionnaire := creatureGUID(blackwingLegionnaire, 0x2)
+
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	// Activate add so razorgore's AdsGoWithBoss is created.
+	_, err := chars.Process(damage(base, player, legionnaire))
+	require.NoError(t, err)
+
+	// Cast 19 eggs: no transition yet.
+	for i := 0; i < 19; i++ {
+		ts := base.Add(time.Duration(10+i) * time.Second)
+		_, err := chars.Process(eggCast(ts, razor, destroyEggSpellID))
+		require.NoError(t, err)
+	}
+	require.Empty(t, transitions, "should not emit transition before threshold")
+
+	// 20th egg: transition fires.
+	transitionTime := base.Add(29 * time.Second)
+	_, err = chars.Process(eggCast(transitionTime, razor, destroyEggSpellID))
+	require.NoError(t, err)
+	require.Len(t, transitions, 1, "should emit exactly one transition at threshold")
+	require.Equal(t, creatures.RazorgorePhaseKeyP2, transitions[0].ToPhaseKey)
+	require.Equal(t, transitionTime, transitions[0].Timestamp)
+	require.Equal(t, razor, transitions[0].SourceGUID)
+
+	// Extra casts: no duplicate transition.
+	for i := 0; i < 10; i++ {
+		ts := base.Add(time.Duration(30+i) * time.Second)
+		_, err := chars.Process(eggCast(ts, razor, destroyEggSpellID))
+		require.NoError(t, err)
+	}
+	require.Len(t, transitions, 1, "should not emit duplicate transitions")
+}
+
+// TestRazorgorePhaseTransition_ResetsOnBossReset verifies that the egg count
+// reset also means a fresh pull can emit a new transition.
+func TestRazorgorePhaseTransition_ResetsOnBossReset(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(flavor),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	var transitions []phases.Transition
+	chars.SetPhaseTransitionCallback(func(t phases.Transition) {
+		transitions = append(transitions, t)
+	})
+
+	player := guid.GUID(0x1)
+	razor := creatureGUID(razorgoreEntry, 0x1)
+
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	// First pull: 20 casts (below V+ threshold of 30). No transition.
+	for i := 0; i < 20; i++ {
+		ts := base.Add(time.Duration(i) * time.Second)
+		_, err := chars.Process(eggCast(ts, razor, destroyEggSpellID))
+		require.NoError(t, err)
+	}
+	require.Empty(t, transitions)
+
+	// Boss resets.
+	_, err := chars.Process(slain(base.Add(30*time.Second), player, razor))
+	require.NoError(t, err)
+
+	// Second pull: 30 casts. Should fire transition.
+	second := base.Add(2 * time.Minute)
+	for i := 0; i < 30; i++ {
+		ts := second.Add(time.Duration(i) * time.Second)
+		_, err := chars.Process(eggCast(ts, razor, destroyEggSpellID))
+		require.NoError(t, err)
+	}
+	require.Len(t, transitions, 1, "should emit transition on second pull after reset")
+	require.Equal(t, creatures.RazorgorePhaseKeyP2, transitions[0].ToPhaseKey)
+}
+
+// TestRazorgorePhaseDefinitions_PhaseProvider verifies that the razorgore
+// character (wrapped in AdsGoWithBoss) implements phases.PhaseProvider and
+// returns the expected definitions when the threshold is non-zero.
+func TestRazorgorePhaseDefinitions_PhaseProvider(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(flavor),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	razor := creatureGUID(razorgoreEntry, 0x1)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(eggCast(base, razor, destroyEggSpellID))
+	require.NoError(t, err)
+
+	razorChar, ok := chars.Get(razor)
+	require.True(t, ok)
+
+	pp, ok := razorChar.(phases.PhaseProvider)
+	require.True(t, ok, "razorgore should implement PhaseProvider")
+
+	defs := pp.PhaseDefinitions()
+	require.NotNil(t, defs)
+	require.Equal(t, "Razorgore the Untamed", defs.EncounterName)
+	require.Len(t, defs.Definitions, 2)
+	require.Equal(t, "Adds", defs.Definitions[0].Name)
+	require.Equal(t, "Boss", defs.Definitions[1].Name)
+	require.Equal(t, creatures.RazorgorePhaseKeyP1, defs.Definitions[0].Key)
+	require.Equal(t, creatures.RazorgorePhaseKeyP2, defs.Definitions[1].Key)
+}
+
+// TestRazorgorePhaseDefinitions_UnsupportedFlavor verifies that an unsupported
+// flavor returns nil phase definitions.
+func TestRazorgorePhaseDefinitions_UnsupportedFlavor(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla}
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(flavor),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	razor := creatureGUID(razorgoreEntry, 0x1)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(eggCast(base, razor, destroyEggSpellID))
+	require.NoError(t, err)
+
+	razorChar, ok := chars.Get(razor)
+	require.True(t, ok)
+
+	pp, ok := razorChar.(phases.PhaseProvider)
+	require.True(t, ok, "razorgore should implement PhaseProvider even for unsupported flavors")
+
+	defs := pp.PhaseDefinitions()
+	require.Nil(t, defs, "unsupported flavor should return nil phase definitions")
 }
