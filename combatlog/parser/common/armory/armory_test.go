@@ -32,6 +32,42 @@ func TestArmoryWriteOrderIsDeterministic(t *testing.T) {
 	assert.Equal(t, []guid.GUID{10, 20, 30}, sortedPlayerGUIDs(players))
 }
 
+func TestRenameGuilds(t *testing.T) {
+	t.Parallel()
+
+	leviaPlayer := guid.GUID(10)
+	remnantPlayer := guid.GUID(20)
+	tracker := &Tracker{
+		Guilds: map[string]map[guid.GUID]struct{}{
+			"Levia":   {leviaPlayer: {}},
+			"Remnant": {remnantPlayer: {}},
+		},
+		Players: map[guid.GUID]combatant.Combatant{
+			leviaPlayer: {
+				Guid:  leviaPlayer,
+				Guild: &combatant.Guild{Name: "Levia"},
+			},
+			remnantPlayer: {
+				Guid:  remnantPlayer,
+				Guild: &combatant.Guild{Name: "Remnant"},
+			},
+		},
+	}
+
+	tracker.RenameGuilds(func(name string) string {
+		if name == "Levia" {
+			return "Remnant"
+		}
+		return name
+	})
+
+	require.Len(t, tracker.Guilds, 1)
+	assert.Contains(t, tracker.Guilds["Remnant"], leviaPlayer)
+	assert.Contains(t, tracker.Guilds["Remnant"], remnantPlayer)
+	assert.Equal(t, "Remnant", tracker.Players[leviaPlayer].Guild.Name)
+	assert.Equal(t, "Remnant", tracker.Players[remnantPlayer].Guild.Name)
+}
+
 func TestOptionalGemEnchantIDs(t *testing.T) {
 	t.Parallel()
 
