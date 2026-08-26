@@ -5,6 +5,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 )
@@ -125,12 +126,30 @@ func NewRazorgore(flavor database.WoWFlavor) func(id guid.GUID, all *characters.
 	}
 }
 
+// RazorgorePhaseDefinitions returns the encounter phase definitions for Razorgore.
+// Exported for testing.
+var RazorgorePhaseDefinitions = &phases.EncounterPhases{
+	EncounterName: "Razorgore the Untamed",
+	Definitions: []phases.Definition{
+		{Key: "razorgore_p1", Name: "Phase 1 – Adds", Order: 0},
+		{Key: "razorgore_p2", Name: "Phase 2 – Boss", Order: 1},
+	},
+}
+
 type razorgore struct {
 	*characters.Common
 	all          *characters.Characters
 	eggThreshold int
 	eggCount     int
 	adsGone      bool
+}
+
+// PhaseDefinitions implements phases.PhaseProvider.
+func (c *razorgore) PhaseDefinitions() *phases.EncounterPhases {
+	if c.eggThreshold == 0 {
+		return nil
+	}
+	return RazorgorePhaseDefinitions
 }
 
 func (c *razorgore) Process(m messages.Message) error {
@@ -148,6 +167,12 @@ func (c *razorgore) Process(m messages.Message) error {
 			if c.eggCount >= c.eggThreshold {
 				c.killEggAds(m)
 				c.adsGone = true
+				// Emit phase transition to P2 at the threshold crossing.
+				c.all.EmitPhaseTransition(phases.Transition{
+					SourceGUID: c.ID(),
+					ToPhaseKey: "razorgore_p2",
+					Timestamp:  m.Date(),
+				})
 			}
 		}
 	}

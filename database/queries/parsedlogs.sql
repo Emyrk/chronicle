@@ -129,9 +129,9 @@ WHERE
 ;
 -- name: InsertEncounterPhase :exec
 INSERT INTO
-  log_instance_encounter_phases (id, encounter_id, key, name, phase_order, start_offset_ms, end_offset_ms)
+  log_instance_encounter_phases (id, encounter_id, key, name, phase_order, start_offset_ms, end_offset_ms, kill_type)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7)
+  ($1, $2, $3, $4, $5, $6, $7, $8)
 ;
 
 -- name: GetEncounterPhasesByInstanceID :many

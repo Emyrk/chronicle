@@ -40,6 +40,7 @@ export interface EncounterPhase {
   end_offset_ms: number;
   start_time: string;
   end_time: string;
+  kill_type: KillType;
 }
 
 export interface Encounter {

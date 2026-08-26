@@ -1444,6 +1444,7 @@ type LogInstanceEncounterPhase struct {
 	PhaseOrder    int32     `db:"phase_order" json:"phase_order"`
 	StartOffsetMs int64     `db:"start_offset_ms" json:"start_offset_ms"`
 	EndOffsetMs   int64     `db:"end_offset_ms" json:"end_offset_ms"`
+	KillType      KillType  `db:"kill_type" json:"kill_type"`
 }
 
 type LogInstanceEvent struct {

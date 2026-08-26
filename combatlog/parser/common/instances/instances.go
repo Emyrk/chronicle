@@ -276,7 +276,6 @@ var (
 				},
 			}
 		},
-		PhaseDetectorFactories: BWLPhaseDetectorFactories,
 	}
 
 	NaxxramasFactory = &CommonFactory{

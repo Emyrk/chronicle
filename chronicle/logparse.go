@@ -561,6 +561,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 						PhaseOrder:    int32(phase.Order),
 						StartOffsetMs: phase.StartOffsetMs,
 						EndOffsetMs:   phase.EndOffsetMs,
+						KillType:      database.KillType(phase.KillType),
 					})
 					if err != nil {
 						return fmt.Errorf("insert encounter phase %q: %w", phase.Key, err)

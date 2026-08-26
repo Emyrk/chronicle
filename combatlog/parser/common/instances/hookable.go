@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/overviewmetrics"
@@ -88,10 +89,6 @@ type Hookable struct {
 	finalizing      bool
 	finalized       bool
 
-	// Phase detectors
-	phaseDetectorFactories []encounter.PhaseDetectorFactory
-	activePhaseDetectors   []encounter.PhaseDetector
-
 	// finalized references
 	g              *armory.Tracker
 	p              *participants.Tracker
@@ -106,10 +103,6 @@ type InstanceParams struct {
 	Rankings      *rankings.Rankings
 	Preprocessors []instancehook.Preprocessor
 	ExtraHooks    []instancehook.Hook
-
-	// PhaseDetectorFactories creates per-fight phase detectors that process
-	// messages during a fight and emit phases at finalization.
-	PhaseDetectorFactories []encounter.PhaseDetectorFactory
 }
 
 func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, flavor database.WoWFlavor) *Hookable {
@@ -125,17 +118,12 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	if f.Preprocessors != nil {
 		preprocessors = f.Preprocessors()
 	}
-	var phaseFactories []encounter.PhaseDetectorFactory
-	if f.PhaseDetectorFactories != nil {
-		phaseFactories = f.PhaseDetectorFactories(flavor)
-	}
 	return NewHookable(ctx, logger, db, z, InstanceParams{
-		Name:                   name,
-		MatchesZone:            f.MatchZone,
-		Idf:                    f.Hostiles(flavor),
-		Rankings:               r,
-		Preprocessors:          preprocessors,
-		PhaseDetectorFactories: phaseFactories,
+		Name:          name,
+		MatchesZone:   f.MatchZone,
+		Idf:           f.Hostiles(flavor),
+		Rankings:       r,
+		Preprocessors: preprocessors,
 	})
 }
 
@@ -244,9 +232,8 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		overviewTracker:        overviewTracker,
 		speedrunTracker:        speedrunTracker,
 		dpsTracker:             dpsTracker,
-		rankingRules:           ip.Rankings,
-		phaseDetectorFactories: ip.PhaseDetectorFactories,
-		verbose:                parseoptions.IsVerbose(ctx),
+		rankingRules:      ip.Rankings,
+		verbose:           parseoptions.IsVerbose(ctx),
 		timings:                timings.New(),
 		completedFights:        make([]encounter.Fight, 0),
 	}
@@ -501,13 +488,6 @@ func (h *Hookable) process(m messages.Message) (finalError error) {
 		})
 	}
 
-	// Feed messages to active phase detectors during a fight.
-	if h.currentFight != nil && h.currentFight.active() {
-		for _, det := range h.activePhaseDetectors {
-			det.ProcessMessage(m)
-		}
-	}
-
 	err = timings.Do1(h.timings, timingsProcessOngoingFightProcess, func() error {
 		return h.currentFight.Process(m)
 	})
@@ -572,11 +552,11 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 	}
 
 	if !wasActive && h.currentFight.active() {
-		// Create fresh phase detectors for this fight.
-		h.activePhaseDetectors = h.activePhaseDetectors[:0]
-		for _, factory := range h.phaseDetectorFactories {
-			h.activePhaseDetectors = append(h.activePhaseDetectors, factory())
-		}
+		// Install phase transition callback that appends to the active fight.
+		fight := h.currentFight
+		h.Characters.SetPhaseTransitionCallback(func(t phases.Transition) {
+			fight.PhaseTransitions = append(fight.PhaseTransitions, t)
+		})
 
 		for _, hook := range h.hooks {
 			hook.FightStarted(h.currentFight.EncounterID, m)
@@ -600,11 +580,12 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 
 func (h *Hookable) finalizeFight() error {
 	fight := encounter.Fight{
-		Hostiles:     map[guid.GUID]encounter.CharacterFight{},
-		Start:        h.currentFight.Start.Timestamp.Date(),
-		End:          h.currentFight.End.Timestamp.Date(),
-		EncounterID:  h.currentFight.EncounterID,
-		PlayerDeaths: h.currentFight.PlayerDeaths,
+		Hostiles:         map[guid.GUID]encounter.CharacterFight{},
+		Start:            h.currentFight.Start.Timestamp.Date(),
+		End:              h.currentFight.End.Timestamp.Date(),
+		EncounterID:      h.currentFight.EncounterID,
+		PlayerDeaths:     h.currentFight.PlayerDeaths,
+		PhaseTransitions: h.currentFight.PhaseTransitions,
 	}
 
 	for id := range h.currentFight.ActiveHostiles {
@@ -629,7 +610,8 @@ func (h *Hookable) finalizeFight() error {
 		return fmt.Errorf("finalizing encounter messages: %w", err)
 	}
 
-	// End the fight
+	// End the fight and clear the phase transition callback.
+	h.Characters.SetPhaseTransitionCallback(nil)
 	h.currentFight = nil
 	h.completedFights = append(h.completedFights, fight)
 	return nil
@@ -730,17 +712,128 @@ func (h *Hookable) fightEncounter(fight encounter.Fight) (encounter.Encounter, e
 		Boss:      encName.IsBossFight(),
 	}
 
-	// Finalize phase detectors that match this encounter name, then reset all.
-	for _, det := range h.activePhaseDetectors {
-		if det.EncounterName() == enc.Name {
-			if phases := det.Finalize(fight.Start, fight.End); len(phases) > 0 {
-				enc.Phases = phases
-			}
-		}
-		det.Reset()
-	}
+	// Build phases from PhaseProvider characters and recorded transitions.
+	enc.Phases = h.buildPhasesFromTransitions(enc, fight)
 
 	return enc, nil
+}
+
+// buildPhasesFromTransitions locates a participating hostile that implements
+// phases.PhaseProvider for this encounter, then builds Phase ranges from the
+// recorded transitions on the completed fight.
+//
+// Rules:
+//   - Phase 1 always starts at fight.Start.
+//   - Each transition closes the current phase and opens the next at the
+//     transition timestamp (half-open: the triggering event belongs to the
+//     new phase).
+//   - The final phase always closes at fight.End.
+//   - Non-final completed phases get KillTypeClean; the final phase inherits
+//     the encounter's KillType.
+//   - Duplicate, unknown, backward, or out-of-range transitions are ignored.
+func (h *Hookable) buildPhasesFromTransitions(enc encounter.Encounter, fight encounter.Fight) []encounter.Phase {
+	if h.Characters == nil {
+		return nil
+	}
+	// Find the PhaseProvider among participating hostiles.
+	var phaseDefs *phases.EncounterPhases
+	for hostileID := range fight.Hostiles {
+		char, ok := h.Characters.Get(hostileID)
+		if !ok {
+			continue
+		}
+		pp, ok := char.(phases.PhaseProvider)
+		if !ok {
+			continue
+		}
+		defs := pp.PhaseDefinitions()
+		if defs != nil && defs.EncounterName == enc.Name {
+			phaseDefs = defs
+			break
+		}
+	}
+	if phaseDefs == nil || len(phaseDefs.Definitions) == 0 {
+		return nil
+	}
+
+	// Build a key → Definition index for quick lookup.
+	defByKey := make(map[string]int, len(phaseDefs.Definitions))
+	for i, d := range phaseDefs.Definitions {
+		defByKey[d.Key] = i
+	}
+
+	// Collect valid, de-duplicated transitions ordered by timestamp.
+	// Filter: must be a known phase key, must be chronologically forward,
+	// must be within fight bounds, and no duplicate keys.
+	type validTransition struct {
+		defIdx    int
+		timestamp time.Time
+	}
+	var transitions []validTransition
+	seen := make(map[string]bool, len(phaseDefs.Definitions))
+	var lastTS time.Time
+
+	for _, t := range fight.PhaseTransitions {
+		idx, ok := defByKey[t.ToPhaseKey]
+		if !ok {
+			continue // unknown phase key
+		}
+		if seen[t.ToPhaseKey] {
+			continue // duplicate
+		}
+		if !t.Timestamp.After(fight.Start) || t.Timestamp.After(fight.End) {
+			continue // out of range
+		}
+		if !lastTS.IsZero() && !t.Timestamp.After(lastTS) {
+			continue // backward or same timestamp
+		}
+		seen[t.ToPhaseKey] = true
+		lastTS = t.Timestamp
+		transitions = append(transitions, validTransition{defIdx: idx, timestamp: t.Timestamp})
+	}
+
+	// Always emit first phase from fight start.
+	firstDef := phaseDefs.Definitions[0]
+	result := make([]encounter.Phase, 0, len(phaseDefs.Definitions))
+
+	if len(transitions) == 0 {
+		// No transitions: single phase spanning the entire fight.
+		result = append(result, encounter.PhaseFromTimes(
+			uuid.New(), firstDef.Key, firstDef.Name, firstDef.Order,
+			enc.KillType,
+			fight.Start, fight.Start, fight.End,
+		))
+		return result
+	}
+
+	// Build phase ranges: phase[i] runs from its start to the next transition.
+	// First phase: fight.Start → first transition.
+	result = append(result, encounter.PhaseFromTimes(
+		uuid.New(), firstDef.Key, firstDef.Name, firstDef.Order,
+		encounter.KillTypeClean,
+		fight.Start, fight.Start, transitions[0].timestamp,
+	))
+
+	// Middle phases (if any): transition[i] → transition[i+1].
+	for i := 0; i < len(transitions)-1; i++ {
+		def := phaseDefs.Definitions[transitions[i].defIdx]
+		result = append(result, encounter.PhaseFromTimes(
+			uuid.New(), def.Key, def.Name, def.Order,
+			encounter.KillTypeClean,
+			fight.Start, transitions[i].timestamp, transitions[i+1].timestamp,
+		))
+	}
+
+	// Final phase: last transition → fight.End, inherits encounter KillType.
+	lastTrans := transitions[len(transitions)-1]
+	lastDef := phaseDefs.Definitions[lastTrans.defIdx]
+	result = append(result, encounter.PhaseFromTimes(
+		uuid.New(), lastDef.Key, lastDef.Name, lastDef.Order,
+		enc.KillType,
+		fight.Start, lastTrans.timestamp, fight.End,
+	))
+
+	return result
 }
 
 func (h *Hookable) drainOpenFight(ctx context.Context) error {

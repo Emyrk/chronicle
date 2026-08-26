@@ -3836,6 +3836,7 @@ export interface WoWEncounterPhase {
     readonly order: number;
     readonly start_offset_ms: number;
     readonly end_offset_ms: number;
+    readonly kill_type: string;
 }
 
 // From types/constants.go

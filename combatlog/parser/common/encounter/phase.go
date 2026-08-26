@@ -21,11 +21,14 @@ type Phase struct {
 	StartOffsetMs int64
 	// EndOffsetMs is the phase end in milliseconds from encounter start.
 	EndOffsetMs int64
+	// KillType is the outcome for this phase. Non-final completed phases get
+	// KillTypeClean; the final phase inherits the encounter's KillType.
+	KillType KillType
 }
 
 // PhaseFromTimes builds a Phase with offsets computed from absolute timestamps
 // relative to the encounter start.
-func PhaseFromTimes(id uuid.UUID, key, name string, order int, encounterStart, phaseStart, phaseEnd time.Time) Phase {
+func PhaseFromTimes(id uuid.UUID, key, name string, order int, killType KillType, encounterStart, phaseStart, phaseEnd time.Time) Phase {
 	return Phase{
 		ID:            id,
 		Key:           key,
@@ -33,5 +36,6 @@ func PhaseFromTimes(id uuid.UUID, key, name string, order int, encounterStart, p
 		Order:         order,
 		StartOffsetMs: phaseStart.Sub(encounterStart).Milliseconds(),
 		EndOffsetMs:   phaseEnd.Sub(encounterStart).Milliseconds(),
+		KillType:      killType,
 	}
 }

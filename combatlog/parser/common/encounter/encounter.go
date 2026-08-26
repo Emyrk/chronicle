@@ -8,11 +8,12 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 )
 
 // KillType represents the outcome of an encounter.
@@ -80,6 +81,10 @@ type Fight struct {
 	// that belong to this fight.
 	Hostiles     map[guid.GUID]CharacterFight
 	PlayerDeaths []messages.Message
+
+	// PhaseTransitions records phase boundary events emitted by specialized
+	// characters during this fight. Used at finalization to build Phase ranges.
+	PhaseTransitions []phases.Transition
 
 	// Start is the earliest start time across all hostile activity periods.
 	Start time.Time

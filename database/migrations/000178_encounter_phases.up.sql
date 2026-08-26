@@ -6,6 +6,7 @@ CREATE TABLE log_instance_encounter_phases (
     phase_order INT NOT NULL,
     start_offset_ms BIGINT NOT NULL,
     end_offset_ms BIGINT NOT NULL,
+    kill_type kill_type NOT NULL,
     PRIMARY KEY (id),
     UNIQUE (encounter_id, key),
     UNIQUE (encounter_id, phase_order),

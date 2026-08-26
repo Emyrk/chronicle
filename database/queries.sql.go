@@ -6016,7 +6016,7 @@ func (q *sqlQuerier) FindDuplicateInstanceCandidates(ctx context.Context, arg Fi
 
 const getEncounterPhasesByInstanceID = `-- name: GetEncounterPhasesByInstanceID :many
 SELECT
-  id, encounter_id, key, name, phase_order, start_offset_ms, end_offset_ms
+  id, encounter_id, key, name, phase_order, start_offset_ms, end_offset_ms, kill_type
 FROM
   log_instance_encounter_phases
 WHERE
@@ -6042,6 +6042,7 @@ func (q *sqlQuerier) GetEncounterPhasesByInstanceID(ctx context.Context, instanc
 			&i.PhaseOrder,
 			&i.StartOffsetMs,
 			&i.EndOffsetMs,
+			&i.KillType,
 		); err != nil {
 			return nil, err
 		}
@@ -6279,9 +6280,9 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 
 const insertEncounterPhase = `-- name: InsertEncounterPhase :exec
 INSERT INTO
-  log_instance_encounter_phases (id, encounter_id, key, name, phase_order, start_offset_ms, end_offset_ms)
+  log_instance_encounter_phases (id, encounter_id, key, name, phase_order, start_offset_ms, end_offset_ms, kill_type)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7)
+  ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type InsertEncounterPhaseParams struct {
@@ -6292,6 +6293,7 @@ type InsertEncounterPhaseParams struct {
 	PhaseOrder    int32     `db:"phase_order" json:"phase_order"`
 	StartOffsetMs int64     `db:"start_offset_ms" json:"start_offset_ms"`
 	EndOffsetMs   int64     `db:"end_offset_ms" json:"end_offset_ms"`
+	KillType      KillType  `db:"kill_type" json:"kill_type"`
 }
 
 func (q *sqlQuerier) InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error {
@@ -6303,6 +6305,7 @@ func (q *sqlQuerier) InsertEncounterPhase(ctx context.Context, arg InsertEncount
 		arg.PhaseOrder,
 		arg.StartOffsetMs,
 		arg.EndOffsetMs,
+		arg.KillType,
 	)
 	return err
 }

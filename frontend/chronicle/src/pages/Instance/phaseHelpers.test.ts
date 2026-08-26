@@ -15,7 +15,7 @@ import {
 // Test fixtures
 // ---------------------------------------------------------------------------
 
-const makePhase = (id: string, encId: string, order: number, startMs: number, endMs: number) => ({
+const makePhase = (id: string, encId: string, order: number, startMs: number, endMs: number, killType: string = "clean") => ({
   id,
   encounter_id: encId,
   key: `phase-${id}`,
@@ -23,6 +23,7 @@ const makePhase = (id: string, encId: string, order: number, startMs: number, en
   order,
   start_offset_ms: startMs,
   end_offset_ms: endMs,
+  kill_type: killType as import("./InstancePage").KillType,
   start_time: new Date(1000000 + startMs).toISOString(),
   end_time: new Date(1000000 + endMs).toISOString(),
 });
