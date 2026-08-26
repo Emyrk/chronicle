@@ -33,9 +33,10 @@ keepers, must not independently start or prolong the encounter.
 range. Sara summons Guardians of Yogg-Saron. A guardian's death casts Shadow
 Nova, including a separate hit against Sara.
 
-**Combat-log trigger:** hostile activity involving a Guardian of Yogg-Saron
-starts the encounter. Guardian activity and Shadow Nova damage against Sara must
-belong to the same Yogg-Saron fight.
+**Combat-log trigger:** a specialized Guardian of Yogg-Saron character starts
+or bumps Sara whenever the Guardian starts or bumps. This includes periodic
+damage that would normally only bump the Guardian. Guardian activity and Shadow
+Nova damage against Sara therefore belong to the same Yogg-Saron fight.
 
 **Transition to phase 2:** repeated guardian explosions reduce Sara to her
 phase-transition threshold. Sara does not die. The server resets her health,

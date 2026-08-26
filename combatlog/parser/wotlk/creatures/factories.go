@@ -50,6 +50,7 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewPowerSpark,
 
 			// Ulduar
+			NewYoggSaronGuardian,
 			NewYoggSaronEncounterCharacter,
 		)
 		// Vortex and Yogg-Saron use vehicle GUIDs, so they must not rely solely on
