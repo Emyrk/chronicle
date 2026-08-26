@@ -63,6 +63,66 @@ type yoggSaronState struct {
 	characters  map[guid.GUID]*yoggSaronCharacter
 }
 
+func loadYoggSaronState(all *characters.Characters) *yoggSaronState {
+	shared, ok := all.Load(yoggSaronStateKey)
+	if !ok {
+		shared = &yoggSaronState{
+			phase:      1,
+			characters: make(map[guid.GUID]*yoggSaronCharacter),
+		}
+		all.Save(yoggSaronStateKey, shared)
+	}
+	return shared.(*yoggSaronState)
+}
+
+type yoggSaronGuardian struct {
+	*characters.Common
+	all *characters.Characters
+}
+
+func NewYoggSaronGuardian(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	if entry, ok := id.GetEntry(); !ok || entry != yoggSaronGuardianEntry {
+		return nil, false
+	}
+	return &yoggSaronGuardian{
+		Common: characters.NewCommonCharacter(id, all),
+		all:    all,
+	}, true
+}
+
+func (c *yoggSaronGuardian) Process(m messages.Message) error {
+	if current, ok := c.Activity.Current(); ok {
+		current.HandleTimeout(m.Date())
+	}
+	return characters.ProcessCommonActivity(c, m)
+}
+
+func (c *yoggSaronGuardian) Start(reason string, m messages.Message) {
+	c.Common.Start(reason, m)
+	c.bumpSara(m)
+}
+
+func (c *yoggSaronGuardian) Bump(reason string, m messages.Message) {
+	c.Common.Bump(reason, m)
+	c.bumpSara(m)
+}
+
+func (c *yoggSaronGuardian) bumpSara(m messages.Message) {
+	for _, entry := range []uint32{yoggSaronSaraEntry, yoggSaronSaraAltEntry} {
+		for _, sara := range c.all.ByEntry[entry] {
+			boss, ok := sara.(characters.CharacterBase)
+			if !ok {
+				continue
+			}
+			if boss.IsActive() {
+				boss.Bump("guardian_of_yogg_saron_activity", m)
+			} else {
+				boss.Start("guardian_of_yogg_saron_activity", m)
+			}
+		}
+	}
+}
+
 type yoggSaronCharacter struct {
 	*characters.Common
 	all   *characters.Characters
@@ -76,15 +136,7 @@ func NewYoggSaronEncounterCharacter(id guid.GUID, all *characters.Characters) (c
 		return nil, false
 	}
 
-	shared, ok := all.Load(yoggSaronStateKey)
-	if !ok {
-		shared = &yoggSaronState{
-			phase:      1,
-			characters: make(map[guid.GUID]*yoggSaronCharacter),
-		}
-		all.Save(yoggSaronStateKey, shared)
-	}
-	state := shared.(*yoggSaronState)
+	state := loadYoggSaronState(all)
 
 	base := characters.NewCommonCharacter(id, all)
 	if isYoggSaronAnchorEntry(entry) {
@@ -104,6 +156,9 @@ func NewYoggSaronEncounterCharacter(id guid.GUID, all *characters.Characters) (c
 }
 
 func (c *yoggSaronCharacter) PhaseDefinitions() *phases.EncounterPhases {
+	if c.entry != yoggSaronSaraEntry && c.entry != yoggSaronSaraAltEntry {
+		return nil
+	}
 	return YoggSaronPhaseDefinitions
 }
 
@@ -140,8 +195,10 @@ func (c *yoggSaronCharacter) Process(m messages.Message) error {
 func (c *yoggSaronCharacter) Start(reason string, m messages.Message) {
 	if !c.anyEncounterUnitActive() {
 		c.state.phase = 1
-		c.state.phaseSource = c.ID()
-	} else if c.state.phaseSource.IsZero() {
+		c.state.phaseSource = 0
+	}
+
+	if c.isSara() {
 		c.state.phaseSource = c.ID()
 	}
 
@@ -160,6 +217,10 @@ func (c *yoggSaronCharacter) Died(reason string, m messages.Message) {
 		c.endLinkedOnYoggSaronDeath(m)
 	}
 	c.resetStateIfInactive()
+}
+
+func (c *yoggSaronCharacter) isSara() bool {
+	return c.entry == yoggSaronSaraEntry || c.entry == yoggSaronSaraAltEntry
 }
 
 func (c *yoggSaronCharacter) emitTransition(toPhase string, m messages.Message) {

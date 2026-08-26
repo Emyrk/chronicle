@@ -46,10 +46,12 @@ func TestYoggSaronPhaseTransitions(t *testing.T) {
 	all := newYoggSaronTestCharacters()
 	player := guid.GUID(1)
 	guardian := creatureGUID(yoggSaronGuardianEntry)
+	sara := creatureGUID(yoggSaronSaraEntry)
 	tentacle := creatureGUID(yoggSaronCrusherEntry)
 	yogg := yoggSaronVehicleGUID()
 	start := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
 
+	_, _ = all.Add(sara, start.Add(-time.Second))
 	_, err := all.Process(testDamage(start, player, guardian))
 	require.NoError(t, err)
 
@@ -62,7 +64,7 @@ func TestYoggSaronPhaseTransitions(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, transitions, 1)
 	require.Equal(t, YoggSaronPhaseKeyP2, transitions[0].ToPhaseKey)
-	require.Equal(t, guardian, transitions[0].SourceGUID)
+	require.Equal(t, sara, transitions[0].SourceGUID)
 
 	immune := testDamage(start.Add(20*time.Second), player, yogg)
 	immune.HitType = types.HitTypeImmune
@@ -74,7 +76,52 @@ func TestYoggSaronPhaseTransitions(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, transitions, 2)
 	require.Equal(t, YoggSaronPhaseKeyP3, transitions[1].ToPhaseKey)
-	require.Equal(t, guardian, transitions[1].SourceGUID)
+	require.Equal(t, sara, transitions[1].SourceGUID)
+}
+
+func TestYoggSaronGuardianFactory(t *testing.T) {
+	t.Parallel()
+
+	all := newYoggSaronTestCharacters()
+	guardianID := creatureGUID(yoggSaronGuardianEntry)
+	guardian, _ := all.Add(guardianID, time.Time{})
+
+	require.IsType(t, &yoggSaronGuardian{}, guardian)
+}
+
+func TestGuardianActivityStartsAndBumpsSara(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name    string
+		hitType types.HitType
+	}{
+		{name: "direct activity starts Guardian", hitType: types.HitTypeHit},
+		{name: "periodic activity only bumps Guardian", hitType: types.HitTypePeriodic},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			all := newYoggSaronTestCharacters()
+			player := guid.GUID(1)
+			guardian := creatureGUID(yoggSaronGuardianEntry)
+			sara := creatureGUID(yoggSaronSaraEntry)
+			start := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
+			_, _ = all.Add(sara, start.Add(-time.Second))
+
+			damage := testDamage(start, player, guardian)
+			damage.HitType = tt.hitType
+			_, err := all.Process(damage)
+			require.NoError(t, err)
+
+			saraCharacter, ok := all.Get(sara)
+			require.True(t, ok)
+			require.True(t, saraCharacter.IsActive())
+			periods := saraCharacter.Periods()
+			require.Len(t, periods, 1)
+			require.Equal(t, start, periods[0].Start.Timestamp.Date())
+		})
+	}
 }
 
 func TestSaraBridgesPhaseOneTransformation(t *testing.T) {
@@ -111,7 +158,7 @@ func TestYoggSaronEncounterActivityKeepsObservedAnchorsActive(t *testing.T) {
 	anchors := []guid.GUID{
 		creatureGUID(yoggSaronSaraEntry),
 		creatureGUID(yoggSaronBrainEntry),
-		creatureGUID(yoggSaronEntry),
+		yoggSaronVehicleGUID(),
 	}
 	immortal := creatureGUID(yoggSaronImmortalEntry)
 	start := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
