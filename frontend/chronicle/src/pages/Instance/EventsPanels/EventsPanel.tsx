@@ -65,6 +65,7 @@ import { createTimelinePanel } from "./Timeline/Timeline";
 import { createRotationsPanel } from "./Rotations/Rotations";
 import { createStatusPanel } from "./Status/Status";
 import { createHealerCastsPanel } from "./HealerCasts/HealerCasts";
+import { createSpellCountPanel } from "./SpellCount/SpellCount";
 import { createUnitLookupPanel } from "./UnitLookup/UnitLookup";
 import { createEquipmentPanel } from "./Equipment/Equipment";
 import { createLootPanel } from "./LootPanel/LootPanel";
@@ -127,6 +128,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   // Replay
   status: createStatusPanel(),
   healer_casts: createHealerCastsPanel(),
+  spell_count: createSpellCountPanel(),
   // Rotations
   rotations: createRotationsPanel(),
   // Control timelines
