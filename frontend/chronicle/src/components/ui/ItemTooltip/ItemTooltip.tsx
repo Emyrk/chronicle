@@ -13,6 +13,11 @@ import {
   resolveSpellDescription,
 } from "@/api/wowdb";
 import { cn } from "@/lib/utils";
+import {
+  equippedItemSetSlotCount,
+  isItemSetSlotEquipped,
+  itemSetDisplayPieces,
+} from "./itemSetDisplay";
 import { isSocketBonusFulfilled } from "./socketBonus";
 
 // WoW item quality colors
@@ -338,7 +343,14 @@ export function ItemTooltip({ item, className, includeReferenceLinks = false, sh
         )}
 
         {/* Item Set */}
-        {item.set && <ItemSetSection set={item.set} includeReferenceLinks={includeReferenceLinks} equippedItemIds={equippedItemIds} />}
+        {item.set && (
+          <ItemSetSection
+            set={item.set}
+            currentItemId={item.entry}
+            includeReferenceLinks={includeReferenceLinks}
+            equippedItemIds={equippedItemIds}
+          />
+        )}
       </div>
     </div>
   );
@@ -423,22 +435,32 @@ function SpellLine({ spell, includeReferenceLinks }: { spell: ItemSpell; include
   );
 }
 
-function ItemSetSection({ set, includeReferenceLinks, equippedItemIds }: { set: NonNullable<ItemTooltipData["set"]>; includeReferenceLinks: boolean; equippedItemIds?: ReadonlySet<number> }) {
-  const items = set.items ?? [];
+function ItemSetSection({
+  set,
+  currentItemId,
+  includeReferenceLinks,
+  equippedItemIds,
+}: {
+  set: NonNullable<ItemTooltipData["set"]>;
+  currentItemId: number;
+  includeReferenceLinks: boolean;
+  equippedItemIds?: ReadonlySet<number>;
+}) {
+  const items = itemSetDisplayPieces(set, currentItemId);
   // Count equipped from eligible_items (cross-tier: a Furious piece counts toward Wrathful set).
   const eligible = set.eligible_items ?? [];
-  const equippedCount = equippedItemIds
-    ? eligible.filter((p) => equippedItemIds.has(p.entry)).length
-    : 0;
+  const equippedCount = equippedItemSetSlotCount(eligible, equippedItemIds);
 
   return (
     <div className="mt-2 pt-2 border-t border-[#4a4a6a]">
       <div className="text-yellow-400 font-medium">{set.name} ({equippedCount}/{items.length})</div>
       {items.map((piece) => {
-        // Check if this piece OR a cross-tier equivalent (same inventory_type) is equipped.
-        const isEquipped = equippedItemIds
-          ? equippedItemIds.has(piece.entry) || eligible.some((e) => e.inventory_type === piece.inventory_type && equippedItemIds.has(e.entry))
-          : false;
+        // Check if this piece or a cross-tier equivalent for the same slot is equipped.
+        const isEquipped = isItemSetSlotEquipped(
+          piece,
+          eligible,
+          equippedItemIds,
+        );
         return (
           <div key={piece.entry} className={cn("ml-2", isEquipped ? "text-item-set-active" : "text-gray-500")}>
             {includeReferenceLinks ? (
