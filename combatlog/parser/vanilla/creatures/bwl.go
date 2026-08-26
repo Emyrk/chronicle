@@ -25,6 +25,7 @@ func NewNefarian(id guid.GUID, all *characters.Characters) (characters.Character
 	}
 	return characters.NewAdsGoWithBossCustomCharacter(c, all, 11583,
 		14668, // Corrupted Infernals
+		14605, // "Bone Construct"
 	), true
 }
 
