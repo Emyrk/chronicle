@@ -4,7 +4,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/google/uuid"
 )
@@ -17,9 +16,10 @@ type ongoingFight struct {
 	// PlayerDeaths helps track a reset vs a "wipe".
 	PlayerDeaths []messages.Message
 
-	// PhaseTransitions records transitions emitted by specialized characters
-	// during this fight. Built into Phase ranges at finalization.
-	PhaseTransitions []phases.Transition
+	// Phases tracks live encounter phase state. Initialized when a fight
+	// starts and a participating hostile provides phase definitions.
+	// Nil when the encounter has no phases.
+	Phases *phaseTracker
 
 	Start *period.Moment
 	End   *period.Moment

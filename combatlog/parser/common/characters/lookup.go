@@ -61,6 +61,11 @@ type Characters struct {
 	// active ongoingFight. Characters call EmitPhaseTransition which forwards
 	// here when set.
 	phaseTransitionCb phases.TransitionCallback
+
+	// stagedTransitions holds transitions emitted during Characters.Process
+	// before the fight detection callback is installed. Hookable drains these
+	// after fight start to apply them to the live phase tracker.
+	stagedTransitions []phases.Transition
 }
 
 func NewCharacters(db *unitdb.Units, factories []CharacterFactory, id *identifier.Identifier) *Characters {
@@ -86,11 +91,25 @@ func (c *Characters) SetPhaseTransitionCallback(cb phases.TransitionCallback) {
 }
 
 // EmitPhaseTransition forwards a phase transition to the installed callback.
-// It is safe to call when no callback is installed (no-op).
+// When no callback is installed, the transition is staged so that hookable can
+// drain it after fight detection on the same message.
 func (c *Characters) EmitPhaseTransition(t phases.Transition) {
 	if c.phaseTransitionCb != nil {
 		c.phaseTransitionCb(t)
+	} else {
+		c.stagedTransitions = append(c.stagedTransitions, t)
 	}
+}
+
+// DrainStagedTransitions returns and clears any transitions that were staged
+// because they were emitted before a fight callback was installed.
+func (c *Characters) DrainStagedTransitions() []phases.Transition {
+	if len(c.stagedTransitions) == 0 {
+		return nil
+	}
+	staged := c.stagedTransitions
+	c.stagedTransitions = nil
+	return staged
 }
 
 func (c *Characters) Save(key string, value any) {
