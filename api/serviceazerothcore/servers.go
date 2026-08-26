@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -43,6 +44,52 @@ func pgtextPtr(t pgtype.Text) *string {
 	return &t.String
 }
 
+func pricingProviderPtr(t pgtype.Text) *chroniclesdk.ItemPricingProvider {
+	if !t.Valid {
+		return nil
+	}
+	provider := chroniclesdk.ItemPricingProvider(t.String)
+	return &provider
+}
+
+func pricingAuctionHousePtr(t pgtype.Text) *chroniclesdk.PricingAuctionHouse {
+	if !t.Valid {
+		return nil
+	}
+	mode := chroniclesdk.PricingAuctionHouse(t.String)
+	return &mode
+}
+
+func optionalText(value *string) pgtype.Text {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: strings.TrimSpace(*value), Valid: true}
+}
+
+func pricingProviderText(value *chroniclesdk.ItemPricingProvider) (pgtype.Text, bool) {
+	if value == nil || *value == "" {
+		return pgtype.Text{}, true
+	}
+	if *value != chroniclesdk.ItemPricingProviderWoWAuctions {
+		return pgtype.Text{}, false
+	}
+	return pgtype.Text{String: string(*value), Valid: true}, true
+}
+
+func realmPricingText(route *string, mode *chroniclesdk.PricingAuctionHouse) (pgtype.Text, pgtype.Text, bool) {
+	if (route == nil || strings.TrimSpace(*route) == "") && (mode == nil || *mode == "") {
+		return pgtype.Text{}, pgtype.Text{}, true
+	}
+	if route == nil || strings.TrimSpace(*route) == "" || mode == nil {
+		return pgtype.Text{}, pgtype.Text{}, false
+	}
+	if *mode != chroniclesdk.PricingAuctionHouseMerged && *mode != chroniclesdk.PricingAuctionHouseSplit {
+		return pgtype.Text{}, pgtype.Text{}, false
+	}
+	return optionalText(route), pgtype.Text{String: string(*mode), Valid: true}, true
+}
+
 func serverToSDK(s database.WowServer) chroniclesdk.WoWServer {
 	return chroniclesdk.WoWServer{
 		ID:               s.ID,
@@ -52,17 +99,20 @@ func serverToSDK(s database.WowServer) chroniclesdk.WoWServer {
 		CreatedBy:        nullUUIDPtr(s.CreatedBy),
 		TenantID:         nullUUIDPtr(s.TenantID),
 		DefaultDatasetID: nullUUIDPtr(s.DefaultDatasetID),
+		PricingProvider:  pricingProviderPtr(s.PricingProvider),
 	}
 }
 
 func realmToSDK(r database.WowServerRealm) chroniclesdk.WoWServerRealm {
 	return chroniclesdk.WoWServerRealm{
-		ID:          r.ID,
-		ServerID:    r.ServerID,
-		Name:        r.Name,
-		Description: r.Description,
-		URL:         pgtextPtr(r.Url),
-		CreatedBy:   nullUUIDPtr(r.CreatedBy),
+		ID:                  r.ID,
+		ServerID:            r.ServerID,
+		Name:                r.Name,
+		Description:         r.Description,
+		URL:                 pgtextPtr(r.Url),
+		CreatedBy:           nullUUIDPtr(r.CreatedBy),
+		PricingRouteName:    pgtextPtr(r.PricingRouteName),
+		PricingAuctionHouse: pricingAuctionHousePtr(r.PricingAuctionHouse),
 	}
 }
 
@@ -199,14 +249,21 @@ func (h *Handler) CreateServer(w http.ResponseWriter, r *http.Request) {
 		urlText = pgtype.Text{String: *req.URL, Valid: true}
 	}
 
+	pricingProvider, ok := pricingProviderText(req.PricingProvider)
+	if !ok {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "unsupported pricing provider"})
+		return
+	}
+
 	createdBy, _ := actorUUID(r)
 
 	server, err := h.zed.InsertWoWServer(ctx, database.InsertWoWServerParams{
-		ID:          uuid.New(),
-		Name:        req.Name,
-		Description: req.Description,
-		Url:         urlText,
-		CreatedBy:   createdBy,
+		ID:              uuid.New(),
+		Name:            req.Name,
+		Description:     req.Description,
+		Url:             urlText,
+		CreatedBy:       createdBy,
+		PricingProvider: pricingProvider,
 	})
 	if err != nil {
 		if database.IsUniqueViolation(err) {
@@ -220,6 +277,45 @@ func (h *Handler) CreateServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusCreated, serverToSDK(server))
+}
+
+func (h *Handler) UpdateServer(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	serverID, err := uuid.Parse(chi.URLParam(r, "serverID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid server ID"})
+		return
+	}
+	if !h.canAdministerServer(w, r, serverID) {
+		return
+	}
+
+	var req chroniclesdk.CreateWoWServerRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	if req.Name == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "name is required"})
+		return
+	}
+	pricingProvider, ok := pricingProviderText(req.PricingProvider)
+	if !ok {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "unsupported pricing provider"})
+		return
+	}
+
+	server, err := h.zed.UpdateWoWServer(ctx, database.UpdateWoWServerParams{
+		ID:              serverID,
+		Name:            req.Name,
+		Description:     req.Description,
+		Url:             optionalText(req.URL),
+		PricingProvider: pricingProvider,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, serverToSDK(server))
 }
 
 func (h *Handler) DeleteServer(w http.ResponseWriter, r *http.Request) {
@@ -305,6 +401,12 @@ func (h *Handler) CreateRealm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pricingRoute, pricingAuctionHouse, ok := realmPricingText(req.PricingRouteName, req.PricingAuctionHouse)
+	if !ok {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "pricing route and auction house must be configured together"})
+		return
+	}
+
 	createdBy, _ := actorUUID(r)
 
 	var urlText pgtype.Text
@@ -313,12 +415,14 @@ func (h *Handler) CreateRealm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	realm, err := h.zed.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{
-		ID:          uuid.New(),
-		ServerID:    serverID,
-		Name:        req.Name,
-		Description: req.Description,
-		Url:         urlText,
-		CreatedBy:   createdBy,
+		ID:                  uuid.New(),
+		ServerID:            serverID,
+		Name:                req.Name,
+		Description:         req.Description,
+		Url:                 urlText,
+		CreatedBy:           createdBy,
+		PricingRouteName:    pricingRoute,
+		PricingAuctionHouse: pricingAuctionHouse,
 	})
 	if err != nil {
 		if database.IsUniqueViolation(err) {
@@ -332,6 +436,46 @@ func (h *Handler) CreateRealm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusCreated, realmToSDK(realm))
+}
+
+func (h *Handler) UpdateRealm(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	realmID, err := uuid.Parse(chi.URLParam(r, "realmID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid realm ID"})
+		return
+	}
+	if !h.canAdministerRealm(w, r, realmID) {
+		return
+	}
+
+	var req chroniclesdk.CreateWoWServerRealmRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	if req.Name == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "name is required"})
+		return
+	}
+	pricingRoute, pricingAuctionHouse, ok := realmPricingText(req.PricingRouteName, req.PricingAuctionHouse)
+	if !ok {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "pricing route and auction house must be configured together"})
+		return
+	}
+
+	realm, err := h.zed.UpdateWoWServerRealm(ctx, database.UpdateWoWServerRealmParams{
+		ID:                  realmID,
+		Name:                req.Name,
+		Description:         req.Description,
+		Url:                 optionalText(req.URL),
+		PricingRouteName:    pricingRoute,
+		PricingAuctionHouse: pricingAuctionHouse,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, realmToSDK(realm))
 }
 
 func (h *Handler) DeleteRealm(w http.ResponseWriter, r *http.Request) {

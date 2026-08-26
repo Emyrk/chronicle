@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import {
   useAzerothcoreServers,
   useCreateAzerothcoreServer,
+  useUpdateAzerothcoreServer,
   useDeleteAzerothcoreServer,
   useAzerothcoreRealms,
   useCreateAzerothcoreRealm,
+  useUpdateAzerothcoreRealm,
   useDeleteAzerothcoreRealm,
   useAdminTenants,
   useUpsertTenant,
@@ -19,8 +21,71 @@ import {
 } from "@/api/queries";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
 import { Loader2, Trash2, Plus, ChevronDown, ChevronRight, ExternalLink, Building2, Pencil } from "lucide-react";
-import type { WoWServer, Tenant } from "@/api/typesGenerated";
+import type { PricingAuctionHouse, WoWServer, WoWServerRealm, Tenant } from "@/api/typesGenerated";
 import { ThemeEditor } from "@/components/ThemeEditor/ThemeEditor";
+
+function RealmPricingEditor({ realm }: { realm: WoWServerRealm }) {
+  const updateRealm = useUpdateAzerothcoreRealm();
+  const [routeName, setRouteName] = useState(realm.pricing_route_name ?? "");
+  const [auctionHouse, setAuctionHouse] = useState<PricingAuctionHouse | "">(realm.pricing_auction_house ?? "");
+
+  const save = () => {
+    const enabled = routeName.trim() !== "" && auctionHouse !== "";
+    updateRealm.mutate({
+      realmId: realm.id,
+      name: realm.name,
+      description: realm.description,
+      url: realm.url,
+      pricing_route_name: enabled ? routeName.trim() : undefined,
+      pricing_auction_house: enabled ? auctionHouse : undefined,
+    });
+  };
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <input
+        className="h-8 w-40 rounded-md border bg-background px-2 text-xs"
+        placeholder="Pricing route name"
+        value={routeName}
+        onChange={(event) => setRouteName(event.target.value)}
+      />
+      <select
+        className="h-8 rounded-md border bg-background px-2 text-xs"
+        value={auctionHouse}
+        onChange={(event) => setAuctionHouse(event.target.value as PricingAuctionHouse | "")}
+      >
+        <option value="">Pricing disabled</option>
+        <option value="merged">Merged AH</option>
+        <option value="split">Split AH</option>
+      </select>
+      <Button type="button" variant="outline" size="sm" onClick={save} disabled={updateRealm.isPending}>
+        {updateRealm.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save pricing"}
+      </Button>
+      {updateRealm.isError && <span className="text-xs text-destructive">{updateRealm.error.message}</span>}
+    </div>
+  );
+}
+
+function ServerPricingProvider({ server }: { server: WoWServer }) {
+  const updateServer = useUpdateAzerothcoreServer();
+  return (
+    <select
+      className="h-8 rounded-md border bg-background px-2 text-xs"
+      value={server.pricing_provider ?? ""}
+      disabled={updateServer.isPending}
+      onChange={(event) => updateServer.mutate({
+        serverId: server.id,
+        name: server.name,
+        description: server.description,
+        url: server.url,
+        pricing_provider: event.target.value === "wowauctions" ? "wowauctions" : undefined,
+      })}
+    >
+      <option value="">No pricing provider</option>
+      <option value="wowauctions">WoWAuctions</option>
+    </select>
+  );
+}
 
 function RealmsList({ server }: { server: WoWServer }) {
   const { data: realms, isLoading } = useAzerothcoreRealms(server.id);
@@ -53,28 +118,31 @@ function RealmsList({ server }: { server: WoWServer }) {
   return (
     <div className="space-y-2">
       {realms?.map((realm) => (
-        <div key={realm.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-          <div>
-            <span className="font-medium">{realm.name}</span>
-            {realm.description && <span className="text-muted-foreground ml-2">— {realm.description}</span>}
-            {realm.url && (
-              <a href={realm.url} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 text-blue-500 hover:underline">
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
+        <div key={realm.id} className="rounded-md border px-3 py-2 text-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="font-medium">{realm.name}</span>
+              {realm.description && <span className="text-muted-foreground ml-2">— {realm.description}</span>}
+              {realm.url && (
+                <a href={realm.url} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 text-blue-500 hover:underline">
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive"
+              onClick={() => {
+                if (window.confirm(`Delete realm "${realm.name}"?`)) {
+                  deleteRealm.mutate(realm.id);
+                }
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-destructive"
-            onClick={() => {
-              if (window.confirm(`Delete realm "${realm.name}"?`)) {
-                deleteRealm.mutate(realm.id);
-              }
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {server.pricing_provider && <RealmPricingEditor realm={realm} />}
         </div>
       ))}
 
@@ -566,6 +634,10 @@ function ServerCard({ server, tenants }: { server: WoWServer; tenants: Tenant[] 
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Dataset:</span>
               <ServerDatasetSelect server={server} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Pricing:</span>
+              <ServerPricingProvider server={server} />
             </div>
           </div>
         </div>

@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
@@ -64,6 +65,8 @@ type Service struct {
 	zugzugURL             string
 	zugzugSecret          string
 	zugzugInstructionsURL string
+	itemPricingAPIKey     string
+	itemPricingBaseURL    string
 	discordAuth           chronauth.DiscordOAuth
 	app                   *api.API
 	closeListener         func()
@@ -196,6 +199,7 @@ func (s *Service) Start(ctx context.Context) error {
 		ExternalAPI:      externalAPI,
 		Rankings:         rankings,
 		Mailer:           mailer,
+		ItemPricing:      itempricing.New(zed, s.itemPricingAPIKey, s.itemPricingBaseURL),
 
 		AccessURL:             au,
 		ShortLinkDomain:       s.shortLinkDomain,
@@ -339,6 +343,24 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_ZUGZUG_INSTRUCTIONS_URL",
 			Default:     "",
 			Value:       serpent.StringOf(&s.zugzugInstructionsURL),
+		},
+		{
+			Name:        "WoWAuctions API Key",
+			Description: "Authorization token for the WoWAuctions item pricing API.",
+			Required:    false,
+			Flag:        "wowauctions-api-key",
+			Env:         "CHRONICLE_WOWAUCTIONS_API_KEY",
+			Default:     "",
+			Value:       serpent.StringOf(&s.itemPricingAPIKey),
+		},
+		{
+			Name:        "WoWAuctions Base URL",
+			Description: "Base URL for the WoWAuctions item pricing API.",
+			Required:    false,
+			Flag:        "wowauctions-base-url",
+			Env:         "CHRONICLE_WOWAUCTIONS_BASE_URL",
+			Default:     "https://api.wowauctions.net/emyrk",
+			Value:       serpent.StringOf(&s.itemPricingBaseURL),
 		},
 		{
 			Name:        "Internal OCR URL",

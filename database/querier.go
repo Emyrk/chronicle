@@ -217,6 +217,7 @@ type sqlcQuerier interface {
 	// Fetches a page of log instances for cursor-based retention processing.
 	// Ordered by end_time ASC so older logs are processed first.
 	GetInstancesForRetentionCheckPaged(ctx context.Context, arg GetInstancesForRetentionCheckPagedParams) ([]GetInstancesForRetentionCheckPagedRow, error)
+	GetItemPricingConfigByRealm(ctx context.Context, realmID uuid.UUID) (GetItemPricingConfigByRealmRow, error)
 	GetItemRandomPropertiesByID(ctx context.Context, arg GetItemRandomPropertiesByIDParams) (DbcItemRandomProperty, error)
 	GetItemSetBonuses(ctx context.Context, arg GetItemSetBonusesParams) ([]DbcItemSetBonu, error)
 	GetItemSetByID(ctx context.Context, arg GetItemSetByIDParams) (DbcItemSet, error)
@@ -547,6 +548,7 @@ type sqlcQuerier interface {
 	ListInstancesMissingParseReceiptWithSnapshot(ctx context.Context, arg ListInstancesMissingParseReceiptWithSnapshotParams) ([]ListInstancesMissingParseReceiptWithSnapshotRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
+	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
 	// Read one persisted result per player and encounter for an exact completed
 	// snapshot contract. Results whose snapshot was deleted are intentionally not
 	// eligible because their receipt is deleted with the snapshot.
@@ -563,6 +565,7 @@ type sqlcQuerier interface {
 	ListRecentInstancesByPlayer(ctx context.Context, arg ListRecentInstancesByPlayerParams) ([]ListRecentInstancesByPlayerRow, error)
 	ListRegressionFixtures(ctx context.Context) ([]ListRegressionFixturesRow, error)
 	ListRegressionSnapshots(ctx context.Context, arg ListRegressionSnapshotsParams) ([]ListRegressionSnapshotsRow, error)
+	ListResolvedItemPrices(ctx context.Context, arg ListResolvedItemPricesParams) ([]ListResolvedItemPricesRow, error)
 	ListServerApplications(ctx context.Context) ([]ListServerApplicationsRow, error)
 	// List a player's member entries across a snapshot (for history/best parses).
 	ListSnapshotMembersByPlayerGUID(ctx context.Context, arg ListSnapshotMembersByPlayerGUIDParams) ([]RankingSnapshotMember, error)
@@ -779,6 +782,7 @@ type sqlcQuerier interface {
 	UpsertGuildPage(ctx context.Context, arg UpsertGuildPageParams) (GuildPage, error)
 	UpsertGuildSettings(ctx context.Context, arg UpsertGuildSettingsParams) (GuildSetting, error)
 	UpsertInstanceOverviewMetrics(ctx context.Context, arg UpsertInstanceOverviewMetricsParams) error
+	UpsertItemDailyPrice(ctx context.Context, arg []UpsertItemDailyPriceParams) *UpsertItemDailyPriceBatchResults
 	UpsertLeaderboardVersionRequirements(ctx context.Context, arg UpsertLeaderboardVersionRequirementsParams) (LeaderboardVersionRequirement, error)
 	UpsertPendingModificationRequest(ctx context.Context, arg UpsertPendingModificationRequestParams) (ApplicationModificationRequest, error)
 	UpsertPlayerGearHistory(ctx context.Context, arg []UpsertPlayerGearHistoryParams) *UpsertPlayerGearHistoryBatchResults

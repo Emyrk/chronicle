@@ -896,6 +896,20 @@ CREATE TABLE instance_overview_metrics (
     CONSTRAINT instance_overview_metrics_wipe_count_nonnegative CHECK ((wipe_count >= 0))
 );
 
+CREATE TABLE item_daily_prices (
+    realm_id uuid NOT NULL,
+    auction_house_faction text NOT NULL,
+    item_id integer NOT NULL,
+    price_date date NOT NULL,
+    price_copper bigint,
+    fetched_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT item_daily_prices_auction_house_faction_check CHECK ((auction_house_faction = ANY (ARRAY['merged'::text, 'alliance'::text, 'horde'::text]))),
+    CONSTRAINT item_daily_prices_item_id_check CHECK ((item_id > 0)),
+    CONSTRAINT item_daily_prices_price_copper_check CHECK (((price_copper IS NULL) OR (price_copper >= 0)))
+);
+
+ALTER TABLE ONLY item_daily_prices FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE leaderboard_version_requirements (
     instance_name text NOT NULL,
     min_parser_version text DEFAULT ''::text NOT NULL,
@@ -1046,7 +1060,11 @@ CREATE TABLE wow_server_realms (
     name text NOT NULL,
     created_by uuid,
     url text,
-    description text DEFAULT ''::text NOT NULL
+    description text DEFAULT ''::text NOT NULL,
+    pricing_route_name text,
+    pricing_auction_house text,
+    CONSTRAINT wow_server_realms_pricing_auction_house_check CHECK (((pricing_auction_house IS NULL) OR (pricing_auction_house = ANY (ARRAY['merged'::text, 'split'::text])))),
+    CONSTRAINT wow_server_realms_pricing_config_complete CHECK ((((pricing_route_name IS NULL) AND (pricing_auction_house IS NULL)) OR ((pricing_route_name <> ''::text) AND (pricing_auction_house IS NOT NULL))))
 );
 
 ALTER TABLE ONLY wow_server_realms FORCE ROW LEVEL SECURITY;
@@ -1058,7 +1076,9 @@ CREATE TABLE wow_servers (
     url text,
     description text DEFAULT ''::text NOT NULL,
     tenant_id uuid,
-    default_dataset_id uuid
+    default_dataset_id uuid,
+    pricing_provider text,
+    CONSTRAINT wow_servers_pricing_provider_check CHECK (((pricing_provider IS NULL) OR (pricing_provider = 'wowauctions'::text)))
 );
 
 ALTER TABLE ONLY wow_servers FORCE ROW LEVEL SECURITY;
@@ -1956,6 +1976,9 @@ ALTER TABLE ONLY instance_overview_metrics
 ALTER TABLE ONLY instance_speedruns
     ADD CONSTRAINT instance_speedruns_pkey PRIMARY KEY (instance_id);
 
+ALTER TABLE ONLY item_daily_prices
+    ADD CONSTRAINT item_daily_prices_pkey PRIMARY KEY (realm_id, auction_house_faction, item_id, price_date);
+
 ALTER TABLE ONLY leaderboard_version_requirements
     ADD CONSTRAINT leaderboard_version_requirements_pkey PRIMARY KEY (instance_name);
 
@@ -2343,6 +2366,8 @@ CREATE INDEX instance_loot_received ON instance_loot USING btree (realm_id, rece
 
 CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING btree (instance_name, start_time);
 
+CREATE INDEX item_daily_prices_future_lookup_idx ON item_daily_prices USING btree (realm_id, auction_house_faction, item_id, price_date) WHERE (price_copper IS NOT NULL);
+
 CREATE UNIQUE INDEX log_instance_youtube_timestamped_instance_id_idx ON log_instance_youtube_timestamped USING btree (log_instance_id) WHERE (log_instance_id IS NOT NULL);
 
 CREATE UNIQUE INDEX log_instance_youtube_timestamped_slug_idx ON log_instance_youtube_timestamped USING btree (instance_slug) WHERE (instance_slug IS NOT NULL);
@@ -2564,6 +2589,9 @@ ALTER TABLE ONLY instance_speedruns
 
 ALTER TABLE ONLY instance_speedruns
     ADD CONSTRAINT instance_speedruns_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY item_daily_prices
+    ADD CONSTRAINT item_daily_prices_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);
@@ -2789,7 +2817,11 @@ ALTER TABLE ONLY wow_servers
 
 ALTER TABLE encounter_dps_rankings ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE item_daily_prices ENABLE ROW LEVEL SECURITY;
+
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON item_daily_prices USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON wow_server_realms USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -2805,6 +2837,9 @@ CASE
       WHERE (tenants.include_in_all = true))))
     ELSE (tenant_id = (current_setting('app.tenant_id'::text, true))::uuid)
 END);
+
+CREATE POLICY tenant_item_price_isolation ON item_daily_prices USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
 
 CREATE POLICY tenant_realm_isolation ON wow_server_realms USING ((server_id IN ( SELECT wow_servers.id
    FROM wow_servers)));

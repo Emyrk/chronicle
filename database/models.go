@@ -1357,6 +1357,15 @@ type InstanceSpeedrun struct {
 	AddonVersionNum  int64              `db:"addon_version_num" json:"addon_version_num"`
 }
 
+type ItemDailyPrice struct {
+	RealmID             uuid.UUID          `db:"realm_id" json:"realm_id"`
+	AuctionHouseFaction string             `db:"auction_house_faction" json:"auction_house_faction"`
+	ItemID              int32              `db:"item_id" json:"item_id"`
+	PriceDate           pgtype.Date        `db:"price_date" json:"price_date"`
+	PriceCopper         pgtype.Int8        `db:"price_copper" json:"price_copper"`
+	FetchedAt           pgtype.Timestamptz `db:"fetched_at" json:"fetched_at"`
+}
+
 type LeaderboardVersionRequirement struct {
 	InstanceName        string             `db:"instance_name" json:"instance_name"`
 	MinParserVersion    string             `db:"min_parser_version" json:"min_parser_version"`
@@ -2206,15 +2215,18 @@ type WowServer struct {
 	Description      string        `db:"description" json:"description"`
 	TenantID         uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
 	DefaultDatasetID uuid.NullUUID `db:"default_dataset_id" json:"default_dataset_id"`
+	PricingProvider  pgtype.Text   `db:"pricing_provider" json:"pricing_provider"`
 }
 
 type WowServerRealm struct {
-	ID          uuid.UUID     `db:"id" json:"id"`
-	ServerID    uuid.UUID     `db:"server_id" json:"server_id"`
-	Name        string        `db:"name" json:"name"`
-	CreatedBy   uuid.NullUUID `db:"created_by" json:"created_by"`
-	Url         pgtype.Text   `db:"url" json:"url"`
-	Description string        `db:"description" json:"description"`
+	ID                  uuid.UUID     `db:"id" json:"id"`
+	ServerID            uuid.UUID     `db:"server_id" json:"server_id"`
+	Name                string        `db:"name" json:"name"`
+	CreatedBy           uuid.NullUUID `db:"created_by" json:"created_by"`
+	Url                 pgtype.Text   `db:"url" json:"url"`
+	Description         string        `db:"description" json:"description"`
+	PricingRouteName    pgtype.Text   `db:"pricing_route_name" json:"pricing_route_name"`
+	PricingAuctionHouse pgtype.Text   `db:"pricing_auction_house" json:"pricing_auction_house"`
 }
 
 type WowServerUploadKey struct {
