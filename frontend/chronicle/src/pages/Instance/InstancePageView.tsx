@@ -765,8 +765,6 @@ function EncounterSidebar({
                     const phaseSelected = activePhaseId === phase.id;
                     const durationMs = phase.end_offset_ms - phase.start_offset_ms;
                     const widthPercent = phaseWidthPercent(phase, encounter);
-                    const showFullName = widthPercent >= 34;
-                    const showDuration = widthPercent >= 42;
                     return (
                       <button
                         type="button"
@@ -775,20 +773,13 @@ function EncounterSidebar({
                         title={`Apply ${phase.name} time range (${formatDurationMs(durationMs)})`}
                         aria-pressed={phaseSelected}
                         className={cn(
-                          "flex h-7 min-w-12 items-center justify-center gap-2 overflow-hidden rounded border px-2 text-[11px] font-semibold transition-all duration-150",
+                          "flex h-7 min-w-12 cursor-pointer items-center justify-center overflow-hidden rounded border px-2 text-[11px] font-semibold transition-all duration-150",
                           "hover:-translate-y-px hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           phaseTone(phase.order, phaseSelected),
                         )}
                         style={{ flexGrow: Math.max(widthPercent, 16), flexBasis: 0 }}
                       >
-                        <span className="truncate">
-                          {showFullName ? phase.name : phaseShortLabel(phase)}
-                        </span>
-                        {showDuration && (
-                          <span className="shrink-0 font-mono text-[10px] opacity-65">
-                            {formatDurationMs(durationMs)}
-                          </span>
-                        )}
+                        <span className="truncate">{phase.name}</span>
                       </button>
                     );
                   })}
