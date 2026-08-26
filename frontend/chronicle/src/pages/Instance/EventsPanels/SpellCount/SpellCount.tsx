@@ -15,11 +15,9 @@ export function createSpellCountPanel(): PanelDefinition<SpellCountResult, Spell
     label: "Spell Casts",
     icon: <Hash className="h-4 w-4" />,
     supportsFiltering: true,
-    fixedFilters: [
-      { type: "source_type", value: ["player"], applyTo: SPELL_COUNT_STREAMS },
-    ],
     defaultFilters: [
       { type: "time_range", value: "controller", applyTo: SPELL_COUNT_STREAMS },
+      { type: "source_type", value: ["player"], applyTo: SPELL_COUNT_STREAMS },
     ],
     render: (props: PanelRenderProps<SpellCountResult>) => <SpellCountContent {...props} />,
   };

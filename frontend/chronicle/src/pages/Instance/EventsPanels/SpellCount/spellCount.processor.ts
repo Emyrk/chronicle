@@ -80,8 +80,9 @@ export const spellCountProcessor: PanelProcessor<SpellCountResult, SpellCountEve
   ) => {
     if (!context.selectedEncounterIds.has(encounterID)) return;
 
+    if (!event.caster) return;
     const player = context.players[event.caster];
-    if (!player) return;
+    const sourceName = player?.name ?? context.units?.[event.caster]?.name ?? event.caster;
 
     let encounterCounts = state.EncounterSpellCounts.get(encounterID);
     if (!encounterCounts) {
@@ -91,8 +92,8 @@ export const spellCountProcessor: PanelProcessor<SpellCountResult, SpellCountEve
 
     const count = encounterCounts.get(event.caster) ?? {
       playerID: event.caster,
-      playerName: player.name,
-      className: player.class,
+      playerName: sourceName,
+      className: player?.class ?? "UNKNOWN",
       successful: 0,
       failed: 0,
       spells: new Map<string, SpellCountSpellData>(),

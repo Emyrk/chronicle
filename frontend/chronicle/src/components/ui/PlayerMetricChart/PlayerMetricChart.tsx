@@ -80,6 +80,8 @@ interface PlayerMetricChartProps extends React.ComponentProps<"div"> {
   onRowCtrlClick?: (playerId: string, event: React.MouseEvent) => void
   /** Custom suffix appended to each row's value (e.g. '%'). Overrides the default '/s' from perSecond. */
   valueSuffix?: string
+  /** Hide the primary value badge when it is zero, while preserving stacked secondary data. */
+  hideZeroValue?: boolean
   /** Parse pill data keyed by playerID. When provided, shows a colored score pill on each matching row. */
   parsePills?: Map<string, ParsePillData>
   /** Initial pinned breakout positions, primarily for stories, screenshots, and guided demos. */
@@ -106,6 +108,7 @@ export function PlayerMetricChart({
   disableInteractions = false,
   onRowCtrlClick,
   valueSuffix,
+  hideZeroValue = false,
   parsePills,
   initialPinnedPositions,
   pinnedPositionsOverride,
@@ -173,6 +176,7 @@ export function PlayerMetricChart({
             type={type}
             suffix={valueSuffix ?? (perSecond ? '/s' : '')}
             decimals={perSecond ? 1 : 0}
+            hideZeroValue={hideZeroValue}
             isPinned={pinnedPlayerIds.has(player.playerID)}
             initialPinnedPosition={initialPinnedPositions?.get(player.playerID)}
             pinnedPositionOverride={pinnedPositionsOverride?.get(player.playerID)}
@@ -201,6 +205,7 @@ export interface PlayerMetricRowProps {
   type: ChartType
   suffix?: string
   decimals?: number
+  hideZeroValue?: boolean
   isPinned?: boolean
   initialPinnedPosition?: { x: number; y: number }
   /** Controlled breakout position; overrides internal drag state. */
@@ -401,6 +406,7 @@ export function PlayerMetricRow({
   parsePill,
   classIconBasePath = '/c/icons',
   animateValues = true,
+  hideZeroValue = false,
 }: PlayerMetricRowProps) {
   const { ref, x, y } = useMouse<HTMLDivElement>();
   const rowRef = useRef<HTMLDivElement>(null)
@@ -705,7 +711,9 @@ export function PlayerMetricRow({
             pill placement can avoid overlapping them. */}
         <span ref={valuesRef} style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
         {/* DPS value */}
-        {formatValue(type, player, suffix, decimals)}
+        {(!hideZeroValue || player.displayValue !== 0)
+          ? formatValue(type, player, suffix, decimals)
+          : null}
 
         {/* Percentage */}
         <span

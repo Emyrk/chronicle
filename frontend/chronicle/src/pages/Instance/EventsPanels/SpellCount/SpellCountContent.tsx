@@ -74,6 +74,7 @@ export function SpellCountContent(props: PanelRenderProps<SpellCountResult>) {
         panelTitle="Spell Casts"
         breakout={breakout}
         stackedLabel="Failed"
+        hideZeroValue
         disableInteractions={context.renderMode === "layout_lab"}
       />
     </GenericPanel>

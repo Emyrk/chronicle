@@ -20,6 +20,9 @@ function context(): ProcessorContext {
       [OTHER_PLAYER]: { name: "Priest", class: "PRIEST" },
     },
     selectedEncounterIds: new Set(["encounter-1"]),
+    units: {
+      [ENEMY]: { name: "Enemy Caster", owner: null, entry: 1 },
+    },
     entitySelection: { playerIds: new Set(), enemyIds: new Set() },
   };
 }
@@ -123,7 +126,7 @@ describe("spellCountProcessor", () => {
     expect(aggregated?.spells.get("116:Frostbolt")).toMatchObject({ successful: 0, failed: 1 });
   });
 
-  it("ignores events outside selected encounters and non-player casters", () => {
+  it("ignores unselected encounters but can count non-player casters when filters allow them", () => {
     const state = spellCountProcessor.createState();
     const ctx = context();
     const timestamp = new Date("2026-08-26T00:00:00Z");
@@ -138,6 +141,12 @@ describe("spellCountProcessor", () => {
       ctx,
     );
 
-    expect(state.EncounterSpellCounts.size).toBe(0);
+    expect(state.EncounterSpellCounts.has("encounter-2")).toBe(false);
+    expect(state.EncounterSpellCounts.get("encounter-1")?.get(ENEMY)).toMatchObject({
+      playerName: "Enemy Caster",
+      className: "UNKNOWN",
+      successful: 1,
+      failed: 0,
+    });
   });
 });
