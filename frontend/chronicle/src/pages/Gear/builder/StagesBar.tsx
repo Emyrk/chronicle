@@ -98,7 +98,7 @@ function StageTabButton({
           />
           {!complete && (
             <span
-              className="h-full bg-zinc-500/70 transition-[width]"
+              className="h-full bg-emerald-500/70 transition-[width]"
               style={{ width: `${laterWidth}%` }}
             />
           )}
@@ -138,7 +138,7 @@ function StageTabButton({
           )}
           {indicator.fromLaterStages.map((later) => (
             <p key={later.stageName} className="flex items-center gap-2">
-              <span className="h-0.5 w-2.5 bg-zinc-500/70" />
+              <span className="h-0.5 w-2.5 bg-emerald-500/70" />
               {later.count} already covered by {later.stageName}
             </p>
           ))}
