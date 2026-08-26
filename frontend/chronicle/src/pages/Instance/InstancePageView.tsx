@@ -769,23 +769,19 @@ function EncounterSidebar({
                           side="right"
                           sideOffset={8}
                           hideArrow
-                          className="w-52 rounded-lg border border-white/10 bg-popover p-3 text-foreground shadow-xl"
+                          className="w-[232px] rounded-lg border border-border/80 bg-popover p-3.5 text-foreground shadow-2xl"
                         >
-                          <div className="space-y-2.5">
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                Phase {phase.order + 1}
-                              </p>
-                              <p className="mt-0.5 text-sm font-semibold leading-tight">{phase.name}</p>
-                            </div>
-                            <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-2">
-                              <span className="text-[11px] text-muted-foreground">Duration</span>
-                              <span className="font-mono text-xs font-medium">{formatDurationMs(durationMs)}</span>
-                            </div>
-                            <p className="border-t border-border/60 pt-2 text-[10px] leading-relaxed text-muted-foreground">
-                              click to filter to just this phase
+                          <div className="flex items-center justify-between gap-4">
+                            <p className="truncate text-sm font-semibold">
+                              Phase {phase.order + 1} — {phase.name}
                             </p>
+                            <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                              {formatDurationMs(durationMs)}
+                            </span>
                           </div>
+                          <p className="mt-2 border-t border-border/70 pt-2 text-[11px] font-medium text-amber-500">
+                            Click to filter this phase <span aria-hidden>→</span>
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     );
