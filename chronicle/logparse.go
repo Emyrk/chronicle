@@ -34,6 +34,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbstatic"
 	"github.com/Emyrk/chronicle/database/jsontransform"
+	"github.com/Emyrk/chronicle/internal/guildrenames"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -367,6 +368,25 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			continue
 		}
 
+		// Compute the instance time range before persisting guilds so historical
+		// guild rename rules can use the log's timestamp.
+		var instanceStart, instanceEnd pgtype.Timestamptz
+		for _, enc := range finalized.Encounters {
+			encStart := database.Timestamptz(enc.Combat.Start)
+			encEnd := database.Timestamptz(enc.Combat.End)
+			if !instanceStart.Valid || encStart.Time.Before(instanceStart.Time) {
+				instanceStart = encStart
+			}
+			if !instanceEnd.Valid || encEnd.Time.After(instanceEnd.Time) {
+				instanceEnd = encEnd
+			}
+		}
+		if instanceStart.Valid {
+			finalized.Guilds.RenameGuilds(func(name string) string {
+				return guildrenames.Resolve(realmName, instanceStart.Time, name)
+			})
+		}
+
 		// Time DB insert
 		dbInsertStart := time.Now()
 		// Only 1 instance should be inserted at a time. This will break if we go
@@ -380,7 +400,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 		}()
 		var dbinstance database.LogInstance
-		var instanceStart, instanceEnd pgtype.Timestamptz
 		err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
 			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
 			if err != nil {
@@ -393,18 +412,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 
 			if err := finalized.Loot.Insert(ctx, instanceID, realmID, tx); err != nil {
 				return fmt.Errorf("insert loot: %w", err)
-			}
-
-			// Compute instance time range from encounters
-			for _, enc := range finalized.Encounters {
-				encStart := database.Timestamptz(enc.Combat.Start)
-				encEnd := database.Timestamptz(enc.Combat.End)
-				if !instanceStart.Valid || encStart.Time.Before(instanceStart.Time) {
-					instanceStart = encStart
-				}
-				if !instanceEnd.Valid || encEnd.Time.After(instanceEnd.Time) {
-					instanceEnd = encEnd
-				}
 			}
 
 			recorderName := ""

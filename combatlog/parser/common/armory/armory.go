@@ -248,6 +248,38 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 	return nil, nil
 }
 
+// RenameGuilds canonicalizes guild names before they are persisted. If multiple
+// parsed names resolve to the same guild, their member sets are merged.
+func (g *Tracker) RenameGuilds(resolve func(string) string) {
+	renamedGuilds := make(map[string]map[guid.GUID]struct{}, len(g.Guilds))
+	for name, members := range g.Guilds {
+		resolvedName := resolve(name)
+		resolvedMembers, ok := renamedGuilds[resolvedName]
+		if !ok {
+			resolvedMembers = make(map[guid.GUID]struct{}, len(members))
+			renamedGuilds[resolvedName] = resolvedMembers
+		}
+		for playerGUID := range members {
+			resolvedMembers[playerGUID] = struct{}{}
+		}
+	}
+	g.Guilds = renamedGuilds
+
+	for playerGUID, player := range g.Players {
+		if player.Guild == nil {
+			continue
+		}
+		resolvedName := resolve(player.Guild.Name)
+		if resolvedName == player.Guild.Name {
+			continue
+		}
+		guild := *player.Guild
+		guild.Name = resolvedName
+		player.Guild = &guild
+		g.Players[playerGUID] = player
+	}
+}
+
 func sortedGuildNames(guilds map[string]map[guid.GUID]struct{}) []string {
 	names := make([]string, 0, len(guilds))
 	for name := range guilds {
