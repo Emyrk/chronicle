@@ -20,14 +20,68 @@ func NewNefarian(id guid.GUID, all *characters.Characters) (characters.Character
 		return nil, false
 	}
 
-	c, ok := characters.NewRoomMechanic(id, 11583, all)
+	base, ok := characters.NewRoomMechanic(id, 11583, all)
 	if !ok {
 		return nil, false
+	}
+
+	var c characters.CharacterBase = base
+	if entry == 11583 {
+		c = &nefarian{RoomMechanic: base, all: all}
 	}
 	return characters.NewAdsGoWithBossCustomCharacter(c, all, 11583,
 		14668, // Corrupted Infernals
 		14605, // "Bone Construct"
 	), true
+}
+
+// Phase key constants for Nefarian.
+const (
+	NefarianPhaseKeyP1 = "nefarian_p1"
+	NefarianPhaseKeyP2 = "nefarian_p2"
+)
+
+// NefarianPhaseDefinitions contains the encounter phase definitions for Nefarian.
+// Exported for testing.
+var NefarianPhaseDefinitions = &phases.EncounterPhases{
+	EncounterName: "Nefarian",
+	Definitions: []phases.Definition{
+		{Key: NefarianPhaseKeyP1, Name: "Adds", Order: 0},
+		{Key: NefarianPhaseKeyP2, Name: "Boss", Order: 1},
+	},
+}
+
+type nefarian struct {
+	*characters.RoomMechanic
+	all       *characters.Characters
+	p2Emitted bool
+}
+
+// PhaseDefinitions implements phases.PhaseProvider.
+func (c *nefarian) PhaseDefinitions() *phases.EncounterPhases {
+	return NefarianPhaseDefinitions
+}
+
+func (c *nefarian) Process(m messages.Message) error {
+	wasActive := c.IsActive()
+
+	if damage, ok := m.(*messages.Damage); ok &&
+		damage.Target == c.ID() &&
+		damage.Amount > 0 &&
+		!c.p2Emitted {
+		c.p2Emitted = true
+		c.all.EmitPhaseTransition(phases.Transition{
+			SourceGUID: c.ID(),
+			ToPhaseKey: NefarianPhaseKeyP2,
+			Timestamp:  m.Date(),
+		})
+	}
+
+	err := c.RoomMechanic.Process(m)
+	if wasActive && !c.IsActive() {
+		c.p2Emitted = false
+	}
+	return err
 }
 
 func isNefarianEntry(entry uint32) bool {
