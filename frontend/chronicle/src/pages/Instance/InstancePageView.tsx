@@ -748,21 +748,46 @@ function EncounterSidebar({
                     const durationMs = phase.end_offset_ms - phase.start_offset_ms;
                     const widthPercent = phaseWidthPercent(phase, encounter);
                     return (
-                      <button
-                        type="button"
-                        key={phase.id}
-                        onClick={() => onSelectPhase(phase, encounter.id)}
-                        title={`Apply ${phase.name} time range (${formatDurationMs(durationMs)})`}
-                        aria-pressed={phaseSelected}
-                        className={cn(
-                          "flex h-7 min-w-12 cursor-pointer items-center justify-center overflow-hidden rounded border px-2 text-[11px] font-semibold transition-all duration-150",
-                          "hover:-translate-y-px hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          phaseTone(phase.order, phaseSelected),
-                        )}
-                        style={{ flexGrow: Math.max(widthPercent, 16), flexBasis: 0 }}
-                      >
-                        <span className="truncate">{phase.name}</span>
-                      </button>
+                      <Tooltip key={phase.id}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => onSelectPhase(phase, encounter.id)}
+                            aria-label={`Filter to phase ${phase.order + 1}: ${phase.name}`}
+                            aria-pressed={phaseSelected}
+                            className={cn(
+                              "flex h-7 min-w-12 cursor-pointer items-center justify-center overflow-hidden rounded border px-2 text-[11px] font-semibold transition-all duration-150",
+                              "hover:-translate-y-px hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              phaseTone(phase.order, phaseSelected),
+                            )}
+                            style={{ flexGrow: Math.max(widthPercent, 16), flexBasis: 0 }}
+                          >
+                            <span className="truncate">{phase.name}</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="right"
+                          sideOffset={8}
+                          hideArrow
+                          className="w-52 rounded-lg border border-white/10 bg-popover p-3 text-foreground shadow-xl"
+                        >
+                          <div className="space-y-2.5">
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                Phase {phase.order + 1}
+                              </p>
+                              <p className="mt-0.5 text-sm font-semibold leading-tight">{phase.name}</p>
+                            </div>
+                            <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-2">
+                              <span className="text-[11px] text-muted-foreground">Duration</span>
+                              <span className="font-mono text-xs font-medium">{formatDurationMs(durationMs)}</span>
+                            </div>
+                            <p className="border-t border-border/60 pt-2 text-[10px] leading-relaxed text-muted-foreground">
+                              click to filter to just this phase
+                            </p>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
                     );
                   })}
                 </div>
