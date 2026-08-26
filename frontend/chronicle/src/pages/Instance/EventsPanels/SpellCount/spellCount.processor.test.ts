@@ -4,7 +4,10 @@ import type {
   SpellFailProcessorEvent,
   SpellGoProcessorEvent,
 } from "../processorTypes";
-import { spellCountProcessor } from "./spellCount.processor";
+import {
+  aggregateSpellCountsForPlayer,
+  spellCountProcessor,
+} from "./spellCount.processor";
 
 const PLAYER = "0x0000000000000001";
 const OTHER_PLAYER = "0x0000000000000002";
@@ -74,14 +77,50 @@ describe("spellCountProcessor", () => {
     );
 
     const counts = state.EncounterSpellCounts.get("encounter-1");
-    expect(counts?.get(PLAYER)).toEqual({
+    const playerCounts = counts?.get(PLAYER);
+    expect(playerCounts).toMatchObject({
       playerID: PLAYER,
       playerName: "Mage",
       className: "MAGE",
       successful: 2,
       failed: 1,
     });
+    expect(playerCounts?.spells.get("133:Fireball")).toEqual({
+      spellId: 133,
+      spellName: "Fireball",
+      successful: 2,
+      failed: 1,
+    });
     expect(counts?.get(OTHER_PLAYER)).toMatchObject({ successful: 1, failed: 0 });
+  });
+
+  it("aggregates per-spell counts across selected encounters for breakouts", () => {
+    const state = spellCountProcessor.createState();
+    const ctx = context();
+    ctx.selectedEncounterIds.add("encounter-2");
+    const timestamp = new Date("2026-08-26T00:00:00Z");
+
+    spellCountProcessor.processEvent(state, spellGo(), "encounter-1", timestamp, "spell_go", ctx);
+    spellCountProcessor.processEvent(
+      state,
+      spellFail({ spell: { id: 116, name: "Frostbolt" } }),
+      "encounter-1",
+      timestamp,
+      "spell_fail",
+      ctx,
+    );
+    spellCountProcessor.processEvent(state, spellGo(), "encounter-2", timestamp, "spell_go", ctx);
+    spellCountProcessor.processEvent(state, spellFail(), "encounter-2", timestamp, "spell_fail", ctx);
+
+    const aggregated = aggregateSpellCountsForPlayer(
+      state,
+      PLAYER,
+      ["encounter-1", "encounter-2"],
+    );
+
+    expect(aggregated).toMatchObject({ successful: 2, failed: 2 });
+    expect(aggregated?.spells.get("133:Fireball")).toMatchObject({ successful: 2, failed: 1 });
+    expect(aggregated?.spells.get("116:Frostbolt")).toMatchObject({ successful: 0, failed: 1 });
   });
 
   it("ignores events outside selected encounters and non-player casters", () => {

@@ -4,6 +4,7 @@ import { formatNumber } from "@/lib/format";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import type { SpellCountResult } from "./spellCount.processor";
+import { useSpellCountBreakout } from "./SpellCountBreakout";
 
 function aggregateForEncounters(
   result: SpellCountResult,
@@ -48,6 +49,12 @@ export function SpellCountContent(props: PanelRenderProps<SpellCountResult>) {
     registerChartData?.(chartData);
   }, [chartData, registerChartData]);
 
+  const breakout = useSpellCountBreakout({
+    result,
+    context,
+    loading: props.loading,
+    processing: props.processing,
+  });
   const successful = chartData.reduce((sum, row) => sum + row.value, 0);
   const failed = chartData.reduce((sum, row) => sum + (row.stackedValue ?? 0), 0);
 
@@ -65,6 +72,7 @@ export function SpellCountContent(props: PanelRenderProps<SpellCountResult>) {
         data={chartData}
         type="healing"
         panelTitle="Spell Casts"
+        breakout={breakout}
         stackedLabel="Failed"
         disableInteractions={context.renderMode === "layout_lab"}
       />
