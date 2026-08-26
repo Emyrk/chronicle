@@ -31,13 +31,16 @@ export function ProgressionCard({
   const poolSize = payload.pool.length;
   const stages = payload.stages.length;
 
-  // The linked analysis profile is either one of the user's saved
-  // stat-weight profiles or a shipped preset.
+  // New payloads carry a portable profile snapshot. ID lookup remains as a
+  // fallback for older progressions saved before snapshots were introduced.
   const profileId = payload.analysis_profile_id;
   const { isAuthenticated } = useAuth();
   const { data: siteConfig } = useSiteConfig();
-  const myProfiles = useMyStatWeights(isAuthenticated && !!profileId);
+  const myProfiles = useMyStatWeights(
+    isAuthenticated && !payload.analysis_profile && !!profileId,
+  );
   const profileName = useMemo(() => {
+    if (payload.analysis_profile) return payload.analysis_profile.name;
     if (!profileId) return null;
     const mine = myProfiles.data?.find((p) => p.id === profileId);
     if (mine) return mine.name;
@@ -46,7 +49,7 @@ export function ProgressionCard({
         (p) => p.id === profileId,
       )?.name ?? null
     );
-  }, [profileId, myProfiles.data, siteConfig?.dataset_flavor]);
+  }, [payload.analysis_profile, profileId, myProfiles.data, siteConfig?.dataset_flavor]);
 
   return (
     <div className="flex items-center gap-4 rounded-md border border-zinc-700/60 bg-zinc-900/40 px-4 py-3 transition-colors hover:border-zinc-600">

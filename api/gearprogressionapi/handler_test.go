@@ -47,6 +47,9 @@ func TestValidatePayload(t *testing.T) {
 		{"empty", nil, false},
 		{"empty document", json.RawMessage(`{"version":1,"pool":[],"stages":[]}`), false},
 		{"analysis profile", json.RawMessage(`{"version":1,"pool":[],"stages":[],"analysis_profile_id":"preset:warrior-fury"}`), false},
+		{"embedded analysis profile", json.RawMessage(`{"version":1,"pool":[],"stages":[],"analysis_profile_id":"private-profile","analysis_profile":{"id":"private-profile","name":"My weights","description":"Portable snapshot","weights":{"agility":2.5,"hit":1.2},"targets":[{"stat":"hit","type":"minimum","value":8}]}}`), false},
+		{"embedded analysis profile missing weights", json.RawMessage(`{"version":1,"pool":[],"stages":[],"analysis_profile":{"id":"profile","name":"Empty","weights":{}}}`), true},
+		{"embedded analysis profile invalid target", json.RawMessage(`{"version":1,"pool":[],"stages":[],"analysis_profile":{"id":"profile","name":"Bad target","weights":{"hit":1},"targets":[{"stat":"hit","type":"exact","value":8}]}}`), true},
 		{"analysis profile too long", json.RawMessage(`{"version":1,"pool":[],"stages":[],"analysis_profile_id":"` + strings.Repeat("a", maxAnalysisProfileIDLen+1) + `"}`), true},
 		{"valid document", json.RawMessage(`{"version":1,"pool":[
 			{"item_id":16921,"enchant_id":2543,"note":"BoE"},{"item_id":22718}

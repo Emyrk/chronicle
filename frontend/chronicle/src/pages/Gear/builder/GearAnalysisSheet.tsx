@@ -93,7 +93,7 @@ export function GearAnalysisSheet({
   const { isAuthenticated } = useAuth();
   const { data: siteConfig } = useSiteConfig();
   const myProfiles = useMyStatWeights(isAuthenticated);
-  const options = useMemo(() => {
+  const availableOptions = useMemo(() => {
     const presets = siteConfig
       ? presetsForFlavor(siteConfig.dataset_flavor ?? [])
           .filter((profile) => profile.classId === classId)
@@ -104,6 +104,13 @@ export function GearAnalysisSheet({
       .map(mineToProfile);
     return [...presets, ...mine];
   }, [classId, myProfiles.data, siteConfig]);
+  const options = useMemo(
+    () =>
+      selection && !availableOptions.some((option) => option.id === selection.id)
+        ? [...availableOptions, selection]
+        : availableOptions,
+    [availableOptions, selection],
+  );
 
   const lastHydratedProfileId = useRef<string | null>(null);
   useEffect(() => {
