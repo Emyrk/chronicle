@@ -137,8 +137,8 @@ const (
 var RazorgorePhaseDefinitions = &phases.EncounterPhases{
 	EncounterName: "Razorgore the Untamed",
 	Definitions: []phases.Definition{
-		{Key: RazorgorePhaseKeyP1, Name: "Phase 1 – Adds", Order: 0},
-		{Key: RazorgorePhaseKeyP2, Name: "Phase 2 – Boss", Order: 1},
+		{Key: RazorgorePhaseKeyP1, Name: "Adds", Order: 0},
+		{Key: RazorgorePhaseKeyP2, Name: "Boss", Order: 1},
 	},
 }
 

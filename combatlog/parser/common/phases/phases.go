@@ -15,7 +15,7 @@ import (
 type Definition struct {
 	// Key is a machine-readable identifier (e.g. "razorgore_p1").
 	Key string
-	// Name is a human-readable label (e.g. "Phase 1 – Adds").
+	// Name is a short human-readable label (e.g. "Adds").
 	Name string
 	// Order is the 0-based display/sequence order.
 	Order int

@@ -427,6 +427,8 @@ func TestRazorgorePhaseDefinitions_PhaseProvider(t *testing.T) {
 	require.NotNil(t, defs)
 	require.Equal(t, "Razorgore the Untamed", defs.EncounterName)
 	require.Len(t, defs.Definitions, 2)
+	require.Equal(t, "Adds", defs.Definitions[0].Name)
+	require.Equal(t, "Boss", defs.Definitions[1].Name)
 	require.Equal(t, creatures.RazorgorePhaseKeyP1, defs.Definitions[0].Key)
 	require.Equal(t, creatures.RazorgorePhaseKeyP2, defs.Definitions[1].Key)
 }
