@@ -1109,6 +1109,7 @@ export interface GearListPayload {
 export interface GearListSlot {
     readonly item_id: number;
     readonly enchant_id?: number;
+    readonly gem_enchant_ids?: readonly number[];
     readonly note?: string;
     readonly alternates?: readonly GearListAlternate[];
 }
@@ -1822,6 +1823,7 @@ export interface ItemSearchResult {
     readonly required_skill: number;
     readonly required_skill_rank: number;
     readonly armor: number;
+    readonly gem_enchant_id?: number;
     readonly icon: string;
 }
 

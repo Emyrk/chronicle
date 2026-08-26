@@ -16,6 +16,7 @@ import { itemRefKey, type HydratedItem } from "./useListItems";
 import { ItemPickerPanel } from "./ItemPickerPanel";
 import { AlternatesEditor } from "./AlternatesEditor";
 import { EnchantPicker } from "./EnchantPicker";
+import { GemPicker } from "./GemPicker";
 
 const ALL_SLOTS = [...LEFT_SLOTS, ...RIGHT_SLOTS, ...BOTTOM_SLOTS];
 
@@ -35,12 +36,13 @@ export function slotLabel(outfitIndex: number): string {
   );
 }
 
-export type EditorTab = "pick" | "alternates" | "enchant";
+export type EditorTab = "pick" | "alternates" | "enchant" | "gems";
 
 const TABS: { id: EditorTab; label: string }[] = [
   { id: "pick", label: "Pick item" },
   { id: "alternates", label: "Alternates & notes" },
   { id: "enchant", label: "Enchant" },
+  { id: "gems", label: "Gems" },
 ];
 
 interface SlotEditorPanelProps {
@@ -59,6 +61,7 @@ interface SlotEditorPanelProps {
   onPromoteAlternate: (itemId: number) => void;
   onRemoveAlternate: (itemId: number) => void;
   onSetEnchant: (enchantId: number | undefined) => void;
+  onSetGem: (socketIndex: number, gemEnchantId: number | undefined) => void;
   /** Observed cohort data for this slot (popularity + enchants). */
   trendsSlot?: GearTrendsSlot;
   /** Active stat weights; enables picker row scores. */
@@ -107,6 +110,7 @@ export function SlotEditorPanel({
   onPromoteAlternate,
   onRemoveAlternate,
   onSetEnchant,
+  onSetGem,
   trendsSlot,
   weights,
   equippedScore,
@@ -185,7 +189,8 @@ export function SlotEditorPanel({
         {TABS.filter((t) => !tabs || tabs.includes(t.id)).map((t) => {
           const disabled =
             (t.id !== "pick" && !entry) ||
-            (t.id === "enchant" && !ENCHANTABLE_SLOTS.has(slotIndex));
+            (t.id === "enchant" && !ENCHANTABLE_SLOTS.has(slotIndex)) ||
+            (t.id === "gems" && !current?.tooltip?.sockets?.length);
           return (
             <button
               key={t.id}
@@ -243,6 +248,13 @@ export function SlotEditorPanel({
           observedEnchants={trendsSlot?.enchants}
         />
       )}
+      {tab === "gems" && entry && current?.tooltip?.sockets?.length ? (
+        <GemPicker
+          sockets={current.tooltip.sockets}
+          gemEnchantIds={entry.gem_enchant_ids}
+          onSetGem={onSetGem}
+        />
+      ) : null}
     </div>
   );
 }

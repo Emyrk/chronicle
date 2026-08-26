@@ -15,6 +15,7 @@ import {
 export interface EquippedSlot {
   item_id: number;
   enchant_id?: number;
+  gem_enchant_ids?: readonly number[];
 }
 
 export interface CharacterMatch {
@@ -57,6 +58,9 @@ export function buildCharacterMatch(
       ...(item.enchant_id && item.enchant_id > 0
         ? { enchant_id: item.enchant_id }
         : {}),
+      ...(item.gem_enchant_ids?.some((id) => id > 0)
+        ? { gem_enchant_ids: item.gem_enchant_ids }
+        : {}),
     };
   });
   return { equippedIds, equippedSlots };
@@ -70,6 +74,9 @@ export function characterMatchStage(match: CharacterMatch): GearStage {
     slots[String(slotIndex)] = {
       item_id: equipped.item_id,
       ...(equipped.enchant_id ? { enchant_id: equipped.enchant_id } : {}),
+      ...(equipped.gem_enchant_ids?.some((id) => id > 0)
+        ? { gem_enchant_ids: [...equipped.gem_enchant_ids] }
+        : {}),
     };
   });
   return { name: "Current Armory gear", slots };

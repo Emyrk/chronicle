@@ -46,12 +46,12 @@ func (s *Service) handleSearchItems(w http.ResponseWriter, r *http.Request) {
 	slots := parseIntList(r.URL.Query().Get("slot"))
 	classes := parseIntList(r.URL.Query().Get("class"))
 
-	// An empty query is allowed when an inventory-slot filter narrows the
-	// scan — it returns the top items for that slot by the chosen sort
-	// (the gear builder's default picker view).
+	// An empty query is allowed when an inventory-slot or item-class filter
+	// narrows the scan. Gear item browsing uses slots; gem browsing uses the
+	// gem item class because gems do not have an equipment slot.
 	q := r.URL.Query().Get("q")
-	slotBrowse := len(q) == 0 && len(slots) > 0
-	if len(q) < 2 && !slotBrowse {
+	filteredBrowse := len(q) == 0 && (len(slots) > 0 || len(classes) > 0)
+	if len(q) < 2 && !filteredBrowse {
 		badRequest(ctx, w, "Query parameter 'q' must be at least 2 characters.")
 		return
 	}
@@ -112,6 +112,7 @@ func (s *Service) handleSearchItems(w http.ResponseWriter, r *http.Request) {
 			RequiredSkill:     row.RequiredSkill,
 			RequiredSkillRank: row.RequiredSkillRank,
 			Armor:             row.Armor,
+			GemEnchantID:      row.GemEnchantID,
 			Icon:              row.Icon,
 		})
 	}

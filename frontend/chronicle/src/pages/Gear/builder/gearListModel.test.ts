@@ -16,6 +16,7 @@ import {
   serializePayload,
   setAlternateNote,
   setSlotEnchant,
+  setSlotGem,
   setSlotItem,
   setSlotNote,
   SLOT,
@@ -39,7 +40,7 @@ describe("parsePayload", () => {
           {
             name: "Pre-Raid",
             slots: {
-              "0": { item_id: 16921, enchant_id: 2543, note: "n", alternates: [{ item_id: 5, note: "a" }] },
+              "0": { item_id: 16921, enchant_id: 2543, gem_enchant_ids: [111, 0, 333], note: "n", alternates: [{ item_id: 5, note: "a" }] },
             },
           },
         ],
@@ -49,6 +50,7 @@ describe("parsePayload", () => {
     expect(parsed.stages[0].slots["0"]).toEqual({
       item_id: 16921,
       enchant_id: 2543,
+      gem_enchant_ids: [111, 0, 333],
       note: "n",
       alternates: [{ item_id: 5, note: "a" }],
     });
@@ -131,8 +133,12 @@ describe("collectItemIds", () => {
 });
 
 describe("fillStageFromOutfit", () => {
-  const equipped: ({ item_id: number; enchant_id?: number } | undefined)[] = [];
-  equipped[SLOT.head] = { item_id: 100, enchant_id: 55 };
+  const equipped: ({
+    item_id: number;
+    enchant_id?: number;
+    gem_enchant_ids?: number[];
+  } | undefined)[] = [];
+  equipped[SLOT.head] = { item_id: 100, enchant_id: 55, gem_enchant_ids: [11, 0, 33] };
   equipped[SLOT.chest] = { item_id: 200 };
   equipped[SLOT.mainHand] = { item_id: 300 };
 
@@ -141,7 +147,11 @@ describe("fillStageFromOutfit", () => {
       { name: "a", slots: { [String(SLOT.chest)]: { item_id: 999, note: "keep" } } },
     ]);
     const next = fillStageFromOutfit(payload, 0, equipped);
-    expect(next.stages[0].slots[String(SLOT.head)]).toEqual({ item_id: 100, enchant_id: 55 });
+    expect(next.stages[0].slots[String(SLOT.head)]).toEqual({
+      item_id: 100,
+      enchant_id: 55,
+      gem_enchant_ids: [11, 0, 33],
+    });
     expect(next.stages[0].slots[String(SLOT.mainHand)]).toEqual({ item_id: 300 });
     // Existing pick untouched without overwrite.
     expect(next.stages[0].slots[String(SLOT.chest)]).toEqual({ item_id: 999, note: "keep" });
@@ -220,12 +230,12 @@ describe("slot operations", () => {
     {
       name: "a",
       slots: {
-        "0": { item_id: 10, enchant_id: 99, note: "keep me", alternates: [{ item_id: 20, note: "alt" }] },
+        "0": { item_id: 10, enchant_id: 99, gem_enchant_ids: [7, 0, 9], note: "keep me", alternates: [{ item_id: 20, note: "alt" }] },
       },
     },
   ]);
 
-  it("setSlotItem replaces the item, drops the enchant, keeps note/alternates", () => {
+  it("setSlotItem replaces the item, drops the enchant and gems, keeps note/alternates", () => {
     const next = setSlotItem(base, 0, 0, 30);
     expect(next.stages[0].slots["0"]).toEqual({
       item_id: 30,
@@ -253,6 +263,17 @@ describe("slot operations", () => {
     expect(withEnchant.stages[0].slots["0"]?.enchant_id).toBe(123);
     const cleared = setSlotEnchant(withEnchant, 0, 0, undefined);
     expect(cleared.stages[0].slots["0"]).not.toHaveProperty("enchant_id");
+  });
+
+  it("setSlotGem preserves socket positions and clears trailing empty sockets", () => {
+    const withMiddleGem = setSlotGem(base, 0, 0, 1, 123);
+    expect(withMiddleGem.stages[0].slots["0"]?.gem_enchant_ids).toEqual([7, 123, 9]);
+
+    const clearedLast = setSlotGem(withMiddleGem, 0, 0, 2, undefined);
+    expect(clearedLast.stages[0].slots["0"]?.gem_enchant_ids).toEqual([7, 123]);
+
+    const clearedAll = setSlotGem(setSlotGem(clearedLast, 0, 0, 1, undefined), 0, 0, 0, undefined);
+    expect(clearedAll.stages[0].slots["0"]).not.toHaveProperty("gem_enchant_ids");
   });
 
   it("setSlotNote sets and clears", () => {

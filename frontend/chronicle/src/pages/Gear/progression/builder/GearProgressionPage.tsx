@@ -77,6 +77,7 @@ import {
   setProgressionAlternateNote,
   setProgressionAnalysisProfile,
   setProgressionSlotEnchant,
+  setProgressionSlotGem,
   setProgressionSlotItem,
   setProgressionSlotNote,
   stageAverageItemLevel,
@@ -804,6 +805,13 @@ function ProgressionView({
                   }
                   onSetEnchant={(enchantId) =>
                     editStageSlot(setProgressionSlotEnchant, enchantId)
+                  }
+                  onSetGem={(socketIndex, gemEnchantId) =>
+                    editStageSlot(
+                      setProgressionSlotGem,
+                      socketIndex,
+                      gemEnchantId,
+                    )
                   }
                 />
               </div>

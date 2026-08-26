@@ -46,7 +46,7 @@ func TestValidatePayload(t *testing.T) {
 		{"empty", nil, false},
 		{"empty stages", json.RawMessage(`{"version":2,"stages":[]}`), false},
 		{"valid document", json.RawMessage(`{"version":2,"stages":[{"name":"Pre-Raid","slots":{
-			"0":{"item_id":16921,"enchant_id":2543,"note":"crafted","alternates":[{"item_id":22718,"note":"cheaper"}]},
+			"0":{"item_id":16921,"enchant_id":2543,"gem_enchant_ids":[111,0,333],"note":"crafted","alternates":[{"item_id":22718,"note":"cheaper"}]},
 			"18":{"item_id":45}
 		}}]}`), false},
 		{"invalid JSON", json.RawMessage(`{invalid`), true},
@@ -61,6 +61,8 @@ func TestValidatePayload(t *testing.T) {
 		{"negative alternate item id", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":1,"alternates":[{"item_id":-5}]}}}]}`), true},
 		{"too many stages", json.RawMessage(`{"version":2,"stages":[` + strings.Repeat(`{"name":"s","slots":{}},`, maxStagesPerList) + `{"name":"s","slots":{}}]}`), true},
 		{"stage name too long", json.RawMessage(`{"version":2,"stages":[{"name":"` + strings.Repeat("a", maxStageNameLen+1) + `","slots":{}}]}`), true},
+		{"too many gems", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":1,"gem_enchant_ids":[1,2,3,4]}}}]}`), true},
+		{"negative gem enchant id", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":1,"gem_enchant_ids":[-1]}}}]}`), true},
 		{"note too long", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":1,"note":"` + longNote + `"}}}]}`), true},
 		{"alternate note too long", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":1,"alternates":[{"item_id":2,"note":"` + longNote + `"}]}}}]}`), true},
 		{"too many alternates", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":1,"alternates":` + manyAlts + `}}}]}`), true},

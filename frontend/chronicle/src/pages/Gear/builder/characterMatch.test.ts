@@ -41,7 +41,7 @@ describe("buildCharacterMatch", () => {
 
   it("converts the current outfit into a read-only builder stage", () => {
     const match = buildCharacterMatch(history(outfit({ 0: 100 })), [
-      { item_id: 111, enchant_id: 222 },
+      { item_id: 111, enchant_id: 222, gem_enchant_ids: [333, 0, 555] },
       { item_id: 0 },
       { item_id: 333 },
     ] as unknown as PlayerOutfit);
@@ -49,7 +49,7 @@ describe("buildCharacterMatch", () => {
     expect(characterMatchStage(match)).toEqual({
       name: "Current Armory gear",
       slots: {
-        "0": { item_id: 111, enchant_id: 222 },
+        "0": { item_id: 111, enchant_id: 222, gem_enchant_ids: [333, 0, 555] },
         "2": { item_id: 333 },
       },
     });

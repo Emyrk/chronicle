@@ -23,6 +23,7 @@ import {
   renameStage,
   setAlternateNote,
   setSlotEnchant,
+  setSlotGem,
   setSlotItem,
   setSlotNote,
   type GearPayload,
@@ -494,6 +495,17 @@ function EditorView({
                 }
                 onSetEnchant={(enchantId) =>
                   editor.update((p) => setSlotEnchant(p, safeStageIndex, selectedSlot, enchantId))
+                }
+                onSetGem={(socketIndex, gemEnchantId) =>
+                  editor.update((p) =>
+                    setSlotGem(
+                      p,
+                      safeStageIndex,
+                      selectedSlot,
+                      socketIndex,
+                      gemEnchantId,
+                    ),
+                  )
                 }
                 trendsSlot={trendsBySlot.get(selectedSlot)}
                 weights={weightSel?.weights ?? null}
