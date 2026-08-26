@@ -34,8 +34,8 @@ export interface StatKeyDef {
     | "Defense"
     | "Resistance"
     | "Weapon";
-  /** item_template stat_type this key reads, if it is a plain stat. */
-  itemMod?: number;
+  /** item_template stat_type values this key reads, if it is a plain stat. */
+  itemMods?: readonly number[];
 }
 
 /**
@@ -43,48 +43,50 @@ export interface StatKeyDef {
  * item_template stat_type enum used by world_item_template.
  */
 export const STAT_KEYS: readonly StatKeyDef[] = [
-  { key: "strength", label: "Strength", group: "Attributes", itemMod: 4 },
-  { key: "agility", label: "Agility", group: "Attributes", itemMod: 3 },
-  { key: "stamina", label: "Stamina", group: "Attributes", itemMod: 7 },
-  { key: "intellect", label: "Intellect", group: "Attributes", itemMod: 5 },
-  { key: "spirit", label: "Spirit", group: "Attributes", itemMod: 6 },
-  { key: "health", label: "Health", group: "Attributes", itemMod: 1 },
-  { key: "mana", label: "Mana", group: "Attributes", itemMod: 0 },
+  { key: "strength", label: "Strength", group: "Attributes", itemMods: [4] },
+  { key: "agility", label: "Agility", group: "Attributes", itemMods: [3] },
+  { key: "stamina", label: "Stamina", group: "Attributes", itemMods: [7] },
+  { key: "intellect", label: "Intellect", group: "Attributes", itemMods: [5] },
+  { key: "spirit", label: "Spirit", group: "Attributes", itemMods: [6] },
+  { key: "health", label: "Health", group: "Attributes", itemMods: [1] },
+  { key: "mana", label: "Mana", group: "Attributes", itemMods: [0] },
 
-  { key: "attack_power", label: "Attack power", group: "Combat", itemMod: 38 },
+  { key: "attack_power", label: "Attack power", group: "Combat", itemMods: [38, 40] },
   {
     key: "ranged_attack_power",
     label: "Ranged attack power",
     group: "Combat",
-    itemMod: 39,
+    itemMods: [39],
   },
-  { key: "hit", label: "Hit", group: "Combat", itemMod: 31 },
-  { key: "crit", label: "Crit", group: "Combat", itemMod: 32 },
-  { key: "haste", label: "Haste", group: "Combat", itemMod: 36 },
-  { key: "expertise", label: "Expertise", group: "Combat", itemMod: 37 },
+  // The split melee/ranged/spell ratings (16-21, 28-30) are used by
+  // older game versions; the unified ratings are used by Wrath.
+  { key: "hit", label: "Hit", group: "Combat", itemMods: [16, 17, 18, 31] },
+  { key: "crit", label: "Crit", group: "Combat", itemMods: [19, 20, 21, 32] },
+  { key: "haste", label: "Haste", group: "Combat", itemMods: [28, 29, 30, 36] },
+  { key: "expertise", label: "Expertise", group: "Combat", itemMods: [37] },
   {
     key: "armor_penetration",
     label: "Armor penetration",
     group: "Combat",
-    itemMod: 44,
+    itemMods: [44],
   },
 
-  { key: "spell_power", label: "Spell power", group: "Spell", itemMod: 45 },
-  { key: "spell_damage", label: "Spell damage", group: "Spell", itemMod: 42 },
-  { key: "healing", label: "Healing power", group: "Spell", itemMod: 41 },
-  { key: "mp5", label: "Mana per 5", group: "Spell", itemMod: 43 },
+  // Spell damage (42) is the pre-Wrath equivalent of spell power (45).
+  { key: "spell_power", label: "Spell power", group: "Spell", itemMods: [42, 45] },
+  { key: "healing", label: "Healing power", group: "Spell", itemMods: [41] },
+  { key: "mp5", label: "Mana per 5", group: "Spell", itemMods: [43] },
   {
     key: "spell_penetration",
     label: "Spell penetration",
     group: "Spell",
-    itemMod: 47,
+    itemMods: [47],
   },
 
-  { key: "defense", label: "Defense", group: "Defense", itemMod: 12 },
-  { key: "dodge", label: "Dodge", group: "Defense", itemMod: 13 },
-  { key: "parry", label: "Parry", group: "Defense", itemMod: 14 },
-  { key: "block", label: "Block", group: "Defense", itemMod: 15 },
-  { key: "block_value", label: "Block value", group: "Defense", itemMod: 48 },
+  { key: "defense", label: "Defense", group: "Defense", itemMods: [12] },
+  { key: "dodge", label: "Dodge", group: "Defense", itemMods: [13] },
+  { key: "parry", label: "Parry", group: "Defense", itemMods: [14] },
+  { key: "block", label: "Block", group: "Defense", itemMods: [15] },
+  { key: "block_value", label: "Block value", group: "Defense", itemMods: [48] },
   { key: "armor", label: "Armor", group: "Defense" },
 
   { key: "resist_holy", label: "Holy resist", group: "Resistance" },
@@ -106,11 +108,14 @@ export const STAT_GROUPS = [
   "Weapon",
 ] as const;
 
+const LEGACY_WEIGHT_KEYS: Readonly<Record<string, string>> = {
+  spell_damage: "spell_power",
+};
+
 const MOD_TO_KEY = new Map<number, string>(
-  STAT_KEYS.filter((s) => s.itemMod !== undefined).map((s) => [
-    s.itemMod!,
-    s.key,
-  ]),
+  STAT_KEYS.flatMap((stat) =>
+    (stat.itemMods ?? []).map((itemMod) => [itemMod, stat.key] as const),
+  ),
 );
 
 /** Resistance array order on SimItem: [holy,fire,nature,frost,shadow,arcane]. */
@@ -141,6 +146,9 @@ export function itemStatValues(item: SimItem): StatWeights {
     if (key && stat.value !== 0) out[key] = (out[key] ?? 0) + stat.value;
   }
   if (item.armor > 0) out.armor = item.armor;
+  if (item.block > 0) {
+    out.block_value = (out.block_value ?? 0) + item.block;
+  }
   item.resistances?.forEach((value, i) => {
     if (value > 0) out[RESIST_KEYS[i]] = value;
   });
@@ -255,8 +263,10 @@ export function parseWeights(raw: unknown): StatWeights {
   }
   if (!value || typeof value !== "object") return {};
   const out: StatWeights = {};
-  for (const [key, v] of Object.entries(value)) {
-    if (typeof v === "number" && Number.isFinite(v) && v !== 0) out[key] = v;
+  for (const [rawKey, v] of Object.entries(value)) {
+    if (typeof v !== "number" || !Number.isFinite(v) || v === 0) continue;
+    const key = LEGACY_WEIGHT_KEYS[rawKey] ?? rawKey;
+    out[key] = (out[key] ?? 0) + v;
   }
   return out;
 }
