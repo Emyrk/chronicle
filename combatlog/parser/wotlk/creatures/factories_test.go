@@ -60,6 +60,28 @@ func TestWotLKEncounterFactoriesUseNeverActiveVortex(t *testing.T) {
 	require.Equal(t, vortex, matched.ID())
 }
 
+func TestWotLKEncounterFactoriesAcceptYoggSaronVehicle(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(
+		unitdb.New(),
+		nil,
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+	yogg := wotlkEntryGUID(0xF150000000000000, yoggSaronEntry)
+
+	var matched characters.Character
+	for _, factory := range NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}) {
+		if char, ok := factory(yogg, chars); ok {
+			matched = char
+			break
+		}
+	}
+
+	require.IsType(t, &yoggSaronCharacter{}, matched)
+	require.Equal(t, yogg, matched.ID())
+}
+
 func TestAzerothServersideFactoryStillAcceptsPets(t *testing.T) {
 	t.Parallel()
 
