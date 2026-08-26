@@ -5589,6 +5589,52 @@ func (q *sqlQuerier) GetItemPricingConfigByRealm(ctx context.Context, realmID uu
 	return i, err
 }
 
+const listItemPricingRealms = `-- name: ListItemPricingRealms :many
+SELECT
+    wsr.id,
+    ws.name AS server_name,
+    wsr.name AS realm_name,
+    wsr.pricing_auction_house
+FROM wow_server_realms wsr
+JOIN wow_servers ws ON ws.id = wsr.server_id
+WHERE ws.pricing_provider = 'wowauctions'
+  AND wsr.pricing_route_name IS NOT NULL
+  AND wsr.pricing_auction_house IS NOT NULL
+ORDER BY ws.name, wsr.name
+`
+
+type ListItemPricingRealmsRow struct {
+	ID                  uuid.UUID   `db:"id" json:"id"`
+	ServerName          string      `db:"server_name" json:"server_name"`
+	RealmName           string      `db:"realm_name" json:"realm_name"`
+	PricingAuctionHouse pgtype.Text `db:"pricing_auction_house" json:"pricing_auction_house"`
+}
+
+func (q *sqlQuerier) ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error) {
+	rows, err := q.db.Query(ctx, listItemPricingRealms)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListItemPricingRealmsRow
+	for rows.Next() {
+		var i ListItemPricingRealmsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ServerName,
+			&i.RealmName,
+			&i.PricingAuctionHouse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listObservedItemIDsForDate = `-- name: ListObservedItemIDsForDate :many
 SELECT item_id
 FROM item_daily_prices

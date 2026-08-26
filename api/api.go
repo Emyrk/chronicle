@@ -427,6 +427,10 @@ func (api *API) Routes() chi.Router {
 			r.Get("/armory/{realm}/{player}/gear-history", api.GetArmoryPlayerGearHistory)
 			r.Get("/armory/{realm}/{player}/loot", api.GetArmoryPlayerLoot)
 
+			// Public item pricing routes
+			r.Get("/item-pricing/realms", api.ItemPricingRealms)
+			r.Post("/item-pricing/prices", api.CurrentItemPrices)
+
 			// Public realm listing
 			r.Get("/realms", api.ListPublicRealms)
 

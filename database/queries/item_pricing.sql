@@ -7,6 +7,19 @@ FROM wow_server_realms wsr
 JOIN wow_servers ws ON ws.id = wsr.server_id
 WHERE wsr.id = @realm_id;
 
+-- name: ListItemPricingRealms :many
+SELECT
+    wsr.id,
+    ws.name AS server_name,
+    wsr.name AS realm_name,
+    wsr.pricing_auction_house
+FROM wow_server_realms wsr
+JOIN wow_servers ws ON ws.id = wsr.server_id
+WHERE ws.pricing_provider = 'wowauctions'
+  AND wsr.pricing_route_name IS NOT NULL
+  AND wsr.pricing_auction_house IS NOT NULL
+ORDER BY ws.name, wsr.name;
+
 -- name: ListResolvedItemPrices :many
 SELECT DISTINCT ON (item_id)
     item_id,

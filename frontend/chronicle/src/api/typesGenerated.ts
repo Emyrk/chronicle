@@ -835,6 +835,13 @@ export interface CreatureSearchResult {
     readonly unit_class: number;
 }
 
+// From chroniclesdk/item_pricing.go
+export interface CurrentItemPricesRequest {
+    readonly realm_id: string;
+    readonly faction: AuctionHouseFaction;
+    readonly item_ids: readonly number[];
+}
+
 // From chroniclesdk/gamedata.go
 /**
  * DBCUploadResponse is the response from uploading a DBC file.
@@ -1858,6 +1865,14 @@ export interface ItemDisplayData {
 export type ItemPricingProvider = "wowauctions";
 
 export const ItemPricingProviders: ItemPricingProvider[] = ["wowauctions"];
+
+// From chroniclesdk/item_pricing.go
+export interface ItemPricingRealm {
+    readonly id: string;
+    readonly server_name: string;
+    readonly realm_name: string;
+    readonly auction_house: PricingAuctionHouse;
+}
 
 // From chroniclesdk/tooltip.go
 export interface ItemResistance {

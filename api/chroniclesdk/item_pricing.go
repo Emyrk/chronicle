@@ -8,6 +8,19 @@ const (
 	AuctionHouseFactionHorde    AuctionHouseFaction = "horde"
 )
 
+type ItemPricingRealm struct {
+	ID           string              `json:"id"`
+	ServerName   string              `json:"server_name"`
+	RealmName    string              `json:"realm_name"`
+	AuctionHouse PricingAuctionHouse `json:"auction_house"`
+}
+
+type CurrentItemPricesRequest struct {
+	RealmID string              `json:"realm_id"`
+	Faction AuctionHouseFaction `json:"faction"`
+	ItemIDs []int32             `json:"item_ids"`
+}
+
 type InstanceItemPricesRequest struct {
 	ItemIDs []int32 `json:"item_ids"`
 }

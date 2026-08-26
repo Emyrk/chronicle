@@ -18,6 +18,15 @@ func (s instancePlayersStub) InstancePlayersByInstanceID(context.Context, uuid.U
 	return s.players, nil
 }
 
+func TestValidPricingFaction(t *testing.T) {
+	t.Parallel()
+	require.True(t, validPricingFaction(string(chroniclesdk.PricingAuctionHouseMerged), chroniclesdk.AuctionHouseFactionMerged))
+	require.False(t, validPricingFaction(string(chroniclesdk.PricingAuctionHouseMerged), chroniclesdk.AuctionHouseFactionAlliance))
+	require.True(t, validPricingFaction(string(chroniclesdk.PricingAuctionHouseSplit), chroniclesdk.AuctionHouseFactionAlliance))
+	require.True(t, validPricingFaction(string(chroniclesdk.PricingAuctionHouseSplit), chroniclesdk.AuctionHouseFactionHorde))
+	require.False(t, validPricingFaction(string(chroniclesdk.PricingAuctionHouseSplit), chroniclesdk.AuctionHouseFactionMerged))
+}
+
 func TestInstancePricingFaction(t *testing.T) {
 	t.Parallel()
 	instanceID := uuid.New()

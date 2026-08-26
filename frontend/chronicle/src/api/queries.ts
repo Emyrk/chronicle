@@ -2374,8 +2374,7 @@ export function useUpsertTenant() {
         : `/api/v1/admin/tenants/${req.id}`;
       // Omit id from the body — on create it's server-generated,
       // on update it comes from the URL path.
-      const body: Partial<UpsertTenantRequest> = { ...req };
-      delete body.id;
+      const body = { ...req, id: undefined };
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
