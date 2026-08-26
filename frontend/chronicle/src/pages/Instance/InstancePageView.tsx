@@ -48,7 +48,7 @@ import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceAction
 import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
 import { InstanceMenu } from "./InstanceMenu";
-import { validateSharedViewPayload } from "./sharedViewImport";
+import { readSharedTimeRange, sameEncounterSelection, validateSharedViewPayload } from "./sharedViewImport";
 import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
@@ -2488,26 +2488,43 @@ export function InstancePageView({
     startOffsetMs: number;
     endOffsetMs: number;
   } | null>(null);
+  const pendingSharedTimeRangeRef = useRef<{
+    encounterIds: string[];
+    startOffsetMs: number;
+    endOffsetMs: number;
+  } | null>(null);
 
-  // Reset the time range on ordinary encounter changes. Phase shortcuts stage
-  // their range until the parent encounter becomes the sole selection.
+  // Reset the time range on ordinary encounter changes. Phase shortcuts and
+  // shared views stage their ranges until the corresponding encounter selection
+  // has landed, preventing this effect from clearing a newly restored range.
   const prevEncounterIdsRef = useRef(internalSelectedIds);
   useEffect(() => {
     if (prevEncounterIdsRef.current === internalSelectedIds) return;
     prevEncounterIdsRef.current = internalSelectedIds;
 
-    const pending = pendingPhaseRangeRef.current;
+    const pendingPhase = pendingPhaseRangeRef.current;
     if (
-      pending &&
+      pendingPhase &&
       internalSelectedIds.length === 1 &&
-      internalSelectedIds[0] === pending.encounterId
+      internalSelectedIds[0] === pendingPhase.encounterId
     ) {
       pendingPhaseRangeRef.current = null;
-      timeRange?.setRange(pending.startOffsetMs, pending.endOffsetMs);
+      timeRange?.setRange(pendingPhase.startOffsetMs, pendingPhase.endOffsetMs);
+      return;
+    }
+
+    const pendingShared = pendingSharedTimeRangeRef.current;
+    if (
+      pendingShared &&
+      sameEncounterSelection(internalSelectedIds, pendingShared.encounterIds)
+    ) {
+      pendingSharedTimeRangeRef.current = null;
+      timeRange?.setRange(pendingShared.startOffsetMs, pendingShared.endOffsetMs);
       return;
     }
 
     pendingPhaseRangeRef.current = null;
+    pendingSharedTimeRangeRef.current = null;
     timeRange?.reset();
   }, [internalSelectedIds, timeRange]);
   
@@ -2733,6 +2750,15 @@ export function InstancePageView({
     );
 
     const resolvedEncounters = encounterIds.length > 0 ? encounterIds : instance.encounters.map((e) => e.id);
+    const sharedTimeRange = readSharedTimeRange(payload);
+    pendingSharedTimeRangeRef.current = sharedTimeRange
+      ? {
+          encounterIds: resolvedEncounters,
+          startOffsetMs: sharedTimeRange.startMs,
+          endOffsetMs: sharedTimeRange.endMs,
+        }
+      : null;
+
     setViewState((prev) => ({
       ...prev,
       panels: orderedPanels,
@@ -2762,10 +2788,9 @@ export function InstancePageView({
     setPanelFiltersByID(importedFilters);
     setSeedFiltersVersion((v) => v + 1);
 
-    // Restore time range selection if present
-    if (payload.view?.timeRange && timeRange) {
-      timeRange.setRange(payload.view.timeRange.startMs, payload.view.timeRange.endMs);
-    } else {
+    // Encounter changes normally clear the controller. A shared range is staged
+    // above and restored by the encounter-selection effect after this state lands.
+    if (!sharedTimeRange) {
       timeRange?.reset();
     }
   }, [allMergedEnemies, instance.encounters, instance.players, onSelectEncounters, setViewState, timeRange]);
