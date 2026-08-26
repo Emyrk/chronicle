@@ -458,3 +458,123 @@ func TestRazorgorePhaseDefinitions_UnsupportedFlavor(t *testing.T) {
 	defs := pp.PhaseDefinitions()
 	require.Nil(t, defs, "unsupported flavor should return nil phase definitions")
 }
+
+func TestNefarianPhaseTransition_EmitsOnFirstDamage(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	var transitions []phases.Transition
+	chars.SetPhaseTransitionCallback(func(t phases.Transition) {
+		transitions = append(transitions, t)
+	})
+
+	player := guid.GUID(0x1)
+	nef := creatureGUID(11583, 0x1)
+	drakonid := creatureGUID(14261, 0x2)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, drakonid))
+	require.NoError(t, err)
+	require.Empty(t, transitions, "damage to a phase-1 add should not start phase 2")
+
+	zeroDamage := damage(base.Add(500*time.Millisecond), player, nef)
+	zeroDamage.Amount = 0
+	_, err = chars.Process(zeroDamage)
+	require.NoError(t, err)
+	require.Empty(t, transitions, "zero damage should not start phase 2")
+
+	transitionTime := base.Add(time.Second)
+	_, err = chars.Process(damage(transitionTime, player, nef))
+	require.NoError(t, err)
+	require.Len(t, transitions, 1)
+	require.Equal(t, creatures.NefarianPhaseKeyP2, transitions[0].ToPhaseKey)
+	require.Equal(t, transitionTime, transitions[0].Timestamp)
+	require.Equal(t, nef, transitions[0].SourceGUID)
+
+	_, err = chars.Process(damage(base.Add(2*time.Second), player, nef))
+	require.NoError(t, err)
+	require.Len(t, transitions, 1, "later damage should not emit duplicate transitions")
+}
+
+func TestNefarianPhaseTransition_ResetsWithEncounter(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	var transitions []phases.Transition
+	chars.SetPhaseTransitionCallback(func(t phases.Transition) {
+		transitions = append(transitions, t)
+	})
+
+	player := guid.GUID(0x1)
+	nef := creatureGUID(11583, 0x1)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, nef))
+	require.NoError(t, err)
+	_, err = chars.Process(slain(base.Add(time.Second), player, nef))
+	require.NoError(t, err)
+
+	_, err = chars.Process(damage(base.Add(2*time.Minute), player, nef))
+	require.NoError(t, err)
+	require.Len(t, transitions, 2, "a new pull should emit a fresh phase transition")
+}
+
+func TestNefarianPhaseTransition_ResetsAfterInactivityWipe(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	var transitions []phases.Transition
+	chars.SetPhaseTransitionCallback(func(t phases.Transition) {
+		transitions = append(transitions, t)
+	})
+
+	player := guid.GUID(0x1)
+	nef := creatureGUID(11583, 0x1)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, nef))
+	require.NoError(t, err)
+	require.Len(t, transitions, 1)
+
+	// The next pull's first hit arrives after the previous activity period timed
+	// out. It must both reset the transition state and emit P2 for the new pull.
+	_, err = chars.Process(damage(base.Add(2*time.Minute), player, nef))
+	require.NoError(t, err)
+	require.Len(t, transitions, 2, "a pull after an inactivity wipe should emit a fresh phase transition")
+}
+
+func TestNefarianPhaseDefinitions_PhaseProvider(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	nef := creatureGUID(11583, 0x1)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, nef))
+	require.NoError(t, err)
+
+	nefChar, ok := chars.Get(nef)
+	require.True(t, ok)
+	pp, ok := nefChar.(phases.PhaseProvider)
+	require.True(t, ok, "nefarian should implement PhaseProvider through AdsGoWithBoss")
+
+	defs := pp.PhaseDefinitions()
+	require.NotNil(t, defs)
+	require.Equal(t, "Nefarian", defs.EncounterName)
+	require.Len(t, defs.Definitions, 2)
+	require.Equal(t, phases.Definition{Key: creatures.NefarianPhaseKeyP1, Name: "Adds", Order: 0}, defs.Definitions[0])
+	require.Equal(t, phases.Definition{Key: creatures.NefarianPhaseKeyP2, Name: "Boss", Order: 1}, defs.Definitions[1])
+}
