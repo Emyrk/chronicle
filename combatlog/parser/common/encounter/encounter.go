@@ -85,6 +85,9 @@ type Fight struct {
 	// fight by the phase tracker and copied at finalization. The final phase's
 	// KillType is assigned by fightEncounter after the outcome is computed.
 	Phases []Phase
+	// PhaseEncounterName identifies the encounter definition that produced Phases.
+	// fightEncounter only attaches the phases when the resolved name matches.
+	PhaseEncounterName string
 
 	// Start is the earliest start time across all hostile activity periods.
 	Start time.Time

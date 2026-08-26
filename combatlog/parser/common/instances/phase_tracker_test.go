@@ -246,6 +246,56 @@ func TestPhaseTracker_RejectsSkippedPhase(t *testing.T) {
 	assert.Equal(t, "p1", pt.currentPhase().Key)
 }
 
+func TestPhaseTracker_SameTimestampTransitionIgnored(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	source := guid.GUID(1)
+	defs := &phases.EncounterPhases{
+		EncounterName: "Three Phase Boss",
+		Definitions: []phases.Definition{
+			{Key: "p1", Name: "Phase 1", Order: 0},
+			{Key: "p2", Name: "Phase 2", Order: 1},
+			{Key: "p3", Name: "Phase 3", Order: 2},
+		},
+	}
+	transitionAt := start.Add(time.Minute)
+
+	pt := newPhaseTracker(defs, source, momentAt(start))
+	require.True(t, pt.transition(phases.Transition{
+		SourceGUID: source, ToPhaseKey: "p2", Timestamp: transitionAt,
+	}))
+	assert.False(t, pt.transition(phases.Transition{
+		SourceGUID: source, ToPhaseKey: "p3", Timestamp: transitionAt,
+	}))
+	assert.Equal(t, "p2", pt.currentPhase().Key)
+}
+
+func TestPhaseTracker_CloseRollsBackEmptyFinalPhase(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	transitionAt := start.Add(2 * time.Minute)
+	source := guid.GUID(1)
+
+	pt := newPhaseTracker(razorgoreDefs, source, momentAt(start))
+	require.True(t, pt.transition(phases.Transition{
+		SourceGUID: source, ToPhaseKey: "razorgore_p2", Timestamp: transitionAt,
+	}))
+	pt.close(momentAt(transitionAt), encounter.KillTypeWipe)
+
+	materialized := pt.materialized()
+	require.Len(t, materialized, 1)
+	assert.Equal(t, "razorgore_p1", materialized[0].Key)
+	assert.Equal(t, transitionAt.Sub(start).Milliseconds(), materialized[0].EndOffsetMs)
+	assert.Equal(t, encounter.KillTypeWipe, materialized[0].KillType)
+}
+
+func TestPhaseTracker_EncounterName(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	pt := newPhaseTracker(razorgoreDefs, guid.GUID(1), momentAt(start))
+	assert.Equal(t, "Razorgore the Untamed", pt.encounterName())
+}
+
 func TestPhaseTracker_NilDefs(t *testing.T) {
 	t.Parallel()
 	start := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)

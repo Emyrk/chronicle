@@ -3,9 +3,9 @@ package instances
 import (
 	"github.com/google/uuid"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
@@ -52,7 +52,6 @@ func newPhaseTracker(
 	}
 
 	first := defs.Definitions[0]
-	startOffset := fightStart.Timestamp.Date().Sub(fightStart.Timestamp.Date()).Milliseconds()
 
 	pt := &phaseTracker{
 		defs:          defs,
@@ -66,7 +65,7 @@ func newPhaseTracker(
 				Key:           first.Key,
 				Name:          first.Name,
 				Order:         first.Order,
-				StartOffsetMs: startOffset,
+				StartOffsetMs: 0,
 				// EndOffsetMs left at 0 until closed.
 			},
 		},
@@ -105,8 +104,13 @@ func (pt *phaseTracker) transition(t phases.Transition) bool {
 
 	offsetMs := ts.Sub(fightStartTime).Milliseconds()
 
-	// Close current phase at the transition timestamp.
+	// A transition must leave the current phase with a non-empty range.
 	current := &pt.phases[len(pt.phases)-1]
+	if offsetMs <= current.StartOffsetMs {
+		return false
+	}
+
+	// Close current phase at the transition timestamp.
 	current.EndOffsetMs = offsetMs
 	current.KillType = encounter.KillTypeClean
 
@@ -131,8 +135,22 @@ func (pt *phaseTracker) close(fightEnd period.Moment, killType encounter.KillTyp
 	}
 	endOffset := fightEnd.Timestamp.Date().Sub(pt.fightStart.Timestamp.Date()).Milliseconds()
 	last := &pt.phases[len(pt.phases)-1]
+	if len(pt.phases) > 1 && last.StartOffsetMs >= endOffset {
+		// A transition on or after the fight-ending timestamp would create an
+		// empty final phase. Roll it back and close the previous phase instead.
+		pt.phases = pt.phases[:len(pt.phases)-1]
+		pt.currentDefIdx--
+		last = &pt.phases[len(pt.phases)-1]
+	}
 	last.EndOffsetMs = endOffset
 	last.KillType = killType
+}
+
+func (pt *phaseTracker) encounterName() string {
+	if pt == nil || pt.defs == nil {
+		return ""
+	}
+	return pt.defs.EncounterName
 }
 
 // materialized returns a copy of the phases built so far.

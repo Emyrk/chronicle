@@ -552,22 +552,37 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 	}
 
 	if !wasActive && h.currentFight.active() {
-		// Initialize live phase tracking if a participating hostile provides
-		// phase definitions for the eventual encounter.
-		h.initPhaseTracker()
-
-		// Install phase transition callback that applies transitions live.
+		// Install the callback as soon as the fight starts. If the phased
+		// character has not joined yet, keep transitions on the fight until its
+		// provider is discovered later in the same or a subsequent message.
 		fight := h.currentFight
 		h.Characters.SetPhaseTransitionCallback(func(t phases.Transition) {
+			if fight.Phases == nil {
+				fight.StagedPhaseTransitions = append(fight.StagedPhaseTransitions, t)
+				return
+			}
 			fight.Phases.transition(t)
 		})
+		fight.StagedPhaseTransitions = append(
+			fight.StagedPhaseTransitions,
+			h.Characters.DrainStagedTransitions()...,
+		)
+	}
 
-		// Drain any transitions that were staged during Characters.Process
-		// on the same message that started this fight.
-		for _, staged := range h.Characters.DrainStagedTransitions() {
-			fight.Phases.transition(staged)
+	// A phase provider may become active after other enemies started the fight.
+	// Initialize it retroactively at fight.Start, then apply transitions emitted
+	// by the triggering message before later hooks process that message.
+	if h.currentFight.active() && h.currentFight.Phases == nil {
+		h.initPhaseTracker()
+	}
+	if h.currentFight.Phases != nil && len(h.currentFight.StagedPhaseTransitions) > 0 {
+		for _, staged := range h.currentFight.StagedPhaseTransitions {
+			h.currentFight.Phases.transition(staged)
 		}
+		h.currentFight.StagedPhaseTransitions = nil
+	}
 
+	if !wasActive && h.currentFight.active() {
 		for _, hook := range h.hooks {
 			hook.FightStarted(h.currentFight.EncounterID, m)
 		}
@@ -594,12 +609,13 @@ func (h *Hookable) finalizeFight() error {
 	h.currentFight.Phases.close(*h.currentFight.End, "")
 
 	fight := encounter.Fight{
-		Hostiles:     map[guid.GUID]encounter.CharacterFight{},
-		Start:        h.currentFight.Start.Timestamp.Date(),
-		End:          h.currentFight.End.Timestamp.Date(),
-		EncounterID:  h.currentFight.EncounterID,
-		PlayerDeaths: h.currentFight.PlayerDeaths,
-		Phases:       h.currentFight.Phases.materialized(),
+		Hostiles:           map[guid.GUID]encounter.CharacterFight{},
+		Start:              h.currentFight.Start.Timestamp.Date(),
+		End:                h.currentFight.End.Timestamp.Date(),
+		EncounterID:        h.currentFight.EncounterID,
+		PlayerDeaths:       h.currentFight.PlayerDeaths,
+		Phases:             h.currentFight.Phases.materialized(),
+		PhaseEncounterName: h.currentFight.Phases.encounterName(),
 	}
 
 	for id := range h.currentFight.ActiveHostiles {
@@ -728,9 +744,11 @@ func (h *Hookable) fightEncounter(fight encounter.Fight) (encounter.Encounter, e
 
 	// Copy already-materialized phases. The final phase's kill type was left
 	// empty at finalization; assign it now that the outcome is known.
-	enc.Phases = fight.Phases
-	if len(enc.Phases) > 0 {
-		enc.Phases[len(enc.Phases)-1].KillType = killType
+	if fight.PhaseEncounterName == enc.Name {
+		enc.Phases = fight.Phases
+		if len(enc.Phases) > 0 {
+			enc.Phases[len(enc.Phases)-1].KillType = killType
+		}
 	}
 
 	return enc, nil
