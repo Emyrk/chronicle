@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { cn } from "@/lib/utils";
 import type { Instance, Encounter, EncounterPhase, EnemyUnit } from "./InstancePage";
-import { activePhaseForTimeRange, phaseShortLabel, phaseTimeRangeSelection, phaseWidthPercent } from "./phaseTimeRange";
+import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } from "./phaseTimeRange";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { PANELS } from "./EventsPanels/EventsPanel";
@@ -367,6 +367,11 @@ function phaseTone(order: number, active: boolean): string {
   return tones[order % tones.length];
 }
 
+function phaseDotTone(order: number): string {
+  const tones = ["bg-violet-400", "bg-amber-400", "bg-cyan-400"];
+  return tones[order % tones.length];
+}
+
 // ============================================================================
 // Enemy status helpers (killed / reset / alive)
 // ============================================================================
@@ -688,7 +693,7 @@ function EncounterSidebar({
           const isSelected = selectedIds.includes(encounter.id);
           const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
           const phases = [...(encounter.phases ?? [])].sort((a, b) => a.order - b.order);
-          const showCompactPhases = isSelected && phases.length > 0 && multipleEncountersSelected;
+          const showCompactPhases = phases.length > 0 && multipleEncountersSelected;
           const showExpandedPhases = isSelected && phases.length > 0 && !multipleEncountersSelected;
 
           return (
@@ -726,18 +731,14 @@ function EncounterSidebar({
                 )}
                 <span className={cn("truncate flex-1", isSelected && "font-semibold")}>{encounter.name}</span>
                 {showCompactPhases ? (
-                  <div className="flex shrink-0 items-center gap-1" aria-label="Encounter phases">
+                  <div className="flex shrink-0 items-center gap-1.5" aria-label="Encounter phases">
                     {phases.map((phase) => (
                       <span
                         key={phase.id}
-                        title={`${phase.name}: ${formatDurationMs(phase.end_offset_ms - phase.start_offset_ms)}`}
-                        className={cn(
-                          "inline-flex h-5 w-9 items-center justify-center rounded border text-[10px] font-semibold leading-none",
-                          phaseTone(phase.order, false),
-                        )}
-                      >
-                        {phaseShortLabel(phase)}
-                      </span>
+                        title={phase.name}
+                        aria-label={`Phase ${phase.order + 1}: ${phase.name}`}
+                        className={cn("h-2 w-2 rounded-full", phaseDotTone(phase.order))}
+                      />
                     ))}
                   </div>
                 ) : (

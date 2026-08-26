@@ -6,11 +6,6 @@ export interface PhaseTimeRangeSelection {
   endOffsetMs: number;
 }
 
-/** Short label used by compact phase chips and narrow proportional cards. */
-export function phaseShortLabel(phase: EncounterPhase): string {
-  return `P${phase.order + 1}`;
-}
-
 /** Width percentage for a phase card relative to its encounter. */
 export function phaseWidthPercent(
   phase: EncounterPhase,

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Encounter, EncounterPhase } from "./InstancePage";
 import {
   activePhaseForTimeRange,
-  phaseShortLabel,
   phaseTimeRangeSelection,
   phaseWidthPercent,
 } from "./phaseTimeRange";
@@ -43,11 +42,6 @@ const encounter: Encounter = {
 };
 
 describe("phase display helpers", () => {
-  it("uses stable short labels based on phase order", () => {
-    expect(phaseShortLabel(phase1)).toBe("P1");
-    expect(phaseShortLabel(phase2)).toBe("P2");
-  });
-
   it("sizes phase cards by their share of encounter duration", () => {
     expect(phaseWidthPercent(phase1, encounter)).toBe(50);
     expect(phaseWidthPercent(phase2, encounter)).toBe(50);
