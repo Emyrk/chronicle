@@ -633,7 +633,7 @@ func WoWEncounterPhase(phase database.LogInstanceEncounterPhase) chroniclesdk.Wo
 		Order:         int(phase.PhaseOrder),
 		StartOffsetMs: phase.StartOffsetMs,
 		EndOffsetMs:   phase.EndOffsetMs,
-		KillType:      string(phase.KillType),
+		KillType:      chroniclesdk.KillType(phase.KillType),
 	}
 }
 

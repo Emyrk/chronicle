@@ -178,12 +178,15 @@ function transformToInstance(
       remaining: enc.remaining as string[] | undefined,
       phases: normalizeArray(enc.phases).map((phase) => ({
         id: phase.id,
-        encounter_id: phase.encounter_id,
+        encounter_id: enc.id,
         key: phase.key,
         name: phase.name,
         order: phase.order,
         start_offset_ms: phase.start_offset_ms,
         end_offset_ms: phase.end_offset_ms,
+        start_time: new Date(new Date(enc.start_time).getTime() + phase.start_offset_ms).toISOString(),
+        end_time: new Date(new Date(enc.start_time).getTime() + phase.end_offset_ms).toISOString(),
+        kill_type: phase.kill_type,
       })),
     };
   });

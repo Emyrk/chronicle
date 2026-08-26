@@ -15,7 +15,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/overviewmetrics"
@@ -25,6 +24,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/participants"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -122,7 +122,7 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 		Name:          name,
 		MatchesZone:   f.MatchZone,
 		Idf:           f.Hostiles(flavor),
-		Rankings:       r,
+		Rankings:      r,
 		Preprocessors: preprocessors,
 	})
 }
@@ -215,27 +215,27 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	}
 
 	c := &Hookable{
-		name:                   ip.Name,
-		logger:                 logger,
-		units:                  db,
-		preprocessors:          ip.Preprocessors,
-		CurrentZone:            z,
-		MatchesZoneF:           ip.MatchesZone,
-		Characters:             chrs,
-		Identifier:             ip.Idf,
-		events:                 encounterevents.NewEvents(),
-		g:                      g,
-		p:                      p,
-		lootTracking:           lootTracking,
-		hooks:                  hooks,
-		engagementTracker:      engagementTracker,
-		overviewTracker:        overviewTracker,
-		speedrunTracker:        speedrunTracker,
-		dpsTracker:             dpsTracker,
+		name:              ip.Name,
+		logger:            logger,
+		units:             db,
+		preprocessors:     ip.Preprocessors,
+		CurrentZone:       z,
+		MatchesZoneF:      ip.MatchesZone,
+		Characters:        chrs,
+		Identifier:        ip.Idf,
+		events:            encounterevents.NewEvents(),
+		g:                 g,
+		p:                 p,
+		lootTracking:      lootTracking,
+		hooks:             hooks,
+		engagementTracker: engagementTracker,
+		overviewTracker:   overviewTracker,
+		speedrunTracker:   speedrunTracker,
+		dpsTracker:        dpsTracker,
 		rankingRules:      ip.Rankings,
 		verbose:           parseoptions.IsVerbose(ctx),
-		timings:                timings.New(),
-		completedFights:        make([]encounter.Fight, 0),
+		timings:           timings.New(),
+		completedFights:   make([]encounter.Fight, 0),
 	}
 
 	cie.emit = func(evt *messages.Combatant) {
@@ -735,8 +735,11 @@ func (h *Hookable) buildPhasesFromTransitions(enc encounter.Encounter, fight enc
 	if h.Characters == nil {
 		return nil
 	}
-	// Find the PhaseProvider among participating hostiles.
+	// Find the PhaseProvider among participating hostiles. Transitions are
+	// associated with this character so another phased unit in the same fight
+	// cannot affect its phase timeline.
 	var phaseDefs *phases.EncounterPhases
+	var phaseSourceGUID guid.GUID
 	for hostileID := range fight.Hostiles {
 		char, ok := h.Characters.Get(hostileID)
 		if !ok {
@@ -749,91 +752,18 @@ func (h *Hookable) buildPhasesFromTransitions(enc encounter.Encounter, fight enc
 		defs := pp.PhaseDefinitions()
 		if defs != nil && defs.EncounterName == enc.Name {
 			phaseDefs = defs
+			phaseSourceGUID = hostileID
 			break
 		}
 	}
-	if phaseDefs == nil || len(phaseDefs.Definitions) == 0 {
-		return nil
-	}
-
-	// Build a key → Definition index for quick lookup.
-	defByKey := make(map[string]int, len(phaseDefs.Definitions))
-	for i, d := range phaseDefs.Definitions {
-		defByKey[d.Key] = i
-	}
-
-	// Collect valid, de-duplicated transitions ordered by timestamp.
-	// Filter: must be a known phase key, must be chronologically forward,
-	// must be within fight bounds, and no duplicate keys.
-	type validTransition struct {
-		defIdx    int
-		timestamp time.Time
-	}
-	var transitions []validTransition
-	seen := make(map[string]bool, len(phaseDefs.Definitions))
-	var lastTS time.Time
-
-	for _, t := range fight.PhaseTransitions {
-		idx, ok := defByKey[t.ToPhaseKey]
-		if !ok {
-			continue // unknown phase key
-		}
-		if seen[t.ToPhaseKey] {
-			continue // duplicate
-		}
-		if !t.Timestamp.After(fight.Start) || t.Timestamp.After(fight.End) {
-			continue // out of range
-		}
-		if !lastTS.IsZero() && !t.Timestamp.After(lastTS) {
-			continue // backward or same timestamp
-		}
-		seen[t.ToPhaseKey] = true
-		lastTS = t.Timestamp
-		transitions = append(transitions, validTransition{defIdx: idx, timestamp: t.Timestamp})
-	}
-
-	// Always emit first phase from fight start.
-	firstDef := phaseDefs.Definitions[0]
-	result := make([]encounter.Phase, 0, len(phaseDefs.Definitions))
-
-	if len(transitions) == 0 {
-		// No transitions: single phase spanning the entire fight.
-		result = append(result, encounter.PhaseFromTimes(
-			uuid.New(), firstDef.Key, firstDef.Name, firstDef.Order,
-			enc.KillType,
-			fight.Start, fight.Start, fight.End,
-		))
-		return result
-	}
-
-	// Build phase ranges: phase[i] runs from its start to the next transition.
-	// First phase: fight.Start → first transition.
-	result = append(result, encounter.PhaseFromTimes(
-		uuid.New(), firstDef.Key, firstDef.Name, firstDef.Order,
-		encounter.KillTypeClean,
-		fight.Start, fight.Start, transitions[0].timestamp,
-	))
-
-	// Middle phases (if any): transition[i] → transition[i+1].
-	for i := 0; i < len(transitions)-1; i++ {
-		def := phaseDefs.Definitions[transitions[i].defIdx]
-		result = append(result, encounter.PhaseFromTimes(
-			uuid.New(), def.Key, def.Name, def.Order,
-			encounter.KillTypeClean,
-			fight.Start, transitions[i].timestamp, transitions[i+1].timestamp,
-		))
-	}
-
-	// Final phase: last transition → fight.End, inherits encounter KillType.
-	lastTrans := transitions[len(transitions)-1]
-	lastDef := phaseDefs.Definitions[lastTrans.defIdx]
-	result = append(result, encounter.PhaseFromTimes(
-		uuid.New(), lastDef.Key, lastDef.Name, lastDef.Order,
+	return buildEncounterPhases(
+		phaseDefs,
+		phaseSourceGUID,
+		fight.PhaseTransitions,
+		fight.Start,
+		fight.End,
 		enc.KillType,
-		fight.Start, lastTrans.timestamp, fight.End,
-	))
-
-	return result
+	)
 }
 
 func (h *Hookable) drainOpenFight(ctx context.Context) error {

@@ -304,6 +304,7 @@ func TestRazorgoreEggs_CountResetsOnBossReset(t *testing.T) {
 			"%s should survive: egg count must reset on boss reset", name)
 	}
 }
+
 // TestRazorgorePhaseTransition_EmitsOnThreshold verifies that the razorgore
 // character emits a phase transition via the Characters callback when the egg
 // threshold is crossed, and does not emit duplicates for extra casts.
@@ -455,4 +456,3 @@ func TestRazorgorePhaseDefinitions_UnsupportedFlavor(t *testing.T) {
 	defs := pp.PhaseDefinitions()
 	require.Nil(t, defs, "unsupported flavor should return nil phase definitions")
 }
-

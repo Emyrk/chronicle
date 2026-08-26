@@ -177,7 +177,7 @@ type WoWEncounterPhase struct {
 	Order         int       `json:"order"`
 	StartOffsetMs int64     `json:"start_offset_ms"`
 	EndOffsetMs   int64     `json:"end_offset_ms"`
-	KillType      string    `json:"kill_type"`
+	KillType      KillType  `json:"kill_type"`
 }
 
 type WoWLogGroupState struct {
