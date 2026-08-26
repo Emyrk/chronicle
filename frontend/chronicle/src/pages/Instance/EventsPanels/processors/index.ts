@@ -26,6 +26,7 @@ import { timelineProcessor } from "../Timeline/timeline.processor";
 import { rotationsProcessor } from "../Rotations/rotations.processor";
 import { statusProcessor } from "../Status/status.processor";
 import { healerCastsProcessor } from "../HealerCasts/healerCasts.processor";
+import { spellCountProcessor } from "../SpellCount/spellCount.processor";
 import { possessionProcessor } from "../PossessionPanel/possession.processor";
 import { vehicleProcessor } from "../VehiclePanel/vehicle.processor";
 import { unitLookupProcessor } from "../UnitLookup/unitLookup.processor";
@@ -65,6 +66,7 @@ export { timelineProcessor } from "../Timeline/timeline.processor";
 export { rotationsProcessor } from "../Rotations/rotations.processor";
 export { statusProcessor } from "../Status/status.processor";
 export { healerCastsProcessor } from "../HealerCasts/healerCasts.processor";
+export { spellCountProcessor } from "../SpellCount/spellCount.processor";
 export { possessionProcessor } from "../PossessionPanel/possession.processor";
 export { vehicleProcessor } from "../VehiclePanel/vehicle.processor";
 export { unitLookupProcessor } from "../UnitLookup/unitLookup.processor";
@@ -100,6 +102,7 @@ export type { TimelineSeriesConfig, AggregationType, TimelineSettings } from "..
 export type { RotationsResult, CastEntry, AuraSegment } from "../Rotations/rotations.processor";
 export type { StatusResult, StatusEncounter, StatusUnitTimeline, StatusTimelineEvent } from "../Status/status.processor";
 export type { HealerCastsResult, HealerCastsEncounter, HealerCastEntry } from "../HealerCasts/healerCasts.processor";
+export type { SpellCountResult, SpellCountData } from "../SpellCount/spellCount.processor";
 export type { DispelResult, DispelEntityData, DispelSpellData, DispelCategory, DispelLogEvent } from "../Dispel/dispel.processor";
 export type { InterruptResult, InterruptEntityData, InterruptSpellData, InterruptLogEvent } from "../Interrupt/interrupt.processor";
 export type { EquipmentResult, PlayerSnapshot } from "../Equipment/equipment.processor";
@@ -173,6 +176,7 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   // Replay
   status: statusProcessor,
   healer_casts: healerCastsProcessor,
+  spell_count: spellCountProcessor,
   replay_strip: { ...emptyProcessor, id: "replay_strip" },
   raid_durability_strip: { ...statusProcessor, id: "raid_durability_strip" },
   // Rotations
