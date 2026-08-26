@@ -367,11 +367,6 @@ function phaseTone(order: number, active: boolean): string {
   return tones[order % tones.length];
 }
 
-function phaseDotTone(order: number): string {
-  const tones = ["bg-violet-400", "bg-amber-400", "bg-cyan-400"];
-  return tones[order % tones.length];
-}
-
 // ============================================================================
 // Enemy status helpers (killed / reset / alive)
 // ============================================================================
@@ -693,7 +688,6 @@ function EncounterSidebar({
           const isSelected = selectedIds.includes(encounter.id);
           const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
           const phases = [...(encounter.phases ?? [])].sort((a, b) => a.order - b.order);
-          const showCompactPhases = phases.length > 0 && multipleEncountersSelected;
           const showExpandedPhases = isSelected && phases.length > 0 && !multipleEncountersSelected;
 
           return (
@@ -730,22 +724,9 @@ function EncounterSidebar({
                   <Skull className="h-4 w-4 shrink-0 text-red-500" />
                 )}
                 <span className={cn("truncate flex-1", isSelected && "font-semibold")}>{encounter.name}</span>
-                {showCompactPhases ? (
-                  <div className="flex shrink-0 items-center gap-1.5" aria-label="Encounter phases">
-                    {phases.map((phase) => (
-                      <span
-                        key={phase.id}
-                        title={phase.name}
-                        aria-label={`Phase ${phase.order + 1}: ${phase.name}`}
-                        className={cn("inline-block h-2 w-2 shrink-0 rounded-full", phaseDotTone(phase.order))}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
-                    {formatEncounterTime(encounter)}
-                  </span>
-                )}
+                <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
+                  {formatEncounterTime(encounter)}
+                </span>
                 {isDebug && (
                   <button
                     onClick={(e) => {
