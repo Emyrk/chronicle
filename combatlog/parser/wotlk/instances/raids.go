@@ -570,6 +570,10 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		34272: "XD-175 Compactobot",
 		34273: "XB-488 Disposalbot",
 		34274: "XB-488 Disposalbot",
+		33985: "Corruptor Tentacle",
+		33966: "Crusher Tentacle",
+		33983: "Constrictor Tentacle",
+		33988: "Immortal Guardian",
 	})
 	instances.LoadBosses(hostile, map[uint32]string{
 		32845: "Hodir",
@@ -618,6 +622,8 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		34106: "Leviathan Mk II",
 		34175: "Auriaya",
 		34332: "Sara",
+		33890: "Brain of Yogg-Saron",
+		33288: "Yogg-Saron",
 	})
 	return hostile
 }
