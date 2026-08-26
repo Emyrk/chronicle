@@ -40,6 +40,7 @@ const (
 	maxSlotIndex         = 18 // PlayerOutfit has 19 slots, 0-18
 	maxSlotNoteLen       = 500
 	maxAlternatesPerSlot = 8
+	maxGemsPerSlot       = 3
 )
 
 // Handler owns all gear builder routes.
@@ -513,6 +514,14 @@ func validatePayload(payload json.RawMessage) error {
 			}
 			if slot.ItemID <= 0 {
 				return fmt.Errorf("stage %d slot %s has an invalid item ID", i+1, key)
+			}
+			if len(slot.GemEnchantIDs) > maxGemsPerSlot {
+				return fmt.Errorf("stage %d slot %s has too many gems, maximum is %d", i+1, key, maxGemsPerSlot)
+			}
+			for _, gemEnchantID := range slot.GemEnchantIDs {
+				if gemEnchantID < 0 {
+					return fmt.Errorf("stage %d slot %s has an invalid gem enchant ID", i+1, key)
+				}
 			}
 			if len(slot.Note) > maxSlotNoteLen {
 				return fmt.Errorf("stage %d slot %s note too long, maximum is %d characters", i+1, key, maxSlotNoteLen)

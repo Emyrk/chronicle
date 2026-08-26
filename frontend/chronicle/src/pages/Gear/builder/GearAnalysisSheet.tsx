@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -31,6 +31,7 @@ import {
   type StatWeights,
   type TargetEvaluation,
 } from "./gearScoring";
+import { findProfileToHydrate } from "./analysisProfileSelection";
 import { readProfileTargets } from "./analysisProfileStorage";
 
 export interface AnalysisProfile {
@@ -104,13 +105,24 @@ export function GearAnalysisSheet({
     return [...presets, ...mine];
   }, [classId, myProfiles.data, siteConfig]);
 
+  const lastHydratedProfileId = useRef<string | null>(null);
   useEffect(() => {
-    // Selection writes local state and the URL in the same interaction. Do not
-    // clear local state while the router is still exposing the previous URL
-    // for one render; choosing "None" already clears selection directly.
-    if (!profileId) return;
-    const profile = options.find((option) => option.id === profileId);
-    if (profile && selection?.id !== profile.id) onSelect(profile);
+    if (!profileId) {
+      lastHydratedProfileId.current = null;
+      return;
+    }
+
+    // Hydrate a saved/URL profile only when that external ID changes. During a
+    // picker interaction the local selection updates one render before the URL
+    // and saved payload, so re-applying the previous ID here would undo the click.
+    const profile = findProfileToHydrate(
+      profileId,
+      lastHydratedProfileId.current,
+      options,
+    );
+    if (!profile) return;
+    lastHydratedProfileId.current = profileId;
+    if (selection?.id !== profile.id) onSelect(profile);
   }, [onSelect, options, profileId, selection]);
 
   const warnings = targetEvaluations?.filter((target) => !target.met) ?? [];

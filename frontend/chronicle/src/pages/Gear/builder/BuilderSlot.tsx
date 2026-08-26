@@ -356,6 +356,7 @@ export function BuilderSlot({
           primaryItem={item}
           primaryName={displayName}
           primaryNote={entry?.note}
+          primaryGemEnchantIds={entry?.gem_enchant_ids}
           alternates={alternateItems}
           iconBaseUrl={iconBaseUrl}
           equippedItemIds={equippedItemIds}
@@ -368,7 +369,11 @@ export function BuilderSlot({
 
       {showTooltip && (
         <CursorTooltip pos={cursor!}>
-          <ItemTooltip item={item.tooltip!} equippedItemIds={equippedItemIds} />
+          <ItemTooltip
+            item={item.tooltip!}
+            gemEnchantIds={entry?.gem_enchant_ids}
+            equippedItemIds={equippedItemIds}
+          />
         </CursorTooltip>
       )}
     </Wrapper>
@@ -427,6 +432,7 @@ export function SlotDetailsPopover({
   primaryItem,
   primaryName,
   primaryNote,
+  primaryGemEnchantIds,
   alternates,
   iconBaseUrl,
   equippedItemIds,
@@ -441,6 +447,7 @@ export function SlotDetailsPopover({
   primaryItem?: HydratedItem;
   primaryName: string;
   primaryNote?: string;
+  primaryGemEnchantIds?: readonly number[];
   alternates: AlternateItemDisplay[];
   iconBaseUrl?: string;
   equippedItemIds?: ReadonlySet<number>;
@@ -576,6 +583,7 @@ export function SlotDetailsPopover({
       {tooltip && (
         <ItemTooltip
           item={tooltip}
+          gemEnchantIds={hoveredAlternateId === null ? primaryGemEnchantIds : undefined}
           equippedItemIds={equippedItemIds}
           className="shrink-0 shadow-2xl shadow-black/60"
         />

@@ -28,6 +28,7 @@ import {
   renameStage,
   setAlternateNote,
   setSlotEnchant,
+  setSlotGem,
   setSlotItem,
   setSlotNote,
   type GearPayload,
@@ -418,6 +419,18 @@ export function setProgressionSlotEnchant(
 ): ProgressionPayload {
   return withStages(payload, (doc) =>
     setSlotEnchant(doc, stageIndex, slotIndex, enchantId),
+  );
+}
+
+export function setProgressionSlotGem(
+  payload: ProgressionPayload,
+  stageIndex: number,
+  slotIndex: number,
+  socketIndex: number,
+  gemEnchantId: number | undefined,
+): ProgressionPayload {
+  return withStages(payload, (doc) =>
+    setSlotGem(doc, stageIndex, slotIndex, socketIndex, gemEnchantId),
   );
 }
 

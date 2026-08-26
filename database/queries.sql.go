@@ -16943,6 +16943,14 @@ SELECT
   wit.delay, wit.dmg_min1, wit.dmg_max1,
   wit.container_slots, wit.required_skill, wit.required_skill_rank,
   wit.armor,
+  COALESCE((
+    SELECT enchant.id
+    FROM dbc_spell_item_enchantment enchant
+    WHERE enchant.dataset_id = $1
+      AND enchant.src_item_id = wit.entry
+    ORDER BY enchant.id
+    LIMIT 1
+  ), 0)::int AS gem_enchant_id,
   COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM world_item_template wit
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = $1 AND wdi.id = wit.display_id
@@ -16995,6 +17003,7 @@ type SearchItemTemplatesRow struct {
 	RequiredSkill     int32   `db:"required_skill" json:"required_skill"`
 	RequiredSkillRank int32   `db:"required_skill_rank" json:"required_skill_rank"`
 	Armor             int32   `db:"armor" json:"armor"`
+	GemEnchantID      int32   `db:"gem_enchant_id" json:"gem_enchant_id"`
 	Icon              string  `db:"icon" json:"icon"`
 }
 
@@ -17035,6 +17044,7 @@ func (q *sqlQuerier) SearchItemTemplates(ctx context.Context, arg SearchItemTemp
 			&i.RequiredSkill,
 			&i.RequiredSkillRank,
 			&i.Armor,
+			&i.GemEnchantID,
 			&i.Icon,
 		); err != nil {
 			return nil, err

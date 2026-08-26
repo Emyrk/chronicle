@@ -107,6 +107,14 @@ SELECT
   wit.delay, wit.dmg_min1, wit.dmg_max1,
   wit.container_slots, wit.required_skill, wit.required_skill_rank,
   wit.armor,
+  COALESCE((
+    SELECT enchant.id
+    FROM dbc_spell_item_enchantment enchant
+    WHERE enchant.dataset_id = @dataset_id
+      AND enchant.src_item_id = wit.entry
+    ORDER BY enchant.id
+    LIMIT 1
+  ), 0)::int AS gem_enchant_id,
   COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM world_item_template wit
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = @dataset_id AND wdi.id = wit.display_id

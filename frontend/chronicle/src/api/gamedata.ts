@@ -124,7 +124,8 @@ export function useSearchItems(params: SearchItemsParams | null) {
     queryFn: ({ signal }) => fetchSearchItems(params!, signal),
     enabled:
       params != null &&
-      (params.q.length >= 2 || (!!params.allowEmpty && params.q.length === 0 && !!params.slot)),
+      (params.q.length >= 2 ||
+        (!!params.allowEmpty && params.q.length === 0 && (!!params.slot || !!params.class))),
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
     retry: false,

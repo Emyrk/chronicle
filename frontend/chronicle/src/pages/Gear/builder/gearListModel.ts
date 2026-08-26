@@ -10,6 +10,7 @@
 export const GEAR_PAYLOAD_VERSION = 2;
 export const MAX_STAGES = 16;
 export const MAX_ALTERNATES = 8;
+export const MAX_GEM_SLOTS = 3;
 export const SLOT_COUNT = 19;
 
 export interface GearAlternate {
@@ -20,6 +21,8 @@ export interface GearAlternate {
 export interface GearSlotEntry {
   item_id: number;
   enchant_id?: number;
+  /** SpellItemEnchantment IDs by socket position; zero means empty. */
+  gem_enchant_ids?: number[];
   note?: string;
   alternates?: GearAlternate[];
 }
@@ -150,6 +153,13 @@ function parseSlotEntry(raw: unknown): GearSlotEntry | null {
   if (typeof obj.enchant_id === "number" && Number.isInteger(obj.enchant_id) && obj.enchant_id > 0) {
     entry.enchant_id = obj.enchant_id;
   }
+  if (Array.isArray(obj.gem_enchant_ids)) {
+    const gems = obj.gem_enchant_ids.slice(0, MAX_GEM_SLOTS).map((gem) =>
+      typeof gem === "number" && Number.isInteger(gem) && gem > 0 ? gem : 0,
+    );
+    while (gems.at(-1) === 0) gems.pop();
+    if (gems.length > 0) entry.gem_enchant_ids = gems;
+  }
   if (typeof obj.note === "string" && obj.note) entry.note = obj.note;
   if (Array.isArray(obj.alternates)) {
     const alternates: GearAlternate[] = [];
@@ -195,7 +205,11 @@ export function collectItemIds(payload: GearPayload): number[] {
 export function fillStageFromOutfit(
   payload: GearPayload,
   stageIndex: number,
-  equipped: ReadonlyArray<{ item_id: number; enchant_id?: number } | undefined>,
+  equipped: ReadonlyArray<{
+    item_id: number;
+    enchant_id?: number;
+    gem_enchant_ids?: readonly number[];
+  } | undefined>,
   overwrite = false,
 ): GearPayload {
   return updateStageSlots(payload, stageIndex, (slots) => {
@@ -209,8 +223,12 @@ export function fillStageFromOutfit(
         ...(existing ?? {}),
         item_id: worn.item_id,
         ...(worn.enchant_id ? { enchant_id: worn.enchant_id } : {}),
+        ...(worn.gem_enchant_ids?.some((id) => id > 0)
+          ? { gem_enchant_ids: [...worn.gem_enchant_ids] }
+          : {}),
       };
       if (!worn.enchant_id) delete next[key]!.enchant_id;
+      if (!worn.gem_enchant_ids?.some((id) => id > 0)) delete next[key]!.gem_enchant_ids;
     });
     return next;
   });
@@ -317,8 +335,8 @@ export function setSlotItem(
 ): GearPayload {
   return updateSlot(payload, stageIndex, slotIndex, (entry) => {
     if (entry?.item_id === itemId) return entry;
-    // Enchant belongs to the old item; drop it. Alternates and the note
-    // describe the slot, keep them (minus the newly equipped item).
+    // Enchant and gems belong to the old item; drop them. Alternates and
+    // the note describe the slot, keep them (minus the newly equipped item).
     const alternates = entry?.alternates?.filter((a) => a.item_id !== itemId);
     return {
       item_id: itemId,
@@ -345,6 +363,31 @@ export function setSlotEnchant(
       next.enchant_id = enchantId;
     } else {
       delete next.enchant_id;
+    }
+    return next;
+  });
+}
+
+export function setSlotGem(
+  payload: GearPayload,
+  stageIndex: number,
+  slotIndex: number,
+  socketIndex: number,
+  gemEnchantId: number | undefined,
+): GearPayload {
+  if (socketIndex < 0 || socketIndex >= MAX_GEM_SLOTS) return payload;
+  return updateSlot(payload, stageIndex, slotIndex, (entry) => {
+    if (!entry) return entry;
+    const gems = [...(entry.gem_enchant_ids ?? [])];
+    while (gems.length <= socketIndex) gems.push(0);
+    gems[socketIndex] = gemEnchantId && gemEnchantId > 0 ? gemEnchantId : 0;
+    while (gems.at(-1) === 0) gems.pop();
+
+    const next = { ...entry };
+    if (gems.length > 0) {
+      next.gem_enchant_ids = gems;
+    } else {
+      delete next.gem_enchant_ids;
     }
     return next;
   });
@@ -437,8 +480,9 @@ export function promoteAlternate(
     // The old primary takes the promoted alternate's list position.
     alternates[idx] = { item_id: entry.item_id };
     const next: GearSlotEntry = { ...entry, item_id: promoted.item_id, alternates };
-    // The enchant belonged to the old primary item.
+    // The enchant and gems belonged to the old primary item.
     delete next.enchant_id;
+    delete next.gem_enchant_ids;
     return next;
   });
 }

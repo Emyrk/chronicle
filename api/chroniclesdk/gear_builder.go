@@ -44,10 +44,11 @@ type GearListStage struct {
 // GearListSlot is the primary pick for one equipment slot plus its
 // ranked alternates and an optional author note.
 type GearListSlot struct {
-	ItemID     int32               `json:"item_id"`
-	EnchantID  *int32              `json:"enchant_id,omitempty"`
-	Note       string              `json:"note,omitempty"`
-	Alternates []GearListAlternate `json:"alternates,omitempty"`
+	ItemID        int32               `json:"item_id"`
+	EnchantID     *int32              `json:"enchant_id,omitempty"`
+	GemEnchantIDs []int32             `json:"gem_enchant_ids,omitempty"`
+	Note          string              `json:"note,omitempty"`
+	Alternates    []GearListAlternate `json:"alternates,omitempty"`
 }
 
 // GearListAlternate is a ranked alternate item for a slot; array order

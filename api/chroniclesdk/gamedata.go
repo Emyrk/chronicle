@@ -2,14 +2,14 @@ package chroniclesdk
 
 // WDBUploadResponse is the response from uploading a WDB cache file.
 type WDBUploadResponse struct {
-	Signature   string         `json:"signature"`
-	Version     uint32         `json:"version"`
-	RecordCount int            `json:"record_count"`
-	Mode        string         `json:"mode"`
-	NewItems    int            `json:"new_items"`
-	Changed     int            `json:"changed"`
-	Unchanged   int            `json:"unchanged"`
-	Diffs       []WDBItemDiff  `json:"diffs"`
+	Signature   string        `json:"signature"`
+	Version     uint32        `json:"version"`
+	RecordCount int           `json:"record_count"`
+	Mode        string        `json:"mode"`
+	NewItems    int           `json:"new_items"`
+	Changed     int           `json:"changed"`
+	Unchanged   int           `json:"unchanged"`
+	Diffs       []WDBItemDiff `json:"diffs"`
 }
 
 // WDBItemDiff describes changes for one item entry.
@@ -100,9 +100,9 @@ type ItemSearchResult struct {
 	RequiredSkill     int32   `json:"required_skill"`
 	RequiredSkillRank int32   `json:"required_skill_rank"`
 	Armor             int32   `json:"armor"`
+	GemEnchantID      int32   `json:"gem_enchant_id,omitempty"`
 	Icon              string  `json:"icon"`
 }
-
 
 // DBCUploadResponse is the response from uploading a DBC file.
 type DBCUploadResponse struct {
@@ -113,4 +113,3 @@ type DBCUploadResponse struct {
 	Updated     int    `json:"updated"`
 	Unchanged   int    `json:"unchanged"`
 }
-
