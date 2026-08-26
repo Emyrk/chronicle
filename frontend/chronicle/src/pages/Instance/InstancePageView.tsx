@@ -766,7 +766,7 @@ function EncounterSidebar({
                           </button>
                         </TooltipTrigger>
                         <TooltipContent
-                          side="right"
+                          side="top"
                           sideOffset={8}
                           hideArrow
                           className="w-[232px] rounded-lg border border-border/80 bg-popover p-3.5 text-foreground shadow-2xl"
