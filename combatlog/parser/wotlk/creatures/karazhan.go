@@ -34,6 +34,7 @@ func NewAttumenTheHuntsman(id guid.GUID, all *characters.Characters) (characters
 		attumenMountedEntry,
 		attumenUnmountedEntry,
 		midnightEntry,
+		16407, // Spectral Servent
 	), true
 }
 
