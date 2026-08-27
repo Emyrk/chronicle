@@ -16,6 +16,12 @@ func TestParseItemBuild8606UsesTBCLayout(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	writeInt32 := func(value int32) {
+		t.Helper()
+		if err := binary.Write(&data, binary.LittleEndian, value); err != nil {
+			t.Fatal(err)
+		}
+	}
 	writeString := func(value string) {
 		t.Helper()
 		if _, err := data.WriteString(value); err != nil {
@@ -44,18 +50,28 @@ func TestParseItemBuild8606UsesTBCLayout(t *testing.T) {
 		writeUint32(0)
 		writeUint32(0)
 	}
-	for range 2 { // TBC damage slots
+	for range 5 { // TBC damage slots
 		writeUint32(0)
 		writeUint32(0)
 		writeUint32(0)
 	}
-	for range 10 { // armor, resistances, delay, ammo, range modifier
+	writeUint32(123) // armor
+	for range 9 {    // resistances, delay, ammo, range modifier
 		writeUint32(0)
 	}
-	for range 5 { // item spells
-		for range 6 {
-			writeUint32(0)
-		}
+	writeInt32(28540) // first item spell ID
+	writeUint32(0)    // on-use trigger
+	writeInt32(1)     // charges
+	writeInt32(-1)    // spell cooldown
+	writeUint32(4)    // spell category
+	writeInt32(-1)    // spell category cooldown
+	for range 4 {     // unused item spell slots
+		writeInt32(0)
+		writeUint32(0)
+		writeInt32(0)
+		writeInt32(-1)
+		writeUint32(0)
+		writeInt32(-1)
 	}
 	writeUint32(0) // bonding
 	writeString("TBC description")
@@ -81,6 +97,15 @@ func TestParseItemBuild8606UsesTBCLayout(t *testing.T) {
 	}
 	if item.Name != "Test Item" {
 		t.Fatalf("name = %q, want %q", item.Name, "Test Item")
+	}
+	if item.Armor != 123 {
+		t.Fatalf("armor = %d, want 123", item.Armor)
+	}
+	if item.SpellID[0] != 28540 {
+		t.Fatalf("first item spell ID = %d, want 28540", item.SpellID[0])
+	}
+	if item.SpellCooldown[0] != -1 {
+		t.Fatalf("first item spell cooldown = %d, want -1", item.SpellCooldown[0])
 	}
 	if item.Description != "TBC description" {
 		t.Fatalf("description = %q, want %q", item.Description, "TBC description")
