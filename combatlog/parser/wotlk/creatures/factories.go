@@ -25,6 +25,8 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 	cres := creatures.VanillaCharacterFactories(flavor)
 	if flavor.Has(database.FlavorTBC, database.FlavorWrath) {
 		tbc := characters.CreatureFactories(
+			// Karazhan
+			NewAttumenTheHuntsman,
 			// Serpentshrine Cavern
 			NewCoilfangGuardian,
 			NewTaintedElementals,
