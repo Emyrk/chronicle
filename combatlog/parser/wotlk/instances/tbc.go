@@ -919,6 +919,11 @@ var SerpentshrineCavernFactory = &instances.CommonFactory{
 	ZoneNames: []string{"serpentshrine cavern"},
 	MapIDs:    []uint32{548},
 	Hostiles:  instances.FromMap(SerpentshrineCavernHostiles()),
+	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+		rules := SerpentshrineCavernSpeedrunRequirements()
+		rules.Speedrun.LevelRange = instances.Level70Cap(fl)
+		return rules
+	},
 }
 
 // TempestKeepHostiles returns creature entry IDs for Tempest Keep (map 550).

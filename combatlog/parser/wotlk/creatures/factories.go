@@ -23,6 +23,13 @@ func AzerothServersideCoreCharacterFactories() []characters.CharacterFactory {
 // TODO: Move this to common
 func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFactory {
 	cres := creatures.VanillaCharacterFactories(flavor)
+	if flavor.Has(database.FlavorTBC, database.FlavorWrath) {
+		tbc := characters.CreatureFactories(
+			// Serpentshrine Cavern
+			NewCoilfangGuardian,
+		)
+		cres = append(tbc, cres...)
+	}
 	if flavor.Has(database.FlavorWrath) {
 		wrath := characters.CreatureFactories(
 			// The Nexus
