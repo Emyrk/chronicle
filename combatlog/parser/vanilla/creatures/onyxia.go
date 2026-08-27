@@ -46,6 +46,7 @@ func NewBroodcommanderAxelusCharacter(flavor database.WoWFlavor) func(id guid.GU
 	return func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 		return characters.NewAdsGoWithBoss(49018,
 			40068, // Warder
+			12129, // Warder
 		)(id, all)
 	}
 }
