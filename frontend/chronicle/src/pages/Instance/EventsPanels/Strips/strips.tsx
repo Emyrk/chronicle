@@ -1,10 +1,18 @@
 /* eslint-disable react-refresh/only-export-components -- strip definitions and their renderers are intentionally colocated */
-import { Activity, Timer } from "lucide-react";
+import { Activity, Coins, Timer } from "lucide-react";
 import { useMemo } from "react";
+import { useConsumableDisambiguations } from "@/api/queries";
+import type { ConsumableDisambiguation } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { ReplayTransportBar, usePlayerDeathTimes } from "../../ReplayControlOverlay";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { usePlayerLifeState } from "../usePlayerLifeState";
+import { CoinAmount } from "../Consumables/CoinAmount";
+import { buildConsumableDisambiguationMap, resolveConsumableUse } from "../Consumables/consumableDisambiguation";
+import { consumablesLedgerProcessor, type ConsumablesResult } from "../Consumables/consumables.processor";
+import { aggregateConsumablesLedger, ledgerCoverage } from "../Consumables/consumablesLedgerLogic";
+import { useConsumablePrices } from "../Consumables/useConsumablePrices";
 import { emptyProcessor } from "../Empty/empty.processor";
 import { statusProcessor, type StatusResult } from "../Status/status.processor";
 import {
@@ -39,6 +47,43 @@ function ReplayStrip() {
   const deaths = usePlayerDeathTimes();
 
   return <ReplayTransportBar deaths={deaths} />;
+}
+
+function ConsumablesCostStrip({ result, context, loading, panelOption }: StripRenderProps<ConsumablesResult>) {
+  const datasetId = useDatasetId();
+  const { data: disambiguations } = useConsumableDisambiguations(datasetId);
+  const disambiguationMap = useMemo(
+    () => buildConsumableDisambiguationMap(disambiguations as ConsumableDisambiguation[] | undefined),
+    [disambiguations],
+  );
+  const resolvedUses = useMemo(
+    () => [...result.uses.values()].map((use) => resolveConsumableUse(use, disambiguationMap)),
+    [disambiguationMap, result.uses],
+  );
+  const prices = useConsumablePrices(context.instance.id, resolvedUses);
+  const ledger = useMemo(
+    () => aggregateConsumablesLedger(resolvedUses, prices),
+    [prices, resolvedUses],
+  );
+  const coverage = ledgerCoverage(ledger);
+  const label = stripOptionValue(panelOption, "t:") ?? "Raid Consume Cost";
+
+  let summary = `${ledger.totalUses.toLocaleString()} consume${ledger.totalUses === 1 ? "" : "s"}`;
+  if (coverage.showGold) summary += ` · ${coverage.label}`;
+
+  return (
+    <StripFrame label={label} summary={summary}>
+      <div className="flex h-10 items-center justify-end border border-white/[0.07] bg-[#111316] px-4">
+        {coverage.showGold ? (
+          <CoinAmount copper={ledger.totalCopper} className="text-2xl font-semibold tracking-tight" />
+        ) : (
+          <span className="text-sm font-medium text-muted-foreground">
+            {loading ? "Loading…" : "No price data"}
+          </span>
+        )}
+      </div>
+    </StripFrame>
+  );
 }
 
 function RaidDurabilityStrip({ result, context, panelOption }: StripRenderProps<StatusResult>) {
@@ -213,6 +258,19 @@ export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
     defaultOrientation: "horizontal",
     size: DEFAULT_SIZE,
     render: (props) => <RaidDurabilityStrip {...props} />,
+  },
+  consumables_cost: {
+    ...consumablesLedgerProcessor,
+    label: "Raid Consume Cost",
+    icon: <Coins className="h-4 w-4" />,
+    supportsFiltering: true,
+    defaultFilters: [
+      { type: "source_type" as const, value: ["player"], applyTo: ["consume"] },
+    ],
+    supportedOrientations: HORIZONTAL_ONLY,
+    defaultOrientation: "horizontal",
+    size: DEFAULT_SIZE,
+    render: (props) => <ConsumablesCostStrip {...props} />,
   },
 };
 
