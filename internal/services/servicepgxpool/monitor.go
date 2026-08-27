@@ -21,7 +21,11 @@ type poolHealthMonitor interface {
 	Stat() *pgxpool.Stat
 }
 
-func monitorPoolHealth(ctx context.Context, logger *slog.Logger, pool poolHealthMonitor) {
+type poolDiagnosticReporter interface {
+	LogActiveConnections(context.Context)
+}
+
+func monitorPoolHealth(ctx context.Context, logger *slog.Logger, pool poolHealthMonitor, diagnostics poolDiagnosticReporter) {
 	ticker := time.NewTicker(postgresHealthCheckInterval)
 	defer ticker.Stop()
 
@@ -62,6 +66,9 @@ func monitorPoolHealth(ctx context.Context, logger *slog.Logger, pool poolHealth
 				slog.Int("consecutive_failures", consecutiveFailures),
 				poolStatsAttr(stats),
 			)
+			if diagnostics != nil {
+				diagnostics.LogActiveConnections(ctx)
+			}
 
 			if shouldResetPool(consecutiveFailures) {
 				pool.Reset()

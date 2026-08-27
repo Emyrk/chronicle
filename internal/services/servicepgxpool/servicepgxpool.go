@@ -40,6 +40,7 @@ type Service struct {
 	maxConns      int64
 	pool          *pgxpool.Pool
 	ps            pubsub.Pubsub
+	diagnostics   *poolDiagnostics
 	monitorCancel context.CancelFunc
 }
 
@@ -67,7 +68,11 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 
-	pool, err := database.NewPostgresDB(ctx, logger, dbURL, database.WithMaxConns(int32(s.maxConns)))
+	s.diagnostics = newPoolDiagnostics(logger)
+	pool, err := database.NewPostgresDB(ctx, logger, dbURL,
+		database.WithMaxConns(int32(s.maxConns)),
+		database.WithTracer(s.diagnostics),
+	)
 	if err != nil {
 		return fmt.Errorf("connect to postgres db: %w", err)
 	}
@@ -82,7 +87,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 	monitorCtx, monitorCancel := context.WithCancel(ctx)
 	s.monitorCancel = monitorCancel
-	go monitorPoolHealth(monitorCtx, logger, s.pool)
+	go monitorPoolHealth(monitorCtx, logger, s.pool, s.diagnostics)
 
 	return nil
 }
