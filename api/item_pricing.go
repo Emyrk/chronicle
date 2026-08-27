@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -15,7 +16,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const maxInstanceItemPrices = 100
+const (
+	maxCurrentItemPrices  = 100
+	maxInstanceItemPrices = 200
+)
 
 func (api *API) ItemPricingRealms(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -47,8 +51,9 @@ func (api *API) CurrentItemPrices(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Read(ctx, w, r, &req) {
 		return
 	}
-	if len(req.ItemIDs) == 0 || len(req.ItemIDs) > maxInstanceItemPrices {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "item_ids must contain between 1 and 100 items"})
+	itemIDs, message := validateItemPriceIDs(req.ItemIDs, maxCurrentItemPrices)
+	if message != "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: message})
 		return
 	}
 	realmID, err := uuid.Parse(req.RealmID)
@@ -80,7 +85,7 @@ func (api *API) CurrentItemPrices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestedDate := time.Now().UTC()
-	prices, err := api.Opts.ItemPricing.Resolve(ctx, realmID, req.Faction, requestedDate, req.ItemIDs)
+	prices, err := api.Opts.ItemPricing.Resolve(ctx, realmID, req.Faction, requestedDate, itemIDs)
 	if errors.Is(err, itempricing.ErrUnavailable) {
 		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "item pricing is not available for this realm"})
 		return
@@ -90,8 +95,20 @@ func (api *API) CurrentItemPrices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := itemPricesResponse(requestedDate, req.Faction, req.ItemIDs, prices)
+	response := itemPricesResponse(requestedDate, req.Faction, itemIDs, prices)
 	httpapi.Write(ctx, w, http.StatusOK, response)
+}
+
+func validateItemPriceIDs(itemIDs []int32, maxItems int) ([]int32, string) {
+	if len(itemIDs) == 0 || len(itemIDs) > maxItems {
+		return nil, fmt.Sprintf("item_ids must contain between 1 and %d items", maxItems)
+	}
+	for _, itemID := range itemIDs {
+		if itemID <= 0 {
+			return nil, "item_ids must contain only positive item IDs"
+		}
+	}
+	return uniquePositiveItemIDs(itemIDs), ""
 }
 
 func validPricingFaction(mode string, faction chroniclesdk.AuctionHouseFaction) bool {
@@ -121,8 +138,9 @@ func (api *API) InstanceItemPrices(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Read(ctx, w, r, &req) {
 		return
 	}
-	if len(req.ItemIDs) == 0 || len(req.ItemIDs) > maxInstanceItemPrices {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "item_ids must contain between 1 and 100 items"})
+	itemIDs, message := validateItemPriceIDs(req.ItemIDs, maxInstanceItemPrices)
+	if message != "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: message})
 		return
 	}
 	if api.Opts.ItemPricing == nil {
@@ -150,7 +168,7 @@ func (api *API) InstanceItemPrices(w http.ResponseWriter, r *http.Request) {
 	}
 	response.Faction = &faction
 
-	prices, err := api.Opts.ItemPricing.Resolve(ctx, inst.RealmID, faction, requestedDate, req.ItemIDs)
+	prices, err := api.Opts.ItemPricing.Resolve(ctx, inst.RealmID, faction, requestedDate, itemIDs)
 	if errors.Is(err, itempricing.ErrUnavailable) {
 		response.Reason = "item pricing is not available for this realm"
 		httpapi.Write(ctx, w, http.StatusOK, response)
@@ -161,7 +179,7 @@ func (api *API) InstanceItemPrices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response = itemPricesResponse(requestedDate, faction, req.ItemIDs, prices)
+	response = itemPricesResponse(requestedDate, faction, itemIDs, prices)
 	httpapi.Write(ctx, w, http.StatusOK, response)
 }
 
