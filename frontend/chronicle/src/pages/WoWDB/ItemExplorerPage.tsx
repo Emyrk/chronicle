@@ -193,16 +193,31 @@ function formatPrice(copper: number): string {
   return `${remainingCopper}c`;
 }
 
-function ResultRow({ item, priceCopper, showPrice }: { item: ItemSearchResult; priceCopper?: number; showPrice: boolean }) {
+function ResultRow({
+  item,
+  priceCopper,
+  showPrice,
+  pricingRealmId,
+  pricingFaction,
+}: {
+  item: ItemSearchResult;
+  priceCopper?: number;
+  showPrice: boolean;
+  pricingRealmId?: string;
+  pricingFaction?: AuctionHouseFaction;
+}) {
   const qualityClass = QUALITY_COLORS[item.quality] ?? "text-quality-common";
   const slotLabel = INVENTORY_TYPE_LABELS[item.inventory_type] ?? "";
   const typeLabel = getTypeLabel(item);
   const details = getDetailsLabel(item);
+  const itemParams = new URLSearchParams({ id: String(item.entry) });
+  if (pricingRealmId) itemParams.set("pricing_realm", pricingRealmId);
+  if (pricingFaction && pricingFaction !== "merged") itemParams.set("pricing_faction", pricingFaction);
 
   return (
     <HoverTooltip itemId={item.entry}>
       <Link
-        to={`/wowdb/item?id=${item.entry}`}
+        to={`/wowdb/item?${itemParams}`}
         className={cn(
           "w-full text-left grid gap-3 items-center px-3 py-1.5 rounded-md transition-colors",
           showPrice ? GRID_COLS_WITH_PRICE : GRID_COLS,
@@ -598,6 +613,8 @@ export function ItemExplorerPage() {
                 item={item}
                 priceCopper={priceByItem.get(item.entry)}
                 showPrice={showPrice}
+                pricingRealmId={selectedPricingRealm?.id}
+                pricingFaction={pricingFaction || undefined}
               />
             ))}
           </div>

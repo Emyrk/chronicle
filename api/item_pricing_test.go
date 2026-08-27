@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -16,6 +18,42 @@ type instancePlayersStub struct {
 
 func (s instancePlayersStub) InstancePlayersByInstanceID(context.Context, uuid.UUID) ([]database.LogInstancePlayer, error) {
 	return s.players, nil
+}
+
+func TestValidateItemPriceIDs(t *testing.T) {
+	t.Parallel()
+
+	items, message := validateItemPriceIDs([]int32{3, 1, 3}, maxInstanceItemPrices)
+	require.Empty(t, message)
+	require.Equal(t, []int32{3, 1}, items)
+
+	_, message = validateItemPriceIDs(nil, maxInstanceItemPrices)
+	require.Equal(t, "item_ids must contain between 1 and 200 items", message)
+
+	_, message = validateItemPriceIDs(make([]int32, maxInstanceItemPrices+1), maxInstanceItemPrices)
+	require.Equal(t, "item_ids must contain between 1 and 200 items", message)
+
+	_, message = validateItemPriceIDs([]int32{0}, maxInstanceItemPrices)
+	require.Equal(t, "item_ids must contain only positive item IDs", message)
+}
+
+func TestItemPricesResponseFiltersToRequestedItems(t *testing.T) {
+	t.Parallel()
+
+	requestedDate := time.Date(2026, time.August, 27, 0, 0, 0, 0, time.UTC)
+	response := itemPricesResponse(
+		requestedDate,
+		chroniclesdk.AuctionHouseFactionMerged,
+		[]int32{8956},
+		[]itempricing.Price{
+			{ItemID: 8956, PriceCopper: 475, ObservedDate: requestedDate},
+			{ItemID: 4306, PriceCopper: 1694, ObservedDate: requestedDate},
+		},
+	)
+
+	require.Len(t, response.Prices, 1)
+	require.Equal(t, int32(8956), response.Prices[0].ItemID)
+	require.Equal(t, int64(475), *response.Prices[0].PriceCopper)
 }
 
 func TestValidPricingFaction(t *testing.T) {
