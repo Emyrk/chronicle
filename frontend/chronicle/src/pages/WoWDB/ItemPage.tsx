@@ -142,7 +142,32 @@ export function ItemPage() {
         </button>
       </form>
 
-      {(pricingRealms?.length ?? 0) > 0 && (
+      {/* Quick links for testing */}
+      <div className="text-xs text-gray-500 space-x-3">
+        <span>Try:</span>
+        <button type="button" className="text-blue-400 hover:underline" onClick={() => lookUpItem("19019")}>
+          Thunderfury
+        </button>
+        <button type="button" className="text-blue-400 hover:underline" onClick={() => lookUpItem("16829")}>
+          Cenarion Boots (set)
+        </button>
+        <button type="button" className="text-blue-400 hover:underline" onClick={() => lookUpItem("2169")}>
+          Buzzer Blade (random ench)
+        </button>
+      </div>
+
+      {/* Result */}
+      <div className="flex justify-center pt-4">
+        {isLoading && <div className="text-gray-400">Loading...</div>}
+        {error && (
+          <div className="text-red-400">
+            {error instanceof Error ? error.message : "Failed to load item"}
+          </div>
+        )}
+        {item && <ItemTooltip item={item} includeReferenceLinks showItemLevel />}
+      </div>
+
+      {item && (pricingRealms?.length ?? 0) > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2">
           <span className="text-sm text-gray-400">Market price</span>
           <select
@@ -178,37 +203,12 @@ export function ItemPage() {
               {formatPrice(itemPrice)}
             </span>
           )}
-          {!priceFetching && selectedPricingRealm && itemId > 0 && itemPrice === undefined && (
+          {!priceFetching && selectedPricingRealm && itemPrice === undefined && (
             <span className="ml-auto text-sm text-gray-500">No price available</span>
           )}
           <span className="w-full text-xs text-gray-500">24-hour average auction price</span>
         </div>
       )}
-
-      {/* Quick links for testing */}
-      <div className="text-xs text-gray-500 space-x-3">
-        <span>Try:</span>
-        <button type="button" className="text-blue-400 hover:underline" onClick={() => lookUpItem("19019")}>
-          Thunderfury
-        </button>
-        <button type="button" className="text-blue-400 hover:underline" onClick={() => lookUpItem("16829")}>
-          Cenarion Boots (set)
-        </button>
-        <button type="button" className="text-blue-400 hover:underline" onClick={() => lookUpItem("2169")}>
-          Buzzer Blade (random ench)
-        </button>
-      </div>
-
-      {/* Result */}
-      <div className="flex justify-center pt-4">
-        {isLoading && <div className="text-gray-400">Loading...</div>}
-        {error && (
-          <div className="text-red-400">
-            {error instanceof Error ? error.message : "Failed to load item"}
-          </div>
-        )}
-        {item && <ItemTooltip item={item} includeReferenceLinks showItemLevel />}
-      </div>
     </div>
   );
 }
