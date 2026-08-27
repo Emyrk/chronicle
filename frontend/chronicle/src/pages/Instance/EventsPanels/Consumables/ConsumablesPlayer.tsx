@@ -24,9 +24,9 @@ import {
   aggregatePlayerItemEncounters,
   classColor,
   classRank,
-  formatGold,
   ledgerCoverage,
 } from "./consumablesLedgerLogic";
+import { CoinAmount } from "./CoinAmount";
 import { useConsumablePrices } from "./useConsumablePrices";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import { PlayerItemBreakout, type PlayerItemBreakoutData } from "./LedgerItemBreakout";
@@ -455,9 +455,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
               <span className="font-mono text-sm font-semibold text-foreground">
                 {ledger.totalUses} <span className="text-2xs font-normal text-muted-foreground">uses</span>
               </span>
-              {coverage.showGold && (
-                <span className="font-mono text-xs text-amber-300/90">{formatGold(ledger.totalCopper)}</span>
-              )}
+              {coverage.showGold && <CoinAmount copper={ledger.totalCopper} className="text-xs" />}
             </div>
           </div>
 
@@ -522,8 +520,12 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                     <div className="font-mono text-2xs text-foreground/80">
                       {uses} consume{uses === 1 ? "" : "s"} used
                     </div>
-                    <div className={cn("font-mono text-2xs", gold > 0 ? "text-amber-300/90" : "text-muted-foreground")}>
-                      {gold > 0 ? formatGold(gold) : "no price data"}
+                    <div className="text-2xs">
+                      {gold > 0 ? (
+                        <CoinAmount copper={gold} />
+                      ) : (
+                        <span className="font-mono text-muted-foreground">no price data</span>
+                      )}
                     </div>
                   </TooltipContent>
                 </HintTooltip>

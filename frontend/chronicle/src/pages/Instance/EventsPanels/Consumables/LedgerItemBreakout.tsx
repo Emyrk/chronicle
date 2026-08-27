@@ -7,10 +7,10 @@
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ItemCell } from "./ConsumablesContent";
+import { CoinAmount } from "./CoinAmount";
 import {
   classAbbreviation,
   classColor,
-  formatGold,
   summarizePlayerItemFights,
   type PlayerItemNamedEncounterRow,
 } from "./consumablesLedgerLogic";
@@ -107,7 +107,14 @@ export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakout
           <div className="mt-0.5 font-mono text-2xs text-muted-foreground/70">
             #{data.itemId}
             {data.showGold && (
-              <> · {data.unitCopper === null ? "no price" : `${formatGold(data.unitCopper)} each`}</>
+              <>
+                {" · "}
+                {data.unitCopper === null ? (
+                  "no price"
+                ) : (
+                  <><CoinAmount copper={data.unitCopper} /> each</>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -134,14 +141,11 @@ export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakout
           </span>
         </div>
         {data.showGold && (
-          <span
-            className={cn(
-              "font-mono text-sm font-semibold",
-              data.unitCopper === null ? "text-muted-foreground/50" : "text-amber-400",
-            )}
-          >
-            {data.unitCopper === null ? "—" : formatGold(data.unitCopper * totalUses)}
-          </span>
+          data.unitCopper === null ? (
+            <span className="font-mono text-sm font-semibold text-muted-foreground/50">—</span>
+          ) : (
+            <CoinAmount copper={data.unitCopper * totalUses} className="text-sm font-semibold" />
+          )
         )}
       </div>
 
@@ -194,14 +198,14 @@ export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakout
               {row.uses}×
             </span>
             {data.showGold && (
-              <span
-                className={cn(
-                  "w-11 shrink-0 text-right font-mono text-2xs",
-                  data.unitCopper === null ? "text-muted-foreground/40" : "text-amber-300/75",
-                )}
-              >
-                {data.unitCopper === null ? "—" : formatGold(data.unitCopper * row.uses)}
-              </span>
+              data.unitCopper === null ? (
+                <span className="w-11 shrink-0 text-right font-mono text-2xs text-muted-foreground/40">—</span>
+              ) : (
+                <CoinAmount
+                  copper={data.unitCopper * row.uses}
+                  className="w-11 shrink-0 text-right text-2xs"
+                />
+              )
             )}
           </div>
         ))}

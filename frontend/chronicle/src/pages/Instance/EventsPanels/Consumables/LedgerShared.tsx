@@ -18,10 +18,10 @@ import { cn } from "@/lib/utils";
 import type { ConsumableUse } from "./consumables.processor";
 import { ItemCell } from "./ConsumablesContent";
 import {
-  formatGold,
   type LedgerAmbiguousRow,
   type LedgerItemRow,
 } from "./consumablesLedgerLogic";
+import { CoinAmount } from "./CoinAmount";
 import { fuzzyConsumableMatch, itemIdentity } from "./consumablesTotalLogic";
 
 /** Flag token: show every player at once (the merged Consumes Total view). */
@@ -155,12 +155,19 @@ export function UsesBar({ fraction, subtitle }: { fraction: number; subtitle: st
 export function GoldCell({ totalCopper, unitCopper }: { totalCopper: number | null; unitCopper: number | null }) {
   return (
     <div className="flex w-16 shrink-0 flex-col items-end gap-0.5">
-      <span className={cn("font-mono text-xs", totalCopper === null ? "text-muted-foreground/50" : "text-amber-300/90")}>
-        {totalCopper === null ? "—" : formatGold(totalCopper)}
-      </span>
-      <span className="font-mono text-2xs text-muted-foreground/60">
-        {unitCopper === null ? "no price" : `${formatGold(unitCopper)} ea`}
-      </span>
+      {totalCopper === null ? (
+        <span className="font-mono text-xs text-muted-foreground/50">—</span>
+      ) : (
+        <CoinAmount copper={totalCopper} className="text-xs" />
+      )}
+      {unitCopper === null ? (
+        <span className="font-mono text-2xs text-muted-foreground/60">no price</span>
+      ) : (
+        <span className="inline-flex items-baseline gap-0.5 text-2xs">
+          <CoinAmount copper={unitCopper} />
+          <span className="font-mono text-muted-foreground/60">ea</span>
+        </span>
+      )}
     </div>
   );
 }
