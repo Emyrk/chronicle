@@ -27,6 +27,9 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 		tbc := characters.CreatureFactories(
 			// Serpentshrine Cavern
 			NewCoilfangGuardian,
+			NewTaintedElementals,
+			NewMorogrimTidewalker,
+			NewLeotherasTheBlind,
 		)
 		cres = append(tbc, cres...)
 	}

@@ -2,8 +2,8 @@ package creatures
 
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 const (

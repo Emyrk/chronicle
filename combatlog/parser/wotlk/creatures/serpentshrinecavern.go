@@ -1,6 +1,8 @@
 package creatures
 
 import (
+	"time"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -51,4 +53,27 @@ func (c *coilfangGuardian) bumpLurker(m messages.Message) {
 			boss.Bump("coilfang_guardian_activity", m)
 		}
 	}
+}
+
+func NewTaintedElementals(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	if entry, ok := id.GetEntry(); !ok || entry != 22009 {
+		return nil, false
+	}
+
+	c := characters.NewCommonCharacter(id, all)
+	c.WithTimeout(time.Second * 30)
+	c.WithTimeoutAsDeath()
+	return c, true
+}
+
+func NewLeotherasTheBlind(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	return characters.NewAdsGoWithBoss(21215,
+		21875, // Shdaow
+	)(id, all)
+}
+
+func NewMorogrimTidewalker(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	return characters.NewAdsGoWithBoss(21213,
+		21920, // Lurker
+	)(id, all)
 }
