@@ -46,7 +46,7 @@ export const INSTANCE_CONFIG: Record<string, InstanceConfig> = {
   "Hyjal Summit": { background: "/c/images/loadingscreens/LoadScreenHyjal.webp", bossCount: 5, abbrev: "Hyjal", category: "raid", contentLevel: 70 },
   "Magtheridon's Lair": { background: "/c/images/loadingscreens/LOADSCREENHELLFIRECITADELRAID.webp", bossCount: 1, abbrev: "Mag", category: "raid", contentLevel: 70 },
   "Gruul's Lair": { background: "/c/images/loadingscreens/LoadScreenGruulsLair.webp", bossCount: 2, abbrev: "Gruul", category: "raid", contentLevel: 70 },
-  "Serpentshrine Cavern": { background: "/c/images/loadingscreens/LoadScreenDungeon.webp", bossCount: 6, abbrev: "SSC", category: "raid", contentLevel: 70 },
+  "Serpentshrine Cavern": { background: "/c/images/loadingscreens/LoadScreenSerpentshrine.webp", bossCount: 6, abbrev: "SSC", category: "raid", contentLevel: 70 },
   "Tempest Keep": { background: "/c/images/loadingscreens/LOADSCREENTEMPESTKEEP.webp", bossCount: 4, abbrev: "TK", category: "raid", contentLevel: 70 },
   "Sunwell Plateau": { background: "/c/images/loadingscreens/LoadScreenSunwell5Man.webp", bossCount: 6, abbrev: "SWP", category: "raid", contentLevel: 70 },
   "World Bosses": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", abbrev: "World", category: "raid", contentLevel: 60 },
