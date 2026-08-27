@@ -68,7 +68,7 @@ func (c *Client) Prices(ctx context.Context, realmRoute string, faction int, ite
 	if err != nil {
 		return nil, fmt.Errorf("request item prices from provider: %s", sanitizeHTTPError(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("item pricing provider returned HTTP %d", resp.StatusCode)
 	}
