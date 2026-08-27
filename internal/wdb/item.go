@@ -51,7 +51,7 @@ type Item struct {
 	StatValue               [10]int32
 	ScalingStatDistribution int32      // build >= 8622 (WotLK)
 	ScalingStatValue        int32      // build >= 8622 (WotLK)
-	DmgMin                  [5]float32 // vanilla: 5 slots; TBC+: only [0:2] populated
+	DmgMin                  [5]float32 // vanilla/TBC: 5 slots; WotLK: only [0:2] populated
 	DmgMax                  [5]float32
 	DmgType                 [5]uint32
 	Armor                   uint32
@@ -193,9 +193,9 @@ func ParseItem(rec Record, build uint32) (Item, error) {
 		it.ScalingStatValue = i()
 	}
 
-	// Vanilla has 5 damage slots; TBC+ reduced to 2.
+	// Vanilla and TBC have 5 damage slots. WotLK reduced the layout to 2.
 	dmgSlots := 5
-	if build >= buildTBC {
+	if build >= buildWotLK {
 		dmgSlots = 2
 	}
 	for j := range dmgSlots {
