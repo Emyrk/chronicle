@@ -206,7 +206,18 @@ export function ItemPage() {
           {!priceFetching && selectedPricingRealm && itemPrice === undefined && (
             <span className="ml-auto text-sm text-gray-500">No price available</span>
           )}
-          <span className="w-full text-xs text-gray-500">24-hour average auction price</span>
+          <div className="w-full border-t border-gray-700/70 pt-2 text-xs text-gray-500">
+            Item data provided by{" "}
+            <a
+              href="https://www.wowauctions.net/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+            >
+              wowauctions.net
+            </a>
+            <span className="block mt-0.5">24-hour average auction price</span>
+          </div>
         </div>
       )}
     </div>
