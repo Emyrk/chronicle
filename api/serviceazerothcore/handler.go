@@ -44,11 +44,13 @@ func (h *Handler) Routes() http.Handler {
 		// Server management
 		r.Get("/servers", h.ListServers)                    // filtered by wow_server#administer
 		r.Post("/servers", h.CreateServer)                  // requires chronicle#admin_servers (global)
+		r.Put("/servers/{serverID}", h.UpdateServer)        // requires wow_server#administer
 		r.Delete("/servers/{serverID}", h.DeleteServer)     // requires wow_server#administer
 		r.Get("/servers/{serverID}/realms", h.ListRealms)   // requires wow_server#administer
 		r.Post("/servers/{serverID}/realms", h.CreateRealm) // requires wow_server#administer
 
 		// Realm management (administer inherited from server)
+		r.Put("/realms/{realmID}", h.UpdateRealm)           // requires wow_server_realm#administer
 		r.Delete("/realms/{realmID}", h.DeleteRealm)        // requires wow_server_realm#administer
 		r.Get("/realms/{realmID}/keys", h.ListUploadKeys)   // requires wow_server_realm#administer
 		r.Post("/realms/{realmID}/keys", h.CreateUploadKey) // requires wow_server_realm#administer

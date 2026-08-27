@@ -1,5 +1,5 @@
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
-import type { ItemTooltip, ItemSearchResult, CreatureSearchResult, EnchantmentSearchResult, ItemSetSearchResult, ItemSetDetail, SimItem } from "./typesGenerated";
+import type { AuctionHouseFaction, InstanceItemPricesResponse, ItemPricingRealm, ItemTooltip, ItemSearchResult, CreatureSearchResult, EnchantmentSearchResult, ItemSetSearchResult, ItemSetDetail, SimItem } from "./typesGenerated";
 
 export interface FetchItemTooltipParams {
   itemId: number;
@@ -128,6 +128,45 @@ export function useSearchItems(params: SearchItemsParams | null) {
         (!!params.allowEmpty && params.q.length === 0 && (!!params.slot || !!params.class))),
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
+    retry: false,
+  });
+}
+
+export function useItemPricingRealms() {
+  return useQuery({
+    queryKey: ["item-pricing", "realms"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/item-pricing/realms");
+      if (!response.ok) throw new Error("Failed to fetch pricing realms");
+      return response.json() as Promise<ItemPricingRealm[]>;
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useCurrentItemPrices(realmId: string, faction: AuctionHouseFaction | "", itemIds: number[]) {
+  const normalizedItemIds = [...new Set(itemIds.filter((itemId) => itemId > 0))].sort((a, b) => a - b);
+  return useQuery({
+    queryKey: ["item-pricing", "current", realmId, faction, normalizedItemIds],
+    queryFn: async () => {
+      const batches: number[][] = [];
+      for (let index = 0; index < normalizedItemIds.length; index += 20) {
+        batches.push(normalizedItemIds.slice(index, index + 20));
+      }
+      const responses = await Promise.all(batches.map(async (batch) => {
+        const response = await fetch("/api/v1/item-pricing/prices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ realm_id: realmId, faction, item_ids: batch }),
+        });
+        if (!response.ok) throw new Error("Failed to fetch item prices");
+        return response.json() as Promise<InstanceItemPricesResponse>;
+      }));
+      return responses.flatMap((response) => response.prices);
+    },
+    enabled: realmId !== "" && faction !== "" && normalizedItemIds.length > 0,
+    staleTime: 5 * 60 * 1000,
     retry: false,
   });
 }

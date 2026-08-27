@@ -412,6 +412,11 @@ export interface ArmorySearchResult {
     readonly updated_at: string;
 }
 
+// From chroniclesdk/item_pricing.go
+export type AuctionHouseFaction = "alliance" | "horde" | "merged";
+
+export const AuctionHouseFactions: AuctionHouseFaction[] = ["alliance", "horde", "merged"];
+
 // From chroniclesdk/authz.go
 /**
  * AuthorizationRequest is a request to check multiple authorizations at once.
@@ -798,6 +803,8 @@ export interface CreateWoWServerRealmRequest {
     readonly name: string;
     readonly description: string;
     readonly url?: string;
+    readonly pricing_route_name?: string;
+    readonly pricing_auction_house?: PricingAuctionHouse;
 }
 
 // From chroniclesdk/azerothcore.go
@@ -805,6 +812,7 @@ export interface CreateWoWServerRequest {
     readonly name: string;
     readonly description: string;
     readonly url?: string;
+    readonly pricing_provider?: ItemPricingProvider;
 }
 
 // From chroniclesdk/gamedata.go
@@ -825,6 +833,13 @@ export interface CreatureSearchResult {
     readonly dmg_min: number;
     readonly dmg_max: number;
     readonly unit_class: number;
+}
+
+// From chroniclesdk/item_pricing.go
+export interface CurrentItemPricesRequest {
+    readonly realm_id: string;
+    readonly faction: AuctionHouseFaction;
+    readonly item_ids: readonly number[];
 }
 
 // From chroniclesdk/gamedata.go
@@ -1604,6 +1619,28 @@ export interface InstanceDefaultsResponse {
     readonly action_bar_layouts: readonly UserPanelLayout[];
 }
 
+// From chroniclesdk/item_pricing.go
+export interface InstanceItemPrice {
+    readonly item_id: number;
+    readonly price_copper?: number;
+    readonly observed_date?: string;
+    readonly future_fallback: boolean;
+}
+
+// From chroniclesdk/item_pricing.go
+export interface InstanceItemPricesRequest {
+    readonly item_ids: readonly number[];
+}
+
+// From chroniclesdk/item_pricing.go
+export interface InstanceItemPricesResponse {
+    readonly available: boolean;
+    readonly reason?: string;
+    readonly requested_date: string;
+    readonly faction?: AuctionHouseFaction;
+    readonly prices: readonly InstanceItemPrice[];
+}
+
 // From chroniclesdk/loot.go
 export interface InstanceLoot {
     readonly source_guid: GUID;
@@ -1822,6 +1859,19 @@ export interface ItemDisplayData {
     readonly ground_model: string; // Ground/dropped model path
     readonly item_visual: number; // Visual effect ID
     readonly flags: number; // Display flags
+}
+
+// From chroniclesdk/azerothcore.go
+export type ItemPricingProvider = "wowauctions";
+
+export const ItemPricingProviders: ItemPricingProvider[] = ["wowauctions"];
+
+// From chroniclesdk/item_pricing.go
+export interface ItemPricingRealm {
+    readonly id: string;
+    readonly server_name: string;
+    readonly realm_name: string;
+    readonly auction_house: PricingAuctionHouse;
 }
 
 // From chroniclesdk/tooltip.go
@@ -2324,6 +2374,11 @@ export interface Preferences {
      */
     readonly raw_log_retention_hours: number | null;
 }
+
+// From chroniclesdk/azerothcore.go
+export type PricingAuctionHouse = "merged" | "split";
+
+export const PricingAuctionHouses: PricingAuctionHouse[] = ["merged", "split"];
 
 // From chroniclesdk/raid_compositions.go
 /**
@@ -4020,6 +4075,7 @@ export interface WoWServer {
     readonly created_by?: string;
     readonly tenant_id?: string;
     readonly default_dataset_id?: string;
+    readonly pricing_provider?: ItemPricingProvider;
 }
 
 // From chroniclesdk/azerothcore.go
@@ -4030,6 +4086,8 @@ export interface WoWServerRealm {
     readonly description: string;
     readonly url?: string;
     readonly created_by?: string;
+    readonly pricing_route_name?: string;
+    readonly pricing_auction_house?: PricingAuctionHouse;
 }
 
 // From chroniclesdk/log.go

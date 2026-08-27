@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
 import type { WoWSpell } from "./wowdb";
-import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest } from "./typesGenerated";
+import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse } from "./typesGenerated";
 import type { 
   WoWLogGroup as WoWLogGroupGenerated, 
   WoWLogFile as WoWLogFileGenerated,
@@ -976,6 +976,43 @@ export function useInstanceYoutube(instanceId: string, options?: Omit<UseQueryOp
       return response.json() as Promise<Video>;
     },
     ...options,
+  });
+}
+
+export function useInstanceItemPrices(instanceId: string, itemIds: number[]) {
+  const normalizedItemIds = [...new Set(itemIds.filter((itemId) => itemId > 0))].sort((a, b) => a - b);
+  return useQuery({
+    queryKey: ["instance-item-prices", instanceId, normalizedItemIds],
+    queryFn: async () => {
+      const batches: number[][] = [];
+      for (let index = 0; index < normalizedItemIds.length; index += 20) {
+        batches.push(normalizedItemIds.slice(index, index + 20));
+      }
+      const responses = await Promise.all(batches.map(async (batch) => {
+        const response = await fetch(`/api/v1/raidlogs/instances/${instanceId}/item-prices`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ item_ids: batch }),
+        });
+        if (!response.ok) throw new Error("Failed to fetch item prices");
+        return response.json() as Promise<InstanceItemPricesResponse>;
+      }));
+      const first = responses[0];
+      const inconsistent = responses.some((response) =>
+        response.requested_date !== first?.requested_date || response.faction !== first?.faction,
+      );
+      if (inconsistent) throw new Error("Inconsistent item price batch response");
+      return {
+        available: responses.some((response) => response.available),
+        reason: responses.find((response) => response.reason)?.reason,
+        requested_date: first?.requested_date ?? "",
+        faction: first?.faction,
+        prices: responses.flatMap((response) => response.prices),
+      } satisfies InstanceItemPricesResponse;
+    },
+    enabled: !!instanceId && normalizedItemIds.length > 0,
+    staleTime: Infinity,
+    retry: false,
   });
 }
 
@@ -2150,6 +2187,25 @@ export function useCreateAzerothcoreServer() {
   });
 }
 
+export function useUpdateAzerothcoreServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ serverId, ...req }: CreateWoWServerRequest & { serverId: string }) => {
+      const response = await fetch(`/api/v1/azerothcore/servers/${serverId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.message || "Failed to update server");
+      }
+      return response.json() as Promise<WoWServer>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["azerothcore", "servers"] }),
+  });
+}
+
 export function useDeleteAzerothcoreServer() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -2198,6 +2254,25 @@ export function useCreateAzerothcoreRealm() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["azerothcore", "realms"] });
     },
+  });
+}
+
+export function useUpdateAzerothcoreRealm() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ realmId, ...req }: CreateWoWServerRealmRequest & { realmId: string }) => {
+      const response = await fetch(`/api/v1/azerothcore/realms/${realmId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.message || "Failed to update realm");
+      }
+      return response.json() as Promise<WoWServerRealm>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["azerothcore", "realms"] }),
   });
 }
 
@@ -2299,7 +2374,7 @@ export function useUpsertTenant() {
         : `/api/v1/admin/tenants/${req.id}`;
       // Omit id from the body — on create it's server-generated,
       // on update it comes from the URL path.
-      const { id: _, ...body } = req;
+      const body = { ...req, id: undefined };
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },

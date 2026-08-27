@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Search, Loader2, Package, X, ArrowUpDown, ArrowDown, ArrowUp, ChevronDown, Check } from "lucide-react";
-import { useSearchItems } from "@/api/gamedata";
+import { useCurrentItemPrices, useItemPricingRealms, useSearchItems } from "@/api/gamedata";
 import { useItemTooltip } from "@/api/gamedata";
 import { ItemIcon } from "@/components/ui/ItemIcon/ItemIcon";
 import { ItemTooltip } from "@/components/ui/ItemTooltip";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
-import type { ItemSearchResult } from "@/api/typesGenerated";
+import type { AuctionHouseFaction, ItemSearchResult } from "@/api/typesGenerated";
 
 // --- Label maps ---
 
@@ -182,8 +182,18 @@ function HoverTooltip({ itemId, children }: { itemId: number; children: React.Re
 }
 
 const GRID_COLS = "grid-cols-[36px_1fr_50px_50px_90px_130px_140px]";
+const GRID_COLS_WITH_PRICE = "grid-cols-[36px_1fr_50px_50px_90px_130px_140px_100px]";
 
-function ResultRow({ item }: { item: ItemSearchResult }) {
+function formatPrice(copper: number): string {
+  const gold = Math.floor(copper / 10000);
+  const silver = Math.floor((copper % 10000) / 100);
+  const remainingCopper = copper % 100;
+  if (gold > 0) return `${gold}g ${silver}s ${remainingCopper}c`;
+  if (silver > 0) return `${silver}s ${remainingCopper}c`;
+  return `${remainingCopper}c`;
+}
+
+function ResultRow({ item, priceCopper, showPrice }: { item: ItemSearchResult; priceCopper?: number; showPrice: boolean }) {
   const qualityClass = QUALITY_COLORS[item.quality] ?? "text-quality-common";
   const slotLabel = INVENTORY_TYPE_LABELS[item.inventory_type] ?? "";
   const typeLabel = getTypeLabel(item);
@@ -195,7 +205,7 @@ function ResultRow({ item }: { item: ItemSearchResult }) {
         to={`/wowdb/item?id=${item.entry}`}
         className={cn(
           "w-full text-left grid gap-3 items-center px-3 py-1.5 rounded-md transition-colors",
-          GRID_COLS,
+          showPrice ? GRID_COLS_WITH_PRICE : GRID_COLS,
           "hover:bg-gray-800/80"
         )}
       >
@@ -212,6 +222,11 @@ function ResultRow({ item }: { item: ItemSearchResult }) {
         <span className="text-gray-500 text-xs text-right truncate">{slotLabel}</span>
         <span className="text-gray-500 text-xs truncate">{typeLabel}</span>
         <span className="text-gray-500 text-xs truncate">{details}</span>
+        {showPrice && (
+          <span className="text-amber-300/90 text-xs text-right tabular-nums">
+            {priceCopper === undefined ? "—" : formatPrice(priceCopper)}
+          </span>
+        )}
       </Link>
     </HoverTooltip>
   );
@@ -307,6 +322,8 @@ export function ItemExplorerPage() {
   const qualityParam = searchParams.get("quality") ?? "";
   const slotParam = searchParams.get("slot") ?? "";
   const classParam = searchParams.get("class") ?? "";
+  const pricingRealmParam = searchParams.get("pricing_realm") ?? "";
+  const pricingFactionParam = searchParams.get("pricing_faction") ?? "";
   const sort = searchParams.get("sort") ?? undefined;
 
   const qualitySet = useMemo(() => new Set(qualityParam ? qualityParam.split(",") : []), [qualityParam]);
@@ -322,6 +339,28 @@ export function ItemExplorerPage() {
       sort,
     } : null
   );
+
+  const { data: pricingRealms } = useItemPricingRealms();
+  const selectedPricingRealm = pricingRealms?.find((realm) => realm.id === pricingRealmParam);
+  const pricingFaction: AuctionHouseFaction | "" = selectedPricingRealm?.auction_house === "merged"
+    ? "merged"
+    : pricingFactionParam === "alliance" || pricingFactionParam === "horde"
+      ? pricingFactionParam
+      : selectedPricingRealm?.auction_house === "split"
+        ? "alliance"
+        : "";
+  const { data: itemPrices, isFetching: pricesFetching } = useCurrentItemPrices(
+    selectedPricingRealm?.id ?? "",
+    pricingFaction,
+    (results ?? []).map((item) => item.entry),
+  );
+  const priceByItem = useMemo(
+    () => new Map((itemPrices ?? []).flatMap((price) =>
+      price.price_copper === undefined ? [] : [[price.item_id, price.price_copper] as const],
+    )),
+    [itemPrices],
+  );
+  const showPrice = selectedPricingRealm !== undefined;
 
   const updateParams = useCallback(
     (updates: Record<string, string | undefined>) => {
@@ -419,6 +458,44 @@ export function ItemExplorerPage() {
             selected={classSet}
             onChange={(s) => updateParams({ class: [...s].join(",") || undefined })}
           />
+
+        {(pricingRealms?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              aria-label="Pricing realm"
+              value={selectedPricingRealm?.id ?? ""}
+              onChange={(event) => {
+                const realm = pricingRealms?.find((candidate) => candidate.id === event.target.value);
+                updateParams({
+                  pricing_realm: realm?.id,
+                  pricing_faction: realm?.auction_house === "split" ? "alliance" : undefined,
+                });
+              }}
+              className="bg-gray-800 border border-gray-600 rounded px-2.5 py-2 text-sm text-white hover:border-gray-500 transition-colors"
+            >
+              <option value="">No price realm</option>
+              {pricingRealms?.map((realm) => (
+                <option key={realm.id} value={realm.id}>
+                  {realm.server_name} · {realm.realm_name}
+                </option>
+              ))}
+            </select>
+            {selectedPricingRealm?.auction_house === "split" && (
+              <select
+                aria-label="Auction house faction"
+                value={pricingFaction}
+                onChange={(event) => updateParams({ pricing_faction: event.target.value })}
+                className="bg-gray-800 border border-gray-600 rounded px-2.5 py-2 text-sm text-white hover:border-gray-500 transition-colors"
+              >
+                <option value="alliance">Alliance</option>
+                <option value="horde">Horde</option>
+              </select>
+            )}
+            {selectedPricingRealm && (
+              <span className="text-xs text-gray-500">Average price from the last 24 hours</span>
+            )}
+          </div>
+        )}
         </div>
       </div>
 
@@ -434,7 +511,7 @@ export function ItemExplorerPage() {
               </span>
               <span className="text-xs text-gray-500">Hover for tooltip · click to view</span>
             </div>
-            <div className={cn("grid gap-3 items-center px-3 text-xs text-gray-500 font-medium", GRID_COLS)}>
+            <div className={cn("grid gap-3 items-center px-3 text-xs text-gray-500 font-medium", showPrice ? GRID_COLS_WITH_PRICE : GRID_COLS)}>
               <span />
               <span>Name</span>
               <button
@@ -452,6 +529,11 @@ export function ItemExplorerPage() {
               <span className="text-right">Slot</span>
               <span>Type</span>
               <span>Details</span>
+              {showPrice && (
+                <span className="flex items-center justify-end gap-1">
+                  Price {pricesFetching && <Loader2 className="h-3 w-3 animate-spin" />}
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -511,7 +593,12 @@ export function ItemExplorerPage() {
         {results && results.length > 0 && (
           <div className="space-y-0.5 pt-2">
             {results.map((item) => (
-              <ResultRow key={item.entry} item={item} />
+              <ResultRow
+                key={item.entry}
+                item={item}
+                priceCopper={priceByItem.get(item.entry)}
+                showPrice={showPrice}
+              />
             ))}
           </div>
         )}

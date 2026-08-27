@@ -617,7 +617,7 @@ func (q *sqlQuerier) GetUploadKeyByHash(ctx context.Context, secretHash string) 
 }
 
 const getWoWServer = `-- name: GetWoWServer :one
-SELECT id, name, created_by, url, description, tenant_id, default_dataset_id FROM wow_servers WHERE id = $1
+SELECT id, name, created_by, url, description, tenant_id, default_dataset_id, pricing_provider FROM wow_servers WHERE id = $1
 `
 
 func (q *sqlQuerier) GetWoWServer(ctx context.Context, id uuid.UUID) (WowServer, error) {
@@ -631,12 +631,13 @@ func (q *sqlQuerier) GetWoWServer(ctx context.Context, id uuid.UUID) (WowServer,
 		&i.Description,
 		&i.TenantID,
 		&i.DefaultDatasetID,
+		&i.PricingProvider,
 	)
 	return i, err
 }
 
 const getWoWServerByName = `-- name: GetWoWServerByName :one
-SELECT id, name, created_by, url, description, tenant_id, default_dataset_id FROM wow_servers WHERE name = $1
+SELECT id, name, created_by, url, description, tenant_id, default_dataset_id, pricing_provider FROM wow_servers WHERE name = $1
 `
 
 func (q *sqlQuerier) GetWoWServerByName(ctx context.Context, name string) (WowServer, error) {
@@ -650,12 +651,13 @@ func (q *sqlQuerier) GetWoWServerByName(ctx context.Context, name string) (WowSe
 		&i.Description,
 		&i.TenantID,
 		&i.DefaultDatasetID,
+		&i.PricingProvider,
 	)
 	return i, err
 }
 
 const getWoWServerRealm = `-- name: GetWoWServerRealm :one
-SELECT id, server_id, name, created_by, url, description FROM wow_server_realms WHERE id = $1
+SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house FROM wow_server_realms WHERE id = $1
 `
 
 func (q *sqlQuerier) GetWoWServerRealm(ctx context.Context, id uuid.UUID) (WowServerRealm, error) {
@@ -668,12 +670,14 @@ func (q *sqlQuerier) GetWoWServerRealm(ctx context.Context, id uuid.UUID) (WowSe
 		&i.CreatedBy,
 		&i.Url,
 		&i.Description,
+		&i.PricingRouteName,
+		&i.PricingAuctionHouse,
 	)
 	return i, err
 }
 
 const getWoWServerRealmByName = `-- name: GetWoWServerRealmByName :one
-SELECT id, server_id, name, created_by, url, description FROM wow_server_realms WHERE lower(name) = lower($1) LIMIT 1
+SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house FROM wow_server_realms WHERE lower(name) = lower($1) LIMIT 1
 `
 
 func (q *sqlQuerier) GetWoWServerRealmByName(ctx context.Context, name string) (WowServerRealm, error) {
@@ -686,6 +690,8 @@ func (q *sqlQuerier) GetWoWServerRealmByName(ctx context.Context, name string) (
 		&i.CreatedBy,
 		&i.Url,
 		&i.Description,
+		&i.PricingRouteName,
+		&i.PricingAuctionHouse,
 	)
 	return i, err
 }
@@ -727,16 +733,17 @@ func (q *sqlQuerier) InsertUploadKey(ctx context.Context, arg InsertUploadKeyPar
 }
 
 const insertWoWServer = `-- name: InsertWoWServer :one
-INSERT INTO wow_servers (id, name, description, url, created_by)
-VALUES ($1, $2, $3, $4, $5) RETURNING id, name, created_by, url, description, tenant_id, default_dataset_id
+INSERT INTO wow_servers (id, name, description, url, created_by, pricing_provider)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, created_by, url, description, tenant_id, default_dataset_id, pricing_provider
 `
 
 type InsertWoWServerParams struct {
-	ID          uuid.UUID     `db:"id" json:"id"`
-	Name        string        `db:"name" json:"name"`
-	Description string        `db:"description" json:"description"`
-	Url         pgtype.Text   `db:"url" json:"url"`
-	CreatedBy   uuid.NullUUID `db:"created_by" json:"created_by"`
+	ID              uuid.UUID     `db:"id" json:"id"`
+	Name            string        `db:"name" json:"name"`
+	Description     string        `db:"description" json:"description"`
+	Url             pgtype.Text   `db:"url" json:"url"`
+	CreatedBy       uuid.NullUUID `db:"created_by" json:"created_by"`
+	PricingProvider pgtype.Text   `db:"pricing_provider" json:"pricing_provider"`
 }
 
 func (q *sqlQuerier) InsertWoWServer(ctx context.Context, arg InsertWoWServerParams) (WowServer, error) {
@@ -746,6 +753,7 @@ func (q *sqlQuerier) InsertWoWServer(ctx context.Context, arg InsertWoWServerPar
 		arg.Description,
 		arg.Url,
 		arg.CreatedBy,
+		arg.PricingProvider,
 	)
 	var i WowServer
 	err := row.Scan(
@@ -756,22 +764,28 @@ func (q *sqlQuerier) InsertWoWServer(ctx context.Context, arg InsertWoWServerPar
 		&i.Description,
 		&i.TenantID,
 		&i.DefaultDatasetID,
+		&i.PricingProvider,
 	)
 	return i, err
 }
 
 const insertWoWServerRealm = `-- name: InsertWoWServerRealm :one
-INSERT INTO wow_server_realms (id, server_id, name, description, url, created_by)
-VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, server_id, name, created_by, url, description
+INSERT INTO wow_server_realms (
+    id, server_id, name, description, url, created_by,
+    pricing_route_name, pricing_auction_house
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house
 `
 
 type InsertWoWServerRealmParams struct {
-	ID          uuid.UUID     `db:"id" json:"id"`
-	ServerID    uuid.UUID     `db:"server_id" json:"server_id"`
-	Name        string        `db:"name" json:"name"`
-	Description string        `db:"description" json:"description"`
-	Url         pgtype.Text   `db:"url" json:"url"`
-	CreatedBy   uuid.NullUUID `db:"created_by" json:"created_by"`
+	ID                  uuid.UUID     `db:"id" json:"id"`
+	ServerID            uuid.UUID     `db:"server_id" json:"server_id"`
+	Name                string        `db:"name" json:"name"`
+	Description         string        `db:"description" json:"description"`
+	Url                 pgtype.Text   `db:"url" json:"url"`
+	CreatedBy           uuid.NullUUID `db:"created_by" json:"created_by"`
+	PricingRouteName    pgtype.Text   `db:"pricing_route_name" json:"pricing_route_name"`
+	PricingAuctionHouse pgtype.Text   `db:"pricing_auction_house" json:"pricing_auction_house"`
 }
 
 func (q *sqlQuerier) InsertWoWServerRealm(ctx context.Context, arg InsertWoWServerRealmParams) (WowServerRealm, error) {
@@ -782,6 +796,8 @@ func (q *sqlQuerier) InsertWoWServerRealm(ctx context.Context, arg InsertWoWServ
 		arg.Description,
 		arg.Url,
 		arg.CreatedBy,
+		arg.PricingRouteName,
+		arg.PricingAuctionHouse,
 	)
 	var i WowServerRealm
 	err := row.Scan(
@@ -791,12 +807,14 @@ func (q *sqlQuerier) InsertWoWServerRealm(ctx context.Context, arg InsertWoWServ
 		&i.CreatedBy,
 		&i.Url,
 		&i.Description,
+		&i.PricingRouteName,
+		&i.PricingAuctionHouse,
 	)
 	return i, err
 }
 
 const listAllWoWServerRealms = `-- name: ListAllWoWServerRealms :many
-SELECT id, server_id, name, created_by, url, description FROM wow_server_realms ORDER BY name
+SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house FROM wow_server_realms ORDER BY name
 `
 
 func (q *sqlQuerier) ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error) {
@@ -815,6 +833,8 @@ func (q *sqlQuerier) ListAllWoWServerRealms(ctx context.Context) ([]WowServerRea
 			&i.CreatedBy,
 			&i.Url,
 			&i.Description,
+			&i.PricingRouteName,
+			&i.PricingAuctionHouse,
 		); err != nil {
 			return nil, err
 		}
@@ -869,7 +889,7 @@ func (q *sqlQuerier) ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUI
 
 const listWoWServerRealms = `-- name: ListWoWServerRealms :many
 
-SELECT id, server_id, name, created_by, url, description FROM wow_server_realms WHERE server_id = $1 ORDER BY name
+SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house FROM wow_server_realms WHERE server_id = $1 ORDER BY name
 `
 
 // Realms
@@ -889,6 +909,8 @@ func (q *sqlQuerier) ListWoWServerRealms(ctx context.Context, serverID uuid.UUID
 			&i.CreatedBy,
 			&i.Url,
 			&i.Description,
+			&i.PricingRouteName,
+			&i.PricingAuctionHouse,
 		); err != nil {
 			return nil, err
 		}
@@ -902,7 +924,7 @@ func (q *sqlQuerier) ListWoWServerRealms(ctx context.Context, serverID uuid.UUID
 
 const listWoWServers = `-- name: ListWoWServers :many
 
-SELECT id, name, created_by, url, description, tenant_id, default_dataset_id FROM wow_servers ORDER BY name
+SELECT id, name, created_by, url, description, tenant_id, default_dataset_id, pricing_provider FROM wow_servers ORDER BY name
 `
 
 // Servers
@@ -923,6 +945,7 @@ func (q *sqlQuerier) ListWoWServers(ctx context.Context) ([]WowServer, error) {
 			&i.Description,
 			&i.TenantID,
 			&i.DefaultDatasetID,
+			&i.PricingProvider,
 		); err != nil {
 			return nil, err
 		}
@@ -935,7 +958,7 @@ func (q *sqlQuerier) ListWoWServers(ctx context.Context) ([]WowServer, error) {
 }
 
 const listWoWServersByTenantID = `-- name: ListWoWServersByTenantID :many
-SELECT id, name, created_by, url, description, tenant_id, default_dataset_id FROM wow_servers WHERE tenant_id = $1 ORDER BY name
+SELECT id, name, created_by, url, description, tenant_id, default_dataset_id, pricing_provider FROM wow_servers WHERE tenant_id = $1 ORDER BY name
 `
 
 func (q *sqlQuerier) ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error) {
@@ -955,6 +978,7 @@ func (q *sqlQuerier) ListWoWServersByTenantID(ctx context.Context, tenantID uuid
 			&i.Description,
 			&i.TenantID,
 			&i.DefaultDatasetID,
+			&i.PricingProvider,
 		); err != nil {
 			return nil, err
 		}
@@ -995,16 +1019,18 @@ const updateWoWServer = `-- name: UpdateWoWServer :one
 UPDATE wow_servers SET
     name = $1,
     description = $2,
-    url = $3
-WHERE id = $4
-RETURNING id, name, created_by, url, description, tenant_id, default_dataset_id
+    url = $3,
+    pricing_provider = $4
+WHERE id = $5
+RETURNING id, name, created_by, url, description, tenant_id, default_dataset_id, pricing_provider
 `
 
 type UpdateWoWServerParams struct {
-	Name        string      `db:"name" json:"name"`
-	Description string      `db:"description" json:"description"`
-	Url         pgtype.Text `db:"url" json:"url"`
-	ID          uuid.UUID   `db:"id" json:"id"`
+	Name            string      `db:"name" json:"name"`
+	Description     string      `db:"description" json:"description"`
+	Url             pgtype.Text `db:"url" json:"url"`
+	PricingProvider pgtype.Text `db:"pricing_provider" json:"pricing_provider"`
+	ID              uuid.UUID   `db:"id" json:"id"`
 }
 
 func (q *sqlQuerier) UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error) {
@@ -1012,6 +1038,7 @@ func (q *sqlQuerier) UpdateWoWServer(ctx context.Context, arg UpdateWoWServerPar
 		arg.Name,
 		arg.Description,
 		arg.Url,
+		arg.PricingProvider,
 		arg.ID,
 	)
 	var i WowServer
@@ -1023,6 +1050,7 @@ func (q *sqlQuerier) UpdateWoWServer(ctx context.Context, arg UpdateWoWServerPar
 		&i.Description,
 		&i.TenantID,
 		&i.DefaultDatasetID,
+		&i.PricingProvider,
 	)
 	return i, err
 }
@@ -1031,16 +1059,20 @@ const updateWoWServerRealm = `-- name: UpdateWoWServerRealm :one
 UPDATE wow_server_realms SET
     name = $1,
     description = $2,
-    url = $3
-WHERE id = $4
-RETURNING id, server_id, name, created_by, url, description
+    url = $3,
+    pricing_route_name = $4,
+    pricing_auction_house = $5
+WHERE id = $6
+RETURNING id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house
 `
 
 type UpdateWoWServerRealmParams struct {
-	Name        string      `db:"name" json:"name"`
-	Description string      `db:"description" json:"description"`
-	Url         pgtype.Text `db:"url" json:"url"`
-	ID          uuid.UUID   `db:"id" json:"id"`
+	Name                string      `db:"name" json:"name"`
+	Description         string      `db:"description" json:"description"`
+	Url                 pgtype.Text `db:"url" json:"url"`
+	PricingRouteName    pgtype.Text `db:"pricing_route_name" json:"pricing_route_name"`
+	PricingAuctionHouse pgtype.Text `db:"pricing_auction_house" json:"pricing_auction_house"`
+	ID                  uuid.UUID   `db:"id" json:"id"`
 }
 
 func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error) {
@@ -1048,6 +1080,8 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 		arg.Name,
 		arg.Description,
 		arg.Url,
+		arg.PricingRouteName,
+		arg.PricingAuctionHouse,
 		arg.ID,
 	)
 	var i WowServerRealm
@@ -1058,6 +1092,8 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 		&i.CreatedBy,
 		&i.Url,
 		&i.Description,
+		&i.PricingRouteName,
+		&i.PricingAuctionHouse,
 	)
 	return i, err
 }
@@ -5528,6 +5564,168 @@ func (q *sqlQuerier) UpsertGuildSettings(ctx context.Context, arg UpsertGuildSet
 	var i GuildSetting
 	err := row.Scan(&i.GuildID, &i.AllowJoinRequestsUntil, &i.UpdatedAt)
 	return i, err
+}
+
+const getItemPricingConfigByRealm = `-- name: GetItemPricingConfigByRealm :one
+SELECT
+    ws.pricing_provider,
+    wsr.pricing_route_name,
+    wsr.pricing_auction_house
+FROM wow_server_realms wsr
+JOIN wow_servers ws ON ws.id = wsr.server_id
+WHERE wsr.id = $1
+`
+
+type GetItemPricingConfigByRealmRow struct {
+	PricingProvider     pgtype.Text `db:"pricing_provider" json:"pricing_provider"`
+	PricingRouteName    pgtype.Text `db:"pricing_route_name" json:"pricing_route_name"`
+	PricingAuctionHouse pgtype.Text `db:"pricing_auction_house" json:"pricing_auction_house"`
+}
+
+func (q *sqlQuerier) GetItemPricingConfigByRealm(ctx context.Context, realmID uuid.UUID) (GetItemPricingConfigByRealmRow, error) {
+	row := q.db.QueryRow(ctx, getItemPricingConfigByRealm, realmID)
+	var i GetItemPricingConfigByRealmRow
+	err := row.Scan(&i.PricingProvider, &i.PricingRouteName, &i.PricingAuctionHouse)
+	return i, err
+}
+
+const listItemPricingRealms = `-- name: ListItemPricingRealms :many
+SELECT
+    wsr.id,
+    ws.name AS server_name,
+    wsr.name AS realm_name,
+    wsr.pricing_auction_house
+FROM wow_server_realms wsr
+JOIN wow_servers ws ON ws.id = wsr.server_id
+WHERE ws.pricing_provider = 'wowauctions'
+  AND wsr.pricing_route_name IS NOT NULL
+  AND wsr.pricing_auction_house IS NOT NULL
+ORDER BY ws.name, wsr.name
+`
+
+type ListItemPricingRealmsRow struct {
+	ID                  uuid.UUID   `db:"id" json:"id"`
+	ServerName          string      `db:"server_name" json:"server_name"`
+	RealmName           string      `db:"realm_name" json:"realm_name"`
+	PricingAuctionHouse pgtype.Text `db:"pricing_auction_house" json:"pricing_auction_house"`
+}
+
+func (q *sqlQuerier) ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error) {
+	rows, err := q.db.Query(ctx, listItemPricingRealms)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListItemPricingRealmsRow
+	for rows.Next() {
+		var i ListItemPricingRealmsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ServerName,
+			&i.RealmName,
+			&i.PricingAuctionHouse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listObservedItemIDsForDate = `-- name: ListObservedItemIDsForDate :many
+SELECT item_id
+FROM item_daily_prices
+WHERE realm_id = $1
+  AND auction_house_faction = $2
+  AND item_id = ANY($3::int[])
+  AND price_date = $4
+`
+
+type ListObservedItemIDsForDateParams struct {
+	RealmID             uuid.UUID   `db:"realm_id" json:"realm_id"`
+	AuctionHouseFaction string      `db:"auction_house_faction" json:"auction_house_faction"`
+	ItemIds             []int32     `db:"item_ids" json:"item_ids"`
+	PriceDate           pgtype.Date `db:"price_date" json:"price_date"`
+}
+
+func (q *sqlQuerier) ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error) {
+	rows, err := q.db.Query(ctx, listObservedItemIDsForDate,
+		arg.RealmID,
+		arg.AuctionHouseFaction,
+		arg.ItemIds,
+		arg.PriceDate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int32
+	for rows.Next() {
+		var item_id int32
+		if err := rows.Scan(&item_id); err != nil {
+			return nil, err
+		}
+		items = append(items, item_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listResolvedItemPrices = `-- name: ListResolvedItemPrices :many
+SELECT DISTINCT ON (item_id)
+    item_id,
+    price_copper,
+    price_date
+FROM item_daily_prices
+WHERE realm_id = $1
+  AND auction_house_faction = $2
+  AND item_id = ANY($3::int[])
+  AND price_copper IS NOT NULL
+  AND price_date >= $4
+ORDER BY item_id, price_date
+`
+
+type ListResolvedItemPricesParams struct {
+	RealmID             uuid.UUID   `db:"realm_id" json:"realm_id"`
+	AuctionHouseFaction string      `db:"auction_house_faction" json:"auction_house_faction"`
+	ItemIds             []int32     `db:"item_ids" json:"item_ids"`
+	RequestedDate       pgtype.Date `db:"requested_date" json:"requested_date"`
+}
+
+type ListResolvedItemPricesRow struct {
+	ItemID      int32       `db:"item_id" json:"item_id"`
+	PriceCopper pgtype.Int8 `db:"price_copper" json:"price_copper"`
+	PriceDate   pgtype.Date `db:"price_date" json:"price_date"`
+}
+
+func (q *sqlQuerier) ListResolvedItemPrices(ctx context.Context, arg ListResolvedItemPricesParams) ([]ListResolvedItemPricesRow, error) {
+	rows, err := q.db.Query(ctx, listResolvedItemPrices,
+		arg.RealmID,
+		arg.AuctionHouseFaction,
+		arg.ItemIds,
+		arg.RequestedDate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListResolvedItemPricesRow
+	for rows.Next() {
+		var i ListResolvedItemPricesRow
+		if err := rows.Scan(&i.ItemID, &i.PriceCopper, &i.PriceDate); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getLeaderboardVersionRequirements = `-- name: GetLeaderboardVersionRequirements :one
@@ -17189,7 +17387,7 @@ func (q *sqlQuerier) DeleteWorld(ctx context.Context, id uuid.UUID) error {
 }
 
 const getServersForWorld = `-- name: GetServersForWorld :many
-SELECT s.id, s.name, s.created_by, s.url, s.description, s.tenant_id, s.default_dataset_id
+SELECT s.id, s.name, s.created_by, s.url, s.description, s.tenant_id, s.default_dataset_id, s.pricing_provider
 FROM wow_servers s
 JOIN world_server ws ON s.id = ws.server_id
 WHERE ws.world_id = $1
@@ -17213,6 +17411,7 @@ func (q *sqlQuerier) GetServersForWorld(ctx context.Context, worldID uuid.UUID) 
 			&i.Description,
 			&i.TenantID,
 			&i.DefaultDatasetID,
+			&i.PricingProvider,
 		); err != nil {
 			return nil, err
 		}

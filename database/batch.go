@@ -448,6 +448,72 @@ func (b *InsertLogInstanceEventsBatchResults) Close() error {
 	return b.br.Close()
 }
 
+const upsertItemDailyPrice = `-- name: UpsertItemDailyPrice :batchexec
+INSERT INTO item_daily_prices (
+    realm_id,
+    auction_house_faction,
+    item_id,
+    price_date,
+    price_copper
+)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (realm_id, auction_house_faction, item_id, price_date)
+DO UPDATE SET
+    price_copper = EXCLUDED.price_copper,
+    fetched_at = now()
+`
+
+type UpsertItemDailyPriceBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type UpsertItemDailyPriceParams struct {
+	RealmID             uuid.UUID   `db:"realm_id" json:"realm_id"`
+	AuctionHouseFaction string      `db:"auction_house_faction" json:"auction_house_faction"`
+	ItemID              int32       `db:"item_id" json:"item_id"`
+	PriceDate           pgtype.Date `db:"price_date" json:"price_date"`
+	PriceCopper         pgtype.Int8 `db:"price_copper" json:"price_copper"`
+}
+
+func (q *sqlQuerier) UpsertItemDailyPrice(ctx context.Context, arg []UpsertItemDailyPriceParams) *UpsertItemDailyPriceBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.RealmID,
+			a.AuctionHouseFaction,
+			a.ItemID,
+			a.PriceDate,
+			a.PriceCopper,
+		}
+		batch.Queue(upsertItemDailyPrice, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &UpsertItemDailyPriceBatchResults{br, len(arg), false}
+}
+
+func (b *UpsertItemDailyPriceBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *UpsertItemDailyPriceBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const upsertPlayerGearHistory = `-- name: UpsertPlayerGearHistory :batchexec
 INSERT INTO
   game_player_gear_history (

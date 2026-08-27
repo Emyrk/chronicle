@@ -18,8 +18,8 @@ import {
   CLASS_ORDER,
   formatGold,
   ledgerCoverage,
-  NO_PRICES,
 } from "./consumablesLedgerLogic";
+import { useConsumablePrices } from "./useConsumablePrices";
 import { LedgerItemBreakout, type LedgerItemBreakoutData } from "./LedgerItemBreakout";
 import {
   AmbiguousSection,
@@ -87,10 +87,11 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
   // line, and bar scale all react to the filter, not just the row list.
   const [filter, setFilter] = useState("");
   const filteredUses = useFilteredUses(resolvedUses, filter);
+  const prices = useConsumablePrices(context.instance.id, resolvedUses);
 
   const ledger = useMemo(
-    () => aggregateConsumablesLedger(filteredUses, NO_PRICES),
-    [filteredUses],
+    () => aggregateConsumablesLedger(filteredUses, prices),
+    [filteredUses, prices],
   );
 
   const coverage = ledgerCoverage(ledger);

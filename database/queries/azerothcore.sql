@@ -13,13 +13,14 @@ SELECT * FROM wow_servers WHERE name = $1;
 
 
 -- name: InsertWoWServer :one
-INSERT INTO wow_servers (id, name, description, url, created_by)
-VALUES ($1, $2, $3, $4, $5) RETURNING *;
+INSERT INTO wow_servers (id, name, description, url, created_by, pricing_provider)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
 -- name: UpdateWoWServer :one
 UPDATE wow_servers SET
     name = @name,
     description = @description,
-    url = @url
+    url = @url,
+    pricing_provider = @pricing_provider
 WHERE id = @id
 RETURNING *;
 
@@ -44,13 +45,18 @@ SELECT * FROM wow_server_realms WHERE lower(name) = lower(@name) LIMIT 1;
 
 
 -- name: InsertWoWServerRealm :one
-INSERT INTO wow_server_realms (id, server_id, name, description, url, created_by)
-VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
+INSERT INTO wow_server_realms (
+    id, server_id, name, description, url, created_by,
+    pricing_route_name, pricing_auction_house
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *;
 -- name: UpdateWoWServerRealm :one
 UPDATE wow_server_realms SET
     name = @name,
     description = @description,
-    url = @url
+    url = @url,
+    pricing_route_name = @pricing_route_name,
+    pricing_auction_house = @pricing_auction_house
 WHERE id = @id
 RETURNING *;
 

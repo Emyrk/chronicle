@@ -32,6 +32,7 @@ import (
 	"github.com/Emyrk/chronicle/database/pubsub"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
@@ -62,6 +63,7 @@ type Options struct {
 	ExternalAPI      http.Handler
 	Rankings         http.Handler
 	Mailer           *chroniclemail.Mailer
+	ItemPricing      *itempricing.Service
 
 	Registry  *prometheus.Registry
 	AccessURL *url.URL
@@ -425,6 +427,10 @@ func (api *API) Routes() chi.Router {
 			r.Get("/armory/{realm}/{player}/gear-history", api.GetArmoryPlayerGearHistory)
 			r.Get("/armory/{realm}/{player}/loot", api.GetArmoryPlayerLoot)
 
+			// Public item pricing routes
+			r.Get("/item-pricing/realms", api.ItemPricingRealms)
+			r.Post("/item-pricing/prices", api.CurrentItemPrices)
+
 			// Public realm listing
 			r.Get("/realms", api.ListPublicRealms)
 
@@ -476,6 +482,7 @@ func (api *API) Routes() chi.Router {
 
 								r.Get("/youtube", api.GetInstanceYoutube)
 								r.Get("/loot", api.GetInstanceLoot)
+								r.Post("/item-prices", api.InstanceItemPrices)
 								r.Get("/overview", api.InstanceOverviewMetrics)
 								r.Get("/speedrun", api.InstanceSpeedrun)
 								r.Get("/speedrun/cohort", api.InstanceSpeedrunCohort)

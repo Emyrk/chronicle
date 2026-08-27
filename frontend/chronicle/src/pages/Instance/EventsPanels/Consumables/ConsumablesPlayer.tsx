@@ -26,8 +26,8 @@ import {
   classRank,
   formatGold,
   ledgerCoverage,
-  NO_PRICES,
 } from "./consumablesLedgerLogic";
+import { useConsumablePrices } from "./useConsumablePrices";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import { PlayerItemBreakout, type PlayerItemBreakoutData } from "./LedgerItemBreakout";
 import {
@@ -183,6 +183,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
   // totals, and combobox counts all react to the filter, not just the rows.
   const [filter, setFilter] = useState("");
   const filteredUses = useFilteredUses(resolvedUses, filter);
+  const prices = useConsumablePrices(context.instance.id, resolvedUses);
 
   const usesByPlayer = useMemo(() => {
     const counts = new Map<string, number>();
@@ -211,7 +212,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
     const goldByPlayer = new Map<string, number>();
     for (const use of filteredUses) {
       if (use.itemId === null) continue;
-      const unitCopper = NO_PRICES.get(use.itemId);
+      const unitCopper = prices.get(use.itemId);
       if (unitCopper === undefined) continue;
       goldByPlayer.set(use.player, (goldByPlayer.get(use.player) ?? 0) + unitCopper);
     }
@@ -222,7 +223,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
       byGold ? (goldByPlayer.get(guid) ?? 0) : (usesByPlayer.get(guid) ?? 0);
     const max = Math.max(1, ...roster.map((player) => valueOf(player.guid)));
     return { byGold, goldByPlayer, valueOf, max };
-  }, [filteredUses, usesByPlayer, roster]);
+  }, [filteredUses, usesByPlayer, roster, prices]);
 
   // panelOption is a comma-separated token list shared with the panel-level
   // "Raid Wide" checkbox ("cb"); only the pl: token belongs to this view.
@@ -314,9 +315,9 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
     () =>
       aggregateConsumablesLedger(
         filteredUses.filter((use) => use.player === selected?.guid),
-        NO_PRICES,
+        prices,
       ),
-    [filteredUses, selected?.guid],
+    [filteredUses, selected?.guid, prices],
   );
 
   const coverage = ledgerCoverage(ledger);
