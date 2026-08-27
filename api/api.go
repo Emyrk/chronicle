@@ -40,7 +40,6 @@ import (
 	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	context2 "github.com/gorilla/context"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -159,7 +158,6 @@ func (api *API) Routes() chi.Router {
 	r.Use(
 		httpmw.Recover(api.Opts.Logger),
 		httpmw.Log500(api.Opts.Logger),
-		context2.ClearHandler,
 		RouteCors(api.Opts.Tenant),
 		httpmw.SecurityHeaders(),
 		httpmw.ContentSecurityPolicy(),
