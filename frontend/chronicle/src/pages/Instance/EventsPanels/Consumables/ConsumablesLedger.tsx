@@ -16,9 +16,9 @@ import {
   aggregateItemBreakout,
   classRank,
   CLASS_ORDER,
-  formatGold,
   ledgerCoverage,
 } from "./consumablesLedgerLogic";
+import { CoinAmount } from "./CoinAmount";
 import { useConsumablePrices } from "./useConsumablePrices";
 import { LedgerItemBreakout, type LedgerItemBreakoutData } from "./LedgerItemBreakout";
 import {
@@ -193,9 +193,7 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
                 <span className="font-mono text-sm font-semibold text-foreground">
                   {ledger.totalUses} <span className="text-2xs font-normal text-muted-foreground">uses</span>
                 </span>
-                {coverage.showGold && (
-                  <span className="font-mono text-xs text-amber-300/90">{formatGold(ledger.totalCopper)}</span>
-                )}
+                {coverage.showGold && <CoinAmount copper={ledger.totalCopper} className="text-xs" />}
               </div>
             </div>
 
