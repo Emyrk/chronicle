@@ -12,37 +12,33 @@ import (
 
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/internal/services"
-	"github.com/Emyrk/chronicle/internal/services/servicelogger"
-	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
 )
 
 func Stringify() *serpent.Command {
-	srvs := services.New()
-	err := srvs.Register(
-		servicelogger.New(srvs),
-		servicewowdb.New(srvs),
-	)
-	if err != nil {
-		panic(fmt.Sprintf("register service: %v", err))
-	}
-	optionSet := srvs.OptionSet()
+	spellDBCPath := defaultSpellDBCPath()
 
 	cmd := &serpent.Command{
 		Use:        "stringify <file>",
 		Short:      "Convert raw combat log lines to human-readable format",
 		Middleware: serpent.RequireNArgs(1),
-		Options:    optionSet,
+		Options: serpent.OptionSet{
+			{
+				Name:        "spell-dbc-path",
+				Description: "Path to Spell.dbc file.",
+				Flag:        "spell-dbc-path",
+				Env:         "CHRONICLE_SPELL_DBC_PATH",
+				Default:     spellDBCPath,
+				Value:       serpent.StringOf(&spellDBCPath),
+			},
+		},
 		Handler: func(i *serpent.Invocation) error {
-			ctx, cancel := context.WithCancel(i.Context())
-			defer cancel()
-
-			logger := getLogger(i)
-			if err := srvs.Start(ctx, logger); err != nil {
-				return fmt.Errorf("start services: %w", err)
+			wdb, err := gamedb.New(i.Context(), gamedb.Options{
+				SpellsDBCPath: spellDBCPath,
+			})
+			if err != nil {
+				return fmt.Errorf("open game database: %w", err)
 			}
-
-			wdb := servicewowdb.WoWDB(srvs).GameDB()
+			defer func() { _ = wdb.Close() }()
 
 			files, err := openFileReaders(i.Args[0])
 			if err != nil {
