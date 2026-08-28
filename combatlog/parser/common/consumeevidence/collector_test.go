@@ -55,6 +55,7 @@ func newTestCatalog() *testCatalog {
 			17538: {13461}, // Greater Stoneshield → item 13461
 		},
 		directSpells: map[chrondbc.SpellID][]int32{
+			17531: {13444},        // Restore Mana → Major Mana Potion
 			17534: {13446},        // Healing Potion (Major) → Major Healing Potion
 			11730: {3928, 918123}, // ambiguous heal spell → two items
 		},
@@ -163,6 +164,64 @@ func TestSpellGoWithoutItemIDNoEvidence(t *testing.T) {
 	}
 	require.NoError(t, col.ProcessMessage(true, eid, spellGo))
 	assert.Empty(t, *emitted)
+}
+
+func TestCastEvidenceForMajorManaPotion(t *testing.T) {
+	t.Parallel()
+
+	col := newCollector(auras.New(nil), newTestCatalog())
+	emitted := collectEmitted(col)
+
+	player := testPlayerGUID()
+	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	eid := uuid.New()
+
+	col.FightStarted(eid, &messages.Damage{MessageBase: messages.Base(ts)})
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Damage{MessageBase: messages.Base(ts)}))
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.SpellGo{
+		MessageBase: messages.Base(ts),
+		Caster:      player,
+		SpellData:   testSpell(17531),
+	}))
+
+	require.Len(t, *emitted, 1)
+	ev := (*emitted)[0]
+	assert.Equal(t, messages.EvidenceKindCast, ev.Kind)
+	assert.Equal(t, messages.ConfidenceEffectDerived, ev.Confidence)
+	assert.Equal(t, []int32{13444}, ev.CandidateItemIDs)
+	assert.Equal(t, player, ev.Player)
+	require.NotNil(t, ev.ConsumedAtUnixMs)
+	assert.Equal(t, ts.UnixMilli(), *ev.ConsumedAtUnixMs)
+}
+
+func TestCastAndHealEvidenceShareConsumeID(t *testing.T) {
+	t.Parallel()
+
+	col := newCollector(auras.New(nil), newTestCatalog())
+	emitted := collectEmitted(col)
+
+	player := testPlayerGUID()
+	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	eid := uuid.New()
+
+	col.FightStarted(eid, &messages.Damage{MessageBase: messages.Base(ts)})
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Damage{MessageBase: messages.Base(ts)}))
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.SpellGo{
+		MessageBase: messages.Base(ts),
+		Caster:      player,
+		SpellData:   testSpell(17534),
+	}))
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Heal{
+		MessageBase: messages.Base(ts.Add(500 * time.Millisecond)),
+		Caster:      player,
+		Target:      player,
+		SpellData:   testSpell(17534),
+		Amount:      1400,
+	}))
+
+	require.Len(t, *emitted, 2)
+	assert.Equal(t, (*emitted)[0].ConsumeID, (*emitted)[1].ConsumeID)
+	assert.NotEqual(t, (*emitted)[0].EvidenceID, (*emitted)[1].EvidenceID)
 }
 
 // TestHealEvidence verifies heal-derived evidence for potions without auras.
