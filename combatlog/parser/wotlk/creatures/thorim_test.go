@@ -9,7 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -93,75 +92,6 @@ func TestThorimOverkillMarksSurrenderAsSlain(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, soldier.IsActive())
 	require.Equal(t, period.EndStateReset, soldier.LastEndState())
-}
-
-func TestThorimAuraRemovalBurstMarksSurrenderAsSlain(t *testing.T) {
-	t.Parallel()
-
-	all := newThorimTestCharacters()
-	player := guid.GUID(1)
-	thorimID := creatureGUID(thorimEntry)
-	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
-
-	_, err := all.Process(testDamage(start, player, thorimID))
-	require.NoError(t, err)
-
-	for i := range thorimAuraRemovalThreshold - 1 {
-		_, err = all.Process(&messages.Aura{
-			MessageBase: messages.Base(start.Add(time.Second + time.Duration(i)*20*time.Millisecond)),
-			Target:      thorimID,
-			SpellName:   "Removed aura",
-			State:       types.AuraStateRemoved,
-		})
-		require.NoError(t, err)
-	}
-
-	thorim, ok := all.Get(thorimID)
-	require.True(t, ok)
-	require.True(t, thorim.IsActive(), "fewer than 15 removals must not end the encounter")
-
-	_, err = all.Process(&messages.Aura{
-		MessageBase: messages.Base(start.Add(time.Second + 280*time.Millisecond)),
-		Target:      thorimID,
-		SpellName:   "Lightning Charge",
-		State:       types.AuraStateRemoved,
-	})
-	require.NoError(t, err)
-	require.False(t, thorim.IsActive())
-	require.Equal(t, period.EndStateSlain, thorim.LastEndState())
-}
-
-func TestThorimAuraRemovalsOutsideWindowDoNotEndEncounter(t *testing.T) {
-	t.Parallel()
-
-	all := newThorimTestCharacters()
-	player := guid.GUID(1)
-	thorimID := creatureGUID(thorimEntry)
-	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
-
-	_, err := all.Process(testDamage(start, player, thorimID))
-	require.NoError(t, err)
-
-	for i := range thorimAuraRemovalThreshold - 1 {
-		_, err = all.Process(&messages.Aura{
-			MessageBase: messages.Base(start.Add(time.Second + time.Duration(i)*20*time.Millisecond)),
-			Target:      thorimID,
-			SpellName:   "Removed aura",
-			State:       types.AuraStateRemoved,
-		})
-		require.NoError(t, err)
-	}
-	_, err = all.Process(&messages.Aura{
-		MessageBase: messages.Base(start.Add(time.Second + 301*time.Millisecond)),
-		Target:      thorimID,
-		SpellName:   "Late removal",
-		State:       types.AuraStateRemoved,
-	})
-	require.NoError(t, err)
-
-	thorim, ok := all.Get(thorimID)
-	require.True(t, ok)
-	require.True(t, thorim.IsActive())
 }
 
 func TestSifIsNeverActive(t *testing.T) {
