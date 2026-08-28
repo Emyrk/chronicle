@@ -439,6 +439,20 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		22515: "World Trigger",
 		24921: "Cosmetic Trigger - LAB",
 		32780: "Invisible Stalker (All Phases)",
+		32872: "Runic Colossus",
+		32873: "Ancient Rune Giant",
+		32874: "Iron Ring Guard",
+		32875: "Iron Honor Guard",
+		32876: "Dark Rune Champion",
+		32877: "Dark Rune Warbringer",
+		32878: "Dark Rune Evoker",
+		32882: "Jormungar Behemoth",
+		32883: "Captured Mercenary Soldier",
+		32885: "Captured Mercenary Soldier",
+		32886: "Dark Rune Acolyte",
+		32904: "Dark Rune Commoner",
+		32907: "Captured Mercenary Captain",
+		32908: "Captured Mercenary Captain",
 		32922: "Dark Rune Champion",
 		32923: "Dark Rune Commoner",
 		32924: "Dark Rune Evoker",
@@ -446,6 +460,9 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33059: "Wrecked Demolisher",
 		33063: "Wrecked Siege Engine",
 		33089: "Dark Matter",
+		33110: "Dark Rune Acolyte",
+		33138: "Lightning Orb",
+		33196: "Sif",
 		33121: "Iron Construct",
 		33191: "Iron Construct",
 		33210: "Expedition Commander",
@@ -458,6 +475,7 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33287: "Expedition Engineer",
 		33354: "Corrupted Servitor",
 		33355: "Misguided Nymph",
+		33413: "Thorim",
 		33430: "Guardian Lasher",
 		33431: "Forest Swarmer",
 		33525: "Mangrove Ent",
@@ -634,6 +652,45 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33288: "Yogg-Saron",
 		32871: "Algalon the Observer",
 	})
+
+	thorimEncounter := func(encounter.Fight) *identifier.EncounterFuncResult {
+		return &identifier.EncounterFuncResult{
+			EncounterName: "Thorim",
+			Bosses:        []uint32{32865},
+		}
+	}
+	for entry, name := range map[uint32]string{
+		32872: "Runic Colossus",
+		32873: "Ancient Rune Giant",
+		32874: "Iron Ring Guard",
+		32875: "Iron Honor Guard",
+		32876: "Dark Rune Champion",
+		32877: "Dark Rune Warbringer",
+		32878: "Dark Rune Evoker",
+		32882: "Jormungar Behemoth",
+		32883: "Captured Mercenary Soldier",
+		32885: "Captured Mercenary Soldier",
+		32886: "Dark Rune Acolyte",
+		32904: "Dark Rune Commoner",
+		32907: "Captured Mercenary Captain",
+		32908: "Captured Mercenary Captain",
+		33110: "Dark Rune Acolyte",
+		33138: "Lightning Orb",
+		33196: "Sif",
+		33378: "Thunder Orb",
+	} {
+		hostile[entry] = instances.Identity{
+			Affiliation:     types.AffiliationHostile,
+			Name:            name,
+			EncounterNameFn: thorimEncounter,
+		}
+	}
+	hostile[32865] = instances.Identity{
+		Affiliation:   types.AffiliationHostile,
+		Name:          "Thorim",
+		EncounterName: "Thorim",
+		Boss:          true,
+	}
 
 	yoggSaronEncounter := func(encounter.Fight) *identifier.EncounterFuncResult {
 		return &identifier.EncounterFuncResult{
