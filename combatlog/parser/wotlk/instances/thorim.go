@@ -15,22 +15,39 @@ var thorimArenaStarterEntries = map[uint32]struct{}{
 }
 
 // thorimArenaStarterCombat prevents the arena's scripted NPC-versus-NPC battle
-// from opening or extending a Thorim pull before players engage. The damage is
+// from opening or extending a Thorim pull before players engage. The events are
 // still retained in the event stream; only character activity is suppressed.
 type thorimArenaStarterCombat struct{}
 
 func (*thorimArenaStarterCombat) ProcessMessage(msg messages.Message) error {
-	damage, ok := msg.(*messages.Damage)
-	if !ok || damage.Caster == nil {
+	var source, target guid.GUID
+	switch event := msg.(type) {
+	case *messages.Damage:
+		if event.Caster == nil {
+			return nil
+		}
+		source, target = *event.Caster, event.Target
+	case *messages.Aura:
+		if event.Source == nil {
+			return nil
+		}
+		source, target = *event.Source, event.Target
+	default:
 		return nil
 	}
 
-	if !isThorimArenaStarter(*damage.Caster) || !isThorimArenaStarter(damage.Target) {
+	if !isThorimArenaStarter(source) || !isThorimArenaStarter(target) {
 		return nil
 	}
 
-	damage.MarkActivityIgnore("scripted Thorim arena combat", *damage.Caster)
-	damage.MarkActivityIgnore("scripted Thorim arena combat", damage.Target)
+	activity, ok := msg.(interface {
+		MarkActivityIgnore(string, guid.GUID)
+	})
+	if !ok {
+		return nil
+	}
+	activity.MarkActivityIgnore("scripted Thorim arena combat", source)
+	activity.MarkActivityIgnore("scripted Thorim arena combat", target)
 	return nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -62,6 +63,32 @@ func TestThorimPhaseTransitionOnFirstDamageableBossHit(t *testing.T) {
 	require.Len(t, transitions, 1)
 	require.Equal(t, soldier, transitions[0].SourceGUID)
 	require.Equal(t, ThorimPhaseKeyP2, transitions[0].ToPhaseKey)
+}
+
+func TestThorimActivityDoesNotKeepUnrelatedAddsAlive(t *testing.T) {
+	t.Parallel()
+
+	all := newThorimTestCharacters()
+	player := guid.GUID(1)
+	commonerID := creatureGUID(32904)
+	championID := creatureGUID(32876)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	_, err := all.Process(testDamage(start, player, commonerID))
+	require.NoError(t, err)
+	_, err = all.Process(testDamage(start.Add(30*time.Second), player, championID))
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(start.Add(61 * time.Second)))
+	require.NoError(t, err)
+
+	commoner, ok := all.Get(commonerID)
+	require.True(t, ok)
+	require.False(t, commoner.IsActive())
+	require.Equal(t, start.Add(time.Minute), commoner.Periods()[0].End.Timestamp.Date())
+
+	champion, ok := all.Get(championID)
+	require.True(t, ok)
+	require.True(t, champion.IsActive())
 }
 
 func TestThorimOverkillMarksSurrenderAsSlain(t *testing.T) {

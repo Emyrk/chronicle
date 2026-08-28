@@ -147,12 +147,10 @@ func (c *thorimCharacter) Start(reason string, m messages.Message) {
 		c.state.phaseSource = c.ID()
 	}
 
-	c.bumpLinked("thorim_linked_activity", m)
 	c.Common.Start(reason, m)
 }
 
 func (c *thorimCharacter) Bump(reason string, m messages.Message) {
-	c.bumpLinked("thorim_linked_activity", m)
 	c.Common.Bump(reason, m)
 }
 
@@ -162,15 +160,6 @@ func (c *thorimCharacter) Died(reason string, m messages.Message) {
 		c.endLinkedOnThorimDefeat(m)
 	}
 	c.resetStateIfInactive()
-}
-
-func (c *thorimCharacter) bumpLinked(reason string, m messages.Message) {
-	for _, linked := range c.state.characters {
-		if linked == c || !linked.IsActive() {
-			continue
-		}
-		linked.Common.Bump(reason, m)
-	}
 }
 
 func (c *thorimCharacter) endLinkedOnThorimDefeat(m messages.Message) {
