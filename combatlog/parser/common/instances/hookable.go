@@ -916,6 +916,18 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		vehicleMetadata = h.vehicleTracker.MetadataForRange(instanceStart, instanceEnd)
 	}
 
+	persistedUnits := make([]guid.GUID, 0)
+	if h.Characters != nil {
+		_ = h.Characters.All.ForEach(func(char characters.Character) error {
+			persist, ok := char.(characters.InstanceUnitPersister)
+			if ok && persist.PersistInInstance() {
+				persistedUnits = append(persistedUnits, char.ID())
+			}
+			return nil
+		})
+		slices.Sort(persistedUnits)
+	}
+
 	return &FinalizedInstance{
 		Realm:        h.realm,
 		Versions:     h.versions,
@@ -929,6 +941,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		Overview:        overview,
 		RankingRules:    activeRankingRules,
 		UnknownUnits:    h.resolveUnknownUnits(),
+		PersistedUnits:  persistedUnits,
 		VehicleMetadata: vehicleMetadata,
 
 		//SpellBook:  c.SpellBook,

@@ -60,6 +60,36 @@ func TestWotLKEncounterFactoriesUseNeverActiveVortex(t *testing.T) {
 	require.Equal(t, vortex, matched.ID())
 }
 
+func TestWotLKEncounterFactoriesUseNeverActiveMechanolift(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(
+		unitdb.New(),
+		nil,
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+	mechanolift := wotlkEntryGUID(0xF150000000000000, mechanoliftEntry)
+	creatureWithSameEntry := wotlkEntryGUID(0xF130000000000000, mechanoliftEntry)
+	character, ok := NewMechanolift(creatureWithSameEntry, chars)
+	require.False(t, ok)
+	require.Nil(t, character)
+
+	var matched characters.Character
+	for _, factory := range NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}) {
+		if char, ok := factory(mechanolift, chars); ok {
+			matched = char
+			break
+		}
+	}
+
+	require.IsType(t, characters.NeverActive{}, matched)
+	require.Equal(t, mechanolift, matched.ID())
+
+	info, ok := chars.DB().Get(mechanolift)
+	require.True(t, ok)
+	require.Equal(t, "Mechanolift 304-A", info.Name)
+}
+
 func TestWotLKEncounterFactoriesAcceptYoggSaronVehicle(t *testing.T) {
 	t.Parallel()
 

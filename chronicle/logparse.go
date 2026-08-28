@@ -506,6 +506,9 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			for id := range finalized.Participants.Active {
 				builder.seen(id)
 			}
+			for _, id := range finalized.PersistedUnits {
+				builder.seen(id)
+			}
 			for id := range finalized.Guilds.Participant {
 				builder.participate(id)
 			}

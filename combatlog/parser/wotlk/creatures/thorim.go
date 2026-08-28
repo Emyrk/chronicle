@@ -90,12 +90,12 @@ type thorimCharacter struct {
 	defeat *characters.ScriptedDefeatDetector
 }
 
-func NewSif(id guid.GUID, _ *characters.Characters) (characters.Character, bool) {
+func NewSif(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	entry, ok := id.GetEntry()
 	if !ok || entry != 33196 {
 		return nil, false
 	}
-	return characters.NewNeverActive(id), true
+	return characters.NewNamedNeverActive(id, all, "Sif"), true
 }
 
 func NewThorimEncounterCharacter(id guid.GUID, all *characters.Characters) (characters.Character, bool) {

@@ -41,7 +41,10 @@ type FinalizedInstance struct {
 	// Nil if this instance has no ranking configuration.
 	RankingRules *rankings.Rankings
 	// UnknownUnits maps creature entry IDs not in the hostiles map to their name and hit count.
-	UnknownUnits    map[uint32]UnknownUnit
+	UnknownUnits map[uint32]UnknownUnit
+	// PersistedUnits contains observed units that requested instance metadata
+	// persistence without participating in encounter activity.
+	PersistedUnits  []guid.GUID
 	VehicleMetadata vehicles.Metadata
 }
 
