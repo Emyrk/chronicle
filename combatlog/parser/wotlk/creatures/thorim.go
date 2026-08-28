@@ -148,7 +148,7 @@ func (c *thorimCharacter) Process(m messages.Message) error {
 			// Thorim surrenders instead of emitting UNIT_DIED. The combat log still
 			// reports the triggering hit with positive overkill, so use that as the
 			// encounter's slain signal. RoomMechanic flushes the pending room deaths.
-			c.RoomMechanic.Died("thorim_defeated", damage)
+			c.Died("thorim_defeated", damage)
 		}
 	}
 
