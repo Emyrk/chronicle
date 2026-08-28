@@ -17,7 +17,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 func TestOnyxiaZoneName(t *testing.T) {
@@ -192,11 +191,13 @@ func TestUlduarHodirScriptedDefeat(t *testing.T) {
 		Amount:      1,
 		HitType:     types.HitTypeHit,
 	}))
-	require.NoError(t, instance.Process(&messages.SpellGo{
+	require.NoError(t, instance.Process(&messages.Damage{
 		MessageBase: messages.Base(start.Add(10 * time.Second)),
-		Caster:      hodir,
-		Target:      &hodir,
-		SpellData:   &chrondbc.Spell{ID: 64899},
+		Caster:      &player,
+		Target:      hodir,
+		Amount:      951,
+		Overkill:    939,
+		HitType:     types.HitTypeHit,
 	}))
 
 	result, err := instance.Finalize(context.Background())

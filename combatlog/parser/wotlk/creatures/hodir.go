@@ -9,7 +9,6 @@ import (
 const (
 	hodirEntry          uint32 = 32845
 	hodirAlternateEntry uint32 = 32846
-	hodirCreditSpell           = 64899
 )
 
 var hodirBossEntries = map[uint32]struct{}{
@@ -38,29 +37,11 @@ func (c *hodirCharacter) Process(m messages.Message) error {
 		return err
 	}
 
-	switch event := m.(type) {
-	case *messages.SpellGo:
-		if event.Caster == c.ID() && isHodirDefeatCredit(event) {
-			c.Died("hodir_defeated", event)
-		}
-	case *messages.Damage:
-		// Keep the same fallback used by Thorim for servers that expose the
-		// scripted surrender as an overkill hit instead of a credit spell.
-		if event.Target == c.ID() && isHodirDefeatHit(event) {
-			c.Died("hodir_defeated", event)
-		}
+	if damage, ok := m.(*messages.Damage); ok && damage.Target == c.ID() && isHodirDefeatHit(damage) {
+		c.Died("hodir_defeated", damage)
 	}
 
 	return nil
-}
-
-func isHodirDefeatCredit(spell *messages.SpellGo) bool {
-	if spell.Caster == 0 || spell.SpellData == nil || spell.SpellData.ID != hodirCreditSpell {
-		return false
-	}
-
-	entry, ok := spell.Caster.GetEntry()
-	return ok && isHodirBossEntry(entry)
 }
 
 func isHodirDefeatHit(damage *messages.Damage) bool {

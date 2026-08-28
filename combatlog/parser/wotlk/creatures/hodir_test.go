@@ -14,7 +14,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 func newHodirTestCharacters() *characters.Characters {
@@ -25,69 +24,7 @@ func newHodirTestCharacters() *characters.Characters {
 	)
 }
 
-func TestHodirCreditSpellMarksSurrenderAsSlain(t *testing.T) {
-	t.Parallel()
-
-	all := newHodirTestCharacters()
-	player := guid.GUID(1)
-	hodirID := creatureGUID(hodirEntry)
-	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
-
-	_, err := all.Process(&messages.Damage{
-		MessageBase: messages.Base(start),
-		Caster:      &player,
-		Target:      hodirID,
-		Amount:      1,
-		HitType:     types.HitTypeHit,
-	})
-	require.NoError(t, err)
-
-	_, err = all.Process(&messages.SpellGo{
-		MessageBase: messages.Base(start.Add(time.Second)),
-		Caster:      hodirID,
-		Target:      &hodirID,
-		SpellData:   &chrondbc.Spell{ID: chrondbc.SpellID(hodirCreditSpell)},
-	})
-	require.NoError(t, err)
-
-	hodir, ok := all.Get(hodirID)
-	require.True(t, ok)
-	require.False(t, hodir.IsActive())
-	require.Equal(t, period.EndStateSlain, hodir.LastEndState())
-	require.Equal(t, start.Add(time.Second), hodir.Periods()[0].End.Timestamp.Date())
-}
-
-func TestHodirUnrelatedSpellDoesNotEndEncounter(t *testing.T) {
-	t.Parallel()
-
-	all := newHodirTestCharacters()
-	player := guid.GUID(1)
-	hodirID := creatureGUID(hodirEntry)
-	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
-
-	_, err := all.Process(&messages.Damage{
-		MessageBase: messages.Base(start),
-		Caster:      &player,
-		Target:      hodirID,
-		Amount:      1,
-		HitType:     types.HitTypeHit,
-	})
-	require.NoError(t, err)
-
-	_, err = all.Process(&messages.SpellGo{
-		MessageBase: messages.Base(start.Add(time.Second)),
-		Caster:      hodirID,
-		SpellData:   &chrondbc.Spell{ID: 62038},
-	})
-	require.NoError(t, err)
-
-	hodir, ok := all.Get(hodirID)
-	require.True(t, ok)
-	require.True(t, hodir.IsActive())
-	require.Equal(t, period.EndStateNone, hodir.LastEndState())
-}
-
-func TestHodirOverkillFallbackMarksSurrenderAsSlain(t *testing.T) {
+func TestHodirOverkillMarksSurrenderAsSlain(t *testing.T) {
 	t.Parallel()
 
 	all := newHodirTestCharacters()
