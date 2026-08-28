@@ -12493,27 +12493,30 @@ func (q *sqlQuerier) GetInstanceEncounterKillTimes(ctx context.Context, instance
 }
 
 const getInstanceSpeedrun = `-- name: GetInstanceSpeedrun :one
-SELECT sr.instance_id, sr.instance_name, sr.realm_id, sr.guild_id, sr.qualified, sr.start_time, sr.completion_time, sr.duration_ms, sr.proof, sr.created_at, sr.addon_version, sr.parser_version_num, sr.addon_version_num, li.capabilities
+SELECT sr.instance_id, sr.instance_name, sr.realm_id, sr.guild_id, sr.qualified, sr.start_time, sr.completion_time, sr.duration_ms, sr.proof, sr.created_at, sr.addon_version, sr.parser_version_num, sr.addon_version_num, sr.ranked_start_time, sr.ranked_completion_time, sr.ranked_duration_ms, li.capabilities
 FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
 WHERE sr.instance_id = $1
 `
 
 type GetInstanceSpeedrunRow struct {
-	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
-	InstanceName     string             `db:"instance_name" json:"instance_name"`
-	RealmID          uuid.UUID          `db:"realm_id" json:"realm_id"`
-	GuildID          uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	Qualified        bool               `db:"qualified" json:"qualified"`
-	StartTime        pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	CompletionTime   pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
-	DurationMs       int64              `db:"duration_ms" json:"duration_ms"`
-	Proof            []byte             `db:"proof" json:"proof"`
-	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	AddonVersion     string             `db:"addon_version" json:"addon_version"`
-	ParserVersionNum int64              `db:"parser_version_num" json:"parser_version_num"`
-	AddonVersionNum  int64              `db:"addon_version_num" json:"addon_version_num"`
-	Capabilities     []string           `db:"capabilities" json:"capabilities"`
+	InstanceID           uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceName         string             `db:"instance_name" json:"instance_name"`
+	RealmID              uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID              uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	Qualified            bool               `db:"qualified" json:"qualified"`
+	StartTime            pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime       pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	DurationMs           int64              `db:"duration_ms" json:"duration_ms"`
+	Proof                []byte             `db:"proof" json:"proof"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	AddonVersion         string             `db:"addon_version" json:"addon_version"`
+	ParserVersionNum     int64              `db:"parser_version_num" json:"parser_version_num"`
+	AddonVersionNum      int64              `db:"addon_version_num" json:"addon_version_num"`
+	RankedStartTime      pgtype.Timestamptz `db:"ranked_start_time" json:"ranked_start_time"`
+	RankedCompletionTime pgtype.Timestamptz `db:"ranked_completion_time" json:"ranked_completion_time"`
+	RankedDurationMs     pgtype.Int8        `db:"ranked_duration_ms" json:"ranked_duration_ms"`
+	Capabilities         []string           `db:"capabilities" json:"capabilities"`
 }
 
 func (q *sqlQuerier) GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (GetInstanceSpeedrunRow, error) {
@@ -12533,6 +12536,9 @@ func (q *sqlQuerier) GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UU
 		&i.AddonVersion,
 		&i.ParserVersionNum,
 		&i.AddonVersionNum,
+		&i.RankedStartTime,
+		&i.RankedCompletionTime,
+		&i.RankedDurationMs,
 		&i.Capabilities,
 	)
 	return i, err
@@ -12616,24 +12622,33 @@ func (q *sqlQuerier) GuildRaidClears(ctx context.Context, arg GuildRaidClearsPar
 const insertInstanceSpeedrun = `-- name: InsertInstanceSpeedrun :exec
 INSERT INTO instance_speedruns (
     instance_id, instance_name, realm_id, guild_id,
-    qualified, start_time, completion_time, duration_ms, proof,
-    addon_version, parser_version_num, addon_version_num
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    qualified, start_time, completion_time, duration_ms,
+    ranked_start_time, ranked_completion_time, ranked_duration_ms,
+    proof, addon_version, parser_version_num, addon_version_num
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7, $8,
+    $9, $10, $11,
+    $12, $13, $14, $15
+)
 `
 
 type InsertInstanceSpeedrunParams struct {
-	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
-	InstanceName     string             `db:"instance_name" json:"instance_name"`
-	RealmID          uuid.UUID          `db:"realm_id" json:"realm_id"`
-	GuildID          uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	Qualified        bool               `db:"qualified" json:"qualified"`
-	StartTime        pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	CompletionTime   pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
-	DurationMs       int64              `db:"duration_ms" json:"duration_ms"`
-	Proof            []byte             `db:"proof" json:"proof"`
-	AddonVersion     string             `db:"addon_version" json:"addon_version"`
-	ParserVersionNum int64              `db:"parser_version_num" json:"parser_version_num"`
-	AddonVersionNum  int64              `db:"addon_version_num" json:"addon_version_num"`
+	InstanceID           uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceName         string             `db:"instance_name" json:"instance_name"`
+	RealmID              uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID              uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	Qualified            bool               `db:"qualified" json:"qualified"`
+	StartTime            pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime       pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	DurationMs           int64              `db:"duration_ms" json:"duration_ms"`
+	RankedStartTime      pgtype.Timestamptz `db:"ranked_start_time" json:"ranked_start_time"`
+	RankedCompletionTime pgtype.Timestamptz `db:"ranked_completion_time" json:"ranked_completion_time"`
+	RankedDurationMs     pgtype.Int8        `db:"ranked_duration_ms" json:"ranked_duration_ms"`
+	Proof                []byte             `db:"proof" json:"proof"`
+	AddonVersion         string             `db:"addon_version" json:"addon_version"`
+	ParserVersionNum     int64              `db:"parser_version_num" json:"parser_version_num"`
+	AddonVersionNum      int64              `db:"addon_version_num" json:"addon_version_num"`
 }
 
 func (q *sqlQuerier) InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error {
@@ -12646,6 +12661,9 @@ func (q *sqlQuerier) InsertInstanceSpeedrun(ctx context.Context, arg InsertInsta
 		arg.StartTime,
 		arg.CompletionTime,
 		arg.DurationMs,
+		arg.RankedStartTime,
+		arg.RankedCompletionTime,
+		arg.RankedDurationMs,
 		arg.Proof,
 		arg.AddonVersion,
 		arg.ParserVersionNum,
@@ -12814,6 +12832,7 @@ JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.instance_name = $1
   AND sr.qualified = true
+  AND sr.ranked_duration_ms IS NOT NULL
 ORDER BY li.difficulty_name
 `
 
@@ -12917,6 +12936,7 @@ FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.qualified = true
+  AND sr.ranked_duration_ms IS NOT NULL
 ORDER BY sr.instance_name, li.difficulty_name
 `
 
@@ -12955,9 +12975,9 @@ WITH deduped AS (
         sr.instance_name,
         li.difficulty_name,
         sr.guild_id,
-        sr.duration_ms,
-        sr.start_time,
-        sr.completion_time,
+        COALESCE(sr.ranked_duration_ms, 0)::bigint AS duration_ms,
+        COALESCE(sr.ranked_start_time, sr.start_time)::timestamptz AS start_time,
+        COALESCE(sr.ranked_completion_time, sr.completion_time)::timestamptz AS completion_time,
         sr.qualified,
         sr.addon_version,
         li.hashed_slug,
@@ -12975,6 +12995,7 @@ WITH deduped AS (
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.instance_name = $3
       AND sr.qualified = true
+      AND sr.ranked_duration_ms IS NOT NULL
       AND sr.guild_id IS NOT NULL
       AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
       AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
@@ -12988,7 +13009,7 @@ WITH deduped AS (
           ELSE true
       END
       AND CASE
-          WHEN $6 :: bigint > 0 THEN sr.completion_time >= now() - make_interval(days => $6::int)
+          WHEN $6 :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $6::int)
           ELSE true
       END
       AND CASE
@@ -13101,6 +13122,7 @@ SELECT DISTINCT COALESCE(wsr.name, '') AS realm_name
 FROM instance_speedruns sr
 JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
 WHERE sr.qualified = true
+  AND sr.ranked_duration_ms IS NOT NULL
 ORDER BY realm_name
 `
 

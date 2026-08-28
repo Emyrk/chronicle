@@ -3309,6 +3309,9 @@ export interface SpeedrunResult {
     readonly start_time: string;
     readonly completion_time: string;
     readonly duration_ms: number;
+    readonly ranked_start_time?: string;
+    readonly ranked_completion_time?: string;
+    readonly ranked_duration_ms?: number;
     readonly proof: readonly SpeedrunProof[];
     readonly version_status?: SpeedrunVersionStatus;
     readonly level_range?: SpeedrunLevelRangeResult;

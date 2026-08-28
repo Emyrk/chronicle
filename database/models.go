@@ -1342,19 +1342,22 @@ type InstanceOverviewMetric struct {
 }
 
 type InstanceSpeedrun struct {
-	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
-	InstanceName     string             `db:"instance_name" json:"instance_name"`
-	RealmID          uuid.UUID          `db:"realm_id" json:"realm_id"`
-	GuildID          uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	Qualified        bool               `db:"qualified" json:"qualified"`
-	StartTime        pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	CompletionTime   pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
-	DurationMs       int64              `db:"duration_ms" json:"duration_ms"`
-	Proof            []byte             `db:"proof" json:"proof"`
-	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	AddonVersion     string             `db:"addon_version" json:"addon_version"`
-	ParserVersionNum int64              `db:"parser_version_num" json:"parser_version_num"`
-	AddonVersionNum  int64              `db:"addon_version_num" json:"addon_version_num"`
+	InstanceID           uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceName         string             `db:"instance_name" json:"instance_name"`
+	RealmID              uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID              uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	Qualified            bool               `db:"qualified" json:"qualified"`
+	StartTime            pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime       pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	DurationMs           int64              `db:"duration_ms" json:"duration_ms"`
+	Proof                []byte             `db:"proof" json:"proof"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	AddonVersion         string             `db:"addon_version" json:"addon_version"`
+	ParserVersionNum     int64              `db:"parser_version_num" json:"parser_version_num"`
+	AddonVersionNum      int64              `db:"addon_version_num" json:"addon_version_num"`
+	RankedStartTime      pgtype.Timestamptz `db:"ranked_start_time" json:"ranked_start_time"`
+	RankedCompletionTime pgtype.Timestamptz `db:"ranked_completion_time" json:"ranked_completion_time"`
+	RankedDurationMs     pgtype.Int8        `db:"ranked_duration_ms" json:"ranked_duration_ms"`
 }
 
 type ItemDailyPrice struct {

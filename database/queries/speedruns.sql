@@ -1,9 +1,15 @@
 -- name: InsertInstanceSpeedrun :exec
 INSERT INTO instance_speedruns (
     instance_id, instance_name, realm_id, guild_id,
-    qualified, start_time, completion_time, duration_ms, proof,
-    addon_version, parser_version_num, addon_version_num
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+    qualified, start_time, completion_time, duration_ms,
+    ranked_start_time, ranked_completion_time, ranked_duration_ms,
+    proof, addon_version, parser_version_num, addon_version_num
+) VALUES (
+    @instance_id, @instance_name, @realm_id, @guild_id,
+    @qualified, @start_time, @completion_time, @duration_ms,
+    @ranked_start_time, @ranked_completion_time, @ranked_duration_ms,
+    @proof, @addon_version, @parser_version_num, @addon_version_num
+);
 
 -- name: GetInstanceSpeedrun :one
 SELECT sr.*, li.capabilities
@@ -128,9 +134,9 @@ WITH deduped AS (
         sr.instance_name,
         li.difficulty_name,
         sr.guild_id,
-        sr.duration_ms,
-        sr.start_time,
-        sr.completion_time,
+        COALESCE(sr.ranked_duration_ms, 0)::bigint AS duration_ms,
+        COALESCE(sr.ranked_start_time, sr.start_time)::timestamptz AS start_time,
+        COALESCE(sr.ranked_completion_time, sr.completion_time)::timestamptz AS completion_time,
         sr.qualified,
         sr.addon_version,
         li.hashed_slug,
@@ -148,6 +154,7 @@ WITH deduped AS (
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.instance_name = @instance_name
       AND sr.qualified = true
+      AND sr.ranked_duration_ms IS NOT NULL
       AND sr.guild_id IS NOT NULL
       AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
       AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
@@ -161,7 +168,7 @@ WITH deduped AS (
           ELSE true
       END
       AND CASE
-          WHEN @since_days :: bigint > 0 THEN sr.completion_time >= now() - make_interval(days => @since_days::int)
+          WHEN @since_days :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => @since_days::int)
           ELSE true
       END
       AND CASE
@@ -196,6 +203,7 @@ FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.qualified = true
+  AND sr.ranked_duration_ms IS NOT NULL
 ORDER BY sr.instance_name, li.difficulty_name;
 
 -- name: SpeedrunDifficulties :many
@@ -208,6 +216,7 @@ JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.instance_name = @instance_name
   AND sr.qualified = true
+  AND sr.ranked_duration_ms IS NOT NULL
 ORDER BY li.difficulty_name;
 
 -- name: SpeedrunRealmNames :many
@@ -216,6 +225,7 @@ SELECT DISTINCT COALESCE(wsr.name, '') AS realm_name
 FROM instance_speedruns sr
 JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
 WHERE sr.qualified = true
+  AND sr.ranked_duration_ms IS NOT NULL
 ORDER BY realm_name;
 
 -- name: GuildRaidClears :many

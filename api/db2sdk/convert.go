@@ -289,6 +289,11 @@ func SpeedrunResult(sr database.GetInstanceSpeedrunRow) *chroniclesdk.SpeedrunRe
 		CompletionTime: sr.CompletionTime.Time,
 		DurationMs:     sr.DurationMs,
 	}
+	if sr.RankedStartTime.Valid && sr.RankedCompletionTime.Valid && sr.RankedDurationMs.Valid {
+		result.RankedStartTime = &sr.RankedStartTime.Time
+		result.RankedCompletionTime = &sr.RankedCompletionTime.Time
+		result.RankedDurationMs = &sr.RankedDurationMs.Int64
+	}
 
 	// The proof JSONB column may be the new format (object with "proof" +
 	// "level_range" keys) or the legacy format (bare array of proofs).

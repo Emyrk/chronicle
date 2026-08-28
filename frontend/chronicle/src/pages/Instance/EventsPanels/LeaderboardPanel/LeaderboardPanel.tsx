@@ -78,6 +78,7 @@ function LeaderboardEmptyState() {
 export function LeaderboardDetails({ speedrun }: { speedrun: SpeedrunResult }) {
   const satisfied = speedrun.proof.filter((p) => p.satisfied).length;
   const total = speedrun.proof.length;
+  const rankedDurationMs = speedrun.ranked_duration_ms ?? speedrun.duration_ms;
 
   return (
     <div className="p-3">
@@ -94,9 +95,20 @@ export function LeaderboardDetails({ speedrun }: { speedrun: SpeedrunResult }) {
           {speedrun.qualified ? (
             <>
               <Clock className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-sm font-semibold text-emerald-400">
-                {formatDuration(speedrun.duration_ms)}
-              </span>
+              <div className="grid grid-cols-2 gap-x-3 text-right">
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Ranked time</div>
+                  <div className="font-mono text-sm font-semibold text-emerald-400">
+                    {formatDuration(rankedDurationMs)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Clear time</div>
+                  <div className="font-mono text-sm font-semibold text-zinc-300">
+                    {formatDuration(speedrun.duration_ms)}
+                  </div>
+                </div>
+              </div>
             </>
           ) : (
             <span className="text-xs font-medium text-zinc-500">
