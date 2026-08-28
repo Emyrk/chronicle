@@ -7,7 +7,11 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
-const algalonEntry = 32871
+const (
+	algalonEntry                   = 32871
+	algalonSurrenderHealthPercent  = 95
+	algalonMinimumSurvivingPlayers = 2
+)
 
 var algalonAddEntries = []uint32{
 	32953, // Black Hole
@@ -19,10 +23,11 @@ var algalonAddEntries = []uint32{
 
 type algalonCharacter struct {
 	*characters.Common
-	all         *characters.Characters
-	defeat      *characters.ScriptedDefeatDetector
-	seenPlayers map[guid.GUID]struct{}
-	deadPlayers map[guid.GUID]struct{}
+	all            *characters.Characters
+	defeat         *characters.ScriptedDefeatDetector
+	seenPlayers    map[guid.GUID]struct{}
+	deadPlayers    map[guid.GUID]struct{}
+	incomingDamage int64
 }
 
 func NewAlgalon(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
@@ -46,6 +51,7 @@ func (c *algalonCharacter) Process(m messages.Message) error {
 		return err
 	}
 	c.observePlayerState(m)
+	c.observeIncomingDamage(m)
 
 	if wasActive && !c.IsActive() {
 		c.endAdds(m)
@@ -57,8 +63,8 @@ func (c *algalonCharacter) Process(m messages.Message) error {
 
 	signal, defeated := c.defeat.Observe(m, c.IsActive())
 	// Algalon removes a similar burst of debuffs when resetting after a wipe.
-	// The observed surrender is distinguished by raid members still being alive.
-	if !defeated || signal != characters.ScriptedDefeatAuraCleanup || !c.hasLivingPlayer() {
+	// Confirm the boss is near defeat and enough of the observed raid survived.
+	if !defeated || signal != characters.ScriptedDefeatAuraCleanup || !c.surrenderConfirmed() {
 		return nil
 	}
 
@@ -72,9 +78,12 @@ func (c *algalonCharacter) Died(reason string, m messages.Message) {
 }
 
 func (c *algalonCharacter) Start(reason string, m messages.Message) {
-	clear(c.seenPlayers)
-	clear(c.deadPlayers)
-	c.defeat.Reset()
+	if !c.IsActive() {
+		clear(c.seenPlayers)
+		clear(c.deadPlayers)
+		c.incomingDamage = 0
+		c.defeat.Reset()
+	}
 	c.Common.Start(reason, m)
 }
 
@@ -97,13 +106,28 @@ func (c *algalonCharacter) observePlayerState(m messages.Message) {
 	}
 }
 
-func (c *algalonCharacter) hasLivingPlayer() bool {
-	for id := range c.seenPlayers {
-		if _, dead := c.deadPlayers[id]; !dead {
-			return true
-		}
+func (c *algalonCharacter) observeIncomingDamage(m messages.Message) {
+	damage, ok := m.(*messages.Damage)
+	if !ok || damage.Target != c.ID() || damage.Amount <= 0 {
+		return
 	}
-	return false
+	c.incomingDamage += int64(damage.Amount)
+}
+
+func (c *algalonCharacter) surrenderConfirmed() bool {
+	livingPlayers := len(c.seenPlayers) - len(c.deadPlayers)
+	if livingPlayers < algalonMinimumSurvivingPlayers {
+		return false
+	}
+
+	info, ok := c.Info()
+	if ok && info.MaxHealth > 0 {
+		return c.incomingDamage*100 >= info.MaxHealth*algalonSurrenderHealthPercent
+	}
+
+	// Older logs may lack maximum-health metadata. Require a surviving majority
+	// so one missing death event cannot turn a wipe cleanup into a kill.
+	return livingPlayers*2 > len(c.seenPlayers)
 }
 
 func (c *algalonCharacter) keepAddsLinked(m messages.Message) {

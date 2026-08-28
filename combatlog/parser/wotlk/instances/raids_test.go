@@ -611,7 +611,7 @@ func TestUlduarAlgalonAuraCleanupWithLivingPlayerIsCleanKill(t *testing.T) {
 		zone.Zone{Name: "Ulduar", MapID: 603},
 		database.WoWFlavor{database.FlavorWrath},
 	)
-	players := []guid.GUID{1, 2}
+	players := []guid.GUID{1, 2, 3}
 	algalon := creatureGUID(32871)
 	star := creatureGUID(32955)
 	darkMatter := creatureGUID(33089)
@@ -631,6 +631,7 @@ func TestUlduarAlgalonAuraCleanupWithLivingPlayerIsCleanKill(t *testing.T) {
 	processDamage(0, players[0], star)
 	processDamage(50*time.Second, players[0], algalon)
 	processDamage(51*time.Second, players[1], algalon)
+	processDamage(51*time.Second+500*time.Millisecond, players[2], algalon)
 	processDamage(52*time.Second, players[0], darkMatter)
 	require.NoError(t, instance.Process(&messages.Slain{
 		MessageBase: messages.Base(start.Add(53 * time.Second)),
