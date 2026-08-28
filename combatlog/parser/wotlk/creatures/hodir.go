@@ -46,8 +46,3 @@ func (c *hodirCharacter) Process(m messages.Message) error {
 	}
 	return nil
 }
-
-func isHodirBossEntry(entry uint32) bool {
-	_, ok := hodirBossEntries[entry]
-	return ok
-}
