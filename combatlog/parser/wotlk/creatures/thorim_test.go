@@ -100,6 +100,58 @@ func TestThorimActivityDoesNotKeepUnrelatedAddsAlive(t *testing.T) {
 	require.True(t, champion.IsActive())
 }
 
+func TestThorimPolymorphRemovalDoesNotSplitArena(t *testing.T) {
+	t.Parallel()
+
+	all := newThorimTestCharacters()
+	player := guid.GUID(1)
+	acolyteID := creatureGUID(32886)
+	start := time.Date(2026, time.August, 3, 23, 19, 38, 929000000, time.UTC)
+
+	_, err := all.Process(testDamage(start, acolyteID, player))
+	require.NoError(t, err)
+
+	// Observed 43z1htJBandK59kS: the same Dark Rune Acolyte was repeatedly
+	// polymorphed between arena waves. Each removal previously entered the generic
+	// five-second reset grace and produced another Thorim reset encounter.
+	processPolymorph := func(appliedAt time.Duration) {
+		_, err = all.Process(&messages.Aura{
+			MessageBase: messages.Base(start.Add(appliedAt)),
+			Target:      acolyteID,
+			SpellName:   "Polymorph",
+			Amount:      1,
+			State:       types.AuraStateAdded,
+		})
+		require.NoError(t, err)
+		_, err = all.Process(&messages.Aura{
+			MessageBase: messages.Base(start.Add(appliedAt + 10*time.Second)),
+			Target:      acolyteID,
+			SpellName:   "Polymorph",
+			State:       types.AuraStateRemoved,
+		})
+		require.NoError(t, err)
+		_, err = all.Process(messages.TimedOut(start.Add(appliedAt + 16*time.Second)))
+		require.NoError(t, err)
+	}
+
+	processPolymorph(42 * time.Second)
+	processPolymorph(70 * time.Second)
+	// Damage between control applications mirrors the Acolyte's observed Holy
+	// Smite activity and keeps the normal 60-second inactivity window alive.
+	_, err = all.Process(testDamage(start.Add(100*time.Second), acolyteID, player))
+	require.NoError(t, err)
+	processPolymorph(140 * time.Second)
+	_, err = all.Process(testDamage(start.Add(170*time.Second), acolyteID, player))
+	require.NoError(t, err)
+	processPolymorph(210 * time.Second)
+
+	acolyte, ok := all.Get(acolyteID)
+	require.True(t, ok)
+	require.True(t, acolyte.IsActive())
+	require.Equal(t, period.EndStateNone, acolyte.LastEndState())
+	require.Len(t, acolyte.Periods(), 1)
+}
+
 func TestThorimOverkillMarksSurrenderAsSlain(t *testing.T) {
 	t.Parallel()
 
