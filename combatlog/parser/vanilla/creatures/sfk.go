@@ -36,7 +36,7 @@ func (a *archmageArugal) Process(m messages.Message) error {
 	switch ty := m.(type) {
 	case *messages.SpellStart:
 		if ty.Caster == a.ID() && !a.RecentlySlain(m) {
-			a.CharacterBase.Bump("casting", ty)
+			a.Bump("casting", ty)
 		}
 	}
 
