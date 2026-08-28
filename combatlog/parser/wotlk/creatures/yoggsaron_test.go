@@ -188,10 +188,11 @@ func TestYoggSaronDeathKillsAnchorsAndDespawnsAdds(t *testing.T) {
 	sara := creatureGUID(yoggSaronSaraEntry)
 	brain := creatureGUID(yoggSaronBrainEntry)
 	yogg := yoggSaronVehicleGUID()
+	guardian := creatureGUID(yoggSaronGuardianEntry)
 	immortal := creatureGUID(yoggSaronImmortalEntry)
 	start := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
 
-	for offset, target := range []guid.GUID{sara, brain, yogg, immortal} {
+	for offset, target := range []guid.GUID{sara, brain, yogg, guardian, immortal} {
 		_, err := all.Process(testDamage(start.Add(time.Duration(offset)*time.Second), player, target))
 		require.NoError(t, err)
 	}
@@ -212,8 +213,11 @@ func TestYoggSaronDeathKillsAnchorsAndDespawnsAdds(t *testing.T) {
 		require.Equal(t, slainAt, current.End.Timestamp.Date())
 	}
 
-	immortalCharacter, ok := all.Get(immortal)
-	require.True(t, ok)
-	require.False(t, immortalCharacter.IsActive())
-	require.Equal(t, period.EndStateReset, immortalCharacter.LastEndState())
+	for _, id := range []guid.GUID{guardian, immortal} {
+		add, ok := all.Get(id)
+		require.True(t, ok)
+		require.False(t, add.IsActive())
+		require.Equal(t, period.EndStateReset, add.LastEndState())
+		require.Equal(t, slainAt, add.Periods()[len(add.Periods())-1].End.Timestamp.Date())
+	}
 }

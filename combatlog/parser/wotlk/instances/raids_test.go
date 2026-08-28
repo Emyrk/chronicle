@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	commoninstances "github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -484,6 +485,7 @@ func TestUlduarYoggSaronEncounterPhases(t *testing.T) {
 	)
 	player := guid.GUID(1)
 	guardian := creatureGUID(33136)
+	guardianSurvivor := guardian + 1
 	sara := creatureGUID(33134)
 	brain := creatureGUID(33890)
 	tentacle := creatureGUID(33966)
@@ -503,6 +505,7 @@ func TestUlduarYoggSaronEncounterPhases(t *testing.T) {
 	}
 
 	processDamage(0, guardian, types.HitTypeHit)
+	processDamage(500*time.Millisecond, guardianSurvivor, types.HitTypeHit)
 	processDamage(time.Second, sara, types.HitTypeHit)
 	require.NoError(t, instance.Process(&messages.Slain{
 		MessageBase: messages.Base(start.Add(2 * time.Second)),
@@ -513,10 +516,14 @@ func TestUlduarYoggSaronEncounterPhases(t *testing.T) {
 	processDamage(80*time.Second, yogg, types.HitTypeImmune)
 	processDamage(90*time.Second, yogg, types.HitTypeHit)
 	processDamage(100*time.Second, immortal, types.HitTypeHit)
+	processDamage(109*time.Second, guardianSurvivor, types.HitTypeHit)
 	require.NoError(t, instance.Process(&messages.Slain{
 		MessageBase: messages.Base(start.Add(110 * time.Second)),
 		Victim:      yogg,
 	}))
+	guardianCharacter, ok := instance.Characters.Get(guardianSurvivor)
+	require.True(t, ok)
+	require.Equal(t, period.EndStateReset, guardianCharacter.LastEndState())
 
 	result, err := instance.Finalize(context.Background())
 	require.NoError(t, err)
