@@ -112,6 +112,28 @@ func TestWotLKEncounterFactoriesAcceptYoggSaronVehicle(t *testing.T) {
 	require.Equal(t, yogg, matched.ID())
 }
 
+func TestWotLKEncounterFactoriesAcceptMimironVehicle(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(
+		unitdb.New(),
+		nil,
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+	leviathan := wotlkEntryGUID(0xF150000000000000, mimironLeviathanMkIIEntry)
+
+	var matched characters.Character
+	for _, factory := range NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}) {
+		if char, ok := factory(leviathan, chars); ok {
+			matched = char
+			break
+		}
+	}
+
+	require.IsType(t, &mimironCharacter{}, matched)
+	require.Equal(t, leviathan, matched.ID())
+}
+
 func TestAzerothServersideFactoryStillAcceptsPets(t *testing.T) {
 	t.Parallel()
 

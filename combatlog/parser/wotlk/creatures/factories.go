@@ -69,12 +69,13 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewKologarnEncounterCharacter,
 			NewSif,
 			NewThorimEncounterCharacter,
+			NewMimironEncounterCharacter,
 			NewYoggSaronGuardian,
 			NewYoggSaronEncounterCharacter,
 		)
-		// Mechanolift, Vortex, Kologarn, and Yogg-Saron use vehicle GUIDs, so they
-		// must not rely solely on the CreatureFactories-wrapped registrations above.
-		wrath = append(wrath, NewMechanolift, NewVortex, NewKologarnEncounterCharacter, NewYoggSaronEncounterCharacter)
+		// Mechanolift, Vortex, Kologarn, Mimiron's machines, and Yogg-Saron can use
+		// vehicle GUIDs, so they must not rely solely on the CreatureFactories wrappers.
+		wrath = append(wrath, NewMechanolift, NewVortex, NewKologarnEncounterCharacter, NewMimironEncounterCharacter, NewYoggSaronEncounterCharacter)
 		cres = append(wrath, cres...)
 	}
 
