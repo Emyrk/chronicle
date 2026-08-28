@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ConsumableUse } from "./consumables.processor";
 import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consumableDisambiguation";
 import {
+  aggregateConsumableGoldByPlayer,
   aggregateConsumablesLedger,
   aggregateItemBreakout,
   aggregatePlayerItemEncounters,
@@ -98,6 +99,26 @@ describe("summarizePlayerItemFights", () => {
         uses: [{ offsetMilli: 1_000, prePull: false }],
       },
     ]);
+  });
+});
+
+describe("aggregateConsumableGoldByPlayer", () => {
+  it("prices direct and single-candidate item identities like the ledger", () => {
+    const prices: ConsumablePrices = new Map([
+      [1, 10 * GOLD],
+      [2, 34 * GOLD],
+    ]);
+    const uses = [
+      makeUse({ itemId: 1, player: "p1" }),
+      makeUse({ candidateItemIds: [2], player: "p1" }),
+      makeUse({ candidateItemIds: [2, 3], player: "p1" }),
+    ];
+
+    const goldByPlayer = aggregateConsumableGoldByPlayer(uses, prices);
+    const ledger = aggregateConsumablesLedger(uses, prices);
+
+    expect(goldByPlayer.get("p1")).toBe(44 * GOLD);
+    expect(goldByPlayer.get("p1")).toBe(ledger.totalCopper);
   });
 });
 
