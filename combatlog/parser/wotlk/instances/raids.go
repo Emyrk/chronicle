@@ -623,7 +623,6 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33147: "Thorim",
 		33186: "Razorscale",
 		33190: "Ignis the Furnace Master",
-		33213: "Hodir",
 		33241: "Freya",
 		33242: "Thorim",
 		33244: "Mimiron",
@@ -652,6 +651,34 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33288: "Yogg-Saron",
 		32871: "Algalon the Observer",
 	})
+
+	// Hodir's post-encounter gossip and keeper forms are friendly NPCs, not
+	// separate boss encounters. The frozen helpers also fight alongside players.
+	for entry, name := range map[uint32]string{
+		32893: "Missy Flamecuffs",
+		32897: "Field Medic Penny",
+		32900: "Elementalist Avuun",
+		32901: "Ellie Nightfeather",
+		32941: "Tor Greycloud",
+		32946: "Veesha Blazeweaver",
+		32948: "Battle-Priest Eliza",
+		32950: "Spiritwalker Yona",
+		33213: "Hodir",
+		33325: "Eivi Nightfeather",
+		33326: "Field Medic Jessi",
+		33327: "Sissy Flamecuffs",
+		33328: "Elementalist Mahfuun",
+		33330: "Battle-Priest Gina",
+		33331: "Amira Blazeweaver",
+		33332: "Spiritwalker Tara",
+		33333: "Kar Greycloud",
+		33411: "Hodir",
+	} {
+		hostile[entry] = instances.Identity{
+			Affiliation: types.AffiliationFriendly,
+			Name:        name,
+		}
+	}
 
 	thorimEncounter := func(encounter.Fight) *identifier.EncounterFuncResult {
 		return &identifier.EncounterFuncResult{
