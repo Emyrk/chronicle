@@ -14,6 +14,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { iconUrl, talentBackgroundUrl } from "@/config/iconUrl";
+import {
+  CLASS_NAMES,
+  specializationIconUrlForClassID,
+} from "@/config/specializationIcon";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
@@ -112,18 +116,14 @@ export interface TalentTreeViewerProps {
 
 // ─── Class data lookups ───────────────────────────────────────────
 
-const CLASS_NAMES: Record<number, string> = {
-  1: "Warrior",
-  2: "Paladin",
-  3: "Hunter",
-  4: "Rogue",
-  5: "Priest",
-  6: "Death Knight",
-  7: "Shaman",
-  8: "Mage",
-  9: "Warlock",
-  11: "Druid",
-};
+function talentTabIconUrl(
+  classID: number,
+  tab: TalentTabData,
+  iconBaseUrl?: string,
+): string {
+  return specializationIconUrlForClassID(classID, tab.name)
+    ?? iconUrl(tab.iconTexture, iconBaseUrl);
+}
 
 // ─── Tooltip internals ────────────────────────────────────────────
 
@@ -662,6 +662,7 @@ function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, poi
 // ─── Talent tab (single tree) ─────────────────────────────────────
 
 function TalentTab({
+  classID,
   tab,
   ranks,
   readOnly,
@@ -679,6 +680,7 @@ function TalentTab({
   popularity,
   diff,
 }: {
+  classID: number;
   tab: TalentTabData;
   ranks: TalentRanks;
   readOnly: boolean;
@@ -768,11 +770,11 @@ function TalentTab({
         <div className={cn("flex min-w-0 items-center", compact ? "gap-2" : "gap-3")}>
           {!compact && (
             <span className="rounded-lg border border-amber-300/35 bg-black/45 p-1 shadow-lg shadow-black/35">
-              <img src={iconUrl(tab.iconTexture, iconBaseUrl)} alt="" className="h-10 w-10 rounded border border-primary/25 object-cover" />
+              <img src={talentTabIconUrl(classID, tab, iconBaseUrl)} alt="" className="h-10 w-10 rounded border border-primary/25 object-cover" />
             </span>
           )}
           {compact && (
-            <img src={iconUrl(tab.iconTexture, iconBaseUrl)} alt="" className="h-6 w-6 rounded border border-primary/25 object-cover" />
+            <img src={talentTabIconUrl(classID, tab, iconBaseUrl)} alt="" className="h-6 w-6 rounded border border-primary/25 object-cover" />
           )}
           <div className="min-w-0">
             <h3 className={cn("truncate font-bold text-white", compact ? "text-xs" : "text-xl")}>{tab.name}</h3>
@@ -883,7 +885,8 @@ function TalentTab({
 // ─── Mobile sticky tree tabs ──────────────────────────────────────
 
 /** Sticky chip bar on mobile: jump-scroll between the stacked trees. */
-function MobileTreeTabs({ tabs, ranks, visibleTabId, onJump }: {
+function MobileTreeTabs({ classID, tabs, ranks, visibleTabId, onJump }: {
+  classID: number;
   tabs: TalentTabData[];
   ranks: TalentRanks;
   visibleTabId: number | null;
@@ -907,7 +910,7 @@ function MobileTreeTabs({ tabs, ranks, visibleTabId, onJump }: {
                 : "border-transparent bg-zinc-900/60 text-zinc-400",
             )}
           >
-            <img src={iconUrl(tab.iconTexture, iconBaseUrl)} alt="" className="h-4 w-4 shrink-0 rounded" />
+            <img src={talentTabIconUrl(classID, tab, iconBaseUrl)} alt="" className="h-4 w-4 shrink-0 rounded" />
             <span className="truncate">{tab.name}</span>
             <span className={cn("shrink-0 tabular-nums", active ? "text-amber-200/90" : "text-zinc-500")}>{points}</span>
           </button>
@@ -1251,11 +1254,12 @@ export function TalentTreeViewer({
             </div>
           </div>
         </div>
-        <MobileTreeTabs tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />
+        <MobileTreeTabs classID={data.id} tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />
         <div ref={exportRef} className={tabGridClassName} style={exportGridStyle}>
           {exportedTabs.map((tab) => (
             <TalentTab
               key={tab.id}
+              classID={data.id}
               tab={tab}
               ranks={ranks}
               readOnly={readOnly}
@@ -1390,11 +1394,12 @@ export function TalentTreeViewer({
         </p>
       )}
       {/* Mobile: sticky mini-tabs to jump between the stacked trees */}
-      {mobileLayout && <MobileTreeTabs tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />}
+      {mobileLayout && <MobileTreeTabs classID={data.id} tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />}
       <div ref={exportRef} className={tabGridClassName} style={exportGridStyle}>
         {exportedTabs.map((tab) => (
           <TalentTab
             key={tab.id}
+            classID={data.id}
             tab={tab}
             ranks={ranks}
             readOnly={readOnly}
