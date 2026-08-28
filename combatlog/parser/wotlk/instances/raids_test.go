@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 func TestOnyxiaZoneName(t *testing.T) {
@@ -165,6 +166,77 @@ func TestOnyxiaDerivedName(t *testing.T) {
 	}
 
 	require.Nil(t, onyxiaDerivedName(database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore}))
+}
+
+func TestUlduarHodirScriptedDefeat(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWrath},
+	})
+	instance := UlduarFactory.New(
+		ctx,
+		slog.Default(),
+		unitdb.New(),
+		zone.Zone{Name: "Ulduar", MapID: 603},
+		database.WoWFlavor{database.FlavorWrath},
+	)
+	player := guid.GUID(1)
+	hodir := creatureGUID(32845)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      hodir,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.SpellGo{
+		MessageBase: messages.Base(start.Add(10 * time.Second)),
+		Caster:      hodir,
+		Target:      &hodir,
+		SpellData:   &chrondbc.Spell{ID: 64899},
+	}))
+
+	result, err := instance.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+
+	got := result.Encounters[0]
+	require.Equal(t, "Hodir", got.Name)
+	require.True(t, got.Boss)
+	require.Equal(t, encounter.KillTypeClean, got.KillType)
+	require.Equal(t, 10*time.Second, got.Combat.End.Sub(got.Combat.Start))
+}
+
+func TestUlduarHodirIdentities(t *testing.T) {
+	t.Parallel()
+
+	hostiles := UlduarHostiles()
+	for _, entry := range []uint32{32845, 32846} {
+		hodir, ok := hostiles[entry]
+		require.True(t, ok)
+		require.Equal(t, "Hodir", hodir.Name)
+		require.True(t, hodir.Boss)
+		require.Equal(t, "Hodir", hodir.EncounterName)
+	}
+
+	for _, entry := range []uint32{
+		32893, 32897, 32900, 32901,
+		32941, 32946, 32948, 32950,
+		33213,
+		33325, 33326, 33327, 33328,
+		33330, 33331, 33332, 33333,
+		33411,
+	} {
+		identity, ok := hostiles[entry]
+		require.True(t, ok, "entry %d must be registered", entry)
+		require.Equal(t, types.AffiliationFriendly, identity.Affiliation)
+		require.False(t, identity.Boss)
+		require.Empty(t, identity.EncounterName)
+		require.Nil(t, identity.EncounterNameFn)
+	}
 }
 
 func TestUlduarThorimEncounterPhases(t *testing.T) {
