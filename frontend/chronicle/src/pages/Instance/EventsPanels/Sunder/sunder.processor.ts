@@ -2,8 +2,8 @@
  * Sunder Armor processor - Tracks Sunder Armor usage by Warriors.
  * 
  * Tracks:
- * - Effective sunders (via AURA_CAST with effect=6, effectMiscValue=1, stacks < 5)
- * - Refreshed sunders (AURA_CAST when already at 5 stacks - counts as ineffective)
+ * - Effective sunders (direct Sunder Armor or Devastate applications below 5 stacks)
+ * - Refreshed sunders (applications when already at 5 stacks - counts as ineffective)
  * - Failed sunders (via SPELL_GO with numHits=0, numMisses=1)
  * - Stack reset (via Aura StateRemoved for Sunder Armor)
  * - Time to 5 sunders on each target (from encounter start)
@@ -16,6 +16,9 @@ import { createAuraProcessorState, applyAuraEvent, hasAura, type AuraProcessorSt
 
 /** Sunder Armor spell IDs (ranks 1-7) */
 const SUNDER_SPELL_IDS = new Set([7386, 7405, 8380, 11596, 11597, 25225, 47467]);
+
+/** Devastate spell IDs (ranks 1-5). Devastate applies Sunder Armor in Wrath. */
+const DEVASTATE_SPELL_IDS = new Set([20243, 30016, 30022, 47497, 47498]);
 
 /** Expose Armor spell IDs (ranks 5-7) */
 const EXPOSE_ARMOR_SPELL_IDS = new Set([11198, 26866, 48669]);
@@ -403,7 +406,7 @@ function processSpellGoEvent(
   encounterId: string,
   context: ProcessorContext,
 ): void {
-  if (!SUNDER_SPELL_IDS.has(event.spell.id)) return;
+  if (!SUNDER_SPELL_IDS.has(event.spell.id) && !DEVASTATE_SPELL_IDS.has(event.spell.id)) return;
   if (!event.target) return;
   
   const casterPlayer = context.players[event.caster];
@@ -510,7 +513,6 @@ function recordEffectiveSunder(
   
   // Update warrior stats
   const warrior = getOrCreateWarrior(state, data.casterGuid, data.casterName);
-  warrior.effectiveSunders++;
   
   // Update target stats
   let target = state.targets[data.targetGuid];
@@ -526,31 +528,39 @@ function recordEffectiveSunder(
     };
     state.targets[data.targetGuid] = target;
   }
-  target.totalSunders++;
-  
   // Track first 5 contributors
   const currentStack = state._targetStacks[data.targetGuid] ?? 0;
+  const stacksApplied = Math.max(Math.min(stackCount, MAX_SUNDER_STACKS) - currentStack, 0);
+  warrior.effectiveSunders += stacksApplied;
+  target.totalSunders += stacksApplied;
   
-  // Update stack count (we already calculated stackCount = currentStack + 1)
+  // Update to the authoritative stack count reported by the aura event.
   state._targetStacks[data.targetGuid] = stackCount;
   
-  // Only count contribution if we're still building toward 5 stacks
-  if (stackCount <= MAX_SUNDER_STACKS && currentStack < MAX_SUNDER_STACKS) {
+  // Credit every stack added by this application. Glyph of Devastate can add
+  // two stacks from one cast, so the aura's resulting stack count is authoritative.
+  const firstAddedStack = Math.max(currentStack + 1, 1);
+  const lastAddedStack = Math.min(stackCount, MAX_SUNDER_STACKS);
+  for (let addedStack = firstAddedStack; addedStack <= lastAddedStack; addedStack++) {
     target.first5Contributors.push({
       guid: data.casterGuid,
       name: data.casterName,
-      stackNumber: stackCount,
+      stackNumber: addedStack,
     });
-    
-    // Update warrior's contribution count for this target
+  }
+
+  const stacksContributed = Math.max(lastAddedStack - firstAddedStack + 1, 0);
+  if (stacksContributed > 0) {
     const currentContrib = warrior.contributionsToFirst5[data.targetGuid] ?? 0;
-    warrior.contributionsToFirst5[data.targetGuid] = currentContrib + 1;
-    
-    // Check if we just reached 5 stacks
-    if (stackCount >= MAX_SUNDER_STACKS && target.timeToFiveStacksMs === null) {
-      const encounterStartMs = state._encounterStarts[data.encounterId] ?? data.timestampMs;
-      target.timeToFiveStacksMs = data.timestampMs - encounterStartMs;
-    }
+    warrior.contributionsToFirst5[data.targetGuid] = currentContrib + stacksContributed;
+  }
+
+  // Check if this application reached 5 stacks.
+  if (currentStack < MAX_SUNDER_STACKS
+    && stackCount >= MAX_SUNDER_STACKS
+    && target.timeToFiveStacksMs === null) {
+    const encounterStartMs = state._encounterStarts[data.encounterId] ?? data.timestampMs;
+    target.timeToFiveStacksMs = data.timestampMs - encounterStartMs;
   }
 }
 

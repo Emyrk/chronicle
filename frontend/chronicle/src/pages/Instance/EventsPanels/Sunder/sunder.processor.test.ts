@@ -163,6 +163,83 @@ describe("sunderProcessor", () => {
     expect(state._targetStacks[TARGET_GUID]).toBe(5);
   });
 
+  it.each([20243, 30016, 30022, 47497, 47498])("attributes Devastate rank spell ID %i to its Sunder aura update", (spellId) => {
+    const state = sunderProcessor.createState();
+    const context = createContext();
+
+    sunderProcessor.processEvent(
+      state,
+      createSpellGoEvent(spellId, {
+        numHits: 0,
+        numMisses: 0,
+        spell: { id: spellId, name: "Devastate" },
+      }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "spell_go",
+      context,
+    );
+    sunderProcessor.processEvent(
+      state,
+      createAuraEvent(47467, {
+        offsetMilli: 1010,
+        spellName: "Sunder Armor",
+        amount: 1,
+      }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura",
+      context,
+    );
+
+    expect(state.warriors[CASTER_GUID]?.effectiveSunders).toBe(1);
+    expect(state.targets[TARGET_GUID]?.totalSunders).toBe(1);
+    expect(state.targets[TARGET_GUID]?.first5Contributors).toEqual([
+      { guid: CASTER_GUID, name: "Tank", stackNumber: 1 },
+    ]);
+  });
+
+  it("credits both stacks when glyphed Devastate takes a target from 3 to 5", () => {
+    const state = sunderProcessor.createState();
+    const context = createContext();
+    state._targetStacks[TARGET_GUID] = 3;
+
+    sunderProcessor.processEvent(
+      state,
+      createSpellGoEvent(47498, {
+        numHits: 0,
+        numMisses: 0,
+        spell: { id: 47498, name: "Devastate" },
+      }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "spell_go",
+      context,
+    );
+    sunderProcessor.processEvent(
+      state,
+      createAuraEvent(47467, {
+        offsetMilli: 1010,
+        spellName: "Sunder Armor",
+        amount: 5,
+        state: AuraState.Modified,
+      }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura",
+      context,
+    );
+
+    expect(state.warriors[CASTER_GUID]?.effectiveSunders).toBe(2);
+    expect(state.targets[TARGET_GUID]?.totalSunders).toBe(2);
+    expect(state.targets[TARGET_GUID]?.first5Contributors).toEqual([
+      { guid: CASTER_GUID, name: "Tank", stackNumber: 4 },
+      { guid: CASTER_GUID, name: "Tank", stackNumber: 5 },
+    ]);
+    expect(state.targets[TARGET_GUID]?.timeToFiveStacksMs).toBe(1010);
+    expect(state._targetStacks[TARGET_GUID]).toBe(5);
+  });
+
   it("records a Wrath Sunder refresh when the aura stack does not increase", () => {
     const state = sunderProcessor.createState();
     const context = createContext();

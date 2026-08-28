@@ -6,8 +6,10 @@ Tracks Sunder Armor effectiveness by warriors.
 
 ### Effective vs Ineffective Sunders
 A sunder is considered **effective** only if:
-1. A warrior casts "Sunder Armor" on a target
+1. A warrior casts "Sunder Armor" or "Devastate" on a target
 2. The target receives an "afflicted by Sunder Armor (N)" aura event within **500ms** of the cast
+
+The aura's resulting stack count is authoritative. In Wrath, Devastate adds one stack, while Glyph of Devastate can add two stacks from one cast.
 
 If no affliction occurs within the window, the sunder is marked as **ineffective** (wasted).
 
@@ -43,7 +45,7 @@ Combat Log Events
 
 ## Event Matching Algorithm
 
-1. When a Sunder Armor cast is seen, store it as a "pending" cast keyed by target GUID
+1. When a Sunder Armor or Devastate cast is seen, store it as a "pending" cast keyed by target GUID
 2. When an affliction event is seen:
    - Look for pending casts on that target within 500ms
    - If multiple casts are pending, credit the **oldest** (first warrior to cast gets credit)
