@@ -127,6 +127,15 @@ func (c *thorimCharacter) PhaseDefinitions() *phases.EncounterPhases {
 }
 
 func (c *thorimCharacter) Process(m messages.Message) error {
+	if aura, ok := m.(*messages.Aura); ok && aura.Target == c.ID() && aura.Amount == 0 &&
+		characters.IsImmobilizeCC(aura.SpellName) {
+		// Thorim arena mobs are often held between waves. Generic crowd-control
+		// removal uses a five-second reset grace, which splits the encounter when
+		// the same surviving mob is controlled again later. Let normal inactivity
+		// timeout preserve the room across those pauses instead.
+		aura.MarkActivityIgnore("thorim_cc_removed", c.ID())
+	}
+
 	wasAnyActive := c.anyEncounterUnitActive()
 	wasActive := c.IsActive()
 
