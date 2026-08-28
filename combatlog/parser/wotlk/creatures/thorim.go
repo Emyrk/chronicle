@@ -111,13 +111,21 @@ func (c *thorimCharacter) Process(m messages.Message) error {
 		return err
 	}
 
-	if damage, ok := m.(*messages.Damage); ok && c.state.phase == 1 && isThorimPhaseTwoHit(damage) {
-		c.all.EmitPhaseTransition(phases.Transition{
-			SourceGUID: c.state.phaseSource,
-			ToPhaseKey: ThorimPhaseKeyP2,
-			Timestamp:  m.Date(),
-		})
-		c.state.phase = 2
+	if damage, ok := m.(*messages.Damage); ok {
+		if c.state.phase == 1 && isThorimPhaseTwoHit(damage) {
+			c.all.EmitPhaseTransition(phases.Transition{
+				SourceGUID: c.state.phaseSource,
+				ToPhaseKey: ThorimPhaseKeyP2,
+				Timestamp:  m.Date(),
+			})
+			c.state.phase = 2
+		}
+		if c.entry == thorimEntry && isThorimDefeatHit(damage) {
+			// Thorim surrenders instead of emitting UNIT_DIED. The combat log still
+			// reports the triggering hit with positive overkill, so use that as the
+			// encounter's slain signal.
+			c.Died("thorim_defeated", damage)
+		}
 	}
 
 	if wasActive && !c.IsActive() {
@@ -144,7 +152,7 @@ func (c *thorimCharacter) Bump(reason string, m messages.Message) {
 func (c *thorimCharacter) Died(reason string, m messages.Message) {
 	c.Common.Died(reason, m)
 	if c.entry == thorimEntry {
-		c.endLinkedOnThorimDeath(m)
+		c.endLinkedOnThorimDefeat(m)
 	}
 	c.resetStateIfInactive()
 }
@@ -158,7 +166,7 @@ func (c *thorimCharacter) bumpLinked(reason string, m messages.Message) {
 	}
 }
 
-func (c *thorimCharacter) endLinkedOnThorimDeath(m messages.Message) {
+func (c *thorimCharacter) endLinkedOnThorimDefeat(m messages.Message) {
 	for _, linked := range c.state.characters {
 		if linked == c || !linked.IsActive() {
 			continue
@@ -199,4 +207,9 @@ func isThorimPhaseTwoHit(damage *messages.Damage) bool {
 		return false
 	}
 	return !damage.HitType.Has(types.HitTypeImmune) && !damage.HitType.Has(types.HitTypeEvade)
+}
+
+func isThorimDefeatHit(damage *messages.Damage) bool {
+	entry, ok := damage.Target.GetEntry()
+	return ok && entry == thorimEntry && damage.Overkill > 0
 }

@@ -210,9 +210,13 @@ func TestUlduarThorimEncounterPhases(t *testing.T) {
 		Amount:      1,
 		HitType:     types.HitTypeHit,
 	}))
-	require.NoError(t, instance.Process(&messages.Slain{
+	require.NoError(t, instance.Process(&messages.Damage{
 		MessageBase: messages.Base(start.Add(80 * time.Second)),
-		Victim:      thorim,
+		Caster:      &player,
+		Target:      thorim,
+		Amount:      951,
+		Overkill:    939,
+		HitType:     types.HitTypePeriodic,
 	}))
 
 	result, err := instance.Finalize(context.Background())
