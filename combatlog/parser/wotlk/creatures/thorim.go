@@ -1,6 +1,8 @@
 package creatures
 
 import (
+	"time"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -50,9 +52,13 @@ var thorimEncounterEntries = []uint32{
 
 	// Encounter helpers that can participate in combat.
 	33138, // Lightning Orb
-	33196, // Sif
 	33378, // Thunder Orb
 }
+
+const (
+	thorimAuraRemovalThreshold = 15
+	thorimAuraRemovalWindow    = 300 * time.Millisecond
+)
 
 const thorimStateKey = "wotlk_thorim"
 
@@ -60,6 +66,8 @@ type thorimState struct {
 	phase       int
 	phaseSource guid.GUID
 	characters  map[guid.GUID]*thorimCharacter
+
+	auraRemovalTimes []time.Time
 }
 
 func loadThorimState(all *characters.Characters) *thorimState {
@@ -79,6 +87,14 @@ type thorimCharacter struct {
 	all   *characters.Characters
 	entry uint32
 	state *thorimState
+}
+
+func NewSif(id guid.GUID, _ *characters.Characters) (characters.Character, bool) {
+	entry, ok := id.GetEntry()
+	if !ok || entry != 33196 {
+		return nil, false
+	}
+	return characters.NewNeverActive(id), true
 }
 
 func NewThorimEncounterCharacter(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
@@ -111,6 +127,13 @@ func (c *thorimCharacter) Process(m messages.Message) error {
 		return err
 	}
 
+	if aura, ok := m.(*messages.Aura); ok &&
+		c.entry == thorimEntry && c.IsActive() &&
+		aura.Target == c.ID() && aura.State == types.AuraStateRemoved &&
+		c.recordAuraRemoval(aura.Date()) {
+		c.Died("thorim_auras_removed", aura)
+	}
+
 	if damage, ok := m.(*messages.Damage); ok {
 		if c.state.phase == 1 && isThorimPhaseTwoHit(damage) {
 			c.all.EmitPhaseTransition(phases.Transition{
@@ -138,6 +161,7 @@ func (c *thorimCharacter) Start(reason string, m messages.Message) {
 	if !c.anyEncounterUnitActive() {
 		c.state.phase = 1
 		c.state.phaseSource = c.ID()
+		c.resetAuraRemovalWindow()
 	}
 
 	c.bumpLinked("thorim_linked_activity", m)
@@ -175,6 +199,21 @@ func (c *thorimCharacter) endLinkedOnThorimDefeat(m messages.Message) {
 	}
 }
 
+func (c *thorimCharacter) recordAuraRemoval(at time.Time) bool {
+	windowStart := at.Add(-thorimAuraRemovalWindow)
+	firstInWindow := 0
+	for firstInWindow < len(c.state.auraRemovalTimes) &&
+		c.state.auraRemovalTimes[firstInWindow].Before(windowStart) {
+		firstInWindow++
+	}
+	c.state.auraRemovalTimes = append(c.state.auraRemovalTimes[firstInWindow:], at)
+	return len(c.state.auraRemovalTimes) >= thorimAuraRemovalThreshold
+}
+
+func (c *thorimCharacter) resetAuraRemovalWindow() {
+	c.state.auraRemovalTimes = nil
+}
+
 func (c *thorimCharacter) anyEncounterUnitActive() bool {
 	for _, linked := range c.state.characters {
 		if linked.IsActive() {
@@ -190,6 +229,7 @@ func (c *thorimCharacter) resetStateIfInactive() {
 	}
 	c.state.phase = 1
 	c.state.phaseSource = 0
+	c.resetAuraRemovalWindow()
 }
 
 func isThorimEncounterEntry(entry uint32) bool {

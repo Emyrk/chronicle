@@ -676,7 +676,6 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		32908: "Captured Mercenary Captain",
 		33110: "Dark Rune Acolyte",
 		33138: "Lightning Orb",
-		33196: "Sif",
 		33378: "Thunder Orb",
 	} {
 		hostile[entry] = instances.Identity{
@@ -684,6 +683,12 @@ func UlduarHostiles() map[uint32]instances.Identity {
 			Name:            name,
 			EncounterNameFn: thorimEncounter,
 		}
+	}
+	// Sif attacks from outside the arena and never participates as an active
+	// encounter unit. Keep her identified without letting her extend the fight.
+	hostile[33196] = instances.Identity{
+		Affiliation: types.AffiliationFriendly,
+		Name:        "Sif",
 	}
 	hostile[32865] = instances.Identity{
 		Affiliation:   types.AffiliationHostile,

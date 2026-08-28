@@ -252,7 +252,7 @@ func TestUlduarThorimEncounterIdentities(t *testing.T) {
 		32876, 32877, 32878,
 		32882, 32883, 32885, 32886,
 		32904, 32907, 32908,
-		33110, 33138, 33196, 33378,
+		33110, 33138, 33378,
 	} {
 		identity, ok := hostiles[entry]
 		require.True(t, ok, "entry %d must be registered", entry)
@@ -264,6 +264,13 @@ func TestUlduarThorimEncounterIdentities(t *testing.T) {
 		require.Equal(t, "Thorim", result.EncounterName)
 		require.Equal(t, []uint32{32865}, result.Bosses)
 	}
+
+	sif, ok := hostiles[33196]
+	require.True(t, ok)
+	require.Equal(t, "Sif", sif.Name)
+	require.Equal(t, types.AffiliationFriendly, sif.Affiliation)
+	require.False(t, sif.Boss)
+	require.Nil(t, sif.EncounterNameFn)
 
 	keeper, ok := hostiles[33413]
 	require.True(t, ok)
