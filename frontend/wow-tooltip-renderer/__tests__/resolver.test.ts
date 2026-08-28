@@ -168,6 +168,38 @@ describe("resolveSpellDescription — cross-spell references", () => {
     ).toBe("deals 6 damage.");
   });
 
+  it("resolves bare cross-spell value and duration variables", () => {
+    const food = makeSpell({
+      id: 26030,
+      effect_base_points: [357, 0, 0],
+      effect_base_dice: [1, 0, 0],
+      effect_die_sides: [1, 0, 0],
+      effect_aura_period: [0, 0, 0],
+      duration: { ID: 205, Duration: 27000, DurationPerLevel: 0, MaxDuration: 27000 },
+    });
+    const staminaBuff = makeSpell({
+      id: 18191,
+      effect_base_points: [10, 0, 0],
+      duration: {
+        ID: 0,
+        Duration: 600000,
+        DurationPerLevel: 0,
+        MaxDuration: 600000,
+      },
+    });
+    const map = new Map<number, WoWSpell>([[18191, staminaBuff]]);
+
+    expect(
+      resolveSpellDescription(
+        food,
+        "Restores $o1 health over $d. Also increases your Stamina by $18191s for $18191d.",
+        map,
+      ),
+    ).toBe(
+      "Restores 358 health over 27 sec. Also increases your Stamina by 10 for 10 min.",
+    );
+  });
+
   it("leaves the placeholder intact when the referenced spell is missing", () => {
     const target = makeSpell({ id: 100 });
     expect(resolveSpellDescription(target, "heals for $23455s1.")).toBe(

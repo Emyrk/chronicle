@@ -75,8 +75,15 @@ export function resolveVariable(
     }
   }
 
-  // Non-indexed variables
+  // Non-indexed variables. Effect variables without an explicit slot use effect 1.
   switch (variable) {
+    case "$s": // Effect value (base + die range)
+    case "$m": // Modified effect value (same as $s for our purposes)
+      return formatValue(getScaledValue(spell, 0, lvl));
+
+    case "$o": // Total over duration
+      return formatValue(getPeriodicTotal(spell, 0, lvl));
+
     case "$n": // Proc charges / stacks
       return String(spell.proc_charges || 1);
 
