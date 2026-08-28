@@ -116,7 +116,9 @@ func NewThorimEncounterCharacter(id guid.GUID, all *characters.Characters) (char
 		state:        loadThorimState(all),
 	}
 	if entry == thorimEntry {
-		c.defeat = characters.NewScriptedDefeatDetector(id, scriptedSurrenderHitConfig())
+		config := scriptedSurrenderHitConfig()
+		config.EvadeConfirmationWindow = thorimEvadeConfirmationWindow
+		c.defeat = characters.NewScriptedDefeatDetector(id, config)
 	}
 	c.state.characters[id] = c
 	return c, true

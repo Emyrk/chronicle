@@ -106,6 +106,41 @@ func TestScriptedDefeatDetectorCancelsEvadeOnFullyAbsorbedDamage(t *testing.T) {
 	require.False(t, defeated)
 }
 
+func TestScriptedDefeatDetectorCancelsEvadeWhenBossResumesAttacking(t *testing.T) {
+	t.Parallel()
+
+	boss := guid.GUID(10)
+	player := guid.GUID(1)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+	detector := NewScriptedDefeatDetector(boss, ScriptedDefeatConfig{
+		Evade:                   true,
+		EvadeConfirmationWindow: 5 * time.Second,
+	})
+
+	_, defeated := detector.Observe(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      boss,
+		HitType:     types.HitTypeEvade,
+	}, true)
+	require.False(t, defeated)
+
+	_, defeated = detector.Observe(messages.TimedOut(start.Add(time.Second)), true)
+	require.False(t, defeated)
+
+	_, defeated = detector.Observe(&messages.Damage{
+		MessageBase: messages.Base(start.Add(3 * time.Second)),
+		Caster:      &boss,
+		Target:      player,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}, true)
+	require.False(t, defeated)
+
+	_, defeated = detector.Observe(messages.TimedOut(start.Add(10*time.Second)), true)
+	require.False(t, defeated)
+}
+
 func TestScriptedDefeatDetectorAuraCleanup(t *testing.T) {
 	t.Parallel()
 

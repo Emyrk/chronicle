@@ -12,6 +12,7 @@ const (
 	scriptedAuraCleanupBurstWindow     = 100 * time.Millisecond
 	scriptedAuraCleanupDamageWindow    = 500 * time.Millisecond
 	freyaEvadeConfirmationWindow       = 5 * time.Second
+	thorimEvadeConfirmationWindow      = 5 * time.Second
 )
 
 func scriptedSurrenderHitConfig() characters.ScriptedDefeatConfig {

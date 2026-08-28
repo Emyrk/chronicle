@@ -201,7 +201,7 @@ func TestThorimEvadeMarksSurrenderAsSlain(t *testing.T) {
 	defeat.HitType = types.HitTypeEvade
 	_, err = all.Process(defeat)
 	require.NoError(t, err)
-	_, err = all.Process(messages.TimedOut(defeat.Date().Add(characters.ScriptedDefeatEvadeConfirmationWindow)))
+	_, err = all.Process(messages.TimedOut(defeat.Date().Add(thorimEvadeConfirmationWindow)))
 	require.NoError(t, err)
 
 	thorim, ok := all.Get(thorimID)
@@ -213,6 +213,53 @@ func TestThorimEvadeMarksSurrenderAsSlain(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, soldier.IsActive())
 	require.Equal(t, period.EndStateSlain, soldier.LastEndState())
+}
+
+func TestThorimTransientEvadeDoesNotSplitActivePull(t *testing.T) {
+	t.Parallel()
+
+	all := newThorimTestCharacters()
+	player := guid.GUID(1)
+	soldierID := creatureGUID(32883)
+	thorimID := creatureGUID(thorimEntry)
+	start := time.Date(2026, time.August, 15, 18, 5, 40, 0, time.UTC)
+
+	_, err := all.Process(testDamage(start, player, soldierID))
+	require.NoError(t, err)
+	_, err = all.Process(testDamage(start.Add(time.Second), player, thorimID))
+	require.NoError(t, err)
+
+	evade := testDamage(start.Add(2*time.Second), player, thorimID)
+	evade.Amount = 0
+	evade.HitType = types.HitTypeEvade
+	_, err = all.Process(evade)
+	require.NoError(t, err)
+
+	// Observed nUL110Lu8bKMiYNO: an unrelated event arrived after the generic
+	// 500ms confirmation window, then Thorim resumed attacking about three seconds
+	// after the evade. This is a transient encounter mechanic, not a surrender.
+	_, err = all.Process(&messages.Aura{
+		MessageBase: messages.Base(start.Add(3 * time.Second)),
+		Target:      player,
+		SpellName:   "Moonkin Aura",
+		State:       types.AuraStateRemoved,
+	})
+	require.NoError(t, err)
+	_, err = all.Process(testDamage(start.Add(5*time.Second), thorimID, player))
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(start.Add(8 * time.Second)))
+	require.NoError(t, err)
+
+	thorim, ok := all.Get(thorimID)
+	require.True(t, ok)
+	require.True(t, thorim.IsActive())
+	require.Equal(t, period.EndStateNone, thorim.LastEndState())
+	require.Len(t, thorim.Periods(), 1)
+
+	soldier, ok := all.Get(soldierID)
+	require.True(t, ok)
+	require.True(t, soldier.IsActive())
+	require.Equal(t, period.EndStateNone, soldier.LastEndState())
 }
 
 func TestThorimWipeAuraCleanupDoesNotMarkSurrender(t *testing.T) {
