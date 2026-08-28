@@ -184,7 +184,7 @@ export const consumablesProcessor: PanelProcessor<ConsumablesResult, ConsumeProc
     if (use.itemId === null && itemId !== null) use.itemId = itemId;
     if (use.candidateItemIds.length === 0 && candidateItemIds.length > 0) {
       use.candidateItemIds = candidateItemIds;
-      use.candidateEffectKind = kind === 3 || kind === 7 ? "buff" : kind === 4 ? "direct" : null;
+      use.candidateEffectKind = kind === 3 || kind === 7 ? "buff" : kind === 2 || kind === 4 ? "direct" : null;
       use.candidateSpellId = spellId;
     }
     if (use.spellId === null && spellId !== null) use.spellId = spellId;

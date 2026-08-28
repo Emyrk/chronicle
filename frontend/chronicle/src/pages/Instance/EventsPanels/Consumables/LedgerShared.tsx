@@ -9,7 +9,8 @@
  */
 
 import { useQueries } from "@tanstack/react-query";
-import { Search, X } from "lucide-react";
+import { ExternalLink, Search, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import { fetchItemTooltip } from "@/api/gamedata";
 import { useSpell } from "@/api/queries";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
@@ -273,10 +274,26 @@ export function AmbiguousSection({
         <div key={row.key} className="flex items-start gap-2.5">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-              <AmbiguousSpellIcon spellId={row.spellId} />
-              <span className="min-w-0 flex-1 truncate text-xs">
-                {row.spellName || "Unknown consumable"}
-              </span>
+              {row.spellId !== null ? (
+                <Link
+                  to={`/wowdb/spell/${row.spellId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex min-w-0 flex-1 items-center gap-1.5 transition-colors hover:text-foreground"
+                  title={`Open ${row.spellName || `spell ${row.spellId}`} in a new tab`}
+                >
+                  <AmbiguousSpellIcon spellId={row.spellId} />
+                  <span className="min-w-0 truncate text-xs">
+                    {row.spellName || "Unknown consumable"}
+                  </span>
+                  <ExternalLink className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-70" />
+                </Link>
+              ) : (
+                <>
+                  <AmbiguousIcon />
+                  <span className="min-w-0 flex-1 truncate text-xs">Unknown consumable</span>
+                </>
+              )}
               <span className="shrink-0 font-mono text-xs">{row.uses}×</span>
             </div>
             <div

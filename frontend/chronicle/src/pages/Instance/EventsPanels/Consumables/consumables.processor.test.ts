@@ -78,6 +78,24 @@ describe("consumable disambiguation", () => {
     expect(resolveConsumableUse(direct, mappings).itemId).toBe(10);
   });
 
+  it("resolves cast evidence through a direct-spell disambiguation", async () => {
+    const { buildConsumableDisambiguationMap, resolveConsumableUse } = await import("./consumableDisambiguation");
+    const use = process([
+      consumeEvent({
+        kind: 2,
+        spell: { id: 17531, name: "Restore Mana" },
+        candidateItemIds: [13444, 99999],
+        candidateItemIdsCount: 2,
+      }),
+    ]).uses.get("use-1")!;
+    const mappings = buildConsumableDisambiguationMap([
+      { effect_kind: "direct", spell_id: 17531, item_id: 13444 },
+    ]);
+
+    expect(use.candidateEffectKind).toBe("direct");
+    expect(resolveConsumableUse(use, mappings).itemId).toBe(13444);
+  });
+
   it("rejects stale and wrong-domain mappings", async () => {
     const { buildConsumableDisambiguationMap, resolveConsumableUse } = await import("./consumableDisambiguation");
     const use = process([
