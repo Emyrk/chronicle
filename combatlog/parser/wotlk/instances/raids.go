@@ -741,4 +741,7 @@ var UlduarFactory = &instances.CommonFactory{
 	ZoneNames: []string{"ulduar"},
 	MapIDs:    []uint32{603},
 	Hostiles:  instances.FromMap(UlduarHostiles()),
+	Preprocessors: func() []instancehook.Preprocessor {
+		return []instancehook.Preprocessor{&thorimArenaStarterCombat{}}
+	},
 }
