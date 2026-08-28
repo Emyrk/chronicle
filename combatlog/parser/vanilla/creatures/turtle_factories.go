@@ -19,6 +19,9 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 
 	cres = append(cres, characters.CreatureFactories(
 		// ── Stock vanilla content ──────────────────────────────────────
+		// SFK
+		NewHauntingSpirit,
+
 		// Sunken Temple
 		NewAtalalDeathwalkerSpirit,
 		// Wailing Caverns
