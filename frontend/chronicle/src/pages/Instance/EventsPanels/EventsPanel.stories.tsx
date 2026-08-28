@@ -201,6 +201,7 @@ const sunderDebugEvents = Array.from({ length: 15 }, (_, index) => ({
   offsetMs: 1200 + index * 750,
   type: index < 5 ? "landed" as const : "refreshed" as const,
   casterName: `Warrior ${index + 1}`,
+  abilityName: index % 2 === 0 ? "Sunder Armor" : "Devastate",
   stackCount: Math.min(index + 1, 5),
 }));
 

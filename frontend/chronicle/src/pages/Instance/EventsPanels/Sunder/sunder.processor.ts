@@ -76,6 +76,7 @@ interface SunderEventData {
   timestampMs: number;
   casterGuid: string;
   casterName: string;
+  abilityName: string;
   targetGuid: string;
   targetName: string;
   encounterId: string;
@@ -89,6 +90,7 @@ export interface ConfirmedSunder {
   timestampMs: number;
   casterGuid: string;
   casterName: string;
+  abilityName: string;
   targetGuid: string;
   targetName: string;
   encounterId: string;
@@ -114,6 +116,8 @@ export interface SunderDebugEvent {
   type: "landed" | "refreshed" | "failed" | "armor_exposed";
   /** Caster name */
   casterName?: string;
+  /** Ability that caused the Sunder event */
+  abilityName?: string;
   /** Stack count (for landed/refreshed events) */
   stackCount?: number;
 }
@@ -243,6 +247,7 @@ function processAuraCastEvent(
   
   const targetUnit = context.units?.[event.target];
   const casterName = casterPlayer.name;
+  const abilityName = event.spell.name;
   const targetName = targetUnit?.name ?? event.target;
   
   // Calculate offset from encounter start for debug
@@ -266,11 +271,13 @@ function processAuraCastEvent(
       offsetMs,
       type: "armor_exposed",
       casterName,
+      abilityName,
     });
     recordFailedSunder(state, {
       timestampMs,
       casterGuid: event.caster,
       casterName,
+      abilityName,
       targetGuid: event.target,
       targetName,
       encounterId,
@@ -301,6 +308,7 @@ function processAuraCastEvent(
       offsetMs,
       type: "refreshed",
       casterName,
+      abilityName,
       stackCount: MAX_SUNDER_STACKS,
     });
     
@@ -309,6 +317,7 @@ function processAuraCastEvent(
       timestampMs,
       casterGuid: event.caster,
       casterName,
+      abilityName,
       targetGuid: event.target,
       targetName,
       encounterId,
@@ -323,6 +332,7 @@ function processAuraCastEvent(
     offsetMs,
     type: "landed",
     casterName,
+    abilityName,
     stackCount: newStackCount,
   });
   
@@ -331,6 +341,7 @@ function processAuraCastEvent(
     timestampMs,
     casterGuid: event.caster,
     casterName,
+    abilityName,
     targetGuid: event.target,
     targetName,
     encounterId,
@@ -372,6 +383,7 @@ function processAuraEvent(
         offsetMs,
         type: "refreshed",
         casterName: pending.casterName,
+        abilityName: pending.abilityName,
         stackCount: currentStack,
       });
       recordRefreshSunder(state, pending);
@@ -382,6 +394,7 @@ function processAuraEvent(
       offsetMs,
       type: "landed",
       casterName: pending.casterName,
+      abilityName: pending.abilityName,
       stackCount,
     });
     recordEffectiveSunder(state, { ...pending, timestampMs }, stackCount);
@@ -422,6 +435,7 @@ function processSpellGoEvent(
     timestampMs,
     casterGuid: event.caster,
     casterName: casterPlayer.name,
+    abilityName: event.spell.name,
     targetGuid: event.target,
     targetName: targetUnit?.name ?? event.target,
     encounterId,
@@ -440,6 +454,7 @@ function processSpellGoEvent(
     offsetMs: timestampMs - encounterStartMs,
     type: "failed",
     casterName: data.casterName,
+    abilityName: data.abilityName,
   });
   recordFailedSunder(state, data);
 }
@@ -459,6 +474,7 @@ function expirePendingSunders(state: SunderResult, timestampMs: number): void {
       offsetMs: pending.timestampMs - encounterStartMs,
       type: "failed",
       casterName: pending.casterName,
+      abilityName: pending.abilityName,
     });
     recordFailedSunder(state, pending);
   }
