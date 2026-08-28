@@ -99,7 +99,7 @@ func TestHodirMassAuraCleanupAfterDamageMarksSurrenderAsSlain(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	for i := range hodirAuraCleanupThreshold {
+	for i := range scriptedKeeperAuraCleanupThreshold {
 		_, err = all.Process(&messages.Aura{
 			MessageBase: messages.Base(start.Add(50*time.Millisecond + time.Duration(i)*time.Millisecond)),
 			Target:      hodirID,
@@ -144,7 +144,7 @@ func TestHodirAuraCleanupRequiresRecentDamageAndBurst(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			for i := range hodirAuraCleanupThreshold {
+			for i := range scriptedKeeperAuraCleanupThreshold {
 				_, err = all.Process(&messages.Aura{
 					MessageBase: messages.Base(start.Add(test.firstAura + time.Duration(i)*test.auraStep)),
 					Target:      hodirID,

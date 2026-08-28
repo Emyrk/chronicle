@@ -84,9 +84,10 @@ func loadThorimState(all *characters.Characters) *thorimState {
 
 type thorimCharacter struct {
 	*characters.RoomMechanic
-	all   *characters.Characters
-	entry uint32
-	state *thorimState
+	all    *characters.Characters
+	entry  uint32
+	state  *thorimState
+	defeat *characters.ScriptedDefeatDetector
 }
 
 func NewSif(id guid.GUID, _ *characters.Characters) (characters.Character, bool) {
@@ -113,6 +114,9 @@ func NewThorimEncounterCharacter(id guid.GUID, all *characters.Characters) (char
 		all:          all,
 		entry:        entry,
 		state:        loadThorimState(all),
+	}
+	if entry == thorimEntry {
+		c.defeat = characters.NewScriptedDefeatDetector(id, scriptedSurrenderHitConfig())
 	}
 	c.state.characters[id] = c
 	return c, true
@@ -144,11 +148,12 @@ func (c *thorimCharacter) Process(m messages.Message) error {
 			c.emitTransition(ThorimPhaseKeyP3, damage)
 			c.state.phase = 3
 		}
-		if c.entry == thorimEntry && isThorimDefeatHit(damage) {
-			// Thorim surrenders instead of emitting UNIT_DIED. Depending on the
-			// queued attack, the combat log reports either positive overkill or an
-			// evade hit after surrender. RoomMechanic flushes pending room deaths.
-			c.Died("thorim_defeated", damage)
+	}
+
+	if c.defeat != nil {
+		if signal, defeated := c.defeat.Observe(m, c.IsActive()); defeated {
+			// RoomMechanic flushes pending room deaths when Thorim surrenders.
+			c.Died("thorim_defeated_"+string(signal), m)
 		}
 	}
 
@@ -220,10 +225,4 @@ func isSuccessfulThorimDamage(damage *messages.Damage) bool {
 	return damage.Amount > 0 &&
 		!damage.HitType.Has(types.HitTypeImmune) &&
 		!damage.HitType.Has(types.HitTypeEvade)
-}
-
-func isThorimDefeatHit(damage *messages.Damage) bool {
-	entry, ok := damage.Target.GetEntry()
-	return ok && entry == thorimEntry &&
-		(damage.Overkill > 0 || damage.HitType.Has(types.HitTypeEvade))
 }

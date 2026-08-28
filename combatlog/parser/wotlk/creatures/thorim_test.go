@@ -1,6 +1,7 @@
 package creatures
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -158,6 +159,41 @@ func TestThorimEvadeMarksSurrenderAsSlain(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, soldier.IsActive())
 	require.Equal(t, period.EndStateSlain, soldier.LastEndState())
+}
+
+func TestThorimWipeAuraCleanupDoesNotMarkSurrender(t *testing.T) {
+	t.Parallel()
+
+	all := newThorimTestCharacters()
+	player := guid.GUID(1)
+	soldierID := creatureGUID(32883)
+	thorimID := creatureGUID(thorimEntry)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	_, err := all.Process(testDamage(start, player, soldierID))
+	require.NoError(t, err)
+	_, err = all.Process(testDamage(start.Add(time.Second), player, thorimID))
+	require.NoError(t, err)
+
+	for i := range scriptedKeeperAuraCleanupThreshold {
+		_, err = all.Process(&messages.Aura{
+			MessageBase: messages.Base(start.Add(time.Second + 50*time.Millisecond + time.Duration(i)*time.Millisecond)),
+			Target:      thorimID,
+			SpellName:   fmt.Sprintf("Debuff %d", i),
+			State:       types.AuraStateRemoved,
+		})
+		require.NoError(t, err)
+	}
+
+	thorim, ok := all.Get(thorimID)
+	require.True(t, ok)
+	require.True(t, thorim.IsActive())
+	require.Equal(t, period.EndStateNone, thorim.LastEndState())
+
+	soldier, ok := all.Get(soldierID)
+	require.True(t, ok)
+	require.True(t, soldier.IsActive())
+	require.Equal(t, period.EndStateNone, soldier.LastEndState())
 }
 
 func TestSifIsNeverActive(t *testing.T) {
