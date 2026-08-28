@@ -647,6 +647,14 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		32871: "Algalon the Observer",
 	})
 
+	// The three council members are one boss encounter regardless of kill order.
+	// Keep alternate registered entries aligned with the canonical encounter name.
+	for _, entry := range []uint32{32857, 32867, 32927, 33692, 33693, 33694} {
+		identity := hostile[entry]
+		identity.EncounterName = "Assembly of Iron"
+		hostile[entry] = identity
+	}
+
 	// Razorscale's expedition units and harpoon state helpers fight or act during
 	// the encounter, but they are friendly mechanics and must not start, extend,
 	// or make the encounter partial.
