@@ -19,11 +19,11 @@ func scriptedSurrenderHitConfig() characters.ScriptedDefeatConfig {
 	}
 }
 
-// Hodir's client logs sometimes omit both the triggering overkill and a queued
-// evade, leaving only the guarded aura-cleanup burst. Thorim uses the same
-// detector but not this fallback: observed Thorim wipes can produce an
+// Hodir and Freya client logs sometimes omit both the triggering overkill and a
+// queued evade, leaving only the guarded aura-cleanup burst. Thorim uses the
+// same detector but not this fallback: observed Thorim wipes can produce an
 // indistinguishable cleanup burst immediately after incoming damage.
-func hodirDefeatConfig() characters.ScriptedDefeatConfig {
+func scriptedSurrenderWithAuraCleanupConfig() characters.ScriptedDefeatConfig {
 	config := scriptedSurrenderHitConfig()
 	config.AuraCleanup = characters.AuraCleanupDefeatConfig{
 		DistinctAuras: scriptedKeeperAuraCleanupThreshold,
