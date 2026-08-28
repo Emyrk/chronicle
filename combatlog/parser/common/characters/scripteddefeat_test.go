@@ -36,15 +36,6 @@ func TestScriptedDefeatDetectorDamageSignals(t *testing.T) {
 			ok:   true,
 		},
 		{
-			name: "evade",
-			damage: &messages.Damage{
-				MessageBase: messages.Base(start), Caster: &player, Target: boss,
-				HitType: types.HitTypeEvade,
-			},
-			want: ScriptedDefeatEvade,
-			ok:   true,
-		},
-		{
 			name: "wrong target",
 			damage: &messages.Damage{
 				MessageBase: messages.Base(start), Caster: &player, Target: guid.GUID(11),
@@ -60,6 +51,60 @@ func TestScriptedDefeatDetectorDamageSignals(t *testing.T) {
 			require.Equal(t, test.want, got)
 		})
 	}
+}
+
+func TestScriptedDefeatDetectorConfirmsEvadeAfterDelay(t *testing.T) {
+	t.Parallel()
+
+	boss := guid.GUID(10)
+	player := guid.GUID(1)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+	detector := NewScriptedDefeatDetector(boss, ScriptedDefeatConfig{Evade: true})
+
+	signal, defeated := detector.Observe(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      boss,
+		HitType:     types.HitTypeEvade,
+	}, true)
+	require.False(t, defeated)
+	require.Empty(t, signal)
+
+	_, defeated = detector.Observe(messages.TimedOut(start.Add(ScriptedDefeatEvadeConfirmationWindow-time.Millisecond)), true)
+	require.False(t, defeated)
+
+	signal, defeated = detector.Observe(messages.TimedOut(start.Add(ScriptedDefeatEvadeConfirmationWindow)), true)
+	require.True(t, defeated)
+	require.Equal(t, ScriptedDefeatEvade, signal)
+}
+
+func TestScriptedDefeatDetectorCancelsEvadeOnSubsequentDamage(t *testing.T) {
+	t.Parallel()
+
+	boss := guid.GUID(10)
+	player := guid.GUID(1)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+	detector := NewScriptedDefeatDetector(boss, ScriptedDefeatConfig{Evade: true})
+
+	_, defeated := detector.Observe(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      boss,
+		HitType:     types.HitTypeEvade,
+	}, true)
+	require.False(t, defeated)
+
+	_, defeated = detector.Observe(&messages.Damage{
+		MessageBase: messages.Base(start.Add(ScriptedDefeatEvadeConfirmationWindow - time.Millisecond)),
+		Caster:      &player,
+		Target:      boss,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}, true)
+	require.False(t, defeated)
+
+	_, defeated = detector.Observe(messages.TimedOut(start.Add(time.Second)), true)
+	require.False(t, defeated)
 }
 
 func TestScriptedDefeatDetectorAuraCleanup(t *testing.T) {

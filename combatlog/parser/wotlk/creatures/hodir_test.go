@@ -67,19 +67,22 @@ func TestHodirEvadeMarksSurrenderAsSlain(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	evadeAt := start.Add(time.Second)
 	_, err = all.Process(&messages.Damage{
-		MessageBase: messages.Base(start.Add(time.Second)),
+		MessageBase: messages.Base(evadeAt),
 		Caster:      &player,
 		Target:      hodirID,
 		HitType:     types.HitTypeEvade,
 	})
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(evadeAt.Add(characters.ScriptedDefeatEvadeConfirmationWindow)))
 	require.NoError(t, err)
 
 	hodir, ok := all.Get(hodirID)
 	require.True(t, ok)
 	require.False(t, hodir.IsActive())
 	require.Equal(t, period.EndStateSlain, hodir.LastEndState())
-	require.Equal(t, start.Add(time.Second), hodir.Periods()[0].End.Timestamp.Date())
+	require.Equal(t, evadeAt.Add(characters.ScriptedDefeatEvadeConfirmationWindow), hodir.Periods()[0].End.Timestamp.Date())
 }
 
 func TestHodirMassAuraCleanupAfterDamageMarksSurrenderAsSlain(t *testing.T) {

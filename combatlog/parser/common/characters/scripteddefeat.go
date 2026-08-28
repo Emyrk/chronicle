@@ -16,6 +16,10 @@ const (
 	ScriptedDefeatPositiveOverkill ScriptedDefeatSignal = "positive_overkill"
 	ScriptedDefeatEvade            ScriptedDefeatSignal = "evade"
 	ScriptedDefeatAuraCleanup      ScriptedDefeatSignal = "aura_cleanup"
+
+	// ScriptedDefeatEvadeConfirmationWindow delays evade-based defeat so
+	// subsequent boss damage can disprove a transient evade.
+	ScriptedDefeatEvadeConfirmationWindow = 500 * time.Millisecond
 )
 
 // AuraCleanupDefeatConfig configures guarded mass-aura-removal detection.
@@ -42,6 +46,7 @@ type ScriptedDefeatDetector struct {
 	active bool
 
 	lastIncomingDamage time.Time
+	pendingEvade       time.Time
 	cleanupBurstStart  time.Time
 	cleanupAuras       map[string]struct{}
 }
@@ -68,19 +73,20 @@ func (d *ScriptedDefeatDetector) Observe(m messages.Message, active bool) (Scrip
 
 	switch event := m.(type) {
 	case *messages.Damage:
-		if event.Target != d.id {
-			return "", false
-		}
-		if d.config.PositiveOverkill && event.Overkill > 0 {
-			d.Reset()
-			return ScriptedDefeatPositiveOverkill, true
-		}
-		if d.config.Evade && event.HitType.Has(types.HitTypeEvade) {
-			d.Reset()
-			return ScriptedDefeatEvade, true
-		}
-		if isSuccessfulIncomingDamage(event) {
-			d.lastIncomingDamage = event.Date()
+		if event.Target == d.id {
+			if d.config.PositiveOverkill && event.Overkill > 0 {
+				d.Reset()
+				return ScriptedDefeatPositiveOverkill, true
+			}
+			if isSuccessfulIncomingDamage(event) {
+				sinceEvade := event.Date().Sub(d.pendingEvade)
+				if !d.pendingEvade.IsZero() && sinceEvade >= 0 && sinceEvade < ScriptedDefeatEvadeConfirmationWindow {
+					d.pendingEvade = time.Time{}
+				}
+				d.lastIncomingDamage = event.Date()
+			} else if d.config.Evade && event.HitType.Has(types.HitTypeEvade) && d.pendingEvade.IsZero() {
+				d.pendingEvade = event.Date()
+			}
 		}
 	case *messages.Aura:
 		if d.observeAuraCleanup(event) {
@@ -89,12 +95,17 @@ func (d *ScriptedDefeatDetector) Observe(m messages.Message, active bool) (Scrip
 		}
 	}
 
+	if !d.pendingEvade.IsZero() && m.Date().Sub(d.pendingEvade) >= ScriptedDefeatEvadeConfirmationWindow {
+		d.Reset()
+		return ScriptedDefeatEvade, true
+	}
 	return "", false
 }
 
 func (d *ScriptedDefeatDetector) Reset() {
 	d.active = false
 	d.lastIncomingDamage = time.Time{}
+	d.pendingEvade = time.Time{}
 	d.cleanupBurstStart = time.Time{}
 	clear(d.cleanupAuras)
 }

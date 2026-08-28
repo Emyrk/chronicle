@@ -62,6 +62,7 @@ func TestFreyaScriptedDefeatSignalsMarkSurrenderAsSlain(t *testing.T) {
 						Target:      freyaID,
 						HitType:     types.HitTypeEvade,
 					},
+					messages.TimedOut(at.Add(time.Second + characters.ScriptedDefeatEvadeConfirmationWindow)),
 				}
 			},
 		},
@@ -85,6 +86,52 @@ func TestFreyaScriptedDefeatSignalsMarkSurrenderAsSlain(t *testing.T) {
 			require.Equal(t, period.EndStateSlain, freya.LastEndState())
 		})
 	}
+}
+
+func TestFreyaDamageAfterEvadeDoesNotSplitEncounter(t *testing.T) {
+	t.Parallel()
+
+	all := newFreyaTestCharacters()
+	playerID := guid.GUID(1)
+	freyaID := creatureGUID(freyaEntry)
+	start := time.Date(2026, time.August, 27, 2, 3, 16, 531000000, time.UTC)
+
+	_, err := all.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &freyaID,
+		Target:      playerID,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
+
+	evadeAt := time.Date(2026, time.August, 27, 2, 3, 37, 858000000, time.UTC)
+	_, err = all.Process(&messages.Damage{
+		MessageBase: messages.Base(evadeAt),
+		Caster:      &playerID,
+		Target:      freyaID,
+		HitType:     types.HitTypeEvade,
+	})
+	require.NoError(t, err)
+
+	// Damage within the confirmation window disproves the queued evade and must
+	// not split the active encounter.
+	_, err = all.Process(&messages.Damage{
+		MessageBase: messages.Base(evadeAt.Add(400 * time.Millisecond)),
+		Caster:      &playerID,
+		Target:      freyaID,
+		Amount:      897,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(evadeAt.Add(time.Second)))
+	require.NoError(t, err)
+
+	freya, ok := all.Get(freyaID)
+	require.True(t, ok)
+	require.True(t, freya.IsActive())
+	require.Equal(t, period.EndStateNone, freya.LastEndState())
+	require.Len(t, freya.Periods(), 1)
 }
 
 func TestFreyaMassAuraCleanupAfterDamageMarksSurrenderAsSlain(t *testing.T) {
