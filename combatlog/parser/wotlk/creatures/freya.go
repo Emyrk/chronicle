@@ -21,7 +21,7 @@ func NewFreyaEncounterCharacter(id guid.GUID, all *characters.Characters) (chara
 
 	return &freyaCharacter{
 		Common: characters.NewCommonCharacter(id, all),
-		defeat: characters.NewScriptedDefeatDetector(id, freyaDefeatConfig()),
+		defeat: characters.NewScriptedDefeatDetector(id, scriptedSurrenderWithAuraCleanupConfig()),
 	}, true
 }
 

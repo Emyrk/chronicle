@@ -49,6 +49,40 @@ func TestFreyaPositiveOverkillMarksSurrenderAsSlain(t *testing.T) {
 	require.Equal(t, period.EndStateSlain, freya.LastEndState())
 }
 
+func TestFreyaEvadeMarksSurrenderAfterConfirmation(t *testing.T) {
+	t.Parallel()
+
+	all := newFreyaTestCharacters()
+	playerID := guid.GUID(1)
+	freyaID := creatureGUID(freyaEntry)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	_, err := all.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &playerID,
+		Target:      freyaID,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
+
+	evadeAt := start.Add(time.Second)
+	_, err = all.Process(&messages.Damage{
+		MessageBase: messages.Base(evadeAt),
+		Caster:      &playerID,
+		Target:      freyaID,
+		HitType:     types.HitTypeEvade,
+	})
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(evadeAt.Add(characters.ScriptedDefeatEvadeConfirmationWindow)))
+	require.NoError(t, err)
+
+	freya, ok := all.Get(freyaID)
+	require.True(t, ok)
+	require.False(t, freya.IsActive())
+	require.Equal(t, period.EndStateSlain, freya.LastEndState())
+}
+
 func TestFreyaDamageAfterEvadeDoesNotSplitEncounter(t *testing.T) {
 	t.Parallel()
 
@@ -75,18 +109,26 @@ func TestFreyaDamageAfterEvadeDoesNotSplitEncounter(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Observed Igr50E8ZG5QkkBJX: no damage arrived within the shared evade
-	// confirmation window, but Freya continued fighting and took damage 4.001s
-	// later. Evade therefore cannot be a Freya defeat signal.
-	_, err = all.Process(messages.TimedOut(evadeAt.Add(characters.ScriptedDefeatEvadeConfirmationWindow)))
-	require.NoError(t, err)
+	// Observed Igr50E8ZG5QkkBJX: several attacks evaded, followed by fully
+	// absorbed periodic damage 489ms after the first evade. The absorb proves
+	// Freya is still engaged and cancels the queued defeat.
+	for _, offset := range []time.Duration{20 * time.Millisecond, 234 * time.Millisecond, 236 * time.Millisecond} {
+		_, err = all.Process(&messages.Damage{
+			MessageBase: messages.Base(evadeAt.Add(offset)),
+			Caster:      &playerID,
+			Target:      freyaID,
+			HitType:     types.HitTypeEvade,
+		})
+		require.NoError(t, err)
+	}
 	_, err = all.Process(&messages.Damage{
-		MessageBase: messages.Base(evadeAt.Add(4*time.Second + time.Millisecond)),
+		MessageBase: messages.Base(evadeAt.Add(489 * time.Millisecond)),
 		Caster:      &playerID,
 		Target:      freyaID,
-		Amount:      897,
-		HitType:     types.HitTypeHit,
+		HitType:     types.HitTypeFullAbsorb | types.HitTypePeriodic,
 	})
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(evadeAt.Add(time.Second)))
 	require.NoError(t, err)
 
 	freya, ok := all.Get(freyaID)

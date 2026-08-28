@@ -78,7 +78,7 @@ func TestScriptedDefeatDetectorConfirmsEvadeAfterDelay(t *testing.T) {
 	require.Equal(t, ScriptedDefeatEvade, signal)
 }
 
-func TestScriptedDefeatDetectorCancelsEvadeOnSubsequentDamage(t *testing.T) {
+func TestScriptedDefeatDetectorCancelsEvadeOnFullyAbsorbedDamage(t *testing.T) {
 	t.Parallel()
 
 	boss := guid.GUID(10)
@@ -98,8 +98,7 @@ func TestScriptedDefeatDetectorCancelsEvadeOnSubsequentDamage(t *testing.T) {
 		MessageBase: messages.Base(start.Add(ScriptedDefeatEvadeConfirmationWindow - time.Millisecond)),
 		Caster:      &player,
 		Target:      boss,
-		Amount:      1,
-		HitType:     types.HitTypeHit,
+		HitType:     types.HitTypeFullAbsorb,
 	}, true)
 	require.False(t, defeated)
 

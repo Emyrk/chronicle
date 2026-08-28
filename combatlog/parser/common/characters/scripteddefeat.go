@@ -78,14 +78,18 @@ func (d *ScriptedDefeatDetector) Observe(m messages.Message, active bool) (Scrip
 				d.Reset()
 				return ScriptedDefeatPositiveOverkill, true
 			}
-			if isSuccessfulIncomingDamage(event) {
+			if d.config.Evade && event.HitType.Has(types.HitTypeEvade) {
+				if d.pendingEvade.IsZero() {
+					d.pendingEvade = event.Date()
+				}
+			} else {
 				sinceEvade := event.Date().Sub(d.pendingEvade)
 				if !d.pendingEvade.IsZero() && sinceEvade >= 0 && sinceEvade < ScriptedDefeatEvadeConfirmationWindow {
 					d.pendingEvade = time.Time{}
 				}
-				d.lastIncomingDamage = event.Date()
-			} else if d.config.Evade && event.HitType.Has(types.HitTypeEvade) && d.pendingEvade.IsZero() {
-				d.pendingEvade = event.Date()
+				if isSuccessfulIncomingDamage(event) {
+					d.lastIncomingDamage = event.Date()
+				}
 			}
 		}
 	case *messages.Aura:

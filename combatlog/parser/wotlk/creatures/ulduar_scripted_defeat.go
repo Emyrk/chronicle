@@ -19,18 +19,10 @@ func scriptedSurrenderHitConfig() characters.ScriptedDefeatConfig {
 	}
 }
 
-// Hodir and Freya client logs sometimes omit the triggering overkill, leaving
-// only the guarded aura-cleanup burst. Thorim uses the same detector but not
-// this fallback: observed Thorim wipes can produce an indistinguishable cleanup
-// burst immediately after incoming damage.
-func freyaDefeatConfig() characters.ScriptedDefeatConfig {
-	config := scriptedSurrenderWithAuraCleanupConfig()
-	// Freya can evade ordinary attacks while still fighting, so evade is not a
-	// reliable surrender signal for this encounter.
-	config.Evade = false
-	return config
-}
-
+// Hodir and Freya client logs sometimes omit both the triggering overkill and a
+// queued evade, leaving only the guarded aura-cleanup burst. Thorim uses the
+// same detector but not this fallback: observed Thorim wipes can produce an
+// indistinguishable cleanup burst immediately after incoming damage.
 func scriptedSurrenderWithAuraCleanupConfig() characters.ScriptedDefeatConfig {
 	config := scriptedSurrenderHitConfig()
 	config.AuraCleanup = characters.AuraCleanupDefeatConfig{
