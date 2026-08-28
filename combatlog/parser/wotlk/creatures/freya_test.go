@@ -25,67 +25,28 @@ func newFreyaTestCharacters() *characters.Characters {
 	)
 }
 
-func TestFreyaScriptedDefeatSignalsMarkSurrenderAsSlain(t *testing.T) {
+func TestFreyaPositiveOverkillMarksSurrenderAsSlain(t *testing.T) {
 	t.Parallel()
 
-	for _, test := range []struct {
-		name   string
-		defeat func(time.Time, guid.GUID, guid.GUID) []messages.Message
-	}{
-		{
-			name: "positive overkill",
-			defeat: func(at time.Time, playerID, freyaID guid.GUID) []messages.Message {
-				return []messages.Message{&messages.Damage{
-					MessageBase: messages.Base(at),
-					Caster:      &playerID,
-					Target:      freyaID,
-					Amount:      100,
-					Overkill:    1,
-					HitType:     types.HitTypeHit,
-				}}
-			},
-		},
-		{
-			name: "evade after damage",
-			defeat: func(at time.Time, playerID, freyaID guid.GUID) []messages.Message {
-				return []messages.Message{
-					&messages.Damage{
-						MessageBase: messages.Base(at),
-						Caster:      &playerID,
-						Target:      freyaID,
-						Amount:      1,
-						HitType:     types.HitTypeHit,
-					},
-					&messages.Damage{
-						MessageBase: messages.Base(at.Add(time.Second)),
-						Caster:      &playerID,
-						Target:      freyaID,
-						HitType:     types.HitTypeEvade,
-					},
-					messages.TimedOut(at.Add(time.Second + characters.ScriptedDefeatEvadeConfirmationWindow)),
-				}
-			},
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
+	all := newFreyaTestCharacters()
+	playerID := guid.GUID(1)
+	freyaID := creatureGUID(freyaEntry)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
 
-			all := newFreyaTestCharacters()
-			playerID := guid.GUID(1)
-			freyaID := creatureGUID(freyaEntry)
-			start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+	_, err := all.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &playerID,
+		Target:      freyaID,
+		Amount:      100,
+		Overkill:    1,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
 
-			for _, message := range test.defeat(start, playerID, freyaID) {
-				_, err := all.Process(message)
-				require.NoError(t, err)
-			}
-
-			freya, ok := all.Get(freyaID)
-			require.True(t, ok)
-			require.False(t, freya.IsActive())
-			require.Equal(t, period.EndStateSlain, freya.LastEndState())
-		})
-	}
+	freya, ok := all.Get(freyaID)
+	require.True(t, ok)
+	require.False(t, freya.IsActive())
+	require.Equal(t, period.EndStateSlain, freya.LastEndState())
 }
 
 func TestFreyaDamageAfterEvadeDoesNotSplitEncounter(t *testing.T) {
@@ -114,17 +75,18 @@ func TestFreyaDamageAfterEvadeDoesNotSplitEncounter(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Damage within the confirmation window disproves the queued evade and must
-	// not split the active encounter.
+	// Observed Igr50E8ZG5QkkBJX: no damage arrived within the shared evade
+	// confirmation window, but Freya continued fighting and took damage 4.001s
+	// later. Evade therefore cannot be a Freya defeat signal.
+	_, err = all.Process(messages.TimedOut(evadeAt.Add(characters.ScriptedDefeatEvadeConfirmationWindow)))
+	require.NoError(t, err)
 	_, err = all.Process(&messages.Damage{
-		MessageBase: messages.Base(evadeAt.Add(400 * time.Millisecond)),
+		MessageBase: messages.Base(evadeAt.Add(4*time.Second + time.Millisecond)),
 		Caster:      &playerID,
 		Target:      freyaID,
 		Amount:      897,
 		HitType:     types.HitTypeHit,
 	})
-	require.NoError(t, err)
-	_, err = all.Process(messages.TimedOut(evadeAt.Add(time.Second)))
 	require.NoError(t, err)
 
 	freya, ok := all.Get(freyaID)
