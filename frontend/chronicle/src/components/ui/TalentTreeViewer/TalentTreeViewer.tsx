@@ -86,6 +86,8 @@ export interface TalentAllocation {
 }
 
 export interface TalentTreeViewerProps {
+  /** Numeric WoW class ID. Required when API talent data omits data.id. */
+  classId?: number;
   data: ClassTalentData;
   /** Pre-set talent allocations (from combat log). Converted to TalentRanks. */
   allocations?: TalentAllocation[];
@@ -984,6 +986,7 @@ async function drawExportWatermark(canvas: HTMLCanvasElement, pixelRatio: number
 
 export function TalentTreeViewer({
   data,
+  classId,
   allocations,
   exclusiveTabs = false,
   pointsPerRow = 5,
@@ -998,6 +1001,7 @@ export function TalentTreeViewer({
   diff,
   className,
 }: TalentTreeViewerProps) {
+  const resolvedClassId = classId ?? data.id;
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabTalentLists = useMemo(() => data.tabs.map((tab) => tab.talents), [data.tabs]);
@@ -1254,12 +1258,12 @@ export function TalentTreeViewer({
             </div>
           </div>
         </div>
-        <MobileTreeTabs classID={data.id} tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />
+        <MobileTreeTabs classID={resolvedClassId} tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />
         <div ref={exportRef} className={tabGridClassName} style={exportGridStyle}>
           {exportedTabs.map((tab) => (
             <TalentTab
               key={tab.id}
-              classID={data.id}
+              classID={resolvedClassId}
               tab={tab}
               ranks={ranks}
               readOnly={readOnly}
@@ -1394,12 +1398,12 @@ export function TalentTreeViewer({
         </p>
       )}
       {/* Mobile: sticky mini-tabs to jump between the stacked trees */}
-      {mobileLayout && <MobileTreeTabs classID={data.id} tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />}
+      {mobileLayout && <MobileTreeTabs classID={resolvedClassId} tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />}
       <div ref={exportRef} className={tabGridClassName} style={exportGridStyle}>
         {exportedTabs.map((tab) => (
           <TalentTab
             key={tab.id}
-            classID={data.id}
+            classID={resolvedClassId}
             tab={tab}
             ranks={ranks}
             readOnly={readOnly}
@@ -1496,6 +1500,7 @@ export function TalentTreeViewerLegacy({
 
   return (
     <TalentTreeViewer
+      classId={classId}
       data={classData}
       allocations={allocations}
       readOnly

@@ -341,6 +341,7 @@ export function TalentCalculatorPage() {
         // (tenant-aware) instead of the compiled-in server default.
         <DatasetProvider datasetId={talentData?.dataset_id} iconBaseUrl={talentData?.icon_base_url}>
         <TalentTreeViewer
+          classId={selectedClassId}
           data={classTreeData}
           maxTalentPoints={maxTalentPoints}
           maxLevel={maxLevel}

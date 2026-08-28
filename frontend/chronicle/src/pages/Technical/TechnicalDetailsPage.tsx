@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, PawPrint, ShieldAlert, Sparkles, Swords, TimerReset } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, Images, PawPrint, ShieldAlert, Sparkles, Swords, TimerReset } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 
 interface TechnicalLink {
@@ -57,6 +57,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     description: "Dataset-generated spell durations and all applicable passive modifiers",
     href: "/technical/aura-duration-modifiers",
     icon: <Clock className="h-4 w-4" />,
+  },
+  {
+    title: "Spec/Class Icons",
+    description: "Reference sheet for every class and specialization icon",
+    href: "/technical/spec-class-icons",
+    icon: <Images className="h-4 w-4" />,
   },
   {
     title: "Talent Trees",
