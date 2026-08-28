@@ -31,6 +31,52 @@ func newUlduarTestInstance(t *testing.T) *commoninstances.Hookable {
 	)
 }
 
+func TestThorimRoomMechanicBridgesEncounterPacks(t *testing.T) {
+	t.Parallel()
+
+	instance := newUlduarTestInstance(t)
+	player := guid.GUID(1)
+	soldier := creatureGUID(32883)
+	guard := creatureGUID(32874)
+	thorim := creatureGUID(32865)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	arenaHit := damageEvent(player, soldier, 1)
+	arenaHit.MessageBase = messages.Base(start)
+	require.NoError(t, instance.Process(arenaHit))
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(10 * time.Second)),
+		Victim:      soldier,
+	}))
+
+	gauntletStart := start.Add(27 * time.Second)
+	gauntletHit := damageEvent(player, guard, 1)
+	gauntletHit.MessageBase = messages.Base(gauntletStart)
+	require.NoError(t, instance.Process(gauntletHit))
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(37 * time.Second)),
+		Victim:      guard,
+	}))
+
+	bossStart := start.Add(54 * time.Second)
+	bossHit := damageEvent(player, thorim, 1)
+	bossHit.MessageBase = messages.Base(bossStart)
+	require.NoError(t, instance.Process(bossHit))
+	defeat := damageEvent(player, thorim, 1)
+	defeat.MessageBase = messages.Base(start.Add(time.Minute))
+	defeat.Overkill = 1
+	require.NoError(t, instance.Process(defeat))
+
+	result, err := instance.Finalize(t.Context())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+	require.Equal(t, start, result.Encounters[0].Combat.Start)
+	require.Equal(t, start.Add(time.Minute), result.Encounters[0].Combat.End)
+	require.Len(t, result.Encounters[0].Phases, 3)
+	require.Equal(t, int64(27_000), result.Encounters[0].Phases[0].EndOffsetMs)
+	require.Equal(t, int64(54_000), result.Encounters[0].Phases[1].EndOffsetMs)
+}
+
 func TestThorimInactiveAddsDoNotMergeAttempts(t *testing.T) {
 	t.Parallel()
 

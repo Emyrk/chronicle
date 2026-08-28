@@ -2,7 +2,6 @@ package creatures
 
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -14,13 +13,15 @@ const thorimEntry = 32865
 const (
 	ThorimPhaseKeyP1 = "thorim_p1"
 	ThorimPhaseKeyP2 = "thorim_p2"
+	ThorimPhaseKeyP3 = "thorim_p3"
 )
 
 var ThorimPhaseDefinitions = &phases.EncounterPhases{
 	EncounterName: "Thorim",
 	Definitions: []phases.Definition{
-		{Key: ThorimPhaseKeyP1, Name: "Arena and Gauntlet", Order: 0},
-		{Key: ThorimPhaseKeyP2, Name: "Thorim", Order: 1},
+		{Key: ThorimPhaseKeyP1, Name: "Arena", Order: 0},
+		{Key: ThorimPhaseKeyP2, Name: "Gauntlet", Order: 1},
+		{Key: ThorimPhaseKeyP3, Name: "Thorim", Order: 2},
 	},
 }
 
@@ -53,6 +54,14 @@ var thorimEncounterEntries = []uint32{
 	33378, // Thunder Orb
 }
 
+var thorimGauntletEntries = map[uint32]struct{}{
+	32872: {}, // Runic Colossus
+	32873: {}, // Ancient Rune Giant
+	32874: {}, // Iron Ring Guard
+	32875: {}, // Iron Honor Guard
+	33110: {}, // Dark Rune Acolyte
+}
+
 const thorimStateKey = "wotlk_thorim"
 
 type thorimState struct {
@@ -74,7 +83,7 @@ func loadThorimState(all *characters.Characters) *thorimState {
 }
 
 type thorimCharacter struct {
-	*characters.Common
+	*characters.RoomMechanic
 	all   *characters.Characters
 	entry uint32
 	state *thorimState
@@ -94,11 +103,16 @@ func NewThorimEncounterCharacter(id guid.GUID, all *characters.Characters) (char
 		return nil, false
 	}
 
+	roomMechanic, ok := characters.NewRoomMechanic(id, thorimEntry, all)
+	if !ok {
+		return nil, false
+	}
+
 	c := &thorimCharacter{
-		Common: characters.NewCommonCharacter(id, all),
-		all:    all,
-		entry:  entry,
-		state:  loadThorimState(all),
+		RoomMechanic: roomMechanic,
+		all:          all,
+		entry:        entry,
+		state:        loadThorimState(all),
 	}
 	c.state.characters[id] = c
 	return c, true
@@ -109,29 +123,32 @@ func (c *thorimCharacter) PhaseDefinitions() *phases.EncounterPhases {
 }
 
 func (c *thorimCharacter) Process(m messages.Message) error {
+	wasAnyActive := c.anyEncounterUnitActive()
 	wasActive := c.IsActive()
 
-	if current, ok := c.Activity.Current(); ok {
-		current.HandleTimeout(m.Date())
-	}
-	if err := characters.ProcessCommonActivity(c, m); err != nil {
+	if err := c.RoomMechanic.Process(m); err != nil {
 		return err
 	}
 
+	if !wasAnyActive && c.anyEncounterUnitActive() {
+		c.state.phase = 1
+		c.state.phaseSource = c.ID()
+	}
+
 	if damage, ok := m.(*messages.Damage); ok {
-		if c.state.phase == 1 && isThorimPhaseTwoHit(damage) {
-			c.all.EmitPhaseTransition(phases.Transition{
-				SourceGUID: c.state.phaseSource,
-				ToPhaseKey: ThorimPhaseKeyP2,
-				Timestamp:  m.Date(),
-			})
+		if c.state.phase == 1 && isThorimGauntletHit(damage) {
+			c.emitTransition(ThorimPhaseKeyP2, damage)
 			c.state.phase = 2
+		}
+		if c.state.phase == 2 && isThorimBossHit(damage) {
+			c.emitTransition(ThorimPhaseKeyP3, damage)
+			c.state.phase = 3
 		}
 		if c.entry == thorimEntry && isThorimDefeatHit(damage) {
 			// Thorim surrenders instead of emitting UNIT_DIED. The combat log still
 			// reports the triggering hit with positive overkill, so use that as the
-			// encounter's slain signal.
-			c.Died("thorim_defeated", damage)
+			// encounter's slain signal. RoomMechanic flushes the pending room deaths.
+			c.RoomMechanic.Died("thorim_defeated", damage)
 		}
 	}
 
@@ -141,34 +158,15 @@ func (c *thorimCharacter) Process(m messages.Message) error {
 	return nil
 }
 
-func (c *thorimCharacter) Start(reason string, m messages.Message) {
-	if !c.anyEncounterUnitActive() {
-		c.state.phase = 1
-		c.state.phaseSource = c.ID()
+func (c *thorimCharacter) emitTransition(toPhase string, m messages.Message) {
+	if c.state.phaseSource.IsZero() {
+		return
 	}
-
-	c.Common.Start(reason, m)
-}
-
-func (c *thorimCharacter) Bump(reason string, m messages.Message) {
-	c.Common.Bump(reason, m)
-}
-
-func (c *thorimCharacter) Died(reason string, m messages.Message) {
-	c.Common.Died(reason, m)
-	if c.entry == thorimEntry {
-		c.endLinkedOnThorimDefeat(m)
-	}
-	c.resetStateIfInactive()
-}
-
-func (c *thorimCharacter) endLinkedOnThorimDefeat(m messages.Message) {
-	for _, linked := range c.state.characters {
-		if linked == c || !linked.IsActive() {
-			continue
-		}
-		linked.End("thorim_encounter_complete", m, period.EndStateReset)
-	}
+	c.all.EmitPhaseTransition(phases.Transition{
+		SourceGUID: c.state.phaseSource,
+		ToPhaseKey: toPhase,
+		Timestamp:  m.Date(),
+	})
 }
 
 func (c *thorimCharacter) anyEncounterUnitActive() bool {
@@ -197,12 +195,31 @@ func isThorimEncounterEntry(entry uint32) bool {
 	return false
 }
 
-func isThorimPhaseTwoHit(damage *messages.Damage) bool {
-	entry, ok := damage.Target.GetEntry()
-	if !ok || entry != thorimEntry || damage.Amount <= 0 {
+func isThorimGauntletHit(damage *messages.Damage) bool {
+	if !isSuccessfulThorimDamage(damage) {
 		return false
 	}
-	return !damage.HitType.Has(types.HitTypeImmune) && !damage.HitType.Has(types.HitTypeEvade)
+	for _, id := range damage.Affects() {
+		entry, ok := id.GetEntry()
+		if !ok {
+			continue
+		}
+		if _, ok := thorimGauntletEntries[entry]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func isThorimBossHit(damage *messages.Damage) bool {
+	entry, ok := damage.Target.GetEntry()
+	return ok && entry == thorimEntry && isSuccessfulThorimDamage(damage)
+}
+
+func isSuccessfulThorimDamage(damage *messages.Damage) bool {
+	return damage.Amount > 0 &&
+		!damage.HitType.Has(types.HitTypeImmune) &&
+		!damage.HitType.Has(types.HitTypeEvade)
 }
 
 func isThorimDefeatHit(damage *messages.Damage) bool {

@@ -30,17 +30,19 @@ func TestThorimPhaseDefinitions(t *testing.T) {
 
 	require.Equal(t, "Thorim", ThorimPhaseDefinitions.EncounterName)
 	require.Equal(t, []phases.Definition{
-		{Key: ThorimPhaseKeyP1, Name: "Arena and Gauntlet", Order: 0},
-		{Key: ThorimPhaseKeyP2, Name: "Thorim", Order: 1},
+		{Key: ThorimPhaseKeyP1, Name: "Arena", Order: 0},
+		{Key: ThorimPhaseKeyP2, Name: "Gauntlet", Order: 1},
+		{Key: ThorimPhaseKeyP3, Name: "Thorim", Order: 2},
 	}, ThorimPhaseDefinitions.Definitions)
 }
 
-func TestThorimPhaseTransitionOnFirstDamageableBossHit(t *testing.T) {
+func TestThorimPhaseTransitions(t *testing.T) {
 	t.Parallel()
 
 	all := newThorimTestCharacters()
 	player := guid.GUID(1)
 	soldier := creatureGUID(32883)
+	guard := creatureGUID(32874)
 	thorim := creatureGUID(thorimEntry)
 	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
 
@@ -52,17 +54,23 @@ func TestThorimPhaseTransitionOnFirstDamageableBossHit(t *testing.T) {
 		transitions = append(transitions, transition)
 	})
 
-	immune := testDamage(start.Add(10*time.Second), player, thorim)
-	immune.HitType = types.HitTypeImmune
-	_, err = all.Process(immune)
-	require.NoError(t, err)
-	require.Empty(t, transitions)
-
-	_, err = all.Process(testDamage(start.Add(20*time.Second), player, thorim))
+	_, err = all.Process(testDamage(start.Add(10*time.Second), player, guard))
 	require.NoError(t, err)
 	require.Len(t, transitions, 1)
 	require.Equal(t, soldier, transitions[0].SourceGUID)
 	require.Equal(t, ThorimPhaseKeyP2, transitions[0].ToPhaseKey)
+
+	immune := testDamage(start.Add(15*time.Second), player, thorim)
+	immune.HitType = types.HitTypeImmune
+	_, err = all.Process(immune)
+	require.NoError(t, err)
+	require.Len(t, transitions, 1)
+
+	_, err = all.Process(testDamage(start.Add(20*time.Second), player, thorim))
+	require.NoError(t, err)
+	require.Len(t, transitions, 2)
+	require.Equal(t, soldier, transitions[1].SourceGUID)
+	require.Equal(t, ThorimPhaseKeyP3, transitions[1].ToPhaseKey)
 }
 
 func TestThorimActivityDoesNotKeepUnrelatedAddsAlive(t *testing.T) {
@@ -118,7 +126,7 @@ func TestThorimOverkillMarksSurrenderAsSlain(t *testing.T) {
 	soldier, ok := all.Get(soldierID)
 	require.True(t, ok)
 	require.False(t, soldier.IsActive())
-	require.Equal(t, period.EndStateReset, soldier.LastEndState())
+	require.Equal(t, period.EndStateSlain, soldier.LastEndState())
 }
 
 func TestSifIsNeverActive(t *testing.T) {

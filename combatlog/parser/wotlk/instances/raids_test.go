@@ -182,6 +182,7 @@ func TestUlduarThorimEncounterPhases(t *testing.T) {
 	)
 	player := guid.GUID(1)
 	soldier := creatureGUID(32883)
+	guard := creatureGUID(32874)
 	thorim := creatureGUID(32865)
 	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
 
@@ -202,6 +203,13 @@ func TestUlduarThorimEncounterPhases(t *testing.T) {
 	require.NoError(t, instance.Process(&messages.Slain{
 		MessageBase: messages.Base(start.Add(10 * time.Second)),
 		Victim:      soldier,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(30 * time.Second)),
+		Caster:      &player,
+		Target:      guard,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
 	}))
 	require.NoError(t, instance.Process(&messages.Damage{
 		MessageBase: messages.Base(start.Add(70 * time.Second)),
@@ -227,13 +235,16 @@ func TestUlduarThorimEncounterPhases(t *testing.T) {
 	require.Equal(t, "Thorim", got.Name)
 	require.True(t, got.Boss)
 	require.Equal(t, encounter.KillTypeClean, got.KillType)
-	require.Len(t, got.Phases, 2)
+	require.Len(t, got.Phases, 3)
 	require.Equal(t, "thorim_p1", got.Phases[0].Key)
 	require.Equal(t, int64(0), got.Phases[0].StartOffsetMs)
-	require.Equal(t, int64(70_000), got.Phases[0].EndOffsetMs)
+	require.Equal(t, int64(30_000), got.Phases[0].EndOffsetMs)
 	require.Equal(t, "thorim_p2", got.Phases[1].Key)
-	require.Equal(t, int64(70_000), got.Phases[1].StartOffsetMs)
-	require.Equal(t, int64(80_000), got.Phases[1].EndOffsetMs)
+	require.Equal(t, int64(30_000), got.Phases[1].StartOffsetMs)
+	require.Equal(t, int64(70_000), got.Phases[1].EndOffsetMs)
+	require.Equal(t, "thorim_p3", got.Phases[2].Key)
+	require.Equal(t, int64(70_000), got.Phases[2].StartOffsetMs)
+	require.Equal(t, int64(80_000), got.Phases[2].EndOffsetMs)
 }
 
 func TestUlduarThorimEncounterIdentities(t *testing.T) {
