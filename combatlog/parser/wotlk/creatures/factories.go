@@ -62,6 +62,7 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewPowerSpark,
 
 			// Ulduar
+			NewMechanolift,
 			NewFreyaEncounterCharacter,
 			NewHodirEncounterCharacter,
 			NewSif,
