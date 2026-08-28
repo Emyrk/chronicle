@@ -67,6 +67,22 @@ export interface ConsumablesLedger {
   maxUses: number;
 }
 
+/** Gold totals per player using the same item identity rules as the ledger. */
+export function aggregateConsumableGoldByPlayer(
+  uses: Iterable<ConsumableUse>,
+  prices: ConsumablePrices,
+): Map<string, number> {
+  const goldByPlayer = new Map<string, number>();
+  for (const use of uses) {
+    const itemId = itemIdentity(use).itemId;
+    if (itemId === null) continue;
+    const unitCopper = prices.get(itemId);
+    if (unitCopper === undefined) continue;
+    goldByPlayer.set(use.player, (goldByPlayer.get(use.player) ?? 0) + unitCopper);
+  }
+  return goldByPlayer;
+}
+
 export function aggregateConsumablesLedger(
   uses: Iterable<ConsumableUse>,
   prices: ConsumablePrices,

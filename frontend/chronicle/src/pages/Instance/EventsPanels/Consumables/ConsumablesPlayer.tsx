@@ -20,6 +20,7 @@ import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import type { ConsumablesResult } from "./consumables.processor";
 import {
+  aggregateConsumableGoldByPlayer,
   aggregateConsumablesLedger,
   aggregatePlayerItemEncounters,
   classColor,
@@ -209,13 +210,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
   // is missing for more than half of the players that used anything, fall
   // back to use counts so the strip stays comparable.
   const rosterBars = useMemo(() => {
-    const goldByPlayer = new Map<string, number>();
-    for (const use of filteredUses) {
-      if (use.itemId === null) continue;
-      const unitCopper = prices.get(use.itemId);
-      if (unitCopper === undefined) continue;
-      goldByPlayer.set(use.player, (goldByPlayer.get(use.player) ?? 0) + unitCopper);
-    }
+    const goldByPlayer = aggregateConsumableGoldByPlayer(filteredUses, prices);
     const activeGuids = [...usesByPlayer.entries()].filter(([, uses]) => uses > 0).map(([guid]) => guid);
     const missingGold = activeGuids.filter((guid) => (goldByPlayer.get(guid) ?? 0) === 0).length;
     const byGold = activeGuids.length > 0 && missingGold * 2 <= activeGuids.length;
