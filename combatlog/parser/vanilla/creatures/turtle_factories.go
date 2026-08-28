@@ -21,6 +21,7 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 		// ── Stock vanilla content ──────────────────────────────────────
 		// SFK
 		NewHauntingSpirit,
+		NewArchmageArgual,
 
 		// Sunken Temple
 		NewAtalalDeathwalkerSpirit,
