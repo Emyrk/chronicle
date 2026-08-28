@@ -553,6 +553,126 @@ func TestUlduarYoggSaronEncounterIdentities(t *testing.T) {
 	}
 }
 
+func TestUlduarAssemblyOfIronIdentities(t *testing.T) {
+	t.Parallel()
+
+	hostiles := UlduarHostiles()
+	for _, entry := range []uint32{32857, 32867, 32927, 33692, 33693, 33694} {
+		identity, ok := hostiles[entry]
+		require.True(t, ok)
+		require.True(t, identity.Boss)
+		require.Equal(t, "Assembly of Iron", identity.EncounterName)
+	}
+}
+
+func TestUlduarAssemblyRespawnStartsNewEncounter(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWrath},
+	})
+	instance := UlduarFactory.New(
+		ctx,
+		slog.Default(),
+		unitdb.New(),
+		zone.Zone{Name: "Ulduar", MapID: 603},
+		database.WoWFlavor{database.FlavorWrath},
+	)
+	player := guid.GUID(1)
+	start := time.Date(2026, time.August, 27, 1, 11, 29, 0, time.UTC)
+	oldAssembly := []guid.GUID{
+		creatureGUIDWithSeed(32857, 1),
+		creatureGUIDWithSeed(32867, 1),
+		creatureGUIDWithSeed(32927, 1),
+	}
+	newAssembly := []guid.GUID{
+		creatureGUIDWithSeed(32857, 2),
+		creatureGUIDWithSeed(32867, 2),
+		creatureGUIDWithSeed(32927, 2),
+	}
+
+	for i, boss := range oldAssembly {
+		require.NoError(t, instance.Process(&messages.Damage{
+			MessageBase: messages.Base(start.Add(time.Duration(i) * time.Millisecond)),
+			Caster:      &player,
+			Target:      boss,
+			Amount:      1,
+			HitType:     types.HitTypeHit,
+		}))
+	}
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(time.Minute)),
+		Victim:      oldAssembly[0],
+		Killer:      &player,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(100 * time.Second)),
+		Caster:      &oldAssembly[1],
+		Target:      player,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(101 * time.Second)),
+		Victim:      player,
+		Killer:      &oldAssembly[1],
+	}))
+
+	// Observed Igr50E8ZG5QkkBJX: after one council member died and the raid
+	// wiped, the respawned council used new GUIDs before the surviving old GUIDs
+	// timed out. The new spawn must close the previous attempt instead of merging
+	// both pulls into one encounter.
+	secondStart := start.Add(2*time.Minute + 15*time.Second)
+	for i, boss := range newAssembly {
+		require.NoError(t, instance.Process(&messages.Damage{
+			MessageBase: messages.Base(secondStart.Add(time.Duration(i) * time.Millisecond)),
+			Caster:      &player,
+			Target:      boss,
+			Amount:      1,
+			HitType:     types.HitTypeHit,
+		}))
+	}
+	// The first respawn event is reserved for closing the prior pull. A later
+	// event starts that council member in the new fight.
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(secondStart.Add(time.Second)),
+		Caster:      &player,
+		Target:      newAssembly[0],
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+
+	for i, boss := range newAssembly {
+		require.NoError(t, instance.Process(&messages.Slain{
+			MessageBase: messages.Base(secondStart.Add(30*time.Second + time.Duration(i)*time.Second)),
+			Victim:      boss,
+			Killer:      &player,
+		}))
+	}
+
+	result, err := instance.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 2)
+
+	first := result.Encounters[0]
+	require.Equal(t, "Assembly of Iron", first.Name)
+	require.True(t, first.Boss)
+	require.Equal(t, encounter.KillTypeWipe, first.KillType)
+	require.Len(t, first.Combat.Hostiles, 3)
+	require.Equal(t, []guid.GUID{oldAssembly[2]}, first.Remaining)
+
+	second := result.Encounters[1]
+	require.Equal(t, "Assembly of Iron", second.Name)
+	require.True(t, second.Boss)
+	require.Equal(t, encounter.KillTypeClean, second.KillType)
+	require.Len(t, second.Combat.Hostiles, 3)
+	require.Empty(t, second.Remaining)
+}
+
+func creatureGUIDWithSeed(entry uint32, seed uint32) guid.GUID {
+	return guid.GUID(0xF130000000000000 | uint64(entry)<<24 | uint64(seed))
+}
+
 func creatureGUID(entry uint32) guid.GUID {
 	return guid.GUID(0xF130000000000001 | uint64(entry)<<24)
 }
