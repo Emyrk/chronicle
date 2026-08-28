@@ -10,7 +10,8 @@ var _ Character = (*NeverActive)(nil)
 
 // NeverActive should not have any meaningful activity, so this is a no-op implementation.
 type NeverActive struct {
-	id guid.GUID
+	id                guid.GUID
+	persistInInstance bool
 }
 
 func NewNeverActive(id guid.GUID) NeverActive {
@@ -18,10 +19,14 @@ func NewNeverActive(id guid.GUID) NeverActive {
 }
 
 // NewNamedNeverActive creates a character that never contributes activity while
-// preserving its known display name in instance unit metadata.
+// preserving its known display name and requesting instance-unit persistence.
 func NewNamedNeverActive(id guid.GUID, all *Characters, name string) NeverActive {
 	all.DB().UpdateUnitName(id, name)
-	return NewNeverActive(id)
+	return NeverActive{id: id, persistInInstance: true}
+}
+
+func (c NeverActive) PersistInInstance() bool {
+	return c.persistInInstance
 }
 
 func (c NeverActive) ID() guid.GUID {

@@ -36,6 +36,12 @@ type Character interface {
 	SetPeriodHook(hook period.Hook)
 }
 
+// InstanceUnitPersister marks characters that should be stored in instance unit
+// metadata even when they never produce an activity period.
+type InstanceUnitPersister interface {
+	PersistInInstance() bool
+}
+
 type Base[M period.IsPeriod] struct {
 	lookup *Characters
 	id     guid.GUID

@@ -174,6 +174,38 @@ func TestFinalize_King_AllAddsKilled_BossAbsent_IsWipe(t *testing.T) {
 		"adds dead + boss required but absent + player deaths = wipe")
 }
 
+func TestFinalizeIncludesNamedNeverActiveUnitsForPersistence(t *testing.T) {
+	t.Parallel()
+
+	db := unitdb.New()
+	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{})
+	sifID := creatureGUID(33196, 1)
+	plainID := creatureGUID(30084, 1)
+	chars := characters.NewCharacters(db, []characters.CharacterFactory{
+		func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+			switch id {
+			case sifID:
+				return characters.NewNamedNeverActive(id, all, "Sif"), true
+			case plainID:
+				return characters.NewNeverActive(id), true
+			default:
+				return nil, false
+			}
+		},
+	}, idf)
+	_, _ = chars.Add(sifID, time.Time{})
+	_, _ = chars.Add(plainID, time.Time{})
+
+	h := &Hookable{
+		Identifier: idf,
+		units:      db,
+		Characters: chars,
+	}
+	result, err := h.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []guid.GUID{sifID}, result.PersistedUnits)
+}
+
 func TestFinalize_InconsistentHostileIDMapping_ReturnsError(t *testing.T) {
 	t.Parallel()
 

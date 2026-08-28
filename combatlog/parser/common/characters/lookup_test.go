@@ -56,6 +56,8 @@ func TestNamedNeverActivePreservesUnitName(t *testing.T) {
 
 	character := NewNamedNeverActive(id, chars, "Mechanolift 304-A")
 	require.False(t, character.IsActive())
+	require.True(t, character.PersistInInstance())
+	require.False(t, NewNeverActive(id).PersistInInstance())
 
 	info, ok := chars.DB().Get(id)
 	require.True(t, ok)
