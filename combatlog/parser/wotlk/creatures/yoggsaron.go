@@ -260,6 +260,17 @@ func (c *yoggSaronCharacter) endLinkedOnYoggSaronDeath(m messages.Message) {
 		// encounter completes. Do not fabricate kills for them.
 		linked.End("yogg_saron_encounter_complete", m, period.EndStateReset)
 	}
+
+	// Phase-one Guardians use a separate character implementation so they can
+	// start Sara. They also despawn when Yogg-Saron dies and must not leave a
+	// successful kill marked partial.
+	for _, guardian := range c.all.ByEntry[yoggSaronGuardianEntry] {
+		boss, ok := guardian.(characters.CharacterBase)
+		if !ok || !boss.IsActive() {
+			continue
+		}
+		boss.End("yogg_saron_encounter_complete", m, period.EndStateReset)
+	}
 }
 
 func isYoggSaronAnchorEntry(entry uint32) bool {
