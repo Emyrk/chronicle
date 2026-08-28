@@ -62,6 +62,8 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewPowerSpark,
 
 			// Ulduar
+			NewSif,
+			NewThorimEncounterCharacter,
 			NewYoggSaronGuardian,
 			NewYoggSaronEncounterCharacter,
 		)

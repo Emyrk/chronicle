@@ -167,6 +167,129 @@ func TestOnyxiaDerivedName(t *testing.T) {
 	require.Nil(t, onyxiaDerivedName(database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore}))
 }
 
+func TestUlduarThorimEncounterPhases(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWrath},
+	})
+	instance := UlduarFactory.New(
+		ctx,
+		slog.Default(),
+		unitdb.New(),
+		zone.Zone{Name: "Ulduar", MapID: 603},
+		database.WoWFlavor{database.FlavorWrath},
+	)
+	player := guid.GUID(1)
+	soldier := creatureGUID(32883)
+	guard := creatureGUID(32874)
+	thorim := creatureGUID(32865)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      soldier,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(time.Second)),
+		Caster:      &thorim,
+		Target:      player,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(10 * time.Second)),
+		Victim:      soldier,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(30 * time.Second)),
+		Caster:      &player,
+		Target:      guard,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(70 * time.Second)),
+		Caster:      &player,
+		Target:      thorim,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(80 * time.Second)),
+		Caster:      &player,
+		Target:      thorim,
+		Amount:      951,
+		Overkill:    939,
+		HitType:     types.HitTypePeriodic,
+	}))
+
+	result, err := instance.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+
+	got := result.Encounters[0]
+	require.Equal(t, "Thorim", got.Name)
+	require.True(t, got.Boss)
+	require.Equal(t, encounter.KillTypeClean, got.KillType)
+	require.Len(t, got.Phases, 3)
+	require.Equal(t, "thorim_p1", got.Phases[0].Key)
+	require.Equal(t, int64(0), got.Phases[0].StartOffsetMs)
+	require.Equal(t, int64(30_000), got.Phases[0].EndOffsetMs)
+	require.Equal(t, "thorim_p2", got.Phases[1].Key)
+	require.Equal(t, int64(30_000), got.Phases[1].StartOffsetMs)
+	require.Equal(t, int64(70_000), got.Phases[1].EndOffsetMs)
+	require.Equal(t, "thorim_p3", got.Phases[2].Key)
+	require.Equal(t, int64(70_000), got.Phases[2].StartOffsetMs)
+	require.Equal(t, int64(80_000), got.Phases[2].EndOffsetMs)
+}
+
+func TestUlduarThorimEncounterIdentities(t *testing.T) {
+	t.Parallel()
+
+	hostiles := UlduarHostiles()
+	fight := encounter.Fight{}
+
+	thorim, ok := hostiles[32865]
+	require.True(t, ok)
+	require.True(t, thorim.Boss)
+	require.Equal(t, "Thorim", thorim.EncounterName)
+
+	for _, entry := range []uint32{
+		32872, 32873, 32874, 32875,
+		32876, 32877, 32878,
+		32882, 32883, 32885, 32886,
+		32904, 32907, 32908,
+		33110, 33138, 33378,
+	} {
+		identity, ok := hostiles[entry]
+		require.True(t, ok, "entry %d must be registered", entry)
+		require.False(t, identity.Boss, "entry %d must not be a separate boss", entry)
+		require.NotNil(t, identity.EncounterNameFn)
+
+		result := identity.EncounterNameFn(fight)
+		require.NotNil(t, result)
+		require.Equal(t, "Thorim", result.EncounterName)
+		require.Equal(t, []uint32{32865}, result.Bosses)
+	}
+
+	sif, ok := hostiles[33196]
+	require.True(t, ok)
+	require.Equal(t, "Sif", sif.Name)
+	require.Equal(t, types.AffiliationFriendly, sif.Affiliation)
+	require.False(t, sif.Boss)
+	require.Nil(t, sif.EncounterNameFn)
+
+	keeper, ok := hostiles[33413]
+	require.True(t, ok)
+	require.Equal(t, "Thorim", keeper.Name)
+	require.False(t, keeper.Boss)
+	require.Nil(t, keeper.EncounterNameFn)
+}
+
 func TestUlduarYoggSaronEncounterPhases(t *testing.T) {
 	t.Parallel()
 
