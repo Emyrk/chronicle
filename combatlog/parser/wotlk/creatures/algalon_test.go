@@ -76,6 +76,41 @@ func TestAlgalonAuraCleanupWithLivingPlayersMarksDefeat(t *testing.T) {
 	require.Equal(t, period.EndStateReset, add.LastEndState())
 }
 
+func TestAlgalonActivityKeepsAddsActiveUntilDefeat(t *testing.T) {
+	t.Parallel()
+
+	all := newAlgalonTestCharacters()
+	player := guid.GUID(1)
+	algalon := creatureGUID(algalonEntry)
+	star := creatureGUID(32955)
+	start := time.Date(2026, time.June, 13, 14, 24, 53, 0, time.UTC)
+
+	_, err := all.Process(testDamage(start, player, star))
+	require.NoError(t, err)
+	_, err = all.Process(testDamage(start.Add(50*time.Second), player, algalon))
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(start.Add(61 * time.Second)))
+	require.NoError(t, err)
+
+	add, ok := all.Get(star)
+	require.True(t, ok)
+	require.True(t, add.IsActive(), "boss activity must prevent the add from timing out")
+
+	lastDamage := start.Add(62 * time.Second)
+	_, err = all.Process(testDamage(lastDamage, player, algalon))
+	require.NoError(t, err)
+
+	cleanupAt := lastDamage.Add(22 * time.Millisecond)
+	processAlgalonAuraCleanup(t, all, algalon, cleanupAt)
+
+	boss, ok := all.Get(algalon)
+	require.True(t, ok)
+	require.Equal(t, period.EndStateSlain, boss.LastEndState())
+	require.False(t, add.IsActive())
+	require.Equal(t, period.EndStateReset, add.LastEndState())
+	require.Len(t, add.Periods(), 1)
+}
+
 func TestAlgalonAuraCleanupAfterRaidDeathRemainsWipe(t *testing.T) {
 	t.Parallel()
 

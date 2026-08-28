@@ -628,17 +628,18 @@ func TestUlduarAlgalonAuraCleanupWithLivingPlayerIsCleanKill(t *testing.T) {
 		}))
 	}
 
-	processDamage(0, players[0], algalon)
-	processDamage(time.Second, players[1], algalon)
-	processDamage(2*time.Second, players[0], star)
-	processDamage(3*time.Second, players[0], darkMatter)
+	processDamage(0, players[0], star)
+	processDamage(50*time.Second, players[0], algalon)
+	processDamage(51*time.Second, players[1], algalon)
+	processDamage(52*time.Second, players[0], darkMatter)
 	require.NoError(t, instance.Process(&messages.Slain{
-		MessageBase: messages.Base(start.Add(4 * time.Second)),
+		MessageBase: messages.Base(start.Add(53 * time.Second)),
 		Victim:      players[1],
 	}))
-	processDamage(5*time.Second, players[0], algalon)
+	require.NoError(t, instance.Process(messages.TimedOut(start.Add(61*time.Second))))
+	processDamage(62*time.Second, players[0], algalon)
 
-	cleanupAt := start.Add(5*time.Second + 22*time.Millisecond)
+	cleanupAt := start.Add(62*time.Second + 22*time.Millisecond)
 	for i := range 12 {
 		require.NoError(t, instance.Process(&messages.Aura{
 			MessageBase: messages.Base(cleanupAt),

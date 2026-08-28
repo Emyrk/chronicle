@@ -41,10 +41,19 @@ func NewAlgalon(id guid.GUID, all *characters.Characters) (characters.Character,
 }
 
 func (c *algalonCharacter) Process(m messages.Message) error {
+	wasActive := c.IsActive()
 	if err := c.Common.Process(m); err != nil {
 		return err
 	}
 	c.observePlayerState(m)
+
+	if wasActive && !c.IsActive() {
+		c.endAdds(m)
+		return nil
+	}
+	if c.IsActive() && c.ContainsMe(m.Affects()...) {
+		c.keepAddsLinked(m)
+	}
 
 	signal, defeated := c.defeat.Observe(m, c.IsActive())
 	// Algalon removes a similar burst of debuffs when resetting after a wipe.
@@ -54,8 +63,12 @@ func (c *algalonCharacter) Process(m messages.Message) error {
 	}
 
 	c.Died("algalon_defeated_"+string(signal), m)
-	c.endAdds(m)
 	return nil
+}
+
+func (c *algalonCharacter) Died(reason string, m messages.Message) {
+	c.Common.Died(reason, m)
+	c.endAdds(m)
 }
 
 func (c *algalonCharacter) Start(reason string, m messages.Message) {
@@ -91,6 +104,22 @@ func (c *algalonCharacter) hasLivingPlayer() bool {
 		}
 	}
 	return false
+}
+
+func (c *algalonCharacter) keepAddsLinked(m messages.Message) {
+	for _, entry := range algalonAddEntries {
+		for _, add := range c.all.ByEntry[entry] {
+			base, ok := add.(characters.CharacterBase)
+			if !ok || base.LastEndState() == period.EndStateSlain {
+				continue
+			}
+			if base.IsActive() {
+				base.Bump("algalon_linked_activity", m)
+			} else if len(base.Periods()) > 0 {
+				base.Start("algalon_linked_activity", m)
+			}
+		}
+	}
 }
 
 func (c *algalonCharacter) endAdds(m messages.Message) {
