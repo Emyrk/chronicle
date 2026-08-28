@@ -39,7 +39,7 @@ func (s *Service) RefreshSession(ctx context.Context, w http.ResponseWriter, r *
 
 	err := s.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		// 1. Get the existing session from DB
-		session, err := s.Zed.GetUserAuthSessionByID(ctx, currentClaims.SessionID)
+		session, err := tx.GetUserAuthSessionByID(ctx, currentClaims.SessionID)
 		if err != nil {
 			return fmt.Errorf("get session: %w", err)
 		}
@@ -57,7 +57,7 @@ func (s *Service) RefreshSession(ctx context.Context, w http.ResponseWriter, r *
 
 		newToken, err := provider.RefreshToken(session.RefreshToken)
 		if err != nil {
-			_, _ = s.Zed.UpdateUserAuthSessionTokens(ctx, database.UpdateUserAuthSessionTokensParams{
+			_, _ = tx.UpdateUserAuthSessionTokens(ctx, database.UpdateUserAuthSessionTokensParams{
 				ID:                session.ID,
 				AccessToken:       session.AccessToken,
 				AccessTokenSecret: session.AccessTokenSecret,
@@ -71,7 +71,7 @@ func (s *Service) RefreshSession(ctx context.Context, w http.ResponseWriter, r *
 			return fmt.Errorf("refresh token: %w", err)
 		}
 
-		newSession, err := s.Zed.UpdateUserAuthSessionTokens(ctx, database.UpdateUserAuthSessionTokensParams{
+		newSession, err := tx.UpdateUserAuthSessionTokens(ctx, database.UpdateUserAuthSessionTokensParams{
 			ID:                session.ID,
 			AccessToken:       newToken.AccessToken,
 			AccessTokenSecret: "", // What is this?

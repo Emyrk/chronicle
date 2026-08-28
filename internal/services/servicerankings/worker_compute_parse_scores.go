@@ -202,7 +202,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 
 				cohort, cached := m.cache[bucketKey]
 				if !cached {
-					cohortRows, cErr := w.Store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
+					cohortRows, cErr := tx.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
 						Metric:         m.metric,
 						SnapshotID:     snapshot.ID,
 						EncounterName:  r.EncounterName,
