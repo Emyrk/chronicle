@@ -32,7 +32,7 @@ func NewHodirEncounterCharacter(id guid.GUID, all *characters.Characters) (chara
 
 	return &hodirCharacter{
 		Common: characters.NewCommonCharacter(id, all),
-		defeat: characters.NewScriptedDefeatDetector(id, scriptedSurrenderWithAuraCleanupConfig()),
+		defeat: characters.NewScriptedDefeatDetector(id, scriptedSurrenderWithAuraCleanupConfig(scriptedKeeperAuraCleanupThreshold)),
 	}, true
 }
 

@@ -7,10 +7,11 @@ import (
 )
 
 const (
-	scriptedKeeperAuraCleanupThreshold    = 8
-	scriptedKeeperAuraCleanupBurstWindow  = 100 * time.Millisecond
-	scriptedKeeperAuraCleanupDamageWindow = 500 * time.Millisecond
-	freyaEvadeConfirmationWindow          = 5 * time.Second
+	scriptedKeeperAuraCleanupThreshold = 8
+	kologarnAuraCleanupThreshold       = 7
+	scriptedAuraCleanupBurstWindow     = 100 * time.Millisecond
+	scriptedAuraCleanupDamageWindow    = 500 * time.Millisecond
+	freyaEvadeConfirmationWindow       = 5 * time.Second
 )
 
 func scriptedSurrenderHitConfig() characters.ScriptedDefeatConfig {
@@ -21,21 +22,25 @@ func scriptedSurrenderHitConfig() characters.ScriptedDefeatConfig {
 }
 
 func freyaDefeatConfig() characters.ScriptedDefeatConfig {
-	config := scriptedSurrenderWithAuraCleanupConfig()
+	config := scriptedSurrenderWithAuraCleanupConfig(scriptedKeeperAuraCleanupThreshold)
 	config.EvadeConfirmationWindow = freyaEvadeConfirmationWindow
 	return config
 }
 
-// Hodir and Freya client logs sometimes omit both the triggering overkill and a
-// queued evade, leaving only the guarded aura-cleanup burst. Thorim uses the
-// same detector but not this fallback: observed Thorim wipes can produce an
-// indistinguishable cleanup burst immediately after incoming damage.
-func scriptedSurrenderWithAuraCleanupConfig() characters.ScriptedDefeatConfig {
+func kologarnDefeatConfig() characters.ScriptedDefeatConfig {
+	return scriptedSurrenderWithAuraCleanupConfig(kologarnAuraCleanupThreshold)
+}
+
+// Hodir, Freya, and Kologarn client logs sometimes omit both the triggering
+// overkill and a queued evade, leaving only the guarded aura-cleanup burst.
+// Thorim uses the same detector but not this fallback: observed Thorim wipes can
+// produce an indistinguishable cleanup burst immediately after incoming damage.
+func scriptedSurrenderWithAuraCleanupConfig(distinctAuras int) characters.ScriptedDefeatConfig {
 	config := scriptedSurrenderHitConfig()
 	config.AuraCleanup = characters.AuraCleanupDefeatConfig{
-		DistinctAuras: scriptedKeeperAuraCleanupThreshold,
-		BurstWindow:   scriptedKeeperAuraCleanupBurstWindow,
-		DamageWindow:  scriptedKeeperAuraCleanupDamageWindow,
+		DistinctAuras: distinctAuras,
+		BurstWindow:   scriptedAuraCleanupBurstWindow,
+		DamageWindow:  scriptedAuraCleanupDamageWindow,
 	}
 	return config
 }
