@@ -162,6 +162,41 @@ func TestHodirAuraCleanupRequiresRecentDamageAndBurst(t *testing.T) {
 	}
 }
 
+func TestHodirWipeAuraCleanupDoesNotMarkSurrender(t *testing.T) {
+	t.Parallel()
+
+	all := newHodirTestCharacters()
+	player := guid.GUID(1)
+	hodirID := creatureGUID(hodirEntry)
+	start := time.Date(2026, time.June, 10, 20, 46, 46, 412000000, time.UTC)
+
+	_, err := all.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      hodirID,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
+
+	// Observed wipe OACkHpz1QQIMUV5o: the reset cleanup began 513ms after
+	// the last incoming damage and removed only five distinct auras per 100ms.
+	for i := range 5 {
+		_, err = all.Process(&messages.Aura{
+			MessageBase: messages.Base(start.Add(513 * time.Millisecond)),
+			Target:      hodirID,
+			SpellName:   fmt.Sprintf("Reset aura %d", i),
+			State:       types.AuraStateRemoved,
+		})
+		require.NoError(t, err)
+	}
+
+	hodir, ok := all.Get(hodirID)
+	require.True(t, ok)
+	require.True(t, hodir.IsActive())
+	require.Equal(t, period.EndStateNone, hodir.LastEndState())
+}
+
 func TestHodirEncounterFactory(t *testing.T) {
 	t.Parallel()
 
