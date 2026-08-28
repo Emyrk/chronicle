@@ -2,6 +2,7 @@ package instances
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -595,6 +596,69 @@ func TestUlduarMimironEncounterIdentities(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, types.AffiliationFriendly, mimiron.Affiliation)
 	require.False(t, mimiron.Boss)
+}
+
+func TestUlduarAlgalonAuraCleanupWithLivingPlayerIsCleanKill(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWrath},
+	})
+	instance := UlduarFactory.New(
+		ctx,
+		slog.Default(),
+		unitdb.New(),
+		zone.Zone{Name: "Ulduar", MapID: 603},
+		database.WoWFlavor{database.FlavorWrath},
+	)
+	players := []guid.GUID{1, 2, 3}
+	algalon := creatureGUID(32871)
+	star := creatureGUID(32955)
+	darkMatter := creatureGUID(33089)
+	start := time.Date(2026, time.August, 26, 16, 6, 30, 0, time.UTC)
+
+	processDamage := func(at time.Duration, caster, target guid.GUID) {
+		t.Helper()
+		require.NoError(t, instance.Process(&messages.Damage{
+			MessageBase: messages.Base(start.Add(at)),
+			Caster:      &caster,
+			Target:      target,
+			Amount:      1,
+			HitType:     types.HitTypeHit,
+		}))
+	}
+
+	processDamage(0, players[0], star)
+	processDamage(50*time.Second, players[0], algalon)
+	processDamage(51*time.Second, players[1], algalon)
+	processDamage(51*time.Second+500*time.Millisecond, players[2], algalon)
+	processDamage(52*time.Second, players[0], darkMatter)
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(53 * time.Second)),
+		Victim:      players[1],
+	}))
+	require.NoError(t, instance.Process(messages.TimedOut(start.Add(61*time.Second))))
+	processDamage(62*time.Second, players[0], algalon)
+
+	cleanupAt := start.Add(62*time.Second + 22*time.Millisecond)
+	for i := range 12 {
+		require.NoError(t, instance.Process(&messages.Aura{
+			MessageBase: messages.Base(cleanupAt),
+			Target:      algalon,
+			SpellName:   fmt.Sprintf("Removed debuff %d", i),
+			State:       types.AuraStateRemoved,
+		}))
+	}
+
+	result, err := instance.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+
+	got := result.Encounters[0]
+	require.Equal(t, "Algalon the Observer", got.Name)
+	require.True(t, got.Boss)
+	require.Equal(t, encounter.KillTypeClean, got.KillType)
+	require.Empty(t, got.Remaining)
 }
 
 func TestUlduarYoggSaronEncounterPhases(t *testing.T) {
