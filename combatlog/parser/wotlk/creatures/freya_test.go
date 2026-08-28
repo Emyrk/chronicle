@@ -76,8 +76,14 @@ func TestFreyaEvadeMarksSurrenderAfterConfirmation(t *testing.T) {
 	require.NoError(t, err)
 	_, err = all.Process(messages.TimedOut(evadeAt.Add(characters.ScriptedDefeatEvadeConfirmationWindow)))
 	require.NoError(t, err)
-
 	freya, ok := all.Get(freyaID)
+	require.True(t, ok)
+	require.True(t, freya.IsActive())
+
+	_, err = all.Process(messages.TimedOut(evadeAt.Add(freyaEvadeConfirmationWindow)))
+	require.NoError(t, err)
+
+	freya, ok = all.Get(freyaID)
 	require.True(t, ok)
 	require.False(t, freya.IsActive())
 	require.Equal(t, period.EndStateSlain, freya.LastEndState())
@@ -129,6 +135,53 @@ func TestFreyaDamageAfterEvadeDoesNotSplitEncounter(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = all.Process(messages.TimedOut(evadeAt.Add(time.Second)))
+	require.NoError(t, err)
+
+	freya, ok := all.Get(freyaID)
+	require.True(t, ok)
+	require.True(t, freya.IsActive())
+	require.Equal(t, period.EndStateNone, freya.LastEndState())
+	require.Len(t, freya.Periods(), 1)
+}
+
+func TestFreyaDamageFourSecondsAfterEvadeDoesNotSplitEncounter(t *testing.T) {
+	t.Parallel()
+
+	all := newFreyaTestCharacters()
+	playerID := guid.GUID(1)
+	freyaID := creatureGUID(freyaEntry)
+	start := time.Date(2026, time.August, 27, 2, 3, 16, 531000000, time.UTC)
+
+	_, err := all.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &freyaID,
+		Target:      playerID,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
+
+	evadeAt := time.Date(2026, time.August, 27, 2, 3, 37, 858000000, time.UTC)
+	_, err = all.Process(&messages.Damage{
+		MessageBase: messages.Base(evadeAt),
+		Caster:      &playerID,
+		Target:      freyaID,
+		HitType:     types.HitTypeEvade,
+	})
+	require.NoError(t, err)
+
+	// Observed Igr50E8ZG5QkkBJX: positive damage resumed 4.001s after the
+	// transient evade. Freya's longer confirmation window keeps this activity
+	// in the same encounter.
+	_, err = all.Process(&messages.Damage{
+		MessageBase: messages.Base(evadeAt.Add(4*time.Second + time.Millisecond)),
+		Caster:      &playerID,
+		Target:      freyaID,
+		Amount:      897,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(evadeAt.Add(6 * time.Second)))
 	require.NoError(t, err)
 
 	freya, ok := all.Get(freyaID)

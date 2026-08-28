@@ -10,6 +10,7 @@ const (
 	scriptedKeeperAuraCleanupThreshold    = 8
 	scriptedKeeperAuraCleanupBurstWindow  = 100 * time.Millisecond
 	scriptedKeeperAuraCleanupDamageWindow = 500 * time.Millisecond
+	freyaEvadeConfirmationWindow          = 5 * time.Second
 )
 
 func scriptedSurrenderHitConfig() characters.ScriptedDefeatConfig {
@@ -17,6 +18,12 @@ func scriptedSurrenderHitConfig() characters.ScriptedDefeatConfig {
 		PositiveOverkill: true,
 		Evade:            true,
 	}
+}
+
+func freyaDefeatConfig() characters.ScriptedDefeatConfig {
+	config := scriptedSurrenderWithAuraCleanupConfig()
+	config.EvadeConfirmationWindow = freyaEvadeConfirmationWindow
+	return config
 }
 
 // Hodir and Freya client logs sometimes omit both the triggering overkill and a

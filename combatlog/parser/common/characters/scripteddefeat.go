@@ -31,9 +31,10 @@ type AuraCleanupDefeatConfig struct {
 
 // ScriptedDefeatConfig selects the defeat signals recognized by a detector.
 type ScriptedDefeatConfig struct {
-	PositiveOverkill bool
-	Evade            bool
-	AuraCleanup      AuraCleanupDefeatConfig
+	PositiveOverkill        bool
+	Evade                   bool
+	EvadeConfirmationWindow time.Duration
+	AuraCleanup             AuraCleanupDefeatConfig
 }
 
 // ScriptedDefeatDetector recognizes combat-log side effects produced by bosses
@@ -84,7 +85,7 @@ func (d *ScriptedDefeatDetector) Observe(m messages.Message, active bool) (Scrip
 				}
 			} else {
 				sinceEvade := event.Date().Sub(d.pendingEvade)
-				if !d.pendingEvade.IsZero() && sinceEvade >= 0 && sinceEvade < ScriptedDefeatEvadeConfirmationWindow {
+				if !d.pendingEvade.IsZero() && sinceEvade >= 0 && sinceEvade < d.evadeConfirmationWindow() {
 					d.pendingEvade = time.Time{}
 				}
 				if isSuccessfulIncomingDamage(event) {
@@ -99,11 +100,18 @@ func (d *ScriptedDefeatDetector) Observe(m messages.Message, active bool) (Scrip
 		}
 	}
 
-	if !d.pendingEvade.IsZero() && m.Date().Sub(d.pendingEvade) >= ScriptedDefeatEvadeConfirmationWindow {
+	if !d.pendingEvade.IsZero() && m.Date().Sub(d.pendingEvade) >= d.evadeConfirmationWindow() {
 		d.Reset()
 		return ScriptedDefeatEvade, true
 	}
 	return "", false
+}
+
+func (d *ScriptedDefeatDetector) evadeConfirmationWindow() time.Duration {
+	if d.config.EvadeConfirmationWindow > 0 {
+		return d.config.EvadeConfirmationWindow
+	}
+	return ScriptedDefeatEvadeConfirmationWindow
 }
 
 func (d *ScriptedDefeatDetector) Reset() {
