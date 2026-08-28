@@ -167,6 +167,27 @@ func TestOnyxiaDerivedName(t *testing.T) {
 	require.Nil(t, onyxiaDerivedName(database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore}))
 }
 
+func TestUlduarNonBossMechanicIdentities(t *testing.T) {
+	t.Parallel()
+
+	hostiles := UlduarHostiles()
+
+	cannon, ok := hostiles[33264]
+	require.True(t, ok)
+	require.Equal(t, "Ironwork Cannon", cannon.Name)
+	require.Equal(t, types.AffiliationHostile, cannon.Affiliation)
+	require.False(t, cannon.Boss)
+	require.Empty(t, cannon.EncounterName)
+
+	for _, entry := range []uint32{33241, 33242, 33244} {
+		keeper, ok := hostiles[entry]
+		require.True(t, ok)
+		require.Equal(t, types.AffiliationFriendly, keeper.Affiliation)
+		require.False(t, keeper.Boss)
+		require.Empty(t, keeper.EncounterName)
+	}
+}
+
 func TestUlduarRazorscaleFriendlyHelpersDoNotExtendEncounter(t *testing.T) {
 	t.Parallel()
 
@@ -419,9 +440,9 @@ func TestUlduarThorimEncounterIdentities(t *testing.T) {
 	for _, entry := range []uint32{
 		32872, 32873, 32874, 32875,
 		32876, 32877, 32878,
-		32882, 32883, 32885, 32886,
-		32904, 32907, 32908,
-		33110, 33138, 33378,
+		32882, 32883, 32885, 32886, 32892,
+		32904, 32907, 32908, 33054,
+		33110, 33138, 33378, 33725,
 	} {
 		identity, ok := hostiles[entry]
 		require.True(t, ok, "entry %d must be registered", entry)

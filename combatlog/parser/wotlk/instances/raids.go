@@ -469,6 +469,7 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33235: "Brann Bronzebeard",
 		33236: "Steelforged Defender",
 		33237: "Ulduar Colossus",
+		33264: "Ironwork Cannon",
 		33354: "Corrupted Servitor",
 		33355: "Misguided Nymph",
 		33413: "Thorim",
@@ -605,28 +606,21 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		32857: "Stormcaller Brundir",
 		32865: "Thorim",
 		32867: "Steelbreaker",
-		32892: "Thorim Event Bunny",
 		32906: "Freya",
 		32913: "Elder Ironbranch",
 		32914: "Elder Stonebark",
 		32915: "Elder Brightleaf",
 		32927: "Runemaster Molgeim",
 		32930: "Kologarn",
-		33054: "Thorim Trap Bunny",
 		33113: "Flame Leviathan",
 		33118: "Ignis the Furnace Master",
 		33147: "Thorim",
 		33186: "Razorscale",
 		33190: "Ignis the Furnace Master",
-		33241: "Freya",
-		33242: "Thorim",
-		33244: "Mimiron",
-		33264: "Ironwork Cannon",
 		33271: "General Vezax",
 		33293: "XT-002 Deconstructor",
 		33350: "Mimiron",
 		33360: "Freya",
-		33378: "Thunder Orb",
 		33391: "Elder Brightleaf",
 		33392: "Elder Ironbranch",
 		33393: "Elder Stonebark",
@@ -637,7 +631,6 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33693: "Steelbreaker",
 		33694: "Stormcaller Brundir",
 		33724: "Razorscale",
-		33725: "Thorim Trap Bunny",
 		33885: "XT-002 Deconstructor",
 		33909: "Kologarn",
 		34003: "Flame Leviathan",
@@ -664,6 +657,19 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33282: "Razorscale Harpoon Fire State",
 		33287: "Expedition Engineer",
 		33816: "Expedition Defender",
+	} {
+		hostile[entry] = instances.Identity{
+			Affiliation: types.AffiliationFriendly,
+			Name:        name,
+		}
+	}
+
+	// Observation Ring keepers are friendly gossip NPCs used during Yogg-Saron,
+	// not alternate versions of their original boss encounters.
+	for entry, name := range map[uint32]string{
+		33241: "Freya",
+		33242: "Thorim",
+		33244: "Mimiron",
 	} {
 		hostile[entry] = instances.Identity{
 			Affiliation: types.AffiliationFriendly,
@@ -717,12 +723,15 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		32883: "Captured Mercenary Soldier",
 		32885: "Captured Mercenary Soldier",
 		32886: "Dark Rune Acolyte",
+		32892: "Thorim Event Bunny",
 		32904: "Dark Rune Commoner",
 		32907: "Captured Mercenary Captain",
 		32908: "Captured Mercenary Captain",
+		33054: "Thorim Trap Bunny",
 		33110: "Dark Rune Acolyte",
 		33138: "Lightning Orb",
 		33378: "Thunder Orb",
+		33725: "Thorim Trap Bunny",
 	} {
 		hostile[entry] = instances.Identity{
 			Affiliation:     types.AffiliationHostile,
