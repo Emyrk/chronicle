@@ -74,6 +74,11 @@ func (d *ScriptedDefeatDetector) Observe(m messages.Message, active bool) (Scrip
 
 	switch event := m.(type) {
 	case *messages.Damage:
+		if event.Caster != nil && *event.Caster == d.id {
+			// A boss dealing damage after an evade proves it is still fighting. This
+			// matters for encounters with brief scripted evade windows, such as Thorim.
+			d.pendingEvade = time.Time{}
+		}
 		if event.Target == d.id {
 			if d.config.PositiveOverkill && event.Overkill > 0 {
 				d.Reset()
