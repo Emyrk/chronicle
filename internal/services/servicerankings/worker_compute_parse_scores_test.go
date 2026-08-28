@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"testing"
 	"time"
 
@@ -27,9 +28,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newSingleConnectionPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
+	connectionURL := dbtestutil.NewConnectionURL(t)
+	migrationPool, err := database.NewPostgresDB(t.Context(), slog.Default(), connectionURL)
+	require.NoError(t, err)
+	migrationPool.Close()
+
+	u, err := url.Parse(connectionURL)
+	require.NoError(t, err)
+	query := u.Query()
+	query.Set("pool_max_conns", "1")
+	u.RawQuery = query.Encode()
+	pool, err := pgxpool.New(t.Context(), u.String())
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	return pool
+}
+
 type cohortErrorStore struct {
 	database.Store
 	err error
+}
+
+func (s cohortErrorStore) InTx(
+	ctx context.Context,
+	f func(database.Store) error,
+	opts *pgx.TxOptions,
+) error {
+	return s.Store.InTx(ctx, func(tx database.Store) error {
+		return f(cohortErrorStore{Store: tx, err: s.err})
+	}, opts)
 }
 
 func (s cohortErrorStore) GetSnapshotCohortValues(
@@ -160,7 +190,9 @@ func TestWorkerComputeParseScores_WithSnapshot(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
-	pool, _ := dbtestutil.NewPGXPool(t)
+	// Keep this pool at one connection to catch queries that bypass the tx handle
+	// while a transaction is already holding the only connection.
+	pool := newSingleConnectionPool(t)
 	store := database.New(pool)
 
 	f := setupScoringFixture(t, pool, store)
