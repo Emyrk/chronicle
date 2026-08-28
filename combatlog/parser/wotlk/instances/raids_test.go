@@ -469,6 +469,133 @@ func TestUlduarThorimEncounterIdentities(t *testing.T) {
 	require.Nil(t, keeper.EncounterNameFn)
 }
 
+func TestUlduarMimironEncounterPhases(t *testing.T) {
+	t.Parallel()
+
+	instance := newUlduarTestInstance(t)
+	player := guid.GUID(1)
+	leviathan := creatureGUID(33432)
+	vx001 := creatureGUID(33651)
+	aerial := creatureGUID(33670)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	processDamage := func(at time.Duration, target guid.GUID) {
+		t.Helper()
+		hit := damageEvent(player, target, 1)
+		hit.MessageBase = messages.Base(start.Add(at))
+		require.NoError(t, instance.Process(hit))
+	}
+	processSlain := func(at time.Duration, target guid.GUID) {
+		t.Helper()
+		require.NoError(t, instance.Process(&messages.Slain{
+			MessageBase: messages.Base(start.Add(at)),
+			Victim:      target,
+			Killer:      &player,
+		}))
+	}
+
+	processDamage(0, leviathan)
+	processSlain(10*time.Second, leviathan)
+	processDamage(20*time.Second, vx001)
+	processSlain(30*time.Second, vx001)
+	processDamage(40*time.Second, aerial)
+	processSlain(50*time.Second, aerial)
+	processDamage(60*time.Second, leviathan)
+	processDamage(61*time.Second, vx001)
+	processDamage(62*time.Second, aerial)
+	processSlain(70*time.Second, leviathan)
+	processSlain(71*time.Second, vx001)
+	processSlain(72*time.Second, aerial)
+
+	result, err := instance.Finalize(t.Context())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+
+	got := result.Encounters[0]
+	require.Equal(t, "Mimiron", got.Name)
+	require.True(t, got.Boss)
+	require.Equal(t, encounter.KillTypeClean, got.KillType)
+	require.Len(t, got.Combat.Hostiles, 3)
+	require.Len(t, got.Phases, 4)
+	require.Equal(t, "mimiron_p1", got.Phases[0].Key)
+	require.Equal(t, int64(0), got.Phases[0].StartOffsetMs)
+	require.Equal(t, int64(20_000), got.Phases[0].EndOffsetMs)
+	require.Equal(t, "mimiron_p2", got.Phases[1].Key)
+	require.Equal(t, int64(20_000), got.Phases[1].StartOffsetMs)
+	require.Equal(t, int64(40_000), got.Phases[1].EndOffsetMs)
+	require.Equal(t, "mimiron_p3", got.Phases[2].Key)
+	require.Equal(t, int64(40_000), got.Phases[2].StartOffsetMs)
+	require.Equal(t, int64(60_000), got.Phases[2].EndOffsetMs)
+	require.Equal(t, "mimiron_p4", got.Phases[3].Key)
+	require.Equal(t, int64(60_000), got.Phases[3].StartOffsetMs)
+	require.Equal(t, int64(72_000), got.Phases[3].EndOffsetMs)
+}
+
+func TestUlduarMimironPhaseFourMustFinish(t *testing.T) {
+	t.Parallel()
+
+	instance := newUlduarTestInstance(t)
+	player := guid.GUID(1)
+	leviathan := creatureGUID(33432)
+	vx001 := creatureGUID(33651)
+	aerial := creatureGUID(33670)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	for i, target := range []guid.GUID{leviathan, vx001, aerial, leviathan, vx001, aerial} {
+		hit := damageEvent(player, target, 1)
+		hit.MessageBase = messages.Base(start.Add(time.Duration(i) * 10 * time.Second))
+		require.NoError(t, instance.Process(hit))
+	}
+	for i, target := range []guid.GUID{leviathan, vx001} {
+		require.NoError(t, instance.Process(&messages.Slain{
+			MessageBase: messages.Base(start.Add(60*time.Second + time.Duration(i)*time.Second)),
+			Victim:      target,
+			Killer:      &player,
+		}))
+	}
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(70 * time.Second)),
+		Victim:      player,
+		Killer:      &aerial,
+	}))
+	require.NoError(t, instance.Process(messages.TimedOut(start.Add(2*time.Minute+2*time.Second))))
+
+	result, err := instance.Finalize(t.Context())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+
+	got := result.Encounters[0]
+	require.Equal(t, "Mimiron", got.Name)
+	require.True(t, got.Boss)
+	require.Equal(t, encounter.KillTypeWipe, got.KillType)
+	require.Len(t, got.Phases, 4)
+	require.Equal(t, encounter.KillTypeWipe, got.Phases[3].KillType)
+}
+
+func TestUlduarMimironEncounterIdentities(t *testing.T) {
+	t.Parallel()
+
+	hostiles := UlduarHostiles()
+	fight := encounter.Fight{}
+	for _, entry := range []uint32{33432, 34106, 33651, 33670} {
+		identity, ok := hostiles[entry]
+		require.True(t, ok)
+		require.True(t, identity.Boss)
+		require.Equal(t, "Mimiron", identity.EncounterName)
+		require.NotNil(t, identity.EncounterNameFn)
+
+		result := identity.EncounterNameFn(fight)
+		require.NotNil(t, result)
+		require.Equal(t, "Mimiron", result.EncounterName)
+		require.Equal(t, []uint32{33651, 33670}, result.Bosses)
+	}
+
+	mimiron, ok := hostiles[33350]
+	require.True(t, ok)
+	require.Equal(t, types.AffiliationFriendly, mimiron.Affiliation)
+	require.False(t, mimiron.Boss)
+}
+
 func TestUlduarYoggSaronEncounterPhases(t *testing.T) {
 	t.Parallel()
 

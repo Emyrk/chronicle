@@ -648,6 +648,34 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		hostile[entry] = identity
 	}
 
+	// Mimiron's three machines form one four-phase encounter. VX-001 and the
+	// Aerial Command Unit are required even when a log ends before they appear.
+	mimironEncounter := func(encounter.Fight) *identifier.EncounterFuncResult {
+		return &identifier.EncounterFuncResult{
+			EncounterName: "Mimiron",
+			Bosses:        []uint32{33651, 33670},
+		}
+	}
+	for entry, name := range map[uint32]string{
+		33432: "Leviathan Mk II",
+		34106: "Leviathan Mk II",
+		33651: "VX-001",
+		33670: "Aerial Command Unit",
+	} {
+		hostile[entry] = instances.Identity{
+			Affiliation:     types.AffiliationHostile,
+			Name:            name,
+			EncounterName:   "Mimiron",
+			EncounterNameFn: mimironEncounter,
+			Boss:            true,
+		}
+	}
+	// Mimiron controls the machines but is not an attackable encounter unit.
+	hostile[33350] = instances.Identity{
+		Affiliation: types.AffiliationFriendly,
+		Name:        "Mimiron",
+	}
+
 	// Razorscale's expedition units and harpoon state helpers fight or act during
 	// the encounter, but they are friendly mechanics and must not start, extend,
 	// or make the encounter partial.
