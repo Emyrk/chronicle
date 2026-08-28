@@ -68,7 +68,11 @@ func TestWotLKEncounterFactoriesUseNeverActiveMechanolift(t *testing.T) {
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
-	mechanolift := wotlkEntryGUID(0xF130000000000000, mechanoliftEntry)
+	mechanolift := wotlkEntryGUID(0xF150000000000000, mechanoliftEntry)
+	creatureWithSameEntry := wotlkEntryGUID(0xF130000000000000, mechanoliftEntry)
+	character, ok := NewMechanolift(creatureWithSameEntry, chars)
+	require.False(t, ok)
+	require.Nil(t, character)
 
 	var matched characters.Character
 	for _, factory := range NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}) {

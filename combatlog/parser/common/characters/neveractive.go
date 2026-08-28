@@ -2,8 +2,8 @@ package characters
 
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 var _ Character = (*NeverActive)(nil)
@@ -15,6 +15,13 @@ type NeverActive struct {
 
 func NewNeverActive(id guid.GUID) NeverActive {
 	return NeverActive{id: id}
+}
+
+// NewNamedNeverActive creates a character that never contributes activity while
+// preserving its known display name in instance unit metadata.
+func NewNamedNeverActive(id guid.GUID, all *Characters, name string) NeverActive {
+	all.DB().UpdateUnitName(id, name)
+	return NewNeverActive(id)
 }
 
 func (c NeverActive) ID() guid.GUID {
@@ -43,4 +50,3 @@ func (c NeverActive) IsActive() bool {
 func (c NeverActive) LastEndState() period.EndState {
 	return period.EndStateNone
 }
-

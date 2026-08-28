@@ -212,6 +212,10 @@ func TestSifIsNeverActive(t *testing.T) {
 	require.IsType(t, characters.NeverActive{}, sif)
 	require.False(t, sif.IsActive())
 	require.Empty(t, sif.Periods())
+
+	info, ok := all.DB().Get(sifID)
+	require.True(t, ok)
+	require.Equal(t, "Sif", info.Name)
 }
 
 func TestThorimEncounterFactory(t *testing.T) {

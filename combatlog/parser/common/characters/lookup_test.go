@@ -44,6 +44,24 @@ func TestCreatureFactoriesRejectNonCreatureGUIDs(t *testing.T) {
 	require.Equal(t, 1, calls)
 }
 
+func TestNamedNeverActivePreservesUnitName(t *testing.T) {
+	t.Parallel()
+
+	chars := NewCharacters(
+		unitdb.New(),
+		nil,
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+	id := entryGUID(0xF150000000000000, 33214)
+
+	character := NewNamedNeverActive(id, chars, "Mechanolift 304-A")
+	require.False(t, character.IsActive())
+
+	info, ok := chars.DB().Get(id)
+	require.True(t, ok)
+	require.Equal(t, "Mechanolift 304-A", info.Name)
+}
+
 func TestCharactersByEntryOnlyIndexesCreatures(t *testing.T) {
 	t.Parallel()
 
