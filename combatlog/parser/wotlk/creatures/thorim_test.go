@@ -129,6 +129,37 @@ func TestThorimOverkillMarksSurrenderAsSlain(t *testing.T) {
 	require.Equal(t, period.EndStateSlain, soldier.LastEndState())
 }
 
+func TestThorimEvadeMarksSurrenderAsSlain(t *testing.T) {
+	t.Parallel()
+
+	all := newThorimTestCharacters()
+	player := guid.GUID(1)
+	soldierID := creatureGUID(32883)
+	thorimID := creatureGUID(thorimEntry)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	_, err := all.Process(testDamage(start, player, soldierID))
+	require.NoError(t, err)
+	_, err = all.Process(testDamage(start.Add(time.Second), player, thorimID))
+	require.NoError(t, err)
+
+	defeat := testDamage(start.Add(2*time.Second), player, thorimID)
+	defeat.Amount = 0
+	defeat.HitType = types.HitTypeEvade
+	_, err = all.Process(defeat)
+	require.NoError(t, err)
+
+	thorim, ok := all.Get(thorimID)
+	require.True(t, ok)
+	require.False(t, thorim.IsActive())
+	require.Equal(t, period.EndStateSlain, thorim.LastEndState())
+
+	soldier, ok := all.Get(soldierID)
+	require.True(t, ok)
+	require.False(t, soldier.IsActive())
+	require.Equal(t, period.EndStateSlain, soldier.LastEndState())
+}
+
 func TestSifIsNeverActive(t *testing.T) {
 	t.Parallel()
 

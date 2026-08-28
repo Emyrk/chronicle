@@ -49,6 +49,38 @@ func TestHodirOverkillMarksSurrenderAsSlain(t *testing.T) {
 	require.Equal(t, period.EndStateSlain, hodir.LastEndState())
 }
 
+func TestHodirEvadeMarksSurrenderAsSlain(t *testing.T) {
+	t.Parallel()
+
+	all := newHodirTestCharacters()
+	player := guid.GUID(1)
+	hodirID := creatureGUID(hodirEntry)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	_, err := all.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      hodirID,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
+
+	_, err = all.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(time.Second)),
+		Caster:      &player,
+		Target:      hodirID,
+		HitType:     types.HitTypeEvade,
+	})
+	require.NoError(t, err)
+
+	hodir, ok := all.Get(hodirID)
+	require.True(t, ok)
+	require.False(t, hodir.IsActive())
+	require.Equal(t, period.EndStateSlain, hodir.LastEndState())
+	require.Equal(t, start.Add(time.Second), hodir.Periods()[0].End.Timestamp.Date())
+}
+
 func TestHodirEncounterFactory(t *testing.T) {
 	t.Parallel()
 

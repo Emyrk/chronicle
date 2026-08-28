@@ -145,9 +145,9 @@ func (c *thorimCharacter) Process(m messages.Message) error {
 			c.state.phase = 3
 		}
 		if c.entry == thorimEntry && isThorimDefeatHit(damage) {
-			// Thorim surrenders instead of emitting UNIT_DIED. The combat log still
-			// reports the triggering hit with positive overkill, so use that as the
-			// encounter's slain signal. RoomMechanic flushes the pending room deaths.
+			// Thorim surrenders instead of emitting UNIT_DIED. Depending on the
+			// queued attack, the combat log reports either positive overkill or an
+			// evade hit after surrender. RoomMechanic flushes pending room deaths.
 			c.Died("thorim_defeated", damage)
 		}
 	}
@@ -224,5 +224,6 @@ func isSuccessfulThorimDamage(damage *messages.Damage) bool {
 
 func isThorimDefeatHit(damage *messages.Damage) bool {
 	entry, ok := damage.Target.GetEntry()
-	return ok && entry == thorimEntry && damage.Overkill > 0
+	return ok && entry == thorimEntry &&
+		(damage.Overkill > 0 || damage.HitType.Has(types.HitTypeEvade))
 }
