@@ -74,6 +74,16 @@ type Service struct {
 	loginAttempts map[string]time.Time
 }
 
+func newCookieStore(secure bool) *sessions.CookieStore {
+	store := sessions.NewCookieStore([]byte("secret"))
+	store.Options.HttpOnly = true
+	store.Options.Secure = secure
+	// sessions v1.4 defaults to SameSite=None and Secure. Preserve the prior
+	// browser behavior so development cookies work over localhost HTTP.
+	store.Options.SameSite = http.SameSiteDefaultMode
+	return store
+}
+
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, error) {
 	//nolint:staticcheck
 	if opts.DevServer && !(strings.Contains(opts.AccessURL.String(), "localhost") || strings.Contains(opts.AccessURL.String(), "192.168.1")) {
@@ -97,9 +107,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 		providers[d.Name()] = d
 	}
 
-	store := sessions.NewCookieStore([]byte("secret"))
-	store.Options.HttpOnly = true
-	store.Options.Secure = opts.AccessURL.Scheme == "https"
+	store := newCookieStore(opts.AccessURL.Scheme == "https")
 	if !store.Options.Secure {
 		logger.Warn("using non-secure cookie store; this is not recommended for production environments")
 	}
@@ -550,6 +558,7 @@ func validateState(req *http.Request, sess goth.Session) error {
 	}
 	return nil
 }
+
 // HandleRelay redeems a one-time relay code and sets the session cookie on the
 // current (tenant subdomain) domain, then redirects to the stored path.
 func (s *Service) HandleRelay(w http.ResponseWriter, r *http.Request) {
@@ -618,4 +627,3 @@ func (s *Service) parseRelayTarget(from string) (origin string, path string, ten
 
 	return targetOrigin, targetPath, info, true
 }
-
