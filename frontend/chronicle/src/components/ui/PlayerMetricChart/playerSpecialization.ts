@@ -1,4 +1,5 @@
 import type { ClassTalentData } from "@/components/ui/TalentTreeViewer/talentLogic";
+import { specializationIconUrl } from "@/config/specializationIcon";
 
 export interface PlayerTalentSnapshot {
   heroClass: string;
@@ -7,7 +8,7 @@ export interface PlayerTalentSnapshot {
 
 export interface PlayerSpecialization {
   name: string;
-  iconTexture: string;
+  iconUrl: string;
 }
 
 const CLASS_NAME_TO_ID: Record<string, number> = {
@@ -53,10 +54,10 @@ export function resolvePlayerSpecialization(
     (left, right) => left.orderIndex - right.orderIndex,
   );
   const tab = orderedTabs[treeIndex];
-  if (!tab?.name || !tab.iconTexture) return null;
+  if (!tab?.name) return null;
 
   return {
     name: tab.name,
-    iconTexture: tab.iconTexture,
+    iconUrl: specializationIconUrl(snapshot.heroClass, tab.name),
   };
 }
