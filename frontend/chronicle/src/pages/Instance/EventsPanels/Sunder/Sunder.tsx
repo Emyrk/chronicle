@@ -366,6 +366,9 @@ function DebugBreakout({ target, onClose }: DebugBreakoutProps) {
                 </td>
                 <td className="py-0.5 px-2">
                   <span className="text-[var(--color-class-warrior)]">{event.casterName}</span>
+                  {event.abilityName && (
+                    <span className="text-muted-foreground ml-2">via {event.abilityName}</span>
+                  )}
                   {(event.type === "landed" || event.type === "refreshed") && event.stackCount && (
                     <span className="text-muted-foreground ml-2">→ stack {event.stackCount}</span>
                   )}

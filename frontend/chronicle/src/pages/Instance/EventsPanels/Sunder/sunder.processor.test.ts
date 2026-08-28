@@ -113,6 +113,8 @@ describe("sunderProcessor", () => {
 
     expect(state.warriors[CASTER_GUID]?.effectiveSunders).toBe(1);
     expect(state.targets[TARGET_GUID]?.totalSunders).toBe(1);
+    expect(state.targets[TARGET_GUID]?.debugEvents[0]?.abilityName).toBe("Sunder Armor");
+    expect(state.confirmedSunders[0]?.abilityName).toBe("Sunder Armor");
   });
 
   it("correlates Wrath cast successes with Sunder aura stack updates", () => {
@@ -197,6 +199,8 @@ describe("sunderProcessor", () => {
     expect(state.targets[TARGET_GUID]?.first5Contributors).toEqual([
       { guid: CASTER_GUID, name: "Tank", stackNumber: 1 },
     ]);
+    expect(state.targets[TARGET_GUID]?.debugEvents[0]?.abilityName).toBe("Devastate");
+    expect(state.confirmedSunders[0]?.abilityName).toBe("Devastate");
   });
 
   it("credits both stacks when glyphed Devastate takes a target from 3 to 5", () => {
@@ -270,6 +274,7 @@ describe("sunderProcessor", () => {
     expect(state.warriors[CASTER_GUID]?.effectiveSunders).toBe(0);
     expect(state.warriors[CASTER_GUID]?.refreshSunders).toBe(1);
     expect(state._targetStacks[TARGET_GUID]).toBe(5);
+    expect(state.targets[TARGET_GUID]?.debugEvents[0]?.abilityName).toBe("Sunder Armor");
   });
 
   it("marks an unconfirmed Wrath cast as failed after the confirmation window", () => {
@@ -339,6 +344,7 @@ describe("sunderProcessor", () => {
       offsetMs: 1000,
       type: "armor_exposed",
       casterName: "Tank",
+      abilityName: "Sunder Armor",
     });
   });
 });
