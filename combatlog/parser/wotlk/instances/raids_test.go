@@ -167,6 +167,81 @@ func TestOnyxiaDerivedName(t *testing.T) {
 	require.Nil(t, onyxiaDerivedName(database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore}))
 }
 
+func TestUlduarRazorscaleFriendlyHelpersDoNotExtendEncounter(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWrath},
+	})
+	instance := UlduarFactory.New(
+		ctx,
+		slog.Default(),
+		unitdb.New(),
+		zone.Zone{Name: "Ulduar", MapID: 603},
+		database.WoWFlavor{database.FlavorWrath},
+	)
+	player := guid.GUID(1)
+	defender := creatureGUID(33816)
+	razorscale := creatureGUID(33186)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	// Expedition Defenders actively fight Razorscale's adds. Their activity is
+	// friendly and must not start the encounter before Razorscale participates.
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &defender,
+		Target:      player,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(20 * time.Second)),
+		Caster:      &razorscale,
+		Target:      player,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(60 * time.Second)),
+		Victim:      razorscale,
+		Killer:      &player,
+	}))
+
+	result, err := instance.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+
+	got := result.Encounters[0]
+	require.Equal(t, "Razorscale", got.Name)
+	require.True(t, got.Boss)
+	require.Equal(t, encounter.KillTypeClean, got.KillType)
+	require.Equal(t, 40*time.Second, got.Combat.End.Sub(got.Combat.Start))
+	require.Len(t, got.Combat.Hostiles, 1)
+	require.Contains(t, got.Combat.Hostiles, razorscale)
+}
+
+func TestUlduarRazorscaleIdentities(t *testing.T) {
+	t.Parallel()
+
+	hostiles := UlduarHostiles()
+	for _, entry := range []uint32{33186, 33724} {
+		razorscale, ok := hostiles[entry]
+		require.True(t, ok)
+		require.Equal(t, "Razorscale", razorscale.Name)
+		require.True(t, razorscale.Boss)
+		require.Equal(t, "Razorscale", razorscale.EncounterName)
+	}
+
+	for _, entry := range []uint32{33210, 33259, 33282, 33287, 33816} {
+		identity, ok := hostiles[entry]
+		require.True(t, ok, "entry %d must be registered", entry)
+		require.Equal(t, types.AffiliationFriendly, identity.Affiliation)
+		require.False(t, identity.Boss)
+		require.Empty(t, identity.EncounterName)
+		require.Nil(t, identity.EncounterNameFn)
+	}
+}
+
 func TestUlduarHodirScriptedDefeat(t *testing.T) {
 	t.Parallel()
 

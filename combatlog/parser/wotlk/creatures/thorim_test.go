@@ -149,6 +149,8 @@ func TestThorimEvadeMarksSurrenderAsSlain(t *testing.T) {
 	defeat.HitType = types.HitTypeEvade
 	_, err = all.Process(defeat)
 	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(defeat.Date().Add(characters.ScriptedDefeatEvadeConfirmationWindow)))
+	require.NoError(t, err)
 
 	thorim, ok := all.Get(thorimID)
 	require.True(t, ok)

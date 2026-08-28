@@ -465,14 +465,10 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33196: "Sif",
 		33121: "Iron Construct",
 		33191: "Iron Construct",
-		33210: "Expedition Commander",
 		33214: "Mechanolift 304-A",
 		33235: "Brann Bronzebeard",
 		33236: "Steelforged Defender",
 		33237: "Ulduar Colossus",
-		33259: "Expedition Trapper",
-		33282: "Razorscale Harpoon Fire State",
-		33287: "Expedition Engineer",
 		33354: "Corrupted Servitor",
 		33355: "Misguided Nymph",
 		33413: "Thorim",
@@ -518,7 +514,6 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33774: "Slain Iron Vrykul",
 		33775: "Slain Iron Dwarf",
 		33779: "Ulduar Shield Bunny",
-		33816: "Expedition Defender",
 		33818: "Twilight Adherent",
 		33819: "Twilight Frost Mage",
 		33820: "Twilight Pyromancer",
@@ -651,6 +646,22 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33288: "Yogg-Saron",
 		32871: "Algalon the Observer",
 	})
+
+	// Razorscale's expedition units and harpoon state helpers fight or act during
+	// the encounter, but they are friendly mechanics and must not start, extend,
+	// or make the encounter partial.
+	for entry, name := range map[uint32]string{
+		33210: "Expedition Commander",
+		33259: "Expedition Trapper",
+		33282: "Razorscale Harpoon Fire State",
+		33287: "Expedition Engineer",
+		33816: "Expedition Defender",
+	} {
+		hostile[entry] = instances.Identity{
+			Affiliation: types.AffiliationFriendly,
+			Name:        name,
+		}
+	}
 
 	// Hodir's post-encounter gossip and keeper forms are friendly NPCs, not
 	// separate boss encounters. The frozen helpers also fight alongside players.
