@@ -195,10 +195,20 @@ func TestUlduarHodirScriptedDefeat(t *testing.T) {
 		MessageBase: messages.Base(start.Add(10 * time.Second)),
 		Caster:      &player,
 		Target:      hodir,
-		Amount:      951,
-		Overkill:    939,
+		Amount:      5513,
 		HitType:     types.HitTypeHit,
 	}))
+	for i, spellName := range []string{
+		"Faerie Fire", "Shadow Mastery", "Judgement of Light", "Heart of the Crusader",
+		"Vindication", "Holy Vengeance", "Deep Wounds", "Ignite",
+	} {
+		require.NoError(t, instance.Process(&messages.Aura{
+			MessageBase: messages.Base(start.Add(10*time.Second + 50*time.Millisecond + time.Duration(i)*time.Millisecond)),
+			Target:      hodir,
+			SpellName:   spellName,
+			State:       types.AuraStateRemoved,
+		}))
+	}
 
 	result, err := instance.Finalize(context.Background())
 	require.NoError(t, err)
@@ -208,7 +218,7 @@ func TestUlduarHodirScriptedDefeat(t *testing.T) {
 	require.Equal(t, "Hodir", got.Name)
 	require.True(t, got.Boss)
 	require.Equal(t, encounter.KillTypeClean, got.KillType)
-	require.Equal(t, 10*time.Second, got.Combat.End.Sub(got.Combat.Start))
+	require.Equal(t, 10*time.Second+57*time.Millisecond, got.Combat.End.Sub(got.Combat.Start))
 }
 
 func TestUlduarHodirIdentities(t *testing.T) {
