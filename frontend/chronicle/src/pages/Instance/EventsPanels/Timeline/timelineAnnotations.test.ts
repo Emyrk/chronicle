@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Encounter } from "../../InstancePage";
 import {
   createTimelinePhaseAnnotations,
+  formatTimelineDeathAnnotation,
   groupTimelineDeathAnnotations,
   timelineAnnotationsEnabled,
 } from "./timelineAnnotations";
@@ -60,6 +61,16 @@ describe("timeline annotations", () => {
     expect(timelineAnnotationsEnabled([])).toBe(false);
     expect(timelineAnnotationsEnabled(["first"])).toBe(true);
     expect(timelineAnnotationsEnabled(["first", "second"])).toBe(false);
+  });
+
+  it("labels death annotations with every player who died", () => {
+    expect(formatTimelineDeathAnnotation({
+      offsetSec: 7.5,
+      deaths: [
+        { offsetMs: 7_500, playerId: "a", playerName: "Alice", className: "MAGE" },
+        { offsetMs: 7_500, playerId: "c", playerName: "Cara", className: "PRIEST" },
+      ],
+    })).toBe("Alice, Cara died at 7.5s");
   });
 
   it("groups simultaneous player deaths", () => {

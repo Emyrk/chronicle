@@ -49,6 +49,11 @@ export function createTimelinePhaseAnnotations(
   });
 }
 
+export function formatTimelineDeathAnnotation(annotation: TimelineDeathAnnotation): string {
+  const names = annotation.deaths.map((death) => death.playerName).join(", ");
+  return `${names} died at ${annotation.offsetSec.toFixed(1)}s`;
+}
+
 export function groupTimelineDeathAnnotations(
   deaths: TimelinePlayerDeath[],
 ): TimelineDeathAnnotation[] {
