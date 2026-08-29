@@ -1,4 +1,5 @@
-import { Check, Clock3, Flag, Skull, Swords, Trophy } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert"
+import { AlertTriangle, Check, Clock3, Flag, Skull, Swords, Trophy } from "lucide-react"
 
 function SpeedrunTimingDiagram() {
   return (
@@ -84,9 +85,18 @@ export function SpeedrunningPage() {
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8">
       <h1 className="mb-2 text-3xl font-bold">How Speedrunning Works</h1>
-      <p className="mb-8 text-muted-foreground">
+      <p className="mb-6 text-muted-foreground">
         A guide to how Chronicle qualifies, times, and ranks complete raid logs.
       </p>
+
+      <Alert className="mb-8 border-amber-400/30 bg-amber-500/10 text-amber-100">
+        <AlertTriangle className="text-amber-400" />
+        <AlertTitle>Speedrun rules are evolving</AlertTitle>
+        <AlertDescription className="text-amber-100/75">
+          Speedrun rules, timing definitions, and qualification requirements are
+          still evolving. Everything described on this page is subject to change.
+        </AlertDescription>
+      </Alert>
 
       <section className="mb-8">
         <h2 className="mb-3 text-xl font-semibold">Upload the Complete Raid</h2>
