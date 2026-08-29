@@ -1,16 +1,23 @@
 import { renderToStaticMarkup } from "react-dom/server"
+import { MemoryRouter } from "react-router-dom"
 import { describe, expect, it, vi } from "vitest"
 import { SpeedrunTimingToggle } from "./SpeedrunTimingToggle"
 import { resolveSpeedrunTimingMode } from "./speedrunTimingPreference"
 
 describe("SpeedrunTimingToggle", () => {
   it("marks the selected timing mode", () => {
-    const markup = renderToStaticMarkup(<SpeedrunTimingToggle value="full" onChange={vi.fn()} />)
+    const markup = renderToStaticMarkup(
+      <MemoryRouter>
+        <SpeedrunTimingToggle value="full" onChange={vi.fn()} />
+      </MemoryRouter>,
+    )
 
     expect(markup).toContain("Boss time")
     expect(markup).toContain("Full raid")
     expect(markup).toContain('aria-pressed="false"')
     expect(markup).toContain('aria-pressed="true"')
+    expect(markup).toContain('href="/speedrunning"')
+    expect(markup).toContain('aria-label="Learn how speedrun timing works"')
   })
 
   it("uses the stored preference when the URL does not select a mode", () => {
