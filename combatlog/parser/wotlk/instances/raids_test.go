@@ -278,20 +278,22 @@ func TestUlduarHodirScriptedDefeat(t *testing.T) {
 		zone.Zone{Name: "Ulduar", MapID: 603},
 		database.WoWFlavor{database.FlavorWrath},
 	)
-	player := guid.GUID(1)
+	players := []guid.GUID{1, 2, 3}
 	hodir := creatureGUID(32845)
 	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
 
-	require.NoError(t, instance.Process(&messages.Damage{
-		MessageBase: messages.Base(start),
-		Caster:      &player,
-		Target:      hodir,
-		Amount:      1,
-		HitType:     types.HitTypeHit,
-	}))
+	for offset, player := range players {
+		require.NoError(t, instance.Process(&messages.Damage{
+			MessageBase: messages.Base(start.Add(time.Duration(offset) * time.Millisecond)),
+			Caster:      &player,
+			Target:      hodir,
+			Amount:      1,
+			HitType:     types.HitTypeHit,
+		}))
+	}
 	require.NoError(t, instance.Process(&messages.Damage{
 		MessageBase: messages.Base(start.Add(10 * time.Second)),
-		Caster:      &player,
+		Caster:      &players[0],
 		Target:      hodir,
 		Amount:      5513,
 		HitType:     types.HitTypeHit,
