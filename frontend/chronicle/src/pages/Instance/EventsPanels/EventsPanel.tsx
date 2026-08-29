@@ -69,6 +69,7 @@ import { createSpellCountPanel } from "./SpellCount/SpellCount";
 import { createUnitLookupPanel } from "./UnitLookup/UnitLookup";
 import { createEquipmentPanel } from "./Equipment/Equipment";
 import { createLootPanel } from "./LootPanel/LootPanel";
+import { createRankingRecordsPanel } from "./RankingRecords/RankingRecords";
 import { createLoggingMetadataPanel } from "./LoggingMetadata/LoggingMetadata";
 
 import { createDispelsDonePanel, createDispelsReceivedPanel } from "./Dispel/Dispel";
@@ -145,6 +146,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   interrupts: createInterruptsPanel(),
   interrupt_log: createInterruptLogPanel(),
   loot: createLootPanel(),
+  ranking_records: createRankingRecordsPanel(),
   logging_metadata: createLoggingMetadataPanel(),
   absorbed_damage: createAbsorbedDamagePanel(),
   resists: createResistsPanel(),

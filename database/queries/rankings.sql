@@ -654,6 +654,14 @@ JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
 WHERE edr.realm_name <> ''
 ORDER BY edr.realm_name;
 
+-- name: InstanceRankingRecords :many
+-- Raw per-player ranking rows recorded for a single log instance. This intentionally
+-- includes zero-value DPS/HPS rows so instance-level ranking issues can be debugged.
+SELECT *
+FROM encounter_dps_rankings
+WHERE instance_id = @instance_id
+ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name;
+
 -- name: HasInstanceDpsRankings :one
 SELECT EXISTS(
     SELECT 1 FROM encounter_dps_rankings WHERE instance_id = @instance_id

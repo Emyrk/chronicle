@@ -482,6 +482,7 @@ func (api *API) Routes() chi.Router {
 								r.Get("/loot", api.GetInstanceLoot)
 								r.Post("/item-prices", api.InstanceItemPrices)
 								r.Get("/overview", api.InstanceOverviewMetrics)
+								r.Get("/ranking-records", api.InstanceRankingRecords)
 								r.Get("/speedrun", api.InstanceSpeedrun)
 								r.Get("/speedrun/cohort", api.InstanceSpeedrunCohort)
 								r.Get("/duplicates", api.ListDuplicateInstances)

@@ -142,6 +142,30 @@ func insertRankingRow(t *testing.T, pool *pgxpool.Pool, store database.Store, re
 	require.NoError(t, err)
 }
 
+func TestInstanceRankingRecordsIncludesZeroMetrics(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	instanceID := uuid.New()
+	killedAt := time.Date(2026, 8, 28, 1, 0, 0, 0, time.UTC)
+
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Baron Geddon", instanceName: "Molten Core",
+		playerGUID: "P-ROGGIA", playerClass: "PALADIN", playerSpec: "Holy",
+		difficultyName: "", maxPlayers: 0,
+		durationSecs: 42.77, killedAt: killedAt, isBoss: true,
+		instanceID: instanceID,
+	})
+
+	rows, err := store.InstanceRankingRecords(ctx, instanceID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "P-ROGGIA", rows[0].PlayerGuid)
+	assert.Zero(t, rows[0].Dps)
+	assert.Zero(t, rows[0].Hps)
+}
+
 func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	t.Parallel()
 

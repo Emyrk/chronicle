@@ -9765,6 +9765,64 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 	return err
 }
 
+const instanceRankingRecords = `-- name: InstanceRankingRecords :many
+SELECT id, encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name, player_class, player_spec, player_role, player_level, talent_build_id, difficulty_name, max_players, realm_id, realm_name, guild_id, guild_name, damage_done, duration_secs, dps, avg_ilvl, log_hashed_slug, killed_at, created_at, healing_done, absorbed_done, hps
+FROM encounter_dps_rankings
+WHERE instance_id = $1
+ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name
+`
+
+// Raw per-player ranking rows recorded for a single log instance. This intentionally
+// includes zero-value DPS/HPS rows so instance-level ranking issues can be debugged.
+func (q *sqlQuerier) InstanceRankingRecords(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRanking, error) {
+	rows, err := q.db.Query(ctx, instanceRankingRecords, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EncounterDpsRanking
+	for rows.Next() {
+		var i EncounterDpsRanking
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncounterID,
+			&i.InstanceID,
+			&i.EncounterName,
+			&i.InstanceName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.PlayerLevel,
+			&i.TalentBuildID,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RealmID,
+			&i.RealmName,
+			&i.GuildID,
+			&i.GuildName,
+			&i.DamageDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.AvgIlvl,
+			&i.LogHashedSlug,
+			&i.KilledAt,
+			&i.CreatedAt,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.Hps,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const pruneStaleRankingsInstanceSummaries = `-- name: PruneStaleRankingsInstanceSummaries :execrows
 DELETE FROM rankings_instance_summaries ris
 WHERE ris.tenant_id = $1

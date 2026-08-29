@@ -487,6 +487,9 @@ type sqlcQuerier interface {
 	InstanceEvent(ctx context.Context, arg InstanceEventParams) (LogInstanceEvent, error)
 	InstancePlayerGUIDsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]guid.GUID, error)
 	InstancePlayersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error)
+	// Raw per-player ranking rows recorded for a single log instance. This intentionally
+	// includes zero-value DPS/HPS rows so instance-level ranking issues can be debugged.
+	InstanceRankingRecords(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRanking, error)
 	// Returns rankings-backed runs comparable to an anchor instance. Cohorts match
 	// instance name, difficulty, and declared maximum raid size, use a historical
 	// window ending at the anchor start time, and stay within the anchor's server,
