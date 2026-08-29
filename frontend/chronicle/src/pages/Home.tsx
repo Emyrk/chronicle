@@ -787,6 +787,9 @@ function RaidSpotlight() {
           style={{ backgroundImage: `url('${getInstanceBackground(spot.name)}')` }}
         >
           <div className="absolute inset-0 bg-background/80" />
+          <span className="absolute top-3 left-4 z-10 text-xs font-medium text-muted-foreground">
+            Full raid
+          </span>
           <Link
             to={`/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}&timing=full${diffQS}`}
             className="absolute top-3 right-4 z-10 text-xs text-primary hover:underline"
