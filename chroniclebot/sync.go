@@ -15,12 +15,32 @@ import (
 
 var ErrMustJoinDiscordServer = errors.New("must be in the discord server to use chronicle")
 
+const protectedTechnicalAdminDiscordID = "221411580535898113"
+
+func ensureProtectedTechnicalAdmin(ctx context.Context, zed authz.Authorizer, discordID string, userID uuid.UUID) error {
+	if discordID != protectedTechnicalAdminDiscordID {
+		return nil
+	}
+
+	b := policy.New()
+	b.GlobalChronicle().Technical_admin(b.User(userID))
+	if _, err := zed.Write(ctx, *b.Txn()); err != nil {
+		return fmt.Errorf("write protected technical_admin: %w", err)
+	}
+	return nil
+}
+
 // SyncDiscordUser manages only the chronicle_guild_member and supporter
 // relations for a user based on their Discord guild membership and roles.
-// All other roles (admin, technical_admin, etc.) are left untouched.
+// All other roles are left untouched, except that the protected Discord user
+// is always granted technical_admin.
 func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorizer, discordID string, userID uuid.UUID) error {
 	if bot.disabled {
 		return nil
+	}
+
+	if err := ensureProtectedTechnicalAdmin(ctx, zed, discordID, userID); err != nil {
+		return err
 	}
 
 	member, err := bot.GetGuildMember(bot.ChronicleGuildID(), discordID)
