@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ArrowLeft, ChevronRight, CircleHelp, HeartPulse, Sparkles } from "lucide-react"
+import { ArrowLeft, ChevronRight, CircleHelp, Sparkles } from "lucide-react"
 import { Link } from "react-router-dom"
 import { specializationIconUrl } from "@/config/specializationIcon"
 
@@ -132,15 +132,6 @@ export function ClassDetailsPage() {
                 Keeping the raw attribution would reward paladins for replacing or
                 &quot;sniping&quot; another paladin&apos;s Judgement of Light debuff to claim
                 the resulting healing.
-              </p>
-            </div>
-
-            <div className="flex gap-3 rounded-xl bg-muted/40 p-4">
-              <HeartPulse className="mt-0.5 h-5 w-5 shrink-0 text-pink-300" />
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Chronicle identifies this effect by spell ID <strong className="text-foreground">20267</strong>,
-                so the behavior is independent of the spell name or client language. The
-                healing amount is unchanged; only the credited source is corrected.
               </p>
             </div>
           </div>
