@@ -141,8 +141,9 @@ func TestServerAuraRefreshAndDoseTransitions(t *testing.T) {
 func TestJudgementOfLightCreditsTarget(t *testing.T) {
 	t.Parallel()
 
-	line := `1777166257180  SPELL_HEAL,0x0000000000000001,"Paladin",0x400,0x0000000000000002,"Attacker",0x400,20267,"Judgement of Light",0x2,61,0,0,nil`
-	p := newTestParser(t, line)
+	line := `1777166257180  SPELL_HEAL,0x0000000000000001,"Paladin",0x400,0x0000000000000002,"Attacker",0x400,20267,"Localized spell name",0x2,61,0,0,nil`
+	p, err := New(context.Background(), slog.Default(), strings.NewReader(line), auraSpellDB{}, nil)
+	require.NoError(t, err)
 
 	heal, ok := advanceOne(t, p).(*messages.Heal)
 	require.True(t, ok)

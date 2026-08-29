@@ -5,6 +5,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,18 +18,26 @@ func TestCreditJudgementOfLightToTarget(t *testing.T) {
 	judgement := &messages.Heal{
 		Caster:    paladin,
 		Target:    attacker,
-		SpellName: "Judgement of Light",
+		SpellName: "Localized spell name",
+		SpellData: &chrondbc.Spell{ID: judgementOfLightHealSpellID},
 	}
-	otherHeal := &messages.Heal{
+	wrongID := &messages.Heal{
 		Caster:    paladin,
 		Target:    attacker,
-		SpellName: "Flash of Light",
+		SpellName: "Judgement of Light",
+		SpellData: &chrondbc.Spell{ID: 1},
+	}
+	missingSpellData := &messages.Heal{
+		Caster:    paladin,
+		Target:    attacker,
+		SpellName: "Judgement of Light",
 	}
 
-	msgs := []messages.Message{judgement, otherHeal}
+	msgs := []messages.Message{judgement, wrongID, missingSpellData}
 	result := CreditJudgementOfLightToTarget(msgs)
 
 	require.Same(t, judgement, result[0])
 	require.Equal(t, attacker, judgement.Caster)
-	require.Equal(t, paladin, otherHeal.Caster)
+	require.Equal(t, paladin, wrongID.Caster)
+	require.Equal(t, paladin, missingSpellData.Caster)
 }

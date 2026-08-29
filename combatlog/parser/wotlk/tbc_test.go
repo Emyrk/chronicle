@@ -63,7 +63,7 @@ func TestTBCHealSuffix(t *testing.T) {
 func TestTBCJudgementOfLightCreditsTarget(t *testing.T) {
 	t.Parallel()
 
-	line := `5/20 15:52:10.073  SPELL_HEAL,0x0000000000000001,"Paladin",0x10511,0x0000000000000002,"Attacker",0x10511,20267,"Judgement of Light",0x2,61,nil`
+	line := `5/20 15:52:10.073  SPELL_HEAL,0x0000000000000001,"Paladin",0x10511,0x0000000000000002,"Attacker",0x10511,20267,"Localized spell name",0x2,61,nil`
 	parser, err := NewTBC(context.Background(), slog.Default(), strings.NewReader(line), auraTestDB{}, auraTestDB{}, nil)
 	require.NoError(t, err)
 
