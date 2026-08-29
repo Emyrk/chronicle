@@ -31,6 +31,7 @@ import { createTimelineRaidDurabilityBars } from "./timelineRaidDurability";
 import {
   createTimelinePhaseAnnotations,
   groupTimelineDeathAnnotations,
+  timelineAnnotationsEnabled,
 } from "./timelineAnnotations";
 import { getSeriesConfigs, getTimelineSettings, hydrateFromPanelOption, serializeTimelineConfig } from "./timelineTypes";
 
@@ -211,17 +212,18 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
     );
   }, [durabilityEncounter, durabilityModel, totalSec]);
 
+  const annotationsEnabled = timelineAnnotationsEnabled(context.selectedEncounterIds);
   const phaseAnnotations = useMemo(() => {
-    if (!timelineSettings.annotations.includes("phases")) return [];
+    if (!annotationsEnabled || !timelineSettings.annotations.includes("phases")) return [];
     return createTimelinePhaseAnnotations(
       context.instance.encounters,
       context.selectedEncounterIds,
     );
-  }, [context.instance.encounters, context.selectedEncounterIds, timelineSettings.annotations]);
+  }, [annotationsEnabled, context.instance.encounters, context.selectedEncounterIds, timelineSettings.annotations]);
   const deathAnnotations = useMemo(() => {
-    if (!timelineSettings.annotations.includes("player_deaths")) return [];
+    if (!annotationsEnabled || !timelineSettings.annotations.includes("player_deaths")) return [];
     return groupTimelineDeathAnnotations(result.playerDeaths ?? []);
-  }, [result.playerDeaths, timelineSettings.annotations]);
+  }, [annotationsEnabled, result.playerDeaths, timelineSettings.annotations]);
 
   // Convert processor result → nivo series, applying per-series aggregation.
   // Filters out stale series that no longer exist in config (e.g., after deletion).

@@ -13,6 +13,10 @@ export interface TimelineDeathAnnotation {
   deaths: TimelinePlayerDeath[];
 }
 
+export function timelineAnnotationsEnabled(selectedEncounterIds: string[]): boolean {
+  return selectedEncounterIds.length === 1;
+}
+
 export function createTimelinePhaseAnnotations(
   encounters: Encounter[],
   selectedEncounterIds: string[],

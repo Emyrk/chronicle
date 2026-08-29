@@ -3,6 +3,7 @@ import type { Encounter } from "../../InstancePage";
 import {
   createTimelinePhaseAnnotations,
   groupTimelineDeathAnnotations,
+  timelineAnnotationsEnabled,
 } from "./timelineAnnotations";
 
 function encounter(
@@ -22,7 +23,7 @@ function encounter(
 }
 
 describe("timeline annotations", () => {
-  it("positions phases against the first selected encounter", () => {
+  it("positions phases for a single selected encounter", () => {
     const encounters = [
       encounter("first", "2026-08-29T12:00:00Z", [{
         id: "phase-1",
@@ -50,10 +51,15 @@ describe("timeline annotations", () => {
       }]),
     ];
 
-    expect(createTimelinePhaseAnnotations(encounters, ["second", "first"])).toEqual([
-      { id: "phase-1", name: "Phase One", startSec: 5, endSec: 15 },
-      { id: "phase-2", name: "Phase Two", startSec: 62, endSec: 68 },
+    expect(createTimelinePhaseAnnotations(encounters, ["second"])).toEqual([
+      { id: "phase-2", name: "Phase Two", startSec: 2, endSec: 8 },
     ]);
+  });
+
+  it("enables annotations only for a single selected encounter", () => {
+    expect(timelineAnnotationsEnabled([])).toBe(false);
+    expect(timelineAnnotationsEnabled(["first"])).toBe(true);
+    expect(timelineAnnotationsEnabled(["first", "second"])).toBe(false);
   });
 
   it("groups simultaneous player deaths", () => {
