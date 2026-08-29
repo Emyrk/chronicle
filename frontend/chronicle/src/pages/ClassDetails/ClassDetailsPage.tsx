@@ -39,7 +39,7 @@ export function ClassDetailsPage() {
           aria-expanded={paladinSelected}
           aria-controls="paladin-details"
           onClick={() => setSelectedClass(paladinSelected ? null : "PALADIN")}
-          className={`group flex w-full max-w-sm items-center gap-4 rounded-xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-300/70 ${
+          className={`group flex w-full max-w-sm cursor-pointer items-center gap-4 rounded-xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-300/70 ${
             paladinSelected
               ? "border-pink-300/50 bg-pink-300/10 shadow-lg shadow-pink-950/20"
               : "bg-card hover:border-pink-300/30 hover:bg-pink-300/5"
