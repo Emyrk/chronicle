@@ -1769,6 +1769,31 @@ export interface InstancePlayer {
     readonly level: number;
 }
 
+// From chroniclesdk/rankings.go
+/**
+ * InstanceRankingRecord is a raw per-player ranking row recorded for one encounter
+ * in a specific log instance. Zero-value metrics are retained for debugging.
+ */
+export interface InstanceRankingRecord {
+    readonly id: string;
+    readonly encounter_id?: string;
+    readonly encounter_name: string;
+    readonly player_guid: string;
+    readonly player_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_role: string;
+    readonly player_level: number;
+    readonly damage_done: number;
+    readonly healing_done: number;
+    readonly absorbed_done: number;
+    readonly duration_secs: number;
+    readonly dps: number;
+    readonly hps: number;
+    readonly log_hashed_slug: string;
+    readonly killed_at: string;
+}
+
 // From chroniclesdk/log.go
 /**
  * InstanceReport contains timing details for a single parsed instance.

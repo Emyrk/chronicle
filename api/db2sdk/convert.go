@@ -280,6 +280,37 @@ func WowDecoratedInstance(instance database.LogInstancesGuild,
 	return ret
 }
 
+func InstanceRankingRecords(rows []database.EncounterDpsRanking) []chroniclesdk.InstanceRankingRecord {
+	result := make([]chroniclesdk.InstanceRankingRecord, 0, len(rows))
+	for _, row := range rows {
+		var encounterID *uuid.UUID
+		if row.EncounterID.Valid {
+			id := row.EncounterID.UUID
+			encounterID = &id
+		}
+		result = append(result, chroniclesdk.InstanceRankingRecord{
+			ID:            row.ID,
+			EncounterID:   encounterID,
+			EncounterName: row.EncounterName,
+			PlayerGUID:    row.PlayerGuid,
+			PlayerName:    row.PlayerName,
+			PlayerClass:   row.PlayerClass,
+			PlayerSpec:    row.PlayerSpec,
+			PlayerRole:    row.PlayerRole,
+			PlayerLevel:   row.PlayerLevel,
+			DamageDone:    row.DamageDone,
+			HealingDone:   row.HealingDone,
+			AbsorbedDone:  row.AbsorbedDone,
+			DurationSecs:  row.DurationSecs,
+			DPS:           row.Dps,
+			HPS:           row.Hps,
+			LogHashedSlug: row.LogHashedSlug,
+			KilledAt:      row.KilledAt.Time,
+		})
+	}
+	return result
+}
+
 // SpeedrunResult converts a database speedrun row to an SDK SpeedrunResult.
 // The proof column is stored as JSONB and decoded into SDK proof types.
 func SpeedrunResult(sr database.GetInstanceSpeedrunRow) *chroniclesdk.SpeedrunResult {

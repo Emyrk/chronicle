@@ -179,6 +179,24 @@ func (api *API) InstanceOverviewMetrics(w http.ResponseWriter, r *http.Request) 
 	httpapi.Write(ctx, w, http.StatusOK, db2sdk.InstanceOverviewMetrics(metrics))
 }
 
+func (api *API) InstanceRankingRecords(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	inst := httpmw.Instance(ctx)
+
+	records, err := api.Opts.Zed.InstanceRankingRecords(ctx, inst.ID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch instance ranking records",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, db2sdk.InstanceRankingRecords(records))
+}
+
 func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	inst := httpmw.Instance(ctx)

@@ -63,6 +63,28 @@ type RankingsEntry struct {
 	KilledAt      time.Time `json:"killed_at"`
 }
 
+// InstanceRankingRecord is a raw per-player ranking row recorded for one encounter
+// in a specific log instance. Zero-value metrics are retained for debugging.
+type InstanceRankingRecord struct {
+	ID            uuid.UUID  `json:"id"`
+	EncounterID   *uuid.UUID `json:"encounter_id,omitempty"`
+	EncounterName string     `json:"encounter_name"`
+	PlayerGUID    string     `json:"player_guid"`
+	PlayerName    string     `json:"player_name"`
+	PlayerClass   string     `json:"player_class"`
+	PlayerSpec    string     `json:"player_spec"`
+	PlayerRole    string     `json:"player_role"`
+	PlayerLevel   int16      `json:"player_level"`
+	DamageDone    int64      `json:"damage_done"`
+	HealingDone   int64      `json:"healing_done"`
+	AbsorbedDone  int64      `json:"absorbed_done"`
+	DurationSecs  float64    `json:"duration_secs"`
+	DPS           float64    `json:"dps"`
+	HPS           float64    `json:"hps"`
+	LogHashedSlug string     `json:"log_hashed_slug"`
+	KilledAt      time.Time  `json:"killed_at"`
+}
+
 // RankingsLeaderboardResponse wraps leaderboard entries with total count for pagination.
 type RankingsLeaderboardResponse struct {
 	Entries    []RankingsEntry `json:"entries"`
@@ -294,6 +316,7 @@ type AdminBulkDeleteSnapshotsRequest struct {
 type AdminBulkDeleteSnapshotsResponse struct {
 	Deleted int `json:"deleted"`
 }
+
 // AdminTimeParseSnapshotSummary is a time-parse snapshot listed in the admin tab.
 type AdminTimeParseSnapshotSummary struct {
 	ID                uuid.UUID  `json:"id"`
