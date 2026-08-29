@@ -301,7 +301,6 @@ type AdminSnapshotSummary struct {
 	CohortMode    string     `json:"cohort_mode"`
 	PolicyVersion int16      `json:"policy_version"`
 	QueryVersion  int16      `json:"query_version"`
-	MemberCount   int64      `json:"member_count"`
 	Status        string     `json:"status"`
 	PublishedAt   *time.Time `json:"published_at"`
 	CreatedAt     time.Time  `json:"created_at"`
