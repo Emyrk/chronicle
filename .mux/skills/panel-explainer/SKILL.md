@@ -49,7 +49,7 @@ frontend/chronicle/src/pages/Instance/EventsPanels/<Panel>/explain/   # per-pane
 
 frontend/chronicle/src/components/ui/PlayerMetricChart/PlayerMetricChart.demo.tsx
                             # the demo harness videos render (see below)
-videos/damage-done-breakout/src/Root.tsx
+videos/remotion/src/Root.tsx
                             # Remotion Studio registration (authoring/preview only)
 frontend/chronicle/src/pages/Instance/EventsPanels/explainers/index.ts
                             # PANEL_EXPLAINERS registry, hasExplainer/getExplainer
@@ -204,7 +204,7 @@ inside scroll areas (chart rows) need no special handling.
 
 1. `explain/videos/<Name>.video.tsx` — composition (intro card + Content sequence)
 2. `explain/lessons.ts` — lesson entry (id, copy, bullets, deriveState, video metadata)
-3. `videos/damage-done-breakout/src/Root.tsx` — `<Composition>` with the same duration
+3. `videos/remotion/src/Root.tsx` — `<Composition>` with the same duration
 4. `PanelExplainerView.stories.tsx` — deep-linked story
    (`parameters: { routerEntries: ["/?lesson=<id>"] }`) — you need it for probing
 5. `data-lesson-target="<id>"` on the relevant real UI

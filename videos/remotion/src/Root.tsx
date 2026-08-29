@@ -47,19 +47,21 @@ import ConsumablesRaidWideVideo from "../../../frontend/chronicle/src/pages/Inst
 import ConsumablesInspectItemVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/InspectItem.video";
 import ConsumablesUnresolvedVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/Unresolved.video";
 import EncounterPhasesDiscordVideo from "../../../frontend/chronicle/src/pages/Instance/videos/EncounterPhasesDiscord.video";
+import RankedSpeedrunTimingVideo from "../../../frontend/chronicle/src/pages/Instance/videos/RankedSpeedrunTiming.video";
 
 /**
- * Studio registration for the in-app explainer lesson compositions.
- * The app plays these via @remotion/player; this project exists so they can
- * be authored/previewed in Remotion Studio (npx remotion studio --no-open).
- * Keep durations in sync with the LessonVideo entries in
- * frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/lessons.ts.
+ * Studio registration for Chronicle's feature demos and in-app explainer
+ * lesson compositions. The app plays lessons via @remotion/player; this
+ * project exists so every composition can be authored and previewed together
+ * in Remotion Studio (npx remotion studio --no-open).
+ * Keep lesson durations in sync with their LessonVideo registrations.
  */
 export const RemotionRoot: React.FC = () => {
   return (
     <>
       <Folder name="FeatureDemos">
         <Composition id="EncounterPhasesDiscord" component={EncounterPhasesDiscordVideo} durationInFrames={650} fps={30} width={1280} height={720} />
+        <Composition id="RankedSpeedrunTiming" component={RankedSpeedrunTimingVideo} durationInFrames={710} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="DamageDoneLessons">
       <Composition
