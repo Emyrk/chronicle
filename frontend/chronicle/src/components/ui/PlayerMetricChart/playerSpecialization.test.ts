@@ -44,7 +44,7 @@ describe("resolvePlayerSpecialization", () => {
       { "1": warrior },
     )).toEqual({
       name: "Fury",
-      iconTexture: "ability_warrior_innerrage",
+      iconUrl: "/c/icons/spec_warrior_fury.png",
     });
   });
 

@@ -1,9 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- Provider and hook are intentionally colocated. */
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { FastCombatantInfoCursor } from "@/api/protodecode/decode";
-import { iconUrl } from "@/config/iconUrl";
 import { useInstanceEventsContext } from "@/hooks/instanceEvents";
-import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
 import {
   resolvePlayerSpecialization,
@@ -11,9 +9,7 @@ import {
   type PlayerTalentSnapshot,
 } from "./playerSpecialization";
 
-export interface PlayerSpecializationDisplay extends PlayerSpecialization {
-  iconUrl: string;
-}
+export type PlayerSpecializationDisplay = PlayerSpecialization;
 
 const PlayerSpecializationContext = createContext<ReadonlyMap<string, PlayerSpecializationDisplay>>(
   new Map(),
@@ -29,7 +25,6 @@ export function PlayerSpecializationProvider({
   children: React.ReactNode;
 }) {
   const instanceEvents = useInstanceEventsContext();
-  const iconBaseUrl = useIconBaseUrl();
   const { data: talentTrees } = useTalentTrees(datasetId);
   const [snapshots, setSnapshots] = useState<ReadonlyMap<string, PlayerTalentSnapshot>>(new Map());
 
@@ -78,16 +73,10 @@ export function PlayerSpecializationProvider({
     for (const [playerID, snapshot] of snapshots) {
       const specialization = resolvePlayerSpecialization(snapshot, talentTrees.classes);
       if (!specialization) continue;
-      resolved.set(playerID, {
-        ...specialization,
-        iconUrl: iconUrl(
-          specialization.iconTexture,
-          talentTrees.icon_base_url ?? iconBaseUrl,
-        ),
-      });
+      resolved.set(playerID, specialization);
     }
     return resolved;
-  }, [iconBaseUrl, snapshots, talentTrees]);
+  }, [snapshots, talentTrees]);
 
   return (
     <PlayerSpecializationContext.Provider value={specializations}>

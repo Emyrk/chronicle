@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, PawPrint, ShieldAlert, Sparkles, Swords, TimerReset } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, Images, PawPrint, ShieldAlert, Sparkles, Swords, TimerReset } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 
 interface TechnicalLink {
@@ -59,6 +59,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     icon: <Clock className="h-4 w-4" />,
   },
   {
+    title: "Spec/Class Icons",
+    description: "Reference sheet for every class and specialization icon",
+    href: "/technical/spec-class-icons",
+    icon: <Images className="h-4 w-4" />,
+  },
+  {
     title: "Talent Trees",
     description: "Visual talent tree viewer for all classes (from Talent.dbc)",
     href: "/technical/talent-trees",
@@ -86,10 +92,10 @@ export function TechnicalDetailsPage() {
         Data dumps from Chronicle's game database.
       </p>
 
-      <div className="space-y-2">
+      <div className="space-y-1">
         {TECHNICAL_LINKS.map((link) => (
-          <Link key={link.href} to={link.href}>
-            <Card className="p-3 hover:bg-muted/50 transition-colors">
+          <Link key={link.href} to={link.href} className="block">
+            <Card className="p-4 hover:bg-muted/50 transition-colors">
               <div className="flex items-center gap-3">
                 <div className="text-primary">{link.icon}</div>
                 <div>

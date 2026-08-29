@@ -21,6 +21,7 @@ import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { GripHorizontal, X } from "lucide-react";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
+import { specializationIconUrl } from "@/config/specializationIcon";
 import {
   Tooltip,
   TooltipContent,
@@ -504,7 +505,7 @@ function PlayerBreakoutContent({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <img
-            src={`/c/icons/spec_${row.className.toLowerCase()}_${row.specialization.toLowerCase().replace(/\s+/g, "")}.png`}
+            src={specializationIconUrl(row.className, row.specialization)}
             alt={row.specialization}
             style={{ width: 16, height: 16, borderRadius: 2 }}
             onError={(e) => {
@@ -895,7 +896,7 @@ function ComparisonRow({
       >
         {/* Spec icon */}
         <img
-          src={`/c/icons/spec_${row.className.toLowerCase()}_${row.specialization.toLowerCase().replace(/\s+/g, "")}.png`}
+          src={specializationIconUrl(row.className, row.specialization)}
           alt={row.specialization}
           style={{
             width: 20,

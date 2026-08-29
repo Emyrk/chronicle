@@ -55,6 +55,7 @@ import {
   VulnerabilitySpellsPage,
   AuraDurationModifiersPage,
   ClassSpellsPage,
+  SpecClassIconsPage,
   TalentTreesPage,
   PetTargetingAbilitiesPage,
   ConsumablesPage,
@@ -193,6 +194,7 @@ function App() {
           <Route path="aura-duration-modifiers" element={<AuraDurationModifiersPage />} />
           <Route path="class-spells" element={<ClassSpellsPage />} />
           <Route path="pet-targeting-abilities" element={<PetTargetingAbilitiesPage />} />
+          <Route path="spec-class-icons" element={<SpecClassIconsPage />} />
           <Route path="talent-trees" element={<TalentTreesPage />} />
           <Route path="consumables" element={<ConsumablesPage />} />
           <Route path="cooldowns" element={<CooldownSpellsPage />} />
