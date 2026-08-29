@@ -89,12 +89,15 @@ type LevelRangeResult struct {
 
 // SpeedrunResult is the outcome of evaluating speedrun rules against an instance.
 type SpeedrunResult struct {
-	Qualified      bool              `json:"qualified"`
-	StartTime      time.Time         `json:"start_time"`
-	CompletionTime time.Time         `json:"completion_time"`
-	Duration       time.Duration     `json:"duration"`
-	Proof          []SpeedrunProof   `json:"proof"`
-	LevelRange     *LevelRangeResult `json:"level_range,omitempty"`
+	Qualified            bool              `json:"qualified"`
+	StartTime            time.Time         `json:"start_time"`
+	CompletionTime       time.Time         `json:"completion_time"`
+	Duration             time.Duration     `json:"duration"`
+	RankedStartTime      time.Time         `json:"ranked_start_time"`
+	RankedCompletionTime time.Time         `json:"ranked_completion_time"`
+	RankedDuration       time.Duration     `json:"ranked_duration"`
+	Proof                []SpeedrunProof   `json:"proof"`
+	LevelRange           *LevelRangeResult `json:"level_range,omitempty"`
 }
 
 // SpeedrunProofPayload is the JSON structure stored in the database proof column.

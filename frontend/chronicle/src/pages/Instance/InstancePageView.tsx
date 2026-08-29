@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
@@ -12,7 +13,7 @@ import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { type LayoutType, type PanelType } from "@/hooks/useUrlState";
 import { useTimeRangeContextOptional } from "./TimeRangeContext";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
-import type { ActionBarSlotsResponse, ActivityPeriod, InstancePlayer } from "@/api/typesGenerated";
+import type { ActionBarSlotsResponse, ActivityPeriod, InstancePlayer, SpeedrunResult } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
 import { Card } from "@/components/ui/Card/Card";
 import { PortalContainerProvider } from "@/components/ui/PortalContainerContext";
@@ -53,6 +54,7 @@ import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
 
+import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -1515,8 +1517,12 @@ function EncounterDetail({
                 {elapsedTimeMs !== null && <span className="text-xs opacity-60">combat</span>}
               </div>
             </TooltipTrigger>
-            <TooltipContent>
-              {elapsedTimeMs !== null 
+            <TooltipContent
+              className="pointer-events-none !border-white/10 !bg-zinc-950 !text-zinc-100 shadow-xl"
+              sideOffset={6}
+              hideArrow
+            >
+              {elapsedTimeMs !== null
                 ? "Sum of all encounter durations (active combat time)"
                 : "Encounter duration"
               }
@@ -1531,7 +1537,11 @@ function EncounterDetail({
                   <span className="text-xs opacity-60">elapsed</span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>
+              <TooltipContent
+                className="pointer-events-none !border-white/10 !bg-zinc-950 !text-zinc-100 shadow-xl"
+                sideOffset={6}
+                hideArrow
+              >
                 Total time from first encounter start to last encounter end
               </TooltipContent>
             </Tooltip>
@@ -1971,6 +1981,17 @@ export function InstancePageView({
   supportsOverview = false,
 }: InstancePageViewProps) {
   const timeRange = useTimeRangeContextOptional();
+
+  const { data: instanceSpeedrun } = useQuery({
+    queryKey: ["instance-speedrun", instance.id],
+    queryFn: async (): Promise<SpeedrunResult | null> => {
+      const response = await fetch(`/api/v1/raidlogs/instances/${encodeURIComponent(instance.id)}/speedrun`);
+      if (!response.ok) return null;
+      return response.json() as Promise<SpeedrunResult>;
+    },
+    staleTime: Infinity,
+    retry: false,
+  });
 
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
@@ -3119,8 +3140,6 @@ export function InstancePageView({
   const elapsedDurationMs = instance.endTime
     ? new Date(instance.endTime).getTime() - new Date(instance.startTime).getTime()
     : null;
-  const totalDuration = elapsedDurationMs !== null ? formatDurationMs(elapsedDurationMs) : null;
-    
   const totalDurationMs = useMemo(() => {
     return selectedEncounters.reduce((acc, enc) => {
       const start = new Date(enc.start_time).getTime();
@@ -3272,16 +3291,26 @@ export function InstancePageView({
         {/* Row 3: Duration stats + action buttons (desktop) */}
         <div className="flex items-center justify-between mt-1">
           <div className="flex items-center gap-4 text-muted-foreground text-sm">
-            {totalDuration && (
+            {elapsedDurationMs !== null && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex cursor-help items-center gap-1.5">
                     <Clock className="h-3.5 w-3.5" />
-                    <span>{totalDuration}</span>
+                    <span>{formatDurationMs(elapsedDurationMs)}</span>
                     <span className="text-xs opacity-60">elapsed</span>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Total time from first encounter start to last encounter end</TooltipContent>
+                <TooltipContent
+                  className="pointer-events-none border border-white/10 bg-zinc-950 p-3 text-zinc-100 shadow-xl"
+                  sideOffset={6}
+                  hideArrow
+                >
+                  <InstanceTimingTooltip
+                    elapsedDurationMs={elapsedDurationMs}
+                    rankedDurationMs={instanceSpeedrun?.ranked_duration_ms}
+                    combatDurationMs={instanceCombatDurationMs}
+                  />
+                </TooltipContent>
               </Tooltip>
             )}
             {instanceCombatDurationMs > 0 && (
@@ -3293,7 +3322,13 @@ export function InstancePageView({
                     <span className="text-xs opacity-60">combat</span>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Sum of all encounter durations (active combat time)</TooltipContent>
+                <TooltipContent
+                  className="pointer-events-none border border-white/10 bg-zinc-950 text-zinc-100 shadow-xl"
+                  sideOffset={6}
+                  hideArrow
+                >
+                  Sum of all encounter durations (active combat time)
+                </TooltipContent>
               </Tooltip>
             )}
           </div>

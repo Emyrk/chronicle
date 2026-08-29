@@ -5,6 +5,7 @@ import type { Instance } from "../../../InstancePage";
 import type { LeaderboardPanelResult } from "../leaderboard.processor";
 
 export const FIXTURE_DURATION_MS = 8_624_000;
+export const FIXTURE_RANKED_DURATION_MS = 7_824_000;
 
 function proof(
   name: string,
@@ -54,6 +55,9 @@ export const QUALIFIED_FIXTURE_SPEEDRUN: SpeedrunResult = {
   start_time: "2026-07-18T20:00:00Z",
   completion_time: "2026-07-18T22:23:44Z",
   duration_ms: FIXTURE_DURATION_MS,
+  ranked_start_time: "2026-07-18T20:10:00Z",
+  ranked_completion_time: "2026-07-18T22:20:24Z",
+  ranked_duration_ms: FIXTURE_RANKED_DURATION_MS,
   proof: QUALIFIED_PROOF,
   version_status: {
     parser_version: "v0.0.424",

@@ -356,16 +356,19 @@ type SpeedrunLevelRangeResult struct {
 
 // SpeedrunResult is the outcome of evaluating speedrun rules against an instance.
 type SpeedrunResult struct {
-	Qualified          bool                      `json:"qualified"`
-	StartTime          time.Time                 `json:"start_time"`
-	CompletionTime     time.Time                 `json:"completion_time"`
-	DurationMs         int64                     `json:"duration_ms"`
-	Proof              []SpeedrunProof           `json:"proof"`
-	VersionStatus      *SpeedrunVersionStatus    `json:"version_status,omitempty"`
-	LevelRange         *SpeedrunLevelRangeResult `json:"level_range,omitempty"`
-	DataSourceStatus   *SpeedrunDataSourceStatus `json:"data_source,omitempty"`
-	DpsRankingsStatus  *DpsRankingsStatus        `json:"dps_rankings,omitempty"`
-	EncounterKillTimes []EncounterKillTime       `json:"encounter_kill_times"`
+	Qualified            bool                      `json:"qualified"`
+	StartTime            time.Time                 `json:"start_time"`
+	CompletionTime       time.Time                 `json:"completion_time"`
+	DurationMs           int64                     `json:"duration_ms"`
+	RankedStartTime      *time.Time                `json:"ranked_start_time,omitempty"`
+	RankedCompletionTime *time.Time                `json:"ranked_completion_time,omitempty"`
+	RankedDurationMs     *int64                    `json:"ranked_duration_ms,omitempty"`
+	Proof                []SpeedrunProof           `json:"proof"`
+	VersionStatus        *SpeedrunVersionStatus    `json:"version_status,omitempty"`
+	LevelRange           *SpeedrunLevelRangeResult `json:"level_range,omitempty"`
+	DataSourceStatus     *SpeedrunDataSourceStatus `json:"data_source,omitempty"`
+	DpsRankingsStatus    *DpsRankingsStatus        `json:"dps_rankings,omitempty"`
+	EncounterKillTimes   []EncounterKillTime       `json:"encounter_kill_times"`
 }
 
 type EncounterKillTime struct {

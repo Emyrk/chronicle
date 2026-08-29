@@ -142,3 +142,67 @@ func TestCleanEncounterKillTimesExcludePartialKills(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, allKillTimes, 2)
 }
+
+func TestSpeedrunLeaderboardUsesRankedDuration(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	startedAt := time.Date(2026, time.August, 1, 20, 0, 0, 0, time.UTC)
+
+	guildID := uuid.New()
+	_, err := pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3)", guildID, realmID, "Ranked Raiders")
+	require.NoError(t, err)
+
+	userID := uuid.New()
+	_, err = store.InsertUser(ctx, database.InsertUserParams{
+		ID: userID, Username: "u-" + userID.String()[:8],
+	})
+	require.NoError(t, err)
+	logGroupID := uuid.New()
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+		CreatedAt: database.Timestamptz(startedAt), UpdatedAt: database.Timestamptz(startedAt),
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+
+	insertRun := func(clearDuration, rankedDuration time.Duration, offset time.Duration) uuid.UUID {
+		t.Helper()
+		id := uuid.New()
+		clearStart := startedAt.Add(offset)
+		clearEnd := clearStart.Add(clearDuration)
+		rankedStart := clearStart.Add(10 * time.Minute)
+		rankedEnd := rankedStart.Add(rankedDuration)
+		_, err := store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: id, RealmID: realmID, LogGroupID: logGroupID,
+			Name: "Molten Core", HashedSlug: pgtype.Text{String: "ranked-" + id.String()[:8], Valid: true},
+			GuildID:   uuid.NullUUID{UUID: guildID, Valid: true},
+			StartTime: database.Timestamptz(clearStart), EndTime: database.Timestamptz(clearEnd),
+			Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40,
+		})
+		require.NoError(t, err)
+		require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
+			InstanceID: id, InstanceName: "Molten Core", RealmID: realmID,
+			GuildID: uuid.NullUUID{UUID: guildID, Valid: true}, Qualified: true,
+			StartTime: database.Timestamptz(clearStart), CompletionTime: database.Timestamptz(clearEnd),
+			DurationMs:      int64(clearDuration / time.Millisecond),
+			RankedStartTime: database.Timestamptz(rankedStart), RankedCompletionTime: database.Timestamptz(rankedEnd),
+			RankedDurationMs: pgtype.Int8{Int64: int64(rankedDuration / time.Millisecond), Valid: true},
+			Proof:            []byte(`{"proof":[]}`),
+		}))
+		return id
+	}
+
+	rankedWinner := insertRun(60*time.Minute, 30*time.Minute, 0)
+	insertRun(50*time.Minute, 40*time.Minute, 2*time.Hour)
+
+	rows, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+		InstanceName: "Molten Core", RealmNames: []string{},
+		FilterDifficulty: true, DifficultyName: "Normal",
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, rankedWinner, rows[0].InstanceID)
+	require.EqualValues(t, 30*time.Minute/time.Millisecond, rows[0].DurationMs)
+}

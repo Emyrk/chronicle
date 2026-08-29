@@ -19,6 +19,7 @@ interface SpeedrunProofProps {
 export function SpeedrunProof({ speedrun }: SpeedrunProofProps) {
   const satisfied = speedrun.proof.filter((p) => p.satisfied).length;
   const total = speedrun.proof.length;
+  const rankedDuration = speedrun.ranked_duration_ms ?? speedrun.duration_ms;
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
@@ -31,8 +32,11 @@ export function SpeedrunProof({ speedrun }: SpeedrunProofProps) {
           {speedrun.qualified ? (
             <>
               <Clock className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-sm font-semibold text-emerald-400">
-                {formatDuration(speedrun.duration_ms)}
+              <span
+                className="text-sm font-semibold text-emerald-400"
+                title="Ranked time, from the first required boss pull to the final required boss encounter end"
+              >
+                {formatDuration(rankedDuration)}
               </span>
             </>
           ) : (

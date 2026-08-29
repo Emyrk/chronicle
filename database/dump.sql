@@ -841,7 +841,12 @@ CREATE TABLE instance_speedruns (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     addon_version text DEFAULT ''::text NOT NULL,
     parser_version_num bigint DEFAULT 0 NOT NULL,
-    addon_version_num bigint DEFAULT 0 NOT NULL
+    addon_version_num bigint DEFAULT 0 NOT NULL,
+    ranked_start_time timestamp with time zone,
+    ranked_completion_time timestamp with time zone,
+    ranked_duration_ms bigint,
+    CONSTRAINT instance_speedruns_ranked_duration_nonnegative CHECK (((ranked_duration_ms IS NULL) OR (ranked_duration_ms >= 0))),
+    CONSTRAINT instance_speedruns_ranked_timing_complete CHECK ((((ranked_start_time IS NULL) AND (ranked_completion_time IS NULL) AND (ranked_duration_ms IS NULL)) OR ((ranked_start_time IS NOT NULL) AND (ranked_completion_time IS NOT NULL) AND (ranked_duration_ms IS NOT NULL))))
 );
 
 CREATE VIEW guild_speedrun_ranks AS
@@ -2265,6 +2270,8 @@ CREATE INDEX idx_instance_loot_item ON instance_loot USING btree (item_id);
 CREATE INDEX idx_instance_loot_received ON instance_loot USING btree (received_guid);
 
 CREATE INDEX idx_instance_speedruns_leaderboard ON instance_speedruns USING btree (instance_name, duration_ms) WHERE (qualified = true);
+
+CREATE INDEX idx_instance_speedruns_ranked_leaderboard ON instance_speedruns USING btree (instance_name, ranked_duration_ms) WHERE ((qualified = true) AND (ranked_duration_ms IS NOT NULL));
 
 CREATE INDEX idx_instance_speedruns_realm ON instance_speedruns USING btree (realm_id, instance_name);
 
