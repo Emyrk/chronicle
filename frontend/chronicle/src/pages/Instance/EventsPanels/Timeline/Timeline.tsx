@@ -28,6 +28,12 @@ import { timelineProcessor, type TimelineResult, type TimelineSeriesMeta } from 
 import { applyAggregation } from "./aggregations";
 import { TimelineFilterEditor } from "./TimelineFilterEditor";
 import { createTimelineRaidDurabilityBars } from "./timelineRaidDurability";
+import {
+  createTimelinePhaseAnnotations,
+  formatTimelineDeathAnnotation,
+  groupTimelineDeathAnnotations,
+  timelineAnnotationsEnabled,
+} from "./timelineAnnotations";
 import { getSeriesConfigs, getTimelineSettings, hydrateFromPanelOption, serializeTimelineConfig } from "./timelineTypes";
 
 import { useTimeRangeContextOptional } from "../../TimeRangeContext";
@@ -121,6 +127,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
   const containerRef = useRef<HTMLDivElement>(null);
   // Capture Nivo's xScale so mouse handlers can convert pixels ↔ data values.
   const xScaleRef = useRef<D3ScaleLinear | null>(null);
+  const [hoveredDeathOffsetSec, setHoveredDeathOffsetSec] = useState<number | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   /** Series IDs currently hidden by clicking the legend (hydrated from settings). */
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(() => {
@@ -148,6 +155,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
         // Also hydrate hiddenSeries from the restored settings
         const restoredSettings = getTimelineSettings(restored);
         if (restoredSettings.hiddenSeries?.length) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from persisted panel config
           setHiddenSeries(new Set(restoredSettings.hiddenSeries));
         }
       }
@@ -164,6 +172,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
     const key = JSON.stringify(settings.hiddenSeries ?? []);
     if (key === lastSyncedSeriesRef.current) return;
     lastSyncedSeriesRef.current = key;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronize externally hydrated panel config
     setHiddenSeries(new Set(settings.hiddenSeries ?? []));
   }, [pc]);
 
@@ -204,6 +213,19 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
       totalSec * 1000,
     );
   }, [durabilityEncounter, durabilityModel, totalSec]);
+
+  const annotationsEnabled = timelineAnnotationsEnabled(context.selectedEncounterIds);
+  const phaseAnnotations = useMemo(() => {
+    if (!annotationsEnabled || !timelineSettings.annotations.includes("phases")) return [];
+    return createTimelinePhaseAnnotations(
+      context.instance.encounters,
+      context.selectedEncounterIds,
+    );
+  }, [annotationsEnabled, context.instance.encounters, context.selectedEncounterIds, timelineSettings.annotations]);
+  const deathAnnotations = useMemo(() => {
+    if (!annotationsEnabled || !timelineSettings.annotations.includes("player_deaths")) return [];
+    return groupTimelineDeathAnnotations(result.playerDeaths ?? []);
+  }, [annotationsEnabled, result.playerDeaths, timelineSettings.annotations]);
 
   // Convert processor result → nivo series, applying per-series aggregation.
   // Filters out stale series that no longer exist in config (e.g., after deletion).
@@ -277,7 +299,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
     const px = clientX - containerRect.left - CHART_MARGIN.left;
     const rawSec = scale.invert(px);
     return Math.max(0, Math.round(rawSec)); // snap to nearest 1s
-  }, []);
+  }, [CHART_MARGIN.left]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -372,6 +394,147 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
       );
     },
     [durabilityBars],
+  );
+
+  const phaseAnnotationLayer = useCallback(
+    ({ innerHeight, xScale }: LineCustomSvgLayerProps<ColoredSeries>) => {
+      if (phaseAnnotations.length === 0) return null;
+      const scale = xScale as unknown as D3ScaleLinear;
+
+      return (
+        <g aria-label="Timeline annotations">
+          {phaseAnnotations.map((phase, index) => {
+            const startX = scale(phase.startSec);
+            const endX = scale(phase.endSec);
+            const width = Math.max(1, endX - startX);
+            return (
+              <g key={phase.id}>
+                <rect
+                  x={startX}
+                  y={0}
+                  width={width}
+                  height={innerHeight}
+                  fill={index % 2 === 0 ? "#8b5cf6" : "#6366f1"}
+                  fillOpacity={0.08}
+                >
+                  <title>{`${phase.name}: ${phase.startSec.toFixed(1)}s–${phase.endSec.toFixed(1)}s`}</title>
+                </rect>
+                <line
+                  x1={startX}
+                  x2={startX}
+                  y1={0}
+                  y2={innerHeight}
+                  stroke="#a78bfa"
+                  strokeOpacity={0.55}
+                  strokeDasharray="4 4"
+                />
+                {width >= 36 ? (
+                  <text
+                    x={startX + 5}
+                    y={12}
+                    fill="#c4b5fd"
+                    fontSize={9}
+                    fontWeight={600}
+                  >
+                    {phase.name}
+                  </text>
+                ) : null}
+              </g>
+            );
+          })}
+        </g>
+      );
+    },
+    [phaseAnnotations],
+  );
+
+  const deathAnnotationLayer = useCallback(
+    ({ innerHeight, innerWidth, xScale }: LineCustomSvgLayerProps<ColoredSeries>) => {
+      if (deathAnnotations.length === 0) return null;
+      const scale = xScale as unknown as D3ScaleLinear;
+
+      return (
+        <g aria-label="Player death annotations">
+          {deathAnnotations.map((annotation) => {
+            const x = scale(annotation.offsetSec);
+            const label = formatTimelineDeathAnnotation(annotation);
+            const hovered = hoveredDeathOffsetSec === annotation.offsetSec;
+            const tooltipLines = annotation.deaths.map((death) => `${death.playerName} died`);
+            const tooltipWidth = Math.max(
+              104,
+              ...tooltipLines.map((line) => line.length * 6 + 20),
+            );
+            const tooltipHeight = 25 + tooltipLines.length * 15;
+            const tooltipX = Math.max(0, Math.min(x - tooltipWidth / 2, innerWidth - tooltipWidth));
+
+            return (
+              <g key={`${annotation.offsetSec}-${label}`}>
+                <line
+                  x1={x}
+                  x2={x}
+                  y1={0}
+                  y2={innerHeight}
+                  stroke="#ef4444"
+                  strokeOpacity={hovered ? 1 : 0.75}
+                  strokeWidth={hovered ? 2 : 1}
+                  strokeDasharray="2 3"
+                  pointerEvents="none"
+                />
+                <path
+                  d={`M ${x - 4} 2 L ${x + 4} 2 L ${x} 10 Z`}
+                  fill="#ef4444"
+                  stroke="#fecaca"
+                  strokeWidth={0.75}
+                  pointerEvents="none"
+                />
+                <rect
+                  x={x - 7}
+                  y={0}
+                  width={14}
+                  height={innerHeight}
+                  fill="transparent"
+                  role="img"
+                  aria-label={label}
+                  style={{ cursor: "help" }}
+                  onMouseEnter={() => setHoveredDeathOffsetSec(annotation.offsetSec)}
+                  onMouseLeave={() => setHoveredDeathOffsetSec(null)}
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <title>{label}</title>
+                </rect>
+                {hovered ? (
+                  <g pointerEvents="none" transform={`translate(${tooltipX}, 14)`}>
+                    <rect
+                      width={tooltipWidth}
+                      height={tooltipHeight}
+                      rx={5}
+                      fill="rgba(24, 24, 27, 0.97)"
+                      stroke="#52525b"
+                    />
+                    <text x={10} y={15} fill="#a1a1aa" fontSize={10} fontWeight={600}>
+                      {annotation.offsetSec.toFixed(1)}s
+                    </text>
+                    {tooltipLines.map((line, index) => (
+                      <text
+                        key={line}
+                        x={10}
+                        y={31 + index * 15}
+                        fill="#fecaca"
+                        fontSize={11}
+                        fontWeight={600}
+                      >
+                        {line}
+                      </text>
+                    ))}
+                  </g>
+                ) : null}
+              </g>
+            );
+          })}
+        </g>
+      );
+    },
+    [deathAnnotations, hoveredDeathOffsetSec],
   );
 
   const overlayLayer = useCallback(
@@ -498,12 +661,13 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
         layers={[
           durabilityLayer,
           "grid",
-          "markers",
+          phaseAnnotationLayer,
           "axes",
           overlayLayer,
           "lines",
           "crosshair",
           "slices",
+          deathAnnotationLayer,
         ]}
       />
 

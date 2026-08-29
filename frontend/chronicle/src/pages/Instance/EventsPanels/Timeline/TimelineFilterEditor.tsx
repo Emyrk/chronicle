@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Settings, Trash2, X } from "lucide-react";
+import { ChevronDown, Plus, Settings, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FilterBlock } from "../FilterBlock";
 import type { PanelFilter } from "../processors/filters";
@@ -19,7 +19,9 @@ import {
   type TimelineSeriesConfig,
   type TimelineSettings,
   type AggregationType,
+  type TimelineAnnotationType,
   SERIES_COLORS,
+  TIMELINE_ANNOTATION_OPTIONS,
   getSeriesConfigs,
   getTimelineSettings,
   createDefaultSeries,
@@ -27,6 +29,12 @@ import {
   hydrateFromPanelOption,
 } from "./timelineTypes";
 import { AGGREGATIONS, type AggregationDef } from "./aggregations";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu/DropdownMenu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
 
 /** Preset border colors (mirrors PanelFilterEditor). */
@@ -276,6 +284,18 @@ function SettingsTab({
   borderColor?: string | null;
   onBorderColorChange?: (color: string | null) => void;
 }) {
+  const toggleAnnotation = (annotation: TimelineAnnotationType) => {
+    const annotations = settings.annotations.includes(annotation)
+      ? settings.annotations.filter((value) => value !== annotation)
+      : [...settings.annotations, annotation];
+    onSettingsChange({ ...settings, annotations });
+  };
+  const annotationLabel = settings.annotations.length === 0
+    ? "None"
+    : settings.annotations.length === 1
+      ? TIMELINE_ANNOTATION_OPTIONS.find((option) => option.value === settings.annotations[0])?.label
+      : `${settings.annotations.length} selected`;
+
   return (
     <div className="space-y-3">
       {/* Background metric */}
@@ -293,6 +313,34 @@ function SettingsTab({
           <option value="raid_durability">Raid Durability</option>
         </select>
       </label>
+
+      {/* Chart annotations */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground shrink-0">Annotations:</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex min-w-40 items-center justify-between gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-foreground hover:border-zinc-500 focus:outline-none"
+            >
+              <span>{annotationLabel}</span>
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-40">
+            {TIMELINE_ANNOTATION_OPTIONS.map((option) => (
+              <DropdownMenuCheckboxItem
+                key={option.value}
+                checked={settings.annotations.includes(option.value)}
+                onCheckedChange={() => toggleAnnotation(option.value)}
+                onSelect={(event) => event.preventDefault()}
+              >
+                {option.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       {/* Bin size */}
       <div className="flex items-center gap-2">

@@ -42,12 +42,24 @@ export type AggregationType = "sum" | "rolling_avg" | "per_second" | "cumulative
 
 export type TimelineBackground = "none" | "raid_durability";
 
+export type TimelineAnnotationType = "phases" | "player_deaths";
+
+export const TIMELINE_ANNOTATION_OPTIONS: ReadonlyArray<{
+  value: TimelineAnnotationType;
+  label: string;
+}> = [
+  { value: "phases", label: "Phases" },
+  { value: "player_deaths", label: "Player Deaths" },
+];
+
 /** General timeline settings (not per-series). */
 export interface TimelineSettings {
   /** Bucket width in ms */
   binMs: number;
   /** Optional metric rendered behind the line series */
   background: TimelineBackground;
+  /** Optional encounter annotations rendered over the chart */
+  annotations: TimelineAnnotationType[];
   /** Series IDs hidden via legend toggle */
   hiddenSeries?: string[];
 }
@@ -87,7 +99,7 @@ export function createDefaultSeries(
 }
 
 export function getDefaultSettings(): TimelineSettings {
-  return { binMs: DEFAULT_BIN_MS, background: "none" };
+  return { binMs: DEFAULT_BIN_MS, background: "none", annotations: [] };
 }
 
 /**
@@ -115,10 +127,16 @@ export function getTimelineSettings(panelContext: Record<string, unknown> | null
   const raw = panelContext?.timelineSettings;
   if (!raw || typeof raw !== "object" || !("binMs" in raw)) return defaults;
   const settings = raw as Partial<TimelineSettings>;
+  const annotations = Array.isArray(settings.annotations)
+    ? settings.annotations.filter((annotation): annotation is TimelineAnnotationType =>
+        annotation === "phases" || annotation === "player_deaths",
+      )
+    : defaults.annotations;
   return {
     ...defaults,
     ...settings,
     background: settings.background === "raid_durability" ? "raid_durability" : "none",
+    annotations,
   };
 }
 
