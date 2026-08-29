@@ -69,7 +69,7 @@ func (s *Service) registerRoutes() {
 
 	s.register(http.MethodGet, "/leaderboards/speedruns", OpenAPIOperation{
 		Summary:     "Get the speedrun leaderboard",
-		Description: "Returns qualified speedruns after duplicate-group and best-per-guild deduplication. The canonical log is the entry used by the leaderboard; other_logs contains matching uploads excluded as duplicates. timing defaults to full and accepts boss_to_boss for first-boss-pull through final-boss-kill timing.",
+		Description: "Returns a paginated list of qualified speedruns after duplicate-group and best-per-guild deduplication. The canonical log is the entry used by the leaderboard; other_logs contains matching uploads excluded as duplicates. timing defaults to full and accepts boss_to_boss for first-boss-pull through final-boss-kill timing.",
 		Parameters: []OpenAPIParameter{
 			queryParameter("instance_name", "Instance name", true, "string", "Molten Core"),
 			queryParameter("timing", "Timing mode: full or boss_to_boss", false, "string", "boss_to_boss"),
@@ -79,9 +79,12 @@ func (s *Service) registerRoutes() {
 			queryParameter("max_players", "Maximum player count", false, "integer", 40),
 			queryParameter("guild_id", "Guild UUID. When set, returns all deduplicated runs for that guild.", false, "string", "00000000-0000-0000-0000-000000000000"),
 			queryParameter("since_days", "Only include runs completed within this many days. Zero disables the filter.", false, "integer", 30),
+			queryParameter("page", "Page number, starting at 1", false, "integer", 1),
+			queryParameter("page_size", "Results per page, from 1 to 50", false, "integer", 50),
 		},
 		Responses: okResponse(SpeedrunLeaderboardResponse{
-			Timing: "boss_to_boss",
+			Timing:     "boss_to_boss",
+			Pagination: Pagination{Page: 1, PageSize: 50},
 			Entries: []SpeedrunLeaderboardEntry{{
 				InstanceName: "Molten Core", DifficultyName: "Normal",
 				GuildID:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),

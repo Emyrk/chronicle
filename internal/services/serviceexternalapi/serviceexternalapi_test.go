@@ -50,7 +50,7 @@ func TestOpenAPISpec(t *testing.T) {
 
 	leaderboard, ok := document.Paths["/leaderboards/speedruns"]["get"]
 	require.True(t, ok)
-	require.Len(t, leaderboard.Parameters, 8)
+	require.Len(t, leaderboard.Parameters, 10)
 	require.Equal(t, "instance_name", leaderboard.Parameters[0].Name)
 	require.True(t, leaderboard.Parameters[0].Required)
 	require.Equal(t, "timing", leaderboard.Parameters[1].Name)

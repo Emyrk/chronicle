@@ -17,7 +17,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const maxCharacterLogsPageSize = 50
+const (
+	maxCharacterLogsPageSize = 50
+	maxLeaderboardPageSize   = 50
+)
 
 type Server struct {
 	ID          uuid.UUID `json:"id"`
@@ -125,8 +128,9 @@ type SpeedrunLeaderboardEntry struct {
 }
 
 type SpeedrunLeaderboardResponse struct {
-	Timing  string                     `json:"timing"`
-	Entries []SpeedrunLeaderboardEntry `json:"entries"`
+	Timing     string                     `json:"timing"`
+	Entries    []SpeedrunLeaderboardEntry `json:"entries"`
+	Pagination Pagination                 `json:"pagination"`
 }
 
 func (s *Service) listServers(w http.ResponseWriter, r *http.Request) {
@@ -281,6 +285,15 @@ func (s *Service) listSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	page := queryInt(r, "page", 1)
+	pageSize := queryInt(r, "page_size", maxLeaderboardPageSize)
+	if page < 1 || pageSize < 1 || pageSize > maxLeaderboardPageSize {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "page must be at least 1 and page_size must be between 1 and 50",
+		})
+		return
+	}
+
 	filterDifficulty := r.URL.Query().Has("difficulty_name")
 	rows, err := s.db.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
 		InstanceName:     instanceName,
@@ -289,6 +302,8 @@ func (s *Service) listSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request
 		MaxPlayers:       maxPlayers,
 		GuildID:          r.URL.Query().Get("guild_id"),
 		SinceDays:        sinceDays,
+		ResultOffset:     int64((page - 1) * pageSize),
+		ResultLimit:      int64(pageSize + 1),
 		FilterDifficulty: filterDifficulty,
 		DifficultyName:   r.URL.Query().Get("difficulty_name"),
 		UseRankedTiming:  useRankedTiming,
@@ -296,6 +311,11 @@ func (s *Service) listSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
+	}
+
+	hasMore := len(rows) > int(pageSize)
+	if hasMore {
+		rows = rows[:pageSize]
 	}
 
 	selectedIDs := make([]uuid.UUID, 0, len(rows))
@@ -362,6 +382,7 @@ func (s *Service) listSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request
 
 	httpapi.Write(ctx, w, http.StatusOK, SpeedrunLeaderboardResponse{
 		Timing: timing, Entries: entries,
+		Pagination: Pagination{Page: page, PageSize: pageSize, HasMore: hasMore},
 	})
 }
 

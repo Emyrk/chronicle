@@ -203,7 +203,8 @@ SELECT * FROM best
 WHERE (CASE WHEN @min_players::bigint > 0 THEN player_count >= @min_players ELSE true END)
   AND (CASE WHEN @max_players::bigint > 0 THEN player_count <= @max_players ELSE true END)
 ORDER BY duration_ms ASC
-LIMIT 50;
+LIMIT CASE WHEN @result_limit::bigint > 0 THEN @result_limit::bigint ELSE 50 END
+OFFSET @result_offset::bigint;
 
 -- name: SpeedrunInstanceBoards :many
 -- Returns distinct (instance, difficulty) boards that have at least one

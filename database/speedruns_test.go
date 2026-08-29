@@ -216,6 +216,22 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	require.Len(t, fullRows, 2)
 	require.Equal(t, fullWinner, fullRows[0].InstanceID)
 	require.EqualValues(t, 50*time.Minute/time.Millisecond, fullRows[0].DurationMs)
+
+	firstPage, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+		InstanceName: "Molten Core", RealmNames: []string{}, ResultLimit: 1,
+		FilterDifficulty: true, DifficultyName: "Normal", UseRankedTiming: false,
+	})
+	require.NoError(t, err)
+	require.Len(t, firstPage, 1)
+	require.Equal(t, fullWinner, firstPage[0].InstanceID)
+
+	secondPage, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+		InstanceName: "Molten Core", RealmNames: []string{}, ResultLimit: 1, ResultOffset: 1,
+		FilterDifficulty: true, DifficultyName: "Normal", UseRankedTiming: false,
+	})
+	require.NoError(t, err)
+	require.Len(t, secondPage, 1)
+	require.Equal(t, rankedWinner, secondPage[0].InstanceID)
 }
 
 func TestExternalAPILeaderboardDuplicateLogsFollowTimingMode(t *testing.T) {

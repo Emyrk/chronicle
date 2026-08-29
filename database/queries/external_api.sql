@@ -184,6 +184,7 @@ FROM log_instances selected
 JOIN log_instances duplicate
   ON duplicate.duplicate_group_id = selected.duplicate_group_id
  AND duplicate.id != selected.id
+JOIN wow_server_realms duplicate_realm ON duplicate_realm.id = duplicate.realm_id
 LEFT JOIN instance_speedruns duplicate_speedrun ON duplicate_speedrun.instance_id = duplicate.id
 LEFT JOIN LATERAL (
     SELECT yt.video_url

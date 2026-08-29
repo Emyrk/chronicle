@@ -167,10 +167,19 @@ func TestListSpeedrunLeaderboardIncludesCanonicalAndDuplicateLogs(t *testing.T) 
 			HasYoutubeVideo: true, YoutubeUrl: "https://youtube.com/watch?v=duplicate",
 		}},
 	}
+	for range 20 {
+		store.leaderboard = append(store.leaderboard, database.SpeedrunLeaderboardRow{
+			InstanceID: uuid.New(), InstanceName: "Molten Core", DifficultyName: "Normal",
+			GuildID: uuid.NullUUID{UUID: guildID, Valid: true}, DurationMs: 3_700_000,
+			StartTime:      pgtype.Timestamptz{Time: now, Valid: true},
+			CompletionTime: pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+			GuildName:      "Example Guild", RealmName: "Example Realm", PlayerCount: 40,
+		})
+	}
 	service := &Service{db: store}
 	service.setupRoutes()
 
-	req := httptest.NewRequest(http.MethodGet, "/leaderboards/speedruns?instance_name=Molten+Core&timing=boss_to_boss&difficulty_name=Normal&realm_name=Example+Realm&min_players=20&max_players=40&since_days=30", nil)
+	req := httptest.NewRequest(http.MethodGet, "/leaderboards/speedruns?instance_name=Molten+Core&timing=boss_to_boss&difficulty_name=Normal&realm_name=Example+Realm&min_players=20&max_players=40&since_days=30&page=2&page_size=20", nil)
 	rec := httptest.NewRecorder()
 	service.ServeHTTP(rec, req)
 
@@ -183,13 +192,17 @@ func TestListSpeedrunLeaderboardIncludesCanonicalAndDuplicateLogs(t *testing.T) 
 	require.Equal(t, int64(20), store.leaderboardParams.MinPlayers)
 	require.Equal(t, int64(40), store.leaderboardParams.MaxPlayers)
 	require.Equal(t, int64(30), store.leaderboardParams.SinceDays)
+	require.Equal(t, int64(20), store.leaderboardParams.ResultOffset)
+	require.Equal(t, int64(21), store.leaderboardParams.ResultLimit)
 	require.True(t, store.duplicateParams.UseRankedTiming)
-	require.Equal(t, []uuid.UUID{canonicalID}, store.duplicateParams.SelectedInstanceIds)
+	require.Len(t, store.duplicateParams.SelectedInstanceIds, 20)
+	require.Contains(t, store.duplicateParams.SelectedInstanceIds, canonicalID)
 
 	var response SpeedrunLeaderboardResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
 	require.Equal(t, "boss_to_boss", response.Timing)
-	require.Len(t, response.Entries, 1)
+	require.Equal(t, Pagination{Page: 2, PageSize: 20, HasMore: true}, response.Pagination)
+	require.Len(t, response.Entries, 20)
 	entry := response.Entries[0]
 	require.True(t, entry.IsDuplicate)
 	require.Equal(t, guildID, entry.GuildID)
@@ -203,6 +216,19 @@ func TestListSpeedrunLeaderboardIncludesCanonicalAndDuplicateLogs(t *testing.T) 
 	require.Equal(t, int64(3_610_000), *entry.OtherLogs[0].DurationMs)
 	require.True(t, entry.OtherLogs[0].HasYoutubeVideo)
 	require.Equal(t, "https://youtube.com/watch?v=duplicate", entry.OtherLogs[0].YoutubeURL)
+}
+
+func TestSpeedrunLeaderboardRejectsPageSizeAboveMaximum(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{db: &fakeExternalAPIStore{}}
+	service.setupRoutes()
+
+	req := httptest.NewRequest(http.MethodGet, "/leaderboards/speedruns?instance_name=Molten+Core&page_size=51", nil)
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestExternalSpeedrunTiming(t *testing.T) {

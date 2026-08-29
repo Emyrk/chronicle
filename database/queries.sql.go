@@ -2343,6 +2343,7 @@ FROM log_instances selected
 JOIN log_instances duplicate
   ON duplicate.duplicate_group_id = selected.duplicate_group_id
  AND duplicate.id != selected.id
+JOIN wow_server_realms duplicate_realm ON duplicate_realm.id = duplicate.realm_id
 LEFT JOIN instance_speedruns duplicate_speedrun ON duplicate_speedrun.instance_id = duplicate.id
 LEFT JOIN LATERAL (
     SELECT yt.video_url
@@ -13123,9 +13124,9 @@ WITH deduped AS (
         sr.instance_name,
         li.difficulty_name,
         sr.guild_id,
-        CASE WHEN $3::boolean THEN COALESCE(sr.ranked_duration_ms, 0) ELSE sr.duration_ms END::bigint AS duration_ms,
-        CASE WHEN $3::boolean THEN COALESCE(sr.ranked_start_time, sr.start_time) ELSE sr.start_time END::timestamptz AS start_time,
-        CASE WHEN $3::boolean THEN COALESCE(sr.ranked_completion_time, sr.completion_time) ELSE sr.completion_time END::timestamptz AS completion_time,
+        CASE WHEN $5::boolean THEN COALESCE(sr.ranked_duration_ms, 0) ELSE sr.duration_ms END::bigint AS duration_ms,
+        CASE WHEN $5::boolean THEN COALESCE(sr.ranked_start_time, sr.start_time) ELSE sr.start_time END::timestamptz AS start_time,
+        CASE WHEN $5::boolean THEN COALESCE(sr.ranked_completion_time, sr.completion_time) ELSE sr.completion_time END::timestamptz AS completion_time,
         sr.qualified,
         sr.addon_version,
         li.hashed_slug,
@@ -13149,52 +13150,55 @@ WITH deduped AS (
         LIMIT 1
     ) youtube ON true
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
-    WHERE sr.instance_name = $4
+    WHERE sr.instance_name = $6
       AND sr.qualified = true
-      AND (NOT $3::boolean OR sr.ranked_duration_ms IS NOT NULL)
+      AND (NOT $5::boolean OR sr.ranked_duration_ms IS NOT NULL)
       AND sr.guild_id IS NOT NULL
       AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
       AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
       AND CASE
-          WHEN cardinality($5 :: text[]) > 0 THEN
-              COALESCE(wsr.name, '') = ANY($5 :: text[])
+          WHEN cardinality($7 :: text[]) > 0 THEN
+              COALESCE(wsr.name, '') = ANY($7 :: text[])
           ELSE true
       END
       AND CASE
-          WHEN $6 :: text != '' THEN sr.guild_id = $6 :: uuid
+          WHEN $8 :: text != '' THEN sr.guild_id = $8 :: uuid
           ELSE true
       END
       AND CASE
-          WHEN $7 :: bigint > 0 THEN
-              CASE WHEN $3::boolean THEN sr.ranked_completion_time ELSE sr.completion_time END >= now() - make_interval(days => $7::int)
+          WHEN $9 :: bigint > 0 THEN
+              CASE WHEN $5::boolean THEN sr.ranked_completion_time ELSE sr.completion_time END >= now() - make_interval(days => $9::int)
           ELSE true
       END
       AND CASE
-          WHEN $8 :: boolean THEN li.difficulty_name = $9 :: text
+          WHEN $10 :: boolean THEN li.difficulty_name = $11 :: text
           ELSE true
       END
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        CASE WHEN $3::boolean THEN sr.ranked_duration_ms ELSE sr.duration_ms END ASC
+        CASE WHEN $5::boolean THEN sr.ranked_duration_ms ELSE sr.duration_ms END ASC
 ),
 best AS (
     SELECT DISTINCT ON (
-        CASE WHEN $6 :: text = '' THEN guild_id END
+        CASE WHEN $8 :: text = '' THEN guild_id END
     ) instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url, has_youtube_video, youtube_url
     FROM deduped
     ORDER BY
-        CASE WHEN $6 :: text = '' THEN guild_id END,
+        CASE WHEN $8 :: text = '' THEN guild_id END,
         duration_ms ASC
 )
 SELECT instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url, has_youtube_video, youtube_url FROM best
 WHERE (CASE WHEN $1::bigint > 0 THEN player_count >= $1 ELSE true END)
   AND (CASE WHEN $2::bigint > 0 THEN player_count <= $2 ELSE true END)
 ORDER BY duration_ms ASC
-LIMIT 50
+LIMIT CASE WHEN $4::bigint > 0 THEN $4::bigint ELSE 50 END
+OFFSET $3::bigint
 `
 
 type SpeedrunLeaderboardParams struct {
 	MinPlayers       int64    `db:"min_players" json:"min_players"`
 	MaxPlayers       int64    `db:"max_players" json:"max_players"`
+	ResultOffset     int64    `db:"result_offset" json:"result_offset"`
+	ResultLimit      int64    `db:"result_limit" json:"result_limit"`
 	UseRankedTiming  bool     `db:"use_ranked_timing" json:"use_ranked_timing"`
 	InstanceName     string   `db:"instance_name" json:"instance_name"`
 	RealmNames       []string `db:"realm_names" json:"realm_names"`
@@ -13237,6 +13241,8 @@ func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeader
 	rows, err := q.db.Query(ctx, speedrunLeaderboard,
 		arg.MinPlayers,
 		arg.MaxPlayers,
+		arg.ResultOffset,
+		arg.ResultLimit,
 		arg.UseRankedTiming,
 		arg.InstanceName,
 		arg.RealmNames,
