@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	vanillasynthetic "github.com/Emyrk/chronicle/combatlog/parser/vanilla/synthetic"
 	"github.com/Emyrk/chronicle/database/gamedb"
 )
 
@@ -24,5 +25,5 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB) *Synthet
 }
 
 func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message, error) {
-	return msgs, nil
+	return vanillasynthetic.CreditJudgementOfLightToTarget(msgs), nil
 }

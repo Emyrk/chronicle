@@ -88,5 +88,7 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 	msgs = s.absorption.ProcessMessages(msgs)
 	s.absorptionDur += time.Since(now)
 
+	msgs = synthetic.CreditJudgementOfLightToTarget(msgs)
+
 	return msgs, nil
 }

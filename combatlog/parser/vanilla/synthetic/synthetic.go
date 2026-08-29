@@ -113,5 +113,7 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 	msgs = s.absorption.ProcessMessages(msgs)
 	s.absorptionDur += time.Since(now)
 
+	msgs = CreditJudgementOfLightToTarget(msgs)
+
 	return msgs, nil
 }

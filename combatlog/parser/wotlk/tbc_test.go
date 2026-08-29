@@ -59,3 +59,24 @@ func TestTBCHealSuffix(t *testing.T) {
 	assert.Equal(t, types.HitTypeCrit, heal.HitType)
 	assert.Equal(t, types.NatureSchool, heal.School)
 }
+
+func TestTBCJudgementOfLightCreditsTarget(t *testing.T) {
+	t.Parallel()
+
+	line := `5/20 15:52:10.073  SPELL_HEAL,0x0000000000000001,"Paladin",0x10511,0x0000000000000002,"Attacker",0x10511,20267,"Judgement of Light",0x2,61,nil`
+	parser, err := NewTBC(context.Background(), slog.Default(), strings.NewReader(line), auraTestDB{}, auraTestDB{}, nil)
+	require.NoError(t, err)
+
+	parsed, err := parser.Advance(context.Background())
+	require.NoError(t, err)
+
+	var heal *messages.Heal
+	for _, msg := range parsed {
+		if typed, ok := msg.(*messages.Heal); ok {
+			heal = typed
+			break
+		}
+	}
+	require.NotNil(t, heal)
+	assert.Equal(t, heal.Target, heal.Caster)
+}
