@@ -431,6 +431,32 @@ func TestParserMessages(t *testing.T) {
 	// })
 }
 
+func TestJudgementOfLightCreditsTarget(t *testing.T) {
+	t.Parallel()
+
+	const spellID chrondbc.SpellID = 20343
+	db := &stubGameDB{spells: map[chrondbc.SpellID]*chrondbc.Spell{
+		spellID: {
+			ID:        spellID,
+			Name_lang: i18n.Text{i18n.English: "Localized spell name"},
+		},
+	}}
+	line := `1771542037|HEAL|0x0000000000000002|0x0000000000000001|20343|61|0|0`
+
+	ctx := context.Background()
+	p, err := New(ctx, slog.Default(), strings.NewReader(line), db, nil)
+	require.NoError(t, err)
+
+	msgs, err := p.Advance(ctx)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	heal, ok := msgs[0].(*messages.Heal)
+	require.True(t, ok)
+	require.Equal(t, guid.GUID(0x0000000000000002), heal.Target)
+	require.Equal(t, heal.Target, heal.Caster)
+}
+
 // stubGameDB is a minimal gamedb.GameDB for tests that need specific spell data
 // without loading a real Spell.dbc (which varies by build tag / server).
 type stubGameDB struct {
