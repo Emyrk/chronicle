@@ -187,8 +187,8 @@ export function ClassDetailsPage() {
                 <h3 className="text-lg font-semibold">Judgement of Light</h3>
               </div>
               <p className="leading-relaxed text-muted-foreground">
-                In 2.4.3 and 3.3.5a combat logs, Judgement of Light healing can be
-                reported as healing done by the paladin who applied the debuff. Chronicle
+                Judgement of Light healing can be reported as healing done by the paladin
+                who applied the debuff. Chronicle instead
                 credits each heal to the player whose attack triggered it, which
                 is also the player receiving the heal.
               </p>
