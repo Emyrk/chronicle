@@ -92,10 +92,10 @@ export function TechnicalDetailsPage() {
         Data dumps from Chronicle's game database.
       </p>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         {TECHNICAL_LINKS.map((link) => (
-          <Link key={link.href} to={link.href}>
-            <Card className="p-3 hover:bg-muted/50 transition-colors">
+          <Link key={link.href} to={link.href} className="block">
+            <Card className="p-4 hover:bg-muted/50 transition-colors">
               <div className="flex items-center gap-3">
                 <div className="text-primary">{link.icon}</div>
                 <div>

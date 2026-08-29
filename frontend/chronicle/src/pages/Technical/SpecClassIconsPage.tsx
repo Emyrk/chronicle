@@ -44,7 +44,7 @@ export function SpecClassIconsPage() {
         Reference sheet for the class and specialization icons used throughout Chronicle.
       </p>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {CLASSES.map((className) => {
           const displayName = CLASS_DISPLAY[className];
           return (
