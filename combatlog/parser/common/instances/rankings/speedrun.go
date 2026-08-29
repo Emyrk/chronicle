@@ -146,9 +146,9 @@ func (t *SpeedrunTracker) FightStarted(_ uuid.UUID, m messages.Message) {
 	}
 }
 
-// FightEnded updates ranked boss timing, then checks whether all requirements
-// are satisfied. Clear time ends when the final requirement is completed, while
-// ranked time ends with the encounter that satisfied the final required boss.
+// FightEnded updates boss timing, then checks whether all requirements are
+// satisfied. Both timing modes end with the encounter that satisfied the final
+// required boss, while trash requirements can qualify the run later.
 func (t *SpeedrunTracker) FightEnded(encounterID uuid.UUID, m messages.Message) {
 	if t.completed {
 		return
@@ -166,6 +166,9 @@ func (t *SpeedrunTracker) FightEnded(encounterID uuid.UUID, m messages.Message) 
 	}
 	t.completed = true
 	t.completionTime = m.Date()
+	if !t.rankedCompletionTime.IsZero() {
+		t.completionTime = t.rankedCompletionTime
+	}
 }
 
 func (t *SpeedrunTracker) encounterIncludesRequiredBoss(encounterID uuid.UUID) bool {
