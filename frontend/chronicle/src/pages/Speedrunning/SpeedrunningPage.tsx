@@ -92,13 +92,12 @@ export function SpeedrunningPage() {
         <h2 className="mb-3 text-xl font-semibold">Upload the Complete Raid</h2>
         <p className="mb-3 text-muted-foreground">
           You do not need to trim trash before the first boss from your combat
-          log. Chronicle separates the time used for competitive boss rankings
+          log. Chronicle separates the time used for boss-to-boss rankings
           from the time taken to complete the entire raid.
         </p>
         <p className="text-muted-foreground">
           Keeping the complete log gives Chronicle the evidence it needs to
-          verify every required boss and trash kill without penalizing your Boss
-          time for clearing trash before the first required boss.
+          verify every required boss and trash kill.
         </p>
       </section>
 
@@ -108,6 +107,19 @@ export function SpeedrunningPage() {
         <h2 className="mb-3 text-xl font-semibold">The Two Timing Modes</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-lg border bg-card p-5">
+            <div className="mb-2 flex items-center gap-2">
+              <h3 className="font-semibold">Full raid</h3>
+              <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-300">
+                Default
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Starts with the first tracked fight in the raid and ends when the
+              encounter containing the final required boss kill ends. It includes
+              activity before the first boss, but never extends past the final boss.
+            </p>
+          </div>
+          <div className="rounded-lg border bg-card p-5">
             <h3 className="mb-2 font-semibold">Boss time</h3>
             <p className="text-sm text-muted-foreground">
               Starts when your raid first pulls a required boss and ends when
@@ -115,28 +127,19 @@ export function SpeedrunningPage() {
               on that first boss does not reset the start of the timer.
             </p>
           </div>
-          <div className="rounded-lg border bg-card p-5">
-            <h3 className="mb-2 font-semibold">Full raid</h3>
-            <p className="text-sm text-muted-foreground">
-              Starts with the first tracked fight in the raid and ends when the
-              encounter containing the final required boss kill ends. It includes
-              activity before the first boss, but never extends past the final boss.
-            </p>
-          </div>
         </div>
       </section>
 
       <section className="mb-8 rounded-lg bg-muted/30 p-4">
-        <h2 className="mb-3 text-xl font-semibold">Why Boss Time Is the Default</h2>
+        <h2 className="mb-3 text-xl font-semibold">Why There Are Two Timers</h2>
         <p className="mb-3 text-muted-foreground">
-          Ranking the entire clear made an otherwise identical run appear faster
-          when the uploader removed early trash from the log. That rewarded log
-          editing instead of faster play.
+          Full raid is the default because it represents the complete run from
+          the first tracked fight through the final required boss encounter.
         </p>
         <p className="text-muted-foreground">
-          Boss time anchors every run to required boss encounters, so raids can
-          upload the activity they actually played. Full raid remains available
-          when you want to compare complete clear times.
+          Boss time provides a second comparison that excludes activity before
+          the first required boss. This lets raids compare boss-to-boss execution
+          without trimming the complete log used for qualification.
         </p>
       </section>
 

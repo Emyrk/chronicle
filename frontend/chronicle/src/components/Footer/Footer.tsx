@@ -56,7 +56,7 @@ export function Footer() {
               </li>
               <li>
                 <Link to="/tools" className="hover:text-foreground transition-colors">
-                  Tools
+                  Tools & FAQ
                 </Link>
               </li>
               <li>
