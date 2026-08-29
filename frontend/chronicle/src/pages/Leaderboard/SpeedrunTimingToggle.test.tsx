@@ -16,7 +16,7 @@ describe("SpeedrunTimingToggle", () => {
   it("uses the stored preference when the URL does not select a mode", () => {
     expect(resolveSpeedrunTimingMode(null, "full")).toBe("full")
     expect(resolveSpeedrunTimingMode(null, "ranked")).toBe("ranked")
-    expect(resolveSpeedrunTimingMode(null, "invalid")).toBe("ranked")
+    expect(resolveSpeedrunTimingMode(null, "invalid")).toBe("full")
   })
 
   it("lets an explicit URL mode override the stored preference", () => {

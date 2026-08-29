@@ -564,7 +564,7 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
   const { data: realms } = useSpeedrunRealms()
   const [criteriaOpen, setCriteriaOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
-  const [storedTiming, setStoredTiming] = useLocalStorage<SpeedrunTimingMode>(SPEEDRUN_TIMING_STORAGE_KEY, "ranked")
+  const [storedTiming, setStoredTiming] = useLocalStorage<SpeedrunTimingMode>(SPEEDRUN_TIMING_STORAGE_KEY, "full")
 
   const selectedInstance = overrideInstance || searchParams.get("instance") || ""
   const { data: rulesData } = useSpeedrunRules(selectedInstance)
@@ -606,7 +606,7 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
   const setTiming = (timing: SpeedrunTimingMode) => {
     setStoredTiming(timing)
     const next = new URLSearchParams(searchParams)
-    if (timing === "ranked") {
+    if (timing === "full") {
       next.delete("timing")
     } else {
       next.set("timing", timing)
@@ -631,7 +631,7 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
     if (state.minPlayers) next.set("min_players", state.minPlayers)
     if (state.maxPlayers) next.set("max_players", state.maxPlayers)
     if (sinceDays) next.set("since_days", sinceDays)
-    if (selectedTiming === "full") next.set("timing", selectedTiming)
+    if (selectedTiming === "ranked") next.set("timing", selectedTiming)
     // Preserve the difficulty board only when staying on the same instance;
     // difficulties differ per instance.
     if (state.instance === selectedInstance && searchParams.has("difficulty")) {

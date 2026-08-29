@@ -7,5 +7,5 @@ export function resolveSpeedrunTimingMode(
   storedValue: unknown,
 ): SpeedrunTimingMode {
   if (urlValue === "ranked" || urlValue === "full") return urlValue
-  return storedValue === "full" ? "full" : "ranked"
+  return storedValue === "ranked" ? "ranked" : "full"
 }
