@@ -6,6 +6,13 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import type { SpeedrunInstanceBoard, SpeedrunLeaderboardEntry, SpeedrunRulesResponse } from "../../api/typesGenerated"
 import { Podium } from "./Podium"
 import { LeaderboardTable } from "./LeaderboardTable"
+import { useLocalStorage } from "../../hooks/useLocalStorage"
+import { SpeedrunTimingToggle } from "./SpeedrunTimingToggle"
+import {
+  resolveSpeedrunTimingMode,
+  SPEEDRUN_TIMING_STORAGE_KEY,
+  type SpeedrunTimingMode,
+} from "./speedrunTimingPreference"
 
 const SPEEDRUN_STALE_TIME = 5 * 60 * 1000 // 5 minutes
 
@@ -49,10 +56,11 @@ function useSpeedrunLeaderboard(
   minPlayers: string,
   maxPlayers: string,
   sinceDays: string,
-  difficulty: string | null
+  difficulty: string | null,
+  timing: SpeedrunTimingMode
 ) {
   return useQuery<SpeedrunLeaderboardEntry[]>({
-    queryKey: ["leaderboard", "speedrun", instanceName, realmNames, minPlayers, maxPlayers, sinceDays, difficulty],
+    queryKey: ["leaderboard", "speedrun", instanceName, realmNames, minPlayers, maxPlayers, sinceDays, difficulty, timing],
     queryFn: async () => {
       const params = new URLSearchParams()
       params.set("instance_name", instanceName)
@@ -63,6 +71,7 @@ function useSpeedrunLeaderboard(
       if (maxPlayers) params.set("max_players", maxPlayers)
       if (sinceDays) params.set("since_days", sinceDays)
       if (difficulty !== null) params.set("difficulty_name", difficulty)
+      params.set("timing", timing)
       const res = await fetch(`/api/v1/rankings/speedrun?${params.toString()}`)
       if (!res.ok) throw new Error("Failed to fetch leaderboard")
       return res.json()
@@ -448,10 +457,10 @@ function formatDuration(ms: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`
 }
 
-function InstanceCard({ board, onSelect }: { board: SpeedrunInstanceBoard; onSelect: (board: SpeedrunInstanceBoard) => void }) {
+function InstanceCard({ board, timing, onSelect }: { board: SpeedrunInstanceBoard; timing: SpeedrunTimingMode; onSelect: (board: SpeedrunInstanceBoard) => void }) {
   const name = board.instance_name
   const bg = getInstanceBackground(name)
-  const { data: entries } = useSpeedrunLeaderboard(name, [], "", "", "", board.difficulty_name)
+  const { data: entries } = useSpeedrunLeaderboard(name, [], "", "", "", board.difficulty_name, timing)
   const top3 = entries?.slice(0, 3) ?? []
 
   return (
@@ -495,7 +504,17 @@ function InstanceCard({ board, onSelect }: { board: SpeedrunInstanceBoard; onSel
   )
 }
 
-function InstanceBrowser({ boards, onSelect }: { boards: SpeedrunInstanceBoard[]; onSelect: (board: SpeedrunInstanceBoard) => void }) {
+function InstanceBrowser({
+  boards,
+  timing,
+  onTimingChange,
+  onSelect,
+}: {
+  boards: SpeedrunInstanceBoard[]
+  timing: SpeedrunTimingMode
+  onTimingChange: (timing: SpeedrunTimingMode) => void
+  onSelect: (board: SpeedrunInstanceBoard) => void
+}) {
   const raids = boards.filter((b) => getInstanceCategory(b.instance_name) === "raid")
   const dungeons = boards.filter((b) => getInstanceCategory(b.instance_name) !== "raid")
 
@@ -511,13 +530,16 @@ function InstanceBrowser({ boards, onSelect }: { boards: SpeedrunInstanceBoard[]
     <div className="space-y-6">
       {raids.length > 0 && (
         <section className="space-y-3">
-          <div className="flex items-baseline gap-3">
-            <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
-            <span className="text-sm text-muted-foreground/60">Chronicle of fastest guild clears</span>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-baseline gap-3">
+              <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
+              <span className="text-sm text-muted-foreground/60">Chronicle of fastest guild clears</span>
+            </div>
+            <SpeedrunTimingToggle value={timing} onChange={onTimingChange} />
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {raids.map((board) => (
-              <InstanceCard key={`${board.instance_name}-${board.difficulty_name}`} board={board} onSelect={onSelect} />
+              <InstanceCard key={`${board.instance_name}-${board.difficulty_name}`} board={board} timing={timing} onSelect={onSelect} />
             ))}
           </div>
         </section>
@@ -527,7 +549,7 @@ function InstanceBrowser({ boards, onSelect }: { boards: SpeedrunInstanceBoard[]
           <h2 className="text-lg font-semibold text-muted-foreground">Dungeons</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {dungeons.map((board) => (
-              <InstanceCard key={`${board.instance_name}-${board.difficulty_name}`} board={board} onSelect={onSelect} />
+              <InstanceCard key={`${board.instance_name}-${board.difficulty_name}`} board={board} timing={timing} onSelect={onSelect} />
             ))}
           </div>
         </section>
@@ -542,6 +564,7 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
   const { data: realms } = useSpeedrunRealms()
   const [criteriaOpen, setCriteriaOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
+  const [storedTiming, setStoredTiming] = useLocalStorage<SpeedrunTimingMode>(SPEEDRUN_TIMING_STORAGE_KEY, "ranked")
 
   const selectedInstance = overrideInstance || searchParams.get("instance") || ""
   const { data: rulesData } = useSpeedrunRules(selectedInstance)
@@ -549,6 +572,7 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
   const minPlayers = searchParams.get("min_players") || ""
   const maxPlayers = searchParams.get("max_players") || ""
   const sinceDays = searchParams.get("since_days") || ""
+  const selectedTiming = resolveSpeedrunTimingMode(searchParams.get("timing"), storedTiming)
 
   // Each difficulty has its own board. Default to the first available
   // difficulty; note the URL value may legitimately be "" (no recorded
@@ -564,7 +588,8 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
     minPlayers,
     maxPlayers,
     sinceDays,
-    selectedDifficulty
+    selectedDifficulty,
+    selectedTiming
   )
 
   const setDifficulty = (difficulty: string) => {
@@ -577,6 +602,17 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
     (selectedRealms.length > 0 ? 1 : 0) +
     (minPlayers ? 1 : 0) +
     (maxPlayers ? 1 : 0)
+
+  const setTiming = (timing: SpeedrunTimingMode) => {
+    setStoredTiming(timing)
+    const next = new URLSearchParams(searchParams)
+    if (timing === "ranked") {
+      next.delete("timing")
+    } else {
+      next.set("timing", timing)
+    }
+    setSearchParams(next)
+  }
 
   const setSinceDays = (days: string) => {
     const next = new URLSearchParams(searchParams)
@@ -595,6 +631,7 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
     if (state.minPlayers) next.set("min_players", state.minPlayers)
     if (state.maxPlayers) next.set("max_players", state.maxPlayers)
     if (sinceDays) next.set("since_days", sinceDays)
+    if (selectedTiming === "full") next.set("timing", selectedTiming)
     // Preserve the difficulty board only when staying on the same instance;
     // difficulties differ per instance.
     if (state.instance === selectedInstance && searchParams.has("difficulty")) {
@@ -617,6 +654,8 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
       <div className="w-full">
         <InstanceBrowser
           boards={boards ?? []}
+          timing={selectedTiming}
+          onTimingChange={setTiming}
           onSelect={(board) => setSearchParams((prev) => {
             const next = new URLSearchParams(prev)
             next.set("instance", board.instance_name)
@@ -665,7 +704,7 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
 
 
           {/* Filters Bar */}
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex flex-wrap items-center gap-3 mb-6">
             <div className="flex-1 min-w-0">
               {instancesLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -692,6 +731,8 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
                 <span className="text-sm text-muted-foreground">No speedrun data yet</span>
               )}
             </div>
+
+            <SpeedrunTimingToggle value={selectedTiming} onChange={setTiming} />
 
             {/* Time Range */}
             <div className="flex rounded-lg border border-white/10 overflow-hidden shrink-0">

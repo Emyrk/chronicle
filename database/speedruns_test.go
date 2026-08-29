@@ -143,15 +143,17 @@ func TestCleanEncounterKillTimesExcludePartialKills(t *testing.T) {
 	require.Len(t, allKillTimes, 2)
 }
 
-func TestSpeedrunLeaderboardUsesRankedDuration(t *testing.T) {
+func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	t.Parallel()
 
 	pool, store, realmID := setupParsesTest(t)
 	ctx := testutil.Context(t, testutil.WaitShort)
 	startedAt := time.Date(2026, time.August, 1, 20, 0, 0, 0, time.UTC)
 
-	guildID := uuid.New()
-	_, err := pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3)", guildID, realmID, "Ranked Raiders")
+	rankedGuildID := uuid.New()
+	fullGuildID := uuid.New()
+	_, err := pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3), ($4, $2, $5)",
+		rankedGuildID, realmID, "Ranked Raiders", fullGuildID, "Full Clear Raiders")
 	require.NoError(t, err)
 
 	userID := uuid.New()
@@ -167,7 +169,7 @@ func TestSpeedrunLeaderboardUsesRankedDuration(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
 
-	insertRun := func(clearDuration, rankedDuration time.Duration, offset time.Duration) uuid.UUID {
+	insertRun := func(guildID uuid.UUID, clearDuration, rankedDuration time.Duration, offset time.Duration) uuid.UUID {
 		t.Helper()
 		id := uuid.New()
 		clearStart := startedAt.Add(offset)
@@ -194,15 +196,24 @@ func TestSpeedrunLeaderboardUsesRankedDuration(t *testing.T) {
 		return id
 	}
 
-	rankedWinner := insertRun(60*time.Minute, 30*time.Minute, 0)
-	insertRun(50*time.Minute, 40*time.Minute, 2*time.Hour)
+	rankedWinner := insertRun(rankedGuildID, 60*time.Minute, 30*time.Minute, 0)
+	fullWinner := insertRun(fullGuildID, 50*time.Minute, 40*time.Minute, 2*time.Hour)
 
-	rows, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+	rankedRows, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
 		InstanceName: "Molten Core", RealmNames: []string{},
-		FilterDifficulty: true, DifficultyName: "Normal",
+		FilterDifficulty: true, DifficultyName: "Normal", UseRankedTiming: true,
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, rankedWinner, rows[0].InstanceID)
-	require.EqualValues(t, 30*time.Minute/time.Millisecond, rows[0].DurationMs)
+	require.Len(t, rankedRows, 2)
+	require.Equal(t, rankedWinner, rankedRows[0].InstanceID)
+	require.EqualValues(t, 30*time.Minute/time.Millisecond, rankedRows[0].DurationMs)
+
+	fullRows, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+		InstanceName: "Molten Core", RealmNames: []string{},
+		FilterDifficulty: true, DifficultyName: "Normal", UseRankedTiming: false,
+	})
+	require.NoError(t, err)
+	require.Len(t, fullRows, 2)
+	require.Equal(t, fullWinner, fullRows[0].InstanceID)
+	require.EqualValues(t, 50*time.Minute/time.Millisecond, fullRows[0].DurationMs)
 }
