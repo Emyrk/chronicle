@@ -2,7 +2,7 @@
  * Deaths processor - aggregates player and enemy deaths from slain events (pure TS, worker-safe)
  */
 
-import type { SlainProcessorEvent, DamageProcessorEvent, HealProcessorEvent, ResourceChangeProcessorEvent, AbsorbedProcessorEvent, AuraCastProcessorEvent, PanelProcessor, ProcessorContext, ProcessorEvent } from "../processorTypes";
+import type { SlainProcessorEvent, ResurrectionProcessorEvent, DamageProcessorEvent, HealProcessorEvent, ResourceChangeProcessorEvent, AbsorbedProcessorEvent, AuraCastProcessorEvent, PanelProcessor, ProcessorContext, ProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { createGuidCache, getCachedGuid, isPlayerGuidFast, type GuidCache } from "../processors/guidCache";
 import { hasHitType, HitTypePartialResist, HitTypeFullResist, HitTypePartialAbsorb, HitTypeFullAbsorb, HitTypePartialBlock, HitTypeFullBlock } from "@/lib/hittype/hittype";
@@ -63,6 +63,22 @@ export interface DeathEvent {
 }
 
 /**
+ * Data for a resurrection shown in the chronological death log.
+ */
+export interface ResurrectionEvent {
+  dateMilli: number;
+  offsetMilli: number;
+  playerID: string;
+  playerName: string;
+  className: string;
+  resurrectorID: string;
+  resurrectorName: string;
+  spellID: number;
+  spellName: string;
+  encounterID: string;
+}
+
+/**
  * Killer data for breakout display
  */
 export interface KillerData {
@@ -99,6 +115,8 @@ export type DeathsResult = {
   DeathEvents: DeathEvent[];
   // Chronological list of enemy death events
   EnemyDeathEvents: DeathEvent[];
+  // Chronological list of player resurrection events
+  ResurrectionEvents: ResurrectionEvent[];
   // GUID cache for performance (avoids repeated parsing)
   GuidCache: GuidCache;
   // Transient: buffer of incoming events per target per encounter for death recap
@@ -175,7 +193,7 @@ function buildRecapFromBuffer(bufferMap: Map<string, Map<string, DeathRecapEntry
 export function createDeathsProcessor(): PanelProcessor<DeathsResult, ProcessorEvent> {
   return {
     id: "deaths",
-    streams: ["slain", "damage", "heal", "resource_change", "absorbed", "aura_cast"],
+    streams: ["slain", "ressurection", "damage", "heal", "resource_change", "absorbed", "aura_cast"],
 
     createState: () => ({
       EncounterDeaths: new Map<string, UnitDeaths>(),
@@ -184,6 +202,7 @@ export function createDeathsProcessor(): PanelProcessor<DeathsResult, ProcessorE
       EnemyByKiller: new Map<string, Map<string, number>>(),
       DeathEvents: [],
       EnemyDeathEvents: [],
+      ResurrectionEvents: [],
       GuidCache: createGuidCache(),
       _incomingBuffer: new Map(),
       _outgoingBuffer: new Map(),
@@ -344,6 +363,26 @@ export function createDeathsProcessor(): PanelProcessor<DeathsResult, ProcessorE
           casterClass: resolveCasterClass(ac.caster, context, guidCache),
         };
         pushToBuffer(state._outgoingBuffer, encounterID, ac.caster, entry);
+        return;
+      }
+
+      // Resurrection rows are shown in the player death log, but have no recap or breakout.
+      if (streamType === "ressurection") {
+        const resurrection = event as ResurrectionProcessorEvent;
+        if (!resurrection.target || !isPlayerGuidFast(resurrection.target)) return;
+
+        state.ResurrectionEvents.push({
+          dateMilli: firstTimestamp.getTime() + resurrection.offsetMilli,
+          offsetMilli: resurrection.offsetMilli,
+          playerID: resurrection.target,
+          playerName: context.players[resurrection.target]?.name || resurrection.target,
+          className: context.players[resurrection.target]?.class || "UNKNOWN",
+          resurrectorID: resurrection.source,
+          resurrectorName: resolveUnitName(resurrection.source, context, guidCache),
+          spellID: resurrection.spell.id,
+          spellName: resurrection.spell.name,
+          encounterID,
+        });
         return;
       }
 

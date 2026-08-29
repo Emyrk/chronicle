@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hasDeathLogEvents, isDeathAheadOfSyncCursor } from "./deathLogSync";
-import { createDeathsProcessor, type DeathEvent } from "./deaths.processor";
+import { createDeathsProcessor, type DeathEvent, type ResurrectionEvent } from "./deaths.processor";
 
 describe("Death Log Sync display", () => {
   it("reports whether a result has any deaths", () => {
@@ -10,6 +10,10 @@ describe("Death Log Sync display", () => {
     const withDeath = createDeathsProcessor().createState();
     withDeath.DeathEvents = [{ dateMilli: 1_000 } as DeathEvent];
     expect(hasDeathLogEvents(withDeath)).toBe(true);
+
+    const withResurrection = createDeathsProcessor().createState();
+    withResurrection.ResurrectionEvents = [{ dateMilli: 1_000 } as ResurrectionEvent];
+    expect(hasDeathLogEvents(withResurrection)).toBe(true);
   });
 
   it("marks only deaths after the Sync timestamp as pending", () => {

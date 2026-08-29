@@ -1,7 +1,7 @@
-import type { DeathEvent, DeathsResult } from "./deaths.processor";
+import type { DeathEvent, DeathsResult, ResurrectionEvent } from "./deaths.processor";
 
 export function hasDeathLogEvents(result: DeathsResult): boolean {
-  return result.DeathEvents.length > 0 || result.EnemyDeathEvents.length > 0;
+  return result.DeathEvents.length > 0 || result.EnemyDeathEvents.length > 0 || result.ResurrectionEvents.length > 0;
 }
 
 /**
@@ -10,7 +10,7 @@ export function hasDeathLogEvents(result: DeathsResult): boolean {
  * render muted until the playhead reaches them.
  */
 export function isDeathAheadOfSyncCursor(
-  death: DeathEvent,
+  death: DeathEvent | ResurrectionEvent,
   syncEnabled: boolean,
   syncTimestamp: Date | null,
 ): boolean {

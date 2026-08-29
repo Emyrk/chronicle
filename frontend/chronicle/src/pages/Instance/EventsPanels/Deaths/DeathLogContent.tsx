@@ -3,7 +3,7 @@
  */
 
 import React, { useMemo, useCallback, useState } from "react";
-import { User, Skull, ChevronRight, ChevronDown, ExternalLink } from "lucide-react";
+import { User, Skull, ChevronRight, ChevronDown, ExternalLink, HeartPulse } from "lucide-react";
 import { GenericPanel } from "../GenericPanel";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
@@ -22,8 +22,13 @@ import { cn } from "@/lib/utils";
 import { hitTypeNames, HitTypeCrit } from "@/lib/hittype/hittype";
 
 import { extractDeathWindow, normalizeDeathWindow, updateDeathWindow } from "./deathBreakoutWindow";
+import {
+  getSortedDeathLogEvents,
+  isResurrectionEvent,
+  type DeathLogMode,
+} from "./deathLogEvents";
 
-type DeathMode = "players" | "enemies";
+type DeathMode = DeathLogMode;
 
 
 function formatTimestamp(absoluteMilli: number): string {
@@ -78,14 +83,6 @@ function getSchoolColor(school: number): string {
     8: "text-blue-400",       // Arcane
   };
   return colors[school] || "text-muted-foreground";
-}
-
-/**
- * Sort death events by offsetMilli and return chronological list.
- */
-function getSortedDeathEvents(selectedEncounterIDs: string[], result: DeathsResult, mode: DeathMode): DeathEvent[] {
-  const events = mode === "players" ? result.DeathEvents : result.EnemyDeathEvents;
-  return [...events].filter((event) => selectedEncounterIDs.includes(event.encounterID));
 }
 
 type DeathLogContentProps = PanelRenderProps<DeathsResult>;
@@ -168,10 +165,15 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
     [props.panelContextVersion]
   );
 
-  const sortedDeaths = useMemo(
-    () => getSortedDeathEvents(context.selectedEncounterIds, cachedResult, mode),
+  const sortedEvents = useMemo(
+    () => getSortedDeathLogEvents(context.selectedEncounterIds, cachedResult, mode),
     [context.selectedEncounterIds, cachedResult, mode],
   );
+  const resurrectionCount = useMemo(
+    () => sortedEvents.filter(isResurrectionEvent).length,
+    [sortedEvents],
+  );
+  const deathCount = sortedEvents.length - resurrectionCount;
 
   // Once we have cached data, never show loading/processing states
   const effectiveProps = {
@@ -185,7 +187,13 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
     <GenericPanel {...effectiveProps}>
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs text-muted-foreground">
-          Total Deaths: <span className="font-medium text-foreground">{sortedDeaths.length}</span>
+          Deaths: <span className="font-medium text-foreground">{deathCount}</span>
+          {mode === "players" && (
+            <>
+              <span className="px-1.5">·</span>
+              Resurrections: <span className="font-medium text-emerald-400">{resurrectionCount}</span>
+            </>
+          )}
         </div>
         {/* Player/Enemy toggle */}
         <div className="flex items-center gap-1 bg-muted rounded-md p-0.5" data-death-mode-toggle>
@@ -227,9 +235,9 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
         </div>
       </div>
 
-      {sortedDeaths.length === 0 ? (
+      {sortedEvents.length === 0 ? (
         <div className="text-xs text-muted-foreground py-4 text-center">
-          {loading || processing ? "Loading..." : "No deaths recorded"}
+          {loading || processing ? "Loading..." : mode === "players" ? "No deaths or resurrections recorded" : "No deaths recorded"}
         </div>
       ) : (
         <ScrollArea className="max-h-panel">
@@ -239,22 +247,78 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                 <th className="w-5" />
                 <th className="text-left py-1.5 px-2 font-medium w-16">Time</th>
                 <th className="text-left py-1.5 px-2 font-medium w-16">Encounter</th>
-                <th className="text-left py-1.5 px-2 font-medium w-28">Killed By</th>
+                <th className="text-left py-1.5 px-2 font-medium w-28">Source</th>
                 <th className="text-left py-1.5 px-2 font-medium">Unit</th>
               </tr>
             </thead>
             <tbody>
-              {sortedDeaths.map((death, index) => {
-                const encounterName = encounterNames.get(death.encounterID) || "Unknown";
-                const prevDeath = index > 0 ? sortedDeaths[index - 1] : null;
-                const isNewEncounter = prevDeath && prevDeath.encounterID !== death.encounterID;
-                const isExpanded = expandedIndex === index;
-                const isPendingSyncDeath = isDeathAheadOfSyncCursor(
-                  death,
+              {sortedEvents.map((event, index) => {
+                const encounterName = encounterNames.get(event.encounterID) || "Unknown";
+                const previousEvent = index > 0 ? sortedEvents[index - 1] : null;
+                const isNewEncounter = previousEvent && previousEvent.encounterID !== event.encounterID;
+                const isPendingSyncEvent = isDeathAheadOfSyncCursor(
+                  event,
                   syncMode?.enabled === true,
                   syncMode?.currentTimestamp ?? null,
                 );
-                const rowKey = `${death.encounterID}:${death.playerID}:${death.offsetMilli}:${index}`;
+                const rowKey = `${event.encounterID}:${event.playerID}:${event.offsetMilli}:${index}`;
+
+                if (isResurrectionEvent(event)) {
+                  return (
+                    <tr
+                      key={rowKey}
+                      className={cn(
+                        "border-b border-emerald-500/20 bg-emerald-500/10",
+                        isNewEncounter && "border-t-2 border-t-border",
+                        isPendingSyncEvent && "opacity-35 saturate-50",
+                      )}
+                      data-resurrection-row
+                      data-sync-pending={isPendingSyncEvent || undefined}
+                    >
+                      <td className="w-5 px-1 py-1 text-emerald-400">
+                        <HeartPulse className="h-3 w-3" />
+                      </td>
+                      <td className="px-2 py-1 font-mono text-2xs text-emerald-300/80">
+                        {checkboxChecked
+                          ? formatRelativeTime(event.offsetMilli)
+                          : formatTimestamp(event.dateMilli)
+                        }
+                      </td>
+                      <td className="max-w-[120px] px-2 py-1">
+                        <button
+                          type="button"
+                          onClick={() => handleEncounterClick(event.encounterID)}
+                          className="max-w-full truncate text-left text-2xs text-blue-500 hover:text-blue-400 hover:underline"
+                          title={`Select ${encounterName}`}
+                        >
+                          {encounterName}
+                        </button>
+                      </td>
+                      <td className="w-24 max-w-24 px-2 py-1 text-emerald-400">
+                        <span className="block truncate" title={`${event.resurrectorName} · ${event.spellName}`}>
+                          {event.resurrectorName}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="min-w-0 flex-1 truncate font-medium"
+                            style={{ color: `var(--color-class-${event.className.toLowerCase()})` }}
+                          >
+                            {event.playerName}
+                          </span>
+                          <span className="shrink-0 text-2xs font-medium text-emerald-400">
+                            Resurrected
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
+
+                const death = event;
+                const isExpanded = expandedIndex === index;
+                const isPendingSyncDeath = isPendingSyncEvent;
                 return (
                   <React.Fragment key={rowKey}>
                     <tr
