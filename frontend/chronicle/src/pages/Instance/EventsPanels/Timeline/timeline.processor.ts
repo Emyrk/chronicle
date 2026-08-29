@@ -18,6 +18,13 @@ export interface TimelineSeriesMeta {
   aggregation: AggregationType;
 }
 
+export interface TimelinePlayerDeath {
+  offsetMs: number;
+  playerId: string;
+  playerName: string;
+  className: string;
+}
+
 export interface TimelineResult {
   /** seriesId → raw bin values (always sums) */
   series: Map<string, number[]>;
@@ -27,6 +34,8 @@ export interface TimelineResult {
   binCount: number;
   /** seriesId → display metadata for rendering */
   seriesMeta: Map<string, TimelineSeriesMeta>;
+  /** Player deaths collected independently of configured chart series */
+  playerDeaths: TimelinePlayerDeath[];
   /** Compiled per-series filter predicates (cached, not serialized) */
   _filterCache: Map<string, FilterPredicate>;
 }
@@ -77,6 +86,7 @@ export const timelineProcessor: PanelProcessor<TimelineResult, ProcessorEvent> =
     binMs: DEFAULT_BIN_MS,
     binCount: 0,
     seriesMeta: new Map(),
+    playerDeaths: [],
     _filterCache: new Map(),
   }),
 
@@ -99,6 +109,17 @@ export const timelineProcessor: PanelProcessor<TimelineResult, ProcessorEvent> =
       return;
     }
 
+    if (streamType === "slain" && event.type === "slain") {
+      const player = context.players[event.target];
+      if (player) {
+        state.playerDeaths.push({
+          offsetMs,
+          playerId: event.target,
+          playerName: player.name,
+          className: player.class,
+        });
+      }
+    }
 
     for (const cfg of configs) {
       // Only process events from the stream this series cares about

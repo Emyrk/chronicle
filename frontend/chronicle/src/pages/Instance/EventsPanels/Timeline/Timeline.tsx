@@ -28,6 +28,10 @@ import { timelineProcessor, type TimelineResult, type TimelineSeriesMeta } from 
 import { applyAggregation } from "./aggregations";
 import { TimelineFilterEditor } from "./TimelineFilterEditor";
 import { createTimelineRaidDurabilityBars } from "./timelineRaidDurability";
+import {
+  createTimelinePhaseAnnotations,
+  groupTimelineDeathAnnotations,
+} from "./timelineAnnotations";
 import { getSeriesConfigs, getTimelineSettings, hydrateFromPanelOption, serializeTimelineConfig } from "./timelineTypes";
 
 import { useTimeRangeContextOptional } from "../../TimeRangeContext";
@@ -148,6 +152,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
         // Also hydrate hiddenSeries from the restored settings
         const restoredSettings = getTimelineSettings(restored);
         if (restoredSettings.hiddenSeries?.length) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from persisted panel config
           setHiddenSeries(new Set(restoredSettings.hiddenSeries));
         }
       }
@@ -164,6 +169,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
     const key = JSON.stringify(settings.hiddenSeries ?? []);
     if (key === lastSyncedSeriesRef.current) return;
     lastSyncedSeriesRef.current = key;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronize externally hydrated panel config
     setHiddenSeries(new Set(settings.hiddenSeries ?? []));
   }, [pc]);
 
@@ -204,6 +210,18 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
       totalSec * 1000,
     );
   }, [durabilityEncounter, durabilityModel, totalSec]);
+
+  const phaseAnnotations = useMemo(() => {
+    if (!timelineSettings.annotations.includes("phases")) return [];
+    return createTimelinePhaseAnnotations(
+      context.instance.encounters,
+      context.selectedEncounterIds,
+    );
+  }, [context.instance.encounters, context.selectedEncounterIds, timelineSettings.annotations]);
+  const deathAnnotations = useMemo(() => {
+    if (!timelineSettings.annotations.includes("player_deaths")) return [];
+    return groupTimelineDeathAnnotations(result.playerDeaths ?? []);
+  }, [result.playerDeaths, timelineSettings.annotations]);
 
   // Convert processor result → nivo series, applying per-series aggregation.
   // Filters out stale series that no longer exist in config (e.g., after deletion).
@@ -277,7 +295,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
     const px = clientX - containerRect.left - CHART_MARGIN.left;
     const rawSec = scale.invert(px);
     return Math.max(0, Math.round(rawSec)); // snap to nearest 1s
-  }, []);
+  }, [CHART_MARGIN.left]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -372,6 +390,82 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
       );
     },
     [durabilityBars],
+  );
+
+  const annotationLayer = useCallback(
+    ({ innerHeight, xScale }: LineCustomSvgLayerProps<ColoredSeries>) => {
+      if (phaseAnnotations.length === 0 && deathAnnotations.length === 0) return null;
+      const scale = xScale as unknown as D3ScaleLinear;
+
+      return (
+        <g aria-label="Timeline annotations">
+          {phaseAnnotations.map((phase, index) => {
+            const startX = scale(phase.startSec);
+            const endX = scale(phase.endSec);
+            const width = Math.max(1, endX - startX);
+            return (
+              <g key={phase.id}>
+                <rect
+                  x={startX}
+                  y={0}
+                  width={width}
+                  height={innerHeight}
+                  fill={index % 2 === 0 ? "#8b5cf6" : "#6366f1"}
+                  fillOpacity={0.08}
+                >
+                  <title>{`${phase.name}: ${phase.startSec.toFixed(1)}s–${phase.endSec.toFixed(1)}s`}</title>
+                </rect>
+                <line
+                  x1={startX}
+                  x2={startX}
+                  y1={0}
+                  y2={innerHeight}
+                  stroke="#a78bfa"
+                  strokeOpacity={0.55}
+                  strokeDasharray="4 4"
+                />
+                {width >= 36 ? (
+                  <text
+                    x={startX + 5}
+                    y={12}
+                    fill="#c4b5fd"
+                    fontSize={9}
+                    fontWeight={600}
+                  >
+                    {phase.name}
+                  </text>
+                ) : null}
+              </g>
+            );
+          })}
+          {deathAnnotations.map((annotation) => {
+            const x = scale(annotation.offsetSec);
+            const names = annotation.deaths.map((death) => death.playerName).join(", ");
+            return (
+              <g key={`${annotation.offsetSec}-${names}`}>
+                <title>{`${names} died at ${annotation.offsetSec.toFixed(1)}s`}</title>
+                <line
+                  x1={x}
+                  x2={x}
+                  y1={0}
+                  y2={innerHeight}
+                  stroke="#ef4444"
+                  strokeOpacity={0.75}
+                  strokeDasharray="2 3"
+                />
+                <path
+                  d={`M ${x - 4} 2 L ${x + 4} 2 L ${x} 10 Z`}
+                  fill="#ef4444"
+                  stroke="#fecaca"
+                  strokeWidth={0.75}
+                />
+              </g>
+            );
+          })}
+        </g>
+      );
+    },
+    [deathAnnotations, phaseAnnotations],
   );
 
   const overlayLayer = useCallback(
@@ -498,7 +592,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
         layers={[
           durabilityLayer,
           "grid",
-          "markers",
+          annotationLayer,
           "axes",
           overlayLayer,
           "lines",
