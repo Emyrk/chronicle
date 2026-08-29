@@ -90,6 +90,7 @@ import { LeaderboardsPage, LeaderboardRedirect, RankingsRedirect } from "./pages
 import { CensusPage } from "./pages/Census/CensusPage"
 import { APIExplorer } from "./pages/APIExplorer/APIExplorer"
 import { ToolsPage } from "./pages/Tools/ToolsPage"
+import { SpeedrunningPage } from "./pages/Speedrunning/SpeedrunningPage"
 import { Layout } from "./components/Layout/Layout"
 import { TenantDatasetLayout } from "./components/Layout/TenantDatasetLayout"
 
@@ -206,6 +207,7 @@ function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/parsing" element={<ParsingPage />} />
         <Route path="/parsing/cohorts" element={<CohortViewerPage />} />
+        <Route path="/speedrunning" element={<SpeedrunningPage />} />
         <Route path="/g/:guildId" element={<GuildPage />} />
         <Route path="/g/:guildId/:tabSlug" element={<GuildPage />} />
         <Route path="/g/:guildId/edit" element={<GuildPageEditor />} />

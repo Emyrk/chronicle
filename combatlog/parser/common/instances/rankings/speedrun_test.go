@@ -346,7 +346,7 @@ func TestSpeedrunTracker_RankedTimeExcludesEarlyTrash(t *testing.T) {
 	assert.Equal(t, 12*time.Minute, result.RankedDuration)
 }
 
-func TestSpeedrunTracker_RankedTimeEndsBeforeTrailingRequiredTrash(t *testing.T) {
+func TestSpeedrunTracker_TimingEndsBeforeTrailingRequiredTrash(t *testing.T) {
 	t.Parallel()
 	rules := SpeedrunRules{Requirements: []SpeedrunRequirement{
 		{Name: "First Boss", EntryIDs: []uint32{100}, Count: 1, Category: SpeedrunCategoryBosses},
@@ -364,6 +364,7 @@ func TestSpeedrunTracker_RankedTimeEndsBeforeTrailingRequiredTrash(t *testing.T)
 	tracker.FightStarted(uuid.New(), msg(finalBossStart))
 	tracker.ActivityChange(msg(finalBossStart.Add(time.Minute)), &stubChar{id: makeCreatureGUID(200, 1), endState: period.EndStateSlain, hasPeriod: true})
 	tracker.FightEnded(uuid.New(), msg(finalBossEnd))
+	assert.False(t, tracker.completed, "trailing trash is still required for qualification")
 
 	clearEnd := t0.Add(22 * time.Minute)
 	tracker.FightStarted(uuid.New(), msg(t0.Add(20*time.Minute)))
@@ -372,7 +373,8 @@ func TestSpeedrunTracker_RankedTimeEndsBeforeTrailingRequiredTrash(t *testing.T)
 
 	result := tracker.Result()
 	require.True(t, result.Qualified)
-	assert.Equal(t, clearEnd, result.CompletionTime)
+	assert.Equal(t, finalBossEnd, result.CompletionTime)
+	assert.Equal(t, 12*time.Minute, result.Duration)
 	assert.Equal(t, finalBossEnd, result.RankedCompletionTime)
 	assert.Equal(t, 12*time.Minute, result.RankedDuration)
 }

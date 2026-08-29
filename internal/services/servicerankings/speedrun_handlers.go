@@ -11,10 +11,23 @@ import (
 	"github.com/Emyrk/chronicle/internal/slice"
 )
 
+func speedrunUsesRankedTiming(value string) (bool, bool) {
+	switch value {
+	case "", "full":
+		return false, true
+	case "ranked":
+		return true, true
+	default:
+		return false, false
+	}
+}
+
 // handleSpeedrunLeaderboard returns the best qualified speedrun per duplicate
 // group for a given instance name.
 //
-//	GET /speedrun?instance_name=Molten+Core&realm_name=Turtle+WoW
+//	GET /speedrun?instance_name=Molten+Core&realm_name=Turtle+WoW&timing=ranked
+//
+// timing defaults to full; ranked re-ranks by the boss-to-boss duration.
 func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -48,6 +61,14 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 	filterDifficulty := r.URL.Query().Has("difficulty_name")
 	difficultyName := r.URL.Query().Get("difficulty_name")
 
+	useRankedTiming, validTiming := speedrunUsesRankedTiming(r.URL.Query().Get("timing"))
+	if !validTiming {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "timing query parameter must be ranked or full",
+		})
+		return
+	}
+
 	rows, err := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
 		InstanceName:     instanceName,
 		RealmNames:       realmNames,
@@ -57,6 +78,7 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 		SinceDays:        sinceDays,
 		FilterDifficulty: filterDifficulty,
 		DifficultyName:   difficultyName,
+		UseRankedTiming:  useRankedTiming,
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{

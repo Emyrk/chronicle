@@ -74,9 +74,9 @@ function useSiteStats() {
 // filter (raids with a single board keep the unfiltered behavior).
 function useSpeedrunTop(instanceName: string, difficulty?: string) {
   return useQuery({
-    queryKey: ["home", "speedrun", instanceName, difficulty],
+    queryKey: ["home", "speedrun", "full", instanceName, difficulty],
     queryFn: () => {
-      const params = new URLSearchParams({ instance_name: instanceName });
+      const params = new URLSearchParams({ instance_name: instanceName, timing: "full" });
       if (difficulty !== undefined) params.set("difficulty_name", difficulty);
       return fetchJSON<SpeedrunLeaderboardEntry[]>(`/api/v1/rankings/speedrun?${params}`);
     },
@@ -301,7 +301,7 @@ function MobileSpotlight({
 
   const footerLink =
     tab === "speed"
-      ? `/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}${diffQS}`
+      ? `/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}&timing=full${diffQS}`
       : tab === "dps"
         ? `/leaderboards?instance=${encodeURIComponent(spot.name)}&tab=leaderboard${diffQS}`
         : null;
@@ -787,8 +787,11 @@ function RaidSpotlight() {
           style={{ backgroundImage: `url('${getInstanceBackground(spot.name)}')` }}
         >
           <div className="absolute inset-0 bg-background/80" />
+          <span className="absolute top-3 left-4 z-10 text-xs font-medium text-muted-foreground">
+            Full raid
+          </span>
           <Link
-            to={`/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}${diffQS}`}
+            to={`/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}&timing=full${diffQS}`}
             className="absolute top-3 right-4 z-10 text-xs text-primary hover:underline"
           >
             Full board →

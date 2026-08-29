@@ -13033,9 +13033,9 @@ WITH deduped AS (
         sr.instance_name,
         li.difficulty_name,
         sr.guild_id,
-        COALESCE(sr.ranked_duration_ms, 0)::bigint AS duration_ms,
-        COALESCE(sr.ranked_start_time, sr.start_time)::timestamptz AS start_time,
-        COALESCE(sr.ranked_completion_time, sr.completion_time)::timestamptz AS completion_time,
+        CASE WHEN $3::boolean THEN COALESCE(sr.ranked_duration_ms, 0) ELSE sr.duration_ms END::bigint AS duration_ms,
+        CASE WHEN $3::boolean THEN COALESCE(sr.ranked_start_time, sr.start_time) ELSE sr.start_time END::timestamptz AS start_time,
+        CASE WHEN $3::boolean THEN COALESCE(sr.ranked_completion_time, sr.completion_time) ELSE sr.completion_time END::timestamptz AS completion_time,
         sr.qualified,
         sr.addon_version,
         li.hashed_slug,
@@ -13051,38 +13051,40 @@ WITH deduped AS (
     LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
     JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
-    WHERE sr.instance_name = $3
+    WHERE sr.instance_name = $4
       AND sr.qualified = true
-      AND sr.ranked_duration_ms IS NOT NULL
+      AND (NOT $3::boolean OR sr.ranked_duration_ms IS NOT NULL)
       AND sr.guild_id IS NOT NULL
       AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
       AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
       AND CASE
-          WHEN cardinality($4 :: text[]) > 0 THEN
-              COALESCE(wsr.name, '') = ANY($4 :: text[])
+          WHEN cardinality($5 :: text[]) > 0 THEN
+              COALESCE(wsr.name, '') = ANY($5 :: text[])
           ELSE true
       END
       AND CASE
-          WHEN $5 :: text != '' THEN sr.guild_id = $5 :: uuid
+          WHEN $6 :: text != '' THEN sr.guild_id = $6 :: uuid
           ELSE true
       END
       AND CASE
-          WHEN $6 :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $6::int)
+          WHEN $7 :: bigint > 0 THEN
+              CASE WHEN $3::boolean THEN sr.ranked_completion_time ELSE sr.completion_time END >= now() - make_interval(days => $7::int)
           ELSE true
       END
       AND CASE
-          WHEN $7 :: boolean THEN li.difficulty_name = $8 :: text
+          WHEN $8 :: boolean THEN li.difficulty_name = $9 :: text
           ELSE true
       END
-    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        CASE WHEN $3::boolean THEN sr.ranked_duration_ms ELSE sr.duration_ms END ASC
 ),
 best AS (
     SELECT DISTINCT ON (
-        CASE WHEN $5 :: text = '' THEN guild_id END
+        CASE WHEN $6 :: text = '' THEN guild_id END
     ) instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url
     FROM deduped
     ORDER BY
-        CASE WHEN $5 :: text = '' THEN guild_id END,
+        CASE WHEN $6 :: text = '' THEN guild_id END,
         duration_ms ASC
 )
 SELECT instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url FROM best
@@ -13095,6 +13097,7 @@ LIMIT 50
 type SpeedrunLeaderboardParams struct {
 	MinPlayers       int64    `db:"min_players" json:"min_players"`
 	MaxPlayers       int64    `db:"max_players" json:"max_players"`
+	UseRankedTiming  bool     `db:"use_ranked_timing" json:"use_ranked_timing"`
 	InstanceName     string   `db:"instance_name" json:"instance_name"`
 	RealmNames       []string `db:"realm_names" json:"realm_names"`
 	GuildID          string   `db:"guild_id" json:"guild_id"`
@@ -13127,12 +13130,14 @@ type SpeedrunLeaderboardRow struct {
 // Excludes runs without a guild. Optional filters: realm, player count, guild.
 // Each difficulty has its own board: set filter_difficulty to select the board
 // matching difficulty_name (empty string matches runs with no recorded difficulty).
+// use_ranked_timing selects boss-to-boss ranked timing; false selects full clear timing.
 // When no guild filter: keep only the best run per guild.
 // When guild filter is set: keep all runs for that guild.
 func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error) {
 	rows, err := q.db.Query(ctx, speedrunLeaderboard,
 		arg.MinPlayers,
 		arg.MaxPlayers,
+		arg.UseRankedTiming,
 		arg.InstanceName,
 		arg.RealmNames,
 		arg.GuildID,
