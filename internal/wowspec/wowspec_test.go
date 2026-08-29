@@ -1,6 +1,8 @@
 package wowspec_test
 
 import (
+	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/Emyrk/chronicle/internal/wowspec"
@@ -77,23 +79,41 @@ func TestInferSpec(t *testing.T) {
 	}
 }
 
+type sharedRoleFixture struct {
+	Cases []sharedRoleCase `json:"cases"`
+}
+
+type sharedRoleCase struct {
+	Name     string                         `json:"name"`
+	Players  map[string]sharedPlayerMetrics `json:"players"`
+	Expected map[string]string              `json:"expected"`
+}
+
+type sharedPlayerMetrics struct {
+	DamageDone          int64          `json:"damage_done"`
+	HealingDone         int64          `json:"healing_done"`
+	IncomingAutoAttacks map[string]int `json:"incoming_auto_attacks"`
+}
+
 func TestInferRoles(t *testing.T) {
 	t.Parallel()
 
 	t.Run("typical_raid", func(t *testing.T) {
 		t.Parallel()
+		// Boss melees tank1 heavily. Other players get occasional cleave.
+		bossAA := map[string]int{"boss": 40}
 		players := map[string]wowspec.PlayerMetrics{
-			// Tank: high damage taken
-			"tank1": {DamageDone: 50000, DamageTaken: 200000, HealingDone: 0},
+			// Tank: receives most auto attacks from "boss"
+			"tank1": {DamageDone: 50000, HealingDone: 0, IncomingAutoAttacks: bossAA},
 			// Healers: high healing, low DPS
-			"healer1": {DamageDone: 5000, DamageTaken: 10000, HealingDone: 150000},
-			"healer2": {DamageDone: 3000, DamageTaken: 8000, HealingDone: 120000},
-			// DPS: high damage, low healing, low damage taken
-			"dps1": {DamageDone: 180000, DamageTaken: 15000, HealingDone: 0},
-			"dps2": {DamageDone: 160000, DamageTaken: 12000, HealingDone: 0},
-			"dps3": {DamageDone: 150000, DamageTaken: 14000, HealingDone: 0},
-			"dps4": {DamageDone: 140000, DamageTaken: 11000, HealingDone: 500},
-			"dps5": {DamageDone: 130000, DamageTaken: 13000, HealingDone: 0},
+			"healer1": {DamageDone: 5000, HealingDone: 150000, IncomingAutoAttacks: map[string]int{"boss": 2}},
+			"healer2": {DamageDone: 3000, HealingDone: 120000, IncomingAutoAttacks: map[string]int{"boss": 1}},
+			// DPS: high damage, low healing
+			"dps1": {DamageDone: 180000, HealingDone: 0, IncomingAutoAttacks: map[string]int{"boss": 3}},
+			"dps2": {DamageDone: 160000, HealingDone: 0, IncomingAutoAttacks: map[string]int{"boss": 1}},
+			"dps3": {DamageDone: 150000, HealingDone: 0},
+			"dps4": {DamageDone: 140000, HealingDone: 500},
+			"dps5": {DamageDone: 130000, HealingDone: 0},
 		}
 		roles := wowspec.InferRoles(players)
 		require.Equal(t, "tank", roles["tank1"])
@@ -124,7 +144,7 @@ func TestInferRoles(t *testing.T) {
 	t.Run("single_player", func(t *testing.T) {
 		t.Parallel()
 		players := map[string]wowspec.PlayerMetrics{
-			"solo": {DamageDone: 100000, DamageTaken: 50000, HealingDone: 0},
+			"solo": {DamageDone: 100000, HealingDone: 0},
 		}
 		roles := wowspec.InferRoles(players)
 		require.Equal(t, "dps", roles["solo"])
@@ -139,9 +159,9 @@ func TestInferRoles(t *testing.T) {
 	t.Run("all_same_stats", func(t *testing.T) {
 		t.Parallel()
 		players := map[string]wowspec.PlayerMetrics{
-			"p1": {DamageDone: 100, DamageTaken: 100, HealingDone: 100},
-			"p2": {DamageDone: 100, DamageTaken: 100, HealingDone: 100},
-			"p3": {DamageDone: 100, DamageTaken: 100, HealingDone: 100},
+			"p1": {DamageDone: 100, HealingDone: 100},
+			"p2": {DamageDone: 100, HealingDone: 100},
+			"p3": {DamageDone: 100, HealingDone: 100},
 		}
 		roles := wowspec.InferRoles(players)
 		// All identical — stddev = 0, no outliers — all DPS
@@ -149,6 +169,94 @@ func TestInferRoles(t *testing.T) {
 			require.Equal(t, "dps", r)
 		}
 	})
+
+	t.Run("aoe_damage_no_tank", func(t *testing.T) {
+		t.Parallel()
+		// All players receive equal auto-attacks from the boss (AoE/cleave).
+		// With EvidenceAttempts=5, score = 3/(3+5) = 0.375 < 0.5 → no tank.
+		players := map[string]wowspec.PlayerMetrics{
+			"p1": {DamageDone: 100000, IncomingAutoAttacks: map[string]int{"boss": 3}},
+			"p2": {DamageDone: 90000, IncomingAutoAttacks: map[string]int{"boss": 3}},
+			"p3": {DamageDone: 80000, IncomingAutoAttacks: map[string]int{"boss": 3}},
+		}
+		roles := wowspec.InferRoles(players)
+		for k, r := range roles {
+			require.Equal(t, "dps", r, "player %s should be dps with even AoE", k)
+		}
+	})
+
+	t.Run("zero_damage_auto_attacks_detect_tank", func(t *testing.T) {
+		t.Parallel()
+		// Tank received 20 auto attacks (all dodged/parried — zero damage).
+		// DPS received 1 each.
+		// Tank score = 20/(20+5) = 0.8 → tank.
+		players := map[string]wowspec.PlayerMetrics{
+			"tank": {DamageDone: 30000, IncomingAutoAttacks: map[string]int{"boss": 20}},
+			"dps1": {DamageDone: 100000, IncomingAutoAttacks: map[string]int{"boss": 1}},
+			"dps2": {DamageDone: 90000},
+		}
+		roles := wowspec.InferRoles(players)
+		require.Equal(t, "tank", roles["tank"])
+		require.Equal(t, "dps", roles["dps1"])
+		require.Equal(t, "dps", roles["dps2"])
+	})
+}
+
+func TestInferRoles_MultiEncounterTankPersistence(t *testing.T) {
+	t.Parallel()
+
+	players := map[string]wowspec.PlayerMetrics{
+		"main-tank": {
+			DamageDone: 100,
+			IncomingAutoAttacksByEncounter: map[string]map[string]int{
+				"encounter-1": {"boss-1": 20},
+				"encounter-2": {"boss-2": 20},
+				"encounter-3": {"boss-3": 20},
+			},
+		},
+		"off-tank": {
+			DamageDone: 100,
+			IncomingAutoAttacksByEncounter: map[string]map[string]int{
+				"encounter-1": {"boss-1": 15},
+				"encounter-2": {"boss-2": 15},
+			},
+		},
+		"one-off": {
+			DamageDone: 100,
+			IncomingAutoAttacksByEncounter: map[string]map[string]int{
+				"encounter-1": {"boss-1": 10},
+			},
+		},
+	}
+
+	roles := wowspec.InferRoles(players)
+	require.Equal(t, wowspec.RoleTank, roles["main-tank"])
+	require.Equal(t, wowspec.RoleTank, roles["off-tank"])
+	require.Equal(t, wowspec.RoleDPS, roles["one-off"])
+}
+
+func TestInferRoles_SharedFixtures(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile("../../testdata/roleinfer/roles.json")
+	require.NoError(t, err)
+
+	var fixture sharedRoleFixture
+	require.NoError(t, json.Unmarshal(data, &fixture))
+
+	for _, tc := range fixture.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			players := make(map[string]wowspec.PlayerMetrics, len(tc.Players))
+			for player, metrics := range tc.Players {
+				players[player] = wowspec.PlayerMetrics{
+					DamageDone:          metrics.DamageDone,
+					HealingDone:         metrics.HealingDone,
+					IncomingAutoAttacks: metrics.IncomingAutoAttacks,
+				}
+			}
+			require.Equal(t, tc.Expected, wowspec.InferRoles(players))
+		})
+	}
 }
 
 func TestTreeNames(t *testing.T) {

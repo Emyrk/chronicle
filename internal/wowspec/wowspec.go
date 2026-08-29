@@ -4,6 +4,8 @@ package wowspec
 import (
 	"math"
 	"sort"
+
+	"github.com/Emyrk/chronicle/internal/roleinfer"
 )
 
 // specMap maps class name → [3]talent tree spec names (tree0, tree1, tree2).
@@ -73,82 +75,89 @@ const (
 // Role detection thresholds.
 // Must match frontend Roles/roles.processor.ts thresholds exactly.
 const (
-	TankZThreshold       = 1.7   // damage taken ≥ 1.7σ above mean
 	HealerZThreshold     = 0.3   // healing done ≥ 0.3σ above mean (~62nd percentile)
 	LowDPSPercentile     = 0.185 // damage done in the bottom 18.5%
 	HealerHighZThreshold = 1.5   // healing done ≥ 1.5σ bypasses damage check (~93rd percentile)
 )
 
-// PlayerMetrics holds the three metrics needed for role inference.
+// PlayerMetrics holds the metrics needed for role inference.
 type PlayerMetrics struct {
 	DamageDone  int64
-	DamageTaken int64
 	HealingDone int64 // should include absorbs (e.g. Power Word: Shield) for accurate healer detection
-	// Class and Spec are optional. When set, spec-based role overrides
-	// are applied (e.g., Shadow Priest is always DPS despite high healing).
-	Class string
-	Spec  string
+	// IncomingAutoAttacks maps hostile source → number of Auto Attack attempts
+	// directed at this player in a single encounter. It remains the convenient
+	// input for encounter-specific rankings and tests.
+	IncomingAutoAttacks map[string]int
+	// IncomingAutoAttacksByEncounter preserves encounter boundaries for
+	// multi-encounter role inference such as aggregated trash rankings.
+	IncomingAutoAttacksByEncounter map[string]map[string]int
 }
 
-// dpsOnlySpecs lists class+spec combinations that are always DPS regardless
-// of statistical detection. These specs produce high healing as a byproduct
-// of their damage (e.g., Vampiric Embrace) which confuses the healer detector.
-var dpsOnlySpecs = map[string]map[string]bool{
-	"PRIEST": {"Shadow": true},
-}
-
-// isDPSOnlySpec returns true if the class+spec combo should always be DPS.
-func isDPSOnlySpec(class, spec string) bool {
-	if specs, ok := dpsOnlySpecs[class]; ok {
-		return specs[spec]
-	}
-	return false
-}
-
-// InferRoles classifies each player's role using statistical outlier detection.
+// InferRoles classifies each player's role using source-aware tank inference
+// (via roleinfer) and statistical healer detection.
 // Returns a map of player ID → role string ("dps", "heal", "tank").
 //
-// Algorithm: compute z-scores for damage taken and healing, plus the observed
-// low-damage percentile across the raid, then:
-//   - Tank = damage taken z-score ≥ 1.7σ
-//   - Healer = healing (incl. absorbs) z-score ≥ 0.3σ AND (damage in bottom 18.5% OR very high healing ≥ 1.5σ)
-//   - DPS = everyone else
+// Tank detection uses roleinfer's source-aware strength and cross-encounter
+// persistence scores. Single-encounter rankings keep the same source scoring;
+// aggregated rankings preserve encounter boundaries before classification.
+//
+// Healer detection uses z-score outlier analysis on healing done.
 //
 // Priority: Tank > Healer > DPS.
 func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 	roles := make(map[K]string, len(players))
-	if len(players) < 2 {
-		for k := range players {
-			roles[k] = RoleDPS
-		}
+	if len(players) == 0 {
 		return roles
 	}
 
-	// Collect values for stats.
-	dtValues := make([]float64, 0, len(players))
+	// Build roleinfer input while preserving encounter boundaries. Callers with
+	// single-encounter data use the empty encounter key.
+	attacksByEncounter := make(map[string]roleinfer.IncomingAutoAttacks[string, K])
+	for player, metrics := range players {
+		byEncounter := metrics.IncomingAutoAttacksByEncounter
+		if len(byEncounter) == 0 && len(metrics.IncomingAutoAttacks) > 0 {
+			byEncounter = map[string]map[string]int{"": metrics.IncomingAutoAttacks}
+		}
+		for encounterID, sourceCounts := range byEncounter {
+			attacks := attacksByEncounter[encounterID]
+			if attacks == nil {
+				attacks = make(roleinfer.IncomingAutoAttacks[string, K])
+				attacksByEncounter[encounterID] = attacks
+			}
+			for source, count := range sourceCounts {
+				targets := attacks[source]
+				if targets == nil {
+					targets = make(map[K]int)
+					attacks[source] = targets
+				}
+				targets[player] = count
+			}
+		}
+	}
+	encounters := make([]roleinfer.IncomingAutoAttacks[string, K], 0, len(attacksByEncounter))
+	for _, attacks := range attacksByEncounter {
+		encounters = append(encounters, attacks)
+	}
+	tankResults := roleinfer.InferTanksAcrossEncounters(encounters)
+
+	// Collect values for healer stats.
 	hdValues := make([]float64, 0, len(players))
 	ddValues := make([]float64, 0, len(players))
 	for _, m := range players {
-		dtValues = append(dtValues, float64(m.DamageTaken))
 		hdValues = append(hdValues, float64(m.HealingDone))
 		ddValues = append(ddValues, float64(m.DamageDone))
 	}
 
-	dtMean, dtStd := meanStdDev(dtValues)
 	hdMean, hdStd := meanStdDev(hdValues)
 	lowDPSCutoff := percentile(ddValues, LowDPSPercentile)
 
 	for k, m := range players {
-		// Spec-based override: some specs are always DPS regardless of stats.
-		if isDPSOnlySpec(m.Class, m.Spec) {
-			roles[k] = RoleDPS
-			continue
+		isTank := false
+		if tr, ok := tankResults[k]; ok {
+			isTank = tr.IsTank
 		}
 
-		dtZ := zScore(float64(m.DamageTaken), dtMean, dtStd)
 		hdZ := zScore(float64(m.HealingDone), hdMean, hdStd)
-
-		isTank := dtZ >= TankZThreshold && m.DamageTaken > 0
 
 		// Healer detection:
 		// 1. Must have done meaningful healing (> 0)

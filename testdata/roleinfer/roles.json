@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "name": "typical raid",
+      "players": {
+        "tank": { "damage_done": 50000, "healing_done": 0, "incoming_auto_attacks": { "boss": 40 } },
+        "healer": { "damage_done": 5000, "healing_done": 150000, "incoming_auto_attacks": { "boss": 2 } },
+        "dps": { "damage_done": 180000, "healing_done": 0, "incoming_auto_attacks": { "boss": 3 } }
+      },
+      "expected": { "tank": "tank", "healer": "heal", "dps": "dps" }
+    },
+    {
+      "name": "damage healing byproduct",
+      "players": {
+        "damage-healer": { "damage_done": 200000, "healing_done": 150000 },
+        "healer": { "damage_done": 5000, "healing_done": 120000 },
+        "dps-a": { "damage_done": 180000, "healing_done": 0 },
+        "dps-b": { "damage_done": 160000, "healing_done": 0 },
+        "dps-c": { "damage_done": 140000, "healing_done": 0 }
+      },
+      "expected": { "damage-healer": "dps", "healer": "heal", "dps-a": "dps", "dps-b": "dps", "dps-c": "dps" }
+    },
+    {
+      "name": "behavior overrides metadata",
+      "players": {
+        "metadata-independent-tank": { "damage_done": 10000, "healing_done": 20000, "incoming_auto_attacks": { "boss": 20 } },
+        "dps": { "damage_done": 100000, "healing_done": 0, "incoming_auto_attacks": { "boss": 1 } }
+      },
+      "expected": { "metadata-independent-tank": "tank", "dps": "dps" }
+    }
+  ]
+}

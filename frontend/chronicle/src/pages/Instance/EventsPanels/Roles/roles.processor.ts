@@ -1,18 +1,22 @@
 /**
- * Roles inference utilities - infers player roles (Tank, Healer, DPS) using outlier detection
+ * Roles inference utilities - infers player roles (Tank, Healer, DPS).
  * 
- * This module provides role inference from damage taken, healing done, and damage done data.
+ * This module provides role inference from tank attempt-count evidence,
+ * healing done, and damage done data.
  * It does NOT have its own processor - instead, the RolesContent component
- * reuses data from the damage_taken, healing_done, and damage_done processors.
+ * reuses data from the tank_attempts, healing_done, and damage_done processors.
  * 
- * Tank detection: Players who take significantly more damage than others (outliers)
+ * Tank detection: Uses source-aware Auto Attack attempt counting via tankInference.
+ *   Players whose TankScore >= TankThreshold are classified as tanks.
  * Healer detection: Players who do meaningful healing AND have low DPS
  *   - The low DPS requirement handles raids with many healers (e.g., 10 healers in 40-man)
  *   - Healers spend GCDs healing, not DPSing, so they naturally have low damage output
  * DPS: Everyone else
  * 
- * Uses standard deviation outliers for tank/healing signals and a percentile for low damage.
+ * Uses standard deviation outliers for healing signals and a percentile for low damage.
  */
+
+import type { TankInferenceResult } from "./tankInference";
 
 /**
  * Inferred role for a player
@@ -87,7 +91,7 @@ function percentile(values: number[], fraction: number): number {
  * Debug info about thresholds used for role detection
  */
 export interface RoleDetectionDebug {
-  /** Z-score threshold for tank detection (e.g., 1.5 = 1.5 std devs above mean) */
+  /** Z-score threshold for tank detection — kept for backward compatibility but unused by new algorithm */
   tankZThreshold: number;
   /** Z-score threshold for healer detection (healing done) */
   healerZThreshold: number;
@@ -101,7 +105,7 @@ export interface RoleDetectionDebug {
   stdDevHealingDone: number;
   meanDamageDone: number;
   stdDevDamageDone: number;
-  /** Actual damage taken cutoff (mean + z * stddev) */
+  /** Actual damage taken cutoff — unused by new tank algorithm */
   tankCutoff: number;
   /** Actual healing done cutoff (mean + z * stddev) */
   healerCutoff: number;
@@ -134,15 +138,14 @@ const LOW_DPS_PERCENTILE = 0.185;
 const HEALER_HIGH_Z_THRESHOLD = 1.5; // 93rd percentile in healing
 
 /**
- * Infer roles from damage taken, healing done, and damage done data.
+ * Infer roles from tank evidence, healing done, and damage done data.
  * 
- * Uses z-scores for tank/healing outliers and a percentile for low damage.
- * - Tanks: high damage taken (outlier)
+ * - Tanks: classified by source-aware Auto Attack attempt counting (TankInferenceResult)
  * - Healers: meaningful healing AND low damage (not just anyone who healed)
  * - DPS: everyone else
  */
 export function inferRoles(
-  damageTaken: Map<string, number>,
+  tankResult: TankInferenceResult,
   healingDone: Map<string, number>,
   damageDone: Map<string, number>,
   players: Record<string, { name: string; class: string }>
@@ -151,7 +154,7 @@ export function inferRoles(
   
   // Get all player IDs from all maps
   const playerIds = new Set([
-    ...damageTaken.keys(),
+    ...tankResult.evidence.keys(),
     ...healingDone.keys(),
     ...damageDone.keys(),
   ]);
@@ -176,14 +179,8 @@ export function inferRoles(
   if (playerIds.size === 0) return { roles: result, debug: emptyDebug };
   
   // Get values - include zeros for all players to not skew statistics
-  // A player who exists but did 0 healing should count toward the average
-  const dtValues = [...playerIds].map(id => damageTaken.get(id) || 0);
   const hdValues = [...playerIds].map(id => healingDone.get(id) || 0);
   const ddValues = [...playerIds].map(id => damageDone.get(id) || 0);
-  
-  // Calculate statistics for damage taken
-  const meanDT = mean(dtValues);
-  const stdDT = stdDev(dtValues);
   
   // Calculate statistics for healing done
   const meanHD = mean(hdValues);
@@ -194,12 +191,9 @@ export function inferRoles(
   const stdDD = stdDev(ddValues);
   
   // Calculate actual cutoffs
-  const tankCutoff = meanDT + TANK_Z_THRESHOLD * stdDT;
   const healerCutoff = meanHD + HEALER_Z_THRESHOLD * stdHD;
   // Damage done is strongly right-skewed, so use the observed percentile directly.
-  // A z-score cutoff can fall below zero and make the low-DPS branch impossible.
   const lowDpsCutoff = percentile(ddValues, LOW_DPS_PERCENTILE);
-  // High healing cutoff: above this, DPS is ignored for healer detection
   const healerHighCutoff = meanHD + HEALER_HIGH_Z_THRESHOLD * stdHD;
   
   const debug: RoleDetectionDebug = {
@@ -207,45 +201,44 @@ export function inferRoles(
     healerZThreshold: HEALER_Z_THRESHOLD,
     lowDpsPercentile: LOW_DPS_PERCENTILE,
     healerHighZThreshold: HEALER_HIGH_Z_THRESHOLD,
-    meanDamageTaken: meanDT,
-    stdDevDamageTaken: stdDT,
+    meanDamageTaken: 0,
+    stdDevDamageTaken: 0,
     meanHealingDone: meanHD,
     stdDevHealingDone: stdHD,
     meanDamageDone: meanDD,
     stdDevDamageDone: stdDD,
-    tankCutoff,
+    tankCutoff: 0,
     healerCutoff,
     lowDpsCutoff,
     healerHighCutoff,
   };
   
   for (const playerID of playerIds) {
-    const dt = damageTaken.get(playerID) || 0;
     const hd = healingDone.get(playerID) || 0;
     const dd = damageDone.get(playerID) || 0;
     const playerInfo = players[playerID];
     const playerClass = playerInfo?.class || "UNKNOWN";
     
     // Calculate z-scores
-    const dtZScore = zScore(dt, meanDT, stdDT);
     const hdZScore = zScore(hd, meanHD, stdHD);
     
     // Determine role
     let role: InferredRole = "dps";
     
-    // Tank detection: high z-score for damage taken
-    const isTankOutlier = dtZScore >= TANK_Z_THRESHOLD && dt > 0;
+    // Tank detection: from source-aware Auto Attack attempt inference.
+    const tankEvidence = tankResult.evidence.get(playerID);
+    const isTank = tankEvidence?.isTank ?? false;
     
     // Healer detection: meaningful healing AND (low DPS OR very high healing)
-    // This handles raids with many healers - they'll all have low DPS
-    // High healing bypasses DPS check for healers who also do some DPS
     const hasHealingAboveThreshold = hdZScore >= HEALER_Z_THRESHOLD && hd > 0;
     const hasLowDps = dd <= lowDpsCutoff;
     const hasVeryHighHealing = hdZScore >= HEALER_HIGH_Z_THRESHOLD;
-    const isHealer = hasHealingAboveThreshold && (hasLowDps || hasVeryHighHealing);
+    // Healing must exceed damage done to avoid classifying damage dealers whose
+    // healing is a byproduct of their damage. This matches the Go implementation.
+    const isHealer = hd > dd && hasHealingAboveThreshold && (hasLowDps || hasVeryHighHealing);
     
-    // Prioritize tank detection over healer (someone taking tons of damage is probably tanking)
-    if (isTankOutlier) {
+    // Prioritize tank detection over healer
+    if (isTank) {
       role = "tank";
     } else if (isHealer) {
       role = "healer";

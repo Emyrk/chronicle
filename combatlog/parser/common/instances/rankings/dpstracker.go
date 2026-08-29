@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 var _ instancehook.Hook = (*DPSTracker)(nil)
@@ -29,6 +30,12 @@ type UnitCombatStats struct {
 	// Talents snapshot at fight end. Nil if the player had no talent data
 	// (e.g., talents were invalidated by a respec, or addon didn't report).
 	Talents *combatant.Talents
+
+	// IncomingAutoAttacks maps hostile source GUID → number of Auto Attack
+	// attempts this player received (including zero-damage misses, dodges,
+	// parries, etc.). Only populated for players. Used by roleinfer for
+	// source-aware tank inference.
+	IncomingAutoAttacks map[guid.GUID]int
 }
 
 // DPSResult holds per-unit combat stats for a single encounter.
@@ -50,6 +57,11 @@ type DPSTracker struct {
 	healingDone map[guid.GUID]int64
 	absorbDone  map[guid.GUID]int64
 
+	// incomingAutoAttacks tracks hostile-source → player-target → attempt count
+	// for auto-attack (SWING) events directed at players, including zero-damage
+	// misses, dodges, parries, etc. Reset per encounter.
+	incomingAutoAttacks map[guid.GUID]map[guid.GUID]int
+
 	// Results across all encounters.
 	results map[uuid.UUID]*DPSResult
 }
@@ -58,12 +70,13 @@ type DPSTracker struct {
 // classifying GUIDs at fight end.
 func NewDPSTracker(units *unitdb.Units) *DPSTracker {
 	return &DPSTracker{
-		units:       units,
-		damageDone:  make(map[guid.GUID]int64),
-		damageTaken: make(map[guid.GUID]int64),
-		healingDone: make(map[guid.GUID]int64),
-		absorbDone:  make(map[guid.GUID]int64),
-		results:     make(map[uuid.UUID]*DPSResult),
+		units:               units,
+		damageDone:          make(map[guid.GUID]int64),
+		damageTaken:         make(map[guid.GUID]int64),
+		healingDone:         make(map[guid.GUID]int64),
+		absorbDone:          make(map[guid.GUID]int64),
+		incomingAutoAttacks: make(map[guid.GUID]map[guid.GUID]int),
+		results:             make(map[uuid.UUID]*DPSResult),
 	}
 }
 
@@ -72,6 +85,7 @@ func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
 	t.damageTaken = make(map[guid.GUID]int64)
 	t.healingDone = make(map[guid.GUID]int64)
 	t.absorbDone = make(map[guid.GUID]int64)
+	t.incomingAutoAttacks = make(map[guid.GUID]map[guid.GUID]int)
 }
 
 func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
@@ -81,6 +95,24 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 
 	switch msg := m.(type) {
 	case *messages.Damage:
+		// Track incoming auto-attack attempts from hostile sources to players
+		// BEFORE the effectiveDamage early return so zero-damage misses,
+		// dodges, parries, etc. are counted for tank inference.
+		if msg.Caster != nil && isAutoAttack(msg) {
+			targetCls := t.units.Classify(msg.Target)
+			if targetCls.Type == unitdb.UnitTypePlayer {
+				casterCls := t.units.Classify(*msg.Caster)
+				if casterCls.Affiliation == unitdb.AffiliationHostile && casterCls.Type != unitdb.UnitTypePlayer {
+					targets := t.incomingAutoAttacks[*msg.Caster]
+					if targets == nil {
+						targets = make(map[guid.GUID]int)
+						t.incomingAutoAttacks[*msg.Caster] = targets
+					}
+					targets[msg.Target]++
+				}
+			}
+		}
+
 		effectiveDamage := combatmetrics.EffectiveDamage(msg)
 		if effectiveDamage <= 0 {
 			return nil
@@ -171,6 +203,25 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 	for g := range t.absorbDone {
 		allGUIDs[g] = struct{}{}
 	}
+	// Also include players that only appear as auto-attack targets.
+	for _, targets := range t.incomingAutoAttacks {
+		for g := range targets {
+			allGUIDs[g] = struct{}{}
+		}
+	}
+
+	// Build per-player incoming auto-attack maps (source → count).
+	playerAutoAttacks := make(map[guid.GUID]map[guid.GUID]int)
+	for source, targets := range t.incomingAutoAttacks {
+		for player, count := range targets {
+			m := playerAutoAttacks[player]
+			if m == nil {
+				m = make(map[guid.GUID]int)
+				playerAutoAttacks[player] = m
+			}
+			m[source] = count
+		}
+	}
 
 	result := &DPSResult{
 		Units: make(map[guid.GUID]*UnitCombatStats, len(allGUIDs)),
@@ -189,12 +240,13 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 			}
 		}
 		stats := &UnitCombatStats{
-			DamageDone:      t.damageDone[g],
-			DamageTaken:     t.damageTaken[g],
-			HealingDone:     t.healingDone[g],
-			HealingAbsorbed: t.absorbDone[g],
-			IsPlayer:        isPlayer,
-			Talents:         talents,
+			DamageDone:          t.damageDone[g],
+			DamageTaken:         t.damageTaken[g],
+			HealingDone:         t.healingDone[g],
+			HealingAbsorbed:     t.absorbDone[g],
+			IsPlayer:            isPlayer,
+			Talents:             talents,
+			IncomingAutoAttacks: playerAutoAttacks[g],
 		}
 		if cls.Relation.HasOwner() {
 			owner := *cls.Relation.Owner
@@ -213,4 +265,16 @@ func (t *DPSTracker) Finalize(_ context.Context) error {
 // Result returns the accumulated DPS results keyed by encounter ID.
 func (t *DPSTracker) Result() map[uuid.UUID]*DPSResult {
 	return t.results
+}
+
+// isAutoAttack returns true if the damage message represents a melee
+// auto-attack (SWING). Covers both normal and off-hand swings.
+func isAutoAttack(msg *messages.Damage) bool {
+	if msg.SpellData != nil {
+		return msg.SpellData.ID == chrondbc.SpellIDAutoAttack
+	}
+	// Fallback: if SpellData is nil and SourceName resolves to "Auto Attack",
+	// treat it as an auto-attack. This catches edge cases where SpellData
+	// was not populated.
+	return msg.SpellName == nil && msg.EnvironmentType == nil
 }

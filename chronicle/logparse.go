@@ -1175,19 +1175,10 @@ func insertDPSRankings(
 			if !stats.IsPlayer {
 				continue
 			}
-			var class, spec string
-			if player, ok := finalized.Guilds.Players[unitGUID]; ok {
-				class = string(db2sdk.HeroClassToDB(player.HeroClass))
-			}
-			if stats.Talents != nil && class != "" {
-				spec = wowspec.InferSpec(class, stats.Talents.Summary)
-			}
 			playerMetrics[unitGUID] = wowspec.PlayerMetrics{
-				DamageDone:  stats.DamageDone + ownerDamage[unitGUID],
-				DamageTaken: stats.DamageTaken,
-				HealingDone: stats.HealingDone + ownerHealing[unitGUID] + stats.HealingAbsorbed + ownerAbsorb[unitGUID],
-				Class:       class,
-				Spec:        spec,
+				DamageDone:          stats.DamageDone + ownerDamage[unitGUID],
+				HealingDone:         stats.HealingDone + ownerHealing[unitGUID] + stats.HealingAbsorbed + ownerAbsorb[unitGUID],
+				IncomingAutoAttacks: guidMapToString(stats.IncomingAutoAttacks),
 			}
 		}
 		roles := wowspec.InferRoles(playerMetrics)
@@ -1291,15 +1282,15 @@ type trashPlayerKey struct {
 
 // trashPlayerAccum accumulates trash stats for one (player, spec) pair.
 type trashPlayerAccum struct {
-	DamageDone    int64
-	DamageTaken   int64
-	HealingDone   int64
-	AbsorbedDone  int64
-	DurationSecs  float64
-	Talents       *combatant.Talents
-	TalentLayout  string
-	TalentSummary []int16
-	LastKilledAt  time.Time
+	DamageDone                     int64
+	HealingDone                    int64
+	AbsorbedDone                   int64
+	DurationSecs                   float64
+	Talents                        *combatant.Talents
+	TalentLayout                   string
+	TalentSummary                  []int16
+	LastKilledAt                   time.Time
+	IncomingAutoAttacksByEncounter map[string]map[guid.GUID]int // encounter → source → count
 }
 
 func insertTrashRankings(
@@ -1373,9 +1364,17 @@ func insertTrashRankings(
 				accum[key] = a
 			}
 			a.DamageDone += stats.DamageDone + ownerDamage[unitGUID]
-			a.DamageTaken += stats.DamageTaken
 			a.HealingDone += stats.HealingDone + ownerHealing[unitGUID]
 			a.AbsorbedDone += stats.HealingAbsorbed + ownerAbsorb[unitGUID]
+			// Preserve encounter boundaries so isolated trash pulls do not define
+			// the player's role across the full trash ranking.
+			if len(stats.IncomingAutoAttacks) > 0 {
+				if a.IncomingAutoAttacksByEncounter == nil {
+					a.IncomingAutoAttacksByEncounter = make(map[string]map[guid.GUID]int)
+				}
+				encounterID := enc.Combat.EncounterID.String()
+				a.IncomingAutoAttacksByEncounter[encounterID] = stats.IncomingAutoAttacks
+			}
 			a.DurationSecs += durationSecs
 			if enc.Combat.End.After(a.LastKilledAt) {
 				a.LastKilledAt = enc.Combat.End
@@ -1390,16 +1389,10 @@ func insertTrashRankings(
 	// Compute roles from the aggregated metrics.
 	playerMetrics := make(map[trashPlayerKey]wowspec.PlayerMetrics, len(accum))
 	for key, a := range accum {
-		var class string
-		if player, ok := finalized.Guilds.Players[key.GUID]; ok {
-			class = string(db2sdk.HeroClassToDB(player.HeroClass))
-		}
 		playerMetrics[key] = wowspec.PlayerMetrics{
-			DamageDone:  a.DamageDone,
-			DamageTaken: a.DamageTaken,
-			HealingDone: a.HealingDone,
-			Class:       class,
-			Spec:        key.Spec,
+			DamageDone:                     a.DamageDone,
+			HealingDone:                    a.HealingDone,
+			IncomingAutoAttacksByEncounter: guidMapsToString(a.IncomingAutoAttacksByEncounter),
 		}
 	}
 	roles := wowspec.InferRoles(playerMetrics)
@@ -1499,6 +1492,32 @@ func extractTalentInfoFromSnapshot(className string, talents *combatant.Talents)
 		}
 	}
 	return spec, layout, summary
+}
+
+// guidMapToString converts source GUID keys to the language-neutral string
+// representation used by role inference and its cross-language fixtures.
+func guidMapToString(m map[guid.GUID]int) map[string]int {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(m))
+	for k, v := range m {
+		out[k.String()] = v
+	}
+	return out
+}
+
+// guidMapsToString converts encounter/source GUID maps to the language-neutral
+// representation used by role inference and its cross-language fixtures.
+func guidMapsToString(m map[string]map[guid.GUID]int) map[string]map[string]int {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]map[string]int, len(m))
+	for encounterID, sources := range m {
+		out[encounterID] = guidMapToString(sources)
+	}
+	return out
 }
 
 // findPlayerGuild returns the guild name for a player, or "" if not in a guild.
