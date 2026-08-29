@@ -1,6 +1,10 @@
 package serviceexternalapi
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/google/uuid"
+)
 
 func (s *Service) registerRoutes() {
 	s.register(http.MethodGet, "/health", OpenAPIOperation{
@@ -63,6 +67,38 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.listCharacterLogs)
 
+	s.register(http.MethodGet, "/leaderboards/speedruns", OpenAPIOperation{
+		Summary:     "Get the speedrun leaderboard",
+		Description: "Returns a paginated list of qualified speedruns after duplicate-group and best-per-guild deduplication. The canonical log is the entry used by the leaderboard; other_logs contains matching uploads excluded as duplicates. timing defaults to full and accepts boss_to_boss for first-boss-pull through final-boss-kill timing.",
+		Parameters: []OpenAPIParameter{
+			queryParameter("instance_name", "Instance name", true, "string", "Molten Core"),
+			queryParameter("timing", "Timing mode: full or boss_to_boss", false, "string", "boss_to_boss"),
+			queryParameter("difficulty_name", "Difficulty board. An empty value selects logs without recorded difficulty.", false, "string", "Normal"),
+			queryParameter("realm_name", "Realm name. Repeat this parameter to include multiple realms.", false, "string", "Example Realm"),
+			queryParameter("min_players", "Minimum player count", false, "integer", 20),
+			queryParameter("max_players", "Maximum player count", false, "integer", 40),
+			queryParameter("guild_id", "Guild UUID. When set, returns all deduplicated runs for that guild.", false, "string", "00000000-0000-0000-0000-000000000000"),
+			queryParameter("since_days", "Only include runs completed within this many days. Zero disables the filter.", false, "integer", 30),
+			queryParameter("page", "Page number, starting at 1", false, "integer", 1),
+			queryParameter("page_size", "Results per page, from 1 to 50", false, "integer", 50),
+		},
+		Responses: okResponse(SpeedrunLeaderboardResponse{
+			Timing:     "boss_to_boss",
+			Pagination: Pagination{Page: 1, PageSize: 50},
+			Entries: []SpeedrunLeaderboardEntry{{
+				InstanceName: "Molten Core", DifficultyName: "Normal",
+				GuildID:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+				GuildName: "Example Guild", RealmName: "Example Realm", PlayerCount: 40,
+				Canonical: SpeedrunLeaderboardLog{
+					DurationMs: int64Pointer(3_600_000), HasYoutubeVideo: true,
+					YoutubeURL: "https://www.youtube.com/watch?v=example",
+				},
+				IsDuplicate: true,
+				OtherLogs:   []SpeedrunLeaderboardLog{{DurationMs: int64Pointer(3_610_000)}},
+			}},
+		}),
+	}, s.listSpeedrunLeaderboard)
+
 	s.register(http.MethodGet, "/openapi.json", OpenAPIOperation{
 		Summary:     "Get the OpenAPI document",
 		Description: "Returns the OpenAPI 3.1 contract used by Chronicle's developer explorer.",
@@ -98,5 +134,9 @@ func queryParameter(name, description string, required bool, kind string, exampl
 }
 
 func int32Pointer(value int32) *int32 {
+	return &value
+}
+
+func int64Pointer(value int64) *int64 {
 	return &value
 }

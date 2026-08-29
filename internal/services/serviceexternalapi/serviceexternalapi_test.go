@@ -48,6 +48,13 @@ func TestOpenAPISpec(t *testing.T) {
 	require.Len(t, characterLogs.Parameters, 5)
 	require.Equal(t, "page_size", characterLogs.Parameters[4].Name)
 
+	leaderboard, ok := document.Paths["/leaderboards/speedruns"]["get"]
+	require.True(t, ok)
+	require.Len(t, leaderboard.Parameters, 10)
+	require.Equal(t, "instance_name", leaderboard.Parameters[0].Name)
+	require.True(t, leaderboard.Parameters[0].Required)
+	require.Equal(t, "timing", leaderboard.Parameters[1].Name)
+
 	health, ok := document.Paths["/health"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Check API health", health.Summary)
