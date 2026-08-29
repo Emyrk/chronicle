@@ -5,6 +5,60 @@ import { specializationIconUrl } from "@/config/specializationIcon"
 
 const PALADIN_COLOR = "var(--color-class-paladin)"
 
+type CreditedClass = "PALADIN" | "ROGUE"
+
+const ATTRIBUTION_PLAYERS = [
+  {
+    className: "PALADIN" as const,
+    name: "Paladin",
+    icon: "/c/icons/class_paladin.png",
+    color: "var(--color-class-paladin)",
+  },
+  {
+    className: "ROGUE" as const,
+    name: "Rogue",
+    icon: "/c/icons/class_rogue.png",
+    color: "var(--color-class-rogue)",
+  },
+]
+
+function AttributionBars({ creditedClass }: { creditedClass: CreditedClass }) {
+  return (
+    <div className="mt-4 space-y-2" aria-label="Example healing attribution">
+      {ATTRIBUTION_PLAYERS.map((player) => {
+        const credited = player.className === creditedClass
+        return (
+          <div key={player.className} className="flex items-center gap-2">
+            <img
+              src={player.icon}
+              alt=""
+              aria-hidden="true"
+              className="h-7 w-7 rounded border border-white/10 object-cover"
+            />
+            <div className="relative h-8 min-w-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-black/20">
+              <div
+                className="absolute inset-y-0 left-0 transition-[width] duration-500"
+                style={{
+                  width: credited ? "100%" : "0%",
+                  backgroundColor: `color-mix(in srgb, ${player.color} 32%, transparent)`,
+                }}
+              />
+              <div className="relative flex h-full items-center justify-between gap-3 px-2.5 text-xs">
+                <span className="font-semibold" style={{ color: player.color }}>
+                  {player.name}
+                </span>
+                <span className="font-semibold tabular-nums text-foreground">
+                  {credited ? "61" : "—"}
+                </span>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function ClassDetailsPage() {
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
   const paladinSelected = selectedClass === "PALADIN"
@@ -112,6 +166,7 @@ export function ClassDetailsPage() {
                 <p className="text-sm text-muted-foreground">
                   The paladin who placed Judgement of Light receives the healing credit.
                 </p>
+                <AttributionBars creditedClass="PALADIN" />
               </div>
               <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-4">
                 <p className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-emerald-300/80">
@@ -120,6 +175,7 @@ export function ClassDetailsPage() {
                 <p className="text-sm text-muted-foreground">
                   The attacking player who triggered and received the heal gets the credit.
                 </p>
+                <AttributionBars creditedClass="ROGUE" />
               </div>
             </div>
 
