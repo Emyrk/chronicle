@@ -16,13 +16,17 @@ import (
 )
 
 type fakeExternalAPIStore struct {
-	servers    []database.ListExternalAPIServersRow
-	server     database.ResolveExternalAPIServerRow
-	realms     []database.ListExternalAPIRealmsRow
-	realm      database.ResolveExternalAPIRealmRow
-	character  database.GetExternalAPICharacterRow
-	logs       []database.ListExternalAPICharacterLogsRow
-	logsParams database.ListExternalAPICharacterLogsParams
+	servers               []database.ListExternalAPIServersRow
+	server                database.ResolveExternalAPIServerRow
+	realms                []database.ListExternalAPIRealmsRow
+	realm                 database.ResolveExternalAPIRealmRow
+	character             database.GetExternalAPICharacterRow
+	logs                  []database.ListExternalAPICharacterLogsRow
+	logsParams            database.ListExternalAPICharacterLogsParams
+	leaderboard           []database.SpeedrunLeaderboardRow
+	leaderboardParams     database.SpeedrunLeaderboardParams
+	leaderboardDuplicates []database.ListExternalAPILeaderboardDuplicateLogsRow
+	duplicateParams       database.ListExternalAPILeaderboardDuplicateLogsParams
 }
 
 func (f *fakeExternalAPIStore) ListExternalAPIServers(context.Context) ([]database.ListExternalAPIServersRow, error) {
@@ -43,6 +47,14 @@ func (f *fakeExternalAPIStore) GetExternalAPICharacter(context.Context, database
 func (f *fakeExternalAPIStore) ListExternalAPICharacterLogs(_ context.Context, params database.ListExternalAPICharacterLogsParams) ([]database.ListExternalAPICharacterLogsRow, error) {
 	f.logsParams = params
 	return f.logs, nil
+}
+func (f *fakeExternalAPIStore) SpeedrunLeaderboard(_ context.Context, params database.SpeedrunLeaderboardParams) ([]database.SpeedrunLeaderboardRow, error) {
+	f.leaderboardParams = params
+	return f.leaderboard, nil
+}
+func (f *fakeExternalAPIStore) ListExternalAPILeaderboardDuplicateLogs(_ context.Context, params database.ListExternalAPILeaderboardDuplicateLogsParams) ([]database.ListExternalAPILeaderboardDuplicateLogsRow, error) {
+	f.duplicateParams = params
+	return f.leaderboardDuplicates, nil
 }
 
 func TestListServers(t *testing.T) {
@@ -125,6 +137,98 @@ func TestListCharacterLogsPagination(t *testing.T) {
 	require.Equal(t, []CharacterEncounterPerformance{{
 		EncounterName: "Ragnaros", DPSParse: int32Pointer(95), HPSParse: int32Pointer(42),
 	}}, response.Logs[0].Performance)
+}
+
+func TestListSpeedrunLeaderboardIncludesCanonicalAndDuplicateLogs(t *testing.T) {
+	t.Parallel()
+
+	canonicalID := uuid.New()
+	duplicateID := uuid.New()
+	duplicateGroupID := uuid.New()
+	guildID := uuid.New()
+	now := time.Date(2026, time.August, 29, 12, 0, 0, 0, time.UTC)
+	store := &fakeExternalAPIStore{
+		leaderboard: []database.SpeedrunLeaderboardRow{{
+			InstanceID: canonicalID, InstanceName: "Molten Core", DifficultyName: "Normal",
+			GuildID: uuid.NullUUID{UUID: guildID, Valid: true}, DurationMs: 3_600_000,
+			StartTime:      pgtype.Timestamptz{Time: now, Valid: true},
+			CompletionTime: pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+			AddonVersion:   "1.2.3", HashedSlug: pgtype.Text{String: "canonical", Valid: true},
+			DuplicateGroupID: uuid.NullUUID{UUID: duplicateGroupID, Valid: true},
+			ParserVersion:    "v1.0.0", GuildName: "Example Guild", RealmName: "Example Realm",
+			PlayerCount: 40, HasYoutubeVideo: true, YoutubeUrl: "https://youtube.com/watch?v=canonical",
+		}},
+		leaderboardDuplicates: []database.ListExternalAPILeaderboardDuplicateLogsRow{{
+			SelectedInstanceID: canonicalID, ID: duplicateID,
+			HashedSlug: pgtype.Text{String: "duplicate", Valid: true}, DurationMs: 3_610_000,
+			StartTime:      pgtype.Timestamptz{Time: now, Valid: true},
+			CompletionTime: pgtype.Timestamptz{Time: now.Add(time.Hour + 10*time.Second), Valid: true},
+			ParserVersion:  "v1.0.0", AddonVersion: "1.2.3",
+			HasYoutubeVideo: true, YoutubeUrl: "https://youtube.com/watch?v=duplicate",
+		}},
+	}
+	service := &Service{db: store}
+	service.setupRoutes()
+
+	req := httptest.NewRequest(http.MethodGet, "/leaderboards/speedruns?instance_name=Molten+Core&timing=boss_to_boss&difficulty_name=Normal&realm_name=Example+Realm&min_players=20&max_players=40&since_days=30", nil)
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.True(t, store.leaderboardParams.UseRankedTiming)
+	require.Equal(t, "Molten Core", store.leaderboardParams.InstanceName)
+	require.Equal(t, []string{"Example Realm"}, store.leaderboardParams.RealmNames)
+	require.True(t, store.leaderboardParams.FilterDifficulty)
+	require.Equal(t, "Normal", store.leaderboardParams.DifficultyName)
+	require.Equal(t, int64(20), store.leaderboardParams.MinPlayers)
+	require.Equal(t, int64(40), store.leaderboardParams.MaxPlayers)
+	require.Equal(t, int64(30), store.leaderboardParams.SinceDays)
+	require.True(t, store.duplicateParams.UseRankedTiming)
+	require.Equal(t, []uuid.UUID{canonicalID}, store.duplicateParams.SelectedInstanceIds)
+
+	var response SpeedrunLeaderboardResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	require.Equal(t, "boss_to_boss", response.Timing)
+	require.Len(t, response.Entries, 1)
+	entry := response.Entries[0]
+	require.True(t, entry.IsDuplicate)
+	require.Equal(t, guildID, entry.GuildID)
+	require.Equal(t, duplicateGroupID, *entry.DuplicateGroupID)
+	require.Equal(t, canonicalID, entry.Canonical.ID)
+	require.Equal(t, int64(3_600_000), *entry.Canonical.DurationMs)
+	require.True(t, entry.Canonical.HasYoutubeVideo)
+	require.Equal(t, "https://youtube.com/watch?v=canonical", entry.Canonical.YoutubeURL)
+	require.Len(t, entry.OtherLogs, 1)
+	require.Equal(t, duplicateID, entry.OtherLogs[0].ID)
+	require.Equal(t, int64(3_610_000), *entry.OtherLogs[0].DurationMs)
+	require.True(t, entry.OtherLogs[0].HasYoutubeVideo)
+	require.Equal(t, "https://youtube.com/watch?v=duplicate", entry.OtherLogs[0].YoutubeURL)
+}
+
+func TestExternalSpeedrunTiming(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		value      string
+		wantName   string
+		wantRanked bool
+		wantValid  bool
+	}{
+		{value: "", wantName: "full", wantValid: true},
+		{value: "full", wantName: "full", wantValid: true},
+		{value: "boss_to_boss", wantName: "boss_to_boss", wantRanked: true, wantValid: true},
+		{value: "ranked"},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.value, func(t *testing.T) {
+			t.Parallel()
+			name, ranked, valid := externalSpeedrunTiming(test.value)
+			require.Equal(t, test.wantName, name)
+			require.Equal(t, test.wantRanked, ranked)
+			require.Equal(t, test.wantValid, valid)
+		})
+	}
 }
 
 func TestCharacterLogOmitsPerformanceWithoutParses(t *testing.T) {

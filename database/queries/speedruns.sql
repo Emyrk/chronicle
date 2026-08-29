@@ -146,12 +146,20 @@ WITH deduped AS (
         g.name AS guild_name,
         COALESCE(wsr.name, '') AS realm_name,
         (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = sr.instance_id) AS player_count,
-        COALESCE(gp.theme->>'logo_url', '')::text AS guild_logo_url
+        COALESCE(gp.theme->>'logo_url', '')::text AS guild_logo_url,
+        (youtube.video_url IS NOT NULL)::boolean AS has_youtube_video,
+        COALESCE(youtube.video_url, '')::text AS youtube_url
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN guilds g ON sr.guild_id = g.id
     LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
     JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
+    LEFT JOIN LATERAL (
+        SELECT yt.video_url
+        FROM log_instance_youtube_timestamped yt
+        WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+        LIMIT 1
+    ) youtube ON true
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.instance_name = @instance_name
       AND sr.qualified = true

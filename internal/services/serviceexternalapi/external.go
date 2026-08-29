@@ -98,6 +98,37 @@ type CharacterLogsResponse struct {
 	Pagination Pagination     `json:"pagination"`
 }
 
+type SpeedrunLeaderboardLog struct {
+	ID              uuid.UUID  `json:"id"`
+	Slug            string     `json:"slug,omitempty"`
+	DurationMs      *int64     `json:"duration_ms,omitempty"`
+	StartTime       *time.Time `json:"start_time,omitempty"`
+	CompletionTime  *time.Time `json:"completion_time,omitempty"`
+	ParserVersion   string     `json:"parser_version,omitempty"`
+	AddonVersion    string     `json:"addon_version,omitempty"`
+	HasYoutubeVideo bool       `json:"has_youtube_video"`
+	YoutubeURL      string     `json:"youtube_url,omitempty"`
+}
+
+type SpeedrunLeaderboardEntry struct {
+	InstanceName     string                   `json:"instance_name"`
+	DifficultyName   string                   `json:"difficulty_name"`
+	GuildID          uuid.UUID                `json:"guild_id"`
+	GuildName        string                   `json:"guild_name"`
+	GuildLogoURL     string                   `json:"guild_logo_url,omitempty"`
+	RealmName        string                   `json:"realm_name"`
+	PlayerCount      int64                    `json:"player_count"`
+	Canonical        SpeedrunLeaderboardLog   `json:"canonical"`
+	IsDuplicate      bool                     `json:"is_duplicate"`
+	DuplicateGroupID *uuid.UUID               `json:"duplicate_group_id,omitempty"`
+	OtherLogs        []SpeedrunLeaderboardLog `json:"other_logs,omitempty"`
+}
+
+type SpeedrunLeaderboardResponse struct {
+	Timing  string                     `json:"timing"`
+	Entries []SpeedrunLeaderboardEntry `json:"entries"`
+}
+
 func (s *Service) listServers(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.ListExternalAPIServers(r.Context())
 	if err != nil {
@@ -213,6 +244,150 @@ func (s *Service) listCharacterLogs(w http.ResponseWriter, r *http.Request) {
 		Character:  character,
 		Logs:       logs,
 		Pagination: Pagination{Page: page, PageSize: pageSize, HasMore: hasMore},
+	})
+}
+
+func (s *Service) listSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	instanceName := r.URL.Query().Get("instance_name")
+	if instanceName == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "instance_name query parameter is required",
+		})
+		return
+	}
+
+	timing, useRankedTiming, ok := externalSpeedrunTiming(r.URL.Query().Get("timing"))
+	if !ok {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "timing query parameter must be full or boss_to_boss",
+		})
+		return
+	}
+
+	minPlayers, ok := queryNonNegativeInt64(r, "min_players")
+	if !ok {
+		writeInvalidNonNegativeInteger(w, r, "min_players")
+		return
+	}
+	maxPlayers, ok := queryNonNegativeInt64(r, "max_players")
+	if !ok {
+		writeInvalidNonNegativeInteger(w, r, "max_players")
+		return
+	}
+	sinceDays, ok := queryNonNegativeInt64(r, "since_days")
+	if !ok {
+		writeInvalidNonNegativeInteger(w, r, "since_days")
+		return
+	}
+
+	filterDifficulty := r.URL.Query().Has("difficulty_name")
+	rows, err := s.db.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+		InstanceName:     instanceName,
+		RealmNames:       r.URL.Query()["realm_name"],
+		MinPlayers:       minPlayers,
+		MaxPlayers:       maxPlayers,
+		GuildID:          r.URL.Query().Get("guild_id"),
+		SinceDays:        sinceDays,
+		FilterDifficulty: filterDifficulty,
+		DifficultyName:   r.URL.Query().Get("difficulty_name"),
+		UseRankedTiming:  useRankedTiming,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	selectedIDs := make([]uuid.UUID, 0, len(rows))
+	entries := make([]SpeedrunLeaderboardEntry, 0, len(rows))
+	entryIndexes := make(map[uuid.UUID]int, len(rows))
+	for _, row := range rows {
+		duration := row.DurationMs
+		startTime := row.StartTime.Time
+		completionTime := row.CompletionTime.Time
+		entry := SpeedrunLeaderboardEntry{
+			InstanceName: row.InstanceName, DifficultyName: row.DifficultyName,
+			GuildID: row.GuildID.UUID, GuildName: row.GuildName, GuildLogoURL: row.GuildLogoUrl,
+			RealmName: row.RealmName, PlayerCount: row.PlayerCount,
+			Canonical: SpeedrunLeaderboardLog{
+				ID: row.InstanceID, Slug: row.HashedSlug.String, DurationMs: &duration,
+				StartTime: &startTime, CompletionTime: &completionTime,
+				ParserVersion: row.ParserVersion, AddonVersion: row.AddonVersion,
+				HasYoutubeVideo: row.HasYoutubeVideo, YoutubeURL: row.YoutubeUrl,
+			},
+		}
+		if row.DuplicateGroupID.Valid {
+			groupID := row.DuplicateGroupID.UUID
+			entry.DuplicateGroupID = &groupID
+		}
+		entryIndexes[row.InstanceID] = len(entries)
+		selectedIDs = append(selectedIDs, row.InstanceID)
+		entries = append(entries, entry)
+	}
+
+	if len(selectedIDs) > 0 {
+		duplicates, err := s.db.ListExternalAPILeaderboardDuplicateLogs(ctx, database.ListExternalAPILeaderboardDuplicateLogsParams{
+			UseRankedTiming: useRankedTiming, SelectedInstanceIds: selectedIDs,
+		})
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		for _, duplicate := range duplicates {
+			index, found := entryIndexes[duplicate.SelectedInstanceID]
+			if !found {
+				continue
+			}
+			log := SpeedrunLeaderboardLog{
+				ID: duplicate.ID, Slug: duplicate.HashedSlug.String,
+				ParserVersion: duplicate.ParserVersion, AddonVersion: duplicate.AddonVersion,
+				HasYoutubeVideo: duplicate.HasYoutubeVideo, YoutubeURL: duplicate.YoutubeUrl,
+			}
+			if duplicate.DurationMs > 0 {
+				duration := duplicate.DurationMs
+				log.DurationMs = &duration
+			}
+			if duplicate.StartTime.Valid {
+				startTime := duplicate.StartTime.Time
+				log.StartTime = &startTime
+			}
+			if duplicate.CompletionTime.Valid {
+				completionTime := duplicate.CompletionTime.Time
+				log.CompletionTime = &completionTime
+			}
+			entries[index].OtherLogs = append(entries[index].OtherLogs, log)
+			entries[index].IsDuplicate = true
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, SpeedrunLeaderboardResponse{
+		Timing: timing, Entries: entries,
+	})
+}
+
+func externalSpeedrunTiming(value string) (string, bool, bool) {
+	switch value {
+	case "", "full":
+		return "full", false, true
+	case "boss_to_boss":
+		return "boss_to_boss", true, true
+	default:
+		return "", false, false
+	}
+}
+
+func queryNonNegativeInt64(r *http.Request, name string) (int64, bool) {
+	value := r.URL.Query().Get(name)
+	if value == "" {
+		return 0, true
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	return parsed, err == nil && parsed >= 0
+}
+
+func writeInvalidNonNegativeInteger(w http.ResponseWriter, r *http.Request, name string) {
+	httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{
+		Message: name + " query parameter must be a non-negative integer",
 	})
 }
 

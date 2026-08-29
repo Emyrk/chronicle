@@ -2318,6 +2318,96 @@ func (q *sqlQuerier) ListExternalAPICharacterLogs(ctx context.Context, arg ListE
 	return items, nil
 }
 
+const listExternalAPILeaderboardDuplicateLogs = `-- name: ListExternalAPILeaderboardDuplicateLogs :many
+SELECT
+    selected.id AS selected_instance_id,
+    duplicate.id,
+    duplicate.hashed_slug,
+    COALESCE(CASE
+        WHEN $1::boolean THEN duplicate_speedrun.ranked_duration_ms
+        ELSE duplicate_speedrun.duration_ms
+    END, 0)::bigint AS duration_ms,
+    CASE
+        WHEN $1::boolean THEN duplicate_speedrun.ranked_start_time
+        ELSE duplicate_speedrun.start_time
+    END::timestamptz AS start_time,
+    CASE
+        WHEN $1::boolean THEN duplicate_speedrun.ranked_completion_time
+        ELSE duplicate_speedrun.completion_time
+    END::timestamptz AS completion_time,
+    duplicate.parser_version,
+    COALESCE(duplicate_speedrun.addon_version, '')::text AS addon_version,
+    (youtube.video_url IS NOT NULL)::boolean AS has_youtube_video,
+    COALESCE(youtube.video_url, '')::text AS youtube_url
+FROM log_instances selected
+JOIN log_instances duplicate
+  ON duplicate.duplicate_group_id = selected.duplicate_group_id
+ AND duplicate.id != selected.id
+LEFT JOIN instance_speedruns duplicate_speedrun ON duplicate_speedrun.instance_id = duplicate.id
+LEFT JOIN LATERAL (
+    SELECT yt.video_url
+    FROM log_instance_youtube_timestamped yt
+    WHERE yt.log_instance_id = duplicate.id OR yt.instance_slug = duplicate.hashed_slug
+    LIMIT 1
+) youtube ON true
+WHERE selected.id = ANY($2::uuid[])
+  AND selected.duplicate_group_id IS NOT NULL
+ORDER BY selected.id, duplicate.id
+`
+
+type ListExternalAPILeaderboardDuplicateLogsParams struct {
+	UseRankedTiming     bool        `db:"use_ranked_timing" json:"use_ranked_timing"`
+	SelectedInstanceIds []uuid.UUID `db:"selected_instance_ids" json:"selected_instance_ids"`
+}
+
+type ListExternalAPILeaderboardDuplicateLogsRow struct {
+	SelectedInstanceID uuid.UUID          `db:"selected_instance_id" json:"selected_instance_id"`
+	ID                 uuid.UUID          `db:"id" json:"id"`
+	HashedSlug         pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	DurationMs         int64              `db:"duration_ms" json:"duration_ms"`
+	StartTime          pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime     pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	ParserVersion      string             `db:"parser_version" json:"parser_version"`
+	AddonVersion       string             `db:"addon_version" json:"addon_version"`
+	HasYoutubeVideo    bool               `db:"has_youtube_video" json:"has_youtube_video"`
+	YoutubeUrl         string             `db:"youtube_url" json:"youtube_url"`
+}
+
+// Returns the logs excluded by duplicate-group deduplication for each selected
+// leaderboard instance. The selected instance is the canonical leaderboard log
+// for the requested timing mode; every other member of its duplicate group is
+// returned here, including unqualified runs.
+func (q *sqlQuerier) ListExternalAPILeaderboardDuplicateLogs(ctx context.Context, arg ListExternalAPILeaderboardDuplicateLogsParams) ([]ListExternalAPILeaderboardDuplicateLogsRow, error) {
+	rows, err := q.db.Query(ctx, listExternalAPILeaderboardDuplicateLogs, arg.UseRankedTiming, arg.SelectedInstanceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExternalAPILeaderboardDuplicateLogsRow
+	for rows.Next() {
+		var i ListExternalAPILeaderboardDuplicateLogsRow
+		if err := rows.Scan(
+			&i.SelectedInstanceID,
+			&i.ID,
+			&i.HashedSlug,
+			&i.DurationMs,
+			&i.StartTime,
+			&i.CompletionTime,
+			&i.ParserVersion,
+			&i.AddonVersion,
+			&i.HasYoutubeVideo,
+			&i.YoutubeUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listExternalAPIRealms = `-- name: ListExternalAPIRealms :many
 SELECT
     wsr.id,
@@ -13044,12 +13134,20 @@ WITH deduped AS (
         g.name AS guild_name,
         COALESCE(wsr.name, '') AS realm_name,
         (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = sr.instance_id) AS player_count,
-        COALESCE(gp.theme->>'logo_url', '')::text AS guild_logo_url
+        COALESCE(gp.theme->>'logo_url', '')::text AS guild_logo_url,
+        (youtube.video_url IS NOT NULL)::boolean AS has_youtube_video,
+        COALESCE(youtube.video_url, '')::text AS youtube_url
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN guilds g ON sr.guild_id = g.id
     LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
     JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
+    LEFT JOIN LATERAL (
+        SELECT yt.video_url
+        FROM log_instance_youtube_timestamped yt
+        WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+        LIMIT 1
+    ) youtube ON true
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.instance_name = $4
       AND sr.qualified = true
@@ -13081,13 +13179,13 @@ WITH deduped AS (
 best AS (
     SELECT DISTINCT ON (
         CASE WHEN $6 :: text = '' THEN guild_id END
-    ) instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url
+    ) instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url, has_youtube_video, youtube_url
     FROM deduped
     ORDER BY
         CASE WHEN $6 :: text = '' THEN guild_id END,
         duration_ms ASC
 )
-SELECT instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url FROM best
+SELECT instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url, has_youtube_video, youtube_url FROM best
 WHERE (CASE WHEN $1::bigint > 0 THEN player_count >= $1 ELSE true END)
   AND (CASE WHEN $2::bigint > 0 THEN player_count <= $2 ELSE true END)
 ORDER BY duration_ms ASC
@@ -13123,6 +13221,8 @@ type SpeedrunLeaderboardRow struct {
 	RealmName        string             `db:"realm_name" json:"realm_name"`
 	PlayerCount      int64              `db:"player_count" json:"player_count"`
 	GuildLogoUrl     string             `db:"guild_logo_url" json:"guild_logo_url"`
+	HasYoutubeVideo  bool               `db:"has_youtube_video" json:"has_youtube_video"`
+	YoutubeUrl       string             `db:"youtube_url" json:"youtube_url"`
 }
 
 // Returns the leaderboard for a given instance name.
@@ -13169,6 +13269,8 @@ func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeader
 			&i.RealmName,
 			&i.PlayerCount,
 			&i.GuildLogoUrl,
+			&i.HasYoutubeVideo,
+			&i.YoutubeUrl,
 		); err != nil {
 			return nil, err
 		}

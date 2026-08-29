@@ -522,6 +522,11 @@ type sqlcQuerier interface {
 	ListDistinctCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListDistinctCohortBucketsRow, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
 	ListExternalAPICharacterLogs(ctx context.Context, arg ListExternalAPICharacterLogsParams) ([]ListExternalAPICharacterLogsRow, error)
+	// Returns the logs excluded by duplicate-group deduplication for each selected
+	// leaderboard instance. The selected instance is the canonical leaderboard log
+	// for the requested timing mode; every other member of its duplicate group is
+	// returned here, including unqualified runs.
+	ListExternalAPILeaderboardDuplicateLogs(ctx context.Context, arg ListExternalAPILeaderboardDuplicateLogsParams) ([]ListExternalAPILeaderboardDuplicateLogsRow, error)
 	ListExternalAPIRealms(ctx context.Context, server string) ([]ListExternalAPIRealmsRow, error)
 	ListExternalAPIServers(ctx context.Context) ([]ListExternalAPIServersRow, error)
 	ListGearListsByUser(ctx context.Context, arg ListGearListsByUserParams) ([]GearList, error)

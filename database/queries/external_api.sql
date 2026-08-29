@@ -153,3 +153,44 @@ LEFT JOIN LATERAL (
 ORDER BY d.started_at DESC, d.id DESC
 LIMIT @result_limit
 OFFSET @result_offset;
+
+
+-- name: ListExternalAPILeaderboardDuplicateLogs :many
+-- Returns the logs excluded by duplicate-group deduplication for each selected
+-- leaderboard instance. The selected instance is the canonical leaderboard log
+-- for the requested timing mode; every other member of its duplicate group is
+-- returned here, including unqualified runs.
+SELECT
+    selected.id AS selected_instance_id,
+    duplicate.id,
+    duplicate.hashed_slug,
+    COALESCE(CASE
+        WHEN @use_ranked_timing::boolean THEN duplicate_speedrun.ranked_duration_ms
+        ELSE duplicate_speedrun.duration_ms
+    END, 0)::bigint AS duration_ms,
+    CASE
+        WHEN @use_ranked_timing::boolean THEN duplicate_speedrun.ranked_start_time
+        ELSE duplicate_speedrun.start_time
+    END::timestamptz AS start_time,
+    CASE
+        WHEN @use_ranked_timing::boolean THEN duplicate_speedrun.ranked_completion_time
+        ELSE duplicate_speedrun.completion_time
+    END::timestamptz AS completion_time,
+    duplicate.parser_version,
+    COALESCE(duplicate_speedrun.addon_version, '')::text AS addon_version,
+    (youtube.video_url IS NOT NULL)::boolean AS has_youtube_video,
+    COALESCE(youtube.video_url, '')::text AS youtube_url
+FROM log_instances selected
+JOIN log_instances duplicate
+  ON duplicate.duplicate_group_id = selected.duplicate_group_id
+ AND duplicate.id != selected.id
+LEFT JOIN instance_speedruns duplicate_speedrun ON duplicate_speedrun.instance_id = duplicate.id
+LEFT JOIN LATERAL (
+    SELECT yt.video_url
+    FROM log_instance_youtube_timestamped yt
+    WHERE yt.log_instance_id = duplicate.id OR yt.instance_slug = duplicate.hashed_slug
+    LIMIT 1
+) youtube ON true
+WHERE selected.id = ANY(@selected_instance_ids::uuid[])
+  AND selected.duplicate_group_id IS NOT NULL
+ORDER BY selected.id, duplicate.id;

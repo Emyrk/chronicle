@@ -34,6 +34,8 @@ type externalAPIStore interface {
 	ResolveExternalAPIRealm(context.Context, database.ResolveExternalAPIRealmParams) (database.ResolveExternalAPIRealmRow, error)
 	GetExternalAPICharacter(context.Context, database.GetExternalAPICharacterParams) (database.GetExternalAPICharacterRow, error)
 	ListExternalAPICharacterLogs(context.Context, database.ListExternalAPICharacterLogsParams) ([]database.ListExternalAPICharacterLogsRow, error)
+	SpeedrunLeaderboard(context.Context, database.SpeedrunLeaderboardParams) ([]database.SpeedrunLeaderboardRow, error)
+	ListExternalAPILeaderboardDuplicateLogs(context.Context, database.ListExternalAPILeaderboardDuplicateLogsParams) ([]database.ListExternalAPILeaderboardDuplicateLogsRow, error)
 }
 
 type Service struct {
