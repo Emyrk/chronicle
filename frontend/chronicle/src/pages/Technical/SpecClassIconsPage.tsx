@@ -50,7 +50,7 @@ export function SpecClassIconsPage() {
           return (
             <Card key={className} className="overflow-hidden">
               <div className="grid gap-px bg-border/70 sm:grid-cols-[minmax(170px,0.8fr)_repeat(3,minmax(0,1fr))]">
-                <div className="flex items-center gap-3 bg-card p-4">
+                <div className="flex items-center gap-3 bg-card p-3">
                   <img
                     src={classIconUrl(className)}
                     alt={`${displayName} class icon`}
@@ -67,7 +67,7 @@ export function SpecClassIconsPage() {
                 </div>
 
                 {SPEC_BY_CLASS[className].map((spec) => (
-                  <div key={spec} className="flex items-center gap-3 bg-card p-4">
+                  <div key={spec} className="flex items-center gap-3 bg-card p-3">
                     <img
                       src={specializationIconUrl(displayName, spec)}
                       alt={`${spec} ${displayName} specialization icon`}
