@@ -216,7 +216,6 @@ export interface AdminSnapshotSummary {
     readonly cohort_mode: string;
     readonly policy_version: number;
     readonly query_version: number;
-    readonly member_count: number;
     readonly status: string;
     readonly published_at: string | null;
     readonly created_at: string;

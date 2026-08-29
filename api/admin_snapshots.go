@@ -584,7 +584,6 @@ func (api *API) AdminListSnapshots(w http.ResponseWriter, r *http.Request) {
 			CohortMode:    row.CohortMode,
 			PolicyVersion: row.PolicyVersion,
 			QueryVersion:  row.QueryVersion,
-			MemberCount:   row.MemberCount,
 			Status:        row.Status,
 		}
 		if row.Cutoff.Valid {

@@ -511,7 +511,6 @@ function DpsHpsTab() {
                   <th className="py-2 pr-4">Lookback</th>
                   <th className="py-2 pr-4">Cohort</th>
                   <th className="py-2 pr-4">Version</th>
-                  <th className="py-2 pr-4">Members</th>
                   <th className="py-2 pr-4">Status</th>
                   <th className="py-2 pr-4">Published</th>
                   <th className="py-2 pr-4"></th>
@@ -540,9 +539,6 @@ function DpsHpsTab() {
                       <span className="text-xs text-muted-foreground">
                         p{snap.policy_version}/q{snap.query_version}
                       </span>
-                    </td>
-                    <td className="py-2 pr-4 font-mono text-xs">
-                      {snap.member_count.toLocaleString()}
                     </td>
                     <td className="py-2 pr-4">
                       <span

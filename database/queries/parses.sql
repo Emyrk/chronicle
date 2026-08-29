@@ -339,7 +339,6 @@ LIMIT 1;
 -- Admin view: list all snapshots across tenants, most recent first.
 -- LEFT JOINs tenants to surface the tenant name (NULL for root scope).
 SELECT rs.*,
-       (SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = rs.id) AS member_count,
        t.name AS tenant_name
 FROM ranking_snapshots rs
 LEFT JOIN tenants t ON t.id = rs.tenant_id
