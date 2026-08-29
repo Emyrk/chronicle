@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ArrowLeft, ChevronRight, HeartPulse, Sparkles } from "lucide-react"
+import { ArrowLeft, ChevronRight, CircleHelp, HeartPulse, Sparkles } from "lucide-react"
 import { Link } from "react-router-dom"
 import { specializationIconUrl } from "@/config/specializationIcon"
 
@@ -99,7 +99,7 @@ export function ClassDetailsPage() {
               <p className="leading-relaxed text-muted-foreground">
                 In 2.4.3 and 3.3.5a combat logs, Judgement of Light healing can be
                 reported as healing done by the paladin who applied the debuff. Chronicle
-                instead credits each heal to the player whose attack triggered it, which
+                credits each heal to the player whose attack triggered it, which
                 is also the player receiving the heal.
               </p>
             </div>
@@ -121,6 +121,18 @@ export function ClassDetailsPage() {
                   The attacking player who triggered and received the heal gets the credit.
                 </p>
               </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-300/20 bg-amber-400/5 p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <CircleHelp className="h-5 w-5 text-amber-300" />
+                <h3 className="font-semibold">Why Chronicle changes it</h3>
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Keeping the raw attribution would reward paladins for replacing or
+                &quot;sniping&quot; another paladin&apos;s Judgement of Light debuff to claim
+                the resulting healing.
+              </p>
             </div>
 
             <div className="flex gap-3 rounded-xl bg-muted/40 p-4">
