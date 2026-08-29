@@ -1,5 +1,20 @@
 import { Link } from "react-router-dom"
-import { Swords, FileText, Youtube, Code, Shirt, Users } from "lucide-react"
+import { Swords, FileText, Youtube, Code, Shirt, Users, Timer } from "lucide-react"
+
+const faq = [
+  {
+    name: "Parsing",
+    description: "Learn how Chronicle calculates parse scores and comparison cohorts.",
+    to: "/parsing",
+    icon: <FileText className="h-6 w-6" />,
+  },
+  {
+    name: "Speedrunning",
+    description: "Learn how Chronicle measures boss time, full raid time, and qualification.",
+    to: "/speedrunning",
+    icon: <Timer className="h-6 w-6" />,
+  },
+]
 
 const tools = [
   {
@@ -7,12 +22,6 @@ const tools = [
     description: "Look up character profiles, gear, and talent builds.",
     to: "/armory",
     icon: <Swords className="h-6 w-6" />,
-  },
-  {
-    name: "Parsing",
-    description: "Upload and parse combat logs from your raids.",
-    to: "/parsing",
-    icon: <FileText className="h-6 w-6" />,
   },
   {
     name: "Gear Progression Builder",
@@ -40,33 +49,47 @@ const tools = [
   },
 ]
 
+function LinkGrid({ items }: { items: typeof faq }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {items.map((item) => (
+        <Link
+          key={item.to}
+          to={item.to}
+          className="group flex items-start gap-4 rounded-lg border bg-card p-5 transition-colors hover:border-foreground/20 hover:bg-accent/50"
+        >
+          <div className="mt-0.5 text-muted-foreground transition-colors group-hover:text-foreground">
+            {item.icon}
+          </div>
+          <div>
+            <h3 className="font-semibold transition-colors group-hover:text-foreground">
+              {item.name}
+            </h3>
+            <p className="text-sm text-muted-foreground">{item.description}</p>
+          </div>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
 export function ToolsPage() {
   return (
     <div className="container mx-auto max-w-3xl px-4 py-12">
-      <h1 className="text-3xl font-bold mb-2">Tools</h1>
-      <p className="text-muted-foreground mb-8">
-        Chronicle utilities and integrations.
+      <h1 className="mb-2 text-3xl font-bold">FAQ &amp; Tools</h1>
+      <p className="mb-10 text-muted-foreground">
+        Guides, utilities, and integrations for Chronicle.
       </p>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {tools.map((tool) => (
-          <Link
-            key={tool.to}
-            to={tool.to}
-            className="group flex items-start gap-4 rounded-lg border bg-card p-5 transition-colors hover:border-foreground/20 hover:bg-accent/50"
-          >
-            <div className="mt-0.5 text-muted-foreground group-hover:text-foreground transition-colors">
-              {tool.icon}
-            </div>
-            <div>
-              <h2 className="font-semibold group-hover:text-foreground transition-colors">
-                {tool.name}
-              </h2>
-              <p className="text-sm text-muted-foreground">{tool.description}</p>
-            </div>
-          </Link>
-        ))}
-      </div>
+      <section className="mb-10">
+        <h2 className="mb-4 text-xl font-semibold">FAQ</h2>
+        <LinkGrid items={faq} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-xl font-semibold">Tools</h2>
+        <LinkGrid items={tools} />
+      </section>
     </div>
   )
 }

@@ -10,8 +10,8 @@ export function SpeedrunTimingToggle({
   return (
     <div className="flex rounded-lg border border-white/10 overflow-hidden shrink-0" aria-label="Leaderboard timing">
       {([
-        { label: "Ranked time", value: "ranked", title: "Rank by the first required boss pull through the final required boss" },
-        { label: "Full clear", value: "full", title: "Rank by the full raid clear time" },
+        { label: "Boss time", value: "ranked", title: "Rank by the first required boss pull through the final required boss" },
+        { label: "Full raid", value: "full", title: "Rank by the full raid clear time" },
       ] as const).map((option) => (
         <button
           key={option.value}

@@ -7,8 +7,8 @@ describe("SpeedrunTimingToggle", () => {
   it("marks the selected timing mode", () => {
     const markup = renderToStaticMarkup(<SpeedrunTimingToggle value="full" onChange={vi.fn()} />)
 
-    expect(markup).toContain("Ranked time")
-    expect(markup).toContain("Full clear")
+    expect(markup).toContain("Boss time")
+    expect(markup).toContain("Full raid")
     expect(markup).toContain('aria-pressed="false"')
     expect(markup).toContain('aria-pressed="true"')
   })
