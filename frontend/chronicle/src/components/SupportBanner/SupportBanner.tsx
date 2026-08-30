@@ -70,10 +70,10 @@ const BAR_BASE_CLASSES =
 const DISMISS_BASE_CLASSES =
   "absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground transition-colors";
 
-const DONATE_BAR_CLASSES = `${BAR_BASE_CLASSES} border-amber-500/30 bg-amber-500/10`;
-const DONATE_DISMISS_CLASSES = `${DISMISS_BASE_CLASSES} hover:bg-amber-500/20`;
-const DONATE_HEADING_CLASSES = "font-wow font-bold text-amber-600 dark:text-amber-400";
-const DONATE_LINK_CLASSES = "underline text-amber-600 dark:text-amber-400 hover:text-amber-500";
+const DONATE_BAR_CLASSES = `${BAR_BASE_CLASSES} border-rose-500/30 bg-rose-500/10`;
+const DONATE_DISMISS_CLASSES = `${DISMISS_BASE_CLASSES} hover:bg-rose-500/20`;
+const DONATE_HEADING_CLASSES = "font-wow font-bold text-rose-600 dark:text-rose-400";
+const DONATE_LINK_CLASSES = "underline text-rose-600 dark:text-rose-400 hover:text-rose-500";
 
 const THANKS_BAR_CLASSES = `${BAR_BASE_CLASSES} border-emerald-500/30 bg-emerald-500/10`;
 const THANKS_DISMISS_CLASSES = `${DISMISS_BASE_CLASSES} hover:bg-emerald-500/20`;
