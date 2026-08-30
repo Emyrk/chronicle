@@ -28,8 +28,9 @@ export function SupportPage() {
           Keeping Chronicle available to Classic WoW communities
         </h1>
         <p className="mt-5 text-lg leading-relaxed text-muted-foreground">
-          Chronicle is open-source software. Some communities run it themselves,
-          while others use deployments that I operate and pay for directly.
+          Chronicle is an open-source, not-for-profit project that is free to
+          use. I personally cover the hosting and infrastructure costs required
+          to keep the service running.
         </p>
       </div>
 
