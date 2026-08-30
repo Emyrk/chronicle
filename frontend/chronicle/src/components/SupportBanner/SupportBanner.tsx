@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Heart, X } from "lucide-react";
+import { toast } from "sonner";
 import { useAuthorizationCheck, useSession } from "@/api/queries";
 
 const HIDE_UNTIL_KEY = "support-banner-hide-until";
@@ -28,13 +29,19 @@ function isDueToShow(): boolean {
   return Date.now() >= hideUntil;
 }
 
-/** Called on dismiss only — picks how long to stay quiet based on variant. */
-function scheduleHideAfterDismiss(variant: "donate" | "thanks") {
-  const hideDays =
-    variant === "thanks"
-      ? THANKS_HIDE_DAYS
-      : DONATE_HIDE_MIN_DAYS + Math.random() * (DONATE_HIDE_MAX_DAYS - DONATE_HIDE_MIN_DAYS);
+/**
+ * Called on dismiss only — picks how long to stay quiet based on variant,
+ * and returns a friendly heads-up for a toast (never pressure, just confirm).
+ */
+function scheduleHideAfterDismiss(variant: "donate" | "thanks"): string {
+  if (variant === "thanks") {
+    localStorage.setItem(HIDE_UNTIL_KEY, String(Date.now() + THANKS_HIDE_DAYS * ONE_DAY_MS));
+    return "Dismissed for 3 months. Thanks again for keeping Chronicle running!";
+  }
+
+  const hideDays = DONATE_HIDE_MIN_DAYS + Math.random() * (DONATE_HIDE_MAX_DAYS - DONATE_HIDE_MIN_DAYS);
   localStorage.setItem(HIDE_UNTIL_KEY, String(Date.now() + hideDays * ONE_DAY_MS));
+  return "Dismissed for at least 30 days — enjoy Chronicle!";
 }
 
 function isOldEnough(createdAt: string): boolean {
@@ -125,7 +132,8 @@ export function SupportBanner() {
   }
 
   const handleDismiss = () => {
-    scheduleHideAfterDismiss(state === "thanks" ? "thanks" : "donate");
+    const message = scheduleHideAfterDismiss(state === "thanks" ? "thanks" : "donate");
+    toast.success(message);
     setState("hidden");
   };
 
