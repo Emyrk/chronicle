@@ -270,8 +270,18 @@ function ActionSlotContent({ spell, keybind }: { spell: DonationSpell; keybind: 
 
 export function SupportPage() {
   const [cryptoModalOpen, setCryptoModalOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const ctaRef = useRef<HTMLDivElement>(null);
   const [actionBarVisible, setActionBarVisible] = useState(false);
+
+  useEffect(() => {
+    if (!mapOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMapOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mapOpen]);
 
   useEffect(() => {
     const el = ctaRef.current;
@@ -476,15 +486,47 @@ export function SupportPage() {
 
       <h2 className="mt-12 text-xl font-semibold text-foreground">Who runs each deployment?</h2>
       <figure className="mt-5">
-        <img
-          src="/chronmap.webp"
-          alt="Fantasy world map. The mainland, labeled Hosted by Chronicle, holds realms whose deployments Chronicle operates and pays for. The isles to the east, labeled Community Hosted, are deployments run by independent communities on their own infrastructure. Banner: Different shores. Shared purpose. One Chronicle."
-          className="w-full rounded-xl border-2 border-[#4a4a6a] shadow-2xl shadow-black/40"
-        />
+        <button
+          type="button"
+          onClick={() => setMapOpen(true)}
+          aria-label="View deployment map full screen"
+          className="block w-full cursor-zoom-in rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+        >
+          <img
+            src="/chronmap.webp"
+            alt="Fantasy world map. The mainland, labeled Hosted by Chronicle, holds realms whose deployments Chronicle operates and pays for. The isles to the east, labeled Community Hosted, are deployments run by independent communities on their own infrastructure. Banner: Different shores. Shared purpose. One Chronicle."
+            className="w-full rounded-xl border-2 border-[#4a4a6a] shadow-2xl shadow-black/40"
+          />
+        </button>
         <figcaption className="mt-2 text-center text-xs italic text-muted-foreground">
           image courtesy of our robot friends
         </figcaption>
       </figure>
+
+      {mapOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Deployment map"
+          className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/85 p-4 backdrop-blur-sm sm:p-8"
+          onClick={() => setMapOpen(false)}
+        >
+          <img
+            src="/chronmap.webp"
+            alt=""
+            className="max-h-full max-w-full rounded-lg shadow-2xl shadow-black/60"
+          />
+          <button
+            type="button"
+            autoFocus
+            onClick={() => setMapOpen(false)}
+            aria-label="Close map"
+            className="absolute right-4 top-4 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-black/60 text-lg text-white transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <nav
         aria-label="Donation quick bar"
