@@ -111,7 +111,7 @@ const WHY_DONATE_ITEMS = [
     slot: "Community Perk",
     subtype: "Infrastructure",
     equip: [
-      "Equip: Keeps every Chronicle-operated realm online, 24 hours a day.",
+      "Equip: Covers hosting, storage, and infrastructure for Chronicle-operated deployments, paid out of pocket every month.",
       "Use: Consumes gold at the start of each month. This effect cannot be dispelled.",
     ],
     flavor: "Even paladins need somewhere to stand.",
