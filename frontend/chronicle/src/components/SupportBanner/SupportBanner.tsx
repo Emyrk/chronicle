@@ -2,28 +2,39 @@ import { useEffect, useMemo, useState } from "react";
 import { Heart, X } from "lucide-react";
 import { useAuthorizationCheck, useSession } from "@/api/queries";
 
-const LAST_SHOWN_KEY = "support-banner-last-shown";
+const HIDE_UNTIL_KEY = "support-banner-hide-until";
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-// How often the banner is allowed to reappear once it's been shown. A first
-// visit (no stored timestamp) always counts as due. Tune once we've seen how
-// this lands — nothing else depends on this number.
-const SHOW_INTERVAL_DAYS = 30;
-const SHOW_INTERVAL_MS = SHOW_INTERVAL_DAYS * 24 * 60 * 60 * 1000;
+// The banner stays up (reappearing on every load) until it's dismissed —
+// there's no cadence gate before that. Dismissing schedules how long it
+// stays quiet afterward, depending on which variant was dismissed:
+// - Thanked supporters go quiet for a fixed 3 months.
+// - Everyone else goes quiet for a random 30-45 days, re-rolled on each
+//   dismissal, so the ask doesn't land on the same day every cycle.
+// Tune these once we've seen how it lands — nothing else depends on them.
+const THANKS_HIDE_DAYS = 90;
+const DONATE_HIDE_MIN_DAYS = 30;
+const DONATE_HIDE_MAX_DAYS = 45;
 
 // Never show to accounts newer than this — a fresh signup hasn't had a
 // chance to get value out of Chronicle yet. Also tunable.
 const MIN_ACCOUNT_AGE_DAYS = 90;
-const MIN_ACCOUNT_AGE_MS = MIN_ACCOUNT_AGE_DAYS * 24 * 60 * 60 * 1000;
+const MIN_ACCOUNT_AGE_MS = MIN_ACCOUNT_AGE_DAYS * ONE_DAY_MS;
 
 const SUPPORT_URL = "https://chronicleclassic.com/support/";
 
 function isDueToShow(): boolean {
-  const lastShown = Number(localStorage.getItem(LAST_SHOWN_KEY) ?? 0);
-  return Date.now() - lastShown > SHOW_INTERVAL_MS;
+  const hideUntil = Number(localStorage.getItem(HIDE_UNTIL_KEY) ?? 0);
+  return Date.now() >= hideUntil;
 }
 
-function markShownNow() {
-  localStorage.setItem(LAST_SHOWN_KEY, String(Date.now()));
+/** Called on dismiss only — picks how long to stay quiet based on variant. */
+function scheduleHideAfterDismiss(variant: "donate" | "thanks") {
+  const hideDays =
+    variant === "thanks"
+      ? THANKS_HIDE_DAYS
+      : DONATE_HIDE_MIN_DAYS + Math.random() * (DONATE_HIDE_MAX_DAYS - DONATE_HIDE_MIN_DAYS);
+  localStorage.setItem(HIDE_UNTIL_KEY, String(Date.now() + hideDays * ONE_DAY_MS));
 }
 
 function isOldEnough(createdAt: string): boolean {
@@ -69,10 +80,11 @@ const THANKS_DISMISS_CLASSES = `${DISMISS_BASE_CLASSES} hover:bg-emerald-500/20`
 const THANKS_HEADING_CLASSES = "font-wow font-bold text-emerald-600 dark:text-emerald-400";
 
 /**
- * Site-wide reminder that Chronicle's hosting is donor-funded, shown at most
- * once every SHOW_INTERVAL_DAYS. Never shown to a logged-out visitor or to an
- * account younger than MIN_ACCOUNT_AGE_DAYS. Whether someone currently holds
- * the "supporter" SpiceDB role is checked last and decides the message.
+ * Site-wide reminder that Chronicle's hosting is donor-funded. Shows on every
+ * load until dismissed (see scheduleHideAfterDismiss for what happens then).
+ * Never shown to a logged-out visitor or to an account younger than
+ * MIN_ACCOUNT_AGE_DAYS. Whether someone currently holds the "supporter"
+ * SpiceDB role is checked last and decides the message.
  */
 export function SupportBanner() {
   const { data: session, isLoading: sessionLoading } = useSession();
@@ -83,9 +95,7 @@ export function SupportBanner() {
     enabled: meetsAgeRequirement,
   });
 
-  // "pending" = still deciding what (if anything) to show; decided exactly
-  // once per session so a later re-render can't flip an already-shown banner
-  // back off just because its freshly-recorded timestamp is now "not due".
+  // "pending" = still deciding what (if anything) to show.
   const [state, setState] = useState<"pending" | "hidden" | "donate" | "thanks">("pending");
 
   const stillDeciding = sessionLoading || (meetsAgeRequirement && authzLoading);
@@ -102,8 +112,6 @@ export function SupportBanner() {
     }
 
     const isSupporter = authz?.supporter ?? false;
-
-    markShownNow();
     setState(isSupporter ? "thanks" : "donate");
   }, [state, stillDeciding, meetsAgeRequirement, authz]);
 
@@ -111,7 +119,10 @@ export function SupportBanner() {
     return null;
   }
 
-  const handleDismiss = () => setState("hidden");
+  const handleDismiss = () => {
+    scheduleHideAfterDismiss(state === "thanks" ? "thanks" : "donate");
+    setState("hidden");
+  };
 
   if (state === "thanks") {
     return (
