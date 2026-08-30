@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   useAdminUsers,
   useResyncUserRoles,
+  useSetUserRoles,
   useUserGrants,
   useDeleteUserGrant,
   type User,
@@ -11,6 +12,7 @@ import {
 import { Card } from "@/components/ui/Card/Card";
 import { UserCharactersSection } from "./UserCharactersSection";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   Users,
   Search,
@@ -165,6 +167,7 @@ function UserRow({ user }: UserRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const resyncMutation = useResyncUserRoles();
+  const setRolesMutation = useSetUserRoles();
   const { data: grants, isLoading: grantsLoading } = useUserGrants(user.id, { enabled: expanded });
 
   const percentage = user.max_storage_bytes > 0 
@@ -177,6 +180,22 @@ function UserRow({ user }: UserRowProps) {
     await navigator.clipboard.writeText(user.id);
     setCopiedId(true);
     setTimeout(() => setCopiedId(false), 2000);
+  };
+
+  const currentRoles = user.roles ?? [];
+  const hasAPIAccess = currentRoles.includes("api_access");
+
+  const handleToggleAPIAccess = async () => {
+    const roles = hasAPIAccess
+      ? currentRoles.filter((role) => role !== "api_access")
+      : [...currentRoles, "api_access"];
+
+    try {
+      await setRolesMutation.mutateAsync({ userId: user.id, roles });
+      toast.success(hasAPIAccess ? "API Access removed" : "API Access granted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update API Access");
+    }
   };
 
   return (
@@ -272,6 +291,28 @@ function UserRow({ user }: UserRowProps) {
                 Resync Roles
               </Button>
             </div>
+          </div>
+
+          {/* API access */}
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <KeyRound className="h-4 w-4 text-amber-500" />
+                API Access
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Allows this user to create read-only API tokens from account settings.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant={hasAPIAccess ? "destructive" : "outline"}
+              onClick={handleToggleAPIAccess}
+              disabled={setRolesMutation.isPending}
+            >
+              {setRolesMutation.isPending && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+              {hasAPIAccess ? "Remove API Access" : "Grant API Access"}
+            </Button>
           </div>
 
           {/* Linked characters */}
