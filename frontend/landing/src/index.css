@@ -66,13 +66,7 @@ body {
 }
 
 @keyframes support-coin-flip {
-  0%, 38% {
-    transform: rotateY(0deg);
-  }
-  50%, 88% {
-    transform: rotateY(180deg);
-  }
-  100% {
+  to {
     transform: rotateY(360deg);
   }
 }
@@ -157,7 +151,7 @@ body {
 .support-ribbon-coin {
   display: block;
   transform-style: preserve-3d;
-  animation: support-coin-flip 8s ease-in-out infinite;
+  animation: support-coin-flip 10s linear infinite;
 }
 
 .support-ribbon-coin-face {
@@ -202,7 +196,7 @@ body {
 
 .support-ribbon:hover .support-ribbon-coin,
 .support-ribbon:focus-visible .support-ribbon-coin {
-  animation-duration: 2.5s;
+  animation-duration: 1.5s;
 }
 
 .support-ribbon:hover .support-ribbon-medallion,
