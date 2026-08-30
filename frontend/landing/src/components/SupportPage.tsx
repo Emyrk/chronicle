@@ -359,7 +359,7 @@ export function SupportPage() {
         {/* <p className="text-lg text-muted-foreground">Support Chronicle for WoW communities.</p> */}
       </div>
 
-      <div className="mt-10 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
+      <div className="mt-14 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
         <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5">
           <BookOpen aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
           <h2 className="flex-1 text-center font-wow text-base font-bold tracking-[0.08em] text-[#f0c060]">
@@ -410,7 +410,7 @@ export function SupportPage() {
         </div>
       </div>
 
-      <h2 className="mt-12 font-wow text-xl font-semibold text-foreground">Why Donate?</h2>
+      <h2 className="mt-16 font-wow text-xl font-semibold text-foreground">Why Donate?</h2>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         {WHY_DONATE_ITEMS.map(({ title, quality, icon, slot, subtype, equip, flavor }) => (
           <article
@@ -449,7 +449,7 @@ export function SupportPage() {
         ))}
       </div>
 
-      <div className="relative mt-12 rounded-lg border border-border bg-card shadow-2xl shadow-black/50 ring-1 ring-white/10">
+      <div className="relative mt-16 rounded-lg border border-border bg-card shadow-2xl shadow-black/50 ring-1 ring-white/10">
         <img
           src="/goblin.webp"
           alt=""
@@ -531,7 +531,7 @@ export function SupportPage() {
         </ul>
       </div>
 
-      <h2 className="mt-12 font-wow text-xl font-semibold text-foreground">Who Runs Each Server?</h2>
+      <h2 className="mt-16 font-wow text-xl font-semibold text-foreground">Who Runs Each Server?</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Whoever hosts a server bears the costs of running its logging site.
       </p>
@@ -553,7 +553,7 @@ export function SupportPage() {
         </figcaption>
       </figure>
 
-      <div className="mt-12 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
+      <div className="mt-16 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
         <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5">
           <ScrollText aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
           <h3 className="flex-1 text-center font-wow text-base font-bold tracking-[0.08em] text-[#f0c060]">
