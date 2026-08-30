@@ -336,9 +336,9 @@ export function SupportPage() {
 
       <div
         ref={ctaRef}
-        className="mt-10 rounded-xl border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-2xl shadow-black/40"
+        className="mt-10 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40"
       >
-        <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#4a4a6a] px-4 py-2.5">
+        <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5">
           <BookOpen aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
           <h2 className="flex-1 text-center font-wow text-sm font-bold tracking-[0.08em] text-[#f0c060]">
             Support the Project
@@ -517,8 +517,8 @@ export function SupportPage() {
         </figcaption>
       </figure>
 
-      <div className="mt-6 rounded-xl border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-2xl shadow-black/40">
-        <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#4a4a6a] px-4 py-2.5">
+      <div className="mt-6 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
+        <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5">
           <ScrollText aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
           <h3 className="flex-1 text-center font-wow text-sm font-bold tracking-[0.08em] text-[#f0c060]">
             Quest Log
