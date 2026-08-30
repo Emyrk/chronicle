@@ -111,8 +111,8 @@ const WHY_DONATE_ITEMS = [
     slot: "Community Perk",
     subtype: "Infrastructure",
     equip: [
-      "Equip: Covers hosting, storage, and infrastructure for Chronicle-operated deployments, paid out of pocket every month.",
-      "Equip: Donations offset those recurring costs.",
+      "Equip: Keeps every Chronicle-operated realm online, 24 hours a day.",
+      "Use: Consumes gold at the start of each month. This effect cannot be dispelled.",
     ],
     flavor: "Even paladins need somewhere to stand.",
   },
@@ -123,8 +123,8 @@ const WHY_DONATE_ITEMS = [
     slot: "Community Perk",
     subtype: "Aura",
     equip: [
-      "Equip: Silences all banner ads and tracking on every Chronicle page.",
-      "Equip: Donations replace the revenue ads would otherwise bring in.",
+      "Equip: Grants immunity to banner ads, pop-ups, and tracking effects.",
+      "Equip: Restores the revenue ads would otherwise bring in — donations make up the difference.",
     ],
     flavor: "No banners. No pop-ups. Just parses.",
   },
@@ -135,7 +135,8 @@ const WHY_DONATE_ITEMS = [
     slot: "Community Perk",
     subtype: "Key",
     equip: [
-      "Equip: Unlocks every server and every parse for everyone. No premium tiers, no locked features.",
+      "Use: Unlocks every server and every parse for everyone. (No cooldown. Unlimited charges.)",
+      "Equip: Premium tiers cannot be applied while this item is equipped.",
     ],
     flavor: "Locked content stays in Naxxramas.",
   },
@@ -147,6 +148,7 @@ const WHY_DONATE_ITEMS = [
     subtype: "Tool",
     equip: [
       "Equip: Increases time spent on fixes, new features, and keeping up with the game.",
+      "Chance on hit: A new feature ships.",
     ],
     flavor: "A well-oiled raid never wipes on mechanics.",
   },
