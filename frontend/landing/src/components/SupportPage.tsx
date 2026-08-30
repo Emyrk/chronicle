@@ -518,12 +518,15 @@ export function SupportPage() {
         </ul>
       </div>
 
-      <h2 className="mt-12 text-xl font-semibold text-foreground">Who runs each deployment?</h2>
+      <h2 className="mt-12 text-xl font-semibold text-foreground">Who runs each server?</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Whoever hosts a server bears the costs of running its logging site.
+      </p>
       <figure className="mt-5">
         <button
           type="button"
           onClick={() => setMapOpen(true)}
-          aria-label="View deployment map full screen"
+          aria-label="View server map full screen"
           className="block w-full cursor-zoom-in rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
         >
           <img
@@ -584,7 +587,7 @@ export function SupportPage() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Deployment map"
+          aria-label="Server map"
           className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/85 p-4 backdrop-blur-sm sm:p-8"
           onClick={() => setMapOpen(false)}
         >
