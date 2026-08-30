@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   CircleHelp,
@@ -157,8 +157,88 @@ const WHY_DONATE_ITEMS = [
 const DONATION_BUTTON_CLASSES =
   "inline-flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-5 py-3 text-base font-semibold text-foreground transition-colors hover:border-pink-300/60 hover:bg-muted";
 
+// Spells on the floating action bar; href opens a link, no href casts the crypto modal.
+const ACTION_BAR_SPELLS = [
+  { label: "GitHub Sponsors", icon: "spell_holy_sealofsacrifice", href: GITHUB_SPONSORS_URL },
+  { label: "Patreon", icon: "inv_banner_02", href: PATREON_URL },
+  { label: "Buy Me a Coffee", icon: "inv_drink_04", href: BUY_ME_A_COFFEE_URL },
+  { label: "Tip with Crypto", icon: "inv_misc_coin_01" },
+];
+
+const ACTION_SLOT_CLASSES =
+  "group relative block h-12 w-12 rounded border-2 border-[#5a5a7a] bg-black outline-none transition-transform hover:scale-105 hover:border-yellow-500/80 focus-visible:scale-105 focus-visible:border-yellow-500/80";
+
+/** Stylized bronze gryphon statue, an homage to the classic action bar end caps. */
+function GryphonEndCap({ side }: { side: "left" | "right" }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 64 88"
+      className={
+        "pointer-events-none absolute bottom-0 hidden h-[4.6rem] w-auto drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)] sm:block " +
+        (side === "left" ? "right-full -mr-2" : "left-full -ml-2 -scale-x-100")
+      }
+    >
+      <defs>
+        <linearGradient id={`gryphon-${side}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#c9963e" />
+          <stop offset="0.45" stopColor="#8a6a2a" />
+          <stop offset="1" stopColor="#4a3812" />
+        </linearGradient>
+      </defs>
+      <g fill={`url(#gryphon-${side})`} stroke="#2a1f08" strokeWidth="1.5" strokeLinejoin="round">
+        {/* plinth */}
+        <path d="M6 86 L6 79 Q6 76 10 76 L54 76 Q58 76 58 79 L58 86 Z" />
+        <path d="M10 76 L12 70 Q13 68 16 68 L48 68 Q51 68 52 70 L54 76 Z" />
+        {/* gryphon: seated, folded wing swept high behind, hooked beak facing in */}
+        <path d="M14 68 Q9 58 12 47 Q11 34 16 24 L14 8 Q13 4 17 7 Q21 10 24 16 Q28 20 32 24 Q34 13 39 9 L38 3 L42 7 Q46 5 49 10 L57 14 Q59 17 53 18 Q50 19 47 21 Q47 27 46 33 Q49 41 47 49 L48 60 Q49 65 52 67 L52 68 L42 68 Q38 62 33 60 Q28 60 26 64 L25 68 Z" />
+        {/* wing feather ridges */}
+        <path d="M17 10 Q15 30 19 46 M22 18 Q20 34 24 50" fill="none" strokeWidth="1.2" stroke="#3a2c10" />
+        {/* eye */}
+        <circle cx="45" cy="13" r="1.3" fill="#2a1f08" stroke="none" />
+      </g>
+    </svg>
+  );
+}
+
+function ActionSlotContent({ label, icon, keybind }: { label: string; icon: string; keybind: number }) {
+  return (
+    <>
+      <img
+        src={`${WOW_ICON_BASE}/${icon}.webp`}
+        alt=""
+        aria-hidden="true"
+        className="h-full w-full rounded-sm object-cover"
+      />
+      <span
+        aria-hidden="true"
+        className="absolute right-0.5 top-0 text-[10px] font-bold text-white [text-shadow:1px_1px_1px_#000]"
+      >
+        {keybind}
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded border border-[#4a4a6a] bg-[#1a1a2e] px-2.5 py-1.5 text-left opacity-0 shadow-lg shadow-black/50 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        <span className="block text-xs font-semibold text-white">{label}</span>
+        <span className="block text-[10px] text-[#ffd200]">Instant cast</span>
+      </span>
+    </>
+  );
+}
+
 export function SupportPage() {
   const [cryptoModalOpen, setCryptoModalOpen] = useState(false);
+  const ctaRef = useRef<HTMLDivElement>(null);
+  const [actionBarVisible, setActionBarVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ctaRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      // Only summon the bar once the donation card has scrolled off the top.
+      setActionBarVisible(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <section className="relative mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8">
@@ -184,7 +264,10 @@ export function SupportPage() {
         </h1>
       </div>
 
-      <div className="mt-10 rounded-xl border border-pink-400/25 bg-card p-6 text-center shadow-lg shadow-pink-950/10 sm:p-10">
+      <div
+        ref={ctaRef}
+        className="mt-10 rounded-xl border border-pink-400/25 bg-card p-6 text-center shadow-lg shadow-pink-950/10 sm:p-10"
+      >
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-pink-400/10 text-pink-300">
           <Heart aria-hidden="true" className="h-6 w-6" />
         </div>
@@ -339,6 +422,45 @@ export function SupportPage() {
           </p>
         </article>
       </div>
+
+      <nav
+        aria-label="Donation quick bar"
+        className={
+          "fixed bottom-3 left-1/2 z-40 -translate-x-1/2 transition-all duration-300 " +
+          (actionBarVisible ? "visible translate-y-0 opacity-100" : "invisible translate-y-8 opacity-0")
+        }
+      >
+        <div className="relative">
+          <GryphonEndCap side="left" />
+          <GryphonEndCap side="right" />
+          <div className="flex items-end gap-1.5 rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e]/95 p-2 shadow-2xl shadow-black/60">
+            {ACTION_BAR_SPELLS.map(({ label, icon, href }, i) =>
+              href ? (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={label}
+                  className={ACTION_SLOT_CLASSES}
+                >
+                  <ActionSlotContent label={label} icon={icon} keybind={i + 1} />
+                </a>
+              ) : (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setCryptoModalOpen(true)}
+                  aria-label={label}
+                  className={ACTION_SLOT_CLASSES}
+                >
+                  <ActionSlotContent label={label} icon={icon} keybind={i + 1} />
+                </button>
+              ),
+            )}
+          </div>
+        </div>
+      </nav>
 
       <CryptoTipModal open={cryptoModalOpen} onClose={() => setCryptoModalOpen(false)} />
     </section>
