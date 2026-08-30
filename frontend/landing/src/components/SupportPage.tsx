@@ -551,9 +551,6 @@ export function SupportPage() {
                         <span aria-hidden="true">◆</span>
                         Hosted by Chronicle
                       </span>
-                      <span className="text-[13px] italic text-[#6b5330]">
-                        displayed beside the server in the directory
-                      </span>
                     </p>
                   </>
                 )}
