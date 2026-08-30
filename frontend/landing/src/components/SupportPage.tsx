@@ -113,7 +113,7 @@ const QUALITY = {
 
 const WHY_DONATE_ITEMS = [
   {
-    title: "Servers aren't free",
+    title: "Servers Aren't Free",
     quality: QUALITY.legendary,
     icon: "inv_misc_gear_01",
     slot: "Community Perk",
@@ -125,7 +125,7 @@ const WHY_DONATE_ITEMS = [
     flavor: "The real gold sink was infrastructure all along.",
   },
   {
-    title: "Keep Chronicle ad-free",
+    title: "Keep Chronicle Ad-Free",
     quality: QUALITY.epic,
     icon: "spell_holy_silence",
     slot: "Community Perk",
@@ -137,7 +137,7 @@ const WHY_DONATE_ITEMS = [
     flavor: "The only things tracking you should be threat meters.",
   },
   {
-    title: "Keep Chronicle paywall-free",
+    title: "Keep Chronicle Paywall-Free",
     quality: QUALITY.rare,
     icon: "inv_misc_key_03",
     slot: "Community Perk",
@@ -149,7 +149,7 @@ const WHY_DONATE_ITEMS = [
     flavor: "No attunement required.",
   },
   {
-    title: "Sustain development",
+    title: "Sustain Development",
     quality: QUALITY.uncommon,
     icon: "inv_misc_wrench_01",
     slot: "Community Perk",
@@ -352,7 +352,7 @@ export function SupportPage() {
 
       <div className="mx-auto mt-6 max-w-3xl text-center">
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
-          Keeping Chronicle available to WoW communities
+          Keeping Chronicle Available to WoW Communities
         </h1>
       </div>
 
@@ -407,7 +407,7 @@ export function SupportPage() {
         </div>
       </div>
 
-      <h2 className="mt-12 text-xl font-semibold text-foreground">Why donate?</h2>
+      <h2 className="mt-12 text-xl font-semibold text-foreground">Why Donate?</h2>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         {WHY_DONATE_ITEMS.map(({ title, quality, icon, slot, subtype, equip, flavor }) => (
           <article
@@ -528,7 +528,7 @@ export function SupportPage() {
         </ul>
       </div>
 
-      <h2 className="mt-12 text-xl font-semibold text-foreground">Who runs each server?</h2>
+      <h2 className="mt-12 text-xl font-semibold text-foreground">Who Runs Each Server?</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Whoever hosts a server bears the costs of running its logging site.
       </p>
