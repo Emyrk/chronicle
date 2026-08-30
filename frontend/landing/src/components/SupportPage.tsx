@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
+  BookOpen,
   CircleHelp,
   Coffee,
   ExternalLink,
-  Heart,
   Server,
   ShieldCheck,
   Skull,
@@ -16,23 +16,6 @@ const GITHUB_SPONSORS_URL = "https://github.com/sponsors/Emyrk";
 const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
 const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/chronicleclassic";
 
-const DONATION_LINKS = [
-  {
-    label: "GitHub Sponsors",
-    href: GITHUB_SPONSORS_URL,
-    icon: <SponsorsHeartIcon className="h-4 w-4 text-pink-400" />,
-  },
-  {
-    label: "Patreon",
-    href: PATREON_URL,
-    icon: <PatreonIcon className="h-4 w-4 text-[#FF424D]" />,
-  },
-  {
-    label: "Buy Me a Coffee",
-    href: BUY_ME_A_COFFEE_URL,
-    icon: <Coffee aria-hidden="true" className="h-4 w-4 text-yellow-400" />,
-  },
-];
 
 const HOSTING_METER = [
   {
@@ -154,35 +137,78 @@ const WHY_DONATE_ITEMS = [
   },
 ];
 
-const DONATION_BUTTON_CLASSES =
-  "inline-flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-5 py-3 text-base font-semibold text-foreground transition-colors hover:border-pink-300/60 hover:bg-muted";
-
-// Spells on the floating action bar; href opens a link, no href casts the crypto modal.
-const ACTION_BAR_SPELLS = [
+// Donation methods as spells: the spellbook and the floating action bar share
+// this list. href opens a link; no href casts the crypto modal.
+const DONATION_SPELLS = [
   {
     label: "GitHub Sponsors",
+    subtitle: "Recurring",
     href: GITHUB_SPONSORS_URL,
     accent: "#ec4899",
     icon: <SponsorsHeartIcon className="h-6 w-6 text-pink-400" />,
   },
   {
     label: "Patreon",
+    subtitle: "Monthly",
     href: PATREON_URL,
     accent: "#FF424D",
     icon: <PatreonIcon className="h-6 w-6 text-[#FF424D]" />,
   },
   {
     label: "Buy Me a Coffee",
+    subtitle: "Instant",
     href: BUY_ME_A_COFFEE_URL,
     accent: "#facc15",
     icon: <Coffee aria-hidden="true" className="h-6 w-6 text-yellow-400" />,
   },
   {
     label: "Tip with Crypto",
+    subtitle: "Summon",
     accent: "#fbbf24",
     icon: <CryptoCoinIcon className="h-6 w-6 text-amber-400" />,
   },
 ];
+
+const SPELLBOOK_ROW_CLASSES =
+  "group relative -mx-2 flex items-center gap-3 rounded px-2 py-1.5 text-left transition-colors hover:bg-black/10 focus-visible:bg-black/10 focus-visible:outline-none";
+
+function SpellbookRow({
+  label,
+  subtitle,
+  icon,
+  accent,
+  external,
+}: {
+  label: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  accent: string;
+  external: boolean;
+}) {
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded border-2 border-[#8a6a2a] shadow-md shadow-black/40"
+        style={{ background: `radial-gradient(circle at 35% 30%, ${accent}40, #14141f 75%)` }}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-serif text-base font-semibold leading-tight text-[#215c10]">
+          {label}
+        </span>
+        <span className="block text-[11px] text-[#7a5c36]">{subtitle}</span>
+      </span>
+      {external && (
+        <ExternalLink
+          aria-hidden="true"
+          className="h-3.5 w-3.5 shrink-0 text-[#7a5c36] opacity-0 transition-opacity group-hover:opacity-70 group-focus-visible:opacity-70"
+        />
+      )}
+    </>
+  );
+}
 
 const ACTION_SLOT_CLASSES =
   "group relative block h-12 w-12 rounded border-2 border-[#5a5a7a] bg-black outline-none transition-transform hover:scale-105 hover:border-yellow-500/80 focus-visible:scale-105 focus-visible:border-yellow-500/80";
@@ -278,38 +304,72 @@ export function SupportPage() {
 
       <div
         ref={ctaRef}
-        className="mt-10 rounded-xl border border-pink-400/25 bg-card p-6 text-center shadow-lg shadow-pink-950/10 sm:p-10"
+        className="mt-10 overflow-hidden rounded-xl border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-2xl shadow-black/40"
       >
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-pink-400/10 text-pink-300">
-          <Heart aria-hidden="true" className="h-6 w-6" />
+        <div className="flex items-center gap-3 border-b-2 border-[#4a4a6a] px-4 py-2.5">
+          <BookOpen aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
+          <h2 className="flex-1 text-center text-sm font-bold uppercase tracking-[0.15em] text-[#f0c060]">
+            Support the Project
+          </h2>
+          <span aria-hidden="true" className="h-4 w-4" />
         </div>
-        <h2 className="mt-4 text-2xl font-semibold text-foreground">Support the project</h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-          Contributions help cover hosting for Chronicle-operated deployments
-          and support continued development. Support is appreciated, never required.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          {DONATION_LINKS.map(({ label, href, icon }) => (
-            <a
-              key={label}
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={DONATION_BUTTON_CLASSES}
+        <div
+          className="relative px-5 py-6 sm:px-10 sm:py-8"
+          style={{
+            background: "radial-gradient(ellipse at 30% 15%, #ead9ae 0%, #d3ba8c 55%, #bda276 100%)",
+          }}
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[#8a704a]/60 to-transparent"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-[#8a704a]/35 to-transparent"
+          />
+          <p className="relative mx-auto max-w-md text-center text-xs italic leading-relaxed text-[#6b5330]">
+            Contributions help cover hosting for Chronicle-operated deployments and
+            support continued development. Support is appreciated, never required.
+          </p>
+          <div className="relative mt-6 grid gap-x-10 gap-y-2 sm:grid-cols-2">
+            {DONATION_SPELLS.map(({ label, subtitle, icon, accent, href }) =>
+              href ? (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={SPELLBOOK_ROW_CLASSES}
+                >
+                  <SpellbookRow label={label} subtitle={subtitle} icon={icon} accent={accent} external />
+                </a>
+              ) : (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setCryptoModalOpen(true)}
+                  className={SPELLBOOK_ROW_CLASSES}
+                >
+                  <SpellbookRow label={label} subtitle={subtitle} icon={icon} accent={accent} external={false} />
+                </button>
+              ),
+            )}
+          </div>
+          <div className="relative mt-6 flex items-center justify-end gap-2">
+            <span className="font-serif text-xs italic text-[#6b5330]">Page 1</span>
+            <span
+              aria-hidden="true"
+              className="flex h-5 w-5 items-center justify-center rounded-sm border border-[#8a6a2a] bg-[#c9963e]/60 text-[11px] font-bold leading-none text-[#3a2c10] opacity-60"
             >
-              {icon}
-              {label}
-              <ExternalLink aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
-            </a>
-          ))}
-          <button
-            type="button"
-            onClick={() => setCryptoModalOpen(true)}
-            className={DONATION_BUTTON_CLASSES}
-          >
-            <CryptoCoinIcon className="h-4 w-4 text-amber-400" />
-            Tip with Crypto
-          </button>
+              ‹
+            </span>
+            <span
+              aria-hidden="true"
+              className="flex h-5 w-5 items-center justify-center rounded-sm border border-[#8a6a2a] bg-[#c9963e]/60 text-[11px] font-bold leading-none text-[#3a2c10] opacity-60"
+            >
+              ›
+            </span>
+          </div>
         </div>
       </div>
 
@@ -446,7 +506,7 @@ export function SupportPage() {
           <GryphonEndCap side="left" />
           <GryphonEndCap side="right" />
           <div className="flex items-end gap-1.5 rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e]/95 p-2 shadow-2xl shadow-black/60">
-            {ACTION_BAR_SPELLS.map(({ label, icon, accent, href }, i) =>
+            {DONATION_SPELLS.map(({ label, icon, accent, href }, i) =>
               href ? (
                 <a
                   key={label}
