@@ -5,7 +5,6 @@ import {
   Coffee,
   ExternalLink,
   ScrollText,
-  Skull,
 } from "lucide-react";
 import { CryptoCoinIcon, PatreonIcon, SponsorsHeartIcon } from "./BrandIcons";
 import { CryptoTipModal } from "./CryptoTipModal";
@@ -206,6 +205,26 @@ const DONATION_SPELLS = [
     desc: "Summons a window of wallet addresses. The summoned window persists until dismissed.",
   },
 ];
+
+function MoneyBagIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M9.2 6.2 7.6 3.6c-.4-.6 0-1.4.8-1.4h7.2c.8 0 1.2.8.8 1.4l-1.6 2.6c-.3.5-.8.8-1.4.8h-2.8c-.6 0-1.1-.3-1.4-.8z" />
+      <path d="M9 8.4h6c3.4 2.1 5.5 5.1 5.5 8 0 3.6-3.1 5.6-8.5 5.6S3.5 20 3.5 16.4c0-2.9 2.1-5.9 5.5-8z" />
+      <text
+        x="12"
+        y="17.6"
+        textAnchor="middle"
+        fontSize="9"
+        fontWeight="bold"
+        fill="oklch(0.2686 0 0)"
+        stroke="none"
+      >
+        $
+      </text>
+    </svg>
+  );
+}
 
 type DonationSpell = (typeof DONATION_SPELLS)[number];
 
@@ -450,7 +469,7 @@ export function SupportPage() {
           className="pointer-events-none absolute bottom-full right-2 -mb-5 h-24 w-auto drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)] sm:right-6 sm:-mb-7 sm:h-32"
         />
         <div className="flex items-center gap-2 rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-2.5 py-1.5">
-          <Skull aria-hidden="true" className="h-4 w-4 text-amber-400" />
+          <MoneyBagIcon className="h-4 w-4 text-amber-400" />
           <h2 className="text-sm font-medium text-foreground">Hosting Bill</h2>
           <span className="ml-auto text-xs text-muted-foreground">Overall Cost</span>
         </div>
