@@ -41,12 +41,12 @@ function isOldEnough(createdAt: string): boolean {
   return Date.now() - new Date(createdAt).getTime() >= MIN_ACCOUNT_AGE_MS;
 }
 
-/** Small medallion that flips between the Chronicle logo and a heart. */
-function CoinMedallion() {
+/** Medallion that flips between the Chronicle logo and a heart. */
+function CoinMedallion({ className }: { className: string }) {
   return (
     <span
       aria-hidden="true"
-      className="relative inline-block h-5 w-5 shrink-0"
+      className={`relative inline-block shrink-0 ${className}`}
       style={{ perspective: "300px" }}
     >
       <span className="support-banner-coin absolute inset-0">
@@ -58,26 +58,28 @@ function CoinMedallion() {
           />
         </span>
         <span className="support-banner-coin-face support-banner-coin-back">
-          <Heart className="h-3 w-3 fill-current" />
+          <Heart className="h-1/2 w-1/2 fill-current" />
         </span>
       </span>
     </span>
   );
 }
 
-const BAR_BASE_CLASSES =
-  "relative flex items-center justify-center gap-2 border-b py-2 px-4 text-center text-sm";
+const BAR_BASE_CLASSES = "border-b py-4 px-6 text-left";
+const CONTENT_ROW_CLASSES = "mx-auto flex w-full max-w-5xl items-center gap-4";
+const BUTTON_BASE_CLASSES =
+  "shrink-0 rounded-md px-4 py-2 text-sm font-bold text-white transition-colors";
 const DISMISS_BASE_CLASSES =
-  "absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground transition-colors";
+  "shrink-0 rounded p-1 text-muted-foreground hover:text-foreground transition-colors";
 
 const DONATE_BAR_CLASSES = `${BAR_BASE_CLASSES} border-rose-500/30 bg-rose-500/10`;
+const DONATE_HEADING_CLASSES = "font-wow text-base font-bold text-foreground";
+const DONATE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} bg-rose-500 hover:bg-rose-600`;
 const DONATE_DISMISS_CLASSES = `${DISMISS_BASE_CLASSES} hover:bg-rose-500/20`;
-const DONATE_HEADING_CLASSES = "font-wow font-bold text-rose-600 dark:text-rose-400";
-const DONATE_LINK_CLASSES = "underline text-rose-600 dark:text-rose-400 hover:text-rose-500";
 
 const THANKS_BAR_CLASSES = `${BAR_BASE_CLASSES} border-emerald-500/30 bg-emerald-500/10`;
+const THANKS_HEADING_CLASSES = "font-wow text-base font-bold text-foreground";
 const THANKS_DISMISS_CLASSES = `${DISMISS_BASE_CLASSES} hover:bg-emerald-500/20`;
-const THANKS_HEADING_CLASSES = "font-wow font-bold text-emerald-600 dark:text-emerald-400";
 
 /**
  * Site-wide reminder that Chronicle's hosting is donor-funded. Shows on every
@@ -127,36 +129,44 @@ export function SupportBanner() {
   if (state === "thanks") {
     return (
       <div className={THANKS_BAR_CLASSES}>
-        <CoinMedallion />
-        <span className={THANKS_HEADING_CLASSES}>
-          Thank You
-        </span>
-        <span className="text-muted-foreground">
-          Your support keeps Chronicle&apos;s servers running — we couldn&apos;t do this without you.
-        </span>
-        <button onClick={handleDismiss} className={THANKS_DISMISS_CLASSES} aria-label="Dismiss banner">
-          <X className="h-4 w-4" />
-        </button>
+        <div className={CONTENT_ROW_CLASSES}>
+          <CoinMedallion className="h-10 w-10" />
+          <div className="min-w-0 flex-1">
+            <div className={THANKS_HEADING_CLASSES}>Thank you for supporting Chronicle.</div>
+            <div className="mt-0.5 text-sm text-muted-foreground">
+              Your generosity keeps every server here running.
+            </div>
+          </div>
+          <button onClick={handleDismiss} className={THANKS_DISMISS_CLASSES} aria-label="Dismiss banner">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className={DONATE_BAR_CLASSES}>
-      <CoinMedallion />
-      <span className={DONATE_HEADING_CLASSES}>
-        Keep Chronicle Alive
-      </span>
-      <span className="text-muted-foreground">
-        Hosting isn&apos;t free —{" "}
-        <a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer" className={DONATE_LINK_CLASSES}>
-          support the project
+      <div className={CONTENT_ROW_CLASSES}>
+        <CoinMedallion className="h-10 w-10" />
+        <div className="min-w-0 flex-1">
+          <div className={DONATE_HEADING_CLASSES}>Chronicle runs on donations, not ads.</div>
+          <div className="mt-0.5 text-sm text-muted-foreground">
+            Every server here is hosted for free. Help keep it that way.
+          </div>
+        </div>
+        <a
+          href={SUPPORT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={DONATE_BUTTON_CLASSES}
+        >
+          Support Chronicle
         </a>
-        .
-      </span>
-      <button onClick={handleDismiss} className={DONATE_DISMISS_CLASSES} aria-label="Dismiss banner">
-        <X className="h-4 w-4" />
-      </button>
+        <button onClick={handleDismiss} className={DONATE_DISMISS_CLASSES} aria-label="Dismiss banner">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }
