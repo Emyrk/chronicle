@@ -536,19 +536,22 @@ export function SupportPage() {
           <div className="relative grid gap-8 sm:grid-cols-2">
             {HOSTING_QUESTS.map(({ title, body, objective, status, badge }) => (
               <article key={title}>
-                <h4 className="font-serif text-lg font-bold leading-tight text-[#5a3c10]">
-                  {title}
-                </h4>
-                {badge && (
-                  <p className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/40 bg-[#101a2c] px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-300">
-                      <span aria-hidden="true">◆</span>
-                      Hosted by Chronicle
-                    </span>
-                    <span className="text-xs italic text-[#6b5330]">
-                      this badge marks them in the server directory
-                    </span>
-                  </p>
+                {badge ? (
+                  <>
+                    <h4>
+                      <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/40 bg-[#101a2c] px-3.5 py-1.5 text-sm font-semibold uppercase tracking-wider text-sky-300">
+                        <span aria-hidden="true">◆</span>
+                        {title}
+                      </span>
+                    </h4>
+                    <p className="mt-1.5 text-xs italic text-[#6b5330]">
+                      the badge that marks these servers in the directory
+                    </p>
+                  </>
+                ) : (
+                  <h4 className="font-serif text-lg font-bold leading-tight text-[#5a3c10]">
+                    {title}
+                  </h4>
                 )}
                 <p className="mt-1.5 text-sm leading-relaxed text-[#4a3520]">{body}</p>
                 <p className="mt-3 text-xs font-bold uppercase tracking-wide text-[#6b5330]">
