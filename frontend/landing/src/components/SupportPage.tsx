@@ -442,11 +442,17 @@ export function SupportPage() {
         ))}
       </div>
 
-      <div className="mt-12 rounded-lg border border-border bg-card shadow-2xl shadow-black/50 ring-1 ring-white/10">
+      <div className="relative mt-12 rounded-lg border border-border bg-card shadow-2xl shadow-black/50 ring-1 ring-white/10">
+        <img
+          src="/goblin.webp"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-full right-2 -mb-2 h-24 w-auto drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)] sm:right-6 sm:-mb-3 sm:h-32"
+        />
         <div className="flex items-center gap-2 rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-2.5 py-1.5">
           <Skull aria-hidden="true" className="h-4 w-4 text-amber-400" />
           <h2 className="text-sm font-medium text-foreground">Hosting Bill</h2>
-          <span className="ml-auto text-xs text-muted-foreground">Overall Damage Done</span>
+          <span className="ml-auto text-xs text-muted-foreground">Overall Cost</span>
         </div>
         <ul className="flex flex-col gap-0.5 p-1">
           {HOSTING_METER.map(({ label, pct, color, note, why, source }, i) => {
