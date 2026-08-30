@@ -38,7 +38,7 @@ const DONATION_LINKS = [
 const HOSTING_METER = [
   {
     label: "Memory",
-    pct: 72,
+    pct: 65,
     color: "#f0a020",
     note: "Largest",
     why: [
@@ -200,7 +200,7 @@ export function SupportPage() {
         </div>
         <div aria-hidden="true" className="mt-4 flex h-6 w-full overflow-hidden rounded-sm">
           {HOSTING_METER.map(({ label, pct, color }) => (
-            <div key={label} style={{ width: `${pct}%`, background: color }} />
+            <div key={label} style={{ flexGrow: pct, background: color }} />
           ))}
         </div>
         <ul className="mt-5 space-y-2.5 font-mono text-sm">
