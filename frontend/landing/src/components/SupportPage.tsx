@@ -176,8 +176,8 @@ function GryphonEndCap({ side }: { side: "left" | "right" }) {
       alt=""
       aria-hidden="true"
       className={
-        "pointer-events-none absolute bottom-0 hidden h-[4.75rem] w-auto drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)] sm:block " +
-        (side === "left" ? "right-full -mr-5" : "left-full -ml-5 -scale-x-100")
+        "pointer-events-none absolute bottom-0 h-12 w-auto drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)] sm:h-[4.75rem] " +
+        (side === "left" ? "right-full -mr-6 sm:-mr-5" : "left-full -ml-6 sm:-ml-5 -scale-x-100")
       }
     />
   );
