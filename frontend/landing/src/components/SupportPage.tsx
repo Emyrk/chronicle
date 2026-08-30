@@ -82,12 +82,14 @@ const PARCHMENT_BG = "radial-gradient(ellipse at 30% 15%, #ead9ae 0%, #d3ba8c 55
 const HOSTING_QUESTS = [
   {
     title: "Hosted by Chronicle",
+    badge: true,
     body: "Chronicle operates these deployments directly — infrastructure, hosting, and service costs are covered by the project. These are the realms of the mainland.",
     objective: "Keep every mainland realm online",
     status: "Ongoing",
   },
   {
     title: "Community Hosted",
+    badge: false,
     body: "Independent communities run Chronicle on their own infrastructure. Same open-source project, their own hosting — the isles across the strait.",
     objective: "Sail your own shores",
     status: "Complete",
@@ -316,19 +318,13 @@ export function SupportPage() {
     <section className="relative mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8">
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-[radial-gradient(ellipse_at_top,_var(--primary-darker)_0%,_transparent_65%)] opacity-50" />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <a
-          href="/"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-          Back to server directory
-        </a>
-        <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-300">
-          <span aria-hidden="true">◆</span>
-          Hosted by Chronicle
-        </div>
-      </div>
+      <a
+        href="/"
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+        Back to server directory
+      </a>
 
       <div className="mx-auto mt-6 max-w-3xl text-center">
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
@@ -538,11 +534,22 @@ export function SupportPage() {
             className="pointer-events-none absolute inset-y-0 left-0 w-8 rounded-bl-[10px] bg-gradient-to-r from-[#8a704a]/60 to-transparent"
           />
           <div className="relative grid gap-8 sm:grid-cols-2">
-            {HOSTING_QUESTS.map(({ title, body, objective, status }) => (
+            {HOSTING_QUESTS.map(({ title, body, objective, status, badge }) => (
               <article key={title}>
                 <h4 className="font-serif text-lg font-bold leading-tight text-[#5a3c10]">
                   {title}
                 </h4>
+                {badge && (
+                  <p className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/40 bg-[#101a2c] px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-300">
+                      <span aria-hidden="true">◆</span>
+                      Hosted by Chronicle
+                    </span>
+                    <span className="text-xs italic text-[#6b5330]">
+                      this badge marks them in the server directory
+                    </span>
+                  </p>
+                )}
                 <p className="mt-1.5 text-sm leading-relaxed text-[#4a3520]">{body}</p>
                 <p className="mt-3 text-xs font-bold uppercase tracking-wide text-[#6b5330]">
                   Objectives
