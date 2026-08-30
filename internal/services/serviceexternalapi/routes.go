@@ -3,6 +3,7 @@ package serviceexternalapi
 import (
 	"net/http"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/google/uuid"
 )
 
@@ -67,6 +68,53 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.listCharacterLogs)
 
+	s.register(http.MethodGet, "/raidlogs/recent", OpenAPIOperation{
+		Summary:     "List recent raid activity",
+		Description: "Returns recent parsed raid instances, newest first. Results may be filtered to activity on or after an RFC3339 timestamp and are limited to 50 per page.",
+		Parameters: []OpenAPIParameter{
+			queryParameter("after_date", "Only include activity starting at or after this RFC3339 timestamp", false, "string", "2026-08-01T00:00:00Z"),
+			queryParameter("instance_name", "Instance name. Repeat this parameter to include multiple names.", false, "string", "Molten Core"),
+			queryParameter("realm_id", "Realm UUID", false, "string", "00000000-0000-0000-0000-000000000000"),
+			queryParameter("guild_id", "Guild UUID", false, "string", "00000000-0000-0000-0000-000000000000"),
+			queryParameter("has_video", "Filter by YouTube video presence: true or false", false, "boolean", true),
+			queryParameter("page", "Page number, starting at 1", false, "integer", 1),
+			queryParameter("page_size", "Results per page, from 1 to 50", false, "integer", 25),
+		},
+		Responses: okResponse(RecentActivityResponse{
+			Activities: []RecentActivity{{
+				Name: "Molten Core", Slug: "example-instance", Realm: Realm{Name: "Example Realm"},
+				Difficulty: "Normal", MaxPlayers: 40, PlayerCount: 40, BossKills: 10,
+			}},
+			Pagination: Pagination{Page: 1, PageSize: 25},
+		}),
+	}, s.listRecentActivity)
+
+	s.register(http.MethodGet, "/raidlogs/instances/{slug}", OpenAPIOperation{
+		Summary:     "Get a raid instance",
+		Description: "Returns parsed raid-instance metadata, encounters, units, and players for a public instance slug. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
+		Parameters: []OpenAPIParameter{
+			pathParameter("slug", "Public raid-instance slug", "example-instance"),
+		},
+		Responses: okResponse(InstanceResponse{
+			WoWInstance: chroniclesdk.WoWInstance{Name: "Molten Core", Slug: "example-instance", DifficultyName: "Normal", MaxPlayers: 40},
+			RealmName:   "Example Realm",
+			Encounters: []InstanceEncounter{{
+				WoWEncounter: chroniclesdk.WoWEncounter{Name: "Ragnaros", Boss: true, KillType: chroniclesdk.KillTypeClean},
+				Hostiles:     []InstanceHostile{{Boss: true, Periods: []InstanceHostilePeriod{{EndState: chroniclesdk.EndStateSlain}}}},
+			}},
+		}),
+	}, s.getInstanceBySlug)
+
+	s.register(http.MethodGet, "/raidlogs/instances/{slug}/events/{type}", OpenAPIOperation{
+		Summary:     "Get a raid-instance event stream",
+		Description: "Returns the stored gzip-compressed protobuf event stream for a public raid-instance slug and event type.",
+		Parameters: []OpenAPIParameter{
+			pathParameter("slug", "Public raid-instance slug", "example-instance"),
+			pathParameter("type", "Event stream type, such as damage, heal, resource_change, slain, cast, or aura", "damage"),
+		},
+		Responses: binaryResponse("Gzip-compressed protobuf event stream."),
+	}, s.getInstanceEventsBySlug)
+
 	s.register(http.MethodGet, "/leaderboards/speedruns", OpenAPIOperation{
 		Summary:     "Get the speedrun leaderboard",
 		Description: "Returns a paginated list of qualified speedruns after duplicate-group and best-per-guild deduplication. The canonical log is the entry used by the leaderboard; other_logs contains matching uploads excluded as duplicates. timing defaults to full and accepts boss_to_boss for first-boss-pull through final-boss-kill timing.",
@@ -114,6 +162,17 @@ func okResponse(example any) map[string]OpenAPIResponse {
 			Description: "Successful response.",
 			Content: map[string]OpenAPIMediaType{
 				"application/json": {Example: example},
+			},
+		},
+	}
+}
+
+func binaryResponse(description string) map[string]OpenAPIResponse {
+	return map[string]OpenAPIResponse{
+		"200": {
+			Description: description,
+			Content: map[string]OpenAPIMediaType{
+				"application/octet-stream": {Schema: &OpenAPISchema{Type: "string", Format: "binary"}},
 			},
 		},
 	}

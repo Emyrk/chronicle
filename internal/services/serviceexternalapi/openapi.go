@@ -53,7 +53,8 @@ type OpenAPIResponse struct {
 }
 
 type OpenAPIMediaType struct {
-	Example any `json:"example,omitempty"`
+	Schema  *OpenAPISchema `json:"schema,omitempty"`
+	Example any            `json:"example,omitempty"`
 }
 
 func newOpenAPIDocument() OpenAPIDocument {
