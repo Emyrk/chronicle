@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Heart, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useMyStorage } from "@/api/queries";
+import { useAuthorizationCheck } from "@/api/queries";
 
 const LAST_SHOWN_KEY = "support-banner-last-shown";
 
@@ -62,13 +62,14 @@ const THANKS_HEADING_CLASSES = "font-wow font-bold text-emerald-600 dark:text-em
 
 /**
  * Site-wide reminder that Chronicle's hosting is donor-funded, shown at most
- * once every SHOW_INTERVAL_DAYS. Whether someone is currently a supporter
- * (an active "support" storage grant) is checked before anything else and
- * decides the message — that check trumps the cadence/dismissal state below.
+ * once every SHOW_INTERVAL_DAYS. Whether someone currently holds the
+ * "supporter" SpiceDB role is checked before anything else and decides the
+ * message — that check trumps the cadence/dismissal state below.
  */
 export function SupportBanner() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { data: storage, isLoading: storageLoading } = useMyStorage({
+  const authzChecks = useMemo(() => ({ supporter: "chronicle:chronicle#supporter" }), []);
+  const { data: authz, isLoading: authzLoading } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated,
   });
 
@@ -77,7 +78,7 @@ export function SupportBanner() {
   // back off just because its freshly-recorded timestamp is now "not due".
   const [state, setState] = useState<"pending" | "hidden" | "donate" | "thanks">("pending");
 
-  const stillDeciding = authLoading || (isAuthenticated && storageLoading);
+  const stillDeciding = authLoading || (isAuthenticated && authzLoading);
 
   useEffect(() => {
     if (state !== "pending" || stillDeciding) {
@@ -89,15 +90,11 @@ export function SupportBanner() {
       return;
     }
 
-    const isSupporter = (storage?.grants ?? []).some(
-      (grant) =>
-        grant.source === "support" &&
-        (!grant.expires_at || new Date(grant.expires_at).getTime() > Date.now()),
-    );
+    const isSupporter = authz?.supporter ?? false;
 
     markShownNow();
     setState(isSupporter ? "thanks" : "donate");
-  }, [state, stillDeciding, storage]);
+  }, [state, stillDeciding, authz]);
 
   if (state === "pending" || state === "hidden") {
     return null;
