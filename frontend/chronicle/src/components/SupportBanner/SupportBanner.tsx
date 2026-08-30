@@ -41,15 +41,18 @@ function isOldEnough(createdAt: string): boolean {
   return Date.now() - new Date(createdAt).getTime() >= MIN_ACCOUNT_AGE_MS;
 }
 
-/** Medallion that flips between the Chronicle logo and a heart. */
+/** Medallion that flips between the Chronicle logo and a heart. Links to the support page. */
 function CoinMedallion({ className }: { className: string }) {
   return (
-    <span
-      aria-hidden="true"
-      className={`relative inline-block shrink-0 ${className}`}
+    <a
+      href={SUPPORT_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Support Chronicle"
+      className={`relative inline-block shrink-0 rounded-full transition-transform hover:scale-105 ${className}`}
       style={{ perspective: "300px" }}
     >
-      <span className="support-banner-coin absolute inset-0">
+      <span aria-hidden="true" className="support-banner-coin absolute inset-0">
         <span className="support-banner-coin-face support-banner-coin-front">
           <img
             src="/c/chronicle/ChronicleIconSquare.png"
@@ -61,7 +64,7 @@ function CoinMedallion({ className }: { className: string }) {
           <Heart className="h-1/2 w-1/2 fill-current" />
         </span>
       </span>
-    </span>
+    </a>
   );
 }
 
