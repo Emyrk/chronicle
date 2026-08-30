@@ -71,24 +71,36 @@ body {
   }
 }
 
-@keyframes support-ribbon-glow {
+@keyframes support-medallion-glow {
   0%, 100% {
-    box-shadow: 0 0 14px rgb(56 189 248 / 0.18), inset 0 0 12px rgb(56 189 248 / 0.08);
+    box-shadow: 0 0 12px rgb(217 180 107 / 0.2), 0 10px 25px rgb(0 0 0 / 0.45);
   }
   50% {
-    box-shadow: 0 0 26px rgb(56 189 248 / 0.38), inset 0 0 18px rgb(56 189 248 / 0.14);
+    box-shadow: 0 0 28px rgb(217 180 107 / 0.48), 0 10px 30px rgb(0 0 0 / 0.55);
+  }
+}
+
+@keyframes support-ribbon-nudge {
+  0%, 88%, 100% {
+    translate: 0;
+  }
+  92% {
+    translate: -0.3rem;
+  }
+  96% {
+    translate: -0.12rem;
   }
 }
 
 .support-ribbon {
   isolation: isolate;
-  border: 1px solid rgb(125 211 252 / 0.28);
-  border-right: 0;
-  border-radius: 0.75rem 0 0 0.75rem;
+  overflow: visible;
+  border: 1px solid rgb(217 180 107 / 0.45);
+  border-radius: 0.75rem;
   background:
-    linear-gradient(110deg, rgb(8 47 73 / 0.95), rgb(15 23 42 / 0.98) 65%),
-    repeating-linear-gradient(135deg, transparent 0 8px, rgb(125 211 252 / 0.06) 8px 9px);
-  clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 12px 50%);
+    linear-gradient(105deg, rgb(48 38 27 / 0.98), rgb(15 23 42 / 0.98) 58%),
+    repeating-linear-gradient(135deg, transparent 0 8px, rgb(217 180 107 / 0.07) 8px 9px);
+  animation: support-ribbon-nudge 8s ease-in-out infinite;
   transition: transform 220ms ease, border-color 220ms ease, filter 220ms ease;
 }
 
@@ -96,51 +108,83 @@ body {
   position: absolute;
   inset: 0;
   z-index: -1;
+  overflow: hidden;
+  border-radius: inherit;
   content: "";
-  background: linear-gradient(90deg, transparent, rgb(56 189 248 / 0.13), transparent);
-  transform: translateX(-100%);
-  transition: transform 500ms ease;
+  background: linear-gradient(100deg, transparent 25%, rgb(251 191 36 / 0.18), transparent 70%);
+  transform: translateX(-110%);
+  transition: transform 550ms ease;
+}
+
+.support-ribbon::after {
+  position: absolute;
+  right: 0.65rem;
+  bottom: -0.45rem;
+  z-index: -2;
+  width: 2.2rem;
+  height: 0.8rem;
+  content: "";
+  background: rgb(120 76 20 / 0.9);
+  clip-path: polygon(0 0, 100% 0, 72% 100%);
+  filter: brightness(0.75);
 }
 
 .support-ribbon:hover,
 .support-ribbon:focus-visible {
-  border-color: rgb(125 211 252 / 0.65);
+  animation-play-state: paused;
+  border-color: rgb(252 211 77 / 0.8);
   filter: brightness(1.12);
-  transform: translateX(-0.35rem);
+  transform: translate(-0.35rem, 0.05rem) scale(1.035);
 }
 
 .support-ribbon:hover::before,
 .support-ribbon:focus-visible::before {
-  transform: translateX(100%);
+  transform: translateX(110%);
+}
+
+.support-ribbon-medallion {
+  animation: support-medallion-glow 3s ease-in-out infinite;
+  transition: border-color 220ms ease, transform 220ms ease;
 }
 
 .support-ribbon-orbit {
-  animation: support-ribbon-glow 3s ease-in-out infinite;
+  transition: border-color 220ms ease;
 }
 
 .support-ribbon-logo {
-  animation: support-logo-spin 16s linear infinite;
-  filter: drop-shadow(0 0 5px rgb(125 211 252 / 0.35));
+  animation: support-logo-spin 20s linear infinite;
+  filter: drop-shadow(0 0 4px rgb(217 180 107 / 0.32));
   transition: filter 220ms ease;
+}
+
+.support-ribbon:hover .support-ribbon-medallion,
+.support-ribbon:focus-visible .support-ribbon-medallion {
+  border-color: rgb(252 211 77 / 0.85);
+  transform: translateY(-50%) scale(1.06);
+}
+
+.support-ribbon:hover .support-ribbon-orbit,
+.support-ribbon:focus-visible .support-ribbon-orbit {
+  border-color: rgb(252 211 77 / 0.7);
 }
 
 .support-ribbon:hover .support-ribbon-logo,
 .support-ribbon:focus-visible .support-ribbon-logo {
-  animation-duration: 2.25s;
-  filter: drop-shadow(0 0 10px rgb(125 211 252 / 0.85));
-}
-
-@media (max-width: 639px) {
-  .support-ribbon {
-    padding-left: 0.85rem;
-  }
+  animation-duration: 2.5s;
+  filter: drop-shadow(0 0 11px rgb(252 211 77 / 0.78));
 }
 
 @media (prefers-reduced-motion: reduce) {
   .support-ribbon,
-  .support-ribbon::before,
+  .support-ribbon-medallion,
   .support-ribbon-logo {
     animation: none;
+  }
+
+  .support-ribbon,
+  .support-ribbon::before,
+  .support-ribbon-medallion,
+  .support-ribbon-logo {
     transition: none;
   }
 
