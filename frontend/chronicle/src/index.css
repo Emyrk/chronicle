@@ -124,6 +124,48 @@
   animation: replay-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Slow coin flip for the support banner's Chronicle-logo/heart medallion. */
+@keyframes support-banner-coin-flip {
+  to {
+    transform: rotateY(360deg);
+  }
+}
+
+.support-banner-coin {
+  display: block;
+  transform-style: preserve-3d;
+  animation: support-banner-coin-flip 3s linear infinite;
+}
+
+.support-banner-coin-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 1px solid rgb(253 230 138 / 0.6);
+  background: #242424;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.support-banner-coin-front {
+  transform: rotateY(0deg) translateZ(1px);
+}
+
+.support-banner-coin-back {
+  color: rgb(253 230 138);
+  transform: rotateY(180deg) translateZ(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .support-banner-coin {
+    animation: none;
+  }
+}
+
 /* Quick jiggle to acknowledge a button press (e.g. toggling replay) */
 @keyframes button-jiggle {
   0%, 100% {
