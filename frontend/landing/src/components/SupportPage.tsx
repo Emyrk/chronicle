@@ -168,36 +168,18 @@ const ACTION_BAR_SPELLS = [
 const ACTION_SLOT_CLASSES =
   "group relative block h-12 w-12 rounded border-2 border-[#5a5a7a] bg-black outline-none transition-transform hover:scale-105 hover:border-yellow-500/80 focus-visible:scale-105 focus-visible:border-yellow-500/80";
 
-/** Stylized bronze gryphon statue, an homage to the classic action bar end caps. */
+/** Stone gryphon statues flanking the bar, like the classic action bar end caps. */
 function GryphonEndCap({ side }: { side: "left" | "right" }) {
   return (
-    <svg
+    <img
+      src="/gryphon.webp"
+      alt=""
       aria-hidden="true"
-      viewBox="0 0 64 88"
       className={
-        "pointer-events-none absolute bottom-0 hidden h-[4.6rem] w-auto drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)] sm:block " +
-        (side === "left" ? "right-full -mr-2" : "left-full -ml-2 -scale-x-100")
+        "pointer-events-none absolute bottom-0 hidden h-[4.75rem] w-auto drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)] sm:block " +
+        (side === "left" ? "right-full -mr-5" : "left-full -ml-5 -scale-x-100")
       }
-    >
-      <defs>
-        <linearGradient id={`gryphon-${side}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#c9963e" />
-          <stop offset="0.45" stopColor="#8a6a2a" />
-          <stop offset="1" stopColor="#4a3812" />
-        </linearGradient>
-      </defs>
-      <g fill={`url(#gryphon-${side})`} stroke="#2a1f08" strokeWidth="1.5" strokeLinejoin="round">
-        {/* plinth */}
-        <path d="M6 86 L6 79 Q6 76 10 76 L54 76 Q58 76 58 79 L58 86 Z" />
-        <path d="M10 76 L12 70 Q13 68 16 68 L48 68 Q51 68 52 70 L54 76 Z" />
-        {/* gryphon: seated, folded wing swept high behind, hooked beak facing in */}
-        <path d="M14 68 Q9 58 12 47 Q11 34 16 24 L14 8 Q13 4 17 7 Q21 10 24 16 Q28 20 32 24 Q34 13 39 9 L38 3 L42 7 Q46 5 49 10 L57 14 Q59 17 53 18 Q50 19 47 21 Q47 27 46 33 Q49 41 47 49 L48 60 Q49 65 52 67 L52 68 L42 68 Q38 62 33 60 Q28 60 26 64 L25 68 Z" />
-        {/* wing feather ridges */}
-        <path d="M17 10 Q15 30 19 46 M22 18 Q20 34 24 50" fill="none" strokeWidth="1.2" stroke="#3a2c10" />
-        {/* eye */}
-        <circle cx="45" cy="13" r="1.3" fill="#2a1f08" stroke="none" />
-      </g>
-    </svg>
+    />
   );
 }
 
