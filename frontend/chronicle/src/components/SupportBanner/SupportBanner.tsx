@@ -76,11 +76,16 @@ function CoinMedallion({ className }: { className: string }) {
 }
 
 const BAR_BASE_CLASSES = "border-b py-4 px-6 text-left";
-const CONTENT_ROW_CLASSES = "mx-auto flex w-full max-w-5xl items-center gap-4";
+// Column on mobile (icon+text on one line, the button dropping to its own
+// line below) and a single row from sm up. pr-8 keeps text/button clear of
+// the dismiss button, which is pinned to the corner only below sm.
+const CONTENT_ROW_CLASSES =
+  "relative mx-auto flex w-full max-w-5xl flex-col gap-3 pr-8 sm:flex-row sm:items-center sm:gap-4 sm:pr-0";
+const ICON_TEXT_CLASSES = "flex min-w-0 flex-1 items-center gap-4";
 const BUTTON_BASE_CLASSES =
-  "shrink-0 rounded-md px-4 py-2 text-sm font-bold text-white transition-colors";
+  "shrink-0 self-end rounded-md px-4 py-2 text-sm font-bold text-white transition-colors sm:self-auto";
 const DISMISS_BASE_CLASSES =
-  "shrink-0 rounded p-1 text-muted-foreground hover:text-foreground transition-colors";
+  "absolute right-0 top-0 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-foreground sm:static";
 
 const DONATE_BAR_CLASSES = `${BAR_BASE_CLASSES} border-rose-500/30 bg-rose-500/10`;
 const DONATE_HEADING_CLASSES = "font-wow text-base font-bold text-foreground";
@@ -141,11 +146,16 @@ export function SupportBanner() {
     return (
       <div className={THANKS_BAR_CLASSES}>
         <div className={CONTENT_ROW_CLASSES}>
-          <CoinMedallion className="h-10 w-10" />
-          <div className="min-w-0 flex-1">
-            <div className={THANKS_HEADING_CLASSES}>Thank you for supporting Chronicle.</div>
-            <div className="mt-0.5 text-sm text-muted-foreground">
-              Your generosity keeps every server here running.
+          <div className={ICON_TEXT_CLASSES}>
+            <CoinMedallion className="h-10 w-10" />
+            <div className="min-w-0 flex-1">
+              <div className={THANKS_HEADING_CLASSES}>
+                <span className="sm:hidden">Thank You</span>
+                <span className="hidden sm:inline">Thank you for supporting Chronicle.</span>
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
+                Your generosity keeps every server here running.
+              </div>
             </div>
           </div>
           <button onClick={handleDismiss} className={THANKS_DISMISS_CLASSES} aria-label="Dismiss banner">
@@ -159,11 +169,16 @@ export function SupportBanner() {
   return (
     <div className={DONATE_BAR_CLASSES}>
       <div className={CONTENT_ROW_CLASSES}>
-        <CoinMedallion className="h-10 w-10" />
-        <div className="min-w-0 flex-1">
-          <div className={DONATE_HEADING_CLASSES}>Chronicle runs on donations, not ads.</div>
-          <div className="mt-0.5 text-sm text-muted-foreground">
-            Every server here is hosted for free. Help keep it that way.
+        <div className={ICON_TEXT_CLASSES}>
+          <CoinMedallion className="h-10 w-10" />
+          <div className="min-w-0 flex-1">
+            <div className={DONATE_HEADING_CLASSES}>
+              <span className="sm:hidden">Keep Chronicle Alive</span>
+              <span className="hidden sm:inline">Chronicle runs on donations, not ads.</span>
+            </div>
+            <div className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
+              Every server here is hosted for free. Help keep it that way.
+            </div>
           </div>
         </div>
         <a
