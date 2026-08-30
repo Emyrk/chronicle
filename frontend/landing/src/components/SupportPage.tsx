@@ -113,7 +113,7 @@ const QUALITY = {
 
 const WHY_DONATE_ITEMS = [
   {
-    title: "Servers aren't free",
+    title: "Servers Aren't Free",
     quality: QUALITY.legendary,
     icon: "inv_misc_gear_01",
     slot: "Community Perk",
@@ -125,7 +125,7 @@ const WHY_DONATE_ITEMS = [
     flavor: "The real gold sink was infrastructure all along.",
   },
   {
-    title: "Keep Chronicle ad-free",
+    title: "Keep Chronicle Ad-Free",
     quality: QUALITY.epic,
     icon: "spell_holy_silence",
     slot: "Community Perk",
@@ -137,7 +137,7 @@ const WHY_DONATE_ITEMS = [
     flavor: "The only things tracking you should be threat meters.",
   },
   {
-    title: "Keep Chronicle paywall-free",
+    title: "Keep Chronicle Paywall-Free",
     quality: QUALITY.rare,
     icon: "inv_misc_key_03",
     slot: "Community Perk",
@@ -149,7 +149,7 @@ const WHY_DONATE_ITEMS = [
     flavor: "No attunement required.",
   },
   {
-    title: "Sustain development",
+    title: "Sustain Development",
     quality: QUALITY.uncommon,
     icon: "inv_misc_wrench_01",
     slot: "Community Perk",
@@ -352,7 +352,7 @@ export function SupportPage() {
 
       <div className="mx-auto mt-6 max-w-3xl text-center">
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
-          Keeping Chronicle available to WoW communities
+          Keeping Chronicle Available to WoW Communities
         </h1>
       </div>
 
@@ -376,7 +376,7 @@ export function SupportPage() {
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-0 right-0 w-4 rounded-br-[10px] bg-gradient-to-l from-[#8a704a]/35 to-transparent"
           />
-          <p className="relative mx-auto max-w-md text-center font-wow text-sm italic leading-snug text-[#6b5330]">
+          <p className="relative mx-auto max-w-xl text-center font-wow text-[15px] leading-snug text-[#4a3520]">
             Contributions help cover hosting for Chronicle-operated deployments and
             support continued development. Support is appreciated, never required.
           </p>
@@ -404,25 +404,10 @@ export function SupportPage() {
               ),
             )}
           </div>
-          <div className="relative mt-4 flex items-center justify-end gap-2">
-            <span className="font-wow text-sm italic text-[#6b5330]">Page 1</span>
-            <span
-              aria-hidden="true"
-              className="flex h-5 w-5 items-center justify-center rounded-sm border border-[#8a6a2a] bg-[#c9963e]/60 text-[11px] font-bold leading-none text-[#3a2c10] opacity-60"
-            >
-              ‹
-            </span>
-            <span
-              aria-hidden="true"
-              className="flex h-5 w-5 items-center justify-center rounded-sm border border-[#8a6a2a] bg-[#c9963e]/60 text-[11px] font-bold leading-none text-[#3a2c10] opacity-60"
-            >
-              ›
-            </span>
-          </div>
         </div>
       </div>
 
-      <h2 className="mt-12 text-xl font-semibold text-foreground">Why donate?</h2>
+      <h2 className="mt-12 text-xl font-semibold text-foreground">Why Donate?</h2>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         {WHY_DONATE_ITEMS.map(({ title, quality, icon, slot, subtype, equip, flavor }) => (
           <article
@@ -543,7 +528,7 @@ export function SupportPage() {
         </ul>
       </div>
 
-      <h2 className="mt-12 text-xl font-semibold text-foreground">Who runs each server?</h2>
+      <h2 className="mt-12 text-xl font-semibold text-foreground">Who Runs Each Server?</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Whoever hosts a server bears the costs of running its logging site.
       </p>
@@ -595,7 +580,7 @@ export function SupportPage() {
                   <>
                     <p className="mt-2 text-[13px] font-bold text-[#6b5330]">Rewards</p>
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/40 bg-[#101a2c] px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-300">
+                      <span className="inline-flex items-center gap-2 rounded-full border border-[#f0c060]/40 bg-[#241a08] px-3 py-1 text-xs font-semibold uppercase tracking-wider text-[#f0c060]">
                         <span aria-hidden="true">◆</span>
                         Hosted by Chronicle
                       </span>
