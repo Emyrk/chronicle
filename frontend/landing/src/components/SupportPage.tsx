@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
@@ -293,7 +293,6 @@ function ActionSlotContent({ spell, keybind }: { spell: DonationSpell; keybind: 
 export function SupportPage() {
   const [cryptoModalOpen, setCryptoModalOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
-  const ctaRef = useRef<HTMLDivElement>(null);
   const [actionBarVisible, setActionBarVisible] = useState(false);
 
   useEffect(() => {
@@ -306,19 +305,10 @@ export function SupportPage() {
   }, [mapOpen]);
 
   useEffect(() => {
-    const el = ctaRef.current;
-    if (!el || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        // Summon the bar once the spellbook has mostly scrolled off the top:
-        // the shrunken root means "still intersecting" only while the book
-        // reaches below the top third of the viewport.
-        setActionBarVisible(!entry.isIntersecting && entry.boundingClientRect.top < 0);
-      },
-      { rootMargin: "-33% 0px 0px 0px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
+    const onScroll = () => setActionBarVisible(window.scrollY > 300);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   return (
@@ -339,10 +329,7 @@ export function SupportPage() {
         </h1>
       </div>
 
-      <div
-        ref={ctaRef}
-        className="mt-10 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40"
-      >
+      <div className="mt-10 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
         <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5">
           <BookOpen aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
           <h2 className="flex-1 text-center font-wow text-base font-bold tracking-[0.08em] text-[#f0c060]">
