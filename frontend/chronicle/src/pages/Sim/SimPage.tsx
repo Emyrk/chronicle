@@ -195,7 +195,6 @@ export function SimPage() {
       units: {
         [SIM_TARGET_GUID]: {
           name: targetName,
-          owner: null,
           entry: 0,
         },
       },

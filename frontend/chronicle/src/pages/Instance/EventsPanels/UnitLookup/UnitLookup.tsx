@@ -52,7 +52,7 @@ function UnitLookupContent({ result, context }: PanelRenderProps<UnitLookupResul
       guid,
       name: unit.name,
       entry: unit.entry,
-      owner: unit.owner as string | null,
+      owner: unit.owner?.toString() ?? null,
       controller: null,
       controllerSpellId: 0,
       unitType: 0,
