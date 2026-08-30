@@ -3,6 +3,7 @@ package serviceexternalapi
 import (
 	"net/http"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/google/uuid"
 )
 
@@ -66,6 +67,22 @@ func (s *Service) registerRoutes() {
 			Pagination: Pagination{Page: 1, PageSize: 50},
 		}),
 	}, s.listCharacterLogs)
+
+	s.register(http.MethodGet, "/raidlogs/instances/{slug}", OpenAPIOperation{
+		Summary:     "Get a raid instance",
+		Description: "Returns parsed raid-instance metadata, encounters, units, and players for a public instance slug. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
+		Parameters: []OpenAPIParameter{
+			pathParameter("slug", "Public raid-instance slug", "example-instance"),
+		},
+		Responses: okResponse(InstanceResponse{
+			WoWInstance: chroniclesdk.WoWInstance{Name: "Molten Core", Slug: "example-instance", DifficultyName: "Normal", MaxPlayers: 40},
+			RealmName:   "Example Realm",
+			Encounters: []InstanceEncounter{{
+				WoWEncounter: chroniclesdk.WoWEncounter{Name: "Ragnaros", Boss: true, KillType: chroniclesdk.KillTypeClean},
+				Hostiles:     []InstanceHostile{{Boss: true, Periods: []InstanceHostilePeriod{{EndState: chroniclesdk.EndStateSlain}}}},
+			}},
+		}),
+	}, s.getInstanceBySlug)
 
 	s.register(http.MethodGet, "/leaderboards/speedruns", OpenAPIOperation{
 		Summary:     "Get the speedrun leaderboard",

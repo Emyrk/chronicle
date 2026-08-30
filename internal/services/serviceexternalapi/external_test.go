@@ -27,6 +27,14 @@ type fakeExternalAPIStore struct {
 	leaderboardParams     database.SpeedrunLeaderboardParams
 	leaderboardDuplicates []database.ListExternalAPILeaderboardDuplicateLogsRow
 	duplicateParams       database.ListExternalAPILeaderboardDuplicateLogsParams
+	instance              database.LogInstancesGuild
+	instanceErr           error
+	instanceSlug          pgtype.Text
+	encounters            []database.LogInstanceEncounter
+	units                 []database.LogInstanceUnit
+	players               []database.LogInstancePlayer
+	hostiles              []database.LogInstanceEncounterHostile
+	phases                []database.LogInstanceEncounterPhase
 }
 
 func (f *fakeExternalAPIStore) ListExternalAPIServers(context.Context) ([]database.ListExternalAPIServersRow, error) {
@@ -55,6 +63,26 @@ func (f *fakeExternalAPIStore) SpeedrunLeaderboard(_ context.Context, params dat
 func (f *fakeExternalAPIStore) ListExternalAPILeaderboardDuplicateLogs(_ context.Context, params database.ListExternalAPILeaderboardDuplicateLogsParams) ([]database.ListExternalAPILeaderboardDuplicateLogsRow, error) {
 	f.duplicateParams = params
 	return f.leaderboardDuplicates, nil
+}
+
+func (f *fakeExternalAPIStore) InstanceBySlug(_ context.Context, slug pgtype.Text) (database.LogInstancesGuild, error) {
+	f.instanceSlug = slug
+	return f.instance, f.instanceErr
+}
+func (f *fakeExternalAPIStore) EncountersByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceEncounter, error) {
+	return f.encounters, nil
+}
+func (f *fakeExternalAPIStore) InstanceUnitsByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceUnit, error) {
+	return f.units, nil
+}
+func (f *fakeExternalAPIStore) InstancePlayersByInstanceID(context.Context, uuid.UUID) ([]database.LogInstancePlayer, error) {
+	return f.players, nil
+}
+func (f *fakeExternalAPIStore) GetInstanceEncounterCharacterFights(context.Context, uuid.UUID) ([]database.LogInstanceEncounterHostile, error) {
+	return f.hostiles, nil
+}
+func (f *fakeExternalAPIStore) GetEncounterPhasesByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceEncounterPhase, error) {
+	return f.phases, nil
 }
 
 func TestListServers(t *testing.T) {
