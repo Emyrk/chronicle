@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
-  CircleHelp,
   Coffee,
   ExternalLink,
   ScrollText,
@@ -76,6 +75,15 @@ const HOSTING_METER = [
 ];
 
 const WOW_ICON_BASE = "https://icons.chronicleclassic.com/turtle";
+
+// Game icons for the hosting cost rows, mirroring the app's class/spec icons.
+const ICON_FOR_COST: Record<string, string> = {
+  Memory: "spell_shadow_manaburn",
+  Network: "spell_nature_lightning",
+  Storage: "inv_crate_02",
+  CPU: "inv_misc_gear_01",
+  Backups: "inv_shield_04",
+};
 
 const PARCHMENT_BG = "radial-gradient(ellipse at 30% 15%, #ead9ae 0%, #d3ba8c 55%, #bda276 100%)";
 
@@ -434,59 +442,79 @@ export function SupportPage() {
         ))}
       </div>
 
-      <div className="mt-12 rounded-xl border border-border bg-card p-6 sm:p-8">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-          Chronicle — Combat Log
+      <div className="mt-12 rounded-lg border border-border bg-card">
+        <div className="flex items-center gap-2 rounded-t-lg border-b border-border bg-background/45 px-2.5 py-1.5">
+          <Skull aria-hidden="true" className="h-4 w-4 text-amber-400" />
+          <h2 className="text-sm font-medium text-foreground">Hosting Bill</h2>
+          <span className="ml-auto text-xs text-muted-foreground">Overall Damage Done</span>
         </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <div className="flex items-center gap-3">
-            <Skull aria-hidden="true" className="h-6 w-6 text-amber-400" />
-            <h2 className="text-xl font-bold text-amber-400">Hosting Bill</h2>
-          </div>
-          <span className="text-sm text-muted-foreground">Overall Damage Done</span>
-        </div>
-        <div aria-hidden="true" className="mt-4 flex h-6 w-full overflow-hidden rounded-sm">
-          {HOSTING_METER.map(({ label, pct, color }) => (
-            <div key={label} style={{ flexGrow: pct, background: color }} />
-          ))}
-        </div>
-        <ul className="mt-5 space-y-2.5 font-mono text-sm">
-          {HOSTING_METER.map(({ label, pct, color, note, why, source }) => (
-            <li key={label} className="flex items-center gap-3">
-              <span aria-hidden="true" className="h-3 w-3 shrink-0" style={{ background: color }} />
-              <span style={{ color }}>{label}</span>
-              <span className="group relative inline-flex">
-                <button
-                  type="button"
-                  aria-label={`About ${label} costs`}
-                  className="text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none"
-                >
-                  <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
-                </button>
+        <ul className="flex flex-col gap-0.5 p-1">
+          {HOSTING_METER.map(({ label, pct, color, note, why, source }, i) => {
+            const maxPct = HOSTING_METER[0].pct;
+            return (
+              <li
+                key={label}
+                tabIndex={0}
+                className="group relative flex h-[30px] items-center overflow-visible rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="absolute inset-0 overflow-hidden rounded-lg">
+                  <div
+                    aria-hidden="true"
+                    className="absolute bottom-0 left-0 top-0 opacity-85"
+                    style={{
+                      width: `${(pct / maxPct) * 100}%`,
+                      background: `linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), ${color}`,
+                    }}
+                  />
+                </div>
+                <div className="relative z-[1] flex w-full items-center px-3">
+                  <span className="w-8 text-[13px] font-medium">#{i + 1}</span>
+                  <img
+                    src={`${WOW_ICON_BASE}/${ICON_FOR_COST[label]}.webp`}
+                    alt=""
+                    aria-hidden="true"
+                    width={24}
+                    height={24}
+                    className="mr-2 h-6 w-6 shrink-0 rounded-[3px]"
+                  />
+                  <span className="min-w-0 truncate text-[13px] font-medium">{label}</span>
+                  <span className="min-w-0 flex-1" />
+                  <span className="mr-3 rounded bg-[oklch(0.205_0_0/0.7)] px-2 py-0.5 font-mono text-xs font-semibold tabular-nums">
+                    {note}
+                  </span>
+                  <span className="w-[50px] text-right font-mono text-xs font-medium tabular-nums text-muted-foreground">
+                    {pct.toFixed(2)}%
+                  </span>
+                </div>
                 <div
                   role="tooltip"
-                  className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-64 rounded-md border border-border bg-card p-3 text-left font-sans text-xs leading-relaxed text-muted-foreground opacity-0 shadow-xl shadow-black/40 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:w-72"
+                  className="pointer-events-none absolute bottom-full left-6 z-20 mb-1 w-72 rounded-md border-2 bg-card text-left text-xs leading-relaxed text-muted-foreground opacity-0 shadow-xl shadow-black/40 transition-opacity group-focus-visible:opacity-100 group-hover:opacity-100"
+                  style={{ borderColor: `color-mix(in oklch, ${color} 60%, transparent)` }}
                 >
-                  <div className="font-semibold" style={{ color }}>
-                    {label}
+                  <div className="flex items-center gap-2 border-b border-border p-2.5">
+                    <span
+                      aria-hidden="true"
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="font-medium text-foreground">{label}</span>
+                    <span className="ml-auto text-muted-foreground">{note}</span>
                   </div>
-                  <ul className="mt-1.5 list-disc space-y-1 pl-4">
-                    {why.map((reason) => (
-                      <li key={reason}>{reason}</li>
-                    ))}
-                  </ul>
-                  <div className="mt-2 border-t border-border pt-2">
-                    <span className="font-semibold text-foreground/80">Source: </span>
-                    {source}
+                  <div className="p-2.5">
+                    <ul className="list-disc space-y-1 pl-4">
+                      {why.map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                    </ul>
+                    <div className="mt-2 border-t border-border pt-2">
+                      <span className="font-semibold text-foreground/80">Source: </span>
+                      {source}
+                    </div>
                   </div>
                 </div>
-              </span>
-              <span className="ml-auto whitespace-nowrap text-muted-foreground">
-                {pct}% of total damage
-              </span>
-              <span className="hidden w-20 text-right text-muted-foreground sm:inline">{note}</span>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       </div>
 
