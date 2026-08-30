@@ -50,7 +50,7 @@ const HOSTING_METER = [
   },
   {
     label: "Network",
-    pct: 13,
+    pct: 15,
     color: "#7fb8e8",
     note: "Small",
     why: [
@@ -62,7 +62,7 @@ const HOSTING_METER = [
   },
   {
     label: "Storage",
-    pct: 10,
+    pct: 13,
     color: "#9ed36a",
     note: "Small",
     why: [
@@ -73,7 +73,7 @@ const HOSTING_METER = [
   },
   {
     label: "CPU",
-    pct: 5,
+    pct: 6,
     color: "#a98ee8",
     note: "Minimal",
     why: [
