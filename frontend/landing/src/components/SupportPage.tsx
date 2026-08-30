@@ -146,6 +146,9 @@ const DONATION_SPELLS = [
     href: GITHUB_SPONSORS_URL,
     accent: "#ec4899",
     icon: <SponsorsHeartIcon className="h-6 w-6 text-pink-400" />,
+    cost: "Any amount of gold",
+    cast: "Instant cast",
+    desc: "Sponsor Chronicle through GitHub, one-time or monthly. Grants Sustained Hosting to all realms. Stacks with other donors.",
   },
   {
     label: "Patreon",
@@ -153,6 +156,9 @@ const DONATION_SPELLS = [
     href: PATREON_URL,
     accent: "#FF424D",
     icon: <PatreonIcon className="h-6 w-6 text-[#FF424D]" />,
+    cost: "Monthly pledge",
+    cast: "Channeled",
+    desc: "Sustains hosting and development while channeled. Interrupting the channel is allowed — no harm done.",
   },
   {
     label: "Buy Me a Coffee",
@@ -160,45 +166,59 @@ const DONATION_SPELLS = [
     href: BUY_ME_A_COFFEE_URL,
     accent: "#facc15",
     icon: <Coffee aria-hidden="true" className="h-6 w-6 text-yellow-400" />,
+    cost: "A few gold",
+    cast: "Instant cast",
+    desc: "A quick one-time thank-you. Restores the developer's mana. May cause caffeination.",
   },
   {
     label: "Tip with Crypto",
     subtitle: "Summon",
     accent: "#fbbf24",
     icon: <CryptoCoinIcon className="h-6 w-6 text-amber-400" />,
+    cost: "Reagents: BTC, ETH, SOL…",
+    cast: "Instant cast",
+    desc: "Summons a window of wallet addresses. The summoned window persists until dismissed.",
   },
 ];
+
+type DonationSpell = (typeof DONATION_SPELLS)[number];
+
+/** WoW-style spell tooltip: name, cost and cast lines in white, gold description. */
+function SpellTooltip({ spell, className }: { spell: DonationSpell; className: string }) {
+  return (
+    <span
+      role="tooltip"
+      className={
+        "pointer-events-none absolute z-20 w-60 rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] p-3 text-left text-xs leading-snug opacity-0 shadow-xl shadow-black/60 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 " +
+        className
+      }
+    >
+      <span className="block text-sm font-medium leading-tight text-white">{spell.label}</span>
+      <span className="block text-white">{spell.cost}</span>
+      <span className="block text-white">{spell.cast}</span>
+      <span className="mt-1 block text-[#ffd200]">{spell.desc}</span>
+    </span>
+  );
+}
 
 const SPELLBOOK_ROW_CLASSES =
   "group relative -mx-2 flex items-center gap-3 rounded px-2 py-1.5 text-left transition-colors hover:bg-black/10 focus-visible:bg-black/10 focus-visible:outline-none";
 
-function SpellbookRow({
-  label,
-  subtitle,
-  icon,
-  accent,
-  external,
-}: {
-  label: string;
-  subtitle: string;
-  icon: React.ReactNode;
-  accent: string;
-  external: boolean;
-}) {
+function SpellbookRow({ spell, external }: { spell: DonationSpell; external: boolean }) {
   return (
     <>
       <span
         aria-hidden="true"
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded border-2 border-[#8a6a2a] shadow-md shadow-black/40"
-        style={{ background: `radial-gradient(circle at 35% 30%, ${accent}40, #14141f 75%)` }}
+        style={{ background: `radial-gradient(circle at 35% 30%, ${spell.accent}40, #14141f 75%)` }}
       >
-        {icon}
+        {spell.icon}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block font-serif text-base font-semibold leading-tight text-[#215c10]">
-          {label}
+          {spell.label}
         </span>
-        <span className="block text-[11px] text-[#7a5c36]">{subtitle}</span>
+        <span className="block text-[11px] text-[#7a5c36]">{spell.subtitle}</span>
       </span>
       {external && (
         <ExternalLink
@@ -206,6 +226,7 @@ function SpellbookRow({
           className="h-3.5 w-3.5 shrink-0 text-[#7a5c36] opacity-0 transition-opacity group-hover:opacity-70 group-focus-visible:opacity-70"
         />
       )}
+      <SpellTooltip spell={spell} className="bottom-full left-0 mb-1" />
     </>
   );
 }
@@ -228,25 +249,15 @@ function GryphonEndCap({ side }: { side: "left" | "right" }) {
   );
 }
 
-function ActionSlotContent({
-  label,
-  icon,
-  accent,
-  keybind,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  accent: string;
-  keybind: number;
-}) {
+function ActionSlotContent({ spell, keybind }: { spell: DonationSpell; keybind: number }) {
   return (
     <>
       <span
         aria-hidden="true"
         className="flex h-full w-full items-center justify-center rounded-sm"
-        style={{ background: `radial-gradient(circle at 35% 30%, ${accent}40, #14141f 75%)` }}
+        style={{ background: `radial-gradient(circle at 35% 30%, ${spell.accent}40, #14141f 75%)` }}
       >
-        {icon}
+        {spell.icon}
       </span>
       <span
         aria-hidden="true"
@@ -254,10 +265,7 @@ function ActionSlotContent({
       >
         {keybind}
       </span>
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded border border-[#4a4a6a] bg-[#1a1a2e] px-2.5 py-1.5 text-left opacity-0 shadow-lg shadow-black/50 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-        <span className="block text-xs font-semibold text-white">{label}</span>
-        <span className="block text-[10px] text-[#ffd200]">Instant cast</span>
-      </span>
+      <SpellTooltip spell={spell} className="bottom-full left-1/2 mb-2 -translate-x-1/2" />
     </>
   );
 }
@@ -332,25 +340,25 @@ export function SupportPage() {
             support continued development. Support is appreciated, never required.
           </p>
           <div className="relative mt-6 grid gap-x-10 gap-y-2 sm:grid-cols-2">
-            {DONATION_SPELLS.map(({ label, subtitle, icon, accent, href }) =>
-              href ? (
+            {DONATION_SPELLS.map((spell) =>
+              spell.href ? (
                 <a
-                  key={label}
-                  href={href}
+                  key={spell.label}
+                  href={spell.href}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={SPELLBOOK_ROW_CLASSES}
                 >
-                  <SpellbookRow label={label} subtitle={subtitle} icon={icon} accent={accent} external />
+                  <SpellbookRow spell={spell} external />
                 </a>
               ) : (
                 <button
-                  key={label}
+                  key={spell.label}
                   type="button"
                   onClick={() => setCryptoModalOpen(true)}
                   className={SPELLBOOK_ROW_CLASSES}
                 >
-                  <SpellbookRow label={label} subtitle={subtitle} icon={icon} accent={accent} external={false} />
+                  <SpellbookRow spell={spell} external={false} />
                 </button>
               ),
             )}
@@ -506,27 +514,27 @@ export function SupportPage() {
           <GryphonEndCap side="left" />
           <GryphonEndCap side="right" />
           <div className="flex items-end gap-1.5 rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e]/95 p-2 shadow-2xl shadow-black/60">
-            {DONATION_SPELLS.map(({ label, icon, accent, href }, i) =>
-              href ? (
+            {DONATION_SPELLS.map((spell, i) =>
+              spell.href ? (
                 <a
-                  key={label}
-                  href={href}
+                  key={spell.label}
+                  href={spell.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={label}
+                  aria-label={spell.label}
                   className={ACTION_SLOT_CLASSES}
                 >
-                  <ActionSlotContent label={label} icon={icon} accent={accent} keybind={i + 1} />
+                  <ActionSlotContent spell={spell} keybind={i + 1} />
                 </a>
               ) : (
                 <button
-                  key={label}
+                  key={spell.label}
                   type="button"
                   onClick={() => setCryptoModalOpen(true)}
-                  aria-label={label}
+                  aria-label={spell.label}
                   className={ACTION_SLOT_CLASSES}
                 >
-                  <ActionSlotContent label={label} icon={icon} accent={accent} keybind={i + 1} />
+                  <ActionSlotContent spell={spell} keybind={i + 1} />
                 </button>
               ),
             )}
