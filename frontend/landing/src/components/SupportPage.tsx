@@ -41,35 +41,55 @@ const HOSTING_METER = [
     pct: 72,
     color: "#f0a020",
     note: "Largest",
-    help: "Parsing a log requires loading the uncompressed log into memory, and logs are large. Memory caches are also maintained for frequently asked-for spells, items, and the like to keep the experience snappy, and the API serves a lot of data, all of which routes through memory. Sourced from the RAM allocation on the machines running Chronicle deployments.",
+    why: [
+      "Parsing requires loading the full uncompressed log into memory — and logs are large.",
+      "Caches for frequently asked-for spells, items, and the like keep the experience snappy.",
+      "The API serves a lot of data, all of which routes through memory.",
+    ],
+    source: "RAM allocation on the machines running Chronicle deployments.",
   },
   {
     label: "Network",
     pct: 13,
     color: "#7fb8e8",
     note: "Small",
-    help: "Log uploads coming in and dashboards, charts, and API responses going out all consume bandwidth. Sourced from the provider's data transfer (egress) charges.",
+    why: [
+      "Combat log uploads coming in.",
+      "Dashboards, charts, and API responses going out.",
+    ],
+    source: "The provider's data transfer (egress) charges.",
   },
   {
     label: "Storage",
     pct: 10,
     color: "#9ed36a",
-    help: "Every uploaded combat log and its parsed history stays available to browse, and that archive only grows. Sourced from the disk volumes backing the database and log storage.",
     note: "Small",
+    why: [
+      "Every uploaded log and its parsed history stays available to browse.",
+      "The archive only grows over time.",
+    ],
+    source: "Disk volumes backing the database and log storage.",
   },
   {
     label: "CPU",
     pct: 5,
     color: "#a98ee8",
     note: "Minimal",
-    help: "Parsing a log is a short burst of compute when it's uploaded; the rest of the time the processors are mostly idle. Sourced from the compute portion of the server instances.",
+    why: [
+      "Parsing a log is a short burst of compute at upload time.",
+      "Outside uploads, the processors are mostly idle.",
+    ],
+    source: "The compute portion of the server instances.",
   },
   {
     label: "Backups",
     pct: 1,
     color: "#8a6a2a",
     note: "Minimal",
-    help: "Regular offsite snapshots protect the database so no one's log history is lost. Sourced from snapshot and object storage fees.",
+    why: [
+      "Regular offsite snapshots protect the database so no one's log history is lost.",
+    ],
+    source: "Snapshot and object storage fees.",
   },
 ];
 
@@ -183,7 +203,7 @@ export function SupportPage() {
           ))}
         </div>
         <ul className="mt-5 space-y-2.5 font-mono text-sm">
-          {HOSTING_METER.map(({ label, pct, color, note, help }) => (
+          {HOSTING_METER.map(({ label, pct, color, note, why, source }) => (
             <li key={label} className="flex items-center gap-3">
               <span aria-hidden="true" className="h-3 w-3 shrink-0" style={{ background: color }} />
               <span style={{ color }}>{label}</span>
@@ -195,12 +215,23 @@ export function SupportPage() {
                 >
                   <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
                 </button>
-                <span
+                <div
                   role="tooltip"
                   className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-64 rounded-md border border-border bg-card p-3 text-left font-sans text-xs leading-relaxed text-muted-foreground opacity-0 shadow-xl shadow-black/40 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:w-72"
                 >
-                  {help}
-                </span>
+                  <div className="font-semibold" style={{ color }}>
+                    {label}
+                  </div>
+                  <ul className="mt-1.5 list-disc space-y-1 pl-4">
+                    {why.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 border-t border-border pt-2">
+                    <span className="font-semibold text-foreground/80">Source: </span>
+                    {source}
+                  </div>
+                </div>
               </span>
               <span className="ml-auto whitespace-nowrap text-muted-foreground">
                 {pct}% of total damage
