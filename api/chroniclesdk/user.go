@@ -25,6 +25,8 @@ type Session struct {
 	EmailVerified bool `json:"email_verified"`
 	// AuthProvider is the provider used for the current session (e.g. "discord", "password").
 	AuthProvider string `json:"auth_provider"`
+	// CreatedAt is when the user's account was created.
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Preferences struct {
