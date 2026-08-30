@@ -46,6 +46,9 @@ export interface ServerEntry {
   // Tags
   status?: StatusTag[];
 
+  /** Chronicle infrastructure and hosting costs are managed by the Chronicle project. */
+  hostedByChronicle?: boolean;
+
   /** Reserved for future sponsorship tier; ignored for now. */
   sponsored?: boolean;
 

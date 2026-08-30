@@ -10,12 +10,18 @@ import type {
   StatusTag,
 } from "../types";
 
-const CACHE_KEY_PREFIX = "chronicle_discovery_";
+const CACHE_KEY_PREFIX = "chronicle_discovery_v2_";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CHRONICLE_HOSTED_DISCOVERY_URL = "https://legacy.chronicleclassic.com";
+
+interface SourcedDiscoveryEntry extends DiscoveryEntry {
+  discoverySource: string;
+}
 
 /** Cache key includes a hash of the URL list so changing URLs invalidates the cache. */
 function cacheKey(urls: string[]): string {
-  return CACHE_KEY_PREFIX + urls.join(",");
+  const source = import.meta.env.DEV ? "dev-proxy:" : "production:";
+  return CACHE_KEY_PREFIX + source + urls.join(",");
 }
 
 // --- Tag → attribute mapping ---
@@ -72,7 +78,7 @@ function parseTags(tags: string[]): {
 }
 
 function discoveryToServer(
-  entry: DiscoveryEntry,
+  entry: SourcedDiscoveryEntry,
   branding: DiscoveryBranding,
 ): ServerEntry {
   const { expansion, client, logging, engine, status } = parseTags(
@@ -100,17 +106,18 @@ function discoveryToServer(
     engine,
     chronicleUrl: entry.url,
     status: status.length > 0 ? status : undefined,
+    hostedByChronicle: entry.discoverySource === CHRONICLE_HOSTED_DISCOVERY_URL,
     instances14d: entry.instances_14d,
     uniquePlayers14d: entry.unique_players_14d,
   };
 }
 
 interface CacheEntry {
-  data: DiscoveryEntry[];
+  data: SourcedDiscoveryEntry[];
   ts: number;
 }
 
-function readCache(key: string): DiscoveryEntry[] | null {
+function readCache(key: string): SourcedDiscoveryEntry[] | null {
   try {
     const raw = sessionStorage.getItem(key);
     if (!raw) return null;
@@ -122,7 +129,7 @@ function readCache(key: string): DiscoveryEntry[] | null {
   }
 }
 
-function writeCache(key: string, data: DiscoveryEntry[]) {
+function writeCache(key: string, data: SourcedDiscoveryEntry[]) {
   try {
     sessionStorage.setItem(
       key,
@@ -133,12 +140,18 @@ function writeCache(key: string, data: DiscoveryEntry[]) {
   }
 }
 
-async function fetchDiscovery(url: string): Promise<DiscoveryEntry[]> {
+function discoveryEndpoint(url: string): string {
+  if (!import.meta.env.DEV) return `${url}/api/v1/discovery`;
+  return `/__discovery/${new URL(url).hostname}`;
+}
+
+async function fetchDiscovery(url: string): Promise<SourcedDiscoveryEntry[]> {
   try {
-    const resp = await fetch(`${url}/api/v1/discovery`);
+    const resp = await fetch(discoveryEndpoint(url));
     if (!resp.ok) return [];
     const data = (await resp.json()) as DiscoveryEntry[];
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+    return data.map((entry) => ({ ...entry, discoverySource: url }));
   } catch {
     return [];
   }
@@ -156,7 +169,11 @@ export function useDiscovery(
   baseline: ServerEntry[],
   discoveryUrls: string[],
 ): { servers: ServerEntry[]; loading: boolean } {
-  const [servers, setServers] = useState<ServerEntry[]>(baseline);
+  // When discovery is configured, wait for every source before revealing the
+  // directory so hardcoded entries do not briefly appear on their own.
+  const [servers, setServers] = useState<ServerEntry[]>(
+    discoveryUrls.length > 0 ? [] : baseline,
+  );
   const [loading, setLoading] = useState(discoveryUrls.length > 0);
 
   useEffect(() => {
@@ -168,7 +185,7 @@ export function useDiscovery(
     let cancelled = false;
 
     const key = cacheKey(discoveryUrls);
-    const cached = readCache(key) as DiscoveryEntry[] | null;
+    const cached = readCache(key);
     if (cached) {
       setServers(mergeDiscovery(baseline, cached));
       setLoading(false);
@@ -177,7 +194,7 @@ export function useDiscovery(
 
     Promise.allSettled(discoveryUrls.map(fetchDiscovery)).then((results) => {
       if (cancelled) return;
-      const entries: DiscoveryEntry[] = [];
+      const entries: SourcedDiscoveryEntry[] = [];
       for (const r of results) {
         if (r.status === "fulfilled") {
           entries.push(...r.value);
@@ -203,9 +220,9 @@ export function useDiscovery(
  */
 function mergeDiscovery(
   baseline: ServerEntry[],
-  entries: DiscoveryEntry[],
+  entries: SourcedDiscoveryEntry[],
 ): ServerEntry[] {
-  const entryMap = new Map<string, DiscoveryEntry>();
+  const entryMap = new Map<string, SourcedDiscoveryEntry>();
   for (const e of entries) {
     if (e.url) entryMap.set(e.url, e);
   }
@@ -228,8 +245,11 @@ function mergeDiscovery(
 }
 
 /** Enrich an existing static server entry with live discovery data. */
-function enrichServer(server: ServerEntry, entry: DiscoveryEntry): ServerEntry {
-  const enriched = { ...server };
+function enrichServer(server: ServerEntry, entry: SourcedDiscoveryEntry): ServerEntry {
+  const enriched = {
+    ...server,
+    hostedByChronicle: entry.discoverySource === CHRONICLE_HOSTED_DISCOVERY_URL,
+  };
   const b = entry.branding;
   if (!b) return enriched;
   // Only override fields if discovery provides them — static data is the fallback.

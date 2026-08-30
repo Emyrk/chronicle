@@ -10,6 +10,8 @@ pnpm install
 pnpm dev        # http://localhost:5173
 ```
 
+The Vite dev server proxies discovery requests to the configured Chronicle deployments, so live server data works locally without requiring those deployments to allow `localhost` through CORS.
+
 ## Build
 
 ```bash

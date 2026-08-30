@@ -64,3 +64,88 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+@keyframes support-logo-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes support-ribbon-glow {
+  0%, 100% {
+    box-shadow: 0 0 14px rgb(56 189 248 / 0.18), inset 0 0 12px rgb(56 189 248 / 0.08);
+  }
+  50% {
+    box-shadow: 0 0 26px rgb(56 189 248 / 0.38), inset 0 0 18px rgb(56 189 248 / 0.14);
+  }
+}
+
+.support-ribbon {
+  isolation: isolate;
+  border: 1px solid rgb(125 211 252 / 0.28);
+  border-right: 0;
+  border-radius: 0.75rem 0 0 0.75rem;
+  background:
+    linear-gradient(110deg, rgb(8 47 73 / 0.95), rgb(15 23 42 / 0.98) 65%),
+    repeating-linear-gradient(135deg, transparent 0 8px, rgb(125 211 252 / 0.06) 8px 9px);
+  clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 12px 50%);
+  transition: transform 220ms ease, border-color 220ms ease, filter 220ms ease;
+}
+
+.support-ribbon::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgb(56 189 248 / 0.13), transparent);
+  transform: translateX(-100%);
+  transition: transform 500ms ease;
+}
+
+.support-ribbon:hover,
+.support-ribbon:focus-visible {
+  border-color: rgb(125 211 252 / 0.65);
+  filter: brightness(1.12);
+  transform: translateX(-0.35rem);
+}
+
+.support-ribbon:hover::before,
+.support-ribbon:focus-visible::before {
+  transform: translateX(100%);
+}
+
+.support-ribbon-orbit {
+  animation: support-ribbon-glow 3s ease-in-out infinite;
+}
+
+.support-ribbon-logo {
+  animation: support-logo-spin 16s linear infinite;
+  filter: drop-shadow(0 0 5px rgb(125 211 252 / 0.35));
+  transition: filter 220ms ease;
+}
+
+.support-ribbon:hover .support-ribbon-logo,
+.support-ribbon:focus-visible .support-ribbon-logo {
+  animation-duration: 2.25s;
+  filter: drop-shadow(0 0 10px rgb(125 211 252 / 0.85));
+}
+
+@media (max-width: 639px) {
+  .support-ribbon {
+    padding-left: 0.85rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .support-ribbon,
+  .support-ribbon::before,
+  .support-ribbon-logo {
+    animation: none;
+    transition: none;
+  }
+
+  .support-ribbon:hover,
+  .support-ribbon:focus-visible {
+    transform: none;
+  }
+}

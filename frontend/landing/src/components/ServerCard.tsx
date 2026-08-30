@@ -20,21 +20,54 @@ function DiscordIcon() {
   );
 }
 
+function HostedByChronicleBadge({ tooltipId, compact = false }: { tooltipId: string; compact?: boolean }) {
+  return (
+    <div className="group/hosted relative z-10 inline-flex">
+      <a
+        href="/support/"
+        aria-describedby={tooltipId}
+        className={`inline-flex items-center gap-1.5 font-semibold uppercase tracking-wider text-sky-200 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-sky-300/70 ${
+          compact
+            ? "text-[11px]"
+            : "rounded-md border border-sky-300/50 bg-slate-950/85 px-2.5 py-1 text-[11px] shadow-lg shadow-black/30 backdrop-blur-sm"
+        }`}
+      >
+        <span aria-hidden="true" className="text-sky-400">◆</span>
+        Hosted by Chronicle
+      </a>
+      <div
+        id={tooltipId}
+        role="tooltip"
+        className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-64 translate-y-1 rounded-md border border-border bg-slate-950 px-3 py-2 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-slate-200 opacity-0 shadow-xl transition group-hover/hosted:pointer-events-auto group-hover/hosted:translate-y-0 group-hover/hosted:opacity-100 group-focus-within/hosted:pointer-events-auto group-focus-within/hosted:translate-y-0 group-focus-within/hosted:opacity-100"
+      >
+        Chronicle operates this deployment and pays its hosting costs.
+        <span className="mt-1 block italic text-muted-foreground">Click to learn more.</span>
+      </div>
+    </div>
+  );
+}
+
 export function ServerCard({ server }: { server: ServerEntry }) {
   const isClosed = server.status?.includes("closed");
 
   return (
     <div
-      className={`group relative flex w-full flex-col overflow-hidden rounded-lg border bg-card transition-all duration-200 ${
+      className={`group relative flex w-full flex-col rounded-lg border bg-card transition-all duration-200 hover:z-10 focus-within:z-10 ${
         isClosed
           ? "border-border/60 saturate-[0.35] hover:saturate-[0.6]"
           : "border-border hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5"
       }`}
       style={server.accentColor ? { "--accent-glow": server.accentColor } as React.CSSProperties : undefined}
     >
+      {server.hostedByChronicle && (
+        <div className="absolute left-3 top-3 z-20">
+          <HostedByChronicleBadge tooltipId={`hosted-tooltip-${server.id}`} />
+        </div>
+      )}
+
       {/* Banner */}
-      {server.banner && (
-        <div className="relative h-28 overflow-hidden bg-muted">
+      {server.banner ? (
+        <div className="relative h-28 overflow-hidden rounded-t-lg bg-muted">
           <img
             src={server.banner}
             alt=""
@@ -47,7 +80,9 @@ export function ServerCard({ server }: { server: ServerEntry }) {
             </div>
           )}
         </div>
-      )}
+      ) : server.hostedByChronicle ? (
+        <div className="h-10 rounded-t-lg bg-gradient-to-r from-sky-950/70 to-card" />
+      ) : null}
 
       <div className="flex flex-1 flex-col gap-3 p-5">
         {/* Header: logo + name */}

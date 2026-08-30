@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Expansion, Client, Logging, ServerEntry, StatusTag } from "../types";
+import { Search, X } from "lucide-react";
+import type { ServerEntry } from "../types";
 import { ServerCard } from "./ServerCard";
 import { DiscordIcon } from "./DiscordIcon";
 
@@ -81,125 +82,119 @@ function sortServers(servers: ServerEntry[]): ServerEntry[] {
   });
 }
 
-// --- Filter types ---
+// --- Fuzzy search ---
 
-type FilterKey = "expansion" | "client" | "logging" | "status";
+/** Returns the edit distance, stopping once the requested limit is exceeded. */
+function editDistanceWithin(value: string, query: string, limit: number): number | null {
+  if (Math.abs(value.length - query.length) > limit) return null;
 
-interface FilterOption {
-  key: FilterKey;
-  value: string;
-  label: string;
-}
+  let previous = Array.from({ length: query.length + 1 }, (_, index) => index);
+  for (let valueIndex = 1; valueIndex <= value.length; valueIndex += 1) {
+    const current = [valueIndex];
+    let rowMinimum = current[0];
 
-/** Derive available filter options from the actual server list. */
-function deriveFilters(servers: ServerEntry[]): FilterOption[] {
-  const expansionLabels: Record<Expansion, string> = { vanilla: "Vanilla", tbc: "TBC", wotlk: "WotLK" };
-  const clientLabels: Record<Client, string> = { "1.12.1": "1.12.1", "2.4.3": "2.4.3", "2.5.3": "2.5.3", "3.3.5a": "3.3.5a" };
-  const loggingLabels: Record<Logging, string> = { server: "Server-side log", client: "Client-side log" };
-  const statusLabels: Record<StatusTag, string> = {
-    closed: "Closed", beta: "Beta", new: "New", hardcore: "Hardcore", fresh: "Fresh",
-    progression: "Progression", "custom-content": "Custom Content",
-  };
-
-  const seen = new Set<string>();
-  const filters: FilterOption[] = [];
-
-  const add = (key: FilterKey, value: string, label: string) => {
-    const id = `${key}:${value}`;
-    if (!seen.has(id)) {
-      seen.add(id);
-      filters.push({ key, value, label });
+    for (let queryIndex = 1; queryIndex <= query.length; queryIndex += 1) {
+      const substitutionCost = value[valueIndex - 1] === query[queryIndex - 1] ? 0 : 1;
+      const distance = Math.min(
+        previous[queryIndex] + 1,
+        current[queryIndex - 1] + 1,
+        previous[queryIndex - 1] + substitutionCost,
+      );
+      current.push(distance);
+      rowMinimum = Math.min(rowMinimum, distance);
     }
-  };
 
-  for (const s of servers) {
-    add("expansion", s.expansion, expansionLabels[s.expansion]);
-    add("client", s.client, clientLabels[s.client]);
-    add("logging", s.logging, loggingLabels[s.logging]);
-    for (const tag of s.status ?? []) {
-      if (tag === "closed") continue;
-      add("status", tag, statusLabels[tag]);
-    }
+    if (rowMinimum > limit) return null;
+    previous = current;
   }
 
-  return filters;
+  return previous[query.length] <= limit ? previous[query.length] : null;
 }
 
-function matchesFilters(server: ServerEntry, active: Set<string>): boolean {
-  if (active.size === 0) return true;
+/** Scores exact substrings first, then allows small typos in individual words. */
+function fuzzyScore(value: string, query: string): number | null {
+  const target = value.toLocaleLowerCase();
+  const needle = query.toLocaleLowerCase().trim();
+  if (!needle) return 0;
 
-  // Group active filters by key — within a key it's OR, across keys it's AND
-  const byKey = new Map<FilterKey, string[]>();
-  for (const id of active) {
-    const [key, value] = id.split(":") as [FilterKey, string];
-    const arr = byKey.get(key) ?? [];
-    arr.push(value);
-    byKey.set(key, arr);
+  const exactIndex = target.indexOf(needle);
+  if (exactIndex !== -1) {
+    return 10_000 - exactIndex * 10 - (target.length - needle.length);
   }
 
-  for (const [key, values] of byKey) {
-    if (key === "status") {
-      if (!values.some((v) => server.status?.includes(v as StatusTag))) return false;
-    } else {
-      if (!values.includes(server[key])) return false;
+  if (needle.length < 4) return null;
+  const typoLimit = needle.length >= 7 ? 2 : 1;
+  const words = target.split(/[^a-z0-9]+/).filter(Boolean);
+  let bestDistance: number | null = null;
+
+  for (const word of words) {
+    const distance = editDistanceWithin(word, needle, typoLimit);
+    if (distance !== null && (bestDistance === null || distance < bestDistance)) {
+      bestDistance = distance;
     }
   }
-  return true;
+
+  return bestDistance === null ? null : 1_000 - bestDistance * 100;
 }
 
-// --- Filter pill ---
+function serverSearchScore(server: ServerEntry, query: string): number | null {
+  const fields = [
+    { value: server.name, weight: 1_000 },
+    { value: server.id, weight: 750 },
+    { value: server.tagline, weight: 300 },
+    { value: server.description, weight: 0 },
+    { value: server.expansion, weight: 200 },
+    { value: server.client, weight: 200 },
+    { value: server.logging, weight: 100 },
+    { value: server.engine, weight: 100 },
+    ...(server.hostedByChronicle
+      ? [{ value: "hosted by chronicle", weight: 100 }]
+      : []),
+    ...(server.status ?? []).map((value) => ({ value, weight: 100 })),
+  ];
 
-function FilterPill({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={
-        active
-          ? "rounded-full border border-primary/50 bg-primary/15 px-3 py-1 text-xs font-medium text-primary transition-colors"
-          : "rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
+  let totalScore = 0;
+  for (const term of query.trim().split(/\s+/)) {
+    let bestTermScore: number | null = null;
+    for (const field of fields) {
+      const score = fuzzyScore(field.value, term);
+      if (score === null) continue;
+      const weightedScore = score + field.weight;
+      if (bestTermScore === null || weightedScore > bestTermScore) {
+        bestTermScore = weightedScore;
       }
-    >
-      {label}
-    </button>
-  );
+    }
+    if (bestTermScore === null) return null;
+    totalScore += bestTermScore;
+  }
+
+  return totalScore;
 }
 
 // --- Grid ---
 
 export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loading?: boolean }) {
-  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
 
-  const filterOptions = useMemo(() => deriveFilters(servers), [servers]);
-
-  const toggle = (key: FilterKey, value: string) => {
-    setActiveFilters((prev) => {
-      const next = new Set(prev);
-      const id = `${key}:${value}`;
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const sorted = useMemo(() => sortServers(servers), [servers]);
-
-  const matches = useMemo(() => {
-    if (activeFilters.size === 0) return null; // no filtering active
-    const set = new Set<string>();
-    for (const s of servers) {
-      if (matchesFilters(s, activeFilters)) set.add(s.id);
+  const searchResults = useMemo(() => {
+    const sorted = sortServers(servers);
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) {
+      return sorted.map((server) => ({ server, matches: true, score: 0 }));
     }
-    return set;
-  }, [servers, activeFilters]);
+
+    return sorted
+      .map((server) => {
+        const score = serverSearchScore(server, normalizedQuery);
+        return { server, matches: score !== null, score: score ?? 0 };
+      })
+      .sort((a, b) => {
+        if (a.matches !== b.matches) return a.matches ? -1 : 1;
+        if (a.matches && b.matches && a.score !== b.score) return b.score - a.score;
+        return 0;
+      });
+  }, [servers, query]);
 
   return (
     <section className="relative mx-auto w-full max-w-6xl px-4 pt-8 pb-12 sm:px-6 sm:pt-12 lg:px-8">
@@ -221,12 +216,6 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
           Combat log analysis for{" "}
           <span className="text-primary">Classic WoW</span>
         </h1>
-
-        <p className="mx-auto mt-2 max-w-2xl text-base text-muted-foreground sm:text-lg">
-          Chronicle transforms raid logs into clear, actionable insights.
-          Select a server below to explore.
-        </p>
-
         <div className="mt-3 flex items-center justify-center gap-4 text-sm text-muted-foreground">
           <a
             href="https://github.com/Emyrk/chronicle"
@@ -253,25 +242,28 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
       {/* Separator */}
       <div className="relative mx-auto mb-6 h-px w-full max-w-xs bg-border/60" />
 
-      {/* Filter bar */}
-      <div className="relative mb-6 flex flex-wrap items-center justify-center gap-2">
-        {filterOptions.map((f) => {
-          const id = `${f.key}:${f.value}`;
-          return (
-            <FilterPill
-              key={id}
-              label={f.label}
-              active={activeFilters.has(id)}
-              onClick={() => toggle(f.key, f.value)}
-            />
-          );
-        })}
-        {activeFilters.size > 0 && (
+      {/* Search — matches rise to the top while the full directory remains visible */}
+      <div className="relative mx-auto mb-6 max-w-xl">
+        <Search
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search servers, expansions, or features…"
+          aria-label="Search servers"
+          className="w-full rounded-lg border border-border bg-card/80 py-3 pl-10 pr-10 text-sm text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground/70 focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+        />
+        {query && (
           <button
-            onClick={() => setActiveFilters(new Set())}
-            className="ml-1 rounded-full px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            type="button"
+            onClick={() => setQuery("")}
+            aria-label="Clear search"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            Clear
+            <X aria-hidden="true" className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -298,12 +290,12 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
             ))}
           </>
         )}
-        {sorted.map((server) => {
-          const dimmed = matches !== null && !matches.has(server.id);
+        {searchResults.map(({ server, matches }) => {
+          const dimmed = query.trim() !== "" && !matches;
           return (
             <div
               key={server.id}
-              className={`flex ${dimmed ? "opacity-30 grayscale pointer-events-none transition-all duration-200" : "transition-all duration-200"}`}
+              className={`flex transition-all duration-200 ${dimmed ? "opacity-30 grayscale" : "opacity-100 grayscale-0"}`}
             >
               <ServerCard server={server} />
             </div>
