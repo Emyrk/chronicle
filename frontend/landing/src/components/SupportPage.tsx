@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
+  ChevronDown,
   Coffee,
   ExternalLink,
   ScrollText,
+  ShieldCheck,
 } from "lucide-react";
 import { CryptoCoinIcon, PatreonIcon, SponsorsHeartIcon } from "./BrandIcons";
 import { CryptoTipModal } from "./CryptoTipModal";
@@ -12,6 +14,33 @@ import { CryptoTipModal } from "./CryptoTipModal";
 const GITHUB_SPONSORS_URL = "https://github.com/sponsors/Emyrk";
 const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
 const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/chronicleclassic";
+
+const CHRONICLE_TENETS = [
+  {
+    title: "Sustainable, Not Profitable",
+    body: "Chronicle does not seek profit. The financial goal is simply to break even on hosting and infrastructure costs.",
+  },
+  {
+    title: "No Ads",
+    body: "Chronicle does not seek to add banner ads, pop-ups, sponsored placements, or tracking-based advertising.",
+  },
+  {
+    title: "No Feature Paywalls",
+    body: "Chronicle does not seek to reserve useful features for paying users. Contributions support the same experience for everyone.",
+  },
+  {
+    title: "Open Source",
+    body: "Chronicle aims to continue to be open source, so the community can inspect, improve, and preserve the project.",
+  },
+  {
+    title: "Community-Hostable",
+    body: "Chronicle aims to remain available for independent communities to operate on their own infrastructure.",
+  },
+  {
+    title: "Support Is Voluntary",
+    body: "Financial support is appreciated, never required. Using Chronicle should not come with an obligation to contribute.",
+  },
+];
 
 const HOSTING_METER = [
   {
@@ -359,7 +388,42 @@ export function SupportPage() {
         {/* <p className="text-lg text-muted-foreground">Support Chronicle for WoW communities.</p> */}
       </div>
 
-      <div className="mt-14 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
+      <details className="group mt-14 overflow-hidden rounded-xl border border-[#6b5320] bg-[#1e1710] shadow-xl shadow-black/30">
+        <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-300 [&::-webkit-details-marker]:hidden">
+          <ShieldCheck aria-hidden="true" className="h-5 w-5 shrink-0 text-[#f0c060]" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-wow text-base font-bold text-[#f0c060]">Chronicle&apos;s Tenets</span>
+            <span className="block text-xs text-muted-foreground">The principles guiding how the project is funded and operated.</span>
+          </span>
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground group-open:hidden">
+            Read
+          </span>
+          <span className="hidden text-xs font-medium uppercase tracking-wider text-muted-foreground group-open:inline">
+            Close
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 text-[#f0c060] transition-transform duration-200 group-open:rotate-180"
+          />
+        </summary>
+        <div className="border-t border-[#6b5320] bg-[#17130f] px-4 py-5 sm:px-6">
+          <ol className="grid gap-3 sm:grid-cols-2">
+            {CHRONICLE_TENETS.map(({ title, body }, index) => (
+              <li key={title} className="flex gap-3 rounded-lg border border-white/10 bg-white/[0.025] p-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#f0c060]/40 bg-[#2a210f] font-wow text-xs font-bold text-[#f0c060]">
+                  {index + 1}
+                </span>
+                <span>
+                  <strong className="block font-wow text-sm text-foreground">{title}</strong>
+                  <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{body}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </details>
+
+      <div className="mt-10 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
         <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5">
           <BookOpen aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
           <h2 className="flex-1 text-center font-wow text-base font-bold tracking-[0.08em] text-[#f0c060]">
