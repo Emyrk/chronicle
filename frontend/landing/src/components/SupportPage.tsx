@@ -83,7 +83,7 @@ const HOSTING_QUESTS = [
   {
     title: "Hosted by Chronicle",
     badge: true,
-    body: "Chronicle operates these deployments directly — infrastructure, hosting, and service costs are covered by the project. These are the realms of the mainland.",
+    body: "Chronicle operates these deployments directly — infrastructure, hosting, and service costs are covered by the project. These are the zones of the mainland.",
     objective: "Keep every mainland realm online",
     status: "Ongoing",
   },
