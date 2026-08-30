@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
+	"github.com/Emyrk/chronicle/internal/services/serviceapikey"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
@@ -55,23 +56,21 @@ func OnAPI() string {
 type Service struct {
 	broker *services.Services
 
-	secretPem               string
-	httpAddress             string
-	devAuth                 bool
-	saffronURL              *url.URL
-	ocrURL                  *url.URL
-	shortLinkDomain         string
-	clientUploadsDisabled   bool
-	zugzugURL               string
-	zugzugSecret            string
-	zugzugInstructionsURL   string
-	itemPricingAPIKey       string
-	itemPricingBaseURL      string
-	apiKeyRequestsPerMinute int64
-	apiKeyBurst             int64
-	discordAuth             chronauth.DiscordOAuth
-	app                     *api.API
-	closeListener           func()
+	secretPem             string
+	httpAddress           string
+	devAuth               bool
+	saffronURL            *url.URL
+	ocrURL                *url.URL
+	shortLinkDomain       string
+	clientUploadsDisabled bool
+	zugzugURL             string
+	zugzugSecret          string
+	zugzugInstructionsURL string
+	itemPricingAPIKey     string
+	itemPricingBaseURL    string
+	discordAuth           chronauth.DiscordOAuth
+	app                   *api.API
+	closeListener         func()
 }
 
 func New(broker *services.Services) *Service {
@@ -108,6 +107,7 @@ func (s *Service) DependsOn() []string {
 		serviceapplication.OnApplication(),
 		servicedataset.OnDataset(),
 		serviceexternalapi.OnExternalAPI(),
+		serviceapikey.OnAPIKey(),
 	}
 }
 
@@ -203,19 +203,18 @@ func (s *Service) Start(ctx context.Context) error {
 		Mailer:           mailer,
 		ItemPricing:      itempricing.New(zed, s.itemPricingAPIKey, s.itemPricingBaseURL),
 
-		AccessURL:               au,
-		ShortLinkDomain:         s.shortLinkDomain,
-		ClientUploadsDisabled:   s.clientUploadsDisabled,
-		ExternalVerification:    s.externalVerification(),
-		DevOAuth:                s.devAuth,
-		Discord:                 s.discordAuth,
-		SecretPEM:               decodedSecret,
-		APIKeyRequestsPerMinute: s.apiKeyRequestsPerMinute,
-		APIKeyBurst:             s.apiKeyBurst,
-		Tenant:                  tenantSvc,
-		Application:             appSvc,
-		Dataset:                 datasetSvc,
-		CacheSvc:                servicecache.CacheService(s.broker),
+		AccessURL:             au,
+		ShortLinkDomain:       s.shortLinkDomain,
+		ClientUploadsDisabled: s.clientUploadsDisabled,
+		ExternalVerification:  s.externalVerification(),
+		DevOAuth:              s.devAuth,
+		Discord:               s.discordAuth,
+		SecretPEM:             decodedSecret,
+		APIKeys:               serviceapikey.APIKeyService(s.broker),
+		Tenant:                tenantSvc,
+		Application:           appSvc,
+		Dataset:               datasetSvc,
+		CacheSvc:              servicecache.CacheService(s.broker),
 	})
 
 	if err != nil {
@@ -365,24 +364,6 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_WOWAUCTIONS_BASE_URL",
 			Default:     "https://api.wowauctions.net/emyrk",
 			Value:       serpent.StringOf(&s.itemPricingBaseURL),
-		},
-		{
-			Name:        "API Key Requests Per Minute",
-			Description: "Sustained per-token request rate. Set to 0 to disable API key rate limiting.",
-			Required:    false,
-			Flag:        "api-key-requests-per-minute",
-			Env:         "CHRONICLE_API_KEY_REQUESTS_PER_MINUTE",
-			Default:     "60",
-			Value:       serpent.Int64Of(&s.apiKeyRequestsPerMinute),
-		},
-		{
-			Name:        "API Key Burst",
-			Description: "Maximum burst size for each API token. Set to 0 to disable API key rate limiting.",
-			Required:    false,
-			Flag:        "api-key-burst",
-			Env:         "CHRONICLE_API_KEY_BURST",
-			Default:     "20",
-			Value:       serpent.Int64Of(&s.apiKeyBurst),
 		},
 		{
 			Name:        "Internal OCR URL",

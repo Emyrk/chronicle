@@ -33,6 +33,7 @@ import (
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/itempricing"
+	"github.com/Emyrk/chronicle/internal/services/serviceapikey"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
@@ -74,12 +75,11 @@ type Options struct {
 	// ExternalVerification enables the external character verification
 	// provider (e.g. zug-zug). Configured via environment variables; nil
 	// when disabled.
-	ExternalVerification    *chroniclesdk.ExternalVerification
-	DevOAuth                bool
-	Discord                 chronauth.DiscordOAuth
-	SecretPEM               []byte // Used for JWTs
-	APIKeyRequestsPerMinute int64
-	APIKeyBurst             int64
+	ExternalVerification *chroniclesdk.ExternalVerification
+	DevOAuth             bool
+	Discord              chronauth.DiscordOAuth
+	SecretPEM            []byte // Used for JWTs
+	APIKeys              *serviceapikey.Service
 
 	// Tenant is the multi-tenant service for subdomain → tenant resolution.
 	// If nil, tenant middleware is a no-op.
@@ -140,10 +140,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 			SecretPEM: opts.SecretPEM,
 			Registry:  opts.Registry,
 		},
-		APIKeys: chronauth.APIKeyOptions{
-			RequestsPerMinute: opts.APIKeyRequestsPerMinute,
-			Burst:             opts.APIKeyBurst,
-		},
+		APIKeys: opts.APIKeys,
 	})
 	if err != nil {
 		return nil, err

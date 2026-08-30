@@ -12,6 +12,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/services/serviceapikey"
 )
 
 type authContextKey struct{}
@@ -61,24 +62,36 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 		// not trigger a logout (there is no session to clear) and tokens are
 		// never auto-refreshed — clients re-authenticate when they expire.
 		if token := bearerToken(r); token != "" {
-			if strings.HasPrefix(token, APIKeyPrefix) {
-				c, err := s.authenticateAPIKey(r.Context(), token)
-				if errors.Is(err, errAPIKeyRateLimited) {
-					w.Header().Set("Retry-After", strconv.Itoa(s.apiKeyLimiter.retryAfterSeconds()))
+			if serviceapikey.IsToken(token) && s.apiKeys == nil {
+				next.ServeHTTP(w, withState(r, &AuthenticationContext{Error: fmt.Errorf("API key service unavailable: %w", ErrNotAuthorized)}))
+				return
+			}
+			if serviceapikey.IsToken(token) {
+				identity, err := s.apiKeys.Authenticate(r.Context(), token, r.Method)
+				switch {
+				case errors.Is(err, serviceapikey.ErrRateLimited):
+					w.Header().Set("Retry-After", strconv.Itoa(s.apiKeys.RetryAfterSeconds()))
 					http.Error(w, err.Error(), http.StatusTooManyRequests)
 					return
-				}
-				if err != nil {
-					stateErr := err
-					if errors.Is(err, ErrNotAuthorized) {
-						stateErr = fmt.Errorf("invalid API key: %w", ErrNotAuthorized)
-					}
-					next.ServeHTTP(w, withState(r, &AuthenticationContext{Error: stateErr}))
+				case errors.Is(err, serviceapikey.ErrReadOnly):
+					http.Error(w, err.Error(), http.StatusForbidden)
+					return
+				case errors.Is(err, serviceapikey.ErrNotAuthorized):
+					next.ServeHTTP(w, withState(r, &AuthenticationContext{Error: fmt.Errorf("invalid API key: %w", ErrNotAuthorized)}))
+					return
+				case err != nil:
+					next.ServeHTTP(w, withState(r, &AuthenticationContext{Error: err}))
 					return
 				}
-				if !isReadOnlyMethod(r.Method) {
-					http.Error(w, "API keys are read-only", http.StatusForbidden)
-					return
+
+				c := &claims.Claims{
+					Issuer:      s.sessions.Issuer,
+					Subject:     identity.UserID,
+					ID:          identity.KeyID,
+					SessionID:   identity.KeyID,
+					APIKeyID:    identity.KeyID,
+					Provider:    serviceapikey.Provider,
+					Refreshable: false,
 				}
 				next.ServeHTTP(w, withState(r, &AuthenticationContext{Claims: c}))
 				return
