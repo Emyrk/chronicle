@@ -233,10 +233,10 @@ function SpellbookRow({ spell, external }: { spell: DonationSpell; external: boo
         {spell.icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block font-wow text-[15px] font-bold leading-tight text-[#215c10]">
+        <span className="block font-wow text-[17px] font-bold leading-tight text-[#215c10]">
           {spell.label}
         </span>
-        <span className="block font-wow text-[11px] leading-tight text-[#7a5c36]">
+        <span className="block font-wow text-xs leading-tight text-[#7a5c36]">
           {spell.subtitle}
         </span>
       </span>
@@ -340,7 +340,7 @@ export function SupportPage() {
       >
         <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5">
           <BookOpen aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
-          <h2 className="flex-1 text-center font-wow text-sm font-bold tracking-[0.08em] text-[#f0c060]">
+          <h2 className="flex-1 text-center font-wow text-base font-bold tracking-[0.08em] text-[#f0c060]">
             Support the Project
           </h2>
           <span aria-hidden="true" className="h-4 w-4" />
@@ -357,7 +357,7 @@ export function SupportPage() {
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-0 right-0 w-4 rounded-br-[10px] bg-gradient-to-l from-[#8a704a]/35 to-transparent"
           />
-          <p className="relative mx-auto max-w-md text-center font-wow text-xs italic leading-snug text-[#6b5330]">
+          <p className="relative mx-auto max-w-md text-center font-wow text-sm italic leading-snug text-[#6b5330]">
             Contributions help cover hosting for Chronicle-operated deployments and
             support continued development. Support is appreciated, never required.
           </p>
@@ -386,7 +386,7 @@ export function SupportPage() {
             )}
           </div>
           <div className="relative mt-4 flex items-center justify-end gap-2">
-            <span className="font-wow text-xs italic text-[#6b5330]">Page 1</span>
+            <span className="font-wow text-sm italic text-[#6b5330]">Page 1</span>
             <span
               aria-hidden="true"
               className="flex h-5 w-5 items-center justify-center rounded-sm border border-[#8a6a2a] bg-[#c9963e]/60 text-[11px] font-bold leading-none text-[#3a2c10] opacity-60"
@@ -520,7 +520,7 @@ export function SupportPage() {
       <div className="mt-6 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
         <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5">
           <ScrollText aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
-          <h3 className="flex-1 text-center font-wow text-sm font-bold tracking-[0.08em] text-[#f0c060]">
+          <h3 className="flex-1 text-center font-wow text-base font-bold tracking-[0.08em] text-[#f0c060]">
             Quest Log
           </h3>
           <span aria-hidden="true" className="h-4 w-4" />
@@ -536,22 +536,22 @@ export function SupportPage() {
           <div className="relative grid gap-x-8 gap-y-4 font-wow sm:grid-cols-2">
             {HOSTING_QUESTS.map(({ title, body, objective, status, badge }) => (
               <article key={title}>
-                <h4 className="text-[17px] font-bold leading-tight text-[#5a3c10]">{title}</h4>
-                <p className="mt-1 text-[13px] leading-snug text-[#4a3520]">{body}</p>
-                <p className="mt-2 text-xs font-bold text-[#6b5330]">Objectives</p>
-                <p className="text-[13px] leading-snug text-[#4a3520]">
+                <h4 className="text-[19px] font-bold leading-tight text-[#5a3c10]">{title}</h4>
+                <p className="mt-1 text-[15px] leading-snug text-[#4a3520]">{body}</p>
+                <p className="mt-2 text-[13px] font-bold text-[#6b5330]">Objectives</p>
+                <p className="text-[15px] leading-snug text-[#4a3520]">
                   {objective}
                   <span className="italic text-[#7a5c36]"> — {status}</span>
                 </p>
                 {badge && (
                   <>
-                    <p className="mt-2 text-xs font-bold text-[#6b5330]">Rewards</p>
+                    <p className="mt-2 text-[13px] font-bold text-[#6b5330]">Rewards</p>
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/40 bg-[#101a2c] px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-300">
                         <span aria-hidden="true">◆</span>
                         Hosted by Chronicle
                       </span>
-                      <span className="text-xs italic text-[#6b5330]">
+                      <span className="text-[13px] italic text-[#6b5330]">
                         displayed beside the server in the directory
                       </span>
                     </p>
