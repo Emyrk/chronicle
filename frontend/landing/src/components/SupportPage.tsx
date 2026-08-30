@@ -442,8 +442,8 @@ export function SupportPage() {
         ))}
       </div>
 
-      <div className="mt-12 rounded-lg border border-border bg-card shadow-2xl shadow-black/50 ring-1 ring-white/5">
-        <div className="flex items-center gap-2 rounded-t-lg border-b border-border bg-background/45 px-2.5 py-1.5">
+      <div className="mt-12 rounded-lg border border-border bg-card shadow-2xl shadow-black/50 ring-1 ring-white/10">
+        <div className="flex items-center gap-2 rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-2.5 py-1.5">
           <Skull aria-hidden="true" className="h-4 w-4 text-amber-400" />
           <h2 className="text-sm font-medium text-foreground">Hosting Bill</h2>
           <span className="ml-auto text-xs text-muted-foreground">Overall Damage Done</span>
