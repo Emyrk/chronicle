@@ -5,6 +5,7 @@ import {
   CircleHelp,
   Coffee,
   ExternalLink,
+  ScrollText,
   Skull,
 } from "lucide-react";
 import { CryptoCoinIcon, PatreonIcon, SponsorsHeartIcon } from "./BrandIcons";
@@ -75,6 +76,23 @@ const HOSTING_METER = [
 ];
 
 const WOW_ICON_BASE = "https://icons.chronicleclassic.com/turtle";
+
+const PARCHMENT_BG = "radial-gradient(ellipse at 30% 15%, #ead9ae 0%, #d3ba8c 55%, #bda276 100%)";
+
+const HOSTING_QUESTS = [
+  {
+    title: "Hosted by Chronicle",
+    body: "Chronicle operates these deployments directly — infrastructure, hosting, and service costs are covered by the project. These are the realms of the mainland.",
+    objective: "Keep every mainland realm online",
+    status: "Ongoing",
+  },
+  {
+    title: "Community Hosted",
+    body: "Independent communities run Chronicle on their own infrastructure. Same open-source project, their own hosting — the isles across the strait.",
+    objective: "Sail your own shores",
+    status: "Complete",
+  },
+];
 
 // WoW item quality colors (matches chronicle's --color-quality-* tokens).
 const QUALITY = {
@@ -502,6 +520,42 @@ export function SupportPage() {
           image courtesy of our robot friends
         </figcaption>
       </figure>
+
+      <div className="mt-6 rounded-xl border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-2xl shadow-black/40">
+        <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#4a4a6a] px-4 py-2.5">
+          <ScrollText aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
+          <h3 className="flex-1 text-center text-sm font-bold uppercase tracking-[0.15em] text-[#f0c060]">
+            Quest Log
+          </h3>
+          <span aria-hidden="true" className="h-4 w-4" />
+        </div>
+        <div
+          className="relative rounded-b-[10px] px-5 py-6 sm:px-8"
+          style={{ background: PARCHMENT_BG }}
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 w-8 rounded-bl-[10px] bg-gradient-to-r from-[#8a704a]/60 to-transparent"
+          />
+          <div className="relative grid gap-8 sm:grid-cols-2">
+            {HOSTING_QUESTS.map(({ title, body, objective, status }) => (
+              <article key={title}>
+                <h4 className="font-serif text-lg font-bold leading-tight text-[#5a3c10]">
+                  {title}
+                </h4>
+                <p className="mt-1.5 text-sm leading-relaxed text-[#4a3520]">{body}</p>
+                <p className="mt-3 text-xs font-bold uppercase tracking-wide text-[#6b5330]">
+                  Objectives
+                </p>
+                <p className="mt-0.5 text-sm text-[#4a3520]">
+                  {objective}
+                  <span className="italic text-[#7a5c36]"> — {status}</span>
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {mapOpen && (
         <div
