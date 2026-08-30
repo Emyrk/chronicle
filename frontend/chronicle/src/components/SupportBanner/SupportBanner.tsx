@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Heart, X } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
-import { useAuthorizationCheck } from "@/api/queries";
+import { useAuthorizationCheck, useSession } from "@/api/queries";
 
 const LAST_SHOWN_KEY = "support-banner-last-shown";
 
@@ -10,6 +9,11 @@ const LAST_SHOWN_KEY = "support-banner-last-shown";
 // this lands — nothing else depends on this number.
 const SHOW_INTERVAL_DAYS = 30;
 const SHOW_INTERVAL_MS = SHOW_INTERVAL_DAYS * 24 * 60 * 60 * 1000;
+
+// Never show to accounts newer than this — a fresh signup hasn't had a
+// chance to get value out of Chronicle yet. Also tunable.
+const MIN_ACCOUNT_AGE_DAYS = 90;
+const MIN_ACCOUNT_AGE_MS = MIN_ACCOUNT_AGE_DAYS * 24 * 60 * 60 * 1000;
 
 const SUPPORT_URL = "https://chronicleclassic.com/support/";
 
@@ -20,6 +24,10 @@ function isDueToShow(): boolean {
 
 function markShownNow() {
   localStorage.setItem(LAST_SHOWN_KEY, String(Date.now()));
+}
+
+function isOldEnough(createdAt: string): boolean {
+  return Date.now() - new Date(createdAt).getTime() >= MIN_ACCOUNT_AGE_MS;
 }
 
 /** Small medallion that flips between the Chronicle logo and a heart. */
@@ -62,15 +70,17 @@ const THANKS_HEADING_CLASSES = "font-wow font-bold text-emerald-600 dark:text-em
 
 /**
  * Site-wide reminder that Chronicle's hosting is donor-funded, shown at most
- * once every SHOW_INTERVAL_DAYS. Whether someone currently holds the
- * "supporter" SpiceDB role is checked before anything else and decides the
- * message — that check trumps the cadence/dismissal state below.
+ * once every SHOW_INTERVAL_DAYS. Never shown to a logged-out visitor or to an
+ * account younger than MIN_ACCOUNT_AGE_DAYS. Whether someone currently holds
+ * the "supporter" SpiceDB role is checked last and decides the message.
  */
 export function SupportBanner() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { data: session, isLoading: sessionLoading } = useSession();
+  const meetsAgeRequirement = !!session && isOldEnough(session.created_at);
+
   const authzChecks = useMemo(() => ({ supporter: "chronicle:chronicle#supporter" }), []);
   const { data: authz, isLoading: authzLoading } = useAuthorizationCheck(authzChecks, {
-    enabled: isAuthenticated,
+    enabled: meetsAgeRequirement,
   });
 
   // "pending" = still deciding what (if anything) to show; decided exactly
@@ -78,14 +88,15 @@ export function SupportBanner() {
   // back off just because its freshly-recorded timestamp is now "not due".
   const [state, setState] = useState<"pending" | "hidden" | "donate" | "thanks">("pending");
 
-  const stillDeciding = authLoading || (isAuthenticated && authzLoading);
+  const stillDeciding = sessionLoading || (meetsAgeRequirement && authzLoading);
 
   useEffect(() => {
     if (state !== "pending" || stillDeciding) {
       return;
     }
 
-    if (!isDueToShow()) {
+    // Covers both "not logged in" (no session) and "account too young".
+    if (!meetsAgeRequirement || !isDueToShow()) {
       setState("hidden");
       return;
     }
@@ -94,7 +105,7 @@ export function SupportBanner() {
 
     markShownNow();
     setState(isSupporter ? "thanks" : "donate");
-  }, [state, stillDeciding, authz]);
+  }, [state, stillDeciding, meetsAgeRequirement, authz]);
 
   if (state === "pending" || state === "hidden") {
     return null;

@@ -35,9 +35,10 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		Roles:                roles,
 		MaxStorageBytes:      user.MaxStorageBytes,
 		ConsumedStorageBytes: user.ConsumedStorageBytes,
-		Preferences: userPreferences(user),
-		Email:        user.Email,
-		AuthProvider: state.Claims.Provider,
+		Preferences:          userPreferences(user),
+		Email:                user.Email,
+		AuthProvider:         state.Claims.Provider,
+		CreatedAt:            user.CreatedAt.Time,
 	}
 
 	// For password-auth users, look up email verification status

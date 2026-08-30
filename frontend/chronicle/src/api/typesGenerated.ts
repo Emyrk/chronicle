@@ -2914,6 +2914,10 @@ export interface Session {
      * AuthProvider is the provider used for the current session (e.g. "discord", "password").
      */
     readonly auth_provider: string;
+    /**
+     * CreatedAt is when the user's account was created.
+     */
+    readonly created_at: string;
 }
 
 // From chroniclesdk/consumables.go
