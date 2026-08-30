@@ -447,7 +447,7 @@ export function SupportPage() {
           src="/goblin.webp"
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-full right-2 -mb-2 h-24 w-auto drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)] sm:right-6 sm:-mb-3 sm:h-32"
+          className="pointer-events-none absolute bottom-full right-2 -mb-4 h-24 w-auto drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)] sm:right-6 sm:-mb-6 sm:h-32"
         />
         <div className="flex items-center gap-2 rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-2.5 py-1.5">
           <Skull aria-hidden="true" className="h-4 w-4 text-amber-400" />
