@@ -49,9 +49,9 @@ export function SupportPage() {
         </div>
       </div>
 
-      <div className="mt-6 max-w-3xl">
+      <div className="mx-auto mt-6 max-w-3xl text-center">
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
-          Keeping Chronicle available to Classic WoW communities
+          Keeping Chronicle available to WoW communities
         </h1>
       </div>
 
