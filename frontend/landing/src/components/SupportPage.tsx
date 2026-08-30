@@ -5,8 +5,6 @@ import {
   CircleHelp,
   Coffee,
   ExternalLink,
-  Server,
-  ShieldCheck,
   Skull,
 } from "lucide-react";
 import { CryptoCoinIcon, PatreonIcon, SponsorsHeartIcon } from "./BrandIcons";
@@ -477,31 +475,16 @@ export function SupportPage() {
       </div>
 
       <h2 className="mt-12 text-xl font-semibold text-foreground">Who runs each deployment?</h2>
-      <div className="mt-5 grid gap-5 md:grid-cols-2">
-        <article className="rounded-xl border border-sky-400/30 bg-card/90 p-6 shadow-lg shadow-sky-950/10">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-400/10 text-sky-300">
-            <ShieldCheck aria-hidden="true" className="h-5 w-5" />
-          </div>
-          <h2 className="mt-4 text-xl font-semibold text-foreground">Hosted by Chronicle</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            I operate the deployment and cover its infrastructure costs. The badge
-            identifies communities whose Chronicle service depends directly on the
-            project&apos;s hosting budget and maintenance.
-          </p>
-        </article>
-
-        <article className="rounded-xl border border-border bg-card/70 p-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-            <Server aria-hidden="true" className="h-5 w-5" />
-          </div>
-          <h2 className="mt-4 text-xl font-semibold text-foreground">Community hosted</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            These communities run Chronicle on their own infrastructure. They still
-            use the same open-source project, but their operators handle hosting and
-            service costs independently.
-          </p>
-        </article>
-      </div>
+      <figure className="mt-5">
+        <img
+          src="/chronmap.webp"
+          alt="Fantasy world map. The mainland, labeled Hosted by Chronicle, holds realms whose deployments Chronicle operates and pays for. The isles to the east, labeled Community Hosted, are deployments run by independent communities on their own infrastructure. Banner: Different shores. Shared purpose. One Chronicle."
+          className="w-full rounded-xl border-2 border-[#4a4a6a] shadow-2xl shadow-black/40"
+        />
+        <figcaption className="mt-2 text-center text-xs italic text-muted-foreground">
+          image courtesy of our robot friends
+        </figcaption>
+      </figure>
 
       <nav
         aria-label="Donation quick bar"
