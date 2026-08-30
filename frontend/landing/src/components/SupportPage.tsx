@@ -13,7 +13,6 @@ const GITHUB_SPONSORS_URL = "https://github.com/sponsors/Emyrk";
 const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
 const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/chronicleclassic";
 
-
 const HOSTING_METER = [
   {
     label: "Memory",
@@ -350,10 +349,14 @@ export function SupportPage() {
         Back to server directory
       </a>
 
-      <div className="mx-auto mt-6 max-w-3xl text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
-          Keeping Chronicle Available to WoW Communities
+      <div className="mx-auto mt-10 max-w-3xl text-center">
+        <h1 className="font-wow text-2xl leading-tight sm:text-5xl lg:text-6xl">
+          <span className="whitespace-nowrap text-[#f0c060]">Keeping Chronicle Available</span>
+          <br />
+          <span className="whitespace-nowrap text-white">to WoW Communities</span>
         </h1>
+       
+        {/* <p className="text-lg text-muted-foreground">Support Chronicle for WoW communities.</p> */}
       </div>
 
       <div className="mt-10 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
@@ -407,7 +410,7 @@ export function SupportPage() {
         </div>
       </div>
 
-      <h2 className="mt-12 text-xl font-semibold text-foreground">Why Donate?</h2>
+      <h2 className="mt-12 font-wow text-xl font-semibold text-foreground">Why Donate?</h2>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         {WHY_DONATE_ITEMS.map(({ title, quality, icon, slot, subtype, equip, flavor }) => (
           <article
@@ -528,7 +531,7 @@ export function SupportPage() {
         </ul>
       </div>
 
-      <h2 className="mt-12 text-xl font-semibold text-foreground">Who Runs Each Server?</h2>
+      <h2 className="mt-12 font-wow text-xl font-semibold text-foreground">Who Runs Each Server?</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Whoever hosts a server bears the costs of running its logging site.
       </p>
@@ -550,7 +553,7 @@ export function SupportPage() {
         </figcaption>
       </figure>
 
-      <div className="mt-6 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
+      <div className="mt-12 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
         <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5">
           <ScrollText aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
           <h3 className="flex-1 text-center font-wow text-base font-bold tracking-[0.08em] text-[#f0c060]">
