@@ -207,7 +207,7 @@ function SpellTooltip({ spell, className }: { spell: DonationSpell; className: s
     <span
       role="tooltip"
       className={
-        "pointer-events-none absolute z-20 w-60 rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] p-3 text-left text-xs leading-snug opacity-0 shadow-xl shadow-black/60 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 " +
+        "pointer-events-none absolute z-20 w-60 rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] p-2.5 text-left font-wow text-xs leading-snug opacity-0 shadow-xl shadow-black/60 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 " +
         className
       }
     >
@@ -220,7 +220,7 @@ function SpellTooltip({ spell, className }: { spell: DonationSpell; className: s
 }
 
 const SPELLBOOK_ROW_CLASSES =
-  "group relative -mx-2 flex cursor-pointer items-center gap-3 rounded px-2 py-1.5 text-left transition-colors hover:bg-black/10 focus-visible:bg-black/10 focus-visible:outline-none";
+  "group relative -mx-2 flex cursor-pointer items-center gap-2.5 rounded px-2 py-1 text-left transition-colors hover:bg-black/10 focus-visible:bg-black/10 focus-visible:outline-none";
 
 function SpellbookRow({ spell, external }: { spell: DonationSpell; external: boolean }) {
   return (
@@ -233,10 +233,12 @@ function SpellbookRow({ spell, external }: { spell: DonationSpell; external: boo
         {spell.icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block font-serif text-base font-semibold leading-tight text-[#215c10]">
+        <span className="block font-wow text-[15px] font-bold leading-tight text-[#215c10]">
           {spell.label}
         </span>
-        <span className="block text-[11px] text-[#7a5c36]">{spell.subtitle}</span>
+        <span className="block font-wow text-[11px] leading-tight text-[#7a5c36]">
+          {spell.subtitle}
+        </span>
       </span>
       {external && (
         <ExternalLink
@@ -338,16 +340,14 @@ export function SupportPage() {
       >
         <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#4a4a6a] px-4 py-2.5">
           <BookOpen aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
-          <h2 className="flex-1 text-center text-sm font-bold uppercase tracking-[0.15em] text-[#f0c060]">
+          <h2 className="flex-1 text-center font-wow text-sm font-bold tracking-[0.08em] text-[#f0c060]">
             Support the Project
           </h2>
           <span aria-hidden="true" className="h-4 w-4" />
         </div>
         <div
-          className="relative rounded-b-[10px] px-5 py-6 sm:px-10 sm:py-8"
-          style={{
-            background: "radial-gradient(ellipse at 30% 15%, #ead9ae 0%, #d3ba8c 55%, #bda276 100%)",
-          }}
+          className="relative rounded-b-[10px] px-5 py-4 sm:px-8 sm:py-5"
+          style={{ background: PARCHMENT_BG }}
         >
           <div
             aria-hidden="true"
@@ -357,11 +357,11 @@ export function SupportPage() {
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-0 right-0 w-4 rounded-br-[10px] bg-gradient-to-l from-[#8a704a]/35 to-transparent"
           />
-          <p className="relative mx-auto max-w-md text-center text-xs italic leading-relaxed text-[#6b5330]">
+          <p className="relative mx-auto max-w-md text-center font-wow text-xs italic leading-snug text-[#6b5330]">
             Contributions help cover hosting for Chronicle-operated deployments and
             support continued development. Support is appreciated, never required.
           </p>
-          <div className="relative mt-6 grid gap-x-10 gap-y-2 sm:grid-cols-2">
+          <div className="relative mt-4 grid gap-x-8 gap-y-1 sm:grid-cols-2">
             {DONATION_SPELLS.map((spell) =>
               spell.href ? (
                 <a
@@ -385,8 +385,8 @@ export function SupportPage() {
               ),
             )}
           </div>
-          <div className="relative mt-6 flex items-center justify-end gap-2">
-            <span className="font-serif text-xs italic text-[#6b5330]">Page 1</span>
+          <div className="relative mt-4 flex items-center justify-end gap-2">
+            <span className="font-wow text-xs italic text-[#6b5330]">Page 1</span>
             <span
               aria-hidden="true"
               className="flex h-5 w-5 items-center justify-center rounded-sm border border-[#8a6a2a] bg-[#c9963e]/60 text-[11px] font-bold leading-none text-[#3a2c10] opacity-60"
@@ -520,39 +520,33 @@ export function SupportPage() {
       <div className="mt-6 rounded-xl border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-2xl shadow-black/40">
         <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#4a4a6a] px-4 py-2.5">
           <ScrollText aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
-          <h3 className="flex-1 text-center text-sm font-bold uppercase tracking-[0.15em] text-[#f0c060]">
+          <h3 className="flex-1 text-center font-wow text-sm font-bold tracking-[0.08em] text-[#f0c060]">
             Quest Log
           </h3>
           <span aria-hidden="true" className="h-4 w-4" />
         </div>
         <div
-          className="relative rounded-b-[10px] px-5 py-6 sm:px-8"
+          className="relative rounded-b-[10px] px-5 py-4 sm:px-8 sm:py-5"
           style={{ background: PARCHMENT_BG }}
         >
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-0 left-0 w-8 rounded-bl-[10px] bg-gradient-to-r from-[#8a704a]/60 to-transparent"
           />
-          <div className="relative grid gap-8 sm:grid-cols-2">
+          <div className="relative grid gap-x-8 gap-y-4 font-wow sm:grid-cols-2">
             {HOSTING_QUESTS.map(({ title, body, objective, status, badge }) => (
               <article key={title}>
-                <h4 className="font-serif text-lg font-bold leading-tight text-[#5a3c10]">
-                  {title}
-                </h4>
-                <p className="mt-1.5 text-sm leading-relaxed text-[#4a3520]">{body}</p>
-                <p className="mt-3 text-xs font-bold uppercase tracking-wide text-[#6b5330]">
-                  Objectives
-                </p>
-                <p className="mt-0.5 text-sm text-[#4a3520]">
+                <h4 className="text-[17px] font-bold leading-tight text-[#5a3c10]">{title}</h4>
+                <p className="mt-1 text-[13px] leading-snug text-[#4a3520]">{body}</p>
+                <p className="mt-2 text-xs font-bold text-[#6b5330]">Objectives</p>
+                <p className="text-[13px] leading-snug text-[#4a3520]">
                   {objective}
                   <span className="italic text-[#7a5c36]"> — {status}</span>
                 </p>
                 {badge && (
                   <>
-                    <p className="mt-3 text-xs font-bold uppercase tracking-wide text-[#6b5330]">
-                      Rewards
-                    </p>
-                    <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="mt-2 text-xs font-bold text-[#6b5330]">Rewards</p>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/40 bg-[#101a2c] px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-300">
                         <span aria-hidden="true">◆</span>
                         Hosted by Chronicle
