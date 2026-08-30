@@ -202,7 +202,7 @@ function SpellTooltip({ spell, className }: { spell: DonationSpell; className: s
 }
 
 const SPELLBOOK_ROW_CLASSES =
-  "group relative -mx-2 flex items-center gap-3 rounded px-2 py-1.5 text-left transition-colors hover:bg-black/10 focus-visible:bg-black/10 focus-visible:outline-none";
+  "group relative -mx-2 flex cursor-pointer items-center gap-3 rounded px-2 py-1.5 text-left transition-colors hover:bg-black/10 focus-visible:bg-black/10 focus-visible:outline-none";
 
 function SpellbookRow({ spell, external }: { spell: DonationSpell; external: boolean }) {
   return (
@@ -232,7 +232,7 @@ function SpellbookRow({ spell, external }: { spell: DonationSpell; external: boo
 }
 
 const ACTION_SLOT_CLASSES =
-  "group relative block h-12 w-12 rounded border-2 border-[#5a5a7a] bg-black outline-none transition-transform hover:scale-105 hover:border-yellow-500/80 focus-visible:scale-105 focus-visible:border-yellow-500/80";
+  "group relative block h-12 w-12 cursor-pointer rounded border-2 border-[#5a5a7a] bg-black outline-none transition-transform hover:scale-105 hover:border-yellow-500/80 focus-visible:scale-105 focus-visible:border-yellow-500/80";
 
 /** Stone gryphon statues flanking the bar, like the classic action bar end caps. */
 function GryphonEndCap({ side }: { side: "left" | "right" }) {

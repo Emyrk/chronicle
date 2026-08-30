@@ -92,7 +92,7 @@ export function Footer() {
               <li>
                 <button
                   onClick={() => setCryptoModalOpen(true)}
-                  className="hover:text-foreground transition-colors inline-flex items-center gap-1"
+                  className="hover:text-foreground transition-colors inline-flex items-center gap-1 cursor-pointer"
                 >
                   <CryptoCoinIcon className="h-4 w-4" />
                   Tip with Crypto
