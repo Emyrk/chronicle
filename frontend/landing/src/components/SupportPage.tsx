@@ -41,7 +41,7 @@ const HOSTING_METER = [
     pct: 72,
     color: "#f0a020",
     note: "Largest",
-    help: "Serving combat log queries quickly means keeping parsed fight data and caches in RAM, so the servers are sized primarily by memory. Sourced from the RAM allocation on the machines running Chronicle deployments.",
+    help: "Parsing a log requires loading the uncompressed log into memory, and logs are large. Memory caches are also maintained for frequently asked-for spells, items, and the like to keep the experience snappy, and the API serves a lot of data, all of which routes through memory. Sourced from the RAM allocation on the machines running Chronicle deployments.",
   },
   {
     label: "Network",
