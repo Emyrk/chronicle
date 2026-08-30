@@ -65,9 +65,15 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-@keyframes support-logo-spin {
-  to {
-    transform: rotate(1turn);
+@keyframes support-coin-flip {
+  0%, 38% {
+    transform: rotateY(0deg);
+  }
+  50%, 88% {
+    transform: rotateY(180deg);
+  }
+  100% {
+    transform: rotateY(360deg);
   }
 }
 
@@ -143,23 +149,49 @@ body {
 }
 
 .support-ribbon-medallion {
+  perspective: 700px;
   animation: support-medallion-glow 3s ease-in-out infinite;
-  transition: border-color 220ms ease, transform 220ms ease;
+  transition: filter 220ms ease, transform 220ms ease;
+}
+
+.support-ribbon-coin {
+  display: block;
+  transform-style: preserve-3d;
+  animation: support-coin-flip 8s ease-in-out infinite;
+}
+
+.support-ribbon-coin-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgb(253 230 138 / 0.55);
+  border-radius: 9999px;
+  background: #242424;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.support-ribbon-coin-front {
+  transform: rotateY(0deg) translateZ(1px);
+}
+
+.support-ribbon-coin-back {
+  color: rgb(253 230 138);
+  background:
+    radial-gradient(circle at 35% 28%, rgb(120 76 20 / 0.8), transparent 48%),
+    #242424;
+  transform: rotateY(180deg) translateZ(1px);
 }
 
 .support-ribbon-orbit {
   transition: border-color 220ms ease;
 }
 
-.support-ribbon-logo {
-  animation: support-logo-spin 20s linear infinite;
-  filter: drop-shadow(0 0 4px rgb(217 180 107 / 0.32));
-  transition: filter 220ms ease;
-}
-
 .support-ribbon:hover .support-ribbon-medallion,
 .support-ribbon:focus-visible .support-ribbon-medallion {
-  border-color: rgb(252 211 77 / 0.85);
   transform: translateY(-50%) scale(1.06);
 }
 
@@ -168,23 +200,27 @@ body {
   border-color: rgb(252 211 77 / 0.7);
 }
 
-.support-ribbon:hover .support-ribbon-logo,
-.support-ribbon:focus-visible .support-ribbon-logo {
+.support-ribbon:hover .support-ribbon-coin,
+.support-ribbon:focus-visible .support-ribbon-coin {
   animation-duration: 2.5s;
-  filter: drop-shadow(0 0 11px rgb(252 211 77 / 0.78));
+}
+
+.support-ribbon:hover .support-ribbon-medallion,
+.support-ribbon:focus-visible .support-ribbon-medallion {
+  filter: drop-shadow(0 0 11px rgb(252 211 77 / 0.65));
 }
 
 @media (prefers-reduced-motion: reduce) {
   .support-ribbon,
   .support-ribbon-medallion,
-  .support-ribbon-logo {
+  .support-ribbon-coin {
     animation: none;
   }
 
   .support-ribbon,
   .support-ribbon::before,
   .support-ribbon-medallion,
-  .support-ribbon-logo {
+  .support-ribbon-coin {
     transition: none;
   }
 
