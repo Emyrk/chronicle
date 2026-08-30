@@ -134,7 +134,6 @@ body {
   animation-play-state: paused;
   border-color: rgb(252 211 77 / 0.8);
   filter: brightness(1.12);
-  transform: translate(-0.35rem, 0.05rem) scale(1.035);
 }
 
 .support-ribbon:hover::before,
@@ -182,11 +181,6 @@ body {
 
 .support-ribbon-orbit {
   transition: border-color 220ms ease;
-}
-
-.support-ribbon:hover .support-ribbon-medallion,
-.support-ribbon:focus-visible .support-ribbon-medallion {
-  transform: translateY(-50%) scale(1.06);
 }
 
 .support-ribbon:hover .support-ribbon-orbit,
