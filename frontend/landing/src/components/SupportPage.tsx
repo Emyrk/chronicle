@@ -312,9 +312,9 @@ export function SupportPage() {
 
       <div
         ref={ctaRef}
-        className="mt-10 overflow-hidden rounded-xl border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-2xl shadow-black/40"
+        className="mt-10 rounded-xl border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-2xl shadow-black/40"
       >
-        <div className="flex items-center gap-3 border-b-2 border-[#4a4a6a] px-4 py-2.5">
+        <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#4a4a6a] px-4 py-2.5">
           <BookOpen aria-hidden="true" className="h-4 w-4 text-[#f0c060]" />
           <h2 className="flex-1 text-center text-sm font-bold uppercase tracking-[0.15em] text-[#f0c060]">
             Support the Project
@@ -322,18 +322,18 @@ export function SupportPage() {
           <span aria-hidden="true" className="h-4 w-4" />
         </div>
         <div
-          className="relative px-5 py-6 sm:px-10 sm:py-8"
+          className="relative rounded-b-[10px] px-5 py-6 sm:px-10 sm:py-8"
           style={{
             background: "radial-gradient(ellipse at 30% 15%, #ead9ae 0%, #d3ba8c 55%, #bda276 100%)",
           }}
         >
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[#8a704a]/60 to-transparent"
+            className="pointer-events-none absolute inset-y-0 left-0 w-8 rounded-bl-[10px] bg-gradient-to-r from-[#8a704a]/60 to-transparent"
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-[#8a704a]/35 to-transparent"
+            className="pointer-events-none absolute inset-y-0 right-0 w-4 rounded-br-[10px] bg-gradient-to-l from-[#8a704a]/35 to-transparent"
           />
           <p className="relative mx-auto max-w-md text-center text-xs italic leading-relaxed text-[#6b5330]">
             Contributions help cover hosting for Chronicle-operated deployments and
