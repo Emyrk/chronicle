@@ -11,7 +11,6 @@ const (
 	ServiceChronicle   = "chronicle"
 	ServiceDiscordBot  = "discordbot"
 	ServiceAPI         = "api"
-	ServiceAPIKey      = "api-key"
 	ServiceExternalAPI = "external-api"
 	ServiceAuthz       = "authz"
 	ServiceWoWDB       = "wow-db"

@@ -21,7 +21,6 @@ import (
 	"github.com/Emyrk/chronicle/chroniclemail"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
-	"github.com/Emyrk/chronicle/internal/services/serviceapikey"
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
@@ -46,7 +45,7 @@ type Options struct {
 	Mailer    *chroniclemail.Mailer
 
 	Sessions SessionOptions
-	APIKeys  *serviceapikey.Service
+	APIKeys  APIKeyOptions
 
 	// TenantChecker resolves a host to tenant info for cross-subdomain auth relay.
 	// Nil means relay is disabled (e.g. dev mode without primary domain).
@@ -75,7 +74,7 @@ type Service struct {
 	loginMu       sync.Mutex
 	loginAttempts map[string]time.Time
 
-	apiKeys *serviceapikey.Service
+	apiKeyLimiter *apiKeyLimiter
 }
 
 func newCookieStore(secure bool) *sessions.CookieStore {
@@ -144,7 +143,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 		tenantChecker:    opts.TenantChecker,
 		registerAttempts: make(map[string]time.Time),
 		loginAttempts:    make(map[string]time.Time),
-		apiKeys:          opts.APIKeys,
+		apiKeyLimiter:    newAPIKeyLimiter(opts.APIKeys),
 	}, nil
 }
 

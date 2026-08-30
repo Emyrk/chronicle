@@ -1,17 +1,19 @@
 package api
 
 import (
-	"errors"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/services/serviceapikey"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+const maxAPIKeysPerUser = 10
 
 func apiKeyToSDK(key database.UserApiKey) chroniclesdk.APIKey {
 	result := chroniclesdk.APIKey{
@@ -28,7 +30,7 @@ func apiKeyToSDK(key database.UserApiKey) chroniclesdk.APIKey {
 
 func (a *API) ListMyAPIKeys(w http.ResponseWriter, r *http.Request) {
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
-	keys, err := a.Opts.APIKeys.List(r.Context(), claims.Subject)
+	keys, err := a.Opts.Zed.ListUserAPIKeys(r.Context(), claims.Subject)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -49,15 +51,34 @@ func (a *API) CreateMyAPIKey(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Read(ctx, w, r, &req) {
 		return
 	}
-	key, raw, err := a.Opts.APIKeys.Create(ctx, claims.Subject, req.Name)
-	if errors.Is(err, serviceapikey.ErrInvalidName) {
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" || len(req.Name) > 80 {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Token name must be between 1 and 80 characters."})
 		return
 	}
-	if errors.Is(err, serviceapikey.ErrKeyLimit) {
+
+	count, err := a.Opts.Zed.CountUserAPIKeys(ctx, claims.Subject)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if count >= maxAPIKeysPerUser {
 		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "Revoke an existing token before creating another."})
 		return
 	}
+
+	raw, hash, err := chronauth.GenerateAPIKey()
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	key, err := a.Opts.Zed.InsertUserAPIKey(ctx, database.InsertUserAPIKeyParams{
+		ID:        uuid.New(),
+		UserID:    claims.Subject,
+		Name:      req.Name,
+		KeyHash:   hash,
+		CreatedAt: database.Timestamptz(time.Now()),
+	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -78,12 +99,15 @@ func (a *API) DeleteMyAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deleted, err := a.Opts.APIKeys.Delete(ctx, claims.Subject, keyID)
+	deleted, err := a.Opts.Zed.DeleteUserAPIKey(ctx, database.DeleteUserAPIKeyParams{
+		ID:     keyID,
+		UserID: claims.Subject,
+	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if !deleted {
+	if deleted == 0 {
 		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "API token not found."})
 		return
 	}

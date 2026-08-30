@@ -9,7 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceapi"
-	"github.com/Emyrk/chronicle/internal/services/serviceapikey"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
@@ -63,7 +62,6 @@ func ServerCmd() *serpent.Command {
 		servicemail.New(srvs),
 		serviceapplication.New(srvs),
 		serviceexternalapi.New(srvs),
-		serviceapikey.New(srvs),
 		serviceapi.New(srvs),
 	)
 	if err != nil {
