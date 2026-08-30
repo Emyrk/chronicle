@@ -55,7 +55,8 @@ const HOSTING_METER = [
     note: "Small",
     why: [
       "Combat log uploads coming in.",
-      "Dashboards, charts, and API responses going out.",
+      "Dashboards, charts, API responses, and log events going out.",
+      "The frontend receives all the log events for the detailed analysis.",
     ],
     source: "The provider's data transfer (egress) charges.",
   },
