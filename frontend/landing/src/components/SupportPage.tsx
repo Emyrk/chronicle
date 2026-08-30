@@ -9,19 +9,21 @@ export function SupportPage() {
     <section className="relative mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8">
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-[radial-gradient(ellipse_at_top,_var(--primary-darker)_0%,_transparent_65%)] opacity-50" />
 
-      <a
-        href="/"
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-        Back to server directory
-      </a>
-
-      <div className="mt-8 max-w-3xl">
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-300">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <a
+          href="/"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+          Back to server directory
+        </a>
+        <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-300">
           <span aria-hidden="true">◆</span>
           Hosted by Chronicle
         </div>
+      </div>
+
+      <div className="mt-6 max-w-3xl">
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
           Keeping Chronicle available to Classic WoW communities
         </h1>
