@@ -13,6 +13,143 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countUserAPIKeys = `-- name: CountUserAPIKeys :one
+SELECT COUNT(*)
+FROM user_api_keys
+WHERE user_id = $1
+`
+
+func (q *sqlQuerier) CountUserAPIKeys(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserAPIKeys, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const deleteUserAPIKey = `-- name: DeleteUserAPIKey :execrows
+DELETE FROM user_api_keys
+WHERE id = $1 AND user_id = $2
+`
+
+type DeleteUserAPIKeyParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) DeleteUserAPIKey(ctx context.Context, arg DeleteUserAPIKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserAPIKey, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getUserAPIKeyByHash = `-- name: GetUserAPIKeyByHash :one
+SELECT id, user_id, name, key_hash, created_at, last_used_at
+FROM user_api_keys
+WHERE key_hash = $1
+`
+
+func (q *sqlQuerier) GetUserAPIKeyByHash(ctx context.Context, keyHash []byte) (UserApiKey, error) {
+	row := q.db.QueryRow(ctx, getUserAPIKeyByHash, keyHash)
+	var i UserApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.KeyHash,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const insertUserAPIKey = `-- name: InsertUserAPIKey :one
+INSERT INTO user_api_keys (id, user_id, name, key_hash, created_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, user_id, name, key_hash, created_at, last_used_at
+`
+
+type InsertUserAPIKeyParams struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Name      string             `db:"name" json:"name"`
+	KeyHash   []byte             `db:"key_hash" json:"key_hash"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+func (q *sqlQuerier) InsertUserAPIKey(ctx context.Context, arg InsertUserAPIKeyParams) (UserApiKey, error) {
+	row := q.db.QueryRow(ctx, insertUserAPIKey,
+		arg.ID,
+		arg.UserID,
+		arg.Name,
+		arg.KeyHash,
+		arg.CreatedAt,
+	)
+	var i UserApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.KeyHash,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const listUserAPIKeys = `-- name: ListUserAPIKeys :many
+SELECT id, user_id, name, key_hash, created_at, last_used_at
+FROM user_api_keys
+WHERE user_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *sqlQuerier) ListUserAPIKeys(ctx context.Context, userID uuid.UUID) ([]UserApiKey, error) {
+	rows, err := q.db.Query(ctx, listUserAPIKeys, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserApiKey
+	for rows.Next() {
+		var i UserApiKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.KeyHash,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const touchUserAPIKeyLastUsed = `-- name: TouchUserAPIKeyLastUsed :exec
+UPDATE user_api_keys
+SET last_used_at = $1
+WHERE id = $2
+  AND (last_used_at IS NULL OR last_used_at < $3)
+`
+
+type TouchUserAPIKeyLastUsedParams struct {
+	LastUsedAt     pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
+	ID             uuid.UUID          `db:"id" json:"id"`
+	LastUsedBefore pgtype.Timestamptz `db:"last_used_before" json:"last_used_before"`
+}
+
+func (q *sqlQuerier) TouchUserAPIKeyLastUsed(ctx context.Context, arg TouchUserAPIKeyLastUsedParams) error {
+	_, err := q.db.Exec(ctx, touchUserAPIKeyLastUsed, arg.LastUsedAt, arg.ID, arg.LastUsedBefore)
+	return err
+}
+
 const censusPlayerCounts = `-- name: CensusPlayerCounts :many
 SELECT
   gp.class,

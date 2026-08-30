@@ -100,6 +100,37 @@ func TestManageConsumablesRole(t *testing.T) {
 	require.False(t, canManageWorldData)
 }
 
+func TestAPIAccessRole(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	for _, tc := range []struct {
+		name  string
+		roles []string
+	}{
+		{name: "dedicated API role", roles: []string{"api_access"}},
+		{name: "admin", roles: []string{"admin"}},
+		{name: "technical admin", roles: []string{"technical_admin"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := uuid.New()
+			require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, tc.roles))
+			allowed, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanCreate_api_key_User(policy.New().User(userID)))
+			require.NoError(t, err)
+			require.True(t, allowed)
+		})
+	}
+
+	userID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"upload_capable"}))
+	allowed, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanCreate_api_key_User(policy.New().User(userID)))
+	require.NoError(t, err)
+	require.False(t, allowed)
+}
+
 func TestInTx_NilWrapped(t *testing.T) {
 	t.Parallel()
 

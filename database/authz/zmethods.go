@@ -233,6 +233,8 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Admin(usr)
 		case "upload_capable":
 			gChron.Upload_capable(usr)
+		case "api_access":
+			gChron.Api_access(usr)
 		case "moderate_logs":
 			gChron.Moderate_logs(usr)
 		case "moderate_guilds":

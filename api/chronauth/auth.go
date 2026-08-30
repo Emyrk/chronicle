@@ -45,6 +45,7 @@ type Options struct {
 	Mailer    *chroniclemail.Mailer
 
 	Sessions SessionOptions
+	APIKeys  APIKeyOptions
 
 	// TenantChecker resolves a host to tenant info for cross-subdomain auth relay.
 	// Nil means relay is disabled (e.g. dev mode without primary domain).
@@ -72,6 +73,8 @@ type Service struct {
 
 	loginMu       sync.Mutex
 	loginAttempts map[string]time.Time
+
+	apiKeyLimiter *apiKeyLimiter
 }
 
 func newCookieStore(secure bool) *sessions.CookieStore {
@@ -140,6 +143,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 		tenantChecker:    opts.TenantChecker,
 		registerAttempts: make(map[string]time.Time),
 		loginAttempts:    make(map[string]time.Time),
+		apiKeyLimiter:    newAPIKeyLimiter(opts.APIKeys),
 	}, nil
 }
 

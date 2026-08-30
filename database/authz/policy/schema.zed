@@ -15,6 +15,7 @@ definition chronicle {
   relation supporter: user
   relation chronicle_guild_member: user
   relation chronicle_member: user // Not in discord
+  relation api_access: user
 
   // Granular roles
   relation moderate_logs: user
@@ -44,6 +45,7 @@ definition chronicle {
 
   permission upload_log = upload_capable + administer + supporter + chronicle_guild_member + chronicle_member
   permission create_layout = chronicle_guild_member + chronicle_member
+  permission create_api_key = api_access + administer
   permission admin_world_data = technical_admin + is_admin_game_data
   permission admin_consumables = administer + manage_consumables
 
