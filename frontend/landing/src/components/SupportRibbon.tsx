@@ -9,6 +9,14 @@ export function SupportRibbon() {
     >
       <span className="support-ribbon-medallion absolute -left-3 top-1/2 z-10 h-[4.75rem] w-[4.75rem] -translate-y-1/2 rounded-full sm:-left-4 sm:h-[5.75rem] sm:w-[5.75rem]">
         <span className="support-ribbon-coin absolute inset-0">
+          {[-3.5, -2.6, -1.7, -0.8, 0, 0.8, 1.7, 2.6, 3.5].map((z) => (
+            <span
+              key={z}
+              aria-hidden="true"
+              className="support-ribbon-coin-ridge"
+              style={{ transform: `translateZ(${z}px)` }}
+            />
+          ))}
           <span className="support-ribbon-coin-face support-ribbon-coin-front">
             <span className="support-ribbon-orbit absolute inset-1 rounded-full border border-dashed border-amber-300/35" />
             <img

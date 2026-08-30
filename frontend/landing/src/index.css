@@ -142,7 +142,7 @@ body {
 }
 
 .support-ribbon-medallion {
-  perspective: 700px;
+  perspective: 600px;
   animation: support-medallion-glow 3s ease-in-out infinite;
   transition: filter 220ms ease, transform 220ms ease;
 }
@@ -150,7 +150,14 @@ body {
 .support-ribbon-coin {
   display: block;
   transform-style: preserve-3d;
-  animation: support-coin-flip 10s linear infinite;
+  animation: support-coin-flip 2.6s linear infinite;
+}
+
+.support-ribbon-coin-ridge {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, #d9a03a, #8a6a2a);
 }
 
 .support-ribbon-coin-face {
@@ -168,7 +175,7 @@ body {
 }
 
 .support-ribbon-coin-front {
-  transform: rotateY(0deg) translateZ(1px);
+  transform: rotateY(0deg) translateZ(4px);
 }
 
 .support-ribbon-coin-back {
@@ -176,7 +183,7 @@ body {
   background:
     radial-gradient(circle at 35% 28%, rgb(120 76 20 / 0.8), transparent 48%),
     #242424;
-  transform: rotateY(180deg) translateZ(1px);
+  transform: rotateY(180deg) translateZ(4px);
 }
 
 .support-ribbon-orbit {
@@ -186,11 +193,6 @@ body {
 .support-ribbon:hover .support-ribbon-orbit,
 .support-ribbon:focus-visible .support-ribbon-orbit {
   border-color: rgb(252 211 77 / 0.7);
-}
-
-.support-ribbon:hover .support-ribbon-coin,
-.support-ribbon:focus-visible .support-ribbon-coin {
-  animation-duration: 1.5s;
 }
 
 .support-ribbon:hover .support-ribbon-medallion,
