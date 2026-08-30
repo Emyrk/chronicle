@@ -159,10 +159,29 @@ const DONATION_BUTTON_CLASSES =
 
 // Spells on the floating action bar; href opens a link, no href casts the crypto modal.
 const ACTION_BAR_SPELLS = [
-  { label: "GitHub Sponsors", icon: "spell_holy_sealofsacrifice", href: GITHUB_SPONSORS_URL },
-  { label: "Patreon", icon: "inv_banner_02", href: PATREON_URL },
-  { label: "Buy Me a Coffee", icon: "inv_drink_04", href: BUY_ME_A_COFFEE_URL },
-  { label: "Tip with Crypto", icon: "inv_misc_coin_01" },
+  {
+    label: "GitHub Sponsors",
+    href: GITHUB_SPONSORS_URL,
+    accent: "#ec4899",
+    icon: <SponsorsHeartIcon className="h-6 w-6 text-pink-400" />,
+  },
+  {
+    label: "Patreon",
+    href: PATREON_URL,
+    accent: "#FF424D",
+    icon: <PatreonIcon className="h-6 w-6 text-[#FF424D]" />,
+  },
+  {
+    label: "Buy Me a Coffee",
+    href: BUY_ME_A_COFFEE_URL,
+    accent: "#facc15",
+    icon: <Coffee aria-hidden="true" className="h-6 w-6 text-yellow-400" />,
+  },
+  {
+    label: "Tip with Crypto",
+    accent: "#fbbf24",
+    icon: <CryptoCoinIcon className="h-6 w-6 text-amber-400" />,
+  },
 ];
 
 const ACTION_SLOT_CLASSES =
@@ -183,15 +202,26 @@ function GryphonEndCap({ side }: { side: "left" | "right" }) {
   );
 }
 
-function ActionSlotContent({ label, icon, keybind }: { label: string; icon: string; keybind: number }) {
+function ActionSlotContent({
+  label,
+  icon,
+  accent,
+  keybind,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  accent: string;
+  keybind: number;
+}) {
   return (
     <>
-      <img
-        src={`${WOW_ICON_BASE}/${icon}.webp`}
-        alt=""
+      <span
         aria-hidden="true"
-        className="h-full w-full rounded-sm object-cover"
-      />
+        className="flex h-full w-full items-center justify-center rounded-sm"
+        style={{ background: `radial-gradient(circle at 35% 30%, ${accent}40, #14141f 75%)` }}
+      >
+        {icon}
+      </span>
       <span
         aria-hidden="true"
         className="absolute right-0.5 top-0 text-[10px] font-bold text-white [text-shadow:1px_1px_1px_#000]"
@@ -416,7 +446,7 @@ export function SupportPage() {
           <GryphonEndCap side="left" />
           <GryphonEndCap side="right" />
           <div className="flex items-end gap-1.5 rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e]/95 p-2 shadow-2xl shadow-black/60">
-            {ACTION_BAR_SPELLS.map(({ label, icon, href }, i) =>
+            {ACTION_BAR_SPELLS.map(({ label, icon, accent, href }, i) =>
               href ? (
                 <a
                   key={label}
@@ -426,7 +456,7 @@ export function SupportPage() {
                   aria-label={label}
                   className={ACTION_SLOT_CLASSES}
                 >
-                  <ActionSlotContent label={label} icon={icon} keybind={i + 1} />
+                  <ActionSlotContent label={label} icon={icon} accent={accent} keybind={i + 1} />
                 </a>
               ) : (
                 <button
@@ -436,7 +466,7 @@ export function SupportPage() {
                   aria-label={label}
                   className={ACTION_SLOT_CLASSES}
                 >
-                  <ActionSlotContent label={label} icon={icon} keybind={i + 1} />
+                  <ActionSlotContent label={label} icon={icon} accent={accent} keybind={i + 1} />
                 </button>
               ),
             )}
