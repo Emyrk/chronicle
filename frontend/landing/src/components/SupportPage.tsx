@@ -350,7 +350,7 @@ export function SupportPage() {
       </a>
 
       <div className="mx-auto mt-10 max-w-3xl text-center">
-        <h1 className="font-wow text-2xl leading-tight sm:text-5xl lg:text-6xl">
+        <h1 className="font-wow text-3xl leading-tight sm:text-5xl lg:text-6xl">
           <span className="whitespace-nowrap text-[#f0c060]">Keeping Chronicle Available</span>
           <br />
           <span className="whitespace-nowrap text-white">to WoW Communities</span>
