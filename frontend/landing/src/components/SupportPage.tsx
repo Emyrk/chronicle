@@ -308,10 +308,15 @@ export function SupportPage() {
   useEffect(() => {
     const el = ctaRef.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(([entry]) => {
-      // Only summon the bar once the donation card has scrolled off the top.
-      setActionBarVisible(!entry.isIntersecting && entry.boundingClientRect.top < 0);
-    });
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // Summon the bar once the spellbook has mostly scrolled off the top:
+        // the shrunken root means "still intersecting" only while the book
+        // reaches below the top third of the viewport.
+        setActionBarVisible(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+      },
+      { rootMargin: "-33% 0px 0px 0px" },
+    );
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
