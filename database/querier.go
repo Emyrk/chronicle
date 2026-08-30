@@ -528,6 +528,7 @@ type sqlcQuerier interface {
 	// returned here, including unqualified runs.
 	ListExternalAPILeaderboardDuplicateLogs(ctx context.Context, arg ListExternalAPILeaderboardDuplicateLogsParams) ([]ListExternalAPILeaderboardDuplicateLogsRow, error)
 	ListExternalAPIRealms(ctx context.Context, server string) ([]ListExternalAPIRealmsRow, error)
+	ListExternalAPIRecentInstances(ctx context.Context, arg ListExternalAPIRecentInstancesParams) ([]ListExternalAPIRecentInstancesRow, error)
 	ListExternalAPIServers(ctx context.Context) ([]ListExternalAPIServersRow, error)
 	ListGearListsByUser(ctx context.Context, arg ListGearListsByUserParams) ([]GearList, error)
 	ListGearProgressionsByUser(ctx context.Context, arg ListGearProgressionsByUserParams) ([]GearProgression, error)

@@ -20,6 +20,7 @@ import (
 const (
 	maxCharacterLogsPageSize = 50
 	maxLeaderboardPageSize   = 50
+	maxRecentPageSize        = 50
 )
 
 type Server struct {

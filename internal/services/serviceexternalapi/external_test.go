@@ -38,6 +38,8 @@ type fakeExternalAPIStore struct {
 	event                 database.LogInstanceEvent
 	eventErr              error
 	eventParams           database.InstanceEventParams
+	recent                []database.ListExternalAPIRecentInstancesRow
+	recentParams          database.ListExternalAPIRecentInstancesParams
 }
 
 func (f *fakeExternalAPIStore) ListExternalAPIServers(context.Context) ([]database.ListExternalAPIServersRow, error) {
@@ -91,6 +93,11 @@ func (f *fakeExternalAPIStore) GetEncounterPhasesByInstanceID(context.Context, u
 func (f *fakeExternalAPIStore) InstanceEvent(_ context.Context, params database.InstanceEventParams) (database.LogInstanceEvent, error) {
 	f.eventParams = params
 	return f.event, f.eventErr
+}
+
+func (f *fakeExternalAPIStore) ListExternalAPIRecentInstances(_ context.Context, params database.ListExternalAPIRecentInstancesParams) ([]database.ListExternalAPIRecentInstancesRow, error) {
+	f.recentParams = params
+	return f.recent, nil
 }
 
 func TestListServers(t *testing.T) {

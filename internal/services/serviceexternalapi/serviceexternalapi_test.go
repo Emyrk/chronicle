@@ -55,6 +55,13 @@ func TestOpenAPISpec(t *testing.T) {
 	require.True(t, leaderboard.Parameters[0].Required)
 	require.Equal(t, "timing", leaderboard.Parameters[1].Name)
 
+	recent, ok := document.Paths["/raidlogs/recent"]["get"]
+	require.True(t, ok)
+	require.Equal(t, "List recent raid activity", recent.Summary)
+	require.Len(t, recent.Parameters, 7)
+	require.Equal(t, "after_date", recent.Parameters[0].Name)
+	require.Equal(t, "page_size", recent.Parameters[6].Name)
+
 	instance, ok := document.Paths["/raidlogs/instances/{slug}"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Get a raid instance", instance.Summary)

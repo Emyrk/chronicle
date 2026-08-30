@@ -2456,6 +2456,145 @@ func (q *sqlQuerier) ListExternalAPIRealms(ctx context.Context, server string) (
 	return items, nil
 }
 
+const listExternalAPIRecentInstances = `-- name: ListExternalAPIRecentInstances :many
+SELECT
+    li.id,
+    li.hashed_slug,
+    COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)::text AS name,
+    li.realm_id,
+    wsr.name::text AS realm_name,
+    li.guild_id,
+    COALESCE(g.name, '')::text AS guild_name,
+    wlg.created_at AS uploaded_at,
+    COALESCE(
+        (SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id),
+        wlg.created_at
+    )::timestamptz AS started_at,
+    COALESCE(
+        (SELECT MAX(lie.end_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id),
+        wlg.created_at
+    )::timestamptz AS ended_at,
+    (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::bigint AS player_count,
+    (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true)::bigint AS boss_count,
+    (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true AND lie.kill_type IN ('clean', 'partial'))::bigint AS boss_kills,
+    EXISTS (
+        SELECT 1 FROM log_instance_youtube_timestamped yt
+        WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+    )::boolean AS has_youtube_video,
+    li.difficulty_name,
+    li.max_players,
+    li.recorder_name
+FROM log_instances li
+JOIN parsed_log_group plg ON plg.id = li.log_group_id
+JOIN wow_log_groups wlg ON wlg.id = plg.id
+LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+LEFT JOIN guilds g ON g.id = li.guild_id
+WHERE (
+        $1::timestamptz IS NULL
+        OR COALESCE(
+            (SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id),
+            wlg.created_at
+        ) >= $1::timestamptz
+    )
+  AND (
+        cardinality($2::text[]) = 0
+        OR COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY($2::text[])
+    )
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR li.realm_id = $3::uuid)
+  AND ($4::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR li.guild_id = $4::uuid)
+  AND (
+        $5::text = ''
+        OR ($5::text = 'true' AND EXISTS (
+            SELECT 1 FROM log_instance_youtube_timestamped yt
+            WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+        ))
+        OR ($5::text = 'false' AND NOT EXISTS (
+            SELECT 1 FROM log_instance_youtube_timestamped yt
+            WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+        ))
+    )
+ORDER BY started_at DESC, li.id DESC
+LIMIT $7
+OFFSET $6
+`
+
+type ListExternalAPIRecentInstancesParams struct {
+	AfterDate     pgtype.Timestamptz `db:"after_date" json:"after_date"`
+	InstanceNames []string           `db:"instance_names" json:"instance_names"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	HasVideo      string             `db:"has_video" json:"has_video"`
+	ResultOffset  int32              `db:"result_offset" json:"result_offset"`
+	ResultLimit   int32              `db:"result_limit" json:"result_limit"`
+}
+
+type ListExternalAPIRecentInstancesRow struct {
+	ID              uuid.UUID          `db:"id" json:"id"`
+	HashedSlug      pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	Name            string             `db:"name" json:"name"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName       string             `db:"realm_name" json:"realm_name"`
+	GuildID         uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName       string             `db:"guild_name" json:"guild_name"`
+	UploadedAt      pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
+	StartedAt       pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt         pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	PlayerCount     int64              `db:"player_count" json:"player_count"`
+	BossCount       int64              `db:"boss_count" json:"boss_count"`
+	BossKills       int64              `db:"boss_kills" json:"boss_kills"`
+	HasYoutubeVideo bool               `db:"has_youtube_video" json:"has_youtube_video"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int32              `db:"max_players" json:"max_players"`
+	RecorderName    string             `db:"recorder_name" json:"recorder_name"`
+}
+
+func (q *sqlQuerier) ListExternalAPIRecentInstances(ctx context.Context, arg ListExternalAPIRecentInstancesParams) ([]ListExternalAPIRecentInstancesRow, error) {
+	rows, err := q.db.Query(ctx, listExternalAPIRecentInstances,
+		arg.AfterDate,
+		arg.InstanceNames,
+		arg.RealmID,
+		arg.GuildID,
+		arg.HasVideo,
+		arg.ResultOffset,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExternalAPIRecentInstancesRow
+	for rows.Next() {
+		var i ListExternalAPIRecentInstancesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.HashedSlug,
+			&i.Name,
+			&i.RealmID,
+			&i.RealmName,
+			&i.GuildID,
+			&i.GuildName,
+			&i.UploadedAt,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.PlayerCount,
+			&i.BossCount,
+			&i.BossKills,
+			&i.HasYoutubeVideo,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RecorderName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listExternalAPIServers = `-- name: ListExternalAPIServers :many
 SELECT
     ws.id,

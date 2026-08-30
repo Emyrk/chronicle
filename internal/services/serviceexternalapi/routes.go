@@ -68,6 +68,27 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.listCharacterLogs)
 
+	s.register(http.MethodGet, "/raidlogs/recent", OpenAPIOperation{
+		Summary:     "List recent raid activity",
+		Description: "Returns recent parsed raid instances, newest first. Results may be filtered to activity on or after an RFC3339 timestamp and are limited to 50 per page.",
+		Parameters: []OpenAPIParameter{
+			queryParameter("after_date", "Only include activity starting at or after this RFC3339 timestamp", false, "string", "2026-08-01T00:00:00Z"),
+			queryParameter("instance_name", "Instance name. Repeat this parameter to include multiple names.", false, "string", "Molten Core"),
+			queryParameter("realm_id", "Realm UUID", false, "string", "00000000-0000-0000-0000-000000000000"),
+			queryParameter("guild_id", "Guild UUID", false, "string", "00000000-0000-0000-0000-000000000000"),
+			queryParameter("has_video", "Filter by YouTube video presence: true or false", false, "boolean", true),
+			queryParameter("page", "Page number, starting at 1", false, "integer", 1),
+			queryParameter("page_size", "Results per page, from 1 to 50", false, "integer", 25),
+		},
+		Responses: okResponse(RecentActivityResponse{
+			Activities: []RecentActivity{{
+				Name: "Molten Core", Slug: "example-instance", Realm: Realm{Name: "Example Realm"},
+				Difficulty: "Normal", MaxPlayers: 40, PlayerCount: 40, BossKills: 10,
+			}},
+			Pagination: Pagination{Page: 1, PageSize: 25},
+		}),
+	}, s.listRecentActivity)
+
 	s.register(http.MethodGet, "/raidlogs/instances/{slug}", OpenAPIOperation{
 		Summary:     "Get a raid instance",
 		Description: "Returns parsed raid-instance metadata, encounters, units, and players for a public instance slug. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",

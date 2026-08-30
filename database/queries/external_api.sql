@@ -155,6 +155,69 @@ LIMIT @result_limit
 OFFSET @result_offset;
 
 
+-- name: ListExternalAPIRecentInstances :many
+SELECT
+    li.id,
+    li.hashed_slug,
+    COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)::text AS name,
+    li.realm_id,
+    wsr.name::text AS realm_name,
+    li.guild_id,
+    COALESCE(g.name, '')::text AS guild_name,
+    wlg.created_at AS uploaded_at,
+    COALESCE(
+        (SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id),
+        wlg.created_at
+    )::timestamptz AS started_at,
+    COALESCE(
+        (SELECT MAX(lie.end_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id),
+        wlg.created_at
+    )::timestamptz AS ended_at,
+    (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::bigint AS player_count,
+    (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true)::bigint AS boss_count,
+    (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true AND lie.kill_type IN ('clean', 'partial'))::bigint AS boss_kills,
+    EXISTS (
+        SELECT 1 FROM log_instance_youtube_timestamped yt
+        WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+    )::boolean AS has_youtube_video,
+    li.difficulty_name,
+    li.max_players,
+    li.recorder_name
+FROM log_instances li
+JOIN parsed_log_group plg ON plg.id = li.log_group_id
+JOIN wow_log_groups wlg ON wlg.id = plg.id
+LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+LEFT JOIN guilds g ON g.id = li.guild_id
+WHERE (
+        @after_date::timestamptz IS NULL
+        OR COALESCE(
+            (SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id),
+            wlg.created_at
+        ) >= @after_date::timestamptz
+    )
+  AND (
+        cardinality(@instance_names::text[]) = 0
+        OR COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY(@instance_names::text[])
+    )
+  AND (@realm_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR li.realm_id = @realm_id::uuid)
+  AND (@guild_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR li.guild_id = @guild_id::uuid)
+  AND (
+        @has_video::text = ''
+        OR (@has_video::text = 'true' AND EXISTS (
+            SELECT 1 FROM log_instance_youtube_timestamped yt
+            WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+        ))
+        OR (@has_video::text = 'false' AND NOT EXISTS (
+            SELECT 1 FROM log_instance_youtube_timestamped yt
+            WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+        ))
+    )
+ORDER BY started_at DESC, li.id DESC
+LIMIT @result_limit
+OFFSET @result_offset;
+
+
 -- name: ListExternalAPILeaderboardDuplicateLogs :many
 -- Returns the logs excluded by duplicate-group deduplication for each selected
 -- leaderboard instance. The selected instance is the canonical leaderboard log
