@@ -5,6 +5,8 @@ import {
   Coffee,
   ExternalLink,
   Heart,
+  LockOpen,
+  MonitorOff,
   Server,
   ShieldCheck,
   Skull,
@@ -94,6 +96,37 @@ const HOSTING_METER = [
   },
 ];
 
+const WHY_DONATE_ITEMS = [
+  {
+    title: "Servers aren't free",
+    color: "#f0a020",
+    icon: Server,
+    desc: "Hosting, storage, and infrastructure for Chronicle-operated deployments are paid out of pocket every month. Donations offset those recurring costs.",
+    flavor: "Even paladins need somewhere to stand.",
+  },
+  {
+    title: "Keep Chronicle ad-free",
+    color: "#f0785a",
+    icon: MonitorOff,
+    desc: "No banner ads, no tracking to sell. Chronicle is not-for-profit, and donations replace the revenue ads would otherwise bring in.",
+    flavor: "No banners. No pop-ups. Just parses.",
+  },
+  {
+    title: "Keep Chronicle paywall-free",
+    color: "#abd473",
+    icon: LockOpen,
+    desc: "No premium tiers, no locked features. Every server and every parse stays free to view for everyone.",
+    flavor: "Locked content stays in Naxxramas.",
+  },
+  {
+    title: "Sustain development",
+    color: "#8fb8e0",
+    icon: Wrench,
+    desc: "Chronicle is actively maintained. Support makes it easier to spend time on fixes, new features, and keeping up with the game.",
+    flavor: "A well-oiled raid never wipes on mechanics.",
+  },
+];
+
 const DONATION_BUTTON_CLASSES =
   "inline-flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-5 py-3 text-base font-semibold text-foreground transition-colors hover:border-pink-300/60 hover:bg-muted";
 
@@ -159,30 +192,32 @@ export function SupportPage() {
       </div>
 
       <h2 className="mt-12 text-xl font-semibold text-foreground">Why donate?</h2>
-      <div className="mt-5 grid gap-5 md:grid-cols-3">
-        {[
-          {
-            icon: Server,
-            title: "Servers aren't free",
-            body: "Hosting, storage, and infrastructure for Chronicle-operated deployments are paid out of pocket every month. Donations offset those recurring costs.",
-          },
-          {
-            icon: Heart,
-            title: "Keep it free for everyone",
-            body: "Chronicle is not-for-profit: no ads, no paywalls, no premium tiers. Contributions keep the service free for every community.",
-          },
-          {
-            icon: Wrench,
-            title: "Sustain development",
-            body: "Chronicle is actively maintained. Support makes it easier to spend time on fixes, new features, and keeping up with the game.",
-          },
-        ].map(({ icon: Icon, title, body }) => (
-          <article key={title} className="rounded-xl border border-border bg-card/70 p-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-              <Icon aria-hidden="true" className="h-5 w-5" />
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        {WHY_DONATE_ITEMS.map(({ title, color, icon: Icon, desc, flavor }) => (
+          <article
+            key={title}
+            className="rounded bg-black/55"
+            style={{ border: "1px solid #000", outline: `1px solid ${color}55`, outlineOffset: "-1px" }}
+          >
+            <div className="flex items-center gap-3 border-b border-[#2a2a2a] p-3">
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-[#111]"
+                style={{ border: `1px solid ${color}` }}
+              >
+                <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} style={{ color }} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold" style={{ color }}>
+                  {title}
+                </h3>
+                <div className="text-[10px] italic text-[#8a8a8a]">Binds when Contributed</div>
+              </div>
             </div>
-            <h3 className="mt-4 text-lg font-semibold text-foreground">{title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
+            <div className="flex flex-col gap-1.5 p-3">
+              <div className="text-[11px] text-[#9d9d9d]">Chronicle Community Perk</div>
+              <p className="text-xs leading-relaxed text-[#d6d6d6]">{desc}</p>
+              <p className="mt-1 text-[11px] italic text-[#ffd100]">&ldquo;{flavor}&rdquo;</p>
+            </div>
           </article>
         ))}
       </div>
