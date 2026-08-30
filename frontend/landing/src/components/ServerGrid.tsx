@@ -40,7 +40,7 @@ function GetInTouchModal({ onClose }: { onClose: () => void }) {
         </button>
 
         <h2 className="text-xl font-semibold text-foreground">
-          Get in touch via Discord
+          Get in Touch via Discord
         </h2>
         <p className="mt-3 text-sm text-muted-foreground">
           We'd love to help bring Chronicle to you. Reach out on our Discord
@@ -213,7 +213,7 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
         />
 
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-          Combat log analysis for{" "}
+          Combat Log Analysis for{" "}
           <span className="text-primary">Classic WoW</span>
         </h1>
         <div className="mt-3 flex items-center justify-center gap-4 text-sm text-muted-foreground">

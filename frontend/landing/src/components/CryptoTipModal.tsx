@@ -59,8 +59,8 @@ export function CryptoTipModal({ open, onClose }: CryptoTipModalProps) {
               {network
                 ? `Send ${selectedCoin} via ${network.networkName}`
                 : coin
-                  ? `Select a network for ${selectedCoin}`
-                  : "Tip with Crypto"}
+                  ? `Select a Network for ${selectedCoin}`
+                  : "Tip With Crypto"}
             </h2>
           </div>
           <button
