@@ -112,9 +112,9 @@ const WHY_DONATE_ITEMS = [
     subtype: "Infrastructure",
     equip: [
       "Equip: Covers hosting, storage, and infrastructure for Chronicle-operated deployments, paid out of pocket every month.",
-      "Use: Consumes gold at the start of each month. This effect cannot be dispelled.",
+      "Use: Consumes gold at the start of each month. (30 day cooldown.)",
     ],
-    flavor: "Even paladins need somewhere to stand.",
+    flavor: "The real gold sink was infrastructure all along.",
   },
   {
     title: "Keep Chronicle ad-free",
@@ -124,9 +124,9 @@ const WHY_DONATE_ITEMS = [
     subtype: "Aura",
     equip: [
       "Equip: Grants immunity to banner ads, pop-ups, and tracking effects.",
-      "Equip: Restores the revenue ads would otherwise bring in — donations make up the difference.",
+      "Use: Dispels one attempted monetization scheme."
     ],
-    flavor: "No banners. No pop-ups. Just parses.",
+    flavor: "The only things tracking you should be threat meters.",
   },
   {
     title: "Keep Chronicle paywall-free",
@@ -135,10 +135,10 @@ const WHY_DONATE_ITEMS = [
     slot: "Community Perk",
     subtype: "Key",
     equip: [
-      "Use: Unlocks every server and every parse for everyone. (No cooldown. Unlimited charges.)",
-      "Equip: Premium tiers cannot be applied while this item is equipped.",
+      "Equip: Removes the “Premium Account Required” debuff.",
+      "Use: Opens all Chronicle content. No key required."
     ],
-    flavor: "Locked content stays in Naxxramas.",
+    flavor: "No attunement required.",
   },
   {
     title: "Sustain development",
@@ -150,7 +150,7 @@ const WHY_DONATE_ITEMS = [
       "Equip: Increases time spent on fixes, new features, and keeping up with the game.",
       "Chance on hit: A new feature ships.",
     ],
-    flavor: "A well-oiled raid never wipes on mechanics.",
+    flavor: "Warning: may cause additional features.",
   },
 ];
 
