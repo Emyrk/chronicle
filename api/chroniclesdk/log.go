@@ -286,7 +286,7 @@ type WoWSimpleParsedInstance struct {
 
 type InstanceUnit struct {
 	Name  string     `json:"name"`
-	Owner *guid.GUID `json:"owner"`
+	Owner *guid.GUID `json:"owner,omitempty"`
 	Entry uint32     `json:"entry"`
 }
 

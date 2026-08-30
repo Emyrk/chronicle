@@ -1844,7 +1844,7 @@ export interface InstanceTimeParsesResponse {
 // From chroniclesdk/log.go
 export interface InstanceUnit {
     readonly name: string;
-    readonly owner: GUID | null;
+    readonly owner?: GUID;
     readonly entry: number;
 }
 
