@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { ArrowLeft, Coffee, ExternalLink, Heart, Server, ShieldCheck, Skull, Wrench } from "lucide-react";
+import {
+  ArrowLeft,
+  CircleHelp,
+  Coffee,
+  ExternalLink,
+  Heart,
+  Server,
+  ShieldCheck,
+  Skull,
+  Wrench,
+} from "lucide-react";
 import { CryptoCoinIcon, PatreonIcon, SponsorsHeartIcon } from "./BrandIcons";
 import { CryptoTipModal } from "./CryptoTipModal";
 
@@ -26,11 +36,41 @@ const DONATION_LINKS = [
 ];
 
 const HOSTING_METER = [
-  { label: "Memory", pct: 72, color: "#f0a020", note: "Largest" },
-  { label: "Network", pct: 13, color: "#7fb8e8", note: "Small" },
-  { label: "Storage", pct: 10, color: "#9ed36a", note: "Small" },
-  { label: "CPU", pct: 5, color: "#a98ee8", note: "Minimal" },
-  { label: "Backups", pct: 1, color: "#8a6a2a", note: "Minimal" },
+  {
+    label: "Memory",
+    pct: 72,
+    color: "#f0a020",
+    note: "Largest",
+    help: "Serving combat log queries quickly means keeping parsed fight data and caches in RAM, so the servers are sized primarily by memory. Sourced from the RAM allocation on the machines running Chronicle deployments.",
+  },
+  {
+    label: "Network",
+    pct: 13,
+    color: "#7fb8e8",
+    note: "Small",
+    help: "Log uploads coming in and dashboards, charts, and API responses going out all consume bandwidth. Sourced from the provider's data transfer (egress) charges.",
+  },
+  {
+    label: "Storage",
+    pct: 10,
+    color: "#9ed36a",
+    help: "Every uploaded combat log and its parsed history stays available to browse, and that archive only grows. Sourced from the disk volumes backing the database and log storage.",
+    note: "Small",
+  },
+  {
+    label: "CPU",
+    pct: 5,
+    color: "#a98ee8",
+    note: "Minimal",
+    help: "Parsing a log is a short burst of compute when it's uploaded; the rest of the time the processors are mostly idle. Sourced from the compute portion of the server instances.",
+  },
+  {
+    label: "Backups",
+    pct: 1,
+    color: "#8a6a2a",
+    note: "Minimal",
+    help: "Regular offsite snapshots protect the database so no one's log history is lost. Sourced from snapshot and object storage fees.",
+  },
 ];
 
 const DONATION_BUTTON_CLASSES =
@@ -143,10 +183,25 @@ export function SupportPage() {
           ))}
         </div>
         <ul className="mt-5 space-y-2.5 font-mono text-sm">
-          {HOSTING_METER.map(({ label, pct, color, note }) => (
+          {HOSTING_METER.map(({ label, pct, color, note, help }) => (
             <li key={label} className="flex items-center gap-3">
               <span aria-hidden="true" className="h-3 w-3 shrink-0" style={{ background: color }} />
               <span style={{ color }}>{label}</span>
+              <span className="group relative inline-flex">
+                <button
+                  type="button"
+                  aria-label={`About ${label} costs`}
+                  className="text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none"
+                >
+                  <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-64 rounded-md border border-border bg-card p-3 text-left font-sans text-xs leading-relaxed text-muted-foreground opacity-0 shadow-xl shadow-black/40 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:w-72"
+                >
+                  {help}
+                </span>
+              </span>
               <span className="ml-auto whitespace-nowrap text-muted-foreground">
                 {pct}% of total damage
               </span>
