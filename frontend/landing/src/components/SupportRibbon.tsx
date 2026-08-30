@@ -5,7 +5,7 @@ export function SupportRibbon() {
     <a
       href="/support/"
       aria-label="Support Chronicle"
-      className="support-ribbon group fixed bottom-4 right-3 z-40 flex h-[4.5rem] items-center pl-[4.25rem] pr-3 text-left shadow-2xl shadow-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:bottom-auto sm:right-5 sm:top-6 sm:h-20 sm:pl-[5.25rem] sm:pr-4"
+      className="support-ribbon group fixed bottom-8 right-3 z-40 flex h-[4.5rem] items-center pl-[4.25rem] pr-3 text-left shadow-2xl shadow-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:bottom-auto sm:right-5 sm:top-6 sm:h-20 sm:pl-[5.25rem] sm:pr-4"
     >
       <span className="support-ribbon-medallion absolute -left-3 top-1/2 z-10 h-[4.75rem] w-[4.75rem] -translate-y-1/2 rounded-full sm:-left-4 sm:h-[5.75rem] sm:w-[5.75rem]">
         <span className="support-ribbon-coin absolute inset-0">
