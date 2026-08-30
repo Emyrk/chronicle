@@ -84,6 +84,16 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.getInstanceBySlug)
 
+	s.register(http.MethodGet, "/raidlogs/instances/{slug}/events/{type}", OpenAPIOperation{
+		Summary:     "Get a raid-instance event stream",
+		Description: "Returns the stored gzip-compressed protobuf event stream for a public raid-instance slug and event type.",
+		Parameters: []OpenAPIParameter{
+			pathParameter("slug", "Public raid-instance slug", "example-instance"),
+			pathParameter("type", "Event stream type, such as damage, heal, resource_change, slain, cast, or aura", "damage"),
+		},
+		Responses: binaryResponse("Gzip-compressed protobuf event stream."),
+	}, s.getInstanceEventsBySlug)
+
 	s.register(http.MethodGet, "/leaderboards/speedruns", OpenAPIOperation{
 		Summary:     "Get the speedrun leaderboard",
 		Description: "Returns a paginated list of qualified speedruns after duplicate-group and best-per-guild deduplication. The canonical log is the entry used by the leaderboard; other_logs contains matching uploads excluded as duplicates. timing defaults to full and accepts boss_to_boss for first-boss-pull through final-boss-kill timing.",
@@ -131,6 +141,17 @@ func okResponse(example any) map[string]OpenAPIResponse {
 			Description: "Successful response.",
 			Content: map[string]OpenAPIMediaType{
 				"application/json": {Example: example},
+			},
+		},
+	}
+}
+
+func binaryResponse(description string) map[string]OpenAPIResponse {
+	return map[string]OpenAPIResponse{
+		"200": {
+			Description: description,
+			Content: map[string]OpenAPIMediaType{
+				"application/octet-stream": {Schema: &OpenAPISchema{Type: "string", Format: "binary"}},
 			},
 		},
 	}

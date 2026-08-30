@@ -44,6 +44,7 @@ type externalAPIStore interface {
 	InstancePlayersByInstanceID(context.Context, uuid.UUID) ([]database.LogInstancePlayer, error)
 	GetInstanceEncounterCharacterFights(context.Context, uuid.UUID) ([]database.LogInstanceEncounterHostile, error)
 	GetEncounterPhasesByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceEncounterPhase, error)
+	InstanceEvent(context.Context, database.InstanceEventParams) (database.LogInstanceEvent, error)
 }
 
 type Service struct {

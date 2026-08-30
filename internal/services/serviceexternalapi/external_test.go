@@ -35,6 +35,9 @@ type fakeExternalAPIStore struct {
 	players               []database.LogInstancePlayer
 	hostiles              []database.LogInstanceEncounterHostile
 	phases                []database.LogInstanceEncounterPhase
+	event                 database.LogInstanceEvent
+	eventErr              error
+	eventParams           database.InstanceEventParams
 }
 
 func (f *fakeExternalAPIStore) ListExternalAPIServers(context.Context) ([]database.ListExternalAPIServersRow, error) {
@@ -83,6 +86,11 @@ func (f *fakeExternalAPIStore) GetInstanceEncounterCharacterFights(context.Conte
 }
 func (f *fakeExternalAPIStore) GetEncounterPhasesByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceEncounterPhase, error) {
 	return f.phases, nil
+}
+
+func (f *fakeExternalAPIStore) InstanceEvent(_ context.Context, params database.InstanceEventParams) (database.LogInstanceEvent, error) {
+	f.eventParams = params
+	return f.event, f.eventErr
 }
 
 func TestListServers(t *testing.T) {

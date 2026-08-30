@@ -61,6 +61,12 @@ func TestOpenAPISpec(t *testing.T) {
 	require.Len(t, instance.Parameters, 1)
 	require.Equal(t, "slug", instance.Parameters[0].Name)
 
+	events, ok := document.Paths["/raidlogs/instances/{slug}/events/{type}"]["get"]
+	require.True(t, ok)
+	require.Equal(t, "Get a raid-instance event stream", events.Summary)
+	require.Len(t, events.Parameters, 2)
+	require.Contains(t, events.Responses["200"].Content, "application/octet-stream")
+
 	health, ok := document.Paths["/health"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Check API health", health.Summary)
