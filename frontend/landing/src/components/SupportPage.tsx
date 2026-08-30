@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Coffee, ExternalLink, Heart, Server, ShieldCheck, Wrench } from "lucide-react";
+import { ArrowLeft, Coffee, ExternalLink, Heart, Server, ShieldCheck, Skull, Wrench } from "lucide-react";
 import { CryptoCoinIcon, PatreonIcon, SponsorsHeartIcon } from "./BrandIcons";
 import { CryptoTipModal } from "./CryptoTipModal";
 
@@ -23,6 +23,14 @@ const DONATION_LINKS = [
     href: BUY_ME_A_COFFEE_URL,
     icon: <Coffee aria-hidden="true" className="h-4 w-4 text-yellow-400" />,
   },
+];
+
+const HOSTING_METER = [
+  { label: "Memory", pct: 72, color: "#f0a020", note: "Largest" },
+  { label: "Network", pct: 13, color: "#7fb8e8", note: "Small" },
+  { label: "Storage", pct: 10, color: "#9ed36a", note: "Small" },
+  { label: "CPU", pct: 5, color: "#a98ee8", note: "Minimal" },
+  { label: "Backups", pct: 1, color: "#8a6a2a", note: "Minimal" },
 ];
 
 const DONATION_BUTTON_CLASSES =
@@ -116,6 +124,36 @@ export function SupportPage() {
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
           </article>
         ))}
+      </div>
+
+      <div className="mt-12 rounded-xl border border-border bg-card p-6 sm:p-8">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+          Chronicle — Combat Log
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <div className="flex items-center gap-3">
+            <Skull aria-hidden="true" className="h-6 w-6 text-amber-400" />
+            <h2 className="text-xl font-bold text-amber-400">Hosting Bill</h2>
+          </div>
+          <span className="text-sm text-muted-foreground">Overall Damage Done</span>
+        </div>
+        <div aria-hidden="true" className="mt-4 flex h-6 w-full overflow-hidden rounded-sm">
+          {HOSTING_METER.map(({ label, pct, color }) => (
+            <div key={label} style={{ width: `${pct}%`, background: color }} />
+          ))}
+        </div>
+        <ul className="mt-5 space-y-2.5 font-mono text-sm">
+          {HOSTING_METER.map(({ label, pct, color, note }) => (
+            <li key={label} className="flex items-center gap-3">
+              <span aria-hidden="true" className="h-3 w-3 shrink-0" style={{ background: color }} />
+              <span style={{ color }}>{label}</span>
+              <span className="ml-auto whitespace-nowrap text-muted-foreground">
+                {pct}% of total damage
+              </span>
+              <span className="hidden w-20 text-right text-muted-foreground sm:inline">{note}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <h2 className="mt-12 text-xl font-semibold text-foreground">Who runs each deployment?</h2>
