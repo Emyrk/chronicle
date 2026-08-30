@@ -21,8 +21,6 @@ type Claims struct {
 	// UserAuthID is the ID of the UserAuth (OAuth link). This is static per user
 	// per provider.
 	UserAuthID uuid.UUID `json:"uaid,omitempty"`
-	// APIKeyID identifies the persistent CLI credential used for this request.
-	APIKeyID uuid.UUID `json:"akid,omitempty"`
 
 	// Extra custom claims
 	Provider    string           `json:"provider,omitempty"`

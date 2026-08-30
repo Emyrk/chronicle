@@ -32,7 +32,6 @@ import {
   Trophy,
   Clock,
   FlaskConical,
-  KeyRound,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -46,7 +45,6 @@ const ASSIGNABLE_ROLES = [
   { value: "technical_admin", label: "Tech Admin", icon: ShieldCheck, className: "bg-purple-500/15 text-purple-400" },
   { value: "admin", label: "Admin", icon: Shield, className: "bg-blue-500/15 text-blue-400" },
   { value: "upload_capable", label: "Upload Capable", icon: Upload, className: "bg-green-500/15 text-green-400" },
-  { value: "api_access", label: "API Access", icon: KeyRound, className: "bg-amber-500/15 text-amber-400" },
   { value: "moderate_logs", label: "Moderate Logs", icon: Eye, className: "bg-cyan-500/15 text-cyan-400" },
   { value: "moderate_guilds", label: "Moderate Guilds", icon: Megaphone, className: "bg-teal-500/15 text-teal-400" },
   { value: "is_admin_users", label: "Admin Users", icon: Users, className: "bg-indigo-500/15 text-indigo-400" },

@@ -2,17 +2,6 @@
 
 import type { GUID } from "@/lib/guid/guid";
 
-// From chroniclesdk/api_keys.go
-/**
- * APIKey is redacted metadata for a persistent CLI credential.
- */
-export interface APIKey {
-    readonly id: string;
-    readonly name: string;
-    readonly created_at: string;
-    readonly last_used_at?: string;
-}
-
 // From chroniclesdk/panel_layout.go
 export interface ActionBarSlotsResponse {
     readonly slot_1: string | null;
@@ -675,20 +664,6 @@ export interface CorePayload {
     readonly display_name: string;
     readonly tagline: string;
     readonly tags: readonly string[];
-}
-
-// From chroniclesdk/api_keys.go
-export interface CreateAPIKeyRequest {
-    readonly name: string;
-}
-
-// From chroniclesdk/api_keys.go
-/**
- * CreateAPIKeyResponse contains a newly-created token. Token is returned only once.
- */
-export interface CreateAPIKeyResponse {
-    readonly api_key: APIKey;
-    readonly token: string;
 }
 
 // From chroniclesdk/gear_builder.go
@@ -2172,11 +2147,6 @@ export interface LinkedCharacter {
      */
     readonly link_source: string;
     readonly linked_at: string;
-}
-
-// From chroniclesdk/api_keys.go
-export interface ListAPIKeysResponse {
-    readonly api_keys: readonly APIKey[];
 }
 
 // From chroniclesdk/guild_page.go

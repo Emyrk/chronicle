@@ -74,12 +74,10 @@ type Options struct {
 	// ExternalVerification enables the external character verification
 	// provider (e.g. zug-zug). Configured via environment variables; nil
 	// when disabled.
-	ExternalVerification    *chroniclesdk.ExternalVerification
-	DevOAuth                bool
-	Discord                 chronauth.DiscordOAuth
-	SecretPEM               []byte // Used for JWTs
-	APIKeyRequestsPerMinute int64
-	APIKeyBurst             int64
+	ExternalVerification *chroniclesdk.ExternalVerification
+	DevOAuth             bool
+	Discord              chronauth.DiscordOAuth
+	SecretPEM            []byte // Used for JWTs
 
 	// Tenant is the multi-tenant service for subdomain → tenant resolution.
 	// If nil, tenant middleware is a no-op.
@@ -139,10 +137,6 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		Sessions: chronauth.SessionOptions{
 			SecretPEM: opts.SecretPEM,
 			Registry:  opts.Registry,
-		},
-		APIKeys: chronauth.APIKeyOptions{
-			RequestsPerMinute: opts.APIKeyRequestsPerMinute,
-			Burst:             opts.APIKeyBurst,
 		},
 	})
 	if err != nil {
@@ -204,12 +198,6 @@ func (api *API) Routes() chi.Router {
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Get("/me/storage", api.GetMyStorage)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
-				r.Route("/me/api-keys", func(r chi.Router) {
-					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_api_key_User))
-					r.Get("/", api.ListMyAPIKeys)
-					r.Post("/", api.CreateMyAPIKey)
-					r.Delete("/{keyID}", api.DeleteMyAPIKey)
-				})
 
 				r.Get("/me/talent-builds", api.ListMyTalentBuilds)
 				r.Post("/me/talent-builds", api.CreateMyTalentBuild)

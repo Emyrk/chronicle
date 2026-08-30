@@ -72,9 +72,6 @@ import type {
   UpdateSiteConfigRequest,
   Dataset,
   UpsertDatasetRequest,
-  APIKey,
-  ListAPIKeysResponse,
-  CreateAPIKeyResponse,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -158,51 +155,6 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
     },
     retry: false,
     ...options,
-  });
-}
-
-export function useMyAPIKeys(options?: Omit<UseQueryOptions<ListAPIKeysResponse>, "queryKey" | "queryFn">) {
-  return useQuery({
-    queryKey: ["my-api-keys"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/me/api-keys/");
-      if (!response.ok) throw new Error("Failed to fetch API tokens");
-      return response.json() as Promise<ListAPIKeysResponse>;
-    },
-    ...options,
-  });
-}
-
-export function useCreateAPIKey() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (name: string) => {
-      const response = await fetch("/api/v1/me/api-keys/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: "Failed to create API token" }));
-        throw buildAPIError("Failed to create API token", error);
-      }
-      return response.json() as Promise<CreateAPIKeyResponse>;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-api-keys"] }),
-  });
-}
-
-export function useDeleteAPIKey() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (key: Pick<APIKey, "id">) => {
-      const response = await fetch(`/api/v1/me/api-keys/${encodeURIComponent(key.id)}`, { method: "DELETE" });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: "Failed to revoke API token" }));
-        throw buildAPIError("Failed to revoke API token", error);
-      }
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-api-keys"] }),
   });
 }
 

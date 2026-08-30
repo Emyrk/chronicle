@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { iconListUrl } from "@/config/iconUrl";
 import { toast } from "sonner";
-import { HardDrive, Clock, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, EyeOff, Monitor, Smartphone, Menu, X, User, Swords, Star, KeyRound, Terminal, Check, Loader2 } from "lucide-react";
+import { HardDrive, Clock, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -26,9 +26,6 @@ import {
   useUpdateActionBarSlots,
   useLogGroups,
   useSiteConfig,
-  useMyAPIKeys,
-  useCreateAPIKey,
-  useDeleteAPIKey,
   type ActionBarSlotsResponse,
   type UserPanelLayout,
   type RequestError,
@@ -173,14 +170,12 @@ type Tab = {
   path: string;
   label: string;
   icon: LucideIcon;
-  requiresAPIAccess?: boolean;
 };
 
 const allTabs: Tab[] = [
   { path: "/account/settings", label: "Profile", icon: User },
   { path: "/account/characters", label: "Characters", icon: Swords },
   { path: "/account/storage", label: "Storage", icon: HardDrive },
-  { path: "/account/api-tokens", label: "API Tokens", icon: KeyRound, requiresAPIAccess: true },
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
@@ -193,13 +188,9 @@ export function AccountLayout() {
   const isMobile = useIsMobile();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const { data: siteConfig } = useSiteConfig();
-  const { data: session } = useSession();
-  const canUseAPI = session?.roles.some((role) => role === "api_access" || role === "admin" || role === "technical_admin") ?? false;
-  const tabs = allTabs.filter((tab) => {
-    if (siteConfig?.client_uploads_disabled && tab.path === "/account/storage") return false;
-    if (tab.requiresAPIAccess && !canUseAPI) return false;
-    return true;
-  });
+  const tabs = siteConfig?.client_uploads_disabled
+    ? allTabs.filter((t) => t.path !== "/account/storage")
+    : allTabs;
 
   const renderNavLinks = (closeOnNavigate: boolean) => (
     <ul className="space-y-1">
@@ -369,157 +360,6 @@ export function ProfileSettings() {
           <span className="text-sm capitalize">{session.auth_provider === "password" ? "Email & Password" : session.auth_provider}</span>
         </div>
       )}
-    </div>
-  );
-}
-
-export function APITokenSettings() {
-  const { data: session } = useSession();
-  const canUseAPI = session?.roles.some((role) => role === "api_access" || role === "admin" || role === "technical_admin") ?? false;
-  const { data, isLoading } = useMyAPIKeys({ enabled: canUseAPI });
-  const createToken = useCreateAPIKey();
-  const deleteToken = useDeleteAPIKey();
-  const [name, setName] = useState("");
-  const [createdToken, setCreatedToken] = useState<string | null>(null);
-  const [showToken, setShowToken] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  if (!canUseAPI) {
-    return (
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-6">
-        <h2 className="text-lg font-semibold">API access is not enabled</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Ask an administrator to grant your account the API Access permission.</p>
-      </div>
-    );
-  }
-
-  const handleCreate = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    try {
-      const result = await createToken.mutateAsync(trimmed);
-      setCreatedToken(result.token);
-      setShowToken(false);
-      setCopied(false);
-      setName("");
-      toast.success("CLI token created");
-    } catch (error) {
-      showRequestErrorToast("Failed to create API token", error);
-    }
-  };
-
-  const handleCopy = async () => {
-    if (!createdToken) return;
-    await navigator.clipboard.writeText(createdToken);
-    setCopied(true);
-    toast.success("Token copied");
-  };
-
-  const handleRevoke = async (id: string, tokenName: string) => {
-    if (!confirm(`Revoke “${tokenName}”? Any scraper using it will stop immediately.`)) return;
-    try {
-      await deleteToken.mutateAsync({ id });
-      toast.success("API token revoked");
-    } catch (error) {
-      showRequestErrorToast("Failed to revoke API token", error);
-    }
-  };
-
-  return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-start gap-4">
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-500">
-          <Terminal className="h-6 w-6" />
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold">CLI & API Tokens</h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Create read-only credentials for scripts and data integrations. Tokens can retrieve anything your account can view, but can never upload, edit, or delete data.
-          </p>
-        </div>
-      </div>
-
-      {createdToken && (
-        <section className="overflow-hidden rounded-xl border border-amber-500/40 bg-gradient-to-br from-amber-500/10 via-background to-background">
-          <div className="border-b border-amber-500/20 px-5 py-4">
-            <div className="flex items-center gap-2 font-medium text-amber-500">
-              <KeyRound className="h-4 w-4" />
-              Copy this token now
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">For security, Chronicle will never display it again.</p>
-          </div>
-          <div className="space-y-3 p-5">
-            <div className="flex items-center gap-2 rounded-lg border bg-background/80 p-2">
-              <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap px-2 font-mono text-sm">
-                {showToken ? createdToken : "•".repeat(42)}
-              </code>
-              <Button variant="ghost" size="icon" onClick={() => setShowToken((value) => !value)} aria-label={showToken ? "Hide token" : "Show token"}>
-                {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2" onClick={handleCopy}>
-                {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                {copied ? "Copied" : "Copy"}
-              </Button>
-            </div>
-            <pre className="styled-scrollbar overflow-x-auto rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">{`curl -H 'Authorization: Bearer ${showToken ? createdToken : "<token>"}' \\\n  https://chronicleclassic.com/api/v1/whoami`}</pre>
-            <Button variant="ghost" size="sm" onClick={() => setCreatedToken(null)}>I have saved this token</Button>
-          </div>
-        </section>
-      )}
-
-      <section className="rounded-xl border bg-card">
-        <div className="border-b p-5">
-          <h3 className="font-medium">Create a token</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Use a name that identifies the script or person using the credential.</p>
-        </div>
-        <div className="flex flex-col gap-3 p-5 sm:flex-row">
-          <Input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter") void handleCreate(); }}
-            maxLength={80}
-            placeholder="Guild website scraper"
-            aria-label="Token name"
-          />
-          <Button className="gap-2 sm:min-w-36" disabled={!name.trim() || createToken.isPending} onClick={() => void handleCreate()}>
-            {createToken.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Create token
-          </Button>
-        </div>
-      </section>
-
-      <section className="rounded-xl border bg-card">
-        <div className="flex items-center justify-between border-b p-5">
-          <div>
-            <h3 className="font-medium">Active tokens</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Up to 10 credentials may be active at once.</p>
-          </div>
-          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{data?.api_keys.length ?? 0} / 10</span>
-        </div>
-        <div className="divide-y">
-          {isLoading ? (
-            <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading tokens</div>
-          ) : data?.api_keys.length ? (
-            data.api_keys.map((key) => (
-              <div key={key.id} className="flex items-center gap-4 p-5">
-                <div className="rounded-lg bg-muted p-2 text-muted-foreground"><KeyRound className="h-4 w-4" /></div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{key.name}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Created {new Date(key.created_at).toLocaleDateString()}
-                    {key.last_used_at ? ` · Last used ${new Date(key.last_used_at).toLocaleString()}` : " · Never used"}
-                  </div>
-                </div>
-                <Button variant="ghost" size="sm" className="gap-2 text-destructive hover:text-destructive" disabled={deleteToken.isPending} onClick={() => void handleRevoke(key.id, key.name)}>
-                  <Trash2 className="h-4 w-4" />Revoke
-                </Button>
-              </div>
-            ))
-          ) : (
-            <div className="p-8 text-center text-sm text-muted-foreground">No API tokens yet.</div>
-          )}
-        </div>
-      </section>
     </div>
   );
 }

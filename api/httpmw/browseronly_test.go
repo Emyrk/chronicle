@@ -22,21 +22,19 @@ func TestBrowserOnly(t *testing.T) {
 	})
 
 	tests := []struct {
-		name          string
-		accessURL     *url.URL
-		secFetch      string
-		origin        string
-		authorization string
-		wantStatus    int
+		name       string
+		accessURL  *url.URL
+		secFetch   string
+		origin     string
+		wantStatus int
 	}{
-		{"prod same-origin allowed", prodURL, "same-origin", "", "", http.StatusOK},
-		{"prod same-site allowed", prodURL, "same-site", "", "", http.StatusOK},
-		{"prod none allowed", prodURL, "none", "", "", http.StatusOK},
-		{"prod cross-site wiki allowed", prodURL, "cross-site", "https://wiki.chronicleclassic.com", "", http.StatusOK},
-		{"prod cross-site rejected", prodURL, "cross-site", "", "", http.StatusForbidden},
-		{"prod missing header rejected", prodURL, "", "", "", http.StatusForbidden},
-		{"prod bearer token allowed", prodURL, "", "", "Bearer chr_cli_test", http.StatusOK},
-		{"dev missing header allowed", devURL, "", "", "", http.StatusOK},
+		{"prod same-origin allowed", prodURL, "same-origin", "", http.StatusOK},
+		{"prod same-site allowed", prodURL, "same-site", "", http.StatusOK},
+		{"prod none allowed", prodURL, "none", "", http.StatusOK},
+		{"prod cross-site wiki allowed", prodURL, "cross-site", "https://wiki.chronicleclassic.com", http.StatusOK},
+		{"prod cross-site rejected", prodURL, "cross-site", "", http.StatusForbidden},
+		{"prod missing header rejected", prodURL, "", "", http.StatusForbidden},
+		{"dev missing header allowed", devURL, "", "", http.StatusOK},
 	}
 
 	for _, tc := range tests {
@@ -50,9 +48,6 @@ func TestBrowserOnly(t *testing.T) {
 			}
 			if tc.origin != "" {
 				req.Header.Set("Origin", tc.origin)
-			}
-			if tc.authorization != "" {
-				req.Header.Set("Authorization", tc.authorization)
 			}
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)

@@ -64,7 +64,6 @@ import {
 import {
   AccountLayout,
   ProfileSettings,
-  APITokenSettings,
   CharacterSettings,
   StorageSettings,
   NotificationSettings,
@@ -229,7 +228,6 @@ function App() {
           <Route path="settings" element={<ProfileSettings />} />
           <Route path="characters" element={<CharacterSettings />} />
           <Route path="storage" element={<StorageSettings />} />
-          <Route path="api-tokens" element={<APITokenSettings />} />
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="privacy" element={<PrivacySettings />} />
           <Route path="appearance" element={<AppearanceSettings />} />

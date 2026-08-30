@@ -1861,15 +1861,6 @@ type UserActionBarSlot struct {
 	Slot0  uuid.NullUUID `db:"slot_0" json:"slot_0"`
 }
 
-type UserApiKey struct {
-	ID         uuid.UUID          `db:"id" json:"id"`
-	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
-	Name       string             `db:"name" json:"name"`
-	KeyHash    []byte             `db:"key_hash" json:"key_hash"`
-	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	LastUsedAt pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
-}
-
 type UserAuthLink struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	LinkedID  string             `db:"linked_id" json:"linked_id"`

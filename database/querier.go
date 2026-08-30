@@ -44,7 +44,6 @@ type sqlcQuerier interface {
 	CountSnapshotMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
 	CountTimeParseSnapshotBossKillMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
 	CountTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
-	CountUserAPIKeys(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserGearLists(ctx context.Context, arg CountUserGearListsParams) (int64, error)
 	CountUserGearProgressions(ctx context.Context, arg CountUserGearProgressionsParams) (int64, error)
@@ -109,7 +108,6 @@ type sqlcQuerier interface {
 	// Bulk-delete time-parse snapshots by IDs. Members are cascade-deleted via FK.
 	DeleteTimeParseSnapshots(ctx context.Context, ids []uuid.UUID) error
 	DeleteUploadKey(ctx context.Context, id uuid.UUID) error
-	DeleteUserAPIKey(ctx context.Context, arg DeleteUserAPIKeyParams) (int64, error)
 	DeleteUserCharacterLink(ctx context.Context, arg DeleteUserCharacterLinkParams) (UserCharacterLink, error)
 	DeleteUserCharacterLinksByUserAndSource(ctx context.Context, arg DeleteUserCharacterLinksByUserAndSourceParams) ([]UserCharacterLink, error)
 	DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID) (int64, error)
@@ -357,7 +355,6 @@ type sqlcQuerier interface {
 	GetTimeParseSnapshotSourceStats(ctx context.Context, arg GetTimeParseSnapshotSourceStatsParams) (GetTimeParseSnapshotSourceStatsRow, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)
 	GetUploadKeyByHash(ctx context.Context, secretHash string) (GetUploadKeyByHashRow, error)
-	GetUserAPIKeyByHash(ctx context.Context, keyHash []byte) (UserApiKey, error)
 	GetUserActionBarSlots(ctx context.Context, userID uuid.UUID) (GetUserActionBarSlotsRow, error)
 	GetUserAuthByLinkedID(ctx context.Context, arg GetUserAuthByLinkedIDParams) (UserAuthLink, error)
 	GetUserAuthLinkByUserID(ctx context.Context, userID uuid.UUID) (UserAuthLink, error)
@@ -477,7 +474,6 @@ type sqlcQuerier interface {
 	// Upload Keys
 	InsertUploadKey(ctx context.Context, arg InsertUploadKeyParams) (WowServerUploadKey, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
-	InsertUserAPIKey(ctx context.Context, arg InsertUserAPIKeyParams) (UserApiKey, error)
 	InsertUserAuth(ctx context.Context, arg InsertUserAuthParams) (UserAuthLink, error)
 	InsertUserAuthSession(ctx context.Context, arg InsertUserAuthSessionParams) (UserAuthSession, error)
 	InsertUserCharacterLink(ctx context.Context, arg InsertUserCharacterLinkParams) (UserCharacterLink, error)
@@ -591,7 +587,6 @@ type sqlcQuerier interface {
 	// or via a server they own (wow_servers.default_dataset_id).
 	ListTenantsByDataset(ctx context.Context, defaultDatasetID uuid.NullUUID) ([]ListTenantsByDatasetRow, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
-	ListUserAPIKeys(ctx context.Context, userID uuid.UUID) ([]UserApiKey, error)
 	ListUserPanelLayouts(ctx context.Context, userID uuid.NullUUID) ([]ListUserPanelLayoutsRow, error)
 	ListUserTalentBuilds(ctx context.Context, arg ListUserTalentBuildsParams) ([]UserTalentBuild, error)
 	ListVulnerabilitySpellsByDataset(ctx context.Context, arg ListVulnerabilitySpellsByDatasetParams) ([]ListVulnerabilitySpellsByDatasetRow, error)
@@ -747,7 +742,6 @@ type sqlcQuerier interface {
 	// time window. Used by the discovery endpoint to surface activity metrics.
 	TenantDiscoveryStats(ctx context.Context, since pgtype.Timestamptz) ([]TenantDiscoveryStatsRow, error)
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
-	TouchUserAPIKeyLastUsed(ctx context.Context, arg TouchUserAPIKeyLastUsedParams) error
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
 	UnassignWorldFromServer(ctx context.Context, arg UnassignWorldFromServerParams) error
 	UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error

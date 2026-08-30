@@ -1,14 +1,6 @@
 package chronauth
 
-import (
-	"bytes"
-	"net/http"
-	"strings"
-	"testing"
-
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
-)
+import "testing"
 
 func TestValidateVersion(t *testing.T) {
 	t.Parallel()
@@ -40,44 +32,5 @@ func TestValidateVersion(t *testing.T) {
 				t.Fatalf("validateVersion(%q) expected nil error, got %v", tc.version, err)
 			}
 		})
-	}
-}
-
-func TestGenerateAPIKey(t *testing.T) {
-	t.Parallel()
-
-	first, firstHash, err := GenerateAPIKey()
-	require.NoError(t, err)
-	second, secondHash, err := GenerateAPIKey()
-	require.NoError(t, err)
-
-	require.True(t, strings.HasPrefix(first, APIKeyPrefix))
-	require.NotEqual(t, first, second)
-	require.Len(t, firstHash, 32)
-	require.True(t, bytes.Equal(firstHash, HashAPIKey(first)))
-	require.False(t, bytes.Equal(firstHash, secondHash))
-}
-
-func TestAPIKeyLimiter(t *testing.T) {
-	t.Parallel()
-
-	keyID := uuid.New()
-	limiter := newAPIKeyLimiter(APIKeyOptions{RequestsPerMinute: 60, Burst: 2})
-	require.True(t, limiter.allow(keyID))
-	require.True(t, limiter.allow(keyID))
-	require.False(t, limiter.allow(keyID))
-	require.True(t, limiter.allow(uuid.New()), "limits should be isolated per token")
-
-	require.True(t, newAPIKeyLimiter(APIKeyOptions{}).allow(keyID), "zero values disable rate limiting")
-}
-
-func TestAPIKeysAreReadOnly(t *testing.T) {
-	t.Parallel()
-
-	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodOptions} {
-		require.True(t, isReadOnlyMethod(method), method)
-	}
-	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
-		require.False(t, isReadOnlyMethod(method), method)
 	}
 }

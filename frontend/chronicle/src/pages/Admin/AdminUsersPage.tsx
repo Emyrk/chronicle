@@ -30,7 +30,6 @@ import {
   Copy,
   Check,
   ExternalLink,
-  KeyRound,
 } from "lucide-react";
 
 function formatBytes(bytes: number): string {
@@ -56,11 +55,6 @@ const ROLE_CONFIG: Record<string, { icon: React.ReactNode; label: string; classN
     icon: <TestTube className="h-3 w-3" />,
     label: "Alpha Tester",
     className: "bg-green-500/15 text-green-500",
-  },
-  api_access: {
-    icon: <KeyRound className="h-3 w-3" />,
-    label: "API Access",
-    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   },
 };
 

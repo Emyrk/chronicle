@@ -1468,15 +1468,6 @@ CREATE TABLE user_action_bar_slots (
     slot_0 uuid
 );
 
-CREATE TABLE user_api_keys (
-    id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    name text NOT NULL,
-    key_hash bytea NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    last_used_at timestamp with time zone
-);
-
 CREATE TABLE user_auth_links (
     id uuid NOT NULL,
     linked_id text NOT NULL,
@@ -2140,12 +2131,6 @@ ALTER TABLE ONLY time_parse_snapshots
 ALTER TABLE ONLY user_action_bar_slots
     ADD CONSTRAINT user_action_bar_slots_pkey PRIMARY KEY (user_id);
 
-ALTER TABLE ONLY user_api_keys
-    ADD CONSTRAINT user_api_keys_key_hash_key UNIQUE (key_hash);
-
-ALTER TABLE ONLY user_api_keys
-    ADD CONSTRAINT user_api_keys_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY user_auth_links
     ADD CONSTRAINT user_auth_links_pkey PRIMARY KEY (id);
 
@@ -2417,8 +2402,6 @@ CREATE INDEX river_notification_created_at_idx ON river_notification USING btree
 CREATE INDEX river_notification_topic_id_idx ON river_notification USING btree (topic, id);
 
 CREATE UNIQUE INDEX time_parse_snapshots_published_key_idx ON time_parse_snapshots USING btree (tenant_id, cutoff, lookback_days, policy_version, query_version) WHERE (status = 'published'::text);
-
-CREATE INDEX user_api_keys_user_id_created_at_idx ON user_api_keys USING btree (user_id, created_at DESC);
 
 CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (lower(linked_id), provider);
 
@@ -2739,9 +2722,6 @@ ALTER TABLE ONLY time_parse_clear_time_members
 
 ALTER TABLE ONLY user_action_bar_slots
     ADD CONSTRAINT user_action_bar_slots_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY user_api_keys
-    ADD CONSTRAINT user_api_keys_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_auth_links
     ADD CONSTRAINT user_auth_links_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);

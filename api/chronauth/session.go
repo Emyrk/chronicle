@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -61,29 +60,6 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 		// not trigger a logout (there is no session to clear) and tokens are
 		// never auto-refreshed — clients re-authenticate when they expire.
 		if token := bearerToken(r); token != "" {
-			if strings.HasPrefix(token, APIKeyPrefix) {
-				c, err := s.authenticateAPIKey(r.Context(), token)
-				if errors.Is(err, errAPIKeyRateLimited) {
-					w.Header().Set("Retry-After", strconv.Itoa(s.apiKeyLimiter.retryAfterSeconds()))
-					http.Error(w, err.Error(), http.StatusTooManyRequests)
-					return
-				}
-				if err != nil {
-					stateErr := err
-					if errors.Is(err, ErrNotAuthorized) {
-						stateErr = fmt.Errorf("invalid API key: %w", ErrNotAuthorized)
-					}
-					next.ServeHTTP(w, withState(r, &AuthenticationContext{Error: stateErr}))
-					return
-				}
-				if !isReadOnlyMethod(r.Method) {
-					http.Error(w, "API keys are read-only", http.StatusForbidden)
-					return
-				}
-				next.ServeHTTP(w, withState(r, &AuthenticationContext{Claims: c}))
-				return
-			}
-
 			c, err := s.sessions.ValidateSession(token)
 			if err != nil {
 				next.ServeHTTP(w, withState(r, &AuthenticationContext{
