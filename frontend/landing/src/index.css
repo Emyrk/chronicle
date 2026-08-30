@@ -71,15 +71,6 @@ body {
   }
 }
 
-@keyframes support-medallion-glow {
-  0%, 100% {
-    box-shadow: 0 0 12px rgb(217 180 107 / 0.2), 0 10px 25px rgb(0 0 0 / 0.45);
-  }
-  50% {
-    box-shadow: 0 0 28px rgb(217 180 107 / 0.48), 0 10px 30px rgb(0 0 0 / 0.55);
-  }
-}
-
 @keyframes support-ribbon-nudge {
   0%, 88%, 100% {
     translate: 0;
@@ -108,25 +99,15 @@ body {
   position: absolute;
   inset: 0;
   z-index: -1;
-  overflow: hidden;
   border-radius: inherit;
   content: "";
-  background: linear-gradient(100deg, transparent 25%, rgb(251 191 36 / 0.18), transparent 70%);
-  transform: translateX(-110%);
-  transition: transform 550ms ease;
-}
-
-.support-ribbon::after {
-  position: absolute;
-  right: 0.65rem;
-  bottom: -0.45rem;
-  z-index: -2;
-  width: 2.2rem;
-  height: 0.8rem;
-  content: "";
-  background: rgb(120 76 20 / 0.9);
-  clip-path: polygon(0 0, 100% 0, 72% 100%);
-  filter: brightness(0.75);
+  /* Sweep via background-position so the sheen never paints outside the ribbon
+     (the ribbon itself must stay overflow: visible for the medallion). */
+  background: linear-gradient(100deg, transparent 30%, rgb(251 191 36 / 0.18) 47.5%, transparent 65%);
+  background-repeat: no-repeat;
+  background-size: 400% 100%;
+  background-position: 100% 0;
+  transition: background-position 550ms ease;
 }
 
 .support-ribbon:hover,
@@ -138,19 +119,33 @@ body {
 
 .support-ribbon:hover::before,
 .support-ribbon:focus-visible::before {
-  transform: translateX(110%);
+  background-position: 0% 0;
 }
 
 .support-ribbon-medallion {
   perspective: 600px;
-  animation: support-medallion-glow 3s ease-in-out infinite;
-  transition: filter 220ms ease, transform 220ms ease;
+  box-shadow: 0 10px 25px rgb(0 0 0 / 0.45);
 }
 
 .support-ribbon-coin {
   display: block;
   transform-style: preserve-3d;
+  animation: support-coin-flip 10s linear infinite;
+}
+
+/* Extra rotation layered on top of the slow base spin; pausing instead of
+   retiming avoids the snap a duration change causes mid-animation. */
+.support-ribbon-coin-spin {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
   animation: support-coin-flip 2.6s linear infinite;
+  animation-play-state: paused;
+}
+
+.support-ribbon:hover .support-ribbon-coin-spin,
+.support-ribbon:focus-visible .support-ribbon-coin-spin {
+  animation-play-state: running;
 }
 
 .support-ribbon-coin-ridge {
@@ -195,22 +190,17 @@ body {
   border-color: rgb(252 211 77 / 0.7);
 }
 
-.support-ribbon:hover .support-ribbon-medallion,
-.support-ribbon:focus-visible .support-ribbon-medallion {
-  filter: drop-shadow(0 0 11px rgb(252 211 77 / 0.65));
-}
-
 @media (prefers-reduced-motion: reduce) {
   .support-ribbon,
-  .support-ribbon-medallion,
-  .support-ribbon-coin {
+  .support-ribbon-coin,
+  .support-ribbon-coin-spin {
     animation: none;
   }
 
   .support-ribbon,
   .support-ribbon::before,
-  .support-ribbon-medallion,
-  .support-ribbon-coin {
+  .support-ribbon-coin,
+  .support-ribbon-coin-spin {
     transition: none;
   }
 
