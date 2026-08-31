@@ -58,9 +58,10 @@ func TestOpenAPISpec(t *testing.T) {
 	recent, ok := document.Paths["/raidlogs/recent"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "List recent raid activity", recent.Summary)
-	require.Len(t, recent.Parameters, 7)
+	require.Len(t, recent.Parameters, 8)
 	require.Equal(t, "after_date", recent.Parameters[0].Name)
-	require.Equal(t, "page_size", recent.Parameters[6].Name)
+	require.Equal(t, "upload_after", recent.Parameters[1].Name)
+	require.Equal(t, "page_size", recent.Parameters[7].Name)
 
 	instance, ok := document.Paths["/raidlogs/instances/{slug}"]["get"]
 	require.True(t, ok)
