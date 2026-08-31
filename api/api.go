@@ -480,6 +480,7 @@ func (api *API) Routes() chi.Router {
 
 								r.Get("/youtube", api.GetInstanceYoutube)
 								r.Get("/loot", api.GetInstanceLoot)
+								r.Get("/raid-group", api.InstanceRaidGroup)
 								r.Post("/item-prices", api.InstanceItemPrices)
 								r.Get("/overview", api.InstanceOverviewMetrics)
 								r.Get("/ranking-records", api.InstanceRankingRecords)

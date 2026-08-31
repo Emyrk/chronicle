@@ -464,6 +464,23 @@ func CompanionStats(from time.Time, idx int32, msg *messages.CompanionStats) *ch
 	}
 }
 
+func RaidGroup(from time.Time, idx int32, msg *messages.RaidGroup) *chronicleproto.RaidGroup {
+	members := make([]string, 0, messages.RaidGroupCount*messages.RaidGroupSize)
+	for _, group := range msg.Groups {
+		for _, member := range group {
+			if member.IsZero() {
+				members = append(members, "")
+			} else {
+				members = append(members, member.String())
+			}
+		}
+	}
+	return &chronicleproto.RaidGroup{
+		Meta:             EventMeta(from, idx, msg),
+		GroupMemberGuids: members,
+	}
+}
+
 // Consume converts a Consume parser message to its proto representation.
 func Consume(from time.Time, idx int32, ev *messages.Consume) *chronicleproto.Consume {
 	return &chronicleproto.Consume{

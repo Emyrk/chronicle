@@ -132,6 +132,11 @@ func (p *Parser) SetUnixMillisMode(enabled bool) {
 	p.useUnixMillis = enabled
 }
 
+// SawRaidGroup reports whether the companion addon emitted a valid raid layout.
+func (p *Parser) SawRaidGroup() bool {
+	return p.companion != nil && p.companion.SawRaidGroup()
+}
+
 func (p *Parser) DetailedTimes() map[string]time.Duration {
 	if ws, ok := p.synthetics.(*synthetic.Synthetic); ok {
 		times := map[string]time.Duration{

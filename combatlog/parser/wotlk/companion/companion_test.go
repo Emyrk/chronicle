@@ -2,6 +2,7 @@ package companion
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -340,6 +341,52 @@ func TestParseVehicleControlRejectsMalformedPayloads(t *testing.T) {
 	for _, payload := range tests {
 		_, err := p.parseVehicle(testTS, payload, 0)
 		require.Error(t, err, payload)
+	}
+}
+
+// --- Raid group tests ---
+
+func TestParseRaidGroup(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+	fields := make([]string, messages.RaidGroupCount*messages.RaidGroupSize)
+	fields[0] = "B"
+	fields[4] = "C"
+	fields[5] = "D"
+	fields[39] = "60000000008DCCC"
+
+	msgs, err := p.Feed(testTS, `[7RG:`+strings.Join(fields, ",")+`]`)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	raidGroup, ok := msgs[0].(*messages.RaidGroup)
+	require.True(t, ok)
+	assert.Equal(t, testTS, raidGroup.Date())
+	assert.Equal(t, guid.GUID(0xB), raidGroup.Groups[0][0])
+	assert.Equal(t, guid.GUID(0xC), raidGroup.Groups[0][4])
+	assert.Equal(t, guid.GUID(0xD), raidGroup.Groups[1][0])
+	assert.Equal(t, guid.GUID(0x060000000008DCCC), raidGroup.Groups[7][4])
+	assert.Equal(t, []guid.GUID{0xB, 0xC, 0xD, 0x060000000008DCCC}, raidGroup.Affects())
+	assert.True(t, p.SawRaidGroup())
+}
+
+func TestParseRaidGroupRejectsMalformedPayloads(t *testing.T) {
+	t.Parallel()
+
+	validFields := make([]string, messages.RaidGroupCount*messages.RaidGroupSize)
+	validFields[0] = "B"
+
+	tests := []string{
+		"G:" + strings.Join(validFields[:len(validFields)-1], ","),
+		"G:" + strings.Join(append([]string{"not-a-guid"}, validFields[1:]...), ","),
+		"G:" + strings.Join(append([]string{"0"}, validFields[1:]...), ","),
+		":" + strings.Join(validFields, ","),
+	}
+	for _, payload := range tests {
+		p := newTestParser()
+		_, err := p.parseRaidGroup(testTS, payload)
+		require.Error(t, err, payload)
+		assert.False(t, p.SawRaidGroup())
 	}
 }
 

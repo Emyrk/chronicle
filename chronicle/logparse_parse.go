@@ -223,6 +223,9 @@ func (w *WorkerLogParse) parseCombatLog(
 			return nil, fmt.Errorf("consume CLEU log: %w", consumeErr)
 		}
 		totalLines = p.Metrics().TotalLinesParsed
+		if p.SawRaidGroup() {
+			logCapabilities = append(logCapabilities, "raidgroup")
+		}
 
 	case database.LogFormatAzerothcoreMod:
 		logCapabilities = append(logCapabilities, "interrupt", "server-side")

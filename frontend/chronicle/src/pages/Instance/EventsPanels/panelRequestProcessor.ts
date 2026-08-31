@@ -4,7 +4,7 @@
  * cannot be constructed, e.g. the compiled design-system bundle).
  */
 
-import { FastDamageCursor, FastHealCursor, FastResourceChangeCursor, FastExtraAttackCursor, FastSlainCursor, FastResurrectionCursor, FastCastCursor, FastAuraCursor, FastSpellGoCursor, FastAuraCastCursor, FastSpellStartCursor, FastSpellFailCursor, FastUnitClassificationCursor, FastDispelCursor, FastInterruptCursor, FastCombatantInfoCursor, FastAbsorbedCursor, FastConsumeCursor, type ReusableDamage, type ReusableHeal, type ReusableResourceChange, type ReusableExtraAttack, type ReusableSlain, type ReusableResurrection, type ReusableCast, type ReusableAura, type ReusableSpellGo, type ReusableAuraCast, type ReusableSpellStart, type ReusableSpellFail, type ReusableUnitClassification, type ReusableDispel, type ReusableInterrupt, type ReusableCombatantInfo, type ReusableAbsorbed, type ReusableConsume } from "@/api/protodecode/decode";
+import { FastDamageCursor, FastHealCursor, FastResourceChangeCursor, FastExtraAttackCursor, FastSlainCursor, FastResurrectionCursor, FastCastCursor, FastAuraCursor, FastSpellGoCursor, FastAuraCastCursor, FastSpellStartCursor, FastSpellFailCursor, FastUnitClassificationCursor, FastDispelCursor, FastInterruptCursor, FastCombatantInfoCursor, FastAbsorbedCursor, FastConsumeCursor, FastRaidGroupCursor, type ReusableDamage, type ReusableHeal, type ReusableResourceChange, type ReusableExtraAttack, type ReusableSlain, type ReusableResurrection, type ReusableCast, type ReusableAura, type ReusableSpellGo, type ReusableAuraCast, type ReusableSpellStart, type ReusableSpellFail, type ReusableUnitClassification, type ReusableDispel, type ReusableInterrupt, type ReusableCombatantInfo, type ReusableAbsorbed, type ReusableConsume, type ReusableRaidGroup } from "@/api/protodecode/decode";
 import { processorRegistry } from "./processors";
 import type { WorkerRequest, WorkerResponse, PanelProcessor, ProcessorContext, SerializableProcessorContext } from "./processorTypes";
 import { compileFilters } from "./processors/filters";
@@ -36,14 +36,14 @@ function deserializeContext(ctx: SerializableProcessorContext): ProcessorContext
 /**
  * Union of all reusable event types
  */
-type AnyReusableEvent = ReusableDamage | ReusableHeal | ReusableResourceChange | ReusableExtraAttack | ReusableSlain | ReusableResurrection | ReusableCast | ReusableAura | ReusableSpellGo | ReusableAuraCast | ReusableSpellStart | ReusableSpellFail | ReusableUnitClassification | ReusableDispel | ReusableInterrupt | ReusableCombatantInfo | ReusableAbsorbed | ReusableConsume;
+type AnyReusableEvent = ReusableDamage | ReusableHeal | ReusableResourceChange | ReusableExtraAttack | ReusableSlain | ReusableResurrection | ReusableCast | ReusableAura | ReusableSpellGo | ReusableAuraCast | ReusableSpellStart | ReusableSpellFail | ReusableUnitClassification | ReusableDispel | ReusableInterrupt | ReusableCombatantInfo | ReusableAbsorbed | ReusableConsume | ReusableRaidGroup;
 
 /**
  * A cursor wrapper that supports peeking at the next event without consuming it.
  */
 interface PeekableCursor {
   streamType: StreamType;
-  cursor: FastDamageCursor | FastHealCursor | FastResourceChangeCursor | FastExtraAttackCursor | FastSlainCursor | FastResurrectionCursor | FastCastCursor | FastAuraCursor | FastSpellGoCursor | FastAuraCastCursor | FastSpellStartCursor | FastSpellFailCursor | FastUnitClassificationCursor | FastDispelCursor | FastInterruptCursor | FastCombatantInfoCursor | FastAbsorbedCursor | FastConsumeCursor;
+  cursor: FastDamageCursor | FastHealCursor | FastResourceChangeCursor | FastExtraAttackCursor | FastSlainCursor | FastResurrectionCursor | FastCastCursor | FastAuraCursor | FastSpellGoCursor | FastAuraCastCursor | FastSpellStartCursor | FastSpellFailCursor | FastUnitClassificationCursor | FastDispelCursor | FastInterruptCursor | FastCombatantInfoCursor | FastAbsorbedCursor | FastConsumeCursor | FastRaidGroupCursor;
   peeked: { event: AnyReusableEvent; encounterID: string; firstTimestamp: Date } | null;
 }
 
@@ -117,6 +117,8 @@ function createCursor(stream: WorkerRequest["streams"][0]): PeekableCursor {
     ? new FastCombatantInfoCursor(stream.data)
     : stream.type === "consume"
     ? new FastConsumeCursor(stream.data)
+    : stream.type === "raid_group"
+    ? new FastRaidGroupCursor(stream.data)
     : new FastDamageCursor(stream.data);
   
   return {

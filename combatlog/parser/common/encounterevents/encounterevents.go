@@ -36,6 +36,7 @@ type EncounterEvents struct {
 	Absorbed           *Builder[*messages.Absorbed, *chronicleproto.Absorbed]
 	CompanionStats     *Builder[*messages.CompanionStats, *chronicleproto.CompanionStats]
 	Consume            *Builder[*messages.Consume, *chronicleproto.Consume]
+	RaidGroup          *Builder[*messages.RaidGroup, *chronicleproto.RaidGroup]
 	cnter              int32
 }
 
@@ -62,6 +63,7 @@ func New(verbose bool) *EncounterEventsInProgress {
 		Absorbed:           NewBuilder[*messages.Absorbed, *chronicleproto.Absorbed](),
 		CompanionStats:     NewBuilder[*messages.CompanionStats, *chronicleproto.CompanionStats](),
 		Consume:            NewBuilder[*messages.Consume, *chronicleproto.Consume](),
+		RaidGroup:          NewBuilder[*messages.RaidGroup, *chronicleproto.RaidGroup](),
 	}
 }
 
@@ -156,6 +158,11 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 		return fmt.Errorf("finalizing companion stats events: %w", err)
 	}
 
+	raidGroup, err := e.RaidGroup.Finalize(encounterID)
+	if err != nil {
+		return fmt.Errorf("finalizing raid group events: %w", err)
+	}
+
 	consume, err := e.Consume.Finalize(encounterID)
 	if err != nil {
 		return fmt.Errorf("finalizing consume events: %w", err)
@@ -180,6 +187,7 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 	merge.Absorbed = append(merge.Absorbed, absorbed...)
 	merge.CompanionStats = append(merge.CompanionStats, companionStats...)
 	merge.Consume = append(merge.Consume, consume...)
+	merge.RaidGroup = append(merge.RaidGroup, raidGroup...)
 
 	return nil
 }
@@ -286,6 +294,11 @@ func (e *EncounterEventsInProgress) Process(m messages.Message) error {
 		if err != nil {
 			return fmt.Errorf("consume proto: %w", err)
 		}
+	case *messages.RaidGroup:
+		err := AddToBuilder(e.RaidGroup, ty, e.nextIndex(), types2proto.RaidGroup)
+		if err != nil {
+			return fmt.Errorf("raid group proto: %w", err)
+		}
 	}
 	return nil
 }
@@ -314,6 +327,7 @@ func (e *EncounterEventsInProgress) setFirsts(t time.Time) {
 	e.Absorbed.SetZero(e.first)
 	e.CompanionStats.SetZero(e.first)
 	e.Consume.SetZero(e.first)
+	e.RaidGroup.SetZero(e.first)
 }
 
 func (e *EncounterEventsInProgress) nextIndex() int32 {

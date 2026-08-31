@@ -30,6 +30,7 @@ type Events struct {
 	Absorbed           []byte
 	CompanionStats     []byte
 	Consume            []byte
+	RaidGroup          []byte
 }
 
 func NewEvents() *Events {
@@ -53,6 +54,7 @@ func NewEvents() *Events {
 		Absorbed:           make([]byte, 0),
 		CompanionStats:     make([]byte, 0),
 		Consume:            make([]byte, 0),
+		RaidGroup:          make([]byte, 0),
 	}
 }
 
@@ -161,6 +163,12 @@ func (e *Events) Insert(ctx context.Context, db database.Store, instanceID uuid.
 	}
 	e.CompanionStats = nil
 
+	raidGroupPayload, err := gzipData(e.RaidGroup)
+	if err != nil {
+		return fmt.Errorf("gzip raid group events: %w", err)
+	}
+	e.RaidGroup = nil
+
 	consumePayload, err := gzipData(e.Consume)
 	if err != nil {
 		return fmt.Errorf("gzip consume events: %w", err)
@@ -262,6 +270,11 @@ func (e *Events) Insert(ctx context.Context, db database.Store, instanceID uuid.
 			InstanceID: instanceID,
 			Type:       database.LogInstanceEventTypeConsume,
 			Events:     consumePayload,
+		},
+		{
+			InstanceID: instanceID,
+			Type:       database.LogInstanceEventTypeRaidGroup,
+			Events:     raidGroupPayload,
 		},
 	})
 	if err := res.Close(); err != nil {

@@ -6059,6 +6059,154 @@ export class FastConsumeCursor {
 }
 
 // ============================================================================
+// Raid group decoder
+// ============================================================================
+
+export interface ReusableRaidGroup {
+  type: "raid_group";
+  index: number;
+  offsetMilli: number;
+  groupMemberGuids: string[];
+  activity: ReusableActivityEntry[];
+  activityCount: number;
+  isSynthetic: boolean;
+}
+
+class RaidGroupDecoder {
+  readonly message: ReusableRaidGroup = {
+    type: "raid_group",
+    index: 0,
+    offsetMilli: 0,
+    groupMemberGuids: [],
+    activity: [],
+    activityCount: 0,
+    isSynthetic: false,
+  };
+
+  decode(data: Uint8Array, offset: number, length: number): ReusableRaidGroup {
+    const end = offset + length;
+    const msg = this.message;
+    msg.index = 0;
+    msg.offsetMilli = 0;
+    msg.groupMemberGuids.length = 0;
+    msg.activityCount = 0;
+    msg.isSynthetic = false;
+
+    while (offset < end) {
+      const tag = data[offset++];
+      const fieldNumber = tag >> 3;
+      const wireType = tag & 0x7;
+      if (wireType !== 2) {
+        const skipped = readVarintFast(data, offset);
+        offset += skipped.bytesRead;
+        continue;
+      }
+
+      const { value: len, bytesRead } = readVarintFast(data, offset);
+      offset += bytesRead;
+      if (fieldNumber === 1) {
+        const metaEnd = offset + len;
+        while (offset < metaEnd) {
+          const metaTag = data[offset++];
+          const metaField = metaTag >> 3;
+          const metaWire = metaTag & 0x7;
+          if (metaWire === 0) {
+            const decoded = metaField === 2 ? readInt64Number(data, offset) : readVarintFast(data, offset);
+            offset += decoded.bytesRead;
+            if (metaField === 1) msg.index = decoded.value;
+            else if (metaField === 2) msg.offsetMilli = decoded.value;
+            else if (metaField === 4) msg.isSynthetic = decoded.value !== 0;
+          } else if (metaWire === 2) {
+            const nested = readVarintFast(data, offset);
+            offset += nested.bytesRead + nested.value;
+          }
+        }
+      } else if (fieldNumber === 2) {
+        msg.groupMemberGuids.push(sharedTextDecoder.decode(data.subarray(offset, offset + len)));
+        offset += len;
+      } else {
+        offset += len;
+      }
+    }
+
+    while (msg.groupMemberGuids.length < 40) msg.groupMemberGuids.push("");
+    return msg;
+  }
+}
+
+export class FastRaidGroupCursor {
+  private readonly data: Uint8Array;
+  private readonly decoder = new RaidGroupDecoder();
+  private offset = 0;
+  private _currentHeader: PayloadHeader | null = null;
+  private _messagesReadInEncounter = 0;
+  private _bytesProcessed = 0;
+
+  constructor(data: Uint8Array) {
+    this.data = data;
+    this._loadNextEncounterHeader();
+  }
+
+  get currentHeader(): PayloadHeader | null { return this._currentHeader; }
+  get hasMoreInEncounter(): boolean { return Boolean(this._currentHeader && this._messagesReadInEncounter < this._currentHeader.count); }
+  get bytesProcessed(): number { return this._bytesProcessed; }
+  get bytesTotal(): number { return this.data.length; }
+
+  next(): ReusableRaidGroup | null {
+    if (!this.hasMoreInEncounter) return null;
+    const { value: length, bytesRead } = readVarint(this.data, this.offset);
+    const msgStart = this.offset + bytesRead;
+    const msg = this.decoder.decode(this.data, msgStart, length);
+    this.offset = msgStart + length;
+    this._bytesProcessed += bytesRead + length;
+    this._messagesReadInEncounter++;
+    return msg;
+  }
+
+  nextEncounter(): boolean {
+    while (this.hasMoreInEncounter) this.next();
+    return this._loadNextEncounterHeader();
+  }
+
+  skipEncounter(): boolean {
+    if (!this._currentHeader) return false;
+    if (this._messagesReadInEncounter > 0) return this.nextEncounter();
+    this.offset += this._currentHeader.dataLength;
+    this._bytesProcessed += this._currentHeader.dataLength;
+    this._currentHeader = null;
+    this._messagesReadInEncounter = 0;
+    return this._loadNextEncounterHeader();
+  }
+
+  private _loadNextEncounterHeader(): boolean {
+    if (this.offset >= this.data.length) {
+      this._currentHeader = null;
+      return false;
+    }
+    const startOffset = this.offset;
+    const idLength = readVarint(this.data, this.offset);
+    this.offset += idLength.bytesRead;
+    const encounterID = sharedTextDecoder.decode(this.data.subarray(this.offset, this.offset + idLength.value));
+    this.offset += idLength.value;
+    const timestamp = readVarint64(this.data, this.offset);
+    this.offset += timestamp.bytesRead;
+    const count = readVarint(this.data, this.offset);
+    this.offset += count.bytesRead;
+    const dataLength = readVarint(this.data, this.offset);
+    this.offset += dataLength.bytesRead;
+    this._currentHeader = {
+      encounterID,
+      firstTimestamp: new Date(Number(timestamp.value)),
+      count: count.value,
+      dataLength: dataLength.value,
+    };
+    this._messagesReadInEncounter = 0;
+    this._bytesProcessed += this.offset - startOffset;
+    return true;
+  }
+}
+
+// ============================================================================
 // Header parsing (for encounter discovery)
 // ============================================================================
 

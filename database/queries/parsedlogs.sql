@@ -461,3 +461,29 @@ ORDER BY li.id;
 
 
 
+
+-- name: InstancePlayerSpecs :many
+SELECT encounter_id, player_guid, player_spec, killed_at
+FROM encounter_dps_rankings
+WHERE instance_id = $1
+  AND encounter_id IS NOT NULL
+  AND player_spec NOT IN ('', 'Unknown')
+ORDER BY killed_at ASC, id ASC;
+
+-- name: InsertInstanceRaidGroupSnapshot :exec
+INSERT INTO log_instance_raid_group_snapshots (
+  instance_id, encounter_id, snapshot_type, observed_at, composition
+) VALUES ($1, $2, $3, $4, $5);
+
+-- name: InstanceRaidGroupSnapshots :many
+SELECT
+  snapshots.*,
+  encounters.name AS encounter_name,
+  encounters.end_time AS killed_at
+FROM log_instance_raid_group_snapshots snapshots
+LEFT JOIN log_instance_encounters encounters ON encounters.id = snapshots.encounter_id
+WHERE snapshots.instance_id = $1
+ORDER BY
+  CASE WHEN snapshots.snapshot_type = 'clean_kill' THEN 0 ELSE 1 END,
+  encounters.end_time ASC NULLS LAST,
+  snapshots.observed_at ASC;

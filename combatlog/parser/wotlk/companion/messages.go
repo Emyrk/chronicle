@@ -33,6 +33,8 @@ func (p *Parser) dispatch(ts time.Time, payload string, ordinal uint64) ([]messa
 		return p.parseMeta(ts, payload[1:])
 	case 'V':
 		return p.parseVehicle(ts, payload[1:], ordinal)
+	case 'R':
+		return p.parseRaidGroup(ts, payload[1:])
 	default:
 		return nil, fmt.Errorf("unknown companion message type %q", string(payload[0]))
 	}
@@ -207,6 +209,37 @@ func (p *Parser) parseVehicle(observedAt time.Time, data string, ordinal uint64)
 			Ordinal:        ordinal,
 		},
 	}, nil
+}
+
+// parseRaidGroup parses: RG:<group1-slot1>,...,<group8-slot5>
+// GUIDs are compact hexadecimal strings without a 0x prefix. Empty fields
+// preserve unused slots and subgroup boundaries.
+func (p *Parser) parseRaidGroup(ts time.Time, data string) ([]messages.Message, error) {
+	if len(data) == 0 || data[0] != 'G' || len(data) < 2 || data[1] != ':' {
+		return nil, fmt.Errorf("raid group: missing G: prefix")
+	}
+
+	fields := strings.Split(data[2:], ",")
+	expectedFields := messages.RaidGroupCount * messages.RaidGroupSize
+	if len(fields) != expectedFields {
+		return nil, fmt.Errorf("raid group: expected %d fields, got %d", expectedFields, len(fields))
+	}
+
+	result := &messages.RaidGroup{MessageBase: messages.Base(ts)}
+	for i, field := range fields {
+		if field == "" {
+			continue
+		}
+
+		value, err := strconv.ParseUint(field, 16, 64)
+		if err != nil || value == 0 {
+			return nil, fmt.Errorf("raid group: invalid GUID %q at field %d", field, i+1)
+		}
+		result.Groups[i/messages.RaidGroupSize][i%messages.RaidGroupSize] = guid.GUID(value)
+	}
+
+	p.sawRaidGroup = true
+	return []messages.Message{result}, nil
 }
 
 // parseLoot parses: L<kind>,<quality>,<itemId>,<count>,<player>
