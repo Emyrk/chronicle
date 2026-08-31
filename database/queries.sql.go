@@ -2501,7 +2501,7 @@ WHERE (
     )
   AND ($2::timestamptz IS NULL OR wlg.created_at >= $2::timestamptz)
   AND (
-        cardinality($3::text[]) = 0
+        COALESCE(cardinality($3::text[]), 0) = 0
         OR COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY($3::text[])
     )
   AND ($4::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR li.realm_id = $4::uuid)

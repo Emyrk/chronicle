@@ -199,7 +199,7 @@ WHERE (
     )
   AND (@upload_after::timestamptz IS NULL OR wlg.created_at >= @upload_after::timestamptz)
   AND (
-        cardinality(@instance_names::text[]) = 0
+        COALESCE(cardinality(@instance_names::text[]), 0) = 0
         OR COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY(@instance_names::text[])
     )
   AND (@realm_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR li.realm_id = @realm_id::uuid)
