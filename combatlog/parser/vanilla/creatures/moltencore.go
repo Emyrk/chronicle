@@ -119,7 +119,12 @@ const (
 )
 
 func NewIncindisCharacter(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
-	return characters.NewAdsGoWithBoss(incindis, spawnOfIncindis, flameskinIncindis, eggIncindis)(id, all)
+	c, ok := characters.NewAdsGoWithBoss(incindis, spawnOfIncindis, flameskinIncindis, eggIncindis)(id, all)
+	if !ok {
+		return nil, false
+	}
+
+	return characters.NewIgnoreCastCharacter(c, 42038), true
 }
 
 type coreRager struct {
