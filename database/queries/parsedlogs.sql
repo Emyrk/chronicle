@@ -462,6 +462,14 @@ ORDER BY li.id;
 
 
 
+-- name: InstancePlayerSpecs :many
+SELECT encounter_id, player_guid, player_spec, killed_at
+FROM encounter_dps_rankings
+WHERE instance_id = $1
+  AND encounter_id IS NOT NULL
+  AND player_spec NOT IN ('', 'Unknown')
+ORDER BY killed_at ASC, id ASC;
+
 -- name: InsertInstanceRaidGroupSnapshot :exec
 INSERT INTO log_instance_raid_group_snapshots (
   instance_id, encounter_id, snapshot_type, observed_at, composition

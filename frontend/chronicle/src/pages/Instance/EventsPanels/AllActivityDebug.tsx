@@ -4,7 +4,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Play, CircleX, Bubbles, WandSparkles, CircleFadingPlus, UserCheck, Ban, Shield, HeartPulse, FlaskConical, Download, LoaderCircle } from "lucide-react";
+import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Play, CircleX, Bubbles, WandSparkles, CircleFadingPlus, UserCheck, Ban, Shield, HeartPulse, FlaskConical, Download, LoaderCircle, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
@@ -48,6 +48,7 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
   absorbed: { icon: Shield, color: "text-sky-400", label: "Absorbed", description: "Damage prevented by shields and other absorb effects." },
   companion_stats: { icon: Shield, color: "text-teal-400", label: "Companion Stats", description: "Stat snapshots reported for pets and other companions." },
   consume: { icon: FlaskConical, color: "text-fuchsia-400", label: "Consume", description: "Consumable use inferred from items, spells, auras, or combat effects." },
+  raid_group: { icon: Users, color: "text-blue-300", label: "Raid Group", description: "Eight-group raid composition snapshots reported by the companion." },
 
   cast: { icon: Wand2, color: "text-purple-500", label: "Cast", description: "General spell cast actions and their selected targets." },
 };
@@ -67,6 +68,7 @@ const STREAM_CODES: Record<StreamType, string> = {
   absorbed: "ab",
   companion_stats: "cs",
   consume: "q",
+  raid_group: "y",
 };
 const CODE_TO_STREAM = Object.fromEntries(
   Object.entries(STREAM_CODES).map(([k, v]) => [v, k as StreamType]),
@@ -491,6 +493,22 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
             ))}
           </div>
 
+          {event.raidGroups ? (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {event.raidGroups.map((group, groupIndex) => (
+                <div key={groupIndex} className="rounded border border-blue-300/20 bg-blue-300/5 px-2 py-1.5">
+                  <div className="mb-1 font-mono text-[9px] font-semibold tracking-[0.08em] text-blue-300">GROUP {groupIndex + 1}</div>
+                  {group.length ? group.map((member) => (
+                    <div key={member.guid} className="flex min-w-0 justify-between gap-2 font-mono text-[10px] leading-5">
+                      <span className={cn("truncate", member.className ? `class-${member.className.toLowerCase()}` : "text-foreground/85")}>{member.name}</span>
+                      <span className="truncate text-muted-foreground" title={member.guid}>{member.guid}</span>
+                    </div>
+                  )) : <div className="font-mono text-[10px] text-muted-foreground/50">Empty</div>}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           {event.activityEvents?.length ? (
             <div className="mt-3 max-w-4xl rounded border border-teal-400/20 bg-teal-400/5 px-3 py-2">
               <div className="mb-1 font-mono text-[9px] font-semibold tracking-[0.08em] text-teal-300">
@@ -685,12 +703,12 @@ function AllActivityContent({
 }: AllActivityContentProps) {
   
   // Default state during loading
-  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], ressurection: [], cast: [], aura: [], spell_go: [], aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [], interrupt: [], absorbed: [], companion_stats: [], consume: [] };
+  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], ressurection: [], cast: [], aura: [], spell_go: [], aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [], interrupt: [], absorbed: [], companion_stats: [], consume: [], raid_group: [] };
   const emptyEncounters = new Map<string, EncounterMeta>();
   const safeResult = result ?? {
     counts: new Map<string, number>(),
     rawEventsByStream: emptyByStream,
-    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, ressurection: 0, cast: 0, aura: 0, spell_go: 0, aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0, consume: 0 },
+    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, ressurection: 0, cast: 0, aura: 0, spell_go: 0, aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0, consume: 0, raid_group: 0 },
     encounters: emptyEncounters,
     totalProcessed: 0,
     eventsSkipped: 0,

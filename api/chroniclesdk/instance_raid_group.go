@@ -10,6 +10,7 @@ type InstanceRaidGroupMember struct {
 	GUID  GUIDString `json:"guid"`
 	Name  string     `json:"name,omitempty"`
 	Class string     `json:"class,omitempty"`
+	Spec  string     `json:"spec,omitempty"`
 }
 
 type InstanceRaidGroupComposition struct {

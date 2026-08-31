@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/google/uuid"
 )
 
 func (api *API) InstanceRaidGroup(w http.ResponseWriter, r *http.Request) {
@@ -40,8 +41,19 @@ func (api *API) InstanceRaidGroup(w http.ResponseWriter, r *http.Request) {
 		playerByGUID[player.UnitGuid] = player
 	}
 
+	specRows, err := api.Opts.Zed.InstancePlayerSpecs(ctx, inst.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	specs := raidGroupPlayerSpecs(specRows)
+
 	for _, snapshot := range snapshots {
-		composition := raidGroupComposition(snapshot.ObservedAt.Time, snapshot.Composition, playerByGUID)
+		snapshotSpecs := specs.byEncounter[snapshot.EncounterID.UUID]
+		if snapshot.SnapshotType == database.RaidGroupSnapshotTypeFinal {
+			snapshotSpecs = specs.latest
+		}
+		composition := raidGroupComposition(snapshot.ObservedAt.Time, snapshot.Composition, playerByGUID, snapshotSpecs)
 		if snapshot.SnapshotType == database.RaidGroupSnapshotTypeFinal {
 			out.Final = &composition
 			continue
@@ -54,7 +66,33 @@ func (api *API) InstanceRaidGroup(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
-func raidGroupComposition(at time.Time, composition raidgroups.Composition, players map[guid.GUID]database.LogInstancePlayer) chroniclesdk.InstanceRaidGroupComposition {
+type instanceRaidGroupSpecs struct {
+	latest      map[guid.GUID]string
+	byEncounter map[uuid.UUID]map[guid.GUID]string
+}
+
+func raidGroupPlayerSpecs(rows []database.InstancePlayerSpecsRow) instanceRaidGroupSpecs {
+	result := instanceRaidGroupSpecs{
+		latest:      make(map[guid.GUID]string),
+		byEncounter: make(map[uuid.UUID]map[guid.GUID]string),
+	}
+	for _, row := range rows {
+		playerGUID, err := guid.FromString(row.PlayerGuid)
+		if err != nil || !row.EncounterID.Valid {
+			continue
+		}
+		encounterSpecs := result.byEncounter[row.EncounterID.UUID]
+		if encounterSpecs == nil {
+			encounterSpecs = make(map[guid.GUID]string)
+			result.byEncounter[row.EncounterID.UUID] = encounterSpecs
+		}
+		encounterSpecs[playerGUID] = row.PlayerSpec
+		result.latest[playerGUID] = row.PlayerSpec
+	}
+	return result
+}
+
+func raidGroupComposition(at time.Time, composition raidgroups.Composition, players map[guid.GUID]database.LogInstancePlayer, specs map[guid.GUID]string) chroniclesdk.InstanceRaidGroupComposition {
 	groups := make([][]chroniclesdk.InstanceRaidGroupMember, len(composition))
 	for groupIndex, group := range composition {
 		groups[groupIndex] = make([]chroniclesdk.InstanceRaidGroupMember, 0, len(group))
@@ -62,7 +100,7 @@ func raidGroupComposition(at time.Time, composition raidgroups.Composition, play
 			if memberGUID.IsZero() {
 				continue
 			}
-			member := chroniclesdk.InstanceRaidGroupMember{GUID: memberGUID}
+			member := chroniclesdk.InstanceRaidGroupMember{GUID: memberGUID, Spec: specs[memberGUID]}
 			if player, ok := players[memberGUID]; ok {
 				member.Name = player.Name
 				member.Class = string(player.Class)

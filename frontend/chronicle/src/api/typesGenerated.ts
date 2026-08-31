@@ -1787,6 +1787,7 @@ export interface InstanceRaidGroupMember {
     readonly guid: string;
     readonly name?: string;
     readonly class?: string;
+    readonly spec?: string;
 }
 
 // From chroniclesdk/instance_raid_group.go

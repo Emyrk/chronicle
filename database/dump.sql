@@ -44,7 +44,8 @@ CREATE TYPE log_instance_event_type AS ENUM (
     'absorbed',
     'companion_stats',
     'ressurection',
-    'consume'
+    'consume',
+    'raid_group'
 );
 
 CREATE TYPE log_type AS ENUM (

@@ -155,7 +155,9 @@ func (s *State) Process(m messages.Message) error {
 	case *messages.RaidGroup:
 		forwardToInstance = false
 		if s.CurrentInstance != nil {
-			s.CurrentInstance.ObserveMetadataAt(typed.Date())
+			if err := s.CurrentInstance.ProcessRaidGroupMetadata(typed); err != nil {
+				return fmt.Errorf("processing raid group metadata: %w", err)
+			}
 		}
 	}
 

@@ -2,7 +2,7 @@
  * All Activity Debug processor - stores raw events for debugging stream interleaving
  */
 
-import type { AbsorbedProcessorEvent, AuraApplication, AuraCastProcessorEvent, AuraProcessorEvent, CastAction, CastProcessorEvent, CombatantInfoProcessorEvent, ConsumeProcessorEvent, DamageProcessorEvent, DispelProcessorEvent, ExtraAttackProcessorEvent, HealProcessorEvent, InterruptProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SlainProcessorEvent, SpellFailProcessorEvent, SpellGoProcessorEvent, SpellStartProcessorEvent, UnitClassificationProcessorEvent } from "../processorTypes";
+import type { AbsorbedProcessorEvent, AuraApplication, AuraCastProcessorEvent, AuraProcessorEvent, CastAction, CastProcessorEvent, CombatantInfoProcessorEvent, ConsumeProcessorEvent, RaidGroupProcessorEvent, DamageProcessorEvent, DispelProcessorEvent, ExtraAttackProcessorEvent, HealProcessorEvent, InterruptProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SlainProcessorEvent, SpellFailProcessorEvent, SpellGoProcessorEvent, SpellStartProcessorEvent, UnitClassificationProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { hitTypeNames } from "@/lib/hittype/hittype";
 
@@ -70,6 +70,8 @@ export interface RawDebugEvent {
   activityEvents?: ActivityEventInfo[];
   // Combatant info gear (shown in the expanded row)
   gear?: { itemId: number; enchantId: number | null; temporaryEnchantId: number | null }[];
+  /** Fixed raid composition grouped into eight subgroups. */
+  raidGroups?: { guid: string; name: string; className?: string }[][];
   /** Diagnostic state that deserves a compact flag in the timeline. */
   flags?: string[];
   /** Additional actors or identifiers that do not fit the source/action/target columns. */
@@ -105,7 +107,7 @@ export interface AllActivityDebugState {
 }
 
 // This processor handles every stream exposed by the debug panel.
-type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | ConsumeProcessorEvent;
+type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | ConsumeProcessorEvent | RaidGroupProcessorEvent;
 
 const SCHOOL_NAMES = ["Unknown", "None", "Physical", "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane"];
 
@@ -133,7 +135,7 @@ const DEFAULT_PAGE_SIZE = 100;
 
 export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActivityEvent> = {
   id: "all_activity",
-  streams: ["damage", "heal", "resource_change", "aura", "slain", "ressurection", "spell_go", "spell_start", "spell_fail", "aura_cast", "extra_attack", "unit_classification", "combatant_info", "dispel", "interrupt", "absorbed", "consume"],
+  streams: ["damage", "heal", "resource_change", "aura", "slain", "ressurection", "spell_go", "spell_start", "spell_fail", "aura_cast", "extra_attack", "unit_classification", "combatant_info", "dispel", "interrupt", "absorbed", "consume", "raid_group"],
   
   createState: () => ({
     counts: new Map<string, number>(),
@@ -147,7 +149,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       cast: [],
       aura: [],
       spell_go: [],
-      aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [], interrupt: [], absorbed: [], companion_stats: [], consume: [],
+      aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [], interrupt: [], absorbed: [], companion_stats: [], consume: [], raid_group: [],
     },
     streamCounts: {
       damage: 0,
@@ -159,7 +161,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       cast: 0,
       aura: 0,
       spell_go: 0,
-      aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0, consume: 0,
+      aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0, consume: 0, raid_group: 0,
     },
     encounters: new Map<string, EncounterMeta>(),
     totalProcessed: 0,
@@ -194,7 +196,9 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     const eventCaster = "attacker" in event ? event.attacker : ("caster" in event ? event.caster : ("source" in event ? event.source : ("guid" in event ? event.guid : ("player" in event ? event.player : ""))));
     const eventTarget = "target" in event ? event.target : ("guid" in event ? event.guid : "");
     if (entitySelection.playerIds.size > 0) {
-      if(!(entitySelection.playerIds.has(eventCaster) || (eventTarget && entitySelection.playerIds.has(eventTarget)))) {
+      const raidGroupMatch = streamType === "raid_group"
+        && (event as RaidGroupProcessorEvent).groupMemberGuids.some((member) => entitySelection.playerIds.has(member));
+      if(!(raidGroupMatch || entitySelection.playerIds.has(eventCaster) || (eventTarget && entitySelection.playerIds.has(eventTarget)))) {
         return;
       }
     }
@@ -261,6 +265,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       } else if (streamType === "consume") {
         const consumeEvent = event as ConsumeProcessorEvent;
         abilityName = consumeEvent.spell.name || (consumeEvent.itemId ? `Item ${consumeEvent.itemId}` : "Consume");
+      } else if (streamType === "raid_group") {
+        abilityName = "Raid Composition";
       } else {
         const regularEvent = event as DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent;
         abilityName = regularEvent.sourceName;
@@ -403,6 +409,10 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const consumeEvent = event as ConsumeProcessorEvent;
       sourceName = consumeEvent.spell.name || (consumeEvent.itemId ? `Item ${consumeEvent.itemId}` : "Consume");
       amount = consumeEvent.amount ?? 0;
+    } else if (streamType === "raid_group") {
+      const raidGroupEvent = event as RaidGroupProcessorEvent;
+      sourceName = "Raid Composition";
+      amount = raidGroupEvent.groupMemberGuids.filter(Boolean).length;
     } else {
       const regularEvent = event as DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent;
       sourceName = regularEvent.sourceName;
@@ -453,7 +463,20 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     };
     
     // Add stream-specific info based on streamType
-    if (streamType === "resource_change") {
+    if (streamType === "raid_group") {
+      const raidGroupEvent = event as RaidGroupProcessorEvent;
+      rawEvent.raidGroups = Array.from({ length: 8 }, (_, groupIndex) =>
+        raidGroupEvent.groupMemberGuids
+          .slice(groupIndex * 5, groupIndex * 5 + 5)
+          .filter(Boolean)
+          .map((member) => ({
+            guid: member,
+            name: context.players[member]?.name ?? member,
+            className: context.players[member]?.class,
+          })),
+      );
+      rawEvent.extra = `${amount} populated players`;
+    } else if (streamType === "resource_change") {
       const rcEvent = event as ResourceChangeProcessorEvent;
       rawEvent.resourceType = rcEvent.resourceType as ResourceType;
       rawEvent.spellId = rcEvent.spellId ?? undefined;

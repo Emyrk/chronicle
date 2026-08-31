@@ -395,7 +395,13 @@ export interface ConsumeProcessorEvent extends EventMeta {
   isProjection: boolean;
 }
 
-export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | CompanionStatsProcessorEvent | ConsumeProcessorEvent;
+export interface RaidGroupProcessorEvent extends EventMeta {
+  type: "raid_group";
+  /** Fixed 8 x 5 layout flattened in group-major order; empty strings preserve slots. */
+  groupMemberGuids: string[];
+}
+
+export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | CompanionStatsProcessorEvent | ConsumeProcessorEvent | RaidGroupProcessorEvent;
 
 /**
  * Selection state for filtering entities (serializable for worker transport).

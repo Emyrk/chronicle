@@ -6966,6 +6966,47 @@ func (q *sqlQuerier) InstancePlayerGUIDsByInstanceID(ctx context.Context, instan
 	return items, nil
 }
 
+const instancePlayerSpecs = `-- name: InstancePlayerSpecs :many
+SELECT encounter_id, player_guid, player_spec, killed_at
+FROM encounter_dps_rankings
+WHERE instance_id = $1
+  AND encounter_id IS NOT NULL
+  AND player_spec NOT IN ('', 'Unknown')
+ORDER BY killed_at ASC, id ASC
+`
+
+type InstancePlayerSpecsRow struct {
+	EncounterID uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
+	PlayerGuid  string             `db:"player_guid" json:"player_guid"`
+	PlayerSpec  string             `db:"player_spec" json:"player_spec"`
+	KilledAt    pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+}
+
+func (q *sqlQuerier) InstancePlayerSpecs(ctx context.Context, instanceID uuid.UUID) ([]InstancePlayerSpecsRow, error) {
+	rows, err := q.db.Query(ctx, instancePlayerSpecs, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InstancePlayerSpecsRow
+	for rows.Next() {
+		var i InstancePlayerSpecsRow
+		if err := rows.Scan(
+			&i.EncounterID,
+			&i.PlayerGuid,
+			&i.PlayerSpec,
+			&i.KilledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const instancePlayersByInstanceID = `-- name: InstancePlayersByInstanceID :many
 SELECT
   instance_id, unit_guid, name, level, class, race, guild_id

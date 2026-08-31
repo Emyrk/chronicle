@@ -279,6 +279,16 @@ func (h *Hookable) ObserveMetadataAt(at time.Time) {
 	}
 }
 
+// ProcessRaidGroupMetadata keeps instance timing current and records composition
+// changes in the active encounter without running normal combat hooks.
+func (h *Hookable) ProcessRaidGroupMetadata(msg *messages.RaidGroup) error {
+	h.ObserveMetadataAt(msg.Date())
+	if h.currentFight == nil || !h.currentFight.active() {
+		return nil
+	}
+	return h.currentFight.Events.Process(msg)
+}
+
 // AttachAuraProjection creates and registers an aura projection adapter that
 // references the shared parse-wide tracker. The adapter projects active auras
 // into encounter event streams on the first real message after FightStarted,
@@ -602,6 +612,18 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 	}
 
 	if !wasActive && h.currentFight.active() {
+		if h.raidGroupTracker != nil {
+			start := h.currentFight.Start.Timestamp.Date()
+			if observation, ok := h.raidGroupTracker.LatestBetween(h.CurrentZone.Seen, start); ok {
+				snapshot := &messages.RaidGroup{
+					MessageBase: messages.Base(start, messages.WithSynthetic()),
+					Groups:      [messages.RaidGroupCount][messages.RaidGroupSize]guid.GUID(observation.Composition),
+				}
+				if err := h.currentFight.Events.Process(snapshot); err != nil {
+					return nil, fmt.Errorf("processing encounter-start raid group: %w", err)
+				}
+			}
+		}
 		for _, hook := range h.hooks {
 			hook.FightStarted(h.currentFight.EncounterID, m)
 		}

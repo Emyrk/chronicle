@@ -232,6 +232,7 @@ const (
 	LogInstanceEventTypeCompanionStats     LogInstanceEventType = "companion_stats"
 	LogInstanceEventTypeRessurection       LogInstanceEventType = "ressurection"
 	LogInstanceEventTypeConsume            LogInstanceEventType = "consume"
+	LogInstanceEventTypeRaidGroup          LogInstanceEventType = "raid_group"
 )
 
 func (e *LogInstanceEventType) Scan(src interface{}) error {
@@ -289,7 +290,8 @@ func (e LogInstanceEventType) Valid() bool {
 		LogInstanceEventTypeAbsorbed,
 		LogInstanceEventTypeCompanionStats,
 		LogInstanceEventTypeRessurection,
-		LogInstanceEventTypeConsume:
+		LogInstanceEventTypeConsume,
+		LogInstanceEventTypeRaidGroup:
 		return true
 	}
 	return false
@@ -316,6 +318,7 @@ func AllLogInstanceEventTypeValues() []LogInstanceEventType {
 		LogInstanceEventTypeCompanionStats,
 		LogInstanceEventTypeRessurection,
 		LogInstanceEventTypeConsume,
+		LogInstanceEventTypeRaidGroup,
 	}
 }
 

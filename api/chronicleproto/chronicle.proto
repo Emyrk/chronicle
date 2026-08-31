@@ -320,3 +320,10 @@ message CompanionStats {
   repeated int32 buckets = 3;  // [10] landed chunk counts per minute
 }
 
+// RaidGroup carries the fixed 8 x 5 raid layout reported by the companion.
+// Empty strings preserve unused slots and subgroup boundaries.
+message RaidGroup {
+  EventMeta meta = 1;
+  repeated string group_member_guids = 2; // exactly 40 entries
+}
+

@@ -236,6 +236,8 @@ const (
 	WoWEventTypeCompanionStats WoWEventType = "companion_stats"
 	// WoWEventTypeConsume is a WoWEventType of type consume.
 	WoWEventTypeConsume WoWEventType = "consume"
+	// WoWEventTypeRaidGroup is a WoWEventType of type raid_group.
+	WoWEventTypeRaidGroup WoWEventType = "raid_group"
 )
 
 var ErrInvalidWoWEventType = errors.New("not a valid WoWEventType")
@@ -262,6 +264,7 @@ func WoWEventTypeValues() []WoWEventType {
 		WoWEventTypeAbsorbed,
 		WoWEventTypeCompanionStats,
 		WoWEventTypeConsume,
+		WoWEventTypeRaidGroup,
 	}
 }
 
@@ -297,6 +300,7 @@ var _WoWEventTypeValue = map[string]WoWEventType{
 	"absorbed":            WoWEventTypeAbsorbed,
 	"companion_stats":     WoWEventTypeCompanionStats,
 	"consume":             WoWEventTypeConsume,
+	"raid_group":          WoWEventTypeRaidGroup,
 }
 
 // ParseWoWEventType attempts to convert a string to a WoWEventType.
