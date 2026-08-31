@@ -279,6 +279,9 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 			// Attach consume collector for item-use and
 			// pre-pull buff evidence.
 			s.CurrentInstance.AttachConsumeCollector(s.Auras, s.ConsumeTracker)
+			// Attach parse-wide raid composition metadata for encounter-start events
+			// and finalized instance snapshots.
+			s.CurrentInstance.AttachRaidGroupTracker(s.RaidGroups)
 			s.logger.Info("Matched new instance",
 				slog.String("name", s.CurrentInstance.Name()),
 			)
