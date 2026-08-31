@@ -8,6 +8,7 @@ import { useItemTooltip } from "@/api/gamedata";
 import { cn } from "@/lib/utils";
 import { getQualityBorderClass, getQualityTextClass, getClassColorVar } from "@/pages/ArmoryPage/types";
 import { formatRaceLabel } from "@/pages/ArmoryPage/characterDisplay";
+import { classNameToId } from "@/pages/Rankings/classDisplay";
 import { HelpCircle, ExternalLink } from "lucide-react";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import {
@@ -174,11 +175,6 @@ function DropdownList({ playerList, search, setSearch, searchRef, selectedGuid, 
   );
 }
 
-const CLASS_NAME_TO_ID: Record<string, number> = {
-  warrior: 1, paladin: 2, hunter: 3, rogue: 4, priest: 5,
-  shaman: 7, mage: 8, warlock: 9, druid: 11,
-};
-
 /**
  * Encode talent allocations as a talent-calculator build string.
  * The `?build=` param uses the positional format: one digit per talent in
@@ -200,7 +196,7 @@ function PlayerTalentsView({
   player: PlayerSnapshot;
   datasetId?: string;
 }) {
-  const classId = CLASS_NAME_TO_ID[player.heroClass.toLowerCase()];
+  const classId = classNameToId(player.heroClass);
 
   const allocations = useMemo<TalentAllocation[] | undefined>(() => {
     if (!player.talents || player.talents.trees.length < 3) return undefined;

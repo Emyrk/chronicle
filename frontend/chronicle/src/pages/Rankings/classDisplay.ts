@@ -47,6 +47,11 @@ export const CLASS_NAME_TO_ID: Record<string, number> = {
   DRUID: 11,
 }
 
+/** Resolves API enum names and display names to a WoW numeric class ID. */
+export function classNameToId(className: string): number | undefined {
+  return CLASS_NAME_TO_ID[className.replace(/[^a-z]/gi, "").toUpperCase()]
+}
+
 export const SPEC_BY_CLASS: Record<string, readonly string[]> = {
   WARRIOR: ["Arms", "Fury", "Protection"],
   ROGUE: ["Assassination", "Combat", "Subtlety"],

@@ -3,22 +3,11 @@ import {
   TalentTreeViewerLegacy as TalentTreeViewer,
   type TalentAllocation,
 } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
+import { classNameToId } from "@/pages/Rankings/classDisplay";
 import { useMemo } from "react";
 
-const CLASS_NAME_TO_ID: Record<string, number> = {
-  Warrior: 1,
-  Paladin: 2,
-  Hunter: 3,
-  Rogue: 4,
-  Priest: 5,
-  Shaman: 7,
-  Mage: 8,
-  Warlock: 9,
-  Druid: 11,
-};
-
 export function TalentsTab({ player }: { player: ArmoryPlayer }) {
-  const classId = CLASS_NAME_TO_ID[player.class] ?? CLASS_NAME_TO_ID[player.class.charAt(0) + player.class.slice(1).toLowerCase()];
+  const classId = classNameToId(player.class);
 
   const allocations = useMemo<TalentAllocation[] | undefined>(() => {
     if (!player.talents) return undefined;
