@@ -47,16 +47,13 @@ func (s *Service) listRecentActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var afterDate pgtype.Timestamptz
-	if value := query.Get("after_date"); value != "" {
-		parsed, err := time.Parse(time.RFC3339, value)
-		if err != nil {
-			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-				Message: "after_date must be an RFC3339 timestamp",
-			})
-			return
-		}
-		afterDate = pgtype.Timestamptz{Time: parsed, Valid: true}
+	afterDate, ok := optionalTimestampQuery(w, r, "after_date")
+	if !ok {
+		return
+	}
+	uploadAfter, ok := optionalTimestampQuery(w, r, "upload_after")
+	if !ok {
+		return
 	}
 
 	realmID, ok := optionalUUIDQuery(w, r, "realm_id")
@@ -78,6 +75,7 @@ func (s *Service) listRecentActivity(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := s.db.ListExternalAPIRecentInstances(ctx, database.ListExternalAPIRecentInstancesParams{
 		AfterDate:     afterDate,
+		UploadAfter:   uploadAfter,
 		InstanceNames: query["instance_name"],
 		RealmID:       realmID,
 		GuildID:       guildID,
@@ -102,7 +100,7 @@ func (s *Service) listRecentActivity(w http.ResponseWriter, r *http.Request) {
 		}
 		activities = append(activities, RecentActivity{
 			ID: row.ID, Slug: row.HashedSlug.String, Name: row.Name,
-			Realm: Realm{ID: row.RealmID, Name: row.RealmName}, Guild: guild,
+			Realm: Realm{ID: row.RealmID, ServerID: row.ServerID, Name: row.RealmName}, Guild: guild,
 			UploadedAt: row.UploadedAt.Time, StartedAt: row.StartedAt.Time, EndedAt: row.EndedAt.Time,
 			PlayerCount: row.PlayerCount, BossCount: row.BossCount, BossKills: row.BossKills,
 			HasYoutubeVideo: row.HasYoutubeVideo, Difficulty: row.DifficultyName,
@@ -114,6 +112,21 @@ func (s *Service) listRecentActivity(w http.ResponseWriter, r *http.Request) {
 		Activities: activities,
 		Pagination: Pagination{Page: page, PageSize: pageSize, HasMore: hasMore},
 	})
+}
+
+func optionalTimestampQuery(w http.ResponseWriter, r *http.Request, name string) (pgtype.Timestamptz, bool) {
+	value := r.URL.Query().Get(name)
+	if value == "" {
+		return pgtype.Timestamptz{}, true
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: name + " must be an RFC3339 timestamp",
+		})
+		return pgtype.Timestamptz{}, false
+	}
+	return pgtype.Timestamptz{Time: parsed, Valid: true}, true
 }
 
 func optionalUUIDQuery(w http.ResponseWriter, r *http.Request, name string) (uuid.UUID, bool) {

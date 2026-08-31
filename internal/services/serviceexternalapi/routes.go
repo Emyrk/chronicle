@@ -70,9 +70,10 @@ func (s *Service) registerRoutes() {
 
 	s.register(http.MethodGet, "/raidlogs/recent", OpenAPIOperation{
 		Summary:     "List recent raid activity",
-		Description: "Returns recent parsed raid instances, newest first. Results may be filtered to activity on or after an RFC3339 timestamp and are limited to 50 per page.",
+		Description: "Returns recent parsed raid instances, newest first. Results may be filtered by activity or log-group upload time and are limited to 50 per page.",
 		Parameters: []OpenAPIParameter{
 			queryParameter("after_date", "Only include activity starting at or after this RFC3339 timestamp", false, "string", "2026-08-01T00:00:00Z"),
+			queryParameter("upload_after", "Only include log groups uploaded at or after this RFC3339 timestamp", false, "string", "2026-08-31T00:00:00Z"),
 			queryParameter("instance_name", "Instance name. Repeat this parameter to include multiple names.", false, "string", "Molten Core"),
 			queryParameter("realm_id", "Realm UUID", false, "string", "00000000-0000-0000-0000-000000000000"),
 			queryParameter("guild_id", "Guild UUID", false, "string", "00000000-0000-0000-0000-000000000000"),
@@ -82,7 +83,7 @@ func (s *Service) registerRoutes() {
 		},
 		Responses: okResponse(RecentActivityResponse{
 			Activities: []RecentActivity{{
-				Name: "Molten Core", Slug: "example-instance", Realm: Realm{Name: "Example Realm"},
+				Name: "Molten Core", Slug: "example-instance", Realm: Realm{ID: uuid.MustParse("22222222-2222-2222-2222-222222222222"), ServerID: uuid.MustParse("11111111-1111-1111-1111-111111111111"), Name: "Example Realm"},
 				Difficulty: "Normal", MaxPlayers: 40, PlayerCount: 40, BossKills: 10,
 			}},
 			Pagination: Pagination{Page: 1, PageSize: 25},

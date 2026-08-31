@@ -2462,6 +2462,7 @@ SELECT
     li.hashed_slug,
     COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)::text AS name,
     li.realm_id,
+    wsr.server_id,
     wsr.name::text AS realm_name,
     li.guild_id,
     COALESCE(g.name, '')::text AS guild_name,
@@ -2497,30 +2498,32 @@ WHERE (
             wlg.created_at
         ) >= $1::timestamptz
     )
+  AND ($2::timestamptz IS NULL OR wlg.created_at >= $2::timestamptz)
   AND (
-        cardinality($2::text[]) = 0
-        OR COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY($2::text[])
+        cardinality($3::text[]) = 0
+        OR COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY($3::text[])
     )
-  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR li.realm_id = $3::uuid)
-  AND ($4::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR li.guild_id = $4::uuid)
+  AND ($4::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR li.realm_id = $4::uuid)
+  AND ($5::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR li.guild_id = $5::uuid)
   AND (
-        $5::text = ''
-        OR ($5::text = 'true' AND EXISTS (
+        $6::text = ''
+        OR ($6::text = 'true' AND EXISTS (
             SELECT 1 FROM log_instance_youtube_timestamped yt
             WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
         ))
-        OR ($5::text = 'false' AND NOT EXISTS (
+        OR ($6::text = 'false' AND NOT EXISTS (
             SELECT 1 FROM log_instance_youtube_timestamped yt
             WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
         ))
     )
 ORDER BY started_at DESC, li.id DESC
-LIMIT $7
-OFFSET $6
+LIMIT $8
+OFFSET $7
 `
 
 type ListExternalAPIRecentInstancesParams struct {
 	AfterDate     pgtype.Timestamptz `db:"after_date" json:"after_date"`
+	UploadAfter   pgtype.Timestamptz `db:"upload_after" json:"upload_after"`
 	InstanceNames []string           `db:"instance_names" json:"instance_names"`
 	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
 	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
@@ -2534,6 +2537,7 @@ type ListExternalAPIRecentInstancesRow struct {
 	HashedSlug      pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
 	Name            string             `db:"name" json:"name"`
 	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	ServerID        uuid.UUID          `db:"server_id" json:"server_id"`
 	RealmName       string             `db:"realm_name" json:"realm_name"`
 	GuildID         uuid.NullUUID      `db:"guild_id" json:"guild_id"`
 	GuildName       string             `db:"guild_name" json:"guild_name"`
@@ -2552,6 +2556,7 @@ type ListExternalAPIRecentInstancesRow struct {
 func (q *sqlQuerier) ListExternalAPIRecentInstances(ctx context.Context, arg ListExternalAPIRecentInstancesParams) ([]ListExternalAPIRecentInstancesRow, error) {
 	rows, err := q.db.Query(ctx, listExternalAPIRecentInstances,
 		arg.AfterDate,
+		arg.UploadAfter,
 		arg.InstanceNames,
 		arg.RealmID,
 		arg.GuildID,
@@ -2571,6 +2576,7 @@ func (q *sqlQuerier) ListExternalAPIRecentInstances(ctx context.Context, arg Lis
 			&i.HashedSlug,
 			&i.Name,
 			&i.RealmID,
+			&i.ServerID,
 			&i.RealmName,
 			&i.GuildID,
 			&i.GuildName,

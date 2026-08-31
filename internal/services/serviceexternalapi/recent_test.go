@@ -18,14 +18,16 @@ func TestListRecentActivityFiltersAndPagination(t *testing.T) {
 	t.Parallel()
 
 	afterDate := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	uploadAfter := time.Date(2026, time.August, 30, 0, 0, 0, 0, time.UTC)
 	realmID := uuid.New()
+	serverID := uuid.New()
 	guildID := uuid.New()
 	startedAt := afterDate.Add(24 * time.Hour)
 	rows := make([]database.ListExternalAPIRecentInstancesRow, 3)
 	for index := range rows {
 		rows[index] = database.ListExternalAPIRecentInstancesRow{
 			ID: uuid.New(), HashedSlug: pgtype.Text{String: "instance-slug", Valid: true},
-			Name: "Molten Core", RealmID: realmID, RealmName: "Example Realm",
+			Name: "Molten Core", RealmID: realmID, ServerID: serverID, RealmName: "Example Realm",
 			GuildID: uuid.NullUUID{UUID: guildID, Valid: true}, GuildName: "Example Guild",
 			UploadedAt:  pgtype.Timestamptz{Time: startedAt.Add(time.Hour), Valid: true},
 			StartedAt:   pgtype.Timestamptz{Time: startedAt, Valid: true},
@@ -40,6 +42,7 @@ func TestListRecentActivityFiltersAndPagination(t *testing.T) {
 
 	query := url.Values{
 		"after_date":    {afterDate.Format(time.RFC3339)},
+		"upload_after":  {uploadAfter.Format(time.RFC3339)},
 		"instance_name": {"Molten Core", "Blackwing Lair"},
 		"realm_id":      {realmID.String()},
 		"guild_id":      {guildID.String()},
@@ -53,6 +56,7 @@ func TestListRecentActivityFiltersAndPagination(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, pgtype.Timestamptz{Time: afterDate, Valid: true}, store.recentParams.AfterDate)
+	require.Equal(t, pgtype.Timestamptz{Time: uploadAfter, Valid: true}, store.recentParams.UploadAfter)
 	require.ElementsMatch(t, []string{"Molten Core", "Blackwing Lair"}, store.recentParams.InstanceNames)
 	require.Equal(t, realmID, store.recentParams.RealmID)
 	require.Equal(t, guildID, store.recentParams.GuildID)
@@ -65,6 +69,7 @@ func TestListRecentActivityFiltersAndPagination(t *testing.T) {
 	require.Len(t, response.Activities, 2)
 	require.Equal(t, Pagination{Page: 2, PageSize: 2, HasMore: true}, response.Pagination)
 	require.Equal(t, "instance-slug", response.Activities[0].Slug)
+	require.Equal(t, serverID, response.Activities[0].Realm.ServerID)
 	require.Equal(t, "Example Guild", response.Activities[0].Guild.Name)
 }
 
@@ -81,6 +86,7 @@ func TestListRecentActivityDefaults(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.False(t, store.recentParams.AfterDate.Valid)
+	require.False(t, store.recentParams.UploadAfter.Valid)
 	require.Equal(t, int32(0), store.recentParams.ResultOffset)
 	require.Equal(t, int32(26), store.recentParams.ResultLimit)
 }
@@ -90,6 +96,7 @@ func TestListRecentActivityRejectsInvalidFilters(t *testing.T) {
 
 	tests := []string{
 		"after_date=not-a-date",
+		"upload_after=not-a-date",
 		"page_size=51",
 		"page=0",
 		"realm_id=not-a-uuid",

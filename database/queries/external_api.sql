@@ -161,6 +161,7 @@ SELECT
     li.hashed_slug,
     COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)::text AS name,
     li.realm_id,
+    wsr.server_id,
     wsr.name::text AS realm_name,
     li.guild_id,
     COALESCE(g.name, '')::text AS guild_name,
@@ -196,6 +197,7 @@ WHERE (
             wlg.created_at
         ) >= @after_date::timestamptz
     )
+  AND (@upload_after::timestamptz IS NULL OR wlg.created_at >= @upload_after::timestamptz)
   AND (
         cardinality(@instance_names::text[]) = 0
         OR COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY(@instance_names::text[])
