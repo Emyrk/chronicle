@@ -167,11 +167,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 			}
 		}
 
-		var level int16
-		info, ok := udb.Get(player.Guid)
-		if ok {
-			level = int16(info.Level)
-		}
+		level := persistedPlayerLevel(player, udb)
 
 		var dbTalents *database.PlayerTalents
 
@@ -246,6 +242,16 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 		return guildWithMostPlayers, nil
 	}
 	return nil, nil
+}
+
+func persistedPlayerLevel(player combatant.Combatant, udb *unitdb.Units) int16 {
+	if player.Level != nil && *player.Level > 0 {
+		return int16(*player.Level)
+	}
+	if info, ok := udb.Get(player.Guid); ok {
+		return int16(info.Level)
+	}
+	return 0
 }
 
 // RenameGuilds canonicalizes guild names before they are persisted. If multiple

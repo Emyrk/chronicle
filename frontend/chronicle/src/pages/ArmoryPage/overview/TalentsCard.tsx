@@ -18,9 +18,12 @@ export function TalentsCard({ player, onOpenTalents }: TalentsCardProps) {
     : 0;
   const totalSpent = trees?.reduce((sum, t) => sum + t.points_spent, 0) ?? 0;
   const summary = trees ? trees.map((t) => t.points_spent).join("/") : "";
-  // One talent point per level from 10; unknown level falls back to the
-  // level-60 pool.
-  const maxPoints = Math.max(player.level >= 10 ? player.level - 9 : 51, 1);
+  // One talent point per level from 10. When the level is unknown, scale the
+  // bars relative to the deepest tree rather than assuming a level cap.
+  const maxPoints = Math.max(
+    player.level >= 10 ? player.level - 9 : (trees?.[deepestIdx].points_spent ?? 0),
+    1,
+  );
 
   return (
     <Card className="h-full gap-0 py-4">
@@ -48,7 +51,7 @@ export function TalentsCard({ player, onOpenTalents }: TalentsCardProps) {
                 {treeName(player, i)}
               </div>
               <div className="font-mono text-xs text-muted-foreground">
-                {tree.points_spent} / {maxPoints}
+                {tree.points_spent}
               </div>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-border">

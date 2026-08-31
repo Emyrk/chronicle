@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
@@ -73,6 +74,28 @@ func TestOptionalGemEnchantIDs(t *testing.T) {
 
 	assert.Nil(t, optionalGemEnchantIDs([4]int{}))
 	assert.Equal(t, []int32{3637, 3454, 0, 0}, optionalGemEnchantIDs([4]int{3637, 3454, 0, 0}))
+}
+
+func TestPersistedPlayerLevel(t *testing.T) {
+	t.Parallel()
+
+	playerID := guid.GUID(10)
+	unitLevel := int32(79)
+	combatantLevel := int32(80)
+
+	units := unitdb.New()
+	units.Update(unitinfo.Info{Guid: playerID, Level: unitLevel})
+
+	assert.Equal(t, int16(80), persistedPlayerLevel(combatant.Combatant{
+		Guid:  playerID,
+		Level: &combatantLevel,
+	}, units))
+	assert.Equal(t, int16(79), persistedPlayerLevel(combatant.Combatant{
+		Guid: playerID,
+	}, units))
+	assert.Equal(t, int16(0), persistedPlayerLevel(combatant.Combatant{
+		Guid: guid.GUID(20),
+	}, units))
 }
 
 func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
