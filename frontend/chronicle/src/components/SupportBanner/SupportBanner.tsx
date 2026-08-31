@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Heart, X } from "lucide-react";
 import { toast } from "sonner";
-import { useAuthorizationCheck, useSession } from "@/api/queries";
+import { useAuthorizationCheck, useSession, useSiteConfig } from "@/api/queries";
+import {
+  migrateSupportBannerHideUntil,
+  readSupportBannerHideUntil,
+  writeSupportBannerHideUntil,
+} from "./supportBannerStorage";
 
-const HIDE_UNTIL_KEY = "support-banner-hide-until";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 // The banner stays up (reappearing on every load) until it's dismissed —
@@ -25,22 +29,21 @@ const MIN_ACCOUNT_AGE_MS = MIN_ACCOUNT_AGE_DAYS * ONE_DAY_MS;
 const SUPPORT_URL = "https://chronicleclassic.com/support/";
 
 function isDueToShow(): boolean {
-  const hideUntil = Number(localStorage.getItem(HIDE_UNTIL_KEY) ?? 0);
-  return Date.now() >= hideUntil;
+  return Date.now() >= readSupportBannerHideUntil();
 }
 
 /**
  * Called on dismiss only — picks how long to stay quiet based on variant,
  * and returns a friendly heads-up for a toast (never pressure, just confirm).
  */
-function scheduleHideAfterDismiss(variant: "donate" | "thanks"): string {
+function scheduleHideAfterDismiss(variant: "donate" | "thanks", primaryDomain?: string): string {
   if (variant === "thanks") {
-    localStorage.setItem(HIDE_UNTIL_KEY, String(Date.now() + THANKS_HIDE_DAYS * ONE_DAY_MS));
+    writeSupportBannerHideUntil(Date.now() + THANKS_HIDE_DAYS * ONE_DAY_MS, primaryDomain);
     return "Dismissed for 3 months. Thanks again for keeping Chronicle running!";
   }
 
   const hideDays = DONATE_HIDE_MIN_DAYS + Math.random() * (DONATE_HIDE_MAX_DAYS - DONATE_HIDE_MIN_DAYS);
-  localStorage.setItem(HIDE_UNTIL_KEY, String(Date.now() + hideDays * ONE_DAY_MS));
+  writeSupportBannerHideUntil(Date.now() + hideDays * ONE_DAY_MS, primaryDomain);
   return "Dismissed for at least 30 days — enjoy Chronicle!";
 }
 
@@ -105,6 +108,8 @@ const THANKS_DISMISS_CLASSES = `${DISMISS_BASE_CLASSES} hover:bg-emerald-500/20`
  */
 export function SupportBanner() {
   const { data: session, isLoading: sessionLoading } = useSession();
+  const { data: siteConfig, isLoading: siteConfigLoading } = useSiteConfig();
+  const primaryDomain = siteConfig?.primary_domain;
   const meetsAgeRequirement = !!session && isOldEnough(session.created_at);
 
   const authzChecks = useMemo(() => ({ supporter: "chronicle:chronicle#supporter" }), []);
@@ -112,37 +117,26 @@ export function SupportBanner() {
     enabled: meetsAgeRequirement,
   });
 
-  // "pending" = still deciding what (if anything) to show.
-  const [state, setState] = useState<"pending" | "hidden" | "donate" | "thanks">("pending");
-
-  const stillDeciding = sessionLoading || (meetsAgeRequirement && authzLoading);
+  const [dismissed, setDismissed] = useState(false);
+  const stillDeciding = siteConfigLoading || sessionLoading || (meetsAgeRequirement && authzLoading);
 
   useEffect(() => {
-    if (state !== "pending" || stillDeciding) {
-      return;
-    }
+    migrateSupportBannerHideUntil(primaryDomain);
+  }, [primaryDomain]);
 
-    // Covers both "not logged in" (no session) and "account too young".
-    if (!meetsAgeRequirement || !isDueToShow()) {
-      setState("hidden");
-      return;
-    }
-
-    const isSupporter = authz?.supporter ?? false;
-    setState(isSupporter ? "thanks" : "donate");
-  }, [state, stillDeciding, meetsAgeRequirement, authz]);
-
-  if (state === "pending" || state === "hidden") {
+  // Covers loading, logged-out visitors, young accounts, and an active dismissal.
+  if (stillDeciding || dismissed || !meetsAgeRequirement || !isDueToShow()) {
     return null;
   }
 
+  const variant = authz?.supporter ? "thanks" : "donate";
   const handleDismiss = () => {
-    const message = scheduleHideAfterDismiss(state === "thanks" ? "thanks" : "donate");
+    const message = scheduleHideAfterDismiss(variant, primaryDomain);
     toast.success(message);
-    setState("hidden");
+    setDismissed(true);
   };
 
-  if (state === "thanks") {
+  if (variant === "thanks") {
     return (
       <div className={THANKS_BAR_CLASSES}>
         <div className={CONTENT_ROW_CLASSES}>
