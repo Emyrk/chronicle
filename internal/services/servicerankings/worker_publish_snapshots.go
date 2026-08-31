@@ -338,16 +338,12 @@ func (w *WorkerPublishParseSnapshotTenant) Work(ctx context.Context, job *river.
 			return fmt.Errorf("batch insert members: %w", err)
 		}
 
-		// 3. Count members.
-		memberCount, err = tx.CountSnapshotMembers(ctx, snap.ID)
+		// 3. Publish the snapshot and persist its exact member count.
+		published, err := tx.PublishRankingSnapshot(ctx, snap.ID)
 		if err != nil {
-			return fmt.Errorf("count members: %w", err)
-		}
-
-		// 4. Publish the snapshot.
-		if _, err := tx.PublishRankingSnapshot(ctx, snap.ID); err != nil {
 			return fmt.Errorf("publish snapshot: %w", err)
 		}
+		memberCount = published.MemberCount
 
 		return nil
 	}, &pgx.TxOptions{})

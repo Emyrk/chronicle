@@ -18,7 +18,7 @@ import (
 
 // cohortQuerier is the subset of database.Store used by the cohort debug handlers.
 type cohortQuerier interface {
-	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]database.ListPublishedSnapshotsRow, error)
+	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]database.RankingSnapshot, error)
 	GetSnapshotCohortDebug(ctx context.Context, arg database.GetSnapshotCohortDebugParams) ([]database.GetSnapshotCohortDebugRow, error)
 	ListDistinctCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]database.ListDistinctCohortBucketsRow, error)
 }

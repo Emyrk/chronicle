@@ -566,8 +566,9 @@ type sqlcQuerier interface {
 	// snapshot contract. Results whose snapshot was deleted are intentionally not
 	// eligible because their receipt is deleted with the snapshot.
 	ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResult, error)
-	// Return published snapshots for a tenant, most recent first.
-	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]ListPublishedSnapshotsRow, error)
+	// Return published snapshots for a tenant, most recent first. member_count is
+	// persisted at publication time so this list never scans snapshot members.
+	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]RankingSnapshot, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
 	// Used by the parses handler to get the viewed instance's own metric values
@@ -605,7 +606,8 @@ type sqlcQuerier interface {
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
 	PruneStaleRankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) (int64, error)
-	// Transition a pending snapshot to published. Idempotent on already-published.
+	// Transition a pending snapshot to published and persist its exact member count.
+	// Idempotent on already-published snapshots.
 	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Transition a pending time-parse snapshot to published. Idempotent on already-published.
 	PublishTimeParseSnapshot(ctx context.Context, id uuid.UUID) (TimeParseSnapshot, error)
