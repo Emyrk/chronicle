@@ -444,6 +444,7 @@ type sqlcQuerier interface {
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
 	InsertInstanceLoot(ctx context.Context, arg []InsertInstanceLootParams) *InsertInstanceLootBatchResults
 	InsertInstancePlayers(ctx context.Context, arg []InsertInstancePlayersParams) *InsertInstancePlayersBatchResults
+	InsertInstanceRaidGroupSnapshot(ctx context.Context, arg InsertInstanceRaidGroupSnapshotParams) error
 	InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error
 	InsertInstanceUnits(ctx context.Context, arg []InsertInstanceUnitsParams) *InsertInstanceUnitsBatchResults
 	InsertLogFile(ctx context.Context, arg InsertLogFileParams) (LogFile, error)
@@ -487,6 +488,7 @@ type sqlcQuerier interface {
 	InstanceEvent(ctx context.Context, arg InstanceEventParams) (LogInstanceEvent, error)
 	InstancePlayerGUIDsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]guid.GUID, error)
 	InstancePlayersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error)
+	InstanceRaidGroupSnapshots(ctx context.Context, instanceID uuid.UUID) ([]InstanceRaidGroupSnapshotsRow, error)
 	// Raw per-player ranking rows recorded for a single log instance. This intentionally
 	// includes zero-value DPS/HPS rows so instance-level ranking issues can be debugged.
 	InstanceRankingRecords(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRanking, error)

@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
@@ -61,6 +62,9 @@ type State struct {
 	// Vehicles tracks delayed companion vehicle-control records across the full log.
 	Vehicles *vehicles.Tracker
 
+	// RaidGroups tracks companion raid-layout observations across the full log.
+	RaidGroups *raidgroups.Tracker
+
 	// Auras is the parse-wide aura tracker. It processes every aura message
 	// once and persists across zone/instance switches.
 	Auras *auras.Tracking
@@ -80,6 +84,7 @@ func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res Insta
 		logger:           logger,
 		Units:            unitdb.New(),
 		Vehicles:         vehicles.New(),
+		RaidGroups:       raidgroups.New(),
 		CurrentZone:      zoner.NewLocation(),
 		instanceResolver: res,
 		Instances:        make([]*instances.Hookable, 0),
@@ -115,6 +120,7 @@ func (s *State) Process(m messages.Message) error {
 		return fmt.Errorf("units process: %w", err)
 	}
 	s.Vehicles.Process(m)
+	s.RaidGroups.Process(m)
 
 	forwardToInstance := true
 	switch typed := m.(type) {
@@ -146,6 +152,11 @@ func (s *State) Process(m messages.Message) error {
 		// parse-wide. Do not send the delayed metadata message through encounter
 		// processing as if it occurred at its carrier position.
 		forwardToInstance = false
+	case *messages.RaidGroup:
+		forwardToInstance = false
+		if s.CurrentInstance != nil {
+			s.CurrentInstance.ObserveMetadataAt(typed.Date())
+		}
 	}
 
 	// Process instance hooks BEFORE updating canonical aura state so that

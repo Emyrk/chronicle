@@ -461,3 +461,21 @@ ORDER BY li.id;
 
 
 
+
+-- name: InsertInstanceRaidGroupSnapshot :exec
+INSERT INTO log_instance_raid_group_snapshots (
+  instance_id, encounter_id, snapshot_type, observed_at, composition
+) VALUES ($1, $2, $3, $4, $5);
+
+-- name: InstanceRaidGroupSnapshots :many
+SELECT
+  snapshots.*,
+  encounters.name AS encounter_name,
+  encounters.end_time AS killed_at
+FROM log_instance_raid_group_snapshots snapshots
+LEFT JOIN log_instance_encounters encounters ON encounters.id = snapshots.encounter_id
+WHERE snapshots.instance_id = $1
+ORDER BY
+  CASE WHEN snapshots.snapshot_type = 'clean_kill' THEN 0 ELSE 1 END,
+  encounters.end_time ASC NULLS LAST,
+  snapshots.observed_at ASC;

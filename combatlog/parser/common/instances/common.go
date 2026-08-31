@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/loot"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/participants"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -44,8 +45,9 @@ type FinalizedInstance struct {
 	UnknownUnits map[uint32]UnknownUnit
 	// PersistedUnits contains observed units that requested instance metadata
 	// persistence without participating in encounter activity.
-	PersistedUnits  []guid.GUID
-	VehicleMetadata vehicles.Metadata
+	PersistedUnits     []guid.GUID
+	VehicleMetadata    vehicles.Metadata
+	RaidGroupSnapshots []raidgroups.InstanceSnapshot
 }
 
 type CommonFactory struct {

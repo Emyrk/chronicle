@@ -35,6 +35,7 @@ type Parser struct {
 
 	addonVersion string
 	realmClock   *realmclock.Info
+	sawRaidGroup bool
 }
 
 type assemblyState int
@@ -60,6 +61,11 @@ func (p *Parser) supportsVehicleTracking() bool {
 // companion header. Legacy six-field headers leave it nil.
 func (p *Parser) RealmClockInfo() *realmclock.Info {
 	return p.realmClock
+}
+
+// SawRaidGroup reports whether this log contained a valid raid-group payload.
+func (p *Parser) SawRaidGroup() bool {
+	return p.sawRaidGroup
 }
 
 // IsCompanionMessage returns true if the failedType string looks like a

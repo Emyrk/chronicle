@@ -7,6 +7,7 @@ package database
 import (
 	"context"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/google/uuid"
@@ -6816,6 +6817,31 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 	return i, err
 }
 
+const insertInstanceRaidGroupSnapshot = `-- name: InsertInstanceRaidGroupSnapshot :exec
+INSERT INTO log_instance_raid_group_snapshots (
+  instance_id, encounter_id, snapshot_type, observed_at, composition
+) VALUES ($1, $2, $3, $4, $5)
+`
+
+type InsertInstanceRaidGroupSnapshotParams struct {
+	InstanceID   uuid.UUID              `db:"instance_id" json:"instance_id"`
+	EncounterID  uuid.NullUUID          `db:"encounter_id" json:"encounter_id"`
+	SnapshotType RaidGroupSnapshotType  `db:"snapshot_type" json:"snapshot_type"`
+	ObservedAt   pgtype.Timestamptz     `db:"observed_at" json:"observed_at"`
+	Composition  raidgroups.Composition `db:"composition" json:"composition"`
+}
+
+func (q *sqlQuerier) InsertInstanceRaidGroupSnapshot(ctx context.Context, arg InsertInstanceRaidGroupSnapshotParams) error {
+	_, err := q.db.Exec(ctx, insertInstanceRaidGroupSnapshot,
+		arg.InstanceID,
+		arg.EncounterID,
+		arg.SnapshotType,
+		arg.ObservedAt,
+		arg.Composition,
+	)
+	return err
+}
+
 const insertParsedLogGroup = `-- name: InsertParsedLogGroup :exec
 INSERT INTO
   parsed_log_group (id)
@@ -6966,6 +6992,60 @@ func (q *sqlQuerier) InstancePlayersByInstanceID(ctx context.Context, instanceID
 			&i.Class,
 			&i.Race,
 			&i.GuildID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const instanceRaidGroupSnapshots = `-- name: InstanceRaidGroupSnapshots :many
+SELECT
+  snapshots.id, snapshots.instance_id, snapshots.encounter_id, snapshots.snapshot_type, snapshots.observed_at, snapshots.composition,
+  encounters.name AS encounter_name,
+  encounters.end_time AS killed_at
+FROM log_instance_raid_group_snapshots snapshots
+LEFT JOIN log_instance_encounters encounters ON encounters.id = snapshots.encounter_id
+WHERE snapshots.instance_id = $1
+ORDER BY
+  CASE WHEN snapshots.snapshot_type = 'clean_kill' THEN 0 ELSE 1 END,
+  encounters.end_time ASC NULLS LAST,
+  snapshots.observed_at ASC
+`
+
+type InstanceRaidGroupSnapshotsRow struct {
+	ID            uuid.UUID              `db:"id" json:"id"`
+	InstanceID    uuid.UUID              `db:"instance_id" json:"instance_id"`
+	EncounterID   uuid.NullUUID          `db:"encounter_id" json:"encounter_id"`
+	SnapshotType  RaidGroupSnapshotType  `db:"snapshot_type" json:"snapshot_type"`
+	ObservedAt    pgtype.Timestamptz     `db:"observed_at" json:"observed_at"`
+	Composition   raidgroups.Composition `db:"composition" json:"composition"`
+	EncounterName pgtype.Text            `db:"encounter_name" json:"encounter_name"`
+	KilledAt      pgtype.Timestamptz     `db:"killed_at" json:"killed_at"`
+}
+
+func (q *sqlQuerier) InstanceRaidGroupSnapshots(ctx context.Context, instanceID uuid.UUID) ([]InstanceRaidGroupSnapshotsRow, error) {
+	rows, err := q.db.Query(ctx, instanceRaidGroupSnapshots, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InstanceRaidGroupSnapshotsRow
+	for rows.Next() {
+		var i InstanceRaidGroupSnapshotsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceID,
+			&i.EncounterID,
+			&i.SnapshotType,
+			&i.ObservedAt,
+			&i.Composition,
+			&i.EncounterName,
+			&i.KilledAt,
 		); err != nil {
 			return nil, err
 		}

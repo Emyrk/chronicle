@@ -8,6 +8,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/google/uuid"
@@ -388,6 +389,64 @@ func AllLogTypeValues() []LogType {
 		LogTypeKronos,
 		LogTypeAzerothcore,
 		LogTypeAzerothcoreClientside,
+	}
+}
+
+type RaidGroupSnapshotType string
+
+const (
+	RaidGroupSnapshotTypeCleanKill RaidGroupSnapshotType = "clean_kill"
+	RaidGroupSnapshotTypeFinal     RaidGroupSnapshotType = "final"
+)
+
+func (e *RaidGroupSnapshotType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RaidGroupSnapshotType(s)
+	case string:
+		*e = RaidGroupSnapshotType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RaidGroupSnapshotType: %T", src)
+	}
+	return nil
+}
+
+type NullRaidGroupSnapshotType struct {
+	RaidGroupSnapshotType RaidGroupSnapshotType `json:"raid_group_snapshot_type"`
+	Valid                 bool                  `json:"valid"` // Valid is true if RaidGroupSnapshotType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRaidGroupSnapshotType) Scan(value interface{}) error {
+	if value == nil {
+		ns.RaidGroupSnapshotType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RaidGroupSnapshotType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRaidGroupSnapshotType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RaidGroupSnapshotType), nil
+}
+
+func (e RaidGroupSnapshotType) Valid() bool {
+	switch e {
+	case RaidGroupSnapshotTypeCleanKill,
+		RaidGroupSnapshotTypeFinal:
+		return true
+	}
+	return false
+}
+
+func AllRaidGroupSnapshotTypeValues() []RaidGroupSnapshotType {
+	return []RaidGroupSnapshotType{
+		RaidGroupSnapshotTypeCleanKill,
+		RaidGroupSnapshotTypeFinal,
 	}
 }
 
@@ -1474,6 +1533,15 @@ type LogInstancePlayer struct {
 	Class      WowPlayableClass `db:"class" json:"class"`
 	Race       WowPlayableRace  `db:"race" json:"race"`
 	GuildID    uuid.NullUUID    `db:"guild_id" json:"guild_id"`
+}
+
+type LogInstanceRaidGroupSnapshot struct {
+	ID           uuid.UUID              `db:"id" json:"id"`
+	InstanceID   uuid.UUID              `db:"instance_id" json:"instance_id"`
+	EncounterID  uuid.NullUUID          `db:"encounter_id" json:"encounter_id"`
+	SnapshotType RaidGroupSnapshotType  `db:"snapshot_type" json:"snapshot_type"`
+	ObservedAt   pgtype.Timestamptz     `db:"observed_at" json:"observed_at"`
+	Composition  raidgroups.Composition `db:"composition" json:"composition"`
 }
 
 // Stores all units (NPCs, not players) that participated in an instance.

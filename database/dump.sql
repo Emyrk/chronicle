@@ -57,6 +57,11 @@ CREATE TYPE log_type AS ENUM (
     'azerothcore-clientside'
 );
 
+CREATE TYPE raid_group_snapshot_type AS ENUM (
+    'clean_kill',
+    'final'
+);
+
 CREATE TYPE river_job_state AS ENUM (
     'available',
     'cancelled',
@@ -984,6 +989,16 @@ CREATE TABLE log_instance_players (
     class wow_playable_class NOT NULL,
     race wow_playable_race NOT NULL,
     guild_id uuid
+);
+
+CREATE TABLE log_instance_raid_group_snapshots (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    instance_id uuid NOT NULL,
+    encounter_id uuid,
+    snapshot_type raid_group_snapshot_type NOT NULL,
+    observed_at timestamp with time zone NOT NULL,
+    composition jsonb NOT NULL,
+    CONSTRAINT raid_group_snapshot_encounter_chk CHECK ((((snapshot_type = 'clean_kill'::raid_group_snapshot_type) AND (encounter_id IS NOT NULL)) OR ((snapshot_type = 'final'::raid_group_snapshot_type) AND (encounter_id IS NULL))))
 );
 
 CREATE TABLE log_instance_units (
@@ -2008,6 +2023,9 @@ ALTER TABLE ONLY log_instance_encounter_phases
 ALTER TABLE ONLY log_instance_encounters
     ADD CONSTRAINT log_instance_encounters_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY log_instance_raid_group_snapshots
+    ADD CONSTRAINT log_instance_raid_group_snapshots_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY log_instance_units
     ADD CONSTRAINT log_instance_units_pkey PRIMARY KEY (instance_id, unit_guid);
 
@@ -2375,6 +2393,10 @@ CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING bt
 
 CREATE INDEX item_daily_prices_future_lookup_idx ON item_daily_prices USING btree (realm_id, auction_house_faction, item_id, price_date) WHERE (price_copper IS NOT NULL);
 
+CREATE UNIQUE INDEX log_instance_raid_group_clean_kill_idx ON log_instance_raid_group_snapshots USING btree (encounter_id) WHERE (snapshot_type = 'clean_kill'::raid_group_snapshot_type);
+
+CREATE UNIQUE INDEX log_instance_raid_group_final_idx ON log_instance_raid_group_snapshots USING btree (instance_id) WHERE (snapshot_type = 'final'::raid_group_snapshot_type);
+
 CREATE UNIQUE INDEX log_instance_youtube_timestamped_instance_id_idx ON log_instance_youtube_timestamped USING btree (log_instance_id) WHERE (log_instance_id IS NOT NULL);
 
 CREATE UNIQUE INDEX log_instance_youtube_timestamped_slug_idx ON log_instance_youtube_timestamped USING btree (instance_slug) WHERE (instance_slug IS NOT NULL);
@@ -2626,6 +2648,12 @@ ALTER TABLE ONLY log_instance_players
 
 ALTER TABLE ONLY log_instance_players
     ADD CONSTRAINT log_instance_players_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_instance_raid_group_snapshots
+    ADD CONSTRAINT log_instance_raid_group_snapshots_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_instance_raid_group_snapshots
+    ADD CONSTRAINT log_instance_raid_group_snapshots_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY log_instance_units
     ADD CONSTRAINT log_instance_units_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;

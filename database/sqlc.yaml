@@ -55,6 +55,8 @@ sql:
             go_type: "github.com/Emyrk/chronicle/combatlog/parser/common/vehicles.Metadata"
           - column: "log_instances_guild.vehicle_control_intervals"
             go_type: "github.com/Emyrk/chronicle/combatlog/parser/common/vehicles.Metadata"
+          - column: "log_instance_raid_group_snapshots.composition"
+            go_type: "github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups.Composition"
           - column: "log_instance_youtube_timestamped.payload"
             go_type:
               type: "[]VideoTimestamp"

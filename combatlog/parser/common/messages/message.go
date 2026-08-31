@@ -694,6 +694,31 @@ func (v VehicleControl) Affects() []guid.GUID {
 }
 func (*VehicleControl) isMessage() {}
 
+const (
+	RaidGroupCount = 8
+	RaidGroupSize  = 5
+)
+
+// RaidGroup records the companion addon's fixed eight-group raid layout.
+// Zero GUIDs represent empty slots so subgroup boundaries remain intact.
+type RaidGroup struct {
+	MessageBase
+	Groups [RaidGroupCount][RaidGroupSize]guid.GUID
+}
+
+func (r RaidGroup) Affects() []guid.GUID {
+	result := make([]guid.GUID, 0, RaidGroupCount*RaidGroupSize)
+	for _, group := range r.Groups {
+		for _, member := range group {
+			if !member.IsZero() {
+				result = append(result, member)
+			}
+		}
+	}
+	return result
+}
+func (*RaidGroup) isMessage() {}
+
 // NewOwner can be used to change the owner of a given unit.
 // Useful for enslave demon
 type NewOwner struct {

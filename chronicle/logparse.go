@@ -581,6 +581,21 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				sdkEncounters = append(sdkEncounters, db2sdk.WoWEncounter(dbencounter))
 			}
 
+			for _, snapshot := range finalized.RaidGroupSnapshots {
+				snapshotType := database.RaidGroupSnapshotTypeFinal
+				encounterID := uuid.NullUUID{}
+				if snapshot.EncounterID != nil {
+					snapshotType = database.RaidGroupSnapshotTypeCleanKill
+					encounterID = uuid.NullUUID{UUID: *snapshot.EncounterID, Valid: true}
+				}
+				if err := tx.InsertInstanceRaidGroupSnapshot(ctx, database.InsertInstanceRaidGroupSnapshotParams{
+					InstanceID: dbinstance.ID, EncounterID: encounterID, SnapshotType: snapshotType,
+					ObservedAt: database.Timestamptz(snapshot.ObservedAt), Composition: snapshot.Composition,
+				}); err != nil {
+					return fmt.Errorf("insert raid group snapshot: %w", err)
+				}
+			}
+
 			err = builder.insert(ctx, tx)
 			if err != nil {
 				return err

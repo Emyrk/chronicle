@@ -1768,6 +1768,34 @@ export interface InstancePlayer {
     readonly level: number;
 }
 
+// From chroniclesdk/instance_raid_group.go
+export interface InstanceRaidGroupComposition {
+    readonly observed_at: string;
+    readonly groups: readonly InstanceRaidGroupMember[][];
+}
+
+// From chroniclesdk/instance_raid_group.go
+export interface InstanceRaidGroupKill {
+    readonly encounter_id: string;
+    readonly encounter_name: string;
+    readonly killed_at: string;
+    readonly composition: InstanceRaidGroupComposition;
+}
+
+// From chroniclesdk/instance_raid_group.go
+export interface InstanceRaidGroupMember {
+    readonly guid: string;
+    readonly name?: string;
+    readonly class?: string;
+}
+
+// From chroniclesdk/instance_raid_group.go
+export interface InstanceRaidGroupResponse {
+    readonly available: boolean;
+    readonly final?: InstanceRaidGroupComposition;
+    readonly clean_kills: readonly InstanceRaidGroupKill[];
+}
+
 // From chroniclesdk/rankings.go
 /**
  * InstanceRankingRecord is a raw per-player ranking row recorded for one encounter

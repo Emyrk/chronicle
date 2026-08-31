@@ -25,6 +25,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/participants"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -90,10 +91,11 @@ type Hookable struct {
 	finalized       bool
 
 	// finalized references
-	g              *armory.Tracker
-	p              *participants.Tracker
-	lootTracking   *loot.LootTracker
-	vehicleTracker *vehicles.Tracker
+	g                *armory.Tracker
+	p                *participants.Tracker
+	lootTracking     *loot.LootTracker
+	vehicleTracker   *vehicles.Tracker
+	raidGroupTracker *raidgroups.Tracker
 }
 
 type InstanceParams struct {
@@ -265,6 +267,16 @@ func (h *Hookable) AddHook(hook instancehook.Hook) {
 
 func (h *Hookable) AttachVehicleTracker(tracker *vehicles.Tracker) {
 	h.vehicleTracker = tracker
+}
+
+func (h *Hookable) AttachRaidGroupTracker(tracker *raidgroups.Tracker) {
+	h.raidGroupTracker = tracker
+}
+
+func (h *Hookable) ObserveMetadataAt(at time.Time) {
+	if at.After(h.lastProcessedAt) {
+		h.lastProcessedAt = at
+	}
 }
 
 // AttachAuraProjection creates and registers an aura projection adapter that
@@ -901,6 +913,26 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 	}
 	overview := overviewmetrics.Summarize(encounters, deadliestAbilities, speedrunResult)
 
+	var raidGroupSnapshots []raidgroups.InstanceSnapshot
+	if h.raidGroupTracker != nil && len(encounters) > 0 {
+		for _, enc := range encounters {
+			if !enc.Boss || enc.KillType != encounter.KillTypeClean {
+				continue
+			}
+			if observation, ok := h.raidGroupTracker.LatestBetween(h.CurrentZone.Seen, enc.Combat.End); ok {
+				encounterID := enc.Combat.EncounterID
+				raidGroupSnapshots = append(raidGroupSnapshots, raidgroups.InstanceSnapshot{
+					EncounterID: &encounterID, ObservedAt: observation.At, Composition: observation.Composition,
+				})
+			}
+		}
+		if observation, ok := h.raidGroupTracker.LatestBetween(h.CurrentZone.Seen, h.lastProcessedAt); ok {
+			raidGroupSnapshots = append(raidGroupSnapshots, raidgroups.InstanceSnapshot{
+				ObservedAt: observation.At, Composition: observation.Composition,
+			})
+		}
+	}
+
 	var vehicleMetadata vehicles.Metadata
 	if h.vehicleTracker != nil && len(encounters) > 0 {
 		instanceStart := encounters[0].Combat.Start
@@ -934,15 +966,16 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		RecorderGUID: h.recorderGUID,
 		Encounters:   encounters,
 		// TODO: Break off guild and spellbook
-		Guilds:          h.g,
-		Loot:            h.lootTracking,
-		Participants:    h.p,
-		Rankings:        rankingsResult,
-		Overview:        overview,
-		RankingRules:    activeRankingRules,
-		UnknownUnits:    h.resolveUnknownUnits(),
-		PersistedUnits:  persistedUnits,
-		VehicleMetadata: vehicleMetadata,
+		Guilds:             h.g,
+		Loot:               h.lootTracking,
+		Participants:       h.p,
+		Rankings:           rankingsResult,
+		Overview:           overview,
+		RankingRules:       activeRankingRules,
+		UnknownUnits:       h.resolveUnknownUnits(),
+		PersistedUnits:     persistedUnits,
+		VehicleMetadata:    vehicleMetadata,
+		RaidGroupSnapshots: raidGroupSnapshots,
 
 		//SpellBook:  c.SpellBook,
 	}, nil
