@@ -105,7 +105,7 @@ Each endpoint returns only one protobuf message type. Use this mapping:
 | `extra_attack` | `chronicleproto.ExtraAttack` |
 | `slain` | `chronicleproto.Slain` |
 | `ressurection` | `chronicleproto.Resurrection` |
-| `cast` | `chronicleproto.Cast` |
+| `cast` | `chronicleproto.Cast` (deprecated; use `spell_go`) |
 | `aura` | `chronicleproto.Aura` |
 | `spell_go` | `chronicleproto.SpellGo` |
 | `aura_cast` | `chronicleproto.AuraCast` |
@@ -121,7 +121,7 @@ Each endpoint returns only one protobuf message type. Use this mapping:
 
 > **Compatibility note:** `ressurection` is intentionally listed with the existing misspelling in the API stream name. The protobuf message itself is correctly named `Resurrection`.
 
-`cast` is retained for older logs. Newer cast information is generally represented by `spell_start`, `spell_go`, and `spell_fail`.
+`cast` is deprecated and retained only for compatibility with older logs. New integrations should use `spell_go` for completed casts. Use `spell_start` when cast-start or channel timing is needed, and `spell_fail` for failed casts.
 
 ## Event timestamps and ordering
 
