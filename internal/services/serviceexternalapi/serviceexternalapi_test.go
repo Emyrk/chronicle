@@ -21,6 +21,7 @@ func TestHealth(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
+	require.Empty(t, rec.Header().Get("RateLimit-Limit"))
 
 	var response HealthResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
@@ -38,6 +39,7 @@ func TestOpenAPISpec(t *testing.T) {
 	service.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "60", rec.Header().Get("RateLimit-Limit"))
 
 	var document OpenAPIDocument
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&document))
@@ -90,9 +92,11 @@ func TestOpenAPISpec(t *testing.T) {
 	require.Equal(t, "Get a raid-instance event stream", events.Summary)
 	require.Len(t, events.Parameters, 2)
 	require.Contains(t, events.Responses["200"].Content, "application/octet-stream")
+	require.Contains(t, events.Responses, "429")
 
 	health, ok := document.Paths["/health"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Check API health", health.Summary)
 	require.Contains(t, health.Responses, "200")
+	require.NotContains(t, health.Responses, "429")
 }

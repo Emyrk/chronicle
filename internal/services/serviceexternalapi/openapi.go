@@ -85,6 +85,11 @@ func newOpenAPIDocument() OpenAPIDocument {
 
 func (s *Service) register(method, path string, operation OpenAPIOperation, handler http.HandlerFunc) {
 	method = strings.ToLower(method)
+	if path != "/health" {
+		operation.Responses["429"] = OpenAPIResponse{
+			Description: "The client IP has exceeded the external API rate limit.",
+		}
+	}
 	if s.openapi.Paths[path] == nil {
 		s.openapi.Paths[path] = make(map[string]OpenAPIOperation)
 	}

@@ -80,6 +80,7 @@ func (s *Service) Start(_ context.Context) error {
 
 func (s *Service) setupRoutes() {
 	s.router = chi.NewRouter()
+	s.router.Use(newExternalIPLimiter().middleware)
 	s.openapi = newOpenAPIDocument()
 	s.registerRoutes()
 }
