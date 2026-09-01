@@ -7,6 +7,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { formatBytes, formatExpirationDate, formatSource } from "@/lib/format";
 import { buildForecastSentence } from "./grantMath";
 
+/** Usage-severity color for the bar fill and the "% used" text: <70% green, 70-90% yellow, 90-100% orange, 100%+ red. */
+function usageColorClasses(percent: number): { bar: string; text: string } {
+  if (percent >= 100) return { bar: "bg-red-500", text: "text-red-500" };
+  if (percent >= 90) return { bar: "bg-orange-500", text: "text-orange-500" };
+  if (percent >= 70) return { bar: "bg-yellow-500", text: "text-yellow-500" };
+  return { bar: "bg-green-500", text: "text-green-500" };
+}
+
 export function RawStorageCard({ storage }: { storage: UserStorageInfo }) {
   const [grantsOpen, setGrantsOpen] = useState(false);
 
@@ -16,6 +24,7 @@ export function RawStorageCard({ storage }: { storage: UserStorageInfo }) {
   const barWidth = Math.max(0.5, Math.min(100, usagePercent));
   const availableBytes = storage.max_storage_bytes - storage.consumed_storage_bytes;
   const forecast = buildForecastSentence(storage.grants, storage.consumed_storage_bytes);
+  const { bar: barColor, text: textColor } = usageColorClasses(usagePercent);
 
   return (
     <Card>
@@ -28,15 +37,17 @@ export function RawStorageCard({ storage }: { storage: UserStorageInfo }) {
           <span className="text-2xl font-semibold">{formatBytes(storage.consumed_storage_bytes)}</span>
           <span className="text-sm text-muted-foreground">of {formatBytes(storage.max_storage_bytes)}</span>
         </div>
-        <div className="h-2 rounded-full bg-muted overflow-hidden">
-          <div className="h-full bg-primary" style={{ width: `${barWidth}%` }} />
+        <div className="h-2 rounded-full bg-muted-foreground/25 overflow-hidden">
+          <div className={`h-full ${barColor}`} style={{ width: `${barWidth}%` }} />
         </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>
+        <div className="flex items-center justify-between text-xs">
+          <span className={`font-medium ${textColor}`}>
             {usagePercent.toFixed(2)}% used
             {availableBytes < 0 && ` (${formatBytes(-availableBytes)} over limit)`}
           </span>
-          <span>{availableBytes >= 0 ? `${formatBytes(availableBytes)} available` : `${formatBytes(-availableBytes)} over limit`}</span>
+          <span className="text-muted-foreground">
+            {availableBytes >= 0 ? `${formatBytes(availableBytes)} available` : `${formatBytes(-availableBytes)} over limit`}
+          </span>
         </div>
         <p className="text-sm text-muted-foreground pt-3 border-t border-border">
           Raw files use your storage allowance. You can delete raw files after Chronicle parses them and keep the
