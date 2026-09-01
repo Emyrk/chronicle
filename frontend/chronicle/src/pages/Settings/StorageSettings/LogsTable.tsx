@@ -14,8 +14,27 @@ import type { LogRowViewModel, PendingAction, SortDirection, SortField } from ".
 
 const PAGE_SIZE = 25;
 
+// POST /api/v1/authcheck rejects requests over this many checks total
+// (api/check.go's maxChecks) — kept in sync with that constant by hand.
+const AUTHCHECK_MAX_CHECKS = 25;
+const CHECKS_PER_ROW = 2; // deleteFiles + delete
+const ROWS_PER_AUTHCHECK_BATCH = Math.floor(AUTHCHECK_MAX_CHECKS / CHECKS_PER_ROW);
+
 const inputClassName =
   "h-9 w-64 rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground";
+
+/** Builds the {id}:deleteFiles / {id}:delete authcheck map for one batch of rows. */
+function useAuthzChecksFor(rows: { id: string }[]): Record<string, string> {
+  return useMemo(() => {
+    const checks: Record<string, string> = {};
+    for (const row of rows) {
+      checks[`${row.id}:deleteFiles`] = `raid_log:${row.id}#delete_files`;
+      checks[`${row.id}:delete`] = `raid_log:${row.id}#delete`;
+    }
+    return checks;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.map((row) => row.id).join(",")]);
+}
 
 interface SortableHeadProps {
   field: SortField;
@@ -157,23 +176,31 @@ export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
   const pageStart = (currentPage - 1) * PAGE_SIZE;
   const paged = sorted.slice(pageStart, pageStart + PAGE_SIZE);
 
-  const authzChecks = useMemo(() => {
-    const checks: Record<string, string> = {};
-    for (const row of paged) {
-      checks[`${row.id}:deleteFiles`] = `raid_log:${row.id}#delete_files`;
-      checks[`${row.id}:delete`] = `raid_log:${row.id}#delete`;
-    }
-    return checks;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paged.map((row) => row.id).join(",")]);
-  const { data: authz } = useAuthorizationCheck(authzChecks, { enabled: paged.length > 0 });
+  // /api/v1/authcheck caps a single request at AUTHCHECK_MAX_CHECKS checks
+  // (api/check.go) and we ask 2 checks per row (delete_files, delete), so a
+  // full page must be split into AUTHCHECK_BATCH_COUNT requests of at most
+  // ROWS_PER_AUTHCHECK_BATCH rows each — otherwise the whole request 400s
+  // and every row's actions silently default to disabled.
+  const authzBatch0 = paged.slice(0, ROWS_PER_AUTHCHECK_BATCH);
+  const authzBatch1 = paged.slice(ROWS_PER_AUTHCHECK_BATCH, ROWS_PER_AUTHCHECK_BATCH * 2);
+  const authzBatch2 = paged.slice(ROWS_PER_AUTHCHECK_BATCH * 2, ROWS_PER_AUTHCHECK_BATCH * 3);
+
+  const authzChecks0 = useAuthzChecksFor(authzBatch0);
+  const authzChecks1 = useAuthzChecksFor(authzBatch1);
+  const authzChecks2 = useAuthzChecksFor(authzBatch2);
+
+  const { data: authz0 } = useAuthorizationCheck(authzChecks0, { enabled: authzBatch0.length > 0 });
+  const { data: authz1 } = useAuthorizationCheck(authzChecks1, { enabled: authzBatch1.length > 0 });
+  const { data: authz2 } = useAuthorizationCheck(authzChecks2, { enabled: authzBatch2.length > 0 });
+
+  const authz = { ...authz0, ...authz1, ...authz2 };
 
   const rows: LogRowViewModel[] = paged.map((row) => ({
     ...row,
     isSelected: selected.has(row.id),
     isExpanded: expandedId === row.id,
-    canDeleteFiles: authz?.[`${row.id}:deleteFiles`] ?? false,
-    canDelete: authz?.[`${row.id}:delete`] ?? false,
+    canDeleteFiles: authz[`${row.id}:deleteFiles`] ?? false,
+    canDelete: authz[`${row.id}:delete`] ?? false,
   }));
 
   const filteredIds = filtered.map((row) => row.id);
