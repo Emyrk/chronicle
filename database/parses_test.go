@@ -326,6 +326,10 @@ func TestRankingSnapshots(t *testing.T) {
 		assert.Equal(t, "published", published.Status)
 		assert.True(t, published.PublishedAt.Valid)
 
+		memberCount, err := store.CountSnapshotMembers(ctx, snapshot.ID)
+		require.NoError(t, err)
+		assert.Equal(t, memberCount, published.MemberCount)
+
 		// Verify latest published.
 		latest, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
 			TenantID:     uuid.UUID{},

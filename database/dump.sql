@@ -1240,8 +1240,11 @@ CREATE TABLE ranking_snapshots (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     published_at timestamp with time zone,
     source_row_count bigint DEFAULT 0 NOT NULL,
-    source_watermark timestamp with time zone
+    source_watermark timestamp with time zone,
+    member_count bigint DEFAULT 0 NOT NULL
 );
+
+COMMENT ON COLUMN ranking_snapshots.member_count IS 'Exact number of ranking_snapshot_members rows captured when the snapshot is published';
 
 CREATE TABLE rankings_instance_summaries (
     instance_name text NOT NULL,

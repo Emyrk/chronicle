@@ -13,9 +13,16 @@ INSERT INTO ranking_snapshots (
 ) RETURNING *;
 
 -- name: PublishRankingSnapshot :one
--- Transition a pending snapshot to published. Idempotent on already-published.
+-- Transition a pending snapshot to published and persist its exact member count.
+-- Idempotent on already-published snapshots.
 UPDATE ranking_snapshots
-SET status = 'published', published_at = now()
+SET status = 'published',
+    published_at = now(),
+    member_count = (
+        SELECT COUNT(*)
+        FROM ranking_snapshot_members
+        WHERE snapshot_id = @id
+    )
 WHERE id = @id AND status IN ('pending', 'published')
 RETURNING *;
 
@@ -270,9 +277,9 @@ WHERE edr.encounter_id IS NOT NULL      -- boss kills only
   AND (@window_start::timestamptz IS NULL OR edr.killed_at >= @window_start);
 
 -- name: ListPublishedSnapshots :many
--- Return published snapshots for a tenant, most recent first.
-SELECT rs.*,
-       (SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = rs.id) AS member_count
+-- Return published snapshots for a tenant, most recent first. member_count is
+-- persisted at publication time so this list never scans snapshot members.
+SELECT rs.*
 FROM ranking_snapshots rs
 WHERE rs.tenant_id = @tenant_id
   AND rs.status = 'published'

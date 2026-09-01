@@ -1671,6 +1671,8 @@ type RankingSnapshot struct {
 	PublishedAt         pgtype.Timestamptz `db:"published_at" json:"published_at"`
 	SourceRowCount      int64              `db:"source_row_count" json:"source_row_count"`
 	SourceWatermark     pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
+	// Exact number of ranking_snapshot_members rows captured when the snapshot is published
+	MemberCount int64 `db:"member_count" json:"member_count"`
 }
 
 type RankingSnapshotMember struct {
