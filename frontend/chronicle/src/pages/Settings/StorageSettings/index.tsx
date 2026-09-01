@@ -61,7 +61,7 @@ export function StorageSettingsView({
       {pendingAction && <DeleteConfirmDialog action={pendingAction} onClose={() => setPendingAction(null)} />}
 
       <Dialog open={videoOpen} onOpenChange={setVideoOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>How storage works</DialogTitle>
           </DialogHeader>
