@@ -59,7 +59,10 @@ function buildCopy(action: ActivePendingAction): CopyResult {
   if (action.kind === "delete-parsed") {
     const group = action.groups[0];
     const allRawGone = activeQuotaBytes(group) === 0;
-    const body = "This removes the parsed instances, encounters, and analytics for this log. This does not change your raw storage usage.";
+    const body =
+      "This action is not recommended and should only be used if you want to remove the logs from the site " +
+      "entirely. This removes the parsed instances, encounters, and analytics for this log. This does not change " +
+      "your raw storage usage.";
     const note = allRawGone
       ? "This log has no raw files remaining, so this removes the only available copy of this data."
       : "Raw files, if present, will be kept.";
