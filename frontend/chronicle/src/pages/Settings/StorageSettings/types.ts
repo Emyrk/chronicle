@@ -5,7 +5,10 @@ import type { LogStatusInfo } from "@/lib/logStatus";
 export interface LogRowViewModel {
   group: WoWLogGroup;
   id: string;
+  /** Truncated for display, e.g. "Molten Core, Onyxia's Lair + 3 more". */
   instancesLabel: string;
+  /** Full, untruncated instance name list — used for search and as a hover title. */
+  instancesFullLabel: string;
   server: string;
   uploadDateLabel: string;
   status: LogStatusInfo;

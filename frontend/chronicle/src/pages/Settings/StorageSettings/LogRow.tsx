@@ -35,7 +35,9 @@ export function LogRow({
         </TableCell>
         <TableCell>
           <div className="flex cursor-pointer flex-col" onClick={() => onToggleExpand(row.id)}>
-            <span className="text-sm font-medium">{row.instancesLabel}</span>
+            <span className="truncate text-sm font-medium" title={row.instancesFullLabel}>
+              {row.instancesLabel}
+            </span>
             <span className="text-xs text-muted-foreground">{row.server}</span>
           </div>
         </TableCell>

@@ -57,9 +57,19 @@ function buildNote(status: LogRowViewModel["status"], activeFileCount: number, d
   }
 }
 
+const MAX_VISIBLE_INSTANCE_NAMES = 2;
+
+function buildInstancesLabel(names: string[]): string {
+  if (names.length === 0) return "Unparsed upload";
+  if (names.length <= MAX_VISIBLE_INSTANCE_NAMES) return names.join(", ");
+  const hidden = names.length - MAX_VISIBLE_INSTANCE_NAMES;
+  return `${names.slice(0, MAX_VISIBLE_INSTANCE_NAMES).join(", ")} + ${hidden} more`;
+}
+
 function buildBaseRow(group: WoWLogGroup): Omit<LogRowViewModel, "isSelected" | "isExpanded" | "canDeleteFiles" | "canDelete"> {
   const status = deriveLogStatus(group);
   const instances = getParsedInstances(group);
+  const instanceNames = instances.map((i) => i.name);
   const { activeCount, deletedCount } = getRawFileCounts(group);
   const { originalBytes, quotaBytesAll } = allTimeBytes(group);
   const storedBytes = activeQuotaBytes(group);
@@ -69,7 +79,8 @@ function buildBaseRow(group: WoWLogGroup): Omit<LogRowViewModel, "isSelected" | 
   return {
     group,
     id: group.id,
-    instancesLabel: instances.length > 0 ? instances.map((i) => i.name).join(", ") : "Unparsed upload",
+    instancesLabel: buildInstancesLabel(instanceNames),
+    instancesFullLabel: instanceNames.length > 0 ? instanceNames.join(", ") : "Unparsed upload",
     server: instances[0]?.server_name ?? instances[0]?.realm_name ?? "—",
     uploadDateLabel: new Date(group.created_at).toLocaleDateString(),
     status,
@@ -107,7 +118,7 @@ export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
     const q = search.trim().toLowerCase();
     if (!q) return baseRows;
     return baseRows.filter(
-      (row) => row.instancesLabel.toLowerCase().includes(q) || row.server.toLowerCase().includes(q),
+      (row) => row.instancesFullLabel.toLowerCase().includes(q) || row.server.toLowerCase().includes(q),
     );
   }, [baseRows, search]);
 
