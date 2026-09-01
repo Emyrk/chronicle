@@ -52,10 +52,11 @@ type externalAPIStore interface {
 }
 
 type Service struct {
-	broker  *services.Services
-	db      externalAPIStore
-	router  chi.Router
-	openapi OpenAPIDocument
+	broker      *services.Services
+	db          externalAPIStore
+	router      chi.Router
+	rateLimiter *externalIPLimiter
+	openapi     OpenAPIDocument
 }
 
 func New(broker *services.Services) *Service {
@@ -80,7 +81,7 @@ func (s *Service) Start(_ context.Context) error {
 
 func (s *Service) setupRoutes() {
 	s.router = chi.NewRouter()
-	s.router.Use(newExternalIPLimiter().middleware)
+	s.rateLimiter = newExternalIPLimiter()
 	s.openapi = newOpenAPIDocument()
 	s.registerRoutes()
 }

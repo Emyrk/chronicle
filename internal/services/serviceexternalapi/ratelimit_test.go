@@ -46,7 +46,13 @@ func TestExternalIPLimiter(t *testing.T) {
 	otherClient := request("/openapi.json", "192.0.2.2")
 	require.Equal(t, http.StatusNoContent, otherClient.Code)
 
-	health := request("/health", "192.0.2.1")
+	healthHandler := limiter.statusMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	healthReq := httptest.NewRequest(http.MethodGet, "/api/external/v1/health", nil)
+	healthReq.Header.Set("X-Forwarded-For", "192.0.2.1")
+	health := httptest.NewRecorder()
+	healthHandler.ServeHTTP(health, healthReq)
 	require.Equal(t, http.StatusNoContent, health.Code)
 	require.Equal(t, "1", health.Header().Get("RateLimit-Limit"))
 	require.Equal(t, "0", health.Header().Get("RateLimit-Remaining"))

@@ -53,15 +53,6 @@ func newExternalIPLimiterWithConfig(requestsPerMinute, burst int) *externalIPLim
 func (l *externalIPLimiter) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		limiter := l.get(externalClientIP(r))
-
-		// Health checks report the current allowance without consuming it, so
-		// clients can inspect their status even after exhausting the bucket.
-		if r.URL.Path == "/health" {
-			l.setHeaders(w, limiter)
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		allowed := limiter.Allow()
 		l.setHeaders(w, limiter)
 		if !allowed {
@@ -72,6 +63,16 @@ func (l *externalIPLimiter) middleware(next http.Handler) http.Handler {
 			return
 		}
 
+		next.ServeHTTP(w, r)
+	})
+}
+
+// statusMiddleware reports the current allowance without consuming it. It is
+// attached directly to the health route so mounting the service under a path
+// prefix cannot accidentally turn the status check into a limited request.
+func (l *externalIPLimiter) statusMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		l.setHeaders(w, l.get(externalClientIP(r)))
 		next.ServeHTTP(w, r)
 	})
 }

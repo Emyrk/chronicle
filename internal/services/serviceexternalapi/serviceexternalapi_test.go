@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,6 +28,26 @@ func TestHealth(t *testing.T) {
 	var response HealthResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
 	require.Equal(t, HealthResponse{Status: "ok"}, response)
+}
+
+func TestMountedHealthDoesNotConsumeRateLimit(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{}
+	service.setupRoutes()
+
+	router := chi.NewRouter()
+	router.Mount("/api/external/v1", service)
+
+	for range 3 {
+		req := httptest.NewRequest(http.MethodGet, "/api/external/v1/health", nil)
+		req.Header.Set("X-Forwarded-For", "192.0.2.1")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, "20", rec.Header().Get("RateLimit-Remaining"))
+	}
 }
 
 func TestOpenAPISpec(t *testing.T) {

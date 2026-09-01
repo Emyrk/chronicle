@@ -94,7 +94,14 @@ func (s *Service) register(method, path string, operation OpenAPIOperation, hand
 		s.openapi.Paths[path] = make(map[string]OpenAPIOperation)
 	}
 	s.openapi.Paths[path][method] = operation
-	s.router.Method(strings.ToUpper(method), path, handler)
+
+	var routeHandler http.Handler = handler
+	if path == "/health" {
+		routeHandler = s.rateLimiter.statusMiddleware(routeHandler)
+	} else {
+		routeHandler = s.rateLimiter.middleware(routeHandler)
+	}
+	s.router.Method(strings.ToUpper(method), path, routeHandler)
 }
 
 func (s *Service) openAPISpec(w http.ResponseWriter, r *http.Request) {
