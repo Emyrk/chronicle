@@ -48,7 +48,11 @@ func TestExternalIPLimiter(t *testing.T) {
 
 	health := request("/health", "192.0.2.1")
 	require.Equal(t, http.StatusNoContent, health.Code)
-	require.Empty(t, health.Header().Get("RateLimit-Limit"))
+	require.Equal(t, "1", health.Header().Get("RateLimit-Limit"))
+	require.Equal(t, "0", health.Header().Get("RateLimit-Remaining"))
+
+	stillRejected := request("/openapi.json", "192.0.2.1")
+	require.Equal(t, http.StatusTooManyRequests, stillRejected.Code)
 }
 
 func TestExternalClientIP(t *testing.T) {

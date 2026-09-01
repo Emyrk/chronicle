@@ -52,19 +52,18 @@ func newExternalIPLimiterWithConfig(requestsPerMinute, burst int) *externalIPLim
 
 func (l *externalIPLimiter) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Health checks should continue to reflect service availability even if
-		// the caller has exhausted its external API allowance.
+		limiter := l.get(externalClientIP(r))
+
+		// Health checks report the current allowance without consuming it, so
+		// clients can inspect their status even after exhausting the bucket.
 		if r.URL.Path == "/health" {
+			l.setHeaders(w, limiter)
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		limiter := l.get(externalClientIP(r))
 		allowed := limiter.Allow()
-		remaining := max(int(math.Floor(limiter.Tokens())), 0)
-		w.Header().Set("RateLimit-Limit", strconv.Itoa(l.requestsPerMinute))
-		w.Header().Set("RateLimit-Remaining", strconv.Itoa(remaining))
-
+		l.setHeaders(w, limiter)
 		if !allowed {
 			w.Header().Set("Retry-After", "1")
 			httpapi.Write(r.Context(), w, http.StatusTooManyRequests, chroniclesdk.Response{
@@ -75,6 +74,12 @@ func (l *externalIPLimiter) middleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (l *externalIPLimiter) setHeaders(w http.ResponseWriter, limiter *rate.Limiter) {
+	remaining := max(int(math.Floor(limiter.Tokens())), 0)
+	w.Header().Set("RateLimit-Limit", strconv.Itoa(l.requestsPerMinute))
+	w.Header().Set("RateLimit-Remaining", strconv.Itoa(remaining))
 }
 
 func (l *externalIPLimiter) get(ip string) *rate.Limiter {

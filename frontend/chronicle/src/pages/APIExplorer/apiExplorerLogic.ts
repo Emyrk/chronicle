@@ -35,6 +35,22 @@ export type OpenAPIDocument = {
   paths: Record<string, Partial<Record<HTTPMethod, OpenAPIOperation>>>
 }
 
+export type RateLimitStatus = {
+  limit: number
+  remaining: number
+}
+
+export function rateLimitStatusFromHeaders(headers: Headers): RateLimitStatus {
+  const limit = Number(headers.get("RateLimit-Limit"))
+  const remaining = Number(headers.get("RateLimit-Remaining"))
+
+  if (!Number.isInteger(limit) || limit <= 0 || !Number.isInteger(remaining) || remaining < 0) {
+    throw new Error("Health response did not include valid rate-limit headers")
+  }
+
+  return { limit, remaining }
+}
+
 export type APIEndpoint = {
   method: HTTPMethod
   path: string

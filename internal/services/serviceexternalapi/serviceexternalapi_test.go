@@ -21,7 +21,8 @@ func TestHealth(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
-	require.Empty(t, rec.Header().Get("RateLimit-Limit"))
+	require.Equal(t, "60", rec.Header().Get("RateLimit-Limit"))
+	require.Equal(t, "20", rec.Header().Get("RateLimit-Remaining"))
 
 	var response HealthResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
