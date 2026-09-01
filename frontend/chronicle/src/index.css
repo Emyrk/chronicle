@@ -427,15 +427,23 @@
   * {
     @apply border-border outline-ring/50;
   }
-  html, body {
-    /* Reserve the scrollbar's gutter on both elements: Radix's scroll-lock
-       (dropdown/dialog/popover open) sets overflow:hidden on body specifically,
-       which removes body's own scrollbar if body — not html — is the element
-       actually rendering it. Without this on both, closing/opening a menu
-       shifts all fixed-width/centered layouts sideways by the scrollbar's
-       width. scrollbar-gutter alone doesn't create a scroll container, so it
-       doesn't carry the position:sticky risk overflow-hidden would. */
+  html {
     scrollbar-gutter: stable;
+  }
+  /*
+   * scrollbar-gutter only takes effect on an element whose own overflow is
+   * non-visible. body's overflow is normally visible (scrollbar-gutter here
+   * is a no-op, correctly), but Radix's scroll-lock (dropdown/dialog/popover
+   * open) sets overflow:hidden on body specifically — which flips
+   * scrollbar-gutter:stable from inert to *active* for the first time,
+   * reserving ~15px it wasn't reserving a moment earlier. That's backwards
+   * from "stable": #root (width:auto, sized from body's content box) shrinks
+   * while a menu is open and snaps back when it closes. Pin it to auto so
+   * Radix's temporary lock can never trigger this. Verified via Playwright:
+   * without this, #root measurably shrinks by the scrollbar's width on open.
+   */
+  body[data-scroll-locked] {
+    scrollbar-gutter: auto !important;
   }
   html, body {
     /* clip (not hidden): overflow-x-hidden creates a scroll container on
