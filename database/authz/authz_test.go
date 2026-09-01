@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/authzed/gochugaru/rel"
 )
 
 func TestAuthz(t *testing.T) {
@@ -98,6 +99,55 @@ func TestManageConsumablesRole(t *testing.T) {
 	canManageWorldData, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_world_data_User(policy.New().User(dedicatedUserID)))
 	require.NoError(t, err)
 	require.False(t, canManageWorldData)
+}
+
+func TestGuildDiscordBotPermissions(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	guildID := uuid.New()
+	leaderID := uuid.New()
+	memberID := uuid.New()
+	technicalAdminID := uuid.New()
+
+	b := policy.New()
+	guild := b.Guild(guildID)
+	chronicle := b.GlobalChronicle()
+	guild.Chronicle(chronicle)
+	guild.Leader(b.User(leaderID))
+	guild.Member(b.User(memberID))
+	chronicle.Technical_admin(b.User(technicalAdminID))
+	_, err := zed.Write(ctx, *b.Txn())
+	require.NoError(t, err)
+
+	checkManage := func(t *testing.T, userID uuid.UUID, expected bool) {
+		t.Helper()
+		allowed, err := zed.CheckOne(ctx, nil, policy.New().Guild(guildID).CanManage_discord_bot_User(policy.New().User(userID)))
+		require.NoError(t, err)
+		require.Equal(t, expected, allowed)
+	}
+
+	checkManage(t, leaderID, false)
+
+	b = policy.New()
+	b.Guild(guildID).Discord_bot_enabledWildcard()
+	_, err = zed.Write(ctx, *b.Txn())
+	require.NoError(t, err)
+
+	entitled, err := zed.CheckOne(ctx, nil, policy.New().Guild(guildID).CanUse_discord_bot_User(policy.New().User(uuid.New())))
+	require.NoError(t, err)
+	require.True(t, entitled)
+	checkManage(t, leaderID, true)
+	checkManage(t, memberID, false)
+	checkManage(t, technicalAdminID, true)
+
+	guildObject := policy.New().Guild(guildID).Object()
+	filter := rel.NewFilter(guildObject.Typ, guildObject.ID, "discord_bot_enabled")
+	require.NoError(t, zed.Delete(ctx, rel.NewPreconditionedFilter(filter)))
+	checkManage(t, leaderID, false)
 }
 
 func TestInTx_NilWrapped(t *testing.T) {

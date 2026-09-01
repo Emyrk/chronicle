@@ -1528,6 +1528,8 @@ export interface GuildSettings {
     readonly guild_id: string;
     readonly allow_join_requests_until: string | null;
     readonly is_member: boolean;
+    readonly discord_bot_enabled: boolean;
+    readonly discord_bot_available: boolean;
 }
 
 // From chroniclesdk/constants.go

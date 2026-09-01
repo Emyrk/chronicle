@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useGuildSettings, useUpdateGuildSettings, useGuildPage } from "@/api/queries";
-import { ArrowLeft, UserPlus, Menu, X } from "lucide-react";
+import { ArrowLeft, Bot, UserPlus, Menu, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { GuildPageHeader, GuildActionsMenu } from "./components";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ type Tab = {
   icon: LucideIcon;
 };
 
-const tabs: Tab[] = [
+const BASE_TABS: Tab[] = [
   { id: "join-requests", label: "Join Requests", icon: UserPlus },
 ];
 
@@ -37,6 +37,10 @@ export function GuildSettings() {
   const isMobile = useIsMobile();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("join-requests");
+
+  const tabs = settings?.discord_bot_enabled
+    ? [...BASE_TABS, { id: "discord-bot", label: "Discord Bot", icon: Bot }]
+    : BASE_TABS;
 
   const open = isOpen(settings?.allow_join_requests_until);
 
@@ -129,6 +133,34 @@ export function GuildSettings() {
                   Close Now
                 </Button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {activeTab === "discord-bot" && settings?.discord_bot_enabled && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Discord Bot</h2>
+            <p className="text-muted-foreground">
+              Link Chronicle to your Discord server and announce new raid logs.
+            </p>
+          </div>
+
+          <div className="border border-border rounded-lg p-6">
+            <div className="flex items-start gap-3">
+              <Bot className="mt-0.5 h-5 w-5 text-muted-foreground" />
+              <div>
+                <h3 className="font-medium">
+                  {settings.discord_bot_available
+                    ? "Ready to install"
+                    : "Discord bot unavailable"}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {settings.discord_bot_available
+                    ? "Discord bot installation will be available in a follow-up update."
+                    : "The Discord bot is not configured on this Chronicle deployment."}
+                </p>
+              </div>
             </div>
           </div>
         </div>

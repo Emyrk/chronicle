@@ -201,6 +201,14 @@ func (z *Authz) IsGuildMember(ctx context.Context, guildID, userID uuid.UUID) (b
 	return z.CheckOne(ctx, nil, zg.CanDirect_member_User(actor))
 }
 
+// IsGuildDiscordBotEnabled reports whether the guild has the wildcard Discord
+// bot entitlement. The concrete subject ID is irrelevant because the relation
+// only grants access through user:*.
+func (z *Authz) IsGuildDiscordBotEnabled(ctx context.Context, guildID uuid.UUID) (bool, error) {
+	guild := policy.New().Guild(guildID)
+	return z.CheckOne(ctx, nil, guild.CanUse_discord_bot_User(policy.New().User(uuid.Nil)))
+}
+
 // SetUserChronicleRoles replaces all Chronicle roles for a user.
 // It deletes all existing chronicle→user relationships, then writes the new set.
 func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, roles []string) error {

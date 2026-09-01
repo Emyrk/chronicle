@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -16,13 +17,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func settingsToSDK(s database.GuildSetting) chroniclesdk.GuildSettings {
+func (api *API) settingsToSDK(ctx context.Context, s database.GuildSetting) (chroniclesdk.GuildSettings, error) {
 	out := chroniclesdk.GuildSettings{GuildID: s.GuildID}
 	if s.AllowJoinRequestsUntil.Valid {
 		t := s.AllowJoinRequestsUntil.Time
 		out.AllowJoinRequestsUntil = &t
 	}
-	return out
+
+	var err error
+	out.DiscordBotEnabled, err = api.Zed.IsGuildDiscordBotEnabled(ctx, s.GuildID)
+	if err != nil {
+		return chroniclesdk.GuildSettings{}, err
+	}
+	out.DiscordBotAvailable = api.Opts.Bot.Available()
+	return out, nil
 }
 
 func joinRequestsOpen(s database.GuildSetting) bool {
@@ -41,19 +49,19 @@ func (api *API) GetGuildSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	settings, err := api.Zed.GetGuildSettings(ctx, guild.ID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildSettings{
-				GuildID:  guild.ID,
-				IsMember: isMember,
-			})
-			return
-		}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		settings.GuildID = guild.ID
+	}
 
-	resp := settingsToSDK(settings)
+	resp, err := api.settingsToSDK(ctx, settings)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	resp.IsMember = isMember
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
@@ -82,7 +90,12 @@ func (api *API) UpdateGuildSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpapi.Write(ctx, w, http.StatusOK, settingsToSDK(settings))
+	resp, err := api.settingsToSDK(ctx, settings)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
 // CreateJoinRequest submits a join request for the authenticated user.

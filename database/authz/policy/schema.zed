@@ -138,6 +138,10 @@ definition guild {
   // TODO: Add more roles
   relation leader: user
   relation member: user
+
+  // Technical administrators grant this wildcard relation to enable the
+  // Discord bot feature for a guild.
+  relation discord_bot_enabled: user:*
   
   permission direct_member = member + leader
 
@@ -146,6 +150,8 @@ definition guild {
   permission admin_guild = leader + chronicle->admin_guilds
   permission add_member = leader + chronicle->admin_guilds
   permission view_chronicle_roster = member + leader + chronicle->admin_guilds
+  permission use_discord_bot = discord_bot_enabled
+  permission manage_discord_bot = admin_guild & discord_bot_enabled
 }
 
 definition armory_player {
