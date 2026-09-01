@@ -36,13 +36,14 @@ export function LogRow({
         <TableCell>
           <div className="flex cursor-pointer flex-col" onClick={() => onToggleExpand(row.id)}>
             <span className="text-sm font-medium">{row.instancesLabel}</span>
-            <span className="text-xs text-muted-foreground">
-              {row.server} · {row.uploadDateLabel}
-            </span>
+            <span className="text-xs text-muted-foreground">{row.server}</span>
           </div>
         </TableCell>
         <TableCell>
           <LogStatusBadge status={row.status} />
+        </TableCell>
+        <TableCell>
+          <span className="text-sm text-muted-foreground">{row.uploadDateLabel}</span>
         </TableCell>
         <TableCell>
           <span className="text-sm">{row.storedLabel}</span>
@@ -76,7 +77,7 @@ export function LogRow({
       </TableRow>
       {row.isExpanded && (
         <TableRow>
-          <TableCell colSpan={6}>
+          <TableCell colSpan={7}>
             <div className="flex flex-col gap-2 rounded-md bg-muted p-4 text-xs text-muted-foreground">
               <div className="grid grid-cols-4 gap-4">
                 <div>

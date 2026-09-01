@@ -35,5 +35,5 @@ export type PendingAction =
   | { kind: "delete-entire"; groups: WoWLogGroup[] }
   | null;
 
-export type StatusFilter = "all" | LogStatusInfo["status"];
-export type SortBy = "raw_desc" | "parsed_desc" | "newest" | "oldest";
+export type SortField = "date" | "raw" | "parsed";
+export type SortDirection = "asc" | "desc";

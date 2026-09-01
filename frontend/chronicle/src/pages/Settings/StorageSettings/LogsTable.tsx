@@ -1,37 +1,45 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { useAuthorizationCheck, type WoWLogGroup } from "@/api/queries";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
+import { cn } from "@/lib/utils";
 import { formatBytes } from "@/lib/format";
 import { deriveLogStatus, getParsedInstances, getRawFileCounts } from "@/lib/logStatus";
 import { activeQuotaBytes, allTimeBytes } from "./logMetrics";
 import { LogRow } from "./LogRow";
-import type { LogRowViewModel, PendingAction, SortBy, StatusFilter } from "./types";
+import type { LogRowViewModel, PendingAction, SortDirection, SortField } from "./types";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 25;
 
-const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All statuses" },
-  { value: "parsed_complete", label: "Parsed" },
-  { value: "parsed_with_warnings", label: "Parsed · warnings" },
-  { value: "processing", label: "Processing" },
-  { value: "parse_failed", label: "Parse failed" },
-  { value: "raw_deleted", label: "Raw deleted" },
-  { value: "partially_deleted", label: "Partially deleted" },
-];
-
-const SORT_OPTIONS: { value: SortBy; label: string }[] = [
-  { value: "raw_desc", label: "Sort: Largest raw first" },
-  { value: "parsed_desc", label: "Sort: Largest parsed first" },
-  { value: "newest", label: "Sort: Newest upload" },
-  { value: "oldest", label: "Sort: Oldest upload" },
-];
-
-const selectClassName = "h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground";
 const inputClassName =
   "h-9 w-64 rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground";
+
+interface SortableHeadProps {
+  field: SortField;
+  activeField: SortField;
+  direction: SortDirection;
+  onClick: (field: SortField) => void;
+  children: ReactNode;
+}
+
+function SortableHead({ field, activeField, direction, onClick, children }: SortableHeadProps) {
+  const isActive = field === activeField;
+  const Icon = isActive ? (direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <TableHead
+      className={cn("cursor-pointer select-none", isActive && "text-foreground")}
+      onClick={() => onClick(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <Icon className={cn("size-3.5", !isActive && "text-muted-foreground/50")} />
+      </span>
+    </TableHead>
+  );
+}
 
 function buildNote(status: LogRowViewModel["status"], activeFileCount: number, deletedFileCount: number): string | null {
   switch (status.status) {
@@ -86,8 +94,8 @@ interface LogsTableProps {
 
 export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sortBy, setSortBy] = useState<SortBy>("raw_desc");
+  const [sortField, setSortField] = useState<SortField>("raw");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -96,29 +104,41 @@ export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return baseRows.filter((row) => {
-      if (statusFilter !== "all" && row.status.status !== statusFilter) return false;
-      if (!q) return true;
-      return row.instancesLabel.toLowerCase().includes(q) || row.server.toLowerCase().includes(q);
-    });
-  }, [baseRows, search, statusFilter]);
+    if (!q) return baseRows;
+    return baseRows.filter(
+      (row) => row.instancesLabel.toLowerCase().includes(q) || row.server.toLowerCase().includes(q),
+    );
+  }, [baseRows, search]);
 
   const sorted = useMemo(() => {
     const rows = [...filtered];
     rows.sort((a, b) => {
-      switch (sortBy) {
-        case "raw_desc":
-          return b.storedBytes - a.storedBytes;
-        case "parsed_desc":
-          return b.parsedBytes - a.parsedBytes;
-        case "newest":
-          return new Date(b.group.created_at).getTime() - new Date(a.group.created_at).getTime();
-        case "oldest":
-          return new Date(a.group.created_at).getTime() - new Date(b.group.created_at).getTime();
+      let cmp: number;
+      switch (sortField) {
+        case "date":
+          cmp = new Date(a.group.created_at).getTime() - new Date(b.group.created_at).getTime();
+          break;
+        case "raw":
+          cmp = a.storedBytes - b.storedBytes;
+          break;
+        case "parsed":
+          cmp = a.parsedBytes - b.parsedBytes;
+          break;
       }
+      return sortDirection === "asc" ? cmp : -cmp;
     });
     return rows;
-  }, [filtered, sortBy]);
+  }, [filtered, sortField, sortDirection]);
+
+  function handleSortClick(field: SortField) {
+    if (field === sortField) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
+    }
+    setPage(1);
+  }
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -206,34 +226,6 @@ export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
             placeholder="Search by instance or server"
             className={inputClassName}
           />
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value as StatusFilter);
-              setPage(1);
-            }}
-            className={selectClassName}
-          >
-            {STATUS_FILTER_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={sortBy}
-            onChange={(e) => {
-              setSortBy(e.target.value as SortBy);
-              setPage(1);
-            }}
-            className={`${selectClassName} ml-auto`}
-          >
-            {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
         </div>
 
         {selected.size > 0 && (
@@ -263,15 +255,22 @@ export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
               </TableHead>
               <TableHead>Log</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Raw stored</TableHead>
-              <TableHead>Parsed</TableHead>
+              <SortableHead field="date" activeField={sortField} direction={sortDirection} onClick={handleSortClick}>
+                Date
+              </SortableHead>
+              <SortableHead field="raw" activeField={sortField} direction={sortDirection} onClick={handleSortClick}>
+                Raw stored
+              </SortableHead>
+              <SortableHead field="parsed" activeField={sortField} direction={sortDirection} onClick={handleSortClick}>
+                Parsed
+              </SortableHead>
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="p-6 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
                   {logs.length === 0
                     ? "No logs yet. Uploaded combat logs will show up here once Chronicle has processed them."
                     : "No logs match your filters."}
