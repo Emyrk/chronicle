@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Activity, Braces, Check, ChevronDown, Clipboard, ExternalLink, LoaderCircle, Play, RefreshCw, Terminal } from "lucide-react"
+import { Activity, Braces, Check, ChevronDown, Clipboard, Clock3, ExternalLink, LoaderCircle, Play, RefreshCw, Terminal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -15,6 +15,8 @@ import {
 } from "./apiExplorerLogic"
 
 const SPEC_URL = "/api/external/v1/openapi.json"
+
+const RATE_LIMIT_BURST = 20
 
 const methodStyles: Record<APIEndpoint["method"], string> = {
   get: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
@@ -54,54 +56,66 @@ function RateLimitStatusCard({ server }: { server: string }) {
     enabled: false,
   })
 
-  const used = data ? data.limit - data.remaining : 0
-  const usedPercent = data ? Math.min((used / data.limit) * 100, 100) : 0
+  const availablePercent = data ? Math.min((data.remaining / RATE_LIMIT_BURST) * 100, 100) : 0
 
   return (
-    <div className="w-full rounded-lg border border-cyan-300/15 bg-slate-950/65 p-4 shadow-lg shadow-black/10 backdrop-blur-sm lg:w-72">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300">
-          <Activity className="h-3.5 w-3.5" />
-          Your rate limit
-        </div>
-        {data && <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.8)]" aria-label="API online" />}
-      </div>
+    <div className="mt-10 rounded-lg border border-cyan-300/15 bg-slate-950/65 shadow-lg shadow-black/10 backdrop-blur-sm">
+      <div className="grid gap-5 p-5 md:grid-cols-[minmax(12rem,0.8fr)_minmax(20rem,1.5fr)_auto] md:items-center md:gap-7 sm:p-6">
+        <div>
+          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300">
+            <Activity className="h-3.5 w-3.5" />
+            Your rate limit
+            {data && <span className="ml-auto h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.8)]" aria-label="API online" />}
+          </div>
 
-      {data ? (
-        <div className="mt-4">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <span className="text-3xl font-black tracking-tight text-white">{data.remaining}</span>
-              <span className="ml-1.5 font-mono text-xs text-slate-500">/ {data.limit}</span>
+          {data ? (
+            <div className="mt-3">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <span className="text-3xl font-black tracking-tight text-white">{data.remaining}</span>
+                  <span className="ml-1.5 font-mono text-xs text-slate-500">/ {RATE_LIMIT_BURST}</span>
+                </div>
+                <span className="pb-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">available now</span>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-cyan-300 transition-[width] duration-500"
+                  style={{ width: `${availablePercent}%` }}
+                />
+              </div>
+              <p className="mt-2 font-mono text-[10px] text-slate-600">
+                Checked {data.checkedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </p>
             </div>
-            <span className="pb-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">requests left</span>
-          </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full bg-cyan-300 transition-[width] duration-500"
-              style={{ width: `${100 - usedPercent}%` }}
-            />
-          </div>
-          <p className="mt-2 font-mono text-[10px] text-slate-600">
-            Checked {data.checkedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-          </p>
+          ) : (
+            <p className={`mt-3 text-sm ${error ? "text-rose-300" : "text-slate-500"}`}>
+              {error instanceof Error ? error.message : "Check your current allowance."}
+            </p>
+          )}
         </div>
-      ) : (
-        <p className={`mt-4 text-sm ${error ? "text-rose-300" : "text-slate-500"}`}>
-          {error instanceof Error ? error.message : "Query the health endpoint to see your current allowance."}
-        </p>
-      )}
 
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => void refetch()}
-        disabled={isFetching}
-        className="mt-4 w-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-cyan-300/10 hover:text-cyan-200"
-      >
-        {isFetching ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
-        {isFetching ? "Checking" : data ? "Refresh status" : "Check status"}
-      </Button>
+        <div className="border-white/10 md:border-l md:pl-7">
+          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
+            <Clock3 className="h-3.5 w-3.5 text-cyan-300" />
+            Continuous refill
+          </div>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            The per-IP bucket holds {RATE_LIMIT_BURST} requests and refills one request each second, an average of {data?.limit ?? 60} per minute. It does not reset at <span className="font-mono text-slate-400">:00</span>. Limits are best effort and apply separately to each Chronicle process.
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">This health check reports the allowance without consuming a request.</p>
+        </div>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void refetch()}
+          disabled={isFetching}
+          className="w-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-cyan-300/10 hover:text-cyan-200 md:w-auto"
+        >
+          {isFetching ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+          {isFetching ? "Checking" : data ? "Refresh status" : "Check status"}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -282,19 +296,14 @@ export function APIExplorer() {
             <Braces className="h-4 w-4" />
             Developer interface
           </div>
-          <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
-            <div>
-              <h1 className="max-w-3xl text-4xl font-black tracking-tight text-white sm:text-6xl">Chronicle External API</h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-slate-400 sm:text-lg">
-                Live documentation for public Chronicle integrations. Inspect the contract, provide parameters, and execute requests without leaving the page.
-              </p>
-              <a href={SPEC_URL} className="mt-5 inline-flex items-center gap-2 font-mono text-xs text-slate-400 transition-colors hover:text-cyan-300">
-                OpenAPI {data?.openapi ?? "3.1"}
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            </div>
-            <RateLimitStatusCard server={server} />
+          <div className="mt-5">
+            <h1 className="max-w-3xl text-4xl font-black tracking-tight text-white sm:text-6xl">Chronicle External API</h1>
+            <a href={SPEC_URL} className="mt-5 inline-flex items-center gap-2 font-mono text-xs text-slate-400 transition-colors hover:text-cyan-300">
+              OpenAPI {data?.openapi ?? "3.1"}
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
           </div>
+          <RateLimitStatusCard server={server} />
           {data && (
             <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-white/10 pt-5 font-mono text-xs text-slate-500">
               <span><strong className="text-slate-200">{endpoints.length}</strong> documented endpoint{endpoints.length === 1 ? "" : "s"}</span>
