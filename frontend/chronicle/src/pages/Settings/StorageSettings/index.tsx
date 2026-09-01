@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Play } from "lucide-react";
+import { Navigate, useLocation } from "react-router-dom";
 import { useLogGroups, useMyStorage, useSiteConfig, type UserStorageInfo, type WoWLogGroup } from "@/api/queries";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { LogsTable } from "./LogsTable";
@@ -80,9 +82,23 @@ export function StorageSettingsView({
 }
 
 export function StorageSettings() {
-  const { data: storage, isLoading: storageLoading } = useMyStorage();
-  const { data: logs, isLoading: logsLoading } = useLogGroups({ allTenants: true });
+  const location = useLocation();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { data: storage, isLoading: storageLoading } = useMyStorage({ enabled: isAuthenticated });
+  const { data: logs, isLoading: logsLoading } = useLogGroups({
+    allTenants: true,
+    enabled: isAuthenticated,
+  });
   const { data: siteConfig } = useSiteConfig();
+
+  if (authLoading) {
+    return <p className="text-sm text-muted-foreground">Checking your session...</p>;
+  }
+
+  if (!isAuthenticated) {
+    const returnPath = location.pathname + location.search;
+    return <Navigate to={`/login?from=${encodeURIComponent(returnPath)}`} replace />;
+  }
 
   return (
     <StorageSettingsView
