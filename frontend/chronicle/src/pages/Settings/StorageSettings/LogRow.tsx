@@ -1,3 +1,4 @@
+import { ExternalLink } from "lucide-react";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import {
   DropdownMenu,
@@ -74,27 +75,38 @@ export function LogRow({
           <span className="text-sm">{row.parsedLabel}</span>
         </TableCell>
         <TableCell>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <span className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent">
-                ⋯
-              </span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => onToggleExpand(row.id)}>View details</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={row.rawDeleteDisabled || !row.canDeleteFiles} onClick={onRequestDeleteRaw}>
-                Delete raw files
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={row.parsedDeleteDisabled || !row.canDelete} onClick={onRequestDeleteParsed}>
-                Delete parsed data
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" disabled={!row.canDelete} onClick={onRequestDeleteEntire}>
-                Delete entire log
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center justify-end gap-1">
+            <a
+              href={`/logs/${row.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open log page in a new tab"
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ExternalLink className="size-4" />
+            </a>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <span className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent">
+                  ⋯
+                </span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => onToggleExpand(row.id)}>View details</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={row.rawDeleteDisabled || !row.canDeleteFiles} onClick={onRequestDeleteRaw}>
+                  Delete raw files
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={row.parsedDeleteDisabled || !row.canDelete} onClick={onRequestDeleteParsed}>
+                  Delete parsed data
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" disabled={!row.canDelete} onClick={onRequestDeleteEntire}>
+                  Delete entire log
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </TableCell>
       </TableRow>
       {row.isExpanded && (

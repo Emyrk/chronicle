@@ -331,7 +331,7 @@ export function LogsTable({ logs, currentTenantName, onRequestDelete }: LogsTabl
               >
                 Parsed
               </SortableHead>
-              <TableHead className="w-10" />
+              <TableHead className="w-16" />
             </TableRow>
           </TableHeader>
           <TableBody>
