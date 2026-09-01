@@ -948,6 +948,7 @@ export function useDeleteLogFiles() {
     onSuccess: (logId) => {
       // Invalidate to refetch with updated file status
       queryClient.invalidateQueries({ queryKey: ["logGroup", logId] });
+      queryClient.invalidateQueries({ queryKey: ["logGroups"] });
     },
   });
 }

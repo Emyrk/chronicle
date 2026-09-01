@@ -85,6 +85,7 @@ func WoWLogGroupRow[T database.GetWoWLogGroupsByOwnerRow | database.GetWoWLogGro
 			LogType:          string(g.WoWLogGroup.LogType),
 			Files:            slice.List(g.Files, WoWLogFile),
 			ProcessingOutput: g.ProcessingOutput,
+			ParsedBytes:      g.ParsedBytes,
 		}
 	case database.GetWoWLogGroupByIDRow:
 		out := chroniclesdk.WoWLogGroup{

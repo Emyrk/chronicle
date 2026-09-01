@@ -394,7 +394,8 @@ ORDER BY name ASC;
 SELECT
   sqlc.embed(wow_log_groups),
   files_agg.files,
-  instances_output.output AS processing_output
+  instances_output.output AS processing_output,
+  parsed_bytes_agg.parsed_bytes
 FROM
   wow_log_groups
     LEFT JOIN LATERAL (
@@ -462,6 +463,13 @@ FROM
         ), '[]'::jsonb)
     ) AS output
     ) instances_output ON true
+
+    LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(octet_length(lie.events)), 0)::bigint AS parsed_bytes
+    FROM log_instance_events lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    WHERE li.log_group_id = wow_log_groups.id
+    ) parsed_bytes_agg ON true
 WHERE
   wow_log_groups.owner = $1
   AND (
