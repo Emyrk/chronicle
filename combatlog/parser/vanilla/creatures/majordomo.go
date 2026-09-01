@@ -3,8 +3,8 @@ package creatures
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 type MajordomoParty struct {
@@ -18,9 +18,10 @@ type MajordomoParty struct {
 }
 
 const (
-	flamewakerElite  = 11664
-	flamewakerHealer = 11663
-	majorDomoEntry   = 12018
+	flamewakerElite   = 11664
+	flamewakerHealer  = 11663
+	majorDomoEntry    = 12018
+	majordomoAddCount = 8
 )
 
 func NewMajordomoPartyCharacter(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
@@ -133,21 +134,25 @@ func (c *MajordomoParty) processAddCheck(m messages.Message) {
 		return // Nothing to do if Majordomo is not active
 	}
 
-	// We need 8 ads to check
-	if len(c.party) != 8 {
+	slainAdds := 0
+	for _, add := range c.party {
+		pd, ok := add.CurrentPeriod()
+		if ok && pd.EndState == period.EndStateSlain {
+			slainAdds++
+		}
+	}
+	if slainAdds < majordomoAddCount {
 		return
 	}
 
-	for _, c := range c.party {
-		if c.IsActive() {
-			return
-		}
-
-		pd, ok := c.CurrentPeriod()
-		if !ok || pd.EndState != period.EndStateSlain {
-			return
+	// Some servers can expose extra active copies of Majordomo's adds. The
+	// encounter still ends after the required eight adds die, and the surviving
+	// copies despawn with Majordomo. End them as defeated so the encounter is a
+	// clean kill rather than a partial kill or wipe.
+	for _, add := range c.party {
+		if add.IsActive() {
+			add.Died("majordomo_defeated", m)
 		}
 	}
-
 	c.Died("all_adds_dead", m)
 }
