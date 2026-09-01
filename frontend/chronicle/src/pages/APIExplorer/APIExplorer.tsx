@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Activity, Braces, Check, ChevronDown, Clipboard, Clock3, ExternalLink, LoaderCircle, Play, RefreshCw, Terminal } from "lucide-react"
+import { Activity, AlertTriangle, Braces, Check, ChevronDown, Clipboard, Clock3, ExternalLink, LoaderCircle, Play, RefreshCw, Terminal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -298,6 +298,16 @@ export function APIExplorer() {
             <Braces className="h-4 w-4" />
             Developer interface
           </div>
+          <div className="mt-6 flex max-w-3xl gap-3 rounded-lg border border-amber-300/25 bg-amber-300/[0.07] px-4 py-3 text-amber-100">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+            <div>
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300">Experimental API</p>
+              <p className="mt-1 text-sm leading-5 text-amber-100/70">
+                This API is experimental. Endpoints, request parameters, response formats, and rate limits may change at any time.
+              </p>
+            </div>
+          </div>
+
           <div className="mt-5">
             <h1 className="max-w-3xl text-4xl font-black tracking-tight text-white sm:text-6xl">Chronicle External API</h1>
             <a href={SPEC_URL} className="mt-5 inline-flex items-center gap-2 font-mono text-xs text-slate-400 transition-colors hover:text-cyan-300">
