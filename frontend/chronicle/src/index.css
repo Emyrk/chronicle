@@ -428,6 +428,13 @@
     @apply border-border outline-ring/50;
   }
   html {
+    /* Force the vertical scrollbar to always render, not just when content
+       overflows. scrollbar-gutter:stable alone depends on subtleties that
+       turned out to be unreliable here (see the body rule below) — this is
+       the old-school, unconditional guarantee: the scrollbar's space is
+       *always* reserved, in every browser, so it can never appear/disappear
+       and shift the layout when Radix locks/unlocks body's overflow. */
+    overflow-y: scroll;
     scrollbar-gutter: stable;
   }
   /*
