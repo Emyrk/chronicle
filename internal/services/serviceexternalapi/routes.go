@@ -2,6 +2,7 @@ package serviceexternalapi
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/google/uuid"
@@ -106,6 +107,43 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.getInstanceBySlug)
 
+	s.register(http.MethodGet, "/raidlogs/instances/{slug}/ranking-records", OpenAPIOperation{
+		Summary:     "Get raid-instance DPS and HPS metrics",
+		Description: "Returns every per-player encounter ranking record stored for a public raid instance, including raw damage, healing, absorption, duration, DPS, HPS, and persisted parse scores when available. Zero-value metrics are retained.",
+		Parameters: []OpenAPIParameter{
+			pathParameter("slug", "Public raid-instance slug", "example-instance"),
+		},
+		Responses: okResponse([]InstanceRankingRecord{{
+			InstanceRankingRecord: chroniclesdk.InstanceRankingRecord{
+				ID:            uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+				EncounterID:   uuidPointer(uuid.MustParse("44444444-4444-4444-4444-444444444444")),
+				EncounterName: "Ragnaros",
+				PlayerGUID:    "Player-00000001",
+				PlayerName:    "Example",
+				PlayerClass:   "Warrior",
+				PlayerSpec:    "Fury",
+				PlayerRole:    "dps",
+				PlayerLevel:   60,
+				DamageDone:    123456,
+				HealingDone:   789,
+				AbsorbedDone:  100,
+				DurationSecs:  120.5,
+				DPS:           1024.53,
+				HPS:           6.55,
+				LogHashedSlug: "example-log",
+				KilledAt:      time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC),
+			},
+			DPSParse: &InstanceRankingParse{
+				MetricValue: 1024.53, PreciseScore: 91.72, DisplayScore: 92,
+				Rank: 18, SampleSize: 842, Status: "ok",
+			},
+			HPSParse: &InstanceRankingParse{
+				MetricValue: 6.55, PreciseScore: 24.11, DisplayScore: 24,
+				Rank: 638, SampleSize: 842, Status: "low_confidence",
+			},
+		}}),
+	}, s.getInstanceRankingRecordsBySlug)
+
 	s.register(http.MethodGet, "/raidlogs/instances/{slug}/events/{type}", OpenAPIOperation{
 		Summary:     "Get a raid-instance event stream",
 		Description: "Returns the stored gzip-compressed protobuf event stream for a public raid-instance slug and event type.",
@@ -191,6 +229,10 @@ func queryParameter(name, description string, required bool, kind string, exampl
 		Name: name, In: "query", Description: description, Required: required,
 		Schema: OpenAPISchema{Type: kind}, Example: example,
 	}
+}
+
+func uuidPointer(value uuid.UUID) *uuid.UUID {
+	return &value
 }
 
 func int32Pointer(value int32) *int32 {
