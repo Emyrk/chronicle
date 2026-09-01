@@ -1,5 +1,8 @@
 import { useState } from "react";
+import { Play } from "lucide-react";
 import { useLogGroups, useMyStorage, type UserStorageInfo, type WoWLogGroup } from "@/api/queries";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { LogsTable } from "./LogsTable";
 import { ParsedDataCard } from "./ParsedDataCard";
@@ -15,14 +18,21 @@ export interface StorageSettingsViewProps {
 
 export function StorageSettingsView({ storage, storageLoading, logs, logsLoading }: StorageSettingsViewProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [videoOpen, setVideoOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Storage</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          View your storage usage, grants, and manage your uploaded logs.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Storage</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            View your storage usage, grants, and manage your uploaded logs.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => setVideoOpen(true)}>
+          <Play className="size-3.5" />
+          How storage works
+        </Button>
       </div>
 
       {storageLoading || !storage ? (
@@ -41,6 +51,22 @@ export function StorageSettingsView({ storage, storageLoading, logs, logsLoading
       )}
 
       {pendingAction && <DeleteConfirmDialog action={pendingAction} onClose={() => setPendingAction(null)} />}
+
+      <Dialog open={videoOpen} onOpenChange={setVideoOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>How storage works</DialogTitle>
+          </DialogHeader>
+          {videoOpen && (
+            <video
+              src="/c/videos/storage-story.mp4"
+              controls
+              autoPlay
+              className="w-full rounded-md bg-black"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
