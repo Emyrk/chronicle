@@ -41,6 +41,7 @@ import { guildsProcessor } from "../Guilds/guilds.processor";
 import { companionStatsProcessor } from "../CompanionStats/companionStats.processor";
 import { playerLifeStateProcessor } from "./playerLifeState.processor";
 import { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
+import { raidCompositionProcessor } from "../RaidComposition/raidComposition.processor";
 
 // Export individual processors
 export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
@@ -80,6 +81,8 @@ export { absorbedDamageProcessor } from "../AbsorbedDamage/absorbedDamage.proces
 export { resistsProcessor } from "../ResistsPanel/resists.processor";
 export { guildsProcessor } from "../Guilds/guilds.processor";
 export { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
+export { raidCompositionProcessor } from "../RaidComposition/raidComposition.processor";
+export type { RaidCompositionResult } from "../RaidComposition/raidComposition.processor";
 
 // Export state types
 export type { DamageDoneResult as DamageDoneState, DamageDoneData, DamageSourceType } from "../DamageDone/damageDone.processor";
@@ -202,4 +205,5 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   guilds: guildsProcessor,
   companion_stats: companionStatsProcessor,
   pulls_and_cleanup: pullsAndCleanupProcessor,
+  raid_composition: raidCompositionProcessor,
 };

@@ -34,6 +34,7 @@ import { hasExplainer } from "./explainers";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { useChartDataActions } from "./ChartDataRegistry";
 import { openPanelPopup, syncPopupAppearance, type PanelPopup } from "./panelPopup";
+import { hasRequiredPanelCapabilities } from "./panelAvailability";
 
 // Import panel definitions
 import { createDamageDonePanel } from "./DamageDone/DamageDone";
@@ -71,6 +72,7 @@ import { createEquipmentPanel } from "./Equipment/Equipment";
 import { createLootPanel } from "./LootPanel/LootPanel";
 import { createRankingRecordsPanel } from "./RankingRecords/RankingRecords";
 import { createLoggingMetadataPanel } from "./LoggingMetadata/LoggingMetadata";
+import { createRaidCompositionPanel } from "./RaidComposition/RaidComposition";
 
 import { createDispelsDonePanel, createDispelsReceivedPanel } from "./Dispel/Dispel";
 import { createInterruptsPanel } from "./Interrupt/Interrupt";
@@ -148,6 +150,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   loot: createLootPanel(),
   ranking_records: createRankingRecordsPanel(),
   logging_metadata: createLoggingMetadataPanel(),
+  raid_composition: createRaidCompositionPanel(),
   absorbed_damage: createAbsorbedDamagePanel(),
   resists: createResistsPanel(),
   guilds: createGuildsPanel(),
@@ -434,6 +437,10 @@ export function EventsPanel({
       defaultFilters: [...existing],
     };
   }, [rawPanel]);
+  const panelAvailable = hasRequiredPanelCapabilities(
+    panel,
+    context.instance.capabilities ?? [],
+  );
 
   // Determine checkbox label first (needed for storage key)
   const checkboxLabel = panel.checkboxLabel || "Per second";
@@ -821,7 +828,7 @@ export function EventsPanel({
     panelContext,
     panelContextKey: panelContextVersion,
     panelIndex,
-    enabled: !panel.selfManagesAggregation,
+    enabled: panelAvailable && !panel.selfManagesAggregation,
   });
   
   // Report timing when panel finishes loading
@@ -878,11 +885,17 @@ export function EventsPanel({
                   <>
                     <span className="truncate max-w-[160px]">{customTitle}</span>
                     <span className="text-xs text-muted-foreground shrink-0">
-                      <PanelSelector value={panelType} onChange={onPanelTypeChange} />
+                      <PanelSelector
+                        value={panelType}
+                        onChange={onPanelTypeChange}
+                      />
                     </span>
                   </>
                 ) : (
-                  <PanelSelector value={panelType} onChange={onPanelTypeChange} />
+                  <PanelSelector
+                    value={panelType}
+                    onChange={onPanelTypeChange}
+                  />
                 )}
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
