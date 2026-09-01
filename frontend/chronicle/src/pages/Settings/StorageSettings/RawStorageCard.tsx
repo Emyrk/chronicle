@@ -3,7 +3,7 @@ import type { UserStorageInfo } from "@/api/queries";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { formatBytes, formatExpirationDate, formatSource } from "@/lib/format";
 import { buildForecastSentence } from "./grantMath";
 
@@ -60,16 +60,14 @@ export function RawStorageCard({ storage }: { storage: UserStorageInfo }) {
               <span>
                 From {storage.grants.length} grant{storage.grants.length === 1 ? "" : "s"}
               </span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex size-3.5 cursor-default items-center justify-center rounded-full border border-current text-[9px]">
-                      ?
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent className="w-60">{forecast}</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex size-3.5 cursor-default items-center justify-center rounded-full border border-current text-[9px]">
+                    ?
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="w-60">{forecast}</TooltipContent>
+              </Tooltip>
             </div>
             <CollapsibleTrigger asChild>
               <Button size="sm" variant="ghost">
