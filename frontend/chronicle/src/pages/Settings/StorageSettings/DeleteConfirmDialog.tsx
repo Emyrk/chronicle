@@ -10,51 +10,69 @@ import type { PendingAction } from "./types";
 
 type ActivePendingAction = NonNullable<PendingAction>;
 
-function groupNames(groups: ActivePendingAction["groups"]): string {
-  return groups
-    .map((g) => {
-      const instances = getParsedInstances(g);
-      return instances.length > 0 ? instances.map((i) => i.name).join(", ") : "this upload";
-    })
-    .join(", ");
+/** One row in the compact "what this affects" list shown below the (static) warning text. */
+interface AffectedItem {
+  label: string;
+  tag?: string;
 }
 
-function buildCopy(action: ActivePendingAction): { title: string; body: string; confirmLabel: string } {
-  const names = groupNames(action.groups);
+interface CopyResult {
+  title: string;
+  body: string;
+  /** Optional static aside — never contains instance names, only counts/facts. */
+  note?: string;
+  confirmLabel: string;
+  affectedItems: AffectedItem[];
+}
 
+function instanceLabel(group: ActivePendingAction["groups"][number]): string {
+  const instances = getParsedInstances(group);
+  return instances.length > 0 ? instances.map((i) => i.name).join(", ") : "Unparsed upload";
+}
+
+/**
+ * The title/body/confirm copy is deliberately static — the same wording every
+ * time, regardless of which or how many logs are selected — so it reads as a
+ * molly guard: recognizable at a glance rather than a sentence that has to be
+ * re-parsed each time because it names different logs. The specific logs
+ * being affected are listed separately, in the compact affectedItems list.
+ */
+function buildCopy(action: ActivePendingAction): CopyResult {
   if (action.kind === "delete-raw") {
     const freed = action.groups.reduce((sum, g) => sum + activeQuotaBytes(g), 0);
-    let body =
-      `Your parsed reports for ${names} will remain available. The original combat-log files will be ` +
-      `permanently removed. Without them, Chronicle cannot investigate parser issues or re-parse ` +
-      `${action.groups.length > 1 ? "these uploads" : "this upload"}.`;
-
-    const failedNames = groupNames(action.groups.filter((g) => deriveLogStatus(g).status === "parse_failed"));
-    if (failedNames) {
-      body += ` Parsing failed for ${failedNames} — raw files may be the only way to recover this log.`;
-    }
-    if (action.excludedCount > 0) {
-      body += ` ${action.excludedCount} selected log${action.excludedCount > 1 ? "s were" : " was"} skipped because its raw files are already deleted or still processing.`;
-    }
-    return { title: `Delete raw files and free ${formatBytes(freed)}?`, body, confirmLabel: "Delete raw files" };
+    const body =
+      "Parsed reports will remain available. The original combat-log files will be permanently removed — " +
+      "Chronicle will no longer be able to investigate parser issues or re-parse them later.";
+    const note =
+      action.excludedCount > 0
+        ? `${action.excludedCount} selected log${action.excludedCount === 1 ? "" : "s"} ${
+            action.excludedCount === 1 ? "was" : "were"
+          } skipped because its raw files are already deleted or still processing.`
+        : undefined;
+    const affectedItems = action.groups.map((g) => ({
+      label: instanceLabel(g),
+      tag: deriveLogStatus(g).status === "parse_failed" ? "Parse failed" : undefined,
+    }));
+    return { title: `Delete raw files and free ${formatBytes(freed)}?`, body, note, confirmLabel: "Delete raw files", affectedItems };
   }
 
   if (action.kind === "delete-parsed") {
-    const allRawGone = activeQuotaBytes(action.groups[0]) === 0;
-    const body =
-      `This removes the parsed instances, encounters, and analytics for this log. This does not change your ` +
-      `raw storage usage. ${
-        allRawGone
-          ? "This log has no raw files remaining, so this removes the only available copy of this data."
-          : "Raw files, if present, will be kept."
-      }`;
-    return { title: `Delete parsed data for ${names}?`, body, confirmLabel: "Delete parsed data" };
+    const group = action.groups[0];
+    const allRawGone = activeQuotaBytes(group) === 0;
+    const body = "This removes the parsed instances, encounters, and analytics for this log. This does not change your raw storage usage.";
+    const note = allRawGone
+      ? "This log has no raw files remaining, so this removes the only available copy of this data."
+      : "Raw files, if present, will be kept.";
+    const instances = getParsedInstances(group);
+    const affectedItems = instances.length > 0 ? instances.map((i) => ({ label: i.name })) : [{ label: "Unparsed upload" }];
+    return { title: "Delete parsed data?", body, note, confirmLabel: "Delete parsed data", affectedItems };
   }
 
   return {
     title: "Delete entire log group?",
-    body: `This permanently deletes ${names} — both the raw files and all parsed reports, encounters, and analytics. This cannot be undone.`,
+    body: "This permanently deletes both the raw files and all parsed reports, encounters, and analytics. This cannot be undone.",
     confirmLabel: "Delete entire log",
+    affectedItems: action.groups.map((g) => ({ label: instanceLabel(g) })),
   };
 }
 
@@ -69,7 +87,7 @@ export function DeleteConfirmDialog({ action, onClose }: DeleteConfirmDialogProp
   const deleteInstance = useDeleteLogInstance();
   const deleteGroup = useDeleteLogGroup();
 
-  const { title, body, confirmLabel } = buildCopy(action);
+  const { title, body, note, confirmLabel, affectedItems } = buildCopy(action);
 
   async function handleConfirm() {
     setIsSubmitting(true);
@@ -114,6 +132,19 @@ export function DeleteConfirmDialog({ action, onClose }: DeleteConfirmDialogProp
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogDescription>{body}</DialogDescription>
+        {note && <p className="text-sm text-muted-foreground">{note}</p>}
+        <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+          {affectedItems.map((item, i) => (
+            <li key={i} className="flex items-center justify-between gap-2">
+              <span className="truncate">{item.label}</span>
+              {item.tag && (
+                <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
+                  {item.tag}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancel
