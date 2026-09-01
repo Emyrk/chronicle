@@ -18,6 +18,10 @@ interface AffectedItem {
 
 interface CopyResult {
   title: string;
+  /** Optional strong-colored caution line, shown above body. */
+  warning?: string;
+  /** "caution" (amber) for a discouraged-but-recoverable action, "danger" (red) for an irreversible one. */
+  warningTone?: "caution" | "danger";
   body: string;
   /** Optional static aside — never contains instance names, only counts/facts. */
   note?: string;
@@ -59,21 +63,22 @@ function buildCopy(action: ActivePendingAction): CopyResult {
   if (action.kind === "delete-parsed") {
     const group = action.groups[0];
     const allRawGone = activeQuotaBytes(group) === 0;
-    const body =
-      "This action is not recommended and should only be used if you want to remove the logs from the site " +
-      "entirely. This removes the parsed instances, encounters, and analytics for this log. This does not change " +
-      "your raw storage usage.";
+    const warning =
+      "This action is not recommended and should only be used if you want to remove the logs from the site entirely.";
+    const body = "This removes the parsed instances, encounters, and analytics for this log. This does not change your raw storage usage.";
     const note = allRawGone
       ? "This log has no raw files remaining, so this removes the only available copy of this data."
       : "Raw files, if present, will be kept.";
     const instances = getParsedInstances(group);
     const affectedItems = instances.length > 0 ? instances.map((i) => ({ label: i.name })) : [{ label: "Unparsed upload" }];
-    return { title: "Delete parsed data?", body, note, confirmLabel: "Delete parsed data", affectedItems };
+    return { title: "Delete parsed data?", warning, warningTone: "caution", body, note, confirmLabel: "Delete parsed data", affectedItems };
   }
 
   return {
     title: "Delete entire log group?",
-    body: "This permanently deletes both the raw files and all parsed reports, encounters, and analytics. This cannot be undone.",
+    warning: "This action is irreversible. There is no way to recover this log once it's deleted.",
+    warningTone: "danger",
+    body: "This permanently deletes both the raw files and all parsed reports, encounters, and analytics for this log.",
     confirmLabel: "Delete entire log",
     affectedItems: action.groups.map((g) => ({ label: instanceLabel(g) })),
   };
@@ -90,7 +95,7 @@ export function DeleteConfirmDialog({ action, onClose }: DeleteConfirmDialogProp
   const deleteInstance = useDeleteLogInstance();
   const deleteGroup = useDeleteLogGroup();
 
-  const { title, body, note, confirmLabel, affectedItems } = buildCopy(action);
+  const { title, warning, warningTone, body, note, confirmLabel, affectedItems } = buildCopy(action);
 
   async function handleConfirm() {
     setIsSubmitting(true);
@@ -134,6 +139,11 @@ export function DeleteConfirmDialog({ action, onClose }: DeleteConfirmDialogProp
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
+        {warning && (
+          <p className={`text-sm font-semibold ${warningTone === "danger" ? "text-destructive" : "text-amber-500"}`}>
+            {warning}
+          </p>
+        )}
         <DialogDescription>{body}</DialogDescription>
         {note && <p className="text-sm text-muted-foreground">{note}</p>}
         <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
