@@ -2076,6 +2076,28 @@ func (q *sqlQuerier) UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDat
 	return err
 }
 
+const getParsedBytesByOwner = `-- name: GetParsedBytesByOwner :one
+SELECT
+  COALESCE(SUM(octet_length(lie.events)), 0)::bigint AS parsed_bytes,
+  COUNT(DISTINCT lie.instance_id)::bigint AS parsed_instance_count
+FROM log_instance_events lie
+JOIN log_instances li ON li.id = lie.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+WHERE wlg.owner = $1
+`
+
+type GetParsedBytesByOwnerRow struct {
+	ParsedBytes         int64 `db:"parsed_bytes" json:"parsed_bytes"`
+	ParsedInstanceCount int64 `db:"parsed_instance_count" json:"parsed_instance_count"`
+}
+
+func (q *sqlQuerier) GetParsedBytesByOwner(ctx context.Context, owner uuid.UUID) (GetParsedBytesByOwnerRow, error) {
+	row := q.db.QueryRow(ctx, getParsedBytesByOwner, owner)
+	var i GetParsedBytesByOwnerRow
+	err := row.Scan(&i.ParsedBytes, &i.ParsedInstanceCount)
+	return i, err
+}
+
 const instanceEvent = `-- name: InstanceEvent :one
 SELECT
   log_instance_events.instance_id, log_instance_events.type, log_instance_events.events
@@ -3026,7 +3048,8 @@ const getWoWLogGroupsByOwner = `-- name: GetWoWLogGroupsByOwner :many
 SELECT
   wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor,
   files_agg.files,
-  instances_output.output AS processing_output
+  instances_output.output AS processing_output,
+  parsed_bytes_agg.parsed_bytes
 FROM
   wow_log_groups
     LEFT JOIN LATERAL (
@@ -3094,6 +3117,13 @@ FROM
         ), '[]'::jsonb)
     ) AS output
     ) instances_output ON true
+
+    LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(octet_length(lie.events)), 0)::bigint AS parsed_bytes
+    FROM log_instance_events lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    WHERE li.log_group_id = wow_log_groups.id
+    ) parsed_bytes_agg ON true
 WHERE
   wow_log_groups.owner = $1
   AND (
@@ -3122,6 +3152,7 @@ type GetWoWLogGroupsByOwnerRow struct {
 	WoWLogGroup      WoWLogGroup `db:"wo_wlog_group" json:"wo_wlog_group"`
 	Files            []LogFile   `db:"files" json:"files"`
 	ProcessingOutput []byte      `db:"processing_output" json:"processing_output"`
+	ParsedBytes      int64       `db:"parsed_bytes" json:"parsed_bytes"`
 }
 
 func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGroupsByOwnerParams) ([]GetWoWLogGroupsByOwnerRow, error) {
@@ -3143,6 +3174,7 @@ func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGr
 			&i.WoWLogGroup.Flavor,
 			&i.Files,
 			&i.ProcessingOutput,
+			&i.ParsedBytes,
 		); err != nil {
 			return nil, err
 		}

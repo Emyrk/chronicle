@@ -3800,6 +3800,17 @@ export interface UserStorageInfo {
     readonly max_storage_bytes: number;
     readonly consumed_storage_bytes: number;
     readonly grants: readonly DataGrant[];
+    /**
+     * ParsedStorageBytes is the total size, in bytes, of this user's parsed
+     * combat-log event streams. It does not count against MaxStorageBytes and
+     * is not currently limited.
+     */
+    readonly parsed_storage_bytes: number;
+    /**
+     * ParsedInstanceCount is the number of parsed instances contributing to
+     * ParsedStorageBytes.
+     */
+    readonly parsed_instance_count: number;
 }
 
 // From chroniclesdk/talent_builds.go
@@ -4000,9 +4011,9 @@ export type WoWEnvironmentType = "drowning" | "fall" | "fatigue" | "fire" | "lav
 export const WoWEnvironmentTypes: WoWEnvironmentType[] = ["drowning", "fall", "fatigue", "fire", "lava", "slime"];
 
 // From chroniclesdk/constants.go
-export type WoWEventType = "absorbed" | "aura" | "aura_cast" | "cast" | "combatant_info" | "companion_stats" | "consume" | "damage" | "dispel" | "extra_attack" | "heal" | "interrupt" | "resource_change" | "ressurection" | "slain" | "spell_fail" | "spell_go" | "spell_start" | "unit_classification";
+export type WoWEventType = "absorbed" | "aura" | "aura_cast" | "cast" | "combatant_info" | "companion_stats" | "consume" | "damage" | "dispel" | "extra_attack" | "heal" | "interrupt" | "raid_group" | "resource_change" | "ressurection" | "slain" | "spell_fail" | "spell_go" | "spell_start" | "unit_classification";
 
-export const WoWEventTypes: WoWEventType[] = ["absorbed", "aura", "aura_cast", "cast", "combatant_info", "companion_stats", "consume", "damage", "dispel", "extra_attack", "heal", "interrupt", "resource_change", "ressurection", "slain", "spell_fail", "spell_go", "spell_start", "unit_classification"];
+export const WoWEventTypes: WoWEventType[] = ["absorbed", "aura", "aura_cast", "cast", "combatant_info", "companion_stats", "consume", "damage", "dispel", "extra_attack", "heal", "interrupt", "raid_group", "resource_change", "ressurection", "slain", "spell_fail", "spell_go", "spell_start", "unit_classification"];
 
 // From types/constants.go
 export type WoWHeroClasses = "DEATHKNIGHT" | "DRUID" | "HUNTER" | "MAGE" | "PALADIN" | "PRIEST" | "ROGUE" | "SHAMAN" | "UNKNOWN" | "WARLOCK" | "WARRIOR";
@@ -4090,6 +4101,12 @@ export interface WoWLogGroup {
     readonly flavor?: readonly string[];
     readonly files: readonly WoWLogFile[];
     readonly processing_output?: Record<string, string>;
+    /**
+     * ParsedBytes is the total size, in bytes, of the parsed combat-log event
+     * streams (log_instance_events.events) for this log group. It does not
+     * count against the owner's raw storage allowance.
+     */
+    readonly parsed_bytes: number;
 }
 
 // From chroniclesdk/log.go

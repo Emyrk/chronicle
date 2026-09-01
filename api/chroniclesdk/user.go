@@ -115,6 +115,13 @@ type UserStorageInfo struct {
 	MaxStorageBytes      int64       `json:"max_storage_bytes"`
 	ConsumedStorageBytes int64       `json:"consumed_storage_bytes"`
 	Grants               []DataGrant `json:"grants"`
+	// ParsedStorageBytes is the total size, in bytes, of this user's parsed
+	// combat-log event streams. It does not count against MaxStorageBytes and
+	// is not currently limited.
+	ParsedStorageBytes int64 `json:"parsed_storage_bytes"`
+	// ParsedInstanceCount is the number of parsed instances contributing to
+	// ParsedStorageBytes.
+	ParsedInstanceCount int64 `json:"parsed_instance_count"`
 }
 
 // UpsertDataGrantRequest is used to create or update a storage grant

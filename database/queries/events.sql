@@ -17,3 +17,13 @@ WHERE
   instance_id = $1 AND
   log_instance_events.type =sqlc.arg('type') :: text :: log_instance_event_type
 ;
+
+-- name: GetParsedBytesByOwner :one
+SELECT
+  COALESCE(SUM(octet_length(lie.events)), 0)::bigint AS parsed_bytes,
+  COUNT(DISTINCT lie.instance_id)::bigint AS parsed_instance_count
+FROM log_instance_events lie
+JOIN log_instances li ON li.id = lie.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+WHERE wlg.owner = $1
+;

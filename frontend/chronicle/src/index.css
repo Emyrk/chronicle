@@ -428,7 +428,45 @@
     @apply border-border outline-ring/50;
   }
   html {
+    /* Force the vertical scrollbar to always render, not just when content
+       overflows. scrollbar-gutter:stable alone depends on subtleties that
+       turned out to be unreliable here (see the body rule below) — this is
+       the old-school, unconditional guarantee: the scrollbar's space is
+       *always* reserved, in every browser, so it can never appear/disappear
+       and shift the layout when Radix locks/unlocks body's overflow. */
+    overflow-y: scroll;
     scrollbar-gutter: stable;
+  }
+  /*
+   * scrollbar-gutter only takes effect on an element whose own overflow is
+   * non-visible. body's overflow is normally visible (scrollbar-gutter here
+   * is a no-op, correctly), but Radix's scroll-lock (dropdown/dialog/popover
+   * open) sets overflow:hidden on body specifically — which flips
+   * scrollbar-gutter:stable from inert to *active* for the first time,
+   * reserving ~15px it wasn't reserving a moment earlier. That's backwards
+   * from "stable": #root (width:auto, sized from body's content box) shrinks
+   * while a menu is open and snaps back when it closes. Pin it to auto so
+   * Radix's temporary lock can never trigger this. Verified via Playwright:
+   * without this, #root measurably shrinks by the scrollbar's width on open.
+   *
+   * The bigger offender, confirmed live in Chrome/Linux (a real, non-overlay
+   * scrollbar — headless Chromium in this sandbox uses an overlay scrollbar
+   * that never reserves width, so it couldn't reproduce this): Radix's
+   * scroll-lock library measures the real scrollbar's width and injects
+   * `margin-right: <width>px !important` on body[data-scroll-locked], meant
+   * to keep the page's right edge from jumping when the scrollbar disappears.
+   * Since body has width:auto, adding that margin shrinks body's own computed
+   * width by the same amount (margin + width = containing-block width) —
+   * shrinking every descendant, #root included. html's scrollbar never
+   * actually disappears now (overflow-y:scroll above), so this compensation
+   * is solving a problem that no longer exists and just re-introduces the
+   * exact shift it was meant to prevent. Pin it to 0 with a selector specific
+   * enough (html + attribute) to beat Radix's bare `body[data-scroll-locked]`
+   * regardless of which stylesheet loads/is injected last.
+   */
+  html body[data-scroll-locked] {
+    scrollbar-gutter: auto !important;
+    margin-right: 0 !important;
   }
   html, body {
     /* clip (not hidden): overflow-x-hidden creates a scroll container on

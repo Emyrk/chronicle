@@ -46,6 +46,10 @@ type WoWLogGroup struct {
 
 	Files            []WoWLogFile    `json:"files"`
 	ProcessingOutput json.RawMessage `json:"processing_output,omitempty"`
+	// ParsedBytes is the total size, in bytes, of the parsed combat-log event
+	// streams (log_instance_events.events) for this log group. It does not
+	// count against the owner's raw storage allowance.
+	ParsedBytes int64 `json:"parsed_bytes"`
 }
 
 type WoWLogFile struct {

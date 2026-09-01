@@ -101,10 +101,18 @@ func (a *API) GetMyStorage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	parsed, err := a.Opts.Zed.GetParsedBytesByOwner(ctx, userID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.UserStorageInfo{
 		MaxStorageBytes:      user.MaxStorageBytes,
 		ConsumedStorageBytes: user.ConsumedStorageBytes,
 		Grants:               db2sdk.DataGrants(grants),
+		ParsedStorageBytes:   parsed.ParsedBytes,
+		ParsedInstanceCount:  parsed.ParsedInstanceCount,
 	})
 }
 
