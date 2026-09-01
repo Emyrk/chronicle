@@ -13,7 +13,13 @@ type OpenAPIDocument struct {
 	OpenAPI string                                 `json:"openapi"`
 	Info    OpenAPIInfo                            `json:"info"`
 	Servers []OpenAPIServer                        `json:"servers"`
+	Tags    []OpenAPITag                           `json:"tags,omitempty"`
 	Paths   map[string]map[string]OpenAPIOperation `json:"paths"`
+}
+
+type OpenAPITag struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 type OpenAPIInfo struct {
@@ -27,6 +33,7 @@ type OpenAPIServer struct {
 }
 
 type OpenAPIOperation struct {
+	Tags        []string                   `json:"tags,omitempty"`
 	Summary     string                     `json:"summary"`
 	Description string                     `json:"description,omitempty"`
 	Parameters  []OpenAPIParameter         `json:"parameters,omitempty"`
@@ -66,7 +73,13 @@ func newOpenAPIDocument() OpenAPIDocument {
 			Version:     "1.0.0",
 		},
 		Servers: []OpenAPIServer{{URL: "/api/external/v1"}},
-		Paths:   make(map[string]map[string]OpenAPIOperation),
+		Tags: []OpenAPITag{
+			{Name: "Explore", Description: "Discover servers, realms, recent raids, and leaderboards."},
+			{Name: "Characters", Description: "Look up characters and their raid history."},
+			{Name: "Raid Instance", Description: "Inspect one parsed raid instance and its data."},
+			{Name: "General", Description: "API health and contract endpoints."},
+		},
+		Paths: make(map[string]map[string]OpenAPIOperation),
 	}
 }
 

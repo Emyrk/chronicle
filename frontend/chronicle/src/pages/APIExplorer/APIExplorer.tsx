@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   buildRequestURL,
+  endpointGroupsFromDocument,
   endpointsFromDocument,
   parameterKey,
   type APIEndpoint,
@@ -198,6 +199,7 @@ export function APIExplorer() {
   })
 
   const endpoints = data ? endpointsFromDocument(data) : []
+  const endpointGroups = data ? endpointGroupsFromDocument(data) : []
   const server = data?.servers[0]?.url ?? "/api/external/v1"
 
   return (
@@ -243,9 +245,24 @@ export function APIExplorer() {
             Unable to load the API contract: {error instanceof Error ? error.message : "Unknown error"}
           </div>
         )}
-        <div className="space-y-6">
-          {endpoints.map((endpoint) => (
-            <EndpointCard key={`${endpoint.method}:${endpoint.path}`} endpoint={endpoint} server={server} />
+        <div className="space-y-12">
+          {endpointGroups.map((group) => (
+            <section key={group.name} aria-labelledby={`api-group-${group.name.replaceAll(" ", "-").toLowerCase()}`}>
+              <div className="mb-5 border-b border-white/10 pb-4">
+                <h2
+                  id={`api-group-${group.name.replaceAll(" ", "-").toLowerCase()}`}
+                  className="text-xl font-bold tracking-tight text-white sm:text-2xl"
+                >
+                  {group.name}
+                </h2>
+                {group.description && <p className="mt-1 text-sm text-slate-500">{group.description}</p>}
+              </div>
+              <div className="space-y-4">
+                {group.endpoints.map((endpoint) => (
+                  <EndpointCard key={`${endpoint.method}:${endpoint.path}`} endpoint={endpoint} server={server} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       </main>

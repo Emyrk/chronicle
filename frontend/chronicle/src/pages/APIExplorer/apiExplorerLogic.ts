@@ -13,6 +13,7 @@ export type OpenAPIParameter = {
 }
 
 export type OpenAPIOperation = {
+  tags?: string[]
   summary: string
   description?: string
   parameters?: OpenAPIParameter[]
@@ -30,6 +31,7 @@ export type OpenAPIDocument = {
     version: string
   }
   servers: Array<{ url: string }>
+  tags?: Array<{ name: string; description?: string }>
   paths: Record<string, Partial<Record<HTTPMethod, OpenAPIOperation>>>
 }
 
@@ -48,6 +50,34 @@ export function endpointsFromDocument(document: OpenAPIDocument): APIEndpoint[] 
       return operation ? [{ method, path, operation }] : []
     }),
   )
+}
+
+export type APIEndpointGroup = {
+  name: string
+  description?: string
+  endpoints: APIEndpoint[]
+}
+
+export function endpointGroupsFromDocument(document: OpenAPIDocument): APIEndpointGroup[] {
+  const endpoints = endpointsFromDocument(document)
+  const tagDetails = new Map((document.tags ?? []).map((tag) => [tag.name, tag]))
+  const grouped = new Map<string, APIEndpoint[]>()
+
+  for (const endpoint of endpoints) {
+    const tag = endpoint.operation.tags?.[0] ?? "Other"
+    grouped.set(tag, [...(grouped.get(tag) ?? []), endpoint])
+  }
+
+  const orderedTags = [
+    ...(document.tags ?? []).map((tag) => tag.name),
+    ...Array.from(grouped.keys()).filter((tag) => !tagDetails.has(tag)),
+  ]
+
+  return orderedTags.flatMap((name) => {
+    const groupEndpoints = grouped.get(name)
+    if (!groupEndpoints?.length) return []
+    return [{ name, description: tagDetails.get(name)?.description, endpoints: groupEndpoints }]
+  })
 }
 
 export function parameterKey(parameter: OpenAPIParameter): string {

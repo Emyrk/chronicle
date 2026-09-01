@@ -10,12 +10,14 @@ import (
 
 func (s *Service) registerRoutes() {
 	s.register(http.MethodGet, "/health", OpenAPIOperation{
+		Tags:        []string{"General"},
 		Summary:     "Check API health",
 		Description: "Returns whether Chronicle's external API is available.",
 		Responses:   okResponse(HealthResponse{Status: "ok"}),
 	}, s.health)
 
 	s.register(http.MethodGet, "/explore/servers", OpenAPIOperation{
+		Tags:        []string{"Explore"},
 		Summary:     "List supported servers",
 		Description: "Lists the servers and their realms visible to the current Chronicle community. Results are tenant-aware.",
 		Responses: okResponse(ServersResponse{Servers: []Server{{
@@ -25,6 +27,7 @@ func (s *Service) registerRoutes() {
 	}, s.listServers)
 
 	s.register(http.MethodGet, "/explore/servers/{server}/realms", OpenAPIOperation{
+		Tags:        []string{"Explore"},
 		Summary:     "List realms for a server",
 		Description: "Accepts a server UUID or case-insensitive server name and lists its visible realms.",
 		Parameters: []OpenAPIParameter{
@@ -42,6 +45,7 @@ func (s *Service) registerRoutes() {
 		pathParameter("character", "Character GUID, decimal game ID, or name", "Example"),
 	}
 	s.register(http.MethodGet, "/characters/{server}/{realm}/{character}", OpenAPIOperation{
+		Tags:        []string{"Characters"},
 		Summary:     "Get a character",
 		Description: "Returns the latest known identity, guild, class, race, level, specialization, role, and item-level data for a character.",
 		Parameters:  characterParameters,
@@ -53,6 +57,7 @@ func (s *Service) registerRoutes() {
 	}, s.getCharacter)
 
 	s.register(http.MethodGet, "/characters/{server}/{realm}/{character}/instances", OpenAPIOperation{
+		Tags:        []string{"Characters"},
 		Summary:     "List a character's instances",
 		Description: "Returns deduplicated raid instances the character participated in, newest first. Performance fields use already-computed ranking and parse data when available.",
 		Parameters: append(characterParameters,
@@ -70,6 +75,7 @@ func (s *Service) registerRoutes() {
 	}, s.listCharacterLogs)
 
 	s.register(http.MethodGet, "/raidlogs/recent", OpenAPIOperation{
+		Tags:        []string{"Explore"},
 		Summary:     "List recent raid activity",
 		Description: "Returns recent parsed raid instances, newest first. Results may be filtered by activity or log-group upload time and are limited to 50 per page.",
 		Parameters: []OpenAPIParameter{
@@ -92,6 +98,7 @@ func (s *Service) registerRoutes() {
 	}, s.listRecentActivity)
 
 	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}", OpenAPIOperation{
+		Tags:        []string{"Raid Instance"},
 		Summary:     "Get a raid instance",
 		Description: "Returns parsed raid-instance metadata, encounters, units, and players for an instance ID. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
 		Parameters: []OpenAPIParameter{
@@ -108,6 +115,7 @@ func (s *Service) registerRoutes() {
 	}, s.getInstanceBySlug)
 
 	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}/ranking-records", OpenAPIOperation{
+		Tags:        []string{"Raid Instance"},
 		Summary:     "Get raid-instance DPS and HPS metrics",
 		Description: "Returns every per-player encounter ranking record stored for an instance ID, including raw damage, healing, absorption, duration, DPS, HPS, and persisted parse scores when available. Zero-value metrics are retained.",
 		Parameters: []OpenAPIParameter{
@@ -145,6 +153,7 @@ func (s *Service) registerRoutes() {
 	}, s.getInstanceRankingRecordsBySlug)
 
 	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}/events/{type}", OpenAPIOperation{
+		Tags:        []string{"Raid Instance"},
 		Summary:     "Get a raid-instance event stream",
 		Description: "Returns the stored gzip-compressed protobuf event stream for an instance ID and event type.",
 		Parameters: []OpenAPIParameter{
@@ -155,6 +164,7 @@ func (s *Service) registerRoutes() {
 	}, s.getInstanceEventsBySlug)
 
 	s.register(http.MethodGet, "/leaderboards/speedruns", OpenAPIOperation{
+		Tags:        []string{"Explore"},
 		Summary:     "Get the speedrun leaderboard",
 		Description: "Returns a paginated list of qualified speedruns after duplicate-group and best-per-guild deduplication. The canonical log is the entry used by the leaderboard; other_logs contains matching uploads excluded as duplicates. timing defaults to full and accepts boss_to_boss for first-boss-pull through final-boss-kill timing.",
 		Parameters: []OpenAPIParameter{
@@ -187,6 +197,7 @@ func (s *Service) registerRoutes() {
 	}, s.listSpeedrunLeaderboard)
 
 	s.register(http.MethodGet, "/openapi.json", OpenAPIOperation{
+		Tags:        []string{"General"},
 		Summary:     "Get the OpenAPI document",
 		Description: "Returns the OpenAPI 3.1 contract used by Chronicle's developer explorer.",
 		Responses: map[string]OpenAPIResponse{
