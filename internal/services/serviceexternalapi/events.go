@@ -9,7 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (s *Service) getInstanceEventsBySlug(w http.ResponseWriter, r *http.Request) {
@@ -20,8 +19,7 @@ func (s *Service) getInstanceEventsBySlug(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	slug := chi.URLParam(r, "slug")
-	instance, err := s.db.InstanceBySlug(ctx, pgtype.Text{String: slug, Valid: slug != ""})
+	instance, err := s.instanceByIdentifier(r)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeNotFound(w, r, "Instance not found")
 		return

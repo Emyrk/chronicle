@@ -29,6 +29,7 @@ type fakeExternalAPIStore struct {
 	duplicateParams       database.ListExternalAPILeaderboardDuplicateLogsParams
 	instance              database.LogInstancesGuild
 	instanceErr           error
+	instanceID            uuid.UUID
 	instanceSlug          pgtype.Text
 	encounters            []database.LogInstanceEncounter
 	units                 []database.LogInstanceUnit
@@ -76,6 +77,10 @@ func (f *fakeExternalAPIStore) ListExternalAPILeaderboardDuplicateLogs(_ context
 	return f.leaderboardDuplicates, nil
 }
 
+func (f *fakeExternalAPIStore) Instance(_ context.Context, instanceID uuid.UUID) (database.LogInstancesGuild, error) {
+	f.instanceID = instanceID
+	return f.instance, f.instanceErr
+}
 func (f *fakeExternalAPIStore) InstanceBySlug(_ context.Context, slug pgtype.Text) (database.LogInstancesGuild, error) {
 	f.instanceSlug = slug
 	return f.instance, f.instanceErr

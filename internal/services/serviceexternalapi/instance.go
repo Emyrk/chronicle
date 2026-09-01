@@ -72,10 +72,17 @@ type instanceRankingParseValue struct {
 	createdAt time.Time
 }
 
+func (s *Service) instanceByIdentifier(r *http.Request) (database.LogInstancesGuild, error) {
+	identifier := chi.URLParam(r, "slug")
+	if instanceID, err := uuid.Parse(identifier); err == nil {
+		return s.db.Instance(r.Context(), instanceID)
+	}
+	return s.db.InstanceBySlug(r.Context(), pgtype.Text{String: identifier, Valid: identifier != ""})
+}
+
 func (s *Service) getInstanceBySlug(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	slug := chi.URLParam(r, "slug")
-	instance, err := s.db.InstanceBySlug(ctx, pgtype.Text{String: slug, Valid: slug != ""})
+	instance, err := s.instanceByIdentifier(r)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeNotFound(w, r, "Instance not found")
 		return
@@ -124,8 +131,7 @@ func (s *Service) getInstanceBySlug(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) getInstanceRankingRecordsBySlug(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	slug := chi.URLParam(r, "slug")
-	instance, err := s.db.InstanceBySlug(ctx, pgtype.Text{String: slug, Valid: slug != ""})
+	instance, err := s.instanceByIdentifier(r)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeNotFound(w, r, "Instance not found")
 		return

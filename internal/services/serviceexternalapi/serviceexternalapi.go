@@ -39,6 +39,7 @@ type externalAPIStore interface {
 	SpeedrunLeaderboard(context.Context, database.SpeedrunLeaderboardParams) ([]database.SpeedrunLeaderboardRow, error)
 	ListExternalAPILeaderboardDuplicateLogs(context.Context, database.ListExternalAPILeaderboardDuplicateLogsParams) ([]database.ListExternalAPILeaderboardDuplicateLogsRow, error)
 	ListExternalAPIRecentInstances(context.Context, database.ListExternalAPIRecentInstancesParams) ([]database.ListExternalAPIRecentInstancesRow, error)
+	Instance(context.Context, uuid.UUID) (database.LogInstancesGuild, error)
 	InstanceBySlug(context.Context, pgtype.Text) (database.LogInstancesGuild, error)
 	EncountersByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceEncounter, error)
 	InstanceUnitsByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceUnit, error)

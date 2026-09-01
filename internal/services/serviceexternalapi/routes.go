@@ -93,9 +93,9 @@ func (s *Service) registerRoutes() {
 
 	s.register(http.MethodGet, "/raidlogs/instances/{slug}", OpenAPIOperation{
 		Summary:     "Get a raid instance",
-		Description: "Returns parsed raid-instance metadata, encounters, units, and players for a public instance slug. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
+		Description: "Returns parsed raid-instance metadata, encounters, units, and players for a public instance slug or UUID. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
 		Parameters: []OpenAPIParameter{
-			pathParameter("slug", "Public raid-instance slug", "example-instance"),
+			pathParameter("slug", "Public raid-instance slug or UUID", "example-instance"),
 		},
 		Responses: okResponse(InstanceResponse{
 			WoWInstance: chroniclesdk.WoWInstance{Name: "Molten Core", Slug: "example-instance", DifficultyName: "Normal", MaxPlayers: 40},
@@ -111,7 +111,7 @@ func (s *Service) registerRoutes() {
 		Summary:     "Get raid-instance DPS and HPS metrics",
 		Description: "Returns every per-player encounter ranking record stored for a public raid instance, including raw damage, healing, absorption, duration, DPS, HPS, and persisted parse scores when available. Zero-value metrics are retained.",
 		Parameters: []OpenAPIParameter{
-			pathParameter("slug", "Public raid-instance slug", "example-instance"),
+			pathParameter("slug", "Public raid-instance slug or UUID", "example-instance"),
 		},
 		Responses: okResponse([]InstanceRankingRecord{{
 			InstanceRankingRecord: chroniclesdk.InstanceRankingRecord{
@@ -146,9 +146,9 @@ func (s *Service) registerRoutes() {
 
 	s.register(http.MethodGet, "/raidlogs/instances/{slug}/events/{type}", OpenAPIOperation{
 		Summary:     "Get a raid-instance event stream",
-		Description: "Returns the stored gzip-compressed protobuf event stream for a public raid-instance slug and event type.",
+		Description: "Returns the stored gzip-compressed protobuf event stream for a public raid-instance slug or UUID and event type.",
 		Parameters: []OpenAPIParameter{
-			pathParameter("slug", "Public raid-instance slug", "example-instance"),
+			pathParameter("slug", "Public raid-instance slug or UUID", "example-instance"),
 			pathParameter("type", "Event stream type, such as damage, heal, resource_change, slain, cast, or aura", "damage"),
 		},
 		Responses: binaryResponse("Gzip-compressed protobuf event stream."),

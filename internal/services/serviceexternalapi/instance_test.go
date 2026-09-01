@@ -123,12 +123,13 @@ func TestGetInstanceRankingRecordsBySlug(t *testing.T) {
 	service := &Service{db: store}
 	service.setupRoutes()
 
-	req := httptest.NewRequest(http.MethodGet, "/raidlogs/instances/example-instance/ranking-records", nil)
+	req := httptest.NewRequest(http.MethodGet, "/raidlogs/instances/"+instanceID.String()+"/ranking-records", nil)
 	rec := httptest.NewRecorder()
 	service.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, pgtype.Text{String: "example-instance", Valid: true}, store.instanceSlug)
+	require.Equal(t, instanceID, store.instanceID)
+	require.False(t, store.instanceSlug.Valid)
 	require.Equal(t, instanceID, store.rankingInstanceID)
 	require.Equal(t, instanceID, store.parseScoresInstanceID)
 
