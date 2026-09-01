@@ -29,12 +29,19 @@ type fakeExternalAPIStore struct {
 	duplicateParams       database.ListExternalAPILeaderboardDuplicateLogsParams
 	instance              database.LogInstancesGuild
 	instanceErr           error
+	instanceID            uuid.UUID
 	instanceSlug          pgtype.Text
 	encounters            []database.LogInstanceEncounter
 	units                 []database.LogInstanceUnit
 	players               []database.LogInstancePlayer
 	hostiles              []database.LogInstanceEncounterHostile
 	phases                []database.LogInstanceEncounterPhase
+	rankingRecords        []database.EncounterDpsRanking
+	rankingRecordsErr     error
+	rankingInstanceID     uuid.UUID
+	parseScores           []database.ParseScoreResult
+	parseScoresErr        error
+	parseScoresInstanceID uuid.UUID
 	event                 database.LogInstanceEvent
 	eventErr              error
 	eventParams           database.InstanceEventParams
@@ -70,6 +77,10 @@ func (f *fakeExternalAPIStore) ListExternalAPILeaderboardDuplicateLogs(_ context
 	return f.leaderboardDuplicates, nil
 }
 
+func (f *fakeExternalAPIStore) Instance(_ context.Context, instanceID uuid.UUID) (database.LogInstancesGuild, error) {
+	f.instanceID = instanceID
+	return f.instance, f.instanceErr
+}
 func (f *fakeExternalAPIStore) InstanceBySlug(_ context.Context, slug pgtype.Text) (database.LogInstancesGuild, error) {
 	f.instanceSlug = slug
 	return f.instance, f.instanceErr
@@ -88,6 +99,14 @@ func (f *fakeExternalAPIStore) GetInstanceEncounterCharacterFights(context.Conte
 }
 func (f *fakeExternalAPIStore) GetEncounterPhasesByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceEncounterPhase, error) {
 	return f.phases, nil
+}
+func (f *fakeExternalAPIStore) InstanceRankingRecords(_ context.Context, instanceID uuid.UUID) ([]database.EncounterDpsRanking, error) {
+	f.rankingInstanceID = instanceID
+	return f.rankingRecords, f.rankingRecordsErr
+}
+func (f *fakeExternalAPIStore) GetParseScoreResultsForInstance(_ context.Context, instanceID uuid.UUID) ([]database.ParseScoreResult, error) {
+	f.parseScoresInstanceID = instanceID
+	return f.parseScores, f.parseScoresErr
 }
 
 func (f *fakeExternalAPIStore) InstanceEvent(_ context.Context, params database.InstanceEventParams) (database.LogInstanceEvent, error) {

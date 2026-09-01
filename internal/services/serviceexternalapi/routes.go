@@ -2,6 +2,7 @@ package serviceexternalapi
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/google/uuid"
@@ -9,12 +10,14 @@ import (
 
 func (s *Service) registerRoutes() {
 	s.register(http.MethodGet, "/health", OpenAPIOperation{
+		Tags:        []string{"General"},
 		Summary:     "Check API health",
 		Description: "Returns whether Chronicle's external API is available.",
 		Responses:   okResponse(HealthResponse{Status: "ok"}),
 	}, s.health)
 
 	s.register(http.MethodGet, "/explore/servers", OpenAPIOperation{
+		Tags:        []string{"Explore"},
 		Summary:     "List supported servers",
 		Description: "Lists the servers and their realms visible to the current Chronicle community. Results are tenant-aware.",
 		Responses: okResponse(ServersResponse{Servers: []Server{{
@@ -24,6 +27,7 @@ func (s *Service) registerRoutes() {
 	}, s.listServers)
 
 	s.register(http.MethodGet, "/explore/servers/{server}/realms", OpenAPIOperation{
+		Tags:        []string{"Explore"},
 		Summary:     "List realms for a server",
 		Description: "Accepts a server UUID or case-insensitive server name and lists its visible realms.",
 		Parameters: []OpenAPIParameter{
@@ -41,6 +45,7 @@ func (s *Service) registerRoutes() {
 		pathParameter("character", "Character GUID, decimal game ID, or name", "Example"),
 	}
 	s.register(http.MethodGet, "/characters/{server}/{realm}/{character}", OpenAPIOperation{
+		Tags:        []string{"Characters"},
 		Summary:     "Get a character",
 		Description: "Returns the latest known identity, guild, class, race, level, specialization, role, and item-level data for a character.",
 		Parameters:  characterParameters,
@@ -52,6 +57,7 @@ func (s *Service) registerRoutes() {
 	}, s.getCharacter)
 
 	s.register(http.MethodGet, "/characters/{server}/{realm}/{character}/instances", OpenAPIOperation{
+		Tags:        []string{"Characters"},
 		Summary:     "List a character's instances",
 		Description: "Returns deduplicated raid instances the character participated in, newest first. Performance fields use already-computed ranking and parse data when available.",
 		Parameters: append(characterParameters,
@@ -69,6 +75,7 @@ func (s *Service) registerRoutes() {
 	}, s.listCharacterLogs)
 
 	s.register(http.MethodGet, "/raidlogs/recent", OpenAPIOperation{
+		Tags:        []string{"Explore"},
 		Summary:     "List recent raid activity",
 		Description: "Returns recent parsed raid instances, newest first. Results may be filtered by activity or log-group upload time and are limited to 50 per page.",
 		Parameters: []OpenAPIParameter{
@@ -90,11 +97,12 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.listRecentActivity)
 
-	s.register(http.MethodGet, "/raidlogs/instances/{slug}", OpenAPIOperation{
+	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}", OpenAPIOperation{
+		Tags:        []string{"Raid Instance"},
 		Summary:     "Get a raid instance",
-		Description: "Returns parsed raid-instance metadata, encounters, units, and players for a public instance slug. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
+		Description: "Returns parsed raid-instance metadata, encounters, units, and players for an instance ID. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
 		Parameters: []OpenAPIParameter{
-			pathParameter("slug", "Public raid-instance slug", "example-instance"),
+			pathParameter("instance_id", "Instance UUID", "11111111-1111-1111-1111-111111111111"),
 		},
 		Responses: okResponse(InstanceResponse{
 			WoWInstance: chroniclesdk.WoWInstance{Name: "Molten Core", Slug: "example-instance", DifficultyName: "Normal", MaxPlayers: 40},
@@ -106,17 +114,57 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.getInstanceBySlug)
 
-	s.register(http.MethodGet, "/raidlogs/instances/{slug}/events/{type}", OpenAPIOperation{
-		Summary:     "Get a raid-instance event stream",
-		Description: "Returns the stored gzip-compressed protobuf event stream for a public raid-instance slug and event type.",
+	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}/ranking-records", OpenAPIOperation{
+		Tags:        []string{"Raid Instance"},
+		Summary:     "Get raid-instance DPS and HPS metrics",
+		Description: "Returns every per-player encounter ranking record stored for an instance ID, including raw damage, healing, absorption, duration, DPS, HPS, and persisted parse scores when available. Zero-value metrics are retained.",
 		Parameters: []OpenAPIParameter{
-			pathParameter("slug", "Public raid-instance slug", "example-instance"),
+			pathParameter("instance_id", "Instance UUID", "11111111-1111-1111-1111-111111111111"),
+		},
+		Responses: okResponse([]InstanceRankingRecord{{
+			InstanceRankingRecord: chroniclesdk.InstanceRankingRecord{
+				ID:            uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+				EncounterID:   uuidPointer(uuid.MustParse("44444444-4444-4444-4444-444444444444")),
+				EncounterName: "Ragnaros",
+				PlayerGUID:    "Player-00000001",
+				PlayerName:    "Example",
+				PlayerClass:   "Warrior",
+				PlayerSpec:    "Fury",
+				PlayerRole:    "dps",
+				PlayerLevel:   60,
+				DamageDone:    123456,
+				HealingDone:   789,
+				AbsorbedDone:  100,
+				DurationSecs:  120.5,
+				DPS:           1024.53,
+				HPS:           6.55,
+				LogHashedSlug: "example-log",
+				KilledAt:      time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC),
+			},
+			DPSParse: &InstanceRankingParse{
+				MetricValue: 1024.53, PreciseScore: 91.72, DisplayScore: 92,
+				Rank: 18, SampleSize: 842, Status: "ok",
+			},
+			HPSParse: &InstanceRankingParse{
+				MetricValue: 6.55, PreciseScore: 24.11, DisplayScore: 24,
+				Rank: 638, SampleSize: 842, Status: "low_confidence",
+			},
+		}}),
+	}, s.getInstanceRankingRecordsBySlug)
+
+	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}/events/{type}", OpenAPIOperation{
+		Tags:        []string{"Raid Instance"},
+		Summary:     "Get a raid-instance event stream",
+		Description: "Returns the stored gzip-compressed protobuf event stream for an instance ID and event type.",
+		Parameters: []OpenAPIParameter{
+			pathParameter("instance_id", "Instance UUID", "11111111-1111-1111-1111-111111111111"),
 			pathParameter("type", "Event stream type, such as damage, heal, resource_change, slain, cast, or aura", "damage"),
 		},
 		Responses: binaryResponse("Gzip-compressed protobuf event stream."),
 	}, s.getInstanceEventsBySlug)
 
 	s.register(http.MethodGet, "/leaderboards/speedruns", OpenAPIOperation{
+		Tags:        []string{"Explore"},
 		Summary:     "Get the speedrun leaderboard",
 		Description: "Returns a paginated list of qualified speedruns after duplicate-group and best-per-guild deduplication. The canonical log is the entry used by the leaderboard; other_logs contains matching uploads excluded as duplicates. timing defaults to full and accepts boss_to_boss for first-boss-pull through final-boss-kill timing.",
 		Parameters: []OpenAPIParameter{
@@ -149,6 +197,7 @@ func (s *Service) registerRoutes() {
 	}, s.listSpeedrunLeaderboard)
 
 	s.register(http.MethodGet, "/openapi.json", OpenAPIOperation{
+		Tags:        []string{"General"},
 		Summary:     "Get the OpenAPI document",
 		Description: "Returns the OpenAPI 3.1 contract used by Chronicle's developer explorer.",
 		Responses: map[string]OpenAPIResponse{
@@ -191,6 +240,10 @@ func queryParameter(name, description string, required bool, kind string, exampl
 		Name: name, In: "query", Description: description, Required: required,
 		Schema: OpenAPISchema{Type: kind}, Example: example,
 	}
+}
+
+func uuidPointer(value uuid.UUID) *uuid.UUID {
+	return &value
 }
 
 func int32Pointer(value int32) *int32 {

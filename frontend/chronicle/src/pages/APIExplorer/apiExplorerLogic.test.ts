@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildRequestURL, endpointsFromDocument, type OpenAPIDocument } from "./apiExplorerLogic"
+import { buildRequestURL, endpointGroupsFromDocument, endpointsFromDocument, type OpenAPIDocument } from "./apiExplorerLogic"
 
 describe("API explorer helpers", () => {
   it("extracts documented operations", () => {
@@ -16,6 +16,44 @@ describe("API explorer helpers", () => {
 
     expect(endpointsFromDocument(document)).toEqual([
       expect.objectContaining({ method: "get", path: "/health" }),
+    ])
+  })
+
+  it("groups endpoints by documented tag order", () => {
+    const document: OpenAPIDocument = {
+      openapi: "3.1.0",
+      info: { title: "API", description: "", version: "1" },
+      servers: [{ url: "/api/external/v1" }],
+      tags: [
+        { name: "Explore", description: "Discovery endpoints" },
+        { name: "Raid Instance" },
+      ],
+      paths: {
+        "/raidlogs/instances/{instance_id}": {
+          get: { tags: ["Raid Instance"], summary: "Instance", responses: {} },
+        },
+        "/raidlogs/recent": {
+          get: { tags: ["Explore"], summary: "Recent raids", responses: {} },
+        },
+        "/leaderboards/speedruns": {
+          get: { tags: ["Explore"], summary: "Speedruns", responses: {} },
+        },
+      },
+    }
+
+    expect(endpointGroupsFromDocument(document)).toEqual([
+      {
+        name: "Explore",
+        description: "Discovery endpoints",
+        endpoints: [
+          expect.objectContaining({ path: "/raidlogs/recent" }),
+          expect.objectContaining({ path: "/leaderboards/speedruns" }),
+        ],
+      },
+      {
+        name: "Raid Instance",
+        endpoints: [expect.objectContaining({ path: "/raidlogs/instances/{instance_id}" })],
+      },
     ])
   })
 
