@@ -265,7 +265,7 @@ export function LogsTable({ logs, currentTenantName, onRequestDelete }: LogsTabl
         <CardDescription>Delete raw files after they're parsed to free space. Parsed reports stay available.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <input
             value={search}
             onChange={(e) => {
@@ -275,23 +275,22 @@ export function LogsTable({ logs, currentTenantName, onRequestDelete }: LogsTabl
             placeholder="Search by instance or server"
             className={inputClassName}
           />
-        </div>
-
-        {selected.size > 0 && (
-          <div className="flex items-center justify-between rounded-md bg-muted px-4 py-3">
-            <span className="text-sm">
-              {selected.size} selected · {formatBytes(selectedRawBytes)} raw storage to free
-            </span>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-                Clear
-              </Button>
-              <Button size="sm" variant="destructive" onClick={requestBulkDeleteRaw}>
-                Delete raw files
-              </Button>
+          {selected.size > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">
+                {selected.size} selected · {formatBytes(selectedRawBytes)} raw storage to free
+              </span>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                  Clear
+                </Button>
+                <Button size="sm" variant="destructive" onClick={requestBulkDeleteRaw}>
+                  Delete raw files
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <Table className="table-fixed">
           <TableHeader>
