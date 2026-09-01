@@ -22,15 +22,16 @@ interface SortableHeadProps {
   activeField: SortField;
   direction: SortDirection;
   onClick: (field: SortField) => void;
+  className?: string;
   children: ReactNode;
 }
 
-function SortableHead({ field, activeField, direction, onClick, children }: SortableHeadProps) {
+function SortableHead({ field, activeField, direction, onClick, className, children }: SortableHeadProps) {
   const isActive = field === activeField;
   const Icon = isActive ? (direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
   return (
     <TableHead
-      className={cn("cursor-pointer select-none", isActive && "text-foreground")}
+      className={cn("cursor-pointer select-none", isActive && "text-foreground", className)}
       onClick={() => onClick(field)}
     >
       <span className="inline-flex items-center gap-1">
@@ -244,7 +245,7 @@ export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
           </div>
         )}
 
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">
@@ -254,14 +255,32 @@ export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
                 />
               </TableHead>
               <TableHead>Log</TableHead>
-              <TableHead>Status</TableHead>
-              <SortableHead field="date" activeField={sortField} direction={sortDirection} onClick={handleSortClick}>
+              <TableHead className="w-36">Status</TableHead>
+              <SortableHead
+                field="date"
+                activeField={sortField}
+                direction={sortDirection}
+                onClick={handleSortClick}
+                className="w-28"
+              >
                 Date
               </SortableHead>
-              <SortableHead field="raw" activeField={sortField} direction={sortDirection} onClick={handleSortClick}>
+              <SortableHead
+                field="raw"
+                activeField={sortField}
+                direction={sortDirection}
+                onClick={handleSortClick}
+                className="w-28"
+              >
                 Raw stored
               </SortableHead>
-              <SortableHead field="parsed" activeField={sortField} direction={sortDirection} onClick={handleSortClick}>
+              <SortableHead
+                field="parsed"
+                activeField={sortField}
+                direction={sortDirection}
+                onClick={handleSortClick}
+                className="w-24"
+              >
                 Parsed
               </SortableHead>
               <TableHead className="w-10" />
