@@ -84,7 +84,7 @@ func (s *Service) registerRoutes() {
 			queryParameter("instance_name", "Instance name. Repeat this parameter to include multiple names.", false, "string", "Molten Core"),
 			queryParameter("realm_id", "Realm UUID", false, "string", "00000000-0000-0000-0000-000000000000"),
 			queryParameter("guild_id", "Guild UUID", false, "string", "00000000-0000-0000-0000-000000000000"),
-			queryParameter("has_video", "Filter by YouTube video presence: true or false", false, "boolean", true),
+			queryParameter("has_video", "Filter by YouTube video presence: true or false", false, "boolean", false),
 			queryParameter("page", "Page number, starting at 1", false, "integer", 1),
 			queryParameter("page_size", "Results per page, from 1 to 50", false, "integer", 25),
 		},
