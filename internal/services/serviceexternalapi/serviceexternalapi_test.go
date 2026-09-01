@@ -63,19 +63,19 @@ func TestOpenAPISpec(t *testing.T) {
 	require.Equal(t, "upload_after", recent.Parameters[1].Name)
 	require.Equal(t, "page_size", recent.Parameters[7].Name)
 
-	instance, ok := document.Paths["/raidlogs/instances/{slug}"]["get"]
+	instance, ok := document.Paths["/raidlogs/instances/{instance_id}"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Get a raid instance", instance.Summary)
 	require.Len(t, instance.Parameters, 1)
-	require.Equal(t, "slug", instance.Parameters[0].Name)
+	require.Equal(t, "instance_id", instance.Parameters[0].Name)
 
-	rankingRecords, ok := document.Paths["/raidlogs/instances/{slug}/ranking-records"]["get"]
+	rankingRecords, ok := document.Paths["/raidlogs/instances/{instance_id}/ranking-records"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Get raid-instance DPS and HPS metrics", rankingRecords.Summary)
 	require.Len(t, rankingRecords.Parameters, 1)
-	require.Equal(t, "slug", rankingRecords.Parameters[0].Name)
+	require.Equal(t, "instance_id", rankingRecords.Parameters[0].Name)
 
-	events, ok := document.Paths["/raidlogs/instances/{slug}/events/{type}"]["get"]
+	events, ok := document.Paths["/raidlogs/instances/{instance_id}/events/{type}"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Get a raid-instance event stream", events.Summary)
 	require.Len(t, events.Parameters, 2)

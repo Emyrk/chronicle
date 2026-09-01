@@ -91,11 +91,11 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.listRecentActivity)
 
-	s.register(http.MethodGet, "/raidlogs/instances/{slug}", OpenAPIOperation{
+	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}", OpenAPIOperation{
 		Summary:     "Get a raid instance",
-		Description: "Returns parsed raid-instance metadata, encounters, units, and players for a public instance slug or UUID. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
+		Description: "Returns parsed raid-instance metadata, encounters, units, and players for an instance ID. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
 		Parameters: []OpenAPIParameter{
-			pathParameter("slug", "Public raid-instance slug or UUID", "example-instance"),
+			pathParameter("instance_id", "Instance UUID", "11111111-1111-1111-1111-111111111111"),
 		},
 		Responses: okResponse(InstanceResponse{
 			WoWInstance: chroniclesdk.WoWInstance{Name: "Molten Core", Slug: "example-instance", DifficultyName: "Normal", MaxPlayers: 40},
@@ -107,11 +107,11 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.getInstanceBySlug)
 
-	s.register(http.MethodGet, "/raidlogs/instances/{slug}/ranking-records", OpenAPIOperation{
+	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}/ranking-records", OpenAPIOperation{
 		Summary:     "Get raid-instance DPS and HPS metrics",
-		Description: "Returns every per-player encounter ranking record stored for a public raid instance, including raw damage, healing, absorption, duration, DPS, HPS, and persisted parse scores when available. Zero-value metrics are retained.",
+		Description: "Returns every per-player encounter ranking record stored for an instance ID, including raw damage, healing, absorption, duration, DPS, HPS, and persisted parse scores when available. Zero-value metrics are retained.",
 		Parameters: []OpenAPIParameter{
-			pathParameter("slug", "Public raid-instance slug or UUID", "example-instance"),
+			pathParameter("instance_id", "Instance UUID", "11111111-1111-1111-1111-111111111111"),
 		},
 		Responses: okResponse([]InstanceRankingRecord{{
 			InstanceRankingRecord: chroniclesdk.InstanceRankingRecord{
@@ -144,11 +144,11 @@ func (s *Service) registerRoutes() {
 		}}),
 	}, s.getInstanceRankingRecordsBySlug)
 
-	s.register(http.MethodGet, "/raidlogs/instances/{slug}/events/{type}", OpenAPIOperation{
+	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}/events/{type}", OpenAPIOperation{
 		Summary:     "Get a raid-instance event stream",
-		Description: "Returns the stored gzip-compressed protobuf event stream for a public raid-instance slug or UUID and event type.",
+		Description: "Returns the stored gzip-compressed protobuf event stream for an instance ID and event type.",
 		Parameters: []OpenAPIParameter{
-			pathParameter("slug", "Public raid-instance slug or UUID", "example-instance"),
+			pathParameter("instance_id", "Instance UUID", "11111111-1111-1111-1111-111111111111"),
 			pathParameter("type", "Event stream type, such as damage, heal, resource_change, slain, cast, or aura", "damage"),
 		},
 		Responses: binaryResponse("Gzip-compressed protobuf event stream."),
