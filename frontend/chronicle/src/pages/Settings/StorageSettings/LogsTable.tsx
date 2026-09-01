@@ -85,7 +85,10 @@ function buildInstancesLabel(names: string[]): string {
   return `${names.slice(0, MAX_VISIBLE_INSTANCE_NAMES).join(", ")} + ${hidden} more`;
 }
 
-function buildBaseRow(group: WoWLogGroup): Omit<LogRowViewModel, "isSelected" | "isExpanded" | "canDeleteFiles" | "canDelete"> {
+function buildBaseRow(
+  group: WoWLogGroup,
+  currentTenantName: string | null,
+): Omit<LogRowViewModel, "isSelected" | "isExpanded" | "canDeleteFiles" | "canDelete"> {
   const status = deriveLogStatus(group);
   const instances = getParsedInstances(group);
   const instanceNames = instances.map((i) => i.name);
@@ -94,6 +97,7 @@ function buildBaseRow(group: WoWLogGroup): Omit<LogRowViewModel, "isSelected" | 
   const storedBytes = activeQuotaBytes(group);
   const compressionPct = originalBytes > 0 ? Math.round((1 - quotaBytesAll / originalBytes) * 100) : null;
   const encounterCount = instances.reduce((sum, inst) => sum + (inst.encounters?.length ?? 0), 0);
+  const tenantName = instances[0]?.tenant_name ?? null;
 
   return {
     group,
@@ -101,6 +105,8 @@ function buildBaseRow(group: WoWLogGroup): Omit<LogRowViewModel, "isSelected" | 
     instancesLabel: buildInstancesLabel(instanceNames),
     instancesFullLabel: instanceNames.length > 0 ? instanceNames.join(", ") : "Unparsed upload",
     server: instances[0]?.server_name ?? instances[0]?.realm_name ?? "—",
+    tenantName,
+    tenantMismatch: !!tenantName && !!currentTenantName && tenantName !== currentTenantName,
     uploadDateLabel: new Date(group.created_at).toLocaleDateString(),
     status,
     storedBytes,
@@ -120,10 +126,11 @@ function buildBaseRow(group: WoWLogGroup): Omit<LogRowViewModel, "isSelected" | 
 
 interface LogsTableProps {
   logs: WoWLogGroup[];
+  currentTenantName: string | null;
   onRequestDelete: (action: PendingAction) => void;
 }
 
-export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
+export function LogsTable({ logs, currentTenantName, onRequestDelete }: LogsTableProps) {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("raw");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -131,7 +138,10 @@ export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const baseRows = useMemo(() => logs.map(buildBaseRow), [logs]);
+  const baseRows = useMemo(
+    () => logs.map((group) => buildBaseRow(group, currentTenantName)),
+    [logs, currentTenantName],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -338,6 +348,7 @@ export function LogsTable({ logs, onRequestDelete }: LogsTableProps) {
                 <LogRow
                   key={row.id}
                   row={row}
+                  currentTenantName={currentTenantName}
                   onToggleSelect={toggleSelect}
                   onToggleExpand={toggleExpand}
                   onRequestDeleteRaw={() => onRequestDelete({ kind: "delete-raw", groups: [row.group], excludedCount: 0 })}

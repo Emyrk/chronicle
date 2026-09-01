@@ -762,14 +762,23 @@ export function useSupportedInstanceBossCounts() {
 export function useLogGroups(options?: Omit<UseQueryOptions<WoWLogGroup[]>, "queryKey" | "queryFn"> & {
   start?: string;
   end?: string;
+  /**
+   * When true, resolves each instance's realm/server/tenant fields
+   * regardless of which tenant subdomain the request came from (instead of
+   * leaving them blank for logs whose realm belongs to a different
+   * tenant). Used by the account storage page, which always lists every
+   * log the user owns across every tenant.
+   */
+  allTenants?: boolean;
 }) {
-  const { start, end, ...queryOptions } = options ?? {};
+  const { start, end, allTenants, ...queryOptions } = options ?? {};
   const params = new URLSearchParams();
   if (start) params.set("start", start);
   if (end) params.set("end", end);
+  if (allTenants) params.set("all_tenants", "true");
   const qs = params.toString();
   return useQuery({
-    queryKey: ["logGroups", start, end],
+    queryKey: ["logGroups", start, end, allTenants],
     retry: false,
     placeholderData: keepPreviousData,
     queryFn: async () => {

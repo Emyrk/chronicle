@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -46,6 +47,17 @@ func (api *API) WoWLogGroups(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		createdBefore = pgtype.Timestamptz{Time: t, Valid: true}
+	}
+
+	// By default, the realm/server/tenant fields on each parsed instance are
+	// scoped by the requesting subdomain's tenant RLS — a log whose realm
+	// belongs to a different tenant than the one being browsed comes back
+	// with those fields blank. all_tenants=true (used by the account storage
+	// page, which always lists every log the user owns regardless of which
+	// tenant they're currently on) bypasses that RLS for this lookup only;
+	// the query is still scoped to the caller's own logs via Owner below.
+	if r.URL.Query().Get("all_tenants") == "true" {
+		ctx = servicetenant.AdminBypass(ctx)
 	}
 
 	groups, err := api.Opts.Zed.GetWoWLogGroupsByOwner(ctx, database.GetWoWLogGroupsByOwnerParams{

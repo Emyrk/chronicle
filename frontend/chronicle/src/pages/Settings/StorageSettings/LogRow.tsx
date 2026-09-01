@@ -7,11 +7,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { TableCell, TableRow } from "@/components/Table/Table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { LogStatusBadge } from "./LogStatusBadge";
 import type { LogRowViewModel } from "./types";
 
 interface LogRowProps {
   row: LogRowViewModel;
+  currentTenantName: string | null;
   onToggleSelect: (id: string) => void;
   onToggleExpand: (id: string) => void;
   onRequestDeleteRaw: () => void;
@@ -21,6 +23,7 @@ interface LogRowProps {
 
 export function LogRow({
   row,
+  currentTenantName,
   onToggleSelect,
   onToggleExpand,
   onRequestDeleteRaw,
@@ -38,7 +41,24 @@ export function LogRow({
             <span className="truncate text-sm font-medium" title={row.instancesFullLabel}>
               {row.instancesLabel}
             </span>
-            <span className="text-xs text-muted-foreground">{row.server}</span>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {row.server}
+              {row.tenantMismatch && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="rounded px-1 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-500">
+                        {row.tenantName}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="w-64">
+                      This log is from {row.tenantName}, not {currentTenantName} — the community you're currently
+                      viewing.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </span>
           </div>
         </TableCell>
         <TableCell>

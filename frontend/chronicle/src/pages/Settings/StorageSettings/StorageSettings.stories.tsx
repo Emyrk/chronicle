@@ -26,6 +26,7 @@ const completeOutput: WoWParsedLogJobOutput = {
       slug: "molten-core",
       realm_id: "realm-1",
       server_name: "ChromieCraft",
+      tenant_name: "ChromieCraft",
       log_group_id: "log-complete",
       encounters: [
         { id: "e1", instance_id: "inst-1", boss: true, name: "Lucifron", kill_type: "clean", start_time: "2026-08-10T14:00:00Z", end_time: "2026-08-10T14:05:00Z" },
@@ -55,6 +56,23 @@ const warningsOutput: WoWParsedLogJobOutput = {
   complete: "2026-08-12T15:00:00Z",
   instance_failures: { "Unknown Instance_0": "Failed to parse a secondary instance in this upload" },
   instances: [{ ...completeOutput.instances[0], id: "inst-3", name: "Onyxia's Lair", log_group_id: "log-warnings" }],
+};
+
+// Uploaded from a different community than the one this story is viewed as
+// (see defaultProps.currentTenantName) — exercises the tenant-mismatch badge.
+const otherTenantOutput: WoWParsedLogJobOutput = {
+  complete: "2026-08-14T15:00:00Z",
+  instance_failures: {},
+  instances: [
+    {
+      ...completeOutput.instances[0],
+      id: "inst-other-tenant",
+      name: "Zul'Gurub",
+      server_name: "Nordanaar",
+      tenant_name: "Nordanaar",
+      log_group_id: "log-other-tenant",
+    },
+  ],
 };
 
 const failedOutput: WoWParsedLogJobOutput = {
@@ -164,6 +182,16 @@ const mockLogs: WoWLogGroup[] = [
     processing_output: { ...warningsOutput, instances: [{ ...completeOutput.instances[0], id: "inst-8", name: "Deadmines", log_group_id: "log-warnings-raw-deleted" }] } as unknown as WoWLogGroup["processing_output"],
     parsed_bytes: 1 * 1024 * 1024,
   },
+  {
+    id: "log-other-tenant",
+    owner: "user-123",
+    created_at: "2026-08-14T16:00:00Z",
+    updated_at: "2026-08-14T16:30:00Z",
+    log_type: "combat_log",
+    files: [file({ id: "f-other-tenant-1", wow_log_id: "log-other-tenant", compressed_size_bytes: 18 * 1024 * 1024 })],
+    processing_output: otherTenantOutput as unknown as WoWLogGroup["processing_output"],
+    parsed_bytes: 2 * 1024 * 1024,
+  },
 ];
 
 const mockStorage: UserStorageInfo = {
@@ -195,6 +223,9 @@ const defaultProps = {
   storageLoading: false,
   logs: mockLogs,
   logsLoading: false,
+  // Viewing as if browsing from ChromieCraft's subdomain — makes log-other-tenant
+  // (uploaded from Nordanaar) render the tenant-mismatch badge.
+  currentTenantName: "ChromieCraft",
 };
 
 const meta: Meta<typeof StorageSettingsView> = {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Play } from "lucide-react";
-import { useLogGroups, useMyStorage, type UserStorageInfo, type WoWLogGroup } from "@/api/queries";
+import { useLogGroups, useMyStorage, useSiteConfig, type UserStorageInfo, type WoWLogGroup } from "@/api/queries";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
@@ -14,9 +14,17 @@ export interface StorageSettingsViewProps {
   storageLoading: boolean;
   logs: WoWLogGroup[] | undefined;
   logsLoading: boolean;
+  /** Name of the tenant currently being browsed (subdomain), or null on the root domain. */
+  currentTenantName: string | null;
 }
 
-export function StorageSettingsView({ storage, storageLoading, logs, logsLoading }: StorageSettingsViewProps) {
+export function StorageSettingsView({
+  storage,
+  storageLoading,
+  logs,
+  logsLoading,
+  currentTenantName,
+}: StorageSettingsViewProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [videoOpen, setVideoOpen] = useState(false);
 
@@ -47,7 +55,7 @@ export function StorageSettingsView({ storage, storageLoading, logs, logsLoading
       {logsLoading || !logs ? (
         <p className="text-sm text-muted-foreground">Loading your logs...</p>
       ) : (
-        <LogsTable logs={logs} onRequestDelete={setPendingAction} />
+        <LogsTable logs={logs} currentTenantName={currentTenantName} onRequestDelete={setPendingAction} />
       )}
 
       {pendingAction && <DeleteConfirmDialog action={pendingAction} onClose={() => setPendingAction(null)} />}
@@ -73,7 +81,16 @@ export function StorageSettingsView({ storage, storageLoading, logs, logsLoading
 
 export function StorageSettings() {
   const { data: storage, isLoading: storageLoading } = useMyStorage();
-  const { data: logs, isLoading: logsLoading } = useLogGroups();
+  const { data: logs, isLoading: logsLoading } = useLogGroups({ allTenants: true });
+  const { data: siteConfig } = useSiteConfig();
 
-  return <StorageSettingsView storage={storage} storageLoading={storageLoading} logs={logs} logsLoading={logsLoading} />;
+  return (
+    <StorageSettingsView
+      storage={storage}
+      storageLoading={storageLoading}
+      logs={logs}
+      logsLoading={logsLoading}
+      currentTenantName={siteConfig?.tenant?.name ?? null}
+    />
+  );
 }

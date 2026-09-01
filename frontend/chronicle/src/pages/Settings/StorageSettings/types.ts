@@ -10,6 +10,10 @@ export interface LogRowViewModel {
   /** Full, untruncated instance name list — used for search and as a hover title. */
   instancesFullLabel: string;
   server: string;
+  /** The log's resolved tenant name, or null if untenanted / unresolved. */
+  tenantName: string | null;
+  /** True when tenantName is known and differs from the tenant currently being browsed. */
+  tenantMismatch: boolean;
   uploadDateLabel: string;
   status: LogStatusInfo;
   /** Active-file quota bytes — what currently counts against the raw storage limit. */
