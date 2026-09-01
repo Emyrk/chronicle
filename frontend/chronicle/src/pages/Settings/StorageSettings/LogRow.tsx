@@ -42,24 +42,23 @@ export function LogRow({
             <span className="truncate text-sm font-medium" title={row.instancesFullLabel}>
               {row.instancesLabel}
             </span>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {row.server}
-              {row.tenantMismatch && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="rounded px-1 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-500">
-                        {row.tenantName}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent className="w-64">
-                      This log is from {row.tenantName}, not {currentTenantName} — the community you're currently
-                      viewing.
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </span>
+            {row.tenantMismatch ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-block w-fit rounded px-1 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-500">
+                      {row.server}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="w-64">
+                    This log is from {row.tenantName}, not {currentTenantName} — the community you're currently
+                    viewing.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <span className="text-xs text-muted-foreground">{row.server}</span>
+            )}
           </div>
         </TableCell>
         <TableCell>
