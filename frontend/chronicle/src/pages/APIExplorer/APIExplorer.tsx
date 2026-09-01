@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Braces, Check, ChevronDown, Clipboard, ExternalLink, LoaderCircle, Play, Terminal } from "lucide-react"
+import { Activity, AlertTriangle, Braces, Check, ChevronDown, Clipboard, Clock3, ExternalLink, LoaderCircle, Play, RefreshCw, Terminal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -8,11 +8,15 @@ import {
   endpointGroupsFromDocument,
   endpointsFromDocument,
   parameterKey,
+  rateLimitStatusFromHeaders,
   type APIEndpoint,
   type OpenAPIDocument,
+  type RateLimitStatus,
 } from "./apiExplorerLogic"
 
 const SPEC_URL = "/api/external/v1/openapi.json"
+
+const RATE_LIMIT_BURST = 20
 
 const methodStyles: Record<APIEndpoint["method"], string> = {
   get: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
@@ -33,6 +37,89 @@ async function fetchDocument(): Promise<OpenAPIDocument> {
   const response = await fetch(SPEC_URL)
   if (!response.ok) throw new Error(`OpenAPI request failed with ${response.status}`)
   return response.json() as Promise<OpenAPIDocument>
+}
+
+type RateLimitCheck = RateLimitStatus & {
+  checkedAt: Date
+}
+
+async function fetchRateLimitStatus(server: string): Promise<RateLimitCheck> {
+  const response = await fetch(`${server}/health`, { cache: "no-store" })
+  if (!response.ok) throw new Error(`Health request failed with ${response.status}`)
+  return { ...rateLimitStatusFromHeaders(response.headers), checkedAt: new Date() }
+}
+
+function RateLimitStatusCard({ server }: { server: string }) {
+  const { data, error, isFetching, refetch } = useQuery({
+    queryKey: ["external-api", "rate-limit", server],
+    queryFn: () => fetchRateLimitStatus(server),
+    enabled: false,
+  })
+
+  const availablePercent = data ? Math.min((data.remaining / RATE_LIMIT_BURST) * 100, 100) : 0
+
+  return (
+    <div className="mt-10 rounded-lg border border-cyan-300/15 bg-slate-950/65 shadow-lg shadow-black/10 backdrop-blur-sm">
+      <div className="grid gap-5 p-5 md:grid-cols-[minmax(12rem,0.8fr)_minmax(20rem,1.5fr)_auto] md:items-center md:gap-7 sm:p-6">
+        <div>
+          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300">
+            <Activity className="h-3.5 w-3.5" />
+            Your rate limit
+            {data && <span className="ml-auto h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.8)]" aria-label="API online" />}
+          </div>
+
+          {data ? (
+            <div className="mt-3">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <span className="text-3xl font-black tracking-tight text-white">{data.remaining}</span>
+                  <span className="ml-1.5 font-mono text-xs text-slate-500">/ {RATE_LIMIT_BURST}</span>
+                </div>
+                <span className="pb-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">available now</span>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-cyan-300 transition-[width] duration-500"
+                  style={{ width: `${availablePercent}%` }}
+                />
+              </div>
+              <p className="mt-2 font-mono text-[10px] text-slate-600">
+                Checked {data.checkedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </p>
+            </div>
+          ) : (
+            <p className={`mt-3 text-sm ${error ? "text-rose-300" : "text-slate-500"}`}>
+              {error instanceof Error ? error.message : "Check your current allowance."}
+            </p>
+          )}
+        </div>
+
+        <div className="border-white/10 md:border-l md:pl-7">
+          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
+            <Clock3 className="h-3.5 w-3.5 text-cyan-300" />
+            Continuous refill
+          </div>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            The per-IP bucket holds {RATE_LIMIT_BURST} requests and refills one request each second, an average of {data?.limit ?? 60} per minute.
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">
+            Every response includes <code className="text-slate-400">RateLimit-Limit</code> and <code className="text-slate-400">RateLimit-Remaining</code>. A <code className="text-slate-400">429</code> response also includes <code className="text-slate-400">Retry-After</code>. This health check reports the allowance without consuming a request.
+          </p>
+        </div>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void refetch()}
+          disabled={isFetching}
+          className="w-full border-white/10 bg-white/[0.03] text-slate-200 hover:bg-cyan-300/10 hover:text-cyan-200 md:w-auto"
+        >
+          {isFetching ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+          {isFetching ? "Checking" : data ? "Refresh status" : "Check status"}
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 function EndpointCard({ endpoint, server }: { endpoint: APIEndpoint; server: string }) {
@@ -211,18 +298,24 @@ export function APIExplorer() {
             <Braces className="h-4 w-4" />
             Developer interface
           </div>
-          <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div className="mt-6 flex max-w-3xl gap-3 rounded-lg border border-amber-300/25 bg-amber-300/[0.07] px-4 py-3 text-amber-100">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
             <div>
-              <h1 className="max-w-3xl text-4xl font-black tracking-tight text-white sm:text-6xl">Chronicle External API</h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-slate-400 sm:text-lg">
-                Live documentation for public Chronicle integrations. Inspect the contract, provide parameters, and execute requests without leaving the page.
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300">Experimental API</p>
+              <p className="mt-1 text-sm leading-5 text-amber-100/70">
+                This API is experimental. Endpoints, request parameters, response formats, and rate limits may change at any time.
               </p>
             </div>
-            <a href={SPEC_URL} className="inline-flex items-center gap-2 font-mono text-xs text-slate-400 transition-colors hover:text-cyan-300">
+          </div>
+
+          <div className="mt-5">
+            <h1 className="max-w-3xl text-4xl font-black tracking-tight text-white sm:text-6xl">Chronicle External API</h1>
+            <a href={SPEC_URL} className="mt-5 inline-flex items-center gap-2 font-mono text-xs text-slate-400 transition-colors hover:text-cyan-300">
               OpenAPI {data?.openapi ?? "3.1"}
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
+          <RateLimitStatusCard server={server} />
           {data && (
             <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-white/10 pt-5 font-mono text-xs text-slate-500">
               <span><strong className="text-slate-200">{endpoints.length}</strong> documented endpoint{endpoints.length === 1 ? "" : "s"}</span>

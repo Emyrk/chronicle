@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,10 +22,32 @@ func TestHealth(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
+	require.Equal(t, "60", rec.Header().Get("RateLimit-Limit"))
+	require.Equal(t, "20", rec.Header().Get("RateLimit-Remaining"))
 
 	var response HealthResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
 	require.Equal(t, HealthResponse{Status: "ok"}, response)
+}
+
+func TestMountedHealthDoesNotConsumeRateLimit(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{}
+	service.setupRoutes()
+
+	router := chi.NewRouter()
+	router.Mount("/api/external/v1", service)
+
+	for range 3 {
+		req := httptest.NewRequest(http.MethodGet, "/api/external/v1/health", nil)
+		req.Header.Set("X-Forwarded-For", "192.0.2.1")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, "20", rec.Header().Get("RateLimit-Remaining"))
+	}
 }
 
 func TestOpenAPISpec(t *testing.T) {
@@ -38,6 +61,7 @@ func TestOpenAPISpec(t *testing.T) {
 	service.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "60", rec.Header().Get("RateLimit-Limit"))
 
 	var document OpenAPIDocument
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&document))
@@ -90,9 +114,11 @@ func TestOpenAPISpec(t *testing.T) {
 	require.Equal(t, "Get a raid-instance event stream", events.Summary)
 	require.Len(t, events.Parameters, 2)
 	require.Contains(t, events.Responses["200"].Content, "application/octet-stream")
+	require.Contains(t, events.Responses, "429")
 
 	health, ok := document.Paths["/health"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Check API health", health.Summary)
 	require.Contains(t, health.Responses, "200")
+	require.NotContains(t, health.Responses, "429")
 }

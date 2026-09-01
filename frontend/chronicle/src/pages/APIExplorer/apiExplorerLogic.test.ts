@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { buildRequestURL, endpointGroupsFromDocument, endpointsFromDocument, type OpenAPIDocument } from "./apiExplorerLogic"
+import {
+  buildRequestURL,
+  endpointGroupsFromDocument,
+  endpointsFromDocument,
+  rateLimitStatusFromHeaders,
+  type OpenAPIDocument,
+} from "./apiExplorerLogic"
 
 describe("API explorer helpers", () => {
   it("extracts documented operations", () => {
@@ -69,5 +75,20 @@ describe("API explorer helpers", () => {
     )
 
     expect(url).toBe("/api/external/v1/characters/A%20B?limit=25")
+  })
+
+  it("reads rate-limit response headers", () => {
+    const headers = new Headers({
+      "RateLimit-Limit": "60",
+      "RateLimit-Remaining": "19",
+    })
+
+    expect(rateLimitStatusFromHeaders(headers)).toEqual({ limit: 60, remaining: 19 })
+  })
+
+  it("rejects missing rate-limit response headers", () => {
+    expect(() => rateLimitStatusFromHeaders(new Headers())).toThrow(
+      "Health response did not include valid rate-limit headers",
+    )
   })
 })
