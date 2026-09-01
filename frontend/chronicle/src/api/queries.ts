@@ -835,6 +835,8 @@ export function useDeleteLogGroup() {
       queryClient.invalidateQueries({ queryKey: ["logGroups"] });
       // Remove the specific log from cache
       queryClient.removeQueries({ queryKey: ["logGroup", logId] });
+      // Deleting a whole log group frees both raw and parsed storage.
+      queryClient.invalidateQueries({ queryKey: ["my-storage"] });
     },
   });
 }
@@ -863,6 +865,8 @@ export function useDeleteLogInstance() {
       queryClient.invalidateQueries({ queryKey: ["logGroups"] });
       queryClient.removeQueries({ queryKey: ["instance", instanceId] });
       queryClient.removeQueries({ queryKey: ["instanceYoutube", instanceId] });
+      // Deleting an instance's parsed data frees parsed storage.
+      queryClient.invalidateQueries({ queryKey: ["my-storage"] });
     },
   });
 }
@@ -958,6 +962,8 @@ export function useDeleteLogFiles() {
       // Invalidate to refetch with updated file status
       queryClient.invalidateQueries({ queryKey: ["logGroup", logId] });
       queryClient.invalidateQueries({ queryKey: ["logGroups"] });
+      // Deleting raw files frees raw storage.
+      queryClient.invalidateQueries({ queryKey: ["my-storage"] });
     },
   });
 }
