@@ -100,7 +100,7 @@ function RateLimitStatusCard({ server }: { server: string }) {
             Continuous refill
           </div>
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            The per-IP bucket holds {RATE_LIMIT_BURST} requests and refills one request each second, an average of {data?.limit ?? 60} per minute. It does not reset at <span className="font-mono text-slate-400">:00</span>. Limits are best effort and apply separately to each Chronicle process.
+            The per-IP bucket holds {RATE_LIMIT_BURST} requests and refills one request each second, an average of {data?.limit ?? 60} per minute.
           </p>
           <p className="mt-1 text-xs leading-5 text-slate-600">This health check reports the allowance without consuming a request.</p>
         </div>
