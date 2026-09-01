@@ -87,6 +87,12 @@ export interface PanelDefinition<TResult, TEvent extends ProcessorEvent = Proces
 
   /** If true, this panel is hidden from the panel selector unless ?debug=true */
   hidden?: boolean;
+
+  /**
+   * Instance capabilities required before the panel is selectable or its streams are fetched.
+   * Use this for message-backed panels whose event stream only exists on compatible logs.
+   */
+  requiredCapabilities?: string[];
   
   /** Custom label for the checkbox (defaults to "Per second" when supportsPerSecond is true) */
   checkboxLabel?: string;

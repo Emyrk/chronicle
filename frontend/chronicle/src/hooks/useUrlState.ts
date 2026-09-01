@@ -667,6 +667,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   guilds: 'gld',
   companion_stats: 'cs',
   pulls_and_cleanup: 'pac',
+  raid_composition: 'rc',
 };
 
 // ============================================================================
