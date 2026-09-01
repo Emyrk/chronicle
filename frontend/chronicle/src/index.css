@@ -427,7 +427,14 @@
   * {
     @apply border-border outline-ring/50;
   }
-  html {
+  html, body {
+    /* Reserve the scrollbar's gutter on both elements: Radix's scroll-lock
+       (dropdown/dialog/popover open) sets overflow:hidden on body specifically,
+       which removes body's own scrollbar if body — not html — is the element
+       actually rendering it. Without this on both, closing/opening a menu
+       shifts all fixed-width/centered layouts sideways by the scrollbar's
+       width. scrollbar-gutter alone doesn't create a scroll container, so it
+       doesn't carry the position:sticky risk overflow-hidden would. */
     scrollbar-gutter: stable;
   }
   html, body {
