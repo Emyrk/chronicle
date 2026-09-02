@@ -19,28 +19,33 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (api *API) settingsToSDK(ctx context.Context, s database.GuildSetting) (chroniclesdk.GuildSettings, error) {
+func settingsToSDK(s database.GuildSetting) chroniclesdk.GuildSettings {
 	out := chroniclesdk.GuildSettings{GuildID: s.GuildID}
 	if s.AllowJoinRequestsUntil.Valid {
 		t := s.AllowJoinRequestsUntil.Time
 		out.AllowJoinRequestsUntil = &t
 	}
+	return out
+}
 
-	var err error
-	out.DiscordIntegrationEnabled, err = api.Zed.IsGuildDiscordBotEnabled(ctx, s.GuildID)
+func (api *API) discordIntegrationSettingsToSDK(ctx context.Context, guildID uuid.UUID) (chroniclesdk.GuildDiscordIntegrationSettings, error) {
+	enabled, err := api.Zed.IsGuildDiscordBotEnabled(ctx, guildID)
 	if err != nil {
-		return chroniclesdk.GuildSettings{}, err
+		return chroniclesdk.GuildDiscordIntegrationSettings{}, err
 	}
-	out.DiscordIntegrationAvailable = api.Opts.Bot.Available()
 
+	out := chroniclesdk.GuildDiscordIntegrationSettings{
+		Enabled:   enabled,
+		Available: api.Opts.Bot.Available(),
+	}
 	if actor, ok := authz.ActorFromContext(ctx); ok {
-		out.CanEnableDiscordIntegration, err = api.Zed.CheckOne(
+		out.CanEnable, err = api.Zed.CheckOne(
 			ctx,
 			nil,
 			policy.New().GlobalChronicle().CanAdminister_authz_User(actor),
 		)
 		if err != nil {
-			return chroniclesdk.GuildSettings{}, err
+			return chroniclesdk.GuildDiscordIntegrationSettings{}, err
 		}
 	}
 	return out, nil
@@ -70,11 +75,7 @@ func (api *API) GetGuildSettings(w http.ResponseWriter, r *http.Request) {
 		settings.GuildID = guild.ID
 	}
 
-	resp, err := api.settingsToSDK(ctx, settings)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
+	resp := settingsToSDK(settings)
 	resp.IsMember = isMember
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
@@ -103,7 +104,15 @@ func (api *API) UpdateGuildSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := api.settingsToSDK(ctx, settings)
+	httpapi.Write(ctx, w, http.StatusOK, settingsToSDK(settings))
+}
+
+// GetGuildDiscordIntegration returns Discord integration settings to guild administrators.
+func (api *API) GetGuildDiscordIntegration(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+
+	resp, err := api.discordIntegrationSettingsToSDK(ctx, guild.ID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -134,15 +143,7 @@ func (api *API) UpdateGuildDiscordIntegration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	settings, err := api.Zed.GetGuildSettings(ctx, guild.ID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		settings.GuildID = guild.ID
-	} else if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	resp, err := api.settingsToSDK(ctx, settings)
+	resp, err := api.discordIntegrationSettingsToSDK(ctx, guild.ID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return

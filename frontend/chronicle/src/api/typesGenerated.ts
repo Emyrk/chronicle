@@ -1353,6 +1353,13 @@ export interface GuildCharacterRosterResponse {
 }
 
 // From chroniclesdk/guild_page.go
+export interface GuildDiscordIntegrationSettings {
+    readonly enabled: boolean;
+    readonly available: boolean;
+    readonly can_enable: boolean;
+}
+
+// From chroniclesdk/guild_page.go
 /**
  * GuildEncounterKill aggregates a guild's kills of one encounter across all
  * time. Duplicate uploads of the same raid night count once.
@@ -1528,9 +1535,6 @@ export interface GuildSettings {
     readonly guild_id: string;
     readonly allow_join_requests_until: string | null;
     readonly is_member: boolean;
-    readonly discord_integration_enabled: boolean;
-    readonly discord_integration_available: boolean;
-    readonly can_enable_discord_integration: boolean;
 }
 
 // From chroniclesdk/constants.go

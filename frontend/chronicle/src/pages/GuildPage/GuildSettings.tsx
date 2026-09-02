@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { Navigate, useParams, Link } from "react-router-dom";
 import {
+  useGuildDiscordIntegration,
   useGuildSettings,
   useUpdateGuildDiscordIntegration,
   useUpdateGuildSettings,
@@ -37,8 +38,11 @@ const TABS: Tab[] = [
 
 export function GuildSettings() {
   const { guildId } = useParams<{ guildId: string }>();
-  const { data: pageConfig } = useGuildPage(guildId);
-  const { data: settings, isLoading } = useGuildSettings(guildId);
+  const { data: pageConfig, isLoading: isPageLoading } = useGuildPage(guildId);
+  const canAdminGuild = pageConfig?.guild.can_edit === true;
+  const { data: settings, isLoading: isSettingsLoading } = useGuildSettings(guildId);
+  const { data: discordSettings, isLoading: isDiscordSettingsLoading } =
+    useGuildDiscordIntegration(guildId, canAdminGuild);
   const updateSettings = useUpdateGuildSettings(guildId);
   const updateDiscordIntegration = useUpdateGuildDiscordIntegration(guildId);
   const isMobile = useIsMobile();
@@ -47,7 +51,15 @@ export function GuildSettings() {
 
   const open = isOpen(settings?.allow_join_requests_until);
 
-  if (isLoading) {
+  if (!isPageLoading && !canAdminGuild) {
+    return <Navigate to={`/g/${guildId}`} replace />;
+  }
+
+  if (
+    isPageLoading ||
+    isSettingsLoading ||
+    (canAdminGuild && isDiscordSettingsLoading)
+  ) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -140,7 +152,7 @@ export function GuildSettings() {
           </div>
         </div>
       )}
-      {activeTab === "discord-integration" && settings && (
+      {activeTab === "discord-integration" && discordSettings && (
         <div className="space-y-4">
           <div>
             <h2 className="text-xl font-semibold">Discord Integration</h2>
@@ -153,15 +165,15 @@ export function GuildSettings() {
             <div className="flex items-start gap-3">
               <Bot className="mt-0.5 h-5 w-5 text-muted-foreground" />
               <div className="flex-1">
-                {!settings.discord_integration_available ? (
+                {!discordSettings.available ? (
                   <>
                     <h3 className="font-medium">Discord integration is not supported</h3>
                     <p className="text-sm text-muted-foreground mt-1">
                       The Discord bot is not configured on this Chronicle deployment.
                     </p>
                   </>
-                ) : !settings.discord_integration_enabled &&
-                  !settings.can_enable_discord_integration ? (
+                ) : !discordSettings.enabled &&
+                  !discordSettings.can_enable ? (
                   <>
                     <h3 className="font-medium">Discord linking is not enabled</h3>
                     <p className="text-sm text-muted-foreground mt-1">
@@ -172,34 +184,34 @@ export function GuildSettings() {
                 ) : (
                   <>
                     <h3 className="font-medium">
-                      {settings.discord_integration_enabled
+                      {discordSettings.enabled
                         ? "Discord linking is enabled"
                         : "Enable Discord linking"}
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {settings.discord_integration_enabled
+                      {discordSettings.enabled
                         ? "Guild administrators can link the Discord bot when installation support is added."
                         : "Allow this guild to link Chronicle to a Discord server."}
                     </p>
 
-                    {settings.can_enable_discord_integration && (
+                    {discordSettings.can_enable && (
                       <Button
                         className="mt-4"
                         variant={
-                          settings.discord_integration_enabled
+                          discordSettings.enabled
                             ? "destructive"
                             : "default"
                         }
                         disabled={updateDiscordIntegration.isPending}
                         onClick={() =>
                           updateDiscordIntegration.mutate({
-                            enabled: !settings.discord_integration_enabled,
+                            enabled: !discordSettings.enabled,
                           })
                         }
                       >
                         {updateDiscordIntegration.isPending
                           ? "Saving..."
-                          : settings.discord_integration_enabled
+                          : discordSettings.enabled
                             ? "Disable Discord Linking"
                             : "Enable Discord Linking"}
                       </Button>

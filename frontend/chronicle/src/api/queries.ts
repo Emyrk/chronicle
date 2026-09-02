@@ -56,6 +56,7 @@ import type {
   UpdateGuildPageRequest as UpdateGuildPageRequestGenerated,
   GuildRosterMember as GuildRosterMemberGenerated,
   GuildSettings as GuildSettingsGenerated,
+  GuildDiscordIntegrationSettings as GuildDiscordIntegrationSettingsGenerated,
   GuildJoinRequest as GuildJoinRequestGenerated,
   UpdateGuildSettingsRequest as UpdateGuildSettingsRequestGenerated,
   UpdateGuildDiscordIntegrationRequest as UpdateGuildDiscordIntegrationRequestGenerated,
@@ -127,6 +128,7 @@ export type UpdateGuildPageRequest = UpdateGuildPageRequestGenerated;
 export type GuildPageTheme = GuildPageThemeGenerated;
 export type GuildRosterMember = GuildRosterMemberGenerated;
 export type GuildSettings = GuildSettingsGenerated;
+export type GuildDiscordIntegrationSettings = GuildDiscordIntegrationSettingsGenerated;
 export type GuildJoinRequest = GuildJoinRequestGenerated;
 export type UpdateGuildSettingsRequest = UpdateGuildSettingsRequestGenerated;
 export type UpdateGuildDiscordIntegrationRequest = UpdateGuildDiscordIntegrationRequestGenerated;
@@ -1726,6 +1728,28 @@ export function useUpdateGuildSettings(guildId: string | undefined) {
   });
 }
 
+export function useGuildDiscordIntegration(
+  guildId: string | undefined,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["guild-discord-integration", guildId],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/v1/guilds/${guildId}/settings/discord-integration`,
+        { credentials: "include" },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to fetch Discord integration settings", error);
+      }
+      return response.json() as Promise<GuildDiscordIntegrationSettings>;
+    },
+    enabled: !!guildId && enabled,
+    retry: false,
+  });
+}
+
 export function useUpdateGuildDiscordIntegration(guildId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -1743,10 +1767,10 @@ export function useUpdateGuildDiscordIntegration(guildId: string | undefined) {
         const error = await response.json().catch(() => null);
         throw buildAPIError("Failed to update Discord integration", error);
       }
-      return response.json() as Promise<GuildSettings>;
+      return response.json() as Promise<GuildDiscordIntegrationSettings>;
     },
     onSuccess: (settings) => {
-      queryClient.setQueryData(["guild-settings", guildId], settings);
+      queryClient.setQueryData(["guild-discord-integration", guildId], settings);
     },
   });
 }
