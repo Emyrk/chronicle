@@ -117,7 +117,7 @@ func TestArgsAnnounceRaidLogInsertOpts(t *testing.T) {
 	require.True(t, opts.UniqueOpts.ByArgs)
 	require.Contains(t, opts.UniqueOpts.ByState, rivertype.JobStatePending)
 	require.Contains(t, opts.UniqueOpts.ByState, rivertype.JobStateRetryable)
-	require.NotContains(t, opts.UniqueOpts.ByState, rivertype.JobStateRunning)
+	require.Contains(t, opts.UniqueOpts.ByState, rivertype.JobStateRunning)
 }
 
 func TestAnnouncementScopeMatches(t *testing.T) {

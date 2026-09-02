@@ -37,12 +37,11 @@ func (a ArgsAnnounceRaidLog) InsertOpts() river.InsertOpts {
 		MaxAttempts: 1,
 		UniqueOpts: river.UniqueOpts{
 			ByArgs: true,
-			// Excluding running allows one follow-up rebuild to queue while the
-			// current worker is rendering older database state.
 			ByState: []rivertype.JobState{
 				rivertype.JobStateScheduled,
 				rivertype.JobStatePending,
 				rivertype.JobStateAvailable,
+				rivertype.JobStateRunning,
 				rivertype.JobStateRetryable,
 			},
 		},
