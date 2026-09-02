@@ -17,7 +17,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
-	"github.com/authzed/gochugaru/rel"
 )
 
 func TestAuthz(t *testing.T) {
@@ -130,12 +129,16 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 		require.Equal(t, expected, allowed)
 	}
 
+	leaderCanEnable, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdminister_authz_User(policy.New().User(leaderID)))
+	require.NoError(t, err)
+	require.False(t, leaderCanEnable)
+	technicalAdminCanEnable, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdminister_authz_User(policy.New().User(technicalAdminID)))
+	require.NoError(t, err)
+	require.True(t, technicalAdminCanEnable)
+
 	checkManage(t, leaderID, false)
 
-	b = policy.New()
-	b.Guild(guildID).Discord_bot_enabledWildcard()
-	_, err = zed.Write(ctx, *b.Txn())
-	require.NoError(t, err)
+	require.NoError(t, zed.SetGuildDiscordBotEnabled(ctx, guildID, true))
 
 	entitled, err := zed.CheckOne(ctx, nil, policy.New().Guild(guildID).CanUse_discord_bot_User(policy.New().User(uuid.New())))
 	require.NoError(t, err)
@@ -144,9 +147,7 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 	checkManage(t, memberID, false)
 	checkManage(t, technicalAdminID, true)
 
-	guildObject := policy.New().Guild(guildID).Object()
-	filter := rel.NewFilter(guildObject.Typ, guildObject.ID, "discord_bot_enabled")
-	require.NoError(t, zed.Delete(ctx, rel.NewPreconditionedFilter(filter)))
+	require.NoError(t, zed.SetGuildDiscordBotEnabled(ctx, guildID, false))
 	checkManage(t, leaderID, false)
 }
 

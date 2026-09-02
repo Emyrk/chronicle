@@ -1528,8 +1528,9 @@ export interface GuildSettings {
     readonly guild_id: string;
     readonly allow_join_requests_until: string | null;
     readonly is_member: boolean;
-    readonly discord_bot_enabled: boolean;
-    readonly discord_bot_available: boolean;
+    readonly discord_integration_enabled: boolean;
+    readonly discord_integration_available: boolean;
+    readonly can_enable_discord_integration: boolean;
 }
 
 // From chroniclesdk/constants.go
@@ -3578,6 +3579,11 @@ export interface UpdateGearStatWeightRequest {
     readonly class_id?: number;
     readonly spec_name?: string;
     readonly weights?: (Record<string, string>);
+}
+
+// From chroniclesdk/guild_page.go
+export interface UpdateGuildDiscordIntegrationRequest {
+    readonly enabled: boolean;
 }
 
 // From chroniclesdk/guild_page.go

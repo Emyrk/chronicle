@@ -137,15 +137,20 @@ type GuildPageOptionsResponse struct {
 // Guild Settings
 
 type GuildSettings struct {
-	GuildID                uuid.UUID  `json:"guild_id"`
-	AllowJoinRequestsUntil *time.Time `json:"allow_join_requests_until"`
-	IsMember               bool       `json:"is_member"`
-	DiscordBotEnabled      bool       `json:"discord_bot_enabled"`
-	DiscordBotAvailable    bool       `json:"discord_bot_available"`
+	GuildID                     uuid.UUID  `json:"guild_id"`
+	AllowJoinRequestsUntil      *time.Time `json:"allow_join_requests_until"`
+	IsMember                    bool       `json:"is_member"`
+	DiscordIntegrationEnabled   bool       `json:"discord_integration_enabled"`
+	DiscordIntegrationAvailable bool       `json:"discord_integration_available"`
+	CanEnableDiscordIntegration bool       `json:"can_enable_discord_integration"`
 }
 
 type UpdateGuildSettingsRequest struct {
 	AllowJoinRequestsUntil *time.Time `json:"allow_join_requests_until"`
+}
+
+type UpdateGuildDiscordIntegrationRequest struct {
+	Enabled bool `json:"enabled"`
 }
 
 // Guild Join Requests

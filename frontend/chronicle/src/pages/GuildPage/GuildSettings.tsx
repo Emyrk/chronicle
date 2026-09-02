@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useGuildSettings, useUpdateGuildSettings, useGuildPage } from "@/api/queries";
+import {
+  useGuildSettings,
+  useUpdateGuildDiscordIntegration,
+  useUpdateGuildSettings,
+  useGuildPage,
+} from "@/api/queries";
 import { ArrowLeft, Bot, UserPlus, Menu, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { GuildPageHeader, GuildActionsMenu } from "./components";
@@ -25,8 +30,9 @@ type Tab = {
   icon: LucideIcon;
 };
 
-const BASE_TABS: Tab[] = [
+const TABS: Tab[] = [
   { id: "join-requests", label: "Join Requests", icon: UserPlus },
+  { id: "discord-integration", label: "Discord Integration", icon: Bot },
 ];
 
 export function GuildSettings() {
@@ -34,13 +40,10 @@ export function GuildSettings() {
   const { data: pageConfig } = useGuildPage(guildId);
   const { data: settings, isLoading } = useGuildSettings(guildId);
   const updateSettings = useUpdateGuildSettings(guildId);
+  const updateDiscordIntegration = useUpdateGuildDiscordIntegration(guildId);
   const isMobile = useIsMobile();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("join-requests");
-
-  const tabs = settings?.discord_bot_enabled
-    ? [...BASE_TABS, { id: "discord-bot", label: "Discord Bot", icon: Bot }]
-    : BASE_TABS;
 
   const open = isOpen(settings?.allow_join_requests_until);
 
@@ -54,7 +57,7 @@ export function GuildSettings() {
 
   const renderNavLinks = (closeOnNavigate: boolean) => (
     <ul className="space-y-1">
-      {tabs.map((tab) => (
+      {TABS.map((tab) => (
         <li key={tab.id}>
           <button
             type="button"
@@ -137,10 +140,10 @@ export function GuildSettings() {
           </div>
         </div>
       )}
-      {activeTab === "discord-bot" && settings?.discord_bot_enabled && (
+      {activeTab === "discord-integration" && settings && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-xl font-semibold">Discord Bot</h2>
+            <h2 className="text-xl font-semibold">Discord Integration</h2>
             <p className="text-muted-foreground">
               Link Chronicle to your Discord server and announce new raid logs.
             </p>
@@ -149,17 +152,66 @@ export function GuildSettings() {
           <div className="border border-border rounded-lg p-6">
             <div className="flex items-start gap-3">
               <Bot className="mt-0.5 h-5 w-5 text-muted-foreground" />
-              <div>
-                <h3 className="font-medium">
-                  {settings.discord_bot_available
-                    ? "Ready to install"
-                    : "Discord bot unavailable"}
-                </h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {settings.discord_bot_available
-                    ? "Discord bot installation will be available in a follow-up update."
-                    : "The Discord bot is not configured on this Chronicle deployment."}
-                </p>
+              <div className="flex-1">
+                {!settings.discord_integration_available ? (
+                  <>
+                    <h3 className="font-medium">Discord integration is not supported</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      The Discord bot is not configured on this Chronicle deployment.
+                    </p>
+                  </>
+                ) : !settings.discord_integration_enabled &&
+                  !settings.can_enable_discord_integration ? (
+                  <>
+                    <h3 className="font-medium">Discord linking is not enabled</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Contact a Chronicle administrator to enable Discord integration for
+                      this guild.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="font-medium">
+                      {settings.discord_integration_enabled
+                        ? "Discord linking is enabled"
+                        : "Enable Discord linking"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {settings.discord_integration_enabled
+                        ? "Guild administrators can link the Discord bot when installation support is added."
+                        : "Allow this guild to link Chronicle to a Discord server."}
+                    </p>
+
+                    {settings.can_enable_discord_integration && (
+                      <Button
+                        className="mt-4"
+                        variant={
+                          settings.discord_integration_enabled
+                            ? "destructive"
+                            : "default"
+                        }
+                        disabled={updateDiscordIntegration.isPending}
+                        onClick={() =>
+                          updateDiscordIntegration.mutate({
+                            enabled: !settings.discord_integration_enabled,
+                          })
+                        }
+                      >
+                        {updateDiscordIntegration.isPending
+                          ? "Saving..."
+                          : settings.discord_integration_enabled
+                            ? "Disable Discord Linking"
+                            : "Enable Discord Linking"}
+                      </Button>
+                    )}
+
+                    {updateDiscordIntegration.error && (
+                      <p className="mt-3 text-sm text-destructive">
+                        {updateDiscordIntegration.error.message}
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
