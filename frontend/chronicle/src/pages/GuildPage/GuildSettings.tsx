@@ -183,7 +183,7 @@ export function GuildSettings() {
             </p>
           </div>
 
-          <div className="border border-border rounded-lg p-6">
+          <div className="relative border border-border rounded-lg p-6">
             <div className="flex items-start gap-3">
               <Bot className="mt-0.5 h-5 w-5 text-muted-foreground" />
               <div className="flex-1">
@@ -236,43 +236,38 @@ export function GuildSettings() {
                       </div>
                     )}
 
-                    {(discordSettings.can_enable ||
-                      (discordSettings.enabled &&
-                        !discordSettings.installed &&
-                        discordSettings.install_url)) && (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {discordSettings.enabled &&
-                          !discordSettings.installed &&
-                          discordSettings.install_url && (
-                            <Button asChild>
-                              <a href={discordSettings.install_url}>
-                                Install Chronicle on Discord
-                              </a>
-                            </Button>
-                          )}
+                    {discordSettings.enabled &&
+                      !discordSettings.installed &&
+                      discordSettings.install_url && (
+                        <Button className="mt-4" asChild>
+                          <a href={discordSettings.install_url}>
+                            Install Chronicle on Discord
+                          </a>
+                        </Button>
+                      )}
 
-                        {discordSettings.can_enable && (
-                          <Button
-                            variant={
-                              discordSettings.enabled
-                                ? "destructive"
-                                : "default"
-                            }
-                            disabled={updateDiscordIntegration.isPending}
-                            onClick={() =>
-                              updateDiscordIntegration.mutate({
-                                enabled: !discordSettings.enabled,
-                              })
-                            }
-                          >
-                            {updateDiscordIntegration.isPending
-                              ? "Saving..."
-                              : discordSettings.enabled
-                                ? "Disable Discord Linking"
-                                : "Enable Discord Linking"}
-                          </Button>
-                        )}
-                      </div>
+                    {discordSettings.can_enable && (
+                      <Button
+                        className="mt-4 md:absolute md:right-6 md:top-6 md:mt-0"
+                        size="sm"
+                        variant={
+                          discordSettings.enabled
+                            ? "destructive"
+                            : "default"
+                        }
+                        disabled={updateDiscordIntegration.isPending}
+                        onClick={() =>
+                          updateDiscordIntegration.mutate({
+                            enabled: !discordSettings.enabled,
+                          })
+                        }
+                      >
+                        {updateDiscordIntegration.isPending
+                          ? "Saving..."
+                          : discordSettings.enabled
+                            ? "Disable Discord Linking"
+                            : "Enable Discord Linking"}
+                      </Button>
                     )}
 
                     {deleteDiscordInstallation.error && (
