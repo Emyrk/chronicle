@@ -29,9 +29,12 @@ func (a ArgsAnnounceRaidLog) Kind() string { return KindAnnounceRaidLog }
 
 func (a ArgsAnnounceRaidLog) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{
-		Queue:       riverconst.QueueDiscordAnnouncements,
-		Priority:    riverconst.PriorityDefault,
-		MaxAttempts: 3,
+		Queue:    riverconst.QueueDiscordAnnouncements,
+		Priority: riverconst.PriorityDefault,
+		// Creating a Discord message and persisting its returned ID cannot be
+		// atomic. Retrying after Discord accepted the message but before the ID
+		// was stored could create a duplicate, so delivery is attempted once.
+		MaxAttempts: 1,
 		UniqueOpts: river.UniqueOpts{
 			ByArgs: true,
 			// Excluding running allows one follow-up rebuild to queue while the

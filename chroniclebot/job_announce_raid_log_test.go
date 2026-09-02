@@ -87,6 +87,7 @@ func TestArgsAnnounceRaidLogInsertOpts(t *testing.T) {
 
 	opts := (ArgsAnnounceRaidLog{}).InsertOpts()
 	require.Equal(t, riverconst.QueueDiscordAnnouncements, opts.Queue)
+	require.Equal(t, 1, opts.MaxAttempts)
 	require.True(t, opts.UniqueOpts.ByArgs)
 	require.Contains(t, opts.UniqueOpts.ByState, rivertype.JobStatePending)
 	require.Contains(t, opts.UniqueOpts.ByState, rivertype.JobStateRetryable)
