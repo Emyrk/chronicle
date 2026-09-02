@@ -219,6 +219,29 @@ func (b *Bot) enqueueSyncJob(discordID, uniqueString string) {
 	}
 }
 
+// VerifyGuild confirms that the connected bot can access a Discord guild.
+func (b *Bot) VerifyGuild(guildID string) (*discordgo.Guild, error) {
+	if !b.Available() || b.session == nil {
+		return nil, fmt.Errorf("discord bot is unavailable")
+	}
+	guild, err := b.session.Guild(guildID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch Discord guild %s: %w", guildID, err)
+	}
+	return guild, nil
+}
+
+// LeaveGuild removes the bot from a Discord guild.
+func (b *Bot) LeaveGuild(guildID string) error {
+	if !b.Available() || b.session == nil {
+		return fmt.Errorf("discord bot is unavailable")
+	}
+	if err := b.session.GuildLeave(guildID); err != nil {
+		return fmt.Errorf("leave Discord guild %s: %w", guildID, err)
+	}
+	return nil
+}
+
 // GetGuildMember fetches a member from a guild.
 // Returns nil if the user is not a member of the guild.
 func (b *Bot) GetGuildMember(guildID, userID string) (*discordgo.Member, error) {

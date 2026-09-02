@@ -1800,6 +1800,27 @@ export function useUpdateGuildDiscordIntegration(guildId: string | undefined) {
   });
 }
 
+export function useDeleteGuildDiscordInstallation(guildId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await fetch(
+        `/api/v1/guilds/${guildId}/settings/discord-integration/installation`,
+        { method: "DELETE", credentials: "include" },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to unlink Discord server", error);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["guild-discord-integration", guildId],
+      });
+    },
+  });
+}
+
 export function useGuildJoinRequests(guildId: string | undefined) {
   return useQuery({
     queryKey: ["guild-join-requests", guildId],

@@ -1357,6 +1357,10 @@ export interface GuildDiscordIntegrationSettings {
     readonly enabled: boolean;
     readonly available: boolean;
     readonly can_enable: boolean;
+    readonly installed: boolean;
+    readonly discord_guild_id?: string;
+    readonly discord_guild_name?: string;
+    readonly install_url?: string;
 }
 
 // From chroniclesdk/guild_page.go

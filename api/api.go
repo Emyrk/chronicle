@@ -195,6 +195,7 @@ func (api *API) Routes() chi.Router {
 				)
 				r.Get("/whoami", api.WhoAmI)
 				r.Get("/whoami/dump", api.DumpToken)
+				r.Get("/discord-integration/callback", api.CompleteGuildDiscordInstall)
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Get("/me/storage", api.GetMyStorage)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
@@ -390,6 +391,8 @@ func (api *API) Routes() chi.Router {
 							r.Put("/{userID}/role", api.AdminUpdateGuildMemberRole)
 							r.Delete("/{userID}", api.AdminRemoveGuildMember)
 						})
+						r.Get("/settings/discord-integration/install", api.BeginGuildDiscordInstall)
+						r.Delete("/settings/discord-integration/installation", api.DeleteGuildDiscordInstallation)
 						r.Get("/settings/discord-integration", api.GetGuildDiscordIntegration)
 						r.With(
 							httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdminister_authz_User),

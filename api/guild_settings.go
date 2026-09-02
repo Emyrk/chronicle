@@ -2,8 +2,12 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
@@ -13,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/cryptorand"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -48,6 +53,28 @@ func (api *API) discordIntegrationSettingsToSDK(ctx context.Context, guildID uui
 			return chroniclesdk.GuildDiscordIntegrationSettings{}, err
 		}
 	}
+	return out, nil
+}
+
+func (api *API) guildDiscordInstallationToSDK(ctx context.Context, guildID uuid.UUID) (chroniclesdk.GuildDiscordIntegrationSettings, error) {
+	out, err := api.discordIntegrationSettingsToSDK(ctx, guildID)
+	if err != nil {
+		return chroniclesdk.GuildDiscordIntegrationSettings{}, err
+	}
+	if out.Enabled && out.Available {
+		out.InstallURL = fmt.Sprintf("/api/v1/guilds/%s/settings/discord-integration/install", guildID)
+	}
+
+	installation, err := api.Zed.GetGuildDiscordInstallation(ctx, guildID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, nil
+	}
+	if err != nil {
+		return chroniclesdk.GuildDiscordIntegrationSettings{}, err
+	}
+	out.Installed = true
+	out.DiscordGuildID = installation.DiscordGuildID
+	out.DiscordGuildName = installation.DiscordGuildName
 	return out, nil
 }
 
@@ -112,7 +139,7 @@ func (api *API) GetGuildDiscordIntegration(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	guild := httpmw.Guild(ctx)
 
-	resp, err := api.discordIntegrationSettingsToSDK(ctx, guild.ID)
+	resp, err := api.guildDiscordInstallationToSDK(ctx, guild.ID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -143,12 +170,185 @@ func (api *API) UpdateGuildDiscordIntegration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	resp, err := api.discordIntegrationSettingsToSDK(ctx, guild.ID)
+	resp, err := api.guildDiscordInstallationToSDK(ctx, guild.ID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
+const discordOAuthTokenURL = "https://discord.com/api/oauth2/token"
+
+func (api *API) discordInstallCallbackURL() string {
+	return api.Opts.AccessURL.ResolveReference(&url.URL{
+		Path: "/api/v1/discord-integration/callback",
+	}).String()
+}
+
+// BeginGuildDiscordInstall starts Discord's required OAuth2 code-grant flow.
+func (api *API) BeginGuildDiscordInstall(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+	claims := chronauth.MustAuthenticatedClaims(ctx)
+
+	enabled, err := api.Zed.IsGuildDiscordBotEnabled(ctx, guild.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !enabled || !api.Opts.Bot.Available() || api.Opts.Discord.ClientID == "" || api.Opts.Discord.ClientSecret == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Discord integration is not available for this guild."})
+		return
+	}
+
+	state, err := cryptorand.String(48)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	_, err = api.Zed.CreateGuildDiscordInstallState(ctx, database.CreateGuildDiscordInstallStateParams{
+		State:     state,
+		GuildID:   guild.ID,
+		UserID:    claims.Subject,
+		ExpiresAt: database.Timestamptz(time.Now().Add(10 * time.Minute)),
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	query := url.Values{
+		"client_id":        {api.Opts.Discord.ClientID},
+		"response_type":    {"code"},
+		"scope":            {"bot applications.commands"},
+		"integration_type": {"0"},
+		"permissions":      {"117760"},
+		"redirect_uri":     {api.discordInstallCallbackURL()},
+		"state":            {state},
+	}
+	http.Redirect(w, r, "https://discord.com/oauth2/authorize?"+query.Encode(), http.StatusTemporaryRedirect)
+}
+
+type discordInstallTokenResponse struct {
+	Guild struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"guild"`
+}
+
+// CompleteGuildDiscordInstall verifies Discord's callback and saves the selected server.
+func (api *API) CompleteGuildDiscordInstall(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims := chronauth.MustAuthenticatedClaims(ctx)
+
+	state, err := api.Zed.ConsumeGuildDiscordInstallState(ctx, r.URL.Query().Get("state"))
+	if err != nil || state.UserID != claims.Subject {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Discord installation request is invalid or expired."})
+		return
+	}
+	canAdmin, err := api.Zed.CheckOne(
+		ctx,
+		nil,
+		policy.New().Guild(state.GuildID).CanAdmin_guild_User(policy.New().User(claims.Subject)),
+	)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !canAdmin {
+		httpapi.Forbidden(w, fmt.Errorf("user can no longer administer guild %s", state.GuildID))
+		return
+	}
+	enabled, err := api.Zed.IsGuildDiscordBotEnabled(ctx, state.GuildID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !enabled || !api.Opts.Bot.Available() {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Discord integration is no longer available for this guild."})
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Discord did not return an authorization code."})
+		return
+	}
+
+	form := url.Values{
+		"client_id":     {api.Opts.Discord.ClientID},
+		"client_secret": {api.Opts.Discord.ClientSecret},
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"redirect_uri":  {api.discordInstallCallbackURL()},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, discordOAuthTokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		httpapi.Write(ctx, w, http.StatusBadGateway, chroniclesdk.Response{Message: "Discord rejected the installation request."})
+		return
+	}
+	var tokenResponse discordInstallTokenResponse
+	if err := json.NewDecoder(response.Body).Decode(&tokenResponse); err != nil || tokenResponse.Guild.ID == "" {
+		httpapi.Write(ctx, w, http.StatusBadGateway, chroniclesdk.Response{Message: "Discord did not return the installed server."})
+		return
+	}
+	existing, err := api.Zed.GetGuildDiscordInstallationByDiscordGuildID(ctx, tokenResponse.Guild.ID)
+	if err == nil && existing.GuildID != state.GuildID {
+		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "That Discord server is already linked to another Chronicle guild."})
+		return
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	verifiedGuild, err := api.Opts.Bot.VerifyGuild(tokenResponse.Guild.ID)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadGateway, chroniclesdk.Response{Message: "Chronicle could not verify the Discord server installation."})
+		return
+	}
+	_, err = api.Zed.UpsertGuildDiscordInstallation(ctx, database.UpsertGuildDiscordInstallationParams{
+		GuildID:          state.GuildID,
+		DiscordGuildID:   verifiedGuild.ID,
+		DiscordGuildName: verifiedGuild.Name,
+		InstalledBy:      claims.Subject,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/g/%s/settings?tab=discord-integration", state.GuildID), http.StatusSeeOther)
+}
+
+// DeleteGuildDiscordInstallation unlinks Chronicle and removes the bot from Discord.
+func (api *API) DeleteGuildDiscordInstallation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+	installation, err := api.Zed.DeleteGuildDiscordInstallation(ctx, guild.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpapi.Write(ctx, w, http.StatusNoContent, nil)
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if err := api.Opts.Bot.LeaveGuild(installation.DiscordGuildID); err != nil {
+		api.Opts.Logger.Warn("failed to remove unlinked Discord bot", "discord_guild_id", installation.DiscordGuildID, "error", err)
+	}
+	httpapi.Write(ctx, w, http.StatusNoContent, nil)
 }
 
 // CreateJoinRequest submits a join request for the authenticated user.

@@ -5695,6 +5695,58 @@ func (q *sqlQuerier) GuildTopParses(ctx context.Context, arg GuildTopParsesParam
 	return items, nil
 }
 
+const consumeGuildDiscordInstallState = `-- name: ConsumeGuildDiscordInstallState :one
+DELETE FROM guild_discord_install_states
+WHERE state = $1 AND expires_at > NOW()
+RETURNING state, guild_id, user_id, expires_at, created_at
+`
+
+func (q *sqlQuerier) ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error) {
+	row := q.db.QueryRow(ctx, consumeGuildDiscordInstallState, state)
+	var i GuildDiscordInstallState
+	err := row.Scan(
+		&i.State,
+		&i.GuildID,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createGuildDiscordInstallState = `-- name: CreateGuildDiscordInstallState :one
+
+INSERT INTO guild_discord_install_states (state, guild_id, user_id, expires_at)
+VALUES ($1, $2, $3, $4)
+RETURNING state, guild_id, user_id, expires_at, created_at
+`
+
+type CreateGuildDiscordInstallStateParams struct {
+	State     string             `db:"state" json:"state"`
+	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	ExpiresAt pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+// Discord Integration
+func (q *sqlQuerier) CreateGuildDiscordInstallState(ctx context.Context, arg CreateGuildDiscordInstallStateParams) (GuildDiscordInstallState, error) {
+	row := q.db.QueryRow(ctx, createGuildDiscordInstallState,
+		arg.State,
+		arg.GuildID,
+		arg.UserID,
+		arg.ExpiresAt,
+	)
+	var i GuildDiscordInstallState
+	err := row.Scan(
+		&i.State,
+		&i.GuildID,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createGuildJoinRequest = `-- name: CreateGuildJoinRequest :one
 
 INSERT INTO guild_join_requests (guild_id, user_id, message)
@@ -5722,6 +5774,26 @@ func (q *sqlQuerier) CreateGuildJoinRequest(ctx context.Context, arg CreateGuild
 	return i, err
 }
 
+const deleteGuildDiscordInstallation = `-- name: DeleteGuildDiscordInstallation :one
+DELETE FROM guild_discord_installations
+WHERE guild_id = $1
+RETURNING guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at
+`
+
+func (q *sqlQuerier) DeleteGuildDiscordInstallation(ctx context.Context, guildID uuid.UUID) (GuildDiscordInstallation, error) {
+	row := q.db.QueryRow(ctx, deleteGuildDiscordInstallation, guildID)
+	var i GuildDiscordInstallation
+	err := row.Scan(
+		&i.GuildID,
+		&i.DiscordGuildID,
+		&i.DiscordGuildName,
+		&i.InstalledBy,
+		&i.InstalledAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteGuildJoinRequest = `-- name: DeleteGuildJoinRequest :exec
 DELETE FROM guild_join_requests WHERE id = $1 AND guild_id = $2
 `
@@ -5734,6 +5806,42 @@ type DeleteGuildJoinRequestParams struct {
 func (q *sqlQuerier) DeleteGuildJoinRequest(ctx context.Context, arg DeleteGuildJoinRequestParams) error {
 	_, err := q.db.Exec(ctx, deleteGuildJoinRequest, arg.ID, arg.GuildID)
 	return err
+}
+
+const getGuildDiscordInstallation = `-- name: GetGuildDiscordInstallation :one
+SELECT guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at FROM guild_discord_installations WHERE guild_id = $1
+`
+
+func (q *sqlQuerier) GetGuildDiscordInstallation(ctx context.Context, guildID uuid.UUID) (GuildDiscordInstallation, error) {
+	row := q.db.QueryRow(ctx, getGuildDiscordInstallation, guildID)
+	var i GuildDiscordInstallation
+	err := row.Scan(
+		&i.GuildID,
+		&i.DiscordGuildID,
+		&i.DiscordGuildName,
+		&i.InstalledBy,
+		&i.InstalledAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getGuildDiscordInstallationByDiscordGuildID = `-- name: GetGuildDiscordInstallationByDiscordGuildID :one
+SELECT guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at FROM guild_discord_installations WHERE discord_guild_id = $1
+`
+
+func (q *sqlQuerier) GetGuildDiscordInstallationByDiscordGuildID(ctx context.Context, discordGuildID string) (GuildDiscordInstallation, error) {
+	row := q.db.QueryRow(ctx, getGuildDiscordInstallationByDiscordGuildID, discordGuildID)
+	var i GuildDiscordInstallation
+	err := row.Scan(
+		&i.GuildID,
+		&i.DiscordGuildID,
+		&i.DiscordGuildName,
+		&i.InstalledBy,
+		&i.InstalledAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getGuildJoinRequestByUser = `-- name: GetGuildJoinRequestByUser :one
@@ -5813,6 +5921,44 @@ func (q *sqlQuerier) ListGuildJoinRequests(ctx context.Context, guildID uuid.UUI
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertGuildDiscordInstallation = `-- name: UpsertGuildDiscordInstallation :one
+INSERT INTO guild_discord_installations (
+  guild_id, discord_guild_id, discord_guild_name, installed_by
+) VALUES ($1, $2, $3, $4)
+ON CONFLICT (guild_id) DO UPDATE SET
+  discord_guild_id = EXCLUDED.discord_guild_id,
+  discord_guild_name = EXCLUDED.discord_guild_name,
+  installed_by = EXCLUDED.installed_by,
+  updated_at = NOW()
+RETURNING guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at
+`
+
+type UpsertGuildDiscordInstallationParams struct {
+	GuildID          uuid.UUID `db:"guild_id" json:"guild_id"`
+	DiscordGuildID   string    `db:"discord_guild_id" json:"discord_guild_id"`
+	DiscordGuildName string    `db:"discord_guild_name" json:"discord_guild_name"`
+	InstalledBy      uuid.UUID `db:"installed_by" json:"installed_by"`
+}
+
+func (q *sqlQuerier) UpsertGuildDiscordInstallation(ctx context.Context, arg UpsertGuildDiscordInstallationParams) (GuildDiscordInstallation, error) {
+	row := q.db.QueryRow(ctx, upsertGuildDiscordInstallation,
+		arg.GuildID,
+		arg.DiscordGuildID,
+		arg.DiscordGuildName,
+		arg.InstalledBy,
+	)
+	var i GuildDiscordInstallation
+	err := row.Scan(
+		&i.GuildID,
+		&i.DiscordGuildID,
+		&i.DiscordGuildName,
+		&i.InstalledBy,
+		&i.InstalledAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertGuildSettings = `-- name: UpsertGuildSettings :one

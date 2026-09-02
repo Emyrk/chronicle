@@ -1323,6 +1323,23 @@ type Guild struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type GuildDiscordInstallState struct {
+	State     string             `db:"state" json:"state"`
+	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	ExpiresAt pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type GuildDiscordInstallation struct {
+	GuildID          uuid.UUID          `db:"guild_id" json:"guild_id"`
+	DiscordGuildID   string             `db:"discord_guild_id" json:"discord_guild_id"`
+	DiscordGuildName string             `db:"discord_guild_name" json:"discord_guild_name"`
+	InstalledBy      uuid.UUID          `db:"installed_by" json:"installed_by"`
+	InstalledAt      pgtype.Timestamptz `db:"installed_at" json:"installed_at"`
+	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type GuildJoinRequest struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`

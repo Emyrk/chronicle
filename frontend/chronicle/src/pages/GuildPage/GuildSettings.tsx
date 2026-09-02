@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Navigate, useParams, Link } from "react-router-dom";
+import { Navigate, useParams, useSearchParams, Link } from "react-router-dom";
 import {
+  useDeleteGuildDiscordInstallation,
   useGuildDiscordIntegration,
   useGuildSettings,
   useUpdateGuildDiscordIntegration,
@@ -39,6 +40,7 @@ const TABS: Tab[] = [
 
 export function GuildSettings() {
   const { guildId } = useParams<{ guildId: string }>();
+  const [searchParams] = useSearchParams();
   const { data: pageConfig, isLoading: isPageLoading } = useGuildPage(guildId);
   const {
     data: discordSettings,
@@ -52,9 +54,14 @@ export function GuildSettings() {
   );
   const updateSettings = useUpdateGuildSettings(guildId);
   const updateDiscordIntegration = useUpdateGuildDiscordIntegration(guildId);
+  const deleteDiscordInstallation = useDeleteGuildDiscordInstallation(guildId);
   const isMobile = useIsMobile();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("join-requests");
+  const [activeTab, setActiveTab] = useState(() =>
+    searchParams.get("tab") === "discord-integration"
+      ? "discord-integration"
+      : "join-requests",
+  );
 
   const open = isOpen(settings?.allow_join_requests_until);
 
@@ -205,9 +212,39 @@ export function GuildSettings() {
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">
                       {discordSettings.enabled
-                        ? "Guild administrators can link the Discord bot when installation support is added."
+                        ? "Install Chronicle to link this guild with a Discord server."
                         : "Allow this guild to link Chronicle to a Discord server."}
                     </p>
+
+                    {discordSettings.enabled && discordSettings.installed && (
+                      <div className="mt-4 rounded-md border border-border bg-muted/40 p-4">
+                        <p className="font-medium">{discordSettings.discord_guild_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Discord server ID: {discordSettings.discord_guild_id}
+                        </p>
+                        <Button
+                          className="mt-3"
+                          variant="destructive"
+                          size="sm"
+                          disabled={deleteDiscordInstallation.isPending}
+                          onClick={() => deleteDiscordInstallation.mutate()}
+                        >
+                          {deleteDiscordInstallation.isPending
+                            ? "Unlinking..."
+                            : "Unlink Discord Server"}
+                        </Button>
+                      </div>
+                    )}
+
+                    {discordSettings.enabled &&
+                      !discordSettings.installed &&
+                      discordSettings.install_url && (
+                        <Button className="mt-4" asChild>
+                          <a href={discordSettings.install_url}>
+                            Install Chronicle on Discord
+                          </a>
+                        </Button>
+                      )}
 
                     {discordSettings.can_enable && (
                       <Button
@@ -230,6 +267,12 @@ export function GuildSettings() {
                             ? "Disable Discord Linking"
                             : "Enable Discord Linking"}
                       </Button>
+                    )}
+
+                    {deleteDiscordInstallation.error && (
+                      <p className="mt-3 text-sm text-destructive">
+                        {deleteDiscordInstallation.error.message}
+                      </p>
                     )}
 
                     {updateDiscordIntegration.error && (

@@ -791,6 +791,23 @@ CREATE TABLE gear_stat_weights (
     CONSTRAINT gear_stat_weights_weights_size_chk CHECK ((octet_length((weights)::text) <= 8192))
 );
 
+CREATE TABLE guild_discord_install_states (
+    state text NOT NULL,
+    guild_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE guild_discord_installations (
+    guild_id uuid NOT NULL,
+    discord_guild_id text NOT NULL,
+    discord_guild_name text NOT NULL,
+    installed_by uuid NOT NULL,
+    installed_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE guild_join_requests (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     guild_id uuid NOT NULL,
@@ -1961,6 +1978,15 @@ ALTER TABLE ONLY gear_progressions
 ALTER TABLE ONLY gear_stat_weights
     ADD CONSTRAINT gear_stat_weights_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY guild_discord_install_states
+    ADD CONSTRAINT guild_discord_install_states_pkey PRIMARY KEY (state);
+
+ALTER TABLE ONLY guild_discord_installations
+    ADD CONSTRAINT guild_discord_installations_discord_guild_id_key UNIQUE (discord_guild_id);
+
+ALTER TABLE ONLY guild_discord_installations
+    ADD CONSTRAINT guild_discord_installations_pkey PRIMARY KEY (guild_id);
+
 ALTER TABLE ONLY guild_join_requests
     ADD CONSTRAINT guild_join_requests_guild_id_user_id_key UNIQUE (guild_id, user_id);
 
@@ -2246,6 +2272,8 @@ CREATE INDEX gear_lists_user_tenant_idx ON gear_lists USING btree (user_id, tena
 CREATE INDEX gear_progressions_user_tenant_idx ON gear_progressions USING btree (user_id, tenant_id);
 
 CREATE INDEX gear_stat_weights_user_tenant_idx ON gear_stat_weights USING btree (user_id, tenant_id);
+
+CREATE INDEX guild_discord_install_states_expires_at_idx ON guild_discord_install_states USING btree (expires_at);
 
 CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 
@@ -2586,6 +2614,18 @@ ALTER TABLE ONLY gear_progressions
 
 ALTER TABLE ONLY gear_stat_weights
     ADD CONSTRAINT gear_stat_weights_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_discord_install_states
+    ADD CONSTRAINT guild_discord_install_states_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_discord_install_states
+    ADD CONSTRAINT guild_discord_install_states_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_discord_installations
+    ADD CONSTRAINT guild_discord_installations_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_discord_installations
+    ADD CONSTRAINT guild_discord_installations_installed_by_fkey FOREIGN KEY (installed_by) REFERENCES users(id);
 
 ALTER TABLE ONLY guild_join_requests
     ADD CONSTRAINT guild_join_requests_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;

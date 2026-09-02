@@ -142,9 +142,13 @@ type GuildSettings struct {
 }
 
 type GuildDiscordIntegrationSettings struct {
-	Enabled   bool `json:"enabled"`
-	Available bool `json:"available"`
-	CanEnable bool `json:"can_enable"`
+	Enabled          bool   `json:"enabled"`
+	Available        bool   `json:"available"`
+	CanEnable        bool   `json:"can_enable"`
+	Installed        bool   `json:"installed"`
+	DiscordGuildID   string `json:"discord_guild_id,omitempty"`
+	DiscordGuildName string `json:"discord_guild_name,omitempty"`
+	InstallURL       string `json:"install_url,omitempty"`
 }
 
 type UpdateGuildSettingsRequest struct {
