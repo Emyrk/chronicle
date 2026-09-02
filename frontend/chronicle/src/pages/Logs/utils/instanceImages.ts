@@ -1,56 +1,54 @@
 // Shared instance configuration - maps instance names to loading screen images
 // Source of truth - also used in RaidCard.tsx
 
-export type InstanceCategory = "raid" | "dungeon" | "unknown";
 export type InstanceContentLevel = 60 | 70 | 80;
 
 export interface InstanceConfig {
   background: string;
   bossCount?: number;
   abbrev?: string;  // Short name for mobile display
-  category?: Exclude<InstanceCategory, "unknown">;
   accentColor?: string;
   contentLevel: InstanceContentLevel | readonly InstanceContentLevel[];
 }
 
 export const INSTANCE_CONFIG: Record<string, InstanceConfig> = {
   // 40-man Raids
-  "Molten Core": { background: "/c/images/loadingscreens/LoadScreenMoltenCore.webp", bossCount: 12, abbrev: "MC", category: "raid", accentColor: "#f97316", contentLevel: 60 },
-  "Blackwing Lair": { background: "/c/images/loadingscreens/LoadScreenBlackWingLair.webp", bossCount: 8, abbrev: "BWL", category: "raid", accentColor: "#ef4444", contentLevel: 60 },
-  "Temple of Ahn'Qiraj": { background: "/c/images/loadingscreens/LoadScreenAhnQiraj40man.webp", bossCount: 9, abbrev: "AQ40", category: "raid", accentColor: "#d9aa42", contentLevel: 60 },
-  "Naxxramas": { background: "/c/images/loadingscreens/LoadScreenNaxxramas.webp", bossCount: 15, abbrev: "Naxx", category: "raid", accentColor: "#82c8b4", contentLevel: [60, 80] },
-  "Emerald Sanctum": { background: "/c/images/loadingscreens/LoadScreenEmeraldSanctum.webp", bossCount: 2, abbrev: "ES", category: "raid", accentColor: "#34d399", contentLevel: 60 },
+  "Molten Core": { background: "/c/images/loadingscreens/LoadScreenMoltenCore.webp", bossCount: 12, abbrev: "MC", accentColor: "#f97316", contentLevel: 60 },
+  "Blackwing Lair": { background: "/c/images/loadingscreens/LoadScreenBlackWingLair.webp", bossCount: 8, abbrev: "BWL", accentColor: "#ef4444", contentLevel: 60 },
+  "Temple of Ahn'Qiraj": { background: "/c/images/loadingscreens/LoadScreenAhnQiraj40man.webp", bossCount: 9, abbrev: "AQ40", accentColor: "#d9aa42", contentLevel: 60 },
+  "Naxxramas": { background: "/c/images/loadingscreens/LoadScreenNaxxramas.webp", bossCount: 15, abbrev: "Naxx", accentColor: "#82c8b4", contentLevel: [60, 80] },
+  "Emerald Sanctum": { background: "/c/images/loadingscreens/LoadScreenEmeraldSanctum.webp", bossCount: 2, abbrev: "ES", accentColor: "#34d399", contentLevel: 60 },
   // 20-man Raids
-  "Zul'Gurub": { background: "/c/images/loadingscreens/LoadScreenZulGurub.webp", bossCount: 10, abbrev: "ZG", category: "raid", accentColor: "#ea580c", contentLevel: 60 },
-  "Ruins of Ahn'Qiraj": { background: "/c/images/loadingscreens/LoadScreenAhnQiraj20man.webp", bossCount: 6, abbrev: "AQ20", category: "raid", accentColor: "#c8a050", contentLevel: 60 },
+  "Zul'Gurub": { background: "/c/images/loadingscreens/LoadScreenZulGurub.webp", bossCount: 10, abbrev: "ZG", accentColor: "#ea580c", contentLevel: 60 },
+  "Ruins of Ahn'Qiraj": { background: "/c/images/loadingscreens/LoadScreenAhnQiraj20man.webp", bossCount: 6, abbrev: "AQ20", accentColor: "#c8a050", contentLevel: 60 },
   // Single Boss
-  "Onyxia's Lair": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", bossCount: 1, abbrev: "Ony", category: "raid", accentColor: "#22c55e", contentLevel: [60, 80] },
+  "Onyxia's Lair": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", bossCount: 1, abbrev: "Ony", accentColor: "#22c55e", contentLevel: [60, 80] },
   // Turtle WoW Custom
-  "Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 5, abbrev: "Kara", category: "raid", accentColor: "#8b5cf6", contentLevel: 60 },
-  "Lower Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 5, abbrev: "Lower Kara", category: "raid", accentColor: "#8b5cf6", contentLevel: 60 },
-  "Upper Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 9, abbrev: "Upper Kara", category: "raid", accentColor: "#8b5cf6", contentLevel: 60 },
+  "Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 5, abbrev: "Kara", accentColor: "#8b5cf6", contentLevel: 60 },
+  "Lower Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 5, abbrev: "Lower Kara", accentColor: "#8b5cf6", contentLevel: 60 },
+  "Upper Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 9, abbrev: "Upper Kara", accentColor: "#8b5cf6", contentLevel: 60 },
   "Karazhan Crypts": { background: "/c/images/loadingscreens/LoadscreenKarazhanCrypt.webp", bossCount: 3, abbrev: "Crypt", accentColor: "#7c3aed", contentLevel: 60 },
   "Hateforge Quarry": { background: "/c/images/loadingscreens/LoadScreenHateforge.webp", bossCount: 4, abbrev: "HQ", contentLevel: 60, },
   "Gilneas City": { background: "/c/images/loadingscreens/LoadScreenGilneasCity.webp", bossCount: 3, abbrev: "Gilneas", contentLevel: 60, },
-  "Icecrown Citadel": { background: "/c/images/loadingscreens/loadscreenicecrowncitadel.webp", bossCount: 12, abbrev: "ICC", category: "raid", contentLevel: 80 },
-  "Ruby Sanctum": { background: "/c/images/loadingscreens/loadscreenrubysanctum.webp", bossCount: 1, abbrev: "RS", category: "raid", contentLevel: 80 },
-  "Vault of Archavon": { background: "/c/images/loadingscreens/LoadScreenVaultofArchavon.webp", bossCount: 4, abbrev: "VoA", category: "raid", contentLevel: 80 },
-  "Obsidian Sanctum": { background: "/c/images/loadingscreens/LoadScreenObsidianSanctum.webp", bossCount: 1, abbrev: "OS", category: "raid", contentLevel: 80 },
-  "Eye of Eternity": { background: "/c/images/loadingscreens/LoadScreenEyeofEternity.webp", bossCount: 1, abbrev: "EoE", category: "raid", contentLevel: 80 },
-  "Trial of the Crusader": { background: "/c/images/loadingscreens/LoadScreenTrialoftheCrusader.webp", bossCount: 5, abbrev: "ToC", category: "raid", contentLevel: 80 },
-  "Ulduar": { background: "/c/images/loadingscreens/LoadScreenUlduar.webp", bossCount: 14, abbrev: "Uld", category: "raid", contentLevel: 80 },
+  "Icecrown Citadel": { background: "/c/images/loadingscreens/loadscreenicecrowncitadel.webp", bossCount: 12, abbrev: "ICC", contentLevel: 80 },
+  "Ruby Sanctum": { background: "/c/images/loadingscreens/loadscreenrubysanctum.webp", bossCount: 1, abbrev: "RS", contentLevel: 80 },
+  "Vault of Archavon": { background: "/c/images/loadingscreens/LoadScreenVaultofArchavon.webp", bossCount: 4, abbrev: "VoA", contentLevel: 80 },
+  "Obsidian Sanctum": { background: "/c/images/loadingscreens/LoadScreenObsidianSanctum.webp", bossCount: 1, abbrev: "OS", contentLevel: 80 },
+  "Eye of Eternity": { background: "/c/images/loadingscreens/LoadScreenEyeofEternity.webp", bossCount: 1, abbrev: "EoE", contentLevel: 80 },
+  "Trial of the Crusader": { background: "/c/images/loadingscreens/LoadScreenTrialoftheCrusader.webp", bossCount: 5, abbrev: "ToC", contentLevel: 80 },
+  "Ulduar": { background: "/c/images/loadingscreens/LoadScreenUlduar.webp", bossCount: 14, abbrev: "Uld", contentLevel: 80 },
 
   // TBC Raids
-  "Zul'Aman": { background: "/c/images/loadingscreens/LOADSCREENZULAMAN.webp", bossCount: 6, abbrev: "ZA", category: "raid", contentLevel: 70 },
-  "Black Temple": { background: "/c/images/loadingscreens/LoadScreenBlackTemple.webp", bossCount: 9, abbrev: "BT", category: "raid", contentLevel: 70 },
-  "Hyjal Summit": { background: "/c/images/loadingscreens/LoadScreenHyjal.webp", bossCount: 5, abbrev: "Hyjal", category: "raid", contentLevel: 70 },
-  "Magtheridon's Lair": { background: "/c/images/loadingscreens/LOADSCREENHELLFIRECITADELRAID.webp", bossCount: 1, abbrev: "Mag", category: "raid", contentLevel: 70 },
-  "Gruul's Lair": { background: "/c/images/loadingscreens/LoadScreenGruulsLair.webp", bossCount: 2, abbrev: "Gruul", category: "raid", contentLevel: 70 },
-  "Serpentshrine Cavern": { background: "/c/images/loadingscreens/LoadScreenSerpentshrine.webp", bossCount: 6, abbrev: "SSC", category: "raid", contentLevel: 70 },
-  "Tempest Keep": { background: "/c/images/loadingscreens/LOADSCREENTEMPESTKEEP.webp", bossCount: 4, abbrev: "TK", category: "raid", contentLevel: 70 },
-  "Sunwell Plateau": { background: "/c/images/loadingscreens/LoadScreenSunwell5Man.webp", bossCount: 6, abbrev: "SWP", category: "raid", contentLevel: 70 },
-  "World Bosses": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", abbrev: "World", category: "raid", contentLevel: 60 },
-  "Timbermaw Hold": { background: "/c/images/loadingscreens/LoadScreenTimbermaw.webp", abbrev: "TMH", category: "raid", contentLevel: 60 },
+  "Zul'Aman": { background: "/c/images/loadingscreens/LOADSCREENZULAMAN.webp", bossCount: 6, abbrev: "ZA", contentLevel: 70 },
+  "Black Temple": { background: "/c/images/loadingscreens/LoadScreenBlackTemple.webp", bossCount: 9, abbrev: "BT", contentLevel: 70 },
+  "Hyjal Summit": { background: "/c/images/loadingscreens/LoadScreenHyjal.webp", bossCount: 5, abbrev: "Hyjal", contentLevel: 70 },
+  "Magtheridon's Lair": { background: "/c/images/loadingscreens/LOADSCREENHELLFIRECITADELRAID.webp", bossCount: 1, abbrev: "Mag", contentLevel: 70 },
+  "Gruul's Lair": { background: "/c/images/loadingscreens/LoadScreenGruulsLair.webp", bossCount: 2, abbrev: "Gruul", contentLevel: 70 },
+  "Serpentshrine Cavern": { background: "/c/images/loadingscreens/LoadScreenSerpentshrine.webp", bossCount: 6, abbrev: "SSC", contentLevel: 70 },
+  "Tempest Keep": { background: "/c/images/loadingscreens/LOADSCREENTEMPESTKEEP.webp", bossCount: 4, abbrev: "TK", contentLevel: 70 },
+  "Sunwell Plateau": { background: "/c/images/loadingscreens/LoadScreenSunwell5Man.webp", bossCount: 6, abbrev: "SWP", contentLevel: 70 },
+  "World Bosses": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", abbrev: "World", contentLevel: 60 },
+  "Timbermaw Hold": { background: "/c/images/loadingscreens/LoadScreenTimbermaw.webp", abbrev: "TMH", contentLevel: 60 },
   "Windhorn Canyon": { background: "/c/images/loadingscreens/LoadScreenWindhorn.webp", abbrev: "WHC", contentLevel: 60 },
   // Dungeons
   "Frostmane Hollow": { background: "/c/images/loadingscreens/LoadScreenFrostmane.webp", abbrev: "FH", contentLevel: 60 },
@@ -134,18 +132,6 @@ export function resolveInstanceName(name: string): string | undefined {
 export function getInstanceConfig(name: string): InstanceConfig | undefined {
   const canonical = resolveInstanceName(name);
   return canonical ? INSTANCE_CONFIG[canonical] : undefined;
-}
-
-export function getInstanceCategory(
-  name: string,
-  flavor: readonly string[] = [],
-): InstanceCategory {
-  const canonical = resolveInstanceName(name);
-  if (!canonical) return "unknown";
-  if (canonical === "Scarlet Monastery" && flavor.includes("vanillaplus")) {
-    return "raid";
-  }
-  return INSTANCE_CONFIG[canonical].category ?? "dungeon";
 }
 
 /** Returns the content-level bracket for an instance, using raid size to distinguish reused raid names. */

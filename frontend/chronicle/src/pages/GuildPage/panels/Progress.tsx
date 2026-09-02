@@ -2,9 +2,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Trophy, AlertCircle } from "lucide-react";
 import type { GuildEncounterKill, GuildEncounterKillsResponse } from "@/api/typesGenerated";
-import { useSupportedInstanceBossCounts } from "@/api/queries";
+import { useSupportedInstanceBossCounts, useSupportedInstances } from "@/api/queries";
 import { cn } from "@/lib/utils";
-import { getInstanceCategory, getInstanceContentLevel } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceContentLevel } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 
 type CategoryFilter = "all" | "raid" | "dungeon";
@@ -239,6 +240,7 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { data: bossCounts } = useSupportedInstanceBossCounts();
+  const { data: supportedInstances } = useSupportedInstances();
 
   useEffect(() => {
     let cancelled = false;
@@ -266,7 +268,7 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
     const category = config.category ?? "all";
     const contentLevel = config.contentLevel ?? "all";
     const filtered = encounters.filter((e) => {
-      const instanceCategory = getInstanceCategory(e.instance_name);
+      const instanceCategory = getInstanceCategory(e.instance_name, supportedInstances);
       const matchesCategory =
         category === "all" ||
         (category === "dungeon" ? instanceCategory !== "raid" : instanceCategory === "raid");
@@ -276,7 +278,7 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
       return matchesCategory && matchesContentLevel;
     });
     return groupProgress(filtered);
-  }, [config.category, config.contentLevel, encounters]);
+  }, [config.category, config.contentLevel, encounters, supportedInstances]);
 
   if (loading) {
     return (

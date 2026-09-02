@@ -7,7 +7,8 @@ import { AlertCircle, CalendarRange, Clock3, Copy, ExternalLink } from "lucide-r
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
 import { DuplicateInstanceModal } from "@/components/DuplicateInstanceModal";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
-import { getInstanceCategory } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
+import { useSupportedInstances } from "@/api/queries";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 import { formatClearDuration } from "./clearTimeUtils";
 import {
@@ -262,6 +263,7 @@ function CompactCalendarContent({
   const [instances, setInstances] = useState<RecentInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { data: supportedInstances } = useSupportedInstances();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -303,8 +305,8 @@ function CompactCalendarContent({
     () =>
       config.category === "all"
         ? instances
-        : instances.filter((instance) => getInstanceCategory(instance.name) === "raid"),
-    [config.category, instances],
+        : instances.filter((instance) => getInstanceCategory(instance.name, supportedInstances) === "raid"),
+    [config.category, instances, supportedInstances],
   );
   const weeks = useMemo(
     () => buildCompactCalendar(filteredInstances, weekCount),

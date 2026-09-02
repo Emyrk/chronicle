@@ -49,6 +49,7 @@ func NexusHostiles() map[uint32]instances.Identity {
 
 var NexusFactory = &instances.CommonFactory{
 	Name:      "The Nexus",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"the nexus"},
 	MapIDs:    []uint32{576},
 	Hostiles:  instances.FromMap(NexusHostiles()),
@@ -89,6 +90,7 @@ func OculusHostiles() map[uint32]instances.Identity {
 var OculusFactory = &instances.CommonFactory{
 	ZoneNames: []string{"the oculus", "oculus"},
 	Name:      "The Oculus",
+	Category:  instances.InstanceCategoryDungeon,
 	MapIDs:    []uint32{578},
 	Hostiles:  instances.FromMap(OculusHostiles()),
 }
@@ -117,6 +119,7 @@ func ForgeOfSoulsHostiles() map[uint32]instances.Identity {
 
 var ForgeOfSoulsFactory = &instances.CommonFactory{
 	Name:      "Forge of Souls",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"forge of souls"},
 	MapIDs:    []uint32{632},
 	Hostiles:  instances.FromMap(ForgeOfSoulsHostiles()),
@@ -150,6 +153,7 @@ func HallsOfReflectionHostiles() map[uint32]instances.Identity {
 
 var HallsOfReflectionFactory = &instances.CommonFactory{
 	Name:      "Halls of Reflection",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"halls of reflection"},
 	MapIDs:    []uint32{668},
 	Hostiles:  instances.FromMap(HallsOfReflectionHostiles()),
@@ -193,6 +197,7 @@ func UtgardeKeepHostiles() map[uint32]instances.Identity {
 
 var UtgardeKeepFactory = &instances.CommonFactory{
 	Name:      "Utgarde Keep",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"utgarde keep"},
 	MapIDs:    []uint32{574},
 	Hostiles:  instances.FromMap(UtgardeKeepHostiles()),
@@ -239,6 +244,7 @@ func UtgardePinnacleHostiles() map[uint32]instances.Identity {
 
 var UtgardePinnacleFactory = &instances.CommonFactory{
 	Name:        "Utgarde Pinnacle",
+	Category:    instances.InstanceCategoryDungeon,
 	MultiZone:   false,
 	DerivedName: nil,
 	ZoneNames:   []string{"utgarde pinnacle"},
@@ -317,6 +323,7 @@ func CullingOfStratholmeHostiles() map[uint32]instances.Identity {
 
 var CullingOfStratholmeFactory = &instances.CommonFactory{
 	Name:      "Culling of Stratholme",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"the culling of stratholme"},
 	MapIDs:    []uint32{595},
 	Hostiles:  instances.FromMap(CullingOfStratholmeHostiles()),
@@ -363,6 +370,7 @@ func HallsOfStoneHostiles() map[uint32]instances.Identity {
 
 var HallsOfStoneFactory = &instances.CommonFactory{
 	Name:      "Halls of Stone",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"halls of stone"},
 	MapIDs:    []uint32{599},
 	Hostiles:  instances.FromMap(HallsOfStoneHostiles()),
@@ -406,6 +414,7 @@ func DrakTharonKeepHostiles() map[uint32]instances.Identity {
 
 var DrakTharonKeepFactory = &instances.CommonFactory{
 	Name:      "Drak'Tharon Keep",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"drak'tharon keep"},
 	MapIDs:    []uint32{600},
 	Hostiles:  instances.FromMap(DrakTharonKeepHostiles()),
@@ -443,6 +452,7 @@ func AzjolNerubHostiles() map[uint32]instances.Identity {
 
 var AzjolNerubFactory = &instances.CommonFactory{
 	Name:      "Azjol-Nerub",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"azjol-nerub"},
 	MapIDs:    []uint32{601},
 	Hostiles:  instances.FromMap(AzjolNerubHostiles()),
@@ -506,6 +516,7 @@ func HallsOfLightningHostiles() map[uint32]instances.Identity {
 
 var HallsOfLightningFactory = &instances.CommonFactory{
 	Name:      "Halls of Lightning",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"halls of lightning"},
 	MapIDs:    []uint32{602},
 	Hostiles:  instances.FromMap(HallsOfLightningHostiles()),
@@ -546,6 +557,7 @@ func GundrakHostiles() map[uint32]instances.Identity {
 
 var GundrakFactory = &instances.CommonFactory{
 	Name:      "Gundrak",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"gundrak"},
 	MapIDs:    []uint32{604},
 	Hostiles:  instances.FromMap(GundrakHostiles()),
@@ -578,6 +590,7 @@ func VioletHoldHostiles() map[uint32]instances.Identity {
 
 var VioletHoldFactory = &instances.CommonFactory{
 	Name:      "Violet Hold",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"the violet hold"},
 	MapIDs:    []uint32{608},
 	Hostiles:  instances.FromMap(VioletHoldHostiles()),
@@ -622,6 +635,7 @@ func AhnkahetOldKingdomHostiles() map[uint32]instances.Identity {
 
 var AhnkahetOldKingdomFactory = &instances.CommonFactory{
 	Name:      "Ahn'kahet: The Old Kingdom",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"ahn'kahet: the old kingdom"},
 	MapIDs:    []uint32{619},
 	Hostiles:  instances.FromMap(AhnkahetOldKingdomHostiles()),
@@ -663,6 +677,7 @@ func TrialOfTheChampionHostiles() map[uint32]instances.Identity {
 
 var TrialOfTheChampionFactory = &instances.CommonFactory{
 	Name:      "Trial of the Champion",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"trial of the champion"},
 	MapIDs:    []uint32{650},
 	Hostiles:  instances.FromMap(TrialOfTheChampionHostiles()),
@@ -736,6 +751,7 @@ func PitOfSaronHostiles() map[uint32]instances.Identity {
 
 var PitOfSaronFactory = &instances.CommonFactory{
 	Name:      "Pit of Saron",
+	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"pit of saron"},
 	MapIDs:    []uint32{658},
 	Hostiles:  instances.FromMap(PitOfSaronHostiles()),

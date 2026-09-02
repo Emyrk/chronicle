@@ -3,6 +3,7 @@ package registry
 import (
 	"testing"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
@@ -121,6 +122,39 @@ func TestInstanceDetailsBossCount(t *testing.T) {
 			t.Fatalf("instance %q not found", tc.instance)
 		})
 	}
+}
+
+func TestInstanceDetailsCategories(t *testing.T) {
+	t.Parallel()
+
+	for _, flavor := range []database.WoWFlavor{
+		{database.FlavorVanilla},
+		{database.FlavorVanilla, database.FlavorVanillaPlus},
+		{database.FlavorNightmareOfUrsol},
+		{database.FlavorTBC},
+		{database.FlavorWrath},
+	} {
+		for _, detail := range RegistryForFlavor(nil, flavor).AllInstanceDetails() {
+			require.Truef(t, detail.Category.Valid(), "instance %q has invalid category %q for flavor %v", detail.Name, detail.Category, flavor)
+		}
+	}
+
+	categoryFor := func(flavor database.WoWFlavor, name string) instances.InstanceCategory {
+		for _, detail := range RegistryForFlavor(nil, flavor).AllInstanceDetails() {
+			if detail.Name == name {
+				return detail.Category
+			}
+		}
+		t.Fatalf("instance %q not found for flavor %v", name, flavor)
+		return ""
+	}
+
+	tower := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorNightmareOfUrsol}).EntryByName("Tower of Karazhan")
+	require.NotNil(t, tower)
+	require.ElementsMatch(t, []string{"Lower Tower of Karazhan", "Upper Tower of Karazhan"}, tower.DerivedNames)
+
+	require.Equal(t, instances.InstanceCategoryDungeon, categoryFor(database.WoWFlavor{database.FlavorVanilla}, "Scarlet Monastery"))
+	require.Equal(t, instances.InstanceCategoryRaid, categoryFor(database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, "Scarlet Monastery"))
 }
 
 func intPtr(value int) *int {

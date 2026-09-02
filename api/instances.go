@@ -49,13 +49,15 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 			trash[j] = chroniclesdk.SupportedInstanceUnit{EntryID: t.EntryID, Name: t.Name}
 		}
 		result[i] = chroniclesdk.SupportedInstance{
-			Name:      d.Name,
-			Comment:   d.Comment,
-			Fallback:  d.Fallback,
-			ZoneNames: d.ZoneNames,
-			BossCount: d.BossCount,
-			Bosses:    bosses,
-			Trash:     trash,
+			Name:         d.Name,
+			Comment:      d.Comment,
+			Category:     string(d.Category),
+			Fallback:     d.Fallback,
+			ZoneNames:    d.ZoneNames,
+			DerivedNames: d.DerivedNames,
+			BossCount:    d.BossCount,
+			Bosses:       bosses,
+			Trash:        trash,
 		}
 	}
 	httpapi.Write(ctx, w, http.StatusOK, result)

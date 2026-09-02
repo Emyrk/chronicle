@@ -3434,8 +3434,10 @@ export interface SpeedrunVersionStatus {
 export interface SupportedInstance {
     readonly name: string;
     readonly comment?: string;
+    readonly category: string;
     readonly fallback?: boolean;
     readonly zone_names?: readonly string[];
+    readonly derived_names?: readonly string[];
     readonly boss_count?: number;
     readonly bosses?: readonly SupportedInstanceUnit[];
     readonly trash?: readonly SupportedInstanceUnit[];

@@ -1,7 +1,9 @@
 import { useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { Loader2, SlidersHorizontal, Check, Users, Globe, X, ChevronDown, Info, ArrowLeft, Trophy } from "lucide-react"
-import { getInstanceConfig, getInstanceCategory, getInstanceBackground } from "../Logs/utils/instanceImages"
+import { getInstanceConfig, getInstanceBackground } from "../Logs/utils/instanceImages"
+import { getInstanceCategory } from "../Logs/utils/instanceCategory"
+import { useSupportedInstances } from "@/api/queries"
 import { useState, useEffect, useCallback, useRef } from "react"
 import type { SpeedrunInstanceBoard, SpeedrunLeaderboardEntry, SpeedrunRulesResponse } from "../../api/typesGenerated"
 import { Podium } from "./Podium"
@@ -515,8 +517,9 @@ function InstanceBrowser({
   onTimingChange: (timing: SpeedrunTimingMode) => void
   onSelect: (board: SpeedrunInstanceBoard) => void
 }) {
-  const raids = boards.filter((b) => getInstanceCategory(b.instance_name) === "raid")
-  const dungeons = boards.filter((b) => getInstanceCategory(b.instance_name) !== "raid")
+  const { data: supportedInstances } = useSupportedInstances()
+  const raids = boards.filter((b) => getInstanceCategory(b.instance_name, supportedInstances) === "raid")
+  const dungeons = boards.filter((b) => getInstanceCategory(b.instance_name, supportedInstances) !== "raid")
 
   if (boards.length === 0) {
     return (
