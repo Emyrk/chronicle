@@ -765,6 +765,7 @@ type sqlcQuerier interface {
 	UpdateGearList(ctx context.Context, arg UpdateGearListParams) (GearList, error)
 	UpdateGearProgression(ctx context.Context, arg UpdateGearProgressionParams) (GearProgression, error)
 	UpdateGearStatWeight(ctx context.Context, arg UpdateGearStatWeightParams) (GearStatWeight, error)
+	UpdateGuildDiscordRaidLogAnnouncements(ctx context.Context, arg UpdateGuildDiscordRaidLogAnnouncementsParams) (GuildDiscordInstallation, error)
 	UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPagePanelParams) (GuildPagePanel, error)
 	UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error)
 	UpdateLogFileAfterAppend(ctx context.Context, arg UpdateLogFileAfterAppendParams) error

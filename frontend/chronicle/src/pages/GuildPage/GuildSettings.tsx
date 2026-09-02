@@ -5,11 +5,13 @@ import {
   useGuildDiscordIntegration,
   useGuildSettings,
   useUpdateGuildDiscordIntegration,
+  useUpdateGuildDiscordRaidLogAnnouncements,
   useUpdateGuildSettings,
   useGuildPage,
+  type GuildDiscordIntegrationSettings,
   type RequestError,
 } from "@/api/queries";
-import { ArrowLeft, Bot, UserPlus, Menu, X } from "lucide-react";
+import { ArrowLeft, BellRing, Bot, UserPlus, Menu, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { GuildPageHeader, GuildActionsMenu } from "./components";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,104 @@ const TABS: Tab[] = [
   { id: "join-requests", label: "Join Requests", icon: UserPlus },
   { id: "discord-integration", label: "Discord Integration", icon: Bot },
 ];
+
+function DiscordRaidLogAnnouncementSettings({
+  guildId,
+  settings,
+}: {
+  guildId: string | undefined;
+  settings: GuildDiscordIntegrationSettings;
+}) {
+  const announcements = settings.raid_log_announcements;
+  const [enabled, setEnabled] = useState(announcements.enabled);
+  const [scope, setScope] = useState(announcements.scope || "raids_only");
+  const [channelId, setChannelId] = useState(announcements.channel_id || "");
+  const updateAnnouncements = useUpdateGuildDiscordRaidLogAnnouncements(guildId);
+
+  return (
+    <div className="rounded-md border border-border bg-background p-4">
+      <div className="flex items-start gap-3">
+        <BellRing className="mt-0.5 h-5 w-5 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <label className="flex cursor-pointer items-center gap-2 font-medium">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(event) => setEnabled(event.target.checked)}
+              className="h-4 w-4 rounded border-border accent-primary"
+            />
+            Announce Raid Logs
+          </label>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Post a Discord message when Chronicle receives a new log for this guild.
+          </p>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1.5 text-sm font-medium">
+              Announce
+              <select
+                value={scope}
+                onChange={(event) => setScope(event.target.value)}
+                className="block h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-normal"
+              >
+                <option value="raids_only">Raids only</option>
+                <option value="dungeons_only">Dungeons only</option>
+                <option value="all">All</option>
+              </select>
+            </label>
+
+            <label className="space-y-1.5 text-sm font-medium">
+              Discord channel
+              <select
+                value={channelId}
+                onChange={(event) => setChannelId(event.target.value)}
+                className="block h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-normal"
+              >
+                <option value="">Select a channel</option>
+                {(settings.channels || []).map((channel) => (
+                  <option key={channel.id} value={channel.id}>
+                    #{channel.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {settings.channels?.length === 0 && (
+            <p className="mt-3 text-sm text-amber-600">
+              Chronicle cannot find a text channel where it can post messages.
+            </p>
+          )}
+
+          <div className="mt-4 flex items-center gap-3">
+            <Button
+              size="sm"
+              disabled={updateAnnouncements.isPending || (enabled && !channelId)}
+              onClick={() =>
+                updateAnnouncements.mutate({
+                  enabled,
+                  scope,
+                  channel_id: channelId,
+                })
+              }
+            >
+              {updateAnnouncements.isPending ? "Saving..." : "Save announcement settings"}
+            </Button>
+            {updateAnnouncements.isSuccess && (
+              <span className="text-sm text-green-600">Saved</span>
+            )}
+          </div>
+
+          {updateAnnouncements.error && (
+            <p className="mt-3 text-sm text-destructive">
+              {updateAnnouncements.error.message}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function GuildSettings() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -222,6 +322,12 @@ export function GuildSettings() {
                         <p className="text-xs text-muted-foreground">
                           Discord server ID: {discordSettings.discord_guild_id}
                         </p>
+                        <div className="mt-4">
+                          <DiscordRaidLogAnnouncementSettings
+                            guildId={guildId}
+                            settings={discordSettings}
+                          />
+                        </div>
                         <Button
                           className="mt-3"
                           variant="destructive"

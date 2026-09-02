@@ -56,6 +56,21 @@ func (api *API) discordIntegrationSettingsToSDK(ctx context.Context, guildID uui
 	return out, nil
 }
 
+const (
+	discordAnnouncementScopeRaidsOnly    = "raids_only"
+	discordAnnouncementScopeDungeonsOnly = "dungeons_only"
+	discordAnnouncementScopeAll          = "all"
+)
+
+func validDiscordAnnouncementScope(scope string) bool {
+	switch scope {
+	case discordAnnouncementScopeRaidsOnly, discordAnnouncementScopeDungeonsOnly, discordAnnouncementScopeAll:
+		return true
+	default:
+		return false
+	}
+}
+
 func (api *API) guildDiscordInstallationToSDK(ctx context.Context, guildID uuid.UUID) (chroniclesdk.GuildDiscordIntegrationSettings, error) {
 	out, err := api.discordIntegrationSettingsToSDK(ctx, guildID)
 	if err != nil {
@@ -75,6 +90,19 @@ func (api *API) guildDiscordInstallationToSDK(ctx context.Context, guildID uuid.
 	out.Installed = true
 	out.DiscordGuildID = installation.DiscordGuildID
 	out.DiscordGuildName = installation.DiscordGuildName
+	out.RaidLogAnnouncements = chroniclesdk.GuildDiscordRaidLogAnnouncements{
+		Enabled:   installation.AnnounceRaidLogs,
+		Scope:     installation.AnnounceRaidLogsScope,
+		ChannelID: installation.AnnounceRaidLogsChannelID.String,
+	}
+	channels, err := api.Opts.Bot.WritableTextChannels(installation.DiscordGuildID)
+	if err != nil {
+		return chroniclesdk.GuildDiscordIntegrationSettings{}, err
+	}
+	out.Channels = make([]chroniclesdk.DiscordChannel, 0, len(channels))
+	for _, channel := range channels {
+		out.Channels = append(out.Channels, chroniclesdk.DiscordChannel{ID: channel.ID, Name: channel.Name})
+	}
 	return out, nil
 }
 
@@ -184,6 +212,70 @@ func (api *API) discordInstallCallbackURL() string {
 	return api.Opts.AccessURL.ResolveReference(&url.URL{
 		Path: "/api/v1/discord-integration/callback",
 	}).String()
+}
+
+// UpdateGuildDiscordRaidLogAnnouncements updates raid-log announcement preferences.
+func (api *API) UpdateGuildDiscordRaidLogAnnouncements(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+
+	var req chroniclesdk.UpdateGuildDiscordRaidLogAnnouncementsRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	if !validDiscordAnnouncementScope(req.Scope) {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid raid log announcement scope."})
+		return
+	}
+	if req.Enabled && req.ChannelID == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Select a Discord channel before enabling raid log announcements."})
+		return
+	}
+
+	installation, err := api.Zed.GetGuildDiscordInstallation(ctx, guild.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Link a Discord server before configuring raid log announcements."})
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if req.ChannelID != "" {
+		channels, err := api.Opts.Bot.WritableTextChannels(installation.DiscordGuildID)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		validChannel := false
+		for _, channel := range channels {
+			if channel.ID == req.ChannelID {
+				validChannel = true
+				break
+			}
+		}
+		if !validChannel {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Chronicle cannot post in that Discord channel."})
+			return
+		}
+	}
+
+	_, err = api.Zed.UpdateGuildDiscordRaidLogAnnouncements(ctx, database.UpdateGuildDiscordRaidLogAnnouncementsParams{
+		GuildID:                   guild.ID,
+		AnnounceRaidLogs:          req.Enabled,
+		AnnounceRaidLogsScope:     req.Scope,
+		AnnounceRaidLogsChannelID: pgtype.Text{String: req.ChannelID, Valid: req.ChannelID != ""},
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	resp, err := api.guildDiscordInstallationToSDK(ctx, guild.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
 // BeginGuildDiscordInstall starts Discord's required OAuth2 code-grant flow.

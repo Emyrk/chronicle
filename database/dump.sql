@@ -805,7 +805,11 @@ CREATE TABLE guild_discord_installations (
     discord_guild_name text NOT NULL,
     installed_by uuid NOT NULL,
     installed_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    announce_raid_logs boolean DEFAULT false NOT NULL,
+    announce_raid_logs_scope text DEFAULT 'raids_only'::text NOT NULL,
+    announce_raid_logs_channel_id text,
+    CONSTRAINT guild_discord_installations_announce_raid_logs_scope_check CHECK ((announce_raid_logs_scope = ANY (ARRAY['raids_only'::text, 'dungeons_only'::text, 'all'::text])))
 );
 
 CREATE TABLE guild_join_requests (

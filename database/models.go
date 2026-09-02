@@ -1332,12 +1332,15 @@ type GuildDiscordInstallState struct {
 }
 
 type GuildDiscordInstallation struct {
-	GuildID          uuid.UUID          `db:"guild_id" json:"guild_id"`
-	DiscordGuildID   string             `db:"discord_guild_id" json:"discord_guild_id"`
-	DiscordGuildName string             `db:"discord_guild_name" json:"discord_guild_name"`
-	InstalledBy      uuid.UUID          `db:"installed_by" json:"installed_by"`
-	InstalledAt      pgtype.Timestamptz `db:"installed_at" json:"installed_at"`
-	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	GuildID                   uuid.UUID          `db:"guild_id" json:"guild_id"`
+	DiscordGuildID            string             `db:"discord_guild_id" json:"discord_guild_id"`
+	DiscordGuildName          string             `db:"discord_guild_name" json:"discord_guild_name"`
+	InstalledBy               uuid.UUID          `db:"installed_by" json:"installed_by"`
+	InstalledAt               pgtype.Timestamptz `db:"installed_at" json:"installed_at"`
+	UpdatedAt                 pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	AnnounceRaidLogs          bool               `db:"announce_raid_logs" json:"announce_raid_logs"`
+	AnnounceRaidLogsScope     string             `db:"announce_raid_logs_scope" json:"announce_raid_logs_scope"`
+	AnnounceRaidLogsChannelID pgtype.Text        `db:"announce_raid_logs_channel_id" json:"announce_raid_logs_channel_id"`
 }
 
 type GuildJoinRequest struct {

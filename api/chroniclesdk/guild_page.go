@@ -142,13 +142,32 @@ type GuildSettings struct {
 }
 
 type GuildDiscordIntegrationSettings struct {
-	Enabled          bool   `json:"enabled"`
-	Available        bool   `json:"available"`
-	CanEnable        bool   `json:"can_enable"`
-	Installed        bool   `json:"installed"`
-	DiscordGuildID   string `json:"discord_guild_id,omitempty"`
-	DiscordGuildName string `json:"discord_guild_name,omitempty"`
-	InstallURL       string `json:"install_url,omitempty"`
+	Enabled              bool                             `json:"enabled"`
+	Available            bool                             `json:"available"`
+	CanEnable            bool                             `json:"can_enable"`
+	Installed            bool                             `json:"installed"`
+	DiscordGuildID       string                           `json:"discord_guild_id,omitempty"`
+	DiscordGuildName     string                           `json:"discord_guild_name,omitempty"`
+	InstallURL           string                           `json:"install_url,omitempty"`
+	Channels             []DiscordChannel                 `json:"channels,omitempty"`
+	RaidLogAnnouncements GuildDiscordRaidLogAnnouncements `json:"raid_log_announcements"`
+}
+
+type DiscordChannel struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type GuildDiscordRaidLogAnnouncements struct {
+	Enabled   bool   `json:"enabled"`
+	Scope     string `json:"scope"`
+	ChannelID string `json:"channel_id,omitempty"`
+}
+
+type UpdateGuildDiscordRaidLogAnnouncementsRequest struct {
+	Enabled   bool   `json:"enabled"`
+	Scope     string `json:"scope"`
+	ChannelID string `json:"channel_id"`
 }
 
 type UpdateGuildSettingsRequest struct {

@@ -39,6 +39,15 @@ ON CONFLICT (guild_id) DO UPDATE SET
   updated_at = NOW()
 RETURNING *;
 
+-- name: UpdateGuildDiscordRaidLogAnnouncements :one
+UPDATE guild_discord_installations SET
+  announce_raid_logs = $2,
+  announce_raid_logs_scope = $3,
+  announce_raid_logs_channel_id = $4,
+  updated_at = NOW()
+WHERE guild_id = $1
+RETURNING *;
+
 -- name: DeleteGuildDiscordInstallation :one
 DELETE FROM guild_discord_installations
 WHERE guild_id = $1

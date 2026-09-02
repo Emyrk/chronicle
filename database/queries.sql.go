@@ -5788,7 +5788,7 @@ func (q *sqlQuerier) CreateGuildJoinRequest(ctx context.Context, arg CreateGuild
 const deleteGuildDiscordInstallation = `-- name: DeleteGuildDiscordInstallation :one
 DELETE FROM guild_discord_installations
 WHERE guild_id = $1
-RETURNING guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at
+RETURNING guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at, announce_raid_logs, announce_raid_logs_scope, announce_raid_logs_channel_id
 `
 
 func (q *sqlQuerier) DeleteGuildDiscordInstallation(ctx context.Context, guildID uuid.UUID) (GuildDiscordInstallation, error) {
@@ -5801,6 +5801,9 @@ func (q *sqlQuerier) DeleteGuildDiscordInstallation(ctx context.Context, guildID
 		&i.InstalledBy,
 		&i.InstalledAt,
 		&i.UpdatedAt,
+		&i.AnnounceRaidLogs,
+		&i.AnnounceRaidLogsScope,
+		&i.AnnounceRaidLogsChannelID,
 	)
 	return i, err
 }
@@ -5820,7 +5823,7 @@ func (q *sqlQuerier) DeleteGuildJoinRequest(ctx context.Context, arg DeleteGuild
 }
 
 const getGuildDiscordInstallation = `-- name: GetGuildDiscordInstallation :one
-SELECT guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at FROM guild_discord_installations WHERE guild_id = $1
+SELECT guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at, announce_raid_logs, announce_raid_logs_scope, announce_raid_logs_channel_id FROM guild_discord_installations WHERE guild_id = $1
 `
 
 func (q *sqlQuerier) GetGuildDiscordInstallation(ctx context.Context, guildID uuid.UUID) (GuildDiscordInstallation, error) {
@@ -5833,6 +5836,9 @@ func (q *sqlQuerier) GetGuildDiscordInstallation(ctx context.Context, guildID uu
 		&i.InstalledBy,
 		&i.InstalledAt,
 		&i.UpdatedAt,
+		&i.AnnounceRaidLogs,
+		&i.AnnounceRaidLogsScope,
+		&i.AnnounceRaidLogsChannelID,
 	)
 	return i, err
 }
@@ -5916,6 +5922,45 @@ func (q *sqlQuerier) ListGuildJoinRequests(ctx context.Context, guildID uuid.UUI
 	return items, nil
 }
 
+const updateGuildDiscordRaidLogAnnouncements = `-- name: UpdateGuildDiscordRaidLogAnnouncements :one
+UPDATE guild_discord_installations SET
+  announce_raid_logs = $2,
+  announce_raid_logs_scope = $3,
+  announce_raid_logs_channel_id = $4,
+  updated_at = NOW()
+WHERE guild_id = $1
+RETURNING guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at, announce_raid_logs, announce_raid_logs_scope, announce_raid_logs_channel_id
+`
+
+type UpdateGuildDiscordRaidLogAnnouncementsParams struct {
+	GuildID                   uuid.UUID   `db:"guild_id" json:"guild_id"`
+	AnnounceRaidLogs          bool        `db:"announce_raid_logs" json:"announce_raid_logs"`
+	AnnounceRaidLogsScope     string      `db:"announce_raid_logs_scope" json:"announce_raid_logs_scope"`
+	AnnounceRaidLogsChannelID pgtype.Text `db:"announce_raid_logs_channel_id" json:"announce_raid_logs_channel_id"`
+}
+
+func (q *sqlQuerier) UpdateGuildDiscordRaidLogAnnouncements(ctx context.Context, arg UpdateGuildDiscordRaidLogAnnouncementsParams) (GuildDiscordInstallation, error) {
+	row := q.db.QueryRow(ctx, updateGuildDiscordRaidLogAnnouncements,
+		arg.GuildID,
+		arg.AnnounceRaidLogs,
+		arg.AnnounceRaidLogsScope,
+		arg.AnnounceRaidLogsChannelID,
+	)
+	var i GuildDiscordInstallation
+	err := row.Scan(
+		&i.GuildID,
+		&i.DiscordGuildID,
+		&i.DiscordGuildName,
+		&i.InstalledBy,
+		&i.InstalledAt,
+		&i.UpdatedAt,
+		&i.AnnounceRaidLogs,
+		&i.AnnounceRaidLogsScope,
+		&i.AnnounceRaidLogsChannelID,
+	)
+	return i, err
+}
+
 const upsertGuildDiscordInstallation = `-- name: UpsertGuildDiscordInstallation :one
 INSERT INTO guild_discord_installations (
   guild_id, discord_guild_id, discord_guild_name, installed_by
@@ -5925,7 +5970,7 @@ ON CONFLICT (guild_id) DO UPDATE SET
   discord_guild_name = EXCLUDED.discord_guild_name,
   installed_by = EXCLUDED.installed_by,
   updated_at = NOW()
-RETURNING guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at
+RETURNING guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at, announce_raid_logs, announce_raid_logs_scope, announce_raid_logs_channel_id
 `
 
 type UpsertGuildDiscordInstallationParams struct {
@@ -5950,6 +5995,9 @@ func (q *sqlQuerier) UpsertGuildDiscordInstallation(ctx context.Context, arg Ups
 		&i.InstalledBy,
 		&i.InstalledAt,
 		&i.UpdatedAt,
+		&i.AnnounceRaidLogs,
+		&i.AnnounceRaidLogsScope,
+		&i.AnnounceRaidLogsChannelID,
 	)
 	return i, err
 }
