@@ -236,37 +236,43 @@ export function GuildSettings() {
                       </div>
                     )}
 
-                    {discordSettings.enabled &&
-                      !discordSettings.installed &&
-                      discordSettings.install_url && (
-                        <Button className="mt-4" asChild>
-                          <a href={discordSettings.install_url}>
-                            Install Chronicle on Discord
-                          </a>
-                        </Button>
-                      )}
+                    {(discordSettings.can_enable ||
+                      (discordSettings.enabled &&
+                        !discordSettings.installed &&
+                        discordSettings.install_url)) && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {discordSettings.enabled &&
+                          !discordSettings.installed &&
+                          discordSettings.install_url && (
+                            <Button asChild>
+                              <a href={discordSettings.install_url}>
+                                Install Chronicle on Discord
+                              </a>
+                            </Button>
+                          )}
 
-                    {discordSettings.can_enable && (
-                      <Button
-                        className="mt-4"
-                        variant={
-                          discordSettings.enabled
-                            ? "destructive"
-                            : "default"
-                        }
-                        disabled={updateDiscordIntegration.isPending}
-                        onClick={() =>
-                          updateDiscordIntegration.mutate({
-                            enabled: !discordSettings.enabled,
-                          })
-                        }
-                      >
-                        {updateDiscordIntegration.isPending
-                          ? "Saving..."
-                          : discordSettings.enabled
-                            ? "Disable Discord Linking"
-                            : "Enable Discord Linking"}
-                      </Button>
+                        {discordSettings.can_enable && (
+                          <Button
+                            variant={
+                              discordSettings.enabled
+                                ? "destructive"
+                                : "default"
+                            }
+                            disabled={updateDiscordIntegration.isPending}
+                            onClick={() =>
+                              updateDiscordIntegration.mutate({
+                                enabled: !discordSettings.enabled,
+                              })
+                            }
+                          >
+                            {updateDiscordIntegration.isPending
+                              ? "Saving..."
+                              : discordSettings.enabled
+                                ? "Disable Discord Linking"
+                                : "Enable Discord Linking"}
+                          </Button>
+                        )}
+                      </div>
                     )}
 
                     {deleteDiscordInstallation.error && (
