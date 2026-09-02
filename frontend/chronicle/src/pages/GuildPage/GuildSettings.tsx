@@ -71,13 +71,18 @@ function DiscordRaidLogAnnouncementSettings({
             Post a Discord message when Chronicle receives a new log for this guild.
           </p>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <fieldset
+            disabled={!enabled}
+            className={`mt-4 grid gap-4 transition-opacity sm:grid-cols-2 ${
+              enabled ? "opacity-100" : "opacity-50"
+            }`}
+          >
             <label className="space-y-1.5 text-sm font-medium">
               Announce
               <select
                 value={scope}
                 onChange={(event) => setScope(event.target.value)}
-                className="block h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-normal"
+                className="block h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-normal disabled:cursor-not-allowed"
               >
                 <option value="raids_only">Raids only</option>
                 <option value="dungeons_only">Dungeons only</option>
@@ -90,7 +95,7 @@ function DiscordRaidLogAnnouncementSettings({
               <select
                 value={channelId}
                 onChange={(event) => setChannelId(event.target.value)}
-                className="block h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-normal"
+                className="block h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-normal disabled:cursor-not-allowed"
               >
                 <option value="">Select a channel</option>
                 {(settings.channels || []).map((channel) => (
@@ -100,9 +105,9 @@ function DiscordRaidLogAnnouncementSettings({
                 ))}
               </select>
             </label>
-          </div>
+          </fieldset>
 
-          {settings.channels?.length === 0 && (
+          {enabled && settings.channels?.length === 0 && (
             <p className="mt-3 text-sm text-amber-600">
               Chronicle cannot find a text channel where it can post messages.
             </p>
