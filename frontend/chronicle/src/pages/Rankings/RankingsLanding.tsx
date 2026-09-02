@@ -5,13 +5,15 @@ import { useRankingsInstances } from "@/api/rankingsQueries"
 import {
   getInstanceBackground,
   getInstanceAbbrev,
-  getInstanceCategory,
 } from "@/pages/Logs/utils/instanceImages"
+import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory"
+import { useSupportedInstances } from "@/api/queries"
 import type { RankingsInstanceSummary } from "@/api/typesGenerated"
 
 export function RankingsLanding() {
   const [, setParams] = useSearchParams()
   const { data: summaries, isLoading } = useRankingsInstances()
+  const { data: supportedInstances } = useSupportedInstances()
 
   const handleSelectInstance = (name: string, difficultyName?: string) => {
     setParams((prev) => {
@@ -45,10 +47,10 @@ export function RankingsLanding() {
   }
 
   const raids = summaries.filter(
-    (s) => getInstanceCategory(s.instance_name) === "raid",
+    (s) => getInstanceCategory(s.instance_name, supportedInstances) === "raid",
   )
   const dungeons = summaries.filter(
-    (s) => getInstanceCategory(s.instance_name) !== "raid",
+    (s) => getInstanceCategory(s.instance_name, supportedInstances) !== "raid",
   )
 
   const renderGrid = (items: RankingsInstanceSummary[]) => (

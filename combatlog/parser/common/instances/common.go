@@ -50,8 +50,20 @@ type FinalizedInstance struct {
 	RaidGroupSnapshots []raidgroups.InstanceSnapshot
 }
 
+type InstanceCategory string
+
+const (
+	InstanceCategoryDungeon InstanceCategory = "dungeon"
+	InstanceCategoryRaid    InstanceCategory = "raid"
+)
+
+func (c InstanceCategory) Valid() bool {
+	return c == InstanceCategoryDungeon || c == InstanceCategoryRaid
+}
+
 type CommonFactory struct {
 	Name      string
+	Category  InstanceCategory
 	MultiZone bool
 
 	// NameFromZone allows changing the instance name from metadata available on

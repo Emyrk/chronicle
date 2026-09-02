@@ -27,6 +27,8 @@ type Entry struct {
 	Name string
 	// Comment is an optional note (e.g. "not fully implemented").
 	Comment string
+	// Category identifies whether the instance is a raid or dungeon.
+	Category instances.InstanceCategory
 	// Factory creates a Hookable for this instance.
 	Factory InstanceFactory
 	// MultiZone means this is a registry of more than 1 unique instance sharing the same zone.
@@ -41,6 +43,8 @@ type Entry struct {
 	SpeedrunRules *rankings.SpeedrunRules
 	// BossCount overrides the encounter count inferred from SpeedrunRules.
 	BossCount *int
+	// DerivedNames are instance names selected from encounter data within a shared zone.
+	DerivedNames []string
 	// DerivedSpeedrunRules holds per-sub-instance speedrun rules when
 	// the factory uses DerivedRankings (e.g. Lower/Upper Tower of Karazhan).
 	DerivedSpeedrunRules map[string]*rankings.SpeedrunRules
@@ -74,12 +78,17 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 	entry := Entry{
 		commonFactory:  f,
 		Name:           f.Name,
+		Category:       f.Category,
 		MultiZone:      f.MultiZone,
 		Factory:        wrap(f.New),
 		ZoneNames:      f.ZoneNames,
 		HostileEntries: hostiles,
 		SpeedrunRules:  speedrun,
 		BossCount:      bossCount,
+	}
+
+	if f.DerivedName != nil {
+		entry.DerivedNames = f.DerivedName(flavor).Names()
 	}
 
 	// When DerivedRankings are present, collect per-sub-instance speedrun rules
@@ -279,13 +288,15 @@ type InstanceDetailUnit struct {
 
 // InstanceDetail holds enriched metadata for a registered instance.
 type InstanceDetail struct {
-	Name      string
-	Comment   string
-	Fallback  bool
-	ZoneNames []string
-	BossCount *int
-	Bosses    []InstanceDetailUnit
-	Trash     []InstanceDetailUnit
+	Name         string
+	Comment      string
+	Category     instances.InstanceCategory
+	Fallback     bool
+	ZoneNames    []string
+	DerivedNames []string
+	BossCount    *int
+	Bosses       []InstanceDetailUnit
+	Trash        []InstanceDetailUnit
 }
 
 // speedrunBossCount returns the number of distinct boss encounters required by
@@ -355,13 +366,15 @@ func (r *Registry) AllInstanceDetails() []InstanceDetail {
 			sort.Slice(trash, func(i, j int) bool { return trash[i].Name < trash[j].Name })
 
 			result = append(result, InstanceDetail{
-				Name:      entry.Name,
-				Comment:   entry.Comment,
-				Fallback:  fallback,
-				ZoneNames: entry.ZoneNames,
-				BossCount: speedrunBossCount(entry),
-				Bosses:    bosses,
-				Trash:     trash,
+				Name:         entry.Name,
+				Comment:      entry.Comment,
+				Category:     entry.Category,
+				Fallback:     fallback,
+				ZoneNames:    entry.ZoneNames,
+				DerivedNames: entry.DerivedNames,
+				BossCount:    speedrunBossCount(entry),
+				Bosses:       bosses,
+				Trash:        trash,
 			})
 		}
 	}

@@ -48,6 +48,7 @@ func VoAHostiles() map[uint32]instances.Identity {
 
 var VoAFactory = &instances.CommonFactory{
 	Name:      "Vault of Archavon",
+	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"vault of archavon"},
 	MapIDs:    []uint32{624},
 	Hostiles:  instances.FromMap(VoAHostiles()),
@@ -79,6 +80,7 @@ func ObsidianSanctumHostiles() map[uint32]instances.Identity {
 
 var ObsidianSanctumFactory = &instances.CommonFactory{
 	Name:      "Obsidian Sanctum",
+	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"the obsidian sanctum"},
 	MapIDs:    []uint32{615},
 	Hostiles:  instances.FromMap(ObsidianSanctumHostiles()),
@@ -147,6 +149,7 @@ func onyxiaDerivedName(fl database.WoWFlavor) *instances.MultiInstanceZone {
 
 var OnyxiaFactory = &instances.CommonFactory{
 	Name:         "Onyxia's Lair",
+	Category:     instances.InstanceCategoryRaid,
 	NameFromZone: onyxiaZoneName,
 	DerivedName:  onyxiaDerivedName,
 	ZoneNames:    []string{"onyxia's lair", "奥妮克希亚的巢穴"},
@@ -203,7 +206,8 @@ func NaxxramasSpeedrunRequirements() []rankings.SpeedrunRequirement {
 }
 
 var NaxxramasFactory = &instances.CommonFactory{
-	Name: "Naxxramas",
+	Name:     "Naxxramas",
+	Category: instances.InstanceCategoryRaid,
 	ZoneNames: []string{
 		"naxxramas",
 		"the upper necropolis",
@@ -239,6 +243,7 @@ func EyeOfEternityHostiles() map[uint32]instances.Identity {
 
 var EyeOfEternityFactory = &instances.CommonFactory{
 	Name:      "Eye of Eternity",
+	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"the eye of eternity", "eye of eternity"},
 	MapIDs:    []uint32{616},
 	Hostiles:  instances.FromMap(EyeOfEternityHostiles()),
@@ -272,6 +277,7 @@ func RubySanctumHostiles() map[uint32]instances.Identity {
 
 var RubySanctumFactory = &instances.CommonFactory{
 	Name:      "Ruby Sanctum",
+	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"the ruby sanctum", "ruby sanctum"},
 	MapIDs:    []uint32{724},
 	Hostiles:  instances.FromMap(RubySanctumHostiles()),
@@ -321,6 +327,7 @@ func TrialOfTheCrusaderHostiles() map[uint32]instances.Identity {
 
 var TrialOfTheCrusaderFactory = &instances.CommonFactory{
 	Name:      "Trial of the Crusader",
+	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"trial of the crusader", "trial of the grand crusader"},
 	MapIDs:    []uint32{649},
 	Hostiles:  instances.FromMap(TrialOfTheCrusaderHostiles()),
@@ -427,6 +434,7 @@ func IcecrownCitadelHostiles() map[uint32]instances.Identity {
 
 var IcecrownCitadelFactory = &instances.CommonFactory{
 	Name:      "Icecrown Citadel",
+	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"icecrown citadel"},
 	MapIDs:    []uint32{631},
 	Hostiles:  instances.FromMap(IcecrownCitadelHostiles()),
@@ -821,6 +829,7 @@ func UlduarHostiles() map[uint32]instances.Identity {
 
 var UlduarFactory = &instances.CommonFactory{
 	Name:      "Ulduar",
+	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"ulduar"},
 	MapIDs:    []uint32{603},
 	Hostiles:  instances.FromMap(UlduarHostiles()),

@@ -2,11 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSupportedInstances } from "@/api/queries";
 import { Loader2, X, Shield, MapPin, Skull, Swords } from "lucide-react";
 import type { SupportedInstance, SupportedInstanceUnit } from "@/api/typesGenerated";
-import {
-  getInstanceBackground,
-  getInstanceConfig,
-  type InstanceCategory,
-} from "@/pages/Logs/utils/instanceImages";
+import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
+import type { InstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -275,8 +272,7 @@ export function SupportedInstances() {
     const other: SupportedInstance[] = [];
 
     for (const inst of supportedInstances) {
-      const config = getInstanceConfig(inst.name);
-      const cat = config?.category;
+      const cat = inst.category;
       if (cat === "raid") raids.push(inst);
       else if (cat === "dungeon") dungeons.push(inst);
       else other.push(inst);

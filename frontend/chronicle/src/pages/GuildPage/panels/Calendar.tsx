@@ -4,7 +4,9 @@ import { Link } from "react-router-dom";
 import { CalendarDays, AlertCircle, ChevronDown, ChevronUp, Copy } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
-import { getInstanceCategory, getInstanceBackground, getInstanceAbbrev } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceBackground, getInstanceAbbrev } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
+import { useSupportedInstances } from "@/api/queries";
 import { LogsCalendar } from "@/pages/Logs/components/LogsCalendar";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { DuplicateInstanceModal } from "@/components/DuplicateInstanceModal";
@@ -186,6 +188,7 @@ function CalendarContent({ config, guild, position }: GuildPanelRenderProps<Cale
   const [instances, setInstances] = useState<RecentInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { data: supportedInstances } = useSupportedInstances();
 
   const compact = position.h <= 5;
   // The default six-row panel gives each day about 90px in six-week months.
@@ -223,8 +226,8 @@ function CalendarContent({ config, guild, position }: GuildPanelRenderProps<Cale
 
   const filtered = useMemo(() => {
     if (category === "all") return instances;
-    return instances.filter((inst) => getInstanceCategory(inst.name) === category);
-  }, [instances, category]);
+    return instances.filter((inst) => getInstanceCategory(inst.name, supportedInstances) === category);
+  }, [instances, category, supportedInstances]);
 
   const byDate = useMemo(() => groupByDate(filtered), [filtered]);
 

@@ -7,7 +7,9 @@ import type {
   RecentInstance,
   RecentInstancesResponse,
 } from "@/api/typesGenerated";
-import { getInstanceCategory, getInstanceAccentColor } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceAccentColor } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
+import { useSupportedInstances } from "@/api/queries";
 import { parseColor, parseHexColor } from "@/pages/Instance/parseColors";
 import { RaidCard } from "@/pages/Recent/RaidCard";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
@@ -334,6 +336,7 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
   const [runParses, setRunParses] = useState<Record<string, GuildRunEncounterParse[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { data: supportedInstances } = useSupportedInstances();
 
   const displayMode = ["list", "floating"].includes(config.displayMode)
     ? config.displayMode
@@ -373,10 +376,10 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
   const filtered = useMemo(() => {
     let result = instances;
     if (category !== "all") {
-      result = result.filter((inst) => getInstanceCategory(inst.name) === category);
+      result = result.filter((inst) => getInstanceCategory(inst.name, supportedInstances) === category);
     }
     return result;
-  }, [instances, category]);
+  }, [instances, category, supportedInstances]);
 
   const groups = useMemo(() => groupDuplicateInstances(filtered).slice(0, limit), [filtered, limit]);
 

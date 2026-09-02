@@ -5,7 +5,7 @@ import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useSiteConfig } from "@/api/queries";
+import { useSiteConfig, useSupportedInstances } from "@/api/queries";
 import {
   useRankingsEncounters,
   useRankingsInstances,
@@ -24,9 +24,8 @@ import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay";
 import {
   getInstanceAbbrev,
   getInstanceBackground,
-  getInstanceCategory,
-  INSTANCE_CONFIG,
 } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { Podium } from "@/pages/Leaderboard/Podium";
 import { RaidCard } from "@/pages/Recent/RaidCard";
 
@@ -101,20 +100,24 @@ function useGuildClears(instanceName: string, difficulty?: string) {
 }
 
 // Raids only: dungeons are supported but off-topic for the homepage.
-// Filters server-side by the known raid names so a dungeon-heavy recent
-// page can't starve the homepage row.
-const RAID_NAMES = Object.entries(INSTANCE_CONFIG)
-  .filter(([, cfg]) => cfg.category === "raid")
-  .map(([name]) => name);
-
+// Filters server-side by raid names from the supported instances API so a
+// dungeon-heavy recent page can't starve the homepage row.
 function useRecentUploads() {
+  const { data: supportedInstances } = useSupportedInstances();
+  const raidNames = supportedInstances?.flatMap((instance) =>
+    instance.category === "raid"
+      ? [instance.name, ...(instance.derived_names ?? [])]
+      : [],
+  );
+
   return useQuery({
-    queryKey: ["home", "recent-uploads"],
+    queryKey: ["home", "recent-uploads", raidNames],
     queryFn: () => {
       const params = new URLSearchParams();
-      for (const name of RAID_NAMES) params.append("instance_name", name);
+      for (const name of raidNames ?? []) params.append("instance_name", name);
       return fetchJSON<RecentInstancesResponse>(`/api/v1/raidlogs/recent?${params}`);
     },
+    enabled: raidNames !== undefined,
     staleTime: 60 * 1000,
   });
 }
@@ -453,6 +456,7 @@ function MobileSpotlight({
 function RaidSpotlight() {
   const isMobile = useIsMobile();
   const { data: instanceSummaries } = useRankingsInstances();
+  const { data: supportedInstances } = useSupportedInstances();
   const { data: siteConfig } = useSiteConfig();
 
   // Tenant parse scoring mode: "spec" (default), "class", or "disabled".
@@ -469,8 +473,8 @@ function RaidSpotlight() {
     const byName = new Map<string, SpotlightRaid>();
     for (const s of instanceSummaries) {
       // Raids only. Known dungeons are excluded; unknown instances stay so a
-      // custom raid missing from INSTANCE_CONFIG doesn't silently vanish.
-      if (getInstanceCategory(s.instance_name) === "dungeon") continue;
+      // custom raid missing from the supported response doesn't silently vanish.
+      if (getInstanceCategory(s.instance_name, supportedInstances) === "dungeon") continue;
       const board: SpotlightBoard = {
         difficulty: s.difficulty_name,
         maxPlayers: s.max_players,
@@ -490,7 +494,7 @@ function RaidSpotlight() {
       }
     }
     return [...byName.values()].sort((a, b) => b.totalKills - a.totalKills);
-  }, [instanceSummaries]);
+  }, [instanceSummaries, supportedInstances]);
 
   // Resume where the visitor left off.
   const [raidIdx, setRaidIdx] = useState(() => {

@@ -2,23 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_INSTANCE_ACCENT,
   getInstanceAccentColor,
-  getInstanceCategory,
   getInstanceContentLevel,
 } from "./instanceImages";
-
-describe("getInstanceCategory", () => {
-  it("classifies Scarlet Monastery as a raid for VanillaPlus", () => {
-    expect(getInstanceCategory("Scarlet Monastery", ["vanilla", "vanillaplus"])).toBe("raid");
-  });
-
-  it("classifies Serpentshrine Cavern as a raid", () => {
-    expect(getInstanceCategory("Serpentshrine Cavern", ["tbc"])).toBe("raid");
-  });
-
-  it("keeps Scarlet Monastery as a dungeon for other flavors", () => {
-    expect(getInstanceCategory("Scarlet Monastery", ["vanilla", "turtle"])).toBe("dungeon");
-  });
-});
 
 describe("getInstanceContentLevel", () => {
   it("returns the configured expansion level", () => {
