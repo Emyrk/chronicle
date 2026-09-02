@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/parseargs"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
@@ -423,6 +424,11 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				}
 			}
 
+			instanceCategory := pgtype.Text{}
+			if category, ok := reg.CategoryByName(inst.Name()); ok {
+				instanceCategory = pgtype.Text{String: string(category), Valid: true}
+			}
+
 			insertInstanceParams := database.InsertInstanceParams{
 				ID:         instanceID,
 				RealmID:    realmID,
@@ -446,6 +452,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				DifficultyName:          inst.CurrentZone.DifficultyName,
 				MaxPlayers:              int32(inst.CurrentZone.MaxPlayers),
 				DynamicDifficulty:       int32(inst.CurrentZone.DynamicDifficulty),
+				Category:                instanceCategory,
 				VehicleControlIntervals: finalized.VehicleMetadata,
 			}
 
@@ -769,6 +776,23 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	jobOut.Complete = ptr.Ref(time.Now())
 	jobResult = "success"
 	_ = river.RecordOutput(ctx, jobOut)
+
+	if w.parent.queue == nil {
+		return nil
+	}
+	persistedInstances, err := db.GetInstancesByLogGroupID(ctx, job.Args.LogID)
+	if err != nil {
+		w.parent.logger.WarnContext(ctx, "failed to list instances for Discord announcements", slog.Any("error", err))
+	} else {
+		for ordinal := range persistedInstances {
+			if _, err := w.parent.queue.Insert(ctx, chroniclebot.ArgsAnnounceRaidLog{
+				LogGroupID: job.Args.LogID, InstanceOrdinal: int32(ordinal),
+			}, nil); err != nil {
+				w.parent.logger.WarnContext(ctx, "failed to enqueue Discord announcement",
+					slog.Int("instance_ordinal", ordinal), slog.Any("error", err))
+			}
+		}
+	}
 
 	return nil
 }

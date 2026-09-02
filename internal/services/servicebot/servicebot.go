@@ -6,6 +6,7 @@ import (
 
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
@@ -45,6 +46,7 @@ func (s *Service) Configures() []string { return []string{} }
 func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
+		serviceaccessurl.OnAccessURL(),
 		servicedbstore.OnDatabaseStore(),
 		serviceauthz.OnAuthz(),
 	}
@@ -56,11 +58,12 @@ func (s *Service) Start(ctx context.Context) error {
 	zed := serviceauthz.Authz(s.broker)
 
 	bot, err := chroniclebot.New(ctx, logger, chroniclebot.Config{
-		Token:    s.cfg.Token,
-		GuildID:  s.cfg.GuildID,
-		Disabled: s.cfg.Disabled,
-		DB:       db,
-		Zed:      zed,
+		Token:     s.cfg.Token,
+		GuildID:   s.cfg.GuildID,
+		Disabled:  s.cfg.Disabled,
+		DB:        db,
+		Zed:       zed,
+		AccessURL: serviceaccessurl.AccessURL(s.broker),
 	})
 	if err != nil {
 		return fmt.Errorf("create chronicle bot: %w", err)
