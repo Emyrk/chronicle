@@ -294,7 +294,7 @@ func (api *API) CompleteGuildDiscordInstall(w http.ResponseWriter, r *http.Reque
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		httpapi.Write(ctx, w, http.StatusBadGateway, chroniclesdk.Response{Message: "Discord rejected the installation request."})
 		return
