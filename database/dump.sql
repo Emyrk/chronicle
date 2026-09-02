@@ -828,6 +828,7 @@ CREATE TABLE guild_discord_log_announcements (
     run_id uuid NOT NULL,
     discord_channel_id text NOT NULL,
     discord_message_id text,
+    delivery_attempted_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );

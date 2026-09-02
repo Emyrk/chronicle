@@ -241,6 +241,17 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 		return nil
 	}
 
+	// Claim creation before contacting Discord. If Discord accepts the message but
+	// Chronicle fails before storing its ID, subsequent jobs intentionally skip
+	// creation rather than risk spamming the channel with duplicates.
+	announcement, err = w.bot.config.DB.ClaimDiscordAnnouncementDelivery(ctx, announcement.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("claim Discord announcement delivery: %w", err)
+	}
+
 	message, err := w.messenger.ChannelMessageSendEmbed(installation.AnnounceRaidLogsChannelID.String, embed)
 	if err != nil {
 		return fmt.Errorf("send Discord announcement: %w", err)

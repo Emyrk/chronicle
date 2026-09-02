@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
@@ -80,6 +81,31 @@ func TestReconcileReparseAndDuplicateMerge(t *testing.T) {
 	reconciled, err := worker.reconcile(ctx, reparsed, 0, "channel")
 	require.NoError(t, err)
 	require.Equal(t, merged.announcement.ID, reconciled.announcement.ID)
+}
+
+func TestClaimDiscordAnnouncementDeliveryAtMostOnce(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	store, _ := dbtestutil.NewDB(t)
+
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "delivery-claim-" + uuid.NewString()[:8]})
+	require.NoError(t, err)
+	realmID := uuid.MustParse("bcf173a7-c94a-49fe-8930-27435d722fb7")
+	guild, err := store.UpsertGuild(ctx, database.UpsertGuildParams{
+		RealmID: realmID, Name: "Claim Guild " + uuid.NewString()[:8], CreatedAt: database.Timestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+	announcement, err := store.UpsertDiscordAnnouncement(ctx, database.UpsertDiscordAnnouncementParams{
+		GuildID: guild.ID, RunID: uuid.New(), DiscordChannelID: "channel",
+	})
+	require.NoError(t, err)
+
+	claimed, err := store.ClaimDiscordAnnouncementDelivery(ctx, announcement.ID)
+	require.NoError(t, err)
+	require.True(t, claimed.DeliveryAttemptedAt.Valid)
+	_, err = store.ClaimDiscordAnnouncementDelivery(ctx, announcement.ID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestArgsAnnounceRaidLogInsertOpts(t *testing.T) {

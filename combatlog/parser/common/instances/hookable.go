@@ -53,6 +53,7 @@ const (
 type Hookable struct {
 	name        string
 	derivedName *MultiInstanceZone
+	Category    InstanceCategory
 	timings     *timings.Accumulator
 	logger      *slog.Logger
 	units       *unitdb.Units
@@ -100,6 +101,7 @@ type Hookable struct {
 
 type InstanceParams struct {
 	Name          string
+	Category      InstanceCategory
 	MatchesZone   func(z zone.Zone) bool
 	Idf           *identifier.Identifier
 	Rankings      *rankings.Rankings
@@ -122,6 +124,7 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	}
 	return NewHookable(ctx, logger, db, z, InstanceParams{
 		Name:          name,
+		Category:      f.Category,
 		MatchesZone:   f.MatchZone,
 		Idf:           f.Hostiles(flavor),
 		Rankings:      r,
@@ -218,6 +221,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 
 	c := &Hookable{
 		name:              ip.Name,
+		Category:          ip.Category,
 		logger:            logger,
 		units:             db,
 		preprocessors:     ip.Preprocessors,

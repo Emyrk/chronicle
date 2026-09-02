@@ -1344,13 +1344,14 @@ type GuildDiscordInstallation struct {
 }
 
 type GuildDiscordLogAnnouncement struct {
-	ID               uuid.UUID          `db:"id" json:"id"`
-	GuildID          uuid.UUID          `db:"guild_id" json:"guild_id"`
-	RunID            uuid.UUID          `db:"run_id" json:"run_id"`
-	DiscordChannelID string             `db:"discord_channel_id" json:"discord_channel_id"`
-	DiscordMessageID pgtype.Text        `db:"discord_message_id" json:"discord_message_id"`
-	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID                  uuid.UUID          `db:"id" json:"id"`
+	GuildID             uuid.UUID          `db:"guild_id" json:"guild_id"`
+	RunID               uuid.UUID          `db:"run_id" json:"run_id"`
+	DiscordChannelID    string             `db:"discord_channel_id" json:"discord_channel_id"`
+	DiscordMessageID    pgtype.Text        `db:"discord_message_id" json:"discord_message_id"`
+	DeliveryAttemptedAt pgtype.Timestamptz `db:"delivery_attempted_at" json:"delivery_attempted_at"`
+	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type GuildDiscordLogAnnouncementSource struct {

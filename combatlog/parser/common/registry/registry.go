@@ -238,25 +238,6 @@ func (r *Registry) EntryByName(name string) *Entry {
 	return r.entries[name]
 }
 
-// CategoryByName returns the category for a registered instance or one of its
-// derived instance names.
-func (r *Registry) CategoryByName(name string) (instances.InstanceCategory, bool) {
-	if entry := r.EntryByName(name); entry != nil {
-		return entry.Category, entry.Category.Valid()
-	}
-	for _, entry := range r.entries {
-		for _, derivedName := range entry.DerivedNames {
-			if derivedName == name {
-				return entry.Category, entry.Category.Valid()
-			}
-		}
-	}
-	if r.fallback != nil {
-		return r.fallback.CategoryByName(name)
-	}
-	return "", false
-}
-
 // SpeedrunRules returns speedrun rules for every registered instance that has
 // them, keyed by instance name. Includes fallback entries.
 func (r *Registry) SpeedrunRules() map[string]*rankings.SpeedrunRules {

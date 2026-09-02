@@ -2076,6 +2076,32 @@ func (q *sqlQuerier) UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDat
 	return err
 }
 
+const claimDiscordAnnouncementDelivery = `-- name: ClaimDiscordAnnouncementDelivery :one
+UPDATE guild_discord_log_announcements
+SET delivery_attempted_at = NOW(),
+    updated_at = NOW()
+WHERE id = $1
+  AND discord_message_id IS NULL
+  AND delivery_attempted_at IS NULL
+RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at
+`
+
+func (q *sqlQuerier) ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error) {
+	row := q.db.QueryRow(ctx, claimDiscordAnnouncementDelivery, id)
+	var i GuildDiscordLogAnnouncement
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.RunID,
+		&i.DiscordChannelID,
+		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteDiscordAnnouncement = `-- name: DeleteDiscordAnnouncement :exec
 DELETE FROM guild_discord_log_announcements WHERE id = $1
 `
@@ -2101,7 +2127,7 @@ func (q *sqlQuerier) DeleteDiscordAnnouncementSource(ctx context.Context, arg De
 }
 
 const getDiscordAnnouncement = `-- name: GetDiscordAnnouncement :one
-SELECT id, guild_id, run_id, discord_channel_id, discord_message_id, created_at, updated_at FROM guild_discord_log_announcements WHERE id = $1
+SELECT id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at FROM guild_discord_log_announcements WHERE id = $1
 `
 
 func (q *sqlQuerier) GetDiscordAnnouncement(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error) {
@@ -2113,6 +2139,7 @@ func (q *sqlQuerier) GetDiscordAnnouncement(ctx context.Context, id uuid.UUID) (
 		&i.RunID,
 		&i.DiscordChannelID,
 		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2120,7 +2147,7 @@ func (q *sqlQuerier) GetDiscordAnnouncement(ctx context.Context, id uuid.UUID) (
 }
 
 const getDiscordAnnouncementByRun = `-- name: GetDiscordAnnouncementByRun :one
-SELECT id, guild_id, run_id, discord_channel_id, discord_message_id, created_at, updated_at
+SELECT id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at
 FROM guild_discord_log_announcements
 WHERE guild_id = $1 AND run_id = $2
 `
@@ -2139,6 +2166,7 @@ func (q *sqlQuerier) GetDiscordAnnouncementByRun(ctx context.Context, arg GetDis
 		&i.RunID,
 		&i.DiscordChannelID,
 		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2149,7 +2177,7 @@ const getDiscordAnnouncementSource = `-- name: GetDiscordAnnouncementSource :one
 
 SELECT
   s.announcement_id, s.log_group_id, s.instance_ordinal, s.instance_slug, s.created_at, s.updated_at,
-  a.id, a.guild_id, a.run_id, a.discord_channel_id, a.discord_message_id, a.created_at, a.updated_at
+  a.id, a.guild_id, a.run_id, a.discord_channel_id, a.discord_message_id, a.delivery_attempted_at, a.created_at, a.updated_at
 FROM guild_discord_log_announcement_sources s
 JOIN guild_discord_log_announcements a ON a.id = s.announcement_id
 WHERE s.log_group_id = $1
@@ -2182,6 +2210,7 @@ func (q *sqlQuerier) GetDiscordAnnouncementSource(ctx context.Context, arg GetDi
 		&i.GuildDiscordLogAnnouncement.RunID,
 		&i.GuildDiscordLogAnnouncement.DiscordChannelID,
 		&i.GuildDiscordLogAnnouncement.DiscordMessageID,
+		&i.GuildDiscordLogAnnouncement.DeliveryAttemptedAt,
 		&i.GuildDiscordLogAnnouncement.CreatedAt,
 		&i.GuildDiscordLogAnnouncement.UpdatedAt,
 	)
@@ -2191,7 +2220,7 @@ func (q *sqlQuerier) GetDiscordAnnouncementSource(ctx context.Context, arg GetDi
 const getDiscordAnnouncementSourceBySlug = `-- name: GetDiscordAnnouncementSourceBySlug :one
 SELECT
   s.announcement_id, s.log_group_id, s.instance_ordinal, s.instance_slug, s.created_at, s.updated_at,
-  a.id, a.guild_id, a.run_id, a.discord_channel_id, a.discord_message_id, a.created_at, a.updated_at
+  a.id, a.guild_id, a.run_id, a.discord_channel_id, a.discord_message_id, a.delivery_attempted_at, a.created_at, a.updated_at
 FROM guild_discord_log_announcement_sources s
 JOIN guild_discord_log_announcements a ON a.id = s.announcement_id
 WHERE s.instance_slug = $1
@@ -2217,6 +2246,7 @@ func (q *sqlQuerier) GetDiscordAnnouncementSourceBySlug(ctx context.Context, ins
 		&i.GuildDiscordLogAnnouncement.RunID,
 		&i.GuildDiscordLogAnnouncement.DiscordChannelID,
 		&i.GuildDiscordLogAnnouncement.DiscordMessageID,
+		&i.GuildDiscordLogAnnouncement.DeliveryAttemptedAt,
 		&i.GuildDiscordLogAnnouncement.CreatedAt,
 		&i.GuildDiscordLogAnnouncement.UpdatedAt,
 	)
@@ -2437,7 +2467,7 @@ SET discord_channel_id = $1,
     discord_message_id = $2,
     updated_at = NOW()
 WHERE id = $3
-RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, created_at, updated_at
+RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at
 `
 
 type SetDiscordAnnouncementMessageParams struct {
@@ -2455,6 +2485,7 @@ func (q *sqlQuerier) SetDiscordAnnouncementMessage(ctx context.Context, arg SetD
 		&i.RunID,
 		&i.DiscordChannelID,
 		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2466,7 +2497,7 @@ UPDATE guild_discord_log_announcements
 SET run_id = $1,
     updated_at = NOW()
 WHERE id = $2
-RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, created_at, updated_at
+RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at
 `
 
 type UpdateDiscordAnnouncementRunParams struct {
@@ -2483,6 +2514,7 @@ func (q *sqlQuerier) UpdateDiscordAnnouncementRun(ctx context.Context, arg Updat
 		&i.RunID,
 		&i.DiscordChannelID,
 		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2495,7 +2527,7 @@ INSERT INTO guild_discord_log_announcements (
 ) VALUES ($1, $2, $3)
 ON CONFLICT (guild_id, run_id) DO UPDATE SET
   updated_at = NOW()
-RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, created_at, updated_at
+RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at
 `
 
 type UpsertDiscordAnnouncementParams struct {
@@ -2513,6 +2545,7 @@ func (q *sqlQuerier) UpsertDiscordAnnouncement(ctx context.Context, arg UpsertDi
 		&i.RunID,
 		&i.DiscordChannelID,
 		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -59,6 +59,15 @@ SET run_id = @run_id,
 WHERE id = @id
 RETURNING *;
 
+-- name: ClaimDiscordAnnouncementDelivery :one
+UPDATE guild_discord_log_announcements
+SET delivery_attempted_at = NOW(),
+    updated_at = NOW()
+WHERE id = @id
+  AND discord_message_id IS NULL
+  AND delivery_attempted_at IS NULL
+RETURNING *;
+
 -- name: SetDiscordAnnouncementMessage :one
 UPDATE guild_discord_log_announcements
 SET discord_channel_id = @discord_channel_id,

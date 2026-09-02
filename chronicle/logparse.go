@@ -425,8 +425,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 
 			instanceCategory := pgtype.Text{}
-			if category, ok := reg.CategoryByName(inst.Name()); ok {
-				instanceCategory = pgtype.Text{String: string(category), Valid: true}
+			if inst.Category.Valid() {
+				instanceCategory = pgtype.Text{String: string(inst.Category), Valid: true}
 			}
 
 			insertInstanceParams := database.InsertInstanceParams{

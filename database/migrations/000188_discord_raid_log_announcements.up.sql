@@ -9,6 +9,7 @@ CREATE TABLE guild_discord_log_announcements (
   run_id UUID NOT NULL,
   discord_channel_id TEXT NOT NULL,
   discord_message_id TEXT,
+  delivery_attempted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (guild_id, run_id)
