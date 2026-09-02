@@ -57,6 +57,7 @@ import type {
   GuildRosterMember as GuildRosterMemberGenerated,
   GuildSettings as GuildSettingsGenerated,
   GuildDiscordIntegrationSettings as GuildDiscordIntegrationSettingsGenerated,
+  GuildDiscordAnnouncementAttemptsResponse as GuildDiscordAnnouncementAttemptsResponseGenerated,
   GuildJoinRequest as GuildJoinRequestGenerated,
   UpdateGuildSettingsRequest as UpdateGuildSettingsRequestGenerated,
   UpdateGuildDiscordIntegrationRequest as UpdateGuildDiscordIntegrationRequestGenerated,
@@ -130,6 +131,7 @@ export type GuildPageTheme = GuildPageThemeGenerated;
 export type GuildRosterMember = GuildRosterMemberGenerated;
 export type GuildSettings = GuildSettingsGenerated;
 export type GuildDiscordIntegrationSettings = GuildDiscordIntegrationSettingsGenerated;
+export type GuildDiscordAnnouncementAttemptsResponse = GuildDiscordAnnouncementAttemptsResponseGenerated;
 export type GuildJoinRequest = GuildJoinRequestGenerated;
 export type UpdateGuildSettingsRequest = UpdateGuildSettingsRequestGenerated;
 export type UpdateGuildDiscordIntegrationRequest = UpdateGuildDiscordIntegrationRequestGenerated;
@@ -1773,6 +1775,35 @@ export function useGuildDiscordIntegration(
       return response.json() as Promise<GuildDiscordIntegrationSettings>;
     },
     enabled: !!guildId && enabled,
+    retry: false,
+  });
+}
+
+export function useGuildDiscordAnnouncementAttempts(
+  guildId: string | undefined,
+  page: number,
+  pageSize: number,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["guild-discord-announcement-attempts", guildId, page, pageSize],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        limit: String(pageSize),
+        offset: String(page * pageSize),
+      });
+      const response = await fetch(
+        `/api/v1/guilds/${guildId}/settings/discord-integration/announcement-attempts?${params}`,
+        { credentials: "include" },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to fetch Discord announcement attempts", error);
+      }
+      return response.json() as Promise<GuildDiscordAnnouncementAttemptsResponse>;
+    },
+    enabled: !!guildId && enabled,
+    placeholderData: keepPreviousData,
     retry: false,
   });
 }

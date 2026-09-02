@@ -830,7 +830,8 @@ CREATE TABLE guild_discord_log_announcements (
     discord_message_id text,
     delivery_attempted_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    delivery_error text
 );
 
 CREATE TABLE guild_join_requests (

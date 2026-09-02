@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/cryptorand"
+	"github.com/bwmarrin/discordgo"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -175,6 +177,92 @@ func (api *API) GetGuildDiscordIntegration(w http.ResponseWriter, r *http.Reques
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
+const (
+	defaultDiscordAnnouncementAttemptsLimit = 10
+	maxDiscordAnnouncementAttemptsLimit     = 100
+)
+
+func discordAnnouncementAttemptsPagination(r *http.Request) (limit, offset int) {
+	limit = defaultDiscordAnnouncementAttemptsLimit
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = min(parsed, maxDiscordAnnouncementAttemptsLimit)
+		}
+	}
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+	return limit, offset
+}
+
+func discordAnnouncementAttemptToSDK(row database.ListGuildDiscordAnnouncementAttemptsRow) chroniclesdk.GuildDiscordAnnouncementAttempt {
+	announcement := row.GuildDiscordLogAnnouncement
+	status := "pending"
+	switch {
+	case announcement.DiscordMessageID.Valid:
+		status = "sent"
+	case announcement.DeliveryError.Valid:
+		status = "failed"
+	case announcement.DeliveryAttemptedAt.Valid:
+		status = "attempted"
+	}
+
+	out := chroniclesdk.GuildDiscordAnnouncementAttempt{
+		ID:               announcement.ID,
+		RunID:            announcement.RunID,
+		DiscordChannelID: announcement.DiscordChannelID,
+		Status:           status,
+		CreatedAt:        announcement.CreatedAt.Time,
+		UpdatedAt:        announcement.UpdatedAt.Time,
+	}
+	if announcement.DiscordMessageID.Valid {
+		out.DiscordMessageID = announcement.DiscordMessageID.String
+	}
+	if announcement.DeliveryAttemptedAt.Valid {
+		attemptedAt := announcement.DeliveryAttemptedAt.Time
+		out.DeliveryAttemptedAt = &attemptedAt
+	}
+	if announcement.DeliveryError.Valid {
+		out.DeliveryError = announcement.DeliveryError.String
+	}
+	if row.InstanceSlug.Valid {
+		out.InstanceSlug = row.InstanceSlug.String
+	}
+	return out
+}
+
+// ListGuildDiscordAnnouncementAttempts returns recent Discord announcement delivery attempts.
+func (api *API) ListGuildDiscordAnnouncementAttempts(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+	limit, offset := discordAnnouncementAttemptsPagination(r)
+
+	rows, err := api.Zed.ListGuildDiscordAnnouncementAttempts(ctx, database.ListGuildDiscordAnnouncementAttemptsParams{
+		GuildID:     guild.ID,
+		LimitCount:  int32(limit + 1),
+		OffsetCount: int32(offset),
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	resp := chroniclesdk.GuildDiscordAnnouncementAttemptsResponse{
+		Attempts: make([]chroniclesdk.GuildDiscordAnnouncementAttempt, len(rows)),
+		HasMore:  hasMore,
+	}
+	for i, row := range rows {
+		resp.Attempts[i] = discordAnnouncementAttemptToSDK(row)
+	}
+	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
 // UpdateGuildDiscordIntegration grants or revokes Discord linking for a guild.
 // Route middleware restricts this operation to authorization administrators.
 func (api *API) UpdateGuildDiscordIntegration(w http.ResponseWriter, r *http.Request) {
@@ -206,7 +294,16 @@ func (api *API) UpdateGuildDiscordIntegration(w http.ResponseWriter, r *http.Req
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
-const discordOAuthTokenURL = "https://discord.com/api/oauth2/token"
+const (
+	discordOAuthTokenURL      = "https://discord.com/api/oauth2/token"
+	discordInstallPermissions = discordgo.PermissionViewChannel |
+		discordgo.PermissionSendMessages |
+		discordgo.PermissionEmbedLinks |
+		discordgo.PermissionAttachFiles |
+		discordgo.PermissionReadMessageHistory |
+		discordgo.PermissionCreatePublicThreads |
+		discordgo.PermissionSendMessagesInThreads
+)
 
 func (api *API) discordInstallCallbackURL() string {
 	return api.Opts.AccessURL.ResolveReference(&url.URL{
@@ -315,7 +412,7 @@ func (api *API) BeginGuildDiscordInstall(w http.ResponseWriter, r *http.Request)
 		"response_type":    {"code"},
 		"scope":            {"bot applications.commands"},
 		"integration_type": {"0"},
-		"permissions":      {"117760"},
+		"permissions":      {strconv.FormatInt(discordInstallPermissions, 10)},
 		"redirect_uri":     {api.discordInstallCallbackURL()},
 		"state":            {state},
 	}

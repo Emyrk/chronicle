@@ -1352,6 +1352,7 @@ type GuildDiscordLogAnnouncement struct {
 	DeliveryAttemptedAt pgtype.Timestamptz `db:"delivery_attempted_at" json:"delivery_attempted_at"`
 	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DeliveryError       pgtype.Text        `db:"delivery_error" json:"delivery_error"`
 }
 
 type GuildDiscordLogAnnouncementSource struct {

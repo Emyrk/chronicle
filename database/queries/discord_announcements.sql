@@ -72,9 +72,32 @@ RETURNING *;
 UPDATE guild_discord_log_announcements
 SET discord_channel_id = @discord_channel_id,
     discord_message_id = @discord_message_id,
+    delivery_error = NULL,
     updated_at = NOW()
 WHERE id = @id
 RETURNING *;
+
+-- name: SetDiscordAnnouncementDeliveryError :exec
+UPDATE guild_discord_log_announcements
+SET delivery_error = @delivery_error,
+    updated_at = NOW()
+WHERE id = @id;
+
+-- name: ListGuildDiscordAnnouncementAttempts :many
+SELECT
+  sqlc.embed(a),
+  source.instance_slug
+FROM guild_discord_log_announcements a
+LEFT JOIN LATERAL (
+  SELECT s.instance_slug
+  FROM guild_discord_log_announcement_sources s
+  WHERE s.announcement_id = a.id
+  ORDER BY s.created_at ASC, s.log_group_id ASC, s.instance_ordinal ASC
+  LIMIT 1
+) source ON TRUE
+WHERE a.guild_id = @guild_id
+ORDER BY a.created_at DESC, a.id DESC
+LIMIT @limit_count OFFSET @offset_count;
 
 -- name: DeleteDiscordAnnouncement :exec
 DELETE FROM guild_discord_log_announcements WHERE id = @id;

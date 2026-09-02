@@ -1,6 +1,7 @@
 package chroniclebot
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -8,9 +9,11 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
 )
@@ -106,6 +109,94 @@ func TestClaimDiscordAnnouncementDeliveryAtMostOnce(t *testing.T) {
 	require.True(t, claimed.DeliveryAttemptedAt.Valid)
 	_, err = store.ClaimDiscordAnnouncementDelivery(ctx, announcement.ID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+type errorAnnouncementMessenger struct {
+	sendErr error
+}
+
+func (m errorAnnouncementMessenger) ChannelMessageSendEmbed(string, *discordgo.MessageEmbed, ...discordgo.RequestOption) (*discordgo.Message, error) {
+	return nil, m.sendErr
+}
+
+func (errorAnnouncementMessenger) ChannelMessageEditEmbed(string, string, *discordgo.MessageEmbed, ...discordgo.RequestOption) (*discordgo.Message, error) {
+	return nil, nil
+}
+
+func (errorAnnouncementMessenger) ChannelMessageDelete(string, string, ...discordgo.RequestOption) error {
+	return nil
+}
+
+func TestAnnouncementDeliveryErrorIsPersisted(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	store, _ := dbtestutil.NewDB(t)
+
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "delivery-error-" + uuid.NewString()[:8]})
+	require.NoError(t, err)
+	realmID := uuid.MustParse("bcf173a7-c94a-49fe-8930-27435d722fb7")
+	guild, err := store.UpsertGuild(ctx, database.UpsertGuildParams{
+		RealmID: realmID, Name: "Delivery Error Guild " + uuid.NewString()[:8], CreatedAt: database.Timestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+	_, err = store.UpsertGuildDiscordInstallation(ctx, database.UpsertGuildDiscordInstallationParams{
+		GuildID: guild.ID, DiscordGuildID: "discord-guild", DiscordGuildName: "Discord Guild", InstalledBy: userID,
+	})
+	require.NoError(t, err)
+	_, err = store.UpdateGuildDiscordRaidLogAnnouncements(ctx, database.UpdateGuildDiscordRaidLogAnnouncementsParams{
+		GuildID: guild.ID, AnnounceRaidLogs: true, AnnounceRaidLogsScope: "raids_only",
+		AnnounceRaidLogsChannelID: pgtype.Text{String: "channel", Valid: true},
+	})
+	require.NoError(t, err)
+
+	logGroupID := uuid.New()
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+		CreatedAt: database.Timestamptz(time.Now()), UpdatedAt: database.Timestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+		ID: uuid.New(), RealmID: realmID, LogGroupID: logGroupID, Name: "Molten Core",
+		HashedSlug: pgtype.Text{String: "delivery-error-slug", Valid: true}, GuildID: uuid.NullUUID{UUID: guild.ID, Valid: true},
+		StartTime: database.Timestamptz(time.Now()), EndTime: database.Timestamptz(time.Now().Add(time.Hour)),
+		Capabilities: []string{}, Category: pgtype.Text{String: "raid", Valid: true},
+	})
+	require.NoError(t, err)
+
+	discordErr := errors.New(`HTTP 403 Forbidden, {"message": "Missing Permissions", "code": 50013}`)
+	bot := &Bot{config: Config{DB: store, AccessURL: "https://chronicle.example"}, logger: testutil.Logger(t)}
+	worker := &WorkerAnnounceRaidLog{bot: bot, messenger: errorAnnouncementMessenger{sendErr: discordErr}}
+	err = worker.Work(ctx, &river.Job[ArgsAnnounceRaidLog]{Args: ArgsAnnounceRaidLog{LogGroupID: logGroupID, InstanceOrdinal: 0}})
+	require.ErrorContains(t, err, "Missing Permissions")
+
+	attempts, err := store.ListGuildDiscordAnnouncementAttempts(ctx, database.ListGuildDiscordAnnouncementAttemptsParams{
+		GuildID: guild.ID, LimitCount: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, attempts, 1)
+	announcement := attempts[0].GuildDiscordLogAnnouncement
+	require.True(t, announcement.DeliveryAttemptedAt.Valid)
+	require.Equal(t, "send Discord announcement: "+discordErr.Error(), announcement.DeliveryError.String)
+}
+
+func TestHasDiscordAnnouncementPermissions(t *testing.T) {
+	t.Parallel()
+
+	required := int64(discordgo.PermissionViewChannel |
+		discordgo.PermissionSendMessages |
+		discordgo.PermissionEmbedLinks |
+		discordgo.PermissionCreatePublicThreads |
+		discordgo.PermissionSendMessagesInThreads)
+	require.True(t, hasDiscordAnnouncementPermissions(required))
+	for _, permission := range []int64{
+		discordgo.PermissionEmbedLinks,
+		discordgo.PermissionCreatePublicThreads,
+		discordgo.PermissionSendMessagesInThreads,
+	} {
+		require.False(t, hasDiscordAnnouncementPermissions(required&^permission))
+	}
 }
 
 func TestArgsAnnounceRaidLogInsertOpts(t *testing.T) {

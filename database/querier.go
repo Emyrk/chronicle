@@ -555,6 +555,7 @@ type sqlcQuerier interface {
 	ListGearListsByUser(ctx context.Context, arg ListGearListsByUserParams) ([]GearList, error)
 	ListGearProgressionsByUser(ctx context.Context, arg ListGearProgressionsByUserParams) ([]GearProgression, error)
 	ListGearStatWeightsByUser(ctx context.Context, arg ListGearStatWeightsByUserParams) ([]GearStatWeight, error)
+	ListGuildDiscordAnnouncementAttempts(ctx context.Context, arg ListGuildDiscordAnnouncementAttemptsParams) ([]ListGuildDiscordAnnouncementAttemptsRow, error)
 	ListGuildJoinRequests(ctx context.Context, guildID uuid.UUID) ([]ListGuildJoinRequestsRow, error)
 	// Guild Page Panels
 	ListGuildPagePanels(ctx context.Context, tabID uuid.UUID) ([]GuildPagePanel, error)
@@ -718,6 +719,7 @@ type sqlcQuerier interface {
 	// Name search for the gear builder's enchant picker. Same names appear at
 	// multiple ranks/IDs, so the ID is part of the result identity.
 	SearchSpellItemEnchantments(ctx context.Context, arg SearchSpellItemEnchantmentsParams) ([]SearchSpellItemEnchantmentsRow, error)
+	SetDiscordAnnouncementDeliveryError(ctx context.Context, arg SetDiscordAnnouncementDeliveryErrorParams) error
 	SetDiscordAnnouncementMessage(ctx context.Context, arg SetDiscordAnnouncementMessageParams) (GuildDiscordLogAnnouncement, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)

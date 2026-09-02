@@ -231,11 +231,18 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 			return nil
 		}
 		if _, err := w.messenger.ChannelMessageEditEmbed(announcement.DiscordChannelID, announcement.DiscordMessageID.String, embed); err != nil {
+			deliveryErr := fmt.Errorf("edit Discord announcement: %w", err)
+			if persistErr := w.setDeliveryError(ctx, announcement.ID, deliveryErr); persistErr != nil {
+				return errors.Join(deliveryErr, persistErr)
+			}
 			if discordMessageUnreachable(err) {
 				w.bot.logger.Warn("Discord announcement is no longer reachable", slog.String("error", err.Error()))
 				return nil
 			}
-			return fmt.Errorf("edit Discord announcement: %w", err)
+			return deliveryErr
+		}
+		if err := w.setDeliveryError(ctx, announcement.ID, nil); err != nil {
+			return err
 		}
 		return nil
 	}
@@ -253,7 +260,11 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 
 	message, err := w.messenger.ChannelMessageSendEmbed(installation.AnnounceRaidLogsChannelID.String, embed)
 	if err != nil {
-		return fmt.Errorf("send Discord announcement: %w", err)
+		deliveryErr := fmt.Errorf("send Discord announcement: %w", err)
+		if persistErr := w.setDeliveryError(ctx, announcement.ID, deliveryErr); persistErr != nil {
+			return errors.Join(deliveryErr, persistErr)
+		}
+		return deliveryErr
 	}
 	_, err = w.bot.config.DB.SetDiscordAnnouncementMessage(ctx, database.SetDiscordAnnouncementMessageParams{
 		DiscordChannelID: installation.AnnounceRaidLogsChannelID.String,
@@ -262,6 +273,20 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 	})
 	if err != nil {
 		return fmt.Errorf("persist Discord message ID: %w", err)
+	}
+	return nil
+}
+
+func (w *WorkerAnnounceRaidLog) setDeliveryError(ctx context.Context, announcementID uuid.UUID, deliveryErr error) error {
+	value := pgtype.Text{}
+	if deliveryErr != nil {
+		value = pgtype.Text{String: deliveryErr.Error(), Valid: true}
+	}
+	if err := w.bot.config.DB.SetDiscordAnnouncementDeliveryError(ctx, database.SetDiscordAnnouncementDeliveryErrorParams{
+		DeliveryError: value,
+		ID:            announcementID,
+	}); err != nil {
+		return fmt.Errorf("persist Discord announcement delivery error: %w", err)
 	}
 	return nil
 }

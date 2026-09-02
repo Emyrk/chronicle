@@ -164,6 +164,24 @@ type GuildDiscordRaidLogAnnouncements struct {
 	ChannelID string `json:"channel_id,omitempty"`
 }
 
+type GuildDiscordAnnouncementAttempt struct {
+	ID                  uuid.UUID  `json:"id"`
+	RunID               uuid.UUID  `json:"run_id"`
+	DiscordChannelID    string     `json:"discord_channel_id"`
+	DiscordMessageID    string     `json:"discord_message_id,omitempty"`
+	DeliveryAttemptedAt *time.Time `json:"delivery_attempted_at,omitempty"`
+	DeliveryError       string     `json:"delivery_error,omitempty"`
+	InstanceSlug        string     `json:"instance_slug,omitempty"`
+	Status              string     `json:"status"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+}
+
+type GuildDiscordAnnouncementAttemptsResponse struct {
+	Attempts []GuildDiscordAnnouncementAttempt `json:"attempts"`
+	HasMore  bool                              `json:"has_more"`
+}
+
 type UpdateGuildDiscordRaidLogAnnouncementsRequest struct {
 	Enabled   bool   `json:"enabled"`
 	Scope     string `json:"scope"`
