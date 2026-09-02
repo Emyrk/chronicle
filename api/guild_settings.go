@@ -304,16 +304,6 @@ func (api *API) CompleteGuildDiscordInstall(w http.ResponseWriter, r *http.Reque
 		httpapi.Write(ctx, w, http.StatusBadGateway, chroniclesdk.Response{Message: "Discord did not return the installed server."})
 		return
 	}
-	existing, err := api.Zed.GetGuildDiscordInstallationByDiscordGuildID(ctx, tokenResponse.Guild.ID)
-	if err == nil && existing.GuildID != state.GuildID {
-		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "That Discord server is already linked to another Chronicle guild."})
-		return
-	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
 	verifiedGuild, err := api.Opts.Bot.VerifyGuild(tokenResponse.Guild.ID)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadGateway, chroniclesdk.Response{Message: "Chronicle could not verify the Discord server installation."})
@@ -345,8 +335,15 @@ func (api *API) DeleteGuildDiscordInstallation(w http.ResponseWriter, r *http.Re
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if err := api.Opts.Bot.LeaveGuild(installation.DiscordGuildID); err != nil {
-		api.Opts.Logger.Warn("failed to remove unlinked Discord bot", "discord_guild_id", installation.DiscordGuildID, "error", err)
+	installationCount, err := api.Zed.CountGuildDiscordInstallationsByDiscordGuildID(ctx, installation.DiscordGuildID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if installationCount == 0 {
+		if err := api.Opts.Bot.LeaveGuild(installation.DiscordGuildID); err != nil {
+			api.Opts.Logger.Warn("failed to remove unlinked Discord bot", "discord_guild_id", installation.DiscordGuildID, "error", err)
+		}
 	}
 	httpapi.Write(ctx, w, http.StatusNoContent, nil)
 }

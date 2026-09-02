@@ -5714,6 +5714,17 @@ func (q *sqlQuerier) ConsumeGuildDiscordInstallState(ctx context.Context, state 
 	return i, err
 }
 
+const countGuildDiscordInstallationsByDiscordGuildID = `-- name: CountGuildDiscordInstallationsByDiscordGuildID :one
+SELECT COUNT(*) FROM guild_discord_installations WHERE discord_guild_id = $1
+`
+
+func (q *sqlQuerier) CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countGuildDiscordInstallationsByDiscordGuildID, discordGuildID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createGuildDiscordInstallState = `-- name: CreateGuildDiscordInstallState :one
 
 INSERT INTO guild_discord_install_states (state, guild_id, user_id, expires_at)
@@ -5814,24 +5825,6 @@ SELECT guild_id, discord_guild_id, discord_guild_name, installed_by, installed_a
 
 func (q *sqlQuerier) GetGuildDiscordInstallation(ctx context.Context, guildID uuid.UUID) (GuildDiscordInstallation, error) {
 	row := q.db.QueryRow(ctx, getGuildDiscordInstallation, guildID)
-	var i GuildDiscordInstallation
-	err := row.Scan(
-		&i.GuildID,
-		&i.DiscordGuildID,
-		&i.DiscordGuildName,
-		&i.InstalledBy,
-		&i.InstalledAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getGuildDiscordInstallationByDiscordGuildID = `-- name: GetGuildDiscordInstallationByDiscordGuildID :one
-SELECT guild_id, discord_guild_id, discord_guild_name, installed_by, installed_at, updated_at FROM guild_discord_installations WHERE discord_guild_id = $1
-`
-
-func (q *sqlQuerier) GetGuildDiscordInstallationByDiscordGuildID(ctx context.Context, discordGuildID string) (GuildDiscordInstallation, error) {
-	row := q.db.QueryRow(ctx, getGuildDiscordInstallationByDiscordGuildID, discordGuildID)
 	var i GuildDiscordInstallation
 	err := row.Scan(
 		&i.GuildID,

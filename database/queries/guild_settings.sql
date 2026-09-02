@@ -25,8 +25,8 @@ RETURNING *;
 -- name: GetGuildDiscordInstallation :one
 SELECT * FROM guild_discord_installations WHERE guild_id = $1;
 
--- name: GetGuildDiscordInstallationByDiscordGuildID :one
-SELECT * FROM guild_discord_installations WHERE discord_guild_id = $1;
+-- name: CountGuildDiscordInstallationsByDiscordGuildID :one
+SELECT COUNT(*) FROM guild_discord_installations WHERE discord_guild_id = $1;
 
 -- name: UpsertGuildDiscordInstallation :one
 INSERT INTO guild_discord_installations (

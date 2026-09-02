@@ -1982,9 +1982,6 @@ ALTER TABLE ONLY guild_discord_install_states
     ADD CONSTRAINT guild_discord_install_states_pkey PRIMARY KEY (state);
 
 ALTER TABLE ONLY guild_discord_installations
-    ADD CONSTRAINT guild_discord_installations_discord_guild_id_key UNIQUE (discord_guild_id);
-
-ALTER TABLE ONLY guild_discord_installations
     ADD CONSTRAINT guild_discord_installations_pkey PRIMARY KEY (guild_id);
 
 ALTER TABLE ONLY guild_join_requests
@@ -2274,6 +2271,8 @@ CREATE INDEX gear_progressions_user_tenant_idx ON gear_progressions USING btree 
 CREATE INDEX gear_stat_weights_user_tenant_idx ON gear_stat_weights USING btree (user_id, tenant_id);
 
 CREATE INDEX guild_discord_install_states_expires_at_idx ON guild_discord_install_states USING btree (expires_at);
+
+CREATE INDEX guild_discord_installations_discord_guild_id_idx ON guild_discord_installations USING btree (discord_guild_id);
 
 CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 
