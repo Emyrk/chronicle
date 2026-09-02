@@ -39,6 +39,35 @@ describe("DiscordAnnouncementHistoryList", () => {
     expect(markup).toContain("Page 2");
   });
 
+  it("shows disabled pagination controls on a single populated page", () => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter>
+        <DiscordAnnouncementHistoryList
+          attempts={[
+            {
+              id: "attempt-1",
+              run_id: "run-1",
+              discord_channel_id: "channel-1",
+              status: "sent",
+              created_at: "2026-09-02T12:00:00Z",
+              updated_at: "2026-09-02T12:00:00Z",
+            },
+          ]}
+          channels={[]}
+          page={0}
+          hasMore={false}
+          onPrevious={vi.fn()}
+          onNext={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(markup).toContain("Page 1");
+    expect(markup).toContain("Previous");
+    expect(markup).toContain("Next");
+    expect(markup).toContain('disabled=""');
+  });
+
   it("renders an empty state without pagination", () => {
     const markup = renderToStaticMarkup(
       <MemoryRouter>

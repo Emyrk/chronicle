@@ -62,10 +62,10 @@ func TestDiscordAnnouncementAttemptsPagination(t *testing.T) {
 		wantLimit  int
 		wantOffset int
 	}{
-		{name: "defaults", wantLimit: 10},
+		{name: "defaults", wantLimit: 5},
 		{name: "custom", query: "?limit=25&offset=50", wantLimit: 25, wantOffset: 50},
 		{name: "caps limit", query: "?limit=500", wantLimit: 100},
-		{name: "ignores invalid", query: "?limit=0&offset=-1", wantLimit: 10},
+		{name: "ignores invalid", query: "?limit=0&offset=-1", wantLimit: 5},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

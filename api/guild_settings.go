@@ -49,7 +49,7 @@ func (api *API) discordIntegrationSettingsToSDK(ctx context.Context, guildID uui
 		out.CanEnable, err = api.Zed.CheckOne(
 			ctx,
 			nil,
-			policy.New().GlobalChronicle().CanAdminister_authz_User(actor),
+			policy.New().GlobalChronicle().CanAdmin_guilds_User(actor),
 		)
 		if err != nil {
 			return chroniclesdk.GuildDiscordIntegrationSettings{}, err
@@ -178,7 +178,7 @@ func (api *API) GetGuildDiscordIntegration(w http.ResponseWriter, r *http.Reques
 }
 
 const (
-	defaultDiscordAnnouncementAttemptsLimit = 10
+	defaultDiscordAnnouncementAttemptsLimit = 5
 	maxDiscordAnnouncementAttemptsLimit     = 100
 )
 

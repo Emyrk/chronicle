@@ -7,7 +7,7 @@ import type {
 } from "@/api/typesGenerated";
 import { Button } from "@/components/ui/button";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 const STATUS_STYLES: Record<string, string> = {
   sent: "bg-green-500/15 text-green-600",
@@ -97,7 +97,7 @@ export function DiscordAnnouncementHistoryList({
         </div>
       )}
 
-      {(page > 0 || hasMore) && (
+      {attempts.length > 0 && (
         <div className="mt-4 flex items-center justify-between">
           <Button size="sm" variant="outline" disabled={page === 0} onClick={onPrevious}>
             Previous

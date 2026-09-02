@@ -2396,7 +2396,7 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) source ON TRUE
 WHERE a.guild_id = $1
-ORDER BY a.created_at DESC, a.id DESC
+ORDER BY COALESCE(a.delivery_attempted_at, a.created_at) DESC, a.created_at DESC, a.id DESC
 LIMIT $3 OFFSET $2
 `
 

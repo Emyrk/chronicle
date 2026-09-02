@@ -139,7 +139,7 @@ definition guild {
   relation leader: user
   relation member: user
 
-  // Technical administrators grant this wildcard relation to enable the
+  // Site guild administrators grant this wildcard relation to enable the
   // Discord bot feature for a guild.
   relation discord_bot_enabled: user:*
   

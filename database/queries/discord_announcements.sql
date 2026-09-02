@@ -96,7 +96,7 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) source ON TRUE
 WHERE a.guild_id = @guild_id
-ORDER BY a.created_at DESC, a.id DESC
+ORDER BY COALESCE(a.delivery_attempted_at, a.created_at) DESC, a.created_at DESC, a.id DESC
 LIMIT @limit_count OFFSET @offset_count;
 
 -- name: DeleteDiscordAnnouncement :exec

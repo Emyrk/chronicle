@@ -397,7 +397,7 @@ func (api *API) Routes() chi.Router {
 						r.Get("/settings/discord-integration/announcement-attempts", api.ListGuildDiscordAnnouncementAttempts)
 						r.Get("/settings/discord-integration", api.GetGuildDiscordIntegration)
 						r.With(
-							httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdminister_authz_User),
+							httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_guilds_User),
 						).Put("/settings/discord-integration", api.UpdateGuildDiscordIntegration)
 						r.Put("/settings", api.UpdateGuildSettings)
 						r.Get("/join-requests", api.ListJoinRequests)
