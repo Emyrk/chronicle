@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,6 +26,29 @@ func settingsToSDK(s database.GuildSetting) chroniclesdk.GuildSettings {
 		out.AllowJoinRequestsUntil = &t
 	}
 	return out
+}
+
+func (api *API) discordIntegrationSettingsToSDK(ctx context.Context, guildID uuid.UUID) (chroniclesdk.GuildDiscordIntegrationSettings, error) {
+	enabled, err := api.Zed.IsGuildDiscordBotEnabled(ctx, guildID)
+	if err != nil {
+		return chroniclesdk.GuildDiscordIntegrationSettings{}, err
+	}
+
+	out := chroniclesdk.GuildDiscordIntegrationSettings{
+		Enabled:   enabled,
+		Available: api.Opts.Bot.Available(),
+	}
+	if actor, ok := authz.ActorFromContext(ctx); ok {
+		out.CanEnable, err = api.Zed.CheckOne(
+			ctx,
+			nil,
+			policy.New().GlobalChronicle().CanAdminister_authz_User(actor),
+		)
+		if err != nil {
+			return chroniclesdk.GuildDiscordIntegrationSettings{}, err
+		}
+	}
+	return out, nil
 }
 
 func joinRequestsOpen(s database.GuildSetting) bool {
@@ -41,16 +67,12 @@ func (api *API) GetGuildSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	settings, err := api.Zed.GetGuildSettings(ctx, guild.ID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildSettings{
-				GuildID:  guild.ID,
-				IsMember: isMember,
-			})
-			return
-		}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		httpapi.InternalServerError(w, err)
 		return
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		settings.GuildID = guild.ID
 	}
 
 	resp := settingsToSDK(settings)
@@ -83,6 +105,50 @@ func (api *API) UpdateGuildSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, settingsToSDK(settings))
+}
+
+// GetGuildDiscordIntegration returns Discord integration settings to guild administrators.
+func (api *API) GetGuildDiscordIntegration(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+
+	resp, err := api.discordIntegrationSettingsToSDK(ctx, guild.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
+// UpdateGuildDiscordIntegration grants or revokes Discord linking for a guild.
+// Route middleware restricts this operation to authorization administrators.
+func (api *API) UpdateGuildDiscordIntegration(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+
+	var req chroniclesdk.UpdateGuildDiscordIntegrationRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	if req.Enabled && !api.Opts.Bot.Available() {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Discord bot integration is not supported on this Chronicle deployment.",
+		})
+		return
+	}
+
+	if err := api.Zed.SetGuildDiscordBotEnabled(ctx, guild.ID, req.Enabled); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	resp, err := api.discordIntegrationSettingsToSDK(ctx, guild.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
 // CreateJoinRequest submits a join request for the authenticated user.

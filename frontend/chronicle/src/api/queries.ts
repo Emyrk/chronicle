@@ -56,8 +56,10 @@ import type {
   UpdateGuildPageRequest as UpdateGuildPageRequestGenerated,
   GuildRosterMember as GuildRosterMemberGenerated,
   GuildSettings as GuildSettingsGenerated,
+  GuildDiscordIntegrationSettings as GuildDiscordIntegrationSettingsGenerated,
   GuildJoinRequest as GuildJoinRequestGenerated,
   UpdateGuildSettingsRequest as UpdateGuildSettingsRequestGenerated,
+  UpdateGuildDiscordIntegrationRequest as UpdateGuildDiscordIntegrationRequestGenerated,
   CreateJoinRequestBody as CreateJoinRequestBodyGenerated,
   RegressionFixture as RegressionFixtureGenerated,
   RegressionSnapshotSummary as RegressionSnapshotSummaryGenerated,
@@ -126,8 +128,10 @@ export type UpdateGuildPageRequest = UpdateGuildPageRequestGenerated;
 export type GuildPageTheme = GuildPageThemeGenerated;
 export type GuildRosterMember = GuildRosterMemberGenerated;
 export type GuildSettings = GuildSettingsGenerated;
+export type GuildDiscordIntegrationSettings = GuildDiscordIntegrationSettingsGenerated;
 export type GuildJoinRequest = GuildJoinRequestGenerated;
 export type UpdateGuildSettingsRequest = UpdateGuildSettingsRequestGenerated;
+export type UpdateGuildDiscordIntegrationRequest = UpdateGuildDiscordIntegrationRequestGenerated;
 export type CreateJoinRequestBody = CreateJoinRequestBodyGenerated;
 export type AdminBulkDeleteResponse = AdminBulkDeleteResponseGenerated;
 export type AdminBulkSelectedReparseResponse = AdminBulkSelectedReparseResponseGenerated;
@@ -165,6 +169,7 @@ interface APIErrorResponse {
 
 export interface RequestError extends Error {
   detail?: string;
+  status?: number;
 }
 
 /** Show an API error as a toast, including the detail field if present. */
@@ -1700,7 +1705,10 @@ export function useGuildCharacters(
   });
 }
 
-export function useGuildSettings(guildId: string | undefined) {
+export function useGuildSettings(
+  guildId: string | undefined,
+  enabled = true,
+) {
   return useQuery({
     queryKey: ["guild-settings", guildId],
     queryFn: async () => {
@@ -1713,7 +1721,7 @@ export function useGuildSettings(guildId: string | undefined) {
       }
       return response.json() as Promise<GuildSettings>;
     },
-    enabled: !!guildId,
+    enabled: !!guildId && enabled,
     retry: false,
   });
 }
@@ -1736,6 +1744,58 @@ export function useUpdateGuildSettings(guildId: string | undefined) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guild-settings", guildId] });
+    },
+  });
+}
+
+export function useGuildDiscordIntegration(
+  guildId: string | undefined,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["guild-discord-integration", guildId],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/v1/guilds/${guildId}/settings/discord-integration`,
+        { credentials: "include" },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        const requestError = buildAPIError(
+          "Failed to fetch Discord integration settings",
+          error,
+        );
+        requestError.status = response.status;
+        throw requestError;
+      }
+      return response.json() as Promise<GuildDiscordIntegrationSettings>;
+    },
+    enabled: !!guildId && enabled,
+    retry: false,
+  });
+}
+
+export function useUpdateGuildDiscordIntegration(guildId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: UpdateGuildDiscordIntegrationRequest) => {
+      const response = await fetch(
+        `/api/v1/guilds/${guildId}/settings/discord-integration`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(req),
+          credentials: "include",
+        },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to update Discord integration", error);
+      }
+      return response.json() as Promise<GuildDiscordIntegrationSettings>;
+    },
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["guild-discord-integration", guildId], settings);
     },
   });
 }

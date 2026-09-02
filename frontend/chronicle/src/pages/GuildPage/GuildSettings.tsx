@@ -1,7 +1,14 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { useGuildSettings, useUpdateGuildSettings, useGuildPage } from "@/api/queries";
-import { ArrowLeft, UserPlus, Menu, X } from "lucide-react";
+import { Navigate, useParams, Link } from "react-router-dom";
+import {
+  useGuildDiscordIntegration,
+  useGuildSettings,
+  useUpdateGuildDiscordIntegration,
+  useUpdateGuildSettings,
+  useGuildPage,
+  type RequestError,
+} from "@/api/queries";
+import { ArrowLeft, Bot, UserPlus, Menu, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { GuildPageHeader, GuildActionsMenu } from "./components";
 import { Button } from "@/components/ui/button";
@@ -25,22 +32,49 @@ type Tab = {
   icon: LucideIcon;
 };
 
-const tabs: Tab[] = [
+const TABS: Tab[] = [
   { id: "join-requests", label: "Join Requests", icon: UserPlus },
+  { id: "discord-integration", label: "Discord Integration", icon: Bot },
 ];
 
 export function GuildSettings() {
   const { guildId } = useParams<{ guildId: string }>();
-  const { data: pageConfig } = useGuildPage(guildId);
-  const { data: settings, isLoading } = useGuildSettings(guildId);
+  const { data: pageConfig, isLoading: isPageLoading } = useGuildPage(guildId);
+  const {
+    data: discordSettings,
+    error: discordSettingsError,
+    isLoading: isDiscordSettingsLoading,
+  } = useGuildDiscordIntegration(guildId);
+  const hasSettingsAccess = discordSettings !== undefined;
+  const { data: settings, isLoading: isSettingsLoading } = useGuildSettings(
+    guildId,
+    hasSettingsAccess,
+  );
   const updateSettings = useUpdateGuildSettings(guildId);
+  const updateDiscordIntegration = useUpdateGuildDiscordIntegration(guildId);
   const isMobile = useIsMobile();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("join-requests");
 
   const open = isOpen(settings?.allow_join_requests_until);
 
-  if (isLoading) {
+  if ((discordSettingsError as RequestError | null)?.status === 403) {
+    return <Navigate to={`/g/${guildId}`} replace />;
+  }
+
+  if (discordSettingsError) {
+    return (
+      <div className="flex items-center justify-center h-64 text-destructive">
+        Unable to load guild settings.
+      </div>
+    );
+  }
+
+  if (
+    isPageLoading ||
+    isDiscordSettingsLoading ||
+    (hasSettingsAccess && isSettingsLoading)
+  ) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -50,7 +84,7 @@ export function GuildSettings() {
 
   const renderNavLinks = (closeOnNavigate: boolean) => (
     <ul className="space-y-1">
-      {tabs.map((tab) => (
+      {TABS.map((tab) => (
         <li key={tab.id}>
           <button
             type="button"
@@ -129,6 +163,83 @@ export function GuildSettings() {
                   Close Now
                 </Button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {activeTab === "discord-integration" && discordSettings && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Discord Integration</h2>
+            <p className="text-muted-foreground">
+              Link Chronicle to your Discord server and announce new raid logs.
+            </p>
+          </div>
+
+          <div className="border border-border rounded-lg p-6">
+            <div className="flex items-start gap-3">
+              <Bot className="mt-0.5 h-5 w-5 text-muted-foreground" />
+              <div className="flex-1">
+                {!discordSettings.available ? (
+                  <>
+                    <h3 className="font-medium">Discord integration is not supported</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      The Discord bot is not configured on this Chronicle deployment.
+                    </p>
+                  </>
+                ) : !discordSettings.enabled &&
+                  !discordSettings.can_enable ? (
+                  <>
+                    <h3 className="font-medium">Discord linking is not enabled</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Contact a Chronicle administrator to enable Discord integration for
+                      this guild.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="font-medium">
+                      {discordSettings.enabled
+                        ? "Discord linking is enabled"
+                        : "Enable Discord linking"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {discordSettings.enabled
+                        ? "Guild administrators can link the Discord bot when installation support is added."
+                        : "Allow this guild to link Chronicle to a Discord server."}
+                    </p>
+
+                    {discordSettings.can_enable && (
+                      <Button
+                        className="mt-4"
+                        variant={
+                          discordSettings.enabled
+                            ? "destructive"
+                            : "default"
+                        }
+                        disabled={updateDiscordIntegration.isPending}
+                        onClick={() =>
+                          updateDiscordIntegration.mutate({
+                            enabled: !discordSettings.enabled,
+                          })
+                        }
+                      >
+                        {updateDiscordIntegration.isPending
+                          ? "Saving..."
+                          : discordSettings.enabled
+                            ? "Disable Discord Linking"
+                            : "Enable Discord Linking"}
+                      </Button>
+                    )}
+
+                    {updateDiscordIntegration.error && (
+                      <p className="mt-3 text-sm text-destructive">
+                        {updateDiscordIntegration.error.message}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

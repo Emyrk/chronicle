@@ -100,6 +100,67 @@ func TestManageConsumablesRole(t *testing.T) {
 	require.False(t, canManageWorldData)
 }
 
+func TestGuildDiscordBotPermissions(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	guildID := uuid.New()
+	leaderID := uuid.New()
+	memberID := uuid.New()
+	technicalAdminID := uuid.New()
+
+	b := policy.New()
+	guild := b.Guild(guildID)
+	chronicle := b.GlobalChronicle()
+	guild.Chronicle(chronicle)
+	guild.Leader(b.User(leaderID))
+	guild.Member(b.User(memberID))
+	chronicle.Technical_admin(b.User(technicalAdminID))
+	_, err := zed.Write(ctx, *b.Txn())
+	require.NoError(t, err)
+
+	checkManage := func(t *testing.T, userID uuid.UUID, expected bool) {
+		t.Helper()
+		allowed, err := zed.CheckOne(ctx, nil, policy.New().Guild(guildID).CanManage_discord_bot_User(policy.New().User(userID)))
+		require.NoError(t, err)
+		require.Equal(t, expected, allowed)
+	}
+
+	checkGuildAdmin := func(t *testing.T, userID uuid.UUID, expected bool) {
+		t.Helper()
+		allowed, err := zed.CheckOne(ctx, nil, policy.New().Guild(guildID).CanAdmin_guild_User(policy.New().User(userID)))
+		require.NoError(t, err)
+		require.Equal(t, expected, allowed)
+	}
+	checkGuildAdmin(t, leaderID, true)
+	checkGuildAdmin(t, memberID, false)
+	checkGuildAdmin(t, technicalAdminID, true)
+
+	leaderCanEnable, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdminister_authz_User(policy.New().User(leaderID)))
+	require.NoError(t, err)
+	require.False(t, leaderCanEnable)
+	technicalAdminCanEnable, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdminister_authz_User(policy.New().User(technicalAdminID)))
+	require.NoError(t, err)
+	require.True(t, technicalAdminCanEnable)
+
+	checkManage(t, leaderID, false)
+
+	require.NoError(t, zed.SetGuildDiscordBotEnabled(ctx, guildID, true))
+
+	entitled, err := zed.CheckOne(ctx, nil, policy.New().Guild(guildID).CanUse_discord_bot_User(policy.New().User(uuid.New())))
+	require.NoError(t, err)
+	require.True(t, entitled)
+	checkManage(t, leaderID, true)
+	checkManage(t, memberID, false)
+	checkManage(t, technicalAdminID, true)
+
+	require.NoError(t, zed.SetGuildDiscordBotEnabled(ctx, guildID, false))
+	checkManage(t, leaderID, false)
+}
+
 func TestInTx_NilWrapped(t *testing.T) {
 	t.Parallel()
 

@@ -82,7 +82,7 @@ func (obj *ObjArmory_player) Create() *Armory_playerRelates {
 	return &Armory_playerRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:152
+// Chronicle schema.zed:158
 // Relationship: armory_player:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjArmory_player) Chronicle(subs ...*ObjChronicle) *ObjArmory_player {
@@ -100,7 +100,7 @@ func (r *Armory_playerRelates) Chronicle(subs ...*ObjChronicle) *Armory_playerRe
 	return r
 }
 
-// Owner schema.zed:155
+// Owner schema.zed:161
 // Relationship: armory_player:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjArmory_player) Owner(subs ...*ObjUser) *ObjArmory_player {
@@ -920,6 +920,10 @@ func (obj *ObjGuild) RelationChronicle() string {
 	return "chronicle"
 }
 
+func (obj *ObjGuild) RelationDiscord_bot_enabled() string {
+	return "discord_bot_enabled"
+}
+
 func (obj *ObjGuild) RelationLeader() string {
 	return "leader"
 }
@@ -946,6 +950,14 @@ func (obj *ObjGuild) PermissionAdd_member() string {
 
 func (obj *ObjGuild) PermissionView_chronicle_roster() string {
 	return "view_chronicle_roster"
+}
+
+func (obj *ObjGuild) PermissionUse_discord_bot() string {
+	return "use_discord_bot"
+}
+
+func (obj *ObjGuild) PermissionManage_discord_bot() string {
+	return "manage_discord_bot"
 }
 
 type GuildRelates struct {
@@ -1016,6 +1028,25 @@ func (r *GuildRelates) Member(subs ...*ObjUser) *GuildRelates {
 	for _, sub := range subs {
 		r.rel.Add("member", sub.src.Obj, "")
 	}
+	return r
+}
+
+// Discord_bot_enabledWildcard schema.zed:144
+// Relationship: guild:<id>#discord_bot_enabled@user:*
+func (obj *ObjGuild) Discord_bot_enabledWildcard() *ObjGuild {
+	obj.src.Touch().Add("discord_bot_enabled", &v1.ObjectReference{
+		ObjectType: "user",
+		ObjectId:   "*",
+	}, "")
+	return obj
+}
+
+// Discord_bot_enabledWildcard on Relates uses the specified operation
+func (r *GuildRelates) Discord_bot_enabledWildcard() *GuildRelates {
+	r.rel.Add("discord_bot_enabled", &v1.ObjectReference{
+		ObjectType: "user",
+		ObjectId:   "*",
+	}, "")
 	return r
 }
 
@@ -1167,6 +1198,66 @@ func (obj *ObjGuild) CanView_chronicle_roster_User(sub *ObjUser) rel.Relationshi
 	}
 }
 
+// CanUse_discord_bot_Chronicle checks if the subject has use_discord_bot permission
+// // Object: guild:<id>
+// Schema: permission use_discord_bot = discord_bot_enabled
+func (obj *ObjGuild) CanUse_discord_bot_Chronicle(sub *ObjChronicle) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "use_discord_bot",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanUse_discord_bot_User checks if the subject has use_discord_bot permission
+// // Object: guild:<id>
+// Schema: permission use_discord_bot = discord_bot_enabled
+func (obj *ObjGuild) CanUse_discord_bot_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "use_discord_bot",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanManage_discord_bot_Chronicle checks if the subject has manage_discord_bot permission
+// // Object: guild:<id>
+// Schema: permission manage_discord_bot = admin_guild & discord_bot_enabled
+func (obj *ObjGuild) CanManage_discord_bot_Chronicle(sub *ObjChronicle) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "manage_discord_bot",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanManage_discord_bot_User checks if the subject has manage_discord_bot permission
+// // Object: guild:<id>
+// Schema: permission manage_discord_bot = admin_guild & discord_bot_enabled
+func (obj *ObjGuild) CanManage_discord_bot_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "manage_discord_bot",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
 type ObjInstance struct {
 	src Object
 }
@@ -1226,7 +1317,7 @@ func (obj *ObjInstance) Create() *InstanceRelates {
 	return &InstanceRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Raid_log schema.zed:176
+// Raid_log schema.zed:182
 // Relationship: instance:<id>#raid_log@raid_log:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Raid_log() etc.
 func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
@@ -1244,7 +1335,7 @@ func (r *InstanceRelates) Raid_log(subs ...*ObjRaid_log) *InstanceRelates {
 	return r
 }
 
-// PublicWildcard schema.zed:177
+// PublicWildcard schema.zed:183
 // Relationship: instance:<id>#public@user:*
 func (obj *ObjInstance) PublicWildcard() *ObjInstance {
 	obj.src.Touch().Add("public", &v1.ObjectReference{
@@ -1808,7 +1899,7 @@ func (obj *ObjRaid_log) Create() *Raid_logRelates {
 	return &Raid_logRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:162
+// Chronicle schema.zed:168
 // Relationship: raid_log:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRaid_log) Chronicle(subs ...*ObjChronicle) *ObjRaid_log {
@@ -1826,7 +1917,7 @@ func (r *Raid_logRelates) Chronicle(subs ...*ObjChronicle) *Raid_logRelates {
 	return r
 }
 
-// Uploader schema.zed:163
+// Uploader schema.zed:169
 // Relationship: raid_log:<id>#uploader@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Uploader() etc.
 func (obj *ObjRaid_log) Uploader(subs ...*ObjUser) *ObjRaid_log {

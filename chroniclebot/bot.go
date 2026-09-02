@@ -87,6 +87,11 @@ func New(ctx context.Context, logger *slog.Logger, config Config) (*Bot, error) 
 	return bot, nil
 }
 
+// Available reports whether the Discord bot is configured and connected.
+func (b *Bot) Available() bool {
+	return b != nil && !b.disabled
+}
+
 func (b *Bot) Disabled() bool {
 	return b.disabled
 }

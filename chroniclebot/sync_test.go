@@ -28,6 +28,14 @@ func (*recordingAuthorizer) Delete(context.Context, *rel.PreconditionedFilter) e
 	return nil
 }
 
+func TestAvailable(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, (*Bot)(nil).Available())
+	require.False(t, (&Bot{disabled: true}).Available())
+	require.True(t, (&Bot{}).Available())
+}
+
 func TestEnsureProtectedTechnicalAdmin(t *testing.T) {
 	t.Parallel()
 

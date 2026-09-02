@@ -7,31 +7,31 @@ import (
 )
 
 type GuildInfo struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	RealmID     uuid.UUID `json:"realm_id"`
-	RealmName   string    `json:"realm_name"`
-	HasPage     bool      `json:"has_page"`
-	PlayerCount int64     `json:"player_count"`
-	LogoURL     string    `json:"logo_url"`
-	CanEdit       bool `json:"can_edit"`
-	CanViewRoster bool `json:"can_view_roster"`
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	RealmID       uuid.UUID `json:"realm_id"`
+	RealmName     string    `json:"realm_name"`
+	HasPage       bool      `json:"has_page"`
+	PlayerCount   int64     `json:"player_count"`
+	LogoURL       string    `json:"logo_url"`
+	CanEdit       bool      `json:"can_edit"`
+	CanViewRoster bool      `json:"can_view_roster"`
 }
 
 type GuildPageConfig struct {
-	ID      uuid.UUID       `json:"id"`
-	GuildID uuid.UUID       `json:"guild_id"`
-	Guild   GuildInfo       `json:"guild"`
-	Theme   GuildPageTheme  `json:"theme"`
-	Tabs    []GuildPageTab  `json:"tabs"`
+	ID      uuid.UUID      `json:"id"`
+	GuildID uuid.UUID      `json:"guild_id"`
+	Guild   GuildInfo      `json:"guild"`
+	Theme   GuildPageTheme `json:"theme"`
+	Tabs    []GuildPageTab `json:"tabs"`
 }
 
 type GuildPageTheme struct {
-	PrimaryColor  string            `json:"primary_color,omitempty"`
-	BannerURL     string            `json:"banner_url,omitempty"`
-	BackgroundURL string            `json:"background_url,omitempty"`
-	LogoURL       string            `json:"logo_url,omitempty"`
-	Description   string            `json:"description,omitempty"`
+	PrimaryColor  string `json:"primary_color,omitempty"`
+	BannerURL     string `json:"banner_url,omitempty"`
+	BackgroundURL string `json:"background_url,omitempty"`
+	LogoURL       string `json:"logo_url,omitempty"`
+	Description   string `json:"description,omitempty"`
 	// HeaderLayout selects the header arrangement: "" or "centered" for the
 	// classic centered header; "left" for the armory-style identity with the
 	// description beside it, centered as a pair; "left_joined" for the
@@ -128,7 +128,6 @@ type GuildRosterMember struct {
 	Roles    []string  `json:"roles"` // "member", "leader", etc.
 }
 
-
 type GuildPageOptionsResponse struct {
 	AllowedTags     []GuildTag       `json:"allowed_tags"`
 	SocialPlatforms []SocialPlatform `json:"social_platforms"`
@@ -142,8 +141,18 @@ type GuildSettings struct {
 	IsMember               bool       `json:"is_member"`
 }
 
+type GuildDiscordIntegrationSettings struct {
+	Enabled   bool `json:"enabled"`
+	Available bool `json:"available"`
+	CanEnable bool `json:"can_enable"`
+}
+
 type UpdateGuildSettingsRequest struct {
 	AllowJoinRequestsUntil *time.Time `json:"allow_join_requests_until"`
+}
+
+type UpdateGuildDiscordIntegrationRequest struct {
+	Enabled bool `json:"enabled"`
 }
 
 // Guild Join Requests

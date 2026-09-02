@@ -390,6 +390,10 @@ func (api *API) Routes() chi.Router {
 							r.Put("/{userID}/role", api.AdminUpdateGuildMemberRole)
 							r.Delete("/{userID}", api.AdminRemoveGuildMember)
 						})
+						r.Get("/settings/discord-integration", api.GetGuildDiscordIntegration)
+						r.With(
+							httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdminister_authz_User),
+						).Put("/settings/discord-integration", api.UpdateGuildDiscordIntegration)
 						r.Put("/settings", api.UpdateGuildSettings)
 						r.Get("/join-requests", api.ListJoinRequests)
 						r.Post("/join-requests/{requestID}/accept", api.AcceptJoinRequest)
