@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { Navigate, useParams, Link } from "react-router-dom";
+import { Navigate, useParams, useSearchParams, Link } from "react-router-dom";
 import {
+  useDeleteGuildDiscordInstallation,
   useGuildDiscordIntegration,
   useGuildSettings,
   useUpdateGuildDiscordIntegration,
+  useUpdateGuildDiscordRaidLogAnnouncements,
   useUpdateGuildSettings,
   useGuildPage,
+  type GuildDiscordIntegrationSettings,
   type RequestError,
 } from "@/api/queries";
-import { ArrowLeft, Bot, UserPlus, Menu, X } from "lucide-react";
+import { ArrowLeft, BellRing, Bot, UserPlus, Menu, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { GuildPageHeader, GuildActionsMenu } from "./components";
 import { Button } from "@/components/ui/button";
@@ -37,8 +40,131 @@ const TABS: Tab[] = [
   { id: "discord-integration", label: "Discord Integration", icon: Bot },
 ];
 
+function DiscordRaidLogAnnouncementSettings({
+  guildId,
+  settings,
+}: {
+  guildId: string | undefined;
+  settings: GuildDiscordIntegrationSettings;
+}) {
+  const announcements = settings.raid_log_announcements;
+  const [enabled, setEnabled] = useState(announcements.enabled);
+  const [scope, setScope] = useState(announcements.scope || "raids_only");
+  const [channelId, setChannelId] = useState(announcements.channel_id || "");
+  const updateAnnouncements = useUpdateGuildDiscordRaidLogAnnouncements(guildId);
+
+  return (
+    <div className="rounded-md border border-border bg-background p-4">
+      <div className="flex items-start gap-3">
+        <BellRing className="mt-0.5 h-5 w-5 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-2 font-medium">
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={(event) => setEnabled(event.target.checked)}
+                className="h-4 w-4 rounded border-border accent-primary"
+              />
+              Announce Raid Logs
+            </label>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                enabled
+                  ? "bg-green-500/15 text-green-600"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {enabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Post a Discord message when Chronicle receives a new log for this guild.
+          </p>
+
+          <fieldset
+            disabled={!enabled}
+            className={`mt-4 grid gap-4 transition-opacity sm:grid-cols-2 ${
+              enabled ? "opacity-100" : "opacity-50"
+            }`}
+          >
+            <label className="space-y-1.5 text-sm font-medium">
+              Announce
+              <select
+                value={scope}
+                onChange={(event) => setScope(event.target.value)}
+                className="block h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-normal disabled:cursor-not-allowed"
+              >
+                <option value="raids_only">Raids only</option>
+                <option value="dungeons_only">Dungeons only</option>
+                <option value="all">All</option>
+              </select>
+            </label>
+
+            <label className="space-y-1.5 text-sm font-medium">
+              Discord channel
+              {enabled && !channelId && (
+                <span className="ml-1 text-xs font-normal text-destructive">Required</span>
+              )}
+              <select
+                value={channelId}
+                onChange={(event) => setChannelId(event.target.value)}
+                aria-invalid={enabled && !channelId}
+                className={`block h-9 w-full rounded-md border bg-background px-3 text-sm font-normal disabled:cursor-not-allowed ${
+                  enabled && !channelId
+                    ? "border-destructive ring-1 ring-destructive/50 focus:ring-destructive"
+                    : "border-input"
+                }`}
+              >
+                <option value="">Select a channel</option>
+                {(settings.channels || []).map((channel) => (
+                  <option key={channel.id} value={channel.id}>
+                    #{channel.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </fieldset>
+
+          {enabled && settings.channels?.length === 0 && (
+            <p className="mt-3 text-sm text-amber-600">
+              Chronicle cannot find a text channel where it can post messages.
+            </p>
+          )}
+
+          <div className="mt-4 flex items-center gap-3">
+            <Button
+              size="sm"
+              disabled={updateAnnouncements.isPending || (enabled && !channelId)}
+              onClick={() =>
+                updateAnnouncements.mutate({
+                  enabled,
+                  scope,
+                  channel_id: channelId,
+                })
+              }
+            >
+              {updateAnnouncements.isPending ? "Saving..." : "Save announcement settings"}
+            </Button>
+            {updateAnnouncements.isSuccess && (
+              <span className="text-sm text-green-600">Saved</span>
+            )}
+          </div>
+
+          {updateAnnouncements.error && (
+            <p className="mt-3 text-sm text-destructive">
+              {updateAnnouncements.error.message}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function GuildSettings() {
   const { guildId } = useParams<{ guildId: string }>();
+  const [searchParams] = useSearchParams();
   const { data: pageConfig, isLoading: isPageLoading } = useGuildPage(guildId);
   const {
     data: discordSettings,
@@ -52,9 +178,14 @@ export function GuildSettings() {
   );
   const updateSettings = useUpdateGuildSettings(guildId);
   const updateDiscordIntegration = useUpdateGuildDiscordIntegration(guildId);
+  const deleteDiscordInstallation = useDeleteGuildDiscordInstallation(guildId);
   const isMobile = useIsMobile();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("join-requests");
+  const [activeTab, setActiveTab] = useState(() =>
+    searchParams.get("tab") === "discord-integration"
+      ? "discord-integration"
+      : "join-requests",
+  );
 
   const open = isOpen(settings?.allow_join_requests_until);
 
@@ -176,7 +307,7 @@ export function GuildSettings() {
             </p>
           </div>
 
-          <div className="border border-border rounded-lg p-6">
+          <div className="relative border border-border rounded-lg p-6">
             <div className="flex items-start gap-3">
               <Bot className="mt-0.5 h-5 w-5 text-muted-foreground" />
               <div className="flex-1">
@@ -205,13 +336,50 @@ export function GuildSettings() {
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">
                       {discordSettings.enabled
-                        ? "Guild administrators can link the Discord bot when installation support is added."
+                        ? "Install Chronicle to link this guild with a Discord server."
                         : "Allow this guild to link Chronicle to a Discord server."}
                     </p>
 
+                    {discordSettings.enabled && discordSettings.installed && (
+                      <div className="mt-4 rounded-md border border-border bg-muted/40 p-4">
+                        <p className="font-medium">{discordSettings.discord_guild_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Discord server ID: {discordSettings.discord_guild_id}
+                        </p>
+                        <div className="mt-4">
+                          <DiscordRaidLogAnnouncementSettings
+                            guildId={guildId}
+                            settings={discordSettings}
+                          />
+                        </div>
+                        <Button
+                          className="mt-3"
+                          variant="destructive"
+                          size="sm"
+                          disabled={deleteDiscordInstallation.isPending}
+                          onClick={() => deleteDiscordInstallation.mutate()}
+                        >
+                          {deleteDiscordInstallation.isPending
+                            ? "Unlinking..."
+                            : "Unlink Discord Server"}
+                        </Button>
+                      </div>
+                    )}
+
+                    {discordSettings.enabled &&
+                      !discordSettings.installed &&
+                      discordSettings.install_url && (
+                        <Button className="mt-4" asChild>
+                          <a href={discordSettings.install_url}>
+                            Install Chronicle on Discord
+                          </a>
+                        </Button>
+                      )}
+
                     {discordSettings.can_enable && (
                       <Button
-                        className="mt-4"
+                        className="mt-4 md:absolute md:right-6 md:top-6 md:mt-0"
+                        size="sm"
                         variant={
                           discordSettings.enabled
                             ? "destructive"
@@ -230,6 +398,12 @@ export function GuildSettings() {
                             ? "Disable Discord Linking"
                             : "Enable Discord Linking"}
                       </Button>
+                    )}
+
+                    {deleteDiscordInstallation.error && (
+                      <p className="mt-3 text-sm text-destructive">
+                        {deleteDiscordInstallation.error.message}
+                      </p>
                     )}
 
                     {updateDiscordIntegration.error && (

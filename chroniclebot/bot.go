@@ -219,6 +219,55 @@ func (b *Bot) enqueueSyncJob(discordID, uniqueString string) {
 	}
 }
 
+// VerifyGuild confirms that the connected bot can access a Discord guild.
+func (b *Bot) VerifyGuild(guildID string) (*discordgo.Guild, error) {
+	if !b.Available() || b.session == nil {
+		return nil, fmt.Errorf("discord bot is unavailable")
+	}
+	guild, err := b.session.Guild(guildID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch Discord guild %s: %w", guildID, err)
+	}
+	return guild, nil
+}
+
+// LeaveGuild removes the bot from a Discord guild.
+func (b *Bot) LeaveGuild(guildID string) error {
+	if !b.Available() || b.session == nil {
+		return fmt.Errorf("discord bot is unavailable")
+	}
+	if err := b.session.GuildLeave(guildID); err != nil {
+		return fmt.Errorf("leave Discord guild %s: %w", guildID, err)
+	}
+	return nil
+}
+
+// WritableTextChannels returns text channels where the bot can view and send messages.
+func (b *Bot) WritableTextChannels(guildID string) ([]*discordgo.Channel, error) {
+	if !b.Available() || b.session == nil || b.session.State == nil || b.session.State.User == nil {
+		return nil, fmt.Errorf("discord bot is unavailable")
+	}
+	channels, err := b.session.GuildChannels(guildID)
+	if err != nil {
+		return nil, fmt.Errorf("get Discord guild channels: %w", err)
+	}
+	writable := make([]*discordgo.Channel, 0, len(channels))
+	for _, channel := range channels {
+		if channel.Type != discordgo.ChannelTypeGuildText {
+			continue
+		}
+		permissions, err := b.session.UserChannelPermissions(b.session.State.User.ID, channel.ID)
+		if err != nil {
+			return nil, fmt.Errorf("get Discord channel %s permissions: %w", channel.ID, err)
+		}
+		const required = discordgo.PermissionViewChannel | discordgo.PermissionSendMessages
+		if permissions&required == required {
+			writable = append(writable, channel)
+		}
+	}
+	return writable, nil
+}
+
 // GetGuildMember fetches a member from a guild.
 // Returns nil if the user is not a member of the guild.
 func (b *Bot) GetGuildMember(guildID, userID string) (*discordgo.Member, error) {

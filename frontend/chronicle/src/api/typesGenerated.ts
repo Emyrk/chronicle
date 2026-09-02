@@ -927,6 +927,12 @@ export type DeviceVisibility = "all" | "desktop" | "mobile";
 
 export const DeviceVisibilitys: DeviceVisibility[] = ["all", "desktop", "mobile"];
 
+// From chroniclesdk/guild_page.go
+export interface DiscordChannel {
+    readonly id: string;
+    readonly name: string;
+}
+
 // From chroniclesdk/discovery.go
 /**
  * DiscoveryEntry is one server/tenant in the discovery response.
@@ -1357,6 +1363,19 @@ export interface GuildDiscordIntegrationSettings {
     readonly enabled: boolean;
     readonly available: boolean;
     readonly can_enable: boolean;
+    readonly installed: boolean;
+    readonly discord_guild_id?: string;
+    readonly discord_guild_name?: string;
+    readonly install_url?: string;
+    readonly channels?: readonly DiscordChannel[];
+    readonly raid_log_announcements: GuildDiscordRaidLogAnnouncements;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildDiscordRaidLogAnnouncements {
+    readonly enabled: boolean;
+    readonly scope: string;
+    readonly channel_id?: string;
 }
 
 // From chroniclesdk/guild_page.go
@@ -3588,6 +3607,13 @@ export interface UpdateGearStatWeightRequest {
 // From chroniclesdk/guild_page.go
 export interface UpdateGuildDiscordIntegrationRequest {
     readonly enabled: boolean;
+}
+
+// From chroniclesdk/guild_page.go
+export interface UpdateGuildDiscordRaidLogAnnouncementsRequest {
+    readonly enabled: boolean;
+    readonly scope: string;
+    readonly channel_id: string;
 }
 
 // From chroniclesdk/guild_page.go

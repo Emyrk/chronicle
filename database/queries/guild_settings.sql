@@ -10,6 +10,49 @@ ON CONFLICT (guild_id) DO UPDATE SET
     allow_join_requests_until = $2, updated_at = NOW()
 RETURNING *;
 
+-- Discord Integration
+
+-- name: CreateGuildDiscordInstallState :one
+INSERT INTO guild_discord_install_states (state, guild_id, user_id, expires_at)
+VALUES ($1, $2, $3, $4)
+RETURNING *;
+
+-- name: ConsumeGuildDiscordInstallState :one
+DELETE FROM guild_discord_install_states
+WHERE state = $1 AND expires_at > NOW()
+RETURNING *;
+
+-- name: GetGuildDiscordInstallation :one
+SELECT * FROM guild_discord_installations WHERE guild_id = $1;
+
+-- name: CountGuildDiscordInstallationsByDiscordGuildID :one
+SELECT COUNT(*) FROM guild_discord_installations WHERE discord_guild_id = $1;
+
+-- name: UpsertGuildDiscordInstallation :one
+INSERT INTO guild_discord_installations (
+  guild_id, discord_guild_id, discord_guild_name, installed_by
+) VALUES ($1, $2, $3, $4)
+ON CONFLICT (guild_id) DO UPDATE SET
+  discord_guild_id = EXCLUDED.discord_guild_id,
+  discord_guild_name = EXCLUDED.discord_guild_name,
+  installed_by = EXCLUDED.installed_by,
+  updated_at = NOW()
+RETURNING *;
+
+-- name: UpdateGuildDiscordRaidLogAnnouncements :one
+UPDATE guild_discord_installations SET
+  announce_raid_logs = $2,
+  announce_raid_logs_scope = $3,
+  announce_raid_logs_channel_id = $4,
+  updated_at = NOW()
+WHERE guild_id = $1
+RETURNING *;
+
+-- name: DeleteGuildDiscordInstallation :one
+DELETE FROM guild_discord_installations
+WHERE guild_id = $1
+RETURNING *;
+
 -- Guild Join Requests
 
 -- name: CreateGuildJoinRequest :one

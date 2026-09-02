@@ -60,6 +60,7 @@ import type {
   GuildJoinRequest as GuildJoinRequestGenerated,
   UpdateGuildSettingsRequest as UpdateGuildSettingsRequestGenerated,
   UpdateGuildDiscordIntegrationRequest as UpdateGuildDiscordIntegrationRequestGenerated,
+  UpdateGuildDiscordRaidLogAnnouncementsRequest as UpdateGuildDiscordRaidLogAnnouncementsRequestGenerated,
   CreateJoinRequestBody as CreateJoinRequestBodyGenerated,
   RegressionFixture as RegressionFixtureGenerated,
   RegressionSnapshotSummary as RegressionSnapshotSummaryGenerated,
@@ -132,6 +133,7 @@ export type GuildDiscordIntegrationSettings = GuildDiscordIntegrationSettingsGen
 export type GuildJoinRequest = GuildJoinRequestGenerated;
 export type UpdateGuildSettingsRequest = UpdateGuildSettingsRequestGenerated;
 export type UpdateGuildDiscordIntegrationRequest = UpdateGuildDiscordIntegrationRequestGenerated;
+export type UpdateGuildDiscordRaidLogAnnouncementsRequest = UpdateGuildDiscordRaidLogAnnouncementsRequestGenerated;
 export type CreateJoinRequestBody = CreateJoinRequestBodyGenerated;
 export type AdminBulkDeleteResponse = AdminBulkDeleteResponseGenerated;
 export type AdminBulkSelectedReparseResponse = AdminBulkSelectedReparseResponseGenerated;
@@ -1796,6 +1798,52 @@ export function useUpdateGuildDiscordIntegration(guildId: string | undefined) {
     },
     onSuccess: (settings) => {
       queryClient.setQueryData(["guild-discord-integration", guildId], settings);
+    },
+  });
+}
+
+export function useUpdateGuildDiscordRaidLogAnnouncements(guildId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: UpdateGuildDiscordRaidLogAnnouncementsRequest) => {
+      const response = await fetch(
+        `/api/v1/guilds/${guildId}/settings/discord-integration/raid-log-announcements`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(req),
+          credentials: "include",
+        },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to update raid log announcements", error);
+      }
+      return response.json() as Promise<GuildDiscordIntegrationSettings>;
+    },
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["guild-discord-integration", guildId], settings);
+    },
+  });
+}
+
+export function useDeleteGuildDiscordInstallation(guildId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await fetch(
+        `/api/v1/guilds/${guildId}/settings/discord-integration/installation`,
+        { method: "DELETE", credentials: "include" },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to unlink Discord server", error);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["guild-discord-integration", guildId],
+      });
     },
   });
 }

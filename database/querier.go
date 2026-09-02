@@ -36,8 +36,10 @@ type sqlcQuerier interface {
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
 	ClearDuplicateGroupID(ctx context.Context, id uuid.UUID) error
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
+	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	CountActiveRegressionJobs(ctx context.Context) (int64, error)
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
+	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
 	CountGuilds(ctx context.Context, dollar_1 string) (int64, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
 	// Return the number of members in a snapshot.
@@ -61,6 +63,8 @@ type sqlcQuerier interface {
 	// Stat Weights
 	// ============================================================
 	CreateGearStatWeight(ctx context.Context, arg CreateGearStatWeightParams) (GearStatWeight, error)
+	// Discord Integration
+	CreateGuildDiscordInstallState(ctx context.Context, arg CreateGuildDiscordInstallStateParams) (GuildDiscordInstallState, error)
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
 	CreateRaidComposition(ctx context.Context, arg CreateRaidCompositionParams) (RaidComposition, error)
@@ -77,6 +81,7 @@ type sqlcQuerier interface {
 	DeleteGearList(ctx context.Context, arg DeleteGearListParams) (int64, error)
 	DeleteGearProgression(ctx context.Context, arg DeleteGearProgressionParams) (int64, error)
 	DeleteGearStatWeight(ctx context.Context, arg DeleteGearStatWeightParams) (int64, error)
+	DeleteGuildDiscordInstallation(ctx context.Context, guildID uuid.UUID) (GuildDiscordInstallation, error)
 	DeleteGuildJoinRequest(ctx context.Context, arg DeleteGuildJoinRequestParams) error
 	DeleteGuildPage(ctx context.Context, guildID uuid.UUID) error
 	DeleteGuildPagePanel(ctx context.Context, id uuid.UUID) error
@@ -192,6 +197,7 @@ type sqlcQuerier interface {
 	GetGearStatWeightByID(ctx context.Context, id uuid.UUID) (GearStatWeight, error)
 	GetGemItemIDByEnchantID(ctx context.Context, arg GetGemItemIDByEnchantIDParams) (int32, error)
 	GetGuildByID(ctx context.Context, id uuid.UUID) (GetGuildByIDRow, error)
+	GetGuildDiscordInstallation(ctx context.Context, guildID uuid.UUID) (GuildDiscordInstallation, error)
 	GetGuildJoinRequestByUser(ctx context.Context, arg GetGuildJoinRequestByUserParams) (GuildJoinRequest, error)
 	// Guild Pages
 	GetGuildPage(ctx context.Context, guildID uuid.UUID) (GuildPage, error)
@@ -759,6 +765,7 @@ type sqlcQuerier interface {
 	UpdateGearList(ctx context.Context, arg UpdateGearListParams) (GearList, error)
 	UpdateGearProgression(ctx context.Context, arg UpdateGearProgressionParams) (GearProgression, error)
 	UpdateGearStatWeight(ctx context.Context, arg UpdateGearStatWeightParams) (GearStatWeight, error)
+	UpdateGuildDiscordRaidLogAnnouncements(ctx context.Context, arg UpdateGuildDiscordRaidLogAnnouncementsParams) (GuildDiscordInstallation, error)
 	UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPagePanelParams) (GuildPagePanel, error)
 	UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error)
 	UpdateLogFileAfterAppend(ctx context.Context, arg UpdateLogFileAfterAppendParams) error
@@ -796,6 +803,7 @@ type sqlcQuerier interface {
 	// stale once a new sync starts, and stays NULL if the sync fails.
 	UpsertExternalCharacterLinkSync(ctx context.Context, arg UpsertExternalCharacterLinkSyncParams) error
 	UpsertGuild(ctx context.Context, arg UpsertGuildParams) (Guild, error)
+	UpsertGuildDiscordInstallation(ctx context.Context, arg UpsertGuildDiscordInstallationParams) (GuildDiscordInstallation, error)
 	UpsertGuildPage(ctx context.Context, arg UpsertGuildPageParams) (GuildPage, error)
 	UpsertGuildSettings(ctx context.Context, arg UpsertGuildSettingsParams) (GuildSetting, error)
 	UpsertInstanceOverviewMetrics(ctx context.Context, arg UpsertInstanceOverviewMetricsParams) error
