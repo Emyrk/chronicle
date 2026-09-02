@@ -58,15 +58,26 @@ function DiscordRaidLogAnnouncementSettings({
       <div className="flex items-start gap-3">
         <BellRing className="mt-0.5 h-5 w-5 text-muted-foreground" />
         <div className="min-w-0 flex-1">
-          <label className="flex cursor-pointer items-center gap-2 font-medium">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(event) => setEnabled(event.target.checked)}
-              className="h-4 w-4 rounded border-border accent-primary"
-            />
-            Announce Raid Logs
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-2 font-medium">
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={(event) => setEnabled(event.target.checked)}
+                className="h-4 w-4 rounded border-border accent-primary"
+              />
+              Announce Raid Logs
+            </label>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                enabled
+                  ? "bg-green-500/15 text-green-600"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {enabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Post a Discord message when Chronicle receives a new log for this guild.
           </p>
@@ -92,10 +103,18 @@ function DiscordRaidLogAnnouncementSettings({
 
             <label className="space-y-1.5 text-sm font-medium">
               Discord channel
+              {enabled && !channelId && (
+                <span className="ml-1 text-xs font-normal text-destructive">Required</span>
+              )}
               <select
                 value={channelId}
                 onChange={(event) => setChannelId(event.target.value)}
-                className="block h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-normal disabled:cursor-not-allowed"
+                aria-invalid={enabled && !channelId}
+                className={`block h-9 w-full rounded-md border bg-background px-3 text-sm font-normal disabled:cursor-not-allowed ${
+                  enabled && !channelId
+                    ? "border-destructive ring-1 ring-destructive/50 focus:ring-destructive"
+                    : "border-input"
+                }`}
               >
                 <option value="">Select a channel</option>
                 {(settings.channels || []).map((channel) => (
