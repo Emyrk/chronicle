@@ -6,6 +6,7 @@ import {
   useUpdateGuildDiscordIntegration,
   useUpdateGuildSettings,
   useGuildPage,
+  type RequestError,
 } from "@/api/queries";
 import { ArrowLeft, Bot, UserPlus, Menu, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -39,10 +40,16 @@ const TABS: Tab[] = [
 export function GuildSettings() {
   const { guildId } = useParams<{ guildId: string }>();
   const { data: pageConfig, isLoading: isPageLoading } = useGuildPage(guildId);
-  const canAdminGuild = pageConfig?.guild.can_edit === true;
-  const { data: settings, isLoading: isSettingsLoading } = useGuildSettings(guildId);
-  const { data: discordSettings, isLoading: isDiscordSettingsLoading } =
-    useGuildDiscordIntegration(guildId, canAdminGuild);
+  const {
+    data: discordSettings,
+    error: discordSettingsError,
+    isLoading: isDiscordSettingsLoading,
+  } = useGuildDiscordIntegration(guildId);
+  const hasSettingsAccess = discordSettings !== undefined;
+  const { data: settings, isLoading: isSettingsLoading } = useGuildSettings(
+    guildId,
+    hasSettingsAccess,
+  );
   const updateSettings = useUpdateGuildSettings(guildId);
   const updateDiscordIntegration = useUpdateGuildDiscordIntegration(guildId);
   const isMobile = useIsMobile();
@@ -51,14 +58,22 @@ export function GuildSettings() {
 
   const open = isOpen(settings?.allow_join_requests_until);
 
-  if (!isPageLoading && !canAdminGuild) {
+  if ((discordSettingsError as RequestError | null)?.status === 403) {
     return <Navigate to={`/g/${guildId}`} replace />;
+  }
+
+  if (discordSettingsError) {
+    return (
+      <div className="flex items-center justify-center h-64 text-destructive">
+        Unable to load guild settings.
+      </div>
+    );
   }
 
   if (
     isPageLoading ||
-    isSettingsLoading ||
-    (canAdminGuild && isDiscordSettingsLoading)
+    isDiscordSettingsLoading ||
+    (hasSettingsAccess && isSettingsLoading)
   ) {
     return (
       <div className="flex items-center justify-center h-64">

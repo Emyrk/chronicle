@@ -169,6 +169,7 @@ interface APIErrorResponse {
 
 export interface RequestError extends Error {
   detail?: string;
+  status?: number;
 }
 
 /** Show an API error as a toast, including the detail field if present. */
@@ -1688,7 +1689,10 @@ export function useGuildCharacters(
   });
 }
 
-export function useGuildSettings(guildId: string | undefined) {
+export function useGuildSettings(
+  guildId: string | undefined,
+  enabled = true,
+) {
   return useQuery({
     queryKey: ["guild-settings", guildId],
     queryFn: async () => {
@@ -1701,7 +1705,7 @@ export function useGuildSettings(guildId: string | undefined) {
       }
       return response.json() as Promise<GuildSettings>;
     },
-    enabled: !!guildId,
+    enabled: !!guildId && enabled,
     retry: false,
   });
 }
@@ -1741,7 +1745,12 @@ export function useGuildDiscordIntegration(
       );
       if (!response.ok) {
         const error = await response.json().catch(() => null);
-        throw buildAPIError("Failed to fetch Discord integration settings", error);
+        const requestError = buildAPIError(
+          "Failed to fetch Discord integration settings",
+          error,
+        );
+        requestError.status = response.status;
+        throw requestError;
       }
       return response.json() as Promise<GuildDiscordIntegrationSettings>;
     },

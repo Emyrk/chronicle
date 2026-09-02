@@ -129,6 +129,16 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 		require.Equal(t, expected, allowed)
 	}
 
+	checkGuildAdmin := func(t *testing.T, userID uuid.UUID, expected bool) {
+		t.Helper()
+		allowed, err := zed.CheckOne(ctx, nil, policy.New().Guild(guildID).CanAdmin_guild_User(policy.New().User(userID)))
+		require.NoError(t, err)
+		require.Equal(t, expected, allowed)
+	}
+	checkGuildAdmin(t, leaderID, true)
+	checkGuildAdmin(t, memberID, false)
+	checkGuildAdmin(t, technicalAdminID, true)
+
 	leaderCanEnable, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdminister_authz_User(policy.New().User(leaderID)))
 	require.NoError(t, err)
 	require.False(t, leaderCanEnable)
