@@ -434,7 +434,12 @@ func TestUlduarThorimEncounterIdentities(t *testing.T) {
 	t.Parallel()
 
 	hostiles := UlduarHostiles()
-	fight := encounter.Fight{}
+	thorimGUID := creatureGUID(32865)
+	fight := encounter.Fight{
+		Hostiles: map[guid.GUID]encounter.CharacterFight{
+			thorimGUID: {ID: thorimGUID},
+		},
+	}
 
 	thorim, ok := hostiles[32865]
 	require.True(t, ok)
@@ -457,6 +462,7 @@ func TestUlduarThorimEncounterIdentities(t *testing.T) {
 		require.NotNil(t, result)
 		require.Equal(t, "Thorim", result.EncounterName)
 		require.Equal(t, []uint32{32865}, result.Bosses)
+		require.Nil(t, identity.EncounterNameFn(encounter.Fight{}))
 	}
 
 	sif, ok := hostiles[33196]

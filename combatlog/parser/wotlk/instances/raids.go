@@ -741,11 +741,17 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		}
 	}
 
-	thorimEncounter := func(encounter.Fight) *identifier.EncounterFuncResult {
-		return &identifier.EncounterFuncResult{
-			EncounterName: "Thorim",
-			Bosses:        []uint32{32865},
+	thorimEncounter := func(f encounter.Fight) *identifier.EncounterFuncResult {
+		for _, hostile := range f.Hostiles {
+			entry, ok := hostile.ID.GetEntry()
+			if ok && entry == 32865 {
+				return &identifier.EncounterFuncResult{
+					EncounterName: "Thorim",
+					Bosses:        []uint32{32865},
+				}
+			}
 		}
+		return nil
 	}
 	for entry, name := range map[uint32]string{
 		32872: "Runic Colossus",
