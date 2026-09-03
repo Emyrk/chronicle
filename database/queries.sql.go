@@ -2454,10 +2454,14 @@ SELECT
   li.max_players,
   wlg.created_at AS uploaded_at,
   u.username AS uploader_name,
+  t.slug AS tenant_slug,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
 FROM log_instances li
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
+LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+LEFT JOIN wow_servers ws ON ws.id = wsr.server_id
+LEFT JOIN tenants t ON t.id = ws.tenant_id
 WHERE COALESCE(li.duplicate_group_id, li.id) = $1::uuid
 ORDER BY wlg.created_at ASC, li.start_time ASC NULLS LAST, li.id ASC
 `
@@ -2473,6 +2477,7 @@ type ListInstancesForDiscordAnnouncementRow struct {
 	MaxPlayers   int32              `db:"max_players" json:"max_players"`
 	UploadedAt   pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
 	UploaderName string             `db:"uploader_name" json:"uploader_name"`
+	TenantSlug   pgtype.Text        `db:"tenant_slug" json:"tenant_slug"`
 	PlayerCount  int32              `db:"player_count" json:"player_count"`
 }
 
@@ -2496,6 +2501,7 @@ func (q *sqlQuerier) ListInstancesForDiscordAnnouncement(ctx context.Context, ru
 			&i.MaxPlayers,
 			&i.UploadedAt,
 			&i.UploaderName,
+			&i.TenantSlug,
 			&i.PlayerCount,
 		); err != nil {
 			return nil, err

@@ -300,12 +300,22 @@ func (w *WorkerAnnounceRaidLog) deleteObsoleteMessage(announcement *database.Gui
 	}
 }
 
-func (w *WorkerAnnounceRaidLog) instanceURL(id uuid.UUID, slug pgtype.Text) string {
+func (w *WorkerAnnounceRaidLog) instanceURL(id uuid.UUID, slug, tenantSlug pgtype.Text) string {
 	linkID := id.String()
 	if slug.Valid && slug.String != "" {
 		linkID = slug.String
 	}
-	return fmt.Sprintf("%s/instances/%s", strings.TrimRight(w.bot.config.AccessURL, "/"), url.PathEscape(linkID))
+
+	baseURL := strings.TrimRight(w.bot.config.AccessURL, "/")
+	if tenantSlug.Valid && tenantSlug.String != "" && w.bot.config.PrimaryDomain != "" {
+		if accessURL, err := url.Parse(w.bot.config.AccessURL); err == nil && accessURL.Scheme != "" {
+			baseURL = (&url.URL{
+				Scheme: accessURL.Scheme,
+				Host:   tenantSlug.String + "." + w.bot.config.PrimaryDomain,
+			}).String()
+		}
+	}
+	return fmt.Sprintf("%s/instances/%s", baseURL, url.PathEscape(linkID))
 }
 
 func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uuid.UUID) (*discordgo.MessageEmbed, error) {
@@ -339,7 +349,7 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 		if log.RecorderName != "" {
 			label += " · " + log.RecorderName
 		}
-		links = append(links, fmt.Sprintf("[%s](%s)", label, w.instanceURL(log.ID, log.HashedSlug)))
+		links = append(links, fmt.Sprintf("[%s](%s)", label, w.instanceURL(log.ID, log.HashedSlug, log.TenantSlug)))
 	}
 
 	bosses := make([]string, 0, len(bestEncounters))
@@ -356,7 +366,7 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 
 	return &discordgo.MessageEmbed{
 		Title:       best.Name,
-		URL:         w.instanceURL(best.ID, best.HashedSlug),
+		URL:         w.instanceURL(best.ID, best.HashedSlug, best.TenantSlug),
 		Description: strings.Join(bosses, "\n"),
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "Logs", Value: strings.Join(links, "\n")},

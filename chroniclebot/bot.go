@@ -20,11 +20,12 @@ type Config struct {
 	// Token is the bot token from Discord Developer Portal.
 	Token string
 	// GuildID is your Discord server ID. If empty, commands are registered globally.
-	GuildID   string
-	Disabled  bool
-	DB        database.Store
-	Zed       *authz.Authz
-	AccessURL string
+	GuildID       string
+	Disabled      bool
+	DB            database.Store
+	Zed           *authz.Authz
+	AccessURL     string
+	PrimaryDomain string
 }
 
 // Bot represents a Discord bot instance.
