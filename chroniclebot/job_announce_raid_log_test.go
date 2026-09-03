@@ -238,10 +238,10 @@ func TestAnnouncementDeliveryErrorIsPersisted(t *testing.T) {
 	require.Empty(t, embed.Description)
 	require.Empty(t, embed.Timestamp)
 	require.NotZero(t, embed.Color)
-	require.Equal(t, guild.Name+" · Molten Core · Aug 14, 2026", embed.Footer.Text)
+	require.Equal(t, guild.Name+" · Nordanaar · Aug 14, 2026", embed.Footer.Text)
+	require.Len(t, embed.Fields, 3)
 	require.Equal(t, "2 / 3", requireAnnouncementField(t, embed, "BOSSES KILLED").Value)
 	require.Equal(t, "+20% faster", requireAnnouncementField(t, embed, "VS. GUILD AVG").Value)
-	require.NotEmpty(t, requireAnnouncementField(t, embed, "REALM").Value)
 
 	attempts, err := store.ListGuildDiscordAnnouncementAttempts(ctx, database.ListGuildDiscordAnnouncementAttemptsParams{
 		GuildID: guild.ID, LimitCount: 10,
@@ -332,6 +332,13 @@ func TestAnnouncementFormatting(t *testing.T) {
 	require.Equal(t, "Heroic · 40-man", announcementVariant("Heroic", 40))
 	require.Equal(t, announcementColor("Molten Core"), announcementColor("molten core"))
 	require.NotZero(t, announcementColor("Onyxia's Lair"))
+}
+
+func TestFormatUploadedLogOmitsUnknownAuthor(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "Log 1 · 16m · 2 bosses", formatUploadedLog("Log 1", "", "16m", 2))
+	require.Equal(t, "Log 2 · Wonky · 16m · 2 bosses", formatUploadedLog("Log 2", "Wonky", "16m", 2))
 }
 
 func TestInstanceURL(t *testing.T) {

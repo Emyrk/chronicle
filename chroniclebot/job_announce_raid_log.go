@@ -396,6 +396,15 @@ func announcementVariant(difficulty string, maxPlayers int32) string {
 	return strings.Join(parts, " · ")
 }
 
+func formatUploadedLog(logName, author, duration string, bossCount int) string {
+	parts := []string{logName}
+	if author != "" {
+		parts = append(parts, author)
+	}
+	parts = append(parts, duration, fmt.Sprintf("%d bosses", bossCount))
+	return strings.Join(parts, " · ")
+}
+
 func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uuid.UUID) (*discordgo.MessageSend, error) {
 	logs, err := w.bot.config.DB.ListInstancesForDiscordAnnouncement(ctx, runID)
 	if err != nil {
@@ -454,18 +463,17 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 			if logURL := w.instanceURL(log.HashedSlug, log.TenantSlug); logURL != "" {
 				logName = fmt.Sprintf("[%s](%s)", logName, logURL)
 			}
-			lines = append(lines, fmt.Sprintf("%s · %s · %s · %d bosses", logName, label, announcementDuration(log), encounterCounts[log.ID]))
+			lines = append(lines, formatUploadedLog(logName, label, announcementDuration(log), encounterCounts[log.ID]))
 		}
 		fields = append(fields, &discordgo.MessageEmbedField{Name: "UPLOADED LOGS", Value: strings.Join(lines, "\n")})
 	}
 	if variant != "" {
 		fields = append(fields, &discordgo.MessageEmbedField{Name: "VARIANT", Value: variant, Inline: true})
 	}
+	footerParts := []string{guildName}
 	if best.RealmName.Valid && best.RealmName.String != "" {
-		fields = append(fields, &discordgo.MessageEmbedField{Name: "REALM", Value: best.RealmName.String, Inline: true})
+		footerParts = append(footerParts, best.RealmName.String)
 	}
-
-	footerParts := []string{guildName, best.Name}
 	if best.StartTime.Valid {
 		footerParts = append(footerParts, best.StartTime.Time.Format("Jan 2, 2006"))
 	}
