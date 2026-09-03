@@ -2452,8 +2452,12 @@ SELECT
   li.end_time,
   li.recorder_name,
   li.max_players,
+  li.difficulty_name,
+  li.category,
   wlg.created_at AS uploaded_at,
   u.username AS uploader_name,
+  wsr.name AS realm_name,
+  g.name AS guild_name,
   t.slug AS tenant_slug,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
 FROM log_instances li
@@ -2462,23 +2466,28 @@ JOIN users u ON u.id = wlg.owner
 LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN wow_servers ws ON ws.id = wsr.server_id
 LEFT JOIN tenants t ON t.id = ws.tenant_id
+LEFT JOIN guilds g ON g.id = li.guild_id
 WHERE COALESCE(li.duplicate_group_id, li.id) = $1::uuid
 ORDER BY wlg.created_at ASC, li.start_time ASC NULLS LAST, li.id ASC
 `
 
 type ListInstancesForDiscordAnnouncementRow struct {
-	ID           uuid.UUID          `db:"id" json:"id"`
-	LogGroupID   uuid.UUID          `db:"log_group_id" json:"log_group_id"`
-	Name         string             `db:"name" json:"name"`
-	HashedSlug   pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
-	StartTime    pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime      pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	RecorderName string             `db:"recorder_name" json:"recorder_name"`
-	MaxPlayers   int32              `db:"max_players" json:"max_players"`
-	UploadedAt   pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
-	UploaderName string             `db:"uploader_name" json:"uploader_name"`
-	TenantSlug   pgtype.Text        `db:"tenant_slug" json:"tenant_slug"`
-	PlayerCount  int32              `db:"player_count" json:"player_count"`
+	ID             uuid.UUID          `db:"id" json:"id"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Name           string             `db:"name" json:"name"`
+	HashedSlug     pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime        pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	RecorderName   string             `db:"recorder_name" json:"recorder_name"`
+	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	Category       pgtype.Text        `db:"category" json:"category"`
+	UploadedAt     pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
+	UploaderName   string             `db:"uploader_name" json:"uploader_name"`
+	RealmName      pgtype.Text        `db:"realm_name" json:"realm_name"`
+	GuildName      pgtype.Text        `db:"guild_name" json:"guild_name"`
+	TenantSlug     pgtype.Text        `db:"tenant_slug" json:"tenant_slug"`
+	PlayerCount    int32              `db:"player_count" json:"player_count"`
 }
 
 func (q *sqlQuerier) ListInstancesForDiscordAnnouncement(ctx context.Context, runID uuid.UUID) ([]ListInstancesForDiscordAnnouncementRow, error) {
@@ -2499,8 +2508,12 @@ func (q *sqlQuerier) ListInstancesForDiscordAnnouncement(ctx context.Context, ru
 			&i.EndTime,
 			&i.RecorderName,
 			&i.MaxPlayers,
+			&i.DifficultyName,
+			&i.Category,
 			&i.UploadedAt,
 			&i.UploaderName,
+			&i.RealmName,
+			&i.GuildName,
 			&i.TenantSlug,
 			&i.PlayerCount,
 		); err != nil {

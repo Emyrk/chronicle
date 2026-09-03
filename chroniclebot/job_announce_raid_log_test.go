@@ -113,17 +113,19 @@ func TestClaimDiscordAnnouncementDeliveryAtMostOnce(t *testing.T) {
 
 type errorAnnouncementMessenger struct {
 	sendErr error
+	sent    *discordgo.MessageSend
 }
 
-func (m errorAnnouncementMessenger) ChannelMessageSendEmbed(string, *discordgo.MessageEmbed, ...discordgo.RequestOption) (*discordgo.Message, error) {
+func (m *errorAnnouncementMessenger) ChannelMessageSendComplex(_ string, message *discordgo.MessageSend, _ ...discordgo.RequestOption) (*discordgo.Message, error) {
+	m.sent = message
 	return nil, m.sendErr
 }
 
-func (errorAnnouncementMessenger) ChannelMessageEditEmbed(string, string, *discordgo.MessageEmbed, ...discordgo.RequestOption) (*discordgo.Message, error) {
+func (*errorAnnouncementMessenger) ChannelMessageEditComplex(*discordgo.MessageEdit, ...discordgo.RequestOption) (*discordgo.Message, error) {
 	return nil, nil
 }
 
-func (errorAnnouncementMessenger) ChannelMessageDelete(string, string, ...discordgo.RequestOption) error {
+func (*errorAnnouncementMessenger) ChannelMessageDelete(string, string, ...discordgo.RequestOption) error {
 	return nil
 }
 
@@ -167,9 +169,22 @@ func TestAnnouncementDeliveryErrorIsPersisted(t *testing.T) {
 
 	discordErr := errors.New(`HTTP 403 Forbidden, {"message": "Missing Permissions", "code": 50013}`)
 	bot := &Bot{config: Config{DB: store, AccessURL: "https://chronicle.example"}, logger: testutil.Logger(t)}
-	worker := &WorkerAnnounceRaidLog{bot: bot, messenger: errorAnnouncementMessenger{sendErr: discordErr}}
+	messenger := &errorAnnouncementMessenger{sendErr: discordErr}
+	worker := &WorkerAnnounceRaidLog{bot: bot, messenger: messenger}
 	err = worker.Work(ctx, &river.Job[ArgsAnnounceRaidLog]{Args: ArgsAnnounceRaidLog{LogGroupID: logGroupID, InstanceOrdinal: 0}})
 	require.ErrorContains(t, err, "Missing Permissions")
+	require.NotNil(t, messenger.sent)
+	require.NotNil(t, messenger.sent.AllowedMentions)
+	require.Empty(t, messenger.sent.AllowedMentions.Parse)
+	require.Equal(t, "New log uploaded to **"+guild.Name+"**", messenger.sent.Content)
+	require.Len(t, messenger.sent.Embeds, 1)
+	embed := messenger.sent.Embeds[0]
+	require.Equal(t, "RAID UPLOAD", embed.Author.Name)
+	require.Equal(t, "Molten Core", embed.Title)
+	require.NotZero(t, embed.Color)
+	require.Equal(t, guild.Name+" · Molten Core", embed.Footer.Text)
+	require.Len(t, embed.Fields, 2)
+	require.Equal(t, "BOSSES KILLED", embed.Fields[0].Name)
 
 	attempts, err := store.ListGuildDiscordAnnouncementAttempts(ctx, database.ListGuildDiscordAnnouncementAttemptsParams{
 		GuildID: guild.ID, LimitCount: 10,
@@ -241,6 +256,17 @@ func TestEffectiveRunID(t *testing.T) {
 		ID:               instanceID,
 		DuplicateGroupID: uuid.NullUUID{UUID: duplicateID, Valid: true},
 	}))
+}
+
+func TestAnnouncementFormatting(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, time.September, 1, 19, 0, 0, 0, time.UTC)
+	require.Equal(t, "51m", formatAnnouncementDuration(database.Timestamptz(start), database.Timestamptz(start.Add(51*time.Minute))))
+	require.Equal(t, "1h 15m", formatAnnouncementDuration(database.Timestamptz(start), database.Timestamptz(start.Add(75*time.Minute))))
+	require.Equal(t, "Heroic · 40-man", announcementVariant("Heroic", 40))
+	require.Equal(t, announcementColor("Molten Core"), announcementColor("molten core"))
+	require.NotZero(t, announcementColor("Onyxia's Lair"))
 }
 
 func TestInstanceURL(t *testing.T) {

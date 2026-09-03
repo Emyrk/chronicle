@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
@@ -49,8 +50,8 @@ func (a ArgsAnnounceRaidLog) InsertOpts() river.InsertOpts {
 }
 
 type discordAnnouncementMessenger interface {
-	ChannelMessageSendEmbed(string, *discordgo.MessageEmbed, ...discordgo.RequestOption) (*discordgo.Message, error)
-	ChannelMessageEditEmbed(string, string, *discordgo.MessageEmbed, ...discordgo.RequestOption) (*discordgo.Message, error)
+	ChannelMessageSendComplex(string, *discordgo.MessageSend, ...discordgo.RequestOption) (*discordgo.Message, error)
+	ChannelMessageEditComplex(*discordgo.MessageEdit, ...discordgo.RequestOption) (*discordgo.Message, error)
 	ChannelMessageDelete(string, string, ...discordgo.RequestOption) error
 }
 
@@ -216,7 +217,7 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 	}
 
 	announcement := reconciled.announcement
-	embed, err := w.buildAnnouncement(ctx, announcement.RunID)
+	messagePayload, err := w.buildAnnouncement(ctx, announcement.RunID)
 	if err != nil {
 		return err
 	}
@@ -230,7 +231,11 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 				slog.String("announcement_id", announcement.ID.String()))
 			return nil
 		}
-		if _, err := w.messenger.ChannelMessageEditEmbed(announcement.DiscordChannelID, announcement.DiscordMessageID.String, embed); err != nil {
+		edit := discordgo.NewMessageEdit(announcement.DiscordChannelID, announcement.DiscordMessageID.String).
+			SetContent(messagePayload.Content).
+			SetEmbeds(messagePayload.Embeds)
+		edit.AllowedMentions = messagePayload.AllowedMentions
+		if _, err := w.messenger.ChannelMessageEditComplex(edit); err != nil {
 			deliveryErr := fmt.Errorf("edit Discord announcement: %w", err)
 			if persistErr := w.setDeliveryError(ctx, announcement.ID, deliveryErr); persistErr != nil {
 				return errors.Join(deliveryErr, persistErr)
@@ -258,7 +263,7 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 		return fmt.Errorf("claim Discord announcement delivery: %w", err)
 	}
 
-	message, err := w.messenger.ChannelMessageSendEmbed(installation.AnnounceRaidLogsChannelID.String, embed)
+	message, err := w.messenger.ChannelMessageSendComplex(installation.AnnounceRaidLogsChannelID.String, messagePayload)
 	if err != nil {
 		deliveryErr := fmt.Errorf("send Discord announcement: %w", err)
 		if persistErr := w.setDeliveryError(ctx, announcement.ID, deliveryErr); persistErr != nil {
@@ -318,7 +323,54 @@ func (w *WorkerAnnounceRaidLog) instanceURL(id uuid.UUID, slug, tenantSlug pgtyp
 	return fmt.Sprintf("%s/instances/%s", baseURL, url.PathEscape(linkID))
 }
 
-func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uuid.UUID) (*discordgo.MessageEmbed, error) {
+func formatAnnouncementDuration(start, end pgtype.Timestamptz) string {
+	if !start.Valid || !end.Valid || !end.Time.After(start.Time) {
+		return "Duration unavailable"
+	}
+	duration := end.Time.Sub(start.Time).Round(time.Minute)
+	hours := int(duration / time.Hour)
+	minutes := int(duration%time.Hour) / int(time.Minute)
+	if hours > 0 && minutes > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
+
+func announcementColor(instanceName string) int {
+	palette := [...]int{
+		0xED4245, // red
+		0xF47B67, // coral
+		0xFAA61A, // amber
+		0x57F287, // green
+		0x1ABC9C, // teal
+		0x3498DB, // blue
+		0x5865F2, // blurple
+		0x9B59B6, // purple
+		0xE91E63, // pink
+	}
+	hash := uint32(2166136261)
+	for _, char := range strings.ToLower(instanceName) {
+		hash ^= uint32(char)
+		hash *= 16777619
+	}
+	return palette[int(hash%uint32(len(palette)))]
+}
+
+func announcementVariant(difficulty string, maxPlayers int32) string {
+	parts := make([]string, 0, 2)
+	if difficulty != "" {
+		parts = append(parts, difficulty)
+	}
+	if maxPlayers > 0 {
+		parts = append(parts, fmt.Sprintf("%d-man", maxPlayers))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uuid.UUID) (*discordgo.MessageSend, error) {
 	logs, err := w.bot.config.DB.ListInstancesForDiscordAnnouncement(ctx, runID)
 	if err != nil {
 		return nil, fmt.Errorf("list announcement logs: %w", err)
@@ -332,47 +384,95 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 	if err != nil {
 		return nil, fmt.Errorf("list announcement encounters: %w", err)
 	}
+	encounterCounts := map[uuid.UUID]int{best.ID: len(bestEncounters)}
 	for _, candidate := range logs[1:] {
 		encounters, err := w.bot.config.DB.ListDiscordAnnouncementEncounters(ctx, candidate.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list announcement encounters: %w", err)
 		}
+		encounterCounts[candidate.ID] = len(encounters)
 		if len(encounters) > len(bestEncounters) {
 			best = candidate
 			bestEncounters = encounters
 		}
 	}
 
-	links := make([]string, 0, len(logs))
-	for _, log := range logs {
-		label := log.UploaderName
-		if log.RecorderName != "" {
-			label += " · " + log.RecorderName
-		}
-		links = append(links, fmt.Sprintf("[%s](%s)", label, w.instanceURL(log.ID, log.HashedSlug, log.TenantSlug)))
+	guildName := best.GuildName.String
+	if guildName == "" {
+		guildName = "this guild"
+	}
+	content := fmt.Sprintf("New log uploaded to **%s**", guildName)
+	if len(logs) > 1 {
+		content = fmt.Sprintf("%d logs uploaded to **%s**", len(logs), guildName)
 	}
 
-	bosses := make([]string, 0, len(bestEncounters))
-	for _, encounter := range bestEncounters {
-		marker := "❌"
-		if encounter.KillType == database.KillTypeClean || encounter.KillType == database.KillTypePartial {
-			marker = "✅"
-		}
-		bosses = append(bosses, marker+" "+encounter.Name)
-	}
-	if len(bosses) == 0 {
-		bosses = append(bosses, "No boss encounters recorded")
+	variant := announcementVariant(best.DifficultyName, best.MaxPlayers)
+	title := best.Name
+	if variant != "" {
+		title += " · " + variant
 	}
 
-	return &discordgo.MessageEmbed{
-		Title:       best.Name,
+	details := make([]string, 0, 3)
+	if best.StartTime.Valid {
+		details = append(details, best.StartTime.Time.Format("Jan 2, 2006"))
+	}
+	if best.RealmName.Valid && best.RealmName.String != "" {
+		details = append(details, best.RealmName.String)
+	}
+	details = append(details, formatAnnouncementDuration(best.StartTime, best.EndTime))
+
+	fields := make([]*discordgo.MessageEmbedField, 0, 3)
+	if len(logs) == 1 {
+		fields = append(fields,
+			&discordgo.MessageEmbedField{Name: "BOSSES KILLED", Value: fmt.Sprintf("%d / %d", countKilledEncounters(bestEncounters), len(bestEncounters)), Inline: true},
+			&discordgo.MessageEmbedField{Name: "PLAYERS", Value: fmt.Sprintf("%d", best.PlayerCount), Inline: true},
+		)
+		if variant != "" {
+			fields = append(fields, &discordgo.MessageEmbedField{Name: "VARIANT", Value: variant, Inline: true})
+		}
+	} else {
+		lines := make([]string, 0, len(logs))
+		for i, log := range logs {
+			label := log.RecorderName
+			if label == "" {
+				label = log.UploaderName
+			}
+			lines = append(lines, fmt.Sprintf("[Log %d](%s) · %s · %s · %d bosses", i+1, w.instanceURL(log.ID, log.HashedSlug, log.TenantSlug), label, formatAnnouncementDuration(log.StartTime, log.EndTime), encounterCounts[log.ID]))
+		}
+		fields = append(fields, &discordgo.MessageEmbedField{Name: "UPLOADED LOGS", Value: strings.Join(lines, "\n")})
+	}
+
+	category := strings.ToUpper(best.Category.String)
+	if category == "" {
+		category = "LOG"
+	}
+	embed := &discordgo.MessageEmbed{
+		Author:      &discordgo.MessageEmbedAuthor{Name: category + " UPLOAD"},
+		Title:       title,
 		URL:         w.instanceURL(best.ID, best.HashedSlug, best.TenantSlug),
-		Description: strings.Join(bosses, "\n"),
-		Fields: []*discordgo.MessageEmbedField{
-			{Name: "Logs", Value: strings.Join(links, "\n")},
-		},
-		Color: 0x5865F2,
+		Description: strings.Join(details, " · "),
+		Fields:      fields,
+		Color:       announcementColor(best.Name),
+		Footer:      &discordgo.MessageEmbedFooter{Text: guildName + " · " + best.Name},
+	}
+	if best.UploadedAt.Valid {
+		embed.Timestamp = best.UploadedAt.Time.Format(time.RFC3339)
+	}
+	return &discordgo.MessageSend{
+		Content:         content,
+		Embeds:          []*discordgo.MessageEmbed{embed},
+		AllowedMentions: &discordgo.MessageAllowedMentions{Parse: []discordgo.AllowedMentionType{}},
 	}, nil
+}
+
+func countKilledEncounters(encounters []database.ListDiscordAnnouncementEncountersRow) int {
+	count := 0
+	for _, encounter := range encounters {
+		if encounter.KillType == database.KillTypeClean || encounter.KillType == database.KillTypePartial {
+			count++
+		}
+	}
+	return count
 }
 
 func discordMessageUnreachable(err error) bool {

@@ -131,8 +131,12 @@ SELECT
   li.end_time,
   li.recorder_name,
   li.max_players,
+  li.difficulty_name,
+  li.category,
   wlg.created_at AS uploaded_at,
   u.username AS uploader_name,
+  wsr.name AS realm_name,
+  g.name AS guild_name,
   t.slug AS tenant_slug,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
 FROM log_instances li
@@ -141,6 +145,7 @@ JOIN users u ON u.id = wlg.owner
 LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN wow_servers ws ON ws.id = wsr.server_id
 LEFT JOIN tenants t ON t.id = ws.tenant_id
+LEFT JOIN guilds g ON g.id = li.guild_id
 WHERE COALESCE(li.duplicate_group_id, li.id) = @run_id::uuid
 ORDER BY wlg.created_at ASC, li.start_time ASC NULLS LAST, li.id ASC;
 
