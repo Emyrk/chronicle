@@ -337,24 +337,17 @@ func TestAnnouncementFormatting(t *testing.T) {
 func TestInstanceURL(t *testing.T) {
 	t.Parallel()
 
-	id := uuid.New()
 	worker := &WorkerAnnounceRaidLog{bot: &Bot{config: Config{
 		AccessURL:     "https://legacy.chronicle.example/",
 		PrimaryDomain: "chronicle.example",
 	}}}
 	require.Equal(t, "https://legacy.chronicle.example/instances/durable-slug", worker.instanceURL(
-		id,
 		pgtype.Text{String: "durable-slug", Valid: true},
 		pgtype.Text{},
 	))
 	require.Equal(t, "https://epoch.chronicle.example/instances/durable-slug", worker.instanceURL(
-		id,
 		pgtype.Text{String: "durable-slug", Valid: true},
 		pgtype.Text{String: "epoch", Valid: true},
 	))
-	require.Equal(t, "https://legacy.chronicle.example/instances/"+id.String(), worker.instanceURL(
-		id,
-		pgtype.Text{},
-		pgtype.Text{},
-	))
+	require.Empty(t, worker.instanceURL(pgtype.Text{}, pgtype.Text{}))
 }

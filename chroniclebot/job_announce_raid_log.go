@@ -306,10 +306,9 @@ func (w *WorkerAnnounceRaidLog) deleteObsoleteMessage(announcement *database.Gui
 	}
 }
 
-func (w *WorkerAnnounceRaidLog) instanceURL(id uuid.UUID, slug, tenantSlug pgtype.Text) string {
-	linkID := id.String()
-	if slug.Valid && slug.String != "" {
-		linkID = slug.String
+func (w *WorkerAnnounceRaidLog) instanceURL(slug, tenantSlug pgtype.Text) string {
+	if !slug.Valid || slug.String == "" {
+		return ""
 	}
 
 	baseURL := strings.TrimRight(w.bot.config.AccessURL, "/")
@@ -321,7 +320,7 @@ func (w *WorkerAnnounceRaidLog) instanceURL(id uuid.UUID, slug, tenantSlug pgtyp
 			}).String()
 		}
 	}
-	return fmt.Sprintf("%s/instances/%s", baseURL, url.PathEscape(linkID))
+	return fmt.Sprintf("%s/instances/%s", baseURL, url.PathEscape(slug.String))
 }
 
 func formatDuration(duration time.Duration) string {
@@ -451,7 +450,11 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 			if label == "" {
 				label = log.UploaderName
 			}
-			lines = append(lines, fmt.Sprintf("[Log %d](%s) · %s · %s · %d bosses", i+1, w.instanceURL(log.ID, log.HashedSlug, log.TenantSlug), label, announcementDuration(log), encounterCounts[log.ID]))
+			logName := fmt.Sprintf("Log %d", i+1)
+			if logURL := w.instanceURL(log.HashedSlug, log.TenantSlug); logURL != "" {
+				logName = fmt.Sprintf("[%s](%s)", logName, logURL)
+			}
+			lines = append(lines, fmt.Sprintf("%s · %s · %s · %d bosses", logName, label, announcementDuration(log), encounterCounts[log.ID]))
 		}
 		fields = append(fields, &discordgo.MessageEmbedField{Name: "UPLOADED LOGS", Value: strings.Join(lines, "\n")})
 	}
@@ -473,7 +476,7 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 	embed := &discordgo.MessageEmbed{
 		Author: &discordgo.MessageEmbedAuthor{Name: category + " UPLOAD"},
 		Title:  title,
-		URL:    w.instanceURL(best.ID, best.HashedSlug, best.TenantSlug),
+		URL:    w.instanceURL(best.HashedSlug, best.TenantSlug),
 		Fields: fields,
 		Color:  announcementColor(best.Name),
 		Footer: &discordgo.MessageEmbedFooter{Text: strings.Join(footerParts, " · ")},
