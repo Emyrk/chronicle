@@ -1359,6 +1359,26 @@ export interface GuildCharacterRosterResponse {
 }
 
 // From chroniclesdk/guild_page.go
+export interface GuildDiscordAnnouncementAttempt {
+    readonly id: string;
+    readonly run_id: string;
+    readonly discord_channel_id: string;
+    readonly discord_message_id?: string;
+    readonly delivery_attempted_at?: string;
+    readonly delivery_error?: string;
+    readonly instance_slug?: string;
+    readonly status: string;
+    readonly created_at: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildDiscordAnnouncementAttemptsResponse {
+    readonly attempts: readonly GuildDiscordAnnouncementAttempt[];
+    readonly has_more: boolean;
+}
+
+// From chroniclesdk/guild_page.go
 export interface GuildDiscordIntegrationSettings {
     readonly enabled: boolean;
     readonly available: boolean;

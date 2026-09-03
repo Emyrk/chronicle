@@ -812,6 +812,28 @@ CREATE TABLE guild_discord_installations (
     CONSTRAINT guild_discord_installations_announce_raid_logs_scope_check CHECK ((announce_raid_logs_scope = ANY (ARRAY['raids_only'::text, 'dungeons_only'::text, 'all'::text])))
 );
 
+CREATE TABLE guild_discord_log_announcement_sources (
+    announcement_id uuid NOT NULL,
+    log_group_id uuid NOT NULL,
+    instance_ordinal integer NOT NULL,
+    instance_slug text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT guild_discord_log_announcement_sources_instance_ordinal_check CHECK ((instance_ordinal >= 0))
+);
+
+CREATE TABLE guild_discord_log_announcements (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    guild_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    discord_channel_id text NOT NULL,
+    discord_message_id text,
+    delivery_attempted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    delivery_error text
+);
+
 CREATE TABLE guild_join_requests (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     guild_id uuid NOT NULL,
@@ -1061,7 +1083,9 @@ CREATE TABLE log_instances (
     difficulty_name text DEFAULT ''::text NOT NULL,
     max_players integer DEFAULT 0 NOT NULL,
     dynamic_difficulty integer DEFAULT 0 NOT NULL,
-    vehicle_control_intervals jsonb DEFAULT '{}'::jsonb NOT NULL
+    vehicle_control_intervals jsonb DEFAULT '{}'::jsonb NOT NULL,
+    category text,
+    CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text])))
 );
 
 COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild run.';
@@ -1988,6 +2012,15 @@ ALTER TABLE ONLY guild_discord_install_states
 ALTER TABLE ONLY guild_discord_installations
     ADD CONSTRAINT guild_discord_installations_pkey PRIMARY KEY (guild_id);
 
+ALTER TABLE ONLY guild_discord_log_announcement_sources
+    ADD CONSTRAINT guild_discord_log_announcement_sources_pkey PRIMARY KEY (log_group_id, instance_ordinal);
+
+ALTER TABLE ONLY guild_discord_log_announcements
+    ADD CONSTRAINT guild_discord_log_announcements_guild_id_run_id_key UNIQUE (guild_id, run_id);
+
+ALTER TABLE ONLY guild_discord_log_announcements
+    ADD CONSTRAINT guild_discord_log_announcements_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY guild_join_requests
     ADD CONSTRAINT guild_join_requests_guild_id_user_id_key UNIQUE (guild_id, user_id);
 
@@ -2277,6 +2310,10 @@ CREATE INDEX gear_stat_weights_user_tenant_idx ON gear_stat_weights USING btree 
 CREATE INDEX guild_discord_install_states_expires_at_idx ON guild_discord_install_states USING btree (expires_at);
 
 CREATE INDEX guild_discord_installations_discord_guild_id_idx ON guild_discord_installations USING btree (discord_guild_id);
+
+CREATE INDEX guild_discord_log_announcement_sources_announcement_id_idx ON guild_discord_log_announcement_sources USING btree (announcement_id);
+
+CREATE UNIQUE INDEX guild_discord_log_announcement_sources_slug_idx ON guild_discord_log_announcement_sources USING btree (instance_slug) WHERE (instance_slug IS NOT NULL);
 
 CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 
@@ -2629,6 +2666,15 @@ ALTER TABLE ONLY guild_discord_installations
 
 ALTER TABLE ONLY guild_discord_installations
     ADD CONSTRAINT guild_discord_installations_installed_by_fkey FOREIGN KEY (installed_by) REFERENCES users(id);
+
+ALTER TABLE ONLY guild_discord_log_announcement_sources
+    ADD CONSTRAINT guild_discord_log_announcement_sources_announcement_id_fkey FOREIGN KEY (announcement_id) REFERENCES guild_discord_log_announcements(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_discord_log_announcement_sources
+    ADD CONSTRAINT guild_discord_log_announcement_sources_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_discord_log_announcements
+    ADD CONSTRAINT guild_discord_log_announcements_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY guild_join_requests
     ADD CONSTRAINT guild_join_requests_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;

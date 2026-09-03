@@ -20,15 +20,16 @@ import (
 
 // Re-export constants from riverconst for backward compatibility.
 const (
-	QueueLogParsing  = riverconst.QueueLogParsing
-	QueueDiscordSync = riverconst.QueueDiscordSync
-	QueueRetention   = riverconst.QueueRetention
-	QueueRankings    = riverconst.QueueRankings
-	QueueResync      = riverconst.QueueResync
-	PriorityHighest  = riverconst.PriorityHighest
-	PriorityHigh     = riverconst.PriorityHigh
-	PriorityDefault  = riverconst.PriorityDefault
-	PriorityLow      = riverconst.PriorityLow
+	QueueLogParsing           = riverconst.QueueLogParsing
+	QueueDiscordSync          = riverconst.QueueDiscordSync
+	QueueDiscordAnnouncements = riverconst.QueueDiscordAnnouncements
+	QueueRetention            = riverconst.QueueRetention
+	QueueRankings             = riverconst.QueueRankings
+	QueueResync               = riverconst.QueueResync
+	PriorityHighest           = riverconst.PriorityHighest
+	PriorityHigh              = riverconst.PriorityHigh
+	PriorityDefault           = riverconst.PriorityDefault
+	PriorityLow               = riverconst.PriorityLow
 )
 
 type Options struct {

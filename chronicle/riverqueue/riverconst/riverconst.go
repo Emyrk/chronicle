@@ -3,11 +3,12 @@
 package riverconst
 
 const (
-	QueueLogParsing  = "log-parsing"
-	QueueDiscordSync = "discord-sync"
-	QueueRetention   = "retention"
-	QueueRankings    = "rankings"
-	QueueResync      = "resync"
+	QueueLogParsing           = "log-parsing"
+	QueueDiscordSync          = "discord-sync"
+	QueueDiscordAnnouncements = "discord-announcements"
+	QueueRetention            = "retention"
+	QueueRankings             = "rankings"
+	QueueResync               = "resync"
 )
 
 const (

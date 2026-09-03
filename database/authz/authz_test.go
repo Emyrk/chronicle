@@ -111,6 +111,7 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 	leaderID := uuid.New()
 	memberID := uuid.New()
 	technicalAdminID := uuid.New()
+	guildModeratorID := uuid.New()
 
 	b := policy.New()
 	guild := b.Guild(guildID)
@@ -119,6 +120,7 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 	guild.Leader(b.User(leaderID))
 	guild.Member(b.User(memberID))
 	chronicle.Technical_admin(b.User(technicalAdminID))
+	chronicle.Moderate_guilds(b.User(guildModeratorID))
 	_, err := zed.Write(ctx, *b.Txn())
 	require.NoError(t, err)
 
@@ -138,13 +140,17 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 	checkGuildAdmin(t, leaderID, true)
 	checkGuildAdmin(t, memberID, false)
 	checkGuildAdmin(t, technicalAdminID, true)
+	checkGuildAdmin(t, guildModeratorID, true)
 
-	leaderCanEnable, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdminister_authz_User(policy.New().User(leaderID)))
+	leaderCanEnable, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_guilds_User(policy.New().User(leaderID)))
 	require.NoError(t, err)
 	require.False(t, leaderCanEnable)
-	technicalAdminCanEnable, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdminister_authz_User(policy.New().User(technicalAdminID)))
+	technicalAdminCanEnable, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_guilds_User(policy.New().User(technicalAdminID)))
 	require.NoError(t, err)
 	require.True(t, technicalAdminCanEnable)
+	guildModeratorCanEnable, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_guilds_User(policy.New().User(guildModeratorID)))
+	require.NoError(t, err)
+	require.True(t, guildModeratorCanEnable)
 
 	checkManage(t, leaderID, false)
 
@@ -156,6 +162,7 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 	checkManage(t, leaderID, true)
 	checkManage(t, memberID, false)
 	checkManage(t, technicalAdminID, true)
+	checkManage(t, guildModeratorID, true)
 
 	require.NoError(t, zed.SetGuildDiscordBotEnabled(ctx, guildID, false))
 	checkManage(t, leaderID, false)

@@ -6,9 +6,11 @@ import (
 
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 
 	"github.com/coder/serpent"
 )
@@ -45,8 +47,10 @@ func (s *Service) Configures() []string { return []string{} }
 func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
+		serviceaccessurl.OnAccessURL(),
 		servicedbstore.OnDatabaseStore(),
 		serviceauthz.OnAuthz(),
+		servicetenant.OnTenant(),
 	}
 }
 
@@ -54,13 +58,16 @@ func (s *Service) Start(ctx context.Context) error {
 	logger := servicelogger.Logger(s.broker)
 	db := servicedbstore.DatabaseStore(s.broker)
 	zed := serviceauthz.Authz(s.broker)
+	tenant := servicetenant.Tenant(s.broker)
 
 	bot, err := chroniclebot.New(ctx, logger, chroniclebot.Config{
-		Token:    s.cfg.Token,
-		GuildID:  s.cfg.GuildID,
-		Disabled: s.cfg.Disabled,
-		DB:       db,
-		Zed:      zed,
+		Token:         s.cfg.Token,
+		GuildID:       s.cfg.GuildID,
+		Disabled:      s.cfg.Disabled,
+		DB:            db,
+		Zed:           zed,
+		AccessURL:     serviceaccessurl.AccessURL(s.broker),
+		PrimaryDomain: tenant.PrimaryDomain(),
 	})
 	if err != nil {
 		return fmt.Errorf("create chronicle bot: %w", err)

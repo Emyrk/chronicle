@@ -1343,6 +1343,27 @@ type GuildDiscordInstallation struct {
 	AnnounceRaidLogsChannelID pgtype.Text        `db:"announce_raid_logs_channel_id" json:"announce_raid_logs_channel_id"`
 }
 
+type GuildDiscordLogAnnouncement struct {
+	ID                  uuid.UUID          `db:"id" json:"id"`
+	GuildID             uuid.UUID          `db:"guild_id" json:"guild_id"`
+	RunID               uuid.UUID          `db:"run_id" json:"run_id"`
+	DiscordChannelID    string             `db:"discord_channel_id" json:"discord_channel_id"`
+	DiscordMessageID    pgtype.Text        `db:"discord_message_id" json:"discord_message_id"`
+	DeliveryAttemptedAt pgtype.Timestamptz `db:"delivery_attempted_at" json:"delivery_attempted_at"`
+	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DeliveryError       pgtype.Text        `db:"delivery_error" json:"delivery_error"`
+}
+
+type GuildDiscordLogAnnouncementSource struct {
+	AnnouncementID  uuid.UUID          `db:"announcement_id" json:"announcement_id"`
+	LogGroupID      uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	InstanceOrdinal int32              `db:"instance_ordinal" json:"instance_ordinal"`
+	InstanceSlug    pgtype.Text        `db:"instance_slug" json:"instance_slug"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type GuildJoinRequest struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`
@@ -1498,6 +1519,7 @@ type LogInstance struct {
 	MaxPlayers              int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty       int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
 	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
+	Category                pgtype.Text        `db:"category" json:"category"`
 }
 
 type LogInstanceEncounter struct {

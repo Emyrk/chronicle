@@ -20,10 +20,12 @@ type Config struct {
 	// Token is the bot token from Discord Developer Portal.
 	Token string
 	// GuildID is your Discord server ID. If empty, commands are registered globally.
-	GuildID  string
-	Disabled bool
-	DB       database.Store
-	Zed      *authz.Authz
+	GuildID       string
+	Disabled      bool
+	DB            database.Store
+	Zed           *authz.Authz
+	AccessURL     string
+	PrimaryDomain string
 }
 
 // Bot represents a Discord bot instance.
@@ -242,7 +244,16 @@ func (b *Bot) LeaveGuild(guildID string) error {
 	return nil
 }
 
-// WritableTextChannels returns text channels where the bot can view and send messages.
+func hasDiscordAnnouncementPermissions(permissions int64) bool {
+	const required = discordgo.PermissionViewChannel |
+		discordgo.PermissionSendMessages |
+		discordgo.PermissionEmbedLinks |
+		discordgo.PermissionCreatePublicThreads |
+		discordgo.PermissionSendMessagesInThreads
+	return permissions&required == required
+}
+
+// WritableTextChannels returns text channels where the bot can send announcements and create public threads.
 func (b *Bot) WritableTextChannels(guildID string) ([]*discordgo.Channel, error) {
 	if !b.Available() || b.session == nil || b.session.State == nil || b.session.State.User == nil {
 		return nil, fmt.Errorf("discord bot is unavailable")
@@ -260,8 +271,7 @@ func (b *Bot) WritableTextChannels(guildID string) ([]*discordgo.Channel, error)
 		if err != nil {
 			return nil, fmt.Errorf("get Discord channel %s permissions: %w", channel.ID, err)
 		}
-		const required = discordgo.PermissionViewChannel | discordgo.PermissionSendMessages
-		if permissions&required == required {
+		if hasDiscordAnnouncementPermissions(permissions) {
 			writable = append(writable, channel)
 		}
 	}

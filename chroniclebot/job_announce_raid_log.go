@@ -1,0 +1,519 @@
+package chroniclebot
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"math"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
+)
+
+const KindAnnounceRaidLog = "announce-raid-log"
+
+type ArgsAnnounceRaidLog struct {
+	LogGroupID      uuid.UUID `json:"log_group_id"`
+	InstanceOrdinal int32     `json:"instance_ordinal"`
+}
+
+func (a ArgsAnnounceRaidLog) Kind() string { return KindAnnounceRaidLog }
+
+func (a ArgsAnnounceRaidLog) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		Queue:    riverconst.QueueDiscordAnnouncements,
+		Priority: riverconst.PriorityDefault,
+		// Creating a Discord message and persisting its returned ID cannot be
+		// atomic. Retrying after Discord accepted the message but before the ID
+		// was stored could create a duplicate, so delivery is attempted once.
+		MaxAttempts: 1,
+		UniqueOpts: river.UniqueOpts{
+			ByArgs: true,
+			ByState: []rivertype.JobState{
+				rivertype.JobStateScheduled,
+				rivertype.JobStatePending,
+				rivertype.JobStateAvailable,
+				rivertype.JobStateRunning,
+				rivertype.JobStateRetryable,
+			},
+		},
+	}
+}
+
+type discordAnnouncementMessenger interface {
+	ChannelMessageSendComplex(string, *discordgo.MessageSend, ...discordgo.RequestOption) (*discordgo.Message, error)
+	ChannelMessageEditComplex(*discordgo.MessageEdit, ...discordgo.RequestOption) (*discordgo.Message, error)
+	ChannelMessageDelete(string, string, ...discordgo.RequestOption) error
+}
+
+type WorkerAnnounceRaidLog struct {
+	river.WorkerDefaults[ArgsAnnounceRaidLog]
+	bot       *Bot
+	messenger discordAnnouncementMessenger
+}
+
+func (b *Bot) NewWorkerAnnounceRaidLog() river.Worker[ArgsAnnounceRaidLog] {
+	return &WorkerAnnounceRaidLog{bot: b, messenger: b.session}
+}
+
+type announcementReconciliation struct {
+	announcement database.GuildDiscordLogAnnouncement
+	obsolete     *database.GuildDiscordLogAnnouncement
+}
+
+func effectiveRunID(instance database.LogInstance) uuid.UUID {
+	if instance.DuplicateGroupID.Valid {
+		return instance.DuplicateGroupID.UUID
+	}
+	return instance.ID
+}
+
+func announcementScopeMatches(scope, category string) bool {
+	switch scope {
+	case "all":
+		return category == "raid" || category == "dungeon"
+	case "raids_only":
+		return category == "raid"
+	case "dungeons_only":
+		return category == "dungeon"
+	default:
+		return false
+	}
+}
+
+func (w *WorkerAnnounceRaidLog) reconcile(
+	ctx context.Context,
+	instance database.LogInstance,
+	ordinal int32,
+	channelID string,
+) (announcementReconciliation, error) {
+	var result announcementReconciliation
+	err := w.bot.config.DB.InTx(ctx, func(tx database.Store) error {
+		source, sourceErr := tx.GetDiscordAnnouncementSource(ctx, database.GetDiscordAnnouncementSourceParams{
+			LogGroupID: instance.LogGroupID, InstanceOrdinal: ordinal,
+		})
+		if errors.Is(sourceErr, pgx.ErrNoRows) && instance.HashedSlug.Valid {
+			bySlug, slugErr := tx.GetDiscordAnnouncementSourceBySlug(ctx, instance.HashedSlug)
+			sourceErr = slugErr
+			if slugErr == nil {
+				source = database.GetDiscordAnnouncementSourceRow(bySlug)
+			}
+			if sourceErr == nil && (source.GuildDiscordLogAnnouncementSource.LogGroupID != instance.LogGroupID ||
+				source.GuildDiscordLogAnnouncementSource.InstanceOrdinal != ordinal) {
+				if err := tx.DeleteDiscordAnnouncementSource(ctx, database.DeleteDiscordAnnouncementSourceParams{
+					LogGroupID:      source.GuildDiscordLogAnnouncementSource.LogGroupID,
+					InstanceOrdinal: source.GuildDiscordLogAnnouncementSource.InstanceOrdinal,
+				}); err != nil {
+					return err
+				}
+			}
+		}
+		if sourceErr != nil && !errors.Is(sourceErr, pgx.ErrNoRows) {
+			return sourceErr
+		}
+
+		runID := effectiveRunID(instance)
+		byRun, runErr := tx.GetDiscordAnnouncementByRun(ctx, database.GetDiscordAnnouncementByRunParams{
+			GuildID: instance.GuildID.UUID, RunID: runID,
+		})
+		if runErr != nil && !errors.Is(runErr, pgx.ErrNoRows) {
+			return runErr
+		}
+
+		slug := instance.HashedSlug
+		switch {
+		case sourceErr == nil && runErr == nil && source.GuildDiscordLogAnnouncement.ID != byRun.ID:
+			old := source.GuildDiscordLogAnnouncement
+			if err := tx.MoveDiscordAnnouncementSources(ctx, database.MoveDiscordAnnouncementSourcesParams{
+				ToAnnouncementID: byRun.ID, FromAnnouncementID: old.ID,
+			}); err != nil {
+				return err
+			}
+			if err := tx.DeleteDiscordAnnouncement(ctx, old.ID); err != nil {
+				return err
+			}
+			result.announcement = byRun
+			result.obsolete = &old
+		case sourceErr == nil:
+			current := source.GuildDiscordLogAnnouncement
+			if current.RunID != runID {
+				var err error
+				current, err = tx.UpdateDiscordAnnouncementRun(ctx, database.UpdateDiscordAnnouncementRunParams{RunID: runID, ID: current.ID})
+				if err != nil {
+					return err
+				}
+			}
+			result.announcement = current
+		case runErr == nil:
+			result.announcement = byRun
+		case errors.Is(sourceErr, pgx.ErrNoRows) && errors.Is(runErr, pgx.ErrNoRows):
+			created, err := tx.UpsertDiscordAnnouncement(ctx, database.UpsertDiscordAnnouncementParams{
+				GuildID: instance.GuildID.UUID, RunID: runID, DiscordChannelID: channelID,
+			})
+			if err != nil {
+				return err
+			}
+			result.announcement = created
+		}
+
+		_, err := tx.UpsertDiscordAnnouncementSource(ctx, database.UpsertDiscordAnnouncementSourceParams{
+			AnnouncementID:  result.announcement.ID,
+			InstanceSlug:    slug,
+			LogGroupID:      instance.LogGroupID,
+			InstanceOrdinal: ordinal,
+		})
+		return err
+	}, nil)
+	return result, err
+}
+
+func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnnounceRaidLog]) error {
+	if !w.bot.Available() {
+		return nil
+	}
+	instanceID, err := w.bot.config.DB.GetLogGroupInstanceIDByOrdinal(ctx, database.GetLogGroupInstanceIDByOrdinalParams{
+		LogGroupID: job.Args.LogGroupID, InstanceOrdinal: job.Args.InstanceOrdinal,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("resolve instance ordinal: %w", err)
+	}
+	instance, err := w.bot.config.DB.GetLogInstanceForDiscordAnnouncement(ctx, instanceID)
+	if err != nil {
+		return fmt.Errorf("load instance: %w", err)
+	}
+	if !instance.GuildID.Valid || !instance.Category.Valid {
+		return nil
+	}
+	installation, err := w.bot.config.DB.GetGuildDiscordInstallation(ctx, instance.GuildID.UUID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load Discord installation: %w", err)
+	}
+	if !installation.AnnounceRaidLogs || !installation.AnnounceRaidLogsChannelID.Valid ||
+		!announcementScopeMatches(installation.AnnounceRaidLogsScope, instance.Category.String) {
+		return nil
+	}
+
+	reconciled, err := w.reconcile(ctx, instance, job.Args.InstanceOrdinal, installation.AnnounceRaidLogsChannelID.String)
+	if err != nil {
+		return fmt.Errorf("reconcile announcement: %w", err)
+	}
+	if reconciled.obsolete != nil {
+		w.deleteObsoleteMessage(reconciled.obsolete)
+	}
+
+	announcement := reconciled.announcement
+	messagePayload, err := w.buildAnnouncement(ctx, announcement.RunID)
+	if err != nil {
+		return err
+	}
+	if w.messenger == nil {
+		return nil
+	}
+
+	if announcement.DiscordMessageID.Valid {
+		if announcement.DiscordChannelID != installation.AnnounceRaidLogsChannelID.String {
+			w.bot.logger.Info("Discord announcement channel changed; leaving existing message untouched",
+				slog.String("announcement_id", announcement.ID.String()))
+			return nil
+		}
+		edit := discordgo.NewMessageEdit(announcement.DiscordChannelID, announcement.DiscordMessageID.String).
+			SetContent(messagePayload.Content).
+			SetEmbeds(messagePayload.Embeds)
+		edit.AllowedMentions = messagePayload.AllowedMentions
+		if _, err := w.messenger.ChannelMessageEditComplex(edit); err != nil {
+			deliveryErr := fmt.Errorf("edit Discord announcement: %w", err)
+			if persistErr := w.setDeliveryError(ctx, announcement.ID, deliveryErr); persistErr != nil {
+				return errors.Join(deliveryErr, persistErr)
+			}
+			if discordMessageUnreachable(err) {
+				w.bot.logger.Warn("Discord announcement is no longer reachable", slog.String("error", err.Error()))
+				return nil
+			}
+			return deliveryErr
+		}
+		if err := w.setDeliveryError(ctx, announcement.ID, nil); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Claim creation before contacting Discord. If Discord accepts the message but
+	// Chronicle fails before storing its ID, subsequent jobs intentionally skip
+	// creation rather than risk spamming the channel with duplicates.
+	announcement, err = w.bot.config.DB.ClaimDiscordAnnouncementDelivery(ctx, announcement.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("claim Discord announcement delivery: %w", err)
+	}
+
+	message, err := w.messenger.ChannelMessageSendComplex(installation.AnnounceRaidLogsChannelID.String, messagePayload)
+	if err != nil {
+		deliveryErr := fmt.Errorf("send Discord announcement: %w", err)
+		if persistErr := w.setDeliveryError(ctx, announcement.ID, deliveryErr); persistErr != nil {
+			return errors.Join(deliveryErr, persistErr)
+		}
+		return deliveryErr
+	}
+	_, err = w.bot.config.DB.SetDiscordAnnouncementMessage(ctx, database.SetDiscordAnnouncementMessageParams{
+		DiscordChannelID: installation.AnnounceRaidLogsChannelID.String,
+		DiscordMessageID: pgtype.Text{String: message.ID, Valid: true},
+		ID:               announcement.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("persist Discord message ID: %w", err)
+	}
+	return nil
+}
+
+func (w *WorkerAnnounceRaidLog) setDeliveryError(ctx context.Context, announcementID uuid.UUID, deliveryErr error) error {
+	value := pgtype.Text{}
+	if deliveryErr != nil {
+		value = pgtype.Text{String: deliveryErr.Error(), Valid: true}
+	}
+	if err := w.bot.config.DB.SetDiscordAnnouncementDeliveryError(ctx, database.SetDiscordAnnouncementDeliveryErrorParams{
+		DeliveryError: value,
+		ID:            announcementID,
+	}); err != nil {
+		return fmt.Errorf("persist Discord announcement delivery error: %w", err)
+	}
+	return nil
+}
+
+func (w *WorkerAnnounceRaidLog) deleteObsoleteMessage(announcement *database.GuildDiscordLogAnnouncement) {
+	if w.messenger == nil || !announcement.DiscordMessageID.Valid {
+		return
+	}
+	if err := w.messenger.ChannelMessageDelete(announcement.DiscordChannelID, announcement.DiscordMessageID.String); err != nil {
+		w.bot.logger.Warn("failed to delete superseded Discord announcement", slog.String("error", err.Error()))
+	}
+}
+
+func (w *WorkerAnnounceRaidLog) instanceURL(slug, tenantSlug pgtype.Text) string {
+	if !slug.Valid || slug.String == "" {
+		return ""
+	}
+
+	baseURL := strings.TrimRight(w.bot.config.AccessURL, "/")
+	if tenantSlug.Valid && tenantSlug.String != "" && w.bot.config.PrimaryDomain != "" {
+		if accessURL, err := url.Parse(w.bot.config.AccessURL); err == nil && accessURL.Scheme != "" {
+			baseURL = (&url.URL{
+				Scheme: accessURL.Scheme,
+				Host:   tenantSlug.String + "." + w.bot.config.PrimaryDomain,
+			}).String()
+		}
+	}
+	return fmt.Sprintf("%s/instances/%s", baseURL, url.PathEscape(slug.String))
+}
+
+func formatDuration(duration time.Duration) string {
+	duration = duration.Round(time.Minute)
+	hours := int(duration / time.Hour)
+	minutes := int(duration%time.Hour) / int(time.Minute)
+	if hours > 0 && minutes > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
+
+func formatAnnouncementDuration(start, end pgtype.Timestamptz) string {
+	if !start.Valid || !end.Valid || !end.Time.After(start.Time) {
+		return "Duration unavailable"
+	}
+	return formatDuration(end.Time.Sub(start.Time))
+}
+
+func announcementDuration(log database.ListInstancesForDiscordAnnouncementRow) string {
+	if log.ClearDurationMs.Valid && log.ClearDurationMs.Int64 > 0 {
+		return formatDuration(time.Duration(log.ClearDurationMs.Int64) * time.Millisecond)
+	}
+	return formatAnnouncementDuration(log.StartTime, log.EndTime)
+}
+
+func guildAverageComparison(currentDurationMs, averageDurationMs int64) string {
+	if currentDurationMs <= 0 || averageDurationMs <= 0 {
+		return ""
+	}
+	percent := int(math.Round(float64(averageDurationMs-currentDurationMs) / float64(averageDurationMs) * 100))
+	switch {
+	case percent > 0:
+		return fmt.Sprintf("+%d%% faster", percent)
+	case percent < 0:
+		return fmt.Sprintf("%d%% slower", percent)
+	default:
+		return "0% vs average"
+	}
+}
+
+func announcementColor(instanceName string) int {
+	palette := [...]int{
+		0xED4245, // red
+		0xF47B67, // coral
+		0xFAA61A, // amber
+		0x57F287, // green
+		0x1ABC9C, // teal
+		0x3498DB, // blue
+		0x5865F2, // blurple
+		0x9B59B6, // purple
+		0xE91E63, // pink
+	}
+	hash := uint32(2166136261)
+	for _, char := range strings.ToLower(instanceName) {
+		hash ^= uint32(char)
+		hash *= 16777619
+	}
+	return palette[int(hash%uint32(len(palette)))]
+}
+
+func announcementVariant(difficulty string, maxPlayers int32) string {
+	parts := make([]string, 0, 2)
+	if difficulty != "" {
+		parts = append(parts, difficulty)
+	}
+	if maxPlayers > 0 {
+		parts = append(parts, fmt.Sprintf("%d-man", maxPlayers))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func formatUploadedLog(logName, author, duration string, bossCount int) string {
+	parts := []string{logName}
+	if author != "" {
+		parts = append(parts, author)
+	}
+	parts = append(parts, duration, fmt.Sprintf("%d bosses", bossCount))
+	return strings.Join(parts, " · ")
+}
+
+func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uuid.UUID) (*discordgo.MessageSend, error) {
+	logs, err := w.bot.config.DB.ListInstancesForDiscordAnnouncement(ctx, runID)
+	if err != nil {
+		return nil, fmt.Errorf("list announcement logs: %w", err)
+	}
+	if len(logs) == 0 {
+		return nil, fmt.Errorf("announcement run %s has no instances", runID)
+	}
+
+	best := logs[0]
+	bestEncounters, err := w.bot.config.DB.ListDiscordAnnouncementEncounters(ctx, best.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list announcement encounters: %w", err)
+	}
+	encounterCounts := map[uuid.UUID]int{best.ID: len(bestEncounters)}
+	for _, candidate := range logs[1:] {
+		encounters, err := w.bot.config.DB.ListDiscordAnnouncementEncounters(ctx, candidate.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list announcement encounters: %w", err)
+		}
+		encounterCounts[candidate.ID] = len(encounters)
+		if len(encounters) > len(bestEncounters) {
+			best = candidate
+			bestEncounters = encounters
+		}
+	}
+
+	guildName := best.GuildName.String
+	if guildName == "" {
+		guildName = "this guild"
+	}
+
+	variant := announcementVariant(best.DifficultyName, best.MaxPlayers)
+	title := best.Name
+	if duration := announcementDuration(best); duration != "Duration unavailable" {
+		title += " · " + duration
+	}
+
+	fields := make([]*discordgo.MessageEmbedField, 0, 5)
+	if len(logs) == 1 {
+		fields = append(fields,
+			&discordgo.MessageEmbedField{Name: "BOSSES KILLED", Value: fmt.Sprintf("%d / %d", countKilledEncounters(bestEncounters), len(bestEncounters)), Inline: true},
+			&discordgo.MessageEmbedField{Name: "PLAYERS", Value: fmt.Sprintf("%d", best.PlayerCount), Inline: true},
+		)
+		if comparison := guildAverageComparison(best.ClearDurationMs.Int64, best.GuildAvgDurationMs); comparison != "" {
+			fields = append(fields, &discordgo.MessageEmbedField{Name: "VS. GUILD AVG", Value: comparison, Inline: true})
+		}
+	} else {
+		lines := make([]string, 0, len(logs))
+		for i, log := range logs {
+			label := log.RecorderName
+			if label == "" {
+				label = log.UploaderName
+			}
+			logName := fmt.Sprintf("Log %d", i+1)
+			if logURL := w.instanceURL(log.HashedSlug, log.TenantSlug); logURL != "" {
+				logName = fmt.Sprintf("[%s](%s)", logName, logURL)
+			}
+			lines = append(lines, formatUploadedLog(logName, label, announcementDuration(log), encounterCounts[log.ID]))
+		}
+		fields = append(fields, &discordgo.MessageEmbedField{Name: "UPLOADED LOGS", Value: strings.Join(lines, "\n")})
+	}
+	if variant != "" {
+		fields = append(fields, &discordgo.MessageEmbedField{Name: "VARIANT", Value: variant, Inline: true})
+	}
+	footerParts := []string{guildName}
+	if best.RealmName.Valid && best.RealmName.String != "" {
+		footerParts = append(footerParts, best.RealmName.String)
+	}
+	if best.StartTime.Valid {
+		footerParts = append(footerParts, best.StartTime.Time.Format("Jan 2, 2006"))
+	}
+	category := strings.ToUpper(best.Category.String)
+	if category == "" {
+		category = "LOG"
+	}
+	embed := &discordgo.MessageEmbed{
+		Author: &discordgo.MessageEmbedAuthor{Name: category + " UPLOAD"},
+		Title:  title,
+		URL:    w.instanceURL(best.HashedSlug, best.TenantSlug),
+		Fields: fields,
+		Color:  announcementColor(best.Name),
+		Footer: &discordgo.MessageEmbedFooter{Text: strings.Join(footerParts, " · ")},
+	}
+	return &discordgo.MessageSend{
+		Embeds:          []*discordgo.MessageEmbed{embed},
+		AllowedMentions: &discordgo.MessageAllowedMentions{Parse: []discordgo.AllowedMentionType{}},
+	}, nil
+}
+
+func countKilledEncounters(encounters []database.ListDiscordAnnouncementEncountersRow) int {
+	count := 0
+	for _, encounter := range encounters {
+		if encounter.KillType == database.KillTypeClean || encounter.KillType == database.KillTypePartial {
+			count++
+		}
+	}
+	return count
+}
+
+func discordMessageUnreachable(err error) bool {
+	var restErr *discordgo.RESTError
+	if !errors.As(err, &restErr) || restErr.Message == nil {
+		return false
+	}
+	switch restErr.Message.Code {
+	case 10003, 10008, 50001, 50013:
+		return true
+	default:
+		return false
+	}
+}

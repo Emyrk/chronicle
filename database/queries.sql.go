@@ -2076,6 +2076,654 @@ func (q *sqlQuerier) UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDat
 	return err
 }
 
+const claimDiscordAnnouncementDelivery = `-- name: ClaimDiscordAnnouncementDelivery :one
+UPDATE guild_discord_log_announcements
+SET delivery_attempted_at = NOW(),
+    updated_at = NOW()
+WHERE id = $1
+  AND discord_message_id IS NULL
+  AND delivery_attempted_at IS NULL
+RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at, delivery_error
+`
+
+func (q *sqlQuerier) ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error) {
+	row := q.db.QueryRow(ctx, claimDiscordAnnouncementDelivery, id)
+	var i GuildDiscordLogAnnouncement
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.RunID,
+		&i.DiscordChannelID,
+		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryError,
+	)
+	return i, err
+}
+
+const deleteDiscordAnnouncement = `-- name: DeleteDiscordAnnouncement :exec
+DELETE FROM guild_discord_log_announcements WHERE id = $1
+`
+
+func (q *sqlQuerier) DeleteDiscordAnnouncement(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDiscordAnnouncement, id)
+	return err
+}
+
+const deleteDiscordAnnouncementSource = `-- name: DeleteDiscordAnnouncementSource :exec
+DELETE FROM guild_discord_log_announcement_sources
+WHERE log_group_id = $1 AND instance_ordinal = $2
+`
+
+type DeleteDiscordAnnouncementSourceParams struct {
+	LogGroupID      uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	InstanceOrdinal int32     `db:"instance_ordinal" json:"instance_ordinal"`
+}
+
+func (q *sqlQuerier) DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error {
+	_, err := q.db.Exec(ctx, deleteDiscordAnnouncementSource, arg.LogGroupID, arg.InstanceOrdinal)
+	return err
+}
+
+const getDiscordAnnouncement = `-- name: GetDiscordAnnouncement :one
+SELECT id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at, delivery_error FROM guild_discord_log_announcements WHERE id = $1
+`
+
+func (q *sqlQuerier) GetDiscordAnnouncement(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error) {
+	row := q.db.QueryRow(ctx, getDiscordAnnouncement, id)
+	var i GuildDiscordLogAnnouncement
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.RunID,
+		&i.DiscordChannelID,
+		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryError,
+	)
+	return i, err
+}
+
+const getDiscordAnnouncementByRun = `-- name: GetDiscordAnnouncementByRun :one
+SELECT id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at, delivery_error
+FROM guild_discord_log_announcements
+WHERE guild_id = $1 AND run_id = $2
+`
+
+type GetDiscordAnnouncementByRunParams struct {
+	GuildID uuid.UUID `db:"guild_id" json:"guild_id"`
+	RunID   uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+func (q *sqlQuerier) GetDiscordAnnouncementByRun(ctx context.Context, arg GetDiscordAnnouncementByRunParams) (GuildDiscordLogAnnouncement, error) {
+	row := q.db.QueryRow(ctx, getDiscordAnnouncementByRun, arg.GuildID, arg.RunID)
+	var i GuildDiscordLogAnnouncement
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.RunID,
+		&i.DiscordChannelID,
+		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryError,
+	)
+	return i, err
+}
+
+const getDiscordAnnouncementSource = `-- name: GetDiscordAnnouncementSource :one
+
+SELECT
+  s.announcement_id, s.log_group_id, s.instance_ordinal, s.instance_slug, s.created_at, s.updated_at,
+  a.id, a.guild_id, a.run_id, a.discord_channel_id, a.discord_message_id, a.delivery_attempted_at, a.created_at, a.updated_at, a.delivery_error
+FROM guild_discord_log_announcement_sources s
+JOIN guild_discord_log_announcements a ON a.id = s.announcement_id
+WHERE s.log_group_id = $1
+  AND s.instance_ordinal = $2
+`
+
+type GetDiscordAnnouncementSourceParams struct {
+	LogGroupID      uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	InstanceOrdinal int32     `db:"instance_ordinal" json:"instance_ordinal"`
+}
+
+type GetDiscordAnnouncementSourceRow struct {
+	GuildDiscordLogAnnouncementSource GuildDiscordLogAnnouncementSource `db:"guild_discord_log_announcement_source" json:"guild_discord_log_announcement_source"`
+	GuildDiscordLogAnnouncement       GuildDiscordLogAnnouncement       `db:"guild_discord_log_announcement" json:"guild_discord_log_announcement"`
+}
+
+// Discord raid-log announcements
+func (q *sqlQuerier) GetDiscordAnnouncementSource(ctx context.Context, arg GetDiscordAnnouncementSourceParams) (GetDiscordAnnouncementSourceRow, error) {
+	row := q.db.QueryRow(ctx, getDiscordAnnouncementSource, arg.LogGroupID, arg.InstanceOrdinal)
+	var i GetDiscordAnnouncementSourceRow
+	err := row.Scan(
+		&i.GuildDiscordLogAnnouncementSource.AnnouncementID,
+		&i.GuildDiscordLogAnnouncementSource.LogGroupID,
+		&i.GuildDiscordLogAnnouncementSource.InstanceOrdinal,
+		&i.GuildDiscordLogAnnouncementSource.InstanceSlug,
+		&i.GuildDiscordLogAnnouncementSource.CreatedAt,
+		&i.GuildDiscordLogAnnouncementSource.UpdatedAt,
+		&i.GuildDiscordLogAnnouncement.ID,
+		&i.GuildDiscordLogAnnouncement.GuildID,
+		&i.GuildDiscordLogAnnouncement.RunID,
+		&i.GuildDiscordLogAnnouncement.DiscordChannelID,
+		&i.GuildDiscordLogAnnouncement.DiscordMessageID,
+		&i.GuildDiscordLogAnnouncement.DeliveryAttemptedAt,
+		&i.GuildDiscordLogAnnouncement.CreatedAt,
+		&i.GuildDiscordLogAnnouncement.UpdatedAt,
+		&i.GuildDiscordLogAnnouncement.DeliveryError,
+	)
+	return i, err
+}
+
+const getDiscordAnnouncementSourceBySlug = `-- name: GetDiscordAnnouncementSourceBySlug :one
+SELECT
+  s.announcement_id, s.log_group_id, s.instance_ordinal, s.instance_slug, s.created_at, s.updated_at,
+  a.id, a.guild_id, a.run_id, a.discord_channel_id, a.discord_message_id, a.delivery_attempted_at, a.created_at, a.updated_at, a.delivery_error
+FROM guild_discord_log_announcement_sources s
+JOIN guild_discord_log_announcements a ON a.id = s.announcement_id
+WHERE s.instance_slug = $1
+`
+
+type GetDiscordAnnouncementSourceBySlugRow struct {
+	GuildDiscordLogAnnouncementSource GuildDiscordLogAnnouncementSource `db:"guild_discord_log_announcement_source" json:"guild_discord_log_announcement_source"`
+	GuildDiscordLogAnnouncement       GuildDiscordLogAnnouncement       `db:"guild_discord_log_announcement" json:"guild_discord_log_announcement"`
+}
+
+func (q *sqlQuerier) GetDiscordAnnouncementSourceBySlug(ctx context.Context, instanceSlug pgtype.Text) (GetDiscordAnnouncementSourceBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getDiscordAnnouncementSourceBySlug, instanceSlug)
+	var i GetDiscordAnnouncementSourceBySlugRow
+	err := row.Scan(
+		&i.GuildDiscordLogAnnouncementSource.AnnouncementID,
+		&i.GuildDiscordLogAnnouncementSource.LogGroupID,
+		&i.GuildDiscordLogAnnouncementSource.InstanceOrdinal,
+		&i.GuildDiscordLogAnnouncementSource.InstanceSlug,
+		&i.GuildDiscordLogAnnouncementSource.CreatedAt,
+		&i.GuildDiscordLogAnnouncementSource.UpdatedAt,
+		&i.GuildDiscordLogAnnouncement.ID,
+		&i.GuildDiscordLogAnnouncement.GuildID,
+		&i.GuildDiscordLogAnnouncement.RunID,
+		&i.GuildDiscordLogAnnouncement.DiscordChannelID,
+		&i.GuildDiscordLogAnnouncement.DiscordMessageID,
+		&i.GuildDiscordLogAnnouncement.DeliveryAttemptedAt,
+		&i.GuildDiscordLogAnnouncement.CreatedAt,
+		&i.GuildDiscordLogAnnouncement.UpdatedAt,
+		&i.GuildDiscordLogAnnouncement.DeliveryError,
+	)
+	return i, err
+}
+
+const getLogGroupInstanceIDByOrdinal = `-- name: GetLogGroupInstanceIDByOrdinal :one
+SELECT li.id
+FROM log_instances li
+WHERE li.log_group_id = $1
+ORDER BY li.start_time ASC NULLS LAST, li.id ASC
+LIMIT 1 OFFSET $2
+`
+
+type GetLogGroupInstanceIDByOrdinalParams struct {
+	LogGroupID      uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	InstanceOrdinal int32     `db:"instance_ordinal" json:"instance_ordinal"`
+}
+
+func (q *sqlQuerier) GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg GetLogGroupInstanceIDByOrdinalParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getLogGroupInstanceIDByOrdinal, arg.LogGroupID, arg.InstanceOrdinal)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getLogInstanceForDiscordAnnouncement = `-- name: GetLogInstanceForDiscordAnnouncement :one
+SELECT id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category FROM log_instances WHERE id = $1
+`
+
+func (q *sqlQuerier) GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error) {
+	row := q.db.QueryRow(ctx, getLogInstanceForDiscordAnnouncement, id)
+	var i LogInstance
+	err := row.Scan(
+		&i.ID,
+		&i.RealmID,
+		&i.LogGroupID,
+		&i.Name,
+		&i.HashedSlug,
+		&i.GuildID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Capabilities,
+		&i.Versions,
+		&i.RecorderName,
+		&i.RecorderGuid,
+		&i.ParserVersion,
+		&i.DuplicateGroupID,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+		&i.DynamicDifficulty,
+		&i.VehicleControlIntervals,
+		&i.Category,
+	)
+	return i, err
+}
+
+const listDiscordAnnouncementEncounters = `-- name: ListDiscordAnnouncementEncounters :many
+SELECT DISTINCT ON (lie.name)
+  lie.name, lie.kill_type, lie.start_time, lie.end_time
+FROM log_instance_encounters lie
+WHERE lie.instance_id = $1
+  AND lie.boss = TRUE
+ORDER BY
+  lie.name,
+  (lie.kill_type IN ('clean', 'partial')) DESC,
+  lie.end_time DESC,
+  lie.id DESC
+`
+
+type ListDiscordAnnouncementEncountersRow struct {
+	Name      string             `db:"name" json:"name"`
+	KillType  KillType           `db:"kill_type" json:"kill_type"`
+	StartTime pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime   pgtype.Timestamptz `db:"end_time" json:"end_time"`
+}
+
+func (q *sqlQuerier) ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error) {
+	rows, err := q.db.Query(ctx, listDiscordAnnouncementEncounters, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDiscordAnnouncementEncountersRow
+	for rows.Next() {
+		var i ListDiscordAnnouncementEncountersRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.KillType,
+			&i.StartTime,
+			&i.EndTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDiscordAnnouncementSources = `-- name: ListDiscordAnnouncementSources :many
+SELECT announcement_id, log_group_id, instance_ordinal, instance_slug, created_at, updated_at
+FROM guild_discord_log_announcement_sources
+WHERE announcement_id = $1
+ORDER BY created_at, log_group_id, instance_ordinal
+`
+
+func (q *sqlQuerier) ListDiscordAnnouncementSources(ctx context.Context, announcementID uuid.UUID) ([]GuildDiscordLogAnnouncementSource, error) {
+	rows, err := q.db.Query(ctx, listDiscordAnnouncementSources, announcementID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildDiscordLogAnnouncementSource
+	for rows.Next() {
+		var i GuildDiscordLogAnnouncementSource
+		if err := rows.Scan(
+			&i.AnnouncementID,
+			&i.LogGroupID,
+			&i.InstanceOrdinal,
+			&i.InstanceSlug,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGuildDiscordAnnouncementAttempts = `-- name: ListGuildDiscordAnnouncementAttempts :many
+SELECT
+  a.id, a.guild_id, a.run_id, a.discord_channel_id, a.discord_message_id, a.delivery_attempted_at, a.created_at, a.updated_at, a.delivery_error,
+  source.instance_slug
+FROM guild_discord_log_announcements a
+LEFT JOIN LATERAL (
+  SELECT s.instance_slug
+  FROM guild_discord_log_announcement_sources s
+  WHERE s.announcement_id = a.id
+  ORDER BY s.created_at ASC, s.log_group_id ASC, s.instance_ordinal ASC
+  LIMIT 1
+) source ON TRUE
+WHERE a.guild_id = $1
+ORDER BY COALESCE(a.delivery_attempted_at, a.created_at) DESC, a.created_at DESC, a.id DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListGuildDiscordAnnouncementAttemptsParams struct {
+	GuildID     uuid.UUID `db:"guild_id" json:"guild_id"`
+	OffsetCount int32     `db:"offset_count" json:"offset_count"`
+	LimitCount  int32     `db:"limit_count" json:"limit_count"`
+}
+
+type ListGuildDiscordAnnouncementAttemptsRow struct {
+	GuildDiscordLogAnnouncement GuildDiscordLogAnnouncement `db:"guild_discord_log_announcement" json:"guild_discord_log_announcement"`
+	InstanceSlug                pgtype.Text                 `db:"instance_slug" json:"instance_slug"`
+}
+
+func (q *sqlQuerier) ListGuildDiscordAnnouncementAttempts(ctx context.Context, arg ListGuildDiscordAnnouncementAttemptsParams) ([]ListGuildDiscordAnnouncementAttemptsRow, error) {
+	rows, err := q.db.Query(ctx, listGuildDiscordAnnouncementAttempts, arg.GuildID, arg.OffsetCount, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGuildDiscordAnnouncementAttemptsRow
+	for rows.Next() {
+		var i ListGuildDiscordAnnouncementAttemptsRow
+		if err := rows.Scan(
+			&i.GuildDiscordLogAnnouncement.ID,
+			&i.GuildDiscordLogAnnouncement.GuildID,
+			&i.GuildDiscordLogAnnouncement.RunID,
+			&i.GuildDiscordLogAnnouncement.DiscordChannelID,
+			&i.GuildDiscordLogAnnouncement.DiscordMessageID,
+			&i.GuildDiscordLogAnnouncement.DeliveryAttemptedAt,
+			&i.GuildDiscordLogAnnouncement.CreatedAt,
+			&i.GuildDiscordLogAnnouncement.UpdatedAt,
+			&i.GuildDiscordLogAnnouncement.DeliveryError,
+			&i.InstanceSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstancesForDiscordAnnouncement = `-- name: ListInstancesForDiscordAnnouncement :many
+SELECT
+  li.id,
+  li.log_group_id,
+  li.name,
+  li.hashed_slug,
+  li.start_time,
+  li.end_time,
+  li.recorder_name,
+  li.max_players,
+  li.difficulty_name,
+  li.category,
+  wlg.created_at AS uploaded_at,
+  u.username AS uploader_name,
+  wsr.name AS realm_name,
+  g.name AS guild_name,
+  t.slug AS tenant_slug,
+  sr.duration_ms AS clear_duration_ms,
+  COALESCE(guild_average.avg_duration_ms, 0)::bigint AS guild_avg_duration_ms,
+  (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
+FROM log_instances li
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+JOIN users u ON u.id = wlg.owner
+LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+LEFT JOIN wow_servers ws ON ws.id = wsr.server_id
+LEFT JOIN tenants t ON t.id = ws.tenant_id
+LEFT JOIN guilds g ON g.id = li.guild_id
+LEFT JOIN instance_speedruns sr ON sr.instance_id = li.id AND sr.qualified = TRUE AND sr.duration_ms > 0
+LEFT JOIN LATERAL (
+  SELECT AVG(previous.duration_ms)::bigint AS avg_duration_ms
+  FROM (
+    SELECT DISTINCT ON (COALESCE(previous_li.duplicate_group_id, previous_li.id))
+      previous_sr.duration_ms
+    FROM instance_speedruns previous_sr
+    JOIN log_instances previous_li ON previous_li.id = previous_sr.instance_id
+    WHERE previous_sr.guild_id = li.guild_id
+      AND previous_sr.instance_name = li.name
+      AND previous_li.difficulty_name = li.difficulty_name
+      AND previous_li.max_players = li.max_players
+      AND previous_sr.qualified = TRUE
+      AND previous_sr.duration_ms > 0
+      AND COALESCE(previous_li.duplicate_group_id, previous_li.id) != COALESCE(li.duplicate_group_id, li.id)
+    ORDER BY COALESCE(previous_li.duplicate_group_id, previous_li.id), previous_sr.duration_ms ASC
+  ) previous
+) guild_average ON TRUE
+WHERE COALESCE(li.duplicate_group_id, li.id) = $1::uuid
+ORDER BY wlg.created_at ASC, li.start_time ASC NULLS LAST, li.id ASC
+`
+
+type ListInstancesForDiscordAnnouncementRow struct {
+	ID                 uuid.UUID          `db:"id" json:"id"`
+	LogGroupID         uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Name               string             `db:"name" json:"name"`
+	HashedSlug         pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	StartTime          pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime            pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	RecorderName       string             `db:"recorder_name" json:"recorder_name"`
+	MaxPlayers         int32              `db:"max_players" json:"max_players"`
+	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
+	Category           pgtype.Text        `db:"category" json:"category"`
+	UploadedAt         pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
+	UploaderName       string             `db:"uploader_name" json:"uploader_name"`
+	RealmName          pgtype.Text        `db:"realm_name" json:"realm_name"`
+	GuildName          pgtype.Text        `db:"guild_name" json:"guild_name"`
+	TenantSlug         pgtype.Text        `db:"tenant_slug" json:"tenant_slug"`
+	ClearDurationMs    pgtype.Int8        `db:"clear_duration_ms" json:"clear_duration_ms"`
+	GuildAvgDurationMs int64              `db:"guild_avg_duration_ms" json:"guild_avg_duration_ms"`
+	PlayerCount        int32              `db:"player_count" json:"player_count"`
+}
+
+func (q *sqlQuerier) ListInstancesForDiscordAnnouncement(ctx context.Context, runID uuid.UUID) ([]ListInstancesForDiscordAnnouncementRow, error) {
+	rows, err := q.db.Query(ctx, listInstancesForDiscordAnnouncement, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstancesForDiscordAnnouncementRow
+	for rows.Next() {
+		var i ListInstancesForDiscordAnnouncementRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LogGroupID,
+			&i.Name,
+			&i.HashedSlug,
+			&i.StartTime,
+			&i.EndTime,
+			&i.RecorderName,
+			&i.MaxPlayers,
+			&i.DifficultyName,
+			&i.Category,
+			&i.UploadedAt,
+			&i.UploaderName,
+			&i.RealmName,
+			&i.GuildName,
+			&i.TenantSlug,
+			&i.ClearDurationMs,
+			&i.GuildAvgDurationMs,
+			&i.PlayerCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const moveDiscordAnnouncementSources = `-- name: MoveDiscordAnnouncementSources :exec
+UPDATE guild_discord_log_announcement_sources
+SET announcement_id = $1,
+    updated_at = NOW()
+WHERE announcement_id = $2
+`
+
+type MoveDiscordAnnouncementSourcesParams struct {
+	ToAnnouncementID   uuid.UUID `db:"to_announcement_id" json:"to_announcement_id"`
+	FromAnnouncementID uuid.UUID `db:"from_announcement_id" json:"from_announcement_id"`
+}
+
+func (q *sqlQuerier) MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error {
+	_, err := q.db.Exec(ctx, moveDiscordAnnouncementSources, arg.ToAnnouncementID, arg.FromAnnouncementID)
+	return err
+}
+
+const setDiscordAnnouncementDeliveryError = `-- name: SetDiscordAnnouncementDeliveryError :exec
+UPDATE guild_discord_log_announcements
+SET delivery_error = $1,
+    updated_at = NOW()
+WHERE id = $2
+`
+
+type SetDiscordAnnouncementDeliveryErrorParams struct {
+	DeliveryError pgtype.Text `db:"delivery_error" json:"delivery_error"`
+	ID            uuid.UUID   `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) SetDiscordAnnouncementDeliveryError(ctx context.Context, arg SetDiscordAnnouncementDeliveryErrorParams) error {
+	_, err := q.db.Exec(ctx, setDiscordAnnouncementDeliveryError, arg.DeliveryError, arg.ID)
+	return err
+}
+
+const setDiscordAnnouncementMessage = `-- name: SetDiscordAnnouncementMessage :one
+UPDATE guild_discord_log_announcements
+SET discord_channel_id = $1,
+    discord_message_id = $2,
+    delivery_error = NULL,
+    updated_at = NOW()
+WHERE id = $3
+RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at, delivery_error
+`
+
+type SetDiscordAnnouncementMessageParams struct {
+	DiscordChannelID string      `db:"discord_channel_id" json:"discord_channel_id"`
+	DiscordMessageID pgtype.Text `db:"discord_message_id" json:"discord_message_id"`
+	ID               uuid.UUID   `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) SetDiscordAnnouncementMessage(ctx context.Context, arg SetDiscordAnnouncementMessageParams) (GuildDiscordLogAnnouncement, error) {
+	row := q.db.QueryRow(ctx, setDiscordAnnouncementMessage, arg.DiscordChannelID, arg.DiscordMessageID, arg.ID)
+	var i GuildDiscordLogAnnouncement
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.RunID,
+		&i.DiscordChannelID,
+		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryError,
+	)
+	return i, err
+}
+
+const updateDiscordAnnouncementRun = `-- name: UpdateDiscordAnnouncementRun :one
+UPDATE guild_discord_log_announcements
+SET run_id = $1,
+    updated_at = NOW()
+WHERE id = $2
+RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at, delivery_error
+`
+
+type UpdateDiscordAnnouncementRunParams struct {
+	RunID uuid.UUID `db:"run_id" json:"run_id"`
+	ID    uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) UpdateDiscordAnnouncementRun(ctx context.Context, arg UpdateDiscordAnnouncementRunParams) (GuildDiscordLogAnnouncement, error) {
+	row := q.db.QueryRow(ctx, updateDiscordAnnouncementRun, arg.RunID, arg.ID)
+	var i GuildDiscordLogAnnouncement
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.RunID,
+		&i.DiscordChannelID,
+		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryError,
+	)
+	return i, err
+}
+
+const upsertDiscordAnnouncement = `-- name: UpsertDiscordAnnouncement :one
+INSERT INTO guild_discord_log_announcements (
+  guild_id, run_id, discord_channel_id
+) VALUES ($1, $2, $3)
+ON CONFLICT (guild_id, run_id) DO UPDATE SET
+  updated_at = NOW()
+RETURNING id, guild_id, run_id, discord_channel_id, discord_message_id, delivery_attempted_at, created_at, updated_at, delivery_error
+`
+
+type UpsertDiscordAnnouncementParams struct {
+	GuildID          uuid.UUID `db:"guild_id" json:"guild_id"`
+	RunID            uuid.UUID `db:"run_id" json:"run_id"`
+	DiscordChannelID string    `db:"discord_channel_id" json:"discord_channel_id"`
+}
+
+func (q *sqlQuerier) UpsertDiscordAnnouncement(ctx context.Context, arg UpsertDiscordAnnouncementParams) (GuildDiscordLogAnnouncement, error) {
+	row := q.db.QueryRow(ctx, upsertDiscordAnnouncement, arg.GuildID, arg.RunID, arg.DiscordChannelID)
+	var i GuildDiscordLogAnnouncement
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.RunID,
+		&i.DiscordChannelID,
+		&i.DiscordMessageID,
+		&i.DeliveryAttemptedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryError,
+	)
+	return i, err
+}
+
+const upsertDiscordAnnouncementSource = `-- name: UpsertDiscordAnnouncementSource :one
+INSERT INTO guild_discord_log_announcement_sources (
+  announcement_id, log_group_id, instance_ordinal, instance_slug
+) VALUES (
+  $1, $2, $3, $4
+)
+ON CONFLICT (log_group_id, instance_ordinal) DO UPDATE SET
+  announcement_id = EXCLUDED.announcement_id,
+  instance_slug = EXCLUDED.instance_slug,
+  updated_at = NOW()
+RETURNING announcement_id, log_group_id, instance_ordinal, instance_slug, created_at, updated_at
+`
+
+type UpsertDiscordAnnouncementSourceParams struct {
+	AnnouncementID  uuid.UUID   `db:"announcement_id" json:"announcement_id"`
+	LogGroupID      uuid.UUID   `db:"log_group_id" json:"log_group_id"`
+	InstanceOrdinal int32       `db:"instance_ordinal" json:"instance_ordinal"`
+	InstanceSlug    pgtype.Text `db:"instance_slug" json:"instance_slug"`
+}
+
+func (q *sqlQuerier) UpsertDiscordAnnouncementSource(ctx context.Context, arg UpsertDiscordAnnouncementSourceParams) (GuildDiscordLogAnnouncementSource, error) {
+	row := q.db.QueryRow(ctx, upsertDiscordAnnouncementSource,
+		arg.AnnouncementID,
+		arg.LogGroupID,
+		arg.InstanceOrdinal,
+		arg.InstanceSlug,
+	)
+	var i GuildDiscordLogAnnouncementSource
+	err := row.Scan(
+		&i.AnnouncementID,
+		&i.LogGroupID,
+		&i.InstanceOrdinal,
+		&i.InstanceSlug,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getParsedBytesByOwner = `-- name: GetParsedBytesByOwner :one
 SELECT
   COALESCE(SUM(octet_length(lie.events)), 0)::bigint AS parsed_bytes,
@@ -6966,10 +7614,10 @@ func (q *sqlQuerier) InsertEncounterPhase(ctx context.Context, arg InsertEncount
 
 const insertInstance = `-- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category
 `
 
 type InsertInstanceParams struct {
@@ -6990,6 +7638,7 @@ type InsertInstanceParams struct {
 	MaxPlayers              int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty       int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
 	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
+	Category                pgtype.Text        `db:"category" json:"category"`
 }
 
 func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error) {
@@ -7011,6 +7660,7 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		arg.MaxPlayers,
 		arg.DynamicDifficulty,
 		arg.VehicleControlIntervals,
+		arg.Category,
 	)
 	var i LogInstance
 	err := row.Scan(
@@ -7032,6 +7682,7 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		&i.MaxPlayers,
 		&i.DynamicDifficulty,
 		&i.VehicleControlIntervals,
+		&i.Category,
 	)
 	return i, err
 }

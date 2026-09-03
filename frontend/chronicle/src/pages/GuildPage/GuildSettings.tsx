@@ -13,6 +13,7 @@ import {
 } from "@/api/queries";
 import { ArrowLeft, BellRing, Bot, UserPlus, Menu, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { DiscordAnnouncementHistory } from "./DiscordAnnouncementHistory";
 import { GuildPageHeader, GuildActionsMenu } from "./components";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -346,10 +347,14 @@ export function GuildSettings() {
                         <p className="text-xs text-muted-foreground">
                           Discord server ID: {discordSettings.discord_guild_id}
                         </p>
-                        <div className="mt-4">
+                        <div className="mt-4 space-y-4">
                           <DiscordRaidLogAnnouncementSettings
                             guildId={guildId}
                             settings={discordSettings}
+                          />
+                          <DiscordAnnouncementHistory
+                            guildId={guildId}
+                            channels={discordSettings.channels || []}
                           />
                         </div>
                         <Button
