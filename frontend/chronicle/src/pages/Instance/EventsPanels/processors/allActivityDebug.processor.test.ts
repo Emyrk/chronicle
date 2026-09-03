@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import type { ConsumeProcessorEvent, RaidGroupProcessorEvent, DamageProcessorEvent, ExtraAttackProcessorEvent, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SlainProcessorEvent, SpellStartProcessorEvent, UnitClassificationProcessorEvent } from "../processorTypes";
+import { AuraApplication, AuraState, type AuraProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -170,6 +170,46 @@ describe("allActivityProcessor", () => {
       spellId: 25504,
       extra: "extra attacks=2",
     });
+  });
+
+  it("uses an attributed aura caster as the activity source", () => {
+    const state = allActivityProcessor.createState();
+    const event: AuraProcessorEvent = {
+      type: "aura",
+      index: 10,
+      offsetMilli: 0,
+      target: "doan",
+      caster: "player",
+      spellName: "Power Word: Shield",
+      spellId: 17,
+      spellAttackOutcome: null,
+      amount: 1,
+      application: AuraApplication.Gains,
+      state: AuraState.Added,
+      isBuff: true,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: true,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "aura",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.aura[0]).toMatchObject({
+      caster: "player",
+      casterName: "Sathite",
+      target: "doan",
+      sourceName: "Power Word: Shield",
+      extra: "Buff · Added (stacks=1)",
+      flags: ["SYNTHETIC"],
+    });
+    expect(state.counts.get("player")).toBe(1);
   });
 
   it("captures resource type, waste, flag, and spell details", () => {

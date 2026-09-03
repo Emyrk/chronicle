@@ -198,6 +198,7 @@ func Aura(from time.Time, idx int32, a *messages.Aura) *chronicleproto.Aura {
 		State:         AuraState(a.State),
 		SpellData:     SpellData(a.SpellData),
 		IsBuff:        a.IsBuff,
+		Caster:        OptionalGUID(a.Source),
 	}
 }
 

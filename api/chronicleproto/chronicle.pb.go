@@ -1365,6 +1365,7 @@ type Aura struct {
 	State         AuraState              `protobuf:"varint,6,opt,name=state,proto3,enum=chronicleproto.AuraState" json:"state,omitempty"`
 	SpellData     *SpellData             `protobuf:"bytes,7,opt,name=spellData,proto3,oneof" json:"spellData,omitempty"`
 	IsBuff        bool                   `protobuf:"varint,8,opt,name=isBuff,proto3" json:"isBuff,omitempty"`
+	Caster        *string                `protobuf:"bytes,9,opt,name=caster,proto3,oneof" json:"caster,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1453,6 +1454,13 @@ func (x *Aura) GetIsBuff() bool {
 		return x.IsBuff
 	}
 	return false
+}
+
+func (x *Aura) GetCaster() string {
+	if x != nil && x.Caster != nil {
+		return *x.Caster
+	}
+	return ""
 }
 
 type AuraCast struct {
@@ -2818,7 +2826,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x06action\x18\x03 \x01(\x0e2\x1a.chronicleproto.CastActionR\x06action\x12\x1b\n" +
 	"\x06target\x18\x04 \x01(\tH\x00R\x06target\x88\x01\x01\x12+\n" +
 	"\x05spell\x18\x05 \x01(\v2\x15.chronicleproto.SpellR\x05spellB\t\n" +
-	"\a_target\"\xe9\x02\n" +
+	"\a_target\"\x91\x03\n" +
 	"\x04Aura\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12\x1c\n" +
@@ -2827,9 +2835,11 @@ const file_chronicle_proto_rawDesc = "" +
 	"\vapplication\x18\x05 \x01(\x0e2\x1f.chronicleproto.AuraApplicationR\vapplication\x12/\n" +
 	"\x05state\x18\x06 \x01(\x0e2\x19.chronicleproto.AuraStateR\x05state\x12<\n" +
 	"\tspellData\x18\a \x01(\v2\x19.chronicleproto.SpellDataH\x00R\tspellData\x88\x01\x01\x12\x16\n" +
-	"\x06isBuff\x18\b \x01(\bR\x06isBuffB\f\n" +
+	"\x06isBuff\x18\b \x01(\bR\x06isBuff\x12\x1b\n" +
+	"\x06caster\x18\t \x01(\tH\x01R\x06caster\x88\x01\x01B\f\n" +
 	"\n" +
-	"_spellData\"\xf0\x02\n" +
+	"_spellDataB\t\n" +
+	"\a_caster\"\xf0\x02\n" +
 	"\bAuraCast\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12/\n" +
 	"\x05spell\x18\x02 \x01(\v2\x19.chronicleproto.SpellDataR\x05spell\x12\x16\n" +

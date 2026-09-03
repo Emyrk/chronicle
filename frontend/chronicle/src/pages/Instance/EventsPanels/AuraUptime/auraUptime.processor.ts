@@ -4,8 +4,8 @@
  * This processor collects all unique aura names and tracks uptime per target
  * for each aura. The UI allows selecting an aura to display detailed uptime.
  * 
- * Note: Aura events only have `target` (who received the aura), not `caster`.
- * So we track "who had the buff" rather than "who cast it."
+ * Aura events may also include a caster when the combat log format can attribute one.
+ * Uptime remains grouped by target, while shared aura state retains known caster ownership.
  */
 
 import type { PanelProcessor, ProcessorContext, AuraProcessorEvent, SlainProcessorEvent } from "../processorTypes";
