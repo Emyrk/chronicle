@@ -6,3 +6,4 @@ export { ProgressPanel } from "./Progress";
 export { StatsPanel } from "./Stats";
 export { MarkdownPanel } from "./Markdown";
 export { LeaderboardPanel } from "./Leaderboard";
+export { TalentBuildsPanel } from "./TalentBuilds";
