@@ -1,5 +1,5 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { AuraSchema, CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
 import { AuraDecoder, FastCombatantInfoCursor, FastConsumeCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
@@ -256,14 +256,44 @@ describe('FastConsumeCursor', () => {
   });
 });
 
-describe('AuraDecoder synthetic metadata', () => {
-  it('decodes and resets EventMeta.is_synthetic', () => {
+describe('AuraDecoder', () => {
+  it('decodes aura caster, buff state, and synthetic metadata', () => {
     const decoder = new AuraDecoder();
-    const syntheticAura = new Uint8Array([0x0a, 0x02, 0x20, 0x01]);
-    expect(decoder.decode(syntheticAura, 0, syntheticAura.length).isSynthetic).toBe(true);
+    const aura = create(AuraSchema, {
+      meta: create(EventMetaSchema, { isSynthetic: true }),
+      target: '0xTARGET',
+      caster: '0xCASTER',
+      spellName: 'Power Word: Shield',
+      currentAmount: 1,
+      isBuff: true,
+    });
+    const encoded = toBinary(AuraSchema, aura);
+
+    expect(decoder.decode(encoded, 0, encoded.length)).toMatchObject({
+      target: '0xTARGET',
+      caster: '0xCASTER',
+      spellName: 'Power Word: Shield',
+      amount: 1,
+      isBuff: true,
+      isSynthetic: true,
+    });
+  });
+
+  it('resets optional caster, buff state, and synthetic metadata', () => {
+    const decoder = new AuraDecoder();
+    const populated = toBinary(AuraSchema, create(AuraSchema, {
+      meta: create(EventMetaSchema, { isSynthetic: true }),
+      caster: '0xCASTER',
+      isBuff: true,
+    }));
+    decoder.decode(populated, 0, populated.length);
 
     const emptyAura = new Uint8Array([]);
-    expect(decoder.decode(emptyAura, 0, emptyAura.length).isSynthetic).toBe(false);
+    expect(decoder.decode(emptyAura, 0, emptyAura.length)).toMatchObject({
+      caster: null,
+      isBuff: false,
+      isSynthetic: false,
+    });
   });
 });
 

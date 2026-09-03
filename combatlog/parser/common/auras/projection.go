@@ -29,6 +29,7 @@ type projectedAuraKey struct {
 // projectedAura records a projected pre-pull aura that may need synthetic expiry.
 type projectedAura struct {
 	Key            projectedAuraKey
+	Source         *guid.GUID
 	Spell          *chrondbc.Spell
 	SpellName      string
 	Stacks         int32
@@ -184,6 +185,7 @@ func (p *Projection) emitProjection(firstReal messages.Message) {
 			p.emit(&messages.Aura{
 				MessageBase: messages.Base(ts, messages.WithSynthetic()),
 				IsBuff:      aura.Buff,
+				Source:      cloneGUID(aura.Source),
 				Target:      unitGUID,
 				SpellName:   aura.SpellName,
 				SpellData:   aura.Spell,
@@ -195,6 +197,7 @@ func (p *Projection) emitProjection(firstReal messages.Message) {
 			if !aura.MaxExistsUntil.IsZero() && aura.MaxExistsUntil.After(ts) {
 				p.projectedAuras[key] = &projectedAura{
 					Key:            key,
+					Source:         cloneGUID(aura.Source),
 					Spell:          aura.Spell,
 					SpellName:      aura.SpellName,
 					Stacks:         aura.Stacks,
@@ -252,6 +255,7 @@ func (p *Projection) emitSyntheticExpiries(m messages.Message) {
 		p.emit(&messages.Aura{
 			MessageBase: messages.Base(pa.MaxExistsUntil, messages.WithSynthetic()),
 			IsBuff:      pa.Buff,
+			Source:      cloneGUID(pa.Source),
 			Target:      pa.Key.Unit,
 			SpellName:   pa.SpellName,
 			SpellData:   pa.Spell,

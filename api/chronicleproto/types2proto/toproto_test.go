@@ -169,6 +169,38 @@ func TestAbsorbedSchoolBackfill(t *testing.T) {
 	require.Equal(t, chronicleproto.School_Arcane, got.AbsorbSchool)
 }
 
+func TestAuraPreservesCaster(t *testing.T) {
+	t.Parallel()
+
+	ts := time.UnixMilli(5000)
+	caster := guid.GUID(1)
+	got := Aura(ts, 4, &messages.Aura{
+		MessageBase: messages.Base(ts, messages.WithSynthetic()),
+		Source:      &caster,
+		Target:      guid.GUID(2),
+		SpellData:   &chrondbc.Spell{ID: 17},
+		SpellName:   "Power Word: Shield",
+		Amount:      1,
+		State:       types.AuraStateAdded,
+		IsBuff:      true,
+	})
+
+	require.Equal(t, caster.String(), got.GetCaster())
+	require.True(t, got.IsBuff)
+	require.True(t, got.Meta.IsSynthetic)
+	require.Equal(t, int32(4), got.Meta.Index)
+}
+
+func TestAuraAllowsUnknownCaster(t *testing.T) {
+	t.Parallel()
+
+	got := Aura(time.UnixMilli(5000), 0, &messages.Aura{
+		Target: guid.GUID(2),
+	})
+
+	require.Nil(t, got.Caster)
+}
+
 func TestEventMetaSyntheticRoundTrip(t *testing.T) {
 	t.Parallel()
 	ts := time.UnixMilli(5000)

@@ -66,12 +66,14 @@ function createAuraEvent(
     activityCount: 0,
     isSynthetic: false,
     target: TARGET_GUID,
+    caster: null,
     spellName: "",
     spellId,
     spellAttackOutcome: null,
     amount: 1,
     application: AuraApplication.Gains,
     state: AuraState.Added,
+    isBuff: false,
     ...overrides,
   };
 }

@@ -51,6 +51,7 @@ type Observer func(Notification)
 // AuraState holds the current stack count for an aura.
 type AuraState struct {
 	Buff          bool
+	Source        *guid.GUID
 	Stacks        int32
 	AppliedAt     time.Time
 	LastUpdatedAt time.Time
@@ -131,6 +132,7 @@ func (t *Tracking) applyAura(msg *messages.Aura) {
 		state = &AuraState{}
 		t.units[msg.Target][msg.SpellData.ID] = state
 		state.Buff = msg.IsBuff
+		state.Source = cloneGUID(msg.Source)
 		state.Stacks = msg.Amount
 		state.AppliedAt = msg.Date()
 		state.LastUpdatedAt = msg.Date()
@@ -151,6 +153,9 @@ func (t *Tracking) applyAura(msg *messages.Aura) {
 	}
 
 	state.Buff = msg.IsBuff
+	if msg.Source != nil {
+		state.Source = cloneGUID(msg.Source)
+	}
 	state.Stacks = msg.Amount
 	state.LastUpdatedAt = msg.Date()
 	state.SpellID = msg.SpellData.ID
@@ -193,6 +198,14 @@ func (t *Tracking) applyAura(msg *messages.Aura) {
 		Stacks:    msg.Amount,
 		Timestamp: msg.Date(),
 	})
+}
+
+func cloneGUID(source *guid.GUID) *guid.GUID {
+	if source == nil {
+		return nil
+	}
+	cloned := *source
+	return &cloned
 }
 
 func maximumExpiry(appliedAt time.Time, spell *chrondbc.Spell, mods *chrondbc.DurationModifierSet) time.Time {
@@ -293,6 +306,7 @@ func (t *Tracking) SnapshotAll() map[guid.GUID]map[chrondbc.SpellID]*AuraState {
 		snap := make(map[chrondbc.SpellID]*AuraState, len(spells))
 		for id, state := range spells {
 			copy := *state
+			copy.Source = cloneGUID(state.Source)
 			snap[id] = &copy
 		}
 		result[unit] = snap
@@ -312,6 +326,7 @@ func (t *Tracking) ProjectAllAuras(ts time.Time) []*messages.Aura {
 			out = append(out, &messages.Aura{
 				MessageBase: messages.Base(ts, messages.WithSynthetic()),
 				IsBuff:      aura.Buff,
+				Source:      cloneGUID(aura.Source),
 				Target:      unitGUID,
 				SpellName:   aura.SpellName,
 				SpellData:   aura.Spell,
@@ -353,6 +368,7 @@ func (t *Tracking) ActiveAuras(unit guid.GUID) map[chrondbc.SpellID]*AuraState {
 	result := make(map[chrondbc.SpellID]*AuraState, len(spells))
 	for id, state := range spells {
 		copy := *state
+		copy.Source = cloneGUID(state.Source)
 		result[id] = &copy
 	}
 	return result

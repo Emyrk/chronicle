@@ -19,6 +19,7 @@ func TestProjectionHandleDeathCancelsUnitProjectionState(t *testing.T) {
 	t0 := time.Date(2026, time.July, 29, 12, 0, 0, 0, time.UTC)
 	deadUnit := guid.GUID(1)
 	otherUnit := guid.GUID(2)
+	otherCaster := guid.GUID(3)
 	spell := &chrondbc.Spell{ID: 100, Duration: dbcmem.SpellDuration{MaxDuration: 30_000}}
 
 	tracker := New(nil)
@@ -49,6 +50,7 @@ func TestProjectionHandleDeathCancelsUnitProjectionState(t *testing.T) {
 		},
 		otherKey: {
 			Key:            otherKey,
+			Source:         &otherCaster,
 			Spell:          spell,
 			SpellName:      "Test Aura",
 			Stacks:         1,
@@ -70,4 +72,6 @@ func TestProjectionHandleDeathCancelsUnitProjectionState(t *testing.T) {
 	projection.emitSyntheticExpiries(&messages.Damage{MessageBase: messages.Base(t0.Add(35 * time.Second))})
 	require.Len(t, emitted, 1)
 	assert.Equal(t, otherUnit, emitted[0].Target)
+	require.NotNil(t, emitted[0].Source)
+	assert.Equal(t, otherCaster, *emitted[0].Source)
 }

@@ -148,6 +148,7 @@ message Aura {
   AuraState state = 6;
   optional SpellData spellData = 7;
   bool isBuff = 8;
+  optional string caster = 9;
 }
 
 message AuraCast {
