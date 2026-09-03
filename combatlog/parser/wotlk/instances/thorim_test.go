@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	commoninstances "github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
@@ -109,6 +110,34 @@ func TestThorimInactiveAddsDoNotMergeAttempts(t *testing.T) {
 	require.Len(t, result.Encounters, 2)
 	require.Equal(t, start.Add(time.Minute), result.Encounters[0].Combat.End)
 	require.Equal(t, secondStart, result.Encounters[1].Combat.Start)
+}
+
+func TestThorimAddOnlyFightIsTrash(t *testing.T) {
+	t.Parallel()
+
+	instance := newUlduarTestInstance(t)
+	player := guid.GUID(1)
+	warbringer := creatureGUID(32877)
+	start := time.Date(2026, time.September, 3, 12, 0, 0, 0, time.UTC)
+
+	hit := damageEvent(player, warbringer, 1)
+	hit.MessageBase = messages.Base(start)
+	require.NoError(t, instance.Process(hit))
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(10 * time.Second)),
+		Victim:      player,
+		Killer:      &warbringer,
+	}))
+	require.NoError(t, instance.Process(messages.TimedOut(start.Add(61*time.Second))))
+
+	result, err := instance.Finalize(t.Context())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+
+	got := result.Encounters[0]
+	require.Equal(t, "Dark Rune Warbringer", got.Name)
+	require.False(t, got.Boss)
+	require.Equal(t, encounter.KillTypeWipe, got.KillType)
 }
 
 func TestThorimArenaStarterCombatIgnoresNPCDamage(t *testing.T) {
