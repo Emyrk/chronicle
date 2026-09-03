@@ -554,6 +554,16 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 			return nil
 		}
 
+		classification := h.units.Classify(char.ID())
+		_, alreadyInFight := h.currentFight.ActiveHostiles[char.ID()]
+		playerControlled := classification.Possession != nil ||
+			(classification.Relation.Owner != nil && classification.Relation.Owner.IsPlayer())
+		if playerControlled && !alreadyInFight {
+			// Player-controlled encounter units are allies for fight detection.
+			// Their entry IDs may still map to hostile encounter mechanics.
+			return nil
+		}
+
 		pd, ok := char.CurrentPeriod()
 		if !ok {
 			return nil

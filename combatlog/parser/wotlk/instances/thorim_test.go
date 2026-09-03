@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
 )
@@ -109,6 +110,42 @@ func TestThorimInactiveAddsDoNotMergeAttempts(t *testing.T) {
 	require.Len(t, result.Encounters, 2)
 	require.Equal(t, start.Add(time.Minute), result.Encounters[0].Combat.End)
 	require.Equal(t, secondStart, result.Encounters[1].Combat.Start)
+}
+
+func TestPlayerOwnedThorimAddDoesNotStartEncounter(t *testing.T) {
+	t.Parallel()
+
+	instance := newUlduarTestInstance(t)
+	player := guid.GUID(1)
+	warbringer := creatureGUID(32877)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, instance.Process(&messages.Unit{
+		MessageBase: messages.Base(start),
+		Info: unitinfo.Info{
+			Guid:         warbringer,
+			Name:         "Dark Rune Warbringer",
+			CanCooperate: false,
+		},
+	}))
+	require.NoError(t, instance.Process(&messages.NewOwner{
+		MessageBase: messages.Base(start),
+		Target:      warbringer,
+		NewOwner:    player,
+	}))
+
+	hit := damageEvent(player, warbringer, 1)
+	hit.MessageBase = messages.Base(start.Add(time.Second))
+	require.NoError(t, instance.Process(hit))
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(2 * time.Second)),
+		Victim:      warbringer,
+		Killer:      &player,
+	}))
+
+	result, err := instance.Finalize(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, result.Encounters)
 }
 
 func TestThorimArenaStarterCombatIgnoresNPCDamage(t *testing.T) {
