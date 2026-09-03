@@ -2310,11 +2310,16 @@ func (q *sqlQuerier) GetLogInstanceForDiscordAnnouncement(ctx context.Context, i
 }
 
 const listDiscordAnnouncementEncounters = `-- name: ListDiscordAnnouncementEncounters :many
-SELECT lie.name, lie.kill_type, lie.start_time, lie.end_time
+SELECT DISTINCT ON (lie.name)
+  lie.name, lie.kill_type, lie.start_time, lie.end_time
 FROM log_instance_encounters lie
 WHERE lie.instance_id = $1
   AND lie.boss = TRUE
-ORDER BY lie.start_time ASC, lie.id ASC
+ORDER BY
+  lie.name,
+  (lie.kill_type IN ('clean', 'partial')) DESC,
+  lie.end_time DESC,
+  lie.id DESC
 `
 
 type ListDiscordAnnouncementEncountersRow struct {
@@ -2459,6 +2464,8 @@ SELECT
   wsr.name AS realm_name,
   g.name AS guild_name,
   t.slug AS tenant_slug,
+  sr.duration_ms AS clear_duration_ms,
+  COALESCE(guild_average.avg_duration_ms, 0)::bigint AS guild_avg_duration_ms,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
 FROM log_instances li
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
@@ -2467,27 +2474,47 @@ LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN wow_servers ws ON ws.id = wsr.server_id
 LEFT JOIN tenants t ON t.id = ws.tenant_id
 LEFT JOIN guilds g ON g.id = li.guild_id
+LEFT JOIN instance_speedruns sr ON sr.instance_id = li.id AND sr.qualified = TRUE AND sr.duration_ms > 0
+LEFT JOIN LATERAL (
+  SELECT AVG(previous.duration_ms)::bigint AS avg_duration_ms
+  FROM (
+    SELECT DISTINCT ON (COALESCE(previous_li.duplicate_group_id, previous_li.id))
+      previous_sr.duration_ms
+    FROM instance_speedruns previous_sr
+    JOIN log_instances previous_li ON previous_li.id = previous_sr.instance_id
+    WHERE previous_sr.guild_id = li.guild_id
+      AND previous_sr.instance_name = li.name
+      AND previous_li.difficulty_name = li.difficulty_name
+      AND previous_li.max_players = li.max_players
+      AND previous_sr.qualified = TRUE
+      AND previous_sr.duration_ms > 0
+      AND COALESCE(previous_li.duplicate_group_id, previous_li.id) != COALESCE(li.duplicate_group_id, li.id)
+    ORDER BY COALESCE(previous_li.duplicate_group_id, previous_li.id), previous_sr.duration_ms ASC
+  ) previous
+) guild_average ON TRUE
 WHERE COALESCE(li.duplicate_group_id, li.id) = $1::uuid
 ORDER BY wlg.created_at ASC, li.start_time ASC NULLS LAST, li.id ASC
 `
 
 type ListInstancesForDiscordAnnouncementRow struct {
-	ID             uuid.UUID          `db:"id" json:"id"`
-	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
-	Name           string             `db:"name" json:"name"`
-	HashedSlug     pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
-	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime        pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	RecorderName   string             `db:"recorder_name" json:"recorder_name"`
-	MaxPlayers     int32              `db:"max_players" json:"max_players"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	Category       pgtype.Text        `db:"category" json:"category"`
-	UploadedAt     pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
-	UploaderName   string             `db:"uploader_name" json:"uploader_name"`
-	RealmName      pgtype.Text        `db:"realm_name" json:"realm_name"`
-	GuildName      pgtype.Text        `db:"guild_name" json:"guild_name"`
-	TenantSlug     pgtype.Text        `db:"tenant_slug" json:"tenant_slug"`
-	PlayerCount    int32              `db:"player_count" json:"player_count"`
+	ID                 uuid.UUID          `db:"id" json:"id"`
+	LogGroupID         uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Name               string             `db:"name" json:"name"`
+	HashedSlug         pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	StartTime          pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime            pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	RecorderName       string             `db:"recorder_name" json:"recorder_name"`
+	MaxPlayers         int32              `db:"max_players" json:"max_players"`
+	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
+	Category           pgtype.Text        `db:"category" json:"category"`
+	UploadedAt         pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
+	UploaderName       string             `db:"uploader_name" json:"uploader_name"`
+	RealmName          pgtype.Text        `db:"realm_name" json:"realm_name"`
+	GuildName          pgtype.Text        `db:"guild_name" json:"guild_name"`
+	TenantSlug         pgtype.Text        `db:"tenant_slug" json:"tenant_slug"`
+	ClearDurationMs    pgtype.Int8        `db:"clear_duration_ms" json:"clear_duration_ms"`
+	GuildAvgDurationMs int64              `db:"guild_avg_duration_ms" json:"guild_avg_duration_ms"`
+	PlayerCount        int32              `db:"player_count" json:"player_count"`
 }
 
 func (q *sqlQuerier) ListInstancesForDiscordAnnouncement(ctx context.Context, runID uuid.UUID) ([]ListInstancesForDiscordAnnouncementRow, error) {
@@ -2515,6 +2542,8 @@ func (q *sqlQuerier) ListInstancesForDiscordAnnouncement(ctx context.Context, ru
 			&i.RealmName,
 			&i.GuildName,
 			&i.TenantSlug,
+			&i.ClearDurationMs,
+			&i.GuildAvgDurationMs,
 			&i.PlayerCount,
 		); err != nil {
 			return nil, err

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/url"
 	"strings"
 	"time"
@@ -323,11 +324,8 @@ func (w *WorkerAnnounceRaidLog) instanceURL(id uuid.UUID, slug, tenantSlug pgtyp
 	return fmt.Sprintf("%s/instances/%s", baseURL, url.PathEscape(linkID))
 }
 
-func formatAnnouncementDuration(start, end pgtype.Timestamptz) string {
-	if !start.Valid || !end.Valid || !end.Time.After(start.Time) {
-		return "Duration unavailable"
-	}
-	duration := end.Time.Sub(start.Time).Round(time.Minute)
+func formatDuration(duration time.Duration) string {
+	duration = duration.Round(time.Minute)
 	hours := int(duration / time.Hour)
 	minutes := int(duration%time.Hour) / int(time.Minute)
 	if hours > 0 && minutes > 0 {
@@ -337,6 +335,35 @@ func formatAnnouncementDuration(start, end pgtype.Timestamptz) string {
 		return fmt.Sprintf("%dh", hours)
 	}
 	return fmt.Sprintf("%dm", minutes)
+}
+
+func formatAnnouncementDuration(start, end pgtype.Timestamptz) string {
+	if !start.Valid || !end.Valid || !end.Time.After(start.Time) {
+		return "Duration unavailable"
+	}
+	return formatDuration(end.Time.Sub(start.Time))
+}
+
+func announcementDuration(log database.ListInstancesForDiscordAnnouncementRow) string {
+	if log.ClearDurationMs.Valid && log.ClearDurationMs.Int64 > 0 {
+		return formatDuration(time.Duration(log.ClearDurationMs.Int64) * time.Millisecond)
+	}
+	return formatAnnouncementDuration(log.StartTime, log.EndTime)
+}
+
+func guildAverageComparison(currentDurationMs, averageDurationMs int64) string {
+	if currentDurationMs <= 0 || averageDurationMs <= 0 {
+		return ""
+	}
+	percent := int(math.Round(float64(averageDurationMs-currentDurationMs) / float64(averageDurationMs) * 100))
+	switch {
+	case percent > 0:
+		return fmt.Sprintf("+%d%% faster", percent)
+	case percent < 0:
+		return fmt.Sprintf("%d%% slower", percent)
+	default:
+		return "0% vs average"
+	}
 }
 
 func announcementColor(instanceName string) int {
@@ -401,34 +428,21 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 	if guildName == "" {
 		guildName = "this guild"
 	}
-	content := fmt.Sprintf("New log uploaded to **%s**", guildName)
-	if len(logs) > 1 {
-		content = fmt.Sprintf("%d logs uploaded to **%s**", len(logs), guildName)
-	}
 
 	variant := announcementVariant(best.DifficultyName, best.MaxPlayers)
 	title := best.Name
-	if variant != "" {
-		title += " · " + variant
+	if duration := announcementDuration(best); duration != "Duration unavailable" {
+		title += " · " + duration
 	}
 
-	details := make([]string, 0, 3)
-	if best.StartTime.Valid {
-		details = append(details, best.StartTime.Time.Format("Jan 2, 2006"))
-	}
-	if best.RealmName.Valid && best.RealmName.String != "" {
-		details = append(details, best.RealmName.String)
-	}
-	details = append(details, formatAnnouncementDuration(best.StartTime, best.EndTime))
-
-	fields := make([]*discordgo.MessageEmbedField, 0, 3)
+	fields := make([]*discordgo.MessageEmbedField, 0, 5)
 	if len(logs) == 1 {
 		fields = append(fields,
 			&discordgo.MessageEmbedField{Name: "BOSSES KILLED", Value: fmt.Sprintf("%d / %d", countKilledEncounters(bestEncounters), len(bestEncounters)), Inline: true},
 			&discordgo.MessageEmbedField{Name: "PLAYERS", Value: fmt.Sprintf("%d", best.PlayerCount), Inline: true},
 		)
-		if variant != "" {
-			fields = append(fields, &discordgo.MessageEmbedField{Name: "VARIANT", Value: variant, Inline: true})
+		if comparison := guildAverageComparison(best.ClearDurationMs.Int64, best.GuildAvgDurationMs); comparison != "" {
+			fields = append(fields, &discordgo.MessageEmbedField{Name: "VS. GUILD AVG", Value: comparison, Inline: true})
 		}
 	} else {
 		lines := make([]string, 0, len(logs))
@@ -437,29 +451,34 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 			if label == "" {
 				label = log.UploaderName
 			}
-			lines = append(lines, fmt.Sprintf("[Log %d](%s) · %s · %s · %d bosses", i+1, w.instanceURL(log.ID, log.HashedSlug, log.TenantSlug), label, formatAnnouncementDuration(log.StartTime, log.EndTime), encounterCounts[log.ID]))
+			lines = append(lines, fmt.Sprintf("[Log %d](%s) · %s · %s · %d bosses", i+1, w.instanceURL(log.ID, log.HashedSlug, log.TenantSlug), label, announcementDuration(log), encounterCounts[log.ID]))
 		}
 		fields = append(fields, &discordgo.MessageEmbedField{Name: "UPLOADED LOGS", Value: strings.Join(lines, "\n")})
 	}
+	if variant != "" {
+		fields = append(fields, &discordgo.MessageEmbedField{Name: "VARIANT", Value: variant, Inline: true})
+	}
+	if best.RealmName.Valid && best.RealmName.String != "" {
+		fields = append(fields, &discordgo.MessageEmbedField{Name: "REALM", Value: best.RealmName.String, Inline: true})
+	}
 
+	footerParts := []string{guildName, best.Name}
+	if best.StartTime.Valid {
+		footerParts = append(footerParts, best.StartTime.Time.Format("Jan 2, 2006"))
+	}
 	category := strings.ToUpper(best.Category.String)
 	if category == "" {
 		category = "LOG"
 	}
 	embed := &discordgo.MessageEmbed{
-		Author:      &discordgo.MessageEmbedAuthor{Name: category + " UPLOAD"},
-		Title:       title,
-		URL:         w.instanceURL(best.ID, best.HashedSlug, best.TenantSlug),
-		Description: strings.Join(details, " · "),
-		Fields:      fields,
-		Color:       announcementColor(best.Name),
-		Footer:      &discordgo.MessageEmbedFooter{Text: guildName + " · " + best.Name},
-	}
-	if best.UploadedAt.Valid {
-		embed.Timestamp = best.UploadedAt.Time.Format(time.RFC3339)
+		Author: &discordgo.MessageEmbedAuthor{Name: category + " UPLOAD"},
+		Title:  title,
+		URL:    w.instanceURL(best.ID, best.HashedSlug, best.TenantSlug),
+		Fields: fields,
+		Color:  announcementColor(best.Name),
+		Footer: &discordgo.MessageEmbedFooter{Text: strings.Join(footerParts, " · ")},
 	}
 	return &discordgo.MessageSend{
-		Content:         content,
 		Embeds:          []*discordgo.MessageEmbed{embed},
 		AllowedMentions: &discordgo.MessageAllowedMentions{Parse: []discordgo.AllowedMentionType{}},
 	}, nil
