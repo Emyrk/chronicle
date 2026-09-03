@@ -1,6 +1,8 @@
 package creatures
 
 import (
+	"time"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -19,8 +21,11 @@ func NewFreyaEncounterCharacter(id guid.GUID, all *characters.Characters) (chara
 		return nil, false
 	}
 
+	c := characters.NewCommonCharacter(id, all)
+	c.SetRecentlySlainDuration(time.Second * 30)
+
 	return &freyaCharacter{
-		Common: characters.NewCommonCharacter(id, all),
+		Common: c,
 		defeat: characters.NewScriptedDefeatDetector(id, freyaDefeatConfig()),
 	}, true
 }
