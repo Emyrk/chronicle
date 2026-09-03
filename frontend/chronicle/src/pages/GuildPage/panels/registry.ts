@@ -11,6 +11,7 @@ import { ProgressPanel } from "./Progress";
 import { BestPerformancePanel } from "./BestPerformance";
 import { QuoteBoardPanel } from "./QuoteBoard";
 import { RaidSchedulePanel } from "./RaidSchedule";
+import { TalentBuildsPanel } from "./TalentBuilds";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyPanelDefinition = GuildPanelDefinition<any>;
@@ -25,6 +26,7 @@ export const PANEL_REGISTRY: Record<string, AnyPanelDefinition> = {
   best_performance: BestPerformancePanel,
   quote_board: QuoteBoardPanel,
   raid_schedule: RaidSchedulePanel,
+  talent_builds: TalentBuildsPanel,
   // stats: StatsPanel,
   markdown: MarkdownPanel,
   // leaderboard: LeaderboardPanel,
