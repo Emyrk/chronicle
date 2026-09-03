@@ -260,6 +260,51 @@ func TestTracking_ProjectAllAuras(t *testing.T) {
 	}
 }
 
+func TestTracking_PreservesCasterAcrossProjection(t *testing.T) {
+	t.Parallel()
+
+	tr := auras.New(nil)
+	caster := guid.GUID(10)
+	msg := makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false)
+	msg.Source = &caster
+	tr.Process(msg)
+
+	state := tr.ActiveAuras(testUnit)[testSpell.ID]
+	require.NotNil(t, state)
+	require.NotNil(t, state.Source)
+	assert.Equal(t, caster, *state.Source)
+
+	projected := tr.ProjectAllAuras(t0.Add(5 * time.Second))
+	require.Len(t, projected, 1)
+	require.NotNil(t, projected[0].Source)
+	assert.Equal(t, caster, *projected[0].Source)
+	assert.True(t, projected[0].IsSynthetic())
+}
+
+func TestTracking_UpdatesCasterOnlyWhenKnown(t *testing.T) {
+	t.Parallel()
+
+	tr := auras.New(nil)
+	originalCaster := guid.GUID(10)
+	msg := makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false)
+	msg.Source = &originalCaster
+	tr.Process(msg)
+
+	unknownRefresh := makeAuraMsg(t0.Add(time.Second), testUnit, testSpell, types.AuraStateAdded, 1, false)
+	tr.Process(unknownRefresh)
+	state := tr.ActiveAuras(testUnit)[testSpell.ID]
+	require.NotNil(t, state.Source)
+	assert.Equal(t, originalCaster, *state.Source)
+
+	newCaster := guid.GUID(20)
+	knownRefresh := makeAuraMsg(t0.Add(2*time.Second), testUnit, testSpell, types.AuraStateAdded, 1, false)
+	knownRefresh.Source = &newCaster
+	tr.Process(knownRefresh)
+	state = tr.ActiveAuras(testUnit)[testSpell.ID]
+	require.NotNil(t, state.Source)
+	assert.Equal(t, newCaster, *state.Source)
+}
+
 func TestTracking_Finalize(t *testing.T) {
 	t.Parallel()
 	tr := auras.New(nil)

@@ -212,6 +212,7 @@ export type AuraState = (typeof AuraState)[keyof typeof AuraState];
 export interface AuraProcessorEvent extends EventMeta {
   type: "aura";
   target: string;  // The unit affected by the aura
+  caster: string | null;  // The known caster, or null when the log format cannot attribute it
   spellName: string;  // Name of the aura/buff/debuff
   spellId: number | null;  // Spell ID from SpellData (if available)
   /** AttackOutcome bitmask of possible hit table results (from SpellData) */
@@ -219,6 +220,7 @@ export interface AuraProcessorEvent extends EventMeta {
   amount: number;  // Stack count (for Modified events, 0 means ended)
   application: AuraApplication;  // Deprecated: use state instead
   state: AuraState;  // Added, Removed, or Modified
+  isBuff: boolean;  // True for buffs, false for debuffs
 }
 
 /**
