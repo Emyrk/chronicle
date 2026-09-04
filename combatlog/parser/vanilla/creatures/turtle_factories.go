@@ -80,6 +80,7 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 		NewGothikRoom,
 		NewKelThuzadRoom,
 		NewHeiganTheUnclean,
+		NewPlagueBeast,
 		NewDiseasedMaggot,
 		NewEyeStalk,
 		// L/UBRS

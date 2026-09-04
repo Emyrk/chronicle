@@ -56,6 +56,17 @@ func NewHeiganTheUnclean(id guid.GUID, all *characters.Characters) (characters.C
 	)(id, all)
 }
 
+func NewPlagueBeast(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	if entry, ok := id.GetEntry(); !ok || entry != 16034 {
+		return nil, false
+	}
+
+	c := characters.NewCommonCharacter(id, all)
+	c.WithTimeoutAsDeath()
+	c.WithTimeout(time.Second * 25)
+	return c, true
+}
+
 func NewEyeStalk(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	entry, ok := id.GetEntry()
 	if !ok || entry != 16236 {
