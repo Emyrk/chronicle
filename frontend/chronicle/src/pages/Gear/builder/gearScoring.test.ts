@@ -97,6 +97,7 @@ describe("itemStatValues", () => {
         { type: 18, value: 12 }, // spell hit rating
         { type: 19, value: 9 }, // melee crit rating
         { type: 30, value: 7 }, // spell haste rating
+        { type: 1000, value: 5 }, // attack and casting speed percentage
         { type: 42, value: 44 }, // pre-Wrath spell damage
       ],
     });
@@ -104,6 +105,7 @@ describe("itemStatValues", () => {
       hit: 12,
       crit: 9,
       haste: 7,
+      attack_casting_speed: 5,
       spell_power: 44,
     });
   });
@@ -130,6 +132,17 @@ describe("scoring", () => {
     expect(scoreItem(chest, weights)).toBe(35); // 10*2 + 10*1.5
     expect(scoreItem(sword, weights)).toBe(300); // 50 dps * 6
     expect(scoreItem(chest, { made_up: 100 })).toBe(0);
+  });
+
+  it("scores haste rating and attack/casting speed independently", () => {
+    const item = simItem({
+      stats: [
+        { type: 30, value: 7 },
+        { type: 1000, value: 5 },
+      ],
+    });
+    expect(scoreItem(item, { haste: 2 })).toBe(14);
+    expect(scoreItem(item, { attack_casting_speed: 3 })).toBe(15);
   });
 
   it("sums across items", () => {
