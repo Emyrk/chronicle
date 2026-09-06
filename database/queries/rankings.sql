@@ -203,6 +203,10 @@ WITH representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
+    -- Avoid calculating boss coverage for unrelated instances. The leaderboard
+    -- filters the ranking rows by this same denormalized instance name below.
+    WHERE cardinality(@instance_names :: text[]) = 0
+       OR li.name = ANY(@instance_names :: text[])
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
