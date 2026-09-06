@@ -224,24 +224,25 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 		}))
 	}
 
-	// The canonical upload has the internally consistent run. The duplicate has
-	// higher per-encounter HPS, which previously won each DISTINCT ON independently.
+	// The group anchor is truncated before Ragnaros. The duplicate has the
+	// complete, internally consistent run and must be selected as representative.
 	insertEncounterRanking(canonicalID, "Lucifron", 100, baseTime)
 	insertEncounterRanking(canonicalID, "Magmadar", 100, baseTime.Add(time.Minute))
 	insertEncounterRanking(duplicateID, "Lucifron", 900, baseTime)
 	insertEncounterRanking(duplicateID, "Magmadar", 900, baseTime.Add(time.Minute))
+	insertEncounterRanking(duplicateID, "Ragnaros", 900, baseTime.Add(2*time.Minute))
 
 	rows, err := store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
 		Metric: "hps", QueryLimit: 10,
 		InstanceNames:  []string{"Molten Core"},
-		EncounterNames: []string{"Lucifron", "Magmadar"},
+		EncounterNames: []string{"Lucifron", "Magmadar", "Ragnaros"},
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, canonicalID.String(), rows[0].LogHashedSlug)
-	assert.Equal(t, int64(200), rows[0].HealingDone)
-	assert.Equal(t, 20.0, rows[0].DurationSecs)
-	assert.Equal(t, 10.0, rows[0].Hps)
+	assert.Equal(t, duplicateID.String(), rows[0].LogHashedSlug)
+	assert.Equal(t, int64(2700), rows[0].HealingDone)
+	assert.Equal(t, 30.0, rows[0].DurationSecs)
+	assert.Equal(t, 90.0, rows[0].Hps)
 }
 
 func TestRankingSnapshots(t *testing.T) {

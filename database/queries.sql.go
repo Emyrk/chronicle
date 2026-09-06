@@ -5006,6 +5006,12 @@ WITH representative_instances AS (
         li.id
     FROM log_instances li
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        -- Prefer the upload with the broadest boss-ranking coverage. The group
+        -- anchor is the first upload, but it may be truncated before the final boss.
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
@@ -5118,6 +5124,12 @@ WITH representative_instances AS (
         li.id
     FROM log_instances li
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        -- Prefer the upload with the broadest boss-ranking coverage. The group
+        -- anchor is the first upload, but it may be truncated before the final boss.
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
@@ -9457,6 +9469,12 @@ WITH representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        -- Prefer the upload with the broadest boss-ranking coverage. The group
+        -- anchor is the first upload, but it may be truncated before the final boss.
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
@@ -11075,6 +11093,12 @@ WITH representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        -- Prefer the upload with the broadest boss-ranking coverage. The group
+        -- anchor is the first upload, but it may be truncated before the final boss.
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
@@ -11286,6 +11310,12 @@ WITH representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        -- Prefer the upload with the broadest boss-ranking coverage. The group
+        -- anchor is the first upload, but it may be truncated before the final boss.
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
@@ -11578,6 +11608,12 @@ WITH representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        -- Prefer the upload with the broadest boss-ranking coverage. The group
+        -- anchor is the first upload, but it may be truncated before the final boss.
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
@@ -12050,6 +12086,12 @@ WITH representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        -- Prefer the upload with the broadest boss-ranking coverage. The group
+        -- anchor is the first upload, but it may be truncated before the final boss.
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
@@ -14879,6 +14921,12 @@ representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        -- Prefer the upload with the broadest boss-ranking coverage. The group
+        -- anchor is the first upload, but it may be truncated before the final boss.
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
@@ -14942,6 +14990,12 @@ representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        -- Prefer the upload with the broadest boss-ranking coverage. The group
+        -- anchor is the first upload, but it may be truncated before the final boss.
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
