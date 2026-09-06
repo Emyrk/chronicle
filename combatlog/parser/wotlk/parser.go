@@ -79,7 +79,7 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 		scanner:      bufio.NewScanner(r),
 		clientFormat: format,
 		guidNames:    gn,
-		synthetics:   synthetic.New(ctx, logger, wowDB, reg, gn),
+		synthetics:   synthetic.New(ctx, logger, wowDB, reg, gn, format == clientFormatTBC),
 		itemFetcher:  gear,
 		baseYear:     time.Now().Year(),
 		metrics: parservanilla.Metrics{

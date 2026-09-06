@@ -30,6 +30,7 @@ type Synthetic struct {
 	slain        *synthetic.SlainDetective
 	absorption   *synthetic.Absorption
 	possession   *synthetic.Possession
+	earthShield  *earthShieldAttribution
 
 	wowDB gamedb.GameDB
 
@@ -39,13 +40,13 @@ type Synthetic struct {
 	absorptionDur   time.Duration
 }
 
-func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *registry.Registry, names NameResolver) *Synthetic {
+func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *registry.Registry, names NameResolver, creditEarthShield bool) *Synthetic {
 	var zd *zonedetector.ZoneDetector
 	if reg != nil {
 		zd = zonedetector.New(logger, reg)
 	}
 
-	return &Synthetic{
+	s := &Synthetic{
 		slain:        synthetic.NewSlainDetective(),
 		absorption:   synthetic.NewAbsorption(logger),
 		logger:       logger,
@@ -55,6 +56,10 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *reg
 		possession:   synthetic.NewPossession(ctx, logger),
 		zoneDetector: zd,
 	}
+	if creditEarthShield {
+		s.earthShield = newEarthShieldAttribution()
+	}
+	return s
 }
 
 func (s *Synthetic) DetailedTimes() map[string]time.Duration {
@@ -88,6 +93,9 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 	msgs = s.absorption.ProcessMessages(msgs)
 	s.absorptionDur += time.Since(now)
 
+	if s.earthShield != nil {
+		msgs = s.earthShield.ProcessMessages(msgs)
+	}
 	msgs = synthetic.CreditJudgementOfLightToTarget(msgs)
 
 	return msgs, nil
