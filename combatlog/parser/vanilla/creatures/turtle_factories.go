@@ -142,6 +142,11 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 		)...)
 	}
 
+	// Keep unmatched pets available to unit metadata consumers without allowing
+	// them to create encounter activity. Known pet factories added above retain
+	// precedence over this fallback.
+	cres = append(cres, NewUnrecognizedPet)
+
 	return cres
 }
 
