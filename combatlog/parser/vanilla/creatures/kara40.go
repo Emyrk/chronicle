@@ -41,6 +41,15 @@ func NewLivingStone(id guid.GUID, all *characters.Characters) (characters.Charac
 		WithTimeoutAsDeathIf(characters.IfEntryAlive(rupturanEntry)), true
 }
 
+func NewManascaleSuppressor(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	if entry, ok := id.GetEntry(); !ok || entry != 61943 {
+		return nil, false
+	}
+
+	return characters.NewIgnoreCastCharacter(characters.NewCommonCharacter(id, all).
+		WithTimeoutAsDeathIf(characters.IfEntryAlive(61946)), 52391), true
+}
+
 func NewMephistroth(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	if entry, ok := id.GetEntry(); !ok || entry != 93333 {
 		return nil, false

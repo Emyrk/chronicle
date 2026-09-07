@@ -137,6 +137,7 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 			NewFelheart,
 			NewLivingStone,
 			NewIncantagos,
+			NewManascaleSuppressor,
 			// Emerald Sanctum
 			NewSolnius,
 		)...)
