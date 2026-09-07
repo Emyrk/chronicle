@@ -18,12 +18,6 @@ func NewNeverActive(id guid.GUID) NeverActive {
 	return NeverActive{id: id}
 }
 
-// NewPersistedNeverActive creates a character that never contributes activity
-// but is retained in instance unit metadata.
-func NewPersistedNeverActive(id guid.GUID) NeverActive {
-	return NeverActive{id: id, persistInInstance: true}
-}
-
 // NewNamedNeverActive creates a character that never contributes activity while
 // preserving its known display name and requesting instance-unit persistence.
 func NewNamedNeverActive(id guid.GUID, all *Characters, name string) NeverActive {

@@ -974,17 +974,29 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		vehicleMetadata = h.vehicleTracker.MetadataForRange(instanceStart, instanceEnd)
 	}
 
-	persistedUnits := make([]guid.GUID, 0)
+	persistedUnitSet := make(map[guid.GUID]struct{})
 	if h.Characters != nil {
 		_ = h.Characters.All.ForEach(func(char characters.Character) error {
 			persist, ok := char.(characters.InstanceUnitPersister)
 			if ok && persist.PersistInInstance() {
-				persistedUnits = append(persistedUnits, char.ID())
+				persistedUnitSet[char.ID()] = struct{}{}
 			}
 			return nil
 		})
-		slices.Sort(persistedUnits)
 	}
+	// UNIT_INFO pets should be available to metadata consumers such as Unit
+	// Lookup regardless of whether their Character implementation became active.
+	// This intentionally does not alter character factory selection or activity.
+	for id := range h.units.Info {
+		if id.IsPet() {
+			persistedUnitSet[id] = struct{}{}
+		}
+	}
+	persistedUnits := make([]guid.GUID, 0, len(persistedUnitSet))
+	for id := range persistedUnitSet {
+		persistedUnits = append(persistedUnits, id)
+	}
+	slices.Sort(persistedUnits)
 
 	return &FinalizedInstance{
 		Realm:        h.realm,

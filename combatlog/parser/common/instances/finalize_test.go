@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -204,6 +205,36 @@ func TestFinalizeIncludesNamedNeverActiveUnitsForPersistence(t *testing.T) {
 	result, err := h.Finalize(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, []guid.GUID{sifID}, result.PersistedUnits)
+}
+
+func TestFinalizePersistsUnitInfoPetsWithoutChangingCharacterFallback(t *testing.T) {
+	t.Parallel()
+
+	db := unitdb.New()
+	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{})
+	chars := characters.NewCharacters(db, nil, idf)
+	petID := guid.GUID(0xF1400234DC000005)
+	ownerID := guid.GUID(0x000000003B9BC56F)
+	db.Update(unitinfo.Info{
+		Guid:         petID,
+		Name:         "Sproutling",
+		CanCooperate: true,
+		Owner:        &ownerID,
+	})
+
+	char, added := chars.Add(petID, time.Time{})
+	require.True(t, added)
+	require.IsType(t, &characters.Common{}, char)
+
+	h := &Hookable{
+		Identifier: idf,
+		units:      db,
+		Characters: chars,
+	}
+	result, err := h.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []guid.GUID{petID}, result.PersistedUnits)
+	require.False(t, char.IsActive())
 }
 
 func TestFinalize_InconsistentHostileIDMapping_ReturnsError(t *testing.T) {
