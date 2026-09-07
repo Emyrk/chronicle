@@ -139,3 +139,80 @@ func TestOwnerSlain_PossessedPetDiesWithPermanentOwner(t *testing.T) {
 	require.Equal(t, period.EndStateSlain, p.EndState)
 	require.Equal(t, ReasonOwnerSlain, p.End.Reason)
 }
+
+func TestTimeoutAsDeathIfEntryAlive(t *testing.T) {
+	t.Parallel()
+
+	const (
+		bossEntry  = uint32(100)
+		trashEntry = uint32(200)
+	)
+	bossID := entryGUID(0xF130000000000000, bossEntry)
+	trashID := entryGUID(0xF130000000000000, trashEntry)
+
+	chars := NewCharacters(
+		unitdb.New(),
+		[]CharacterFactory{
+			func(id guid.GUID, all *Characters) (Character, bool) {
+				switch id {
+				case bossID:
+					return NewCommonCharacter(id, all).WithTimeout(10 * time.Second), true
+				case trashID:
+					return NewCommonCharacter(id, all).
+						WithTimeout(time.Second).
+						WithTimeoutAsDeathIf(IfEntryAlive(bossEntry)), true
+				default:
+					return nil, false
+				}
+			},
+		},
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+	boss, _ := chars.Add(bossID, time.Time{})
+	trash, _ := chars.Add(trashID, time.Time{})
+
+	base := time.Date(2026, time.September, 7, 0, 0, 0, 0, time.UTC)
+	trash.(*Common).Start("test", messages.TimedOut(base))
+	boss.(*Common).Start("test", messages.TimedOut(base.Add(500*time.Millisecond)))
+
+	require.NoError(t, trash.Process(messages.TimedOut(base.Add(2*time.Second))))
+	require.Equal(t, period.EndStateSlain, trash.LastEndState())
+}
+
+func TestTimeoutAsDeathIfEntryAliveRequiresActiveEntry(t *testing.T) {
+	t.Parallel()
+
+	const (
+		bossEntry  = uint32(100)
+		trashEntry = uint32(200)
+	)
+	bossID := entryGUID(0xF130000000000000, bossEntry)
+	trashID := entryGUID(0xF130000000000000, trashEntry)
+
+	chars := NewCharacters(
+		unitdb.New(),
+		[]CharacterFactory{
+			func(id guid.GUID, all *Characters) (Character, bool) {
+				switch id {
+				case bossID:
+					return NewCommonCharacter(id, all), true
+				case trashID:
+					return NewCommonCharacter(id, all).
+						WithTimeout(time.Second).
+						WithTimeoutAsDeathIf(IfEntryAlive(bossEntry)), true
+				default:
+					return nil, false
+				}
+			},
+		},
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+	_, _ = chars.Add(bossID, time.Time{})
+	trash, _ := chars.Add(trashID, time.Time{})
+
+	base := time.Date(2026, time.September, 7, 0, 0, 0, 0, time.UTC)
+	trash.(*Common).Start("test", messages.TimedOut(base))
+
+	require.NoError(t, trash.Process(messages.TimedOut(base.Add(2*time.Second))))
+	require.Equal(t, period.EndStateTimeout, trash.LastEndState())
+}

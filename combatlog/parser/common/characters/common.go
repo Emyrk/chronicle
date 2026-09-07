@@ -16,10 +16,25 @@ const (
 	InactivityTimeout = time.Second * 60
 )
 
+type TimeoutAsDeathCondition func(*Characters) bool
+
+// IfEntryAlive treats a timeout as a death while any creature with the given
+// entry is active.
+func IfEntryAlive(entry uint32) TimeoutAsDeathCondition {
+	return func(all *Characters) bool {
+		for _, character := range all.ByEntry[entry] {
+			if character.IsActive() {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 type Common struct {
 	*Base[*period.InactivityPeriod]
-	timeout        time.Duration
-	timeoutAsDeath bool
+	timeout          time.Duration
+	timeoutAsDeathIf TimeoutAsDeathCondition
 }
 
 func NewCommonCharacter(id guid.GUID, all *Characters) *Common {
@@ -35,7 +50,11 @@ func (c *Common) WithTimeout(timeout time.Duration) *Common {
 }
 
 func (c *Common) WithTimeoutAsDeath() *Common {
-	c.timeoutAsDeath = true
+	return c.WithTimeoutAsDeathIf(func(*Characters) bool { return true })
+}
+
+func (c *Common) WithTimeoutAsDeathIf(condition TimeoutAsDeathCondition) *Common {
+	c.timeoutAsDeathIf = condition
 	return c
 }
 
@@ -50,10 +69,13 @@ func (c *Common) Process(m messages.Message) error {
 }
 
 func (c *Common) Start(reason string, m messages.Message) {
-	c.Activity.Start(
-		period.NewInactivityPeriod(c.ID(), c.timeout).WithTimeoutAsDeath(c.timeoutAsDeath),
-		reason, m,
-	)
+	activity := period.NewInactivityPeriod(c.ID(), c.timeout)
+	if c.timeoutAsDeathIf != nil {
+		activity.WithTimeoutAsDeathIf(func() bool {
+			return c.timeoutAsDeathIf(c.Lookup())
+		})
+	}
+	c.Activity.Start(activity, reason, m)
 }
 
 type CharacterBase interface {

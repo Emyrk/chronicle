@@ -28,7 +28,7 @@ func NewNetherInfernal(id guid.GUID, all *characters.Characters) (characters.Cha
 	}
 
 	c := characters.NewCommonCharacter(id, all)
-	c.WithTimeoutAsDeath()
+	c.WithTimeoutAsDeathIf(characters.IfEntryAlive(59991))
 
 	return c, true
 }
@@ -37,7 +37,8 @@ func NewLivingStone(id guid.GUID, all *characters.Characters) (characters.Charac
 	if entry, ok := id.GetEntry(); !ok || entry != 59959 {
 		return nil, false
 	}
-	return characters.NewCommonCharacter(id, all).WithTimeoutAsDeath(), true
+	return characters.NewCommonCharacter(id, all).
+		WithTimeoutAsDeathIf(characters.IfEntryAlive(rupturanEntry)), true
 }
 
 func NewMephistroth(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
@@ -131,5 +132,6 @@ func NewDraeneiNetherWalker(id guid.GUID, all *characters.Characters) (character
 	if entry, ok := id.GetEntry(); !ok || entry != 59978 {
 		return nil, false
 	}
-	return characters.NewCommonCharacter(id, all).WithTimeoutAsDeath(), true
+	return characters.NewCommonCharacter(id, all).
+		WithTimeoutAsDeathIf(characters.IfEntryAlive(59981)), true
 }

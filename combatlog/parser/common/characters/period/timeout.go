@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 var _ IsPeriod = (*InactivityPeriod)(nil)
@@ -40,7 +40,7 @@ type InactivityTimer struct {
 type InactivityPeriod struct {
 	*WorkingPeriod[InactivityTimer]
 
-	timeoutAsDeath bool
+	timeoutAsDeathIf func() bool
 }
 
 // NewInactivityPeriod creates a new inactivity-based period with the given
@@ -54,7 +54,11 @@ func NewInactivityPeriod(me guid.GUID, bumpBy time.Duration) *InactivityPeriod {
 }
 
 func (p *InactivityPeriod) WithTimeoutAsDeath(set bool) *InactivityPeriod {
-	p.timeoutAsDeath = set
+	return p.WithTimeoutAsDeathIf(func() bool { return set })
+}
+
+func (p *InactivityPeriod) WithTimeoutAsDeathIf(condition func() bool) *InactivityPeriod {
+	p.timeoutAsDeathIf = condition
 	return p
 }
 
@@ -113,7 +117,7 @@ func (p *InactivityPeriod) HandleTimeout(now time.Time) bool {
 	// Normal inactivity timeout
 	if now.After(p.Meta.NextTimeout) {
 		p.Timeout("inactivity", p.Meta.NextTimeout)
-		if p.timeoutAsDeath {
+		if p.timeoutAsDeathIf != nil && p.timeoutAsDeathIf() {
 			p.EndState = EndStateSlain
 		} else if strings.HasPrefix(p.LastActive.Reason, "cc_") {
 			p.EndState = EndStateReset
