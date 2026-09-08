@@ -191,9 +191,9 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     
     // Filter by selected players if any are selected
     const { entitySelection } = context;
-    // Aura events only have target, cast events have caster but may not have target.
+    // Aura caster attribution is nullable because some combat log formats only identify the target.
     // Combatant info events use "guid" instead of caster/target.
-    const eventCaster = "attacker" in event ? event.attacker : ("caster" in event ? event.caster : ("source" in event ? event.source : ("guid" in event ? event.guid : ("player" in event ? event.player : ""))));
+    const eventCaster = ("attacker" in event ? event.attacker : ("caster" in event ? event.caster : ("source" in event ? event.source : ("guid" in event ? event.guid : ("player" in event ? event.player : ""))))) ?? "";
     const eventTarget = "target" in event ? event.target : ("guid" in event ? event.guid : "");
     if (entitySelection.playerIds.size > 0) {
       const raidGroupMatch = streamType === "raid_group"
@@ -540,7 +540,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       // Show aura state in extra field (state is the preferred field)
       const stateNames = ["Unknown", "Added", "Removed", "Modified"];
       const stateName = stateNames[auraEvent.state] || "Unknown";
-      rawEvent.extra = `${stateName} (stacks=${auraEvent.amount})`;
+      const auraKind = auraEvent.isBuff ? "Buff" : "Debuff";
+      rawEvent.extra = `${auraKind} · ${stateName} (stacks=${auraEvent.amount})`;
     } else if (streamType === "slain") {
       const slainEvent = event as SlainProcessorEvent;
       // Show death info in extra field

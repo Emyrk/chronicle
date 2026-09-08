@@ -10,9 +10,11 @@ export interface AuraRef {
   spellName?: string;
 }
 
-interface ActiveAura {
+export interface ActiveAura {
   spellId: number | null;
   normalizedSpellName: string;
+  caster: string | null;
+  isBuff: boolean;
   stacks: number;
 }
 
@@ -154,9 +156,12 @@ function applyAuraStateEvent(
 
   const stacks = event.amount;
 
+  const previous = targetAuras.get(key);
   targetAuras.set(key, {
     spellId: event.spellId,
     normalizedSpellName,
+    caster: event.caster ?? previous?.caster ?? null,
+    isBuff: event.isBuff,
     stacks,
   });
 
@@ -248,6 +253,39 @@ export function getAuraStacks(
   }
 
   return maxStacks;
+}
+
+/**
+ * Return the known caster for a tracked aura, or null when unavailable.
+ */
+export function getAuraCaster(
+  state: AuraProcessorState,
+  encounterID: string,
+  targetGuid: string,
+  auraRef: AuraRef,
+): string | null {
+  const targetAuras = getTargetAuras(state, encounterID, targetGuid);
+  if (!targetAuras) return null;
+
+  const spellId = "spellId" in auraRef ? auraRef.spellId : undefined;
+  if (spellId != null) {
+    const aura = targetAuras.get(spellIdKey(spellId));
+    if (aura) return aura.caster;
+  }
+
+  const normalizedSpellName = normalizeSpellName("spellName" in auraRef ? auraRef.spellName : undefined);
+  if (!normalizedSpellName) return null;
+
+  const namedAura = targetAuras.get(spellNameKey(normalizedSpellName));
+  if (namedAura) return namedAura.caster;
+
+  for (const aura of targetAuras.values()) {
+    if (aura.normalizedSpellName === normalizedSpellName) {
+      return aura.caster;
+    }
+  }
+
+  return null;
 }
 
 /**
