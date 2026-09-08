@@ -1,4 +1,6 @@
 import { useCallback } from "react";
+import { ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useSpell } from "@/api/queries";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
@@ -10,24 +12,38 @@ import {
   type SpellCountSpellData,
 } from "./spellCount.processor";
 
-// eslint-disable-next-line react-refresh/only-export-components
-function SpellCell({ spell }: { spell: SpellCountSpellData }) {
+export function SpellCell({ spell }: { spell: SpellCountSpellData }) {
   const datasetId = useDatasetId();
   const { data } = useSpell(
     spell.spellId > 0 ? String(spell.spellId) : "",
     datasetId,
     { enabled: spell.spellId > 0 },
   );
+  const spellName = <span className="truncate">{spell.spellName}</span>;
 
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5">
-      {data ? <SpellIconWithTooltip spell={data} size={16} className="size-4 shrink-0" /> : null}
-      <span className="truncate">{spell.spellName}</span>
+      {data ? (
+        <SpellIconWithTooltip spell={data} size={16} className="size-4 shrink-0">
+          {spellName}
+        </SpellIconWithTooltip>
+      ) : spellName}
+      {spell.spellId > 0 ? (
+        <Link
+          to={`/wowdb/spell/${spell.spellId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          aria-label={`Open ${spell.spellName} (spell ID ${spell.spellId}) in WowDB`}
+          title={`Open spell ID ${spell.spellId} in WowDB`}
+        >
+          <ExternalLink className="size-3" />
+        </Link>
+      ) : null}
     </span>
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 function SpellCountTable({ spells }: { spells: SpellCountSpellData[] }) {
   const sorted = [...spells].sort((a, b) =>
     b.successful - a.successful
@@ -55,7 +71,7 @@ function SpellCountTable({ spells }: { spells: SpellCountSpellData[] }) {
               key={`${spell.spellId}:${spell.spellName}`}
               className="border-b border-border/10 hover:bg-muted/50"
             >
-              <td className="max-w-[220px] px-2 py-1" title={spell.spellName}>
+              <td className="max-w-[220px] px-2 py-1">
                 <SpellCell spell={spell} />
               </td>
               <td className="px-2 py-1 text-right font-mono">
@@ -79,6 +95,7 @@ interface UseSpellCountBreakoutOptions {
   processing: boolean;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useSpellCountBreakout({
   result,
   context,
