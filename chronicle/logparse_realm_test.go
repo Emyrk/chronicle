@@ -164,6 +164,18 @@ continuation line that doesn't have framing`,
 			expected:  "",
 		},
 
+		// ── Blizzard combat log v9 ───────────────────────────────────
+		{
+			name:      "v9/dominant_engaged_realm",
+			logFormat: database.LogFormatV9Cleu,
+			input: `9/3/2026 18:57:03.000-6  SPELL_CAST_SUCCESS,Player-1-00000001,"Visitor-Dreamscythe-US",0x514,0,0000000000000000,nil,0,0,1,"Spell",0x1
+9/3/2026 18:58:00.000-6  ENCOUNTER_START,601,"Boss",4,25,564,5
+9/3/2026 18:58:01.000-6  SPELL_DAMAGE,Player-2-00000001,"One-Nightslayer-US",0x514,0,Creature-0-1-564-1-1-1,"Boss",0,0,1,"Spell",0x1,1,1,-1,1,0,0,0,nil,nil,nil
+9/3/2026 18:58:02.000-6  SPELL_HEAL,Player-2-00000002,"Two-Nightslayer-US",0x514,0,Player-2-00000001,"One-Nightslayer-US",0x514,0,1,"Heal",0x2,1,1,0,0,nil
+9/3/2026 18:59:00.000-6  ENCOUNTER_END,601,"Boss",4,25,1`,
+			expected: "Nightslayer-US",
+		},
+
 		// ── AzerothCore server-side ──────────────────────────────────
 		{
 			name:      "azerothcore/chronicle_header_with_realm",

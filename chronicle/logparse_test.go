@@ -10,6 +10,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestEnsureFormatFlavor(t *testing.T) {
+	t.Parallel()
+
+	base := database.WoWFlavor{database.FlavorTBC}
+	got := ensureFormatFlavor(database.LogFormatV9Cleu, base)
+	require.Equal(t, database.WoWFlavor{
+		database.FlavorTBC,
+		database.FlavorTBCAnniversary,
+	}, got)
+	require.Equal(t, base, ensureFormatFlavor(database.LogFormat243CcAddon, base))
+}
+
 func TestSlugCollisionFromLookup(t *testing.T) {
 	t.Parallel()
 

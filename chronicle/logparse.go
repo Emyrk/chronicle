@@ -111,6 +111,16 @@ func resolveLogFlavor(current database.WoWFlavor, explicit bool, resolved Resolv
 	return merged, !slices.Equal(current, merged)
 }
 
+func ensureFormatFlavor(format database.LogFormat, flavor database.WoWFlavor) database.WoWFlavor {
+	if format == database.LogFormatV9Cleu {
+		return flavor.Merge(database.WoWFlavor{
+			database.FlavorTBC,
+			database.FlavorTBCAnniversary,
+		})
+	}
+	return flavor
+}
+
 func slugCollisionFromLookup(err error) (bool, error) {
 	switch {
 	case err == nil:
@@ -255,6 +265,9 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	// selected flavor, including on reparses of logs with a persisted flavor.
 	var flavorChanged bool
 	flavor, flavorChanged = resolveLogFlavor(flavor, explicitFlavor, resolved)
+	formatFlavor := ensureFormatFlavor(logFormat, flavor)
+	flavorChanged = flavorChanged || !slices.Equal(flavor, formatFlavor)
+	flavor = formatFlavor
 	if flavorChanged {
 		_ = db.UpdateWoWLogGroupFlavor(ctx, database.UpdateWoWLogGroupFlavorParams{
 			ID:     lg.ID,

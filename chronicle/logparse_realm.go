@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	blizzardv9 "github.com/Emyrk/chronicle/combatlog/parser/blizzard/v9"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
@@ -98,6 +99,10 @@ func resolveRealmByName(
 // found. Scans the entire file — realm info can appear at any point depending
 // on format.
 func scanRealmName(logFormat database.LogFormat, data []byte) string {
+	if logFormat == database.LogFormatV9Cleu {
+		return blizzardv9.DominantEngagedRealm(data)
+	}
+
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		line := scanner.Text()

@@ -106,6 +106,7 @@ func TestExpectedRawLogFiles(t *testing.T) {
 	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormat112aCcAddon))
 	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormat243CcAddon))
 	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormat335aCcAddon))
+	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormatV9Cleu))
 }
 
 func TestValidateResyncRawFiles(t *testing.T) {

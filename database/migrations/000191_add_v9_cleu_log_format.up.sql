@@ -1,0 +1,1 @@
+ALTER TYPE log_format ADD VALUE IF NOT EXISTS 'v9-cleu';
