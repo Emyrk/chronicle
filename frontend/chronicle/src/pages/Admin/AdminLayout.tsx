@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthorizationCheck } from "@/api/queries";
+import { useAuthorizationCheck, useSiteConfig } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Database,
   Camera,
+  HeartHandshake,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -41,6 +42,7 @@ const tabs: Tab[] = [
   { path: "/admin/applications", label: "Applications", icon: ClipboardList },
   { path: "/admin/cache-stats", label: "Cache Stats", icon: Database },
   { path: "/admin/parsing", label: "Parsing", icon: Camera },
+  { path: "/admin/support", label: "Support", icon: HeartHandshake },
 ];
 
 export function AdminLayout() {
@@ -49,6 +51,7 @@ export function AdminLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { data: siteConfig, isLoading: siteConfigLoading } = useSiteConfig();
 
   const authzChecks = useMemo(
     () => ({
@@ -61,7 +64,8 @@ export function AdminLayout() {
   });
   const isAdmin = authz?.admin ?? false;
 
-  const sessionLoading = authLoading || authzLoading;
+  const sessionLoading = authLoading || authzLoading || siteConfigLoading;
+  const visibleTabs = siteConfig?.support_enabled ? tabs : tabs.filter((tab) => tab.path !== "/admin/support");
 
   if (sessionLoading) {
     return (
@@ -96,7 +100,7 @@ export function AdminLayout() {
 
   const renderNavLinks = (closeOnNavigate: boolean) => (
     <ul className="space-y-1">
-      {tabs.map((tab) => (
+      {visibleTabs.map((tab) => (
         <li key={tab.path}>
           <Link
             to={tab.path}

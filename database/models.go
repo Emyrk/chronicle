@@ -1885,6 +1885,33 @@ type SiteConfig struct {
 	ParseConfig           []byte             `db:"parse_config" json:"parse_config"`
 }
 
+type SupportService struct {
+	ID          uuid.UUID          `db:"id" json:"id"`
+	Provider    string             `db:"provider" json:"provider"`
+	DisplayName string             `db:"display_name" json:"display_name"`
+	PublicUrl   string             `db:"public_url" json:"public_url"`
+	Enabled     bool               `db:"enabled" json:"enabled"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type SupportServiceMonthlyTotal struct {
+	ServiceID      uuid.UUID          `db:"service_id" json:"service_id"`
+	Month          pgtype.Date        `db:"month" json:"month"`
+	ReceivedCents  int64              `db:"received_cents" json:"received_cents"`
+	RecurringCents int64              `db:"recurring_cents" json:"recurring_cents"`
+	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type SupportSetting struct {
+	ID               bool               `db:"id" json:"id"`
+	PublicEnabled    bool               `db:"public_enabled" json:"public_enabled"`
+	Currency         string             `db:"currency" json:"currency"`
+	MonthlyGoalCents int64              `db:"monthly_goal_cents" json:"monthly_goal_cents"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type TalentBuild struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
 	PlayerClass   string             `db:"player_class" json:"player_class"`

@@ -770,6 +770,16 @@ export interface CreateShareResponse {
     readonly url: string;
 }
 
+// From chroniclesdk/support.go
+export interface CreateSupportServiceRequest {
+    readonly provider: SupportProvider;
+    readonly display_name: string;
+    readonly public_url?: string;
+    readonly enabled: boolean;
+    readonly received_cents: number;
+    readonly recurring_cents: number;
+}
+
 // From chroniclesdk/guild_page.go
 export interface CreateTabRequest {
     readonly label: string;
@@ -3118,6 +3128,10 @@ export interface SiteConfig {
      */
     readonly client_uploads_disabled: boolean;
     /**
+     * SupportEnabled indicates that donation transparency tracking is available.
+     */
+    readonly support_enabled: boolean;
+    /**
      * Tenant is the resolved tenant for the current request (based on subdomain).
      * Nil when accessed from the root domain.
      */
@@ -3447,6 +3461,60 @@ export interface SpeedrunVersionStatus {
     readonly addon_qualified: boolean;
 }
 
+// From chroniclesdk/support.go
+export interface SupportAdminResponse {
+    readonly month: string;
+    readonly settings: SupportSettings;
+    readonly services: readonly SupportService[];
+}
+
+// From chroniclesdk/support.go
+export type SupportProvider = "buy_me_a_coffee" | "github_sponsors" | "manual" | "patreon";
+
+export const SupportProviders: SupportProvider[] = ["buy_me_a_coffee", "github_sponsors", "manual", "patreon"];
+
+// From chroniclesdk/support.go
+export interface SupportService {
+    readonly id: string;
+    readonly provider: SupportProvider;
+    readonly display_name: string;
+    readonly public_url?: string;
+    readonly enabled: boolean;
+    readonly received_cents: number;
+    readonly recurring_cents: number;
+    readonly updated_at: string;
+    readonly totals_updated_at?: string;
+}
+
+// From chroniclesdk/support.go
+export interface SupportSettings {
+    readonly public_enabled: boolean;
+    readonly currency: string;
+    readonly monthly_goal_cents: number;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/support.go
+export interface SupportSummary {
+    readonly month: string;
+    readonly currency: string;
+    readonly monthly_goal_cents: number;
+    readonly monthly_recurring_cents: number;
+    readonly received_this_month_cents: number;
+    readonly remaining_monthly_cents: number;
+    readonly providers: readonly SupportSummaryProvider[];
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/support.go
+export interface SupportSummaryProvider {
+    readonly provider: SupportProvider;
+    readonly display_name: string;
+    readonly public_url?: string;
+    readonly received_cents: number;
+    readonly recurring_cents: number;
+}
+
 // From chroniclesdk/supported_instance.go
 /**
  * SupportedInstance describes a registered instance with its metadata.
@@ -3704,6 +3772,23 @@ export interface UpdateSiteConfigRequest {
     readonly discoverable?: boolean;
     readonly default_format?: string;
     readonly available_formats?: readonly string[];
+}
+
+// From chroniclesdk/support.go
+export interface UpdateSupportServiceRequest {
+    readonly provider: SupportProvider;
+    readonly display_name: string;
+    readonly public_url?: string;
+    readonly enabled: boolean;
+    readonly received_cents: number;
+    readonly recurring_cents: number;
+}
+
+// From chroniclesdk/support.go
+export interface UpdateSupportSettingsRequest {
+    readonly public_enabled: boolean;
+    readonly currency: string;
+    readonly monthly_goal_cents: number;
 }
 
 // From chroniclesdk/guild_page.go

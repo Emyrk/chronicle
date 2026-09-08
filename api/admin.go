@@ -710,6 +710,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
 		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+		SupportEnabled:        a.Opts.SupportEnabled,
 	}
 	if t != nil {
 		tenant := chroniclesdk.TenantFromDB(*t)
@@ -805,6 +806,7 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
 		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+		SupportEnabled:        a.Opts.SupportEnabled,
 		Branding:              unmarshalBranding(config.Branding),
 		Discoverable:          config.Discoverable,
 	})

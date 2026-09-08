@@ -85,6 +85,19 @@ func TestRouteCors(t *testing.T) {
 			wantAllowedOrigin: "*",
 		},
 		{
+			name:              "public support API allows arbitrary origins for reads",
+			path:              api.SupportAPIPath + "/summary",
+			origin:            "https://chronicleclassic.com",
+			method:            http.MethodGet,
+			wantAllowedOrigin: "*",
+		},
+		{
+			name:   "public support API rejects writes",
+			path:   api.SupportAPIPath + "/summary",
+			origin: "https://chronicleclassic.com",
+			method: http.MethodPost,
+		},
+		{
 			name:   "Chronicle API keeps rejecting arbitrary origins",
 			path:   "/api/v1/whoami",
 			origin: "https://example.com",

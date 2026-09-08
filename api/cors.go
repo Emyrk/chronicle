@@ -8,7 +8,10 @@ import (
 	"github.com/go-chi/cors"
 )
 
-const ExternalAPIPath = "/api/external/v1"
+const (
+	ExternalAPIPath = "/api/external/v1"
+	SupportAPIPath  = "/api/v1/support"
+)
 
 func Cors(tenant *servicetenant.Service) func(next http.Handler) http.Handler {
 	return cors.Handler(cors.Options{
@@ -28,16 +31,34 @@ func ExternalCors() func(next http.Handler) http.Handler {
 	return cors.AllowAll().Handler
 }
 
+// PublicReadCors allows any site to read explicitly public aggregate endpoints
+// without exposing credentials or permitting writes.
+func PublicReadCors() func(next http.Handler) http.Handler {
+	return cors.Handler(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{http.MethodGet, http.MethodOptions},
+		AllowedHeaders: []string{"Accept", "Content-Type"},
+		MaxAge:         300,
+	})
+}
+
 // RouteCors selects the permissive external API policy while preserving the
 // existing origin restrictions for Chronicle's browser-facing routes.
 func RouteCors(tenant *servicetenant.Service) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		chronicle := Cors(tenant)(next)
 		external := ExternalCors()(next)
+		publicRead := PublicReadCors()(next)
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == ExternalAPIPath || strings.HasPrefix(r.URL.Path, ExternalAPIPath+"/") {
+			isExternalAPI := r.URL.Path == ExternalAPIPath || strings.HasPrefix(r.URL.Path, ExternalAPIPath+"/")
+			isPublicSupportAPI := r.URL.Path == SupportAPIPath || strings.HasPrefix(r.URL.Path, SupportAPIPath+"/")
+			if isExternalAPI {
 				external.ServeHTTP(w, r)
+				return
+			}
+			if isPublicSupportAPI {
+				publicRead.ServeHTTP(w, r)
 				return
 			}
 			chronicle.ServeHTTP(w, r)

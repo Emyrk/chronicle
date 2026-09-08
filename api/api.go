@@ -61,6 +61,8 @@ type Options struct {
 	InternalGameData http.Handler
 	ExternalAPI      http.Handler
 	Rankings         http.Handler
+	SupportPublic    http.Handler
+	SupportAdmin     http.Handler
 	Mailer           *chroniclemail.Mailer
 	ItemPricing      *itempricing.Service
 
@@ -71,6 +73,7 @@ type Options struct {
 	ShortLinkDomain string
 	// ClientUploadsDisabled disables client-side log uploads (for servers using server-side logging).
 	ClientUploadsDisabled bool
+	SupportEnabled        bool
 	// ExternalVerification enables the external character verification
 	// provider (e.g. zug-zug). Configured via environment variables; nil
 	// when disabled.
@@ -179,6 +182,9 @@ func (api *API) Routes() chi.Router {
 		r.Group(func(r chi.Router) {
 			// Not browser-only
 			r.Get("/discovery", api.Discovery)
+			if api.Opts.SupportPublic != nil {
+				r.Mount("/support", api.Opts.SupportPublic)
+			}
 			r.Get("/parser-version", api.ParserVersion)
 		})
 
@@ -311,6 +317,9 @@ func (api *API) Routes() chi.Router {
 						// TODO: Determine right authz
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 					)
+					if api.Opts.SupportAdmin != nil {
+						r.Mount("/support", api.Opts.SupportAdmin)
+					}
 					r.Get("/instance-names", api.AdminListInstanceNames)
 					r.Get("/outdated-instances", api.AdminListOutdatedInstances)
 					r.Post("/outdated-instances/reparse", api.AdminBulkReparseOutdatedInstances)

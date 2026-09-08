@@ -1466,6 +1466,41 @@ CREATE TABLE site_config (
     CONSTRAINT site_config_id_check CHECK (id)
 );
 
+CREATE TABLE support_service_monthly_totals (
+    service_id uuid NOT NULL,
+    month date NOT NULL,
+    received_cents bigint DEFAULT 0 NOT NULL,
+    recurring_cents bigint DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT support_service_monthly_totals_month_check CHECK ((month = (date_trunc('month'::text, (month)::timestamp with time zone))::date)),
+    CONSTRAINT support_service_monthly_totals_received_cents_check CHECK ((received_cents >= 0)),
+    CONSTRAINT support_service_monthly_totals_recurring_cents_check CHECK ((recurring_cents >= 0))
+);
+
+CREATE TABLE support_services (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    provider text NOT NULL,
+    display_name text NOT NULL,
+    public_url text DEFAULT ''::text NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT support_services_display_name_check CHECK ((display_name <> ''::text)),
+    CONSTRAINT support_services_provider_check CHECK ((provider = ANY (ARRAY['manual'::text, 'patreon'::text, 'github_sponsors'::text, 'buy_me_a_coffee'::text])))
+);
+
+CREATE TABLE support_settings (
+    id boolean DEFAULT true NOT NULL,
+    public_enabled boolean DEFAULT true NOT NULL,
+    currency text DEFAULT 'USD'::text NOT NULL,
+    monthly_goal_cents bigint DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT support_settings_currency_check CHECK ((currency ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT support_settings_id_check CHECK (id),
+    CONSTRAINT support_settings_monthly_goal_cents_check CHECK ((monthly_goal_cents >= 0))
+);
+
 CREATE TABLE talent_builds (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     player_class text NOT NULL,
@@ -2184,6 +2219,15 @@ ALTER TABLE ONLY shared_views
 ALTER TABLE ONLY site_config
     ADD CONSTRAINT site_config_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY support_service_monthly_totals
+    ADD CONSTRAINT support_service_monthly_totals_pkey PRIMARY KEY (service_id, month);
+
+ALTER TABLE ONLY support_services
+    ADD CONSTRAINT support_services_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY support_settings
+    ADD CONSTRAINT support_settings_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY talent_builds
     ADD CONSTRAINT talent_builds_pkey PRIMARY KEY (id);
 
@@ -2497,6 +2541,8 @@ CREATE UNIQUE INDEX river_job_unique_idx ON river_job USING btree (unique_key) W
 CREATE INDEX river_notification_created_at_idx ON river_notification USING btree (created_at);
 
 CREATE INDEX river_notification_topic_id_idx ON river_notification USING btree (topic, id);
+
+CREATE INDEX support_service_monthly_totals_month_idx ON support_service_monthly_totals USING btree (month);
 
 CREATE UNIQUE INDEX time_parse_snapshots_published_key_idx ON time_parse_snapshots USING btree (tenant_id, cutoff, lookback_days, policy_version, query_version) WHERE (status = 'published'::text);
 
@@ -2834,6 +2880,9 @@ ALTER TABLE ONLY shared_views
 
 ALTER TABLE ONLY shared_views
     ADD CONSTRAINT shared_views_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY support_service_monthly_totals
+    ADD CONSTRAINT support_service_monthly_totals_service_id_fkey FOREIGN KEY (service_id) REFERENCES support_services(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_default_dataset_id_fkey FOREIGN KEY (default_dataset_id) REFERENCES datasets(id);

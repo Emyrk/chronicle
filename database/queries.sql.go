@@ -14496,6 +14496,334 @@ func (q *sqlQuerier) SpeedrunRealmNames(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const deleteSupportService = `-- name: DeleteSupportService :exec
+DELETE FROM support_services WHERE id = $1
+`
+
+func (q *sqlQuerier) DeleteSupportService(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSupportService, id)
+	return err
+}
+
+const getSupportAdminServices = `-- name: GetSupportAdminServices :many
+SELECT
+    s.id, s.provider, s.display_name, s.public_url, s.enabled, s.created_at, s.updated_at,
+    COALESCE(t.received_cents, 0)::BIGINT AS received_cents,
+    COALESCE(t.recurring_cents, 0)::BIGINT AS recurring_cents,
+    t.updated_at AS totals_updated_at
+FROM support_services s
+LEFT JOIN support_service_monthly_totals t
+    ON t.service_id = s.id
+   AND t.month = $1
+ORDER BY s.display_name, s.id
+`
+
+type GetSupportAdminServicesRow struct {
+	SupportService  SupportService     `db:"support_service" json:"support_service"`
+	ReceivedCents   int64              `db:"received_cents" json:"received_cents"`
+	RecurringCents  int64              `db:"recurring_cents" json:"recurring_cents"`
+	TotalsUpdatedAt pgtype.Timestamptz `db:"totals_updated_at" json:"totals_updated_at"`
+}
+
+func (q *sqlQuerier) GetSupportAdminServices(ctx context.Context, month pgtype.Date) ([]GetSupportAdminServicesRow, error) {
+	rows, err := q.db.Query(ctx, getSupportAdminServices, month)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSupportAdminServicesRow
+	for rows.Next() {
+		var i GetSupportAdminServicesRow
+		if err := rows.Scan(
+			&i.SupportService.ID,
+			&i.SupportService.Provider,
+			&i.SupportService.DisplayName,
+			&i.SupportService.PublicUrl,
+			&i.SupportService.Enabled,
+			&i.SupportService.CreatedAt,
+			&i.SupportService.UpdatedAt,
+			&i.ReceivedCents,
+			&i.RecurringCents,
+			&i.TotalsUpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSupportService = `-- name: GetSupportService :one
+SELECT id, provider, display_name, public_url, enabled, created_at, updated_at FROM support_services WHERE id = $1
+`
+
+func (q *sqlQuerier) GetSupportService(ctx context.Context, id uuid.UUID) (SupportService, error) {
+	row := q.db.QueryRow(ctx, getSupportService, id)
+	var i SupportService
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.DisplayName,
+		&i.PublicUrl,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSupportSettings = `-- name: GetSupportSettings :one
+SELECT id, public_enabled, currency, monthly_goal_cents, created_at, updated_at FROM support_settings WHERE id = TRUE
+`
+
+func (q *sqlQuerier) GetSupportSettings(ctx context.Context) (SupportSetting, error) {
+	row := q.db.QueryRow(ctx, getSupportSettings)
+	var i SupportSetting
+	err := row.Scan(
+		&i.ID,
+		&i.PublicEnabled,
+		&i.Currency,
+		&i.MonthlyGoalCents,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSupportSummary = `-- name: GetSupportSummary :many
+SELECT
+    s.id AS service_id,
+    s.provider,
+    s.display_name,
+    s.public_url,
+    COALESCE(t.received_cents, 0)::BIGINT AS received_cents,
+    COALESCE(t.recurring_cents, 0)::BIGINT AS recurring_cents,
+    t.updated_at
+FROM support_services s
+LEFT JOIN support_service_monthly_totals t
+    ON t.service_id = s.id
+   AND t.month = $1
+WHERE s.enabled = TRUE
+ORDER BY s.display_name, s.id
+`
+
+type GetSupportSummaryRow struct {
+	ServiceID      uuid.UUID          `db:"service_id" json:"service_id"`
+	Provider       string             `db:"provider" json:"provider"`
+	DisplayName    string             `db:"display_name" json:"display_name"`
+	PublicUrl      string             `db:"public_url" json:"public_url"`
+	ReceivedCents  int64              `db:"received_cents" json:"received_cents"`
+	RecurringCents int64              `db:"recurring_cents" json:"recurring_cents"`
+	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+func (q *sqlQuerier) GetSupportSummary(ctx context.Context, month pgtype.Date) ([]GetSupportSummaryRow, error) {
+	rows, err := q.db.Query(ctx, getSupportSummary, month)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSupportSummaryRow
+	for rows.Next() {
+		var i GetSupportSummaryRow
+		if err := rows.Scan(
+			&i.ServiceID,
+			&i.Provider,
+			&i.DisplayName,
+			&i.PublicUrl,
+			&i.ReceivedCents,
+			&i.RecurringCents,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertSupportService = `-- name: InsertSupportService :one
+INSERT INTO support_services (id, provider, display_name, public_url, enabled)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, provider, display_name, public_url, enabled, created_at, updated_at
+`
+
+type InsertSupportServiceParams struct {
+	ID          uuid.UUID `db:"id" json:"id"`
+	Provider    string    `db:"provider" json:"provider"`
+	DisplayName string    `db:"display_name" json:"display_name"`
+	PublicUrl   string    `db:"public_url" json:"public_url"`
+	Enabled     bool      `db:"enabled" json:"enabled"`
+}
+
+func (q *sqlQuerier) InsertSupportService(ctx context.Context, arg InsertSupportServiceParams) (SupportService, error) {
+	row := q.db.QueryRow(ctx, insertSupportService,
+		arg.ID,
+		arg.Provider,
+		arg.DisplayName,
+		arg.PublicUrl,
+		arg.Enabled,
+	)
+	var i SupportService
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.DisplayName,
+		&i.PublicUrl,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listSupportServices = `-- name: ListSupportServices :many
+SELECT id, provider, display_name, public_url, enabled, created_at, updated_at FROM support_services
+ORDER BY display_name, id
+`
+
+func (q *sqlQuerier) ListSupportServices(ctx context.Context) ([]SupportService, error) {
+	rows, err := q.db.Query(ctx, listSupportServices)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SupportService
+	for rows.Next() {
+		var i SupportService
+		if err := rows.Scan(
+			&i.ID,
+			&i.Provider,
+			&i.DisplayName,
+			&i.PublicUrl,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateSupportService = `-- name: UpdateSupportService :one
+UPDATE support_services SET
+    provider = $1,
+    display_name = $2,
+    public_url = $3,
+    enabled = $4,
+    updated_at = NOW()
+WHERE id = $5
+RETURNING id, provider, display_name, public_url, enabled, created_at, updated_at
+`
+
+type UpdateSupportServiceParams struct {
+	Provider    string    `db:"provider" json:"provider"`
+	DisplayName string    `db:"display_name" json:"display_name"`
+	PublicUrl   string    `db:"public_url" json:"public_url"`
+	Enabled     bool      `db:"enabled" json:"enabled"`
+	ID          uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) UpdateSupportService(ctx context.Context, arg UpdateSupportServiceParams) (SupportService, error) {
+	row := q.db.QueryRow(ctx, updateSupportService,
+		arg.Provider,
+		arg.DisplayName,
+		arg.PublicUrl,
+		arg.Enabled,
+		arg.ID,
+	)
+	var i SupportService
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.DisplayName,
+		&i.PublicUrl,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateSupportSettings = `-- name: UpdateSupportSettings :one
+UPDATE support_settings SET
+    public_enabled = $1,
+    currency = $2,
+    monthly_goal_cents = $3,
+    updated_at = NOW()
+WHERE id = TRUE
+RETURNING id, public_enabled, currency, monthly_goal_cents, created_at, updated_at
+`
+
+type UpdateSupportSettingsParams struct {
+	PublicEnabled    bool   `db:"public_enabled" json:"public_enabled"`
+	Currency         string `db:"currency" json:"currency"`
+	MonthlyGoalCents int64  `db:"monthly_goal_cents" json:"monthly_goal_cents"`
+}
+
+func (q *sqlQuerier) UpdateSupportSettings(ctx context.Context, arg UpdateSupportSettingsParams) (SupportSetting, error) {
+	row := q.db.QueryRow(ctx, updateSupportSettings, arg.PublicEnabled, arg.Currency, arg.MonthlyGoalCents)
+	var i SupportSetting
+	err := row.Scan(
+		&i.ID,
+		&i.PublicEnabled,
+		&i.Currency,
+		&i.MonthlyGoalCents,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertSupportServiceMonthlyTotal = `-- name: UpsertSupportServiceMonthlyTotal :one
+INSERT INTO support_service_monthly_totals (
+    service_id, month, received_cents, recurring_cents
+) VALUES (
+    $1, $2, $3, $4
+)
+ON CONFLICT (service_id, month) DO UPDATE SET
+    received_cents = EXCLUDED.received_cents,
+    recurring_cents = EXCLUDED.recurring_cents,
+    updated_at = NOW()
+RETURNING service_id, month, received_cents, recurring_cents, updated_at
+`
+
+type UpsertSupportServiceMonthlyTotalParams struct {
+	ServiceID      uuid.UUID   `db:"service_id" json:"service_id"`
+	Month          pgtype.Date `db:"month" json:"month"`
+	ReceivedCents  int64       `db:"received_cents" json:"received_cents"`
+	RecurringCents int64       `db:"recurring_cents" json:"recurring_cents"`
+}
+
+func (q *sqlQuerier) UpsertSupportServiceMonthlyTotal(ctx context.Context, arg UpsertSupportServiceMonthlyTotalParams) (SupportServiceMonthlyTotal, error) {
+	row := q.db.QueryRow(ctx, upsertSupportServiceMonthlyTotal,
+		arg.ServiceID,
+		arg.Month,
+		arg.ReceivedCents,
+		arg.RecurringCents,
+	)
+	var i SupportServiceMonthlyTotal
+	err := row.Scan(
+		&i.ServiceID,
+		&i.Month,
+		&i.ReceivedCents,
+		&i.RecurringCents,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getDeploymentInfo = `-- name: GetDeploymentInfo :one
 SELECT id, created_at, last_telemetry_heartbeat FROM deployment_info LIMIT 1
 `

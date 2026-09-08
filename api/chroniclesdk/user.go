@@ -176,6 +176,8 @@ type SiteConfig struct {
 	// ClientUploadsDisabled indicates that this server uses server-side logging
 	// and client-side uploads should be hidden from the UI.
 	ClientUploadsDisabled bool `json:"client_uploads_disabled"`
+	// SupportEnabled indicates that donation transparency tracking is available.
+	SupportEnabled bool `json:"support_enabled"`
 	// Tenant is the resolved tenant for the current request (based on subdomain).
 	// Nil when accessed from the root domain.
 	Tenant *Tenant `json:"tenant"`
