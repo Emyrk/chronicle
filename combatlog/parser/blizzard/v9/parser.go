@@ -71,6 +71,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	inner.ConfigureSynthetics(ctx, reg, wotlksynthetic.Options{
 		CreditEarthShield: true,
 		GenerateAbsorbs:   false,
+		DetectZone:        false,
 	})
 	p := &Parser{inner: inner, wowDB: wowDB}
 	inner.WithEventHook("V9_COMBAT_LOG_VERSION", p.combatLogVersion)
@@ -132,10 +133,9 @@ func (p *Parser) encounterStart(ts time.Time, m *wotlk.Matched, _ string) ([]mes
 	name := m.String()
 	difficulty := m.Int32()
 	groupSize := m.Int32()
-	// v9 also includes instance and project IDs. They are not needed for the
-	// activity window, but consume them when present so malformed fields surface.
+	var instanceID uint32
 	if m.Remain() > 0 {
-		_ = m.Int32()
+		instanceID = m.Uint32()
 	}
 	if m.Remain() > 0 {
 		_ = m.Int32()
@@ -150,6 +150,7 @@ func (p *Parser) encounterStart(ts time.Time, m *wotlk.Matched, _ string) ([]mes
 		Name:        name,
 		Difficulty:  difficulty,
 		GroupSize:   groupSize,
+		InstanceID:  instanceID,
 	}}, nil
 }
 

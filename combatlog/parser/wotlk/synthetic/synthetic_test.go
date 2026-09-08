@@ -18,9 +18,11 @@ func TestNewWithOptionsConfiguresOptionalAttribution(t *testing.T) {
 	s := NewWithOptions(context.Background(), slog.Default(), nil, nil, nil, Options{
 		CreditEarthShield: true,
 		GenerateAbsorbs:   false,
+		DetectZone:        false,
 	})
 	require.NotNil(t, s.earthShield)
 	require.Nil(t, s.absorption)
+	require.Nil(t, s.zoneDetector)
 
 	legacy := New(context.Background(), slog.Default(), nil, nil, nil, false)
 	require.Nil(t, legacy.earthShield)

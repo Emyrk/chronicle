@@ -198,18 +198,21 @@ func (c *Characters) Process(m messages.Message) (bool, error) {
 	c.processNewCharacters(m)
 
 	boundary, isBoundary := m.(*messages.EncounterBoundary)
-	endingEncounter := isBoundary && !boundary.Active
 	if isBoundary {
 		c.explicitEncounter = boundary.Active
 	}
 
 	forAllErr := c.All.ForEachAwake(m.Date(), func(char Character) error {
 		before := char.IsActive()
-		if endingEncounter && before {
+		if isBoundary && before && !boundary.PreserveActivity {
+			reason := "encounter end"
+			if boundary.Active {
+				reason = "encounter start"
+			}
 			if ender, ok := char.(interface {
 				End(string, messages.Message, period.EndState)
 			}); ok {
-				ender.End("encounter end", m, period.EndStateReset)
+				ender.End(reason, m, period.EndStateReset)
 			}
 		}
 

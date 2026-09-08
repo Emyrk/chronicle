@@ -141,6 +141,22 @@ func (s *State) Process(m messages.Message) error {
 			s.Zone(*typed)
 			s.timings.Add("encounter_state.zone", time.Since(zoneStart))
 		}
+	case *messages.EncounterBoundary:
+		if typed.Active && typed.InstanceID != 0 {
+			for _, instance := range s.Instances {
+				if instance.MatchesZone(zone.Zone{MapID: typed.InstanceID}) {
+					s.CurrentInstance = instance
+					break
+				}
+			}
+		} else if !typed.Active {
+			for _, instance := range s.Instances {
+				if instance.HasExplicitEncounter(typed.EncounterID) {
+					s.CurrentInstance = instance
+					break
+				}
+			}
+		}
 	case *messages.Damage:
 		//s.Damage(typed)
 	case *messages.Cast:

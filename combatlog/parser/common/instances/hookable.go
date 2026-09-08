@@ -81,15 +81,16 @@ type Hookable struct {
 	derivedRankingRules     map[string]*rankings.Rankings
 
 	// Live tracking data
-	Auras           *auras.Tracking
-	Characters      *characters.Characters
-	currentFight    *ongoingFight
-	events          *encounterevents.Events
-	lastActivity    time.Time
-	completedFights []encounter.Fight
-	lastProcessedAt time.Time
-	finalizing      bool
-	finalized       bool
+	Auras             *auras.Tracking
+	Characters        *characters.Characters
+	currentFight      *ongoingFight
+	events            *encounterevents.Events
+	lastActivity      time.Time
+	completedFights   []encounter.Fight
+	explicitEncounter *messages.EncounterBoundary
+	lastProcessedAt   time.Time
+	finalizing        bool
+	finalized         bool
 
 	// finalized references
 	g                *armory.Tracker
@@ -373,6 +374,10 @@ func (h *Hookable) SetRealm(r *realm.Info) {
 	h.realm = r
 }
 
+func (h *Hookable) HasExplicitEncounter(encounterID int32) bool {
+	return h.explicitEncounter != nil && h.explicitEncounter.EncounterID == encounterID
+}
+
 func (h *Hookable) SetVersions(versions map[string]string, player *guid.GUID) {
 	h.versions = versions
 	h.recorderGUID = player
@@ -466,6 +471,29 @@ func (h *Hookable) process(m messages.Message) (finalError error) {
 	}
 
 	switch msg := m.(type) {
+	case *messages.EncounterBoundary:
+		if msg.Active {
+			if h.currentFight != nil && h.currentFight.active() {
+				lead := msg.Date().Sub(h.currentFight.Start.Timestamp.Date())
+				if lead >= 0 && lead <= time.Second {
+					msg.PreserveActivity = true
+				}
+			}
+			boundary := *msg
+			h.explicitEncounter = &boundary
+			if h.currentFight != nil && (!h.currentFight.active() || msg.PreserveActivity) {
+				h.currentFight.AuthoritativeStart = h.explicitEncounter
+				h.currentFight.AuthoritativeName = h.explicitEncounter.Name
+				if msg.PreserveActivity {
+					h.currentFight.Start = &period.Moment{Timestamp: msg, Reason: "encounter start"}
+				}
+			}
+		} else {
+			if h.currentFight != nil && h.currentFight.AuthoritativeName != "" {
+				h.currentFight.AuthoritativeSuccess = msg.Success
+			}
+			h.explicitEncounter = nil
+		}
 	case *messages.Versions:
 		h.SetVersions(msg.Versions, msg.Player)
 	case *messages.Realm:
@@ -543,6 +571,10 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 			Start:          nil,
 			End:            nil,
 		}
+		if h.explicitEncounter != nil {
+			h.currentFight.AuthoritativeStart = h.explicitEncounter
+			h.currentFight.AuthoritativeName = h.explicitEncounter.Name
+		}
 	}
 
 	wasActive := h.currentFight.active()
@@ -563,7 +595,14 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 			// If the character is active, update the fight start time if needed.
 			activeTotal++
 			h.currentFight.ActiveHostiles[char.ID()] = struct{}{}
-			h.currentFight.Begin(pd.Start)
+			if h.currentFight.AuthoritativeStart != nil {
+				h.currentFight.Begin(&period.Moment{
+					Timestamp: h.currentFight.AuthoritativeStart,
+					Reason:    "encounter start",
+				})
+			} else {
+				h.currentFight.Begin(pd.Start)
+			}
 		}
 
 		if !pd.IsActive() {
@@ -633,7 +672,11 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 		}
 	}
 
-	if activeTotal == 0 && h.currentFight.active() && !h.Characters.ExplicitEncounterActive() {
+	boundaryStart := false
+	if boundary, ok := m.(*messages.EncounterBoundary); ok {
+		boundaryStart = boundary.Active
+	}
+	if activeTotal == 0 && h.currentFight.active() && (!h.Characters.ExplicitEncounterActive() || boundaryStart) {
 		return func() error {
 			for _, hook := range h.hooks {
 				hook.FightEnded(h.currentFight.EncounterID, m)
@@ -654,13 +697,15 @@ func (h *Hookable) finalizeFight() error {
 	h.currentFight.Phases.close(*h.currentFight.End, "")
 
 	fight := encounter.Fight{
-		Hostiles:           map[guid.GUID]encounter.CharacterFight{},
-		Start:              h.currentFight.Start.Timestamp.Date(),
-		End:                h.currentFight.End.Timestamp.Date(),
-		EncounterID:        h.currentFight.EncounterID,
-		PlayerDeaths:       h.currentFight.PlayerDeaths,
-		Phases:             h.currentFight.Phases.materialized(),
-		PhaseEncounterName: h.currentFight.Phases.encounterName(),
+		Hostiles:             map[guid.GUID]encounter.CharacterFight{},
+		Start:                h.currentFight.Start.Timestamp.Date(),
+		End:                  h.currentFight.End.Timestamp.Date(),
+		EncounterID:          h.currentFight.EncounterID,
+		PlayerDeaths:         h.currentFight.PlayerDeaths,
+		Phases:               h.currentFight.Phases.materialized(),
+		PhaseEncounterName:   h.currentFight.Phases.encounterName(),
+		AuthoritativeName:    h.currentFight.AuthoritativeName,
+		AuthoritativeSuccess: h.currentFight.AuthoritativeSuccess,
 	}
 
 	for id := range h.currentFight.ActiveHostiles {
@@ -674,6 +719,9 @@ func (h *Hookable) finalizeFight() error {
 			return fmt.Errorf("getting periods during fight for character %s: %w", id, err)
 		}
 
+		if len(during) == 0 {
+			continue
+		}
 		fight.Hostiles[id] = encounter.CharacterFight{
 			ID:       id,
 			Activity: during,
@@ -785,6 +833,19 @@ func (h *Hookable) fightEncounter(fight encounter.Fight) (encounter.Encounter, e
 		KillType:  killType,
 		Remaining: rr.Timeouts,
 		Boss:      encName.IsBossFight(),
+	}
+	if fight.AuthoritativeName != "" {
+		enc.Name = fight.AuthoritativeName
+		enc.Type = types.EncounterTypeBOSS
+		enc.Boss = true
+		if fight.AuthoritativeSuccess != nil {
+			if *fight.AuthoritativeSuccess {
+				enc.KillType = encounter.KillTypeClean
+				enc.Remaining = nil
+			} else {
+				enc.KillType = encounter.KillTypeWipe
+			}
+		}
 	}
 
 	// Copy already-materialized phases. The final phase's kill type was left

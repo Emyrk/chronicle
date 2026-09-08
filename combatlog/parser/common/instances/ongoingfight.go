@@ -25,6 +25,10 @@ type ongoingFight struct {
 	// becomes active. They are applied immediately after tracker initialization.
 	StagedPhaseTransitions []phases.Transition
 
+	AuthoritativeStart   *messages.EncounterBoundary
+	AuthoritativeName    string
+	AuthoritativeSuccess *bool
+
 	Start *period.Moment
 	End   *period.Moment
 }

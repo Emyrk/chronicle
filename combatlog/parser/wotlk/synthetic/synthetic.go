@@ -24,6 +24,7 @@ type NameResolver interface {
 type Options struct {
 	CreditEarthShield bool
 	GenerateAbsorbs   bool
+	DetectZone        bool
 }
 
 type Synthetic struct {
@@ -49,12 +50,13 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *reg
 	return NewWithOptions(ctx, logger, wowDB, reg, names, Options{
 		CreditEarthShield: creditEarthShield,
 		GenerateAbsorbs:   true,
+		DetectZone:        true,
 	})
 }
 
 func NewWithOptions(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *registry.Registry, names NameResolver, options Options) *Synthetic {
 	var zd *zonedetector.ZoneDetector
-	if reg != nil {
+	if options.DetectZone && reg != nil {
 		zd = zonedetector.New(logger, reg)
 	}
 

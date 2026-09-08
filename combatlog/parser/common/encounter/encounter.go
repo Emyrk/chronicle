@@ -89,6 +89,11 @@ type Fight struct {
 	// fightEncounter only attaches the phases when the resolved name matches.
 	PhaseEncounterName string
 
+	// AuthoritativeName is supplied by explicit encounter boundary records.
+	// When set, it overrides name inference from the participating hostiles.
+	AuthoritativeName    string
+	AuthoritativeSuccess *bool
+
 	// Start is the earliest start time across all hostile activity periods.
 	Start time.Time
 

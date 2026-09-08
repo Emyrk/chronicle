@@ -659,12 +659,14 @@ func (*Consume) isMessage()            {}
 // combat log. While Active is true, inactivity timeouts must not end the fight.
 type EncounterBoundary struct {
 	MessageBase
-	Active      bool
-	EncounterID int32
-	Name        string
-	Difficulty  int32
-	GroupSize   int32
-	Success     *bool
+	Active           bool
+	EncounterID      int32
+	Name             string
+	Difficulty       int32
+	GroupSize        int32
+	InstanceID       uint32
+	Success          *bool
+	PreserveActivity bool
 }
 
 func (e EncounterBoundary) Affects() []guid.GUID { return nil }
