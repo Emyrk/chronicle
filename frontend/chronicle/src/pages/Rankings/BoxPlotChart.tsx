@@ -156,12 +156,19 @@ function DpsStatLine({ label, desc, value, highlight }: { label: string; desc?: 
 
 interface BoxPlotChartProps {
   stats: RankingsBoxPlotStats[]
+  loading?: boolean
   title?: string
   subtitle?: string
   onRowClick?: (playerClass: string, playerSpec: string) => void
 }
 
-export function BoxPlotChart({ stats, title = "DPS Distribution by Class", subtitle, onRowClick }: BoxPlotChartProps) {
+export function BoxPlotChart({
+  stats,
+  loading = false,
+  title = "DPS Distribution by Class",
+  subtitle,
+  onRowClick,
+}: BoxPlotChartProps) {
   const scaleMax = useMemo(() => {
     if (stats.length === 0) return 1200
     return Math.max(...stats.map((s) => s.max_dps))
@@ -189,7 +196,9 @@ export function BoxPlotChart({ stats, title = "DPS Distribution by Class", subti
         )}
       </div>
 
-      {stats.length === 0 ? (
+      {loading ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : stats.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
           No data for the selected filters.
         </p>

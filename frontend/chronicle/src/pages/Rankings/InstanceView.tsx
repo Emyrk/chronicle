@@ -403,7 +403,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     ? [...selectedRealms].join(",")
     : undefined
 
-  const { data: rawBoxPlotStats = [] } = useRankingsStats({
+  const { data: rawBoxPlotStats = [], isLoading: boxPlotLoading } = useRankingsStats({
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
     difficulty_names: difficultyNamesParam,
@@ -912,8 +912,11 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           dpsSubTab === "boxplot" ? (
             <BoxPlotChart
               stats={boxPlotStats}
+              loading={boxPlotLoading}
               title={`${valueMetric.toUpperCase()} Distribution by Class & Spec`}
-              subtitle={`${boxPlotStats.reduce((sum, s) => sum + s.count, 0).toLocaleString()} total runs`}
+              subtitle={boxPlotLoading
+                ? undefined
+                : `${boxPlotStats.reduce((sum, s) => sum + s.count, 0).toLocaleString()} total runs`}
               onRowClick={handleBoxPlotRowClick}
             />
           ) : (
