@@ -148,7 +148,7 @@ export function useRankingsStats(params: {
   metric?: "dps" | "hps";
   group_by_class?: boolean;
   max_players?: number;
-}) {
+}, enabled = true) {
   const searchParams = new URLSearchParams();
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
   if (params.encounter_names) searchParams.set("encounter_names", params.encounter_names);
@@ -166,6 +166,7 @@ export function useRankingsStats(params: {
     queryFn: () =>
       fetchJSON<RankingsBoxPlotStats[]>(`/api/v1/rankings/stats${qs ? `?${qs}` : ""}`),
     staleTime: RANKINGS_STALE_TIME,
+    enabled,
   });
 }
 
@@ -177,7 +178,7 @@ export function useRankingsRealms() {
   });
 }
 
-export function useRankingsKillTimes(instanceName: string, period?: string) {
+export function useRankingsKillTimes(instanceName: string, period?: string, enabled = true) {
   const searchParams = new URLSearchParams();
   searchParams.set("instance_name", instanceName);
   if (period) searchParams.set("period", period);
@@ -187,7 +188,7 @@ export function useRankingsKillTimes(instanceName: string, period?: string) {
     queryFn: () =>
       fetchJSON<RankingsKillTimeStats[]>(`/api/v1/rankings/kill-times?${searchParams.toString()}`),
     staleTime: RANKINGS_STALE_TIME,
-    enabled: !!instanceName,
+    enabled: enabled && !!instanceName,
   });
 }
 
@@ -195,6 +196,7 @@ export function useRankingsSuccessRates(
   instanceName: string,
   period?: string,
   opts?: { difficulty_names?: string; max_players?: number },
+  enabled = true,
 ) {
   const searchParams = new URLSearchParams();
   searchParams.set("instance_name", instanceName);
@@ -209,7 +211,7 @@ export function useRankingsSuccessRates(
         `/api/v1/rankings/success-rates?${searchParams.toString()}`,
       ),
     staleTime: RANKINGS_STALE_TIME,
-    enabled: !!instanceName,
+    enabled: enabled && !!instanceName,
   });
 }
 export function useRankingsKillTimeLeaderboard(params: {
@@ -218,7 +220,7 @@ export function useRankingsKillTimeLeaderboard(params: {
   period?: string;
   limit?: number;
   offset?: number;
-}) {
+}, enabled = true) {
   const searchParams = new URLSearchParams();
   searchParams.set("instance_name", params.instance_name);
   if (params.encounter_name) searchParams.set("encounter_name", params.encounter_name);
@@ -233,7 +235,7 @@ export function useRankingsKillTimeLeaderboard(params: {
         `/api/v1/rankings/kill-time-leaderboard?${searchParams.toString()}`,
       ),
     staleTime: RANKINGS_STALE_TIME,
-    enabled: !!params.instance_name,
+    enabled: enabled && !!params.instance_name,
   });
 }
 

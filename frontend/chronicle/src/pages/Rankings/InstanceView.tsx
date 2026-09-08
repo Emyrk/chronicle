@@ -40,6 +40,8 @@ import { BoxPlotChart } from "./BoxPlotChart"
 import { RankingsTable } from "./RankingsTable"
 import { KillTimeTable } from "./KillTimeTable"
 import { ClassSpecFilter } from "./ClassSpecFilter"
+import { RankingsLoadingState } from "./RankingsLoadingState"
+import { getRankingsQueryEnablement } from "./rankingsQueryState"
 import {
   groupByParamForValue,
   parseGroupByClass,
@@ -403,6 +405,12 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     ? [...selectedRealms].join(",")
     : undefined
 
+  const queryEnablement = getRankingsQueryEnablement(
+    metric,
+    dpsSubTab,
+    encounterSummaries !== undefined,
+  )
+
   const { data: rawBoxPlotStats = [], isLoading: boxPlotLoading } = useRankingsStats({
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
@@ -412,14 +420,14 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     role: filterRole,
     metric: valueMetric,
     group_by_class: groupByClass,
-  })
+  }, queryEnablement.playerStats)
 
   const boxPlotStats = useMemo(() => {
     if (!hideUnknowns) return rawBoxPlotStats
     return rawBoxPlotStats.filter((s) => s.player_class !== "Unknown" && s.player_spec !== "Unknown")
   }, [rawBoxPlotStats, hideUnknowns])
 
-  const { data: leaderboardData } = useRankingsLeaderboard({
+  const { data: leaderboardData, isLoading: leaderboardLoading } = useRankingsLeaderboard({
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
     difficulty_names: difficultyNamesParam,
@@ -432,7 +440,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     metric: valueMetric,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
-  })
+  }, queryEnablement.playerLeaderboard)
 
   // Derive available difficulties from instance summaries (unaffected by difficulty filter)
   const { data: instanceSummaries } = useRankingsInstances()
@@ -515,7 +523,11 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return entries.map((e, i) => ({ ...e, rank: offset + i + 1 }))
   }, [leaderboardData, page])
 
-  const { data: killTimeStats = [] } = useRankingsKillTimes(instanceName, periodParam)
+  const { data: killTimeStats = [], isLoading: killTimeStatsLoading } = useRankingsKillTimes(
+    instanceName,
+    periodParam,
+    queryEnablement.killTimeStats,
+  )
 
   // Kill time leaderboard: always a single encounter (mixing bosses is meaningless).
   // Persisted via ?kt_enc= URL param; defaults to the first boss.
@@ -538,13 +550,13 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [setParams],
   )
 
-  const { data: killTimeLeaderboardData } = useRankingsKillTimeLeaderboard({
+  const { data: killTimeLeaderboardData, isLoading: killTimeLeaderboardLoading } = useRankingsKillTimeLeaderboard({
     instance_name: instanceName,
     encounter_name: killTimeEncounter,
     period: periodParam,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
-  })
+  }, queryEnablement.killTimeLeaderboard)
 
   const killTimeTotalCount = killTimeLeaderboardData?.total_count ?? 0
   const killTimeTotalPages = Math.max(1, Math.ceil(killTimeTotalCount / PAGE_SIZE))
@@ -555,9 +567,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return entries.map((e, i) => ({ ...e, rank: offset + i + 1 }))
   }, [killTimeLeaderboardData, page])
 
-  const { data: successRates = [] } = useRankingsSuccessRates(instanceName, periodParam, {
+  const { data: successRates = [], isLoading: successRatesLoading } = useRankingsSuccessRates(instanceName, periodParam, {
     difficulty_names: difficultyNamesParam,
-  })
+  }, queryEnablement.successRates)
 
   // ── Loading state ──────────────────────────────────────────────────
 
@@ -927,7 +939,11 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 onClassSelect={handleClassSelect}
                 onSpecSelect={handleSpecSelect}
               />
-              <RankingsTable entries={leaderboardEntries} metric={valueMetric} />
+              <RankingsTable
+                entries={leaderboardEntries}
+                loading={leaderboardLoading}
+                metric={valueMetric}
+              />
               {/* Pagination */}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between pt-2">
@@ -965,7 +981,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
         {metric === "killtime" && (
           killTimeSubTab === "boxplot" ? (
-            <KillTimeContent stats={killTimeStats} />
+            <KillTimeContent stats={killTimeStats} loading={killTimeStatsLoading} />
           ) : (
             <>
               {/* Encounter selector — kill times only make sense per-boss */}
@@ -985,7 +1001,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   </button>
                 ))}
               </div>
-              <KillTimeTable entries={killTimeEntries} />
+              <KillTimeTable entries={killTimeEntries} loading={killTimeLeaderboardLoading} />
               {/* Pagination */}
               {killTimeTotalPages > 1 && (
                 <div className="flex items-center justify-between pt-2">
@@ -1022,7 +1038,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         )}
 
         {metric === "success" && (
-          <SuccessRateContent rates={successRates} />
+          <SuccessRateContent rates={successRates} loading={successRatesLoading} />
         )}
       </div>
     </div>
@@ -1040,7 +1056,9 @@ function formatTime(seconds: number): string {
   return `${m}:${String(sWhole).padStart(2, "0")}${fracStr}`
 }
 
-function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
+function KillTimeContent({ stats, loading }: { stats: RankingsKillTimeStats[]; loading: boolean }) {
+  if (loading) return <RankingsLoadingState />
+
   const scaleMax = Math.max(...stats.map((s) => s.max_secs), 1)
   const step = scaleMax <= 300 ? 30 : 60
   const ticks: number[] = []
@@ -1189,7 +1207,9 @@ function TimeStatLine({ label, desc, value, highlight }: { label: string; desc?:
 
 // ── Success Rate Content ─────────────────────────────────────────────────
 
-function SuccessRateContent({ rates }: { rates: RankingsSuccessRate[] }) {
+function SuccessRateContent({ rates, loading }: { rates: RankingsSuccessRate[]; loading: boolean }) {
+  if (loading) return <RankingsLoadingState />
+
   if (rates.length === 0) {
     return (
       <div className="rounded-xl border p-8 text-center text-muted-foreground">

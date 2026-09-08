@@ -1,6 +1,7 @@
 import { ExternalLink } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import type { RankingsEntry } from "@/api/typesGenerated"
+import { RankingsLoadingState } from "./RankingsLoadingState"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
 
 const MEDAL_ICONS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
@@ -25,6 +26,7 @@ export interface RankedEntry extends RankingsEntry {
 
 interface RankingsTableProps {
   entries: RankedEntry[]
+  loading?: boolean
   metric?: "dps" | "hps"
 }
 
@@ -38,8 +40,10 @@ function metricTitle(entry: RankedEntry, metric: "dps" | "hps"): string | undefi
   return `Effective healing: ${entry.healing_done.toLocaleString()} · Absorbed: ${entry.absorbed_done.toLocaleString()} · Total: ${total.toLocaleString()}`
 }
 
-export function RankingsTable({ entries, metric = "dps" }: RankingsTableProps) {
+export function RankingsTable({ entries, loading = false, metric = "dps" }: RankingsTableProps) {
   const navigate = useNavigate()
+
+  if (loading) return <RankingsLoadingState />
 
   if (entries.length === 0) {
     return (
