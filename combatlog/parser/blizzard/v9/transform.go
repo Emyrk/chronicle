@@ -92,7 +92,11 @@ func (r *transformReader) transform(line string) (string, error) {
 		return prefix + "V9_COMBATANT_INFO," + player + "," + strconv.Quote(r.names[args[0]]) + "," + encoded, nil
 	case "SPELL_ABSORBED":
 		return r.transformAbsorbed(prefix, args)
-	case "MAP_CHANGE", "ENCOUNTER_START", "ENCOUNTER_END", "EMOTE", "SWING_DAMAGE_LANDED":
+	case "ENCOUNTER_START":
+		return prefix + "V9_ENCOUNTER_START," + strings.Join(args, ","), nil
+	case "ENCOUNTER_END":
+		return prefix + "V9_ENCOUNTER_END," + strings.Join(args, ","), nil
+	case "MAP_CHANGE", "EMOTE", "SWING_DAMAGE_LANDED":
 		return "", nil
 	}
 

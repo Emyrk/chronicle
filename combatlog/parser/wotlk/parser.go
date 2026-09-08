@@ -29,6 +29,7 @@ const (
 type Parser struct {
 	logger       *slog.Logger
 	wowDB        gamedb.SpellFetcher
+	gameDB       gamedb.GameDB
 	scanner      *bufio.Scanner
 	clientFormat clientFormat
 
@@ -76,6 +77,7 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 		eventHook:    map[string]func(ts time.Time, m *Matched, raw string) ([]messages.Message, error){},
 		logger:       logger,
 		wowDB:        wowDB,
+		gameDB:       wowDB,
 		scanner:      bufio.NewScanner(r),
 		clientFormat: format,
 		guidNames:    gn,
@@ -98,6 +100,11 @@ func (p *Parser) SetSynthetics(s interface {
 	ProcessMessages([]messages.Message) ([]messages.Message, error)
 }) {
 	p.synthetics = s
+}
+
+// ConfigureSynthetics replaces the default synthetic event pipeline.
+func (p *Parser) ConfigureSynthetics(ctx context.Context, reg *registry.Registry, options synthetic.Options) {
+	p.synthetics = synthetic.NewWithOptions(ctx, p.logger, p.gameDB, reg, p.guidNames, options)
 }
 
 // SetBaseYear overrides the year used for timestamps (WotLK logs omit the year).

@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 type Room struct {
@@ -105,7 +105,7 @@ func NewRoomMechanic(id guid.GUID, bossEntry uint32, all *Characters) (*RoomMech
 
 func (c *RoomMechanic) Process(m messages.Message) error {
 	cur, ok := c.Activity.Current()
-	if ok {
+	if ok && !c.Lookup().ExplicitEncounterActive() {
 		cur.HandleTimeout(m.Date())
 	}
 

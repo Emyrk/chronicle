@@ -510,6 +510,38 @@ func TestHookableFinalize_UsesPerInstanceLastProcessedTimestamp(t *testing.T) {
 	require.Equal(t, base.Add(3*time.Hour+characters.InactivityTimeout), secondActivity[0].End.Timestamp.Date())
 }
 
+func TestEncounterBoundaryKeepsFightActiveUntilEnd(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)
+	h := newFinalizeTestHookable(t)
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(base),
+		Active:      true,
+		EncounterID: 1,
+		Name:        "Final Boss",
+	}))
+	_, boss := startFinalizeTestFight(t, h, base.Add(time.Second))
+
+	require.NoError(t, h.Process(messages.TimedOut(base.Add(2*characters.InactivityTimeout))))
+	require.True(t, h.currentFight.active(), "inactivity must not close an explicit encounter")
+	require.Empty(t, h.completedFights)
+	bossCharacter, ok := h.Characters.Get(boss)
+	require.True(t, ok)
+	require.True(t, bossCharacter.IsActive())
+
+	end := base.Add(3 * characters.InactivityTimeout)
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(end),
+		Active:      false,
+		EncounterID: 1,
+		Name:        "Final Boss",
+	}))
+	require.False(t, bossCharacter.IsActive())
+	require.Len(t, h.completedFights, 1)
+	require.Equal(t, end, h.completedFights[0].End)
+}
+
 func TestHookableFinalize_HonorsCustomTimeout(t *testing.T) {
 	t.Parallel()
 

@@ -1,11 +1,14 @@
 package v9
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -115,4 +118,35 @@ func TestParseCombatantMetadata(t *testing.T) {
 	require.NotNil(t, gear[0].EnchantID)
 	assert.Equal(t, 3009, *gear[0].EnchantID)
 	assert.Zero(t, gear[1].ItemID)
+}
+
+func TestCombatantInfoLeavesUnknownLevelUnset(t *testing.T) {
+	t.Parallel()
+
+	fields := make([]string, 27)
+	fields[24] = "(8,0,53)"
+	fields[26] = "[]"
+	encoded := base64.RawStdEncoding.EncodeToString([]byte(strings.Join(fields, ",")))
+	ts, _, matched, err := wotlk.ParseLine(`9/8 12:00:00.000  V9_COMBATANT_INFO,0x000017B1037BA400,"Player-Nightslayer-US",` + encoded)
+	require.NoError(t, err)
+
+	parsed, err := (&Parser{}).combatantInfo(ts, matched, "")
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+	combatant, ok := parsed[0].(*messages.Combatant)
+	require.True(t, ok)
+	require.Nil(t, combatant.Level)
+}
+
+func TestTransformEncounterBoundaries(t *testing.T) {
+	t.Parallel()
+
+	reader := newTransformReader(strings.NewReader(""))
+	start, err := reader.transform(`9/8/2026 12:00:00.000-6  ENCOUNTER_START,601,"Boss",4,25,564,5`)
+	require.NoError(t, err)
+	assert.Equal(t, `9/8 18:00:00.000  V9_ENCOUNTER_START,601,"Boss",4,25,564,5`, start)
+
+	end, err := reader.transform(`9/8/2026 12:05:00.000-6  ENCOUNTER_END,601,"Boss",4,25,1`)
+	require.NoError(t, err)
+	assert.Equal(t, `9/8 18:05:00.000  V9_ENCOUNTER_END,601,"Boss",4,25,1`, end)
 }

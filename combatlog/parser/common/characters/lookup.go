@@ -66,6 +66,10 @@ type Characters struct {
 	// before the fight detection callback is installed. Hookable drains these
 	// after fight start to apply them to the live phase tracker.
 	stagedTransitions []phases.Transition
+
+	// explicitEncounter is set while a combat-log supplied encounter window is
+	// active. Character inactivity timeouts are suppressed until its END record.
+	explicitEncounter bool
 }
 
 func NewCharacters(db *unitdb.Units, factories []CharacterFactory, id *identifier.Identifier) *Characters {
@@ -180,6 +184,10 @@ func (c *Characters) Add(id guid.GUID, now time.Time) (_ Character, newChar bool
 	return char, newChar
 }
 
+func (c *Characters) ExplicitEncounterActive() bool {
+	return c.explicitEncounter
+}
+
 // TODO: Maybe a "synthetic" boolean should exist on message base. This would
 // allow inserting custom messages for totems/pets that indicate their death/recall.
 // This would have to be returned here to be added to the message stream.
@@ -188,8 +196,22 @@ func (c *Characters) Add(id guid.GUID, now time.Time) (_ Character, newChar bool
 func (c *Characters) Process(m messages.Message) (bool, error) {
 	defer func() { c.activityChanged = nil }()
 	c.processNewCharacters(m)
+
+	boundary, isBoundary := m.(*messages.EncounterBoundary)
+	endingEncounter := isBoundary && !boundary.Active
+	if isBoundary {
+		c.explicitEncounter = boundary.Active
+	}
+
 	forAllErr := c.All.ForEachAwake(m.Date(), func(char Character) error {
 		before := char.IsActive()
+		if endingEncounter && before {
+			if ender, ok := char.(interface {
+				End(string, messages.Message, period.EndState)
+			}); ok {
+				ender.End("encounter end", m, period.EndStateReset)
+			}
+		}
 
 		// TODO: Dead characters that will never return should be removed from processing?
 		// Or at least have some kind of speedup

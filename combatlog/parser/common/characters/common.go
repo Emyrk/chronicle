@@ -61,7 +61,7 @@ func (c *Common) WithTimeoutAsDeathIf(condition TimeoutAsDeathCondition) *Common
 func (c *Common) Process(m messages.Message) error {
 	// Timeouts should be checked on every timestamp
 	cur, ok := c.Activity.Current()
-	if ok {
+	if ok && !c.Lookup().ExplicitEncounterActive() {
 		cur.HandleTimeout(m.Date())
 	}
 

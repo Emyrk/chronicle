@@ -633,7 +633,7 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 		}
 	}
 
-	if activeTotal == 0 && h.currentFight.active() {
+	if activeTotal == 0 && h.currentFight.active() && !h.Characters.ExplicitEncounterActive() {
 		return func() error {
 			for _, hook := range h.hooks {
 				hook.FightEnded(h.currentFight.EncounterID, m)

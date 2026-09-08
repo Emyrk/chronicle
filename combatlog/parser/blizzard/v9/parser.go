@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
+	wotlksynthetic "github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Gophercraft/core/i18n"
@@ -67,11 +68,17 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 		return nil, err
 	}
 	inner.SetBaseYear(year)
+	inner.ConfigureSynthetics(ctx, reg, wotlksynthetic.Options{
+		CreditEarthShield: true,
+		GenerateAbsorbs:   false,
+	})
 	p := &Parser{inner: inner, wowDB: wowDB}
 	inner.WithEventHook("V9_COMBAT_LOG_VERSION", p.combatLogVersion)
 	inner.WithEventHook("V9_ZONE_CHANGE", p.zoneChange)
 	inner.WithEventHook("V9_COMBATANT_INFO", p.combatantInfo)
 	inner.WithEventHook("V9_SPELL_ABSORBED", p.spellAbsorbed)
+	inner.WithEventHook("V9_ENCOUNTER_START", p.encounterStart)
+	inner.WithEventHook("V9_ENCOUNTER_END", p.encounterEnd)
 	return p, nil
 }
 
@@ -117,6 +124,52 @@ func (p *Parser) zoneChange(ts time.Time, m *wotlk.Matched, _ string) ([]message
 			InstanceType: instanceType,
 			IsInstance:   instanceType != "0",
 		},
+	}}, nil
+}
+
+func (p *Parser) encounterStart(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
+	encounterID := m.Int32()
+	name := m.String()
+	difficulty := m.Int32()
+	groupSize := m.Int32()
+	// v9 also includes instance and project IDs. They are not needed for the
+	// activity window, but consume them when present so malformed fields surface.
+	if m.Remain() > 0 {
+		_ = m.Int32()
+	}
+	if m.Remain() > 0 {
+		_ = m.Int32()
+	}
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+	return []messages.Message{&messages.EncounterBoundary{
+		MessageBase: messages.Base(ts),
+		Active:      true,
+		EncounterID: encounterID,
+		Name:        name,
+		Difficulty:  difficulty,
+		GroupSize:   groupSize,
+	}}, nil
+}
+
+func (p *Parser) encounterEnd(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
+	encounterID := m.Int32()
+	name := m.String()
+	difficulty := m.Int32()
+	groupSize := m.Int32()
+	success := m.Int32() == 1
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+	return []messages.Message{&messages.EncounterBoundary{
+		MessageBase: messages.Base(ts),
+		Active:      false,
+		EncounterID: encounterID,
+		Name:        name,
+		Difficulty:  difficulty,
+		GroupSize:   groupSize,
+		Success:     &success,
 	}}, nil
 }
 
@@ -174,7 +227,6 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 		return nil, err
 	}
 	gear := parseGear(fields[26])
-	level := int32(70)
 	return []messages.Message{&messages.Combatant{
 		MessageBase: messages.Base(ts),
 		Combatant: combatant.Combatant{
@@ -186,7 +238,6 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 			Race:       "Unknown",
 			GearSetups: gear,
 			Talents:    talents,
-			Level:      &level,
 		},
 	}}, nil
 }

@@ -655,6 +655,21 @@ type Consume struct {
 func (c Consume) Affects() []guid.GUID { return []guid.GUID{c.Player} }
 func (*Consume) isMessage()            {}
 
+// EncounterBoundary marks an authoritative encounter window supplied by the
+// combat log. While Active is true, inactivity timeouts must not end the fight.
+type EncounterBoundary struct {
+	MessageBase
+	Active      bool
+	EncounterID int32
+	Name        string
+	Difficulty  int32
+	GroupSize   int32
+	Success     *bool
+}
+
+func (e EncounterBoundary) Affects() []guid.GUID { return nil }
+func (*EncounterBoundary) isMessage()            {}
+
 type Timeout struct {
 	MessageBase
 }
