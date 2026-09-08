@@ -34,6 +34,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
+	"github.com/Emyrk/chronicle/internal/services/servicesupport"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
 	"github.com/Emyrk/chronicle/internal/services/zugzuglink"
@@ -106,6 +107,7 @@ func (s *Service) DependsOn() []string {
 		serviceapplication.OnApplication(),
 		servicedataset.OnDataset(),
 		serviceexternalapi.OnExternalAPI(),
+		servicesupport.OnSupport(),
 	}
 }
 
@@ -180,6 +182,12 @@ func (s *Service) Start(ctx context.Context) error {
 	externalAPI := serviceexternalapi.ExternalAPI(s.broker)
 	rankings := servicerankings.Rankings(s.broker)
 	mailer := servicemail.Mailer(s.broker)
+	supportSvc := servicesupport.Support(s.broker)
+	var supportPublic, supportAdmin http.Handler
+	if supportSvc.Enabled() {
+		supportPublic = supportSvc.PublicRoutes()
+		supportAdmin = supportSvc.AdminRoutes()
+	}
 	handler, err := api.New(ctx, api.Options{
 		Logger:           logger,
 		Storage:          st,
@@ -198,12 +206,15 @@ func (s *Service) Start(ctx context.Context) error {
 		InternalGameData: gamedata,
 		ExternalAPI:      externalAPI,
 		Rankings:         rankings,
+		SupportPublic:    supportPublic,
+		SupportAdmin:     supportAdmin,
 		Mailer:           mailer,
 		ItemPricing:      itempricing.New(zed, s.itemPricingAPIKey, s.itemPricingBaseURL),
 
 		AccessURL:             au,
 		ShortLinkDomain:       s.shortLinkDomain,
 		ClientUploadsDisabled: s.clientUploadsDisabled,
+		SupportEnabled:        supportSvc.Enabled(),
 		ExternalVerification:  s.externalVerification(),
 		DevOAuth:              s.devAuth,
 		Discord:               s.discordAuth,

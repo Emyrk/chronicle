@@ -25,4 +25,5 @@ const (
 	ServiceRankings    = "rankings"
 	ServiceDataset     = "dataset"
 	ServiceCache       = "cache"
+	ServiceSupport     = "support"
 )

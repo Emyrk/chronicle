@@ -110,6 +110,7 @@ type sqlcQuerier interface {
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
+	DeleteSupportService(ctx context.Context, id uuid.UUID) error
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
 	// Delete a time-parse snapshot by ID. Members are cascade-deleted.
 	DeleteTimeParseSnapshot(ctx context.Context, id uuid.UUID) error
@@ -347,6 +348,10 @@ type sqlcQuerier interface {
 	// IMPORTANT: keep the WHERE clause in sync with BatchInsertSnapshotMembersFromRankings.
 	GetSnapshotSourceStats(ctx context.Context, arg GetSnapshotSourceStatsParams) (GetSnapshotSourceStatsRow, error)
 	GetSpellItemEnchantmentByID(ctx context.Context, arg GetSpellItemEnchantmentByIDParams) (DbcSpellItemEnchantment, error)
+	GetSupportAdminServices(ctx context.Context, month pgtype.Date) ([]GetSupportAdminServicesRow, error)
+	GetSupportService(ctx context.Context, id uuid.UUID) (SupportService, error)
+	GetSupportSettings(ctx context.Context) (SupportSetting, error)
+	GetSupportSummary(ctx context.Context, month pgtype.Date) ([]GetSupportSummaryRow, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error)
 	// Tenant queries. These run with AdminBypass context since the tenants table
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
@@ -486,6 +491,7 @@ type sqlcQuerier interface {
 	InsertServerApplication(ctx context.Context, arg InsertServerApplicationParams) (ServerApplication, error)
 	InsertServerUploadMeta(ctx context.Context, arg InsertServerUploadMetaParams) error
 	InsertStampedYoutubeVideo(ctx context.Context, arg InsertStampedYoutubeVideoParams) error
+	InsertSupportService(ctx context.Context, arg InsertSupportServiceParams) (SupportService, error)
 	InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error)
 	// Create a new pending time-parse snapshot for a tenant+lookback.
 	InsertTimeParseSnapshot(ctx context.Context, arg InsertTimeParseSnapshotParams) (TimeParseSnapshot, error)
@@ -608,6 +614,7 @@ type sqlcQuerier interface {
 	ListSnapshotMembersForInstance(ctx context.Context, arg ListSnapshotMembersForInstanceParams) ([]RankingSnapshotMember, error)
 	// List snapshot members for an instance, joining to encounter_dps_rankings for player name/role.
 	ListSnapshotMembersForInstanceWithNames(ctx context.Context, arg ListSnapshotMembersForInstanceWithNamesParams) ([]ListSnapshotMembersForInstanceWithNamesRow, error)
+	ListSupportServices(ctx context.Context) ([]SupportService, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
@@ -796,6 +803,8 @@ type sqlcQuerier interface {
 	UpdateRegressionFixtureNote(ctx context.Context, arg UpdateRegressionFixtureNoteParams) error
 	UpdateRetentionPolicyStats(ctx context.Context, arg UpdateRetentionPolicyStatsParams) error
 	UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error)
+	UpdateSupportService(ctx context.Context, arg UpdateSupportServiceParams) (SupportService, error)
+	UpdateSupportSettings(ctx context.Context, arg UpdateSupportSettingsParams) (SupportSetting, error)
 	UpdateTelemetryHeartbeat(ctx context.Context) error
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
@@ -842,6 +851,7 @@ type sqlcQuerier interface {
 	UpsertRetentionPolicy(ctx context.Context, arg UpsertRetentionPolicyParams) (RetentionPolicy, error)
 	UpsertRetentionPolicyByRealm(ctx context.Context, arg UpsertRetentionPolicyByRealmParams) (RetentionPolicy, error)
 	UpsertRetentionRule(ctx context.Context, arg UpsertRetentionRuleParams) (RetentionRule, error)
+	UpsertSupportServiceMonthlyTotal(ctx context.Context, arg UpsertSupportServiceMonthlyTotalParams) (SupportServiceMonthlyTotal, error)
 	// Insert a unique talent build, returning its ID. If the build already exists,
 	// return the existing row's ID.
 	UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error)
