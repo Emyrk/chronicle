@@ -22,7 +22,8 @@ CREATE TYPE log_format AS ENUM (
     '1.12a-cc-addon',
     '3.3.5a-cc-addon',
     'azerothcore-mod',
-    '2.4.3-cc-addon'
+    '2.4.3-cc-addon',
+    'v9-cleu'
 );
 
 CREATE TYPE log_instance_event_type AS ENUM (

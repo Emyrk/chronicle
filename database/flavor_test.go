@@ -33,6 +33,7 @@ func TestAllFlavorTagValuesIncludesKnownTags(t *testing.T) {
 	all := database.WoWFlavor(database.AllFlavorTagValues())
 	for _, tag := range []database.FlavorTag{
 		database.FlavorTBC,
+		database.FlavorTBCAnniversary,
 		database.FlavorChromieCraft,
 		database.FlavorAzerothcoreProgression,
 		database.FlavorLunatic,

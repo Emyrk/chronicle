@@ -10,6 +10,7 @@ import type { ActivityPeriod, InstancePlayer, InstanceUnit, WoWEncounterWithHost
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
 import { InstancePageView } from "./InstancePageView";
 import { YouTubeOverlay } from "./YouTubeOverlay";
 import { SyncModeProvider, useSyncModeContext } from "./SyncModeContext";
@@ -497,10 +498,7 @@ export function InstancePage() {
 }
 
 function AddonMissingBanner({ instance }: { instance: Instance }) {
-  const hasAddon = !!instance.versions?.["addon"] || !!instance.versions?.["chronicle_companion"];
-  const isServerSide = instance.capabilities?.includes("server-side");
-
-  if (hasAddon || isServerSide) return null;
+  if (!shouldShowChronicleCompanionWarning(instance)) return null;
 
   return (
     <div className="w-full px-4 pt-4">

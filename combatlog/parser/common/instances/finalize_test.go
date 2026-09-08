@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -508,6 +509,181 @@ func TestHookableFinalize_UsesPerInstanceLastProcessedTimestamp(t *testing.T) {
 	secondActivity := secondResult.Encounters[0].Combat.Hostiles[secondBoss].Activity
 	require.Equal(t, base.Add(characters.InactivityTimeout), firstActivity[0].End.Timestamp.Date())
 	require.Equal(t, base.Add(3*time.Hour+characters.InactivityTimeout), secondActivity[0].End.Timestamp.Date())
+}
+
+func TestEncounterBoundaryKeepsFightActiveUntilEnd(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)
+	h := newFinalizeTestHookable(t)
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(base),
+		Active:      true,
+		EncounterID: 1,
+		Name:        "Authoritative Boss",
+	}))
+	_, boss := startFinalizeTestFight(t, h, base.Add(time.Second))
+
+	require.NoError(t, h.Process(messages.TimedOut(base.Add(2*characters.InactivityTimeout))))
+	require.True(t, h.currentFight.active(), "inactivity must not close an explicit encounter")
+	require.Empty(t, h.completedFights)
+	bossCharacter, ok := h.Characters.Get(boss)
+	require.True(t, ok)
+	require.True(t, bossCharacter.IsActive())
+
+	end := base.Add(3 * characters.InactivityTimeout)
+	success := true
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(end),
+		Active:      false,
+		EncounterID: 1,
+		Name:        "Authoritative Boss",
+		Success:     &success,
+	}))
+	require.False(t, bossCharacter.IsActive())
+	require.Len(t, h.completedFights, 1)
+	require.Equal(t, base, h.completedFights[0].Start)
+	require.Equal(t, end, h.completedFights[0].End)
+
+	enc, err := h.fightEncounter(h.completedFights[0])
+	require.NoError(t, err)
+	require.Equal(t, "Authoritative Boss", enc.Name)
+	require.Equal(t, types.EncounterTypeBOSS, enc.Type)
+	require.True(t, enc.Boss)
+	require.NotNil(t, enc.Remaining, "successful encounters must persist an empty array, not JSON null")
+	require.Empty(t, enc.Remaining)
+	require.Equal(t, encounter.KillTypeClean, enc.KillType)
+}
+
+func TestEncounterStartAnnotatesExistingInactiveFightPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)
+	h := newFinalizeTestHookable(t)
+	h.currentFight = &ongoingFight{
+		EncounterID:    uuid.New(),
+		ActiveHostiles: make(map[guid.GUID]struct{}),
+		Events:         encounterevents.New(false),
+	}
+
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(base),
+		Active:      true,
+		EncounterID: 1,
+		Name:        "Authoritative Boss",
+	}))
+	_, _ = startFinalizeTestFight(t, h, base.Add(time.Second))
+
+	require.Equal(t, "Authoritative Boss", h.currentFight.AuthoritativeName)
+	require.Equal(t, base, h.currentFight.Start.Timestamp.Date())
+}
+
+func TestEncounterBoundaryFailureIsAuthoritativeWipe(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)
+	h := newFinalizeTestHookable(t)
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(base),
+		Active:      true,
+		EncounterID: 1,
+		Name:        "Authoritative Boss",
+	}))
+	_, _ = startFinalizeTestFight(t, h, base.Add(time.Second))
+
+	success := false
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(base.Add(2 * time.Second)),
+		Active:      false,
+		EncounterID: 1,
+		Name:        "Authoritative Boss",
+		Success:     &success,
+	}))
+	require.Len(t, h.completedFights, 1)
+	enc, err := h.fightEncounter(h.completedFights[0])
+	require.NoError(t, err)
+	require.Equal(t, "Authoritative Boss", enc.Name)
+	require.Equal(t, encounter.KillTypeWipe, enc.KillType)
+}
+
+func TestFinalizeSkipsHostilesWithoutActivityInsideFightWindow(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)
+	h := newFinalizeTestHookable(t)
+	_, boss := startFinalizeTestFight(t, h, base)
+
+	boundaryStart := base.Add(time.Second)
+	h.currentFight.Start = &period.Moment{
+		Timestamp: &messages.EncounterBoundary{
+			MessageBase: messages.Base(boundaryStart),
+			Active:      true,
+			Name:        "Authoritative Boss",
+		},
+		Reason: "encounter start",
+	}
+	h.currentFight.AuthoritativeName = "Authoritative Boss"
+
+	bossCharacter, ok := h.Characters.Get(boss)
+	require.True(t, ok)
+	bossCharacter.(interface {
+		End(string, messages.Message, period.EndState)
+	}).End("before encounter", messages.TimedOut(base.Add(500*time.Millisecond)), period.EndStateReset)
+
+	h.currentFight.End = &period.Moment{Timestamp: messages.TimedOut(base.Add(2 * time.Second)), Reason: "test"}
+	require.NoError(t, h.finalizeFight())
+	require.Len(t, h.completedFights, 1)
+	require.Empty(t, h.completedFights[0].Hostiles)
+}
+
+func TestEncounterStartAdoptsImmediatePreBoundaryActivity(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)
+	h := newFinalizeTestHookable(t)
+	_, boss := startFinalizeTestFight(t, h, base)
+
+	start := base.Add(100 * time.Millisecond)
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(start),
+		Active:      true,
+		EncounterID: 1,
+		Name:        "Authoritative Boss",
+	}))
+	require.Empty(t, h.completedFights)
+	require.True(t, h.currentFight.active())
+	require.Equal(t, start, h.currentFight.Start.Timestamp.Date())
+	require.Equal(t, "Authoritative Boss", h.currentFight.AuthoritativeName)
+	bossCharacter, ok := h.Characters.Get(boss)
+	require.True(t, ok)
+	require.True(t, bossCharacter.IsActive())
+}
+
+func TestEncounterStartSeparatesExistingFight(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)
+	h := newFinalizeTestHookable(t)
+	_, boss := startFinalizeTestFight(t, h, base)
+
+	start := base.Add(10 * time.Second)
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(start),
+		Active:      true,
+		EncounterID: 1,
+		Name:        "Authoritative Boss",
+	}))
+	require.Len(t, h.completedFights, 1, "pre-encounter combat must be finalized at ENCOUNTER_START")
+	require.Equal(t, start, h.completedFights[0].End)
+
+	bossCharacter, ok := h.Characters.Get(boss)
+	require.True(t, ok)
+	require.False(t, bossCharacter.IsActive())
+
+	_, _ = startFinalizeTestFight(t, h, start.Add(time.Second))
+	require.NotNil(t, h.currentFight)
+	require.Equal(t, start, h.currentFight.Start.Timestamp.Date())
+	require.Equal(t, "Authoritative Boss", h.currentFight.AuthoritativeName)
 }
 
 func TestHookableFinalize_HonorsCustomTimeout(t *testing.T) {

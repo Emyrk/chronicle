@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/consumers"
 	"github.com/Emyrk/chronicle/combatlog/parser/azerothcore"
 	azencounters "github.com/Emyrk/chronicle/combatlog/parser/azerothcore/encounters"
+	blizzardv9 "github.com/Emyrk/chronicle/combatlog/parser/blizzard/v9"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
@@ -226,6 +227,33 @@ func (w *WorkerLogParse) parseCombatLog(
 		if p.SawRaidGroup() {
 			logCapabilities = append(logCapabilities, "raidgroup")
 		}
+
+	case database.LogFormatV9Cleu:
+		logCapabilities = append(logCapabilities, "interrupt")
+		loadStart := time.Now()
+		data := preloadedFirst
+		if data == nil {
+			rdr, err := w.loadFile(ctx, files[0])
+			if err != nil {
+				return nil, fmt.Errorf("load v9 CLEU log file: %w", err)
+			}
+			data, err = io.ReadAll(rdr)
+			if err != nil {
+				return nil, fmt.Errorf("read v9 CLEU log file: %w", err)
+			}
+		}
+		loadFileDuration = time.Since(loadStart)
+
+		p, err := blizzardv9.New(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+		if err != nil {
+			return nil, fmt.Errorf("create v9 CLEU parser: %w", err)
+		}
+		c.Advancer = p
+		consumeErr = c.ConsumeAll(ctx, p)
+		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
+			return nil, fmt.Errorf("consume v9 CLEU log: %w", consumeErr)
+		}
+		totalLines = p.Metrics().TotalLinesParsed
 
 	case database.LogFormatAzerothcoreMod:
 		logCapabilities = append(logCapabilities, "interrupt", "server-side")

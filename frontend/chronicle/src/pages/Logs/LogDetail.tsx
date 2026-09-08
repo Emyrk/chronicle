@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { useAuth } from "@/hooks/useAuth";
+import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
 import { 
   useLogGroup,
@@ -655,13 +656,15 @@ function InstanceFailureCard({ name, error }: { name: string; error: string }) {
 }
 
 function InstanceCard({ 
-  instance, 
+  instance,
+  logFormat,
   canUploadYoutube,
   canDeleteInstance,
   onDeleteInstance,
   isDeletingInstance,
 }: { 
   instance: WoWSimpleParsedInstance;
+  logFormat?: string;
   canUploadYoutube: boolean;
   canDeleteInstance: boolean;
   onDeleteInstance: (instanceId: string, instanceName: string) => void;
@@ -764,7 +767,10 @@ function InstanceCard({
       </div>
 
       {/* Addon-missing warning */}
-      {!instance.versions?.["addon"] && !instance.capabilities?.includes("server-side") && (
+      {shouldShowChronicleCompanionWarning({
+        ...instance,
+        format: instance.format ?? logFormat,
+      }) && (
         <div className="px-3 pt-2">
           <div className="bg-amber-500/10 border border-amber-500/30 rounded px-3 py-2 flex items-center gap-2 text-xs text-muted-foreground">
             <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
@@ -861,6 +867,7 @@ function ParsedInstancesSection({
             <InstanceCard
               key={instance.id}
               instance={instance}
+              logFormat={log.format}
               canUploadYoutube={canUploadYoutube}
               canDeleteInstance={canDeleteInstance}
               onDeleteInstance={onDeleteInstance}

@@ -151,6 +151,7 @@ const (
 	LogFormat335aCcAddon       LogFormat = "3.3.5a-cc-addon"
 	LogFormatAzerothcoreMod    LogFormat = "azerothcore-mod"
 	LogFormat243CcAddon        LogFormat = "2.4.3-cc-addon"
+	LogFormatV9Cleu            LogFormat = "v9-cleu"
 )
 
 func (e *LogFormat) Scan(src interface{}) error {
@@ -194,7 +195,8 @@ func (e LogFormat) Valid() bool {
 		LogFormat112aCcAddon,
 		LogFormat335aCcAddon,
 		LogFormatAzerothcoreMod,
-		LogFormat243CcAddon:
+		LogFormat243CcAddon,
+		LogFormatV9Cleu:
 		return true
 	}
 	return false
@@ -207,6 +209,7 @@ func AllLogFormatValues() []LogFormat {
 		LogFormat335aCcAddon,
 		LogFormatAzerothcoreMod,
 		LogFormat243CcAddon,
+		LogFormatV9Cleu,
 	}
 }
 
