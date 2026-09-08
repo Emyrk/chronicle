@@ -1,6 +1,7 @@
 import { ExternalLink } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import type { KillTimeLeaderboardEntry } from "@/api/typesGenerated"
+import { RankingsLoadingState } from "./RankingsLoadingState"
 
 const MEDAL_ICONS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
 
@@ -27,10 +28,13 @@ export interface RankedKillTimeEntry extends KillTimeLeaderboardEntry {
 
 interface KillTimeTableProps {
   entries: RankedKillTimeEntry[]
+  loading?: boolean
 }
 
-export function KillTimeTable({ entries }: KillTimeTableProps) {
+export function KillTimeTable({ entries, loading = false }: KillTimeTableProps) {
   const navigate = useNavigate()
+
+  if (loading) return <RankingsLoadingState />
 
   if (entries.length === 0) {
     return (
