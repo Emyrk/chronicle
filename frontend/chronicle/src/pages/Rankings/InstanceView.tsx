@@ -40,6 +40,7 @@ import { BoxPlotChart } from "./BoxPlotChart"
 import { RankingsTable } from "./RankingsTable"
 import { KillTimeTable } from "./KillTimeTable"
 import { ClassSpecFilter } from "./ClassSpecFilter"
+import { getRankingsQueryEnablement } from "./rankingsQueryState"
 import {
   groupByParamForValue,
   parseGroupByClass,
@@ -403,6 +404,12 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     ? [...selectedRealms].join(",")
     : undefined
 
+  const queryEnablement = getRankingsQueryEnablement(
+    metric,
+    dpsSubTab,
+    encounterSummaries !== undefined,
+  )
+
   const { data: rawBoxPlotStats = [], isLoading: boxPlotLoading } = useRankingsStats({
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
@@ -412,7 +419,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     role: filterRole,
     metric: valueMetric,
     group_by_class: groupByClass,
-  })
+  }, queryEnablement.playerStats)
 
   const boxPlotStats = useMemo(() => {
     if (!hideUnknowns) return rawBoxPlotStats
@@ -432,7 +439,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     metric: valueMetric,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
-  })
+  }, queryEnablement.playerLeaderboard)
 
   // Derive available difficulties from instance summaries (unaffected by difficulty filter)
   const { data: instanceSummaries } = useRankingsInstances()
@@ -515,7 +522,11 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return entries.map((e, i) => ({ ...e, rank: offset + i + 1 }))
   }, [leaderboardData, page])
 
-  const { data: killTimeStats = [] } = useRankingsKillTimes(instanceName, periodParam)
+  const { data: killTimeStats = [] } = useRankingsKillTimes(
+    instanceName,
+    periodParam,
+    queryEnablement.killTimeStats,
+  )
 
   // Kill time leaderboard: always a single encounter (mixing bosses is meaningless).
   // Persisted via ?kt_enc= URL param; defaults to the first boss.
@@ -544,7 +555,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     period: periodParam,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
-  })
+  }, queryEnablement.killTimeLeaderboard)
 
   const killTimeTotalCount = killTimeLeaderboardData?.total_count ?? 0
   const killTimeTotalPages = Math.max(1, Math.ceil(killTimeTotalCount / PAGE_SIZE))
@@ -557,7 +568,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   const { data: successRates = [] } = useRankingsSuccessRates(instanceName, periodParam, {
     difficulty_names: difficultyNamesParam,
-  })
+  }, queryEnablement.successRates)
 
   // ── Loading state ──────────────────────────────────────────────────
 
