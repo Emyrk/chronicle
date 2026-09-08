@@ -55,6 +55,45 @@ func TestGUIDNormalizerUsesCompleteWorldGUID(t *testing.T) {
 	assert.NotEqual(t, first, second)
 }
 
+func TestGUIDNormalizerResolvesWorldGUIDCollision(t *testing.T) {
+	t.Parallel()
+
+	n := newGUIDNormalizer()
+	raw := "Creature-0-1-564-1-15479-01001E1033"
+	prefix := legacyCreatureHigh<<48 | uint64(15479)<<24
+	initial := prefix | uint64(hash24(raw))
+	n.valueToRaw[initial] = "Creature-0-1-564-1-15479-0000000001"
+
+	normalized, err := n.normalize(raw)
+	require.NoError(t, err)
+	expected := prefix | uint64((hash24(raw)+1)&0xFFFFFF)
+	assert.Equal(t, fmt.Sprintf("0x%016X", expected), normalized)
+	assert.Equal(t, raw, n.valueToRaw[expected])
+	assert.Equal(t, expected, n.rawToValue[raw])
+
+	again, err := n.normalize(raw)
+	require.NoError(t, err)
+	assert.Equal(t, normalized, again, "repeated GUIDs must keep their allocated identity")
+}
+
+func TestGUIDNormalizerPlayerGUIDsAreLossless(t *testing.T) {
+	t.Parallel()
+
+	n := newGUIDNormalizer()
+	first, err := n.normalize("Player-6065-037BA400")
+	require.NoError(t, err)
+	second, err := n.normalize("Player-6066-037BA400")
+	require.NoError(t, err)
+	third, err := n.normalize("Player-6065-037BA401")
+	require.NoError(t, err)
+
+	assert.Equal(t, "0x000017B1037BA400", first)
+	assert.Equal(t, "0x000017B2037BA400", second)
+	assert.Equal(t, "0x000017B1037BA401", third)
+	assert.NotEqual(t, first, second)
+	assert.NotEqual(t, first, third)
+}
+
 func TestTransformDamage(t *testing.T) {
 	t.Parallel()
 

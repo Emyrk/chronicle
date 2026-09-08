@@ -16,14 +16,18 @@ const (
 
 // guidNormalizer converts Blizzard's modern string GUIDs into Chronicle's
 // legacy 64-bit GUID representation. Player GUIDs are lossless. World-object
-// GUIDs preserve the entity type and template entry, with a collision-checked
-// 24-bit hash of the complete modern GUID as the instance identity.
+// GUIDs preserve the entity type and template entry, with a per-log unique
+// 24-bit identity initially derived from the complete modern GUID.
 type guidNormalizer struct {
-	seen map[uint64]string
+	rawToValue map[string]uint64
+	valueToRaw map[uint64]string
 }
 
 func newGUIDNormalizer() *guidNormalizer {
-	return &guidNormalizer{seen: make(map[uint64]string)}
+	return &guidNormalizer{
+		rawToValue: make(map[string]uint64),
+		valueToRaw: make(map[uint64]string),
+	}
 }
 
 func hash24(raw string) uint32 {
@@ -83,19 +87,30 @@ func (n *guidNormalizer) normalize(raw string) (string, error) {
 			high = legacyObjectHigh
 		}
 		// A modern world GUID needs more than 64 bits if stored losslessly. Keep
-		// Chronicle's 16-bit type and 24-bit template entry, then derive the
-		// remaining 24-bit identity from the complete GUID. This distinguishes
-		// otherwise identical pets and creatures whose modern spawn IDs differ
-		// only above the low 24 bits. The seen map makes collisions fatal.
-		value = high<<48 | entry<<24 | uint64(hash24(raw))
+		// Chronicle's 16-bit type and 24-bit template entry, then allocate the
+		// remaining 24-bit identity within this log. Start from a hash of the
+		// complete GUID and probe forward if another GUID already owns that slot.
+		// This distinguishes spawns whose modern IDs differ only above 24 bits
+		// without making parsing probabilistically fail on a hash collision.
+		if existing, ok := n.rawToValue[raw]; ok {
+			return fmt.Sprintf("0x%016X", existing), nil
+		}
+		prefix := high<<48 | entry<<24
+		start := hash24(raw)
+		for offset := uint32(0); offset < 1<<24; offset++ {
+			candidate := prefix | uint64((start+offset)&0xFFFFFF)
+			if _, occupied := n.valueToRaw[candidate]; occupied {
+				continue
+			}
+			n.rawToValue[raw] = candidate
+			n.valueToRaw[candidate] = raw
+			return fmt.Sprintf("0x%016X", candidate), nil
+		}
+		return "", fmt.Errorf("exhausted legacy GUID identities for %q", raw)
 
 	default:
 		return "", fmt.Errorf("unsupported Blizzard GUID %q", raw)
 	}
 
-	if previous, ok := n.seen[value]; ok && previous != raw {
-		return "", fmt.Errorf("blizzard GUID collision: %q and %q normalize to 0x%016X", previous, raw, value)
-	}
-	n.seen[value] = raw
 	return fmt.Sprintf("0x%016X", value), nil
 }
