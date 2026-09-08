@@ -841,7 +841,7 @@ func (h *Hookable) fightEncounter(fight encounter.Fight) (encounter.Encounter, e
 		if fight.AuthoritativeSuccess != nil {
 			if *fight.AuthoritativeSuccess {
 				enc.KillType = encounter.KillTypeClean
-				enc.Remaining = nil
+				enc.Remaining = []guid.GUID{}
 			} else {
 				enc.KillType = encounter.KillTypeWipe
 			}

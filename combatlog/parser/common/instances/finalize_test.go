@@ -550,6 +550,8 @@ func TestEncounterBoundaryKeepsFightActiveUntilEnd(t *testing.T) {
 	require.Equal(t, "Authoritative Boss", enc.Name)
 	require.Equal(t, types.EncounterTypeBOSS, enc.Type)
 	require.True(t, enc.Boss)
+	require.NotNil(t, enc.Remaining, "successful encounters must persist an empty array, not JSON null")
+	require.Empty(t, enc.Remaining)
 	require.Equal(t, encounter.KillTypeClean, enc.KillType)
 }
 
