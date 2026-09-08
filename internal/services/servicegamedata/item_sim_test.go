@@ -1,6 +1,7 @@
 package servicegamedata
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -69,6 +70,43 @@ func TestApplyEquipSpellRowStatsAllStats(t *testing.T) {
 	}
 }
 
+func TestApplyEquipSpellRowStatsCollapsesSpeedAuras(t *testing.T) {
+	t.Parallel()
+
+	sim := chroniclesdk.SimItem{}
+	applyEquipSpellRowStats(&spelldb.SpellRow{
+		Effect0:           int32(chrondbc.EffectApplyAura),
+		Effect1:           int32(chrondbc.EffectApplyAura),
+		Effect2:           int32(chrondbc.EffectApplyAura),
+		EffectAura0:       int32(chrondbc.AuraEffectModMeleeHaste),
+		EffectAura1:       int32(chrondbc.AuraEffectModRangedHaste),
+		EffectAura2:       int32(chrondbc.AuraEffectModCastingSpeed_NOT_STACK),
+		EffectBasePoints0: 4,
+		EffectBasePoints1: 4,
+		EffectBasePoints2: 2,
+	}, &sim)
+
+	want := []chroniclesdk.ItemStat{{Type: itemModAttackCastingSpeed, Value: 5}}
+	if !slices.Equal(sim.Stats, want) {
+		t.Errorf("stats = %+v, want %+v", sim.Stats, want)
+	}
+}
+
+func TestApplyEquipSpellRowStatsIgnoresMovementSpeed(t *testing.T) {
+	t.Parallel()
+
+	sim := chroniclesdk.SimItem{}
+	applyEquipSpellRowStats(&spelldb.SpellRow{
+		Effect0:           int32(chrondbc.EffectApplyAura),
+		EffectAura0:       int32(chrondbc.AuraEffectModIncreaseSpeed),
+		EffectBasePoints0: 9,
+	}, &sim)
+
+	if len(sim.Stats) != 0 {
+		t.Errorf("stats = %+v, want none", sim.Stats)
+	}
+}
+
 func TestApplyEquipSpellRowStatsCombatBonuses(t *testing.T) {
 	t.Parallel()
 
@@ -78,6 +116,11 @@ func TestApplyEquipSpellRowStatsCombatBonuses(t *testing.T) {
 		misc    int32
 		wantMod int32
 	}{
+		{name: "attack speed", aura: chrondbc.AuraEffectModAttackspeed, wantMod: itemModAttackCastingSpeed},
+		{name: "casting speed", aura: chrondbc.AuraEffectModCastingSpeed_NOT_STACK, wantMod: itemModAttackCastingSpeed},
+		{name: "melee haste", aura: chrondbc.AuraEffectModMeleeHaste, wantMod: itemModAttackCastingSpeed},
+		{name: "ranged haste", aura: chrondbc.AuraEffectModRangedHaste, wantMod: itemModAttackCastingSpeed},
+		{name: "melee ranged haste", aura: chrondbc.AuraEffectModMeleeRangedHaste, wantMod: itemModAttackCastingSpeed},
 		{name: "attack power", aura: chrondbc.AuraEffectModAttackPower, wantMod: itemModAttackPower},
 		{name: "ranged attack power", aura: chrondbc.AuraEffectModRangedAttackPower, wantMod: itemModRangedAttackPower},
 		{name: "hit", aura: chrondbc.AuraEffectModHitChance, wantMod: itemModHit},

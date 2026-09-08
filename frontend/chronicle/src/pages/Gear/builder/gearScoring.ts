@@ -63,6 +63,13 @@ export const STAT_KEYS: readonly StatKeyDef[] = [
   { key: "hit", label: "Hit", group: "Combat", itemMods: [16, 17, 18, 31] },
   { key: "crit", label: "Crit", group: "Combat", itemMods: [19, 20, 21, 32] },
   { key: "haste", label: "Haste", group: "Combat", itemMods: [28, 29, 30, 36] },
+  {
+    key: "attack_casting_speed",
+    label: "Attack and Casting Speed",
+    group: "Combat",
+    // Internal SimItem stat emitted from permanent percentage-speed equip auras.
+    itemMods: [1000],
+  },
   { key: "expertise", label: "Expertise", group: "Combat", itemMods: [37] },
   {
     key: "armor_penetration",

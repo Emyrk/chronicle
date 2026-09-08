@@ -152,6 +152,9 @@ const (
 	itemModSpellDamage       int32 = 42
 	itemModManaRegen         int32 = 43
 	itemModBlockValue        int32 = 48
+	// Internal SimItem stat for percentage-based attack and casting speed.
+	// It is not a Mangos ItemModType value.
+	itemModAttackCastingSpeed int32 = 1000
 )
 
 // applyEquipSpellStats decodes permanent item equip auras into the same
@@ -182,6 +185,7 @@ func applyEquipSpellRowStats(spell *spelldb.SpellRow, sim *chroniclesdk.SimItem)
 	basePoints := [3]int32{spell.EffectBasePoints0, spell.EffectBasePoints1, spell.EffectBasePoints2}
 	miscValues := [3]int32{spell.EffectMiscValue0, spell.EffectMiscValue1, spell.EffectMiscValue2}
 
+	var attackCastingSpeed int32
 	for i, auraValue := range auras {
 		if chrondbc.Effect(effects[i]) != chrondbc.EffectApplyAura {
 			continue
@@ -209,6 +213,14 @@ func applyEquipSpellRowStats(spell *spelldb.SpellRow, sim *chroniclesdk.SimItem)
 			if misc == 0 { // POWER_MANA
 				appendSimItemStat(sim, itemModMana, value)
 			}
+		case chrondbc.AuraEffectModAttackspeed,
+			chrondbc.AuraEffectModCastingSpeed_NOT_STACK,
+			chrondbc.AuraEffectModMeleeHaste,
+			chrondbc.AuraEffectModRangedHaste,
+			chrondbc.AuraEffectModMeleeRangedHaste:
+			// One displayed attack/casting speed bonus may use several equal
+			// aura effects. Collapse them instead of double-counting the item.
+			attackCastingSpeed = max(attackCastingSpeed, value)
 		case chrondbc.AuraEffectModAttackPower:
 			appendSimItemStat(sim, itemModAttackPower, value)
 		case chrondbc.AuraEffectModRangedAttackPower:
@@ -247,6 +259,7 @@ func applyEquipSpellRowStats(spell *spelldb.SpellRow, sim *chroniclesdk.SimItem)
 			appendSimItemStat(sim, itemModBlockValue, value)
 		}
 	}
+	appendSimItemStat(sim, itemModAttackCastingSpeed, attackCastingSpeed)
 }
 
 func auraStatItemMod(auraStat int32) (int32, bool) {
