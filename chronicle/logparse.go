@@ -1567,9 +1567,11 @@ func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents
 		return ""
 	}
 
-	// Nightmare of Ursol Feral druids form exactly two cohorts. Bear talents
-	// override the Cat default. Talent names are resolved from the dataset so
-	// positional layouts remain dataset-specific.
+	// Nightmare of Ursol Feral druids form exactly two cohorts. Require both
+	// Bear marker talents; builds with only one marker retain the Cat default.
+	// Talent names are resolved from the dataset so positional layouts remain
+	// dataset-specific.
+	var thickHide, feralCharge bool
 	if treeData != nil {
 		if druid, ok := treeData.Classes[11]; ok {
 			for _, tab := range druid.Tabs {
@@ -1577,15 +1579,21 @@ func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents
 					continue
 				}
 				for _, talent := range tab.Talents {
-					if talent.TabIndex < 0 || int(talent.TabIndex) >= len(playerTalents.Trees[1]) {
+					if talent.TabIndex < 0 || int(talent.TabIndex) >= len(playerTalents.Trees[1]) || playerTalents.Trees[1][talent.TabIndex] == 0 {
 						continue
 					}
-					if playerTalents.Trees[1][talent.TabIndex] > 0 && (strings.EqualFold(talent.Name, "Thick Hide") || strings.EqualFold(talent.Name, "Feral Charge")) {
-						return "Bear"
+					if strings.EqualFold(talent.Name, "Thick Hide") {
+						thickHide = true
+					}
+					if strings.EqualFold(talent.Name, "Feral Charge") {
+						feralCharge = true
 					}
 				}
 			}
 		}
+	}
+	if thickHide && feralCharge {
+		return "Bear"
 	}
 	return "Cat"
 }
