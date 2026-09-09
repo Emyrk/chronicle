@@ -5,6 +5,7 @@ import { specializationIconUrl } from "@/config/specializationIcon"
 
 const PALADIN_COLOR = "var(--color-class-paladin)"
 const PRIEST_COLOR = "var(--color-class-priest)"
+const SHAMAN_COLOR = "var(--color-class-shaman)"
 
 type CreditedClass = "PALADIN" | "ROGUE"
 
@@ -64,6 +65,7 @@ export function ClassDetailsPage() {
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
   const paladinSelected = selectedClass === "PALADIN"
   const priestSelected = selectedClass === "PRIEST"
+  const shamanSelected = selectedClass === "SHAMAN"
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
@@ -153,6 +155,38 @@ export function ClassDetailsPage() {
             </span>
             <ChevronRight
               className={`h-5 w-5 text-muted-foreground transition-transform ${priestSelected ? "rotate-90 text-white" : ""}`}
+            />
+          </button>
+          <button
+            type="button"
+            aria-expanded={shamanSelected}
+            aria-controls="shaman-details"
+            onClick={() => setSelectedClass(shamanSelected ? null : "SHAMAN")}
+            className={`group flex w-full max-w-sm cursor-pointer items-center gap-4 rounded-xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/70 ${
+              shamanSelected
+                ? "border-blue-300/50 bg-blue-300/10 shadow-lg shadow-blue-950/20"
+                : "bg-card hover:border-blue-300/30 hover:bg-blue-300/5"
+            }`}
+          >
+            <img
+              src="/c/icons/class_shaman.png"
+              alt=""
+              aria-hidden="true"
+              className="h-16 w-16 rounded-lg border border-white/15 object-cover shadow-md transition-transform group-hover:scale-105"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Class
+              </span>
+              <span className="block text-lg font-bold" style={{ color: SHAMAN_COLOR }}>
+                Shaman
+              </span>
+              <span className="mt-0.5 block text-sm text-muted-foreground">
+                Earth Shield attribution
+              </span>
+            </span>
+            <ChevronRight
+              className={`h-5 w-5 text-muted-foreground transition-transform ${shamanSelected ? "rotate-90 text-blue-200" : ""}`}
             />
           </button>
         </div>
@@ -345,6 +379,42 @@ export function ClassDetailsPage() {
                 while the effect is active.
               </p>
             </section>
+          </div>
+        </section>
+      )}
+
+      {shamanSelected && (
+        <section
+          id="shaman-details"
+          aria-labelledby="restoration-shaman-heading"
+          className="overflow-hidden rounded-2xl border border-blue-300/20 bg-[radial-gradient(circle_at_100%_0%,rgba(96,165,250,0.12),transparent_38%)] shadow-xl shadow-black/10"
+        >
+          <div className="flex items-center gap-4 border-b border-border/70 bg-card/70 p-5 sm:p-6">
+            <img
+              src={specializationIconUrl("Shaman", "Restoration")}
+              alt="Restoration Shaman specialization icon"
+              className="h-14 w-14 rounded-lg border border-blue-200/20 object-cover shadow-md"
+            />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-300/80">
+                Shaman specialization
+              </p>
+              <h2 id="restoration-shaman-heading" className="text-2xl font-bold">
+                Restoration
+              </h2>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-6">
+            <div className="mb-3 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-blue-300" />
+              <h3 className="text-lg font-semibold">Earth Shield</h3>
+            </div>
+            <p className="leading-relaxed text-muted-foreground">
+              Some combat log formats report an Earth Shield heal as if it were cast by the
+              shielded unit. Chronicle tracks who applied Earth Shield and credits each triggered
+              heal to that shaman, not to the unit receiving the hits.
+            </p>
           </div>
         </section>
       )}

@@ -1,4 +1,5 @@
-import { ArrowLeft, Check, GitBranch, Info, Shield, Tags } from "lucide-react"
+import { useState } from "react"
+import { ArrowLeft, Check, ChevronRight, Info } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useSiteConfig } from "@/api/queries"
 import { specializationIconUrl } from "@/config/specializationIcon"
@@ -7,6 +8,9 @@ import { subspecRulesForFlavor } from "./subspecs"
 export function SubspecsPage() {
   const { data: siteConfig, isLoading } = useSiteConfig()
   const rules = subspecRulesForFlavor(siteConfig?.dataset_flavor ?? [])
+  const classes = [...new Set(rules.map((rule) => rule.className))]
+  const [selectedClass, setSelectedClass] = useState<string | null>(null)
+  const selectedRules = rules.filter((rule) => rule.className === selectedClass)
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
@@ -24,43 +28,15 @@ export function SubspecsPage() {
         </p>
         <h1 className="mb-3 text-3xl font-bold">Subspecs</h1>
         <p className="text-muted-foreground">
-          Subspecs divide one specialization into more precise ranking and parse cohorts when
-          talent choices represent meaningfully different roles.
+          See how Chronicle divides specializations into more precise ranking and parse cohorts.
         </p>
       </div>
-
-      <section className="mb-8 grid gap-4 md:grid-cols-3" aria-label="How subspecs work">
-        <div className="rounded-xl border bg-card p-4">
-          <Tags className="mb-3 h-5 w-5 text-sky-300" />
-          <h2 className="mb-1 font-semibold">Dataset-aware</h2>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Rules are enabled by the current tenant&apos;s resolved dataset flavor. Talent positions
-            are read from that dataset rather than assumed globally.
-          </p>
-        </div>
-        <div className="rounded-xl border bg-card p-4">
-          <GitBranch className="mb-3 h-5 w-5 text-amber-300" />
-          <h2 className="mb-1 font-semibold">Snapshot-specific</h2>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Chronicle uses the talent snapshot recorded for each encounter, so a mid-raid respec
-            can place later encounters in a different cohort.
-          </p>
-        </div>
-        <div className="rounded-xl border bg-card p-4">
-          <Shield className="mb-3 h-5 w-5 text-emerald-300" />
-          <h2 className="mb-1 font-semibold">Cohort separation</h2>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Leaderboards and spec-mode parses compare a subspec only with records from that same
-            class, specialization, and subspec.
-          </p>
-        </div>
-      </section>
 
       {isLoading ? (
         <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
           Loading subspec rules for this server…
         </div>
-      ) : rules.length === 0 ? (
+      ) : classes.length === 0 ? (
         <section className="rounded-2xl border border-dashed bg-card/50 p-6">
           <div className="flex items-start gap-3">
             <Info className="mt-0.5 h-5 w-5 text-muted-foreground" />
@@ -68,98 +44,132 @@ export function SubspecsPage() {
               <h2 className="font-semibold">No subspec rules are active for this server</h2>
               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                 Chronicle currently uses the standard class and specialization cohorts for this
-                tenant&apos;s dataset flavors.
+                server.
               </p>
             </div>
           </div>
         </section>
       ) : (
-        <div className="space-y-6">
-          {rules.map((rule) => (
-            <section
-              key={`${rule.flavor}:${rule.className}:${rule.spec}`}
-              className="overflow-hidden rounded-2xl border border-orange-300/20 bg-[radial-gradient(circle_at_100%_0%,rgba(251,146,60,0.12),transparent_38%)] shadow-xl shadow-black/10"
+        <>
+          <section aria-labelledby="choose-class" className="mb-8">
+            <h2
+              id="choose-class"
+              className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground"
             >
-              <div className="flex items-center gap-4 border-b border-border/70 bg-card/70 p-5 sm:p-6">
-                <img
-                  src={specializationIconUrl(rule.className, rule.spec)}
-                  alt={`${rule.spec} ${rule.className} specialization icon`}
-                  className="h-14 w-14 rounded-lg border border-orange-200/20 object-cover shadow-md"
-                />
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-300/80">
-                    {rule.className} specialization
-                  </p>
-                  <h2 className="text-2xl font-bold">
-                    {rule.spec}: {rule.subspecs.map((subspec) => subspec.name).join(" & ")}
-                  </h2>
-                </div>
-              </div>
-
-              <div className="space-y-6 p-5 sm:p-6">
-                <div>
-                  <h3 className="mb-3 text-lg font-semibold">Detection rule</h3>
-                  <p className="mb-4 leading-relaxed text-muted-foreground">
-                    A Feral Druid is classified as <strong className="text-foreground">Bear</strong>{" "}
-                    only when the encounter&apos;s talent snapshot has at least one point in all three
-                    required talents:
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {rule.detection.map((talent) => (
-                      <div
-                        key={talent}
-                        className="flex items-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-400/5 px-3 py-2.5 text-sm font-semibold"
+              Choose a class
+            </h2>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {classes.map((className) => {
+                const selected = selectedClass === className
+                return (
+                  <button
+                    key={className}
+                    type="button"
+                    aria-expanded={selected}
+                    aria-controls={`${className.toLowerCase()}-subspec-details`}
+                    onClick={() => setSelectedClass(selected ? null : className)}
+                    className={`group flex w-full max-w-sm cursor-pointer items-center gap-4 rounded-xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70 ${
+                      selected
+                        ? "border-orange-300/50 bg-orange-300/10 shadow-lg shadow-orange-950/20"
+                        : "bg-card hover:border-orange-300/30 hover:bg-orange-300/5"
+                    }`}
+                  >
+                    <img
+                      src={`/c/icons/class_${className.toLowerCase().replaceAll(" ", "")}.png`}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-16 w-16 rounded-lg border border-white/15 object-cover shadow-md transition-transform group-hover:scale-105"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                        Class
+                      </span>
+                      <span
+                        className="block text-lg font-bold"
+                        style={{ color: `var(--color-class-${className.toLowerCase().replaceAll(" ", "-")})` }}
                       >
-                        <Check className="h-4 w-4 text-emerald-300" />
-                        {talent}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                        {className}
+                      </span>
+                      <span className="mt-0.5 block text-sm text-muted-foreground">
+                        {rules
+                          .filter((rule) => rule.className === className)
+                          .map((rule) => rule.spec)
+                          .join(", ")}
+                      </span>
+                    </span>
+                    <ChevronRight
+                      className={`h-5 w-5 text-muted-foreground transition-transform ${selected ? "rotate-90 text-orange-200" : ""}`}
+                    />
+                  </button>
+                )
+              })}
+            </div>
+          </section>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {rule.subspecs.map((subspec) => {
-                    const bear = subspec.name === "Bear"
-                    return (
-                      <div
-                        key={subspec.name}
-                        className={`rounded-xl border p-4 ${
-                          bear
-                            ? "border-emerald-300/20 bg-emerald-400/5"
-                            : "border-orange-300/20 bg-orange-400/5"
-                        }`}
-                      >
-                        <p
-                          className={`mb-1 text-xs font-bold uppercase tracking-[0.14em] ${
-                            bear ? "text-emerald-300/80" : "text-orange-300/80"
-                          }`}
-                        >
-                          {subspec.name}
-                        </p>
-                        <p className="text-sm leading-relaxed text-muted-foreground">
-                          {subspec.description}
-                        </p>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                <div className="rounded-xl border border-sky-300/20 bg-sky-400/5 p-4">
-                  <div className="mb-2 flex items-center gap-2">
-                    <Info className="h-5 w-5 text-sky-300" />
-                    <h3 className="font-semibold">Default behavior</h3>
+          {selectedClass && (
+            <div id={`${selectedClass.toLowerCase()}-subspec-details`} className="space-y-6">
+              {selectedRules.map((rule) => (
+                <section
+                  key={`${rule.flavor}:${rule.className}:${rule.spec}`}
+                  className="overflow-hidden rounded-2xl border border-orange-300/20 bg-[radial-gradient(circle_at_100%_0%,rgba(251,146,60,0.12),transparent_38%)] shadow-xl shadow-black/10"
+                >
+                  <div className="flex items-center gap-4 border-b border-border/70 bg-card/70 p-5 sm:p-6">
+                    <img
+                      src={specializationIconUrl(rule.className, rule.spec)}
+                      alt={`${rule.spec} ${rule.className} specialization icon`}
+                      className="h-14 w-14 rounded-lg border border-orange-200/20 object-cover shadow-md"
+                    />
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-300/80">
+                        {rule.className} specialization
+                      </p>
+                      <h2 className="text-2xl font-bold">{rule.spec}</h2>
+                    </div>
                   </div>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    If any required Bear talent is missing—or talent metadata cannot identify all
-                    three markers—the build uses the <strong className="text-foreground">{rule.fallback}</strong>{" "}
-                    subspec. Chronicle always produces one of these two Feral cohorts on the
-                    Nightmare of Ursol flavor.
-                  </p>
-                </div>
-              </div>
-            </section>
-          ))}
-        </div>
+
+                  <div className="space-y-6 p-5 sm:p-6">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {rule.subspecs.map((subspec) => {
+                        const bear = subspec.name === "Bear"
+                        return (
+                          <div
+                            key={subspec.name}
+                            className={`rounded-xl border p-4 ${
+                              bear
+                                ? "border-emerald-300/20 bg-emerald-400/5"
+                                : "border-orange-300/20 bg-orange-400/5"
+                            }`}
+                          >
+                            <p
+                              className={`mb-1 text-xs font-bold uppercase tracking-[0.14em] ${
+                                bear ? "text-emerald-300/80" : "text-orange-300/80"
+                              }`}
+                            >
+                              {subspec.name}
+                            </p>
+                            <p className="text-sm leading-relaxed text-muted-foreground">
+                              {subspec.description}
+                            </p>
+                            {bear && (
+                              <div className="mt-4 space-y-2">
+                                {rule.detection.map((talent) => (
+                                  <div key={talent} className="flex items-center gap-2 text-sm font-semibold">
+                                    <Check className="h-4 w-4 text-emerald-300" />
+                                    At least 1 point in {talent}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
