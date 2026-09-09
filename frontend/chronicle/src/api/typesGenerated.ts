@@ -601,6 +601,7 @@ export interface CohortBucket {
     readonly encounter_name: string;
     readonly player_class: string;
     readonly player_spec: string;
+    readonly player_sub_spec?: string;
     readonly difficulty_name: string;
     readonly max_players: number;
 }
@@ -629,6 +630,7 @@ export interface CohortDebugResponse {
     readonly encounter_name: string;
     readonly player_class: string;
     readonly player_spec: string;
+    readonly player_sub_spec?: string;
     readonly metric: string;
     readonly total_kills: number;
     readonly min_value: number;
@@ -1749,6 +1751,7 @@ export interface InstanceParsePlayer {
     readonly player_name: string;
     readonly player_class: string;
     readonly player_spec: string;
+    readonly player_sub_spec?: string;
     readonly player_role: string;
     /**
      * Bosses contains per-encounter parse results for bosses this player killed.
@@ -1856,6 +1859,7 @@ export interface InstanceRankingRecord {
     readonly player_name: string;
     readonly player_class: string;
     readonly player_spec: string;
+    readonly player_sub_spec?: string;
     readonly player_role: string;
     readonly player_level: number;
     readonly damage_done: number;
@@ -2572,6 +2576,7 @@ export interface RaidComposition {
 export interface RankingsBoxPlotStats {
     readonly player_class: string;
     readonly player_spec: string;
+    readonly player_sub_spec?: string;
     readonly min_dps: number;
     readonly q1_dps: number;
     readonly median_dps: number;
@@ -2625,6 +2630,24 @@ export interface RankingsEntry {
     readonly avg_ilvl?: number;
     readonly log_hashed_slug: string;
     readonly killed_at: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsFilterClass describes the specs and sub-specs available for one class.
+ */
+export interface RankingsFilterClass {
+    readonly player_class: string;
+    readonly specs: readonly RankingsFilterSpec[];
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsFilterSpec describes one broad spec and its available sub-specs.
+ */
+export interface RankingsFilterSpec {
+    readonly spec: string;
+    readonly sub_specs: readonly string[];
 }
 
 // From chroniclesdk/rankings.go

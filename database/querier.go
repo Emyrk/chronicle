@@ -539,8 +539,8 @@ type sqlcQuerier interface {
 	ListDatasets(ctx context.Context) ([]Dataset, error)
 	ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error)
 	ListDiscordAnnouncementSources(ctx context.Context, announcementID uuid.UUID) ([]GuildDiscordLogAnnouncementSource, error)
-	// Return distinct (encounter_name, player_class, player_spec, difficulty_name, max_players)
-	// combinations available in a snapshot, for driving filter dropdowns.
+	// Return distinct (encounter_name, player_class, player_spec, player_sub_spec,
+	// difficulty_name, max_players) combinations available in a snapshot.
 	ListDistinctCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListDistinctCohortBucketsRow, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
 	ListExternalAPICharacterLogs(ctx context.Context, arg ListExternalAPICharacterLogsParams) ([]ListExternalAPICharacterLogsRow, error)
@@ -648,6 +648,8 @@ type sqlcQuerier interface {
 	RankingsDistinctSummaryKeys(ctx context.Context) ([]RankingsDistinctSummaryKeysRow, error)
 	// Returns encounters available in rankings for a given instance.
 	RankingsEncounterList(ctx context.Context, instanceName string) ([]RankingsEncounterListRow, error)
+	// Distinct class/spec/sub-spec combinations available to the public rankings UI.
+	RankingsFilterOptions(ctx context.Context, instanceNames []string) ([]RankingsFilterOptionsRow, error)
 	// Reads pre-computed per-instance summaries for a specific tenant.
 	// The table has no RLS; filtering is done explicitly by tenant_id.
 	RankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) ([]RankingsInstanceSummariesRow, error)

@@ -32,6 +32,7 @@ import {
   useRankingsKillTimeLeaderboard,
   useRankingsSuccessRates,
   useRankingsRealms,
+  useRankingsFilters,
 } from "@/api/rankingsQueries"
 import type { RankedEntry } from "./RankingsTable"
 import type { RankedKillTimeEntry } from "./KillTimeTable"
@@ -108,6 +109,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const killTimeSubTab: KillTimeSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
   const filterClass = params.get("class") ?? undefined
   const filterSpec = params.get("spec") ?? undefined
+  const filterSubSpec = params.get("sub_spec") ?? undefined
   const filterRole = useMemo(() => params.get("role") || "", [params])  // "" = all roles
 
   const page = useMemo(() => {
@@ -291,13 +293,15 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   )
 
   const handleBoxPlotRowClick = useCallback(
-    (playerClass: string, playerSpec: string) => {
+    (playerClass: string, playerSpec: string, playerSubSpec: string) => {
       setParams((prev) => {
         const next = new URLSearchParams(prev)
         next.set("tab", "leaderboard")
         next.set("class", playerClass)
         if (playerSpec) next.set("spec", playerSpec)
         else next.delete("spec")
+        if (playerSubSpec) next.set("sub_spec", playerSubSpec)
+        else next.delete("sub_spec")
         next.delete("page")
         return next
       })
@@ -312,6 +316,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         if (cls) next.set("class", cls)
         else next.delete("class")
         next.delete("spec")
+        next.delete("sub_spec")
         next.delete("page")
         return next
       })
@@ -325,6 +330,20 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         const next = new URLSearchParams(prev)
         if (spec) next.set("spec", spec)
         else next.delete("spec")
+        next.delete("sub_spec")
+        next.delete("page")
+        return next
+      })
+    },
+    [setParams],
+  )
+
+  const handleSubSpecSelect = useCallback(
+    (subSpec: string | null) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (subSpec) next.set("sub_spec", subSpec)
+        else next.delete("sub_spec")
         next.delete("page")
         return next
       })
@@ -411,6 +430,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     encounterSummaries !== undefined,
   )
 
+  const { data: filterOptions = [] } = useRankingsFilters(instanceName)
+
   const { data: rawBoxPlotStats = [], isLoading: boxPlotLoading } = useRankingsStats({
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
@@ -435,6 +456,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     period: periodParam,
     class: filterClass,
     spec: filterSpec,
+    sub_spec: filterSubSpec,
     role: filterRole,
     hide_unknowns: hideUnknowns,
     metric: valueMetric,
@@ -936,8 +958,11 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
               <ClassSpecFilter
                 selectedClass={filterClass ?? null}
                 selectedSpec={filterSpec ?? null}
+                selectedSubSpec={filterSubSpec ?? null}
+                options={filterOptions}
                 onClassSelect={handleClassSelect}
                 onSpecSelect={handleSpecSelect}
+                onSubSpecSelect={handleSubSpecSelect}
               />
               <RankingsTable
                 entries={leaderboardEntries}

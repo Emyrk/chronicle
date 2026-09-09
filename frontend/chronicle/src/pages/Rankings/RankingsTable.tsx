@@ -83,7 +83,7 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
               </div>
               <div className="mt-1 flex min-w-0 items-center gap-2 text-xs">
                 <span className="shrink-0 font-medium" style={{ color: CLASS_CSS_VAR[entry.player_class] }}>
-                  {entry.player_spec}
+                  {entry.sub_spec ? `${entry.player_spec} (${entry.sub_spec})` : entry.player_spec}
                 </span>
                 <span className="truncate text-muted-foreground">{entry.realm_name}</span>
                 <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
@@ -151,7 +151,7 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
                       className="h-4 w-4 shrink-0 rounded-sm"
                       onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
                     />
-                    <span style={{ color: CLASS_CSS_VAR[entry.player_class] }}>{entry.player_spec}</span>
+                    <span style={{ color: CLASS_CSS_VAR[entry.player_class] }}>{entry.sub_spec ? `${entry.player_spec} (${entry.sub_spec})` : entry.player_spec}</span>
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right font-mono font-semibold" title={metricTitle(entry, metric)}>

@@ -73,6 +73,7 @@ type InstanceRankingRecord struct {
 	PlayerName    string     `json:"player_name"`
 	PlayerClass   string     `json:"player_class"`
 	PlayerSpec    string     `json:"player_spec"`
+	PlayerSubSpec string     `json:"player_sub_spec,omitempty"`
 	PlayerRole    string     `json:"player_role"`
 	PlayerLevel   int16      `json:"player_level"`
 	DamageDone    int64      `json:"damage_done"`
@@ -91,16 +92,29 @@ type RankingsLeaderboardResponse struct {
 	TotalCount int64           `json:"total_count"`
 }
 
+// RankingsFilterClass describes the specs and sub-specs available for one class.
+type RankingsFilterClass struct {
+	PlayerClass string               `json:"player_class"`
+	Specs       []RankingsFilterSpec `json:"specs"`
+}
+
+// RankingsFilterSpec describes one broad spec and its available sub-specs.
+type RankingsFilterSpec struct {
+	Spec     string   `json:"spec"`
+	SubSpecs []string `json:"sub_specs"`
+}
+
 // RankingsBoxPlotStats contains box plot statistics for a class/spec combination.
 type RankingsBoxPlotStats struct {
-	PlayerClass string  `json:"player_class"`
-	PlayerSpec  string  `json:"player_spec"`
-	MinDPS      float64 `json:"min_dps"`
-	Q1DPS       float64 `json:"q1_dps"`
-	MedianDPS   float64 `json:"median_dps"`
-	Q3DPS       float64 `json:"q3_dps"`
-	MaxDPS      float64 `json:"max_dps"`
-	Count       int64   `json:"count"`
+	PlayerClass   string  `json:"player_class"`
+	PlayerSpec    string  `json:"player_spec"`
+	PlayerSubSpec string  `json:"player_sub_spec,omitempty"`
+	MinDPS        float64 `json:"min_dps"`
+	Q1DPS         float64 `json:"q1_dps"`
+	MedianDPS     float64 `json:"median_dps"`
+	Q3DPS         float64 `json:"q3_dps"`
+	MaxDPS        float64 `json:"max_dps"`
+	Count         int64   `json:"count"`
 }
 
 // RankingsKillTimeStats contains box plot statistics for encounter kill durations.
@@ -188,11 +202,12 @@ type InstanceParsesResponse struct {
 
 // InstanceParsePlayer is a player's parse data across selected encounters.
 type InstanceParsePlayer struct {
-	PlayerGUID  string `json:"player_guid"`
-	PlayerName  string `json:"player_name"`
-	PlayerClass string `json:"player_class"`
-	PlayerSpec  string `json:"player_spec"`
-	PlayerRole  string `json:"player_role"`
+	PlayerGUID    string `json:"player_guid"`
+	PlayerName    string `json:"player_name"`
+	PlayerClass   string `json:"player_class"`
+	PlayerSpec    string `json:"player_spec"`
+	PlayerSubSpec string `json:"player_sub_spec,omitempty"`
+	PlayerRole    string `json:"player_role"`
 
 	// Bosses contains per-encounter parse results for bosses this player killed.
 	Bosses []InstanceParseBoss `json:"bosses"`
@@ -354,6 +369,7 @@ type CohortBucket struct {
 	EncounterName  string `json:"encounter_name"`
 	PlayerClass    string `json:"player_class"`
 	PlayerSpec     string `json:"player_spec"`
+	PlayerSubSpec  string `json:"player_sub_spec,omitempty"`
 	DifficultyName string `json:"difficulty_name"`
 	MaxPlayers     int16  `json:"max_players"`
 }
@@ -376,6 +392,7 @@ type CohortDebugResponse struct {
 	EncounterName string             `json:"encounter_name"`
 	PlayerClass   string             `json:"player_class"`
 	PlayerSpec    string             `json:"player_spec"`
+	PlayerSubSpec string             `json:"player_sub_spec,omitempty"`
 	Metric        string             `json:"metric"`
 	TotalKills    int                `json:"total_kills"`
 	MinValue      float64            `json:"min_value"`

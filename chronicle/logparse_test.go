@@ -5,10 +5,47 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
+
+func TestInferTalentSubSpec(t *testing.T) {
+	t.Parallel()
+
+	feralTalents := []talents.TalentEntry{
+		{Name: "Thick Hide", TabIndex: 0},
+		{Name: "Feral Charge", TabIndex: 1},
+		{Name: "Improved Shred", TabIndex: 2},
+	}
+	treeData := &talents.TalentTreeData{Classes: map[int32]talents.ClassTalentData{
+		11: {Tabs: []talents.TalentTabData{{Name: "Feral Combat", Talents: feralTalents}}},
+	}}
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
+
+	for _, tt := range []struct {
+		name    string
+		class   string
+		spec    string
+		flavor  database.WoWFlavor
+		talents *combatant.Talents
+		want    string
+	}{
+		{name: "thick hide is bear", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 0, 0}, nil}}, want: "Bear"},
+		{name: "feral charge is bear", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {0, 1, 0}, nil}}, want: "Bear"},
+		{name: "bear talent overrides improved shred", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 0, 1}, nil}}, want: "Bear"},
+		{name: "otherwise cat", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {0, 0, 1}, nil}}, want: "Cat"},
+		{name: "non nightmare has no sub spec", class: "DRUID", spec: "Feral", flavor: database.WoWFlavor{database.FlavorVanilla}, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1}, nil}}},
+		{name: "non feral has no sub spec", class: "DRUID", spec: "Balance", flavor: flavor, talents: &combatant.Talents{}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, inferTalentSubSpec(tt.class, tt.spec, tt.talents, tt.flavor, treeData))
+		})
+	}
+}
 
 func TestSlugCollisionFromLookup(t *testing.T) {
 	t.Parallel()

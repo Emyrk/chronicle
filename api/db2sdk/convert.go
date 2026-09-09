@@ -297,6 +297,7 @@ func InstanceRankingRecords(rows []database.EncounterDpsRanking) []chroniclesdk.
 			PlayerName:    row.PlayerName,
 			PlayerClass:   row.PlayerClass,
 			PlayerSpec:    row.PlayerSpec,
+			PlayerSubSpec: row.PlayerSubSpec,
 			PlayerRole:    row.PlayerRole,
 			PlayerLevel:   row.PlayerLevel,
 			DamageDone:    row.DamageDone,

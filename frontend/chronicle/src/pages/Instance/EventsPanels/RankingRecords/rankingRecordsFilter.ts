@@ -12,9 +12,10 @@ export function filterRankingRecords(
       record.player_name,
       record.player_class,
       record.player_spec,
+      record.player_sub_spec,
       record.player_role,
       record.encounter_name,
       record.player_guid,
-    ].some((value) => value.toLowerCase().includes(normalized)),
+    ].some((value) => value?.toLowerCase().includes(normalized)),
   );
 }

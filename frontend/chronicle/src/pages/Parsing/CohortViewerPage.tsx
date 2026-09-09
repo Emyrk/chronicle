@@ -23,6 +23,7 @@ export function CohortViewerPage() {
   const encounterName = searchParams.get("encounter") ?? "";
   const playerClass = searchParams.get("class") ?? "";
   const playerSpec = searchParams.get("spec") ?? "";
+  const playerSubSpec = searchParams.get("sub_spec") ?? "";
   const difficulty = searchParams.get("difficulty") ?? "";
   const maxPlayersRaw = Number(searchParams.get("max_players") ?? "");
   const maxPlayers = Number.isFinite(maxPlayersRaw) && maxPlayersRaw > 0 ? maxPlayersRaw : undefined;
@@ -49,7 +50,8 @@ export function CohortViewerPage() {
     [setSearchParams],
   );
 
-  const setPlayerSpec = (v: string) => updateParams({ spec: v });
+  const setPlayerSpec = (v: string) => updateParams({ spec: v, sub_spec: "" });
+  const setPlayerSubSpec = (v: string) => updateParams({ sub_spec: v });
   const setDifficulty = (v: string) => updateParams({ difficulty: v });
   const setMaxPlayers = (v: number | undefined) => updateParams({ max_players: v ? String(v) : "" });
   const setMetric = (v: "dps" | "hps") => updateParams({ metric: v === "dps" ? "" : v });
@@ -59,6 +61,7 @@ export function CohortViewerPage() {
     encounter_name: encounterName || undefined,
     class: playerClass || undefined,
     spec: playerSpec || undefined,
+    sub_spec: playerSubSpec || undefined,
     difficulty: difficulty,
     max_players: maxPlayers,
     metric,
@@ -87,6 +90,16 @@ export function CohortViewerPage() {
     );
     return [...new Set(filtered.map((b: CohortBucket) => b.player_spec).filter(Boolean))].sort();
   }, [buckets, encounterName, playerClass]);
+
+  const subSpecs = useMemo(() => {
+    const filtered = buckets.filter(
+      (b: CohortBucket) =>
+        (!encounterName || b.encounter_name === encounterName) &&
+        (!playerClass || b.player_class === playerClass) &&
+        (!playerSpec || b.player_spec === playerSpec),
+    );
+    return [...new Set(filtered.map((b: CohortBucket) => b.player_sub_spec).filter(Boolean))].sort();
+  }, [buckets, encounterName, playerClass, playerSpec]);
 
   const difficulties = useMemo(() => {
     return [...new Set(buckets.map((b: CohortBucket) => b.difficulty_name))].sort();
@@ -127,7 +140,7 @@ export function CohortViewerPage() {
               className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
               value={selectedSnapshotId}
               onChange={(e) =>
-                updateParams({ snapshot: e.target.value, encounter: "", class: "", spec: "" })
+                updateParams({ snapshot: e.target.value, encounter: "", class: "", spec: "", sub_spec: "" })
               }
             >
               <option value="">Select a snapshot…</option>
@@ -146,7 +159,7 @@ export function CohortViewerPage() {
           <select
             className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
             value={encounterName}
-            onChange={(e) => updateParams({ encounter: e.target.value, class: "", spec: "" })}
+            onChange={(e) => updateParams({ encounter: e.target.value, class: "", spec: "", sub_spec: "" })}
             disabled={!selectedSnapshotId}
           >
             <option value="">{encounters.length ? "Select encounter…" : "Load a snapshot first"}</option>
@@ -163,7 +176,7 @@ export function CohortViewerPage() {
           <select
             className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
             value={playerClass}
-            onChange={(e) => updateParams({ class: e.target.value, spec: "" })}
+            onChange={(e) => updateParams({ class: e.target.value, spec: "", sub_spec: "" })}
             disabled={!encounterName}
           >
             <option value="">{classes.length ? "Select class…" : "Select encounter first"}</option>
@@ -191,6 +204,25 @@ export function CohortViewerPage() {
             ))}
           </select>
         </div>
+
+        {subSpecs.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium mb-1">Sub-spec</label>
+            <select
+              className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
+              value={playerSubSpec}
+              onChange={(e) => setPlayerSubSpec(e.target.value)}
+              disabled={!playerSpec}
+            >
+              <option value="">All sub-specs</option>
+              {subSpecs.map((subSpec) => (
+                <option key={subSpec} value={subSpec}>
+                  {subSpec}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {difficulties.length > 1 && (
           <div>

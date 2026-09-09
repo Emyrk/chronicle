@@ -116,7 +116,12 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
                   <div className="text-[10px] text-muted-foreground">{record.player_class}</div>
                 </td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-muted-foreground">
-                  {[record.player_spec, record.player_role].filter(Boolean).join(" · ") || "—"}
+                  {[
+                    record.player_sub_spec
+                      ? `${record.player_spec} (${record.player_sub_spec})`
+                      : record.player_spec,
+                    record.player_role,
+                  ].filter(Boolean).join(" · ") || "—"}
                 </td>
                 <td className="px-2 py-1.5 text-right">{formatNumber(record.duration_secs, 2)}s</td>
                 <td className="px-2 py-1.5 text-right">{formatNumber(record.damage_done)}</td>

@@ -34,6 +34,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbstatic"
+	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/database/jsontransform"
 	"github.com/Emyrk/chronicle/internal/guildrenames"
 	"github.com/Emyrk/chronicle/internal/ptr"
@@ -274,6 +275,14 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	if err != nil {
 		jobResult = "failure"
 		return err
+	}
+
+	talentTreeData, talentTreeErr := gameDB.TalentTrees(ctx, resolved.DatasetID)
+	if talentTreeErr != nil {
+		slog.WarnContext(ctx, "load talent trees for ranking sub-spec inference",
+			slog.String("dataset_id", resolved.DatasetID.String()),
+			slog.String("err", talentTreeErr.Error()),
+		)
 	}
 
 	logCapabilities := parsed.logCapabilities
@@ -716,7 +725,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		// transaction so a ranking error cannot roll back the parsed instance.
 		if finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-				return insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName)
+				return insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData)
 			}, nil)
 			if rankErr != nil {
 				slog.WarnContext(ctx, "insert dps rankings failed",
@@ -1153,6 +1162,9 @@ func insertDPSRankings(
 	dbinstance database.LogInstance,
 	instanceName string,
 	realmName string,
+	datasetID uuid.UUID,
+	flavor database.WoWFlavor,
+	talentTreeData *talents.TalentTreeData,
 ) error {
 	// Build a set of player GUIDs that violate the level range, reusing the
 	// speedrun proof which has already checked every engaged player.
@@ -1244,15 +1256,17 @@ func insertDPSRankings(
 			// Use the per-encounter talent snapshot from the DPS tracker,
 			// not the armory tracker's final state, so mid-raid respecs
 			// and respec invalidation are correctly captured.
-			spec, talentLayout, talentSummary := extractTalentInfoFromSnapshot(className, stats.Talents)
+			spec, subSpec, talentLayout, talentSummary := extractTalentInfoFromSnapshot(className, stats.Talents, flavor, talentTreeData)
 
 			var talentBuildID uuid.NullUUID
 			if talentLayout != "" {
 				tbID, err := tx.UpsertTalentBuild(ctx, database.UpsertTalentBuildParams{
+					DatasetID:     datasetID,
 					PlayerClass:   className,
 					TalentSummary: talentSummary,
 					TalentLayout:  talentLayout,
 					Spec:          spec,
+					SubSpec:       pgtype.Text{String: subSpec, Valid: subSpec != ""},
 				})
 				if err != nil {
 					if database.IsRLSViolation(err) {
@@ -1287,6 +1301,7 @@ func insertDPSRankings(
 				PlayerName:     player.Name,
 				PlayerClass:    className,
 				PlayerSpec:     spec,
+				PlayerSubSpec:  subSpec,
 				PlayerRole:     roles[unitGUID],
 				PlayerLevel:    playerLevel,
 				TalentBuildID:  talentBuildID,
@@ -1315,7 +1330,7 @@ func insertDPSRankings(
 	}
 
 	// Aggregate trash (non-boss) encounters into per-(player, spec) ranking rows.
-	if err := insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, levelViolators); err != nil {
+	if err := insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, levelViolators, datasetID, flavor, talentTreeData); err != nil {
 		return err
 	}
 	return nil
@@ -1324,8 +1339,9 @@ func insertDPSRankings(
 // trashPlayerKey groups trash damage by player GUID + spec.
 // A player who respecs mid-raid gets separate trash rows per spec.
 type trashPlayerKey struct {
-	GUID guid.GUID
-	Spec string
+	GUID    guid.GUID
+	Spec    string
+	SubSpec string
 }
 
 // trashPlayerAccum accumulates trash stats for one (player, spec) pair.
@@ -1349,6 +1365,9 @@ func insertTrashRankings(
 	instanceName string,
 	realmName string,
 	levelViolators map[guid.GUID]struct{},
+	datasetID uuid.UUID,
+	flavor database.WoWFlavor,
+	talentTreeData *talents.TalentTreeData,
 ) error {
 	accum := make(map[trashPlayerKey]*trashPlayerAccum)
 
@@ -1399,9 +1418,9 @@ func insertTrashRankings(
 				continue
 			}
 			className := string(db2sdk.HeroClassToDB(finalized.Guilds.Players[unitGUID].HeroClass))
-			spec, talentLayout, talentSummary := extractTalentInfoFromSnapshot(className, stats.Talents)
+			spec, subSpec, talentLayout, talentSummary := extractTalentInfoFromSnapshot(className, stats.Talents, flavor, talentTreeData)
 
-			key := trashPlayerKey{GUID: unitGUID, Spec: spec}
+			key := trashPlayerKey{GUID: unitGUID, Spec: spec, SubSpec: subSpec}
 			a, ok := accum[key]
 			if !ok {
 				a = &trashPlayerAccum{
@@ -1457,10 +1476,12 @@ func insertTrashRankings(
 		var talentBuildID uuid.NullUUID
 		if a.TalentLayout != "" {
 			tbID, err := tx.UpsertTalentBuild(ctx, database.UpsertTalentBuildParams{
+				DatasetID:     datasetID,
 				PlayerClass:   className,
 				TalentSummary: a.TalentSummary,
 				TalentLayout:  a.TalentLayout,
 				Spec:          key.Spec,
+				SubSpec:       pgtype.Text{String: key.SubSpec, Valid: key.SubSpec != ""},
 			})
 			if err != nil {
 				if database.IsRLSViolation(err) {
@@ -1489,6 +1510,7 @@ func insertTrashRankings(
 			PlayerName:     player.Name,
 			PlayerClass:    className,
 			PlayerSpec:     key.Spec,
+			PlayerSubSpec:  key.SubSpec,
 			PlayerRole:     roles[key],
 			PlayerLevel:    playerLevel,
 			TalentBuildID:  talentBuildID,
@@ -1517,19 +1539,19 @@ func insertTrashRankings(
 	return nil
 }
 
-// extractTalentInfoFromSnapshot returns the inferred spec, talent layout string,
-// and talent summary from a per-encounter talent snapshot. Returns "Unknown" spec
-// if the snapshot is nil (e.g., talents were invalidated by a respec).
-func extractTalentInfoFromSnapshot(className string, talents *combatant.Talents) (spec string, layout string, summary []int16) {
-	if talents == nil {
-		return "Unknown", "", nil
+// extractTalentInfoFromSnapshot returns the inferred spec, sub-spec, talent layout,
+// and talent summary from a per-encounter talent snapshot.
+func extractTalentInfoFromSnapshot(className string, playerTalents *combatant.Talents, flavor database.WoWFlavor, treeData *talents.TalentTreeData) (spec string, subSpec string, layout string, summary []int16) {
+	if playerTalents == nil {
+		return "Unknown", "", "", nil
 	}
-	spec = wowspec.InferSpec(className, talents.Summary)
+	spec = wowspec.InferSpec(className, playerTalents.Summary)
+	subSpec = inferTalentSubSpec(className, spec, playerTalents, flavor, treeData)
 	summary = make([]int16, 3)
-	for i, v := range talents.Summary {
+	for i, v := range playerTalents.Summary {
 		summary[i] = int16(v)
 	}
-	for i, tree := range talents.Trees {
+	for i, tree := range playerTalents.Trees {
 		if i > 0 {
 			layout += "}"
 		}
@@ -1537,7 +1559,35 @@ func extractTalentInfoFromSnapshot(className string, talents *combatant.Talents)
 			layout += fmt.Sprintf("%d", rank)
 		}
 	}
-	return spec, layout, summary
+	return spec, subSpec, layout, summary
+}
+
+func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents, flavor database.WoWFlavor, treeData *talents.TalentTreeData) string {
+	if className != "DRUID" || spec != "Feral" || !flavor.Has(database.FlavorNightmareOfUrsol) {
+		return ""
+	}
+
+	// Nightmare of Ursol Feral druids form exactly two cohorts. Bear talents
+	// override the Cat default. Talent names are resolved from the dataset so
+	// positional layouts remain dataset-specific.
+	if treeData != nil {
+		if druid, ok := treeData.Classes[11]; ok {
+			for _, tab := range druid.Tabs {
+				if !strings.EqualFold(tab.Name, "Feral") && !strings.EqualFold(tab.Name, "Feral Combat") {
+					continue
+				}
+				for _, talent := range tab.Talents {
+					if talent.TabIndex < 0 || int(talent.TabIndex) >= len(playerTalents.Trees[1]) {
+						continue
+					}
+					if playerTalents.Trees[1][talent.TabIndex] > 0 && (strings.EqualFold(talent.Name, "Thick Hide") || strings.EqualFold(talent.Name, "Feral Charge")) {
+						return "Bear"
+					}
+				}
+			}
+		}
+	}
+	return "Cat"
 }
 
 // findPlayerGuild returns the guild name for a player, or "" if not in a guild.

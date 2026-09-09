@@ -175,6 +175,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/instances", s.handleInstances)
 	s.router.Get("/encounters", s.handleEncounters)
 	s.router.Get("/leaderboard", s.handleLeaderboard)
+	s.router.Get("/filters", s.handleFilters)
 	s.router.Get("/stats", s.handleStats)
 	s.router.Get("/realms", s.handleRealms)
 	s.router.Get("/kill-times", s.handleKillTimes)
@@ -324,6 +325,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		RealmNames:       splitCSV(q.Get("realm_names")),
 		Class:            classParam,
 		Spec:             q.Get("spec"),
+		SubSpec:          q.Get("sub_spec"),
 		Role:             q.Get("role"),
 		SinceDays:        sinceDays,
 		HideUnknowns:     q.Get("hide_unknowns") == "true",
@@ -373,8 +375,8 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 			v := row.AvgIlvl
 			entry.AvgIlvl = &v
 		}
-		if row.TalentSubSpec != "" {
-			entry.SubSpec = &row.TalentSubSpec
+		if row.PlayerSubSpec != "" {
+			entry.SubSpec = &row.PlayerSubSpec
 		}
 		if row.TalentLayout != "" {
 			entry.TalentLayout = &row.TalentLayout
@@ -386,6 +388,45 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		Entries:    entries,
 		TotalCount: totalCount,
 	})
+}
+
+// handleFilters returns backend-discovered class/spec/sub-spec options.
+//
+//	GET /filters?instance_names=Molten+Core
+func (s *Service) handleFilters(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rows, err := s.store.RankingsFilterOptions(ctx, splitCSV(r.URL.Query().Get("instance_names")))
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{Message: "Failed to fetch rankings filter options", Detail: err.Error()},
+		})
+		return
+	}
+
+	classes := make([]chroniclesdk.RankingsFilterClass, 0)
+	classIndexes := make(map[string]int)
+	specIndexes := make(map[string]map[string]int)
+	for _, row := range rows {
+		className := normalizeClassName(row.PlayerClass)
+		classIndex, ok := classIndexes[className]
+		if !ok {
+			classIndex = len(classes)
+			classIndexes[className] = classIndex
+			specIndexes[className] = make(map[string]int)
+			classes = append(classes, chroniclesdk.RankingsFilterClass{PlayerClass: className, Specs: []chroniclesdk.RankingsFilterSpec{}})
+		}
+		specIndex, ok := specIndexes[className][row.PlayerSpec]
+		if !ok {
+			specIndex = len(classes[classIndex].Specs)
+			specIndexes[className][row.PlayerSpec] = specIndex
+			classes[classIndex].Specs = append(classes[classIndex].Specs, chroniclesdk.RankingsFilterSpec{Spec: row.PlayerSpec, SubSpecs: []string{}})
+		}
+		if row.PlayerSubSpec != "" {
+			classes[classIndex].Specs[specIndex].SubSpecs = append(classes[classIndex].Specs[specIndex].SubSpecs, row.PlayerSubSpec)
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, classes)
 }
 
 // handleStats returns box plot statistics per class/spec.
@@ -424,14 +465,15 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 	out := make([]chroniclesdk.RankingsBoxPlotStats, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, chroniclesdk.RankingsBoxPlotStats{
-			PlayerClass: normalizeClassName(row.PlayerClass),
-			PlayerSpec:  row.PlayerSpec,
-			MinDPS:      row.MinDps,
-			Q1DPS:       row.Q1Dps,
-			MedianDPS:   row.MedianDps,
-			Q3DPS:       row.Q3Dps,
-			MaxDPS:      row.MaxDps,
-			Count:       row.Count,
+			PlayerClass:   normalizeClassName(row.PlayerClass),
+			PlayerSpec:    row.PlayerSpec,
+			PlayerSubSpec: row.PlayerSubSpec,
+			MinDPS:        row.MinDps,
+			Q1DPS:         row.Q1Dps,
+			MedianDPS:     row.MedianDps,
+			Q3DPS:         row.Q3Dps,
+			MaxDPS:        row.MaxDps,
+			Count:         row.Count,
 		})
 	}
 
