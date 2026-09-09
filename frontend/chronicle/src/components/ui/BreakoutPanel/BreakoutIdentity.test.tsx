@@ -6,18 +6,19 @@ describe("BreakoutIdentity", () => {
   it("renders specialization before class when available", () => {
     const markup = renderToStaticMarkup(
       <BreakoutIdentity
-        color="#69ccf0"
-        name="Mageplayer"
-        className="MAGE"
-        specialization="Fire"
+        color="#ff7d0a"
+        name="Druidplayer"
+        className="DRUID"
+        specialization="Feral"
+        subSpec="Bear"
       />,
     );
 
     expect(markup).toContain("data-breakout-identity");
     expect(markup).toContain("h-2 w-2");
-    expect(markup).toContain("Mageplayer");
-    expect(markup).toContain("FIRE MAGE");
-    expect(markup).toContain("#69ccf0");
+    expect(markup).toContain("Druidplayer");
+    expect(markup).toContain("FERAL (BEAR) DRUID");
+    expect(markup).toContain("#ff7d0a");
   });
 
   it("keeps the class-only label when specialization is unavailable", () => {

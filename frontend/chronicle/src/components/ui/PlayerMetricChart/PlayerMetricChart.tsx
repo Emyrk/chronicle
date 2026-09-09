@@ -11,6 +11,7 @@ import { useMouse } from '@/hooks/useMouse';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { cn } from '@/lib/utils';
 import { BreakoutIdentity } from '@/components/ui/BreakoutPanel/BreakoutIdentity';
+import { playerClassLabel } from '@/components/ui/BreakoutPanel/playerClassLabel';
 import { usePortalContainer } from '@/components/ui/PortalContainerContext';
 import { X, GripHorizontal } from 'lucide-react';
 import { usePlayerSpecializations } from './PlayerSpecializationContext';
@@ -42,6 +43,8 @@ export interface ParsePillData {
   displayScore: number;
   /** Hex color for the score. */
   color: string;
+  /** Sub-spec shown in player identity labels, when applicable. */
+  subSpec?: string;
   /** Tooltip content rendered on hover. */
   tooltipContent: ReactNode;
 }
@@ -233,9 +236,10 @@ interface DraggablePinnedTooltipProps {
   onClose: () => void
   panelTitle?: string
   breakout?: BreakoutFn
+  subSpec?: string
 }
 
-function DraggablePinnedTooltip({ player, initialPosition, positionOverride, onClose, panelTitle, breakout }: DraggablePinnedTooltipProps) {
+function DraggablePinnedTooltip({ player, initialPosition, positionOverride, onClose, panelTitle, breakout, subSpec }: DraggablePinnedTooltipProps) {
   const isMobile = useIsMobile()
   const portalContainer = usePortalContainer()
   const portalDocument = portalContainer?.ownerDocument
@@ -309,6 +313,7 @@ function DraggablePinnedTooltip({ player, initialPosition, positionOverride, onC
               name={player.playerName}
               className={player.className}
               specialization={player.specialization}
+              subSpec={subSpec}
             />
             {panelTitle && (
               <span className="ml-auto border-l border-border pl-2 text-2xs text-muted-foreground">
@@ -361,6 +366,7 @@ function DraggablePinnedTooltip({ player, initialPosition, positionOverride, onC
           name={player.playerName}
           className={player.className}
           specialization={player.specialization}
+          subSpec={subSpec}
         />
         {panelTitle && (
           <span className="ml-auto border-l border-border pl-2 text-2xs text-muted-foreground">
@@ -789,7 +795,7 @@ export function PlayerMetricRow({
               />
               <span className="font-medium">{player.playerName}</span>
               <span className="text-muted-foreground text-xs ml-auto">
-                {player.specialization ? `${player.specialization.toUpperCase()} ${player.className}` : player.className}
+                {playerClassLabel(player.className, player.specialization, parsePill?.subSpec)}
               </span>
             </div>
           </div>
@@ -807,6 +813,7 @@ export function PlayerMetricRow({
         onClose={handleClose}
         panelTitle={panelTitle}
         breakout={breakout}
+        subSpec={parsePill?.subSpec}
       />
     )}
   </>

@@ -162,6 +162,20 @@ func (f parsesTestFixture) publishSnapshot(t *testing.T) database.RankingSnapsho
 	return snap
 }
 
+func (f parsesTestFixture) setPlayerSubSpec(t *testing.T, playerGUID, subSpec string) {
+	t.Helper()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	conn, err := f.pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx,
+		"UPDATE encounter_dps_rankings SET player_sub_spec = $1 WHERE instance_id = $2 AND player_guid = $3",
+		subSpec, f.instanceID, playerGUID)
+	require.NoError(t, err)
+}
+
 func (f parsesTestFixture) insertSimpleRanking(
 	t *testing.T,
 	encounterName, playerGUID string,
@@ -327,6 +341,7 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		f := setupParsesTest(t)
 		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 500)
 		f.insertSimpleRanking(t, "Golemagg", "Player-persisted", 900, 400)
+		f.setPlayerSubSpec(t, "Player-persisted", "Bear")
 		snapshot := f.publishSnapshot(t)
 		snapshotID := uuid.NullUUID{UUID: snapshot.ID, Valid: true}
 
@@ -354,6 +369,7 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 			require.True(t, response.Available)
 			require.Len(t, response.Players, 1)
 			require.Len(t, response.Players[0].Bosses, 2)
+			assert.Equal(t, "Bear", response.Players[0].PlayerSubSpec)
 			assert.Equal(t, test.wantScores[0], response.Players[0].Bosses[0].DisplayScore)
 			assert.Equal(t, test.wantScores[1], response.Players[0].Bosses[1].DisplayScore)
 			require.NotNil(t, response.Players[0].AverageParse)
@@ -365,12 +381,14 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
+		f.setPlayerSubSpec(t, "Player-persisted", "Bear")
 		snapshot := f.publishSnapshot(t)
 		persistedResult(f, t, uuid.NullUUID{UUID: snapshot.ID, Valid: true}, uuid.Nil, "Ragnaros", "dps", 99)
 
 		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
 		require.Len(t, response.Players, 1)
 		require.Len(t, response.Players[0].Bosses, 1)
+		assert.Equal(t, "Bear", response.Players[0].PlayerSubSpec)
 		assert.Equal(t, 0, response.Players[0].Bosses[0].DisplayScore)
 		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), response.Players[0].Bosses[0].Status)
 	})
