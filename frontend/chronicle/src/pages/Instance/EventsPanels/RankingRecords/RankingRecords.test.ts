@@ -8,9 +8,10 @@ const record = {
   encounter_name: "Baron Geddon",
   player_guid: "0x00000000000197DC",
   player_name: "Roggia",
-  player_class: "PALADIN",
-  player_spec: "Holy",
-  player_role: "dps",
+  player_class: "DRUID",
+  player_spec: "Feral",
+  player_sub_spec: "Bear",
+  player_role: "tank",
 } as InstanceRankingRecord;
 
 describe("Ranking Records panel", () => {
@@ -21,7 +22,7 @@ describe("Ranking Records panel", () => {
   });
 
   it("searches player, encounter, role, and GUID fields", () => {
-    for (const query of ["roggia", "geddon", "dps", "197dc"]) {
+    for (const query of ["roggia", "geddon", "feral", "bear", "tank", "197dc"]) {
       expect(filterRankingRecords([record], query)).toEqual([record]);
     }
     expect(filterRankingRecords([record], "priest")).toEqual([]);

@@ -1859,6 +1859,7 @@ export interface InstanceRankingRecord {
     readonly player_name: string;
     readonly player_class: string;
     readonly player_spec: string;
+    readonly player_sub_spec?: string;
     readonly player_role: string;
     readonly player_level: number;
     readonly damage_done: number;

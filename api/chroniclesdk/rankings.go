@@ -73,6 +73,7 @@ type InstanceRankingRecord struct {
 	PlayerName    string     `json:"player_name"`
 	PlayerClass   string     `json:"player_class"`
 	PlayerSpec    string     `json:"player_spec"`
+	PlayerSubSpec string     `json:"player_sub_spec,omitempty"`
 	PlayerRole    string     `json:"player_role"`
 	PlayerLevel   int16      `json:"player_level"`
 	DamageDone    int64      `json:"damage_done"`

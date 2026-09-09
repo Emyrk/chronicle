@@ -21,7 +21,7 @@ import (
 
 // snapshotQueryVersion is bumped whenever the BatchInsertSnapshotMembersFromRankings
 // query logic changes. Stored on each snapshot for reproducibility.
-const snapshotQueryVersion int16 = 1
+const snapshotQueryVersion int16 = 2
 
 // ---------------------------------------------------------------------------
 // ArgsPublishParseSnapshots — dispatch job (periodic).

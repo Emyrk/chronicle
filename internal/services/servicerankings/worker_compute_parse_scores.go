@@ -53,7 +53,7 @@ const RepairLookbackDays = 30
 // QueryVersion is bumped when the SQL query semantics change (e.g. cohort
 // selection, snapshot membership filters). This is separate from PolicyVersion
 // which tracks scoring algorithm changes.
-const QueryVersion = 1
+const QueryVersion = 2
 
 // WorkerComputeParseScores computes and persists parse scores for a single instance.
 type WorkerComputeParseScores struct {
