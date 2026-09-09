@@ -191,14 +191,15 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 				}
 
 				// Build cohort key (separate per metric).
-				var playerSpec pgtype.Text
+				var playerSpec, playerSubSpec pgtype.Text
 				if snapshotCohortMode == parsepolicy.CohortModeSpec {
 					playerSpec = pgtype.Text{String: r.PlayerSpec, Valid: true}
+					playerSubSpec = pgtype.Text{String: r.PlayerSubSpec, Valid: true}
 				}
 
-				bucketKey := fmt.Sprintf("%s|%s|%d|%s|%s",
+				bucketKey := fmt.Sprintf("%s|%s|%d|%s|%s|%s",
 					r.EncounterName, r.DifficultyName, r.MaxPlayers,
-					r.PlayerClass, playerSpec.String)
+					r.PlayerClass, playerSpec.String, playerSubSpec.String)
 
 				cohort, cached := m.cache[bucketKey]
 				if !cached {
@@ -210,6 +211,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 						MaxPlayers:     r.MaxPlayers,
 						PlayerClass:    r.PlayerClass,
 						PlayerSpec:     playerSpec,
+						PlayerSubSpec:  playerSubSpec,
 					})
 					if cErr != nil {
 						return fmt.Errorf("load %s cohort for encounter %q: %w", m.metric, r.EncounterName, cErr)
@@ -272,6 +274,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 					PlayerName:     r.PlayerName,
 					PlayerClass:    r.PlayerClass,
 					PlayerSpec:     r.PlayerSpec,
+					PlayerSubSpec:  r.PlayerSubSpec,
 					PlayerRole:     r.PlayerRole,
 					Metric:         m.metric,
 					MetricValue:    m.value,

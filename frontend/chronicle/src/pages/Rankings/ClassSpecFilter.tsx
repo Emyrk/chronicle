@@ -1,22 +1,30 @@
 import { useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { serverCapabilities } from "@/config/serverCapabilities"
-import { ALL_DPS_CLASSES, CLASS_CSS_VAR, CLASS_DISPLAY, CLASS_NAME_TO_ID, SPEC_BY_CLASS } from "./classDisplay"
+import type { RankingsFilterClass } from "@/api/typesGenerated"
+import { ALL_DPS_CLASSES, CLASS_CSS_VAR, CLASS_DISPLAY, CLASS_NAME_TO_ID } from "./classDisplay"
 
 interface ClassSpecFilterProps {
   selectedClass: string | null
   selectedSpec: string | null
+  selectedSubSpec: string | null
+  options: readonly RankingsFilterClass[]
   onClassSelect: (cls: string | null) => void
   onSpecSelect: (spec: string | null) => void
+  onSubSpecSelect: (subSpec: string | null) => void
 }
 
 export function ClassSpecFilter({
   selectedClass,
   selectedSpec,
+  selectedSubSpec,
+  options,
   onClassSelect,
   onSpecSelect,
+  onSubSpecSelect,
 }: ClassSpecFilterProps) {
-  const specs = selectedClass ? SPEC_BY_CLASS[selectedClass] : undefined
+  const specs = selectedClass ? options.find((option) => option.player_class === selectedClass)?.specs : undefined
+  const subSpecs = specs?.find((spec) => spec.spec === selectedSpec)?.sub_specs ?? []
 
   const visibleClasses = useMemo(() => {
     const classIds = serverCapabilities.talentCalculator?.classIds
@@ -75,7 +83,8 @@ export function ClassSpecFilter({
           >
             All Specs
           </button>
-          {specs.map((spec) => {
+          {specs.map((specOption) => {
+            const spec = specOption.spec
             const active = selectedSpec === spec
             return (
               <button
@@ -89,6 +98,27 @@ export function ClassSpecFilter({
                 )}
               >
                 {spec}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {selectedSpec && subSpecs.length > 0 && (
+        <div className="-mx-3 flex items-center gap-1 overflow-x-auto px-3 pb-2 styled-scrollbar sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-1 sm:pb-0">
+          {subSpecs.map((subSpec) => {
+            const active = selectedSubSpec === subSpec
+            return (
+              <button
+                key={subSpec}
+                onClick={() => onSubSpecSelect(active ? null : subSpec)}
+                className={cn(
+                  "shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors sm:px-2 sm:py-0.5",
+                  active
+                    ? "border-[#5F8FA6] bg-[#5F8FA6]/20 text-foreground"
+                    : "border-white/10 text-muted-foreground hover:text-foreground hover:bg-white/5",
+                )}
+              >
+                {subSpec}
               </button>
             )
           })}

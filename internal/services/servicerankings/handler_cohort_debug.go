@@ -133,6 +133,10 @@ func handleSnapshotCohortWithStore(store cohortQuerier, w http.ResponseWriter, r
 	if spec := q.Get("spec"); spec != "" {
 		playerSpec = pgtype.Text{String: spec, Valid: true}
 	}
+	var playerSubSpec pgtype.Text
+	if subSpec := q.Get("sub_spec"); subSpec != "" {
+		playerSubSpec = pgtype.Text{String: subSpec, Valid: true}
+	}
 
 	// Fetch cohort data with identity fields.
 	rows, err := store.GetSnapshotCohortDebug(ctx, database.GetSnapshotCohortDebugParams{
@@ -143,6 +147,7 @@ func handleSnapshotCohortWithStore(store cohortQuerier, w http.ResponseWriter, r
 		MaxPlayers:     maxPlayers,
 		PlayerClass:    playerClass,
 		PlayerSpec:     playerSpec,
+		PlayerSubSpec:  playerSubSpec,
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -224,12 +229,17 @@ func handleSnapshotCohortWithStore(store cohortQuerier, w http.ResponseWriter, r
 	if playerSpec.Valid {
 		specStr = playerSpec.String
 	}
+	subSpecStr := ""
+	if playerSubSpec.Valid {
+		subSpecStr = playerSubSpec.String
+	}
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.CohortDebugResponse{
 		SnapshotID:    snapshotID,
 		EncounterName: encounterName,
 		PlayerClass:   normalizeClassName(playerClass),
 		PlayerSpec:    specStr,
+		PlayerSubSpec: subSpecStr,
 		Metric:        metric,
 		TotalKills:    len(entries),
 		MinValue:      minVal,
@@ -247,6 +257,7 @@ func convertCohortBuckets(rows []database.ListDistinctCohortBucketsRow) []chroni
 			EncounterName:  b.EncounterName,
 			PlayerClass:    normalizeClassName(b.PlayerClass),
 			PlayerSpec:     b.PlayerSpec,
+			PlayerSubSpec:  b.PlayerSubSpec,
 			DifficultyName: b.DifficultyName,
 			MaxPlayers:     b.MaxPlayers,
 		})

@@ -31,7 +31,7 @@ RETURNING *;
 INSERT INTO ranking_snapshot_members (
     snapshot_id, ranking_id, instance_id, run_id,
     instance_name, encounter_name,
-    player_guid, player_class, player_spec,
+    player_guid, player_class, player_spec, player_sub_spec,
     difficulty_name, max_players,
     killed_at, created_at_ranking,
     damage_done, healing_done, absorbed_done,
@@ -39,7 +39,7 @@ INSERT INTO ranking_snapshot_members (
 ) VALUES (
     @snapshot_id, @ranking_id, @instance_id, @run_id,
     @instance_name, @encounter_name,
-    @player_guid, @player_class, @player_spec,
+    @player_guid, @player_class, @player_spec, @player_sub_spec,
     @difficulty_name, @max_players,
     @killed_at, @created_at_ranking,
     @damage_done, @healing_done, @absorbed_done,
@@ -83,6 +83,7 @@ eligible AS (
         edr.player_guid,
         edr.player_class,
         edr.player_spec,
+        edr.player_sub_spec,
         edr.difficulty_name,
         edr.max_players,
         edr.killed_at,
@@ -111,7 +112,7 @@ eligible AS (
 INSERT INTO ranking_snapshot_members (
     snapshot_id, ranking_id, instance_id, run_id,
     instance_name, encounter_name,
-    player_guid, player_class, player_spec,
+    player_guid, player_class, player_spec, player_sub_spec,
     difficulty_name, max_players,
     killed_at, created_at_ranking,
     damage_done, healing_done, absorbed_done,
@@ -120,7 +121,7 @@ INSERT INTO ranking_snapshot_members (
 SELECT
     @snapshot_id, e.ranking_id, e.instance_id, e.run_id,
     e.instance_name, e.encounter_name,
-    e.player_guid, e.player_class, e.player_spec,
+    e.player_guid, e.player_class, e.player_spec, e.player_sub_spec,
     e.difficulty_name, e.max_players,
     e.killed_at, e.created_at,
     e.damage_done, e.healing_done, e.absorbed_done,
@@ -198,6 +199,7 @@ WHERE rsm.snapshot_id = @snapshot_id
   AND rsm.max_players = @max_players
   AND rsm.player_class = @player_class
   AND (sqlc.narg('player_spec')::text IS NULL OR rsm.player_spec = @player_spec)
+  AND (sqlc.narg('player_sub_spec')::text IS NULL OR rsm.player_sub_spec = @player_sub_spec)
   -- Only include rows with a positive value for the requested metric so
   -- zero-DPS healers don't appear in DPS cohorts and vice versa.
   AND CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0;
@@ -249,6 +251,7 @@ SELECT
     edr.player_name,
     edr.player_class,
     edr.player_spec,
+    edr.player_sub_spec,
     edr.player_role,
     edr.difficulty_name,
     edr.max_players,
@@ -302,6 +305,7 @@ SELECT
     edr.player_name,
     rsm.player_class,
     rsm.player_spec,
+    rsm.player_sub_spec,
     rsm.difficulty_name,
     rsm.max_players,
     rsm.killed_at,
@@ -313,6 +317,7 @@ WHERE rsm.snapshot_id = @snapshot_id
   AND rsm.encounter_name = @encounter_name
   AND rsm.player_class = @player_class
   AND (sqlc.narg('player_spec')::text IS NULL OR rsm.player_spec = @player_spec)
+  AND (sqlc.narg('player_sub_spec')::text IS NULL OR rsm.player_sub_spec = @player_sub_spec)
   -- Difficulty and raid size are optional viewer filters: unlike the parses
   -- handler (which always knows the viewed row's exact bucket), the debug
   -- viewer may leave them unselected, meaning "any".
@@ -322,17 +327,18 @@ WHERE rsm.snapshot_id = @snapshot_id
 ORDER BY CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END DESC;
 
 -- name: ListDistinctCohortBuckets :many
--- Return distinct (encounter_name, player_class, player_spec, difficulty_name, max_players)
--- combinations available in a snapshot, for driving filter dropdowns.
+-- Return distinct (encounter_name, player_class, player_spec, player_sub_spec,
+-- difficulty_name, max_players) combinations available in a snapshot.
 SELECT DISTINCT
     rsm.encounter_name,
     rsm.player_class,
     rsm.player_spec,
+    rsm.player_sub_spec,
     rsm.difficulty_name,
     rsm.max_players
 FROM ranking_snapshot_members rsm
 WHERE rsm.snapshot_id = @snapshot_id
-ORDER BY rsm.encounter_name, rsm.player_class, rsm.player_spec;
+ORDER BY rsm.encounter_name, rsm.player_class, rsm.player_spec, rsm.player_sub_spec;
 
 -- name: GetLatestPublishedSnapshotForGuard :one
 -- Return the most recently published snapshot matching the full key dimensions

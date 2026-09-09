@@ -8910,7 +8910,7 @@ func (q *sqlQuerier) GetParseScoreReceiptForInstance(ctx context.Context, instan
 
 const getParseScoreResultsForInstance = `-- name: GetParseScoreResultsForInstance :many
 SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
-    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at
+    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at, psr.player_sub_spec
 FROM parse_score_results psr
 WHERE psr.instance_id = $1
 ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
@@ -8954,6 +8954,7 @@ func (q *sqlQuerier) GetParseScoreResultsForInstance(ctx context.Context, instan
 			&i.MaxPlayers,
 			&i.KilledAt,
 			&i.CreatedAt,
+			&i.PlayerSubSpec,
 		); err != nil {
 			return nil, err
 		}
@@ -9131,14 +9132,14 @@ func (q *sqlQuerier) InsertParseScoreReceipt(ctx context.Context, arg InsertPars
 const insertParseScoreResult = `-- name: InsertParseScoreResult :exec
 INSERT INTO parse_score_results (
     tenant_id, instance_id, run_id, snapshot_id, log_group_id, guild_id,
-    encounter_name, player_guid, player_name, player_class, player_spec, player_role,
+    encounter_name, player_guid, player_name, player_class, player_spec, player_sub_spec, player_role,
     metric, metric_value, precise_score, display_score, rank, sample_size, status,
     instance_name, difficulty_name, max_players, killed_at
 ) VALUES (
     $1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10, $11, $12,
-    $13, $14, $15, $16, $17, $18, $19,
-    $20, $21, $22, $23
+    $7, $8, $9, $10, $11, $12, $13,
+    $14, $15, $16, $17, $18, $19, $20,
+    $21, $22, $23, $24
 )
 `
 
@@ -9154,6 +9155,7 @@ type InsertParseScoreResultParams struct {
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
 	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
 	PlayerRole     string             `db:"player_role" json:"player_role"`
 	Metric         string             `db:"metric" json:"metric"`
 	MetricValue    float64            `db:"metric_value" json:"metric_value"`
@@ -9183,6 +9185,7 @@ func (q *sqlQuerier) InsertParseScoreResult(ctx context.Context, arg InsertParse
 		arg.PlayerName,
 		arg.PlayerClass,
 		arg.PlayerSpec,
+		arg.PlayerSubSpec,
 		arg.PlayerRole,
 		arg.Metric,
 		arg.MetricValue,
@@ -9392,7 +9395,7 @@ func (q *sqlQuerier) ListInstancesMissingParseReceiptWithSnapshot(ctx context.Co
 
 const listParseScoreResultsForContract = `-- name: ListParseScoreResultsForContract :many
 SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
-    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at
+    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at, psr.player_sub_spec
 FROM parse_score_results psr
 WHERE psr.tenant_id = $1
   AND psr.instance_id = $2
@@ -9451,6 +9454,7 @@ func (q *sqlQuerier) ListParseScoreResultsForContract(ctx context.Context, arg L
 			&i.MaxPlayers,
 			&i.KilledAt,
 			&i.CreatedAt,
+			&i.PlayerSubSpec,
 		); err != nil {
 			return nil, err
 		}
@@ -9493,6 +9497,7 @@ eligible AS (
         edr.player_guid,
         edr.player_class,
         edr.player_spec,
+        edr.player_sub_spec,
         edr.difficulty_name,
         edr.max_players,
         edr.killed_at,
@@ -9521,7 +9526,7 @@ eligible AS (
 INSERT INTO ranking_snapshot_members (
     snapshot_id, ranking_id, instance_id, run_id,
     instance_name, encounter_name,
-    player_guid, player_class, player_spec,
+    player_guid, player_class, player_spec, player_sub_spec,
     difficulty_name, max_players,
     killed_at, created_at_ranking,
     damage_done, healing_done, absorbed_done,
@@ -9530,7 +9535,7 @@ INSERT INTO ranking_snapshot_members (
 SELECT
     $1, e.ranking_id, e.instance_id, e.run_id,
     e.instance_name, e.encounter_name,
-    e.player_guid, e.player_class, e.player_spec,
+    e.player_guid, e.player_class, e.player_spec, e.player_sub_spec,
     e.difficulty_name, e.max_players,
     e.killed_at, e.created_at,
     e.damage_done, e.healing_done, e.absorbed_done,
@@ -9826,6 +9831,7 @@ SELECT
     edr.player_name,
     rsm.player_class,
     rsm.player_spec,
+    rsm.player_sub_spec,
     rsm.difficulty_name,
     rsm.max_players,
     rsm.killed_at,
@@ -9837,11 +9843,12 @@ WHERE rsm.snapshot_id = $2
   AND rsm.encounter_name = $3
   AND rsm.player_class = $4
   AND ($5::text IS NULL OR rsm.player_spec = $5)
+  AND ($6::text IS NULL OR rsm.player_sub_spec = $6)
   -- Difficulty and raid size are optional viewer filters: unlike the parses
   -- handler (which always knows the viewed row's exact bucket), the debug
   -- viewer may leave them unselected, meaning "any".
-  AND ($6::text IS NULL OR rsm.difficulty_name = $6)
-  AND ($7::smallint IS NULL OR rsm.max_players = $7)
+  AND ($7::text IS NULL OR rsm.difficulty_name = $7)
+  AND ($8::smallint IS NULL OR rsm.max_players = $8)
   AND CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
 ORDER BY CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END DESC
 `
@@ -9852,6 +9859,7 @@ type GetSnapshotCohortDebugParams struct {
 	EncounterName  string      `db:"encounter_name" json:"encounter_name"`
 	PlayerClass    string      `db:"player_class" json:"player_class"`
 	PlayerSpec     pgtype.Text `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  pgtype.Text `db:"player_sub_spec" json:"player_sub_spec"`
 	DifficultyName pgtype.Text `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     pgtype.Int2 `db:"max_players" json:"max_players"`
 }
@@ -9862,6 +9870,7 @@ type GetSnapshotCohortDebugRow struct {
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
 	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16              `db:"max_players" json:"max_players"`
 	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
@@ -9879,6 +9888,7 @@ func (q *sqlQuerier) GetSnapshotCohortDebug(ctx context.Context, arg GetSnapshot
 		arg.EncounterName,
 		arg.PlayerClass,
 		arg.PlayerSpec,
+		arg.PlayerSubSpec,
 		arg.DifficultyName,
 		arg.MaxPlayers,
 	)
@@ -9895,6 +9905,7 @@ func (q *sqlQuerier) GetSnapshotCohortDebug(ctx context.Context, arg GetSnapshot
 			&i.PlayerName,
 			&i.PlayerClass,
 			&i.PlayerSpec,
+			&i.PlayerSubSpec,
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.KilledAt,
@@ -9923,6 +9934,7 @@ WHERE rsm.snapshot_id = $2
   AND rsm.max_players = $5
   AND rsm.player_class = $6
   AND ($7::text IS NULL OR rsm.player_spec = $7)
+  AND ($8::text IS NULL OR rsm.player_sub_spec = $8)
   -- Only include rows with a positive value for the requested metric so
   -- zero-DPS healers don't appear in DPS cohorts and vice versa.
   AND CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
@@ -9936,6 +9948,7 @@ type GetSnapshotCohortValuesParams struct {
 	MaxPlayers     int16       `db:"max_players" json:"max_players"`
 	PlayerClass    string      `db:"player_class" json:"player_class"`
 	PlayerSpec     pgtype.Text `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  pgtype.Text `db:"player_sub_spec" json:"player_sub_spec"`
 }
 
 type GetSnapshotCohortValuesRow struct {
@@ -9969,6 +9982,7 @@ func (q *sqlQuerier) GetSnapshotCohortValues(ctx context.Context, arg GetSnapsho
 		arg.MaxPlayers,
 		arg.PlayerClass,
 		arg.PlayerSpec,
+		arg.PlayerSubSpec,
 	)
 	if err != nil {
 		return nil, err
@@ -10092,7 +10106,7 @@ const insertRankingSnapshotMember = `-- name: InsertRankingSnapshotMember :exec
 INSERT INTO ranking_snapshot_members (
     snapshot_id, ranking_id, instance_id, run_id,
     instance_name, encounter_name,
-    player_guid, player_class, player_spec,
+    player_guid, player_class, player_spec, player_sub_spec,
     difficulty_name, max_players,
     killed_at, created_at_ranking,
     damage_done, healing_done, absorbed_done,
@@ -10100,11 +10114,11 @@ INSERT INTO ranking_snapshot_members (
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6,
-    $7, $8, $9,
-    $10, $11,
-    $12, $13,
-    $14, $15, $16,
-    $17, $18, $19
+    $7, $8, $9, $10,
+    $11, $12,
+    $13, $14,
+    $15, $16, $17,
+    $18, $19, $20
 ) ON CONFLICT (snapshot_id, ranking_id) DO NOTHING
 `
 
@@ -10118,6 +10132,7 @@ type InsertRankingSnapshotMemberParams struct {
 	PlayerGuid       string             `db:"player_guid" json:"player_guid"`
 	PlayerClass      string             `db:"player_class" json:"player_class"`
 	PlayerSpec       string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string             `db:"player_sub_spec" json:"player_sub_spec"`
 	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers       int16              `db:"max_players" json:"max_players"`
 	KilledAt         pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
@@ -10142,6 +10157,7 @@ func (q *sqlQuerier) InsertRankingSnapshotMember(ctx context.Context, arg Insert
 		arg.PlayerGuid,
 		arg.PlayerClass,
 		arg.PlayerSpec,
+		arg.PlayerSubSpec,
 		arg.DifficultyName,
 		arg.MaxPlayers,
 		arg.KilledAt,
@@ -10230,23 +10246,25 @@ SELECT DISTINCT
     rsm.encounter_name,
     rsm.player_class,
     rsm.player_spec,
+    rsm.player_sub_spec,
     rsm.difficulty_name,
     rsm.max_players
 FROM ranking_snapshot_members rsm
 WHERE rsm.snapshot_id = $1
-ORDER BY rsm.encounter_name, rsm.player_class, rsm.player_spec
+ORDER BY rsm.encounter_name, rsm.player_class, rsm.player_spec, rsm.player_sub_spec
 `
 
 type ListDistinctCohortBucketsRow struct {
 	EncounterName  string `db:"encounter_name" json:"encounter_name"`
 	PlayerClass    string `db:"player_class" json:"player_class"`
 	PlayerSpec     string `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string `db:"player_sub_spec" json:"player_sub_spec"`
 	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16  `db:"max_players" json:"max_players"`
 }
 
-// Return distinct (encounter_name, player_class, player_spec, difficulty_name, max_players)
-// combinations available in a snapshot, for driving filter dropdowns.
+// Return distinct (encounter_name, player_class, player_spec, player_sub_spec,
+// difficulty_name, max_players) combinations available in a snapshot.
 func (q *sqlQuerier) ListDistinctCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListDistinctCohortBucketsRow, error) {
 	rows, err := q.db.Query(ctx, listDistinctCohortBuckets, snapshotID)
 	if err != nil {
@@ -10260,6 +10278,7 @@ func (q *sqlQuerier) ListDistinctCohortBuckets(ctx context.Context, snapshotID u
 			&i.EncounterName,
 			&i.PlayerClass,
 			&i.PlayerSpec,
+			&i.PlayerSubSpec,
 			&i.DifficultyName,
 			&i.MaxPlayers,
 		); err != nil {
@@ -10330,6 +10349,7 @@ SELECT
     edr.player_name,
     edr.player_class,
     edr.player_spec,
+    edr.player_sub_spec,
     edr.player_role,
     edr.difficulty_name,
     edr.max_players,
@@ -10355,6 +10375,7 @@ type ListRankingsForInstanceRow struct {
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
 	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
 	PlayerRole     string             `db:"player_role" json:"player_role"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16              `db:"max_players" json:"max_players"`
@@ -10389,6 +10410,7 @@ func (q *sqlQuerier) ListRankingsForInstance(ctx context.Context, instanceID uui
 			&i.PlayerName,
 			&i.PlayerClass,
 			&i.PlayerSpec,
+			&i.PlayerSubSpec,
 			&i.PlayerRole,
 			&i.DifficultyName,
 			&i.MaxPlayers,
@@ -10412,7 +10434,7 @@ func (q *sqlQuerier) ListRankingsForInstance(ctx context.Context, instanceID uui
 }
 
 const listSnapshotMembersByPlayerGUID = `-- name: ListSnapshotMembersByPlayerGUID :many
-SELECT rsm.id, rsm.snapshot_id, rsm.ranking_id, rsm.instance_id, rsm.run_id, rsm.instance_name, rsm.encounter_name, rsm.player_guid, rsm.player_class, rsm.player_spec, rsm.difficulty_name, rsm.max_players, rsm.killed_at, rsm.created_at_ranking, rsm.damage_done, rsm.healing_done, rsm.absorbed_done, rsm.duration_secs, rsm.dps, rsm.hps
+SELECT rsm.id, rsm.snapshot_id, rsm.ranking_id, rsm.instance_id, rsm.run_id, rsm.instance_name, rsm.encounter_name, rsm.player_guid, rsm.player_class, rsm.player_spec, rsm.difficulty_name, rsm.max_players, rsm.killed_at, rsm.created_at_ranking, rsm.damage_done, rsm.healing_done, rsm.absorbed_done, rsm.duration_secs, rsm.dps, rsm.hps, rsm.player_sub_spec
 FROM ranking_snapshot_members rsm
 WHERE rsm.snapshot_id = $1
   AND rsm.player_guid = $2
@@ -10455,6 +10477,7 @@ func (q *sqlQuerier) ListSnapshotMembersByPlayerGUID(ctx context.Context, arg Li
 			&i.DurationSecs,
 			&i.Dps,
 			&i.Hps,
+			&i.PlayerSubSpec,
 		); err != nil {
 			return nil, err
 		}
@@ -10467,7 +10490,7 @@ func (q *sqlQuerier) ListSnapshotMembersByPlayerGUID(ctx context.Context, arg Li
 }
 
 const listSnapshotMembersForInstance = `-- name: ListSnapshotMembersForInstance :many
-SELECT rsm.id, rsm.snapshot_id, rsm.ranking_id, rsm.instance_id, rsm.run_id, rsm.instance_name, rsm.encounter_name, rsm.player_guid, rsm.player_class, rsm.player_spec, rsm.difficulty_name, rsm.max_players, rsm.killed_at, rsm.created_at_ranking, rsm.damage_done, rsm.healing_done, rsm.absorbed_done, rsm.duration_secs, rsm.dps, rsm.hps
+SELECT rsm.id, rsm.snapshot_id, rsm.ranking_id, rsm.instance_id, rsm.run_id, rsm.instance_name, rsm.encounter_name, rsm.player_guid, rsm.player_class, rsm.player_spec, rsm.difficulty_name, rsm.max_players, rsm.killed_at, rsm.created_at_ranking, rsm.damage_done, rsm.healing_done, rsm.absorbed_done, rsm.duration_secs, rsm.dps, rsm.hps, rsm.player_sub_spec
 FROM ranking_snapshot_members rsm
 WHERE rsm.snapshot_id = $1
   AND rsm.instance_id = $2
@@ -10510,6 +10533,7 @@ func (q *sqlQuerier) ListSnapshotMembersForInstance(ctx context.Context, arg Lis
 			&i.DurationSecs,
 			&i.Dps,
 			&i.Hps,
+			&i.PlayerSubSpec,
 		); err != nil {
 			return nil, err
 		}
@@ -10522,7 +10546,7 @@ func (q *sqlQuerier) ListSnapshotMembersForInstance(ctx context.Context, arg Lis
 }
 
 const listSnapshotMembersForInstanceWithNames = `-- name: ListSnapshotMembersForInstanceWithNames :many
-SELECT rsm.id, rsm.snapshot_id, rsm.ranking_id, rsm.instance_id, rsm.run_id, rsm.instance_name, rsm.encounter_name, rsm.player_guid, rsm.player_class, rsm.player_spec, rsm.difficulty_name, rsm.max_players, rsm.killed_at, rsm.created_at_ranking, rsm.damage_done, rsm.healing_done, rsm.absorbed_done, rsm.duration_secs, rsm.dps, rsm.hps,
+SELECT rsm.id, rsm.snapshot_id, rsm.ranking_id, rsm.instance_id, rsm.run_id, rsm.instance_name, rsm.encounter_name, rsm.player_guid, rsm.player_class, rsm.player_spec, rsm.difficulty_name, rsm.max_players, rsm.killed_at, rsm.created_at_ranking, rsm.damage_done, rsm.healing_done, rsm.absorbed_done, rsm.duration_secs, rsm.dps, rsm.hps, rsm.player_sub_spec,
        edr.player_name,
        edr.player_role
 FROM ranking_snapshot_members rsm
@@ -10558,6 +10582,7 @@ type ListSnapshotMembersForInstanceWithNamesRow struct {
 	DurationSecs     float64            `db:"duration_secs" json:"duration_secs"`
 	Dps              float64            `db:"dps" json:"dps"`
 	Hps              float64            `db:"hps" json:"hps"`
+	PlayerSubSpec    string             `db:"player_sub_spec" json:"player_sub_spec"`
 	PlayerName       string             `db:"player_name" json:"player_name"`
 	PlayerRole       string             `db:"player_role" json:"player_role"`
 }
@@ -10593,6 +10618,7 @@ func (q *sqlQuerier) ListSnapshotMembersForInstanceWithNames(ctx context.Context
 			&i.DurationSecs,
 			&i.Dps,
 			&i.Hps,
+			&i.PlayerSubSpec,
 			&i.PlayerName,
 			&i.PlayerRole,
 		); err != nil {
@@ -10928,7 +10954,7 @@ func (q *sqlQuerier) HasInstanceDpsRankings(ctx context.Context, instanceID uuid
 const insertEncounterDpsRanking = `-- name: InsertEncounterDpsRanking :exec
 INSERT INTO encounter_dps_rankings (
     encounter_id, instance_id, encounter_name, instance_name,
-    player_guid, player_name, player_class, player_spec, player_role, player_level,
+    player_guid, player_name, player_class, player_spec, player_sub_spec, player_role, player_level,
     talent_build_id, difficulty_name, max_players,
     realm_id, realm_name, guild_id, guild_name,
     damage_done, duration_secs, dps, avg_ilvl,
@@ -10936,12 +10962,12 @@ INSERT INTO encounter_dps_rankings (
     log_hashed_slug, killed_at
 ) VALUES (
     $1, $2, $3, $4,
-    $5, $6, $7, $8, $9, $10,
-    $11, $12, $13,
-    $14, $15, $16, $17,
-    $18, $19, $20, $21,
-    $22, $23, $24,
-    $25, $26
+    $5, $6, $7, $8, $9, $10, $11,
+    $12, $13, $14,
+    $15, $16, $17, $18,
+    $19, $20, $21, $22,
+    $23, $24, $25,
+    $26, $27
 ) ON CONFLICT (encounter_id, player_guid) DO NOTHING
 `
 
@@ -10954,6 +10980,7 @@ type InsertEncounterDpsRankingParams struct {
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
 	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
 	PlayerRole     string             `db:"player_role" json:"player_role"`
 	PlayerLevel    int16              `db:"player_level" json:"player_level"`
 	TalentBuildID  uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
@@ -10984,6 +11011,7 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 		arg.PlayerName,
 		arg.PlayerClass,
 		arg.PlayerSpec,
+		arg.PlayerSubSpec,
 		arg.PlayerRole,
 		arg.PlayerLevel,
 		arg.TalentBuildID,
@@ -11007,7 +11035,7 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 }
 
 const instanceRankingRecords = `-- name: InstanceRankingRecords :many
-SELECT id, encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name, player_class, player_spec, player_role, player_level, talent_build_id, difficulty_name, max_players, realm_id, realm_name, guild_id, guild_name, damage_done, duration_secs, dps, avg_ilvl, log_hashed_slug, killed_at, created_at, healing_done, absorbed_done, hps
+SELECT id, encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name, player_class, player_spec, player_role, player_level, talent_build_id, difficulty_name, max_players, realm_id, realm_name, guild_id, guild_name, damage_done, duration_secs, dps, avg_ilvl, log_hashed_slug, killed_at, created_at, healing_done, absorbed_done, hps, player_sub_spec
 FROM encounter_dps_rankings
 WHERE instance_id = $1
 ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name
@@ -11053,6 +11081,7 @@ func (q *sqlQuerier) InstanceRankingRecords(ctx context.Context, instanceID uuid
 			&i.HealingDone,
 			&i.AbsorbedDone,
 			&i.Hps,
+			&i.PlayerSubSpec,
 		); err != nil {
 			return nil, err
 		}
@@ -11109,6 +11138,7 @@ deduped AS (
         edr.encounter_name,
         edr.player_class,
         edr.player_spec,
+        edr.player_sub_spec,
         edr.realm_id,
         edr.damage_done,
         edr.healing_done,
@@ -11158,18 +11188,20 @@ per_run AS (
     SELECT
         d.player_class,
         d.player_spec,
+        d.player_sub_spec,
         (CASE WHEN $9 :: text = 'hps'
             THEN SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
             ELSE SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
         END)::double precision AS metric_value
     FROM deduped d
     JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
-    GROUP BY d.player_guid, d.run_id, d.player_class, d.player_spec, rec.encounter_count
+    GROUP BY d.player_guid, d.run_id, d.player_class, d.player_spec, d.player_sub_spec, rec.encounter_count
     HAVING COUNT(DISTINCT d.encounter_name) = rec.encounter_count
 )
 SELECT
     s.player_class,
     s.player_spec,
+    s.player_sub_spec,
     s.min_dps,
     s.q1_dps,
     s.median_dps,
@@ -11180,6 +11212,7 @@ FROM (
     SELECT
         d.player_class,
         (CASE WHEN $1 :: bool THEN '' ELSE d.player_spec END)::text AS player_spec,
+        (CASE WHEN $1 :: bool THEN '' ELSE d.player_sub_spec END)::text AS player_sub_spec,
         PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.metric_value) AS q1_dps,
         PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.metric_value) AS median_dps,
         PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.metric_value) AS q3_dps,
@@ -11193,7 +11226,9 @@ FROM (
         COUNT(*)::bigint AS count
     FROM per_run d
     WHERE d.metric_value > 0
-    GROUP BY d.player_class, (CASE WHEN $1 :: bool THEN '' ELSE d.player_spec END)::text
+    GROUP BY d.player_class,
+        (CASE WHEN $1 :: bool THEN '' ELSE d.player_spec END)::text,
+        (CASE WHEN $1 :: bool THEN '' ELSE d.player_sub_spec END)::text
 ) s
 ORDER BY s.median_dps DESC
 `
@@ -11211,14 +11246,15 @@ type RankingsBoxPlotStatsParams struct {
 }
 
 type RankingsBoxPlotStatsRow struct {
-	PlayerClass string  `db:"player_class" json:"player_class"`
-	PlayerSpec  string  `db:"player_spec" json:"player_spec"`
-	MinDps      float64 `db:"min_dps" json:"min_dps"`
-	Q1Dps       float64 `db:"q1_dps" json:"q1_dps"`
-	MedianDps   float64 `db:"median_dps" json:"median_dps"`
-	Q3Dps       float64 `db:"q3_dps" json:"q3_dps"`
-	MaxDps      float64 `db:"max_dps" json:"max_dps"`
-	Count       int64   `db:"count" json:"count"`
+	PlayerClass   string  `db:"player_class" json:"player_class"`
+	PlayerSpec    string  `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec string  `db:"player_sub_spec" json:"player_sub_spec"`
+	MinDps        float64 `db:"min_dps" json:"min_dps"`
+	Q1Dps         float64 `db:"q1_dps" json:"q1_dps"`
+	MedianDps     float64 `db:"median_dps" json:"median_dps"`
+	Q3Dps         float64 `db:"q3_dps" json:"q3_dps"`
+	MaxDps        float64 `db:"max_dps" json:"max_dps"`
+	Count         int64   `db:"count" json:"count"`
 }
 
 // Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
@@ -11252,6 +11288,7 @@ func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPl
 		if err := rows.Scan(
 			&i.PlayerClass,
 			&i.PlayerSpec,
+			&i.PlayerSubSpec,
 			&i.MinDps,
 			&i.Q1Dps,
 			&i.MedianDps,
@@ -11322,7 +11359,7 @@ WITH representative_instances AS (
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
-        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps
+        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec
     FROM encounter_dps_rankings edr
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -11355,6 +11392,46 @@ func (q *sqlQuerier) RankingsEncounterList(ctx context.Context, instanceName str
 	for rows.Next() {
 		var i RankingsEncounterListRow
 		if err := rows.Scan(&i.EncounterName, &i.TotalKills, &i.TopDps); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rankingsFilterOptions = `-- name: RankingsFilterOptions :many
+SELECT DISTINCT
+    edr.player_class,
+    edr.player_spec,
+    edr.player_sub_spec
+FROM encounter_dps_rankings edr
+JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+WHERE (cardinality($1::text[]) = 0 OR edr.instance_name = ANY($1::text[]))
+  AND edr.player_class <> 'Unknown'
+  AND edr.player_spec <> 'Unknown'
+ORDER BY edr.player_class, edr.player_spec, edr.player_sub_spec
+`
+
+type RankingsFilterOptionsRow struct {
+	PlayerClass   string `db:"player_class" json:"player_class"`
+	PlayerSpec    string `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec string `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+// Distinct class/spec/sub-spec combinations available to the public rankings UI.
+func (q *sqlQuerier) RankingsFilterOptions(ctx context.Context, instanceNames []string) ([]RankingsFilterOptionsRow, error) {
+	rows, err := q.db.Query(ctx, rankingsFilterOptions, instanceNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsFilterOptionsRow
+	for rows.Next() {
+		var i RankingsFilterOptionsRow
+		if err := rows.Scan(&i.PlayerClass, &i.PlayerSpec, &i.PlayerSubSpec); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -11644,6 +11721,7 @@ deduped AS (
         edr.player_name,
         edr.player_class,
         edr.player_spec,
+        edr.player_sub_spec,
         edr.player_role,
         edr.player_level,
         edr.instance_name,
@@ -11688,23 +11766,27 @@ deduped AS (
         ELSE true
     END
     AND CASE
+        WHEN $10 :: text != '' THEN edr.player_sub_spec = $10
+        ELSE true
+    END
+    AND CASE
         WHEN $6 :: text != '' THEN edr.player_role = $6
         ELSE true
     END
     AND CASE
-        WHEN $10 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $10::int)
+        WHEN $11 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $11::int)
         ELSE true
     END
     AND CASE
-        WHEN $11 :: bool THEN edr.player_class != 'Unknown' AND edr.player_spec != 'Unknown'
+        WHEN $12 :: bool THEN edr.player_class != 'Unknown' AND edr.player_spec != 'Unknown'
         ELSE true
     END
     AND CASE
-        WHEN cardinality($12 :: text[]) > 0 THEN edr.difficulty_name = ANY($12 :: text[])
+        WHEN cardinality($13 :: text[]) > 0 THEN edr.difficulty_name = ANY($13 :: text[])
         ELSE true
     END
     AND CASE
-        WHEN $13 :: smallint > 0 THEN edr.max_players = $13
+        WHEN $14 :: smallint > 0 THEN edr.max_players = $14
         ELSE true
     END
     AND (CASE WHEN $1 :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
@@ -11723,6 +11805,7 @@ per_run AS (
         ((array_agg(d.player_name ORDER BY d.damage_done DESC))[1])::text AS player_name,
         ((array_agg(d.player_class ORDER BY d.damage_done DESC))[1])::text AS player_class,
         (string_agg(DISTINCT d.player_spec, '/' ORDER BY d.player_spec))::text AS player_spec,
+        (string_agg(DISTINCT d.player_sub_spec, '/' ORDER BY d.player_sub_spec))::text AS player_sub_spec,
         ((array_agg(d.player_role ORDER BY d.damage_done DESC))[1])::text AS player_role,
         MAX(d.player_level)::smallint AS player_level,
         ((array_agg(d.instance_name ORDER BY d.damage_done DESC))[1])::text AS instance_name,
@@ -11755,6 +11838,7 @@ aggregated AS (
         pr.player_name,
         pr.player_class,
         pr.player_spec,
+        pr.player_sub_spec,
         pr.player_role,
         pr.player_level,
         pr.instance_name,
@@ -11779,7 +11863,7 @@ aggregated AS (
     ORDER BY pr.player_guid, (CASE WHEN $1 :: text = 'hps' THEN pr.hps ELSE pr.dps END) DESC
 )
 SELECT
-    a.player_guid, a.player_name, a.player_class, a.player_spec, a.player_role, a.player_level, a.instance_name, a.encounter_name, a.difficulty_name, a.max_players, a.realm_id, a.realm_name, a.guild_name, a.damage_done, a.healing_done, a.absorbed_done, a.duration_secs, a.dps, a.hps, a.avg_ilvl, a.log_hashed_slug, a.killed_at, a.talent_sub_spec, a.talent_layout,
+    a.player_guid, a.player_name, a.player_class, a.player_spec, a.player_sub_spec, a.player_role, a.player_level, a.instance_name, a.encounter_name, a.difficulty_name, a.max_players, a.realm_id, a.realm_name, a.guild_name, a.damage_done, a.healing_done, a.absorbed_done, a.duration_secs, a.dps, a.hps, a.avg_ilvl, a.log_hashed_slug, a.killed_at, a.talent_sub_spec, a.talent_layout,
     COUNT(*) OVER() AS total_count
 FROM aggregated a
 WHERE (CASE WHEN $1 :: text = 'hps' THEN a.hps ELSE a.dps END) > 0
@@ -11798,6 +11882,7 @@ type RankingsLeaderboardParams struct {
 	InstanceNames    []string `db:"instance_names" json:"instance_names"`
 	EncounterNames   []string `db:"encounter_names" json:"encounter_names"`
 	RealmNames       []string `db:"realm_names" json:"realm_names"`
+	SubSpec          string   `db:"sub_spec" json:"sub_spec"`
 	SinceDays        int64    `db:"since_days" json:"since_days"`
 	HideUnknowns     bool     `db:"hide_unknowns" json:"hide_unknowns"`
 	DifficultyNames  []string `db:"difficulty_names" json:"difficulty_names"`
@@ -11809,6 +11894,7 @@ type RankingsLeaderboardRow struct {
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
 	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
 	PlayerRole     string             `db:"player_role" json:"player_role"`
 	PlayerLevel    int16              `db:"player_level" json:"player_level"`
 	InstanceName   string             `db:"instance_name" json:"instance_name"`
@@ -11853,6 +11939,7 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 		arg.InstanceNames,
 		arg.EncounterNames,
 		arg.RealmNames,
+		arg.SubSpec,
 		arg.SinceDays,
 		arg.HideUnknowns,
 		arg.DifficultyNames,
@@ -11870,6 +11957,7 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 			&i.PlayerName,
 			&i.PlayerClass,
 			&i.PlayerSpec,
+			&i.PlayerSubSpec,
 			&i.PlayerRole,
 			&i.PlayerLevel,
 			&i.InstanceName,
@@ -12220,32 +12308,39 @@ func (q *sqlQuerier) UpsertRankingsInstanceSummary(ctx context.Context, arg Upse
 
 const upsertTalentBuild = `-- name: UpsertTalentBuild :one
 WITH ins AS (
-    INSERT INTO talent_builds (player_class, talent_summary, talent_layout, spec)
-    VALUES ($1, $2, $3, $4)
-    ON CONFLICT (player_class, talent_layout) DO NOTHING
+    INSERT INTO talent_builds (dataset_id, player_class, talent_summary, talent_layout, spec, sub_spec)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (dataset_id, player_class, talent_layout) DO UPDATE SET
+        spec = EXCLUDED.spec,
+        sub_spec = EXCLUDED.sub_spec
     RETURNING id
 )
 SELECT id FROM ins
 UNION ALL
-SELECT id FROM talent_builds WHERE player_class = $1 AND talent_layout = $3
+SELECT id FROM talent_builds
+WHERE dataset_id = $1 AND player_class = $2 AND talent_layout = $4
 LIMIT 1
 `
 
 type UpsertTalentBuildParams struct {
-	PlayerClass   string  `db:"player_class" json:"player_class"`
-	TalentSummary []int16 `db:"talent_summary" json:"talent_summary"`
-	TalentLayout  string  `db:"talent_layout" json:"talent_layout"`
-	Spec          string  `db:"spec" json:"spec"`
+	DatasetID     uuid.UUID   `db:"dataset_id" json:"dataset_id"`
+	PlayerClass   string      `db:"player_class" json:"player_class"`
+	TalentSummary []int16     `db:"talent_summary" json:"talent_summary"`
+	TalentLayout  string      `db:"talent_layout" json:"talent_layout"`
+	Spec          string      `db:"spec" json:"spec"`
+	SubSpec       pgtype.Text `db:"sub_spec" json:"sub_spec"`
 }
 
 // Insert a unique talent build, returning its ID. If the build already exists,
 // return the existing row's ID.
 func (q *sqlQuerier) UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertTalentBuild,
+		arg.DatasetID,
 		arg.PlayerClass,
 		arg.TalentSummary,
 		arg.TalentLayout,
 		arg.Spec,
+		arg.SubSpec,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

@@ -20,8 +20,9 @@ function BoxPlotRow({ stats, scaleMax, onClick }: BoxPlotRowProps) {
   const pct = (v: number) => `${(v / scaleMax) * 100}%`
   const color = CLASS_CSS_VAR[stats.player_class]
   const iqr = stats.q3_dps - stats.q1_dps
-  const label = stats.player_spec
-    ? `${CLASS_DISPLAY[stats.player_class]} - ${stats.player_spec}`
+  const specLabel = stats.player_sub_spec ? `${stats.player_spec} (${stats.player_sub_spec})` : stats.player_spec
+  const label = specLabel
+    ? `${CLASS_DISPLAY[stats.player_class]} - ${specLabel}`
     : CLASS_DISPLAY[stats.player_class]
 
   return (
@@ -45,7 +46,7 @@ function BoxPlotRow({ stats, scaleMax, onClick }: BoxPlotRowProps) {
                 onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
               />
               <span className="truncate font-medium" style={{ color }}>
-                {stats.player_spec || CLASS_DISPLAY[stats.player_class]}
+                {specLabel || CLASS_DISPLAY[stats.player_class]}
               </span>
             </span>
             <span className="ml-auto shrink-0 bg-card/90 pl-2 font-mono font-semibold tabular-nums text-foreground backdrop-blur-[1px] sm:hidden">
@@ -159,7 +160,7 @@ interface BoxPlotChartProps {
   loading?: boolean
   title?: string
   subtitle?: string
-  onRowClick?: (playerClass: string, playerSpec: string) => void
+  onRowClick?: (playerClass: string, playerSpec: string, playerSubSpec: string) => void
 }
 
 export function BoxPlotChart({
@@ -207,10 +208,10 @@ export function BoxPlotChart({
           <div className="space-y-1">
             {stats.map((s) => (
               <BoxPlotRow
-                key={`${s.player_class}-${s.player_spec ?? ""}`}
+                key={`${s.player_class}-${s.player_spec ?? ""}-${s.player_sub_spec ?? ""}`}
                 stats={s}
                 scaleMax={ticks.max}
-                onClick={onRowClick ? () => onRowClick(s.player_class, s.player_spec) : undefined}
+                onClick={onRowClick ? () => onRowClick(s.player_class, s.player_spec, s.player_sub_spec ?? "") : undefined}
               />
             ))}
 

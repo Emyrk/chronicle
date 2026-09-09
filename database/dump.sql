@@ -703,7 +703,8 @@ CREATE TABLE encounter_dps_rankings (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     healing_done bigint DEFAULT 0 NOT NULL,
     absorbed_done bigint DEFAULT 0 NOT NULL,
-    hps double precision DEFAULT 0 NOT NULL
+    hps double precision DEFAULT 0 NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL
 );
 
 ALTER TABLE ONLY encounter_dps_rankings FORCE ROW LEVEL SECURITY;
@@ -1225,6 +1226,7 @@ CREATE TABLE parse_score_results (
     max_players smallint DEFAULT 0 NOT NULL,
     killed_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL,
     CONSTRAINT parse_score_results_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text])))
 );
 
@@ -1268,7 +1270,8 @@ CREATE TABLE ranking_snapshot_members (
     absorbed_done bigint DEFAULT 0 NOT NULL,
     duration_secs double precision NOT NULL,
     dps double precision NOT NULL,
-    hps double precision DEFAULT 0 NOT NULL
+    hps double precision DEFAULT 0 NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL
 );
 
 CREATE TABLE ranking_snapshots (
@@ -1473,7 +1476,8 @@ CREATE TABLE talent_builds (
     talent_layout text NOT NULL,
     spec text DEFAULT 'Unknown'::text NOT NULL,
     sub_spec text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    dataset_id uuid NOT NULL
 );
 
 CREATE TABLE time_parse_boss_kill_members (
@@ -2185,10 +2189,10 @@ ALTER TABLE ONLY site_config
     ADD CONSTRAINT site_config_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY talent_builds
-    ADD CONSTRAINT talent_builds_pkey PRIMARY KEY (id);
+    ADD CONSTRAINT talent_builds_dataset_class_layout_key UNIQUE (dataset_id, player_class, talent_layout);
 
 ALTER TABLE ONLY talent_builds
-    ADD CONSTRAINT talent_builds_player_class_talent_layout_key UNIQUE (player_class, talent_layout);
+    ADD CONSTRAINT talent_builds_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_pkey PRIMARY KEY (id);
@@ -2420,7 +2424,7 @@ CREATE INDEX idx_rs_tenant_status ON ranking_snapshots USING btree (tenant_id, s
 
 CREATE INDEX idx_rsm_cohort_class ON ranking_snapshot_members USING btree (snapshot_id, encounter_name, difficulty_name, max_players, player_class);
 
-CREATE INDEX idx_rsm_cohort_spec ON ranking_snapshot_members USING btree (snapshot_id, encounter_name, difficulty_name, max_players, player_class, player_spec);
+CREATE INDEX idx_rsm_cohort_spec ON ranking_snapshot_members USING btree (snapshot_id, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec);
 
 CREATE INDEX idx_rsm_instance ON ranking_snapshot_members USING btree (snapshot_id, instance_id);
 
@@ -2834,6 +2838,9 @@ ALTER TABLE ONLY shared_views
 
 ALTER TABLE ONLY shared_views
     ADD CONSTRAINT shared_views_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY talent_builds
+    ADD CONSTRAINT talent_builds_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id);
 
 ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_default_dataset_id_fkey FOREIGN KEY (default_dataset_id) REFERENCES datasets(id);

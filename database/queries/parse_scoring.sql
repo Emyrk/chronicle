@@ -3,12 +3,12 @@
 -- No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
 INSERT INTO parse_score_results (
     tenant_id, instance_id, run_id, snapshot_id, log_group_id, guild_id,
-    encounter_name, player_guid, player_name, player_class, player_spec, player_role,
+    encounter_name, player_guid, player_name, player_class, player_spec, player_sub_spec, player_role,
     metric, metric_value, precise_score, display_score, rank, sample_size, status,
     instance_name, difficulty_name, max_players, killed_at
 ) VALUES (
     @tenant_id, @instance_id, @run_id, @snapshot_id, @log_group_id, @guild_id,
-    @encounter_name, @player_guid, @player_name, @player_class, @player_spec, @player_role,
+    @encounter_name, @player_guid, @player_name, @player_class, @player_spec, @player_sub_spec, @player_role,
     @metric, @metric_value, @precise_score, @display_score, @rank, @sample_size, @status,
     @instance_name, @difficulty_name, @max_players, @killed_at
 );

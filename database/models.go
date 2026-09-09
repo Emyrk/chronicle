@@ -1243,6 +1243,7 @@ type EncounterDpsRanking struct {
 	HealingDone    int64              `db:"healing_done" json:"healing_done"`
 	AbsorbedDone   int64              `db:"absorbed_done" json:"absorbed_done"`
 	Hps            float64            `db:"hps" json:"hps"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
 }
 
 type ExternalCharacterLinkSync struct {
@@ -1681,6 +1682,7 @@ type ParseScoreResult struct {
 	MaxPlayers     int16              `db:"max_players" json:"max_players"`
 	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
 }
 
 // A parsed_log_group is a wow_log_group that has been processed and contains parsed logs. A duplicate allows deleting this one row to clear all parsed logs for a given wow_log_group.
@@ -1741,6 +1743,7 @@ type RankingSnapshotMember struct {
 	DurationSecs     float64            `db:"duration_secs" json:"duration_secs"`
 	Dps              float64            `db:"dps" json:"dps"`
 	Hps              float64            `db:"hps" json:"hps"`
+	PlayerSubSpec    string             `db:"player_sub_spec" json:"player_sub_spec"`
 }
 
 type RankingsInstanceSummary struct {
@@ -1893,6 +1896,7 @@ type TalentBuild struct {
 	Spec          string             `db:"spec" json:"spec"`
 	SubSpec       pgtype.Text        `db:"sub_spec" json:"sub_spec"`
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	DatasetID     uuid.UUID          `db:"dataset_id" json:"dataset_id"`
 }
 
 type Tenant struct {
