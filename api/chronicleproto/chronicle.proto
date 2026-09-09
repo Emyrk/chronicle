@@ -268,6 +268,7 @@ enum EvidenceKind {
   EvidenceDamage = 6;          // damage event from a consumable (sapper, etc)
   EvidenceActiveAtPull = 7;    // pre-pull aura projected into encounter
   EvidenceCooldown = 8;        // inferred from cooldown window
+  EvidencePreCombat = 9;       // observed outside combat and assigned to the next encounter
 }
 
 // EvidenceConfidence describes how certain we are about the evidence.
@@ -296,7 +297,7 @@ message Consume {
   int64 observedAtUnixMilli = 11;          // when the observation occurred
   optional int32 amount = 12;              // heal/resource/damage amount
   optional string resourceType = 13;       // resource type string (matches ResourceChange.resourceType)
-  bool isProjection = 14;                  // true when projected from prior encounter
+  bool isProjection = 14;                  // true when projected into an encounter
   optional string itemName = 15;           // item name when itemId is known
 }
 

@@ -440,6 +440,11 @@ func (h *Hookable) completedSpeedrunBoundary() (time.Time, time.Duration, bool) 
 	return completedAt, gap, !completedAt.IsZero()
 }
 
+// FightActive reports whether this instance currently has an active encounter.
+func (h *Hookable) FightActive() bool {
+	return h.currentFight != nil && h.currentFight.active()
+}
+
 func (h *Hookable) Process(m messages.Message) error {
 	if h.finalizing || h.finalized {
 		return fmt.Errorf("cannot process message after instance finalization started")

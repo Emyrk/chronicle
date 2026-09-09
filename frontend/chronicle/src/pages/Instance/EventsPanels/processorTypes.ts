@@ -364,7 +364,8 @@ export type EvidenceKind =
   | 5  // Resource
   | 6  // Damage
   | 7  // ActiveAtPull (pre-pull aura projected into encounter)
-  | 8; // Cooldown
+  | 8  // Cooldown
+  | 9; // PreCombat (observed outside combat, assigned to next encounter)
 
 /**
  * Evidence confidence level.

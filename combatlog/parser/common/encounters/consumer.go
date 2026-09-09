@@ -70,8 +70,8 @@ type State struct {
 	Auras *auras.Tracking
 
 	// ConsumeTracker is the parse-wide consumable evidence tracker. It
-	// records direct item-use and aura episodes for every message and is
-	// shared by all per-instance Collectors.
+	// records direct item-use and aura episodes plus pending pre-combat
+	// evidence, and is shared by all per-instance Collectors.
 	ConsumeTracker *consumeevidence.Tracker
 
 	instanceResolver InstanceResolver
@@ -122,6 +122,9 @@ func (s *State) Process(m messages.Message) error {
 	s.Vehicles.Process(m)
 	s.RaidGroups.Process(m)
 
+	// Capture whether this message arrived during an encounter before processing
+	// it, since processing may start or end the fight.
+	consumeActive := s.CurrentInstance != nil && s.CurrentInstance.FightActive()
 	forwardToInstance := true
 	switch typed := m.(type) {
 	case *messages.Realm:
@@ -191,8 +194,9 @@ func (s *State) Process(m messages.Message) error {
 
 	// Process consume evidence at the parse level (once, after instance hooks).
 	// This records direct item-use and aura episodes parse-wide so every
-	// per-instance Collector can read shared state.
-	s.ConsumeTracker.Process(m)
+	// per-instance Collector can read shared state. The active state assigns
+	// observed out-of-combat instant consumes to the following encounter.
+	s.ConsumeTracker.Process(m, consumeActive)
 
 	// Process aura messages at the parse level (once, after instance hooks).
 	// This ordering ensures projection captures the pre-message canonical

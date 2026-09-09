@@ -25,6 +25,11 @@ type Tracker struct {
 	directEpisodes []directEpisode
 	// auraEpisodes records consumable aura applications parse-wide.
 	auraEpisodes []auraEpisode
+	// preCombatEvidence holds observed out-of-combat instant consumes until the
+	// next encounter starts. Evidence is drained exactly once by that encounter.
+	preCombatEvidence []*messages.Consume
+	// preCombatCastEpisodes correlate cast-only evidence with later effects.
+	preCombatCastEpisodes []castEpisode
 }
 
 // NewTracker creates a parse-wide tracker. Pass nil catalog to disable
@@ -43,20 +48,30 @@ func (t *Tracker) Catalog() ConsumableCatalog {
 	return t.catalog
 }
 
-// Process observes a message and records any direct or aura episodes. Call
-// once for every real message at the parse level.
-func (t *Tracker) Process(m messages.Message) {
+// Process observes a message and records consume episodes parse-wide. The
+// optional active flag identifies whether the message belonged to an encounter;
+// callers that omit it retain the historical in-combat behavior.
+func (t *Tracker) Process(m messages.Message, active ...bool) {
+	inCombat := true
+	if len(active) > 0 {
+		inCombat = active[0]
+	}
+
+	var direct *directEpisode
 	if sg, ok := m.(*messages.SpellGo); ok && sg.ItemID != nil {
-		t.recordDirectEpisode(sg)
+		direct = t.recordDirectEpisode(sg)
 	}
 	if auraMsg, ok := m.(*messages.Aura); ok && auraMsg.State == 1 && auraMsg.IsBuff {
 		t.recordAuraEpisode(auraMsg)
 	}
+	if !inCombat {
+		t.recordPreCombatEvidence(m, direct)
+	}
 }
 
-func (t *Tracker) recordDirectEpisode(sg *messages.SpellGo) {
+func (t *Tracker) recordDirectEpisode(sg *messages.SpellGo) *directEpisode {
 	if t.catalog != nil && !t.catalog.IsConsumableItem(*sg.ItemID) {
-		return
+		return nil
 	}
 	ts := sg.Date()
 	consumeID := StableConsumeID("direct", sg.Caster, sg.SpellData, sg.ItemID, ts)
@@ -67,6 +82,7 @@ func (t *Tracker) recordDirectEpisode(sg *messages.SpellGo) {
 		spellData: sg.SpellData,
 		ts:        ts,
 	})
+	return &t.directEpisodes[len(t.directEpisodes)-1]
 }
 
 func (t *Tracker) recordAuraEpisode(auraMsg *messages.Aura) {
@@ -103,6 +119,223 @@ func (t *Tracker) recordAuraEpisode(auraMsg *messages.Aura) {
 		appliedAt: ts,
 		itemIDs:   candidateItems,
 	})
+}
+
+// recordPreCombatEvidence queues recognized instant consume evidence observed
+// outside an encounter. Persistent aura evidence is projected separately from
+// the active aura snapshot at pull time.
+func (t *Tracker) recordPreCombatEvidence(m messages.Message, direct *directEpisode) {
+	switch msg := m.(type) {
+	case *messages.SpellGo:
+		if msg.ItemID != nil {
+			if direct != nil {
+				t.queuePreCombatDirect(msg, direct)
+			}
+			return
+		}
+		t.queuePreCombatCast(msg)
+	case *messages.Heal:
+		t.queuePreCombatHeal(msg)
+	case *messages.ResourceChange:
+		t.queuePreCombatResource(msg)
+	}
+}
+
+func (t *Tracker) queuePreCombatDirect(sg *messages.SpellGo, ep *directEpisode) {
+	tsMilli := ep.ts.UnixMilli()
+	itemID := ep.itemID
+	t.preCombatEvidence = append(t.preCombatEvidence, &messages.Consume{
+		MessageBase:      messages.Base(ep.ts),
+		ConsumeID:        ep.consumeID,
+		EvidenceID:       StableEvidenceID(ep.consumeID, "spell_go"),
+		Player:           ep.player,
+		ItemID:           &itemID,
+		SpellData:        sg.SpellData,
+		Kind:             messages.EvidenceKindDirectItem,
+		Confidence:       messages.ConfidenceDirect,
+		ConsumedAtUnixMs: &tsMilli,
+		ObservedAtUnixMs: tsMilli,
+	})
+}
+
+func (t *Tracker) queuePreCombatCast(sg *messages.SpellGo) {
+	if sg.SpellData == nil || t.catalog == nil {
+		return
+	}
+	candidateItems, ok := t.catalog.IsConsumableDirectSpell(chrondbc.SpellID(sg.SpellData.ID))
+	if !ok {
+		return
+	}
+
+	ts := sg.Date()
+	tsMilli := ts.UnixMilli()
+	consumeID := StableConsumeID("cast", sg.Caster, sg.SpellData, nil, ts)
+	confidence := evidenceConfidence(candidateItems)
+	t.preCombatCastEpisodes = append(t.preCombatCastEpisodes, castEpisode{
+		consumeID:      consumeID,
+		player:         sg.Caster,
+		spellData:      sg.SpellData,
+		candidateItems: append([]int32(nil), candidateItems...),
+		ts:             ts,
+	})
+	t.preCombatEvidence = append(t.preCombatEvidence, &messages.Consume{
+		MessageBase:      messages.Base(ts),
+		ConsumeID:        consumeID,
+		EvidenceID:       StableEvidenceID(consumeID, "cast"),
+		Player:           sg.Caster,
+		CandidateItemIDs: candidateItems,
+		SpellData:        sg.SpellData,
+		Kind:             messages.EvidenceKindCast,
+		Confidence:       confidence,
+		ConsumedAtUnixMs: &tsMilli,
+		ObservedAtUnixMs: tsMilli,
+	})
+}
+
+func (t *Tracker) queuePreCombatHeal(heal *messages.Heal) {
+	if heal.SpellData == nil || heal.Caster != heal.Target || t.catalog == nil {
+		return
+	}
+	candidateItems, ok := t.catalog.IsConsumableDirectSpell(chrondbc.SpellID(heal.SpellData.ID))
+	if !ok {
+		return
+	}
+
+	ts := heal.Date()
+	tsMilli := ts.UnixMilli()
+	consumeID, itemID, confidence := t.correlatePreCombatEffect(
+		heal.Caster,
+		chrondbc.SpellID(heal.SpellData.ID),
+		candidateItems,
+		ts,
+		"heal",
+		heal.SpellData,
+	)
+	if itemID != nil {
+		candidateItems = nil
+	}
+	amount := heal.Amount + heal.Overheal
+	resourceType := "Health"
+	t.preCombatEvidence = append(t.preCombatEvidence, &messages.Consume{
+		MessageBase:      messages.Base(ts),
+		ConsumeID:        consumeID,
+		EvidenceID:       StableEvidenceID(consumeID, "heal"),
+		Player:           heal.Caster,
+		ItemID:           itemID,
+		CandidateItemIDs: candidateItems,
+		SpellData:        heal.SpellData,
+		Kind:             messages.EvidenceKindHeal,
+		Confidence:       confidence,
+		ConsumedAtUnixMs: &tsMilli,
+		ObservedAtUnixMs: tsMilli,
+		Amount:           &amount,
+		ResourceType:     &resourceType,
+	})
+}
+
+func (t *Tracker) queuePreCombatResource(change *messages.ResourceChange) {
+	if change.SpellData == nil || t.catalog == nil || string(change.Direction) != "Gain" {
+		return
+	}
+	candidateItems, ok := t.catalog.IsConsumableDirectSpell(chrondbc.SpellID(change.SpellData.ID))
+	if !ok {
+		return
+	}
+
+	ts := change.Date()
+	tsMilli := ts.UnixMilli()
+	consumeID, itemID, confidence := t.correlatePreCombatEffect(
+		change.Target,
+		chrondbc.SpellID(change.SpellData.ID),
+		candidateItems,
+		ts,
+		"resource",
+		change.SpellData,
+	)
+	if itemID != nil {
+		candidateItems = nil
+	}
+	amount := change.Amount + change.OverResource
+	resourceType := string(change.Resource)
+	t.preCombatEvidence = append(t.preCombatEvidence, &messages.Consume{
+		MessageBase:      messages.Base(ts),
+		ConsumeID:        consumeID,
+		EvidenceID:       StableEvidenceID(consumeID, "resource"),
+		Player:           change.Target,
+		ItemID:           itemID,
+		CandidateItemIDs: candidateItems,
+		SpellData:        change.SpellData,
+		Kind:             messages.EvidenceKindResource,
+		Confidence:       confidence,
+		ConsumedAtUnixMs: &tsMilli,
+		ObservedAtUnixMs: tsMilli,
+		Amount:           &amount,
+		ResourceType:     &resourceType,
+	})
+}
+
+func (t *Tracker) correlatePreCombatEffect(
+	player guid.GUID,
+	spellID chrondbc.SpellID,
+	candidateItems []int32,
+	ts time.Time,
+	kind string,
+	spell *chrondbc.Spell,
+) (string, *int32, messages.EvidenceConfidence) {
+	confidence := evidenceConfidence(candidateItems)
+	if ep := t.FindDirectEpisode(player, spellID, candidateItems, ts); ep != nil {
+		itemID := ep.itemID
+		return ep.consumeID, &itemID, messages.ConfidenceDirect
+	}
+	if ep := t.findPreCombatCastEpisode(player, spellID, candidateItems, ts); ep != nil {
+		return ep.consumeID, nil, confidence
+	}
+	return StableConsumeID(kind, player, spell, nil, ts), nil, confidence
+}
+
+func (t *Tracker) findPreCombatCastEpisode(
+	player guid.GUID,
+	spellID chrondbc.SpellID,
+	candidateItems []int32,
+	observedAt time.Time,
+) *castEpisode {
+	const correlationWindow = 2 * time.Second
+	for i := len(t.preCombatCastEpisodes) - 1; i >= 0; i-- {
+		ep := &t.preCombatCastEpisodes[i]
+		if observedAt.Sub(ep.ts) > correlationWindow {
+			break
+		}
+		if ep.player != player {
+			continue
+		}
+		if ep.spellData != nil && ep.spellData.ID == spellID {
+			return ep
+		}
+		for _, observedItem := range candidateItems {
+			for _, castItem := range ep.candidateItems {
+				if observedItem == castItem {
+					return ep
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func evidenceConfidence(candidateItems []int32) messages.EvidenceConfidence {
+	if len(candidateItems) > 1 {
+		return messages.ConfidenceAmbiguous
+	}
+	return messages.ConfidenceEffectDerived
+}
+
+// DrainPreCombatEvidence returns every out-of-combat instant consume observed
+// since the previous encounter and clears the queue for the next encounter.
+func (t *Tracker) DrainPreCombatEvidence() []*messages.Consume {
+	evidence := t.preCombatEvidence
+	t.preCombatEvidence = nil
+	t.preCombatCastEpisodes = nil
+	return evidence
 }
 
 // FindDirectEpisode finds a recent direct episode matching the given aura.
