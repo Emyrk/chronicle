@@ -201,7 +201,7 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 		Ids:              []uuid.UUID{canonicalID, duplicateID},
 	}))
 
-	insertEncounterRanking := func(instanceID uuid.UUID, encounterName string, healing int64, killedAt time.Time) {
+	insertEncounterRanking := func(instanceID uuid.UUID, encounterName, playerClass, playerSpec string, healing int64, killedAt time.Time) {
 		t.Helper()
 		encounterID := uuid.New()
 		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
@@ -216,8 +216,8 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 		require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
 			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
 			InstanceID:  instanceID, EncounterName: encounterName, InstanceName: "Molten Core",
-			PlayerGuid: "P-HEALER", PlayerName: "Healer", PlayerClass: "PRIEST",
-			PlayerSpec: "Holy", PlayerRole: "heal", PlayerLevel: 60,
+			PlayerGuid: "P-HEALER", PlayerName: "Healer", PlayerClass: playerClass,
+			PlayerSpec: playerSpec, PlayerRole: "heal", PlayerLevel: 60,
 			DifficultyName: "", MaxPlayers: 40, RealmID: realmID, RealmName: "test-realm",
 			HealingDone: healing, DurationSecs: 10, Hps: hps,
 			KilledAt: database.Timestamptz(killedAt), LogHashedSlug: instanceID.String(),
@@ -226,23 +226,34 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 
 	// The group anchor is truncated before Ragnaros. The duplicate has the
 	// complete, internally consistent run and must be selected as representative.
-	insertEncounterRanking(canonicalID, "Lucifron", 100, baseTime)
-	insertEncounterRanking(canonicalID, "Magmadar", 100, baseTime.Add(time.Minute))
-	insertEncounterRanking(duplicateID, "Lucifron", 900, baseTime)
-	insertEncounterRanking(duplicateID, "Magmadar", 900, baseTime.Add(time.Minute))
-	insertEncounterRanking(duplicateID, "Ragnaros", 900, baseTime.Add(2*time.Minute))
+	insertEncounterRanking(canonicalID, "Lucifron", "PALADIN", "Holy", 100, baseTime)
+	insertEncounterRanking(canonicalID, "Magmadar", "PALADIN", "Holy", 100, baseTime.Add(time.Minute))
+	insertEncounterRanking(duplicateID, "Lucifron", "PRIEST", "Holy", 900, baseTime)
+	insertEncounterRanking(duplicateID, "Magmadar", "PRIEST", "Holy", 900, baseTime.Add(time.Minute))
+	insertEncounterRanking(duplicateID, "Ragnaros", "PRIEST", "Holy", 900, baseTime.Add(2*time.Minute))
 
-	rows, err := store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
-		Metric: "hps", QueryLimit: 10,
-		InstanceNames:  []string{"Molten Core"},
-		EncounterNames: []string{"Lucifron", "Magmadar", "Ragnaros"},
-	})
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	assert.Equal(t, duplicateID.String(), rows[0].LogHashedSlug)
-	assert.Equal(t, int64(2700), rows[0].HealingDone)
-	assert.Equal(t, 30.0, rows[0].DurationSecs)
-	assert.Equal(t, 90.0, rows[0].Hps)
+	for _, params := range []database.RankingsLeaderboardParams{
+		{
+			Metric: "hps", QueryLimit: 10,
+			InstanceNames:  []string{"Molten Core"},
+			EncounterNames: []string{"Lucifron", "Magmadar", "Ragnaros"},
+		},
+		{
+			Metric: "hps", QueryLimit: 10,
+			InstanceNames:  []string{"Molten Core"},
+			EncounterNames: []string{"Lucifron", "Magmadar", "Ragnaros"},
+			Class:          "PRIEST",
+			Spec:           "Holy",
+		},
+	} {
+		rows, err := store.RankingsLeaderboard(ctx, params)
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		assert.Equal(t, duplicateID.String(), rows[0].LogHashedSlug)
+		assert.Equal(t, int64(2700), rows[0].HealingDone)
+		assert.Equal(t, 30.0, rows[0].DurationSecs)
+		assert.Equal(t, 90.0, rows[0].Hps)
+	}
 }
 
 func TestRankingSnapshots(t *testing.T) {
