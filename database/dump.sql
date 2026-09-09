@@ -2424,7 +2424,7 @@ CREATE INDEX idx_rs_tenant_status ON ranking_snapshots USING btree (tenant_id, s
 
 CREATE INDEX idx_rsm_cohort_class ON ranking_snapshot_members USING btree (snapshot_id, encounter_name, difficulty_name, max_players, player_class);
 
-CREATE INDEX idx_rsm_cohort_spec ON ranking_snapshot_members USING btree (snapshot_id, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec);
+CREATE INDEX idx_rsm_cohort_spec ON ranking_snapshot_members USING btree (snapshot_id, encounter_name, difficulty_name, max_players, player_class, player_spec);
 
 CREATE INDEX idx_rsm_instance ON ranking_snapshot_members USING btree (snapshot_id, instance_id);
 
