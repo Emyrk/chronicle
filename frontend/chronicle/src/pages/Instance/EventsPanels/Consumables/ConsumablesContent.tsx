@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { ChevronDown, ChevronRight, HelpCircle, Hourglass } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, HelpCircle, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { iconUrl } from "@/config/iconUrl";
 import { usePortalContainer } from "@/components/ui/PortalContainerContext";
@@ -30,6 +30,7 @@ import {
 } from "./consumables.processor";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { buildConsumablesTokens, parseConsumablesTokens } from "./consumablesTokens";
+import { paginateConsumables } from "./consumablesPagination";
 
 // ============================================================================
 // Helpers
@@ -423,6 +424,20 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
       .sort((a, b) => a.dateMilli - b.dateMilli);
   }, [cachedResult, showPrePull, disambiguationMap]);
 
+  // This log can contain thousands of rows. Keep the mounted table bounded so
+  // unrelated React updates do not repeatedly traverse and paint the full log.
+  const [requestedPage, setRequestedPage] = useState(0);
+  const page = useMemo(() => paginateConsumables(sortedUses, requestedPage), [sortedUses, requestedPage]);
+  useEffect(() => {
+    if (requestedPage !== page.page) setRequestedPage(page.page);
+  }, [page.page, requestedPage]);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const goToPage = useCallback((nextPage: number) => {
+    setRequestedPage(nextPage);
+    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>("[data-slot='scroll-area-viewport']");
+    if (viewport) viewport.scrollTop = 0;
+  }, []);
+
   const effectiveProps = {
     ...props,
     loading: hasData ? false : props.loading,
@@ -432,16 +447,48 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
   return (
     <GenericPanel {...effectiveProps}>
       <div className="flex flex-col h-full min-h-0">
-        <div className="flex items-center justify-between mb-2 gap-2 shrink-0">
+        <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
           <div className="text-xs text-muted-foreground">
             Uses: <span className="font-medium text-foreground">{sortedUses.length}</span>
+            {page.pageCount > 1 && (
+              <span className="ml-2 text-muted-foreground/60">
+                {page.start + 1}-{page.end}
+              </span>
+            )}
             {(cachedResult?.unknownUseIds.size ?? 0) > 0 && (
               <span className="ml-2 text-muted-foreground/60" title="Uses Chronicle could not map to a known item">
                 {cachedResult!.unknownUseIds.size} unmapped
               </span>
             )}
           </div>
-          <PrePullToggle enabled={showPrePull} onToggle={togglePrePull} />
+          <div className="flex items-center gap-1.5">
+            {page.pageCount > 1 && (
+              <div className="flex items-center gap-0.5" aria-label="Consumables log pages">
+                <button
+                  type="button"
+                  onClick={() => goToPage(page.page - 1)}
+                  disabled={page.page === 0}
+                  className="rounded border border-border p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Previous consumables page"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <span className="min-w-12 text-center font-mono text-2xs text-muted-foreground">
+                  {page.page + 1}/{page.pageCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => goToPage(page.page + 1)}
+                  disabled={page.page === page.pageCount - 1}
+                  className="rounded border border-border p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Next consumables page"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+            <PrePullToggle enabled={showPrePull} onToggle={togglePrePull} />
+          </div>
         </div>
 
         {sortedUses.length === 0 ? (
@@ -449,7 +496,7 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
             {loading ? "Loading..." : "No consumable uses recorded"}
           </div>
         ) : (
-          <ScrollArea className="flex-1 min-h-0">
+          <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-card">
                 <tr className="border-b border-border text-muted-foreground">
@@ -463,7 +510,7 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
                 </tr>
               </thead>
               <tbody>
-                {sortedUses.map((use) => {
+                {page.items.map((use) => {
                   const encounterName = encounterNames.get(use.encounterID) || "Unknown";
                   const player = context.instance.players?.[use.player];
                   const isExpanded = expanded.has(use.consumeId);
