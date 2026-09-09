@@ -87,6 +87,7 @@ export const EVIDENCE_KIND_LABELS: Record<number, string> = {
   6: "Damage",
   7: "Active at Pull",
   8: "Cooldown",
+  9: "Pre-Combat",
 };
 
 /** EvidenceConfidence enum value -> display label. */

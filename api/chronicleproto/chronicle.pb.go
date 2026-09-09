@@ -321,6 +321,7 @@ const (
 	EvidenceKind_EvidenceDamage       EvidenceKind = 6 // damage event from a consumable (sapper, etc)
 	EvidenceKind_EvidenceActiveAtPull EvidenceKind = 7 // pre-pull aura projected into encounter
 	EvidenceKind_EvidenceCooldown     EvidenceKind = 8 // inferred from cooldown window
+	EvidenceKind_EvidencePreCombat    EvidenceKind = 9 // observed outside combat and assigned to the next encounter
 )
 
 // Enum value maps for EvidenceKind.
@@ -335,6 +336,7 @@ var (
 		6: "EvidenceDamage",
 		7: "EvidenceActiveAtPull",
 		8: "EvidenceCooldown",
+		9: "EvidencePreCombat",
 	}
 	EvidenceKind_value = map[string]int32{
 		"EvidenceUnknown":      0,
@@ -346,6 +348,7 @@ var (
 		"EvidenceDamage":       6,
 		"EvidenceActiveAtPull": 7,
 		"EvidenceCooldown":     8,
+		"EvidencePreCombat":    9,
 	}
 )
 
@@ -2336,7 +2339,7 @@ type Consume struct {
 	ObservedAtUnixMilli int64                  `protobuf:"varint,11,opt,name=observedAtUnixMilli,proto3" json:"observedAtUnixMilli,omitempty"`       // when the observation occurred
 	Amount              *int32                 `protobuf:"varint,12,opt,name=amount,proto3,oneof" json:"amount,omitempty"`                           // heal/resource/damage amount
 	ResourceType        *string                `protobuf:"bytes,13,opt,name=resourceType,proto3,oneof" json:"resourceType,omitempty"`                // resource type string (matches ResourceChange.resourceType)
-	IsProjection        bool                   `protobuf:"varint,14,opt,name=isProjection,proto3" json:"isProjection,omitempty"`                     // true when projected from prior encounter
+	IsProjection        bool                   `protobuf:"varint,14,opt,name=isProjection,proto3" json:"isProjection,omitempty"`                     // true when projected into an encounter
 	ItemName            *string                `protobuf:"bytes,15,opt,name=itemName,proto3,oneof" json:"itemName,omitempty"`                        // item name when itemId is known
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
@@ -3023,7 +3026,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x11DispelTypeDisease\x10\x03\x12\x14\n" +
 	"\x10DispelTypePoison\x10\x04\x12\x15\n" +
 	"\x11DispelTypeStealth\x10\x05\x12\x1a\n" +
-	"\x16DispelTypeInvisibility\x10\x06*\xcb\x01\n" +
+	"\x16DispelTypeInvisibility\x10\x06*\xe2\x01\n" +
 	"\fEvidenceKind\x12\x13\n" +
 	"\x0fEvidenceUnknown\x10\x00\x12\x16\n" +
 	"\x12EvidenceDirectItem\x10\x01\x12\x10\n" +
@@ -3033,7 +3036,8 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x10EvidenceResource\x10\x05\x12\x12\n" +
 	"\x0eEvidenceDamage\x10\x06\x12\x18\n" +
 	"\x14EvidenceActiveAtPull\x10\a\x12\x14\n" +
-	"\x10EvidenceCooldown\x10\b*\x8f\x01\n" +
+	"\x10EvidenceCooldown\x10\b\x12\x15\n" +
+	"\x11EvidencePreCombat\x10\t*\x8f\x01\n" +
 	"\x12EvidenceConfidence\x12\x15\n" +
 	"\x11ConfidenceUnknown\x10\x00\x12\x14\n" +
 	"\x10ConfidenceDirect\x10\x01\x12\x1b\n" +

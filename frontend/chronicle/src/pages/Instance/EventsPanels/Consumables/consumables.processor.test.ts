@@ -264,6 +264,31 @@ describe("consumablesProcessor", () => {
     expect(use.observations[1].resourceType).toBe("Mana");
   });
 
+  it("classifies projected pre-combat evidence as a real use before the pull", () => {
+    const pullTime = 1700000000000;
+    const state = consumablesProcessor.createState();
+    consumablesProcessor.processEvent(
+      state,
+      consumeEvent({
+        kind: 9,
+        isProjection: true,
+        itemId: 13444,
+        consumedAtUnixMilli: pullTime - 5000,
+        observedAtUnixMilli: pullTime - 5000,
+      }),
+      "enc1",
+      new Date(pullTime),
+      "consume",
+      createContext(),
+    );
+
+    const use = state.uses.get("use-1")!;
+    expect(use.activeAtPullOnly).toBe(false);
+    expect(use.kinds).toEqual([9]);
+    expect(use.offsetMilli).toBe(-5000);
+    expect(use.dateMilli).toBe(pullTime - 5000);
+  });
+
   it("prefers the consumed timestamp for display time", () => {
     const state = process([
       consumeEvent({ consumeId: "u", evidenceId: "e1", kind: 7, confidence: 2, observedAtUnixMilli: 1700000100000 }),

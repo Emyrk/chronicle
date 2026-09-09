@@ -618,6 +618,7 @@ const (
 	EvidenceKindDamage       EvidenceKind = 6
 	EvidenceKindActiveAtPull EvidenceKind = 7
 	EvidenceKindCooldown     EvidenceKind = 8
+	EvidenceKindPreCombat    EvidenceKind = 9
 )
 
 // EvidenceConfidence describes how certain we are about the evidence.
@@ -649,7 +650,7 @@ type Consume struct {
 	ObservedAtUnixMs int64              // when the observation occurred
 	Amount           *int32             // heal/resource/damage amount
 	ResourceType     *string            // resource type string (matches ResourceChange)
-	IsProjection     bool               // true when projected from prior encounter
+	IsProjection     bool               // true when projected into an encounter
 }
 
 func (c Consume) Affects() []guid.GUID { return []guid.GUID{c.Player} }

@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/auras"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/google/uuid"
@@ -716,7 +717,7 @@ func TestInactiveFightCapturesDirectEpisodeParseWide(t *testing.T) {
 		Caster:      player,
 		SpellData:   testSpell(17538),
 	}
-	trk.Process(spellGo)
+	trk.Process(spellGo, false)
 
 	// No emission yet (not active).
 	assert.Empty(t, *emitted, "should not emit during inactive fight")
@@ -745,12 +746,89 @@ func TestInactiveFightCapturesDirectEpisodeParseWide(t *testing.T) {
 	require.Len(t, *emitted, 2, "should project direct and active-at-pull evidence")
 	assert.Equal(t, (*emitted)[0].ConsumeID, (*emitted)[1].ConsumeID)
 	assert.NotEqual(t, (*emitted)[0].EvidenceID, (*emitted)[1].EvidenceID)
-	assert.Equal(t, messages.EvidenceKindDirectItem, (*emitted)[0].Kind)
+	assert.Equal(t, messages.EvidenceKindPreCombat, (*emitted)[0].Kind)
 	assert.Equal(t, messages.EvidenceKindActiveAtPull, (*emitted)[1].Kind)
 	assert.True(t, (*emitted)[0].IsProjection)
 	assert.True(t, (*emitted)[1].IsProjection)
 	require.NotNil(t, (*emitted)[0].ConsumedAtUnixMs)
 	assert.Nil(t, (*emitted)[1].ConsumedAtUnixMs)
+}
+
+func TestPreCombatInstantProjectsIntoNextEncounterOnce(t *testing.T) {
+	t.Parallel()
+
+	tracker := NewTracker(newTestCatalog())
+	collector := NewCollector(auras.New(nil), tracker)
+	emitted := collectEmitted(collector)
+
+	player := testPlayerGUID()
+	consumeTime := time.Date(2024, 1, 1, 11, 59, 55, 0, time.UTC)
+	pullTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	tracker.Process(&messages.SpellGo{
+		MessageBase: messages.Base(consumeTime),
+		Caster:      player,
+		SpellData:   testSpell(17531),
+	}, false)
+
+	firstEncounter := uuid.New()
+	collector.FightStarted(firstEncounter, &messages.Damage{MessageBase: messages.Base(pullTime)})
+	require.NoError(t, collector.ProcessMessage(true, firstEncounter, &messages.Damage{MessageBase: messages.Base(pullTime)}))
+
+	require.Len(t, *emitted, 1)
+	preCombat := (*emitted)[0]
+	assert.Equal(t, messages.EvidenceKindPreCombat, preCombat.Kind)
+	assert.Equal(t, []int32{13444}, preCombat.CandidateItemIDs)
+	assert.True(t, preCombat.IsProjection)
+	require.NotNil(t, preCombat.ConsumedAtUnixMs)
+	assert.Equal(t, consumeTime.UnixMilli(), *preCombat.ConsumedAtUnixMs)
+
+	collector.FightEnded(firstEncounter, &messages.Damage{MessageBase: messages.Base(pullTime.Add(time.Minute))})
+	secondEncounter := uuid.New()
+	collector.FightStarted(secondEncounter, &messages.Damage{MessageBase: messages.Base(pullTime.Add(2 * time.Minute))})
+	require.NoError(t, collector.ProcessMessage(true, secondEncounter, &messages.Damage{MessageBase: messages.Base(pullTime.Add(2 * time.Minute))}))
+	assert.Len(t, *emitted, 1, "pre-combat evidence belongs only to the next encounter")
+}
+
+func TestPreCombatCastAndResourceShareOneConsume(t *testing.T) {
+	t.Parallel()
+
+	tracker := NewTracker(newTestCatalog())
+	collector := NewCollector(auras.New(nil), tracker)
+	emitted := collectEmitted(collector)
+
+	player := testPlayerGUID()
+	consumeTime := time.Date(2024, 1, 1, 11, 59, 55, 0, time.UTC)
+	spell := testSpell(17531)
+	tracker.Process(&messages.SpellGo{
+		MessageBase: messages.Base(consumeTime),
+		Caster:      player,
+		SpellData:   spell,
+	}, false)
+	tracker.Process(&messages.ResourceChange{
+		MessageBase:  messages.Base(consumeTime.Add(500 * time.Millisecond)),
+		Target:       player,
+		Amount:       1800,
+		OverResource: 200,
+		Resource:     types.ResourceMana,
+		Direction:    types.ChangeDirectionGain,
+		SpellData:    spell,
+	}, false)
+
+	pullTime := consumeTime.Add(5 * time.Second)
+	encounterID := uuid.New()
+	collector.FightStarted(encounterID, &messages.Damage{MessageBase: messages.Base(pullTime)})
+	require.NoError(t, collector.ProcessMessage(true, encounterID, &messages.Damage{MessageBase: messages.Base(pullTime)}))
+
+	require.Len(t, *emitted, 2)
+	assert.Equal(t, (*emitted)[0].ConsumeID, (*emitted)[1].ConsumeID)
+	assert.NotEqual(t, (*emitted)[0].EvidenceID, (*emitted)[1].EvidenceID)
+	for _, evidence := range *emitted {
+		assert.Equal(t, messages.EvidenceKindPreCombat, evidence.Kind)
+	}
+	require.NotNil(t, (*emitted)[1].Amount)
+	assert.Equal(t, int32(2000), *(*emitted)[1].Amount)
+	require.NotNil(t, (*emitted)[1].ResourceType)
+	assert.Equal(t, "Mana", *(*emitted)[1].ResourceType)
 }
 
 // TestResourceTypeStringRoundtrip verifies that ResourceType is an optional

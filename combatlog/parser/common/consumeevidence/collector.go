@@ -8,6 +8,7 @@
 //   - Aura-gain matching a known consumable buff (A2: EvidenceKindAura, ConfidenceEffectDerived)
 //   - Self-heal matching a known consumable use spell (EvidenceKindHeal)
 //   - Active-at-pull projection of consumable auras (EvidenceKindActiveAtPull)
+//   - Out-of-combat instant consumes assigned to the next encounter (EvidenceKindPreCombat)
 //
 // Design principles:
 //   - ConsumeID and EvidenceID are parse-wide stable and deterministic, including
@@ -414,8 +415,26 @@ func (c *Collector) Finalize(_ context.Context) error {
 // in the snapshot. Uses deterministic IDs derived from the original aura
 // episode so projected copies can be deduplicated.
 func (c *Collector) emitProjection(ts time.Time) {
-	if c.emit == nil || c.snapshot == nil {
+	if c.emit == nil {
 		c.snapshot = nil
+		return
+	}
+
+	// Assign every recognized out-of-combat instant consume to this encounter.
+	// Preserve source evidence IDs so a correlated active-aura projection can
+	// detect the same physical observation and avoid emitting it twice.
+	for _, source := range c.shared.DrainPreCombatEvidence() {
+		if c.isDuplicateEvidence(source.EvidenceID) {
+			continue
+		}
+		projected := *source
+		projected.MessageBase = messages.Base(ts, messages.WithSynthetic())
+		projected.Kind = messages.EvidenceKindPreCombat
+		projected.IsProjection = true
+		c.emitConsume(&projected)
+	}
+
+	if c.snapshot == nil {
 		return
 	}
 	catalog := c.shared.Catalog()

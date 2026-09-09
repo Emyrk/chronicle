@@ -62,6 +62,9 @@ interface ConfidenceBadgeConfig {
 /** Badge per display state: strongest confidence, with an "At Pull" override
  * when the use was never directly observed. */
 function badgeForUse(use: ConsumableUse): ConfidenceBadgeConfig {
+  if (use.kinds.includes(9)) {
+    return { color: "text-sky-400", bgColor: "bg-sky-500/15", label: "Pre-Combat" };
+  }
   if (use.activeAtPullOnly) {
     return { color: "text-sky-400", bgColor: "bg-sky-500/15", label: "At Pull" };
   }
@@ -338,7 +341,7 @@ function EvidenceDetails({ use, encounterNames }: { use: ConsumableUse; encounte
 // ============================================================================
 
 // ============================================================================
-// Pre-pull toggle
+// Pre-combat toggle
 // ============================================================================
 
 function PrePullToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
@@ -352,10 +355,10 @@ function PrePullToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () =
           ? "bg-sky-500/15 border-sky-400 text-sky-400"
           : "bg-red-500/10 border-red-500/60 text-red-400 line-through",
       )}
-      title={enabled ? "Hide uses only seen active at pull" : "Show uses only seen active at pull"}
+      title={enabled ? "Hide pre-combat uses" : "Show pre-combat uses"}
     >
       <Hourglass className="h-3 w-3" />
-      <span className="hidden sm:inline">Pre-Pull</span>
+      <span className="hidden sm:inline">Pre-Combat</span>
     </button>
   );
 }
@@ -416,7 +419,7 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
     if (!cachedResult) return [];
     return [...cachedResult.uses.values()]
       .map((use) => resolveConsumableUse(use, disambiguationMap))
-      .filter((use) => showPrePull || !use.activeAtPullOnly)
+      .filter((use) => showPrePull || !(use.activeAtPullOnly || use.kinds.includes(9) || use.offsetMilli < 0))
       .sort((a, b) => a.dateMilli - b.dateMilli);
   }, [cachedResult, showPrePull, disambiguationMap]);
 

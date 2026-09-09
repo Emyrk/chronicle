@@ -5709,7 +5709,7 @@ export interface ReusableConsume {
   candidateItemIds: number[];
   candidateItemIdsCount: number;
   spell: ReusableConsumeSpell;
-  kind: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8; // EvidenceKind enum
+  kind: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9; // EvidenceKind enum
   confidence: 0 | 1 | 2 | 3 | 4;          // EvidenceConfidence enum
   consumedAtUnixMilli: number | null;
   observedAtUnixMilli: number;
