@@ -294,11 +294,12 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		p, exists := players[m.PlayerGuid]
 		if !exists {
 			p = &instanceParsePlayerInfo{
-				name:   m.PlayerName,
-				class:  m.PlayerClass,
-				spec:   m.PlayerSpec,
-				role:   m.PlayerRole,
-				bosses: make(map[string]database.ListRankingsForInstanceRow),
+				name:    m.PlayerName,
+				class:   m.PlayerClass,
+				spec:    m.PlayerSpec,
+				subSpec: m.PlayerSubSpec,
+				role:    m.PlayerRole,
+				bosses:  make(map[string]database.ListRankingsForInstanceRow),
 			}
 			players[m.PlayerGuid] = p
 			playerOrder = append(playerOrder, m.PlayerGuid)
@@ -392,6 +393,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 						MaxPlayers:     memberRow.MaxPlayers,
 						PlayerClass:    memberRow.PlayerClass,
 						PlayerSpec:     playerSpec,
+						PlayerSubSpec:  playerSubSpec,
 					})
 					if cErr != nil {
 						logger.Error("failed to load cohort values",
@@ -519,11 +521,12 @@ func buildPersistedInstanceParsePlayers(
 		player, exists := players[ranking.PlayerGuid]
 		if !exists {
 			player = &instanceParsePlayerInfo{
-				name:   ranking.PlayerName,
-				class:  ranking.PlayerClass,
-				spec:   ranking.PlayerSpec,
-				role:   ranking.PlayerRole,
-				bosses: make(map[string]database.ListRankingsForInstanceRow),
+				name:    ranking.PlayerName,
+				class:   ranking.PlayerClass,
+				spec:    ranking.PlayerSpec,
+				subSpec: ranking.PlayerSubSpec,
+				role:    ranking.PlayerRole,
+				bosses:  make(map[string]database.ListRankingsForInstanceRow),
 			}
 			players[ranking.PlayerGuid] = player
 			playerOrder = append(playerOrder, ranking.PlayerGuid)

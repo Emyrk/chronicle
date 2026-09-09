@@ -242,6 +242,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 							PlayerName:     r.PlayerName,
 							PlayerClass:    r.PlayerClass,
 							PlayerSpec:     r.PlayerSpec,
+							PlayerSubSpec:  r.PlayerSubSpec,
 							PlayerRole:     r.PlayerRole,
 							Metric:         m.metric,
 							MetricValue:    m.value,
