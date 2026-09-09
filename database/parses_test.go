@@ -44,6 +44,7 @@ type rankingOpts struct {
 	playerGUID     string
 	playerClass    string
 	playerSpec     string
+	playerSubSpec  string
 	difficultyName string
 	maxPlayers     int16
 	damageDone     int64
@@ -127,6 +128,7 @@ func insertRankingRow(t *testing.T, pool *pgxpool.Pool, store database.Store, re
 		PlayerName:     "Player-" + opts.playerGUID,
 		PlayerClass:    opts.playerClass,
 		PlayerSpec:     opts.playerSpec,
+		PlayerSubSpec:  opts.playerSubSpec,
 		DifficultyName: opts.difficultyName,
 		MaxPlayers:     opts.maxPlayers,
 		RealmID:        realmID,
@@ -201,7 +203,7 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 		Ids:              []uuid.UUID{canonicalID, duplicateID},
 	}))
 
-	insertEncounterRanking := func(instanceID uuid.UUID, encounterName, playerClass, playerSpec string, healing int64, killedAt time.Time) {
+	insertEncounterRanking := func(instanceID uuid.UUID, encounterName, playerClass, playerSpec, playerSubSpec string, healing int64, killedAt time.Time) {
 		t.Helper()
 		encounterID := uuid.New()
 		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
@@ -217,7 +219,7 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
 			InstanceID:  instanceID, EncounterName: encounterName, InstanceName: "Molten Core",
 			PlayerGuid: "P-HEALER", PlayerName: "Healer", PlayerClass: playerClass,
-			PlayerSpec: playerSpec, PlayerRole: "heal", PlayerLevel: 60,
+			PlayerSpec: playerSpec, PlayerSubSpec: playerSubSpec, PlayerRole: "heal", PlayerLevel: 60,
 			DifficultyName: "", MaxPlayers: 40, RealmID: realmID, RealmName: "test-realm",
 			HealingDone: healing, DurationSecs: 10, Hps: hps,
 			KilledAt: database.Timestamptz(killedAt), LogHashedSlug: instanceID.String(),
@@ -226,11 +228,11 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 
 	// The group anchor is truncated before Ragnaros. The duplicate has the
 	// complete, internally consistent run and must be selected as representative.
-	insertEncounterRanking(canonicalID, "Lucifron", "PALADIN", "Holy", 100, baseTime)
-	insertEncounterRanking(canonicalID, "Magmadar", "PALADIN", "Holy", 100, baseTime.Add(time.Minute))
-	insertEncounterRanking(duplicateID, "Lucifron", "PRIEST", "Holy", 900, baseTime)
-	insertEncounterRanking(duplicateID, "Magmadar", "PRIEST", "Holy", 900, baseTime.Add(time.Minute))
-	insertEncounterRanking(duplicateID, "Ragnaros", "PRIEST", "Holy", 900, baseTime.Add(2*time.Minute))
+	insertEncounterRanking(canonicalID, "Lucifron", "PALADIN", "Holy", "", 100, baseTime)
+	insertEncounterRanking(canonicalID, "Magmadar", "PALADIN", "Holy", "", 100, baseTime.Add(time.Minute))
+	insertEncounterRanking(duplicateID, "Lucifron", "PRIEST", "Holy", "Bear", 900, baseTime)
+	insertEncounterRanking(duplicateID, "Magmadar", "PRIEST", "Holy", "Bear", 900, baseTime.Add(time.Minute))
+	insertEncounterRanking(duplicateID, "Ragnaros", "PRIEST", "Holy", "Bear", 900, baseTime.Add(2*time.Minute))
 
 	for _, params := range []database.RankingsLeaderboardParams{
 		{
@@ -244,6 +246,12 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 			EncounterNames: []string{"Lucifron", "Magmadar", "Ragnaros"},
 			Class:          "PRIEST",
 			Spec:           "Holy",
+		},
+		{
+			Metric: "hps", QueryLimit: 10,
+			InstanceNames:  []string{"Molten Core"},
+			EncounterNames: []string{"Lucifron", "Magmadar", "Ragnaros"},
+			SubSpec:        "Bear",
 		},
 	} {
 		rows, err := store.RankingsLeaderboard(ctx, params)
