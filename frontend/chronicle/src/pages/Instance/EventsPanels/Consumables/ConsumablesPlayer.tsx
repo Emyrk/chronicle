@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consumableDisambiguation";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
-import type { ConsumablesResult } from "./consumables.processor";
+import { isPreCombatUse, PRE_COMBAT_DESCRIPTION, type ConsumablesResult } from "./consumables.processor";
 import {
   aggregateConsumableGoldByPlayer,
   aggregateConsumablesLedger,
@@ -33,8 +33,10 @@ import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomi
 import { PlayerItemBreakout, type PlayerItemBreakoutData } from "./LedgerItemBreakout";
 import {
   AmbiguousSection,
+  ConsumableTimingFilter,
   LedgerFilterInput,
   LedgerRow,
+  TimingColumnHeaders,
   useFilteredUses,
   VIEW_ALL_TOKEN,
 } from "./LedgerShared";
@@ -183,7 +185,12 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
   // Filtering happens before any aggregation so the roster bars, header
   // totals, and combobox counts all react to the filter, not just the rows.
   const [filter, setFilter] = useState("");
-  const filteredUses = useFilteredUses(resolvedUses, filter);
+  const [showPreCombat, setShowPreCombat] = useState(false);
+  const timingFilteredUses = useMemo(
+    () => showPreCombat ? resolvedUses : resolvedUses.filter((use) => !isPreCombatUse(use)),
+    [resolvedUses, showPreCombat],
+  );
+  const filteredUses = useFilteredUses(timingFilteredUses, filter);
   const prices = useConsumablePrices(context.instance.id, resolvedUses);
 
   const usesByPlayer = useMemo(() => {
@@ -315,6 +322,8 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
     [filteredUses, selected?.guid, prices],
   );
 
+  const showTimingColumns = ledger.rows.some((row) => row.inCombatUses > 0) && ledger.rows.some((row) => row.preCombatUses > 0);
+
   const coverage = ledgerCoverage(ledger);
 
   const gapParts: string[] = [];
@@ -336,7 +345,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
     const key = `${selected.guid}:${itemId}`;
     const rect = target.getBoundingClientRect();
     const view = target.ownerDocument.defaultView;
-    const x = Math.max(8, Math.min(rect.right + 8, (view?.innerWidth ?? 640) - 340));
+    const x = Math.max(8, Math.min(rect.right + 8, (view?.innerWidth ?? 640) - 448));
     const y = Math.max(8, Math.min(rect.top, (view?.innerHeight ?? 480) - 200));
     setBreakouts((previous) =>
       previous.some((b) => b.key === key)
@@ -394,8 +403,16 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
         </div>
       ) : (
         <div className="flex h-full min-h-0 flex-col">
-          <div className="shrink-0 pb-2">
-            <LedgerFilterInput value={filter} onChange={setFilter} />
+          <div className="flex shrink-0 gap-2 pb-2">
+            <div className="min-w-0 flex-1">
+              <LedgerFilterInput value={filter} onChange={setFilter} />
+            </div>
+            <ConsumableTimingFilter
+              label="Pre-Combat"
+              description={PRE_COMBAT_DESCRIPTION}
+              enabled={showPreCombat}
+              onToggle={() => setShowPreCombat((shown) => !shown)}
+            />
           </div>
           <div
             className="flex shrink-0 items-center justify-between gap-2 px-2 pb-2"
@@ -537,6 +554,8 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
             </span>
           </div>
 
+          <TimingColumnHeaders show={showTimingColumns} showGold={coverage.showGold} />
+
           {ledger.totalUses === 0 ? (
             <div className="py-4 text-center text-xs text-muted-foreground">
               {loading
@@ -557,6 +576,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                     maxUses={ledger.maxUses}
                     subtitle={`${row.encounters} fight${row.encounters === 1 ? "" : "s"}`}
                     showGold={coverage.showGold}
+                    showTimingColumns={showTimingColumns}
                     onClick={(event) => toggleBreakout(row.itemId, event.currentTarget)}
                     selected={breakouts.some((b) => b.key === `${selected.guid}:${row.itemId}`)}
                   />

@@ -254,15 +254,15 @@ describe("aggregateConsumablesLedger", () => {
 });
 
 describe("aggregateItemBreakout", () => {
-  it("counts uses per player for one item, most uses first", () => {
+  it("counts in-combat, pre-combat, and total uses per player", () => {
     const rows = aggregateItemBreakout(
       [
         makeUse({ itemId: 13454, player: "p1" }),
         makeUse({ itemId: 13454, player: "p2" }),
-        makeUse({ itemId: 13454, player: "p2" }),
+        makeUse({ itemId: 13454, player: "p2", kinds: [9], offsetMilli: -5000 }),
         makeUse({ itemId: 9999, player: "p3" }),
         // Single candidate resolves to its item, so it counts too.
-        makeUse({ candidateItemIds: [13454], player: "p4" }),
+        makeUse({ candidateItemIds: [13454], player: "p4", kinds: [9], offsetMilli: -2000 }),
         // Multi-candidate stays ambiguous and is excluded.
         makeUse({ candidateItemIds: [13454, 9187], player: "p5" }),
       ],
@@ -270,9 +270,9 @@ describe("aggregateItemBreakout", () => {
     );
 
     expect(rows).toEqual([
-      { player: "p2", uses: 2 },
-      { player: "p1", uses: 1 },
-      { player: "p4", uses: 1 },
+      { player: "p2", inCombatUses: 1, preCombatUses: 1, uses: 2 },
+      { player: "p1", inCombatUses: 1, preCombatUses: 0, uses: 1 },
+      { player: "p4", inCombatUses: 0, preCombatUses: 1, uses: 1 },
     ]);
   });
 });
@@ -283,7 +283,7 @@ describe("aggregatePlayerItemEncounters", () => {
       [
         makeUse({ itemId: 13446, player: "p1", encounterID: "enc1", offsetMilli: 65_000 }),
         makeUse({ itemId: 13446, player: "p1", encounterID: "enc1", offsetMilli: 5_000 }),
-        makeUse({ itemId: 13446, player: "p1", encounterID: "enc2", offsetMilli: -2_000 }),
+        makeUse({ itemId: 13446, player: "p1", encounterID: "enc2", offsetMilli: -2_000, kinds: [9] }),
         makeUse({ itemId: 13446, player: "p1", encounterID: "enc3", offsetMilli: 1_000, activeAtPullOnly: true }),
         // Other players and other items are excluded.
         makeUse({ itemId: 13446, player: "p2", encounterID: "enc1" }),
@@ -297,12 +297,12 @@ describe("aggregatePlayerItemEncounters", () => {
       {
         encounterID: "enc1",
         uses: [
-          { offsetMilli: 5_000, prePull: false },
-          { offsetMilli: 65_000, prePull: false },
+          { offsetMilli: 5_000, prePull: false, preCombat: false },
+          { offsetMilli: 65_000, prePull: false, preCombat: false },
         ],
       },
-      { encounterID: "enc2", uses: [{ offsetMilli: -2_000, prePull: true }] },
-      { encounterID: "enc3", uses: [{ offsetMilli: 1_000, prePull: true }] },
+      { encounterID: "enc2", uses: [{ offsetMilli: -2_000, prePull: true, preCombat: true }] },
+      { encounterID: "enc3", uses: [{ offsetMilli: 1_000, prePull: true, preCombat: false }] },
     ]);
   });
 });

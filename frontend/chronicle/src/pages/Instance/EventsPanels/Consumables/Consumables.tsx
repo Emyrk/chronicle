@@ -19,6 +19,8 @@ export function createConsumablesPanel(): PanelDefinition<ConsumablesResult, any
     icon: <FlaskConical className="h-4 w-4" />,
     checkboxLabel: "Encounter offset",
     supportsFiltering: true,
+    // Timing badges only change which completed uses are rendered.
+    renderOnlyOptionTokens: ["pc:", "pp:", "bc:", "t:"],
     defaultFilters: [
       // Non-players (e.g. NPCs drinking potions) are excluded by default.
       { type: "source_type" as const, value: ["player"], applyTo: ["consume"] },

@@ -15,7 +15,7 @@
  * ambiguous bucket.
  */
 
-import type { ConsumableUse } from "./consumables.processor";
+import { isPreCombatUse, type ConsumableUse } from "./consumables.processor";
 import { itemIdentity } from "./consumablesTotalLogic";
 
 /** Unit prices in copper, keyed by item ID. Empty until price data exists. */
@@ -28,6 +28,8 @@ export interface LedgerItemRow {
   key: string;
   itemId: number;
   uses: number;
+  inCombatUses: number;
+  preCombatUses: number;
   /** Distinct players that used the item. */
   users: number;
   /** Distinct encounters the item was seen in. */
@@ -93,6 +95,8 @@ export function aggregateConsumablesLedger(
     spellId: number | null;
     spellName: string;
     uses: number;
+    inCombatUses: number;
+    preCombatUses: number;
     players: Set<string>;
     encounters: Set<string>;
   }
@@ -108,12 +112,16 @@ export function aggregateConsumablesLedger(
         spellId: use.spellId,
         spellName: use.spellName,
         uses: 0,
+        inCombatUses: 0,
+        preCombatUses: 0,
         players: new Set(),
         encounters: new Set(),
       };
       buckets.set(identity.key, bucket);
     }
     bucket.uses += 1;
+    if (isPreCombatUse(use)) bucket.preCombatUses += 1;
+    else bucket.inCombatUses += 1;
     bucket.players.add(use.player);
     bucket.encounters.add(use.encounterID);
     if (!bucket.spellName && use.spellName) {
@@ -131,6 +139,8 @@ export function aggregateConsumablesLedger(
         key,
         itemId: bucket.itemId,
         uses: bucket.uses,
+        inCombatUses: bucket.inCombatUses,
+        preCombatUses: bucket.preCombatUses,
         users: bucket.players.size,
         encounters: bucket.encounters.size,
         unitCopper,
@@ -202,6 +212,8 @@ export function classAbbreviation(cls: string | undefined): string {
 
 export interface ItemBreakoutCount {
   player: string;
+  inCombatUses: number;
+  preCombatUses: number;
   uses: number;
 }
 
@@ -214,13 +226,20 @@ export function aggregateItemBreakout(
   uses: Iterable<ConsumableUse>,
   itemId: number,
 ): ItemBreakoutCount[] {
-  const counts = new Map<string, number>();
+  const counts = new Map<string, { inCombatUses: number; preCombatUses: number }>();
   for (const use of uses) {
     if (itemIdentity(use).itemId !== itemId) continue;
-    counts.set(use.player, (counts.get(use.player) ?? 0) + 1);
+    const count = counts.get(use.player) ?? { inCombatUses: 0, preCombatUses: 0 };
+    if (isPreCombatUse(use)) count.preCombatUses += 1;
+    else count.inCombatUses += 1;
+    counts.set(use.player, count);
   }
   return [...counts.entries()]
-    .map(([player, count]) => ({ player, uses: count }))
+    .map(([player, count]) => ({
+      player,
+      ...count,
+      uses: count.inCombatUses + count.preCombatUses,
+    }))
     .sort((a, b) => b.uses - a.uses || a.player.localeCompare(b.player));
 }
 
@@ -228,6 +247,8 @@ export interface PlayerItemUse {
   offsetMilli: number;
   /** Only ever seen as an already-active pre-pull buff (or before the pull). */
   prePull: boolean;
+  /** Directly observed outside combat and assigned to this encounter. */
+  preCombat?: boolean;
 }
 
 export interface PlayerItemEncounterRow {
@@ -256,6 +277,7 @@ export function aggregatePlayerItemEncounters(
     row.uses.push({
       offsetMilli: use.offsetMilli,
       prePull: use.activeAtPullOnly || use.offsetMilli < 0,
+      preCombat: isPreCombatUse(use),
     });
   }
   for (const row of rows.values()) {

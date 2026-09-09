@@ -9,7 +9,7 @@ import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consum
 import { GenericPanel } from "../GenericPanel";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import type { PanelDefinition, PanelRenderProps } from "../types";
-import { consumablesLedgerProcessor, type ConsumablesResult } from "./consumables.processor";
+import { consumablesLedgerProcessor, isPreCombatUse, PRE_COMBAT_DESCRIPTION, type ConsumablesResult } from "./consumables.processor";
 import { ConsumablesPlayerContent } from "./ConsumablesPlayer";
 import {
   aggregateConsumablesLedger,
@@ -23,9 +23,11 @@ import { useConsumablePrices } from "./useConsumablePrices";
 import { LedgerItemBreakout, type LedgerItemBreakoutData } from "./LedgerItemBreakout";
 import {
   AmbiguousSection,
+  ConsumableTimingFilter,
   CoverageLine,
   LedgerFilterInput,
   LedgerRow,
+  TimingColumnHeaders,
   panelOptionTokens,
   togglePanelOptionFlag,
   useFilteredUses,
@@ -86,13 +88,20 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
   // Filtering happens before aggregation so the header totals, coverage
   // line, and bar scale all react to the filter, not just the row list.
   const [filter, setFilter] = useState("");
-  const filteredUses = useFilteredUses(resolvedUses, filter);
+  const [showPreCombat, setShowPreCombat] = useState(false);
+  const timingFilteredUses = useMemo(
+    () => showPreCombat ? resolvedUses : resolvedUses.filter((use) => !isPreCombatUse(use)),
+    [resolvedUses, showPreCombat],
+  );
+  const filteredUses = useFilteredUses(timingFilteredUses, filter);
   const prices = useConsumablePrices(context.instance.id, resolvedUses);
 
   const ledger = useMemo(
     () => aggregateConsumablesLedger(filteredUses, prices),
     [filteredUses, prices],
   );
+
+  const showTimingColumns = ledger.rows.some((row) => row.inCombatUses > 0) && ledger.rows.some((row) => row.preCombatUses > 0);
 
   const coverage = ledgerCoverage(ledger);
 
@@ -102,7 +111,7 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
   const toggleBreakout = (itemId: number, target: HTMLElement) => {
     const rect = target.getBoundingClientRect();
     const view = target.ownerDocument.defaultView;
-    const x = Math.max(8, Math.min(rect.right + 8, (view?.innerWidth ?? 640) - 340));
+    const x = Math.max(8, Math.min(rect.right + 8, (view?.innerWidth ?? 640) - 448));
     const y = Math.max(8, Math.min(rect.top, (view?.innerHeight ?? 480) - 200));
     setBreakouts((previous) =>
       previous.some((b) => b.itemId === itemId)
@@ -125,9 +134,16 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
       const ledgerRow = ledger.rows.find((row) => row.itemId === breakout.itemId);
       if (!ledgerRow) return [];
 
-      const rows = aggregateItemBreakout(resolvedUses, breakout.itemId).map((count) => {
+      const rows = aggregateItemBreakout(filteredUses, breakout.itemId).map((count) => {
         const player = players[count.player];
-        return { guid: count.player, name: player?.name ?? count.player, cls: player?.class, uses: count.uses };
+        return {
+          guid: count.player,
+          name: player?.name ?? count.player,
+          cls: player?.class,
+          inCombatUses: count.inCombatUses,
+          preCombatUses: count.preCombatUses,
+          uses: count.uses,
+        };
       });
       // Most uses first, ties by name now that names are known.
       rows.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
@@ -136,7 +152,14 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
       const userGuids = new Set(rows.map((row) => row.guid));
       const nonUsers = Object.entries(players)
         .filter(([guid]) => !userGuids.has(guid))
-        .map(([guid, player]) => ({ guid, name: player.name ?? guid, cls: player.class, uses: 0 }))
+        .map(([guid, player]) => ({
+          guid,
+          name: player.name ?? guid,
+          cls: player.class,
+          inCombatUses: 0,
+          preCombatUses: 0,
+          uses: 0,
+        }))
         .sort(
           (a, b) =>
             classRank(a.cls) - classRank(b.cls) ||
@@ -163,7 +186,7 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
         classes,
       }];
     });
-  }, [breakouts, ledger.rows, resolvedUses, context.instance.players, coverage.showGold]);
+  }, [breakouts, ledger.rows, filteredUses, context.instance.players, coverage.showGold]);
 
   const effectiveProps = {
     ...props,
@@ -183,7 +206,17 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
             className="flex h-full min-h-0 flex-col gap-2"
             data-lesson-target="raid-wide-consumables"
           >
-            <LedgerFilterInput value={filter} onChange={setFilter} />
+            <div className="flex shrink-0 gap-2">
+              <div className="min-w-0 flex-1">
+                <LedgerFilterInput value={filter} onChange={setFilter} />
+              </div>
+              <ConsumableTimingFilter
+                label="Pre-Combat"
+                description={PRE_COMBAT_DESCRIPTION}
+                enabled={showPreCombat}
+                onToggle={() => setShowPreCombat((shown) => !shown)}
+              />
+            </div>
             <div
               className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2 pb-2"
               data-demo-consumables-raid-summary
@@ -196,6 +229,8 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
                 {coverage.showGold && <CoinAmount copper={ledger.totalCopper} className="text-xs" />}
               </div>
             </div>
+
+            <TimingColumnHeaders show={showTimingColumns} showGold={coverage.showGold} />
 
             <ScrollArea className="min-h-0 flex-1">
               {/* Right gutter so rows don't sit under the overlay scrollbar. */}
@@ -214,6 +249,7 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
                         maxUses={ledger.maxUses}
                         subtitle={`${row.users} player${row.users === 1 ? "" : "s"}`}
                         showGold={coverage.showGold}
+                        showTimingColumns={showTimingColumns}
                         onClick={(event) => toggleBreakout(row.itemId, event.currentTarget)}
                         selected={breakouts.some((b) => b.itemId === row.itemId)}
                       />
