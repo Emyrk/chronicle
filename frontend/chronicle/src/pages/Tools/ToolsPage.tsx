@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen } from "lucide-react"
+import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch } from "lucide-react"
 
 const faq = [
   {
@@ -13,6 +13,12 @@ const faq = [
     description: "Learn how Chronicle measures boss time, full raid time, and qualification.",
     to: "/speedrunning",
     icon: <Timer className="h-6 w-6" />,
+  },
+  {
+    name: "Subspecs",
+    description: "See how talent builds are divided into specialized ranking and parse cohorts.",
+    to: "/subspecs",
+    icon: <GitBranch className="h-6 w-6" />,
   },
   {
     name: "Class details",
