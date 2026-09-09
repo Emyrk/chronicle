@@ -11602,15 +11602,31 @@ func (q *sqlQuerier) RankingsKillTimeStats(ctx context.Context, arg RankingsKill
 }
 
 const rankingsLeaderboard = `-- name: RankingsLeaderboard :many
-WITH representative_instances AS (
+WITH candidate_runs AS (
+    -- Class/spec/role filters usually narrow the leaderboard to a small fraction
+    -- of raid logs. Find those duplicate groups first so representative selection
+    -- does not calculate boss coverage for every matching instance ever uploaded.
+    SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM encounter_dps_rankings candidate
+    JOIN log_instances li ON li.id = candidate.instance_id
+    WHERE ($4 :: text != '' OR $5 :: text != '' OR $6 :: text != '')
+      AND (cardinality($7 :: text[]) = 0
+           OR candidate.instance_name = ANY($7 :: text[]))
+      AND ($4 :: text = '' OR candidate.player_class = $4)
+      AND ($5 :: text = '' OR candidate.player_spec = $5)
+      AND ($6 :: text = '' OR candidate.player_role = $6)
+),
+representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
-    -- Avoid calculating boss coverage for unrelated instances. The leaderboard
-    -- filters the ranking rows by this same denormalized instance name below.
-    WHERE cardinality($4 :: text[]) = 0
-       OR li.name = ANY($4 :: text[])
+    -- Avoid calculating boss coverage for unrelated instances and, when a
+    -- player archetype is selected, duplicate groups that cannot contribute.
+    WHERE (cardinality($7 :: text[]) = 0
+           OR li.name = ANY($7 :: text[]))
+      AND (($4 :: text = '' AND $5 :: text = '' AND $6 :: text = '')
+           OR COALESCE(li.duplicate_group_id, li.id) IN (SELECT run_id FROM candidate_runs))
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -11652,27 +11668,27 @@ deduped AS (
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
     WHERE CASE
-        WHEN cardinality($4 :: text[]) > 0 THEN edr.instance_name = ANY($4 :: text[])
+        WHEN cardinality($7 :: text[]) > 0 THEN edr.instance_name = ANY($7 :: text[])
         ELSE true
     END
     AND CASE
-        WHEN cardinality($5 :: text[]) > 0 THEN edr.encounter_name = ANY($5 :: text[])
+        WHEN cardinality($8 :: text[]) > 0 THEN edr.encounter_name = ANY($8 :: text[])
         ELSE true
     END
     AND CASE
-        WHEN cardinality($6 :: text[]) > 0 THEN edr.realm_name = ANY($6 :: text[])
+        WHEN cardinality($9 :: text[]) > 0 THEN edr.realm_name = ANY($9 :: text[])
         ELSE true
     END
     AND CASE
-        WHEN $7 :: text != '' THEN edr.player_class = $7
+        WHEN $4 :: text != '' THEN edr.player_class = $4
         ELSE true
     END
     AND CASE
-        WHEN $8 :: text != '' THEN edr.player_spec = $8
+        WHEN $5 :: text != '' THEN edr.player_spec = $5
         ELSE true
     END
     AND CASE
-        WHEN $9 :: text != '' THEN edr.player_role = $9
+        WHEN $6 :: text != '' THEN edr.player_role = $6
         ELSE true
     END
     AND CASE
@@ -11776,12 +11792,12 @@ type RankingsLeaderboardParams struct {
 	Metric           string   `db:"metric" json:"metric"`
 	QueryOffset      int64    `db:"query_offset" json:"query_offset"`
 	QueryLimit       int64    `db:"query_limit" json:"query_limit"`
-	InstanceNames    []string `db:"instance_names" json:"instance_names"`
-	EncounterNames   []string `db:"encounter_names" json:"encounter_names"`
-	RealmNames       []string `db:"realm_names" json:"realm_names"`
 	Class            string   `db:"class" json:"class"`
 	Spec             string   `db:"spec" json:"spec"`
 	Role             string   `db:"role" json:"role"`
+	InstanceNames    []string `db:"instance_names" json:"instance_names"`
+	EncounterNames   []string `db:"encounter_names" json:"encounter_names"`
+	RealmNames       []string `db:"realm_names" json:"realm_names"`
 	SinceDays        int64    `db:"since_days" json:"since_days"`
 	HideUnknowns     bool     `db:"hide_unknowns" json:"hide_unknowns"`
 	DifficultyNames  []string `db:"difficulty_names" json:"difficulty_names"`
@@ -11831,12 +11847,12 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 		arg.Metric,
 		arg.QueryOffset,
 		arg.QueryLimit,
-		arg.InstanceNames,
-		arg.EncounterNames,
-		arg.RealmNames,
 		arg.Class,
 		arg.Spec,
 		arg.Role,
+		arg.InstanceNames,
+		arg.EncounterNames,
+		arg.RealmNames,
 		arg.SinceDays,
 		arg.HideUnknowns,
 		arg.DifficultyNames,
