@@ -92,6 +92,7 @@ import { APIExplorer } from "./pages/APIExplorer/APIExplorer"
 import { ToolsPage } from "./pages/Tools/ToolsPage"
 import { SpeedrunningPage } from "./pages/Speedrunning/SpeedrunningPage"
 import { ClassDetailsPage } from "./pages/ClassDetails/ClassDetailsPage"
+import { SubspecsPage } from "./pages/Subspecs/SubspecsPage"
 import { Layout } from "./components/Layout/Layout"
 import { TenantDatasetLayout } from "./components/Layout/TenantDatasetLayout"
 
@@ -209,6 +210,7 @@ function App() {
         <Route path="/parsing" element={<ParsingPage />} />
         <Route path="/parsing/cohorts" element={<CohortViewerPage />} />
         <Route path="/speedrunning" element={<SpeedrunningPage />} />
+        <Route path="/subspecs" element={<SubspecsPage />} />
         <Route path="/class-details" element={<ClassDetailsPage />} />
         <Route path="/g/:guildId" element={<GuildPage />} />
         <Route path="/g/:guildId/:tabSlug" element={<GuildPage />} />
