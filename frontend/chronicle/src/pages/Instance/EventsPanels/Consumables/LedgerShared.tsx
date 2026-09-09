@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { fetchItemTooltip } from "@/api/gamedata";
 import { useSpell } from "@/api/queries";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { cn } from "@/lib/utils";
 import type { ConsumableUse } from "./consumables.processor";
@@ -100,6 +101,39 @@ export function useFilteredUses(uses: ConsumableUse[], filter: string): Consumab
   });
 }
 
+export function ConsumableTimingFilter({
+  label,
+  description,
+  enabled,
+  onToggle,
+}: {
+  label: string;
+  description: string;
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <HintTooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-pressed={enabled}
+          className={cn(
+            "h-7 shrink-0 cursor-pointer whitespace-nowrap rounded border px-2 text-2xs font-medium transition-colors",
+            enabled
+              ? "border-sky-400 bg-sky-500/15 text-sky-400"
+              : "border-border bg-background/70 text-muted-foreground line-through hover:border-border/80 hover:text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64">{description}</TooltipContent>
+    </HintTooltip>
+  );
+}
+
 export function LedgerFilterInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
     <label className="relative block shrink-0" data-demo-consumables-search>
@@ -173,11 +207,26 @@ export function GoldCell({ totalCopper, unitCopper }: { totalCopper: number | nu
   );
 }
 
+export function TimingColumnHeaders({ show, showGold }: { show: boolean; showGold: boolean }) {
+  if (!show) return null;
+  return (
+    <div className="flex shrink-0 items-center gap-2.5 px-2 pt-1 text-2xs font-medium text-muted-foreground">
+      <span className="min-w-0 flex-1" />
+      <div className="grid w-32 shrink-0 grid-cols-2 gap-3 text-right">
+        <span className="whitespace-nowrap">In Combat</span>
+        <span className="whitespace-nowrap">Pre-Combat</span>
+      </div>
+      {showGold && <span className="w-16 shrink-0" />}
+    </div>
+  );
+}
+
 export function LedgerRow({
   row,
   maxUses,
   subtitle,
   showGold,
+  showTimingColumns = false,
   onClick,
   selected = false,
 }: {
@@ -186,6 +235,7 @@ export function LedgerRow({
   /** Under-bar fact: "N players" at raid scope, "N fights" at player scope. */
   subtitle: string;
   showGold: boolean;
+  showTimingColumns?: boolean;
   /** When set, the row is clickable (opens the item breakout). */
   onClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
   selected?: boolean;
@@ -206,7 +256,14 @@ export function LedgerRow({
           <div className="min-w-0 flex-1 text-xs">
             <ItemCell itemId={row.itemId} link newTab />
           </div>
-          <span className="shrink-0 font-mono text-xs text-foreground">{row.uses}×</span>
+          {showTimingColumns ? (
+            <div className="grid w-32 shrink-0 grid-cols-2 gap-3 text-right font-mono text-xs text-foreground">
+              <span>{row.inCombatUses}×</span>
+              <span>{row.preCombatUses}×</span>
+            </div>
+          ) : (
+            <span className="shrink-0 font-mono text-xs text-foreground">{row.uses}×</span>
+          )}
         </div>
         <UsesBar fraction={maxUses > 0 ? row.uses / maxUses : 0} subtitle={subtitle} />
       </div>

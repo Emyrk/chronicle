@@ -99,6 +99,19 @@ export const CONFIDENCE_LABELS: Record<number, string> = {
   4: "Inferred",
 };
 
+export const PRE_COMBAT_DESCRIPTION = "Used outside combat and has no auras or effects that persist into combat.";
+export const PRE_POT_DESCRIPTION = "A consumable effect that persists into combat through an aura already active at pull.";
+
+/** Directly observed outside combat and assigned to the following encounter. */
+export function isPreCombatUse(use: ConsumableUse): boolean {
+  return use.kinds.includes(9);
+}
+
+/** Consumable effect that was already active when the encounter started. */
+export function isPrePotUse(use: ConsumableUse): boolean {
+  return use.activeAtPullOnly;
+}
+
 /** Display name for a use: spell name, else item placeholder. */
 export function consumableDisplayName(use: ConsumableUse): string {
   if (use.spellName) return use.spellName;

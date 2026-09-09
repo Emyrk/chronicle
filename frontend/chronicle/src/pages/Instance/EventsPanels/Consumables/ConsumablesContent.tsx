@@ -25,9 +25,14 @@ import {
   CONFIDENCE_LABELS,
   consumableDisplayName,
   EVIDENCE_KIND_LABELS,
+  isPreCombatUse,
+  isPrePotUse,
+  PRE_COMBAT_DESCRIPTION,
+  PRE_POT_DESCRIPTION,
   type ConsumableUse,
   type ConsumablesResult,
 } from "./consumables.processor";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { buildConsumablesTokens, parseConsumablesTokens } from "./consumablesTokens";
 import { paginateConsumables } from "./consumablesPagination";
@@ -58,16 +63,17 @@ interface ConfidenceBadgeConfig {
   color: string;
   bgColor: string;
   label: string;
+  description?: string;
 }
 
 /** Badge per display state: strongest confidence, with an "At Pull" override
  * when the use was never directly observed. */
 function badgeForUse(use: ConsumableUse): ConfidenceBadgeConfig {
   if (use.kinds.includes(9)) {
-    return { color: "text-sky-400", bgColor: "bg-sky-500/15", label: "Pre-Combat" };
+    return { color: "text-sky-400", bgColor: "bg-sky-500/15", label: "Pre-Combat", description: PRE_COMBAT_DESCRIPTION };
   }
   if (use.activeAtPullOnly) {
-    return { color: "text-sky-400", bgColor: "bg-sky-500/15", label: "At Pull" };
+    return { color: "text-sky-400", bgColor: "bg-sky-500/15", label: "At Pull", description: PRE_POT_DESCRIPTION };
   }
   switch (use.bestConfidence) {
     case 1:
@@ -85,10 +91,17 @@ function badgeForUse(use: ConsumableUse): ConfidenceBadgeConfig {
 
 function ConfidenceBadge({ use }: { use: ConsumableUse }) {
   const config = badgeForUse(use);
-  return (
-    <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium", config.bgColor, config.color)}>
+  const badge = (
+    <span className={cn("inline-flex items-center whitespace-nowrap px-1.5 py-0.5 rounded text-2xs font-medium", config.bgColor, config.color)}>
       {config.label}
     </span>
+  );
+  if (!config.description) return badge;
+  return (
+    <HintTooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent className="max-w-64">{config.description}</TooltipContent>
+    </HintTooltip>
   );
 }
 
@@ -342,25 +355,40 @@ function EvidenceDetails({ use, encounterNames }: { use: ConsumableUse; encounte
 // ============================================================================
 
 // ============================================================================
-// Pre-combat toggle
+// Pre-encounter timing filters
 // ============================================================================
 
-function PrePullToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+function TimingToggle({
+  label,
+  description,
+  enabled,
+  onToggle,
+}: {
+  label: string;
+  description: string;
+  enabled: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={cn(
-        "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all cursor-pointer border",
-        enabled
-          ? "bg-sky-500/15 border-sky-400 text-sky-400"
-          : "bg-red-500/10 border-red-500/60 text-red-400 line-through",
-      )}
-      title={enabled ? "Hide pre-combat uses" : "Show pre-combat uses"}
-    >
-      <Hourglass className="h-3 w-3" />
-      <span className="hidden sm:inline">Pre-Combat</span>
-    </button>
+    <HintTooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-pressed={enabled}
+          className={cn(
+            "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all cursor-pointer border",
+            enabled
+              ? "bg-sky-500/15 border-sky-400 text-sky-400"
+              : "bg-red-500/10 border-red-500/60 text-red-400 line-through",
+          )}
+        >
+          <Hourglass className="h-3 w-3" />
+          <span className="hidden sm:inline">{label}</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64">{description}</TooltipContent>
+    </HintTooltip>
   );
 }
 
@@ -372,11 +400,11 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
   // Initialize from the persisted panelOption (mount-only).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const initial = useMemo(() => parseConsumablesTokens(panelOption), []);
-  const [showPrePull, setShowPrePull] = useState(initial.showPrePull);
+  const [timingFilters, setTimingFilters] = useState(initial);
 
-  const togglePrePull = useCallback(() => {
-    setShowPrePull((prev) => {
-      const next = !prev;
+  const toggleTimingFilter = useCallback((key: "showPreCombat" | "showPrePot") => {
+    setTimingFilters((previous) => {
+      const next = { ...previous, [key]: !previous[key] };
       setPanelOption?.(buildConsumablesTokens(panelOption, next));
       return next;
     });
@@ -420,9 +448,10 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
     if (!cachedResult) return [];
     return [...cachedResult.uses.values()]
       .map((use) => resolveConsumableUse(use, disambiguationMap))
-      .filter((use) => showPrePull || !(use.activeAtPullOnly || use.kinds.includes(9) || use.offsetMilli < 0))
+      .filter((use) => timingFilters.showPreCombat || !isPreCombatUse(use))
+      .filter((use) => timingFilters.showPrePot || !isPrePotUse(use))
       .sort((a, b) => a.dateMilli - b.dateMilli);
-  }, [cachedResult, showPrePull, disambiguationMap]);
+  }, [cachedResult, timingFilters, disambiguationMap]);
 
   // This log can contain thousands of rows. Keep the mounted table bounded so
   // unrelated React updates do not repeatedly traverse and paint the full log.
@@ -487,13 +516,24 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
                 </button>
               </div>
             )}
-            <PrePullToggle enabled={showPrePull} onToggle={togglePrePull} />
+            <TimingToggle
+              label="Pre-Combat"
+              description={PRE_COMBAT_DESCRIPTION}
+              enabled={timingFilters.showPreCombat}
+              onToggle={() => toggleTimingFilter("showPreCombat")}
+            />
+            <TimingToggle
+              label="Pre-Pot"
+              description={PRE_POT_DESCRIPTION}
+              enabled={timingFilters.showPrePot}
+              onToggle={() => toggleTimingFilter("showPrePot")}
+            />
           </div>
         </div>
 
         {sortedUses.length === 0 ? (
           <div className="text-xs text-muted-foreground py-4 text-center">
-            {loading ? "Loading..." : "No consumable uses recorded"}
+            {loading || props.processing ? "Loading..." : "No consumable uses recorded"}
           </div>
         ) : (
           <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">

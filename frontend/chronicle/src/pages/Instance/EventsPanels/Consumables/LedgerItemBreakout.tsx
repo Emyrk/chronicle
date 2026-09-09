@@ -19,6 +19,8 @@ export interface BreakoutPlayerRow {
   guid: string;
   name: string;
   cls: string | undefined;
+  inCombatUses: number;
+  preCombatUses: number;
   uses: number;
 }
 
@@ -54,7 +56,7 @@ export function PlayerItemBreakout({ data, onClose }: { data: PlayerItemBreakout
   const totalUses = data.rows.reduce((sum, row) => sum + row.uses.length, 0);
   const fightRows = summarizePlayerItemFights(data.rows);
   return (
-    <div className="w-80 overflow-hidden rounded-lg border border-amber-500/25 bg-card shadow-2xl">
+    <div className="w-[28rem] overflow-hidden rounded-lg border border-amber-500/25 bg-card shadow-2xl">
       <div className="flex cursor-grab items-center gap-2 border-b border-border bg-muted/30 px-3 py-2" data-drag-handle>
         <div className="min-w-0 flex-1">
           <div className="text-xs">
@@ -76,17 +78,36 @@ export function PlayerItemBreakout({ data, onClose }: { data: PlayerItemBreakout
         </button>
       </div>
 
+      <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1.5 text-2xs font-medium text-muted-foreground">
+        <span className="min-w-0 flex-1">Fight</span>
+        <div className="grid w-44 shrink-0 grid-cols-3 gap-3 text-right">
+          <span className="whitespace-nowrap">In Combat</span>
+          <span className="whitespace-nowrap">Pre-Combat</span>
+          <span>Total</span>
+        </div>
+      </div>
+
       <div className="max-h-[var(--incoming-events-body-height)] overflow-y-auto py-1.5 styled-scrollbar">
-        {fightRows.map((row) => (
-          <div key={row.key} className="flex items-baseline gap-2 px-3 py-1">
-            <span className="min-w-0 flex-1 truncate text-xs text-foreground/80">
-              {row.label}
-            </span>
-            <span className="w-6 shrink-0 text-right font-mono text-xs text-foreground">
-              {row.uses.length}×
-            </span>
-          </div>
-        ))}
+        {fightRows.map((row) => {
+          const preCombatUses = row.uses.filter((use) => use.preCombat).length;
+          const inCombatUses = row.uses.length - preCombatUses;
+          return (
+            <div key={row.key} className="flex items-baseline gap-2 px-3 py-1">
+              <span className="min-w-0 flex-1 truncate text-xs text-foreground/80">
+                {row.label}
+              </span>
+              <div className="grid w-44 shrink-0 grid-cols-3 gap-3 text-right font-mono text-xs">
+                <span className={inCombatUses > 0 ? "text-foreground" : "text-muted-foreground/40"}>
+                  {inCombatUses}×
+                </span>
+                <span className={preCombatUses > 0 ? "text-foreground" : "text-muted-foreground/40"}>
+                  {preCombatUses}×
+                </span>
+                <span className="text-foreground">{row.uses.length}×</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -95,10 +116,13 @@ export function PlayerItemBreakout({ data, onClose }: { data: PlayerItemBreakout
 export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakoutData; onClose: () => void }) {
   const totalUses = data.rows.reduce((sum, row) => sum + row.uses, 0);
   const repeats = totalUses - data.rows.length;
+  const inCombatUses = data.rows.reduce((sum, row) => sum + row.inCombatUses, 0);
+  const preCombatUses = data.rows.reduce((sum, row) => sum + row.preCombatUses, 0);
+  const showTimingColumns = inCombatUses > 0 && preCombatUses > 0;
   const maxUses = Math.max(1, ...data.rows.map((row) => row.uses));
 
   return (
-    <div className="w-80 overflow-hidden rounded-lg border border-amber-500/25 bg-card shadow-2xl">
+    <div className="w-[28rem] overflow-hidden rounded-lg border border-amber-500/25 bg-card shadow-2xl">
       <div className="flex cursor-grab items-center gap-2 border-b border-border bg-muted/30 px-3 py-2" data-drag-handle>
         <div className="min-w-0 flex-1">
           <div className="text-xs">
@@ -174,6 +198,20 @@ export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakout
         ))}
       </div>
 
+      {showTimingColumns && (
+        <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1.5 text-2xs font-medium text-muted-foreground">
+          <span className="w-0.5 shrink-0" />
+          <span className="w-24 shrink-0">Player</span>
+          <span className="min-w-0 flex-1" />
+          <div className="grid w-44 shrink-0 grid-cols-3 gap-3 text-right">
+            <span className="whitespace-nowrap">In Combat</span>
+            <span className="whitespace-nowrap">Pre-Combat</span>
+            <span>Total</span>
+          </div>
+          {data.showGold && <span className="w-11 shrink-0 text-right">Cost</span>}
+        </div>
+      )}
+
       <div className="max-h-[var(--incoming-events-body-height)] overflow-y-auto py-1.5 styled-scrollbar">
         {data.rows.map((row) => (
           <div
@@ -189,14 +227,23 @@ export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakout
                 style={{ width: `${(row.uses / maxUses) * 100}%`, background: classColor(row.cls) }}
               />
             </div>
-            <span
-              className={cn(
-                "w-6 shrink-0 text-right font-mono text-xs",
-                row.uses > 1 ? "text-foreground" : "text-muted-foreground/60",
-              )}
-            >
-              {row.uses}×
-            </span>
+            {showTimingColumns ? (
+              <div className="grid w-44 shrink-0 grid-cols-3 gap-3 text-right font-mono text-xs">
+                <span className={row.inCombatUses > 0 ? "text-foreground" : "text-muted-foreground/40"}>
+                  {row.inCombatUses}×
+                </span>
+                <span className={row.preCombatUses > 0 ? "text-foreground" : "text-muted-foreground/40"}>
+                  {row.preCombatUses}×
+                </span>
+                <span className={cn(row.uses > 1 ? "text-foreground" : "text-muted-foreground/60")}>
+                  {row.uses}×
+                </span>
+              </div>
+            ) : (
+              <span className={cn("w-6 shrink-0 text-right font-mono text-xs", row.uses > 1 ? "text-foreground" : "text-muted-foreground/60")}>
+                {row.uses}×
+              </span>
+            )}
             {data.showGold && (
               data.unitCopper === null ? (
                 <span className="w-11 shrink-0 text-right font-mono text-2xs text-muted-foreground/40">—</span>
