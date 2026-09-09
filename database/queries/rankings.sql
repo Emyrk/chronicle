@@ -199,17 +199,18 @@ ORDER BY (d.encounter_name = 'Trash'), d.encounter_name;
 -- Each player appears once with their highest-DPS run.
 -- Deduplicates by (player, encounter, duplicate_group) before aggregating.
 WITH candidate_runs AS (
-    -- Class/spec/role filters usually narrow the leaderboard to a small fraction
-    -- of raid logs. Find those duplicate groups first so representative selection
-    -- does not calculate boss coverage for every matching instance ever uploaded.
+    -- Class/spec/sub-spec/role filters usually narrow the leaderboard to a small
+    -- fraction of raid logs. Find those duplicate groups first so representative
+    -- selection does not calculate boss coverage for every matching instance ever uploaded.
     SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM encounter_dps_rankings candidate
     JOIN log_instances li ON li.id = candidate.instance_id
-    WHERE (@class :: text != '' OR @spec :: text != '' OR @role :: text != '')
+    WHERE (@class :: text != '' OR @spec :: text != '' OR @sub_spec :: text != '' OR @role :: text != '')
       AND (cardinality(@instance_names :: text[]) = 0
            OR candidate.instance_name = ANY(@instance_names :: text[]))
       AND (@class :: text = '' OR candidate.player_class = @class)
       AND (@spec :: text = '' OR candidate.player_spec = @spec)
+      AND (@sub_spec :: text = '' OR candidate.player_sub_spec = @sub_spec)
       AND (@role :: text = '' OR candidate.player_role = @role)
 ),
 representative_instances AS (
@@ -221,7 +222,7 @@ representative_instances AS (
     -- player archetype is selected, duplicate groups that cannot contribute.
     WHERE (cardinality(@instance_names :: text[]) = 0
            OR li.name = ANY(@instance_names :: text[]))
-      AND ((@class :: text = '' AND @spec :: text = '' AND @role :: text = '')
+      AND ((@class :: text = '' AND @spec :: text = '' AND @sub_spec :: text = '' AND @role :: text = '')
            OR COALESCE(li.duplicate_group_id, li.id) IN (SELECT run_id FROM candidate_runs))
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
