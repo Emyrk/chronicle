@@ -1567,11 +1567,11 @@ func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents
 		return ""
 	}
 
-	// Nightmare of Ursol Feral druids form exactly two cohorts. Require both
-	// Bear marker talents; builds with only one marker retain the Cat default.
+	// Nightmare of Ursol Feral druids form exactly two cohorts. Require all
+	// three Bear marker talents; builds missing any marker retain the Cat default.
 	// Talent names are resolved from the dataset so positional layouts remain
 	// dataset-specific.
-	var thickHide, feralCharge bool
+	var thickHide, feralCharge, feralInstinct bool
 	if treeData != nil {
 		if druid, ok := treeData.Classes[11]; ok {
 			for _, tab := range druid.Tabs {
@@ -1588,11 +1588,14 @@ func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents
 					if strings.EqualFold(talent.Name, "Feral Charge") {
 						feralCharge = true
 					}
+					if strings.EqualFold(talent.Name, "Feral Instinct") {
+						feralInstinct = true
+					}
 				}
 			}
 		}
 	}
-	if thickHide && feralCharge {
+	if thickHide && feralCharge && feralInstinct {
 		return "Bear"
 	}
 	return "Cat"

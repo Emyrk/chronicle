@@ -18,7 +18,8 @@ func TestInferTalentSubSpec(t *testing.T) {
 	feralTalents := []talents.TalentEntry{
 		{Name: "Thick Hide", TabIndex: 0},
 		{Name: "Feral Charge", TabIndex: 1},
-		{Name: "Improved Shred", TabIndex: 2},
+		{Name: "Feral Instinct", TabIndex: 2},
+		{Name: "Improved Shred", TabIndex: 3},
 	}
 	treeData := &talents.TalentTreeData{Classes: map[int32]talents.ClassTalentData{
 		11: {Tabs: []talents.TalentTabData{{Name: "Feral Combat", Talents: feralTalents}}},
@@ -33,11 +34,12 @@ func TestInferTalentSubSpec(t *testing.T) {
 		talents *combatant.Talents
 		want    string
 	}{
-		{name: "both bear markers is bear", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 1, 0}, nil}}, want: "Bear"},
-		{name: "feral charge alone is cat", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {0, 1, 0}, nil}}, want: "Cat"},
-		{name: "thick hide alone is cat", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 0, 1}, nil}}, want: "Cat"},
-		{name: "both bear markers override improved shred", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 1, 1}, nil}}, want: "Bear"},
-		{name: "otherwise cat", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {0, 0, 1}, nil}}, want: "Cat"},
+		{name: "all bear markers is bear", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 1, 1, 0}, nil}}, want: "Bear"},
+		{name: "all bear markers override improved shred", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 1, 1, 1}, nil}}, want: "Bear"},
+		{name: "missing thick hide is cat", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {0, 1, 1, 0}, nil}}, want: "Cat"},
+		{name: "missing feral charge is cat", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 0, 1, 0}, nil}}, want: "Cat"},
+		{name: "missing feral instinct is cat", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 1, 0, 0}, nil}}, want: "Cat"},
+		{name: "otherwise cat", class: "DRUID", spec: "Feral", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {0, 0, 0, 1}, nil}}, want: "Cat"},
 		{name: "non nightmare has no sub spec", class: "DRUID", spec: "Feral", flavor: database.WoWFlavor{database.FlavorVanilla}, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1}, nil}}},
 		{name: "non feral has no sub spec", class: "DRUID", spec: "Balance", flavor: flavor, talents: &combatant.Talents{}},
 	} {
