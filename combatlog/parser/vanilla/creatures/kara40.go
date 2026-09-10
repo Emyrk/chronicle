@@ -144,3 +144,9 @@ func NewDraeneiNetherWalker(id guid.GUID, all *characters.Characters) (character
 	return characters.NewCommonCharacter(id, all).
 		WithTimeoutAsDeathIf(characters.IfEntryAlive(59981)), true
 }
+
+func NewNightmareCrawler(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	return characters.NewIgnoreCast(93335,
+		51902, // Painful Insomnia
+	)(id, all)
+}
