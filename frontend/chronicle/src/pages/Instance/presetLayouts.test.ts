@@ -6,16 +6,19 @@ import {
   extractTimelineToken,
 } from "./EventsPanels/Timeline/timelineTypes";
 
-function timelineBackground(panelOption: string | undefined): string | undefined {
-  return deserializeTimelineConfig(extractTimelineToken(panelOption))?.settings.background;
+function timelineSettings(panelOption: string | undefined) {
+  return deserializeTimelineConfig(extractTimelineToken(panelOption))?.settings;
 }
 
-describe("built-in Timeline backgrounds", () => {
-  it("enables Raid Durability for the default Summary layout", () => {
-    expect(timelineBackground(DEFAULT_INSTANCE_PANEL_OPTIONS["panel-1"])).toBe("raid_durability");
+describe("built-in Timeline settings", () => {
+  it("enables Raid Durability and player deaths for the default Summary layout", () => {
+    const settings = timelineSettings(DEFAULT_INSTANCE_PANEL_OPTIONS["panel-1"]);
+
+    expect(settings?.background).toBe("raid_durability");
+    expect(settings?.annotations).toEqual(["player_deaths"]);
   });
 
-  it("enables Raid Durability for every preset tab containing a line chart", () => {
+  it("enables Raid Durability and player deaths for every preset tab containing a line chart", () => {
     const timelinePresets = PRESET_LAYOUTS.filter((preset) =>
       Object.values(preset.panelTypes).includes("timeline"),
     );
@@ -23,9 +26,10 @@ describe("built-in Timeline backgrounds", () => {
     expect(timelinePresets.map((preset) => preset.label)).toEqual(["Summary", "Damage", "Healing"]);
     for (const preset of timelinePresets) {
       const timelinePanelId = Object.entries(preset.panelTypes).find(([, type]) => type === "timeline")?.[0];
-      expect(timelineBackground(timelinePanelId ? preset.panelOptions[timelinePanelId] : undefined)).toBe(
-        "raid_durability",
-      );
+      const settings = timelineSettings(timelinePanelId ? preset.panelOptions[timelinePanelId] : undefined);
+
+      expect(settings?.background).toBe("raid_durability");
+      expect(settings?.annotations).toEqual(["player_deaths"]);
     }
   });
 });
