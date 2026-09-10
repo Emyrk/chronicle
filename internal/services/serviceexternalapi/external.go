@@ -5,12 +5,14 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	types "github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -252,6 +254,98 @@ func (s *Service) listCharacterLogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Service) listIndividualLeaderboard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := r.URL.Query()
+
+	limit := int64(50)
+	if value := q.Get("limit"); value != "" {
+		if parsed, err := strconv.ParseInt(value, 10, 64); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	var offset int64
+	if value := q.Get("offset"); value != "" {
+		offset, _ = strconv.ParseInt(value, 10, 64)
+	}
+
+	class := q.Get("class")
+	if class != "" {
+		class = string(db2sdk.HeroClassToDB(types.HeroClasses(class)))
+	}
+
+	metric := normalizeIndividualLeaderboardMetric(q.Get("metric"))
+	rows, err := s.db.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+		Metric:           metric,
+		QueryOffset:      offset,
+		QueryLimit:       limit,
+		Class:            class,
+		Spec:             q.Get("spec"),
+		SubSpec:          q.Get("sub_spec"),
+		Role:             q.Get("role"),
+		InstanceNames:    splitCSVQuery(q.Get("instance_names")),
+		EncounterNames:   splitCSVQuery(q.Get("encounter_names")),
+		RealmNames:       splitCSVQuery(q.Get("realm_names")),
+		SinceDays:        individualLeaderboardPeriodToDays(q.Get("period")),
+		HideUnknowns:     q.Get("hide_unknowns") == "true",
+		DifficultyNames:  splitCSVQuery(q.Get("difficulty_names")),
+		FilterMaxPlayers: parseIndividualLeaderboardMaxPlayers(q.Get("max_players")),
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	var totalCount int64
+	entries := make([]chroniclesdk.RankingsEntry, 0, len(rows))
+	for _, row := range rows {
+		totalCount = row.TotalCount
+		entry := chroniclesdk.RankingsEntry{
+			EncounterName:  row.EncounterName,
+			InstanceName:   row.InstanceName,
+			PlayerGUID:     row.PlayerGuid,
+			PlayerName:     row.PlayerName,
+			PlayerClass:    strings.ReplaceAll(row.PlayerClass, "_", ""),
+			PlayerSpec:     row.PlayerSpec,
+			PlayerRole:     row.PlayerRole,
+			PlayerLevel:    row.PlayerLevel,
+			DifficultyName: row.DifficultyName,
+			MaxPlayers:     row.MaxPlayers,
+			RealmID:        row.RealmID,
+			RealmName:      row.RealmName,
+			GuildName:      row.GuildName,
+			DamageDone:     row.DamageDone,
+			HealingDone:    row.HealingDone,
+			AbsorbedDone:   row.AbsorbedDone,
+			DurationSecs:   row.DurationSecs,
+			DPS:            row.Dps,
+			HPS:            row.Hps,
+			LogHashedSlug:  row.LogHashedSlug,
+			KilledAt:       row.KilledAt.Time,
+		}
+		if row.AvgIlvl > 0 {
+			value := row.AvgIlvl
+			entry.AvgIlvl = &value
+		}
+		if row.PlayerSubSpec != "" {
+			entry.SubSpec = &row.PlayerSubSpec
+		}
+		if row.TalentLayout != "" {
+			entry.TalentLayout = &row.TalentLayout
+		}
+		entries = append(entries, entry)
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.RankingsLeaderboardResponse{
+		Entries:    entries,
+		TotalCount: totalCount,
+	})
+}
+
 func (s *Service) listSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	instanceName := r.URL.Query().Get("instance_name")
@@ -385,6 +479,55 @@ func (s *Service) listSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request
 		Timing: timing, Entries: entries,
 		Pagination: Pagination{Page: page, PageSize: pageSize, HasMore: hasMore},
 	})
+}
+
+func normalizeIndividualLeaderboardMetric(metric string) string {
+	if metric == "hps" {
+		return "hps"
+	}
+	return "dps"
+}
+
+func individualLeaderboardPeriodToDays(period string) int64 {
+	switch period {
+	case "7d":
+		return 7
+	case "30d":
+		return 30
+	case "90d":
+		return 90
+	default:
+		return 0
+	}
+}
+
+func parseIndividualLeaderboardMaxPlayers(value string) int16 {
+	if value == "" {
+		return 0
+	}
+	parsed, err := strconv.ParseInt(value, 10, 16)
+	if err != nil || parsed < 0 {
+		return 0
+	}
+	return int16(parsed)
+}
+
+func splitCSVQuery(value string) []string {
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			values = append(values, part)
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
 }
 
 func externalSpeedrunTiming(value string) (string, bool, bool) {

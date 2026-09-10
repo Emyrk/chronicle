@@ -79,6 +79,15 @@ func TestOpenAPISpec(t *testing.T) {
 	require.Len(t, characterLogs.Parameters, 5)
 	require.Equal(t, "page_size", characterLogs.Parameters[4].Name)
 
+	individualLeaderboard, ok := document.Paths["/leaderboards"]["get"]
+	require.True(t, ok)
+	require.Equal(t, "Get the individual performance leaderboard", individualLeaderboard.Summary)
+	require.Len(t, individualLeaderboard.Parameters, 14)
+	require.Equal(t, "instance_names", individualLeaderboard.Parameters[0].Name)
+	require.Equal(t, "metric", individualLeaderboard.Parameters[10].Name)
+	require.Equal(t, "offset", individualLeaderboard.Parameters[13].Name)
+	require.Equal(t, []string{"Explore"}, individualLeaderboard.Tags)
+
 	leaderboard, ok := document.Paths["/leaderboards/speedruns"]["get"]
 	require.True(t, ok)
 	require.Len(t, leaderboard.Parameters, 10)
