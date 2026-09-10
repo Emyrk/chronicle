@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
@@ -23,6 +24,8 @@ type fakeExternalAPIStore struct {
 	character             database.GetExternalAPICharacterRow
 	logs                  []database.ListExternalAPICharacterLogsRow
 	logsParams            database.ListExternalAPICharacterLogsParams
+	dpsLeaderboard        []database.RankingsLeaderboardRow
+	dpsLeaderboardParams  database.RankingsLeaderboardParams
 	leaderboard           []database.SpeedrunLeaderboardRow
 	leaderboardParams     database.SpeedrunLeaderboardParams
 	leaderboardDuplicates []database.ListExternalAPILeaderboardDuplicateLogsRow
@@ -67,6 +70,10 @@ func (f *fakeExternalAPIStore) GetExternalAPICharacter(context.Context, database
 func (f *fakeExternalAPIStore) ListExternalAPICharacterLogs(_ context.Context, params database.ListExternalAPICharacterLogsParams) ([]database.ListExternalAPICharacterLogsRow, error) {
 	f.logsParams = params
 	return f.logs, nil
+}
+func (f *fakeExternalAPIStore) RankingsLeaderboard(_ context.Context, params database.RankingsLeaderboardParams) ([]database.RankingsLeaderboardRow, error) {
+	f.dpsLeaderboardParams = params
+	return f.dpsLeaderboard, nil
 }
 func (f *fakeExternalAPIStore) SpeedrunLeaderboard(_ context.Context, params database.SpeedrunLeaderboardParams) ([]database.SpeedrunLeaderboardRow, error) {
 	f.leaderboardParams = params
@@ -199,6 +206,68 @@ func TestListCharacterLogsPagination(t *testing.T) {
 	require.Equal(t, []CharacterEncounterPerformance{{
 		EncounterName: "Ragnaros", DPSParse: int32Pointer(95), HPSParse: int32Pointer(42),
 	}}, response.Logs[0].Performance)
+}
+
+func TestListIndividualLeaderboardMatchesRankingsQueryContract(t *testing.T) {
+	t.Parallel()
+
+	realmID := uuid.New()
+	killedAt := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
+	store := &fakeExternalAPIStore{
+		dpsLeaderboard: []database.RankingsLeaderboardRow{{
+			PlayerGuid: "Player-00000001", PlayerName: "Example", PlayerClass: "DEATH_KNIGHT",
+			PlayerSpec: "Frost", PlayerSubSpec: "Dual Wield", PlayerRole: "heal", PlayerLevel: 60,
+			InstanceName: "Naxxramas", EncounterName: "Kel'Thuzad", DifficultyName: "Normal",
+			MaxPlayers: 40, RealmID: realmID, RealmName: "Example Realm", GuildName: "Example Guild",
+			DamageDone: 150000, HealingDone: 120000, AbsorbedDone: 30000,
+			DurationSecs: 120, Dps: 1250, Hps: 1250, AvgIlvl: 72,
+			LogHashedSlug: "example-log", KilledAt: pgtype.Timestamptz{Time: killedAt, Valid: true},
+			TalentLayout: "talents", TotalCount: 5,
+		}},
+	}
+	service := &Service{db: store}
+	service.setupRoutes()
+
+	req := httptest.NewRequest(http.MethodGet, "/leaderboards?instance_names=Naxxramas%2CMolten+Core&encounter_names=Kel%27Thuzad&difficulty_names=Normal&realm_names=Example+Realm&class=DEATHKNIGHT&spec=Frost&sub_spec=Dual+Wield&role=heal&period=30d&hide_unknowns=true&metric=hps&max_players=40&limit=2&offset=2", nil)
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, database.RankingsLeaderboardParams{
+		Metric: "hps", QueryOffset: 2, QueryLimit: 2,
+		Class: "DEATH_KNIGHT", Spec: "Frost", SubSpec: "Dual Wield", Role: "heal",
+		InstanceNames: []string{"Naxxramas", "Molten Core"}, EncounterNames: []string{"Kel'Thuzad"},
+		RealmNames: []string{"Example Realm"}, SinceDays: 30, HideUnknowns: true,
+		DifficultyNames: []string{"Normal"}, FilterMaxPlayers: 40,
+	}, store.dpsLeaderboardParams)
+
+	var response chroniclesdk.RankingsLeaderboardResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	require.Equal(t, int64(5), response.TotalCount)
+	require.Len(t, response.Entries, 1)
+	require.Equal(t, "DEATHKNIGHT", response.Entries[0].PlayerClass)
+	require.Equal(t, "Dual Wield", *response.Entries[0].SubSpec)
+	require.Equal(t, int16(72), *response.Entries[0].AvgIlvl)
+	require.Equal(t, int64(120000), response.Entries[0].HealingDone)
+	require.Equal(t, int64(30000), response.Entries[0].AbsorbedDone)
+	require.Equal(t, 1250.0, response.Entries[0].HPS)
+	require.Equal(t, "example-log", response.Entries[0].LogHashedSlug)
+}
+
+func TestIndividualLeaderboardDefaultsToDPSAndCapsLimit(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeExternalAPIStore{}
+	service := &Service{db: store}
+	service.setupRoutes()
+
+	req := httptest.NewRequest(http.MethodGet, "/leaderboards?metric=invalid&limit=500", nil)
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "dps", store.dpsLeaderboardParams.Metric)
+	require.Equal(t, int64(200), store.dpsLeaderboardParams.QueryLimit)
 }
 
 func TestListSpeedrunLeaderboardIncludesCanonicalAndDuplicateLogs(t *testing.T) {

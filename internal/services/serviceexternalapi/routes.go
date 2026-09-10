@@ -163,6 +163,40 @@ func (s *Service) registerRoutes() {
 		Responses: binaryResponse("Gzip-compressed protobuf event stream."),
 	}, s.getInstanceEventsBySlug)
 
+	s.register(http.MethodGet, "/leaderboards", OpenAPIOperation{
+		Tags:        []string{"Explore"},
+		Summary:     "Get the individual performance leaderboard",
+		Description: "Returns each character's best complete raid run, ordered by DPS or HPS. The query contract matches Chronicle's rankings leaderboard and stats routes. Duplicate uploads are represented by one selected instance per duplicate group.",
+		Parameters: []OpenAPIParameter{
+			queryParameter("instance_names", "Comma-separated instance names", false, "string", "Molten Core"),
+			queryParameter("encounter_names", "Comma-separated encounter names", false, "string", "Ragnaros"),
+			queryParameter("difficulty_names", "Comma-separated difficulty names", false, "string", "Normal"),
+			queryParameter("realm_names", "Comma-separated realm names", false, "string", "Example Realm"),
+			queryParameter("period", "Lookback period: 7d, 30d, or 90d. Other values disable the filter.", false, "string", "30d"),
+			queryParameter("class", "Player class in SDK form, such as WARRIOR or DEATHKNIGHT", false, "string", "WARRIOR"),
+			queryParameter("spec", "Player specialization", false, "string", "Fury"),
+			queryParameter("sub_spec", "Player sub-specialization", false, "string", "Dual Wield"),
+			queryParameter("role", "Player role", false, "string", "dps"),
+			queryParameter("hide_unknowns", "Exclude records with an unknown class or specialization", false, "boolean", true),
+			queryParameter("metric", "Leaderboard metric: dps or hps. Defaults to dps.", false, "string", "dps"),
+			queryParameter("max_players", "Raid-size board filter. Zero disables the filter.", false, "integer", 40),
+			queryParameter("limit", "Maximum results, from 1 to 200", false, "integer", 50),
+			queryParameter("offset", "Number of results to skip", false, "integer", 0),
+		},
+		Responses: okResponse(chroniclesdk.RankingsLeaderboardResponse{
+			Entries: []chroniclesdk.RankingsEntry{{
+				PlayerGUID: "Player-00000001", PlayerName: "Example", PlayerClass: "WARRIOR",
+				PlayerSpec: "Fury", PlayerRole: "dps", PlayerLevel: 60,
+				InstanceName: "Molten Core", EncounterName: "Ragnaros", DifficultyName: "Normal",
+				MaxPlayers: 40, RealmID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+				RealmName: "Example Realm", GuildName: "Example Guild", DamageDone: 123456,
+				DurationSecs: 120.5, DPS: 1024.53, LogHashedSlug: "example-log",
+				KilledAt: time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC),
+			}},
+			TotalCount: 1,
+		}),
+	}, s.listIndividualLeaderboard)
+
 	s.register(http.MethodGet, "/leaderboards/speedruns", OpenAPIOperation{
 		Tags:        []string{"Explore"},
 		Summary:     "Get the speedrun leaderboard",
