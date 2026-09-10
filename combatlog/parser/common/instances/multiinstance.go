@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 type MultiInstanceZone struct {
@@ -36,6 +37,22 @@ func (m *MultiInstanceZone) Names() []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+func (m *MultiInstanceZone) NameForGUIDs(ids []guid.GUID) (string, bool) {
+	if m == nil {
+		return "", false
+	}
+	for _, id := range ids {
+		entry, ok := id.GetEntry()
+		if !ok {
+			continue
+		}
+		if name, ok := m.config[entry]; ok {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 func (m *MultiInstanceZone) Name(fights []encounter.Fight) (string, bool) {

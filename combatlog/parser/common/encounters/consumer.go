@@ -122,6 +122,12 @@ func (s *State) Process(m messages.Message) error {
 	s.Vehicles.Process(m)
 	s.RaidGroups.Process(m)
 
+	if s.CurrentInstance != nil && s.CurrentInstance.ShouldSplitDerived(m) {
+		z := s.CurrentInstance.CurrentZone
+		z.Seen = m.Date()
+		s.createInstance(z)
+	}
+
 	// Capture whether this message arrived during an encounter before processing
 	// it, since processing may start or end the fight.
 	consumeActive := s.CurrentInstance != nil && s.CurrentInstance.FightActive()
@@ -283,30 +289,7 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 	}
 
 	if !matched {
-		s.CurrentInstance = s.instanceResolver(s.verbose, z.Zone, s.Units)
-		if s.CurrentInstance != nil {
-			// Set any initial realm state that we have
-			s.CurrentInstance.SetRealm(s.CurrentRealm)
-			if s.CurrentVersions != nil {
-				s.CurrentInstance.SetVersions(s.CurrentVersions.Versions, s.CurrentVersions.Player)
-			}
-			// Vehicle control messages can arrive after the events they describe,
-			// so instances resolve metadata from the parse-wide tracker at finalization.
-			s.CurrentInstance.AttachVehicleTracker(s.Vehicles)
-			// Attach a projection adapter so the instance can project
-			// parse-wide aura state into encounter event streams.
-			s.CurrentInstance.AttachAuraProjection(s.Auras)
-			// Attach consume collector for item-use and
-			// pre-pull buff evidence.
-			s.CurrentInstance.AttachConsumeCollector(s.Auras, s.ConsumeTracker)
-			// Attach parse-wide raid composition metadata for encounter-start events
-			// and finalized instance snapshots.
-			s.CurrentInstance.AttachRaidGroupTracker(s.RaidGroups)
-			s.logger.Info("Matched new instance",
-				slog.String("name", s.CurrentInstance.Name()),
-			)
-			s.Instances = append(s.Instances, s.CurrentInstance)
-		}
+		s.createInstance(z.Zone)
 	}
 
 	s.logger.Info(fmt.Sprintf("Zone changed to %q (instance %d)", z.Name, z.InstanceID),
@@ -316,4 +299,23 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 		slog.Uint64("exited_instance_id", uint64(s.CurrentZone.InstanceID)),
 		slog.Time("seen", z.Seen),
 	)
+}
+
+func (s *State) createInstance(z zone.Zone) {
+	s.CurrentInstance = s.instanceResolver(s.verbose, z, s.Units)
+	if s.CurrentInstance == nil {
+		return
+	}
+
+	s.CurrentInstance.SetRealm(s.CurrentRealm)
+	if s.CurrentVersions != nil {
+		s.CurrentInstance.SetVersions(s.CurrentVersions.Versions, s.CurrentVersions.Player)
+	}
+	// These trackers are parse-wide and intentionally shared across instance segments.
+	s.CurrentInstance.AttachVehicleTracker(s.Vehicles)
+	s.CurrentInstance.AttachAuraProjection(s.Auras)
+	s.CurrentInstance.AttachConsumeCollector(s.Auras, s.ConsumeTracker)
+	s.CurrentInstance.AttachRaidGroupTracker(s.RaidGroups)
+	s.logger.Info("Matched new instance", slog.String("name", s.CurrentInstance.Name()))
+	s.Instances = append(s.Instances, s.CurrentInstance)
 }
