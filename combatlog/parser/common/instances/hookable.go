@@ -440,6 +440,26 @@ func (h *Hookable) completedSpeedrunBoundary() (time.Time, time.Duration, bool) 
 	return completedAt, gap, !completedAt.IsZero()
 }
 
+// ShouldSplitDerived reports whether m starts activity in a different derived
+// sub-instance after this segment has already completed a fight.
+func (h *Hookable) ShouldSplitDerived(m messages.Message) bool {
+	if h.derivedName == nil || h.FightActive() || len(h.completedFights) == 0 {
+		return false
+	}
+
+	damage, ok := m.(*messages.Damage)
+	if !ok || !damage.RequiresActive() || damage.HitType.Has(types.HitTypeImmune) || damage.HitType.Has(types.HitTypeEvade) {
+		return false
+	}
+
+	currentName, ok := h.derivedName.Name(h.completedFights)
+	if !ok {
+		return false
+	}
+	incomingName, ok := h.derivedName.NameForGUIDs(m.Affects())
+	return ok && incomingName != currentName
+}
+
 // FightActive reports whether this instance currently has an active encounter.
 func (h *Hookable) FightActive() bool {
 	return h.currentFight != nil && h.currentFight.active()
