@@ -62,6 +62,7 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewPowerSpark,
 
 			// Ulduar
+			NewIgnisIronConstruct,
 			NewAlgalon,
 			NewAssemblyOfIronCharacter,
 			NewRazorscaleAdd,
