@@ -31,7 +31,11 @@ const TIMELINE_SERIES = {
     { id: "s3", name: "Effective Healing", stream: "effective_heal", aggregation: "rolling_avg", color: "#85e203", filters: [{ type: "source_type", value: ["player", "pet"] }, { type: "target_type", value: ["pet", "player"], combinator: "and" }] },
     { id: "s4", name: "Friendly Fire", stream: "damage", aggregation: "sum", color: "#FF7D0A", filters: [{ type: "source_type", value: ["player", "pet"] }, { type: "target_type", value: ["player", "pet"], combinator: "and" }] },
   ],
-  settings: { binMs: 500, background: "raid_durability" },
+  settings: {
+    binMs: 500,
+    background: "raid_durability",
+    annotations: ["player_deaths"],
+  },
 };
 
 /** Build the full panel-1 option string for the timeline with the given hidden series. */
