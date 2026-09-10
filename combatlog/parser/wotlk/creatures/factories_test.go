@@ -2,9 +2,12 @@ package creatures
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
@@ -13,6 +16,68 @@ import (
 
 func wotlkEntryGUID(high uint64, entry uint32) guid.GUID {
 	return guid.GUID(high | uint64(entry)<<24 | 1)
+}
+
+func TestWotLKEncounterFactoriesTreatIronConstructTimeoutAsDeathWhileIgnisIsAlive(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name           string
+		ignisEntry     uint32
+		constructEntry uint32
+	}{
+		{name: "10 player", ignisEntry: 33118, constructEntry: 33121},
+		{name: "25 player", ignisEntry: 33190, constructEntry: 33191},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			all := characters.NewCharacters(
+				unitdb.New(),
+				NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
+				identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+			)
+			player := guid.GUID(1)
+			ignisID := wotlkEntryGUID(0xF130000000000000, test.ignisEntry)
+			constructID := wotlkEntryGUID(0xF130000000000000, test.constructEntry)
+			start := time.Date(2026, time.September, 10, 12, 0, 0, 0, time.UTC)
+
+			_, err := all.Process(testDamage(start, constructID, player))
+			require.NoError(t, err)
+			_, err = all.Process(testDamage(start, ignisID, player))
+			require.NoError(t, err)
+			_, err = all.Process(testDamage(start.Add(30*time.Second), ignisID, player))
+			require.NoError(t, err)
+			_, err = all.Process(messages.TimedOut(start.Add(61 * time.Second)))
+			require.NoError(t, err)
+
+			construct, ok := all.Get(constructID)
+			require.True(t, ok)
+			require.Equal(t, period.EndStateSlain, construct.LastEndState())
+		})
+	}
+}
+
+func TestWotLKEncounterFactoriesLeaveIronConstructTimeoutWhenIgnisIsInactive(t *testing.T) {
+	t.Parallel()
+
+	all := characters.NewCharacters(
+		unitdb.New(),
+		NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+	player := guid.GUID(1)
+	constructID := wotlkEntryGUID(0xF130000000000000, 33121)
+	start := time.Date(2026, time.September, 10, 12, 0, 0, 0, time.UTC)
+
+	_, err := all.Process(testDamage(start, constructID, player))
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(start.Add(61 * time.Second)))
+	require.NoError(t, err)
+
+	construct, ok := all.Get(constructID)
+	require.True(t, ok)
+	require.Equal(t, period.EndStateTimeout, construct.LastEndState())
 }
 
 func TestWotLKEncounterFactoriesRejectPetEntries(t *testing.T) {
