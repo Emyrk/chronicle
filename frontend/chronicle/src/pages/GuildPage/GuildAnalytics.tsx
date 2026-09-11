@@ -15,6 +15,7 @@ import {
 import { useGuildPage, useGuildResourceAnalytics } from "@/api/queries";
 import type { GuildResourceAnalyticsDay } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
+import { getInstanceAccentColor } from "@/pages/Logs/utils/instanceImages";
 import { GuildActionsMenu, GuildPageHeader } from "./components";
 
 const numberFormatter = new Intl.NumberFormat();
@@ -22,26 +23,6 @@ const compactFormatter = new Intl.NumberFormat(undefined, { notation: "compact",
 
 const RANGE_OPTIONS = [7, 14, 30] as const;
 type RangeDays = (typeof RANGE_OPTIONS)[number];
-
-// Reuse the app's WoW class colors to tell instances apart — deterministic per
-// instance key so a row keeps its color as ranges/sorting change.
-const INSTANCE_COLORS = [
-  "var(--color-class-deathknight)",
-  "var(--color-class-mage)",
-  "var(--color-class-druid)",
-  "var(--color-class-warlock)",
-  "var(--color-class-hunter)",
-  "var(--color-class-paladin)",
-  "var(--color-class-rogue)",
-  "var(--color-class-shaman)",
-  "var(--color-class-warrior)",
-];
-
-function colorForKey(key: string): string {
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
-  return INSTANCE_COLORS[Math.abs(hash) % INSTANCE_COLORS.length];
-}
 
 interface DayValue {
   date: string;
@@ -161,7 +142,7 @@ export function GuildAnalytics() {
               <MetricCard icon={BarChart3} label="Instance views" value={compactFormatter.format(summary.instanceTotalAll)}>
                 <span className="text-xs text-muted-foreground">across {summary.instances.length} tracked instances</span>
               </MetricCard>
-              <MetricCard icon={Star} label="Most viewed instance" value={summary.instances[0]?.name ?? "—"}>
+              <MetricCard icon={Star} label="Most viewed instance" value={summary.instances[0]?.name ?? "—"} valueClassName="font-wow text-xl">
                 <span className="text-xs text-amber-500">{summary.instances[0] ? `${compactFormatter.format(summary.instances[0].total)} views` : "No views yet"}</span>
               </MetricCard>
               <MetricCard icon={CalendarDays} label="Busiest day" value={summary.busiestDay ? formatDayTitle(summary.busiestDay.date) : "—"}>
@@ -233,7 +214,7 @@ export function GuildAnalytics() {
                             <div className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground">{idx + 1}</div>
                             <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: instance.color, boxShadow: `0 0 6px ${instance.color}55` }} />
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium">{instance.name}</div>
+                              <div className="font-wow truncate text-sm font-semibold">{instance.name}</div>
                               <div className="mt-1 flex h-6 items-end gap-[3px]">
                                 {instance.sparkline.map((day) => (
                                   <div
@@ -293,7 +274,7 @@ export function GuildAnalytics() {
                       >
                         <div className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground">{idx + 4}</div>
                         <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: entry.color }} />
-                        <div className="min-w-0 flex-1 truncate text-muted-foreground">{entry.name}</div>
+                        <div className="font-wow min-w-0 flex-1 truncate text-muted-foreground">{entry.name}</div>
                         <div className="font-mono text-xs">{compactFormatter.format(entry.total)}</div>
                       </Link>
                     ))}
@@ -312,11 +293,11 @@ export function GuildAnalytics() {
   );
 }
 
-function MetricCard({ icon: Icon, label, value, children }: { icon: typeof Eye; label: string; value: string; children?: React.ReactNode }) {
+function MetricCard({ icon: Icon, label, value, valueClassName, children }: { icon: typeof Eye; label: string; value: string; valueClassName?: string; children?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground"><Icon className="h-4 w-4" />{label}</div>
-      <div className="truncate text-2xl font-semibold tabular-nums" title={value}>{value}</div>
+      <div className={cn("truncate text-2xl font-semibold tabular-nums", valueClassName)} title={value}>{value}</div>
       <div className="mt-1.5">{children}</div>
     </div>
   );
@@ -358,7 +339,7 @@ function Podium({ entries }: { entries: InstanceSummary[] }) {
             >
               {medal.emoji}
             </div>
-            <div className="w-full min-w-0 truncate text-xs font-medium">{entry.name}</div>
+            <div className="font-wow w-full min-w-0 truncate text-xs font-semibold">{entry.name}</div>
             <div className={cn("flex w-full flex-col items-center justify-center rounded-t-lg border", medal.h, rank === 0 ? "border-amber-500/40 bg-amber-500/10" : "border-border bg-muted/20")}>
               <div className="font-semibold tabular-nums">{compactFormatter.format(entry.total)}</div>
               <div className="mt-0.5 text-[9px] tracking-wide text-muted-foreground">RANK {rank + 1}</div>
@@ -430,7 +411,7 @@ function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDa
       return {
         key,
         name,
-        color: colorForKey(key),
+        color: getInstanceAccentColor(name),
         total: sumViews(series),
         deltaPct: pctDelta(sumViews(series), sumViews(seriesFor(byDate, priorDates))),
         series,
