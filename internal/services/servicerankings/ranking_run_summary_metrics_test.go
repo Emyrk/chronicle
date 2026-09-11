@@ -21,10 +21,12 @@ func TestRankingRunSummaryMetrics(t *testing.T) {
 	metrics.runsDeleted.Inc()
 	metrics.runsRetained.Inc()
 	metrics.rebuildDuration.Observe(1)
+	metrics.leaderboardPath.WithLabelValues("fast", "eligible").Inc()
+	metrics.leaderboardPath.WithLabelValues("slow", "dirty_summary").Inc()
 
 	families, err := registry.Gather()
 	require.NoError(t, err)
-	require.Len(t, families, 8)
+	require.Len(t, families, 9)
 	names := make([]string, 0, len(families))
 	for _, family := range families {
 		names = append(names, family.GetName())
@@ -36,6 +38,7 @@ func TestRankingRunSummaryMetrics(t *testing.T) {
 	assert.Contains(t, names, "chronicle_rankings_run_summaries_runs_processed_total")
 	assert.Contains(t, names, "chronicle_rankings_run_summaries_runs_rebuilt_total")
 	assert.Contains(t, names, "chronicle_rankings_run_summaries_runs_deleted_total")
+	assert.Contains(t, names, "chronicle_rankings_run_summaries_leaderboard_queries_total")
 	assert.Contains(t, names, "chronicle_rankings_run_summaries_runs_retained_dirty_total")
 
 	// A separate registry mirrors isolated service tests and cannot collide with

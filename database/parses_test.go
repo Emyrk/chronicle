@@ -234,7 +234,7 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	insertEncounterRanking(duplicateID, "Magmadar", "PRIEST", "Holy", "Bear", 900, baseTime.Add(time.Minute))
 	insertEncounterRanking(duplicateID, "Ragnaros", "PRIEST", "Holy", "Bear", 900, baseTime.Add(2*time.Minute))
 
-	for _, params := range []database.RankingsLeaderboardParams{
+	for _, params := range []database.RankingsLeaderboardSlowParams{
 		{
 			Metric: "hps", QueryLimit: 10,
 			InstanceNames:  []string{"Molten Core"},
@@ -254,7 +254,7 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 			SubSpec:        "Bear",
 		},
 	} {
-		rows, err := store.RankingsLeaderboard(ctx, params)
+		rows, err := store.RankingsLeaderboardSlow(ctx, params)
 		require.NoError(t, err)
 		require.Len(t, rows, 1)
 		assert.Equal(t, duplicateID.String(), rows[0].LogHashedSlug)

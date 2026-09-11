@@ -36,7 +36,7 @@ type externalAPIStore interface {
 	ResolveExternalAPIRealm(context.Context, database.ResolveExternalAPIRealmParams) (database.ResolveExternalAPIRealmRow, error)
 	GetExternalAPICharacter(context.Context, database.GetExternalAPICharacterParams) (database.GetExternalAPICharacterRow, error)
 	ListExternalAPICharacterLogs(context.Context, database.ListExternalAPICharacterLogsParams) ([]database.ListExternalAPICharacterLogsRow, error)
-	RankingsLeaderboard(context.Context, database.RankingsLeaderboardParams) ([]database.RankingsLeaderboardRow, error)
+	RankingsLeaderboardSlow(context.Context, database.RankingsLeaderboardSlowParams) ([]database.RankingsLeaderboardSlowRow, error)
 	SpeedrunLeaderboard(context.Context, database.SpeedrunLeaderboardParams) ([]database.SpeedrunLeaderboardRow, error)
 	ListExternalAPILeaderboardDuplicateLogs(context.Context, database.ListExternalAPILeaderboardDuplicateLogsParams) ([]database.ListExternalAPILeaderboardDuplicateLogsRow, error)
 	ListExternalAPIRecentInstances(context.Context, database.ListExternalAPIRecentInstancesParams) ([]database.ListExternalAPIRecentInstancesRow, error)

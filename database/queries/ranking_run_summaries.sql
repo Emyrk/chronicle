@@ -188,6 +188,146 @@ FROM representative_instance ri
 JOIN per_player pp ON true
 ORDER BY pp.player_guid;
 
+-- name: RankingsLeaderboardFastEligibility :one
+-- Checks whether the requested leaderboard can be answered exactly from the
+-- current per-run projection. tenant_id is an explicit pruning predicate when a
+-- tenant context exists; realm/server RLS remains the authorization boundary.
+WITH source_runs AS MATERIALIZED (
+    SELECT DISTINCT
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    WHERE (NOT @filter_tenant::boolean OR ws.tenant_id = @tenant_id::uuid)
+      AND (COALESCE(cardinality(@instance_names::text[]), 0) = 0 OR edr.instance_name = ANY(@instance_names::text[]))
+      AND (COALESCE(cardinality(@realm_names::text[]), 0) = 0 OR edr.realm_name = ANY(@realm_names::text[]))
+      AND (COALESCE(cardinality(@difficulty_names::text[]), 0) = 0 OR edr.difficulty_name = ANY(@difficulty_names::text[]))
+      AND (@filter_max_players::smallint <= 0 OR edr.max_players = @filter_max_players::smallint)
+),
+matching_summaries AS MATERIALIZED (
+    SELECT rr.*
+    FROM ranking_runs rr
+    WHERE (NOT @filter_tenant::boolean OR rr.tenant_id = @tenant_id::uuid)
+      AND (COALESCE(cardinality(@instance_names::text[]), 0) = 0 OR rr.instance_name = ANY(@instance_names::text[]))
+      AND (COALESCE(cardinality(@realm_names::text[]), 0) = 0 OR rr.realm_name = ANY(@realm_names::text[]))
+      AND (COALESCE(cardinality(@difficulty_names::text[]), 0) = 0 OR rr.difficulty_name = ANY(@difficulty_names::text[]))
+      AND (@filter_max_players::smallint <= 0 OR rr.max_players = @filter_max_players::smallint)
+),
+requested_encounters AS (
+    SELECT COALESCE(array_agg(DISTINCT encounter_name ORDER BY encounter_name), '{}')::text[] AS names
+    FROM unnest(@encounter_names::text[]) encounter_name
+),
+realm_encounters AS (
+    SELECT
+        ms.realm_id,
+        COALESCE(array_agg(DISTINCT encounter_name ORDER BY encounter_name), '{}')::text[] AS names
+    FROM matching_summaries ms
+    CROSS JOIN LATERAL unnest(ms.encounter_names) encounter_name
+    WHERE ms.run_id IN (SELECT run_id FROM source_runs)
+    GROUP BY ms.realm_id
+),
+all_encounters AS (
+    SELECT COALESCE(array_agg(DISTINCT encounter_name ORDER BY encounter_name), '{}')::text[] AS names
+    FROM realm_encounters re
+    CROSS JOIN LATERAL unnest(re.names) encounter_name
+)
+SELECT
+    (SELECT COUNT(*) FROM source_runs)::bigint AS source_run_count,
+    (SELECT COUNT(*)
+     FROM source_runs sr
+     LEFT JOIN matching_summaries ms ON ms.run_id = sr.run_id
+     WHERE ms.run_id IS NULL)::bigint AS missing_run_count,
+    (SELECT COUNT(*)
+     FROM matching_summaries ms
+     JOIN source_runs sr ON sr.run_id = ms.run_id
+     WHERE ms.summary_version <> @summary_version::smallint)::bigint AS stale_run_count,
+    (SELECT COUNT(*)
+     FROM ranking_player_run_summaries rprs
+     JOIN source_runs sr ON sr.run_id = rprs.run_id
+     WHERE rprs.summary_version <> @summary_version::smallint)::bigint AS stale_player_count,
+    (SELECT COUNT(*)
+     FROM matching_summaries ms
+     LEFT JOIN source_runs sr ON sr.run_id = ms.run_id
+     WHERE sr.run_id IS NULL)::bigint AS orphan_run_count,
+    (SELECT COUNT(*)
+     FROM ranking_run_summary_dirty dirty
+     WHERE dirty.run_id IN (
+         SELECT run_id FROM source_runs
+         UNION
+         SELECT run_id FROM matching_summaries
+     ))::bigint AS dirty_run_count,
+    (SELECT COUNT(*)
+     FROM matching_summaries ms
+     JOIN source_runs sr ON sr.run_id = ms.run_id
+     JOIN realm_encounters re ON re.realm_id = ms.realm_id
+     WHERE ms.encounter_names <> re.names)::bigint AS nonstandard_run_count,
+    COALESCE(
+        (SELECT COUNT(*) FROM source_runs) = 0
+        OR (SELECT names FROM requested_encounters) = (SELECT names FROM all_encounters),
+        false
+    )::boolean AS encounters_match;
+
+-- name: RankingsLeaderboardFast :many
+-- Summary-backed equivalent of RankingsLeaderboardSlow. Eligibility must be
+-- checked first so every selected run represents the complete standard encounter
+-- set and every projection row is current and clean.
+WITH filtered AS (
+    SELECT rprs.*
+    FROM ranking_player_run_summaries rprs
+    JOIN ranking_runs rr ON rr.run_id = rprs.run_id
+    WHERE (NOT @filter_tenant::boolean OR rprs.tenant_id = @tenant_id::uuid)
+      AND rr.summary_version = @summary_version::smallint
+      AND rprs.summary_version = @summary_version::smallint
+      AND (COALESCE(cardinality(@instance_names::text[]), 0) = 0 OR rprs.instance_name = ANY(@instance_names::text[]))
+      AND (COALESCE(cardinality(@realm_names::text[]), 0) = 0 OR rprs.realm_name = ANY(@realm_names::text[]))
+      AND (COALESCE(cardinality(@difficulty_names::text[]), 0) = 0 OR rprs.difficulty_name = ANY(@difficulty_names::text[]))
+      AND (@filter_max_players::smallint <= 0 OR rprs.max_players = @filter_max_players::smallint)
+      AND (@class::text = '' OR rprs.player_class = @class::text)
+      AND (@spec::text = '' OR rprs.player_spec = @spec::text)
+      AND (@sub_spec::text = '' OR rprs.player_sub_spec = @sub_spec::text)
+      AND (@role::text = '' OR rprs.player_role = @role::text)
+      AND (NOT @hide_unknowns::boolean OR (rprs.player_class <> 'Unknown' AND rprs.player_spec <> 'Unknown'))
+      AND (CASE WHEN @metric::text = 'hps' THEN rprs.hps ELSE rprs.dps END) > 0
+),
+best_per_player AS (
+    SELECT DISTINCT ON (f.player_guid)
+        f.player_guid,
+        f.player_name,
+        f.player_class,
+        f.player_spec,
+        f.player_sub_spec,
+        f.player_role,
+        f.player_level,
+        f.instance_name,
+        f.encounter_name,
+        f.difficulty_name,
+        f.max_players,
+        f.realm_id,
+        f.realm_name,
+        f.guild_name,
+        f.damage_done,
+        f.healing_done,
+        f.absorbed_done,
+        f.duration_secs,
+        f.dps,
+        f.hps,
+        f.avg_ilvl,
+        f.log_hashed_slug,
+        f.killed_at,
+        f.talent_sub_spec,
+        f.talent_layout
+    FROM filtered f
+    ORDER BY f.player_guid, (CASE WHEN @metric::text = 'hps' THEN f.hps ELSE f.dps END) DESC
+)
+SELECT
+    bpp.*,
+    COUNT(*) OVER() AS total_count
+FROM best_per_player bpp
+ORDER BY (CASE WHEN @metric::text = 'hps' THEN bpp.hps ELSE bpp.dps END) DESC
+LIMIT @query_limit::bigint
+OFFSET @query_offset::bigint;
+
 -- name: DeleteRankingRunSummary :exec
 DELETE FROM ranking_runs WHERE run_id = @run_id;
 
