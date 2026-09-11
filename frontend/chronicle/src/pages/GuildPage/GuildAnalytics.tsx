@@ -258,29 +258,30 @@ export function GuildAnalytics() {
                           </div>
                           <div className="min-w-[110px] shrink-0 text-right">
                             <div className="font-mono text-sm">{compactFormatter.format(instance.total)}</div>
-                            <DeltaLabel pct={instance.deltaPct} range={range} compact />
+                            <DeltaLabel pct={instance.deltaPct} range={range} compact reference={compactFormatter.format(instance.prevTotal)} />
                           </div>
                         </button>
                         {isExpanded && (
                           <div className="px-5 pb-4 pl-11">
-                            <div className="flex h-16 items-end gap-1 mb-2">
-                              {instance.series.map((day) => {
-                                const value = metricValue(day, metric);
-                                return (
-                                  <div
-                                    key={day.date}
-                                    title={`${formatDayTitle(day.date)} — ${numberFormatter.format(value)} ${METRIC_UNIT[metric]}`}
-                                    className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
-                                  >
-                                    <div
-                                      className="w-full max-w-[18px] rounded-t opacity-85"
-                                      style={{ height: `${Math.max(6, (value / instance.seriesMax) * 100)}%`, background: instance.color }}
-                                    />
-                                  </div>
-                                );
-                              })}
+                            <div className="overflow-x-auto pb-1">
+                              <div className="flex h-16 items-end gap-2.5">
+                                {instance.series.map((day) => {
+                                  const value = metricValue(day, metric);
+                                  return (
+                                    <div key={day.date} className="group relative flex h-full w-7 shrink-0 flex-col items-center justify-end gap-1">
+                                      <div className="invisible absolute bottom-full mb-1 whitespace-nowrap rounded bg-popover px-1.5 py-0.5 text-xs shadow group-hover:visible">
+                                        {formatDayTitle(day.date)} &middot; {numberFormatter.format(value)} {METRIC_UNIT[metric]}
+                                      </div>
+                                      <div
+                                        className="w-5 rounded-t opacity-85 transition-opacity group-hover:opacity-100"
+                                        style={{ height: `${Math.max(6, (value / instance.seriesMax) * 100)}%`, background: instance.color }}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                            <Link to={`/instances/${instance.key}`} className="text-xs text-amber-500 hover:text-amber-400">
+                            <Link to={`/instances/${instance.key}`} className="mt-2 inline-block text-xs text-amber-500 hover:text-amber-400">
                               Open instance page &rarr;
                             </Link>
                           </div>
@@ -312,12 +313,12 @@ function MetricCard({ icon: Icon, label, value, valueClassName, children }: { ic
   );
 }
 
-function DeltaLabel({ pct, range, compact }: { pct: number; range: number; compact?: boolean }) {
+function DeltaLabel({ pct, range, compact, reference }: { pct: number; range: number; compact?: boolean; reference?: string }) {
   const Icon = pct >= 0 ? TrendingUp : TrendingDown;
   return (
     <div className={cn("flex items-center gap-1 text-xs", pct >= 0 ? "text-emerald-500" : "text-muted-foreground", compact && "justify-end")}>
       <Icon className="h-3 w-3" />
-      {pct >= 0 ? "+" : ""}{pct}% {!compact && `vs prior ${range}d`}
+      {pct >= 0 ? "+" : ""}{pct}% {compact ? (reference && `vs ${reference}`) : `vs prior ${range}d`}
     </div>
   );
 }
@@ -331,6 +332,7 @@ interface InstanceSummary {
   name: string;
   color: string;
   total: number;
+  prevTotal: number;
   deltaPct: number;
   series: DayValue[];
   seriesMax: number;
@@ -378,12 +380,15 @@ function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDa
     .map(([key, name]) => {
       const byDate = instanceByDate.get(key) ?? new Map();
       const series = seriesFor(byDate, currentDates);
+      const total = sumMetric(series, metric);
+      const prevTotal = sumMetric(seriesFor(byDate, priorDates), metric);
       return {
         key,
         name,
         color: getInstanceAccentColor(name),
-        total: sumMetric(series, metric),
-        deltaPct: pctDelta(sumMetric(series, metric), sumMetric(seriesFor(byDate, priorDates), metric)),
+        total,
+        prevTotal,
+        deltaPct: pctDelta(total, prevTotal),
         series,
         seriesMax: Math.max(1, ...series.map((d) => metricValue(d, metric))),
       };
