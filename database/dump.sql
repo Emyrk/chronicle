@@ -242,12 +242,12 @@ BEGIN
     END IF;
 
     INSERT INTO ranking_run_summary_dirty (
-        run_id, generation, last_transaction_id, updated_at
+        run_id, last_transaction_id, updated_at
     ) VALUES (
-        p_run_id, 1, current_transaction_id, now()
+        p_run_id, current_transaction_id, now()
     )
     ON CONFLICT (run_id) DO UPDATE SET
-        generation = ranking_run_summary_dirty.generation + 1,
+        generation = EXCLUDED.generation,
         last_transaction_id = EXCLUDED.last_transaction_id,
         updated_at = EXCLUDED.updated_at
     WHERE ranking_run_summary_dirty.last_transaction_id
@@ -1406,9 +1406,16 @@ CREATE TABLE ranking_player_run_summaries (
 
 ALTER TABLE ONLY ranking_player_run_summaries FORCE ROW LEVEL SECURITY;
 
+CREATE SEQUENCE ranking_run_summary_dirty_generation_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
 CREATE TABLE ranking_run_summary_dirty (
     run_id uuid NOT NULL,
-    generation bigint DEFAULT 1 NOT NULL,
+    generation bigint DEFAULT nextval('ranking_run_summary_dirty_generation_seq'::regclass) NOT NULL,
     last_transaction_id xid8 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -2736,7 +2743,7 @@ CREATE TRIGGER trg_cleanup_after_untrack AFTER DELETE ON user_tracked_layouts FO
 
 CREATE TRIGGER trg_invalidate_ranking_run_before_instance_delete BEFORE DELETE ON log_instances FOR EACH ROW EXECUTE FUNCTION invalidate_ranking_run_before_instance_delete();
 
-CREATE TRIGGER trg_invalidate_ranking_run_from_instance_update AFTER UPDATE OF duplicate_group_id, name, realm_id, start_time ON log_instances FOR EACH ROW WHEN (((old.duplicate_group_id IS DISTINCT FROM new.duplicate_group_id) OR (old.name IS DISTINCT FROM new.name) OR (old.realm_id IS DISTINCT FROM new.realm_id) OR (old.start_time IS DISTINCT FROM new.start_time))) EXECUTE FUNCTION invalidate_ranking_run_from_instance_update();
+CREATE TRIGGER trg_invalidate_ranking_run_from_instance_update AFTER UPDATE OF duplicate_group_id, name, realm_id, start_time, difficulty_name, max_players ON log_instances FOR EACH ROW WHEN (((old.duplicate_group_id IS DISTINCT FROM new.duplicate_group_id) OR (old.name IS DISTINCT FROM new.name) OR (old.realm_id IS DISTINCT FROM new.realm_id) OR (old.start_time IS DISTINCT FROM new.start_time) OR (old.difficulty_name IS DISTINCT FROM new.difficulty_name) OR (old.max_players IS DISTINCT FROM new.max_players))) EXECUTE FUNCTION invalidate_ranking_run_from_instance_update();
 
 CREATE TRIGGER trg_invalidate_ranking_run_from_ranking_mutation AFTER INSERT OR DELETE OR UPDATE ON encounter_dps_rankings FOR EACH ROW EXECUTE FUNCTION invalidate_ranking_run_from_ranking_mutation();
 

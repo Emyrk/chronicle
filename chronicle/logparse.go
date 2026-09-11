@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/parseargs"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
@@ -732,6 +733,15 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 					slog.String("instance_id", dbinstance.ID.String()),
 					slog.String("err", rankErr.Error()),
 				)
+			} else if w.parent.queue != nil {
+				// Triggers own the durable dirty queue. This coalesced job is only
+				// a low-latency wake-up after the ranking transaction commits.
+				if _, enqueueErr := w.parent.queue.Insert(ctx, rankingargs.ArgsRebuildRankingRunSummaries{}, nil); enqueueErr != nil {
+					w.parent.logger.Error("failed to wake ranking run summary rebuild",
+						slog.String("instance_id", dbinstance.ID.String()),
+						slog.Any("error", enqueueErr),
+					)
+				}
 			}
 		}
 

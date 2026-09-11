@@ -104,7 +104,7 @@ func TestRankingRunDirtyGenerationCoalescesWithinTransaction(t *testing.T) {
 	insertDirtyTestRanking(t, pool, store, realmID, instanceID)
 
 	inserted := readDirtyRankingRun(t, pool, instanceID)
-	assert.Equal(t, int64(1), inserted.generation)
+	assert.Greater(t, inserted.generation, int64(0))
 	assert.NotEmpty(t, inserted.lastTransactionID)
 
 	ctx := testutil.Context(t, testutil.WaitShort)
@@ -141,7 +141,7 @@ func TestRankingRunDirtyGenerationCoalescesWithinTransaction(t *testing.T) {
 	require.NoError(t, tx.Commit(ctx))
 
 	first := readDirtyRankingRun(t, pool, instanceID)
-	assert.Equal(t, int64(1), first.generation)
+	assert.Greater(t, first.generation, inserted.generation)
 	assert.NotEmpty(t, first.lastTransactionID)
 
 	_, err = pool.Exec(ctx, `
@@ -152,8 +152,94 @@ func TestRankingRunDirtyGenerationCoalescesWithinTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	second := readDirtyRankingRun(t, pool, instanceID)
-	assert.Equal(t, int64(2), second.generation)
+	assert.Greater(t, second.generation, first.generation)
 	assert.NotEqual(t, first.lastTransactionID, second.lastTransactionID)
+}
+
+func TestRankingRunDirtyTracksInstanceCohortMutations(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	instanceID := uuid.New()
+	insertDirtyTestRanking(t, pool, store, realmID, instanceID)
+	previous := readDirtyRankingRun(t, pool, instanceID)
+
+	ctx := testutil.Context(t, testutil.WaitShort)
+	mutations := []struct {
+		name  string
+		query string
+	}{
+		{name: "difficulty name", query: "UPDATE log_instances SET difficulty_name = difficulty_name || '-updated' WHERE id = $1"},
+		{name: "max players", query: "UPDATE log_instances SET max_players = max_players + 1 WHERE id = $1"},
+	}
+	for _, mutation := range mutations {
+		_, err := pool.Exec(ctx, "DELETE FROM ranking_run_summary_dirty WHERE run_id = $1", instanceID)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, mutation.query, instanceID)
+		require.NoError(t, err, mutation.name)
+
+		dirty := readDirtyRankingRun(t, pool, instanceID)
+		assert.Greater(t, dirty.generation, previous.generation, mutation.name)
+		previous = dirty
+	}
+}
+
+func TestRankingRunDirtyStaleClearDoesNotDeleteRecreatedGeneration(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	instanceID := uuid.New()
+	insertDirtyTestRanking(t, pool, store, realmID, instanceID)
+	stale := readDirtyRankingRun(t, pool, instanceID)
+
+	ctx := testutil.Context(t, testutil.WaitShort)
+	cleared, err := pool.Exec(ctx, `
+		DELETE FROM ranking_run_summary_dirty
+		WHERE run_id = $1 AND generation = $2
+	`, instanceID, stale.generation)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), cleared.RowsAffected())
+
+	_, err = pool.Exec(ctx, `
+		UPDATE encounter_dps_rankings
+		SET damage_done = damage_done + 1
+		WHERE instance_id = $1
+	`, instanceID)
+	require.NoError(t, err)
+	recreated := readDirtyRankingRun(t, pool, instanceID)
+	assert.Greater(t, recreated.generation, stale.generation)
+
+	cleared, err = pool.Exec(ctx, `
+		DELETE FROM ranking_run_summary_dirty
+		WHERE run_id = $1 AND generation = $2
+	`, instanceID, stale.generation)
+	require.NoError(t, err)
+	assert.Zero(t, cleared.RowsAffected())
+	assert.Equal(t, recreated, readDirtyRankingRun(t, pool, instanceID))
+}
+
+func TestClearDirtyRankingRunGenerationIsConditional(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	instanceID := uuid.New()
+	insertDirtyTestRanking(t, pool, store, realmID, instanceID)
+
+	ctx := testutil.Context(t, testutil.WaitShort)
+	observed := readDirtyRankingRun(t, pool, instanceID)
+	_, err := pool.Exec(ctx, `
+		UPDATE encounter_dps_rankings
+		SET damage_done = damage_done + 1
+		WHERE instance_id = $1
+	`, instanceID)
+	require.NoError(t, err)
+
+	cleared, err := store.ClearDirtyRankingRunGeneration(ctx, database.ClearDirtyRankingRunGenerationParams{
+		RunID: instanceID, Generation: observed.generation,
+	})
+	require.NoError(t, err)
+	assert.Zero(t, cleared)
+	assert.Greater(t, readDirtyRankingRun(t, pool, instanceID).generation, observed.generation)
 }
 
 func TestRankingRunDirtyTracksDirectRankingMutationAndInstanceDeletion(t *testing.T) {
@@ -162,19 +248,21 @@ func TestRankingRunDirtyTracksDirectRankingMutationAndInstanceDeletion(t *testin
 	pool, store, realmID := setupParsesTest(t)
 	instanceID := uuid.New()
 	insertDirtyTestRanking(t, pool, store, realmID, instanceID)
+	initial := readDirtyRankingRun(t, pool, instanceID)
 
 	ctx := testutil.Context(t, testutil.WaitShort)
 	_, err := pool.Exec(ctx, "DELETE FROM ranking_run_summary_dirty WHERE run_id = $1", instanceID)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, "DELETE FROM encounter_dps_rankings WHERE instance_id = $1", instanceID)
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), readDirtyRankingRun(t, pool, instanceID).generation)
+	rankingDeleted := readDirtyRankingRun(t, pool, instanceID)
+	assert.Greater(t, rankingDeleted.generation, initial.generation)
 
 	_, err = pool.Exec(ctx, "DELETE FROM ranking_run_summary_dirty WHERE run_id = $1", instanceID)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, "DELETE FROM log_instances WHERE id = $1", instanceID)
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), readDirtyRankingRun(t, pool, instanceID).generation)
+	assert.Greater(t, readDirtyRankingRun(t, pool, instanceID).generation, rankingDeleted.generation)
 }
 
 func TestRankingRunDirtyTracksAncestorCascadeDeletion(t *testing.T) {
@@ -183,6 +271,7 @@ func TestRankingRunDirtyTracksAncestorCascadeDeletion(t *testing.T) {
 	pool, store, realmID := setupParsesTest(t)
 	instanceID := uuid.New()
 	insertDirtyTestRanking(t, pool, store, realmID, instanceID)
+	initial := readDirtyRankingRun(t, pool, instanceID)
 
 	ctx := testutil.Context(t, testutil.WaitShort)
 	var logGroupID uuid.UUID
@@ -196,7 +285,7 @@ func TestRankingRunDirtyTracksAncestorCascadeDeletion(t *testing.T) {
 
 	// The ancestor cascade, parent BEFORE DELETE trigger, and ranking-row deletes
 	// execute in one transaction, so they coalesce into one durable generation.
-	assert.Equal(t, int64(1), readDirtyRankingRun(t, pool, instanceID).generation)
+	assert.Greater(t, readDirtyRankingRun(t, pool, instanceID).generation, initial.generation)
 
 	var instanceCount, rankingCount int64
 	require.NoError(t, pool.QueryRow(ctx, `
@@ -217,6 +306,8 @@ func TestRankingRunDirtyTracksDuplicateGroupReassignment(t *testing.T) {
 	duplicateID := uuid.New()
 	insertDirtyTestRanking(t, pool, store, realmID, canonicalID)
 	insertDirtyTestRanking(t, pool, store, realmID, duplicateID)
+	initialCanonical := readDirtyRankingRun(t, pool, canonicalID)
+	initialDuplicate := readDirtyRankingRun(t, pool, duplicateID)
 
 	ctx := testutil.Context(t, testutil.WaitShort)
 	_, err := pool.Exec(ctx, "DELETE FROM ranking_run_summary_dirty WHERE run_id = ANY($1)", []uuid.UUID{canonicalID, duplicateID})
@@ -231,11 +322,11 @@ func TestRankingRunDirtyTracksDuplicateGroupReassignment(t *testing.T) {
 
 	canonical := readDirtyRankingRun(t, pool, canonicalID)
 	obsolete := readDirtyRankingRun(t, pool, duplicateID)
-	assert.Equal(t, int64(1), canonical.generation)
-	assert.Equal(t, int64(1), obsolete.generation)
+	assert.Greater(t, canonical.generation, initialCanonical.generation)
+	assert.Greater(t, obsolete.generation, initialDuplicate.generation)
 	assert.Equal(t, canonical.lastTransactionID, obsolete.lastTransactionID)
 
 	_, err = pool.Exec(ctx, "DELETE FROM log_instances WHERE id = $1", duplicateID)
 	require.NoError(t, err)
-	assert.Equal(t, int64(2), readDirtyRankingRun(t, pool, canonicalID).generation)
+	assert.Greater(t, readDirtyRankingRun(t, pool, canonicalID).generation, canonical.generation)
 }

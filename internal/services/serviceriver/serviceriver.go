@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/guildanalytics"
 	"github.com/Emyrk/chronicle/chronicle/retention"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
@@ -153,8 +154,9 @@ func (s *Service) Start(ctx context.Context) error {
 		)
 	}
 
-	// Register rankings summary refresh workers and periodic job (hourly).
+	// Register ranking workers and periodic jobs.
 	rank := servicerankings.Rankings(s.broker)
+	riverqueue.AddWorker(q, rank.RunSummaryWorker)
 	rank.SummaryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.SummaryDispatchWorker)
 	riverqueue.AddWorker(q, rank.SummaryTenantWorker)
@@ -173,6 +175,15 @@ func (s *Service) Start(ctx context.Context) error {
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(5*time.Minute),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return rankingargs.ArgsRebuildRankingRunSummaries{}, nil
+			},
+			&river.PeriodicJobOpts{RunOnStart: true},
+		),
+	)
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(
 			river.PeriodicInterval(1*time.Hour),
