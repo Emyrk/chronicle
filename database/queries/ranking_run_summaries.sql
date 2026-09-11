@@ -5,6 +5,41 @@ SELECT
     now()::timestamptz AS observed_at
 FROM ranking_run_summary_dirty;
 
+-- name: RankingRunSummaryBackfillStatus :one
+-- Cross-tenant status for the admin repair controls. A single source scan derives
+-- the logical runs; dirty age is measured in seconds for stable SDK serialization.
+WITH logical_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+),
+summary_counts AS (
+    SELECT
+        COUNT(*)::bigint AS logical_run_count,
+        COUNT(*) FILTER (WHERE rr.run_id IS NOT NULL AND rr.summary_version = @summary_version::smallint)::bigint AS current_run_count,
+        COUNT(*) FILTER (WHERE rr.run_id IS NULL)::bigint AS missing_run_count,
+        COUNT(*) FILTER (WHERE rr.run_id IS NOT NULL AND rr.summary_version <> @summary_version::smallint)::bigint AS stale_run_count
+    FROM logical_runs lr
+    LEFT JOIN ranking_runs rr ON rr.run_id = lr.run_id
+),
+dirty_status AS (
+    SELECT
+        COUNT(*)::bigint AS dirty_run_count,
+        MIN(updated_at)::timestamptz AS oldest_dirty_at,
+        COALESCE(EXTRACT(EPOCH FROM (now() - MIN(updated_at))), 0)::double precision AS oldest_dirty_age_seconds
+    FROM ranking_run_summary_dirty
+)
+SELECT
+    sc.logical_run_count,
+    sc.current_run_count,
+    sc.missing_run_count,
+    sc.stale_run_count,
+    ds.dirty_run_count,
+    ds.oldest_dirty_at,
+    ds.oldest_dirty_age_seconds
+FROM summary_counts sc
+CROSS JOIN dirty_status ds;
+
 -- name: ListDirtyRankingRuns :many
 -- Returns a bounded, stable batch without locking dirty rows. Rebuilds may be
 -- expensive, so workers observe the generation and conditionally clear it only
@@ -196,3 +231,154 @@ ORDER BY player_guid;
 -- name: ClearDirtyRankingRunGeneration :execrows
 DELETE FROM ranking_run_summary_dirty
 WHERE run_id = @run_id AND generation = @generation;
+
+-- name: SetLocalRankingSummaryBackfillStatementTimeout :exec
+SET LOCAL statement_timeout = '10s';
+
+-- name: PreviewRankingSummaryBackfill :one
+WITH ranking_instances AS MATERIALIZED (
+    SELECT
+        li.id AS instance_id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        ws.tenant_id,
+        COUNT(edr.*)::bigint AS source_rows
+    FROM log_instances li
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    LEFT JOIN encounter_dps_rankings edr ON edr.instance_id = li.id
+    GROUP BY li.id, li.duplicate_group_id, ws.tenant_id
+), selected_runs AS (
+    SELECT DISTINCT ri.run_id
+    FROM ranking_instances ri
+    WHERE ri.source_rows > 0
+      AND (@scope_all::boolean OR ri.tenant_id = @tenant_id::uuid)
+), logical_runs AS (
+    SELECT ri.run_id, SUM(ri.source_rows)::bigint AS source_rows
+    FROM ranking_instances ri
+    JOIN selected_runs selected ON selected.run_id = ri.run_id
+    GROUP BY ri.run_id
+), cross_tenant_duplicate_runs AS (
+    SELECT ri.run_id
+    FROM ranking_instances ri
+    JOIN selected_runs selected ON selected.run_id = ri.run_id
+    GROUP BY ri.run_id
+    HAVING COUNT(DISTINCT ri.tenant_id) > 1
+), classified AS (
+    SELECT
+        lr.run_id,
+        lr.source_rows,
+        rr.run_id IS NULL AS missing,
+        rr.run_id IS NOT NULL AND rr.summary_version < @target_summary_version::smallint AS stale,
+        rr.run_id IS NOT NULL AND rr.summary_version >= @target_summary_version::smallint AS current,
+        dirty.run_id IS NOT NULL AS dirty
+    FROM logical_runs lr
+    LEFT JOIN ranking_runs rr ON rr.run_id = lr.run_id
+    LEFT JOIN ranking_run_summary_dirty dirty ON dirty.run_id = lr.run_id
+)
+SELECT
+    COUNT(*)::bigint AS total_runs,
+    COALESCE(SUM(source_rows), 0)::bigint AS source_rows,
+    COUNT(*) FILTER (WHERE missing)::bigint AS missing_runs,
+    COUNT(*) FILTER (WHERE stale)::bigint AS stale_runs,
+    COUNT(*) FILTER (WHERE current)::bigint AS current_runs,
+    COUNT(*) FILTER (WHERE dirty)::bigint AS dirty_runs,
+    ((COUNT(*) FILTER (WHERE missing OR stale)) * 65536)::bigint AS estimated_wal_bytes,
+    (SELECT COUNT(*) FROM cross_tenant_duplicate_runs)::bigint AS cross_tenant_duplicate_runs
+FROM classified;
+
+-- name: CreateRankingSummaryBackfill :one
+INSERT INTO ranking_summary_backfills (
+    tenant_id, requested_by, target_summary_version, batch_size, max_batches,
+    delay_ms, preview_total_runs, preview_source_rows, preview_missing_runs, preview_stale_runs,
+    preview_current_runs, preview_dirty_runs, estimated_wal_bytes
+) VALUES (
+    CASE WHEN @scope_all::boolean THEN NULL ELSE @tenant_id::uuid END,
+    @requested_by, @target_summary_version, @batch_size, @max_batches,
+    @delay_ms, @preview_total_runs, @preview_source_rows, @preview_missing_runs, @preview_stale_runs,
+    @preview_current_runs, @preview_dirty_runs, @estimated_wal_bytes
+)
+RETURNING *;
+
+-- name: GetRankingSummaryBackfill :one
+SELECT * FROM ranking_summary_backfills WHERE id = @id;
+
+-- name: LatestRankingSummaryBackfill :one
+SELECT *
+FROM ranking_summary_backfills
+WHERE (@scope_all::boolean AND tenant_id IS NULL)
+   OR (NOT @scope_all::boolean AND tenant_id = @tenant_id::uuid)
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
+-- name: StartRankingSummaryBackfill :one
+UPDATE ranking_summary_backfills
+SET status = 'running',
+    started_at = COALESCE(started_at, now()),
+    batches_completed = CASE WHEN status IN ('paused', 'failed') THEN 0 ELSE batches_completed END,
+    completed_at = NULL,
+    last_error_at = NULL,
+    error_message = NULL
+WHERE id = @id AND status IN ('planned', 'paused', 'failed')
+RETURNING *;
+
+-- name: PauseRankingSummaryBackfill :one
+UPDATE ranking_summary_backfills
+SET status = 'paused', started_at = COALESCE(started_at, now())
+WHERE id = @id AND status IN ('planned', 'running')
+RETURNING *;
+
+-- name: MarkRankingSummaryBackfillBatch :many
+WITH plan AS MATERIALIZED (
+    SELECT * FROM ranking_summary_backfills
+    WHERE ranking_summary_backfills.id = @backfill_id
+      AND ranking_summary_backfills.status = 'running'
+), logical_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    JOIN plan p ON p.tenant_id IS NULL OR p.tenant_id = ws.tenant_id
+), candidates AS MATERIALIZED (
+    SELECT lr.run_id
+    FROM logical_runs lr
+    JOIN plan p ON true
+    LEFT JOIN ranking_runs rr ON rr.run_id = lr.run_id
+    WHERE lr.run_id > p.cursor_run_id
+      AND (rr.run_id IS NULL OR rr.summary_version < p.target_summary_version)
+    ORDER BY lr.run_id
+    LIMIT (SELECT batch_size FROM plan)
+), marked AS (
+    INSERT INTO ranking_run_summary_dirty (run_id, generation, last_transaction_id, updated_at)
+    SELECT run_id, 1, pg_current_xact_id(), now() FROM candidates
+    ON CONFLICT (run_id) DO UPDATE SET
+        generation = CASE
+            WHEN ranking_run_summary_dirty.last_transaction_id = pg_current_xact_id()
+                THEN ranking_run_summary_dirty.generation
+            ELSE ranking_run_summary_dirty.generation + 1
+        END,
+        last_transaction_id = pg_current_xact_id(),
+        updated_at = now()
+    RETURNING run_id
+)
+SELECT run_id FROM marked ORDER BY run_id;
+
+-- name: AdvanceRankingSummaryBackfill :one
+UPDATE ranking_summary_backfills
+SET cursor_run_id = @cursor_run_id,
+    batches_completed = batches_completed + 1,
+    runs_marked_dirty = runs_marked_dirty + @runs_marked_dirty,
+    last_progress_at = now(),
+    status = CASE
+        WHEN @complete::boolean THEN 'completed'
+        WHEN batches_completed + 1 >= max_batches THEN 'paused'
+        ELSE 'running'
+    END,
+    completed_at = CASE WHEN @complete::boolean THEN now() ELSE NULL END
+WHERE id = @id AND status = 'running'
+RETURNING *;
+
+-- name: FailRankingSummaryBackfill :exec
+UPDATE ranking_summary_backfills
+SET status = 'failed', completed_at = now(), last_error_at = now(), error_message = @error_message
+WHERE id = @id AND status = 'running';

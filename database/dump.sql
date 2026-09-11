@@ -1483,6 +1483,42 @@ CREATE TABLE ranking_snapshots (
 
 COMMENT ON COLUMN ranking_snapshots.member_count IS 'Exact number of ranking_snapshot_members rows captured when the snapshot is published';
 
+CREATE TABLE ranking_summary_backfills (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid,
+    requested_by uuid NOT NULL,
+    status text DEFAULT 'planned'::text NOT NULL,
+    target_summary_version smallint NOT NULL,
+    batch_size integer NOT NULL,
+    max_batches integer NOT NULL,
+    delay_ms integer NOT NULL,
+    preview_total_runs bigint NOT NULL,
+    preview_source_rows bigint NOT NULL,
+    preview_missing_runs bigint NOT NULL,
+    preview_stale_runs bigint NOT NULL,
+    preview_current_runs bigint NOT NULL,
+    preview_dirty_runs bigint NOT NULL,
+    estimated_wal_bytes bigint NOT NULL,
+    cursor_run_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    batches_completed integer DEFAULT 0 NOT NULL,
+    runs_marked_dirty bigint DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    started_at timestamp with time zone,
+    last_progress_at timestamp with time zone,
+    last_error_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    error_message text,
+    CONSTRAINT ranking_summary_backfills_batch_size_check CHECK (((batch_size >= 1) AND (batch_size <= 500))),
+    CONSTRAINT ranking_summary_backfills_delay_ms_check CHECK (((delay_ms >= 100) AND (delay_ms <= 60000))),
+    CONSTRAINT ranking_summary_backfills_error_check CHECK ((((last_error_at IS NULL) AND (error_message IS NULL)) OR ((last_error_at IS NOT NULL) AND (error_message IS NOT NULL)))),
+    CONSTRAINT ranking_summary_backfills_lifecycle_check CHECK ((((status = 'planned'::text) AND (started_at IS NULL) AND (completed_at IS NULL)) OR ((status = ANY (ARRAY['running'::text, 'paused'::text])) AND (started_at IS NOT NULL) AND (completed_at IS NULL)) OR ((status = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text])) AND (completed_at IS NOT NULL)))),
+    CONSTRAINT ranking_summary_backfills_max_batches_check CHECK (((max_batches >= 1) AND (max_batches <= 100))),
+    CONSTRAINT ranking_summary_backfills_preview_counts_check CHECK (((preview_total_runs >= 0) AND (preview_source_rows >= 0) AND (preview_missing_runs >= 0) AND (preview_stale_runs >= 0) AND (preview_current_runs >= 0) AND (preview_dirty_runs >= 0) AND (estimated_wal_bytes >= 0) AND (preview_total_runs = ((preview_missing_runs + preview_stale_runs) + preview_current_runs)) AND (preview_dirty_runs <= preview_total_runs))),
+    CONSTRAINT ranking_summary_backfills_progress_check CHECK (((batches_completed >= 0) AND (batches_completed <= max_batches) AND (runs_marked_dirty >= 0))),
+    CONSTRAINT ranking_summary_backfills_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'running'::text, 'paused'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT ranking_summary_backfills_target_version_check CHECK ((target_summary_version > 0))
+);
+
 CREATE TABLE rankings_instance_summaries (
     instance_name text NOT NULL,
     difficulty_name text DEFAULT ''::text NOT NULL,
@@ -2331,6 +2367,9 @@ ALTER TABLE ONLY ranking_snapshot_members
 ALTER TABLE ONLY ranking_snapshots
     ADD CONSTRAINT ranking_snapshots_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY ranking_summary_backfills
+    ADD CONSTRAINT ranking_summary_backfills_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY rankings_instance_summaries
     ADD CONSTRAINT rankings_instance_summaries_pkey PRIMARY KEY (instance_name, difficulty_name, max_players, tenant_id);
 
@@ -2636,6 +2675,8 @@ CREATE INDEX idx_ranking_runs_summary_version ON ranking_runs USING btree (summa
 CREATE INDEX idx_ranking_runs_tenant_instance_cohort ON ranking_runs USING btree (tenant_id, instance_name, realm_id, difficulty_name, max_players);
 
 CREATE INDEX idx_ranking_snapshot_members_ranking_id ON ranking_snapshot_members USING btree (ranking_id);
+
+CREATE INDEX idx_ranking_summary_backfills_created_at ON ranking_summary_backfills USING btree (created_at DESC);
 
 CREATE INDEX idx_regression_snapshots_fixture ON regression_snapshots USING btree (fixture_id, created_at DESC);
 
@@ -3052,6 +3093,9 @@ ALTER TABLE ONLY ranking_snapshot_members
 
 ALTER TABLE ONLY ranking_snapshot_members
     ADD CONSTRAINT ranking_snapshot_members_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY ranking_summary_backfills
+    ADD CONSTRAINT ranking_summary_backfills_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT;
 
 ALTER TABLE ONLY regression_fixtures
     ADD CONSTRAINT regression_fixtures_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;

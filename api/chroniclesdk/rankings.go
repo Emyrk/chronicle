@@ -275,8 +275,62 @@ type AdminTriggerSnapshotResponse struct {
 	Jobs []AdminTriggerSnapshotJobResult `json:"jobs"`
 }
 
+// AdminRankingSummaryBackfillPreview classifies logical ranking runs for a target version.
+type AdminRankingSummaryBackfillPreview struct {
+	TargetSummaryVersion int16      `json:"target_summary_version"`
+	TenantID             *uuid.UUID `json:"tenant_id,omitempty"`
+	TotalRuns            int64      `json:"total_runs"`
+	SourceRows           int64      `json:"source_rows"`
+	MissingRuns          int64      `json:"missing_runs"`
+	StaleRuns            int64      `json:"stale_runs"`
+	CurrentRuns          int64      `json:"current_runs"`
+	DirtyRuns            int64      `json:"dirty_runs"`
+	EstimatedWALBytes    *int64     `json:"estimated_wal_bytes"`
+}
+
+// AdminRankingSummaryBackfill is a persisted, resumable backfill execution.
+type AdminRankingSummaryBackfill struct {
+	ID                   uuid.UUID                          `json:"id"`
+	TenantID             *uuid.UUID                         `json:"tenant_id,omitempty"`
+	RequestedBy          uuid.UUID                          `json:"requested_by"`
+	Status               string                             `json:"status"`
+	TargetSummaryVersion int16                              `json:"target_summary_version"`
+	BatchSize            int32                              `json:"batch_size"`
+	MaxBatches           int32                              `json:"max_batches"`
+	DelayMS              int32                              `json:"delay_ms"`
+	Preview              AdminRankingSummaryBackfillPreview `json:"preview"`
+	CursorRunID          uuid.UUID                          `json:"cursor_run_id"`
+	BatchesCompleted     int32                              `json:"batches_completed"`
+	RunsMarkedDirty      int64                              `json:"runs_marked_dirty"`
+	CreatedAt            time.Time                          `json:"created_at"`
+	StartedAt            *time.Time                         `json:"started_at,omitempty"`
+	LastProgressAt       *time.Time                         `json:"last_progress_at,omitempty"`
+	LastErrorAt          *time.Time                         `json:"last_error_at,omitempty"`
+	CompletedAt          *time.Time                         `json:"completed_at,omitempty"`
+	ErrorMessage         *string                            `json:"error_message,omitempty"`
+}
+
+// AdminRankingSummaryBackfillRequest creates a planned record without executing it.
+type AdminRankingSummaryBackfillRequest struct {
+	TenantID             *uuid.UUID `json:"tenant_id,omitempty"`
+	TargetSummaryVersion int16      `json:"target_summary_version"`
+	BatchSize            int32      `json:"batch_size"`
+	MaxBatches           int32      `json:"max_batches"`
+	DelayMS              int32      `json:"delay_ms"`
+}
+
+// AdminRankingSummaryBackfillsResponse returns a live preview and the latest persisted plan.
+type AdminRankingSummaryBackfillsResponse struct {
+	Preview AdminRankingSummaryBackfillPreview `json:"preview"`
+	Latest  *AdminRankingSummaryBackfill       `json:"latest,omitempty"`
+}
+
 // AdminRankingRunSummaryStatusResponse describes the durable player-run summary rebuild queue.
 type AdminRankingRunSummaryStatusResponse struct {
+	LogicalRunCount       int64      `json:"logical_run_count"`
+	CurrentRunCount       int64      `json:"current_run_count"`
+	MissingRunCount       int64      `json:"missing_run_count"`
+	StaleRunCount         int64      `json:"stale_run_count"`
 	QueueDepth            int64      `json:"queue_depth"`
 	OldestDirtyAt         *time.Time `json:"oldest_dirty_at,omitempty"`
 	OldestDirtyAgeSeconds float64    `json:"oldest_dirty_age_seconds"`

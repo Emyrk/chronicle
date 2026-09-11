@@ -11023,6 +11023,66 @@ func (q *sqlQuerier) UpdateRaidCompositionSharing(ctx context.Context, arg Updat
 	return i, err
 }
 
+const advanceRankingSummaryBackfill = `-- name: AdvanceRankingSummaryBackfill :one
+UPDATE ranking_summary_backfills
+SET cursor_run_id = $1,
+    batches_completed = batches_completed + 1,
+    runs_marked_dirty = runs_marked_dirty + $2,
+    last_progress_at = now(),
+    status = CASE
+        WHEN $3::boolean THEN 'completed'
+        WHEN batches_completed + 1 >= max_batches THEN 'paused'
+        ELSE 'running'
+    END,
+    completed_at = CASE WHEN $3::boolean THEN now() ELSE NULL END
+WHERE id = $4 AND status = 'running'
+RETURNING id, tenant_id, requested_by, status, target_summary_version, batch_size, max_batches, delay_ms, preview_total_runs, preview_source_rows, preview_missing_runs, preview_stale_runs, preview_current_runs, preview_dirty_runs, estimated_wal_bytes, cursor_run_id, batches_completed, runs_marked_dirty, created_at, started_at, last_progress_at, last_error_at, completed_at, error_message
+`
+
+type AdvanceRankingSummaryBackfillParams struct {
+	CursorRunID     uuid.UUID `db:"cursor_run_id" json:"cursor_run_id"`
+	RunsMarkedDirty int64     `db:"runs_marked_dirty" json:"runs_marked_dirty"`
+	Complete        bool      `db:"complete" json:"complete"`
+	ID              uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) AdvanceRankingSummaryBackfill(ctx context.Context, arg AdvanceRankingSummaryBackfillParams) (RankingSummaryBackfill, error) {
+	row := q.db.QueryRow(ctx, advanceRankingSummaryBackfill,
+		arg.CursorRunID,
+		arg.RunsMarkedDirty,
+		arg.Complete,
+		arg.ID,
+	)
+	var i RankingSummaryBackfill
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Status,
+		&i.TargetSummaryVersion,
+		&i.BatchSize,
+		&i.MaxBatches,
+		&i.DelayMs,
+		&i.PreviewTotalRuns,
+		&i.PreviewSourceRows,
+		&i.PreviewMissingRuns,
+		&i.PreviewStaleRuns,
+		&i.PreviewCurrentRuns,
+		&i.PreviewDirtyRuns,
+		&i.EstimatedWalBytes,
+		&i.CursorRunID,
+		&i.BatchesCompleted,
+		&i.RunsMarkedDirty,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.LastProgressAt,
+		&i.LastErrorAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+	)
+	return i, err
+}
+
 const clearDirtyRankingRunGeneration = `-- name: ClearDirtyRankingRunGeneration :execrows
 DELETE FROM ranking_run_summary_dirty
 WHERE run_id = $1 AND generation = $2
@@ -11041,12 +11101,106 @@ func (q *sqlQuerier) ClearDirtyRankingRunGeneration(ctx context.Context, arg Cle
 	return result.RowsAffected(), nil
 }
 
+const createRankingSummaryBackfill = `-- name: CreateRankingSummaryBackfill :one
+INSERT INTO ranking_summary_backfills (
+    tenant_id, requested_by, target_summary_version, batch_size, max_batches,
+    delay_ms, preview_total_runs, preview_source_rows, preview_missing_runs, preview_stale_runs,
+    preview_current_runs, preview_dirty_runs, estimated_wal_bytes
+) VALUES (
+    CASE WHEN $1::boolean THEN NULL ELSE $2::uuid END,
+    $3, $4, $5, $6,
+    $7, $8, $9, $10, $11,
+    $12, $13, $14
+)
+RETURNING id, tenant_id, requested_by, status, target_summary_version, batch_size, max_batches, delay_ms, preview_total_runs, preview_source_rows, preview_missing_runs, preview_stale_runs, preview_current_runs, preview_dirty_runs, estimated_wal_bytes, cursor_run_id, batches_completed, runs_marked_dirty, created_at, started_at, last_progress_at, last_error_at, completed_at, error_message
+`
+
+type CreateRankingSummaryBackfillParams struct {
+	ScopeAll             bool      `db:"scope_all" json:"scope_all"`
+	TenantID             uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RequestedBy          uuid.UUID `db:"requested_by" json:"requested_by"`
+	TargetSummaryVersion int16     `db:"target_summary_version" json:"target_summary_version"`
+	BatchSize            int32     `db:"batch_size" json:"batch_size"`
+	MaxBatches           int32     `db:"max_batches" json:"max_batches"`
+	DelayMs              int32     `db:"delay_ms" json:"delay_ms"`
+	PreviewTotalRuns     int64     `db:"preview_total_runs" json:"preview_total_runs"`
+	PreviewSourceRows    int64     `db:"preview_source_rows" json:"preview_source_rows"`
+	PreviewMissingRuns   int64     `db:"preview_missing_runs" json:"preview_missing_runs"`
+	PreviewStaleRuns     int64     `db:"preview_stale_runs" json:"preview_stale_runs"`
+	PreviewCurrentRuns   int64     `db:"preview_current_runs" json:"preview_current_runs"`
+	PreviewDirtyRuns     int64     `db:"preview_dirty_runs" json:"preview_dirty_runs"`
+	EstimatedWalBytes    int64     `db:"estimated_wal_bytes" json:"estimated_wal_bytes"`
+}
+
+func (q *sqlQuerier) CreateRankingSummaryBackfill(ctx context.Context, arg CreateRankingSummaryBackfillParams) (RankingSummaryBackfill, error) {
+	row := q.db.QueryRow(ctx, createRankingSummaryBackfill,
+		arg.ScopeAll,
+		arg.TenantID,
+		arg.RequestedBy,
+		arg.TargetSummaryVersion,
+		arg.BatchSize,
+		arg.MaxBatches,
+		arg.DelayMs,
+		arg.PreviewTotalRuns,
+		arg.PreviewSourceRows,
+		arg.PreviewMissingRuns,
+		arg.PreviewStaleRuns,
+		arg.PreviewCurrentRuns,
+		arg.PreviewDirtyRuns,
+		arg.EstimatedWalBytes,
+	)
+	var i RankingSummaryBackfill
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Status,
+		&i.TargetSummaryVersion,
+		&i.BatchSize,
+		&i.MaxBatches,
+		&i.DelayMs,
+		&i.PreviewTotalRuns,
+		&i.PreviewSourceRows,
+		&i.PreviewMissingRuns,
+		&i.PreviewStaleRuns,
+		&i.PreviewCurrentRuns,
+		&i.PreviewDirtyRuns,
+		&i.EstimatedWalBytes,
+		&i.CursorRunID,
+		&i.BatchesCompleted,
+		&i.RunsMarkedDirty,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.LastProgressAt,
+		&i.LastErrorAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+	)
+	return i, err
+}
+
 const deleteRankingRunSummary = `-- name: DeleteRankingRunSummary :exec
 DELETE FROM ranking_runs WHERE run_id = $1
 `
 
 func (q *sqlQuerier) DeleteRankingRunSummary(ctx context.Context, runID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteRankingRunSummary, runID)
+	return err
+}
+
+const failRankingSummaryBackfill = `-- name: FailRankingSummaryBackfill :exec
+UPDATE ranking_summary_backfills
+SET status = 'failed', completed_at = now(), last_error_at = now(), error_message = $1
+WHERE id = $2 AND status = 'running'
+`
+
+type FailRankingSummaryBackfillParams struct {
+	ErrorMessage pgtype.Text `db:"error_message" json:"error_message"`
+	ID           uuid.UUID   `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) FailRankingSummaryBackfill(ctx context.Context, arg FailRankingSummaryBackfillParams) error {
+	_, err := q.db.Exec(ctx, failRankingSummaryBackfill, arg.ErrorMessage, arg.ID)
 	return err
 }
 
@@ -11071,6 +11225,42 @@ func (q *sqlQuerier) GetRankingRunSummary(ctx context.Context, runID uuid.UUID) 
 		&i.SummaryVersion,
 		&i.SourceGeneration,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRankingSummaryBackfill = `-- name: GetRankingSummaryBackfill :one
+SELECT id, tenant_id, requested_by, status, target_summary_version, batch_size, max_batches, delay_ms, preview_total_runs, preview_source_rows, preview_missing_runs, preview_stale_runs, preview_current_runs, preview_dirty_runs, estimated_wal_bytes, cursor_run_id, batches_completed, runs_marked_dirty, created_at, started_at, last_progress_at, last_error_at, completed_at, error_message FROM ranking_summary_backfills WHERE id = $1
+`
+
+func (q *sqlQuerier) GetRankingSummaryBackfill(ctx context.Context, id uuid.UUID) (RankingSummaryBackfill, error) {
+	row := q.db.QueryRow(ctx, getRankingSummaryBackfill, id)
+	var i RankingSummaryBackfill
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Status,
+		&i.TargetSummaryVersion,
+		&i.BatchSize,
+		&i.MaxBatches,
+		&i.DelayMs,
+		&i.PreviewTotalRuns,
+		&i.PreviewSourceRows,
+		&i.PreviewMissingRuns,
+		&i.PreviewStaleRuns,
+		&i.PreviewCurrentRuns,
+		&i.PreviewDirtyRuns,
+		&i.EstimatedWalBytes,
+		&i.CursorRunID,
+		&i.BatchesCompleted,
+		&i.RunsMarkedDirty,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.LastProgressAt,
+		&i.LastErrorAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
 	)
 	return i, err
 }
@@ -11203,6 +11393,52 @@ func (q *sqlQuerier) InsertRankingRunSummary(ctx context.Context, arg InsertRank
 	return err
 }
 
+const latestRankingSummaryBackfill = `-- name: LatestRankingSummaryBackfill :one
+SELECT id, tenant_id, requested_by, status, target_summary_version, batch_size, max_batches, delay_ms, preview_total_runs, preview_source_rows, preview_missing_runs, preview_stale_runs, preview_current_runs, preview_dirty_runs, estimated_wal_bytes, cursor_run_id, batches_completed, runs_marked_dirty, created_at, started_at, last_progress_at, last_error_at, completed_at, error_message
+FROM ranking_summary_backfills
+WHERE ($1::boolean AND tenant_id IS NULL)
+   OR (NOT $1::boolean AND tenant_id = $2::uuid)
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type LatestRankingSummaryBackfillParams struct {
+	ScopeAll bool      `db:"scope_all" json:"scope_all"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) LatestRankingSummaryBackfill(ctx context.Context, arg LatestRankingSummaryBackfillParams) (RankingSummaryBackfill, error) {
+	row := q.db.QueryRow(ctx, latestRankingSummaryBackfill, arg.ScopeAll, arg.TenantID)
+	var i RankingSummaryBackfill
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Status,
+		&i.TargetSummaryVersion,
+		&i.BatchSize,
+		&i.MaxBatches,
+		&i.DelayMs,
+		&i.PreviewTotalRuns,
+		&i.PreviewSourceRows,
+		&i.PreviewMissingRuns,
+		&i.PreviewStaleRuns,
+		&i.PreviewCurrentRuns,
+		&i.PreviewDirtyRuns,
+		&i.EstimatedWalBytes,
+		&i.CursorRunID,
+		&i.BatchesCompleted,
+		&i.RunsMarkedDirty,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.LastProgressAt,
+		&i.LastErrorAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+	)
+	return i, err
+}
+
 const listDirtyRankingRuns = `-- name: ListDirtyRankingRuns :many
 SELECT run_id, generation
 FROM ranking_run_summary_dirty
@@ -11293,6 +11529,248 @@ func (q *sqlQuerier) ListRankingPlayerRunSummaries(ctx context.Context, runID uu
 		return nil, err
 	}
 	return items, nil
+}
+
+const markRankingSummaryBackfillBatch = `-- name: MarkRankingSummaryBackfillBatch :many
+WITH plan AS MATERIALIZED (
+    SELECT id, tenant_id, requested_by, status, target_summary_version, batch_size, max_batches, delay_ms, preview_total_runs, preview_source_rows, preview_missing_runs, preview_stale_runs, preview_current_runs, preview_dirty_runs, estimated_wal_bytes, cursor_run_id, batches_completed, runs_marked_dirty, created_at, started_at, last_progress_at, last_error_at, completed_at, error_message FROM ranking_summary_backfills
+    WHERE ranking_summary_backfills.id = $1
+      AND ranking_summary_backfills.status = 'running'
+), logical_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    JOIN plan p ON p.tenant_id IS NULL OR p.tenant_id = ws.tenant_id
+), candidates AS MATERIALIZED (
+    SELECT lr.run_id
+    FROM logical_runs lr
+    JOIN plan p ON true
+    LEFT JOIN ranking_runs rr ON rr.run_id = lr.run_id
+    WHERE lr.run_id > p.cursor_run_id
+      AND (rr.run_id IS NULL OR rr.summary_version < p.target_summary_version)
+    ORDER BY lr.run_id
+    LIMIT (SELECT batch_size FROM plan)
+), marked AS (
+    INSERT INTO ranking_run_summary_dirty (run_id, generation, last_transaction_id, updated_at)
+    SELECT run_id, 1, pg_current_xact_id(), now() FROM candidates
+    ON CONFLICT (run_id) DO UPDATE SET
+        generation = CASE
+            WHEN ranking_run_summary_dirty.last_transaction_id = pg_current_xact_id()
+                THEN ranking_run_summary_dirty.generation
+            ELSE ranking_run_summary_dirty.generation + 1
+        END,
+        last_transaction_id = pg_current_xact_id(),
+        updated_at = now()
+    RETURNING run_id
+)
+SELECT run_id FROM marked ORDER BY run_id
+`
+
+func (q *sqlQuerier) MarkRankingSummaryBackfillBatch(ctx context.Context, backfillID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, markRankingSummaryBackfillBatch, backfillID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var run_id uuid.UUID
+		if err := rows.Scan(&run_id); err != nil {
+			return nil, err
+		}
+		items = append(items, run_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pauseRankingSummaryBackfill = `-- name: PauseRankingSummaryBackfill :one
+UPDATE ranking_summary_backfills
+SET status = 'paused', started_at = COALESCE(started_at, now())
+WHERE id = $1 AND status IN ('planned', 'running')
+RETURNING id, tenant_id, requested_by, status, target_summary_version, batch_size, max_batches, delay_ms, preview_total_runs, preview_source_rows, preview_missing_runs, preview_stale_runs, preview_current_runs, preview_dirty_runs, estimated_wal_bytes, cursor_run_id, batches_completed, runs_marked_dirty, created_at, started_at, last_progress_at, last_error_at, completed_at, error_message
+`
+
+func (q *sqlQuerier) PauseRankingSummaryBackfill(ctx context.Context, id uuid.UUID) (RankingSummaryBackfill, error) {
+	row := q.db.QueryRow(ctx, pauseRankingSummaryBackfill, id)
+	var i RankingSummaryBackfill
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Status,
+		&i.TargetSummaryVersion,
+		&i.BatchSize,
+		&i.MaxBatches,
+		&i.DelayMs,
+		&i.PreviewTotalRuns,
+		&i.PreviewSourceRows,
+		&i.PreviewMissingRuns,
+		&i.PreviewStaleRuns,
+		&i.PreviewCurrentRuns,
+		&i.PreviewDirtyRuns,
+		&i.EstimatedWalBytes,
+		&i.CursorRunID,
+		&i.BatchesCompleted,
+		&i.RunsMarkedDirty,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.LastProgressAt,
+		&i.LastErrorAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+	)
+	return i, err
+}
+
+const previewRankingSummaryBackfill = `-- name: PreviewRankingSummaryBackfill :one
+WITH ranking_instances AS MATERIALIZED (
+    SELECT
+        li.id AS instance_id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        ws.tenant_id,
+        COUNT(edr.*)::bigint AS source_rows
+    FROM log_instances li
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    LEFT JOIN encounter_dps_rankings edr ON edr.instance_id = li.id
+    GROUP BY li.id, li.duplicate_group_id, ws.tenant_id
+), selected_runs AS (
+    SELECT DISTINCT ri.run_id
+    FROM ranking_instances ri
+    WHERE ri.source_rows > 0
+      AND ($1::boolean OR ri.tenant_id = $2::uuid)
+), logical_runs AS (
+    SELECT ri.run_id, SUM(ri.source_rows)::bigint AS source_rows
+    FROM ranking_instances ri
+    JOIN selected_runs selected ON selected.run_id = ri.run_id
+    GROUP BY ri.run_id
+), cross_tenant_duplicate_runs AS (
+    SELECT ri.run_id
+    FROM ranking_instances ri
+    JOIN selected_runs selected ON selected.run_id = ri.run_id
+    GROUP BY ri.run_id
+    HAVING COUNT(DISTINCT ri.tenant_id) > 1
+), classified AS (
+    SELECT
+        lr.run_id,
+        lr.source_rows,
+        rr.run_id IS NULL AS missing,
+        rr.run_id IS NOT NULL AND rr.summary_version < $3::smallint AS stale,
+        rr.run_id IS NOT NULL AND rr.summary_version >= $3::smallint AS current,
+        dirty.run_id IS NOT NULL AS dirty
+    FROM logical_runs lr
+    LEFT JOIN ranking_runs rr ON rr.run_id = lr.run_id
+    LEFT JOIN ranking_run_summary_dirty dirty ON dirty.run_id = lr.run_id
+)
+SELECT
+    COUNT(*)::bigint AS total_runs,
+    COALESCE(SUM(source_rows), 0)::bigint AS source_rows,
+    COUNT(*) FILTER (WHERE missing)::bigint AS missing_runs,
+    COUNT(*) FILTER (WHERE stale)::bigint AS stale_runs,
+    COUNT(*) FILTER (WHERE current)::bigint AS current_runs,
+    COUNT(*) FILTER (WHERE dirty)::bigint AS dirty_runs,
+    ((COUNT(*) FILTER (WHERE missing OR stale)) * 65536)::bigint AS estimated_wal_bytes,
+    (SELECT COUNT(*) FROM cross_tenant_duplicate_runs)::bigint AS cross_tenant_duplicate_runs
+FROM classified
+`
+
+type PreviewRankingSummaryBackfillParams struct {
+	ScopeAll             bool      `db:"scope_all" json:"scope_all"`
+	TenantID             uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	TargetSummaryVersion int16     `db:"target_summary_version" json:"target_summary_version"`
+}
+
+type PreviewRankingSummaryBackfillRow struct {
+	TotalRuns                int64 `db:"total_runs" json:"total_runs"`
+	SourceRows               int64 `db:"source_rows" json:"source_rows"`
+	MissingRuns              int64 `db:"missing_runs" json:"missing_runs"`
+	StaleRuns                int64 `db:"stale_runs" json:"stale_runs"`
+	CurrentRuns              int64 `db:"current_runs" json:"current_runs"`
+	DirtyRuns                int64 `db:"dirty_runs" json:"dirty_runs"`
+	EstimatedWalBytes        int64 `db:"estimated_wal_bytes" json:"estimated_wal_bytes"`
+	CrossTenantDuplicateRuns int64 `db:"cross_tenant_duplicate_runs" json:"cross_tenant_duplicate_runs"`
+}
+
+func (q *sqlQuerier) PreviewRankingSummaryBackfill(ctx context.Context, arg PreviewRankingSummaryBackfillParams) (PreviewRankingSummaryBackfillRow, error) {
+	row := q.db.QueryRow(ctx, previewRankingSummaryBackfill, arg.ScopeAll, arg.TenantID, arg.TargetSummaryVersion)
+	var i PreviewRankingSummaryBackfillRow
+	err := row.Scan(
+		&i.TotalRuns,
+		&i.SourceRows,
+		&i.MissingRuns,
+		&i.StaleRuns,
+		&i.CurrentRuns,
+		&i.DirtyRuns,
+		&i.EstimatedWalBytes,
+		&i.CrossTenantDuplicateRuns,
+	)
+	return i, err
+}
+
+const rankingRunSummaryBackfillStatus = `-- name: RankingRunSummaryBackfillStatus :one
+WITH logical_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+),
+summary_counts AS (
+    SELECT
+        COUNT(*)::bigint AS logical_run_count,
+        COUNT(*) FILTER (WHERE rr.run_id IS NOT NULL AND rr.summary_version = $1::smallint)::bigint AS current_run_count,
+        COUNT(*) FILTER (WHERE rr.run_id IS NULL)::bigint AS missing_run_count,
+        COUNT(*) FILTER (WHERE rr.run_id IS NOT NULL AND rr.summary_version <> $1::smallint)::bigint AS stale_run_count
+    FROM logical_runs lr
+    LEFT JOIN ranking_runs rr ON rr.run_id = lr.run_id
+),
+dirty_status AS (
+    SELECT
+        COUNT(*)::bigint AS dirty_run_count,
+        MIN(updated_at)::timestamptz AS oldest_dirty_at,
+        COALESCE(EXTRACT(EPOCH FROM (now() - MIN(updated_at))), 0)::double precision AS oldest_dirty_age_seconds
+    FROM ranking_run_summary_dirty
+)
+SELECT
+    sc.logical_run_count,
+    sc.current_run_count,
+    sc.missing_run_count,
+    sc.stale_run_count,
+    ds.dirty_run_count,
+    ds.oldest_dirty_at,
+    ds.oldest_dirty_age_seconds
+FROM summary_counts sc
+CROSS JOIN dirty_status ds
+`
+
+type RankingRunSummaryBackfillStatusRow struct {
+	LogicalRunCount       int64              `db:"logical_run_count" json:"logical_run_count"`
+	CurrentRunCount       int64              `db:"current_run_count" json:"current_run_count"`
+	MissingRunCount       int64              `db:"missing_run_count" json:"missing_run_count"`
+	StaleRunCount         int64              `db:"stale_run_count" json:"stale_run_count"`
+	DirtyRunCount         int64              `db:"dirty_run_count" json:"dirty_run_count"`
+	OldestDirtyAt         pgtype.Timestamptz `db:"oldest_dirty_at" json:"oldest_dirty_at"`
+	OldestDirtyAgeSeconds float64            `db:"oldest_dirty_age_seconds" json:"oldest_dirty_age_seconds"`
+}
+
+// Cross-tenant status for the admin repair controls. A single source scan derives
+// the logical runs; dirty age is measured in seconds for stable SDK serialization.
+func (q *sqlQuerier) RankingRunSummaryBackfillStatus(ctx context.Context, summaryVersion int16) (RankingRunSummaryBackfillStatusRow, error) {
+	row := q.db.QueryRow(ctx, rankingRunSummaryBackfillStatus, summaryVersion)
+	var i RankingRunSummaryBackfillStatusRow
+	err := row.Scan(
+		&i.LogicalRunCount,
+		&i.CurrentRunCount,
+		&i.MissingRunCount,
+		&i.StaleRunCount,
+		&i.DirtyRunCount,
+		&i.OldestDirtyAt,
+		&i.OldestDirtyAgeSeconds,
+	)
+	return i, err
 }
 
 const rankingRunSummaryDirtyStatus = `-- name: RankingRunSummaryDirtyStatus :one
@@ -11548,6 +12026,59 @@ func (q *sqlQuerier) RankingRunSummarySource(ctx context.Context, runID uuid.UUI
 		return nil, err
 	}
 	return items, nil
+}
+
+const setLocalRankingSummaryBackfillStatementTimeout = `-- name: SetLocalRankingSummaryBackfillStatementTimeout :exec
+SET LOCAL statement_timeout = '10s'
+`
+
+func (q *sqlQuerier) SetLocalRankingSummaryBackfillStatementTimeout(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, setLocalRankingSummaryBackfillStatementTimeout)
+	return err
+}
+
+const startRankingSummaryBackfill = `-- name: StartRankingSummaryBackfill :one
+UPDATE ranking_summary_backfills
+SET status = 'running',
+    started_at = COALESCE(started_at, now()),
+    batches_completed = CASE WHEN status IN ('paused', 'failed') THEN 0 ELSE batches_completed END,
+    completed_at = NULL,
+    last_error_at = NULL,
+    error_message = NULL
+WHERE id = $1 AND status IN ('planned', 'paused', 'failed')
+RETURNING id, tenant_id, requested_by, status, target_summary_version, batch_size, max_batches, delay_ms, preview_total_runs, preview_source_rows, preview_missing_runs, preview_stale_runs, preview_current_runs, preview_dirty_runs, estimated_wal_bytes, cursor_run_id, batches_completed, runs_marked_dirty, created_at, started_at, last_progress_at, last_error_at, completed_at, error_message
+`
+
+func (q *sqlQuerier) StartRankingSummaryBackfill(ctx context.Context, id uuid.UUID) (RankingSummaryBackfill, error) {
+	row := q.db.QueryRow(ctx, startRankingSummaryBackfill, id)
+	var i RankingSummaryBackfill
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Status,
+		&i.TargetSummaryVersion,
+		&i.BatchSize,
+		&i.MaxBatches,
+		&i.DelayMs,
+		&i.PreviewTotalRuns,
+		&i.PreviewSourceRows,
+		&i.PreviewMissingRuns,
+		&i.PreviewStaleRuns,
+		&i.PreviewCurrentRuns,
+		&i.PreviewDirtyRuns,
+		&i.EstimatedWalBytes,
+		&i.CursorRunID,
+		&i.BatchesCompleted,
+		&i.RunsMarkedDirty,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.LastProgressAt,
+		&i.LastErrorAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+	)
+	return i, err
 }
 
 const getCharacterEncounterStats = `-- name: GetCharacterEncounterStats :many
