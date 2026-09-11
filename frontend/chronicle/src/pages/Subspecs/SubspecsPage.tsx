@@ -130,19 +130,19 @@ export function SubspecsPage() {
                   <div className="space-y-6 p-5 sm:p-6">
                     <div className="grid gap-3 sm:grid-cols-2">
                       {rule.subspecs.map((subspec) => {
-                        const bear = subspec.name === "Bear"
+                        const detected = subspec.name === rule.detectedSubspec
                         return (
                           <div
                             key={subspec.name}
                             className={`rounded-xl border p-4 ${
-                              bear
+                              detected
                                 ? "border-emerald-300/20 bg-emerald-400/5"
                                 : "border-orange-300/20 bg-orange-400/5"
                             }`}
                           >
                             <p
                               className={`mb-1 text-xs font-bold uppercase tracking-[0.14em] ${
-                                bear ? "text-emerald-300/80" : "text-orange-300/80"
+                                detected ? "text-emerald-300/80" : "text-orange-300/80"
                               }`}
                             >
                               {subspec.name}
@@ -150,7 +150,7 @@ export function SubspecsPage() {
                             <p className="text-sm leading-relaxed text-muted-foreground">
                               {subspec.description}
                             </p>
-                            {bear && (
+                            {detected && (
                               <div className="mt-4 space-y-2">
                                 {rule.detection.map((talent) => (
                                   <div key={talent} className="flex items-center gap-2 text-sm font-semibold">

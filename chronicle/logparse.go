@@ -1563,42 +1563,73 @@ func extractTalentInfoFromSnapshot(className string, playerTalents *combatant.Ta
 }
 
 func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents, flavor database.WoWFlavor, treeData *talents.TalentTreeData) string {
-	if className != "DRUID" || spec != "Feral" || !flavor.Has(database.FlavorNightmareOfUrsol) {
+	if !flavor.Has(database.FlavorNightmareOfUrsol) {
 		return ""
 	}
 
-	// Nightmare of Ursol Feral druids form exactly two cohorts. Require all
-	// three Bear marker talents; builds missing any marker retain the Cat default.
+	type subSpecRule struct {
+		classID       int32
+		treeIndex     int
+		tabNames      []string
+		markerTalents []string
+		matched       string
+		fallback      string
+	}
+
+	var rule subSpecRule
+	switch {
+	case className == "DRUID" && spec == "Feral":
+		rule = subSpecRule{
+			classID:       11,
+			treeIndex:     1,
+			tabNames:      []string{"Feral", "Feral Combat"},
+			markerTalents: []string{"Thick Hide", "Feral Charge", "Feral Instinct"},
+			matched:       "Bear",
+			fallback:      "Cat",
+		}
+	case className == "SHAMAN" && spec == "Enhancement":
+		rule = subSpecRule{
+			classID:       7,
+			treeIndex:     1,
+			tabNames:      []string{"Enhancement"},
+			markerTalents: []string{"Totemic Alignment", "Ancestral Guardian", "Spirit Armor"},
+			matched:       "Tank",
+			fallback:      "DPS",
+		}
+	default:
+		return ""
+	}
+
+	// Nightmare of Ursol sub-specs form exactly two cohorts. Require every
+	// marker talent; builds missing any marker retain the fallback cohort.
 	// Talent names are resolved from the dataset so positional layouts remain
 	// dataset-specific.
-	var thickHide, feralCharge, feralInstinct bool
+	markers := make(map[string]bool, len(rule.markerTalents))
 	if treeData != nil {
-		if druid, ok := treeData.Classes[11]; ok {
-			for _, tab := range druid.Tabs {
-				if !strings.EqualFold(tab.Name, "Feral") && !strings.EqualFold(tab.Name, "Feral Combat") {
+		if classData, ok := treeData.Classes[rule.classID]; ok {
+			for _, tab := range classData.Tabs {
+				if !slices.ContainsFunc(rule.tabNames, func(name string) bool { return strings.EqualFold(name, tab.Name) }) {
 					continue
 				}
 				for _, talent := range tab.Talents {
-					if talent.TabIndex < 0 || int(talent.TabIndex) >= len(playerTalents.Trees[1]) || playerTalents.Trees[1][talent.TabIndex] == 0 {
+					if talent.TabIndex < 0 || int(talent.TabIndex) >= len(playerTalents.Trees[rule.treeIndex]) || playerTalents.Trees[rule.treeIndex][talent.TabIndex] == 0 {
 						continue
 					}
-					if strings.EqualFold(talent.Name, "Thick Hide") {
-						thickHide = true
-					}
-					if strings.EqualFold(talent.Name, "Feral Charge") {
-						feralCharge = true
-					}
-					if strings.EqualFold(talent.Name, "Feral Instinct") {
-						feralInstinct = true
+					for _, marker := range rule.markerTalents {
+						if strings.EqualFold(talent.Name, marker) {
+							markers[marker] = true
+						}
 					}
 				}
 			}
 		}
 	}
-	if thickHide && feralCharge && feralInstinct {
-		return "Bear"
+	for _, marker := range rule.markerTalents {
+		if !markers[marker] {
+			return rule.fallback
+		}
 	}
-	return "Cat"
+	return rule.matched
 }
 
 // findPlayerGuild returns the guild name for a player, or "" if not in a guild.

@@ -7,6 +7,7 @@ export interface SubspecRule {
     description: string
   }[]
   detection: readonly string[]
+  detectedSubspec: string
   fallback: string
 }
 
@@ -26,7 +27,26 @@ const SUBSPEC_RULES: readonly SubspecRule[] = [
       },
     ],
     detection: ["Thick Hide", "Feral Charge", "Feral Instinct"],
+    detectedSubspec: "Bear",
     fallback: "Cat",
+  },
+  {
+    flavor: "nightmare-of-ursol",
+    className: "Shaman",
+    spec: "Enhancement",
+    subspecs: [
+      {
+        name: "Tank",
+        description: "Tank-oriented Enhancement builds that meet every required talent marker.",
+      },
+      {
+        name: "DPS",
+        description: "All other Enhancement builds, including builds missing any Tank marker.",
+      },
+    ],
+    detection: ["Totemic Alignment", "Ancestral Guardian", "Spirit Armor"],
+    detectedSubspec: "Tank",
+    fallback: "DPS",
   },
 ]
 
