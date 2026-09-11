@@ -349,12 +349,13 @@ const (
 )
 
 type GuildResourceAnalyticsDay struct {
-	ResourceKind   string `json:"resource_kind"`
-	ResourceKey    string `json:"resource_key"`
-	ResourceName   string `json:"resource_name"`
-	ViewedOn       string `json:"viewed_on"`
-	Views          int64  `json:"views"`
-	UniqueVisitors int64  `json:"unique_visitors"`
+	ResourceKind     string `json:"resource_kind"`
+	ResourceKey      string `json:"resource_key"`
+	ResourceGroupKey string `json:"resource_group_key"`
+	ResourceName     string `json:"resource_name"`
+	ViewedOn         string `json:"viewed_on"`
+	Views            int64  `json:"views"`
+	UniqueVisitors   int64  `json:"unique_visitors"`
 }
 
 type GuildResourceAnalyticsResponse struct {

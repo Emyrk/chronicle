@@ -25,11 +25,42 @@ func (api *API) trackGuildPageView(next http.Handler) http.Handler {
 
 func (api *API) trackGuildInstanceView(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if guildID, resourceKey, ok := trackableInstanceResource(httpmw.Instance(r.Context())); ok {
-			api.recordGuildResourceView(w, r, guildID, chroniclesdk.GuildResourceKindInstance, resourceKey)
+		instance := httpmw.Instance(r.Context())
+		if guildID, memberKey, ok := trackableInstanceResource(instance); ok {
+			groupKey := memberKey
+			if instance.DuplicateGroupID.Valid {
+				var err error
+				groupKey, err = api.Zed.InstanceAnalyticsGroupKey(r.Context(), instance.ID)
+				if err != nil {
+					api.Opts.Logger.WarnContext(r.Context(), "failed to resolve instance analytics group",
+						"instance_id", instance.ID,
+						"error", err,
+					)
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			api.recordGuildInstanceView(w, r, guildID, groupKey, memberKey)
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (api *API) recordGuildInstanceView(w http.ResponseWriter, r *http.Request, guildID uuid.UUID, groupKey, memberKey string) {
+	visitorID := visitorid.Ensure(w, r)
+	if err := api.Zed.RecordGuildInstanceView(r.Context(), database.RecordGuildInstanceViewParams{
+		GuildID:   guildID,
+		GroupKey:  groupKey,
+		MemberKey: memberKey,
+		VisitorID: visitorID,
+	}); err != nil {
+		api.Opts.Logger.WarnContext(r.Context(), "failed to record guild instance view",
+			"guild_id", guildID,
+			"group_key", groupKey,
+			"member_key", memberKey,
+			"error", err,
+		)
+	}
 }
 
 // recordGuildResourceView records low-stakes analytics without changing the
@@ -74,12 +105,13 @@ func (api *API) GuildResourceAnalytics(w http.ResponseWriter, r *http.Request) {
 	days := make([]chroniclesdk.GuildResourceAnalyticsDay, 0, len(rows))
 	for _, row := range rows {
 		days = append(days, chroniclesdk.GuildResourceAnalyticsDay{
-			ResourceKind:   row.ResourceKind,
-			ResourceKey:    row.ResourceKey,
-			ResourceName:   row.ResourceName,
-			ViewedOn:       row.ViewedOn.Time.Format("2006-01-02"),
-			Views:          row.Views,
-			UniqueVisitors: row.UniqueVisitors,
+			ResourceKind:     row.ResourceKind,
+			ResourceKey:      row.ResourceKey,
+			ResourceGroupKey: row.ResourceGroupKey,
+			ResourceName:     row.ResourceName,
+			ViewedOn:         row.ViewedOn.Time.Format("2006-01-02"),
+			Views:            row.Views,
+			UniqueVisitors:   row.UniqueVisitors,
 		})
 	}
 

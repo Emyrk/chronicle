@@ -6382,19 +6382,25 @@ const guildResourceAnalytics = `-- name: GuildResourceAnalytics :many
 SELECT
     stats.resource_kind,
     stats.resource_key,
+    (CASE
+        WHEN stats.resource_kind IN ('instance', 'instance_member') THEN COALESCE(group_instance.hashed_slug, instance.hashed_slug, stats.resource_key)
+        ELSE stats.resource_key
+    END)::text AS resource_group_key,
     stats.viewed_on,
     stats.views,
     stats.unique_visitors,
     (CASE
         WHEN stats.resource_kind = 'guild_page' THEN g.name
-        WHEN stats.resource_kind = 'instance' THEN COALESCE(instance.name, stats.resource_key)
+        WHEN stats.resource_kind IN ('instance', 'instance_member') THEN COALESCE(instance.name, stats.resource_key)
         ELSE stats.resource_key
     END)::text AS resource_name
 FROM guild_resource_daily_stats AS stats
 JOIN guilds AS g ON g.id = stats.guild_id
 LEFT JOIN log_instances AS instance
-    ON stats.resource_kind = 'instance'
+    ON stats.resource_kind IN ('instance', 'instance_member')
     AND instance.hashed_slug = stats.resource_key
+LEFT JOIN log_instances AS group_instance
+    ON group_instance.id = instance.duplicate_group_id
 WHERE stats.guild_id = $1
   AND stats.viewed_on > (now() AT TIME ZONE 'UTC')::date - $2::int
 ORDER BY stats.viewed_on ASC, stats.resource_kind ASC, resource_name ASC
@@ -6406,12 +6412,13 @@ type GuildResourceAnalyticsParams struct {
 }
 
 type GuildResourceAnalyticsRow struct {
-	ResourceKind   string      `db:"resource_kind" json:"resource_kind"`
-	ResourceKey    string      `db:"resource_key" json:"resource_key"`
-	ViewedOn       pgtype.Date `db:"viewed_on" json:"viewed_on"`
-	Views          int64       `db:"views" json:"views"`
-	UniqueVisitors int64       `db:"unique_visitors" json:"unique_visitors"`
-	ResourceName   string      `db:"resource_name" json:"resource_name"`
+	ResourceKind     string      `db:"resource_kind" json:"resource_kind"`
+	ResourceKey      string      `db:"resource_key" json:"resource_key"`
+	ResourceGroupKey string      `db:"resource_group_key" json:"resource_group_key"`
+	ViewedOn         pgtype.Date `db:"viewed_on" json:"viewed_on"`
+	Views            int64       `db:"views" json:"views"`
+	UniqueVisitors   int64       `db:"unique_visitors" json:"unique_visitors"`
+	ResourceName     string      `db:"resource_name" json:"resource_name"`
 }
 
 func (q *sqlQuerier) GuildResourceAnalytics(ctx context.Context, arg GuildResourceAnalyticsParams) ([]GuildResourceAnalyticsRow, error) {
@@ -6426,6 +6433,7 @@ func (q *sqlQuerier) GuildResourceAnalytics(ctx context.Context, arg GuildResour
 		if err := rows.Scan(
 			&i.ResourceKind,
 			&i.ResourceKey,
+			&i.ResourceGroupKey,
 			&i.ViewedOn,
 			&i.Views,
 			&i.UniqueVisitors,
@@ -6439,6 +6447,86 @@ func (q *sqlQuerier) GuildResourceAnalytics(ctx context.Context, arg GuildResour
 		return nil, err
 	}
 	return items, nil
+}
+
+const instanceAnalyticsGroupKey = `-- name: InstanceAnalyticsGroupKey :one
+SELECT COALESCE(group_instance.hashed_slug, instance.hashed_slug)::text AS group_key
+FROM log_instances AS instance
+LEFT JOIN log_instances AS group_instance
+    ON group_instance.id = instance.duplicate_group_id
+WHERE instance.id = $1
+  AND instance.hashed_slug IS NOT NULL
+`
+
+func (q *sqlQuerier) InstanceAnalyticsGroupKey(ctx context.Context, instanceID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, instanceAnalyticsGroupKey, instanceID)
+	var group_key string
+	err := row.Scan(&group_key)
+	return group_key, err
+}
+
+const recordGuildInstanceView = `-- name: RecordGuildInstanceView :exec
+WITH resources AS (
+    SELECT 'instance'::text AS resource_kind, $2::text AS resource_key
+    UNION ALL
+    SELECT 'instance_member'::text, $3::text
+),
+new_unique AS (
+    INSERT INTO guild_resource_recent_visitors (
+        guild_id,
+        resource_kind,
+        resource_key,
+        visitor_id,
+        viewed_on
+    )
+    SELECT
+        $1,
+        resources.resource_kind,
+        resources.resource_key,
+        $4,
+        (now() AT TIME ZONE 'UTC')::date
+    FROM resources
+    ON CONFLICT DO NOTHING
+    RETURNING resource_kind, resource_key
+)
+INSERT INTO guild_resource_daily_stats (
+    guild_id,
+    resource_kind,
+    resource_key,
+    viewed_on,
+    views,
+    unique_visitors
+)
+SELECT
+    $1,
+    resources.resource_kind,
+    resources.resource_key,
+    (now() AT TIME ZONE 'UTC')::date,
+    1,
+    CASE WHEN new_unique.resource_key IS NULL THEN 0 ELSE 1 END
+FROM resources
+LEFT JOIN new_unique USING (resource_kind, resource_key)
+ON CONFLICT (guild_id, resource_kind, resource_key, viewed_on)
+DO UPDATE SET
+    views = guild_resource_daily_stats.views + 1,
+    unique_visitors = guild_resource_daily_stats.unique_visitors + EXCLUDED.unique_visitors
+`
+
+type RecordGuildInstanceViewParams struct {
+	GuildID   uuid.UUID `db:"guild_id" json:"guild_id"`
+	GroupKey  string    `db:"group_key" json:"group_key"`
+	MemberKey string    `db:"member_key" json:"member_key"`
+	VisitorID uuid.UUID `db:"visitor_id" json:"visitor_id"`
+}
+
+func (q *sqlQuerier) RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error {
+	_, err := q.db.Exec(ctx, recordGuildInstanceView,
+		arg.GuildID,
+		arg.GroupKey,
+		arg.MemberKey,
+		arg.VisitorID,
+	)
+	return err
 }
 
 const recordGuildResourceView = `-- name: RecordGuildResourceView :exec
