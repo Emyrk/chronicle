@@ -263,23 +263,24 @@ export function GuildAnalytics() {
                         </button>
                         {isExpanded && (
                           <div className="px-5 pb-4 pl-11">
-                            <div className="overflow-x-auto pb-1">
-                              <div className="flex h-16 items-end gap-2.5">
-                                {instance.series.map((day) => {
-                                  const value = metricValue(day, metric);
-                                  return (
-                                    <div key={day.date} className="group relative flex h-full w-7 shrink-0 flex-col items-center justify-end gap-1">
-                                      <div className="invisible absolute bottom-full mb-1 whitespace-nowrap rounded bg-popover px-1.5 py-0.5 text-xs shadow group-hover:visible">
-                                        {formatDayTitle(day.date)} &middot; {numberFormatter.format(value)} {METRIC_UNIT[metric]}
-                                      </div>
-                                      <div
-                                        className="w-5 rounded-t opacity-85 transition-opacity group-hover:opacity-100"
-                                        style={{ height: `${Math.max(6, (value / instance.seriesMax) * 100)}%`, background: instance.color }}
-                                      />
+                            <div
+                              className="flex h-16 items-end gap-1.5"
+                              style={{ width: `${(range / 30) * 100}%`, minWidth: "160px" }}
+                            >
+                              {instance.series.map((day) => {
+                                const value = metricValue(day, metric);
+                                return (
+                                  <div key={day.date} className="group relative flex h-full min-w-0 max-w-6 flex-1 flex-col items-center justify-end gap-1">
+                                    <div className="invisible absolute bottom-full mb-1 whitespace-nowrap rounded bg-popover px-1.5 py-0.5 text-xs shadow group-hover:visible">
+                                      {formatDayTitle(day.date)} &middot; {numberFormatter.format(value)} {METRIC_UNIT[metric]}
                                     </div>
-                                  );
-                                })}
-                              </div>
+                                    <div
+                                      className="w-full rounded-t opacity-85 transition-opacity group-hover:opacity-100"
+                                      style={{ height: `${Math.max(6, (value / instance.seriesMax) * 100)}%`, background: instance.color }}
+                                    />
+                                  </div>
+                                );
+                              })}
                             </div>
                             <Link to={`/instances/${instance.key}`} className="mt-2 inline-block text-xs text-amber-500 hover:text-amber-400">
                               Open instance page &rarr;
