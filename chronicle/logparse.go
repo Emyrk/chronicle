@@ -658,6 +658,14 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 					rankedCompletionTime = database.Timestamptz(sr.RankedCompletionTime)
 					rankedDurationMs = pgtype.Int8{Int64: sr.RankedDuration.Milliseconds(), Valid: true}
 				}
+				bossToBossStartTime := pgtype.Timestamptz{}
+				bossToBossCompletionTime := pgtype.Timestamptz{}
+				bossToBossDurationMs := pgtype.Int8{}
+				if !sr.BossToBossStartTime.IsZero() && !sr.BossToBossCompletionTime.IsZero() {
+					bossToBossStartTime = database.Timestamptz(sr.BossToBossStartTime)
+					bossToBossCompletionTime = database.Timestamptz(sr.BossToBossCompletionTime)
+					bossToBossDurationMs = pgtype.Int8{Int64: sr.BossToBossDuration.Milliseconds(), Valid: true}
+				}
 
 				err = tx.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
 					InstanceID:   dbinstance.ID,
@@ -667,17 +675,20 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 						UUID:  guildID,
 						Valid: guildID != uuid.Nil,
 					},
-					Qualified:            qualified,
-					StartTime:            database.Timestamptz(sr.StartTime),
-					CompletionTime:       database.Timestamptz(sr.CompletionTime),
-					DurationMs:           sr.Duration.Milliseconds(),
-					RankedStartTime:      rankedStartTime,
-					RankedCompletionTime: rankedCompletionTime,
-					RankedDurationMs:     rankedDurationMs,
-					Proof:                proofJSON,
-					AddonVersion:         addonVersion,
-					ParserVersionNum:     semverenc.Encode(parserVer),
-					AddonVersionNum:      semverenc.Encode(addonVersion),
+					Qualified:                qualified,
+					StartTime:                database.Timestamptz(sr.StartTime),
+					CompletionTime:           database.Timestamptz(sr.CompletionTime),
+					DurationMs:               sr.Duration.Milliseconds(),
+					RankedStartTime:          rankedStartTime,
+					RankedCompletionTime:     rankedCompletionTime,
+					RankedDurationMs:         rankedDurationMs,
+					BossToBossStartTime:      bossToBossStartTime,
+					BossToBossCompletionTime: bossToBossCompletionTime,
+					BossToBossDurationMs:     bossToBossDurationMs,
+					Proof:                    proofJSON,
+					AddonVersion:             addonVersion,
+					ParserVersionNum:         semverenc.Encode(parserVer),
+					AddonVersionNum:          semverenc.Encode(addonVersion),
 				})
 				if err != nil {
 					return fmt.Errorf("insert speedrun: %w", err)

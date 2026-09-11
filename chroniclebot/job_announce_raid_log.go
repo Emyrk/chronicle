@@ -344,8 +344,8 @@ func formatAnnouncementDuration(start, end pgtype.Timestamptz) string {
 }
 
 func announcementDuration(log database.ListInstancesForDiscordAnnouncementRow) string {
-	if log.ClearDurationMs.Valid && log.ClearDurationMs.Int64 > 0 {
-		return formatDuration(time.Duration(log.ClearDurationMs.Int64) * time.Millisecond)
+	if log.ClearDurationMs > 0 {
+		return formatDuration(time.Duration(log.ClearDurationMs) * time.Millisecond)
 	}
 	return formatAnnouncementDuration(log.StartTime, log.EndTime)
 }
@@ -449,7 +449,7 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 			&discordgo.MessageEmbedField{Name: "BOSSES KILLED", Value: fmt.Sprintf("%d / %d", countKilledEncounters(bestEncounters), len(bestEncounters)), Inline: true},
 			&discordgo.MessageEmbedField{Name: "PLAYERS", Value: fmt.Sprintf("%d", best.PlayerCount), Inline: true},
 		)
-		if comparison := guildAverageComparison(best.ClearDurationMs.Int64, best.GuildAvgDurationMs); comparison != "" {
+		if comparison := guildAverageComparison(best.ClearDurationMs, best.GuildAvgDurationMs); comparison != "" {
 			fields = append(fields, &discordgo.MessageEmbedField{Name: "VS. GUILD AVG", Value: comparison, Inline: true})
 		}
 	} else {

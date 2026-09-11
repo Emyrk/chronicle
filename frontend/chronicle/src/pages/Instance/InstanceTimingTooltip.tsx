@@ -5,7 +5,8 @@ function formatDurationMs(ms: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}hr ${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+  if (hours > 0)
+    return `${hours}hr ${minutes}m ${seconds.toString().padStart(2, "0")}s`;
   return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
 }
 
@@ -24,7 +25,9 @@ function TimingRow({
       <div>
         <div className="flex items-baseline justify-between gap-4">
           <span className="font-medium">{label}</span>
-          <span className="font-mono tabular-nums">{formatDurationMs(durationMs)}</span>
+          <span className="font-mono tabular-nums">
+            {formatDurationMs(durationMs)}
+          </span>
         </div>
         <p className="mt-0.5 leading-snug opacity-65">{description}</p>
       </div>
@@ -35,11 +38,11 @@ function TimingRow({
 export function InstanceTimingTooltip({
   elapsedDurationMs,
   rankedDurationMs,
-  combatDurationMs,
+  bossToBossDurationMs,
 }: {
   elapsedDurationMs: number;
   rankedDurationMs?: number;
-  combatDurationMs: number;
+  bossToBossDurationMs?: number;
 }) {
   return (
     <div className="w-80 space-y-3 py-1 text-left">
@@ -52,14 +55,16 @@ export function InstanceTimingTooltip({
         <TimingRow
           label="Ranked time"
           durationMs={rankedDurationMs}
-          description="Leaderboard time from the first required boss pull to the final required boss encounter end."
+          description="Full raid leaderboard time after applying any instance-specific start rule."
         />
       )}
-      <TimingRow
-        label="Combat time"
-        durationMs={combatDurationMs}
-        description="Sum of all encounter durations, excluding downtime between encounters."
-      />
+      {bossToBossDurationMs !== undefined && (
+        <TimingRow
+          label="Boss-to-boss time"
+          durationMs={bossToBossDurationMs}
+          description="From the first required boss pull to the final required boss encounter end."
+        />
+      )}
     </div>
   );
 }

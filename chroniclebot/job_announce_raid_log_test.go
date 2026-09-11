@@ -174,13 +174,15 @@ func TestAnnouncementDeliveryErrorIsPersisted(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
 	}
-	insertSpeedrun := func(instanceID uuid.UUID, start time.Time, duration time.Duration) {
+	insertSpeedrun := func(instanceID uuid.UUID, start time.Time, elapsedDuration, rankedDuration time.Duration) {
 		t.Helper()
 		require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
 			InstanceID: instanceID, InstanceName: "Molten Core", RealmID: realmID,
 			GuildID: uuid.NullUUID{UUID: guild.ID, Valid: true}, Qualified: true,
-			StartTime: database.Timestamptz(start), CompletionTime: database.Timestamptz(start.Add(duration)),
-			DurationMs: int64(duration / time.Millisecond), Proof: []byte(`{"proof":[]}`),
+			StartTime: database.Timestamptz(start), CompletionTime: database.Timestamptz(start.Add(elapsedDuration)),
+			DurationMs:      int64(elapsedDuration / time.Millisecond),
+			RankedStartTime: database.Timestamptz(start), RankedCompletionTime: database.Timestamptz(start.Add(rankedDuration)),
+			RankedDurationMs: pgtype.Int8{Int64: int64(rankedDuration / time.Millisecond), Valid: true}, Proof: []byte(`{"proof":[]}`),
 		}))
 	}
 
@@ -193,7 +195,7 @@ func TestAnnouncementDeliveryErrorIsPersisted(t *testing.T) {
 		Capabilities: []string{}, Category: pgtype.Text{String: "raid", Valid: true},
 	})
 	require.NoError(t, err)
-	insertSpeedrun(previousInstance.ID, previousInstance.StartTime.Time, 75*time.Minute)
+	insertSpeedrun(previousInstance.ID, previousInstance.StartTime.Time, 75*time.Minute, 45*time.Minute)
 
 	logGroupID := uuid.New()
 	insertLogGroup(logGroupID, startedAt.Add(24*time.Hour))
@@ -204,7 +206,7 @@ func TestAnnouncementDeliveryErrorIsPersisted(t *testing.T) {
 		Capabilities: []string{}, Category: pgtype.Text{String: "raid", Valid: true},
 	})
 	require.NoError(t, err)
-	insertSpeedrun(instance.ID, startedAt, time.Hour)
+	insertSpeedrun(instance.ID, startedAt, time.Hour, 30*time.Minute)
 
 	insertEncounter := func(name string, killType database.KillType, offset time.Duration) {
 		t.Helper()
@@ -234,14 +236,14 @@ func TestAnnouncementDeliveryErrorIsPersisted(t *testing.T) {
 	require.Len(t, messenger.sent.Embeds, 1)
 	embed := messenger.sent.Embeds[0]
 	require.Equal(t, "RAID UPLOAD", embed.Author.Name)
-	require.Equal(t, "Molten Core · 1h", embed.Title)
+	require.Equal(t, "Molten Core · 1h 5m", embed.Title)
 	require.Empty(t, embed.Description)
 	require.Empty(t, embed.Timestamp)
 	require.NotZero(t, embed.Color)
 	require.Equal(t, guild.Name+" · Nordanaar · Aug 14, 2026", embed.Footer.Text)
 	require.Len(t, embed.Fields, 3)
 	require.Equal(t, "2 / 3", requireAnnouncementField(t, embed, "BOSSES KILLED").Value)
-	require.Equal(t, "+20% faster", requireAnnouncementField(t, embed, "VS. GUILD AVG").Value)
+	require.Equal(t, "+13% faster", requireAnnouncementField(t, embed, "VS. GUILD AVG").Value)
 
 	attempts, err := store.ListGuildDiscordAnnouncementAttempts(ctx, database.ListGuildDiscordAnnouncementAttemptsParams{
 		GuildID: guild.ID, LimitCount: 10,
@@ -323,7 +325,7 @@ func TestAnnouncementFormatting(t *testing.T) {
 	require.Equal(t, "1h 15m", formatAnnouncementDuration(database.Timestamptz(start), database.Timestamptz(start.Add(75*time.Minute))))
 	require.Equal(t, "1h", announcementDuration(database.ListInstancesForDiscordAnnouncementRow{
 		StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(start.Add(75 * time.Minute)),
-		ClearDurationMs: pgtype.Int8{Int64: int64(time.Hour / time.Millisecond), Valid: true},
+		ClearDurationMs: int64(time.Hour / time.Millisecond),
 	}))
 	require.Equal(t, "+20% faster", guildAverageComparison(int64(time.Hour/time.Millisecond), int64(75*time.Minute/time.Millisecond)))
 	require.Equal(t, "-20% slower", guildAverageComparison(int64(90*time.Minute/time.Millisecond), int64(75*time.Minute/time.Millisecond)))

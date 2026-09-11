@@ -3308,7 +3308,7 @@ export function InstancePageView({
                   <InstanceTimingTooltip
                     elapsedDurationMs={elapsedDurationMs}
                     rankedDurationMs={instanceSpeedrun?.ranked_duration_ms}
-                    combatDurationMs={instanceCombatDurationMs}
+                    bossToBossDurationMs={instanceSpeedrun?.boss_to_boss_duration_ms}
                   />
                 </TooltipContent>
               </Tooltip>

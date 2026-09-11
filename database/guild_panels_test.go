@@ -439,7 +439,9 @@ func TestGuildBestRuns(t *testing.T) {
 			InstanceID: id, InstanceName: name, RealmID: f.realmID,
 			GuildID:   uuid.NullUUID{UUID: f.guildID, Valid: true},
 			StartTime: database.Timestamptz(completedAt.Add(-duration)), CompletionTime: database.Timestamptz(completedAt),
-			DurationMs: int64(duration / time.Millisecond), Proof: []byte(`{"proof":[]}`),
+			DurationMs:      int64(duration / time.Millisecond),
+			RankedStartTime: database.Timestamptz(completedAt.Add(-duration)), RankedCompletionTime: database.Timestamptz(completedAt),
+			RankedDurationMs: pgtype.Int8{Int64: int64(duration / time.Millisecond), Valid: true}, Proof: []byte(`{"proof":[]}`),
 		}))
 		return id
 	}

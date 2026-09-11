@@ -45,27 +45,36 @@ type SpeedrunTracker struct {
 	completionTime time.Time
 	completed      bool
 
-	currentFightStart         time.Time
-	currentFightSatisfiedBoss bool
-	rankedStartTime           time.Time
-	rankedCompletionTime      time.Time
+	currentFightStart                time.Time
+	currentFightSatisfiedBoss        bool
+	currentFightSatisfiedRankedStart bool
+	rankedStartAfterRequirementIndex int
+	rankedStartTime                  time.Time
+	rankedCompletionTime             time.Time
+	bossToBossStartTime              time.Time
+	bossToBossCompletionTime         time.Time
 }
 
 func NewSpeedrunTracker(rules SpeedrunRules, units *unitdb.Units, engagement *EngagementTracker) *SpeedrunTracker {
 	entryToRule := make(map[uint32]int)
+	rankedStartAfterRequirementIndex := -1
 	for i, req := range rules.Requirements {
 		for _, eid := range req.EntryIDs {
 			entryToRule[eid] = i
 		}
+		if req.Name == rules.RankedStartAfterRequirement {
+			rankedStartAfterRequirementIndex = i
+		}
 	}
 	return &SpeedrunTracker{
-		rules:       rules,
-		entryToRule: entryToRule,
-		state:       make([]requirementState, len(rules.Requirements)),
-		remaining:   len(rules.Requirements),
-		seenGUIDs:   make(map[guid.GUID]struct{}),
-		units:       units,
-		engagement:  engagement,
+		rules:                            rules,
+		entryToRule:                      entryToRule,
+		state:                            make([]requirementState, len(rules.Requirements)),
+		remaining:                        len(rules.Requirements),
+		seenGUIDs:                        make(map[guid.GUID]struct{}),
+		units:                            units,
+		engagement:                       engagement,
+		rankedStartAfterRequirementIndex: rankedStartAfterRequirementIndex,
 	}
 }
 
@@ -118,10 +127,10 @@ func (t *SpeedrunTracker) ActivityChange(m messages.Message, chars ...characters
 		if len(rs.kills) >= t.rules.Requirements[ruleIdx].Count {
 			rs.satisfied = true
 			t.remaining--
-			if t.rules.Requirements[ruleIdx].Category == SpeedrunCategoryBosses {
+			if t.rules.Requirements[ruleIdx].Category != SpeedrunCategoryTrash {
 				t.currentFightSatisfiedBoss = true
-				if t.rankedStartTime.IsZero() {
-					t.rankedStartTime = t.currentFightStart
+				if ruleIdx == t.rankedStartAfterRequirementIndex {
+					t.currentFightSatisfiedRankedStart = true
 				}
 			}
 		}
@@ -136,39 +145,47 @@ func (t *SpeedrunTracker) ProcessMessage(_ bool, _ uuid.UUID, _ messages.Message
 	return nil
 }
 
-// FightStarted records the clear-time start on the first fight and retains the
-// current fight start so ranked timing can begin when a required boss is found.
+// FightStarted records the raw and default ranked clear start on the first fight,
+// and retains each fight start so boss-to-boss timing can begin on a boss pull.
 func (t *SpeedrunTracker) FightStarted(_ uuid.UUID, m messages.Message) {
 	t.currentFightStart = m.Date()
 	t.currentFightSatisfiedBoss = false
+	t.currentFightSatisfiedRankedStart = false
 	if t.startTime.IsZero() {
 		t.startTime = m.Date()
+		if t.rankedStartAfterRequirementIndex < 0 {
+			t.rankedStartTime = m.Date()
+		}
 	}
 }
 
-// FightEnded updates boss timing, then checks whether all requirements are
-// satisfied. Both timing modes end with the encounter that satisfied the final
-// required boss, while trash requirements can qualify the run later.
+// FightEnded updates all timing boundaries, then checks whether all requirements
+// are satisfied. Timings end with the final required boss even when trailing trash
+// requirements qualify the run later.
 func (t *SpeedrunTracker) FightEnded(encounterID uuid.UUID, m messages.Message) {
 	if t.completed {
 		return
 	}
 
-	if t.rankedStartTime.IsZero() && t.encounterIncludesRequiredBoss(encounterID) {
-		t.rankedStartTime = t.currentFightStart
+	if t.bossToBossStartTime.IsZero() && (t.encounterIncludesRequiredBoss(encounterID) || t.currentFightSatisfiedBoss) {
+		t.bossToBossStartTime = t.currentFightStart
+	}
+	if t.rankedStartTime.IsZero() && t.currentFightSatisfiedRankedStart {
+		t.rankedStartTime = m.Date()
 	}
 	if t.currentFightSatisfiedBoss {
+		t.completionTime = m.Date()
 		t.rankedCompletionTime = m.Date()
+		t.bossToBossCompletionTime = m.Date()
 	}
 
 	if t.remaining != 0 {
 		return
 	}
-	t.completed = true
-	t.completionTime = m.Date()
-	if !t.rankedCompletionTime.IsZero() {
-		t.completionTime = t.rankedCompletionTime
+	if t.completionTime.IsZero() {
+		t.completionTime = m.Date()
 	}
+	t.completed = true
 }
 
 func (t *SpeedrunTracker) encounterIncludesRequiredBoss(encounterID uuid.UUID) bool {
@@ -181,7 +198,7 @@ func (t *SpeedrunTracker) encounterIncludesRequiredBoss(encounterID uuid.UUID) b
 			continue
 		}
 		ruleIdx, ok := t.entryToRule[entry]
-		if ok && t.rules.Requirements[ruleIdx].Category == SpeedrunCategoryBosses {
+		if ok && t.rules.Requirements[ruleIdx].Category != SpeedrunCategoryTrash {
 			return true
 		}
 	}
@@ -225,15 +242,22 @@ func (t *SpeedrunTracker) Result() *SpeedrunResult {
 	if !t.rankedStartTime.IsZero() && !t.rankedCompletionTime.IsZero() {
 		rankedDuration = t.rankedCompletionTime.Sub(t.rankedStartTime)
 	}
+	bossToBossDuration := time.Duration(0)
+	if !t.bossToBossStartTime.IsZero() && !t.bossToBossCompletionTime.IsZero() {
+		bossToBossDuration = t.bossToBossCompletionTime.Sub(t.bossToBossStartTime)
+	}
 	result := &SpeedrunResult{
-		Qualified:            t.completed,
-		StartTime:            t.startTime,
-		CompletionTime:       t.completionTime,
-		Duration:             t.completionTime.Sub(t.startTime),
-		RankedStartTime:      t.rankedStartTime,
-		RankedCompletionTime: t.rankedCompletionTime,
-		RankedDuration:       rankedDuration,
-		Proof:                proof,
+		Qualified:                t.completed,
+		StartTime:                t.startTime,
+		CompletionTime:           t.completionTime,
+		Duration:                 t.completionTime.Sub(t.startTime),
+		RankedStartTime:          t.rankedStartTime,
+		RankedCompletionTime:     t.rankedCompletionTime,
+		RankedDuration:           rankedDuration,
+		BossToBossStartTime:      t.bossToBossStartTime,
+		BossToBossCompletionTime: t.bossToBossCompletionTime,
+		BossToBossDuration:       bossToBossDuration,
+		Proof:                    proof,
 	}
 
 	// Check the level range against engaged players only. Player metadata can come
