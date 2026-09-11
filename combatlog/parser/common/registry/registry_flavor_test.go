@@ -107,6 +107,7 @@ func TestInstanceDetailsBossCount(t *testing.T) {
 		{name: "gruul groups council members", flavor: database.WoWFlavor{database.FlavorTBC}, instance: "Gruul's Lair", bossCount: intPtr(2)},
 		{name: "vanilla plus scarlet monastery", flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, instance: "Scarlet Monastery", bossCount: intPtr(8)},
 		{name: "vanilla plus blackwing lair", flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, instance: "Blackwing Lair", bossCount: intPtr(8)},
+		{name: "ulduar excludes optional encounters", flavor: database.WoWFlavor{database.FlavorWrath}, instance: "Ulduar", bossCount: intPtr(14)},
 		{name: "instance without speedrun rules", flavor: database.WoWFlavor{database.FlavorVanilla}, instance: "Shadowfang Keep"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -122,6 +123,52 @@ func TestInstanceDetailsBossCount(t *testing.T) {
 			t.Fatalf("instance %q not found", tc.instance)
 		})
 	}
+}
+
+func TestUlduarProgressionBosses(t *testing.T) {
+	t.Parallel()
+
+	reg := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorWrath})
+	for _, detail := range reg.AllInstanceDetails() {
+		if detail.Name != "Ulduar" {
+			continue
+		}
+		require.Equal(t, []string{
+			"Flame Leviathan",
+			"Ignis the Furnace Master",
+			"Razorscale",
+			"XT-002 Deconstructor",
+			"Assembly of Iron",
+			"Kologarn",
+			"Auriaya",
+			"Hodir",
+			"Thorim",
+			"Freya",
+			"Mimiron",
+			"General Vezax",
+			"Yogg-Saron",
+			"Algalon the Observer",
+		}, detail.ProgressionBosses)
+		require.NotContains(t, detail.ProgressionBosses, "Elder Brightleaf")
+		return
+	}
+	t.Fatal("Ulduar not found")
+}
+
+func TestProgressionBossesUseCanonicalEncounterNames(t *testing.T) {
+	t.Parallel()
+
+	reg := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorWrath})
+	for _, detail := range reg.AllInstanceDetails() {
+		if detail.Name != "Naxxramas" {
+			continue
+		}
+		require.Len(t, detail.ProgressionBosses, 15)
+		require.Contains(t, detail.ProgressionBosses, "Four Horsemen")
+		require.NotContains(t, detail.ProgressionBosses, "Four Horsemen: Baron Rivendare")
+		return
+	}
+	t.Fatal("Naxxramas not found")
 }
 
 func TestInstanceDetailsCategories(t *testing.T) {
