@@ -244,15 +244,15 @@ export function GuildAnalytics() {
                             <div className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground">{idx + 1}</div>
                             <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: instance.color, boxShadow: `0 0 6px ${instance.color}55` }} />
                             <div className="font-wow min-w-0 flex-1 truncate text-sm font-semibold">{instance.name}</div>
-                            <div className="flex h-4 shrink-0 items-end gap-[3px]">
-                              {instance.sparkline.map((day) => {
+                            <div className="flex h-4 w-20 shrink-0 items-end gap-px">
+                              {instance.series.map((day) => {
                                 const value = metricValue(day, metric);
                                 return (
                                   <div
                                     key={day.date}
                                     title={`${formatDayTitle(day.date)} — ${numberFormatter.format(value)} ${METRIC_UNIT[metric]}`}
-                                    className="w-[5px] rounded-[1px]"
-                                    style={{ height: `${Math.max(18, (value / instance.sparkMax) * 100)}%`, background: instance.color }}
+                                    className="min-w-0 flex-1 rounded-[1px]"
+                                    style={{ height: `${Math.max(18, (value / instance.seriesMax) * 100)}%`, background: instance.color }}
                                   />
                                 );
                               })}
@@ -397,8 +397,6 @@ interface InstanceSummary {
   deltaPct: number;
   series: DayValue[];
   seriesMax: number;
-  sparkline: DayValue[];
-  sparkMax: number;
 }
 
 function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDays, metric: Metric) {
@@ -429,7 +427,6 @@ function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDa
   const fullWindow = buildDates(FULL_WINDOW);
   const currentDates = fullWindow.slice(-range);
   const priorDates = fullWindow.slice(-(range * 2), -range);
-  const last7Dates = fullWindow.slice(-7);
 
   const guildSeries = seriesFor(guildPageByDate, currentDates);
   const guildMax = Math.max(1, ...guildSeries.map((d) => metricValue(d, metric)));
@@ -444,7 +441,6 @@ function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDa
     .map(([key, name]) => {
       const byDate = instanceByDate.get(key) ?? new Map();
       const series = seriesFor(byDate, currentDates);
-      const sparkline = seriesFor(byDate, last7Dates);
       return {
         key,
         name,
@@ -453,8 +449,6 @@ function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDa
         deltaPct: pctDelta(sumMetric(series, metric), sumMetric(seriesFor(byDate, priorDates), metric)),
         series,
         seriesMax: Math.max(1, ...series.map((d) => metricValue(d, metric))),
-        sparkline,
-        sparkMax: Math.max(1, ...sparkline.map((d) => metricValue(d, metric))),
       };
     })
     .sort((a, b) => b.total - a.total);
