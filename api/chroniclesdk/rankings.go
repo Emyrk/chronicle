@@ -277,11 +277,20 @@ type AdminTriggerSnapshotResponse struct {
 
 // AdminRankingRunSummaryStatusResponse describes the durable player-run summary rebuild queue.
 type AdminRankingRunSummaryStatusResponse struct {
+	LogicalRunCount       int64      `json:"logical_run_count"`
+	CurrentRunCount       int64      `json:"current_run_count"`
+	MissingRunCount       int64      `json:"missing_run_count"`
+	StaleRunCount         int64      `json:"stale_run_count"`
 	QueueDepth            int64      `json:"queue_depth"`
 	OldestDirtyAt         *time.Time `json:"oldest_dirty_at,omitempty"`
 	OldestDirtyAgeSeconds float64    `json:"oldest_dirty_age_seconds"`
 	ObservedAt            time.Time  `json:"observed_at"`
 	SummaryVersion        int16      `json:"summary_version"`
+}
+
+// AdminRankingRunSummaryBackfillResponse is returned when a bounded backfill starts.
+type AdminRankingRunSummaryBackfillResponse struct {
+	Job AdminRankingRunSummaryRebuildJob `json:"job"`
 }
 
 // AdminRankingRunSummaryRebuildJob describes the coalesced rebuild job.

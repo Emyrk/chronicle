@@ -5,6 +5,75 @@ SELECT
     now()::timestamptz AS observed_at
 FROM ranking_run_summary_dirty;
 
+-- name: BackfillRankingRunSummaries :many
+-- Marks a deterministic UUID-cursor batch of logical ranking runs whose current
+-- projection is missing or stale. Already-dirty runs are owned by the rebuild
+-- worker and are intentionally skipped so a restarted backfill is idempotent.
+WITH logical_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+),
+candidates AS MATERIALIZED (
+    SELECT lr.run_id
+    FROM logical_runs lr
+    LEFT JOIN ranking_runs rr ON rr.run_id = lr.run_id
+    LEFT JOIN ranking_run_summary_dirty dirty ON dirty.run_id = lr.run_id
+    WHERE lr.run_id > @after_run_id::uuid
+      AND dirty.run_id IS NULL
+      AND (rr.run_id IS NULL OR rr.summary_version <> @summary_version::smallint)
+    ORDER BY lr.run_id
+    LIMIT @batch_size
+),
+inserted AS (
+    INSERT INTO ranking_run_summary_dirty (
+        run_id, generation, last_transaction_id, updated_at
+    )
+    SELECT run_id, 1, pg_current_xact_id(), now()
+    FROM candidates
+    ON CONFLICT (run_id) DO NOTHING
+    RETURNING run_id
+)
+SELECT candidates.run_id
+FROM candidates
+LEFT JOIN inserted ON inserted.run_id = candidates.run_id
+ORDER BY candidates.run_id;
+
+-- name: RankingRunSummaryBackfillStatus :one
+-- Cross-tenant status for the admin repair controls. A single source scan derives
+-- the logical runs; dirty age is measured in seconds for stable SDK serialization.
+WITH logical_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+),
+summary_counts AS (
+    SELECT
+        COUNT(*)::bigint AS logical_run_count,
+        COUNT(*) FILTER (WHERE rr.run_id IS NOT NULL AND rr.summary_version = @summary_version::smallint)::bigint AS current_run_count,
+        COUNT(*) FILTER (WHERE rr.run_id IS NULL)::bigint AS missing_run_count,
+        COUNT(*) FILTER (WHERE rr.run_id IS NOT NULL AND rr.summary_version <> @summary_version::smallint)::bigint AS stale_run_count
+    FROM logical_runs lr
+    LEFT JOIN ranking_runs rr ON rr.run_id = lr.run_id
+),
+dirty_status AS (
+    SELECT
+        COUNT(*)::bigint AS dirty_run_count,
+        MIN(updated_at)::timestamptz AS oldest_dirty_at,
+        COALESCE(EXTRACT(EPOCH FROM (now() - MIN(updated_at))), 0)::double precision AS oldest_dirty_age_seconds
+    FROM ranking_run_summary_dirty
+)
+SELECT
+    sc.logical_run_count,
+    sc.current_run_count,
+    sc.missing_run_count,
+    sc.stale_run_count,
+    ds.dirty_run_count,
+    ds.oldest_dirty_at,
+    ds.oldest_dirty_age_seconds
+FROM summary_counts sc
+CROSS JOIN dirty_status ds;
+
 -- name: ListDirtyRankingRuns :many
 -- Returns a bounded, stable batch without locking dirty rows. Rebuilds may be
 -- expensive, so workers observe the generation and conditionally clear it only

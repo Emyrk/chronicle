@@ -203,6 +203,54 @@ func TestWorkerRebuildRankingRunSummariesRetainsChangedGeneration(t *testing.T) 
 	assert.Equal(t, int64(2), dirty[0].Generation)
 }
 
+type recordingRankingJobInserter struct {
+	args []river.JobArgs
+}
+
+func (q *recordingRankingJobInserter) Insert(_ context.Context, args river.JobArgs, _ *river.InsertOpts) (*rivertype.JobInsertResult, error) {
+	q.args = append(q.args, args)
+	return &rivertype.JobInsertResult{Job: &rivertype.JobRow{
+		ID: int64(len(q.args)), Kind: args.Kind(), State: rivertype.JobStateAvailable,
+	}}, nil
+}
+
+func TestWorkerBackfillRankingRunSummariesMarksAndWakesDrain(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupSnapshotTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Lucifron", instanceName: "Molten Core",
+		playerGUID: "P-BACKFILL", playerClass: "MAGE", playerSpec: "Frost",
+		maxPlayers: 40, damageDone: 1000, durationSecs: 10, dps: 100,
+		killedAt: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC), isBoss: true,
+	})
+	_, err := pool.Exec(ctx, "DELETE FROM ranking_run_summary_dirty")
+	require.NoError(t, err)
+
+	queue := &recordingRankingJobInserter{}
+	worker := &servicerankings.WorkerBackfillRankingRunSummaries{
+		Store: store, Queue: queue, Logger: slog.Default(),
+	}
+	require.NoError(t, worker.Work(ctx, &river.Job[rankingargs.ArgsBackfillRankingRunSummaries]{
+		Args: rankingargs.ArgsBackfillRankingRunSummaries{},
+	}))
+
+	require.Len(t, queue.args, 1)
+	assert.IsType(t, rankingargs.ArgsRebuildRankingRunSummaries{}, queue.args[0])
+	dirty, err := store.ListDirtyRankingRuns(servicetenant.AdminBypass(ctx), 10)
+	require.NoError(t, err)
+	require.Len(t, dirty, 1)
+}
+
+func TestArgsBackfillRankingRunSummariesUseRankingsQueue(t *testing.T) {
+	t.Parallel()
+
+	opts := (rankingargs.ArgsBackfillRankingRunSummaries{}).InsertOpts()
+	assert.Equal(t, "rankings", opts.Queue)
+	assert.Equal(t, 5, opts.MaxAttempts)
+}
+
 func TestArgsRebuildRankingRunSummariesAreCoalesced(t *testing.T) {
 	t.Parallel()
 

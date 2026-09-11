@@ -274,6 +274,7 @@ func (api *API) Routes() chi.Router {
 				r.Route("/parses", func(r chi.Router) {
 					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
 					r.Get("/ranking-run-summaries/status", api.AdminRankingRunSummaryStatus)
+					r.Post("/ranking-run-summaries/backfill", api.AdminBackfillRankingRunSummaries)
 					r.Post("/ranking-run-summaries/rebuild", api.AdminRebuildRankingRunSummaries)
 					r.Get("/rankings/status", api.AdminRankingsRefreshStatus)
 					r.Post("/rankings/refresh", api.AdminRefreshRankings)

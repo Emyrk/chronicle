@@ -445,7 +445,10 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 //	GET /api/v1/admin/parses/ranking-run-summaries/status
 func (api *API) AdminRankingRunSummaryStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	status, err := database.New(api.Opts.Pool).RankingRunSummaryDirtyStatus(servicetenant.AdminBypass(ctx))
+	status, err := database.New(api.Opts.Pool).RankingRunSummaryBackfillStatus(
+		servicetenant.AdminBypass(ctx),
+		servicerankings.RankingPlayerRunSummaryVersion(),
+	)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -457,20 +460,48 @@ func (api *API) AdminRankingRunSummaryStatus(w http.ResponseWriter, r *http.Requ
 	}
 
 	response := chroniclesdk.AdminRankingRunSummaryStatusResponse{
-		QueueDepth:     status.QueueDepth,
-		ObservedAt:     status.ObservedAt.Time,
-		SummaryVersion: servicerankings.RankingPlayerRunSummaryVersion(),
+		LogicalRunCount:       status.LogicalRunCount,
+		CurrentRunCount:       status.CurrentRunCount,
+		MissingRunCount:       status.MissingRunCount,
+		StaleRunCount:         status.StaleRunCount,
+		QueueDepth:            status.DirtyRunCount,
+		OldestDirtyAgeSeconds: status.OldestDirtyAgeSeconds,
+		ObservedAt:            time.Now(),
+		SummaryVersion:        servicerankings.RankingPlayerRunSummaryVersion(),
 	}
-	if status.OldestUpdatedAt.Valid {
-		oldest := status.OldestUpdatedAt.Time
+	if status.OldestDirtyAt.Valid {
+		oldest := status.OldestDirtyAt.Time
 		response.OldestDirtyAt = &oldest
-		response.OldestDirtyAgeSeconds = status.ObservedAt.Time.Sub(oldest).Seconds()
-		if response.OldestDirtyAgeSeconds < 0 {
-			response.OldestDirtyAgeSeconds = 0
-		}
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, response)
+}
+
+// AdminBackfillRankingRunSummaries starts or resumes the bounded historical backfill.
+//
+//	POST /api/v1/admin/parses/ranking-run-summaries/backfill
+func (api *API) AdminBackfillRankingRunSummaries(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	result, err := api.Queues.Insert(ctx, servicerankings.InitialRankingRunSummaryBackfillArgs(), nil)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to enqueue ranking run summary backfill",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusAccepted, chroniclesdk.AdminRankingRunSummaryBackfillResponse{
+		Job: chroniclesdk.AdminRankingRunSummaryRebuildJob{
+			ID:                       result.Job.ID,
+			Kind:                     result.Job.Kind,
+			Queue:                    result.Job.Queue,
+			State:                    string(result.Job.State),
+			UniqueSkippedAsDuplicate: result.UniqueSkippedAsDuplicate,
+		},
+	})
 }
 
 // AdminRebuildRankingRunSummaries enqueues the coalesced durable queue drain.

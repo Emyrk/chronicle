@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -72,6 +73,73 @@ func setRealmTenant(t *testing.T, pool *pgxpool.Pool, realmID uuid.UUID, tenantI
 		  AND wsr.id = $2
 	`, tenantID, realmID)
 	require.NoError(t, err)
+}
+
+func TestBackfillRankingRunSummariesDeterministicResumeAndIdempotence(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	adminCtx := servicetenant.AdminBypass(ctx)
+
+	runIDs := []uuid.UUID{
+		uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		uuid.MustParse("00000000-0000-0000-0000-000000000002"),
+		uuid.MustParse("00000000-0000-0000-0000-000000000003"),
+		uuid.MustParse("00000000-0000-0000-0000-000000000004"),
+		uuid.MustParse("00000000-0000-0000-0000-000000000005"),
+	}
+	for _, runID := range runIDs {
+		insertDirtyTestRanking(t, pool, store, realmID, runID)
+	}
+	_, err := pool.Exec(ctx, "DELETE FROM ranking_run_summary_dirty WHERE run_id = ANY($1)", runIDs)
+	require.NoError(t, err)
+
+	insertSummary := func(runID uuid.UUID, version int16) {
+		t.Helper()
+		require.NoError(t, store.InsertRankingRunSummary(adminCtx, database.InsertRankingRunSummaryParams{
+			RunID: runID, RepresentativeInstanceID: runID,
+			InstanceName: "Molten Core", RealmID: realmID, RealmName: "test-realm",
+			DifficultyName: "Raid", MaxPlayers: 40, BossCoverage: 1,
+			EncounterNames: []string{"Lucifron"}, SummaryVersion: version, SourceGeneration: 1,
+		}))
+	}
+	insertSummary(runIDs[1], 1)
+	insertSummary(runIDs[2], 0)
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO ranking_run_summary_dirty (run_id, generation, last_transaction_id)
+		VALUES ($1, 1, pg_current_xact_id())
+	`, runIDs[3])
+	require.NoError(t, err)
+
+	first, err := store.BackfillRankingRunSummaries(adminCtx, database.BackfillRankingRunSummariesParams{
+		AfterRunID: uuid.Nil, SummaryVersion: 1, BatchSize: 2,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []uuid.UUID{runIDs[0], runIDs[2]}, first)
+
+	second, err := store.BackfillRankingRunSummaries(adminCtx, database.BackfillRankingRunSummariesParams{
+		AfterRunID: first[len(first)-1], SummaryVersion: 1, BatchSize: 2,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []uuid.UUID{runIDs[4]}, second)
+
+	restarted, err := store.BackfillRankingRunSummaries(adminCtx, database.BackfillRankingRunSummariesParams{
+		AfterRunID: uuid.Nil, SummaryVersion: 1, BatchSize: 10,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, restarted)
+
+	status, err := store.RankingRunSummaryBackfillStatus(adminCtx, 1)
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), status.LogicalRunCount)
+	assert.Equal(t, int64(1), status.CurrentRunCount)
+	assert.Equal(t, int64(3), status.MissingRunCount)
+	assert.Equal(t, int64(1), status.StaleRunCount)
+	assert.Equal(t, int64(4), status.DirtyRunCount)
+	assert.True(t, status.OldestDirtyAt.Valid)
+	assert.GreaterOrEqual(t, status.OldestDirtyAgeSeconds, float64(0))
 }
 
 func TestRankingRunDirtyTracksServerTenantReassignment(t *testing.T) {

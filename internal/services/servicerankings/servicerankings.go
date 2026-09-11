@@ -46,6 +46,8 @@ type Service struct {
 	store    *authz.Authz
 	registry *registry.Registry
 
+	// RunSummaryBackfillWorker marks missing or stale run summaries dirty.
+	RunSummaryBackfillWorker *WorkerBackfillRankingRunSummaries
 	// RunSummaryWorker drains the durable per-run summary dirty queue.
 	RunSummaryWorker *WorkerRebuildRankingRunSummaries
 
@@ -105,6 +107,11 @@ func (s *Service) Start(_ context.Context) error {
 	namedLogger := services.NamedLogger(s.logger, s.Name())
 	store := servicedbstore.DatabaseStore(s.broker)
 	runSummaryMetrics := newRankingRunSummaryMetrics(serviceprometheus.Registry(s.broker))
+	s.RunSummaryBackfillWorker = &WorkerBackfillRankingRunSummaries{
+		Store:  store,
+		Logger: namedLogger,
+		// Queue is set by serviceriver after queue creation.
+	}
 	s.RunSummaryWorker = &WorkerRebuildRankingRunSummaries{
 		Store:   store,
 		Logger:  namedLogger,

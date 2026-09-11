@@ -15,6 +15,10 @@ import (
 type sqlcQuerier interface {
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
+	// Marks a deterministic UUID-cursor batch of logical ranking runs whose current
+	// projection is missing or stale. Already-dirty runs are owned by the rebuild
+	// worker and are intentionally skipped so a restarted backfill is idempotent.
+	BackfillRankingRunSummaries(ctx context.Context, arg BackfillRankingRunSummariesParams) ([]uuid.UUID, error)
 	// Populate a pending snapshot's members from eligible encounter_dps_rankings rows.
 	// Boss kills only (encounter_id IS NOT NULL), deduplicated by duplicate group
 	// using one representative instance per duplicate group, bounded by the snapshot's cutoff and optional window_start.
@@ -643,6 +647,9 @@ type sqlcQuerier interface {
 	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Transition a pending time-parse snapshot to published. Idempotent on already-published.
 	PublishTimeParseSnapshot(ctx context.Context, id uuid.UUID) (TimeParseSnapshot, error)
+	// Cross-tenant status for the admin repair controls. A single source scan derives
+	// the logical runs; dirty age is measured in seconds for stable SDK serialization.
+	RankingRunSummaryBackfillStatus(ctx context.Context, summaryVersion int16) (RankingRunSummaryBackfillStatusRow, error)
 	RankingRunSummaryDirtyStatus(ctx context.Context) (RankingRunSummaryDirtyStatusRow, error)
 	// Resolves the current representative physical instance for one logical run using
 	// the exact ordering from RankingsLeaderboardSlow, then aggregates one row per
