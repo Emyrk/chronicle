@@ -503,6 +503,7 @@ type sqlcQuerier interface {
 	InsertWoWServerRealm(ctx context.Context, arg InsertWoWServerRealmParams) (WowServerRealm, error)
 	InsertWorld(ctx context.Context, name string) (World, error)
 	Instance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
+	InstanceAnalyticsGroupKey(ctx context.Context, instanceID uuid.UUID) (string, error)
 	InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	InstanceEvent(ctx context.Context, arg InstanceEventParams) (LogInstanceEvent, error)
 	InstancePlayerGUIDsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]guid.GUID, error)
@@ -692,6 +693,7 @@ type sqlcQuerier interface {
 	// Returns aggregate refresh metadata for one tenant's precomputed summaries.
 	RankingsSummaryStatus(ctx context.Context, tenantID uuid.UUID) (RankingsSummaryStatusRow, error)
 	RecordAuthzMigration(ctx context.Context, version int32) error
+	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
 	// Resolves the dataset for a realm. Precedence:
 	//   server.default_dataset_id > tenant.default_dataset_id.
