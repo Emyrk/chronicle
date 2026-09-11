@@ -470,6 +470,7 @@ export function InstancePage() {
         <InstanceEventsProvider instanceId={instance.id}>
           <PlayerSpecializationProvider
             datasetId={instance.datasetId}
+            flavor={instance.flavor ?? []}
             selectedEncounterIds={selectedEncounterIds}
           >
             {tenantGate.banner && (
