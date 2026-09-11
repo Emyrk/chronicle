@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
 
@@ -87,6 +88,7 @@ func (s *Service) DependsOn() []string {
 		serviceauthz.OnAuthz(),
 		servicedbstore.OnDatabaseStore(),
 		servicechronicle.OnChronicle(),
+		serviceprometheus.OnPrometheus(),
 	}
 }
 
@@ -102,9 +104,11 @@ func (s *Service) Start(_ context.Context) error {
 
 	namedLogger := services.NamedLogger(s.logger, s.Name())
 	store := servicedbstore.DatabaseStore(s.broker)
+	runSummaryMetrics := newRankingRunSummaryMetrics(serviceprometheus.Registry(s.broker))
 	s.RunSummaryWorker = &WorkerRebuildRankingRunSummaries{
-		Store:  store,
-		Logger: namedLogger,
+		Store:   store,
+		Logger:  namedLogger,
+		metrics: runSummaryMetrics,
 	}
 	s.SummaryDispatchWorker = &WorkerRefreshRankingsSummaries{
 		Store:  store,

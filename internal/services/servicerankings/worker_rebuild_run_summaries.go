@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/database"
@@ -25,17 +26,33 @@ func RankingPlayerRunSummaryVersion() int16 { return rankingPlayerRunSummaryVers
 type WorkerRebuildRankingRunSummaries struct {
 	river.WorkerDefaults[rankingargs.ArgsRebuildRankingRunSummaries]
 
-	Store  database.Store
-	Logger *slog.Logger
+	Store   database.Store
+	Logger  *slog.Logger
+	metrics *rankingRunSummaryMetrics
 }
 
-func (w *WorkerRebuildRankingRunSummaries) Work(ctx context.Context, _ *river.Job[rankingargs.ArgsRebuildRankingRunSummaries]) error {
+func (w *WorkerRebuildRankingRunSummaries) Work(ctx context.Context, _ *river.Job[rankingargs.ArgsRebuildRankingRunSummaries]) (workErr error) {
 	ctx = servicetenant.AdminBypass(ctx)
-
+	startedAt := time.Now()
 	processed := 0
 	rebuilt := 0
 	deleted := 0
 	retainedDirty := 0
+	defer func() {
+		if w.metrics == nil {
+			return
+		}
+		w.metrics.rebuildDuration.Observe(time.Since(startedAt).Seconds())
+		if workErr != nil {
+			w.metrics.failures.Inc()
+		}
+		w.metrics.runsProcessed.Add(float64(processed))
+		w.metrics.runsRebuilt.Add(float64(rebuilt))
+		w.metrics.runsDeleted.Add(float64(deleted))
+		w.metrics.runsRetained.Add(float64(retainedDirty))
+		w.observeDirtyQueueMetrics(ctx)
+	}()
+	w.observeDirtyQueueMetrics(ctx)
 
 	for {
 		dirty, err := w.Store.ListDirtyRankingRuns(ctx, rankingRunSummaryBatchSize)
@@ -84,6 +101,26 @@ func (w *WorkerRebuildRankingRunSummaries) Work(ctx context.Context, _ *river.Jo
 		"summary_version": rankingPlayerRunSummaryVersion,
 	})
 	return nil
+}
+
+func (w *WorkerRebuildRankingRunSummaries) observeDirtyQueueMetrics(ctx context.Context) {
+	if w.metrics == nil {
+		return
+	}
+	status, err := w.Store.RankingRunSummaryDirtyStatus(ctx)
+	if err != nil {
+		w.Logger.Warn("observe ranking run summary dirty queue metrics", slog.String("error", err.Error()))
+		return
+	}
+	w.metrics.queueDepth.Set(float64(status.QueueDepth))
+	oldestAge := 0.0
+	if status.OldestUpdatedAt.Valid {
+		oldestAge = status.ObservedAt.Time.Sub(status.OldestUpdatedAt.Time).Seconds()
+		if oldestAge < 0 {
+			oldestAge = 0
+		}
+	}
+	w.metrics.oldestDirtyAge.Set(oldestAge)
 }
 
 type rebuildOutcome int

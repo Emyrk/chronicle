@@ -1,6 +1,7 @@
 package servicerankings_test
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/assert"
@@ -122,6 +124,83 @@ func TestWorkerRebuildRankingRunSummaries(t *testing.T) {
 	players, err = store.ListRankingPlayerRunSummaries(adminCtx, canonicalID)
 	require.NoError(t, err)
 	assert.Empty(t, players)
+}
+
+type trackingRankingStore struct {
+	database.Store
+	batchSizes []int
+}
+
+func (s *trackingRankingStore) ListDirtyRankingRuns(ctx context.Context, batchSize int32) ([]database.ListDirtyRankingRunsRow, error) {
+	rows, err := s.Store.ListDirtyRankingRuns(ctx, batchSize)
+	s.batchSizes = append(s.batchSizes, len(rows))
+	return rows, err
+}
+
+func TestWorkerRebuildRankingRunSummariesDrainsMultipleBoundedBatches(t *testing.T) {
+	t.Parallel()
+
+	pool, store, _ := setupSnapshotTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	for range 26 {
+		_, err := pool.Exec(ctx, `
+			INSERT INTO ranking_run_summary_dirty (run_id, generation, last_transaction_id)
+			VALUES ($1, 1, pg_current_xact_id())
+		`, uuid.New())
+		require.NoError(t, err)
+	}
+
+	tracking := &trackingRankingStore{Store: store}
+	worker := &servicerankings.WorkerRebuildRankingRunSummaries{Store: tracking, Logger: slog.Default()}
+	require.NoError(t, worker.Work(ctx, &river.Job[rankingargs.ArgsRebuildRankingRunSummaries]{}))
+
+	assert.Equal(t, []int{25, 1}, tracking.batchSizes)
+	status, err := store.RankingRunSummaryDirtyStatus(servicetenant.AdminBypass(ctx))
+	require.NoError(t, err)
+	assert.Zero(t, status.QueueDepth)
+}
+
+type generationBumpRankingStore struct {
+	database.Store
+	pool   *pgxpool.Pool
+	bumped bool
+}
+
+func (s *generationBumpRankingStore) RankingRunSummarySource(ctx context.Context, runID uuid.UUID) ([]database.RankingRunSummarySourceRow, error) {
+	rows, err := s.Store.RankingRunSummarySource(ctx, runID)
+	if err != nil || s.bumped {
+		return rows, err
+	}
+	s.bumped = true
+	_, err = s.pool.Exec(ctx, `
+		UPDATE ranking_run_summary_dirty
+		SET generation = generation + 1, last_transaction_id = pg_current_xact_id(), updated_at = now()
+		WHERE run_id = $1
+	`, runID)
+	return rows, err
+}
+
+func TestWorkerRebuildRankingRunSummariesRetainsChangedGeneration(t *testing.T) {
+	t.Parallel()
+
+	pool, store, _ := setupSnapshotTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	runID := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO ranking_run_summary_dirty (run_id, generation, last_transaction_id)
+		VALUES ($1, 1, pg_current_xact_id())
+	`, runID)
+	require.NoError(t, err)
+
+	bumping := &generationBumpRankingStore{Store: store, pool: pool}
+	worker := &servicerankings.WorkerRebuildRankingRunSummaries{Store: bumping, Logger: slog.Default()}
+	require.NoError(t, worker.Work(ctx, &river.Job[rankingargs.ArgsRebuildRankingRunSummaries]{}))
+
+	dirty, err := store.ListDirtyRankingRuns(servicetenant.AdminBypass(ctx), 10)
+	require.NoError(t, err)
+	require.Len(t, dirty, 1)
+	assert.Equal(t, runID, dirty[0].RunID)
+	assert.Equal(t, int64(2), dirty[0].Generation)
 }
 
 func TestArgsRebuildRankingRunSummariesAreCoalesced(t *testing.T) {

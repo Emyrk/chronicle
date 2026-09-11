@@ -1,3 +1,10 @@
+-- name: RankingRunSummaryDirtyStatus :one
+SELECT
+    COUNT(*)::bigint AS queue_depth,
+    MIN(updated_at)::timestamptz AS oldest_updated_at,
+    now()::timestamptz AS observed_at
+FROM ranking_run_summary_dirty;
+
 -- name: ListDirtyRankingRuns :many
 -- Returns a bounded, stable batch without locking dirty rows. Rebuilds may be
 -- expensive, so workers observe the generation and conditionally clear it only

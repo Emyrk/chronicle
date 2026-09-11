@@ -11151,6 +11151,27 @@ func (q *sqlQuerier) ListRankingPlayerRunSummaries(ctx context.Context, runID uu
 	return items, nil
 }
 
+const rankingRunSummaryDirtyStatus = `-- name: RankingRunSummaryDirtyStatus :one
+SELECT
+    COUNT(*)::bigint AS queue_depth,
+    MIN(updated_at)::timestamptz AS oldest_updated_at,
+    now()::timestamptz AS observed_at
+FROM ranking_run_summary_dirty
+`
+
+type RankingRunSummaryDirtyStatusRow struct {
+	QueueDepth      int64              `db:"queue_depth" json:"queue_depth"`
+	OldestUpdatedAt pgtype.Timestamptz `db:"oldest_updated_at" json:"oldest_updated_at"`
+	ObservedAt      pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
+}
+
+func (q *sqlQuerier) RankingRunSummaryDirtyStatus(ctx context.Context) (RankingRunSummaryDirtyStatusRow, error) {
+	row := q.db.QueryRow(ctx, rankingRunSummaryDirtyStatus)
+	var i RankingRunSummaryDirtyStatusRow
+	err := row.Scan(&i.QueueDepth, &i.OldestUpdatedAt, &i.ObservedAt)
+	return i, err
+}
+
 const rankingRunSummarySource = `-- name: RankingRunSummarySource :many
 WITH representative_instance AS (
     SELECT
