@@ -218,107 +218,82 @@ export function GuildAnalytics() {
               )}
             </section>
 
-            <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr] items-start">
-              <section className="overflow-hidden rounded-xl border border-border bg-card">
-                <div className="border-b border-border p-5">
-                  <h2 className="font-semibold">Top instances &middot; {range}D</h2>
-                  <p className="text-sm text-muted-foreground">Instances without a stable slug are intentionally not tracked.</p>
-                </div>
-                {summary.instances.length === 0 ? (
-                  <div className="p-5"><EmptyAnalytics /></div>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {summary.instances.slice(0, 10).map((instance, idx) => {
-                      const isExpanded = !!expanded[instance.key];
-                      return (
-                        <div key={instance.key}>
-                          <button
-                            onClick={() => setExpanded((prev) => ({ ...prev, [instance.key]: !prev[instance.key] }))}
-                            className="flex w-full items-center gap-2.5 px-5 py-1.5 text-left transition-colors hover:bg-muted/20"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-                            ) : (
-                              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-                            )}
-                            <div className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground">{idx + 1}</div>
-                            <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: instance.color, boxShadow: `0 0 6px ${instance.color}55` }} />
-                            <div className="font-wow min-w-0 flex-1 truncate text-sm font-semibold">{instance.name}</div>
-                            <div className="flex h-4 w-20 shrink-0 items-end gap-px">
+            <section className="overflow-hidden rounded-xl border border-border bg-card">
+              <div className="border-b border-border p-5">
+                <h2 className="font-semibold">Top 10 instances &middot; {range}D</h2>
+                <p className="text-sm text-muted-foreground">Instances without a stable slug are intentionally not tracked.</p>
+              </div>
+              {summary.instances.length === 0 ? (
+                <div className="p-5"><EmptyAnalytics /></div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {summary.instances.slice(0, 10).map((instance, idx) => {
+                    const isExpanded = !!expanded[instance.key];
+                    return (
+                      <div key={instance.key}>
+                        <button
+                          onClick={() => setExpanded((prev) => ({ ...prev, [instance.key]: !prev[instance.key] }))}
+                          className="flex w-full items-center gap-2.5 px-5 py-1.5 text-left transition-colors hover:bg-muted/20"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          )}
+                          <div className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground">{idx + 1}</div>
+                          <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: instance.color, boxShadow: `0 0 6px ${instance.color}55` }} />
+                          <div className="font-wow w-48 shrink-0 truncate text-sm font-semibold">{instance.name}</div>
+                          <div className="flex h-5 min-w-0 flex-1 items-end gap-[3px]">
+                            {instance.series.map((day) => {
+                              const value = metricValue(day, metric);
+                              return (
+                                <div
+                                  key={day.date}
+                                  title={`${formatDayTitle(day.date)} — ${numberFormatter.format(value)} ${METRIC_UNIT[metric]}`}
+                                  className="min-w-0 max-w-[14px] flex-1 rounded-[1px]"
+                                  style={{ height: `${Math.max(18, (value / instance.seriesMax) * 100)}%`, background: instance.color }}
+                                />
+                              );
+                            })}
+                          </div>
+                          <div className="min-w-[110px] shrink-0 text-right">
+                            <div className="font-mono text-sm">{compactFormatter.format(instance.total)}</div>
+                            <DeltaLabel pct={instance.deltaPct} range={range} compact />
+                          </div>
+                        </button>
+                        {isExpanded && (
+                          <div className="px-5 pb-4 pl-11">
+                            <div className="flex h-16 items-end gap-1 mb-2">
                               {instance.series.map((day) => {
                                 const value = metricValue(day, metric);
                                 return (
                                   <div
                                     key={day.date}
                                     title={`${formatDayTitle(day.date)} — ${numberFormatter.format(value)} ${METRIC_UNIT[metric]}`}
-                                    className="min-w-0 flex-1 rounded-[1px]"
-                                    style={{ height: `${Math.max(18, (value / instance.seriesMax) * 100)}%`, background: instance.color }}
-                                  />
+                                    className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
+                                  >
+                                    <div
+                                      className="w-full max-w-[18px] rounded-t opacity-85"
+                                      style={{ height: `${Math.max(6, (value / instance.seriesMax) * 100)}%`, background: instance.color }}
+                                    />
+                                  </div>
                                 );
                               })}
                             </div>
-                            <div className="min-w-[100px] shrink-0 text-right">
-                              <div className="font-mono text-sm">{compactFormatter.format(instance.total)}</div>
-                              <DeltaLabel pct={instance.deltaPct} range={range} compact />
-                            </div>
-                          </button>
-                          {isExpanded && (
-                            <div className="px-5 pb-4 pl-11">
-                              <div className="flex h-16 items-end gap-1 mb-2">
-                                {instance.series.map((day) => {
-                                  const value = metricValue(day, metric);
-                                  return (
-                                    <div
-                                      key={day.date}
-                                      title={`${formatDayTitle(day.date)} — ${numberFormatter.format(value)} ${METRIC_UNIT[metric]}`}
-                                      className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
-                                    >
-                                      <div
-                                        className="w-full max-w-[18px] rounded-t opacity-85"
-                                        style={{ height: `${Math.max(6, (value / instance.seriesMax) * 100)}%`, background: instance.color }}
-                                      />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              <Link to={`/instances/${instance.key}`} className="text-xs text-amber-500 hover:text-amber-400">
-                                Open instance page &rarr;
-                              </Link>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-
-              <section className="rounded-xl border border-border bg-card p-5">
-                <h2 className="mb-4 font-semibold">Top 5 &middot; {range}D</h2>
-                {summary.top5.length === 0 ? (
-                  <EmptyAnalytics />
-                ) : (
-                  <>
-                    <Podium entries={summary.top5.slice(0, 3)} />
-                    {summary.top5.slice(3, 5).map((entry, idx) => (
-                      <Link
-                        key={entry.key}
-                        to={`/instances/${entry.key}`}
-                        className="flex items-center gap-2.5 border-t border-border px-1 py-2 text-sm transition-colors hover:bg-muted/20 -mx-1"
-                      >
-                        <div className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground">{idx + 4}</div>
-                        <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: entry.color }} />
-                        <div className="font-wow min-w-0 flex-1 truncate text-muted-foreground">{entry.name}</div>
-                        <div className="font-mono text-xs">{compactFormatter.format(entry.total)}</div>
-                      </Link>
-                    ))}
-                  </>
-                )}
-              </section>
-            </div>
+                            <Link to={`/instances/${instance.key}`} className="text-xs text-amber-500 hover:text-amber-400">
+                              Open instance page &rarr;
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
 
             <p className="text-xs text-muted-foreground">
-              Unique views use a first-party browser cookie and are deduplicated per resource per UTC day. Counts may differ when visitors clear cookies or use another browser.
+              Numbers are approximate — view tracking is best-effort and can undercount or overcount depending on visitors' browsers and privacy settings.
             </p>
           </div>
         )}
@@ -343,44 +318,6 @@ function DeltaLabel({ pct, range, compact }: { pct: number; range: number; compa
     <div className={cn("flex items-center gap-1 text-xs", pct >= 0 ? "text-emerald-500" : "text-muted-foreground", compact && "justify-end")}>
       <Icon className="h-3 w-3" />
       {pct >= 0 ? "+" : ""}{pct}% {!compact && `vs prior ${range}d`}
-    </div>
-  );
-}
-
-const MEDAL = [
-  { emoji: "🥇", ring: "border-yellow-500/40", text: "text-yellow-400", h: "h-[92px]" },
-  { emoji: "🥈", ring: "border-slate-400/30", text: "text-slate-300", h: "h-[70px]" },
-  { emoji: "🥉", ring: "border-amber-700/30", text: "text-amber-600", h: "h-[58px]" },
-] as const;
-const PODIUM_ORDER = [1, 0, 2] as const;
-
-function Podium({ entries }: { entries: InstanceSummary[] }) {
-  return (
-    <div className="mb-2 flex items-end justify-center gap-2">
-      {PODIUM_ORDER.map((rank) => {
-        const entry = entries[rank];
-        const medal = MEDAL[rank];
-        if (!entry) return <div key={rank} className="flex-1" />;
-        return (
-          <Link
-            key={entry.key}
-            to={`/instances/${entry.key}`}
-            className="flex flex-1 flex-col items-center gap-2 text-center"
-          >
-            <div
-              className={cn("flex items-center justify-center rounded-full border-2", rank === 0 ? "h-12 w-12 text-xl" : "h-10 w-10 text-base", medal.ring)}
-              style={{ background: `radial-gradient(circle at 35% 30%, ${entry.color}55, transparent)` }}
-            >
-              {medal.emoji}
-            </div>
-            <div className="font-wow w-full min-w-0 truncate text-xs font-semibold">{entry.name}</div>
-            <div className={cn("flex w-full flex-col items-center justify-center rounded-t-lg border", medal.h, rank === 0 ? "border-amber-500/40 bg-amber-500/10" : "border-border bg-muted/20")}>
-              <div className="font-semibold tabular-nums">{compactFormatter.format(entry.total)}</div>
-              <div className="mt-0.5 text-[9px] tracking-wide text-muted-foreground">RANK {rank + 1}</div>
-            </div>
-          </Link>
-        );
-      })}
     </div>
   );
 }
@@ -465,6 +402,5 @@ function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDa
     instances,
     instanceTotalAll,
     busiestDay,
-    top5: instances.slice(0, 5),
   };
 }
