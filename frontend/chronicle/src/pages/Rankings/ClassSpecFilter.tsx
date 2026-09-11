@@ -1,7 +1,14 @@
 import { useMemo } from "react"
-import { cn } from "@/lib/utils"
-import { serverCapabilities } from "@/config/serverCapabilities"
+import { CircleHelp } from "lucide-react"
+import { Link } from "react-router-dom"
 import type { RankingsFilterClass } from "@/api/typesGenerated"
+import {
+  HintTooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip/tooltip"
+import { serverCapabilities } from "@/config/serverCapabilities"
+import { cn } from "@/lib/utils"
 import { ALL_DPS_CLASSES, CLASS_CSS_VAR, CLASS_DISPLAY, CLASS_NAME_TO_ID } from "./classDisplay"
 
 interface ClassSpecFilterProps {
@@ -105,6 +112,34 @@ export function ClassSpecFilter({
       )}
       {selectedSpec && subSpecs.length > 0 && (
         <div className="-mx-3 flex items-center gap-1 overflow-x-auto px-3 pb-2 styled-scrollbar sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-1 sm:pb-0">
+          <HintTooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="What are subspecs?"
+                className="mr-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/25 text-muted-foreground transition-colors hover:border-white/20 hover:bg-black/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5F8FA6]"
+              >
+                <CircleHelp className="size-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              sideOffset={6}
+              hideArrow
+              className="max-w-72 border border-white/10 bg-zinc-950 px-3.5 py-3 text-zinc-100 shadow-xl shadow-black/40"
+            >
+              <p className="leading-relaxed text-zinc-300">
+                Subspecs split some specializations into more precise ranking cohorts using detected
+                talent builds.
+              </p>
+              <Link
+                to="/subspecs"
+                className="mt-2 inline-flex font-semibold text-orange-300 underline decoration-orange-300/40 underline-offset-2 transition-colors hover:text-orange-200"
+              >
+                Learn how subspecs work
+              </Link>
+            </TooltipContent>
+          </HintTooltip>
           {subSpecs.map((subSpec) => {
             const active = selectedSubSpec === subSpec
             return (
