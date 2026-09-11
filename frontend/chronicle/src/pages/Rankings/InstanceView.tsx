@@ -22,7 +22,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
 import type { RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
-import { useSiteConfig } from "@/api/queries"
+import { useSiteConfig, useSupportedInstanceProgressionBosses } from "@/api/queries"
 import {
   useRankingsEncounters,
   useRankingsInstances,
@@ -43,6 +43,7 @@ import { KillTimeTable } from "./KillTimeTable"
 import { ClassSpecFilter } from "./ClassSpecFilter"
 import { RankingsLoadingState } from "./RankingsLoadingState"
 import { getRankingsQueryEnablement } from "./rankingsQueryState"
+import { defaultRankingBossNames, rankingEncounterSections } from "./rankingsEncounterSelection"
 import {
   groupByParamForValue,
   parseGroupByClass,
@@ -73,6 +74,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   // ── API queries ───────────────────────────────────────────────────────
   const { data: encounterSummaries, isLoading: encountersLoading } = useRankingsEncounters(instanceName)
+  const { data: progressionBosses, isLoading: progressionBossesLoading } = useSupportedInstanceProgressionBosses()
   const { data: siteConfig } = useSiteConfig()
   const configuredCohortMode = siteConfig?.tenant?.parse_config?.cohort_mode
   const cohortMode: RankingsCohortMode =
@@ -88,9 +90,17 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     () => new Set(encounterNames.filter((n) => n !== "Trash")),
     [encounterNames],
   )
+  const defaultBossNames = useMemo(
+    () => defaultRankingBossNames(instanceName, encounterNames, progressionBosses),
+    [encounterNames, instanceName, progressionBosses],
+  )
   const trashNames = useMemo(
     () => new Set<string>(encounterNames.filter((n) => n === "Trash")),
     [encounterNames],
+  )
+  const encounterSections = useMemo(
+    () => rankingEncounterSections(encounterNames, defaultBossNames),
+    [defaultBossNames, encounterNames],
   )
 
   // ── URL state ────────────────────────────────────────────────────────
@@ -107,6 +117,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   const dpsSubTab: DpsSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
   const killTimeSubTab: KillTimeSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
+  const usesMultiEncounterSelection =
+    isPlayerMetric || metric === "success" || (metric === "killtime" && killTimeSubTab === "boxplot")
   const filterClass = params.get("class") ?? undefined
   const filterSpec = params.get("spec") ?? undefined
   const filterSubSpec = params.get("sub_spec") ?? undefined
@@ -167,12 +179,12 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return new Set(raw.split(",").filter(Boolean))
   }, [params])
 
-  // Default (no URL param) = bosses only; trash is opt-in via ?encounters=.
+  // Default (no URL param) = canonical progression bosses; optional bosses and trash are opt-in.
   const selectedEncounters: Set<string> = useMemo(() => {
     const raw = params.get("encounters")
-    if (!raw) return new Set(bossNames)
+    if (!raw) return new Set(defaultBossNames)
     return new Set(raw.split(",").filter(Boolean))
-  }, [params, bossNames])
+  }, [params, defaultBossNames])
 
   // ── Setters ──────────────────────────────────────────────────────────
 
@@ -356,14 +368,14 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       setParams((prev) => {
         const next = new URLSearchParams(prev)
         const raw = prev.get("encounters")
-        const current = raw ? new Set(raw.split(",").filter(Boolean)) : new Set(bossNames)
+        const current = raw ? new Set(raw.split(",").filter(Boolean)) : new Set(defaultBossNames)
 
         if (ctrlKey) {
           // Toggle individual
           if (current.has(name)) current.delete(name)
           else current.add(name)
         } else {
-          // Single-select: if already solo-selected, reset to default (bosses); otherwise select only this one
+          // Single-select: if already solo-selected, reset to the progression default; otherwise select only this one
           if (current.size === 1 && current.has(name)) {
             next.delete("encounters")
             return next
@@ -372,9 +384,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           current.add(name)
         }
 
-        // No param = default (bosses only). An empty selection also resets to default.
+        // No param = progression default. An empty selection also resets to default.
         const isDefault =
-          current.size === bossNames.size && [...current].every((n) => bossNames.has(n))
+          current.size === defaultBossNames.size && [...current].every((n) => defaultBossNames.has(n))
         if (current.size === 0 || isDefault) {
           next.delete("encounters")
         } else {
@@ -383,24 +395,27 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         return next
       })
     },
-    [setParams, bossNames],
+    [setParams, defaultBossNames],
   )
 
   const handleQuickSelect = useCallback(
-    (mode: "all" | "bosses" | "trash") => {
+    (mode: "all" | "progression" | "trash") => {
       setParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (mode === "bosses" || (mode === "all" && trashNames.size === 0)) {
-          // Bosses only is the default — no param needed.
+        if (mode === "progression") {
+          // Canonical progression bosses are the default — no param needed.
           next.delete("encounters")
         } else {
           const names = mode === "all" ? encounterNames : [...trashNames]
-          next.set("encounters", [...names].join(","))
+          const isDefault =
+            names.length === defaultBossNames.size && names.every((name) => defaultBossNames.has(name))
+          if (isDefault) next.delete("encounters")
+          else next.set("encounters", names.join(","))
         }
         return next
       })
     },
-    [setParams, encounterNames, trashNames],
+    [setParams, defaultBossNames, encounterNames, trashNames],
   )
 
   // ── API query params ─────────────────────────────────────────────────
@@ -427,7 +442,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const queryEnablement = getRankingsQueryEnablement(
     metric,
     dpsSubTab,
-    encounterSummaries !== undefined,
+    encounterSummaries !== undefined && progressionBosses !== undefined,
   )
 
   const { data: filterOptions = [] } = useRankingsFilters(instanceName)
@@ -545,20 +560,26 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return entries.map((e, i) => ({ ...e, rank: offset + i + 1 }))
   }, [leaderboardData, page])
 
-  const { data: killTimeStats = [], isLoading: killTimeStatsLoading } = useRankingsKillTimes(
+  const { data: rawKillTimeStats = [], isLoading: killTimeStatsLoading } = useRankingsKillTimes(
     instanceName,
     periodParam,
     queryEnablement.killTimeStats,
   )
 
+  const killTimeStats = useMemo(
+    () => rawKillTimeStats.filter((stat) => selectedEncounters.has(stat.encounter_name)),
+    [rawKillTimeStats, selectedEncounters],
+  )
+
   // Kill time leaderboard: always a single encounter (mixing bosses is meaningless).
   // Persisted via ?kt_enc= URL param; defaults to the first boss.
   const bossList = useMemo(() => [...bossNames].sort(), [bossNames])
+  const defaultBossList = useMemo(() => [...defaultBossNames].sort(), [defaultBossNames])
   const killTimeEncounter = useMemo(() => {
     const raw = params.get("kt_enc")
     if (raw && bossNames.has(raw)) return raw
-    return bossList[0] ?? ""
-  }, [params, bossNames, bossList])
+    return defaultBossList[0] ?? bossList[0] ?? ""
+  }, [params, bossNames, bossList, defaultBossList])
 
   const handleKillTimeEncounterChange = useCallback(
     (enc: string) => {
@@ -589,13 +610,17 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return entries.map((e, i) => ({ ...e, rank: offset + i + 1 }))
   }, [killTimeLeaderboardData, page])
 
-  const { data: successRates = [], isLoading: successRatesLoading } = useRankingsSuccessRates(instanceName, periodParam, {
+  const { data: rawSuccessRates = [], isLoading: successRatesLoading } = useRankingsSuccessRates(instanceName, periodParam, {
     difficulty_names: difficultyNamesParam,
   }, queryEnablement.successRates)
+  const successRates = useMemo(
+    () => rawSuccessRates.filter((rate) => selectedEncounters.has(rate.encounter_name)),
+    [rawSuccessRates, selectedEncounters],
+  )
 
   // ── Loading state ──────────────────────────────────────────────────
 
-  if (encountersLoading) {
+  if (encountersLoading || progressionBossesLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -625,49 +650,57 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       {/* Quick-select buttons */}
       <div className="flex gap-1 mt-1.5">
         <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("all")} title="Select all encounters">All</Button>
-        <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("bosses")} title="Select boss encounters only">Bosses</Button>
+        <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("progression")} title="Select progression bosses">Progression</Button>
         <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("trash")} title="Select trash encounters only">Trash</Button>
       </div>
 
       {/* Encounter list */}
-      <div className="mt-3 space-y-1">
-        {encounterNames.map((name) => {
-          const isSelected = selectedEncounters.has(name)
-          const isTrashEnc = trashNames.has(name)
-          return (
-            <div
-              role="button"
-              tabIndex={0}
-              key={name}
-              onClick={(e) => handleEncounterClick(name, e.ctrlKey || e.metaKey)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  handleEncounterClick(name, e.ctrlKey || e.metaKey)
-                }
-              }}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-all duration-150 cursor-pointer",
-                isSelected
-                  ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
-                  : "hover:bg-accent/50 hover:translate-x-0.5",
-                !isSelected && isTrashEnc && "text-muted-foreground",
-                isTrashEnc && "mt-3 border-t border-white/5 pt-3",
-              )}
-              title={`${name} — Click to select, Ctrl+Click to toggle`}
-            >
-              <CheckCircle
-                className={cn(
-                  "h-4 w-4 shrink-0",
-                  isTrashEnc ? "text-green-500/60" : "text-green-500",
-                )}
-              />
-              <span className={cn("truncate flex-1", isTrashEnc && !isSelected && "italic")}>
-                {name}
-              </span>
+      <div className="mt-3 space-y-4">
+        {encounterSections.map((section) => (
+          <div key={section.kind}>
+            <h4 className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              {section.label}
+            </h4>
+            <div className="space-y-1">
+              {section.names.map((name) => {
+                const isSelected = selectedEncounters.has(name)
+                const isSubdued = section.kind !== "boss"
+                return (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    key={name}
+                    onClick={(e) => handleEncounterClick(name, e.ctrlKey || e.metaKey)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleEncounterClick(name, e.ctrlKey || e.metaKey)
+                      }
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-all duration-150 cursor-pointer",
+                      isSelected
+                        ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
+                        : "hover:bg-accent/50 hover:translate-x-0.5",
+                      !isSelected && isSubdued && "text-muted-foreground",
+                    )}
+                    title={`${name} — Click to select, Ctrl+Click to toggle`}
+                  >
+                    <CheckCircle
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        isSubdued ? "text-green-500/60" : "text-green-500",
+                      )}
+                    />
+                    <span className={cn("truncate flex-1", section.kind === "trash" && !isSelected && "italic")}>
+                      {name}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
-          )
-        })}
+          </div>
+        ))}
       </div>
 
       {/* Info hint */}
@@ -679,16 +712,16 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   return (
     <div className="flex">
-      {/* Mobile backdrop (DPS only) */}
-      {isPlayerMetric && isMobile && sidebarOpen && (
+      {/* Mobile encounter-filter backdrop */}
+      {usesMultiEncounterSelection && isMobile && sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Mobile FAB (DPS only) */}
-      {isPlayerMetric && isMobile && createPortal(
+      {/* Mobile encounter-filter button */}
+      {usesMultiEncounterSelection && isMobile && createPortal(
         <Button
           variant="default"
           size="icon"
@@ -702,13 +735,13 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         document.body,
       )}
 
-      {/* Sidebar — desktop: always present (empty when not DPS to preserve layout), mobile: overlay */}
+      {/* Encounter sidebar — desktop: always present, mobile: overlay */}
       {!isMobile && (
         <div className="pt-1 w-64 shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar sticky top-4 max-h-[calc(100vh-2rem)]">
-          {isPlayerMetric && sidebarContent}
+          {usesMultiEncounterSelection && sidebarContent}
         </div>
       )}
-      {isPlayerMetric && isMobile && sidebarOpen && (
+      {usesMultiEncounterSelection && isMobile && sidebarOpen && (
         <div className="fixed inset-y-0 left-0 z-50 w-[min(20rem,88vw)] overflow-y-auto border-r bg-background px-4 pt-4 shadow-2xl styled-scrollbar">
           {sidebarContent}
         </div>

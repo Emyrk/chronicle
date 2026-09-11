@@ -154,8 +154,9 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 
 	rankedGuildID := uuid.New()
 	fullGuildID := uuid.New()
-	_, err := pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3), ($4, $2, $5)",
-		rankedGuildID, realmID, "Ranked Raiders", fullGuildID, "Full Clear Raiders")
+	legacyGuildID := uuid.New()
+	_, err := pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3), ($4, $2, $5), ($6, $2, $7)",
+		rankedGuildID, realmID, "Ranked Raiders", fullGuildID, "Full Clear Raiders", legacyGuildID, "Legacy Raiders")
 	require.NoError(t, err)
 
 	userID := uuid.New()
@@ -205,6 +206,25 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	bossWinner := insertRun(rankedGuildID, 60*time.Minute, 55*time.Minute, 30*time.Minute, 0)
 	fullWinner := insertRun(fullGuildID, 50*time.Minute, 40*time.Minute, 35*time.Minute, 2*time.Hour)
 
+	legacyID := uuid.New()
+	legacyStart := startedAt.Add(4 * time.Hour)
+	legacyDuration := 45 * time.Minute
+	legacyEnd := legacyStart.Add(legacyDuration)
+	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+		ID: legacyID, RealmID: realmID, LogGroupID: logGroupID,
+		Name: "Molten Core", HashedSlug: pgtype.Text{String: "legacy-" + legacyID.String()[:8], Valid: true},
+		GuildID:   uuid.NullUUID{UUID: legacyGuildID, Valid: true},
+		StartTime: database.Timestamptz(legacyStart), EndTime: database.Timestamptz(legacyEnd),
+		Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40,
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
+		InstanceID: legacyID, InstanceName: "Molten Core", RealmID: realmID,
+		GuildID: uuid.NullUUID{UUID: legacyGuildID, Valid: true}, Qualified: true,
+		StartTime: database.Timestamptz(legacyStart), CompletionTime: database.Timestamptz(legacyEnd),
+		DurationMs: int64(legacyDuration / time.Millisecond), Proof: []byte(`{"proof":[]}`),
+	}))
+
 	rankedRows, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
 		InstanceName: "Molten Core", RealmNames: []string{},
 		FilterDifficulty: true, DifficultyName: "Normal", UseRankedTiming: true,
@@ -219,9 +239,13 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 		FilterDifficulty: true, DifficultyName: "Normal", UseRankedTiming: false,
 	})
 	require.NoError(t, err)
-	require.Len(t, fullRows, 2)
+	require.Len(t, fullRows, 3)
 	require.Equal(t, fullWinner, fullRows[0].InstanceID)
 	require.EqualValues(t, 40*time.Minute/time.Millisecond, fullRows[0].DurationMs)
+	require.Equal(t, legacyID, fullRows[1].InstanceID)
+	require.EqualValues(t, legacyDuration/time.Millisecond, fullRows[1].DurationMs)
+	require.True(t, legacyStart.Equal(fullRows[1].StartTime.Time))
+	require.True(t, legacyEnd.Equal(fullRows[1].CompletionTime.Time))
 
 	firstPage, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
 		InstanceName: "Molten Core", RealmNames: []string{}, ResultLimit: 1,
@@ -237,7 +261,7 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, secondPage, 1)
-	require.Equal(t, bossWinner, secondPage[0].InstanceID)
+	require.Equal(t, legacyID, secondPage[0].InstanceID)
 }
 
 func TestExternalAPILeaderboardDuplicateLogsFollowTimingMode(t *testing.T) {

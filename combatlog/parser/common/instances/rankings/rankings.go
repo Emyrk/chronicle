@@ -55,7 +55,6 @@ type SpeedrunRules struct {
 // Nil sub-fields mean that ranking category doesn't apply.
 type Rankings struct {
 	Speedrun *SpeedrunRules `json:"speedrun,omitempty"`
-	// Future: DPS *DPSRules, etc.
 }
 
 // --- Proof (output, JSON-serializable) ---

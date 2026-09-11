@@ -5,7 +5,11 @@ import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useSiteConfig, useSupportedInstances } from "@/api/queries";
+import {
+  selectSupportedInstanceProgressionBosses,
+  useSiteConfig,
+  useSupportedInstances,
+} from "@/api/queries";
 import {
   useRankingsEncounters,
   useRankingsInstances,
@@ -20,6 +24,7 @@ import type {
   SpeedrunGuildClearsEntry,
   SpeedrunLeaderboardEntry,
 } from "@/api/typesGenerated";
+import { defaultRankingBossNames } from "@/pages/Rankings/rankingsEncounterSelection";
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay";
 import {
   getInstanceAbbrev,
@@ -614,15 +619,21 @@ function RaidSpotlight() {
   const { data: speedruns } = useSpeedrunTop(spot?.name ?? "", difficultyFilter);
   const { data: guildClears } = useGuildClears(spot?.name ?? "", difficultyFilter);
 
-  // Bosses only, like the leaderboard page's "All Bosses" default. "Trash" is
-  // the only trash encounter name by convention.
+  const progressionBosses = useMemo(
+    () => selectSupportedInstanceProgressionBosses(supportedInstances ?? []),
+    [supportedInstances],
+  );
+
+  // Match the rankings page default: canonical progression bosses only.
+  // Optional bosses remain selectable on the full rankings page.
   const { data: encounterSummaries } = useRankingsEncounters(spot?.name ?? "");
-  const bossEncounterNames = useMemo(() => {
-    const bosses = (encounterSummaries ?? [])
-      .map((e) => e.encounter_name)
-      .filter((n) => n !== "Trash");
-    return bosses.length > 0 ? bosses.join(",") : undefined;
-  }, [encounterSummaries]);
+  const spotlightBossNames = useMemo(() => {
+    const names = (encounterSummaries ?? []).map((encounter) => encounter.encounter_name);
+    return defaultRankingBossNames(spot?.name ?? "", names, progressionBosses);
+  }, [encounterSummaries, progressionBosses, spot?.name]);
+  const spotlightRankingsReady = encounterSummaries !== undefined && supportedInstances !== undefined;
+  const bossEncounterNames =
+    spotlightBossNames.size > 0 ? [...spotlightBossNames].join(",") : undefined;
 
   const { data: leaderboard } = useRankingsLeaderboard({
     instance_names: spot?.name ?? "",
@@ -630,30 +641,30 @@ function RaidSpotlight() {
     difficulty_names: difficultyFilter,
     max_players: maxPlayersFilter,
     limit: 12,
-  });
+  }, spotlightRankingsReady);
   const { data: boxPlotStats } = useRankingsStats({
     instance_names: spot?.name ?? "",
     encounter_names: bossEncounterNames,
     difficulty_names: difficultyFilter,
     max_players: maxPlayersFilter,
-  });
+  }, spotlightRankingsReady);
 
   // Success rates for the "Toughest Bosses" card. Only fetched when the card
   // is shown (empty instance name disables the query). Follows the active
   // board's difficulty/size toggles like the other spotlight cards.
   const { data: successRates } = useRankingsSuccessRates(
-    showToughestBosses ? (spot?.name ?? "") : "",
+    showToughestBosses && spotlightRankingsReady ? (spot?.name ?? "") : "",
     undefined,
     { difficulty_names: difficultyFilter, max_players: maxPlayersFilter },
   );
   const toughestBosses = useMemo(() => {
     if (!successRates) return [];
     return successRates
-      .filter((r) => r.total > 0)
+      .filter((r) => spotlightBossNames.has(r.encounter_name) && r.total > 0)
       .map((r) => ({ ...r, pct: (r.kills / r.total) * 100 }))
       .sort((a, b) => a.pct - b.pct)
       .slice(0, 6);
-  }, [successRates]);
+  }, [spotlightBossNames, successRates]);
 
   const topSpecs = useMemo(() => {
     if (!boxPlotStats) return [];

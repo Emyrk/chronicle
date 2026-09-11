@@ -122,7 +122,16 @@ func insertTimeParseInstance(t *testing.T, pool *pgxpool.Pool, store database.St
 			Valid: opts.durationMs > 0,
 		},
 		DurationMs: opts.durationMs,
-		Proof:      []byte("{}"),
+		RankedStartTime: pgtype.Timestamptz{
+			Time:  opts.startTime,
+			Valid: opts.durationMs > 0,
+		},
+		RankedCompletionTime: pgtype.Timestamptz{
+			Time:  completionTime,
+			Valid: opts.durationMs > 0,
+		},
+		RankedDurationMs: pgtype.Int8{Int64: opts.durationMs, Valid: opts.durationMs > 0},
+		Proof:            []byte("{}"),
 	})
 	require.NoError(t, err)
 
@@ -519,7 +528,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		conn, err := pool.Acquire(ctx)
 		require.NoError(t, err)
 		_, err = conn.Exec(ctx,
-			"UPDATE instance_speedruns SET duration_ms = $1 WHERE instance_id = $2",
+			"UPDATE instance_speedruns SET duration_ms = $1, ranked_duration_ms = $1 WHERE instance_id = $2",
 			555000, firstInstanceID)
 		require.NoError(t, err)
 		conn.Release()

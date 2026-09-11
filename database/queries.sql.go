@@ -14921,9 +14921,18 @@ WITH deduped AS (
         sr.instance_name,
         li.difficulty_name,
         sr.guild_id,
-        CASE WHEN $5::boolean THEN sr.boss_to_boss_duration_ms ELSE sr.ranked_duration_ms END::bigint AS duration_ms,
-        CASE WHEN $5::boolean THEN sr.boss_to_boss_start_time ELSE sr.ranked_start_time END::timestamptz AS start_time,
-        CASE WHEN $5::boolean THEN sr.boss_to_boss_completion_time ELSE sr.ranked_completion_time END::timestamptz AS completion_time,
+        CASE WHEN $5::boolean
+            THEN sr.boss_to_boss_duration_ms
+            ELSE COALESCE(sr.ranked_duration_ms, sr.duration_ms)
+        END::bigint AS duration_ms,
+        CASE WHEN $5::boolean
+            THEN sr.boss_to_boss_start_time
+            ELSE COALESCE(sr.ranked_start_time, sr.start_time)
+        END::timestamptz AS start_time,
+        CASE WHEN $5::boolean
+            THEN sr.boss_to_boss_completion_time
+            ELSE COALESCE(sr.ranked_completion_time, sr.completion_time)
+        END::timestamptz AS completion_time,
         sr.qualified,
         sr.addon_version,
         li.hashed_slug,
@@ -14964,7 +14973,10 @@ WITH deduped AS (
       END
       AND CASE
           WHEN $9 :: bigint > 0 THEN
-              CASE WHEN $5::boolean THEN sr.boss_to_boss_completion_time ELSE sr.ranked_completion_time END >= now() - make_interval(days => $9::int)
+              CASE WHEN $5::boolean
+                  THEN sr.boss_to_boss_completion_time
+                  ELSE COALESCE(sr.ranked_completion_time, sr.completion_time)
+              END >= now() - make_interval(days => $9::int)
           ELSE true
       END
       AND CASE
@@ -14972,7 +14984,10 @@ WITH deduped AS (
           ELSE true
       END
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        CASE WHEN $5::boolean THEN sr.boss_to_boss_duration_ms ELSE sr.ranked_duration_ms END ASC
+        CASE WHEN $5::boolean
+            THEN sr.boss_to_boss_duration_ms
+            ELSE COALESCE(sr.ranked_duration_ms, sr.duration_ms)
+        END ASC
 ),
 best AS (
     SELECT DISTINCT ON (
@@ -15031,7 +15046,8 @@ type SpeedrunLeaderboardRow struct {
 // Excludes runs without a guild. Optional filters: realm, player count, guild.
 // Each difficulty has its own board: set filter_difficulty to select the board
 // matching difficulty_name (empty string matches runs with no recorded difficulty).
-// use_ranked_timing selects boss-to-boss timing; false selects ranked clear timing.
+// use_ranked_timing selects boss-to-boss timing; false selects ranked clear timing,
+// falling back to raw timing for qualified legacy rows that predate ranked timing storage.
 // When no guild filter: keep only the best run per guild.
 // When guild filter is set: keep all runs for that guild.
 func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error) {

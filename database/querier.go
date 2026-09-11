@@ -767,7 +767,8 @@ type sqlcQuerier interface {
 	// Excludes runs without a guild. Optional filters: realm, player count, guild.
 	// Each difficulty has its own board: set filter_difficulty to select the board
 	// matching difficulty_name (empty string matches runs with no recorded difficulty).
-	// use_ranked_timing selects boss-to-boss timing; false selects ranked clear timing.
+	// use_ranked_timing selects boss-to-boss timing; false selects ranked clear timing,
+	// falling back to raw timing for qualified legacy rows that predate ranked timing storage.
 	// When no guild filter: keep only the best run per guild.
 	// When guild filter is set: keep all runs for that guild.
 	SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error)
