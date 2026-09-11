@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Loader2, Youtube, Timer, TriangleAlert } from "lucide-react";
-import { recordGuildResourceView, useInstance, useInstanceYoutube, useAuthorizationCheck } from "@/api/queries";
+import { useInstance, useInstanceYoutube, useAuthorizationCheck } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
@@ -363,14 +363,6 @@ export function InstancePage() {
     instanceId || "",
     { enabled: !!instanceId }
   );
-  const recordedInstanceView = useRef<string | null>(null);
-
-  useEffect(() => {
-    const slug = apiInstance?.slug;
-    if (!slug || !apiInstance.guild || recordedInstanceView.current === slug) return;
-    recordedInstanceView.current = slug;
-    void recordGuildResourceView({ resource_kind: "instance", resource_id: slug }).catch(() => {});
-  }, [apiInstance?.guild, apiInstance?.slug]);
 
   // Canonicalize URL: redirect from UUID to slug when available
   useEffect(() => {

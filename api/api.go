@@ -343,7 +343,6 @@ func (api *API) Routes() chi.Router {
 			})
 
 			r.Get("/healthz", healthz)
-			r.Post("/analytics/guild-resource-view", api.RecordGuildResourceView)
 			if api.Opts.WoWDB != nil {
 				r.Mount("/wowdb", api.Opts.WoWDB)
 			}
@@ -360,7 +359,7 @@ func (api *API) Routes() chi.Router {
 						api.Auth.Authenticated(true),
 					)
 					r.Get("/", api.GetGuild)
-					r.Get("/page", api.GetGuildPage)
+					r.With(api.trackGuildPageView).Get("/page", api.GetGuildPage)
 					r.Get("/settings", api.GetGuildSettings)
 					r.Get("/speedruns/clears", api.GuildRaidClears)
 					r.Get("/characters", api.GuildCharacterRoster)
@@ -486,7 +485,7 @@ func (api *API) Routes() chi.Router {
 							r.Route("/{instance_id}", func(r chi.Router) {
 								r.Use(httpmw.InstanceIDMiddleware(api.Opts.Zed))
 								r.Get("/events/{type}", api.InstanceEvents)
-								r.Get("/", api.Instance)
+								r.With(api.trackGuildInstanceView).Get("/", api.Instance)
 
 								r.Get("/youtube", api.GetInstanceYoutube)
 								r.Get("/loot", api.GetInstanceLoot)

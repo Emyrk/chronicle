@@ -1,11 +1,7 @@
 package api
 
 import (
-	"context"
-	"database/sql"
-	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -13,82 +9,43 @@ import (
 	"github.com/Emyrk/chronicle/api/visitorid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const guildAnalyticsLookbackDays int32 = 30
 
-// RecordGuildResourceView records a low-stakes, cookie-based analytics view.
-// Resource ownership is resolved on the server so callers cannot attribute a
-// view to an arbitrary guild. Unsupported and untrackable resources are no-ops.
-func (api *API) RecordGuildResourceView(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (api *API) trackGuildPageView(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		guild := httpmw.Guild(r.Context())
+		api.recordGuildResourceView(w, r, guild.ID, chroniclesdk.GuildResourceKindPage, guild.ID.String())
+		next.ServeHTTP(w, r)
+	})
+}
 
-	var req chroniclesdk.RecordGuildResourceViewRequest
-	if !httpapi.Read(ctx, w, r, &req) {
-		return
-	}
-
-	guildID, resourceKey, ok, err := api.resolveGuildAnalyticsResource(ctx, req)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			httpapi.Write(ctx, w, http.StatusNoContent, nil)
-			return
+func (api *API) trackGuildInstanceView(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if guildID, resourceKey, ok := trackableInstanceResource(httpmw.Instance(r.Context())); ok {
+			api.recordGuildResourceView(w, r, guildID, chroniclesdk.GuildResourceKindInstance, resourceKey)
 		}
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	if !ok {
-		httpapi.Write(ctx, w, http.StatusNoContent, nil)
-		return
-	}
+		next.ServeHTTP(w, r)
+	})
+}
 
+// recordGuildResourceView records low-stakes analytics without changing the
+// content response when analytics storage is unavailable.
+func (api *API) recordGuildResourceView(w http.ResponseWriter, r *http.Request, guildID uuid.UUID, resourceKind, resourceKey string) {
 	visitorID := visitorid.Ensure(w, r)
-	if err := api.Zed.RecordGuildResourceView(ctx, database.RecordGuildResourceViewParams{
+	if err := api.Zed.RecordGuildResourceView(r.Context(), database.RecordGuildResourceViewParams{
 		GuildID:      guildID,
-		ResourceKind: req.ResourceKind,
+		ResourceKind: resourceKind,
 		ResourceKey:  resourceKey,
 		VisitorID:    visitorID,
 	}); err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	httpapi.Write(ctx, w, http.StatusNoContent, nil)
-}
-
-func (api *API) resolveGuildAnalyticsResource(ctx context.Context, req chroniclesdk.RecordGuildResourceViewRequest) (uuid.UUID, string, bool, error) {
-	switch req.ResourceKind {
-	case chroniclesdk.GuildResourceKindPage:
-		guildID, err := uuid.Parse(req.ResourceID)
-		if err != nil {
-			return uuid.Nil, "", false, nil
-		}
-		guild, err := api.Zed.GetGuildByID(ctx, guildID)
-		if err != nil {
-			return uuid.Nil, "", false, err
-		}
-		return guild.ID, guild.ID.String(), true, nil
-
-	case chroniclesdk.GuildResourceKindInstance:
-		resourceID := strings.TrimSpace(req.ResourceID)
-		var (
-			instance database.LogInstancesGuild
-			err      error
+		api.Opts.Logger.WarnContext(r.Context(), "failed to record guild resource view",
+			"guild_id", guildID,
+			"resource_kind", resourceKind,
+			"resource_key", resourceKey,
+			"error", err,
 		)
-		if instanceID, parseErr := uuid.Parse(resourceID); parseErr == nil {
-			instance, err = api.Zed.Instance(ctx, instanceID)
-		} else {
-			instance, err = api.Zed.InstanceBySlug(ctx, pgtype.Text{String: resourceID, Valid: resourceID != ""})
-		}
-		if err != nil {
-			return uuid.Nil, "", false, err
-		}
-		guildID, resourceKey, ok := trackableInstanceResource(instance)
-		return guildID, resourceKey, ok, nil
-
-	default:
-		return uuid.Nil, "", false, nil
 	}
 }
 

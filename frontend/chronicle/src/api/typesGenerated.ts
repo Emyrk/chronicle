@@ -2795,12 +2795,6 @@ export interface RecentInstancesResponse {
     readonly has_more: boolean;
 }
 
-// From chroniclesdk/guild_page.go
-export interface RecordGuildResourceViewRequest {
-    readonly resource_kind: string;
-    readonly resource_id: string;
-}
-
 // From chroniclesdk/regression.go
 export interface RegressionFixture {
     readonly id: string;

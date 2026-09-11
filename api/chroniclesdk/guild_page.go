@@ -348,11 +348,6 @@ const (
 	GuildResourceKindInstance = "instance"
 )
 
-type RecordGuildResourceViewRequest struct {
-	ResourceKind string `json:"resource_kind"`
-	ResourceID   string `json:"resource_id"`
-}
-
 type GuildResourceAnalyticsDay struct {
 	ResourceKind   string `json:"resource_kind"`
 	ResourceKey    string `json:"resource_key"`
