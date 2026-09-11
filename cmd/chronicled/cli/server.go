@@ -38,6 +38,7 @@ import (
 
 func ServerCmd() *serpent.Command {
 	srvs := services.New()
+	apiService := serviceapi.New(srvs)
 	err := srvs.Register(
 		serviceaccessurl.New(srvs),
 		servicelogger.New(srvs),
@@ -62,7 +63,7 @@ func ServerCmd() *serpent.Command {
 		servicemail.New(srvs),
 		serviceapplication.New(srvs),
 		serviceexternalapi.New(srvs),
-		serviceapi.New(srvs),
+		apiService,
 	)
 	if err != nil {
 		panic(fmt.Sprintf("register service: %v", err))
@@ -87,6 +88,11 @@ func ServerCmd() *serpent.Command {
 				slog.String("commit", version.GitCommit),
 				slog.String("build_time", version.BuildTime),
 			)
+			if err := apiService.StartStartupServer(ctx, logger); err != nil {
+				return fmt.Errorf("start startup http server: %w", err)
+			}
+			defer apiService.CloseHTTPServer()
+
 			err := srvs.Start(ctx, logger)
 			if err != nil {
 				return fmt.Errorf("start services: %w", err)
