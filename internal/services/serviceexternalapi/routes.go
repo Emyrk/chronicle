@@ -166,7 +166,7 @@ func (s *Service) registerRoutes() {
 	s.register(http.MethodGet, "/leaderboards", OpenAPIOperation{
 		Tags:        []string{"Explore"},
 		Summary:     "Get the individual performance leaderboard",
-		Description: "Returns each character's best complete raid run, ordered by DPS or HPS. The query contract matches Chronicle's rankings leaderboard and stats routes. Duplicate uploads are represented by one selected instance per duplicate group.",
+		Description: "Returns each character's best complete raid run, ordered by DPS or HPS. The query contract matches Chronicle's rankings leaderboard and stats routes. Duplicate uploads are represented by one selected instance per duplicate group. Successful responses may be cached for five minutes and do not include RateLimit-Remaining because CDN cache hits do not consume the client's origin rate limit.",
 		Parameters: []OpenAPIParameter{
 			queryParameter("instance_names", "Comma-separated instance names", false, "string", "Molten Core"),
 			queryParameter("encounter_names", "Comma-separated encounter names", false, "string", "Ragnaros"),
@@ -200,7 +200,7 @@ func (s *Service) registerRoutes() {
 	s.register(http.MethodGet, "/leaderboards/speedruns", OpenAPIOperation{
 		Tags:        []string{"Explore"},
 		Summary:     "Get the speedrun leaderboard",
-		Description: "Returns a paginated list of qualified speedruns after duplicate-group and best-per-guild deduplication. The canonical log is the entry used by the leaderboard; other_logs contains matching uploads excluded as duplicates. timing defaults to full and accepts boss_to_boss for first-boss-pull through final-boss-kill timing.",
+		Description: "Returns a paginated list of qualified speedruns after duplicate-group and best-per-guild deduplication. The canonical log is the entry used by the leaderboard; other_logs contains matching uploads excluded as duplicates. timing defaults to full and accepts boss_to_boss for first-boss-pull through final-boss-kill timing. Successful responses may be cached for five minutes and do not include RateLimit-Remaining because CDN cache hits do not consume the client's origin rate limit.",
 		Parameters: []OpenAPIParameter{
 			queryParameter("instance_name", "Instance name", true, "string", "Molten Core"),
 			queryParameter("timing", "Timing mode: full or boss_to_boss", false, "string", "boss_to_boss"),

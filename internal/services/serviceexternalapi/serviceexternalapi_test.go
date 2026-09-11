@@ -108,6 +108,8 @@ func TestOpenAPISpec(t *testing.T) {
 	require.Equal(t, "metric", individualLeaderboard.Parameters[10].Name)
 	require.Equal(t, "offset", individualLeaderboard.Parameters[13].Name)
 	require.Equal(t, []string{"Explore"}, individualLeaderboard.Tags)
+	require.Contains(t, individualLeaderboard.Description, "do not include RateLimit-Remaining")
+	require.Contains(t, individualLeaderboard.Description, "cache hits do not consume")
 
 	leaderboard, ok := document.Paths["/leaderboards/speedruns"]["get"]
 	require.True(t, ok)
@@ -116,6 +118,8 @@ func TestOpenAPISpec(t *testing.T) {
 	require.True(t, leaderboard.Parameters[0].Required)
 	require.Equal(t, []string{"Explore"}, leaderboard.Tags)
 	require.Equal(t, "timing", leaderboard.Parameters[1].Name)
+	require.Contains(t, leaderboard.Description, "do not include RateLimit-Remaining")
+	require.Contains(t, leaderboard.Description, "cache hits do not consume")
 
 	recent, ok := document.Paths["/raidlogs/recent"]["get"]
 	require.True(t, ok)

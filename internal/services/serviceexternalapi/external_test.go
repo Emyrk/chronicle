@@ -234,7 +234,7 @@ func TestListIndividualLeaderboardMatchesRankingsQueryContract(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "public, max-age=300", rec.Header().Get("Cache-Control"))
-	require.Empty(t, rec.Header().Get("RateLimit-Limit"))
+	require.Equal(t, "60", rec.Header().Get("RateLimit-Limit"))
 	require.Empty(t, rec.Header().Get("RateLimit-Remaining"))
 	require.Equal(t, database.RankingsLeaderboardParams{
 		Metric: "hps", QueryOffset: 2, QueryLimit: 2,
@@ -319,7 +319,7 @@ func TestListSpeedrunLeaderboardIncludesCanonicalAndDuplicateLogs(t *testing.T) 
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "public, max-age=300", rec.Header().Get("Cache-Control"))
-	require.Empty(t, rec.Header().Get("RateLimit-Limit"))
+	require.Equal(t, "60", rec.Header().Get("RateLimit-Limit"))
 	require.Empty(t, rec.Header().Get("RateLimit-Remaining"))
 	require.True(t, store.leaderboardParams.UseRankedTiming)
 	require.Equal(t, "Molten Core", store.leaderboardParams.InstanceName)

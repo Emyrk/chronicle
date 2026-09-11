@@ -103,7 +103,7 @@ function RateLimitStatusCard({ server }: { server: string }) {
             The per-IP bucket holds {RATE_LIMIT_BURST} requests and refills one request each second, an average of {data?.limit ?? 60} per minute.
           </p>
           <p className="mt-1 text-xs leading-5 text-slate-600">
-            Every response includes <code className="text-slate-400">RateLimit-Limit</code> and <code className="text-slate-400">RateLimit-Remaining</code>. A <code className="text-slate-400">429</code> response also includes <code className="text-slate-400">Retry-After</code>. This health check reports the allowance without consuming a request.
+            Every response includes <code className="text-slate-400">RateLimit-Limit</code>. Most responses also include <code className="text-slate-400">RateLimit-Remaining</code>; successful leaderboard responses omit it because cached responses do not consume the origin rate limit. A <code className="text-slate-400">429</code> response also includes <code className="text-slate-400">Retry-After</code>. This health check reports the allowance without consuming a request.
           </p>
         </div>
 

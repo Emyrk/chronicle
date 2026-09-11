@@ -484,11 +484,10 @@ func (s *Service) listSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request
 }
 
 // markLeaderboardCacheable makes successful public leaderboard responses
-// eligible for Chronicle's shared CDN cache. Per-client rate-limit headers must
-// not be stored in a response that Cloudflare can serve to other clients.
+// eligible for Chronicle's shared CDN cache. The per-client remaining allowance
+// must not be stored in a response that Cloudflare can serve to other clients.
 func markLeaderboardCacheable(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "public, max-age=300")
-	w.Header().Del("RateLimit-Limit")
 	w.Header().Del("RateLimit-Remaining")
 }
 
