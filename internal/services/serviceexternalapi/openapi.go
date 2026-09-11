@@ -84,6 +84,10 @@ func newOpenAPIDocument() OpenAPIDocument {
 }
 
 func (s *Service) register(method, path string, operation OpenAPIOperation, handler http.HandlerFunc) {
+	s.registerWithRateLimitCost(method, path, externalStandardRequestCost, operation, handler)
+}
+
+func (s *Service) registerWithRateLimitCost(method, path string, cost int, operation OpenAPIOperation, handler http.HandlerFunc) {
 	method = strings.ToLower(method)
 	if path != "/health" {
 		operation.Responses["429"] = OpenAPIResponse{
@@ -99,7 +103,7 @@ func (s *Service) register(method, path string, operation OpenAPIOperation, hand
 	if path == "/health" {
 		routeHandler = s.rateLimiter.statusMiddleware(routeHandler)
 	} else {
-		routeHandler = s.rateLimiter.middleware(routeHandler)
+		routeHandler = s.rateLimiter.middlewareWithCost(cost, routeHandler)
 	}
 	s.router.Method(strings.ToUpper(method), path, routeHandler)
 }

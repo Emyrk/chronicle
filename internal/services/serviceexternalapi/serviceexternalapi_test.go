@@ -50,6 +50,27 @@ func TestMountedHealthDoesNotConsumeRateLimit(t *testing.T) {
 	}
 }
 
+func TestEventsRateLimitCost(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{
+		router:      chi.NewRouter(),
+		rateLimiter: newExternalIPLimiterWithConfig(1, externalRateLimitBurst),
+		openapi:     newOpenAPIDocument(),
+	}
+	service.registerRoutes()
+
+	for range 10 {
+		req := httptest.NewRequest(http.MethodGet, "/raidlogs/instances/example-instance/events/not-a-stream", nil)
+		req.Header.Set("X-Forwarded-For", "192.0.2.1")
+		rec := httptest.NewRecorder()
+		service.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+		require.Equal(t, "19", rec.Header().Get("RateLimit-Remaining"))
+	}
+}
+
 func TestOpenAPISpec(t *testing.T) {
 	t.Parallel()
 

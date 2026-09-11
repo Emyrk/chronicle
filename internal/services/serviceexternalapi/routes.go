@@ -152,7 +152,7 @@ func (s *Service) registerRoutes() {
 		}}),
 	}, s.getInstanceRankingRecordsBySlug)
 
-	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}/events/{type}", OpenAPIOperation{
+	s.registerWithRateLimitCost(http.MethodGet, "/raidlogs/instances/{instance_id}/events/{type}", externalEventsRequestCost, OpenAPIOperation{
 		Tags:        []string{"Raid Instance"},
 		Summary:     "Get a raid-instance event stream",
 		Description: "Returns the stored gzip-compressed protobuf event stream for an instance ID and event type.",
