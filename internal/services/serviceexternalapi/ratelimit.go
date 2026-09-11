@@ -19,6 +19,10 @@ const (
 	externalRateLimitBurst     = 20
 	externalLimiterEntryTTL    = 10 * time.Minute
 	externalLimiterCleanup     = 5 * time.Minute
+
+	// Track tenths of a standard request so selected routes can have fractional costs.
+	externalStandardRequestCost = 10
+	externalEventsRequestCost   = 1
 )
 
 // externalIPLimiter owns the external API's per-process, per-IP token buckets.
@@ -51,9 +55,13 @@ func newExternalIPLimiterWithConfig(requestsPerMinute, burst int) *externalIPLim
 }
 
 func (l *externalIPLimiter) middleware(next http.Handler) http.Handler {
+	return l.middlewareWithCost(externalStandardRequestCost, next)
+}
+
+func (l *externalIPLimiter) middlewareWithCost(cost int, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		limiter := l.get(externalClientIP(r))
-		allowed := limiter.Allow()
+		allowed := limiter.AllowN(time.Now(), cost)
 		l.setHeaders(w, limiter)
 		if !allowed {
 			w.Header().Set("Retry-After", "1")
@@ -78,7 +86,7 @@ func (l *externalIPLimiter) statusMiddleware(next http.Handler) http.Handler {
 }
 
 func (l *externalIPLimiter) setHeaders(w http.ResponseWriter, limiter *rate.Limiter) {
-	remaining := max(int(math.Floor(limiter.Tokens())), 0)
+	remaining := max(int(math.Floor(limiter.Tokens()/externalStandardRequestCost)), 0)
 	w.Header().Set("RateLimit-Limit", strconv.Itoa(l.requestsPerMinute))
 	w.Header().Set("RateLimit-Remaining", strconv.Itoa(remaining))
 }
@@ -102,7 +110,10 @@ func (l *externalIPLimiter) get(ip string) *rate.Limiter {
 	entry, ok := l.limiters[ip]
 	if !ok {
 		entry = &externalLimiterEntry{
-			limiter: rate.NewLimiter(rate.Every(time.Minute/time.Duration(l.requestsPerMinute)), l.burst),
+			limiter: rate.NewLimiter(
+				rate.Every(time.Minute/time.Duration(l.requestsPerMinute*externalStandardRequestCost)),
+				l.burst*externalStandardRequestCost,
+			),
 		}
 		l.limiters[ip] = entry
 	}
