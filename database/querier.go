@@ -35,6 +35,7 @@ type sqlcQuerier interface {
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
+	ClearDirtyRankingRunGeneration(ctx context.Context, arg ClearDirtyRankingRunGenerationParams) (int64, error)
 	ClearDuplicateGroupID(ctx context.Context, id uuid.UUID) error
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
@@ -99,6 +100,7 @@ type sqlcQuerier interface {
 	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
 	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
 	DeleteRaidCompositionByID(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteRankingRunSummary(ctx context.Context, runID uuid.UUID) error
 	// Delete a snapshot by ID. Members are cascade-deleted via the FK
 	// ranking_snapshot_members.snapshot_id → ranking_snapshots.id ON DELETE CASCADE
 	// (migration 000143). Deleting a day's snapshot makes raids from that day
@@ -297,6 +299,7 @@ type sqlcQuerier interface {
 	// Used by the idempotency guard.
 	GetPublishedTimeParseSnapshotForCutoff(ctx context.Context, arg GetPublishedTimeParseSnapshotForCutoffParams) (TimeParseSnapshot, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
+	GetRankingRunSummary(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	GetRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
@@ -478,6 +481,8 @@ type sqlcQuerier interface {
 	// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
 	InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error
 	InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error
+	InsertRankingPlayerRunSummary(ctx context.Context, arg InsertRankingPlayerRunSummaryParams) error
+	InsertRankingRunSummary(ctx context.Context, arg InsertRankingRunSummaryParams) error
 	// Create a new pending snapshot for a tenant+lookback.
 	InsertRankingSnapshot(ctx context.Context, arg InsertRankingSnapshotParams) (RankingSnapshot, error)
 	// Insert a single snapshot member (caller batches in a transaction).
@@ -539,6 +544,10 @@ type sqlcQuerier interface {
 	ListConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumablesByDatasetRow, error)
 	ListCooldownSpellsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListCooldownSpellsByDatasetRow, error)
 	ListDatasets(ctx context.Context) ([]Dataset, error)
+	// Returns a bounded, stable batch without locking dirty rows. Rebuilds may be
+	// expensive, so workers observe the generation and conditionally clear it only
+	// after the replacement transaction commits.
+	ListDirtyRankingRuns(ctx context.Context, batchSize int32) ([]ListDirtyRankingRunsRow, error)
 	ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error)
 	ListDiscordAnnouncementSources(ctx context.Context, announcementID uuid.UUID) ([]GuildDiscordLogAnnouncementSource, error)
 	// Return distinct (encounter_name, player_class, player_spec, player_sub_spec,
@@ -593,6 +602,7 @@ type sqlcQuerier interface {
 	// persisted at publication time so this list never scans snapshot members.
 	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]RankingSnapshot, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
+	ListRankingPlayerRunSummaries(ctx context.Context, runID uuid.UUID) ([]RankingPlayerRunSummary, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
 	// Used by the parses handler to get the viewed instance's own metric values
 	// independent of snapshot membership (the instance may not be a member of the
@@ -635,6 +645,10 @@ type sqlcQuerier interface {
 	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Transition a pending time-parse snapshot to published. Idempotent on already-published.
 	PublishTimeParseSnapshot(ctx context.Context, id uuid.UUID) (TimeParseSnapshot, error)
+	// Resolves the current representative physical instance for one logical run using
+	// the exact ordering from RankingsLeaderboardSlow, then aggregates one row per
+	// player across that representative instance's encounters.
+	RankingRunSummarySource(ctx context.Context, runID uuid.UUID) ([]RankingRunSummarySourceRow, error)
 	// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
 	// DPS is aggregated per run (sum damage / sum duration across encounters in one
 	// instance run), so each run is one data point. Matches leaderboard aggregation.

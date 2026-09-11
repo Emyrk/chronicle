@@ -11023,6 +11023,512 @@ func (q *sqlQuerier) UpdateRaidCompositionSharing(ctx context.Context, arg Updat
 	return i, err
 }
 
+const clearDirtyRankingRunGeneration = `-- name: ClearDirtyRankingRunGeneration :execrows
+DELETE FROM ranking_run_summary_dirty
+WHERE run_id = $1 AND generation = $2
+`
+
+type ClearDirtyRankingRunGenerationParams struct {
+	RunID      uuid.UUID `db:"run_id" json:"run_id"`
+	Generation int64     `db:"generation" json:"generation"`
+}
+
+func (q *sqlQuerier) ClearDirtyRankingRunGeneration(ctx context.Context, arg ClearDirtyRankingRunGenerationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearDirtyRankingRunGeneration, arg.RunID, arg.Generation)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteRankingRunSummary = `-- name: DeleteRankingRunSummary :exec
+DELETE FROM ranking_runs WHERE run_id = $1
+`
+
+func (q *sqlQuerier) DeleteRankingRunSummary(ctx context.Context, runID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRankingRunSummary, runID)
+	return err
+}
+
+const getRankingRunSummary = `-- name: GetRankingRunSummary :one
+SELECT run_id, representative_instance_id, tenant_id, instance_name, realm_id, realm_name, difficulty_name, max_players, boss_coverage, encounter_names, summary_version, source_generation, updated_at FROM ranking_runs WHERE run_id = $1
+`
+
+func (q *sqlQuerier) GetRankingRunSummary(ctx context.Context, runID uuid.UUID) (RankingRun, error) {
+	row := q.db.QueryRow(ctx, getRankingRunSummary, runID)
+	var i RankingRun
+	err := row.Scan(
+		&i.RunID,
+		&i.RepresentativeInstanceID,
+		&i.TenantID,
+		&i.InstanceName,
+		&i.RealmID,
+		&i.RealmName,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+		&i.BossCoverage,
+		&i.EncounterNames,
+		&i.SummaryVersion,
+		&i.SourceGeneration,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertRankingPlayerRunSummary = `-- name: InsertRankingPlayerRunSummary :exec
+INSERT INTO ranking_player_run_summaries (
+    run_id, tenant_id, player_guid, player_name, player_class, player_spec,
+    player_sub_spec, player_role, player_level, instance_name, encounter_name,
+    difficulty_name, max_players, realm_id, realm_name, guild_name, damage_done,
+    healing_done, absorbed_done, duration_secs, dps, hps, avg_ilvl,
+    log_hashed_slug, killed_at, talent_sub_spec, talent_layout, summary_version,
+    updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11,
+    $12, $13, $14, $15, $16, $17,
+    $18, $19, $20, $21, $22, $23,
+    $24, $25, $26, $27, $28,
+    now()
+)
+`
+
+type InsertRankingPlayerRunSummaryParams struct {
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	TenantID       uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+	PlayerLevel    int16              `db:"player_level" json:"player_level"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName      string             `db:"realm_name" json:"realm_name"`
+	GuildName      string             `db:"guild_name" json:"guild_name"`
+	DamageDone     int64              `db:"damage_done" json:"damage_done"`
+	HealingDone    int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone   int64              `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs   float64            `db:"duration_secs" json:"duration_secs"`
+	Dps            float64            `db:"dps" json:"dps"`
+	Hps            float64            `db:"hps" json:"hps"`
+	AvgIlvl        int16              `db:"avg_ilvl" json:"avg_ilvl"`
+	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	TalentSubSpec  string             `db:"talent_sub_spec" json:"talent_sub_spec"`
+	TalentLayout   string             `db:"talent_layout" json:"talent_layout"`
+	SummaryVersion int16              `db:"summary_version" json:"summary_version"`
+}
+
+func (q *sqlQuerier) InsertRankingPlayerRunSummary(ctx context.Context, arg InsertRankingPlayerRunSummaryParams) error {
+	_, err := q.db.Exec(ctx, insertRankingPlayerRunSummary,
+		arg.RunID,
+		arg.TenantID,
+		arg.PlayerGuid,
+		arg.PlayerName,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PlayerRole,
+		arg.PlayerLevel,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RealmID,
+		arg.RealmName,
+		arg.GuildName,
+		arg.DamageDone,
+		arg.HealingDone,
+		arg.AbsorbedDone,
+		arg.DurationSecs,
+		arg.Dps,
+		arg.Hps,
+		arg.AvgIlvl,
+		arg.LogHashedSlug,
+		arg.KilledAt,
+		arg.TalentSubSpec,
+		arg.TalentLayout,
+		arg.SummaryVersion,
+	)
+	return err
+}
+
+const insertRankingRunSummary = `-- name: InsertRankingRunSummary :exec
+INSERT INTO ranking_runs (
+    run_id, representative_instance_id, tenant_id, instance_name, realm_id,
+    realm_name, difficulty_name, max_players, boss_coverage, encounter_names,
+    summary_version, source_generation, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12, now()
+)
+`
+
+type InsertRankingRunSummaryParams struct {
+	RunID                    uuid.UUID     `db:"run_id" json:"run_id"`
+	RepresentativeInstanceID uuid.UUID     `db:"representative_instance_id" json:"representative_instance_id"`
+	TenantID                 uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName             string        `db:"instance_name" json:"instance_name"`
+	RealmID                  uuid.UUID     `db:"realm_id" json:"realm_id"`
+	RealmName                string        `db:"realm_name" json:"realm_name"`
+	DifficultyName           string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers               int16         `db:"max_players" json:"max_players"`
+	BossCoverage             int32         `db:"boss_coverage" json:"boss_coverage"`
+	EncounterNames           []string      `db:"encounter_names" json:"encounter_names"`
+	SummaryVersion           int16         `db:"summary_version" json:"summary_version"`
+	SourceGeneration         int64         `db:"source_generation" json:"source_generation"`
+}
+
+func (q *sqlQuerier) InsertRankingRunSummary(ctx context.Context, arg InsertRankingRunSummaryParams) error {
+	_, err := q.db.Exec(ctx, insertRankingRunSummary,
+		arg.RunID,
+		arg.RepresentativeInstanceID,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.RealmID,
+		arg.RealmName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.BossCoverage,
+		arg.EncounterNames,
+		arg.SummaryVersion,
+		arg.SourceGeneration,
+	)
+	return err
+}
+
+const listDirtyRankingRuns = `-- name: ListDirtyRankingRuns :many
+SELECT run_id, generation
+FROM ranking_run_summary_dirty
+ORDER BY updated_at ASC, run_id ASC
+LIMIT $1
+`
+
+type ListDirtyRankingRunsRow struct {
+	RunID      uuid.UUID `db:"run_id" json:"run_id"`
+	Generation int64     `db:"generation" json:"generation"`
+}
+
+// Returns a bounded, stable batch without locking dirty rows. Rebuilds may be
+// expensive, so workers observe the generation and conditionally clear it only
+// after the replacement transaction commits.
+func (q *sqlQuerier) ListDirtyRankingRuns(ctx context.Context, batchSize int32) ([]ListDirtyRankingRunsRow, error) {
+	rows, err := q.db.Query(ctx, listDirtyRankingRuns, batchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirtyRankingRunsRow
+	for rows.Next() {
+		var i ListDirtyRankingRunsRow
+		if err := rows.Scan(&i.RunID, &i.Generation); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRankingPlayerRunSummaries = `-- name: ListRankingPlayerRunSummaries :many
+SELECT run_id, tenant_id, player_guid, player_name, player_class, player_spec, player_sub_spec, player_role, player_level, instance_name, encounter_name, difficulty_name, max_players, realm_id, realm_name, guild_name, damage_done, healing_done, absorbed_done, duration_secs, dps, hps, avg_ilvl, log_hashed_slug, killed_at, talent_sub_spec, talent_layout, summary_version, updated_at
+FROM ranking_player_run_summaries
+WHERE run_id = $1
+ORDER BY player_guid
+`
+
+func (q *sqlQuerier) ListRankingPlayerRunSummaries(ctx context.Context, runID uuid.UUID) ([]RankingPlayerRunSummary, error) {
+	rows, err := q.db.Query(ctx, listRankingPlayerRunSummaries, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingPlayerRunSummary
+	for rows.Next() {
+		var i RankingPlayerRunSummary
+		if err := rows.Scan(
+			&i.RunID,
+			&i.TenantID,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PlayerRole,
+			&i.PlayerLevel,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RealmID,
+			&i.RealmName,
+			&i.GuildName,
+			&i.DamageDone,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.Hps,
+			&i.AvgIlvl,
+			&i.LogHashedSlug,
+			&i.KilledAt,
+			&i.TalentSubSpec,
+			&i.TalentLayout,
+			&i.SummaryVersion,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rankingRunSummarySource = `-- name: RankingRunSummarySource :many
+WITH representative_instance AS (
+    SELECT
+        li.id AS representative_instance_id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        ws.tenant_id,
+        li.name AS instance_name,
+        li.realm_id,
+        wsr.name AS realm_name,
+        li.difficulty_name,
+        li.max_players::smallint AS max_players,
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL)::integer AS boss_coverage
+    FROM log_instances li
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    WHERE COALESCE(li.duplicate_group_id, li.id) = $1::uuid
+    ORDER BY
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+    LIMIT 1
+),
+deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name)
+        edr.player_guid,
+        edr.player_name,
+        edr.player_class,
+        edr.player_spec,
+        edr.player_sub_spec,
+        edr.player_role,
+        edr.player_level,
+        edr.instance_name,
+        edr.encounter_name,
+        edr.difficulty_name,
+        edr.max_players,
+        edr.realm_id,
+        edr.realm_name,
+        edr.guild_name,
+        edr.damage_done,
+        edr.healing_done,
+        edr.absorbed_done,
+        edr.duration_secs,
+        edr.avg_ilvl,
+        edr.log_hashed_slug,
+        edr.killed_at,
+        COALESCE(tb.sub_spec, '')::text AS talent_sub_spec,
+        COALESCE(tb.talent_layout, '')::text AS talent_layout
+    FROM encounter_dps_rankings edr
+    JOIN representative_instance ri ON ri.representative_instance_id = edr.instance_id
+    LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
+    ORDER BY edr.player_guid, edr.encounter_name, edr.dps DESC
+),
+realm_encounter_count AS (
+    SELECT realm_id, COUNT(DISTINCT encounter_name) AS encounter_count
+    FROM deduped
+    GROUP BY realm_id
+),
+per_player AS (
+    SELECT
+        d.player_guid,
+        ((array_agg(d.player_name ORDER BY d.damage_done DESC))[1])::text AS player_name,
+        ((array_agg(d.player_class ORDER BY d.damage_done DESC))[1])::text AS player_class,
+        (string_agg(DISTINCT d.player_spec, '/' ORDER BY d.player_spec))::text AS player_spec,
+        (string_agg(DISTINCT d.player_sub_spec, '/' ORDER BY d.player_sub_spec))::text AS player_sub_spec,
+        ((array_agg(d.player_role ORDER BY d.damage_done DESC))[1])::text AS player_role,
+        MAX(d.player_level)::smallint AS player_level,
+        ((array_agg(d.instance_name ORDER BY d.damage_done DESC))[1])::text AS instance_name,
+        ((array_agg(d.encounter_name ORDER BY d.damage_done DESC))[1])::text AS encounter_name,
+        ((array_agg(d.difficulty_name ORDER BY d.damage_done DESC))[1])::text AS difficulty_name,
+        MAX(d.max_players)::smallint AS max_players,
+        ((array_agg(d.realm_id ORDER BY d.damage_done DESC))[1])::uuid AS realm_id,
+        ((array_agg(d.realm_name ORDER BY d.damage_done DESC))[1])::text AS realm_name,
+        ((array_agg(d.guild_name ORDER BY d.damage_done DESC))[1])::text AS guild_name,
+        SUM(d.damage_done)::bigint AS damage_done,
+        SUM(d.healing_done)::bigint AS healing_done,
+        SUM(d.absorbed_done)::bigint AS absorbed_done,
+        SUM(d.duration_secs)::double precision AS duration_secs,
+        (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
+        (SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS hps,
+        COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
+        ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
+        MAX(d.killed_at)::timestamptz AS killed_at,
+        COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1], '')::text AS talent_sub_spec,
+        COALESCE((array_agg(d.talent_layout ORDER BY d.damage_done DESC))[1], '')::text AS talent_layout
+    FROM deduped d
+    JOIN realm_encounter_count rec ON rec.realm_id = d.realm_id
+    GROUP BY d.player_guid, rec.encounter_count
+    HAVING COUNT(DISTINCT d.encounter_name) = rec.encounter_count
+)
+SELECT
+    ri.representative_instance_id,
+    ri.run_id,
+    ri.tenant_id,
+    ri.instance_name AS run_instance_name,
+    ri.realm_id AS run_realm_id,
+    ri.realm_name AS run_realm_name,
+    ri.difficulty_name AS run_difficulty_name,
+    ri.max_players AS run_max_players,
+    ri.boss_coverage,
+    COALESCE((SELECT array_agg(DISTINCT d.encounter_name ORDER BY d.encounter_name) FROM deduped d), '{}')::text[] AS encounter_names,
+    pp.player_guid,
+    pp.player_name,
+    pp.player_class,
+    pp.player_spec,
+    pp.player_sub_spec,
+    pp.player_role,
+    pp.player_level,
+    pp.instance_name,
+    pp.encounter_name,
+    pp.difficulty_name,
+    pp.max_players,
+    pp.realm_id,
+    pp.realm_name,
+    pp.guild_name,
+    pp.damage_done,
+    pp.healing_done,
+    pp.absorbed_done,
+    pp.duration_secs,
+    pp.dps,
+    pp.hps,
+    pp.avg_ilvl,
+    pp.log_hashed_slug,
+    pp.killed_at,
+    pp.talent_sub_spec,
+    pp.talent_layout
+FROM representative_instance ri
+JOIN per_player pp ON true
+ORDER BY pp.player_guid
+`
+
+type RankingRunSummarySourceRow struct {
+	RepresentativeInstanceID uuid.UUID          `db:"representative_instance_id" json:"representative_instance_id"`
+	RunID                    uuid.UUID          `db:"run_id" json:"run_id"`
+	TenantID                 uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	RunInstanceName          string             `db:"run_instance_name" json:"run_instance_name"`
+	RunRealmID               uuid.UUID          `db:"run_realm_id" json:"run_realm_id"`
+	RunRealmName             string             `db:"run_realm_name" json:"run_realm_name"`
+	RunDifficultyName        string             `db:"run_difficulty_name" json:"run_difficulty_name"`
+	RunMaxPlayers            int16              `db:"run_max_players" json:"run_max_players"`
+	BossCoverage             int32              `db:"boss_coverage" json:"boss_coverage"`
+	EncounterNames           []string           `db:"encounter_names" json:"encounter_names"`
+	PlayerGuid               string             `db:"player_guid" json:"player_guid"`
+	PlayerName               string             `db:"player_name" json:"player_name"`
+	PlayerClass              string             `db:"player_class" json:"player_class"`
+	PlayerSpec               string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec            string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole               string             `db:"player_role" json:"player_role"`
+	PlayerLevel              int16              `db:"player_level" json:"player_level"`
+	InstanceName             string             `db:"instance_name" json:"instance_name"`
+	EncounterName            string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName           string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers               int16              `db:"max_players" json:"max_players"`
+	RealmID                  uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName                string             `db:"realm_name" json:"realm_name"`
+	GuildName                string             `db:"guild_name" json:"guild_name"`
+	DamageDone               int64              `db:"damage_done" json:"damage_done"`
+	HealingDone              int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone             int64              `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs             float64            `db:"duration_secs" json:"duration_secs"`
+	Dps                      float64            `db:"dps" json:"dps"`
+	Hps                      float64            `db:"hps" json:"hps"`
+	AvgIlvl                  int16              `db:"avg_ilvl" json:"avg_ilvl"`
+	LogHashedSlug            string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt                 pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	TalentSubSpec            string             `db:"talent_sub_spec" json:"talent_sub_spec"`
+	TalentLayout             string             `db:"talent_layout" json:"talent_layout"`
+}
+
+// Resolves the current representative physical instance for one logical run using
+// the exact ordering from RankingsLeaderboardSlow, then aggregates one row per
+// player across that representative instance's encounters.
+func (q *sqlQuerier) RankingRunSummarySource(ctx context.Context, runID uuid.UUID) ([]RankingRunSummarySourceRow, error) {
+	rows, err := q.db.Query(ctx, rankingRunSummarySource, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingRunSummarySourceRow
+	for rows.Next() {
+		var i RankingRunSummarySourceRow
+		if err := rows.Scan(
+			&i.RepresentativeInstanceID,
+			&i.RunID,
+			&i.TenantID,
+			&i.RunInstanceName,
+			&i.RunRealmID,
+			&i.RunRealmName,
+			&i.RunDifficultyName,
+			&i.RunMaxPlayers,
+			&i.BossCoverage,
+			&i.EncounterNames,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PlayerRole,
+			&i.PlayerLevel,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RealmID,
+			&i.RealmName,
+			&i.GuildName,
+			&i.DamageDone,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.Hps,
+			&i.AvgIlvl,
+			&i.LogHashedSlug,
+			&i.KilledAt,
+			&i.TalentSubSpec,
+			&i.TalentLayout,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCharacterEncounterStats = `-- name: GetCharacterEncounterStats :many
 SELECT
   edr.instance_name,
