@@ -5285,10 +5285,16 @@ func (q *sqlQuerier) BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []b
 const countGuilds = `-- name: CountGuilds :one
 SELECT COUNT(*) FROM guilds g
 WHERE ($1::text = '' OR g.name ILIKE '%' || $1 || '%')
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000' OR g.realm_id = $2)
 `
 
-func (q *sqlQuerier) CountGuilds(ctx context.Context, dollar_1 string) (int64, error) {
-	row := q.db.QueryRow(ctx, countGuilds, dollar_1)
+type CountGuildsParams struct {
+	Search  string    `db:"search" json:"search"`
+	RealmID uuid.UUID `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countGuilds, arg.Search, arg.RealmID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -5639,15 +5645,17 @@ LEFT JOIN guild_pages gp ON gp.guild_id = g.id
 JOIN wow_server_realms r ON r.id = g.realm_id
 LEFT JOIN game_players gpl ON gpl.guild_id = g.id
 WHERE ($1::text = '' OR g.name ILIKE '%' || $1 || '%')
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000' OR g.realm_id = $2)
 GROUP BY g.id, gp.id, r.name, gp.theme
 ORDER BY COUNT(gpl.id) DESC, g.name
-LIMIT $2 OFFSET $3
+LIMIT $4 OFFSET $3
 `
 
 type ListGuildsWithPagesParams struct {
-	Column1 string `db:"column_1" json:"column_1"`
-	Limit   int32  `db:"limit" json:"limit"`
-	Offset  int32  `db:"offset" json:"offset"`
+	Search       string    `db:"search" json:"search"`
+	RealmID      uuid.UUID `db:"realm_id" json:"realm_id"`
+	ResultOffset int32     `db:"result_offset" json:"result_offset"`
+	ResultLimit  int32     `db:"result_limit" json:"result_limit"`
 }
 
 type ListGuildsWithPagesRow struct {
@@ -5662,7 +5670,12 @@ type ListGuildsWithPagesRow struct {
 }
 
 func (q *sqlQuerier) ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error) {
-	rows, err := q.db.Query(ctx, listGuildsWithPages, arg.Column1, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listGuildsWithPages,
+		arg.Search,
+		arg.RealmID,
+		arg.ResultOffset,
+		arg.ResultLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

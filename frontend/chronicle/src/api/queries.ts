@@ -1632,12 +1632,13 @@ export function useArmoryLoot(
   });
 }
 
-export function useGuildSearch(params: { search: string; offset?: number }) {
+export function useGuildSearch(params: { search: string; realm?: string; offset?: number }) {
   return useQuery({
     queryKey: ["guild-search", params],
     queryFn: async () => {
       const searchParams = new URLSearchParams();
       if (params.search) searchParams.set("search", params.search);
+      if (params.realm) searchParams.set("realm", params.realm);
       if (params.offset) searchParams.set("offset", String(params.offset));
       const response = await fetch(`/api/v1/guilds/?${searchParams}`);
       if (!response.ok) {

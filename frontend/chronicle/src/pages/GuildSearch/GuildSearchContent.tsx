@@ -29,10 +29,10 @@ export function GuildSearchContent() {
   const [page, setPage] = useState(0);
   const pageSize = 15;
 
-  // Reset to first page when search changes
+  // Reset to first page when search or realm changes
   useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, realmFilter]);
 
   // Sync debounced value to URL
   useEffect(() => {
@@ -45,6 +45,7 @@ export function GuildSearchContent() {
 
   const { data, isLoading, isFetching } = useGuildSearch({
     search: debouncedSearch,
+    realm: realmFilter || undefined,
     offset: page * pageSize,
   });
 
@@ -60,12 +61,6 @@ export function GuildSearchContent() {
     else next.delete(key);
     setSearchParams(next, { replace: true });
   };
-
-  // Client-side realm filter (backend doesn't support realm param on guild list)
-  const filtered = data?.guilds?.filter((g) => {
-    if (realmFilter && g.realm_id !== realmFilter) return false;
-    return true;
-  });
 
   return (
     <div>
@@ -105,7 +100,7 @@ export function GuildSearchContent() {
           <Loader2 className="h-6 w-6 mx-auto mb-3 animate-spin text-primary" />
           <p className="text-sm">Loading guilds…</p>
         </div>
-      ) : filtered && filtered.length > 0 ? (
+      ) : data && data.guilds.length > 0 ? (
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">
@@ -143,7 +138,7 @@ export function GuildSearchContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.map((guild) => (
+                {data.guilds.map((guild) => (
                   <GuildRow key={guild.id} guild={guild} />
                 ))}
               </tbody>
