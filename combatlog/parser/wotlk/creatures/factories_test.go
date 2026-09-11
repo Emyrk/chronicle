@@ -80,6 +80,49 @@ func TestWotLKEncounterFactoriesLeaveIronConstructTimeoutWhenIgnisIsInactive(t *
 	require.Equal(t, period.EndStateTimeout, construct.LastEndState())
 }
 
+func TestWotLKEncounterFactoriesKillTempestMinionsWithEmalon(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name        string
+		emalonEntry uint32
+		minionEntry uint32
+	}{
+		{name: "10 player", emalonEntry: 33993, minionEntry: 33998},
+		{name: "25 player", emalonEntry: 33994, minionEntry: 34200},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			all := characters.NewCharacters(
+				unitdb.New(),
+				NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
+				identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+			)
+			player := guid.GUID(1)
+			emalonID := wotlkEntryGUID(0xF130000000000000, test.emalonEntry)
+			minionID := wotlkEntryGUID(0xF130000000000000, test.minionEntry)
+			start := time.Date(2026, time.September, 11, 12, 0, 0, 0, time.UTC)
+
+			_, err := all.Process(testDamage(start, minionID, player))
+			require.NoError(t, err)
+			_, err = all.Process(testDamage(start, emalonID, player))
+			require.NoError(t, err)
+			_, err = all.Process(&messages.Slain{
+				MessageBase: messages.Base(start.Add(30 * time.Second)),
+				Killer:      &player,
+				Victim:      emalonID,
+			})
+			require.NoError(t, err)
+
+			minion, ok := all.Get(minionID)
+			require.True(t, ok)
+			require.False(t, minion.IsActive())
+			require.Equal(t, period.EndStateSlain, minion.LastEndState())
+		})
+	}
+}
+
 func TestWotLKEncounterFactoriesRejectPetEntries(t *testing.T) {
 	t.Parallel()
 

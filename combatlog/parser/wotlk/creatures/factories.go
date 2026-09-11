@@ -52,6 +52,9 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			// Underbog
 			NewClaw,
 
+			// Vault of Archavon
+			NewEmalon,
+
 			// Obsidian Sanctum
 			NewSarthrion,
 
