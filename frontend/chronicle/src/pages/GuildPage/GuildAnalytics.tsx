@@ -24,10 +24,21 @@ const compactFormatter = new Intl.NumberFormat(undefined, { notation: "compact",
 const RANGE_OPTIONS = [7, 14, 30] as const;
 type RangeDays = (typeof RANGE_OPTIONS)[number];
 
+type Metric = "unique" | "total";
+const METRIC_OPTIONS: { value: Metric; label: string }[] = [
+  { value: "unique", label: "Unique views" },
+  { value: "total", label: "Total views" },
+];
+const METRIC_UNIT: Record<Metric, string> = { unique: "unique views", total: "views" };
+
 interface DayValue {
   date: string;
   views: number;
   uniqueVisitors: number;
+}
+
+function metricValue(day: DayValue, metric: Metric): number {
+  return metric === "unique" ? day.uniqueVisitors : day.views;
 }
 
 /** Ascending date strings (UTC, YYYY-MM-DD), `count` days ending today. */
@@ -49,8 +60,8 @@ function seriesFor(byDate: Map<string, { views: number; uniqueVisitors: number }
   });
 }
 
-function sumViews(series: DayValue[]): number {
-  return series.reduce((total, day) => total + day.views, 0);
+function sumMetric(series: DayValue[], metric: Metric): number {
+  return series.reduce((total, day) => total + metricValue(day, metric), 0);
 }
 
 function pctDelta(current: number, prior: number): number {
@@ -77,9 +88,10 @@ export function GuildAnalytics() {
   const { data: pageConfig, isLoading: pageLoading } = useGuildPage(guildId);
   const { data: analytics, isLoading, error } = useGuildResourceAnalytics(guildId);
   const [range, setRange] = useState<RangeDays>(14);
+  const [metric, setMetric] = useState<Metric>("unique");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const summary = useMemo(() => buildSummary(analytics?.days ?? [], range), [analytics, range]);
+  const summary = useMemo(() => buildSummary(analytics?.days ?? [], range, metric), [analytics, range, metric]);
 
   if (pageLoading) {
     return <div className="flex h-64 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" /></div>;
@@ -111,21 +123,40 @@ export function GuildAnalytics() {
               <p className="text-sm text-muted-foreground">Guild page and raid-log traffic over time.</p>
             </div>
           </div>
-          <div className="flex gap-1.5">
-            {RANGE_OPTIONS.map((r) => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={cn(
-                  "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-                  r === range
-                    ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
-                    : "border-border text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {r}D
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex gap-1.5">
+              {METRIC_OPTIONS.map((m) => (
+                <button
+                  key={m.value}
+                  onClick={() => setMetric(m.value)}
+                  className={cn(
+                    "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+                    m.value === metric
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <div className="h-5 w-px bg-border" />
+            <div className="flex gap-1.5">
+              {RANGE_OPTIONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={cn(
+                    "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+                    r === range
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {r}D
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -143,41 +174,42 @@ export function GuildAnalytics() {
                 <span className="text-xs text-muted-foreground">across {summary.instances.length} tracked instances</span>
               </MetricCard>
               <MetricCard icon={Star} label="Most viewed instance" value={summary.instances[0]?.name ?? "—"} valueClassName="font-wow text-xl">
-                <span className="text-xs text-amber-500">{summary.instances[0] ? `${compactFormatter.format(summary.instances[0].total)} views` : "No views yet"}</span>
+                <span className="text-xs text-amber-500">{summary.instances[0] ? `${compactFormatter.format(summary.instances[0].total)} ${METRIC_UNIT[metric]}` : "No views yet"}</span>
               </MetricCard>
               <MetricCard icon={CalendarDays} label="Busiest day" value={summary.busiestDay ? formatDayTitle(summary.busiestDay.date) : "—"}>
-                <span className="text-xs text-muted-foreground">{summary.busiestDay ? `${numberFormatter.format(summary.busiestDay.views)} guild page views` : "No views yet"}</span>
+                <span className="text-xs text-muted-foreground">{summary.busiestDay ? `${numberFormatter.format(metricValue(summary.busiestDay, metric))} guild page ${METRIC_UNIT[metric]}` : "No views yet"}</span>
               </MetricCard>
             </div>
 
             <section className="rounded-xl border border-border bg-card p-5">
               <div className="mb-5">
                 <h2 className="font-semibold">Guild page traffic</h2>
-                <p className="text-sm text-muted-foreground">Daily views over the last {range} days.</p>
+                <p className="text-sm text-muted-foreground">Daily {METRIC_UNIT[metric]} over the last {range} days.</p>
               </div>
-              {summary.guildSeries.every((d) => d.views === 0) ? (
+              {summary.guildSeries.every((d) => metricValue(d, metric) === 0) ? (
                 <EmptyAnalytics />
               ) : (
                 <div className="styled-scrollbar overflow-x-auto pb-2">
-                  <div className="flex h-44 min-w-[640px] items-end gap-1.5" aria-label="Daily guild page views">
+                  <div className="flex h-44 min-w-[640px] items-end gap-1.5" aria-label={`Daily guild page ${METRIC_UNIT[metric]}`}>
                     {summary.guildSeries.map((day, idx) => {
-                      const isPeak = idx === summary.guildPeakIdx && day.views > 0;
+                      const value = metricValue(day, metric);
+                      const isPeak = idx === summary.guildPeakIdx && value > 0;
                       return (
                         <div key={day.date} className="group relative flex min-w-3 flex-1 flex-col items-center justify-end gap-2">
                           {isPeak && (
                             <div className="absolute -top-5 whitespace-nowrap text-[10px] font-semibold text-amber-500">
-                              {numberFormatter.format(day.views)}
+                              {numberFormatter.format(value)}
                             </div>
                           )}
-                          <div className="invisible absolute bottom-full mb-1 rounded bg-popover px-1.5 py-0.5 text-xs shadow group-hover:visible">
-                            {formatDayTitle(day.date)} &middot; {numberFormatter.format(day.views)}
+                          <div className="invisible absolute bottom-full mb-1 whitespace-nowrap rounded bg-popover px-1.5 py-0.5 text-xs shadow group-hover:visible">
+                            {formatDayTitle(day.date)} &middot; {numberFormatter.format(value)} {METRIC_UNIT[metric]}
                           </div>
                           <div
                             className={cn(
                               "w-full max-w-[26px] rounded-t transition-colors",
                               isPeak ? "bg-amber-500" : "bg-primary/60 group-hover:bg-primary",
                             )}
-                            style={{ height: `${Math.max(4, (day.views / summary.guildMax) * 112)}px` }}
+                            style={{ height: `${Math.max(4, (value / summary.guildMax) * 112)}px` }}
                           />
                           <span className="text-[10px] text-muted-foreground">{formatDayLabel(day.date, range)}</span>
                         </div>
@@ -216,14 +248,17 @@ export function GuildAnalytics() {
                             <div className="min-w-0 flex-1">
                               <div className="font-wow truncate text-sm font-semibold">{instance.name}</div>
                               <div className="mt-1 flex h-6 items-end gap-[3px]">
-                                {instance.sparkline.map((day) => (
-                                  <div
-                                    key={day.date}
-                                    title={`${formatDayTitle(day.date)} — ${numberFormatter.format(day.views)} views`}
-                                    className="w-[5px] rounded-[1px]"
-                                    style={{ height: `${Math.max(18, (day.views / instance.sparkMax) * 100)}%`, background: instance.color }}
-                                  />
-                                ))}
+                                {instance.sparkline.map((day) => {
+                                  const value = metricValue(day, metric);
+                                  return (
+                                    <div
+                                      key={day.date}
+                                      title={`${formatDayTitle(day.date)} — ${numberFormatter.format(value)} ${METRIC_UNIT[metric]}`}
+                                      className="w-[5px] rounded-[1px]"
+                                      style={{ height: `${Math.max(18, (value / instance.sparkMax) * 100)}%`, background: instance.color }}
+                                    />
+                                  );
+                                })}
                               </div>
                             </div>
                             <div className="shrink-0 text-right">
@@ -234,18 +269,21 @@ export function GuildAnalytics() {
                           {isExpanded && (
                             <div className="px-5 pb-4 pl-11">
                               <div className="flex h-16 items-end gap-1 mb-2">
-                                {instance.series.map((day) => (
-                                  <div
-                                    key={day.date}
-                                    title={`${formatDayTitle(day.date)} — ${numberFormatter.format(day.views)} views`}
-                                    className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
-                                  >
+                                {instance.series.map((day) => {
+                                  const value = metricValue(day, metric);
+                                  return (
                                     <div
-                                      className="w-full max-w-[18px] rounded-t opacity-85"
-                                      style={{ height: `${Math.max(6, (day.views / instance.seriesMax) * 100)}%`, background: instance.color }}
-                                    />
-                                  </div>
-                                ))}
+                                      key={day.date}
+                                      title={`${formatDayTitle(day.date)} — ${numberFormatter.format(value)} ${METRIC_UNIT[metric]}`}
+                                      className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
+                                    >
+                                      <div
+                                        className="w-full max-w-[18px] rounded-t opacity-85"
+                                        style={{ height: `${Math.max(6, (value / instance.seriesMax) * 100)}%`, background: instance.color }}
+                                      />
+                                    </div>
+                                  );
+                                })}
                               </div>
                               <Link to={`/instances/${instance.key}`} className="text-xs text-amber-500 hover:text-amber-400">
                                 Open instance page &rarr;
@@ -367,7 +405,7 @@ interface InstanceSummary {
   sparkMax: number;
 }
 
-function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDays) {
+function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDays, metric: Metric) {
   const guildPageByDate = new Map<string, { views: number; uniqueVisitors: number }>();
   const instanceNames = new Map<string, string>();
   const instanceByDate = new Map<string, Map<string, { views: number; uniqueVisitors: number }>>();
@@ -398,10 +436,13 @@ function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDa
   const last7Dates = fullWindow.slice(-7);
 
   const guildSeries = seriesFor(guildPageByDate, currentDates);
-  const guildMax = Math.max(1, ...guildSeries.map((d) => d.views));
-  const guildPeakIdx = guildSeries.reduce((best, day, idx) => (day.views > guildSeries[best].views ? idx : best), 0);
-  const guildTotal = sumViews(guildSeries);
-  const guildPriorTotal = sumViews(seriesFor(guildPageByDate, priorDates));
+  const guildMax = Math.max(1, ...guildSeries.map((d) => metricValue(d, metric)));
+  const guildPeakIdx = guildSeries.reduce(
+    (best, day, idx) => (metricValue(day, metric) > metricValue(guildSeries[best], metric) ? idx : best),
+    0,
+  );
+  const guildTotal = sumMetric(guildSeries, metric);
+  const guildPriorTotal = sumMetric(seriesFor(guildPageByDate, priorDates), metric);
 
   const instances: InstanceSummary[] = [...instanceNames.entries()]
     .map(([key, name]) => {
@@ -412,12 +453,12 @@ function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDa
         key,
         name,
         color: getInstanceAccentColor(name),
-        total: sumViews(series),
-        deltaPct: pctDelta(sumViews(series), sumViews(seriesFor(byDate, priorDates))),
+        total: sumMetric(series, metric),
+        deltaPct: pctDelta(sumMetric(series, metric), sumMetric(seriesFor(byDate, priorDates), metric)),
         series,
-        seriesMax: Math.max(1, ...series.map((d) => d.views)),
+        seriesMax: Math.max(1, ...series.map((d) => metricValue(d, metric))),
         sparkline,
-        sparkMax: Math.max(1, ...sparkline.map((d) => d.views)),
+        sparkMax: Math.max(1, ...sparkline.map((d) => metricValue(d, metric))),
       };
     })
     .sort((a, b) => b.total - a.total);
