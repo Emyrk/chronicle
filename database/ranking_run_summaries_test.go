@@ -13,7 +13,6 @@ import (
 )
 
 type dirtyRankingRun struct {
-	tenantID          uuid.NullUUID
 	generation        int64
 	lastTransactionID string
 }
@@ -24,10 +23,10 @@ func readDirtyRankingRun(t *testing.T, pool *pgxpool.Pool, runID uuid.UUID) dirt
 	ctx := testutil.Context(t, testutil.WaitShort)
 	var row dirtyRankingRun
 	require.NoError(t, pool.QueryRow(ctx, `
-    SELECT tenant_id, generation, last_transaction_id::text
+    SELECT generation, last_transaction_id::text
     FROM ranking_run_summary_dirty
     WHERE run_id = $1
-  `, runID).Scan(&row.tenantID, &row.generation, &row.lastTransactionID))
+  `, runID).Scan(&row.generation, &row.lastTransactionID))
 	return row
 }
 
@@ -75,7 +74,7 @@ func setRealmTenant(t *testing.T, pool *pgxpool.Pool, realmID uuid.UUID, tenantI
 	require.NoError(t, err)
 }
 
-func TestRankingRunDirtyStoresAndUpdatesTenantOwnership(t *testing.T) {
+func TestRankingRunDirtyTracksServerTenantReassignment(t *testing.T) {
 	t.Parallel()
 
 	pool, store, realmID := setupParsesTest(t)
@@ -85,10 +84,6 @@ func TestRankingRunDirtyStoresAndUpdatesTenantOwnership(t *testing.T) {
 	instanceID := uuid.New()
 	insertDirtyTestRanking(t, pool, store, realmID, instanceID)
 
-	initial := readDirtyRankingRun(t, pool, instanceID)
-	require.True(t, initial.tenantID.Valid)
-	assert.Equal(t, firstTenantID, initial.tenantID.UUID)
-
 	ctx := testutil.Context(t, testutil.WaitShort)
 	_, err := pool.Exec(ctx, "DELETE FROM ranking_run_summary_dirty WHERE run_id = $1", instanceID)
 	require.NoError(t, err)
@@ -97,9 +92,8 @@ func TestRankingRunDirtyStoresAndUpdatesTenantOwnership(t *testing.T) {
 	setRealmTenant(t, pool, realmID, secondTenantID)
 
 	reassigned := readDirtyRankingRun(t, pool, instanceID)
-	require.True(t, reassigned.tenantID.Valid)
-	assert.Equal(t, secondTenantID, reassigned.tenantID.UUID)
 	assert.Equal(t, int64(1), reassigned.generation)
+	assert.NotEmpty(t, reassigned.lastTransactionID)
 }
 
 func TestRankingRunDirtyGenerationCoalescesWithinTransaction(t *testing.T) {

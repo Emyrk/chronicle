@@ -103,19 +103,15 @@ CREATE POLICY tenant_isolation ON ranking_player_run_summaries
 -- reading source rows across tenants.
 CREATE TABLE ranking_run_summary_dirty (
     run_id UUID PRIMARY KEY,
-    tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
     generation BIGINT NOT NULL DEFAULT 1,
     last_transaction_id XID8 NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_ranking_run_summary_dirty_tenant_updated_at
-    ON ranking_run_summary_dirty (tenant_id, updated_at);
+CREATE INDEX idx_ranking_run_summary_dirty_updated_at
+    ON ranking_run_summary_dirty (updated_at);
 
-CREATE OR REPLACE FUNCTION mark_ranking_run_summary_dirty(
-    p_run_id UUID,
-    p_tenant_id UUID
-)
+CREATE OR REPLACE FUNCTION mark_ranking_run_summary_dirty(p_run_id UUID)
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -129,12 +125,11 @@ BEGIN
     END IF;
 
     INSERT INTO ranking_run_summary_dirty (
-        run_id, tenant_id, generation, last_transaction_id, updated_at
+        run_id, generation, last_transaction_id, updated_at
     ) VALUES (
-        p_run_id, p_tenant_id, 1, current_transaction_id, now()
+        p_run_id, 1, current_transaction_id, now()
     )
     ON CONFLICT (run_id) DO UPDATE SET
-        tenant_id = EXCLUDED.tenant_id,
         generation = ranking_run_summary_dirty.generation + 1,
         last_transaction_id = EXCLUDED.last_transaction_id,
         updated_at = EXCLUDED.updated_at
@@ -151,20 +146,17 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
     logical_run_id UUID;
-    owning_tenant_id UUID;
 BEGIN
-    SELECT COALESCE(li.duplicate_group_id, li.id), ws.tenant_id
-    INTO logical_run_id, owning_tenant_id
-    FROM log_instances li
-    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
-    JOIN wow_servers ws ON ws.id = wsr.server_id
-    WHERE li.id = p_instance_id;
+    SELECT COALESCE(duplicate_group_id, id)
+    INTO logical_run_id
+    FROM log_instances
+    WHERE id = p_instance_id;
 
-    PERFORM mark_ranking_run_summary_dirty(logical_run_id, owning_tenant_id);
+    PERFORM mark_ranking_run_summary_dirty(logical_run_id);
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION mark_ranking_run_summary_dirty(UUID, UUID) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION mark_ranking_run_summary_dirty(UUID) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION mark_instance_ranking_run_summary_dirty(UUID) FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION invalidate_ranking_run_from_ranking_mutation()
@@ -194,27 +186,12 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
-DECLARE
-    old_tenant_id UUID;
-    new_tenant_id UUID;
 BEGIN
-    SELECT ws.tenant_id
-    INTO old_tenant_id
-    FROM wow_server_realms wsr
-    JOIN wow_servers ws ON ws.id = wsr.server_id
-    WHERE wsr.id = OLD.realm_id;
-
-    SELECT ws.tenant_id
-    INTO new_tenant_id
-    FROM wow_server_realms wsr
-    JOIN wow_servers ws ON ws.id = wsr.server_id
-    WHERE wsr.id = NEW.realm_id;
-
     PERFORM mark_ranking_run_summary_dirty(
-        COALESCE(OLD.duplicate_group_id, OLD.id), old_tenant_id
+        COALESCE(OLD.duplicate_group_id, OLD.id)
     );
     PERFORM mark_ranking_run_summary_dirty(
-        COALESCE(NEW.duplicate_group_id, NEW.id), new_tenant_id
+        COALESCE(NEW.duplicate_group_id, NEW.id)
     );
     RETURN NULL;
 END;
@@ -246,7 +223,7 @@ BEGIN
         JOIN wow_server_realms wsr ON wsr.id = li.realm_id
         WHERE wsr.server_id = NEW.id
     LOOP
-        PERFORM mark_ranking_run_summary_dirty(logical_run_id, NEW.tenant_id);
+        PERFORM mark_ranking_run_summary_dirty(logical_run_id);
     END LOOP;
     RETURN NULL;
 END;
@@ -264,17 +241,9 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
-DECLARE
-    old_tenant_id UUID;
 BEGIN
-    SELECT ws.tenant_id
-    INTO old_tenant_id
-    FROM wow_server_realms wsr
-    JOIN wow_servers ws ON ws.id = wsr.server_id
-    WHERE wsr.id = OLD.realm_id;
-
     PERFORM mark_ranking_run_summary_dirty(
-        COALESCE(OLD.duplicate_group_id, OLD.id), old_tenant_id
+        COALESCE(OLD.duplicate_group_id, OLD.id)
     );
     RETURN OLD;
 END;

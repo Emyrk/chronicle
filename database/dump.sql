@@ -157,17 +157,9 @@ CREATE FUNCTION invalidate_ranking_run_before_instance_delete() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-DECLARE
-    old_tenant_id UUID;
 BEGIN
-    SELECT ws.tenant_id
-    INTO old_tenant_id
-    FROM wow_server_realms wsr
-    JOIN wow_servers ws ON ws.id = wsr.server_id
-    WHERE wsr.id = OLD.realm_id;
-
     PERFORM mark_ranking_run_summary_dirty(
-        COALESCE(OLD.duplicate_group_id, OLD.id), old_tenant_id
+        COALESCE(OLD.duplicate_group_id, OLD.id)
     );
     RETURN OLD;
 END;
@@ -177,27 +169,12 @@ CREATE FUNCTION invalidate_ranking_run_from_instance_update() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-DECLARE
-    old_tenant_id UUID;
-    new_tenant_id UUID;
 BEGIN
-    SELECT ws.tenant_id
-    INTO old_tenant_id
-    FROM wow_server_realms wsr
-    JOIN wow_servers ws ON ws.id = wsr.server_id
-    WHERE wsr.id = OLD.realm_id;
-
-    SELECT ws.tenant_id
-    INTO new_tenant_id
-    FROM wow_server_realms wsr
-    JOIN wow_servers ws ON ws.id = wsr.server_id
-    WHERE wsr.id = NEW.realm_id;
-
     PERFORM mark_ranking_run_summary_dirty(
-        COALESCE(OLD.duplicate_group_id, OLD.id), old_tenant_id
+        COALESCE(OLD.duplicate_group_id, OLD.id)
     );
     PERFORM mark_ranking_run_summary_dirty(
-        COALESCE(NEW.duplicate_group_id, NEW.id), new_tenant_id
+        COALESCE(NEW.duplicate_group_id, NEW.id)
     );
     RETURN NULL;
 END;
@@ -231,7 +208,7 @@ BEGIN
         JOIN wow_server_realms wsr ON wsr.id = li.realm_id
         WHERE wsr.server_id = NEW.id
     LOOP
-        PERFORM mark_ranking_run_summary_dirty(logical_run_id, NEW.tenant_id);
+        PERFORM mark_ranking_run_summary_dirty(logical_run_id);
     END LOOP;
     RETURN NULL;
 END;
@@ -243,20 +220,17 @@ CREATE FUNCTION mark_instance_ranking_run_summary_dirty(p_instance_id uuid) RETU
     AS $$
 DECLARE
     logical_run_id UUID;
-    owning_tenant_id UUID;
 BEGIN
-    SELECT COALESCE(li.duplicate_group_id, li.id), ws.tenant_id
-    INTO logical_run_id, owning_tenant_id
-    FROM log_instances li
-    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
-    JOIN wow_servers ws ON ws.id = wsr.server_id
-    WHERE li.id = p_instance_id;
+    SELECT COALESCE(duplicate_group_id, id)
+    INTO logical_run_id
+    FROM log_instances
+    WHERE id = p_instance_id;
 
-    PERFORM mark_ranking_run_summary_dirty(logical_run_id, owning_tenant_id);
+    PERFORM mark_ranking_run_summary_dirty(logical_run_id);
 END;
 $$;
 
-CREATE FUNCTION mark_ranking_run_summary_dirty(p_run_id uuid, p_tenant_id uuid) RETURNS void
+CREATE FUNCTION mark_ranking_run_summary_dirty(p_run_id uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
@@ -268,12 +242,11 @@ BEGIN
     END IF;
 
     INSERT INTO ranking_run_summary_dirty (
-        run_id, tenant_id, generation, last_transaction_id, updated_at
+        run_id, generation, last_transaction_id, updated_at
     ) VALUES (
-        p_run_id, p_tenant_id, 1, current_transaction_id, now()
+        p_run_id, 1, current_transaction_id, now()
     )
     ON CONFLICT (run_id) DO UPDATE SET
-        tenant_id = EXCLUDED.tenant_id,
         generation = ranking_run_summary_dirty.generation + 1,
         last_transaction_id = EXCLUDED.last_transaction_id,
         updated_at = EXCLUDED.updated_at
@@ -1415,7 +1388,6 @@ ALTER TABLE ONLY ranking_player_run_summaries FORCE ROW LEVEL SECURITY;
 
 CREATE TABLE ranking_run_summary_dirty (
     run_id uuid NOT NULL,
-    tenant_id uuid,
     generation bigint DEFAULT 1 NOT NULL,
     last_transaction_id xid8 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
@@ -2620,7 +2592,7 @@ CREATE INDEX idx_ranking_player_run_summaries_tenant_dps ON ranking_player_run_s
 
 CREATE INDEX idx_ranking_player_run_summaries_tenant_hps ON ranking_player_run_summaries USING btree (tenant_id, hps DESC);
 
-CREATE INDEX idx_ranking_run_summary_dirty_tenant_updated_at ON ranking_run_summary_dirty USING btree (tenant_id, updated_at);
+CREATE INDEX idx_ranking_run_summary_dirty_updated_at ON ranking_run_summary_dirty USING btree (updated_at);
 
 CREATE INDEX idx_ranking_runs_summary_version ON ranking_runs USING btree (summary_version);
 
@@ -3025,9 +2997,6 @@ ALTER TABLE ONLY ranking_player_run_summaries
 
 ALTER TABLE ONLY ranking_player_run_summaries
     ADD CONSTRAINT ranking_player_run_summaries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY ranking_run_summary_dirty
-    ADD CONSTRAINT ranking_run_summary_dirty_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY ranking_runs
     ADD CONSTRAINT ranking_runs_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);

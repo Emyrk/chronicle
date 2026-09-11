@@ -1752,7 +1752,6 @@ type RankingRun struct {
 
 type RankingRunSummaryDirty struct {
 	RunID             uuid.UUID          `db:"run_id" json:"run_id"`
-	TenantID          uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
 	Generation        int64              `db:"generation" json:"generation"`
 	LastTransactionID pgtype.Uint64      `db:"last_transaction_id" json:"last_transaction_id"`
 	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
