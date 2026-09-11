@@ -342,3 +342,27 @@ type GuildRunEncounterParse struct {
 type GuildRunParsesResponse struct {
 	Encounters []GuildRunEncounterParse `json:"encounters"`
 }
+
+const (
+	GuildResourceKindPage     = "guild_page"
+	GuildResourceKindInstance = "instance"
+)
+
+type RecordGuildResourceViewRequest struct {
+	ResourceKind string `json:"resource_kind"`
+	ResourceID   string `json:"resource_id"`
+}
+
+type GuildResourceAnalyticsDay struct {
+	ResourceKind   string `json:"resource_kind"`
+	ResourceKey    string `json:"resource_key"`
+	ResourceName   string `json:"resource_name"`
+	ViewedOn       string `json:"viewed_on"`
+	Views          int64  `json:"views"`
+	UniqueVisitors int64  `json:"unique_visitors"`
+}
+
+type GuildResourceAnalyticsResponse struct {
+	LookbackDays int32                       `json:"lookback_days"`
+	Days         []GuildResourceAnalyticsDay `json:"days"`
+}

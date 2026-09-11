@@ -48,6 +48,8 @@ import type {
   ArmoryLootResponse as ArmoryLootResponseGenerated,
   ListGuildsResponse as ListGuildsResponseGenerated,
   GuildPageConfig as GuildPageConfigGenerated,
+  GuildResourceAnalyticsResponse as GuildResourceAnalyticsResponseGenerated,
+  RecordGuildResourceViewRequest as RecordGuildResourceViewRequestGenerated,
   GuildPageTheme as GuildPageThemeGenerated,
   GuildPageTab as GuildPageTabGenerated,
   GuildPagePanel as GuildPagePanelGenerated,
@@ -122,6 +124,8 @@ export type ArmoryGearHistoryResponse = ArmoryGearHistoryResponseGenerated;
 export type ArmoryLootResponse = ArmoryLootResponseGenerated;
 export type ListGuildsResponse = ListGuildsResponseGenerated;
 export type GuildPageConfig = GuildPageConfigGenerated;
+export type GuildResourceAnalyticsResponse = GuildResourceAnalyticsResponseGenerated;
+export type RecordGuildResourceViewRequest = RecordGuildResourceViewRequestGenerated;
 export type GuildPageTab = GuildPageTabGenerated;
 export type GuildPagePanel = GuildPagePanelGenerated;
 export type UpdateTabRequest = UpdateTabRequestGenerated;
@@ -1662,6 +1666,34 @@ export function useGuildPage(guildId: string | undefined) {
         throw buildAPIError("Failed to fetch guild page", error);
       }
       return response.json() as Promise<GuildPageConfig>;
+    },
+    enabled: !!guildId,
+    retry: false,
+  });
+}
+
+export async function recordGuildResourceView(request: RecordGuildResourceViewRequest): Promise<void> {
+  const response = await fetch("/api/v1/analytics/guild-resource-view", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) throw new Error("Failed to record guild resource view");
+}
+
+export function useGuildResourceAnalytics(guildId: string | undefined) {
+  return useQuery({
+    queryKey: ["guild-resource-analytics", guildId],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/guilds/${guildId}/analytics`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to fetch guild analytics", error);
+      }
+      return response.json() as Promise<GuildResourceAnalyticsResponse>;
     },
     enabled: !!guildId,
     retry: false,

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { MoreVertical, Pencil, Users, Settings } from "lucide-react";
+import { BarChart3, MoreVertical, Pencil, Users, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,6 +34,14 @@ export function GuildActionsMenu({ guildId, canEdit, canViewRoster }: GuildActio
             <Link to={`/g/${guildId}/edit`}>
               <Pencil className="h-4 w-4 mr-2" />
               Edit Page
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {canEdit && (
+          <DropdownMenuItem asChild>
+            <Link to={`/g/${guildId}/analytics`}>
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Analytics
             </Link>
           </DropdownMenuItem>
         )}

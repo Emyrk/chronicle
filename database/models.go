@@ -1405,6 +1405,24 @@ type GuildPageTab struct {
 	Visibility string             `db:"visibility" json:"visibility"`
 }
 
+type GuildResourceDailyStat struct {
+	GuildID        uuid.UUID   `db:"guild_id" json:"guild_id"`
+	ResourceKind   string      `db:"resource_kind" json:"resource_kind"`
+	ResourceKey    string      `db:"resource_key" json:"resource_key"`
+	ViewedOn       pgtype.Date `db:"viewed_on" json:"viewed_on"`
+	Views          int64       `db:"views" json:"views"`
+	UniqueVisitors int64       `db:"unique_visitors" json:"unique_visitors"`
+}
+
+type GuildResourceRecentVisitor struct {
+	GuildID      uuid.UUID          `db:"guild_id" json:"guild_id"`
+	ResourceKind string             `db:"resource_kind" json:"resource_kind"`
+	ResourceKey  string             `db:"resource_key" json:"resource_key"`
+	VisitorID    uuid.UUID          `db:"visitor_id" json:"visitor_id"`
+	ViewedOn     pgtype.Date        `db:"viewed_on" json:"viewed_on"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type GuildSetting struct {
 	GuildID                uuid.UUID          `db:"guild_id" json:"guild_id"`
 	AllowJoinRequestsUntil pgtype.Timestamptz `db:"allow_join_requests_until" json:"allow_join_requests_until"`

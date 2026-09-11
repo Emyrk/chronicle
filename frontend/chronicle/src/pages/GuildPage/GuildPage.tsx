@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import type { DeviceVisibility } from "@/api/typesGenerated";
-import { useGuildPage, useGuildSettings, useMyJoinRequest, useCreateJoinRequest } from "@/api/queries";
+import { recordGuildResourceView, useGuildPage, useGuildSettings, useMyJoinRequest, useCreateJoinRequest } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { GuildPageCanvas, TabBar, GuildPageHeader, GuildActionsMenu } from "./components";
 import { Shield, PanelLeft, UserPlus, Clock } from "lucide-react";
@@ -32,6 +32,13 @@ export function GuildPage() {
   const { data: settings } = useGuildSettings(guildId);
   const { data: myRequest } = useMyJoinRequest(guildId, isAuthenticated);
   const createJoinRequest = useCreateJoinRequest(guildId);
+  const recordedGuildView = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!guildId || !pageConfig || recordedGuildView.current === guildId) return;
+    recordedGuildView.current = guildId;
+    void recordGuildResourceView({ resource_kind: "guild_page", resource_id: guildId }).catch(() => {});
+  }, [guildId, pageConfig]);
 
   // Filter tabs and panels based on device visibility.
   const visibleTabs = orderGuildPageTabs(pageConfig?.tabs || [])

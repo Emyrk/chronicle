@@ -873,6 +873,26 @@ CREATE TABLE guild_pages (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE guild_resource_daily_stats (
+    guild_id uuid NOT NULL,
+    resource_kind text NOT NULL,
+    resource_key text NOT NULL,
+    viewed_on date NOT NULL,
+    views bigint DEFAULT 0 NOT NULL,
+    unique_visitors bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT guild_resource_daily_stats_unique_visitors_check CHECK ((unique_visitors >= 0)),
+    CONSTRAINT guild_resource_daily_stats_views_check CHECK ((views >= 0))
+);
+
+CREATE TABLE guild_resource_recent_visitors (
+    guild_id uuid NOT NULL,
+    resource_kind text NOT NULL,
+    resource_key text NOT NULL,
+    visitor_id uuid NOT NULL,
+    viewed_on date NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE guild_settings (
     guild_id uuid NOT NULL,
     allow_join_requests_until timestamp with time zone,
@@ -2047,6 +2067,12 @@ ALTER TABLE ONLY guild_pages
 ALTER TABLE ONLY guild_pages
     ADD CONSTRAINT guild_pages_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY guild_resource_daily_stats
+    ADD CONSTRAINT guild_resource_daily_stats_pkey PRIMARY KEY (guild_id, resource_kind, resource_key, viewed_on);
+
+ALTER TABLE ONLY guild_resource_recent_visitors
+    ADD CONSTRAINT guild_resource_recent_visitors_pkey PRIMARY KEY (guild_id, resource_kind, resource_key, visitor_id, viewed_on);
+
 ALTER TABLE ONLY guild_settings
     ADD CONSTRAINT guild_settings_pkey PRIMARY KEY (guild_id);
 
@@ -2319,6 +2345,10 @@ CREATE INDEX guild_discord_installations_discord_guild_id_idx ON guild_discord_i
 CREATE INDEX guild_discord_log_announcement_sources_announcement_id_idx ON guild_discord_log_announcement_sources USING btree (announcement_id);
 
 CREATE UNIQUE INDEX guild_discord_log_announcement_sources_slug_idx ON guild_discord_log_announcement_sources USING btree (instance_slug) WHERE (instance_slug IS NOT NULL);
+
+CREATE INDEX guild_resource_daily_stats_guild_date_idx ON guild_resource_daily_stats USING btree (guild_id, viewed_on DESC);
+
+CREATE INDEX guild_resource_recent_visitors_date_idx ON guild_resource_recent_visitors USING btree (viewed_on);
 
 CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 
@@ -2697,6 +2727,12 @@ ALTER TABLE ONLY guild_page_tabs
 
 ALTER TABLE ONLY guild_pages
     ADD CONSTRAINT guild_pages_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_resource_daily_stats
+    ADD CONSTRAINT guild_resource_daily_stats_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_resource_recent_visitors
+    ADD CONSTRAINT guild_resource_recent_visitors_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY guild_settings
     ADD CONSTRAINT guild_settings_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;

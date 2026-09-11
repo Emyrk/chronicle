@@ -343,6 +343,7 @@ func (api *API) Routes() chi.Router {
 			})
 
 			r.Get("/healthz", healthz)
+			r.Post("/analytics/guild-resource-view", api.RecordGuildResourceView)
 			if api.Opts.WoWDB != nil {
 				r.Mount("/wowdb", api.Opts.WoWDB)
 			}
@@ -403,6 +404,7 @@ func (api *API) Routes() chi.Router {
 						r.Post("/join-requests/{requestID}/accept", api.AcceptJoinRequest)
 						r.Delete("/join-requests/{requestID}", api.DenyJoinRequest)
 
+						r.Get("/analytics", api.GuildResourceAnalytics)
 						r.Put("/page", api.UpsertGuildPage)
 						r.Post("/page/tabs", api.CreateGuildPageTab)
 						r.Put("/page/tabs/reorder", api.ReorderGuildPageTabs)
