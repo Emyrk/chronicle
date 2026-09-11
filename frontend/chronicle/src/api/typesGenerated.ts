@@ -1525,6 +1525,7 @@ export interface GuildRaidClearsResponse {
 export interface GuildResourceAnalyticsDay {
     readonly resource_kind: string;
     readonly resource_key: string;
+    readonly resource_group_key: string;
     readonly resource_name: string;
     readonly viewed_on: string;
     readonly views: number;
