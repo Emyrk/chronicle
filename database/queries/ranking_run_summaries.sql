@@ -196,3 +196,52 @@ ORDER BY player_guid;
 -- name: ClearDirtyRankingRunGeneration :execrows
 DELETE FROM ranking_run_summary_dirty
 WHERE run_id = @run_id AND generation = @generation;
+
+-- name: PreviewRankingSummaryBackfill :one
+WITH logical_runs AS (
+    SELECT DISTINCT
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    WHERE (@scope_all::boolean OR ws.tenant_id = @tenant_id::uuid)
+      AND EXISTS (
+          SELECT 1 FROM encounter_dps_rankings edr WHERE edr.instance_id = li.id
+      )
+), classified AS (
+    SELECT
+        lr.run_id,
+        rr.run_id IS NULL AS missing,
+        rr.run_id IS NOT NULL AND rr.summary_version < @target_summary_version::smallint AS stale,
+        rr.run_id IS NOT NULL AND rr.summary_version >= @target_summary_version::smallint AS current,
+        dirty.run_id IS NOT NULL AS dirty
+    FROM logical_runs lr
+    LEFT JOIN ranking_runs rr ON rr.run_id = lr.run_id
+    LEFT JOIN ranking_run_summary_dirty dirty ON dirty.run_id = lr.run_id
+)
+SELECT
+    COUNT(*)::bigint AS total_runs,
+    COUNT(*) FILTER (WHERE missing)::bigint AS missing_runs,
+    COUNT(*) FILTER (WHERE stale)::bigint AS stale_runs,
+    COUNT(*) FILTER (WHERE current)::bigint AS current_runs,
+    COUNT(*) FILTER (WHERE dirty)::bigint AS dirty_runs
+FROM classified;
+
+-- name: CreateRankingSummaryBackfill :one
+INSERT INTO ranking_summary_backfills (
+    tenant_id, requested_by, target_summary_version, batch_size, max_batches,
+    delay_ms, preview_total_runs, preview_missing_runs, preview_stale_runs,
+    preview_current_runs, preview_dirty_runs, estimated_wal_bytes
+) VALUES (
+    CASE WHEN @scope_all::boolean THEN NULL ELSE @tenant_id::uuid END,
+    @requested_by, @target_summary_version, @batch_size, @max_batches,
+    @delay_ms, @preview_total_runs, @preview_missing_runs, @preview_stale_runs,
+    @preview_current_runs, @preview_dirty_runs, NULL
+)
+RETURNING *;
+
+-- name: GetRankingSummaryBackfill :one
+SELECT * FROM ranking_summary_backfills WHERE id = @id;
+
+-- name: LatestRankingSummaryBackfill :one
+SELECT * FROM ranking_summary_backfills ORDER BY created_at DESC, id DESC LIMIT 1;

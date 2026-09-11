@@ -1801,6 +1801,31 @@ type RankingSnapshotMember struct {
 	PlayerSubSpec    string             `db:"player_sub_spec" json:"player_sub_spec"`
 }
 
+type RankingSummaryBackfill struct {
+	ID                   uuid.UUID          `db:"id" json:"id"`
+	TenantID             uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	RequestedBy          uuid.UUID          `db:"requested_by" json:"requested_by"`
+	Status               string             `db:"status" json:"status"`
+	TargetSummaryVersion int16              `db:"target_summary_version" json:"target_summary_version"`
+	BatchSize            int32              `db:"batch_size" json:"batch_size"`
+	MaxBatches           int32              `db:"max_batches" json:"max_batches"`
+	DelayMs              int32              `db:"delay_ms" json:"delay_ms"`
+	PreviewTotalRuns     int64              `db:"preview_total_runs" json:"preview_total_runs"`
+	PreviewMissingRuns   int64              `db:"preview_missing_runs" json:"preview_missing_runs"`
+	PreviewStaleRuns     int64              `db:"preview_stale_runs" json:"preview_stale_runs"`
+	PreviewCurrentRuns   int64              `db:"preview_current_runs" json:"preview_current_runs"`
+	PreviewDirtyRuns     int64              `db:"preview_dirty_runs" json:"preview_dirty_runs"`
+	EstimatedWalBytes    pgtype.Int8        `db:"estimated_wal_bytes" json:"estimated_wal_bytes"`
+	BatchesCompleted     int32              `db:"batches_completed" json:"batches_completed"`
+	RunsMarkedDirty      int64              `db:"runs_marked_dirty" json:"runs_marked_dirty"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	StartedAt            pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	LastProgressAt       pgtype.Timestamptz `db:"last_progress_at" json:"last_progress_at"`
+	LastErrorAt          pgtype.Timestamptz `db:"last_error_at" json:"last_error_at"`
+	CompletedAt          pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	ErrorMessage         pgtype.Text        `db:"error_message" json:"error_message"`
+}
+
 type RankingsInstanceSummary struct {
 	InstanceName   string             `db:"instance_name" json:"instance_name"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`

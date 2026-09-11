@@ -70,6 +70,7 @@ type sqlcQuerier interface {
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
 	CreateRaidComposition(ctx context.Context, arg CreateRaidCompositionParams) (RaidComposition, error)
+	CreateRankingSummaryBackfill(ctx context.Context, arg CreateRankingSummaryBackfillParams) (RankingSummaryBackfill, error)
 	CreateSharedView(ctx context.Context, arg CreateSharedViewParams) (SharedView, error)
 	CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error)
 	CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error)
@@ -300,6 +301,7 @@ type sqlcQuerier interface {
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	GetRankingRunSummary(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	GetRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
+	GetRankingSummaryBackfill(ctx context.Context, id uuid.UUID) (RankingSummaryBackfill, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
 	GetRealmsWithRetentionPolicies(ctx context.Context) ([]uuid.UUID, error)
@@ -522,6 +524,7 @@ type sqlcQuerier interface {
 	InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error)
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
+	LatestRankingSummaryBackfill(ctx context.Context) (RankingSummaryBackfill, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
 	ListAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationsByDatasetRow, error)
 	ListAllRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error)
@@ -634,6 +637,7 @@ type sqlcQuerier interface {
 	ListWorlds(ctx context.Context) ([]World, error)
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
+	PreviewRankingSummaryBackfill(ctx context.Context, arg PreviewRankingSummaryBackfillParams) (PreviewRankingSummaryBackfillRow, error)
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
