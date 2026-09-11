@@ -132,6 +132,15 @@ func defaultGuildPageConfig(guild chroniclesdk.GuildInfo) chroniclesdk.GuildPage
 func (api *API) ListGuilds(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	search := r.URL.Query().Get("search")
+	realmID := uuid.Nil
+	if realm := r.URL.Query().Get("realm"); realm != "" {
+		var err error
+		realmID, err = uuid.Parse(realm)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid realm ID"})
+			return
+		}
+	}
 
 	const maxLimit = 15
 	limit := maxLimit
@@ -142,16 +151,20 @@ func (api *API) ListGuilds(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	total, err := api.Opts.Zed.CountGuilds(ctx, search)
+	total, err := api.Opts.Zed.CountGuilds(ctx, database.CountGuildsParams{
+		Search:  search,
+		RealmID: realmID,
+	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 
 	guilds, err := api.Opts.Zed.ListGuildsWithPages(ctx, database.ListGuildsWithPagesParams{
-		Column1: search, // Empty string handled in SQL with IS NULL check
-		Limit:   int32(limit),
-		Offset:  int32(offset),
+		Search:       search,
+		RealmID:      realmID,
+		ResultLimit:  int32(limit),
+		ResultOffset: int32(offset),
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
