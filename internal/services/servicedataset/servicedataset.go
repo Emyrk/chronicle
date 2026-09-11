@@ -31,7 +31,7 @@ type DatasetStore interface {
 	UpdateDataset(ctx context.Context, arg database.UpdateDatasetParams) (database.Dataset, error)
 	DeleteDataset(ctx context.Context, id uuid.UUID) error
 	ListTenantsByDataset(ctx context.Context, datasetID uuid.NullUUID) ([]database.ListTenantsByDatasetRow, error)
-	ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error)
+	ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (database.ResolveDatasetByRealmRow, error)
 	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (database.ResolveDatasetWithFlavorByRealmRow, error)
 	GetDatasetImportSummary(ctx context.Context, datasetID uuid.UUID) (database.GetDatasetImportSummaryRow, error)
 }
@@ -89,12 +89,27 @@ func (s *Service) GetDataset(ctx context.Context, id uuid.UUID) (database.Datase
 }
 
 func (s *Service) ResolveDatasetForRealm(ctx context.Context, realmID uuid.UUID) uuid.UUID {
+	if resolved, ok := s.LookupDatasetForRealm(ctx, realmID); ok {
+		return resolved
+	}
+	return DefaultDatasetID
+}
+
+// LookupDatasetForRealm returns the configured dataset for a realm. The second
+// result is false when no non-zero dataset is configured or resolution fails.
+func (s *Service) LookupDatasetForRealm(ctx context.Context, realmID uuid.UUID) (uuid.UUID, bool) {
 	ctx = servicetenant.AdminBypass(ctx)
 	resolved, err := s.db.ResolveDatasetByRealm(ctx, realmID)
-	if err != nil || !resolved.Valid {
-		return DefaultDatasetID
+	if err != nil {
+		return uuid.Nil, false
 	}
-	return resolved.UUID
+	if resolved.ServerDatasetID.Valid && resolved.ServerDatasetID.UUID != uuid.Nil {
+		return resolved.ServerDatasetID.UUID, true
+	}
+	if resolved.TenantDatasetID.Valid && resolved.TenantDatasetID.UUID != uuid.Nil {
+		return resolved.TenantDatasetID.UUID, true
+	}
+	return uuid.Nil, false
 }
 
 // ResolveDatasetWithFlavorForRealm resolves the dataset, its default flavor,

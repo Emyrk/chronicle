@@ -35,10 +35,16 @@ type fakeExternalAPIStore struct {
 	instanceID            uuid.UUID
 	instanceSlug          pgtype.Text
 	encounters            []database.LogInstanceEncounter
+	encountersCalled      bool
 	units                 []database.LogInstanceUnit
+	unitsCalled           bool
 	players               []database.LogInstancePlayer
 	hostiles              []database.LogInstanceEncounterHostile
+	hostilesCalled        bool
 	phases                []database.LogInstanceEncounterPhase
+	phasesCalled          bool
+	datasetResolution     database.ResolveDatasetByRealmRow
+	datasetResolutionErr  error
 	rankingRecords        []database.EncounterDpsRanking
 	rankingRecordsErr     error
 	rankingInstanceID     uuid.UUID
@@ -93,19 +99,26 @@ func (f *fakeExternalAPIStore) InstanceBySlug(_ context.Context, slug pgtype.Tex
 	return f.instance, f.instanceErr
 }
 func (f *fakeExternalAPIStore) EncountersByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceEncounter, error) {
+	f.encountersCalled = true
 	return f.encounters, nil
 }
 func (f *fakeExternalAPIStore) InstanceUnitsByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceUnit, error) {
+	f.unitsCalled = true
 	return f.units, nil
 }
 func (f *fakeExternalAPIStore) InstancePlayersByInstanceID(context.Context, uuid.UUID) ([]database.LogInstancePlayer, error) {
 	return f.players, nil
 }
 func (f *fakeExternalAPIStore) GetInstanceEncounterCharacterFights(context.Context, uuid.UUID) ([]database.LogInstanceEncounterHostile, error) {
+	f.hostilesCalled = true
 	return f.hostiles, nil
 }
 func (f *fakeExternalAPIStore) GetEncounterPhasesByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceEncounterPhase, error) {
+	f.phasesCalled = true
 	return f.phases, nil
+}
+func (f *fakeExternalAPIStore) ResolveDatasetByRealm(context.Context, uuid.UUID) (database.ResolveDatasetByRealmRow, error) {
+	return f.datasetResolution, f.datasetResolutionErr
 }
 func (f *fakeExternalAPIStore) InstanceRankingRecords(_ context.Context, instanceID uuid.UUID) ([]database.EncounterDpsRanking, error) {
 	f.rankingInstanceID = instanceID

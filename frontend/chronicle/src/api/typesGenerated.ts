@@ -4041,6 +4041,16 @@ export type WoWAffiliation = 1 | 2 | 3 | 0;
 
 export const WoWAffiliations: WoWAffiliation[] = [1, 2, 3, 0];
 
+// From chroniclesdk/log.go
+/**
+ * WoWAttendanceInstance is the lightweight instance detail response used when
+ * only the raid roster is needed.
+ */
+export interface WoWAttendanceInstance extends WoWInstance {
+    readonly realm_name?: string;
+    readonly players: Record<string, InstancePlayer>;
+}
+
 // From types/constants.go
 export type WoWAuraApplication = "Fades" | "Gains" | "Removed" | "Unknown";
 
@@ -4149,7 +4159,7 @@ export interface WoWInstance {
      * Frontends use it to fetch matching talent/spell data regardless of the
      * tenant domain serving the request. Only populated on the detail endpoint.
      */
-    readonly dataset_id?: string;
+    readonly dataset_id: string | null;
     readonly icon_base_url?: string;
     /**
      * Format is the log group's parse format (e.g. "1.12a-cc-addon").

@@ -77,6 +77,20 @@ describe("API explorer helpers", () => {
     expect(url).toBe("/api/external/v1/characters/A%20B?limit=25")
   })
 
+  it("builds the attendance-only instance URL", () => {
+    const url = buildRequestURL(
+      "/api/external/v1",
+      "/raidlogs/instances/{instance_id}",
+      [
+        { name: "instance_id", in: "path", required: true, schema: { type: "string" } },
+        { name: "attendance_only", in: "query", schema: { type: "boolean" } },
+      ],
+      { "path:instance_id": "example-instance", "query:attendance_only": "true" },
+    )
+
+    expect(url).toBe("/api/external/v1/raidlogs/instances/example-instance?attendance_only=true")
+  })
+
   it("reads rate-limit response headers", () => {
     const headers = new Headers({
       "RateLimit-Limit": "60",

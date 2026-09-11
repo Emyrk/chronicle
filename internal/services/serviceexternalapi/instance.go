@@ -1,8 +1,10 @@
 package serviceexternalapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -22,6 +24,12 @@ type InstanceResponse struct {
 	Encounters []InstanceEncounter                       `json:"encounters"`
 	Units      map[guid.GUID]chroniclesdk.InstanceUnit   `json:"units"`
 	Players    map[guid.GUID]chroniclesdk.InstancePlayer `json:"players"`
+}
+
+type AttendanceInstanceResponse struct {
+	chroniclesdk.WoWInstance
+	RealmName string                                    `json:"realm_name,omitempty"`
+	Players   map[guid.GUID]chroniclesdk.InstancePlayer `json:"players"`
 }
 
 type InstanceEncounter struct {
@@ -92,17 +100,32 @@ func (s *Service) getInstanceBySlug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	players, err := s.db.InstancePlayersByInstanceID(ctx, instance.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	wowInstance := db2sdk.WoWInstance(instance)
+	if datasetID, ok := s.lookupDatasetForRealm(ctx, instance.RealmID); ok {
+		wowInstance.DatasetID = &datasetID
+	}
+
+	if externalAttendanceOnly(r) {
+		httpapi.Write(ctx, w, http.StatusOK, AttendanceInstanceResponse{
+			WoWInstance: wowInstance,
+			RealmName:   instance.RealmName,
+			Players:     db2sdk.InstancePlayers(players),
+		})
+		return
+	}
+
 	encounters, err := s.db.EncountersByInstanceID(ctx, instance.ID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	units, err := s.db.InstanceUnitsByInstanceID(ctx, instance.ID)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	players, err := s.db.InstancePlayersByInstanceID(ctx, instance.ID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -120,13 +143,32 @@ func (s *Service) getInstanceBySlug(w http.ResponseWriter, r *http.Request) {
 
 	decorated := db2sdk.WowDecoratedInstance(instance, units, players, encounters, hostiles, phases)
 	response := InstanceResponse{
-		WoWInstance: decorated.WoWInstance,
+		WoWInstance: wowInstance,
 		RealmName:   decorated.RealmName,
 		Encounters:  compactInstanceEncounters(decorated.Encounters),
 		Units:       decorated.Units,
 		Players:     decorated.Players,
 	}
 	httpapi.Write(ctx, w, http.StatusOK, response)
+}
+
+func externalAttendanceOnly(r *http.Request) bool {
+	value, err := strconv.ParseBool(r.URL.Query().Get("attendance_only"))
+	return err == nil && value
+}
+
+func (s *Service) lookupDatasetForRealm(ctx context.Context, realmID uuid.UUID) (uuid.UUID, bool) {
+	resolved, err := s.db.ResolveDatasetByRealm(ctx, realmID)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	if resolved.ServerDatasetID.Valid && resolved.ServerDatasetID.UUID != uuid.Nil {
+		return resolved.ServerDatasetID.UUID, true
+	}
+	if resolved.TenantDatasetID.Valid && resolved.TenantDatasetID.UUID != uuid.Nil {
+		return resolved.TenantDatasetID.UUID, true
+	}
+	return uuid.Nil, false
 }
 
 func (s *Service) getInstanceRankingRecordsBySlug(w http.ResponseWriter, r *http.Request) {

@@ -47,6 +47,7 @@ type externalAPIStore interface {
 	InstancePlayersByInstanceID(context.Context, uuid.UUID) ([]database.LogInstancePlayer, error)
 	GetInstanceEncounterCharacterFights(context.Context, uuid.UUID) ([]database.LogInstanceEncounterHostile, error)
 	GetEncounterPhasesByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceEncounterPhase, error)
+	ResolveDatasetByRealm(context.Context, uuid.UUID) (database.ResolveDatasetByRealmRow, error)
 	InstanceRankingRecords(context.Context, uuid.UUID) ([]database.EncounterDpsRanking, error)
 	GetParseScoreResultsForInstance(context.Context, uuid.UUID) ([]database.ParseScoreResult, error)
 	InstanceEvent(context.Context, database.InstanceEventParams) (database.LogInstanceEvent, error)

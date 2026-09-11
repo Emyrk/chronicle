@@ -269,16 +269,28 @@ func WowDecoratedInstance(instance database.LogInstancesGuild,
 				Entry: uint32(u.Entry),
 			}
 		}),
-		Players: maps.MapFromSlice(players, func(u database.LogInstancePlayer) guid.GUID { return u.UnitGuid }, func(u database.LogInstancePlayer) chroniclesdk.InstancePlayer {
-			return chroniclesdk.InstancePlayer{
-				Name:  u.Name,
-				Class: HeroClass(u.Class),
-				Race:  HeroRace(u.Race),
-				Level: u.Level,
-			}
-		}),
+		Players: InstancePlayers(players),
 	}
 	return ret
+}
+
+func WowAttendanceInstance(instance database.LogInstancesGuild, players []database.LogInstancePlayer) chroniclesdk.WoWAttendanceInstance {
+	return chroniclesdk.WoWAttendanceInstance{
+		WoWInstance: WoWInstance(instance),
+		RealmName:   instance.RealmName,
+		Players:     InstancePlayers(players),
+	}
+}
+
+func InstancePlayers(players []database.LogInstancePlayer) map[guid.GUID]chroniclesdk.InstancePlayer {
+	return maps.MapFromSlice(players, func(u database.LogInstancePlayer) guid.GUID { return u.UnitGuid }, func(u database.LogInstancePlayer) chroniclesdk.InstancePlayer {
+		return chroniclesdk.InstancePlayer{
+			Name:  u.Name,
+			Class: HeroClass(u.Class),
+			Race:  HeroRace(u.Race),
+			Level: u.Level,
+		}
+	})
 }
 
 func InstanceRankingRecords(rows []database.EncounterDpsRanking) []chroniclesdk.InstanceRankingRecord {
