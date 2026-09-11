@@ -2,6 +2,30 @@ package instances
 
 import "github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 
+func UlduarSpeedrunRequirements() *rankings.Rankings {
+	return &rankings.Rankings{
+		Speedrun: &rankings.SpeedrunRules{
+			Requirements: []rankings.SpeedrunRequirement{
+				{Name: "Flame Leviathan", EntryIDs: []uint32{33113, 34003}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Ignis the Furnace Master", EntryIDs: []uint32{33118, 33190}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Razorscale", EntryIDs: []uint32{33186, 33724}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "XT-002 Deconstructor", EntryIDs: []uint32{33293, 33885}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Assembly of Iron", EntryIDs: []uint32{32857, 32867, 32927, 33692, 33693, 33694}, Count: 3, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Kologarn", EntryIDs: []uint32{32930, 33909}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Auriaya", EntryIDs: []uint32{33515, 34175}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Hodir", EntryIDs: []uint32{32845, 32846}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Thorim", EntryIDs: []uint32{32865, 33147}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Freya", EntryIDs: []uint32{32906, 33360}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Mimiron", EntryIDs: []uint32{33432, 34106, 33651, 33670}, Count: 3, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "General Vezax", EntryIDs: []uint32{33271, 33449}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Yogg-Saron", EntryIDs: []uint32{33288}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Algalon the Observer", EntryIDs: []uint32{32871}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			},
+			RankedStartAfterRequirement: "Flame Leviathan",
+		},
+	}
+}
+
 func GruulsLairSpeedrunRequirements() *rankings.Rankings {
 	return &rankings.Rankings{
 		Speedrun: &rankings.SpeedrunRules{

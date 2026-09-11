@@ -2,11 +2,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Trophy, AlertCircle } from "lucide-react";
 import type { GuildEncounterKill, GuildEncounterKillsResponse } from "@/api/typesGenerated";
-import { useSupportedInstanceBossCounts, useSupportedInstances } from "@/api/queries";
+import {
+  useSupportedInstanceBossCounts,
+  useSupportedInstanceProgressionBosses,
+  useSupportedInstances,
+} from "@/api/queries";
 import { cn } from "@/lib/utils";
 import { getInstanceContentLevel } from "@/pages/Logs/utils/instanceImages";
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
+import { filterCanonicalProgressionEncounters } from "./progressUtils";
 
 type CategoryFilter = "all" | "raid" | "dungeon";
 type ContentLevelFilter = "all" | "60" | "70" | "80";
@@ -240,6 +245,7 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { data: bossCounts } = useSupportedInstanceBossCounts();
+  const { data: progressionBosses } = useSupportedInstanceProgressionBosses();
   const { data: supportedInstances } = useSupportedInstances();
 
   useEffect(() => {
@@ -277,8 +283,14 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
         getInstanceContentLevel(e.instance_name, e.max_players) === Number(contentLevel);
       return matchesCategory && matchesContentLevel;
     });
-    return groupProgress(filtered);
-  }, [config.category, config.contentLevel, encounters, supportedInstances]);
+    return groupProgress(filterCanonicalProgressionEncounters(filtered, progressionBosses));
+  }, [
+    config.category,
+    config.contentLevel,
+    encounters,
+    progressionBosses,
+    supportedInstances,
+  ]);
 
   if (loading) {
     return (
