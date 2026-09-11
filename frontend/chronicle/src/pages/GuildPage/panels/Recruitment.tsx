@@ -1,16 +1,21 @@
-import { Flag, ExternalLink } from "lucide-react";
+/* eslint-disable react-refresh/only-export-components -- Panel registry files export a definition alongside their render components. */
+import { Flag, ExternalLink, Plus, X } from "lucide-react";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 
+interface RecruitmentNeedInput {
+  spec: string;
+  status: string;
+}
+
 interface RecruitmentConfig {
-  needs: string;
+  /** Structured needs; older saves may hold a newline-separated string. */
+  needs: RecruitmentNeedInput[] | string;
   note: string;
   applyUrl: string;
   applyLabel: string;
 }
 
-interface RecruitmentNeed {
-  spec: string;
-  status: string;
+interface RecruitmentNeed extends RecruitmentNeedInput {
   color: string;
 }
 
@@ -30,27 +35,95 @@ const PRIORITY_DOTS: Record<string, string> = {
   closed: "bg-muted-foreground/60",
 };
 
-/**
- * Parses one need per line. Each line is "Spec: priority", e.g.
- * "Resto Druid: High". Priority is one of high/medium/low/always/closed;
- * anything else (or no priority) shows verbatim in a neutral color.
- */
-function parseNeeds(raw: string): RecruitmentNeed[] {
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const sep = line.lastIndexOf(":");
-      const spec = sep >= 0 ? line.slice(0, sep).trim() : line;
-      const status = sep >= 0 ? line.slice(sep + 1).trim() : "Open";
-      const key = status.toLowerCase();
-      return {
-        spec: spec || line,
-        status,
-        color: key,
-      };
-    });
+/** Accepts structured rows, or the legacy "Spec: priority" lines. */
+function normalizeNeedInputs(raw: unknown): RecruitmentNeedInput[] {
+  if (Array.isArray(raw)) {
+    return raw.map((need) => ({
+      spec: typeof need?.spec === "string" ? need.spec : "",
+      status: typeof need?.status === "string" ? need.status : "",
+    }));
+  }
+  if (typeof raw !== "string" || !raw) return [];
+
+  return raw.split("\n").map((line) => {
+    const sep = line.lastIndexOf(":");
+    return {
+      spec: (sep >= 0 ? line.slice(0, sep) : line).trim(),
+      status: (sep >= 0 ? line.slice(sep + 1) : "Open").trim(),
+    };
+  });
+}
+
+function parseNeeds(raw: unknown): RecruitmentNeed[] {
+  return normalizeNeedInputs(raw)
+    .map(({ spec, status }) => ({
+      spec: spec.trim(),
+      status: status.trim(),
+      color: status.trim().toLowerCase(),
+    }))
+    .filter((need) => need.spec.length > 0);
+}
+
+function RecruitmentNeedsEditor({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  const needs = normalizeNeedInputs(value);
+  const rows =
+    needs.length > 0 || Array.isArray(value) ? needs : [{ spec: "", status: "" }];
+
+  const update = (index: number, patch: Partial<RecruitmentNeedInput>) => {
+    onChange(rows.map((need, i) => (i === index ? { ...need, ...patch } : need)));
+  };
+
+  return (
+    <div className="space-y-2">
+      {rows.map((need, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input
+            type="text"
+            value={need.spec}
+            onChange={(e) => update(i, { spec: e.target.value })}
+            placeholder="Resto Druid"
+            aria-label={`Recruitment need ${i + 1}`}
+            className="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
+          />
+          <span className="shrink-0 text-sm font-medium text-muted-foreground">:</span>
+          <input
+            type="text"
+            value={need.status}
+            onChange={(e) => update(i, { status: e.target.value })}
+            placeholder="High"
+            aria-label={`Recruitment priority ${i + 1}`}
+            className="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(rows.filter((_, j) => j !== i))}
+            className="shrink-0 rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            title="Remove row"
+            aria-label={`Remove recruitment need ${i + 1}`}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...rows, { spec: "", status: "" }])}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+      >
+        <Plus className="h-4 w-4" />
+        Add row
+      </button>
+      <p className="text-xs text-muted-foreground">
+        Priorities like high, medium, low, always, and closed get their own colors.
+      </p>
+    </div>
+  );
 }
 
 function RecruitmentContent({ config, isEditing }: GuildPanelRenderProps<RecruitmentConfig>) {
@@ -63,7 +136,7 @@ function RecruitmentContent({ config, isEditing }: GuildPanelRenderProps<Recruit
       <div className="flex items-center justify-center h-full min-h-[100px] text-muted-foreground">
         <p className="text-sm text-center px-4">
           {isEditing
-            ? "Open this panel's settings to list the specs you need (one per line, e.g. “Resto Druid: High”)."
+            ? "Open this panel's settings to add the specs and priorities you need."
             : "No recruitment info yet"}
         </p>
       </div>
@@ -124,9 +197,9 @@ export const RecruitmentPanel: GuildPanelDefinition<RecruitmentConfig> = {
   configSchema: [
     {
       name: "needs",
-      label: "Needs (one per line: “Spec: priority” — high, medium, low, always, or closed)",
-      type: "textarea",
-      placeholder: "Resto Druid: High\nWarlock: Medium\nProt Warrior: Low\nExceptional players: Always",
+      label: "Needs",
+      type: "custom",
+      render: (value, onChange) => <RecruitmentNeedsEditor value={value} onChange={onChange} />,
     },
     {
       name: "note",
@@ -148,7 +221,7 @@ export const RecruitmentPanel: GuildPanelDefinition<RecruitmentConfig> = {
     },
   ],
   defaultConfig: {
-    needs: "",
+    needs: [{ spec: "", status: "" }],
     note: "",
     applyUrl: "",
     applyLabel: "",
