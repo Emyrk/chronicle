@@ -1,14 +1,17 @@
 import type { ClassTalentData } from "@/components/ui/TalentTreeViewer/talentLogic";
 import { specializationIconUrl } from "@/config/specializationIcon";
+import { subspecRulesForFlavor } from "@/pages/Subspecs/subspecs";
 
 export interface PlayerTalentSnapshot {
   heroClass: string;
   summary: readonly number[];
+  trees: readonly string[];
 }
 
 export interface PlayerSpecialization {
   name: string;
   iconUrl: string;
+  subSpec?: string;
 }
 
 const CLASS_NAME_TO_ID: Record<string, number> = {
@@ -44,6 +47,7 @@ export function dominantTalentTreeIndex(summary: readonly number[]): number | nu
 export function resolvePlayerSpecialization(
   snapshot: PlayerTalentSnapshot,
   classes: Record<string, ClassTalentData>,
+  flavor: readonly string[] = [],
 ): PlayerSpecialization | null {
   const classID = CLASS_NAME_TO_ID[normalizedClassName(snapshot.heroClass)];
   const classTalents = classID === undefined ? undefined : classes[String(classID)];
@@ -56,8 +60,23 @@ export function resolvePlayerSpecialization(
   const tab = orderedTabs[treeIndex];
   if (!tab?.name) return null;
 
+  const rule = subspecRulesForFlavor(flavor).find(
+    (candidate) => normalizedClassName(candidate.className) === normalizedClassName(snapshot.heroClass)
+      && tab.name.toLowerCase().includes(candidate.spec.toLowerCase()),
+  );
+  const markerTab = rule
+    ? orderedTabs.find((candidate) => candidate.name.toLowerCase().includes(rule.spec.toLowerCase()))
+    : undefined;
+  const markerTreeIndex = markerTab ? orderedTabs.indexOf(markerTab) : -1;
+  const markerRanks = markerTreeIndex >= 0 ? snapshot.trees[markerTreeIndex] ?? "" : "";
+  const hasAllMarkers = rule?.detection.every((marker) => {
+    const talent = markerTab?.talents.find((candidate) => candidate.name.toLowerCase() === marker.toLowerCase());
+    return talent !== undefined && Number(markerRanks[talent.tabIndex] ?? "0") > 0;
+  });
+
   return {
     name: tab.name,
     iconUrl: specializationIconUrl(snapshot.heroClass, tab.name),
+    ...(rule ? { subSpec: hasAllMarkers ? rule.detectedSubspec : rule.fallback } : {}),
   };
 }
