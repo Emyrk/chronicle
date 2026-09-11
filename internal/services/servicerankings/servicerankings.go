@@ -45,6 +45,9 @@ type Service struct {
 	store    *authz.Authz
 	registry *registry.Registry
 
+	// RunSummaryWorker drains the durable per-run summary dirty queue.
+	RunSummaryWorker *WorkerRebuildRankingRunSummaries
+
 	// SummaryDispatchWorker fans out per-tenant refresh jobs.
 	SummaryDispatchWorker *WorkerRefreshRankingsSummaries
 	// SummaryTenantWorker refreshes summaries for a single tenant.
@@ -99,6 +102,10 @@ func (s *Service) Start(_ context.Context) error {
 
 	namedLogger := services.NamedLogger(s.logger, s.Name())
 	store := servicedbstore.DatabaseStore(s.broker)
+	s.RunSummaryWorker = &WorkerRebuildRankingRunSummaries{
+		Store:  store,
+		Logger: namedLogger,
+	}
 	s.SummaryDispatchWorker = &WorkerRefreshRankingsSummaries{
 		Store:  store,
 		Logger: namedLogger,

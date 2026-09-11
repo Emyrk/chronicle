@@ -156,6 +156,30 @@ func TestRankingRunDirtyGenerationCoalescesWithinTransaction(t *testing.T) {
 	assert.NotEqual(t, first.lastTransactionID, second.lastTransactionID)
 }
 
+func TestClearDirtyRankingRunGenerationIsConditional(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	instanceID := uuid.New()
+	insertDirtyTestRanking(t, pool, store, realmID, instanceID)
+
+	ctx := testutil.Context(t, testutil.WaitShort)
+	observed := readDirtyRankingRun(t, pool, instanceID)
+	_, err := pool.Exec(ctx, `
+		UPDATE encounter_dps_rankings
+		SET damage_done = damage_done + 1
+		WHERE instance_id = $1
+	`, instanceID)
+	require.NoError(t, err)
+
+	cleared, err := store.ClearDirtyRankingRunGeneration(ctx, database.ClearDirtyRankingRunGenerationParams{
+		RunID: instanceID, Generation: observed.generation,
+	})
+	require.NoError(t, err)
+	assert.Zero(t, cleared)
+	assert.Equal(t, observed.generation+1, readDirtyRankingRun(t, pool, instanceID).generation)
+}
+
 func TestRankingRunDirtyTracksDirectRankingMutationAndInstanceDeletion(t *testing.T) {
 	t.Parallel()
 
