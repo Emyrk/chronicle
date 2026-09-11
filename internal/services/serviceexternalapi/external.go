@@ -279,7 +279,10 @@ func (s *Service) listIndividualLeaderboard(w http.ResponseWriter, r *http.Reque
 	}
 
 	metric := normalizeIndividualLeaderboardMetric(q.Get("metric"))
-	rows, err := s.db.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+	// Keep the external API on the reference query for now. This service does not
+	// share the internal eligibility planner or its tenant-aware fast-path metrics,
+	// and silently duplicating those semantics here would risk divergent results.
+	rows, err := s.db.RankingsLeaderboardSlow(ctx, database.RankingsLeaderboardSlowParams{
 		Metric:           metric,
 		QueryOffset:      offset,
 		QueryLimit:       limit,

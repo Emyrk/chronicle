@@ -24,8 +24,8 @@ type fakeExternalAPIStore struct {
 	character             database.GetExternalAPICharacterRow
 	logs                  []database.ListExternalAPICharacterLogsRow
 	logsParams            database.ListExternalAPICharacterLogsParams
-	dpsLeaderboard        []database.RankingsLeaderboardRow
-	dpsLeaderboardParams  database.RankingsLeaderboardParams
+	dpsLeaderboard        []database.RankingsLeaderboardSlowRow
+	dpsLeaderboardParams  database.RankingsLeaderboardSlowParams
 	leaderboard           []database.SpeedrunLeaderboardRow
 	leaderboardParams     database.SpeedrunLeaderboardParams
 	leaderboardDuplicates []database.ListExternalAPILeaderboardDuplicateLogsRow
@@ -71,7 +71,7 @@ func (f *fakeExternalAPIStore) ListExternalAPICharacterLogs(_ context.Context, p
 	f.logsParams = params
 	return f.logs, nil
 }
-func (f *fakeExternalAPIStore) RankingsLeaderboard(_ context.Context, params database.RankingsLeaderboardParams) ([]database.RankingsLeaderboardRow, error) {
+func (f *fakeExternalAPIStore) RankingsLeaderboardSlow(_ context.Context, params database.RankingsLeaderboardSlowParams) ([]database.RankingsLeaderboardSlowRow, error) {
 	f.dpsLeaderboardParams = params
 	return f.dpsLeaderboard, nil
 }
@@ -214,7 +214,7 @@ func TestListIndividualLeaderboardMatchesRankingsQueryContract(t *testing.T) {
 	realmID := uuid.New()
 	killedAt := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
 	store := &fakeExternalAPIStore{
-		dpsLeaderboard: []database.RankingsLeaderboardRow{{
+		dpsLeaderboard: []database.RankingsLeaderboardSlowRow{{
 			PlayerGuid: "Player-00000001", PlayerName: "Example", PlayerClass: "DEATH_KNIGHT",
 			PlayerSpec: "Frost", PlayerSubSpec: "Dual Wield", PlayerRole: "heal", PlayerLevel: 60,
 			InstanceName: "Naxxramas", EncounterName: "Kel'Thuzad", DifficultyName: "Normal",
@@ -236,7 +236,7 @@ func TestListIndividualLeaderboardMatchesRankingsQueryContract(t *testing.T) {
 	require.Equal(t, "public, max-age=300", rec.Header().Get("Cache-Control"))
 	require.Equal(t, "60", rec.Header().Get("RateLimit-Limit"))
 	require.Empty(t, rec.Header().Get("RateLimit-Remaining"))
-	require.Equal(t, database.RankingsLeaderboardParams{
+	require.Equal(t, database.RankingsLeaderboardSlowParams{
 		Metric: "hps", QueryOffset: 2, QueryLimit: 2,
 		Class: "DEATH_KNIGHT", Spec: "Frost", SubSpec: "Dual Wield", Role: "heal",
 		InstanceNames: []string{"Naxxramas", "Molten Core"}, EncounterNames: []string{"Kel'Thuzad"},

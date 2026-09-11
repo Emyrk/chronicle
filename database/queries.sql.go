@@ -12028,6 +12028,305 @@ func (q *sqlQuerier) RankingRunSummarySource(ctx context.Context, runID uuid.UUI
 	return items, nil
 }
 
+const rankingsLeaderboardFast = `-- name: RankingsLeaderboardFast :many
+WITH filtered AS (
+    SELECT rprs.run_id, rprs.tenant_id, rprs.player_guid, rprs.player_name, rprs.player_class, rprs.player_spec, rprs.player_sub_spec, rprs.player_role, rprs.player_level, rprs.instance_name, rprs.encounter_name, rprs.difficulty_name, rprs.max_players, rprs.realm_id, rprs.realm_name, rprs.guild_name, rprs.damage_done, rprs.healing_done, rprs.absorbed_done, rprs.duration_secs, rprs.dps, rprs.hps, rprs.avg_ilvl, rprs.log_hashed_slug, rprs.killed_at, rprs.talent_sub_spec, rprs.talent_layout, rprs.summary_version, rprs.updated_at
+    FROM ranking_player_run_summaries rprs
+    JOIN ranking_runs rr ON rr.run_id = rprs.run_id
+    WHERE (NOT $4::boolean OR rprs.tenant_id = $5::uuid)
+      AND rr.summary_version = $6::smallint
+      AND rprs.summary_version = $6::smallint
+      AND (COALESCE(cardinality($7::text[]), 0) = 0 OR rprs.instance_name = ANY($7::text[]))
+      AND (COALESCE(cardinality($8::text[]), 0) = 0 OR rprs.realm_name = ANY($8::text[]))
+      AND (COALESCE(cardinality($9::text[]), 0) = 0 OR rprs.difficulty_name = ANY($9::text[]))
+      AND ($10::smallint <= 0 OR rprs.max_players = $10::smallint)
+      AND ($11::text = '' OR rprs.player_class = $11::text)
+      AND ($12::text = '' OR rprs.player_spec = $12::text)
+      AND ($13::text = '' OR rprs.player_sub_spec = $13::text)
+      AND ($14::text = '' OR rprs.player_role = $14::text)
+      AND (NOT $15::boolean OR (rprs.player_class <> 'Unknown' AND rprs.player_spec <> 'Unknown'))
+      AND (CASE WHEN $1::text = 'hps' THEN rprs.hps ELSE rprs.dps END) > 0
+),
+best_per_player AS (
+    SELECT DISTINCT ON (f.player_guid)
+        f.player_guid,
+        f.player_name,
+        f.player_class,
+        f.player_spec,
+        f.player_sub_spec,
+        f.player_role,
+        f.player_level,
+        f.instance_name,
+        f.encounter_name,
+        f.difficulty_name,
+        f.max_players,
+        f.realm_id,
+        f.realm_name,
+        f.guild_name,
+        f.damage_done,
+        f.healing_done,
+        f.absorbed_done,
+        f.duration_secs,
+        f.dps,
+        f.hps,
+        f.avg_ilvl,
+        f.log_hashed_slug,
+        f.killed_at,
+        f.talent_sub_spec,
+        f.talent_layout
+    FROM filtered f
+    ORDER BY f.player_guid, (CASE WHEN $1::text = 'hps' THEN f.hps ELSE f.dps END) DESC
+)
+SELECT
+    bpp.player_guid, bpp.player_name, bpp.player_class, bpp.player_spec, bpp.player_sub_spec, bpp.player_role, bpp.player_level, bpp.instance_name, bpp.encounter_name, bpp.difficulty_name, bpp.max_players, bpp.realm_id, bpp.realm_name, bpp.guild_name, bpp.damage_done, bpp.healing_done, bpp.absorbed_done, bpp.duration_secs, bpp.dps, bpp.hps, bpp.avg_ilvl, bpp.log_hashed_slug, bpp.killed_at, bpp.talent_sub_spec, bpp.talent_layout,
+    COUNT(*) OVER() AS total_count
+FROM best_per_player bpp
+ORDER BY (CASE WHEN $1::text = 'hps' THEN bpp.hps ELSE bpp.dps END) DESC
+LIMIT $3::bigint
+OFFSET $2::bigint
+`
+
+type RankingsLeaderboardFastParams struct {
+	Metric           string    `db:"metric" json:"metric"`
+	QueryOffset      int64     `db:"query_offset" json:"query_offset"`
+	QueryLimit       int64     `db:"query_limit" json:"query_limit"`
+	FilterTenant     bool      `db:"filter_tenant" json:"filter_tenant"`
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SummaryVersion   int16     `db:"summary_version" json:"summary_version"`
+	InstanceNames    []string  `db:"instance_names" json:"instance_names"`
+	RealmNames       []string  `db:"realm_names" json:"realm_names"`
+	DifficultyNames  []string  `db:"difficulty_names" json:"difficulty_names"`
+	FilterMaxPlayers int16     `db:"filter_max_players" json:"filter_max_players"`
+	Class            string    `db:"class" json:"class"`
+	Spec             string    `db:"spec" json:"spec"`
+	SubSpec          string    `db:"sub_spec" json:"sub_spec"`
+	Role             string    `db:"role" json:"role"`
+	HideUnknowns     bool      `db:"hide_unknowns" json:"hide_unknowns"`
+}
+
+type RankingsLeaderboardFastRow struct {
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+	PlayerLevel    int16              `db:"player_level" json:"player_level"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName      string             `db:"realm_name" json:"realm_name"`
+	GuildName      string             `db:"guild_name" json:"guild_name"`
+	DamageDone     int64              `db:"damage_done" json:"damage_done"`
+	HealingDone    int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone   int64              `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs   float64            `db:"duration_secs" json:"duration_secs"`
+	Dps            float64            `db:"dps" json:"dps"`
+	Hps            float64            `db:"hps" json:"hps"`
+	AvgIlvl        int16              `db:"avg_ilvl" json:"avg_ilvl"`
+	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	TalentSubSpec  string             `db:"talent_sub_spec" json:"talent_sub_spec"`
+	TalentLayout   string             `db:"talent_layout" json:"talent_layout"`
+	TotalCount     int64              `db:"total_count" json:"total_count"`
+}
+
+// Summary-backed equivalent of RankingsLeaderboardSlow. Eligibility must be
+// checked first so every selected run represents the complete standard encounter
+// set and every projection row is current and clean.
+func (q *sqlQuerier) RankingsLeaderboardFast(ctx context.Context, arg RankingsLeaderboardFastParams) ([]RankingsLeaderboardFastRow, error) {
+	rows, err := q.db.Query(ctx, rankingsLeaderboardFast,
+		arg.Metric,
+		arg.QueryOffset,
+		arg.QueryLimit,
+		arg.FilterTenant,
+		arg.TenantID,
+		arg.SummaryVersion,
+		arg.InstanceNames,
+		arg.RealmNames,
+		arg.DifficultyNames,
+		arg.FilterMaxPlayers,
+		arg.Class,
+		arg.Spec,
+		arg.SubSpec,
+		arg.Role,
+		arg.HideUnknowns,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsLeaderboardFastRow
+	for rows.Next() {
+		var i RankingsLeaderboardFastRow
+		if err := rows.Scan(
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PlayerRole,
+			&i.PlayerLevel,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RealmID,
+			&i.RealmName,
+			&i.GuildName,
+			&i.DamageDone,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.Hps,
+			&i.AvgIlvl,
+			&i.LogHashedSlug,
+			&i.KilledAt,
+			&i.TalentSubSpec,
+			&i.TalentLayout,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rankingsLeaderboardFastEligibility = `-- name: RankingsLeaderboardFastEligibility :one
+WITH source_runs AS MATERIALIZED (
+    SELECT DISTINCT
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    WHERE (NOT $2::boolean OR ws.tenant_id = $3::uuid)
+      AND (COALESCE(cardinality($4::text[]), 0) = 0 OR edr.instance_name = ANY($4::text[]))
+      AND (COALESCE(cardinality($5::text[]), 0) = 0 OR edr.realm_name = ANY($5::text[]))
+      AND (COALESCE(cardinality($6::text[]), 0) = 0 OR edr.difficulty_name = ANY($6::text[]))
+      AND ($7::smallint <= 0 OR edr.max_players = $7::smallint)
+),
+matching_summaries AS MATERIALIZED (
+    SELECT rr.run_id, rr.representative_instance_id, rr.tenant_id, rr.instance_name, rr.realm_id, rr.realm_name, rr.difficulty_name, rr.max_players, rr.boss_coverage, rr.encounter_names, rr.summary_version, rr.source_generation, rr.updated_at
+    FROM ranking_runs rr
+    WHERE (NOT $2::boolean OR rr.tenant_id = $3::uuid)
+      AND (COALESCE(cardinality($4::text[]), 0) = 0 OR rr.instance_name = ANY($4::text[]))
+      AND (COALESCE(cardinality($5::text[]), 0) = 0 OR rr.realm_name = ANY($5::text[]))
+      AND (COALESCE(cardinality($6::text[]), 0) = 0 OR rr.difficulty_name = ANY($6::text[]))
+      AND ($7::smallint <= 0 OR rr.max_players = $7::smallint)
+),
+requested_encounters AS (
+    SELECT COALESCE(array_agg(DISTINCT encounter_name ORDER BY encounter_name), '{}')::text[] AS names
+    FROM unnest($8::text[]) encounter_name
+),
+realm_encounters AS (
+    SELECT
+        ms.realm_id,
+        COALESCE(array_agg(DISTINCT encounter_name ORDER BY encounter_name), '{}')::text[] AS names
+    FROM matching_summaries ms
+    CROSS JOIN LATERAL unnest(ms.encounter_names) encounter_name
+    WHERE ms.run_id IN (SELECT run_id FROM source_runs)
+    GROUP BY ms.realm_id
+),
+all_encounters AS (
+    SELECT COALESCE(array_agg(DISTINCT encounter_name ORDER BY encounter_name), '{}')::text[] AS names
+    FROM realm_encounters re
+    CROSS JOIN LATERAL unnest(re.names) encounter_name
+)
+SELECT
+    (SELECT COUNT(*) FROM source_runs)::bigint AS source_run_count,
+    (SELECT COUNT(*)
+     FROM source_runs sr
+     LEFT JOIN matching_summaries ms ON ms.run_id = sr.run_id
+     WHERE ms.run_id IS NULL)::bigint AS missing_run_count,
+    (SELECT COUNT(*)
+     FROM matching_summaries ms
+     JOIN source_runs sr ON sr.run_id = ms.run_id
+     WHERE ms.summary_version <> $1::smallint)::bigint AS stale_run_count,
+    (SELECT COUNT(*)
+     FROM ranking_player_run_summaries rprs
+     JOIN source_runs sr ON sr.run_id = rprs.run_id
+     WHERE rprs.summary_version <> $1::smallint)::bigint AS stale_player_count,
+    (SELECT COUNT(*)
+     FROM matching_summaries ms
+     LEFT JOIN source_runs sr ON sr.run_id = ms.run_id
+     WHERE sr.run_id IS NULL)::bigint AS orphan_run_count,
+    (SELECT COUNT(*)
+     FROM ranking_run_summary_dirty dirty
+     WHERE dirty.run_id IN (
+         SELECT run_id FROM source_runs
+         UNION
+         SELECT run_id FROM matching_summaries
+     ))::bigint AS dirty_run_count,
+    (SELECT COUNT(*)
+     FROM matching_summaries ms
+     JOIN source_runs sr ON sr.run_id = ms.run_id
+     JOIN realm_encounters re ON re.realm_id = ms.realm_id
+     WHERE ms.encounter_names <> re.names)::bigint AS nonstandard_run_count,
+    COALESCE(
+        (SELECT COUNT(*) FROM source_runs) = 0
+        OR (SELECT names FROM requested_encounters) = (SELECT names FROM all_encounters),
+        false
+    )::boolean AS encounters_match
+`
+
+type RankingsLeaderboardFastEligibilityParams struct {
+	SummaryVersion   int16     `db:"summary_version" json:"summary_version"`
+	FilterTenant     bool      `db:"filter_tenant" json:"filter_tenant"`
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceNames    []string  `db:"instance_names" json:"instance_names"`
+	RealmNames       []string  `db:"realm_names" json:"realm_names"`
+	DifficultyNames  []string  `db:"difficulty_names" json:"difficulty_names"`
+	FilterMaxPlayers int16     `db:"filter_max_players" json:"filter_max_players"`
+	EncounterNames   []string  `db:"encounter_names" json:"encounter_names"`
+}
+
+type RankingsLeaderboardFastEligibilityRow struct {
+	SourceRunCount      int64 `db:"source_run_count" json:"source_run_count"`
+	MissingRunCount     int64 `db:"missing_run_count" json:"missing_run_count"`
+	StaleRunCount       int64 `db:"stale_run_count" json:"stale_run_count"`
+	StalePlayerCount    int64 `db:"stale_player_count" json:"stale_player_count"`
+	OrphanRunCount      int64 `db:"orphan_run_count" json:"orphan_run_count"`
+	DirtyRunCount       int64 `db:"dirty_run_count" json:"dirty_run_count"`
+	NonstandardRunCount int64 `db:"nonstandard_run_count" json:"nonstandard_run_count"`
+	EncountersMatch     bool  `db:"encounters_match" json:"encounters_match"`
+}
+
+// Checks whether the requested leaderboard can be answered exactly from the
+// current per-run projection. tenant_id is an explicit pruning predicate when a
+// tenant context exists; realm/server RLS remains the authorization boundary.
+func (q *sqlQuerier) RankingsLeaderboardFastEligibility(ctx context.Context, arg RankingsLeaderboardFastEligibilityParams) (RankingsLeaderboardFastEligibilityRow, error) {
+	row := q.db.QueryRow(ctx, rankingsLeaderboardFastEligibility,
+		arg.SummaryVersion,
+		arg.FilterTenant,
+		arg.TenantID,
+		arg.InstanceNames,
+		arg.RealmNames,
+		arg.DifficultyNames,
+		arg.FilterMaxPlayers,
+		arg.EncounterNames,
+	)
+	var i RankingsLeaderboardFastEligibilityRow
+	err := row.Scan(
+		&i.SourceRunCount,
+		&i.MissingRunCount,
+		&i.StaleRunCount,
+		&i.StalePlayerCount,
+		&i.OrphanRunCount,
+		&i.DirtyRunCount,
+		&i.NonstandardRunCount,
+		&i.EncountersMatch,
+	)
+	return i, err
+}
+
 const setLocalRankingSummaryBackfillStatementTimeout = `-- name: SetLocalRankingSummaryBackfillStatementTimeout :exec
 SET LOCAL statement_timeout = '10s'
 `
@@ -12885,7 +13184,7 @@ func (q *sqlQuerier) RankingsKillTimeStats(ctx context.Context, arg RankingsKill
 	return items, nil
 }
 
-const rankingsLeaderboard = `-- name: RankingsLeaderboard :many
+const rankingsLeaderboardSlow = `-- name: RankingsLeaderboardSlow :many
 WITH candidate_runs AS (
     -- Class/spec/sub-spec/role filters usually narrow the leaderboard to a small
     -- fraction of raid logs. Find those duplicate groups first so representative
@@ -13080,7 +13379,7 @@ LIMIT $3::bigint
 OFFSET $2::bigint
 `
 
-type RankingsLeaderboardParams struct {
+type RankingsLeaderboardSlowParams struct {
 	Metric           string   `db:"metric" json:"metric"`
 	QueryOffset      int64    `db:"query_offset" json:"query_offset"`
 	QueryLimit       int64    `db:"query_limit" json:"query_limit"`
@@ -13097,7 +13396,7 @@ type RankingsLeaderboardParams struct {
 	FilterMaxPlayers int16    `db:"filter_max_players" json:"filter_max_players"`
 }
 
-type RankingsLeaderboardRow struct {
+type RankingsLeaderboardSlowRow struct {
 	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
@@ -13136,8 +13435,8 @@ type RankingsLeaderboardRow struct {
 // union across realms would exclude every run when multiple realms are shown.
 // Step 1: aggregate per player per run (sum encounters within a single instance run).
 // Step 2: pick each player's best run.
-func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error) {
-	rows, err := q.db.Query(ctx, rankingsLeaderboard,
+func (q *sqlQuerier) RankingsLeaderboardSlow(ctx context.Context, arg RankingsLeaderboardSlowParams) ([]RankingsLeaderboardSlowRow, error) {
+	rows, err := q.db.Query(ctx, rankingsLeaderboardSlow,
 		arg.Metric,
 		arg.QueryOffset,
 		arg.QueryLimit,
@@ -13157,9 +13456,9 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RankingsLeaderboardRow
+	var items []RankingsLeaderboardSlowRow
 	for rows.Next() {
-		var i RankingsLeaderboardRow
+		var i RankingsLeaderboardSlowRow
 		if err := rows.Scan(
 			&i.PlayerGuid,
 			&i.PlayerName,

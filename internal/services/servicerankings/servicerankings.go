@@ -45,6 +45,7 @@ type Service struct {
 	logger   *slog.Logger
 	store    *authz.Authz
 	registry *registry.Registry
+	metrics  *rankingRunSummaryMetrics
 
 	// RunSummaryBackfillWorker marks missing or stale run summaries dirty.
 	RunSummaryBackfillWorker *WorkerBackfillRankingRunSummaries
@@ -107,6 +108,7 @@ func (s *Service) Start(_ context.Context) error {
 	namedLogger := services.NamedLogger(s.logger, s.Name())
 	store := servicedbstore.DatabaseStore(s.broker)
 	runSummaryMetrics := newRankingRunSummaryMetrics(serviceprometheus.Registry(s.broker))
+	s.metrics = runSummaryMetrics
 	s.RunSummaryBackfillWorker = &WorkerBackfillRankingRunSummaries{
 		Store:  store,
 		Logger: namedLogger,
@@ -302,6 +304,116 @@ func (s *Service) handleEncounters(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
+type rankingsLeaderboardStore interface {
+	RankingsLeaderboardFastEligibility(context.Context, database.RankingsLeaderboardFastEligibilityParams) (database.RankingsLeaderboardFastEligibilityRow, error)
+	RankingsLeaderboardFast(context.Context, database.RankingsLeaderboardFastParams) ([]database.RankingsLeaderboardFastRow, error)
+	RankingsLeaderboardSlow(context.Context, database.RankingsLeaderboardSlowParams) ([]database.RankingsLeaderboardSlowRow, error)
+}
+
+type leaderboardQueryMetadata struct {
+	Path   string
+	Reason string
+}
+
+func rankingsLeaderboard(
+	ctx context.Context,
+	store rankingsLeaderboardStore,
+	logger *slog.Logger,
+	metrics *rankingRunSummaryMetrics,
+	params database.RankingsLeaderboardSlowParams,
+) ([]database.RankingsLeaderboardSlowRow, leaderboardQueryMetadata, error) {
+	fallback := func(reason string) ([]database.RankingsLeaderboardSlowRow, leaderboardQueryMetadata, error) {
+		metadata := leaderboardQueryMetadata{Path: "slow", Reason: reason}
+		if metrics != nil {
+			metrics.leaderboardPath.WithLabelValues(metadata.Path, metadata.Reason).Inc()
+		}
+		if logger != nil {
+			logger.Debug("using slow rankings leaderboard", slog.String("reason", reason))
+		}
+		rows, err := store.RankingsLeaderboardSlow(ctx, params)
+		return rows, metadata, err
+	}
+
+	// A relative cutoff is applied to individual encounter rows by the reference
+	// query. The run projection only stores the final killed_at, so it cannot safely
+	// reproduce a cutoff that falls inside a run.
+	if params.SinceDays > 0 {
+		return fallback("unsupported_since")
+	}
+
+	tenant := servicetenant.TenantFromContext(ctx)
+	filterTenant := tenant != nil
+	tenantID := servicetenant.TenantIDFromContext(ctx)
+	eligibility, err := store.RankingsLeaderboardFastEligibility(ctx, database.RankingsLeaderboardFastEligibilityParams{
+		SummaryVersion:   rankingPlayerRunSummaryVersion,
+		FilterTenant:     filterTenant,
+		TenantID:         tenantID,
+		InstanceNames:    params.InstanceNames,
+		RealmNames:       params.RealmNames,
+		DifficultyNames:  params.DifficultyNames,
+		FilterMaxPlayers: params.FilterMaxPlayers,
+		EncounterNames:   params.EncounterNames,
+	})
+	if err != nil {
+		if logger != nil {
+			logger.Warn("plan fast rankings leaderboard", slog.String("error", err.Error()))
+		}
+		return fallback("eligibility_error")
+	}
+
+	switch {
+	case eligibility.MissingRunCount > 0:
+		return fallback("missing_summary")
+	case eligibility.StaleRunCount > 0 || eligibility.StalePlayerCount > 0:
+		return fallback("stale_summary")
+	case eligibility.DirtyRunCount > 0:
+		return fallback("dirty_summary")
+	case eligibility.OrphanRunCount > 0:
+		return fallback("orphan_summary")
+	case eligibility.NonstandardRunCount > 0:
+		return fallback("nonstandard_encounters")
+	case !eligibility.EncountersMatch:
+		return fallback("encounter_subset")
+	}
+
+	fastRows, err := store.RankingsLeaderboardFast(ctx, database.RankingsLeaderboardFastParams{
+		Metric:           params.Metric,
+		QueryOffset:      params.QueryOffset,
+		QueryLimit:       params.QueryLimit,
+		FilterTenant:     filterTenant,
+		TenantID:         tenantID,
+		SummaryVersion:   rankingPlayerRunSummaryVersion,
+		InstanceNames:    params.InstanceNames,
+		RealmNames:       params.RealmNames,
+		DifficultyNames:  params.DifficultyNames,
+		FilterMaxPlayers: params.FilterMaxPlayers,
+		Class:            params.Class,
+		Spec:             params.Spec,
+		SubSpec:          params.SubSpec,
+		Role:             params.Role,
+		HideUnknowns:     params.HideUnknowns,
+	})
+	if err != nil {
+		if logger != nil {
+			logger.Warn("query fast rankings leaderboard", slog.String("error", err.Error()))
+		}
+		return fallback("fast_query_error")
+	}
+
+	rows := make([]database.RankingsLeaderboardSlowRow, 0, len(fastRows))
+	for _, row := range fastRows {
+		rows = append(rows, database.RankingsLeaderboardSlowRow(row))
+	}
+	metadata := leaderboardQueryMetadata{Path: "fast", Reason: "eligible"}
+	if metrics != nil {
+		metrics.leaderboardPath.WithLabelValues(metadata.Path, metadata.Reason).Inc()
+	}
+	if logger != nil {
+		logger.Debug("using fast rankings leaderboard", slog.Int64("source_runs", eligibility.SourceRunCount))
+	}
+	return rows, metadata, nil
+}
+
 // handleLeaderboard returns paginated DPS rankings with filters.
 //
 //	GET /leaderboard?instance_names=Molten+Core&encounter_names=Ragnaros&period=90d
@@ -336,7 +448,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		classParam = string(db2sdk.HeroClassToDB(types.HeroClasses(classParam)))
 	}
 
-	rows, err := s.store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+	rows, _, err := rankingsLeaderboard(ctx, s.store, s.logger, s.metrics, database.RankingsLeaderboardSlowParams{
 		InstanceNames:    splitCSV(q.Get("instance_names")),
 		EncounterNames:   splitCSV(q.Get("encounter_names")),
 		DifficultyNames:  splitCSV(q.Get("difficulty_names")),

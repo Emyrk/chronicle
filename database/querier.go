@@ -687,6 +687,14 @@ type sqlcQuerier interface {
 	// Box plot stats on encounter duration (seconds) per encounter name.
 	// Deduplicates encounters across duplicate log groups.
 	RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error)
+	// Summary-backed equivalent of RankingsLeaderboardSlow. Eligibility must be
+	// checked first so every selected run represents the complete standard encounter
+	// set and every projection row is current and clean.
+	RankingsLeaderboardFast(ctx context.Context, arg RankingsLeaderboardFastParams) ([]RankingsLeaderboardFastRow, error)
+	// Checks whether the requested leaderboard can be answered exactly from the
+	// current per-run projection. tenant_id is an explicit pruning predicate when a
+	// tenant context exists; realm/server RLS remains the authorization boundary.
+	RankingsLeaderboardFastEligibility(ctx context.Context, arg RankingsLeaderboardFastEligibilityParams) (RankingsLeaderboardFastEligibilityRow, error)
 	// Returns paginated DPS rankings showing each player's best single run.
 	// A "run" is one instance_id (deduplicated by duplicate_group_id).
 	// Within a run, damage and duration are summed across encounters to get run DPS.
@@ -697,7 +705,7 @@ type sqlcQuerier interface {
 	// union across realms would exclude every run when multiple realms are shown.
 	// Step 1: aggregate per player per run (sum encounters within a single instance run).
 	// Step 2: pick each player's best run.
-	RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
+	RankingsLeaderboardSlow(ctx context.Context, arg RankingsLeaderboardSlowParams) ([]RankingsLeaderboardSlowRow, error)
 	// Distinct realm names that have DPS ranking data, for the realm filter dropdown.
 	// Rows with an empty realm name are excluded: they cannot be filtered on, and
 	// selecting "all realms" must collapse to no filter so those rows still appear.

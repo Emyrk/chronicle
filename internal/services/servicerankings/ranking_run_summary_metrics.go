@@ -14,6 +14,7 @@ type rankingRunSummaryMetrics struct {
 	runsRebuilt     prometheus.Counter
 	runsDeleted     prometheus.Counter
 	runsRetained    prometheus.Counter
+	leaderboardPath *prometheus.CounterVec
 }
 
 func newRankingRunSummaryMetrics(reg prometheus.Registerer) *rankingRunSummaryMetrics {
@@ -71,5 +72,11 @@ func newRankingRunSummaryMetrics(reg prometheus.Registerer) *rankingRunSummaryMe
 			Name:      "runs_retained_dirty_total",
 			Help:      "Total ranking runs retained dirty after a generation changed during rebuild.",
 		}),
+		leaderboardPath: factory.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "chronicle",
+			Subsystem: "rankings_run_summaries",
+			Name:      "leaderboard_queries_total",
+			Help:      "Total player leaderboard queries by selected path and fallback reason.",
+		}, []string{"path", "reason"}),
 	}
 }
