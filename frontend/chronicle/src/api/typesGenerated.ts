@@ -150,6 +150,38 @@ export interface AdminOutdatedInstancesResponse {
 
 // From chroniclesdk/rankings.go
 /**
+ * AdminRankingRunSummaryRebuildJob describes the coalesced rebuild job.
+ */
+export interface AdminRankingRunSummaryRebuildJob {
+    readonly id: number;
+    readonly kind: string;
+    readonly queue: string;
+    readonly state: string;
+    readonly unique_skipped_as_duplicate: boolean;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * AdminRankingRunSummaryRebuildResponse is returned when a rebuild drain is enqueued.
+ */
+export interface AdminRankingRunSummaryRebuildResponse {
+    readonly job: AdminRankingRunSummaryRebuildJob;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * AdminRankingRunSummaryStatusResponse describes the durable player-run summary rebuild queue.
+ */
+export interface AdminRankingRunSummaryStatusResponse {
+    readonly queue_depth: number;
+    readonly oldest_dirty_at?: string;
+    readonly oldest_dirty_age_seconds: number;
+    readonly observed_at: string;
+    readonly summary_version: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
  * AdminRankingsRefreshStatusResponse lists rankings summary freshness by tenant.
  */
 export interface AdminRankingsRefreshStatusResponse {

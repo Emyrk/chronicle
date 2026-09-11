@@ -645,6 +645,7 @@ type sqlcQuerier interface {
 	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Transition a pending time-parse snapshot to published. Idempotent on already-published.
 	PublishTimeParseSnapshot(ctx context.Context, id uuid.UUID) (TimeParseSnapshot, error)
+	RankingRunSummaryDirtyStatus(ctx context.Context) (RankingRunSummaryDirtyStatusRow, error)
 	// Resolves the current representative physical instance for one logical run using
 	// the exact ordering from RankingsLeaderboardSlow, then aggregates one row per
 	// player across that representative instance's encounters.

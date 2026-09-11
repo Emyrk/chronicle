@@ -275,6 +275,29 @@ type AdminTriggerSnapshotResponse struct {
 	Jobs []AdminTriggerSnapshotJobResult `json:"jobs"`
 }
 
+// AdminRankingRunSummaryStatusResponse describes the durable player-run summary rebuild queue.
+type AdminRankingRunSummaryStatusResponse struct {
+	QueueDepth            int64      `json:"queue_depth"`
+	OldestDirtyAt         *time.Time `json:"oldest_dirty_at,omitempty"`
+	OldestDirtyAgeSeconds float64    `json:"oldest_dirty_age_seconds"`
+	ObservedAt            time.Time  `json:"observed_at"`
+	SummaryVersion        int16      `json:"summary_version"`
+}
+
+// AdminRankingRunSummaryRebuildJob describes the coalesced rebuild job.
+type AdminRankingRunSummaryRebuildJob struct {
+	ID                       int64  `json:"id"`
+	Kind                     string `json:"kind"`
+	Queue                    string `json:"queue"`
+	State                    string `json:"state"`
+	UniqueSkippedAsDuplicate bool   `json:"unique_skipped_as_duplicate"`
+}
+
+// AdminRankingRunSummaryRebuildResponse is returned when a rebuild drain is enqueued.
+type AdminRankingRunSummaryRebuildResponse struct {
+	Job AdminRankingRunSummaryRebuildJob `json:"job"`
+}
+
 // AdminRankingsRefreshTenantStatus describes rankings summary freshness for one tenant.
 type AdminRankingsRefreshTenantStatus struct {
 	TenantID            uuid.UUID  `json:"tenant_id"`

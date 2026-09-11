@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
@@ -436,6 +437,67 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 			JobID:        result.Job.ID,
 			JobState:     string(result.Job.State),
 		}},
+	})
+}
+
+// AdminRankingRunSummaryStatus returns the current durable rebuild queue status.
+//
+//	GET /api/v1/admin/parses/ranking-run-summaries/status
+func (api *API) AdminRankingRunSummaryStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	status, err := database.New(api.Opts.Pool).RankingRunSummaryDirtyStatus(servicetenant.AdminBypass(ctx))
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch ranking run summary rebuild status",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	response := chroniclesdk.AdminRankingRunSummaryStatusResponse{
+		QueueDepth:     status.QueueDepth,
+		ObservedAt:     status.ObservedAt.Time,
+		SummaryVersion: servicerankings.RankingPlayerRunSummaryVersion(),
+	}
+	if status.OldestUpdatedAt.Valid {
+		oldest := status.OldestUpdatedAt.Time
+		response.OldestDirtyAt = &oldest
+		response.OldestDirtyAgeSeconds = status.ObservedAt.Time.Sub(oldest).Seconds()
+		if response.OldestDirtyAgeSeconds < 0 {
+			response.OldestDirtyAgeSeconds = 0
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, response)
+}
+
+// AdminRebuildRankingRunSummaries enqueues the coalesced durable queue drain.
+// This is separate from the legacy per-tenant rankings summary refresh.
+//
+//	POST /api/v1/admin/parses/ranking-run-summaries/rebuild
+func (api *API) AdminRebuildRankingRunSummaries(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	result, err := api.Queues.Insert(ctx, rankingargs.ArgsRebuildRankingRunSummaries{}, nil)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to enqueue ranking run summary rebuild",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusAccepted, chroniclesdk.AdminRankingRunSummaryRebuildResponse{
+		Job: chroniclesdk.AdminRankingRunSummaryRebuildJob{
+			ID:                       result.Job.ID,
+			Kind:                     result.Job.Kind,
+			Queue:                    result.Job.Queue,
+			State:                    string(result.Job.State),
+			UniqueSkippedAsDuplicate: result.UniqueSkippedAsDuplicate,
+		},
 	})
 }
 
