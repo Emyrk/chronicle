@@ -133,6 +133,11 @@ go run -C ./scripts/apitypings main.go > frontend/chronicle/src/api/typesGenerat
 
 **Migrations are immutable once deployed.** Never edit an existing migration file — always create a new one. If you are unsure whether a migration has been deployed, ask the user before modifying it.
 
+> [!CAUTION]
+> **Production migrations run during service startup and block the service from becoming available.** Before adding a data migration that updates, deletes, rewrites, or scans an existing table, inspect production-scale row counts and relevant indexes, estimate the affected rows/WAL, and explicitly warn the user if it may delay startup or cause downtime. Get the user's approval before shipping a potentially slow migration.
+>
+> Avoid broad updates of large denormalized/history tables such as `ranking_snapshot_members`, `encounter_dps_rankings`, and `parse_score_results`. Scope updates to the exact cohort, use indexed predicates, and prefer batching, an offline/admin backfill, or recomputation when a startup transaction could touch a large number of rows. Include a preview/count query with the proposed migration so impact can be checked before deployment.
+
 ```bash
 # Create a new migration
 ./database/migrations/create_migration.sh "description of migration"

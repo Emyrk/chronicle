@@ -203,6 +203,21 @@ describe("TalentTreeViewer popularity URL state", () => {
     });
   });
 
+  it("stores an optional subspec selection", () => {
+    const params = searchParamsWithTalentPopularity(
+      new URLSearchParams(),
+      { instance: "Emerald Sanctum", spec: "Enhancement", metric: "dps", subSpec: "Tank" },
+    );
+
+    expect(params.toString()).toBe("pop=emerald-sanctum.enhancement.dps.tank");
+    expect(talentPopularitySelection(params)).toEqual({
+      instance: "emerald-sanctum",
+      spec: "enhancement",
+      metric: "dps",
+      subSpec: "tank",
+    });
+  });
+
   it("clears popularity without dropping other query params", () => {
     const params = new URLSearchParams("build=505&pop=molten-core.fire.dps");
     const cleared = searchParamsWithTalentPopularity(params, null);
@@ -214,7 +229,7 @@ describe("TalentTreeViewer popularity URL state", () => {
   it("ignores malformed popularity selections", () => {
     expect(talentPopularitySelection(new URLSearchParams("pop=molten-core.fire"))).toBeNull();
     expect(talentPopularitySelection(new URLSearchParams("pop=molten-core.fire.damage"))).toBeNull();
-    expect(talentPopularitySelection(new URLSearchParams("pop=molten-core.fire.dps.extra"))).toBeNull();
+    expect(talentPopularitySelection(new URLSearchParams("pop=molten-core.fire.dps.tank.extra"))).toBeNull();
   });
 });
 
