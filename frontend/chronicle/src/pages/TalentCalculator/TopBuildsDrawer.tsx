@@ -22,6 +22,7 @@ import {
   rankingsLayoutToBuild,
 } from "@/components/ui/TalentTreeViewer/talentLogic";
 import { SPEC_BY_CLASS } from "@/pages/Rankings/classDisplay";
+import { subspecRulesForFlavor } from "@/pages/Subspecs/subspecs";
 import type { TalentClassInfo } from "./MyBuildsDrawer";
 
 /** "Death Knight" → "DEATHKNIGHT" (the SDK hero-class form the API expects). */
@@ -45,8 +46,9 @@ function formatDPS(dps: number): string {
   return dps >= 1000 ? `${(dps / 1000).toFixed(1)}k` : Math.round(dps).toString();
 }
 
-export function TopBuildsDrawer({ selectedClass, onShowAll }: {
+export function TopBuildsDrawer({ selectedClass, datasetFlavor, onShowAll }: {
   selectedClass?: TalentClassInfo;
+  datasetFlavor: readonly string[];
   /** Called with the selected ranking cohort to show the popularity overlay. */
   onShowAll?: (selection: TalentPopularitySelection) => void;
 }) {
@@ -58,6 +60,13 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
   const specs = SPEC_BY_CLASS[apiClass] ?? [];
   const [specIdx, setSpecIdx] = useState(0);
   const spec = specs[Math.min(specIdx, specs.length - 1)] ?? "";
+  const [selectedSubSpec, setSelectedSubSpec] = useState("");
+  const subSpecRule = subspecRulesForFlavor(datasetFlavor).find(
+    (rule) => rule.className === selectedClass?.name && rule.spec === spec,
+  );
+  const subSpec = subSpecRule?.subspecs.some((option) => option.name === selectedSubSpec)
+    ? selectedSubSpec
+    : "";
 
   // Each spec has a hard-coded preferred ranking metric (healers → HPS);
   // metricOverride holds a manual toggle away from it and resets on spec change.
@@ -65,6 +74,7 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
   const metric = metricOverride ?? defaultMetricForSpec(apiClass, spec);
   function selectSpec(index: number) {
     setSpecIdx(index);
+    setSelectedSubSpec("");
     setMetricOverride(null);
   }
 
@@ -93,9 +103,10 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
       encounter_names: bossNames.join(","),
       class: apiClass,
       spec,
+      sub_spec: subSpec || undefined,
       hide_unknowns: true,
       metric,
-      limit: 10,
+      limit: 15,
     },
     open && Boolean(activeInstance && apiClass && spec) && bossNames.length > 0,
   );
@@ -105,7 +116,7 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
       .map((entry) => rankingsLayoutToBuild(entry.talent_layout))
       .filter(Boolean);
     if (builds.length === 0 || !onShowAll) return;
-    onShowAll({ instance: activeInstance, spec, metric });
+    onShowAll({ instance: activeInstance, spec, metric, ...(subSpec ? { subSpec } : {}) });
     setOpen(false);
     toast.success(`Showing talent popularity across ${builds.length} top ${spec} builds`, {
       description: "Use \"Hide popularity\" in the toolbar to dismiss it.",
@@ -213,9 +224,28 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
               </button>
             ))}
           </div>
+          {subSpecRule && (
+            <div className="flex gap-1" aria-label={`${spec} subspec`}>
+              {["", ...subSpecRule.subspecs.map((option) => option.name)].map((name) => (
+                <button
+                  key={name || "all"}
+                  type="button"
+                  onClick={() => setSelectedSubSpec(name)}
+                  className={cn(
+                    "flex-1 truncate rounded-md border px-2 py-1.5 text-xs font-bold transition",
+                    name === subSpec
+                      ? "border-emerald-300/60 bg-emerald-400/15 text-emerald-100"
+                      : "border-zinc-700/60 bg-zinc-900/40 text-zinc-400 hover:border-zinc-500 hover:text-white",
+                  )}
+                >
+                  {name || "All"}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Top 10 list */}
+        {/* Top 15 list */}
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
           {leaderboardQuery.isLoading || instancesQuery.isLoading || encountersQuery.isLoading ? (
             <p className="text-sm text-zinc-500">Loading rankings…</p>

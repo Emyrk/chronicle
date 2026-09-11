@@ -333,6 +333,7 @@ export interface TalentPopularitySelection {
   instance: string;
   spec: string;
   metric: "dps" | "hps";
+  subSpec?: string;
 }
 
 export function talentPopularitySlug(value: string) {
@@ -345,9 +346,10 @@ export function searchParamsWithTalentPopularity(
 ) {
   const next = new URLSearchParams(params);
   if (selection) {
+    const value = `${talentPopularitySlug(selection.instance)}.${talentPopularitySlug(selection.spec)}.${selection.metric}`;
     next.set(
       TALENT_POPULARITY_PARAM,
-      `${talentPopularitySlug(selection.instance)}.${talentPopularitySlug(selection.spec)}.${selection.metric}`,
+      selection.subSpec ? `${value}.${talentPopularitySlug(selection.subSpec)}` : value,
     );
   } else {
     next.delete(TALENT_POPULARITY_PARAM);
@@ -356,9 +358,9 @@ export function searchParamsWithTalentPopularity(
 }
 
 export function talentPopularitySelection(params: URLSearchParams): TalentPopularitySelection | null {
-  const [instance, spec, metric, ...extra] = (params.get(TALENT_POPULARITY_PARAM) ?? "").split(".");
+  const [instance, spec, metric, subSpec, ...extra] = (params.get(TALENT_POPULARITY_PARAM) ?? "").split(".");
   if (!instance || !spec || extra.length > 0 || (metric !== "dps" && metric !== "hps")) return null;
-  return { instance, spec, metric };
+  return { instance, spec, metric, ...(subSpec ? { subSpec } : {}) };
 }
 
 export function isTalentBuildLocked(params: URLSearchParams) {

@@ -23,6 +23,7 @@ import {
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { SPEC_BY_CLASS } from "@/pages/Rankings/classDisplay";
+import { subspecRulesForFlavor } from "@/pages/Subspecs/subspecs";
 import { MyBuildsDrawer } from "./MyBuildsDrawer";
 import { TopBuildsDrawer } from "./TopBuildsDrawer";
 
@@ -108,7 +109,7 @@ export function TalentCalculatorPage() {
   const isMobile = useIsMobile();
 
   // Top Builds "Show all" overlay: store the ranking cohort in a compact URL
-  // value, then reload its current top-10 builds when the page is opened.
+  // value, then reload its current top-15 builds when the page is opened.
   const popularitySource = useMemo(
     () => selectedPet ? null : talentPopularitySelection(searchParams),
     [searchParams, selectedPet],
@@ -117,6 +118,10 @@ export function TalentCalculatorPage() {
   const popularitySpec = (SPEC_BY_CLASS[apiClass] ?? []).find(
     (spec) => talentPopularitySlug(spec) === popularitySource?.spec,
   ) ?? "";
+  const popularitySubSpec = subspecRulesForFlavor(siteConfig?.dataset_flavor ?? [])
+    .find((rule) => rule.className === selectedClass?.name && rule.spec === popularitySpec)
+    ?.subspecs.find((subspec) => talentPopularitySlug(subspec.name) === popularitySource?.subSpec)
+    ?.name ?? "";
 
   const popularityInstancesQuery = useRankingsInstances(Boolean(popularitySource));
   const popularityInstance = useMemo(() => {
@@ -139,15 +144,17 @@ export function TalentCalculatorPage() {
       encounter_names: popularityBossNames.join(","),
       class: apiClass,
       spec: popularitySpec,
+      sub_spec: popularitySubSpec || undefined,
       hide_unknowns: true,
       metric: popularitySource?.metric,
-      limit: 10,
+      limit: 15,
     },
     Boolean(
       popularitySource
       && popularityInstance
       && apiClass
       && popularitySpec
+      && (!popularitySource.subSpec || popularitySubSpec)
       && popularityBossNames.length > 0
     ),
   );
@@ -376,7 +383,14 @@ export function TalentCalculatorPage() {
                   </button>
                 )}
                 {/* Top Builds is desktop-only by design. */}
-                {topBuildsAvailable && <TopBuildsDrawer selectedClass={selectedClass} onShowAll={showPopularity} />}
+                {topBuildsAvailable && (
+                  <TopBuildsDrawer
+                    key={selectedClass?.id}
+                    selectedClass={selectedClass}
+                    datasetFlavor={siteConfig?.dataset_flavor ?? []}
+                    onShowAll={showPopularity}
+                  />
+                )}
                 <MyBuildsDrawer classes={availableClasses} selectedClassId={selectedClassId} />
               </>
             ) : undefined
