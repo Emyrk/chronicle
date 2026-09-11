@@ -1,57 +1,104 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { ArrowLeft, BarChart3, Eye, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  BarChart3,
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  Lock,
+  Star,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import { useGuildPage, useGuildResourceAnalytics } from "@/api/queries";
+import type { GuildResourceAnalyticsDay } from "@/api/typesGenerated";
+import { cn } from "@/lib/utils";
 import { GuildActionsMenu, GuildPageHeader } from "./components";
 
 const numberFormatter = new Intl.NumberFormat();
+const compactFormatter = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
+
+const RANGE_OPTIONS = [7, 14, 30] as const;
+type RangeDays = (typeof RANGE_OPTIONS)[number];
+
+// Reuse the app's WoW class colors to tell instances apart — deterministic per
+// instance key so a row keeps its color as ranges/sorting change.
+const INSTANCE_COLORS = [
+  "var(--color-class-deathknight)",
+  "var(--color-class-mage)",
+  "var(--color-class-druid)",
+  "var(--color-class-warlock)",
+  "var(--color-class-hunter)",
+  "var(--color-class-paladin)",
+  "var(--color-class-rogue)",
+  "var(--color-class-shaman)",
+  "var(--color-class-warrior)",
+];
+
+function colorForKey(key: string): string {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  return INSTANCE_COLORS[Math.abs(hash) % INSTANCE_COLORS.length];
+}
+
+interface DayValue {
+  date: string;
+  views: number;
+  uniqueVisitors: number;
+}
+
+/** Ascending date strings (UTC, YYYY-MM-DD), `count` days ending today. */
+function buildDates(count: number): string[] {
+  const dates: string[] = [];
+  const today = new Date();
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+function seriesFor(byDate: Map<string, { views: number; uniqueVisitors: number }>, dates: string[]): DayValue[] {
+  return dates.map((date) => {
+    const entry = byDate.get(date);
+    return { date, views: entry?.views ?? 0, uniqueVisitors: entry?.uniqueVisitors ?? 0 };
+  });
+}
+
+function sumViews(series: DayValue[]): number {
+  return series.reduce((total, day) => total + day.views, 0);
+}
+
+function pctDelta(current: number, prior: number): number {
+  if (prior <= 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - prior) / prior) * 100);
+}
+
+function formatDayLabel(date: string, rangeDays: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  return rangeDays <= 14
+    ? d.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" }).slice(0, 2)
+    : String(d.getUTCDate());
+}
+
+function formatDayTitle(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+const FULL_WINDOW = 60;
 
 export function GuildAnalytics() {
   const { guildId } = useParams<{ guildId: string }>();
   const { data: pageConfig, isLoading: pageLoading } = useGuildPage(guildId);
   const { data: analytics, isLoading, error } = useGuildResourceAnalytics(guildId);
+  const [range, setRange] = useState<RangeDays>(14);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const summary = useMemo(() => {
-    const rows = analytics?.days ?? [];
-    const today = new Date().toISOString().slice(0, 10);
-    const instances = new Map<string, { name: string; views: number; uniqueVisitors: number }>();
-    const daily = new Map<string, number>();
-    let guildPageViews = 0;
-    let instanceViews = 0;
-    let uniqueViewsToday = 0;
-
-    for (const row of rows) {
-      daily.set(row.viewed_on, (daily.get(row.viewed_on) ?? 0) + row.views);
-      if (row.viewed_on === today) uniqueViewsToday += row.unique_visitors;
-      if (row.resource_kind === "guild_page") {
-        guildPageViews += row.views;
-      } else if (row.resource_kind === "instance") {
-        instanceViews += row.views;
-        const current = instances.get(row.resource_key) ?? {
-          name: row.resource_name,
-          views: 0,
-          uniqueVisitors: 0,
-        };
-        current.views += row.views;
-        current.uniqueVisitors += row.unique_visitors;
-        instances.set(row.resource_key, current);
-      }
-    }
-
-    const dailyRows = [...daily.entries()].sort(([a], [b]) => a.localeCompare(b));
-    const maxDailyViews = Math.max(1, ...dailyRows.map(([, views]) => views));
-
-    return {
-      guildPageViews,
-      instanceViews,
-      uniqueViewsToday,
-      dailyRows,
-      maxDailyViews,
-      instances: [...instances.entries()]
-        .map(([key, value]) => ({ key, ...value }))
-        .sort((a, b) => b.views - a.views),
-    };
-  }, [analytics]);
+  const summary = useMemo(() => buildSummary(analytics?.days ?? [], range), [analytics, range]);
 
   if (pageLoading) {
     return <div className="flex h-64 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" /></div>;
@@ -68,13 +115,36 @@ export function GuildAnalytics() {
       <GuildPageHeader guild={pageConfig.guild} theme={pageConfig.theme} />
 
       <div className="mx-auto max-w-6xl pb-12">
-        <div className="mb-6 flex items-center gap-3">
-          <Link to={`/g/${guildId}`} className="text-muted-foreground transition-colors hover:text-foreground">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="text-lg font-semibold">Guild Analytics</h1>
-            <p className="text-sm text-muted-foreground">A lightweight view of the last {analytics?.lookback_days ?? 30} days.</p>
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Link to={`/g/${guildId}`} className="text-muted-foreground transition-colors hover:text-foreground">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-semibold">Guild Analytics</h1>
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-500">
+                  <Lock className="h-3 w-3" /> Officers only
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">Guild page and raid-log traffic over time.</p>
+            </div>
+          </div>
+          <div className="flex gap-1.5">
+            {RANGE_OPTIONS.map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={cn(
+                  "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+                  r === range
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {r}D
+              </button>
+            ))}
           </div>
         </div>
 
@@ -84,66 +154,153 @@ export function GuildAnalytics() {
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">Failed to load guild analytics.</div>
         ) : (
           <div className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <MetricCard icon={Eye} label="Guild page views" value={summary.guildPageViews} />
-              <MetricCard icon={BarChart3} label="Instance views" value={summary.instanceViews} />
-              <MetricCard icon={Users} label="Unique views today" value={summary.uniqueViewsToday} />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricCard icon={Eye} label="Guild page views" value={compactFormatter.format(summary.guildTotal)}>
+                <DeltaLabel pct={summary.guildDeltaPct} range={range} />
+              </MetricCard>
+              <MetricCard icon={BarChart3} label="Instance views" value={compactFormatter.format(summary.instanceTotalAll)}>
+                <span className="text-xs text-muted-foreground">across {summary.instances.length} tracked instances</span>
+              </MetricCard>
+              <MetricCard icon={Star} label="Most viewed instance" value={summary.instances[0]?.name ?? "—"}>
+                <span className="text-xs text-amber-500">{summary.instances[0] ? `${compactFormatter.format(summary.instances[0].total)} views` : "No views yet"}</span>
+              </MetricCard>
+              <MetricCard icon={CalendarDays} label="Busiest day" value={summary.busiestDay ? formatDayTitle(summary.busiestDay.date) : "—"}>
+                <span className="text-xs text-muted-foreground">{summary.busiestDay ? `${numberFormatter.format(summary.busiestDay.views)} guild page views` : "No views yet"}</span>
+              </MetricCard>
             </div>
 
             <section className="rounded-xl border border-border bg-card p-5">
               <div className="mb-5">
-                <h2 className="font-semibold">Views by day</h2>
-                <p className="text-sm text-muted-foreground">Guild page and guild instance views combined.</p>
+                <h2 className="font-semibold">Guild page traffic</h2>
+                <p className="text-sm text-muted-foreground">Daily views over the last {range} days.</p>
               </div>
-              {summary.dailyRows.length === 0 ? (
+              {summary.guildSeries.every((d) => d.views === 0) ? (
                 <EmptyAnalytics />
               ) : (
                 <div className="styled-scrollbar overflow-x-auto pb-2">
-                  <div className="flex h-44 min-w-[640px] items-end gap-1.5" aria-label="Daily guild resource views">
-                    {summary.dailyRows.map(([date, views]) => (
-                      <div key={date} className="group flex min-w-3 flex-1 flex-col items-center justify-end gap-2">
-                        <div className="invisible rounded bg-popover px-1.5 py-0.5 text-xs shadow group-hover:visible">
-                          {numberFormatter.format(views)}
+                  <div className="flex h-44 min-w-[640px] items-end gap-1.5" aria-label="Daily guild page views">
+                    {summary.guildSeries.map((day, idx) => {
+                      const isPeak = idx === summary.guildPeakIdx && day.views > 0;
+                      return (
+                        <div key={day.date} className="group relative flex min-w-3 flex-1 flex-col items-center justify-end gap-2">
+                          {isPeak && (
+                            <div className="absolute -top-5 whitespace-nowrap text-[10px] font-semibold text-amber-500">
+                              {numberFormatter.format(day.views)}
+                            </div>
+                          )}
+                          <div className="invisible absolute bottom-full mb-1 rounded bg-popover px-1.5 py-0.5 text-xs shadow group-hover:visible">
+                            {formatDayTitle(day.date)} &middot; {numberFormatter.format(day.views)}
+                          </div>
+                          <div
+                            className={cn(
+                              "w-full max-w-[26px] rounded-t transition-colors",
+                              isPeak ? "bg-amber-500" : "bg-primary/60 group-hover:bg-primary",
+                            )}
+                            style={{ height: `${Math.max(4, (day.views / summary.guildMax) * 112)}px` }}
+                          />
+                          <span className="text-[10px] text-muted-foreground">{formatDayLabel(day.date, range)}</span>
                         </div>
-                        <div
-                          className="w-full rounded-t bg-primary/70 transition-colors group-hover:bg-primary"
-                          style={{ height: `${Math.max(4, (views / summary.maxDailyViews) * 112)}px` }}
-                          title={`${date}: ${numberFormatter.format(views)} views`}
-                        />
-                        <span className="text-[10px] text-muted-foreground">{date.slice(5)}</span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
             </section>
 
-            <section className="overflow-hidden rounded-xl border border-border bg-card">
-              <div className="border-b border-border p-5">
-                <h2 className="font-semibold">Instance views</h2>
-                <p className="text-sm text-muted-foreground">Instances without a stable slug are intentionally not tracked.</p>
-              </div>
-              {summary.instances.length === 0 ? (
-                <div className="p-5"><EmptyAnalytics /></div>
-              ) : (
-                <div className="styled-scrollbar overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-sm">
-                    <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <tr><th className="px-5 py-3 font-medium">Instance</th><th className="px-5 py-3 text-right font-medium">Views</th><th className="px-5 py-3 text-right font-medium">Daily unique views</th></tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {summary.instances.map((instance) => (
-                        <tr key={instance.key} className="hover:bg-muted/20">
-                          <td className="px-5 py-3"><Link className="font-medium hover:text-primary" to={`/instances/${instance.key}`}>{instance.name}</Link></td>
-                          <td className="px-5 py-3 text-right tabular-nums">{numberFormatter.format(instance.views)}</td>
-                          <td className="px-5 py-3 text-right tabular-nums">{numberFormatter.format(instance.uniqueVisitors)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr] items-start">
+              <section className="overflow-hidden rounded-xl border border-border bg-card">
+                <div className="border-b border-border p-5">
+                  <h2 className="font-semibold">Top instances &middot; {range}D</h2>
+                  <p className="text-sm text-muted-foreground">Instances without a stable slug are intentionally not tracked.</p>
                 </div>
-              )}
-            </section>
+                {summary.instances.length === 0 ? (
+                  <div className="p-5"><EmptyAnalytics /></div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {summary.instances.slice(0, 10).map((instance, idx) => {
+                      const isExpanded = !!expanded[instance.key];
+                      return (
+                        <div key={instance.key}>
+                          <button
+                            onClick={() => setExpanded((prev) => ({ ...prev, [instance.key]: !prev[instance.key] }))}
+                            className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-muted/20"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            )}
+                            <div className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground">{idx + 1}</div>
+                            <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: instance.color, boxShadow: `0 0 6px ${instance.color}55` }} />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-medium">{instance.name}</div>
+                              <div className="mt-1 flex h-6 items-end gap-[3px]">
+                                {instance.sparkline.map((day) => (
+                                  <div
+                                    key={day.date}
+                                    title={`${formatDayTitle(day.date)} — ${numberFormatter.format(day.views)} views`}
+                                    className="w-[5px] rounded-[1px]"
+                                    style={{ height: `${Math.max(18, (day.views / instance.sparkMax) * 100)}%`, background: instance.color }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <div className="font-mono text-sm">{compactFormatter.format(instance.total)}</div>
+                              <DeltaLabel pct={instance.deltaPct} range={range} compact />
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="px-5 pb-4 pl-11">
+                              <div className="flex h-16 items-end gap-1 mb-2">
+                                {instance.series.map((day) => (
+                                  <div
+                                    key={day.date}
+                                    title={`${formatDayTitle(day.date)} — ${numberFormatter.format(day.views)} views`}
+                                    className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
+                                  >
+                                    <div
+                                      className="w-full max-w-[18px] rounded-t opacity-85"
+                                      style={{ height: `${Math.max(6, (day.views / instance.seriesMax) * 100)}%`, background: instance.color }}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                              <Link to={`/instances/${instance.key}`} className="text-xs text-amber-500 hover:text-amber-400">
+                                Open instance page &rarr;
+                              </Link>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-xl border border-border bg-card p-5">
+                <h2 className="mb-4 font-semibold">Top 5 &middot; {range}D</h2>
+                {summary.top5.length === 0 ? (
+                  <EmptyAnalytics />
+                ) : (
+                  <>
+                    <Podium entries={summary.top5.slice(0, 3)} />
+                    {summary.top5.slice(3, 5).map((entry, idx) => (
+                      <Link
+                        key={entry.key}
+                        to={`/instances/${entry.key}`}
+                        className="flex items-center gap-2.5 border-t border-border px-1 py-2 text-sm transition-colors hover:bg-muted/20 -mx-1"
+                      >
+                        <div className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground">{idx + 4}</div>
+                        <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: entry.color }} />
+                        <div className="min-w-0 flex-1 truncate text-muted-foreground">{entry.name}</div>
+                        <div className="font-mono text-xs">{compactFormatter.format(entry.total)}</div>
+                      </Link>
+                    ))}
+                  </>
+                )}
+              </section>
+            </div>
 
             <p className="text-xs text-muted-foreground">
               Unique views use a first-party browser cookie and are deduplicated per resource per UTC day. Counts may differ when visitors clear cookies or use another browser.
@@ -155,15 +312,147 @@ export function GuildAnalytics() {
   );
 }
 
-function MetricCard({ icon: Icon, label, value }: { icon: typeof Eye; label: string; value: number }) {
+function MetricCard({ icon: Icon, label, value, children }: { icon: typeof Eye; label: string; value: string; children?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground"><Icon className="h-4 w-4" />{label}</div>
-      <div className="text-3xl font-semibold tabular-nums">{numberFormatter.format(value)}</div>
+      <div className="truncate text-2xl font-semibold tabular-nums" title={value}>{value}</div>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+function DeltaLabel({ pct, range, compact }: { pct: number; range: number; compact?: boolean }) {
+  const Icon = pct >= 0 ? TrendingUp : TrendingDown;
+  return (
+    <div className={cn("flex items-center gap-1 text-xs", pct >= 0 ? "text-emerald-500" : "text-muted-foreground", compact && "justify-end")}>
+      <Icon className="h-3 w-3" />
+      {pct >= 0 ? "+" : ""}{pct}% {!compact && `vs prior ${range}d`}
+    </div>
+  );
+}
+
+const MEDAL = [
+  { emoji: "🥇", ring: "border-yellow-500/40", text: "text-yellow-400", h: "h-[92px]" },
+  { emoji: "🥈", ring: "border-slate-400/30", text: "text-slate-300", h: "h-[70px]" },
+  { emoji: "🥉", ring: "border-amber-700/30", text: "text-amber-600", h: "h-[58px]" },
+] as const;
+const PODIUM_ORDER = [1, 0, 2] as const;
+
+function Podium({ entries }: { entries: InstanceSummary[] }) {
+  return (
+    <div className="mb-2 flex items-end justify-center gap-2">
+      {PODIUM_ORDER.map((rank) => {
+        const entry = entries[rank];
+        const medal = MEDAL[rank];
+        if (!entry) return <div key={rank} className="flex-1" />;
+        return (
+          <Link
+            key={entry.key}
+            to={`/instances/${entry.key}`}
+            className="flex flex-1 flex-col items-center gap-2 text-center"
+          >
+            <div
+              className={cn("flex items-center justify-center rounded-full border-2", rank === 0 ? "h-12 w-12 text-xl" : "h-10 w-10 text-base", medal.ring)}
+              style={{ background: `radial-gradient(circle at 35% 30%, ${entry.color}55, transparent)` }}
+            >
+              {medal.emoji}
+            </div>
+            <div className="w-full min-w-0 truncate text-xs font-medium">{entry.name}</div>
+            <div className={cn("flex w-full flex-col items-center justify-center rounded-t-lg border", medal.h, rank === 0 ? "border-amber-500/40 bg-amber-500/10" : "border-border bg-muted/20")}>
+              <div className="font-semibold tabular-nums">{compactFormatter.format(entry.total)}</div>
+              <div className="mt-0.5 text-[9px] tracking-wide text-muted-foreground">RANK {rank + 1}</div>
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }
 
 function EmptyAnalytics() {
   return <div className="py-8 text-center text-sm text-muted-foreground">No views recorded yet.</div>;
+}
+
+interface InstanceSummary {
+  key: string;
+  name: string;
+  color: string;
+  total: number;
+  deltaPct: number;
+  series: DayValue[];
+  seriesMax: number;
+  sparkline: DayValue[];
+  sparkMax: number;
+}
+
+function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: RangeDays) {
+  const guildPageByDate = new Map<string, { views: number; uniqueVisitors: number }>();
+  const instanceNames = new Map<string, string>();
+  const instanceByDate = new Map<string, Map<string, { views: number; uniqueVisitors: number }>>();
+
+  for (const row of rows) {
+    if (row.resource_kind === "guild_page") {
+      const cur = guildPageByDate.get(row.viewed_on) ?? { views: 0, uniqueVisitors: 0 };
+      cur.views += row.views;
+      cur.uniqueVisitors += row.unique_visitors;
+      guildPageByDate.set(row.viewed_on, cur);
+    } else if (row.resource_kind === "instance") {
+      instanceNames.set(row.resource_key, row.resource_name);
+      let byDate = instanceByDate.get(row.resource_key);
+      if (!byDate) {
+        byDate = new Map();
+        instanceByDate.set(row.resource_key, byDate);
+      }
+      const cur = byDate.get(row.viewed_on) ?? { views: 0, uniqueVisitors: 0 };
+      cur.views += row.views;
+      cur.uniqueVisitors += row.unique_visitors;
+      byDate.set(row.viewed_on, cur);
+    }
+  }
+
+  const fullWindow = buildDates(FULL_WINDOW);
+  const currentDates = fullWindow.slice(-range);
+  const priorDates = fullWindow.slice(-(range * 2), -range);
+  const last7Dates = fullWindow.slice(-7);
+
+  const guildSeries = seriesFor(guildPageByDate, currentDates);
+  const guildMax = Math.max(1, ...guildSeries.map((d) => d.views));
+  const guildPeakIdx = guildSeries.reduce((best, day, idx) => (day.views > guildSeries[best].views ? idx : best), 0);
+  const guildTotal = sumViews(guildSeries);
+  const guildPriorTotal = sumViews(seriesFor(guildPageByDate, priorDates));
+
+  const instances: InstanceSummary[] = [...instanceNames.entries()]
+    .map(([key, name]) => {
+      const byDate = instanceByDate.get(key) ?? new Map();
+      const series = seriesFor(byDate, currentDates);
+      const sparkline = seriesFor(byDate, last7Dates);
+      return {
+        key,
+        name,
+        color: colorForKey(key),
+        total: sumViews(series),
+        deltaPct: pctDelta(sumViews(series), sumViews(seriesFor(byDate, priorDates))),
+        series,
+        seriesMax: Math.max(1, ...series.map((d) => d.views)),
+        sparkline,
+        sparkMax: Math.max(1, ...sparkline.map((d) => d.views)),
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+
+  const instanceTotalAll = instances.reduce((total, inst) => total + inst.total, 0);
+  const busiestDay = guildTotal > 0 ? guildSeries[guildPeakIdx] : null;
+
+  return {
+    guildSeries,
+    guildMax,
+    guildPeakIdx,
+    guildTotal,
+    guildDeltaPct: pctDelta(guildTotal, guildPriorTotal),
+    instances,
+    instanceTotalAll,
+    busiestDay,
+    top5: instances.slice(0, 5),
+  };
 }

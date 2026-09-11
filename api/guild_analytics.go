@@ -11,7 +11,9 @@ import (
 	"github.com/google/uuid"
 )
 
-const guildAnalyticsLookbackDays int32 = 30
+// 60 days so the frontend can compute "vs prior period" deltas for its
+// widest (30D) range selector, in addition to the raw daily series.
+const guildAnalyticsLookbackDays int32 = 60
 
 func (api *API) trackGuildPageView(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
