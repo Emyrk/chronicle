@@ -189,33 +189,31 @@ export function GuildAnalytics() {
               {summary.guildSeries.every((d) => metricValue(d, metric) === 0) ? (
                 <EmptyAnalytics />
               ) : (
-                <div className="styled-scrollbar overflow-x-auto pb-2">
-                  <div className="flex h-44 min-w-[640px] items-end gap-1.5" aria-label={`Daily guild page ${METRIC_UNIT[metric]}`}>
-                    {summary.guildSeries.map((day, idx) => {
-                      const value = metricValue(day, metric);
-                      const isPeak = idx === summary.guildPeakIdx && value > 0;
-                      return (
-                        <div key={day.date} className="group relative flex min-w-3 flex-1 flex-col items-center justify-end gap-2">
-                          {isPeak && (
-                            <div className="absolute -top-5 whitespace-nowrap text-[10px] font-semibold text-amber-500">
-                              {numberFormatter.format(value)}
-                            </div>
-                          )}
-                          <div className="invisible absolute bottom-full mb-1 whitespace-nowrap rounded bg-popover px-1.5 py-0.5 text-xs shadow group-hover:visible">
-                            {formatDayTitle(day.date)} &middot; {numberFormatter.format(value)} {METRIC_UNIT[metric]}
+                <div className="flex h-44 items-end gap-1 sm:gap-1.5" aria-label={`Daily guild page ${METRIC_UNIT[metric]}`}>
+                  {summary.guildSeries.map((day, idx) => {
+                    const value = metricValue(day, metric);
+                    const isPeak = idx === summary.guildPeakIdx && value > 0;
+                    return (
+                      <div key={day.date} className="group relative flex flex-1 flex-col items-center justify-end gap-2">
+                        {isPeak && (
+                          <div className="absolute -top-5 whitespace-nowrap text-[10px] font-semibold text-amber-500">
+                            {numberFormatter.format(value)}
                           </div>
-                          <div
-                            className={cn(
-                              "w-full max-w-[26px] rounded-t transition-colors",
-                              isPeak ? "bg-amber-500" : "bg-primary/60 group-hover:bg-primary",
-                            )}
-                            style={{ height: `${Math.max(4, (value / summary.guildMax) * 112)}px` }}
-                          />
-                          <span className="text-[10px] text-muted-foreground">{formatDayLabel(day.date, range)}</span>
+                        )}
+                        <div className="invisible absolute bottom-full mb-1 whitespace-nowrap rounded bg-popover px-1.5 py-0.5 text-xs shadow group-hover:visible">
+                          {formatDayTitle(day.date)} &middot; {numberFormatter.format(value)} {METRIC_UNIT[metric]}
                         </div>
-                      );
-                    })}
-                  </div>
+                        <div
+                          className={cn(
+                            "w-full max-w-[26px] rounded-t transition-colors",
+                            isPeak ? "bg-amber-500" : "bg-primary/60 group-hover:bg-primary",
+                          )}
+                          style={{ height: `${Math.max(4, (value / summary.guildMax) * 112)}px` }}
+                        />
+                        <span className="text-[10px] text-muted-foreground">{formatDayLabel(day.date, range)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </section>
