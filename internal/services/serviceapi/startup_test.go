@@ -20,8 +20,11 @@ func TestStartupPageHandler(t *testing.T) {
 	require.Equal(t, "no-store", recorder.Header().Get("Cache-Control"))
 	require.Equal(t, "5", recorder.Header().Get("Retry-After"))
 	require.Contains(t, recorder.Body.String(), "Consulting the archives")
+	require.Contains(t, recorder.Body.String(), "src=\"/example-not-ready/logo.png\"")
 	require.Contains(t, recorder.Body.String(), "id=\"countdown\">5")
-	require.Contains(t, recorder.Body.String(), "window.location.reload()")
+	require.Contains(t, recorder.Body.String(), "window.fetch(\"/api/v1/healthz\"")
+	require.Contains(t, recorder.Body.String(), "if (response.ok && !preview)")
+	require.NotContains(t, recorder.Body.String(), "http-equiv=\"refresh\"")
 	require.NotContains(t, recorder.Body.String(), "database")
 }
 
@@ -49,4 +52,10 @@ func TestSwitchableHandler(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, preview.Code)
 	require.Contains(t, preview.Body.String(), "Consulting the archives")
 	require.Contains(t, preview.Body.String(), "Trying again in")
+
+	logo := httptest.NewRecorder()
+	handler.ServeHTTP(logo, httptest.NewRequest(http.MethodGet, startupLogoPath, nil))
+	require.Equal(t, http.StatusOK, logo.Code)
+	require.Equal(t, "image/png", logo.Header().Get("Content-Type"))
+	require.Equal(t, startupLogo, logo.Body.Bytes())
 }

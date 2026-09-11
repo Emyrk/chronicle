@@ -2,20 +2,26 @@ package serviceapi
 
 import (
 	"context"
+	_ "embed"
 	"io"
 	"log/slog"
 	"net/http"
 	"sync"
 )
 
-const startupPagePreviewPath = "/example-not-ready"
+const (
+	startupPagePreviewPath = "/example-not-ready"
+	startupLogoPath        = startupPagePreviewPath + "/logo.png"
+)
+
+//go:embed startup-logo.png
+var startupLogo []byte
 
 const startupPage = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="6">
   <title>Chronicle is getting ready</title>
   <style>
     :root { color-scheme: dark; font-family: Georgia, "Times New Roman", serif; }
@@ -36,17 +42,13 @@ const startupPage = `<!doctype html>
       content: "";
     }
     main { position: relative; width: min(34rem, calc(100% - 3rem)); text-align: center; }
-    .rune {
-      display: grid;
-      width: 4.5rem;
-      height: 4.5rem;
+    .logo {
+      display: block;
+      width: 5.5rem;
+      height: 5.5rem;
       margin: 0 auto 1.75rem;
-      place-items: center;
-      border: 1px solid #8f6f3b;
-      border-radius: 50%;
-      box-shadow: 0 0 2rem #b9853026, inset 0 0 1.25rem #b9853014;
-      color: #d8ad64;
-      font-size: 2rem;
+      object-fit: contain;
+      filter: drop-shadow(0 0 1.25rem #b9853040);
       animation: breathe 2.4s ease-in-out infinite;
     }
     h1 { margin: 0 0 0.75rem; font-size: clamp(2rem, 7vw, 3.25rem); font-weight: 400; letter-spacing: -0.04em; }
@@ -54,35 +56,59 @@ const startupPage = `<!doctype html>
     .retry { display: flex; align-items: center; justify-content: center; gap: 0.65rem; margin-top: 2rem; color: #796e5b; font: 0.72rem ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
     .timer { min-width: 2ch; color: #d8ad64; font-variant-numeric: tabular-nums; }
     .track { width: 5rem; height: 1px; overflow: hidden; background: #3f372b; }
-    .track::after { display: block; width: 100%; height: 100%; background: #c8974e; content: ""; transform-origin: left; animation: drain 5s linear forwards; }
-    @keyframes breathe { 50% { border-color: #d8ad64; box-shadow: 0 0 2.5rem #b9853040, inset 0 0 1.5rem #b9853020; transform: scale(1.04); } }
+    .track::after { display: block; width: 100%; height: 100%; background: #c8974e; content: ""; transform-origin: left; }
+    .track.running::after { animation: drain 5s linear forwards; }
+    @keyframes breathe { 50% { filter: drop-shadow(0 0 1.75rem #b9853066); transform: scale(1.04); } }
     @keyframes drain { to { transform: scaleX(0); } }
-    @media (prefers-reduced-motion: reduce) { .rune, .track::after { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { .logo, .track::after { animation: none; } }
   </style>
 </head>
 <body>
   <main>
-    <div class="rune" aria-hidden="true">C</div>
+    <img class="logo" src="/example-not-ready/logo.png" alt="Chronicle">
     <h1>Consulting the archives...</h1>
     <p class="message">The scribes are shuffling a few things into place.</p>
     <div class="retry" aria-live="polite">
       <span>Trying again in</span>
       <span class="timer" id="countdown">5</span>
       <span>seconds</span>
-      <span class="track" aria-hidden="true"></span>
+      <span class="track running" aria-hidden="true"></span>
     </div>
   </main>
   <script>
     (() => {
-      let remaining = 5;
+      const retrySeconds = 5;
       const countdown = document.getElementById("countdown");
-      const timer = window.setInterval(() => {
+      const track = document.querySelector(".track");
+      const preview = window.location.pathname === "/example-not-ready";
+      let remaining = retrySeconds;
+      let checking = false;
+
+      const restartCountdown = () => {
+        remaining = retrySeconds;
+        countdown.textContent = String(remaining);
+        track.classList.remove("running");
+        void track.offsetWidth;
+        track.classList.add("running");
+      };
+
+      window.setInterval(async () => {
         remaining -= 1;
         countdown.textContent = String(Math.max(remaining, 0));
-        if (remaining <= 0) {
-          window.clearInterval(timer);
-          window.location.reload();
+        if (remaining > 0 || checking) return;
+
+        checking = true;
+        try {
+          const response = await window.fetch("/api/v1/healthz", { cache: "no-store" });
+          if (response.ok && !preview) {
+            window.location.reload();
+            return;
+          }
+        } catch (_) {
+          // The server may briefly be unavailable while it changes over.
         }
+        restartCountdown();
+        checking = false;
       }, 1000);
     })();
   </script>
@@ -106,6 +132,10 @@ func (h *switchableHandler) Set(handler http.Handler) {
 }
 
 func (h *switchableHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == startupLogoPath {
+		startupLogoHandler().ServeHTTP(w, r)
+		return
+	}
 	if r.URL.Path == startupPagePreviewPath {
 		startupPageHandler().ServeHTTP(w, r)
 		return
@@ -115,6 +145,14 @@ func (h *switchableHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler := h.handler
 	h.mu.RUnlock()
 	handler.ServeHTTP(w, r)
+}
+
+func startupLogoHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(startupLogo)
+	})
 }
 
 func startupPageHandler() http.Handler {
