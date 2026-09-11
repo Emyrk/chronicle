@@ -115,7 +115,7 @@ export function GuildAnalytics() {
             </Link>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold">Guild Analytics</h1>
+                <h1 className="text-lg font-semibold">Popularity</h1>
                 <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-500">
                   <Lock className="h-3 w-3" /> Officers only
                 </span>
