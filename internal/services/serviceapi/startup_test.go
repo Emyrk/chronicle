@@ -19,8 +19,10 @@ func TestStartupPageHandler(t *testing.T) {
 	require.Equal(t, "text/html; charset=utf-8", recorder.Header().Get("Content-Type"))
 	require.Equal(t, "no-store", recorder.Header().Get("Cache-Control"))
 	require.Equal(t, "5", recorder.Header().Get("Retry-After"))
-	require.Contains(t, recorder.Body.String(), "Please wait")
-	require.Contains(t, recorder.Body.String(), "updating its database")
+	require.Contains(t, recorder.Body.String(), "Consulting the archives")
+	require.Contains(t, recorder.Body.String(), "id=\"countdown\">5")
+	require.Contains(t, recorder.Body.String(), "window.location.reload()")
+	require.NotContains(t, recorder.Body.String(), "database")
 }
 
 func TestSwitchableHandler(t *testing.T) {
@@ -45,5 +47,6 @@ func TestSwitchableHandler(t *testing.T) {
 	preview := httptest.NewRecorder()
 	handler.ServeHTTP(preview, httptest.NewRequest(http.MethodGet, startupPagePreviewPath, nil))
 	require.Equal(t, http.StatusServiceUnavailable, preview.Code)
-	require.Contains(t, preview.Body.String(), "Please wait")
+	require.Contains(t, preview.Body.String(), "Consulting the archives")
+	require.Contains(t, preview.Body.String(), "Trying again in")
 }
