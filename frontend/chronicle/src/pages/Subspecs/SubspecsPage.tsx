@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ArrowLeft, Check, ChevronRight, Info } from "lucide-react"
+import { ArrowLeft, Check, ChevronRight, Info, TriangleAlert } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useSiteConfig } from "@/api/queries"
 import { specializationIconUrl } from "@/config/specializationIcon"
@@ -51,6 +51,20 @@ export function SubspecsPage() {
         </section>
       ) : (
         <>
+          <section className="mb-8 rounded-xl border border-amber-300/20 bg-amber-300/5 p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+              <div>
+                <h2 className="font-semibold text-amber-100">Subspecs are an approximation</h2>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  Chronicle classifies subspecs from a small set of talent markers. Hybrid or unusual
+                  builds may be grouped unexpectedly, and a subspec does not confirm a player&apos;s
+                  role, gear, rotation, or assignment in a specific encounter.
+                </p>
+              </div>
+            </div>
+          </section>
+
           <section aria-labelledby="choose-class" className="mb-8">
             <h2
               id="choose-class"
@@ -128,6 +142,22 @@ export function SubspecsPage() {
                   </div>
 
                   <div className="space-y-6 p-5 sm:p-6">
+                    {rule.className === "Druid" && (
+                      <div className="rounded-xl border border-sky-300/20 bg-sky-300/5 p-4">
+                        <div className="flex items-start gap-3">
+                          <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
+                          <div>
+                            <h3 className="font-semibold text-sky-100">Spec only, not active form</h3>
+                            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                              Chronicle only checks the player&apos;s Feral talent spec. We do not
+                              check whether they are actually in Bear Form or Cat Form during the
+                              encounter.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid gap-3 sm:grid-cols-2">
                       {rule.subspecs.map((subspec) => {
                         const detected = subspec.name === rule.detectedSubspec
