@@ -173,11 +173,77 @@ export interface AdminRankingRunSummaryRebuildResponse {
  * AdminRankingRunSummaryStatusResponse describes the durable player-run summary rebuild queue.
  */
 export interface AdminRankingRunSummaryStatusResponse {
+    readonly logical_run_count: number;
+    readonly current_run_count: number;
+    readonly missing_run_count: number;
+    readonly stale_run_count: number;
     readonly queue_depth: number;
     readonly oldest_dirty_at?: string;
     readonly oldest_dirty_age_seconds: number;
     readonly observed_at: string;
     readonly summary_version: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * AdminRankingSummaryBackfill is a persisted, resumable backfill execution.
+ */
+export interface AdminRankingSummaryBackfill {
+    readonly id: string;
+    readonly tenant_id?: string;
+    readonly requested_by: string;
+    readonly status: string;
+    readonly target_summary_version: number;
+    readonly batch_size: number;
+    readonly max_batches: number;
+    readonly delay_ms: number;
+    readonly preview: AdminRankingSummaryBackfillPreview;
+    readonly cursor_run_id: string;
+    readonly batches_completed: number;
+    readonly runs_marked_dirty: number;
+    readonly created_at: string;
+    readonly started_at?: string;
+    readonly last_progress_at?: string;
+    readonly last_error_at?: string;
+    readonly completed_at?: string;
+    readonly error_message?: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * AdminRankingSummaryBackfillPreview classifies logical ranking runs for a target version.
+ */
+export interface AdminRankingSummaryBackfillPreview {
+    readonly target_summary_version: number;
+    readonly tenant_id?: string;
+    readonly total_runs: number;
+    readonly source_rows: number;
+    readonly missing_runs: number;
+    readonly stale_runs: number;
+    readonly current_runs: number;
+    readonly dirty_runs: number;
+    readonly estimated_wal_bytes: number | null;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * AdminRankingSummaryBackfillRequest creates a planned record without executing it.
+ */
+export interface AdminRankingSummaryBackfillRequest {
+    readonly tenant_id?: string;
+    readonly target_summary_version: number;
+    readonly batch_size: number;
+    readonly max_batches: number;
+    readonly delay_ms: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * AdminRankingSummaryBackfillsResponse returns a live preview and the latest persisted plan.
+ */
+export interface AdminRankingSummaryBackfillsResponse {
+    readonly preview: AdminRankingSummaryBackfillPreview;
+    readonly latest?: AdminRankingSummaryBackfill;
 }
 
 // From chroniclesdk/rankings.go

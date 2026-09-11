@@ -14,6 +14,7 @@ import (
 
 type sqlcQuerier interface {
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
+	AdvanceRankingSummaryBackfill(ctx context.Context, arg AdvanceRankingSummaryBackfillParams) (RankingSummaryBackfill, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
 	// Populate a pending snapshot's members from eligible encounter_dps_rankings rows.
 	// Boss kills only (encounter_id IS NOT NULL), deduplicated by duplicate group
@@ -70,6 +71,7 @@ type sqlcQuerier interface {
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
 	CreateRaidComposition(ctx context.Context, arg CreateRaidCompositionParams) (RaidComposition, error)
+	CreateRankingSummaryBackfill(ctx context.Context, arg CreateRankingSummaryBackfillParams) (RankingSummaryBackfill, error)
 	CreateSharedView(ctx context.Context, arg CreateSharedViewParams) (SharedView, error)
 	CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error)
 	CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error)
@@ -130,6 +132,7 @@ type sqlcQuerier interface {
 	DeleteWorld(ctx context.Context, id uuid.UUID) error
 	DeleteYoutubeVideoByInstanceOrSlug(ctx context.Context, arg DeleteYoutubeVideoByInstanceOrSlugParams) error
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
+	FailRankingSummaryBackfill(ctx context.Context, arg FailRankingSummaryBackfillParams) error
 	FindDuplicateInstanceCandidates(ctx context.Context, arg FindDuplicateInstanceCandidatesParams) ([]FindDuplicateInstanceCandidatesRow, error)
 	// Matches an existing log group by all available instance identity criteria:
 	// instance_token (unique per instance, immune to AzerothCore ID reuse),
@@ -301,6 +304,7 @@ type sqlcQuerier interface {
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	GetRankingRunSummary(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	GetRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
+	GetRankingSummaryBackfill(ctx context.Context, id uuid.UUID) (RankingSummaryBackfill, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
 	GetRealmsWithRetentionPolicies(ctx context.Context) ([]uuid.UUID, error)
@@ -524,6 +528,7 @@ type sqlcQuerier interface {
 	InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error)
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
+	LatestRankingSummaryBackfill(ctx context.Context, arg LatestRankingSummaryBackfillParams) (RankingSummaryBackfill, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
 	ListAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationsByDatasetRow, error)
 	ListAllRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error)
@@ -635,7 +640,10 @@ type sqlcQuerier interface {
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
+	MarkRankingSummaryBackfillBatch(ctx context.Context, backfillID uuid.UUID) ([]uuid.UUID, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
+	PauseRankingSummaryBackfill(ctx context.Context, id uuid.UUID) (RankingSummaryBackfill, error)
+	PreviewRankingSummaryBackfill(ctx context.Context, arg PreviewRankingSummaryBackfillParams) (PreviewRankingSummaryBackfillRow, error)
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
@@ -645,6 +653,9 @@ type sqlcQuerier interface {
 	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Transition a pending time-parse snapshot to published. Idempotent on already-published.
 	PublishTimeParseSnapshot(ctx context.Context, id uuid.UUID) (TimeParseSnapshot, error)
+	// Cross-tenant status for the admin repair controls. A single source scan derives
+	// the logical runs; dirty age is measured in seconds for stable SDK serialization.
+	RankingRunSummaryBackfillStatus(ctx context.Context, summaryVersion int16) (RankingRunSummaryBackfillStatusRow, error)
 	RankingRunSummaryDirtyStatus(ctx context.Context) (RankingRunSummaryDirtyStatusRow, error)
 	// Resolves the current representative physical instance for one logical run using
 	// the exact ordering from RankingsLeaderboardSlow, then aggregates one row per
@@ -742,6 +753,7 @@ type sqlcQuerier interface {
 	SetDiscordAnnouncementDeliveryError(ctx context.Context, arg SetDiscordAnnouncementDeliveryErrorParams) error
 	SetDiscordAnnouncementMessage(ctx context.Context, arg SetDiscordAnnouncementMessageParams) (GuildDiscordLogAnnouncement, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
+	SetLocalRankingSummaryBackfillStatementTimeout(ctx context.Context) error
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)
 	SetResetToken(ctx context.Context, arg SetResetTokenParams) error
@@ -782,6 +794,7 @@ type sqlcQuerier interface {
 	SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error)
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
+	StartRankingSummaryBackfill(ctx context.Context, id uuid.UUID) (RankingSummaryBackfill, error)
 	TelemetryGetActiveFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetDeletedFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetLogCountByZone(ctx context.Context) ([]TelemetryGetLogCountByZoneRow, error)

@@ -156,6 +156,8 @@ func (s *Service) Start(ctx context.Context) error {
 
 	// Register ranking workers and periodic jobs.
 	rank := servicerankings.Rankings(s.broker)
+	rank.RunSummaryBackfillWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RunSummaryBackfillWorker)
 	riverqueue.AddWorker(q, rank.RunSummaryWorker)
 	rank.SummaryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.SummaryDispatchWorker)
