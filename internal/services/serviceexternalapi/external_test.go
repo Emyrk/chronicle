@@ -233,6 +233,9 @@ func TestListIndividualLeaderboardMatchesRankingsQueryContract(t *testing.T) {
 	service.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "public, max-age=300", rec.Header().Get("Cache-Control"))
+	require.Empty(t, rec.Header().Get("RateLimit-Limit"))
+	require.Empty(t, rec.Header().Get("RateLimit-Remaining"))
 	require.Equal(t, database.RankingsLeaderboardParams{
 		Metric: "hps", QueryOffset: 2, QueryLimit: 2,
 		Class: "DEATH_KNIGHT", Spec: "Frost", SubSpec: "Dual Wield", Role: "heal",
@@ -315,6 +318,9 @@ func TestListSpeedrunLeaderboardIncludesCanonicalAndDuplicateLogs(t *testing.T) 
 	service.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "public, max-age=300", rec.Header().Get("Cache-Control"))
+	require.Empty(t, rec.Header().Get("RateLimit-Limit"))
+	require.Empty(t, rec.Header().Get("RateLimit-Remaining"))
 	require.True(t, store.leaderboardParams.UseRankedTiming)
 	require.Equal(t, "Molten Core", store.leaderboardParams.InstanceName)
 	require.Equal(t, []string{"Example Realm"}, store.leaderboardParams.RealmNames)
@@ -360,6 +366,8 @@ func TestSpeedrunLeaderboardRejectsPageSizeAboveMaximum(t *testing.T) {
 	service.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Empty(t, rec.Header().Get("Cache-Control"))
+	require.Equal(t, "60", rec.Header().Get("RateLimit-Limit"))
 }
 
 func TestExternalSpeedrunTiming(t *testing.T) {

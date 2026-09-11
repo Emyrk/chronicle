@@ -340,6 +340,7 @@ func (s *Service) listIndividualLeaderboard(w http.ResponseWriter, r *http.Reque
 		entries = append(entries, entry)
 	}
 
+	markLeaderboardCacheable(w)
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.RankingsLeaderboardResponse{
 		Entries:    entries,
 		TotalCount: totalCount,
@@ -475,10 +476,20 @@ func (s *Service) listSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	markLeaderboardCacheable(w)
 	httpapi.Write(ctx, w, http.StatusOK, SpeedrunLeaderboardResponse{
 		Timing: timing, Entries: entries,
 		Pagination: Pagination{Page: page, PageSize: pageSize, HasMore: hasMore},
 	})
+}
+
+// markLeaderboardCacheable makes successful public leaderboard responses
+// eligible for Chronicle's shared CDN cache. Per-client rate-limit headers must
+// not be stored in a response that Cloudflare can serve to other clients.
+func markLeaderboardCacheable(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Header().Del("RateLimit-Limit")
+	w.Header().Del("RateLimit-Remaining")
 }
 
 func normalizeIndividualLeaderboardMetric(metric string) string {
