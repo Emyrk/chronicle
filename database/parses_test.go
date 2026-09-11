@@ -264,6 +264,93 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	}
 }
 
+func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
+	t.Parallel()
+
+	_, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{
+		ID: userID, Username: "u-" + userID.String()[:8],
+	})
+	require.NoError(t, err)
+
+	logGroupID := uuid.New()
+	baseTime := time.Date(2026, 7, 26, 18, 0, 0, 0, time.UTC)
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+		CreatedAt: database.Timestamptz(baseTime), UpdatedAt: database.Timestamptz(baseTime),
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+
+	canonicalID := uuid.New()
+	duplicateID := uuid.New()
+	unrelatedID := uuid.New()
+	for _, instance := range []struct {
+		id   uuid.UUID
+		name string
+	}{
+		{id: canonicalID, name: "Molten Core"},
+		{id: duplicateID, name: "Molten Core"},
+		{id: unrelatedID, name: "Blackwing Lair"},
+	} {
+		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: instance.id, RealmID: realmID, LogGroupID: logGroupID,
+			Name: instance.name, Capabilities: []string{},
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: canonicalID, Valid: true},
+		Ids:              []uuid.UUID{canonicalID, duplicateID},
+	}))
+
+	insertEncounterRanking := func(instanceID uuid.UUID, instanceName, encounterName string, healing int64, killedAt time.Time) {
+		t.Helper()
+		encounterID := uuid.New()
+		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
+			ID: encounterID, InstanceID: instanceID, Name: encounterName,
+			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
+			StartTime: database.Timestamptz(killedAt.Add(-10 * time.Second)),
+			EndTime:   database.Timestamptz(killedAt),
+		})
+		require.NoError(t, err)
+
+		require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+			InstanceID:  instanceID, EncounterName: encounterName, InstanceName: instanceName,
+			PlayerGuid: "P-HEALER", PlayerName: "Healer", PlayerClass: "PRIEST",
+			PlayerSpec: "Holy", PlayerRole: "heal", PlayerLevel: 60,
+			DifficultyName: "", MaxPlayers: 40, RealmID: realmID, RealmName: "test-realm",
+			HealingDone: healing, DurationSecs: 10, Hps: float64(healing) / 10,
+			KilledAt: database.Timestamptz(killedAt), LogHashedSlug: instanceID.String(),
+		}))
+	}
+
+	// The canonical upload is truncated, so only the complete duplicate should
+	// contribute to the Molten Core distribution. The unrelated instance ensures
+	// instance-scoped representative selection preserves query results.
+	insertEncounterRanking(canonicalID, "Molten Core", "Lucifron", 100, baseTime)
+	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", 900, baseTime)
+	insertEncounterRanking(duplicateID, "Molten Core", "Magmadar", 900, baseTime.Add(time.Minute))
+	insertEncounterRanking(unrelatedID, "Blackwing Lair", "Razorgore", 5000, baseTime)
+
+	rows, err := store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
+		Metric:         "hps",
+		InstanceNames:  []string{"Molten Core"},
+		EncounterNames: []string{"Lucifron", "Magmadar"},
+		GroupByClass:   false,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "PRIEST", rows[0].PlayerClass)
+	assert.Equal(t, "Holy", rows[0].PlayerSpec)
+	assert.Equal(t, int64(1), rows[0].Count)
+	assert.Equal(t, 90.0, rows[0].MedianDps)
+}
+
 func TestRankingSnapshots(t *testing.T) {
 	t.Parallel()
 

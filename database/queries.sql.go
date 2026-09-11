@@ -11121,6 +11121,11 @@ WITH representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
+    -- Scope representative selection before calculating boss coverage. Without
+    -- this filter, an instance-specific box plot ranks duplicate uploads for
+    -- every instance in the database and discards unrelated runs only later.
+    WHERE (cardinality($2 :: text[]) = 0
+           OR li.name = ANY($2 :: text[]))
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
