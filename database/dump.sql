@@ -274,19 +274,11 @@ BEGIN
     )
     ON CONFLICT (run_id) DO UPDATE SET
         tenant_id = EXCLUDED.tenant_id,
-        generation = CASE
-            WHEN ranking_run_summary_dirty.last_transaction_id
-                 IS DISTINCT FROM EXCLUDED.last_transaction_id
-            THEN ranking_run_summary_dirty.generation + 1
-            ELSE ranking_run_summary_dirty.generation
-        END,
+        generation = ranking_run_summary_dirty.generation + 1,
         last_transaction_id = EXCLUDED.last_transaction_id,
-        updated_at = CASE
-            WHEN ranking_run_summary_dirty.last_transaction_id
-                 IS DISTINCT FROM EXCLUDED.last_transaction_id
-            THEN EXCLUDED.updated_at
-            ELSE ranking_run_summary_dirty.updated_at
-        END;
+        updated_at = EXCLUDED.updated_at
+    WHERE ranking_run_summary_dirty.last_transaction_id
+          IS DISTINCT FROM EXCLUDED.last_transaction_id;
 END;
 $$;
 
@@ -3222,21 +3214,11 @@ CREATE POLICY tenant_admin_bypass ON wow_servers USING ((current_setting('app.te
 CREATE POLICY tenant_isolation ON encounter_dps_rankings USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
 
-CREATE POLICY tenant_isolation ON ranking_player_run_summaries USING (
-CASE
-    WHEN (NULLIF(current_setting('app.tenant_id'::text, true), ''::text) IS NULL) THEN ((tenant_id IS NULL) OR (tenant_id IN ( SELECT tenants.id
-       FROM tenants
-      WHERE (tenants.include_in_all = true))))
-    ELSE (tenant_id = (current_setting('app.tenant_id'::text, true))::uuid)
-END);
+CREATE POLICY tenant_isolation ON ranking_player_run_summaries USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
 
-CREATE POLICY tenant_isolation ON ranking_runs USING (
-CASE
-    WHEN (NULLIF(current_setting('app.tenant_id'::text, true), ''::text) IS NULL) THEN ((tenant_id IS NULL) OR (tenant_id IN ( SELECT tenants.id
-       FROM tenants
-      WHERE (tenants.include_in_all = true))))
-    ELSE (tenant_id = (current_setting('app.tenant_id'::text, true))::uuid)
-END);
+CREATE POLICY tenant_isolation ON ranking_runs USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
 
 CREATE POLICY tenant_isolation ON wow_servers USING (
 CASE

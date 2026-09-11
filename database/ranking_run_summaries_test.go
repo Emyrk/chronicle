@@ -125,12 +125,25 @@ func TestRankingRunDirtyGenerationCoalescesWithinTransaction(t *testing.T) {
     WHERE instance_id = $1
   `, instanceID)
 	require.NoError(t, err)
+
+	var firstTupleID string
+	require.NoError(t, tx.QueryRow(ctx, `
+		SELECT ctid::text FROM ranking_run_summary_dirty WHERE run_id = $1
+	`, instanceID).Scan(&firstTupleID))
+
 	_, err = tx.Exec(ctx, `
     UPDATE encounter_dps_rankings
     SET dps = dps + 1
     WHERE instance_id = $1
   `, instanceID)
 	require.NoError(t, err)
+
+	var secondTupleID string
+	require.NoError(t, tx.QueryRow(ctx, `
+		SELECT ctid::text FROM ranking_run_summary_dirty WHERE run_id = $1
+	`, instanceID).Scan(&secondTupleID))
+	assert.Equal(t, firstTupleID, secondTupleID, "same-transaction invalidation should not rewrite the dirty row")
+
 	require.NoError(t, tx.Commit(ctx))
 
 	first := readDirtyRankingRun(t, pool, instanceID)

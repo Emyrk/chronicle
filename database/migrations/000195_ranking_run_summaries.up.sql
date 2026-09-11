@@ -33,16 +33,11 @@ ALTER TABLE ranking_runs FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_admin_bypass ON ranking_runs
     USING (current_setting('app.tenant_bypass', true) = 'true');
 
+-- Preserve the existing RLS chain used by encounter_dps_rankings:
+-- summary.realm_id -> wow_server_realms -> wow_servers. The denormalized
+-- tenant_id is for explicit fast-query filtering, not authorization.
 CREATE POLICY tenant_isolation ON ranking_runs
-    USING (
-        CASE
-            WHEN nullif(current_setting('app.tenant_id', true), '') IS NULL THEN
-                tenant_id IS NULL
-                OR tenant_id IN (SELECT id FROM tenants WHERE include_in_all = true)
-            ELSE
-                tenant_id = current_setting('app.tenant_id', true)::uuid
-        END
-    );
+    USING (realm_id IN (SELECT id FROM wow_server_realms));
 
 -- One row per logical run and player. encounter_name intentionally preserves the
 -- slow query's display field: the encounter from the player's highest-damage
@@ -97,16 +92,10 @@ ALTER TABLE ranking_player_run_summaries FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_admin_bypass ON ranking_player_run_summaries
     USING (current_setting('app.tenant_bypass', true) = 'true');
 
+-- Keep authorization on the established realm/server RLS chain. Fast queries
+-- may additionally filter tenant_id when the request has a tenant context.
 CREATE POLICY tenant_isolation ON ranking_player_run_summaries
-    USING (
-        CASE
-            WHEN nullif(current_setting('app.tenant_id', true), '') IS NULL THEN
-                tenant_id IS NULL
-                OR tenant_id IN (SELECT id FROM tenants WHERE include_in_all = true)
-            ELSE
-                tenant_id = current_setting('app.tenant_id', true)::uuid
-        END
-    );
+    USING (realm_id IN (SELECT id FROM wow_server_realms));
 
 -- This is a database-owned durable work queue. The trigger functions are
 -- SECURITY DEFINER so source mutations can always record repair work, including
@@ -146,19 +135,11 @@ BEGIN
     )
     ON CONFLICT (run_id) DO UPDATE SET
         tenant_id = EXCLUDED.tenant_id,
-        generation = CASE
-            WHEN ranking_run_summary_dirty.last_transaction_id
-                 IS DISTINCT FROM EXCLUDED.last_transaction_id
-            THEN ranking_run_summary_dirty.generation + 1
-            ELSE ranking_run_summary_dirty.generation
-        END,
+        generation = ranking_run_summary_dirty.generation + 1,
         last_transaction_id = EXCLUDED.last_transaction_id,
-        updated_at = CASE
-            WHEN ranking_run_summary_dirty.last_transaction_id
-                 IS DISTINCT FROM EXCLUDED.last_transaction_id
-            THEN EXCLUDED.updated_at
-            ELSE ranking_run_summary_dirty.updated_at
-        END;
+        updated_at = EXCLUDED.updated_at
+    WHERE ranking_run_summary_dirty.last_transaction_id
+          IS DISTINCT FROM EXCLUDED.last_transaction_id;
 END;
 $$;
 
