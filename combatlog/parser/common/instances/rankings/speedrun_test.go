@@ -57,6 +57,15 @@ func singleBossRules(name string, entryID uint32) SpeedrunRules {
 	}
 }
 
+func TestRankingsRanksEncounter(t *testing.T) {
+	t.Parallel()
+
+	rules := &Rankings{ExcludedEncounters: []string{"Optional Boss"}}
+	assert.False(t, rules.RanksEncounter("Optional Boss"))
+	assert.True(t, rules.RanksEncounter("Required Boss"))
+	assert.False(t, (*Rankings)(nil).RanksEncounter("Required Boss"))
+}
+
 func TestSpeedrunTracker_ActivityChange_SlainSatisfiesRequirement(t *testing.T) {
 	t.Parallel()
 	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil)
@@ -381,37 +390,6 @@ func TestSpeedrunTracker_RankedTimeStartsAfterConfiguredRequirement(t *testing.T
 	assert.Equal(t, openingStart, result.BossToBossStartTime)
 	assert.Equal(t, finalEnd, result.BossToBossCompletionTime)
 	assert.Equal(t, 12*time.Minute, result.BossToBossDuration)
-}
-
-func TestSpeedrunTracker_RankedTimeStartsAfterConfiguredRequirement(t *testing.T) {
-	t.Parallel()
-
-	rules := SpeedrunRules{
-		Requirements: []SpeedrunRequirement{
-			{Name: "Opening Boss", EntryIDs: []uint32{100}, Count: 1, Category: SpeedrunCategoryBosses},
-			{Name: "Final Boss", EntryIDs: []uint32{200}, Count: 1, Category: SpeedrunCategoryBosses},
-		},
-		RankedStartAfterRequirement: "Opening Boss",
-	}
-	tracker := NewSpeedrunTracker(rules, nil, nil)
-
-	openingStart := t0
-	openingEnd := t0.Add(2 * time.Minute)
-	tracker.FightStarted(uuid.New(), msg(openingStart))
-	tracker.ActivityChange(msg(openingEnd), &stubChar{id: makeCreatureGUID(100, 1), endState: period.EndStateSlain, hasPeriod: true})
-	tracker.FightEnded(uuid.New(), msg(openingEnd))
-
-	finalStart := t0.Add(10 * time.Minute)
-	finalEnd := finalStart.Add(2 * time.Minute)
-	tracker.FightStarted(uuid.New(), msg(finalStart))
-	tracker.ActivityChange(msg(finalEnd), &stubChar{id: makeCreatureGUID(200, 1), endState: period.EndStateSlain, hasPeriod: true})
-	tracker.FightEnded(uuid.New(), msg(finalEnd))
-
-	result := tracker.Result()
-	require.True(t, result.Qualified)
-	assert.Equal(t, openingEnd, result.RankedStartTime)
-	assert.Equal(t, finalEnd, result.RankedCompletionTime)
-	assert.Equal(t, 10*time.Minute, result.RankedDuration)
 }
 
 func TestSpeedrunTracker_TimingEndsBeforeTrailingRequiredTrash(t *testing.T) {

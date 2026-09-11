@@ -23,6 +23,11 @@ func UlduarSpeedrunRequirements() *rankings.Rankings {
 			},
 			RankedStartAfterRequirement: "Flame Leviathan",
 		},
+		ExcludedEncounters: []string{
+			"Elder Brightleaf",
+			"Elder Ironbranch",
+			"Elder Stonebark",
+		},
 	}
 }
 

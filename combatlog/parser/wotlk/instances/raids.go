@@ -608,16 +608,6 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33988: "Immortal Guardian",
 		32955: "Collapsing Star",
 	})
-	// Freya's three elders are optional encounters. Keep them identifiable and
-	// combat-capable without counting them toward progression or rankings.
-	instances.LoadAdds(hostile, map[uint32]string{
-		32913: "Elder Ironbranch",
-		32914: "Elder Stonebark",
-		32915: "Elder Brightleaf",
-		33391: "Elder Brightleaf",
-		33392: "Elder Ironbranch",
-		33393: "Elder Stonebark",
-	})
 	instances.LoadBosses(hostile, map[uint32]string{
 		32845: "Hodir",
 		32846: "Hodir",
@@ -625,6 +615,9 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		32865: "Thorim",
 		32867: "Steelbreaker",
 		32906: "Freya",
+		32913: "Elder Ironbranch",
+		32914: "Elder Stonebark",
+		32915: "Elder Brightleaf",
 		32927: "Runemaster Molgeim",
 		32930: "Kologarn",
 		33113: "Flame Leviathan",
@@ -636,6 +629,9 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33293: "XT-002 Deconstructor",
 		33350: "Mimiron",
 		33360: "Freya",
+		33391: "Elder Brightleaf",
+		33392: "Elder Ironbranch",
+		33393: "Elder Stonebark",
 		33432: "Leviathan Mk II",
 		33449: "General Vezax",
 		33515: "Auriaya",

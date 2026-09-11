@@ -34,13 +34,19 @@ func TestUlduarSpeedrunRequirements(t *testing.T) {
 	}, rules.Speedrun.Requirements)
 }
 
-func TestUlduarOptionalEldersAreNotBossEncounters(t *testing.T) {
+func TestUlduarOptionalEldersRemainBossesButAreNotRanked(t *testing.T) {
 	t.Parallel()
 
+	rules := UlduarFactory.FlavoredRankings(database.WoWFlavor{database.FlavorWrath})
+	require.NotNil(t, rules)
 	hostiles := UlduarHostiles()
 	for _, entry := range []uint32{32913, 32914, 32915, 33391, 33392, 33393} {
 		require.Contains(t, hostiles, entry)
-		require.False(t, hostiles[entry].Boss)
+		require.True(t, hostiles[entry].Boss)
+		require.False(t, rules.RanksEncounter(hostiles[entry].EncounterName))
+	}
+	for _, encounter := range []string{"Flame Leviathan", "Freya", "Yogg-Saron"} {
+		require.True(t, rules.RanksEncounter(encounter))
 	}
 }
 
