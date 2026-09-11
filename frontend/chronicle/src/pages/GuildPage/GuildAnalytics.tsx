@@ -236,7 +236,7 @@ export function GuildAnalytics() {
                         <div key={instance.key}>
                           <button
                             onClick={() => setExpanded((prev) => ({ ...prev, [instance.key]: !prev[instance.key] }))}
-                            className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-muted/20"
+                            className="flex w-full items-center gap-2.5 px-5 py-1.5 text-left transition-colors hover:bg-muted/20"
                           >
                             {isExpanded ? (
                               <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -245,23 +245,21 @@ export function GuildAnalytics() {
                             )}
                             <div className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground">{idx + 1}</div>
                             <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: instance.color, boxShadow: `0 0 6px ${instance.color}55` }} />
-                            <div className="min-w-0 flex-1">
-                              <div className="font-wow truncate text-sm font-semibold">{instance.name}</div>
-                              <div className="mt-1 flex h-6 items-end gap-[3px]">
-                                {instance.sparkline.map((day) => {
-                                  const value = metricValue(day, metric);
-                                  return (
-                                    <div
-                                      key={day.date}
-                                      title={`${formatDayTitle(day.date)} — ${numberFormatter.format(value)} ${METRIC_UNIT[metric]}`}
-                                      className="w-[5px] rounded-[1px]"
-                                      style={{ height: `${Math.max(18, (value / instance.sparkMax) * 100)}%`, background: instance.color }}
-                                    />
-                                  );
-                                })}
-                              </div>
+                            <div className="font-wow min-w-0 flex-1 truncate text-sm font-semibold">{instance.name}</div>
+                            <div className="flex h-4 shrink-0 items-end gap-[3px]">
+                              {instance.sparkline.map((day) => {
+                                const value = metricValue(day, metric);
+                                return (
+                                  <div
+                                    key={day.date}
+                                    title={`${formatDayTitle(day.date)} — ${numberFormatter.format(value)} ${METRIC_UNIT[metric]}`}
+                                    className="w-[5px] rounded-[1px]"
+                                    style={{ height: `${Math.max(18, (value / instance.sparkMax) * 100)}%`, background: instance.color }}
+                                  />
+                                );
+                              })}
                             </div>
-                            <div className="shrink-0 text-right">
+                            <div className="min-w-[100px] shrink-0 text-right">
                               <div className="font-mono text-sm">{compactFormatter.format(instance.total)}</div>
                               <DeltaLabel pct={instance.deltaPct} range={range} compact />
                             </div>
