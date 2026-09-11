@@ -58,6 +58,7 @@ const startupPage = `<!doctype html>
     .track { width: 5rem; height: 1px; overflow: hidden; background: #3f372b; }
     .track::after { display: block; width: 100%; height: 100%; background: #c8974e; content: ""; transform-origin: left; }
     .track.running::after { animation: drain 5s linear forwards; }
+    .explanation { max-width: 28rem; margin: 1.75rem auto 0; color: #655e52; font: 0.75rem/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; }
     @keyframes breathe { 50% { filter: drop-shadow(0 0 1.75rem #b9853066); transform: scale(1.04); } }
     @keyframes drain { to { transform: scaleX(0); } }
     @media (prefers-reduced-motion: reduce) { .logo, .track::after { animation: none; } }
@@ -74,6 +75,7 @@ const startupPage = `<!doctype html>
       <span>seconds</span>
       <span class="track running" aria-hidden="true"></span>
     </div>
+    <p class="explanation">Chronicle was recently re-deployed and is preparing the database. This usually only takes a few moments.</p>
   </main>
   <script>
     (() => {

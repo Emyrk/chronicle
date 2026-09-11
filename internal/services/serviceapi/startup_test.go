@@ -24,8 +24,9 @@ func TestStartupPageHandler(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), "id=\"countdown\">5")
 	require.Contains(t, recorder.Body.String(), "window.fetch(\"/api/v1/healthz\"")
 	require.Contains(t, recorder.Body.String(), "if (response.ok && !preview)")
+	require.Contains(t, recorder.Body.String(), "Chronicle was recently re-deployed and is preparing the database")
+	require.Contains(t, recorder.Body.String(), "This usually only takes a few moments")
 	require.NotContains(t, recorder.Body.String(), "http-equiv=\"refresh\"")
-	require.NotContains(t, recorder.Body.String(), "database")
 }
 
 func TestSwitchableHandler(t *testing.T) {
