@@ -81,6 +81,7 @@ type sqlcQuerier interface {
 	DeleteDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDiscordAnnouncement(ctx context.Context, id uuid.UUID) error
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
+	DeleteExpiredGuildResourceVisitors(ctx context.Context) error
 	DeleteGearList(ctx context.Context, arg DeleteGearListParams) (int64, error)
 	DeleteGearProgression(ctx context.Context, arg DeleteGearProgressionParams) (int64, error)
 	DeleteGearStatWeight(ctx context.Context, arg DeleteGearStatWeightParams) (int64, error)
@@ -431,6 +432,7 @@ type sqlcQuerier interface {
 	// completion_time and a negative sentinel duration (see chronicle/logparse.go).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	GuildRaidClears(ctx context.Context, arg GuildRaidClearsParams) ([]GuildRaidClearsRow, error)
+	GuildResourceAnalytics(ctx context.Context, arg GuildResourceAnalyticsParams) ([]GuildResourceAnalyticsRow, error)
 	// Returns the guild's average parse per encounter for each raid night (run),
 	// for the guild page "Recent" panel (per-boss bars; callers weight by
 	// parse_count for a whole-run average). Averages every raider's parses using
@@ -690,6 +692,7 @@ type sqlcQuerier interface {
 	// Returns aggregate refresh metadata for one tenant's precomputed summaries.
 	RankingsSummaryStatus(ctx context.Context, tenantID uuid.UUID) (RankingsSummaryStatusRow, error)
 	RecordAuthzMigration(ctx context.Context, version int32) error
+	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
 	// Resolves the dataset for a realm. Precedence:
 	//   server.default_dataset_id > tenant.default_dataset_id.
 	// The result is NULL when neither is set (and when the realm is unknown the

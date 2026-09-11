@@ -6355,6 +6355,137 @@ func (q *sqlQuerier) GuildTopParses(ctx context.Context, arg GuildTopParsesParam
 	return items, nil
 }
 
+const deleteExpiredGuildResourceVisitors = `-- name: DeleteExpiredGuildResourceVisitors :exec
+DELETE FROM guild_resource_recent_visitors
+WHERE viewed_on < (now() AT TIME ZONE 'UTC')::date - 1
+`
+
+func (q *sqlQuerier) DeleteExpiredGuildResourceVisitors(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteExpiredGuildResourceVisitors)
+	return err
+}
+
+const guildResourceAnalytics = `-- name: GuildResourceAnalytics :many
+SELECT
+    stats.resource_kind,
+    stats.resource_key,
+    stats.viewed_on,
+    stats.views,
+    stats.unique_visitors,
+    (CASE
+        WHEN stats.resource_kind = 'guild_page' THEN g.name
+        WHEN stats.resource_kind = 'instance' THEN COALESCE(instance.name, stats.resource_key)
+        ELSE stats.resource_key
+    END)::text AS resource_name
+FROM guild_resource_daily_stats AS stats
+JOIN guilds AS g ON g.id = stats.guild_id
+LEFT JOIN log_instances AS instance
+    ON stats.resource_kind = 'instance'
+    AND instance.hashed_slug = stats.resource_key
+WHERE stats.guild_id = $1
+  AND stats.viewed_on > (now() AT TIME ZONE 'UTC')::date - $2::int
+ORDER BY stats.viewed_on ASC, stats.resource_kind ASC, resource_name ASC
+`
+
+type GuildResourceAnalyticsParams struct {
+	GuildID      uuid.UUID `db:"guild_id" json:"guild_id"`
+	LookbackDays int32     `db:"lookback_days" json:"lookback_days"`
+}
+
+type GuildResourceAnalyticsRow struct {
+	ResourceKind   string      `db:"resource_kind" json:"resource_kind"`
+	ResourceKey    string      `db:"resource_key" json:"resource_key"`
+	ViewedOn       pgtype.Date `db:"viewed_on" json:"viewed_on"`
+	Views          int64       `db:"views" json:"views"`
+	UniqueVisitors int64       `db:"unique_visitors" json:"unique_visitors"`
+	ResourceName   string      `db:"resource_name" json:"resource_name"`
+}
+
+func (q *sqlQuerier) GuildResourceAnalytics(ctx context.Context, arg GuildResourceAnalyticsParams) ([]GuildResourceAnalyticsRow, error) {
+	rows, err := q.db.Query(ctx, guildResourceAnalytics, arg.GuildID, arg.LookbackDays)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildResourceAnalyticsRow
+	for rows.Next() {
+		var i GuildResourceAnalyticsRow
+		if err := rows.Scan(
+			&i.ResourceKind,
+			&i.ResourceKey,
+			&i.ViewedOn,
+			&i.Views,
+			&i.UniqueVisitors,
+			&i.ResourceName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recordGuildResourceView = `-- name: RecordGuildResourceView :exec
+WITH new_unique AS (
+    INSERT INTO guild_resource_recent_visitors (
+        guild_id,
+        resource_kind,
+        resource_key,
+        visitor_id,
+        viewed_on
+    )
+    VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        (now() AT TIME ZONE 'UTC')::date
+    )
+    ON CONFLICT DO NOTHING
+    RETURNING 1
+)
+INSERT INTO guild_resource_daily_stats (
+    guild_id,
+    resource_kind,
+    resource_key,
+    viewed_on,
+    views,
+    unique_visitors
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    (now() AT TIME ZONE 'UTC')::date,
+    1,
+    (SELECT COUNT(*) FROM new_unique)
+)
+ON CONFLICT (guild_id, resource_kind, resource_key, viewed_on)
+DO UPDATE SET
+    views = guild_resource_daily_stats.views + 1,
+    unique_visitors = guild_resource_daily_stats.unique_visitors + EXCLUDED.unique_visitors
+`
+
+type RecordGuildResourceViewParams struct {
+	GuildID      uuid.UUID `db:"guild_id" json:"guild_id"`
+	ResourceKind string    `db:"resource_kind" json:"resource_kind"`
+	ResourceKey  string    `db:"resource_key" json:"resource_key"`
+	VisitorID    uuid.UUID `db:"visitor_id" json:"visitor_id"`
+}
+
+func (q *sqlQuerier) RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error {
+	_, err := q.db.Exec(ctx, recordGuildResourceView,
+		arg.GuildID,
+		arg.ResourceKind,
+		arg.ResourceKey,
+		arg.VisitorID,
+	)
+	return err
+}
+
 const consumeGuildDiscordInstallState = `-- name: ConsumeGuildDiscordInstallState :one
 DELETE FROM guild_discord_install_states
 WHERE state = $1 AND expires_at > NOW()

@@ -1522,6 +1522,28 @@ export interface GuildRaidClearsResponse {
 }
 
 // From chroniclesdk/guild_page.go
+export interface GuildResourceAnalyticsDay {
+    readonly resource_kind: string;
+    readonly resource_key: string;
+    readonly resource_name: string;
+    readonly viewed_on: string;
+    readonly views: number;
+    readonly unique_visitors: number;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildResourceAnalyticsResponse {
+    readonly lookback_days: number;
+    readonly days: readonly GuildResourceAnalyticsDay[];
+}
+
+// From chroniclesdk/guild_page.go
+export const GuildResourceKindInstance = "instance";
+
+// From chroniclesdk/guild_page.go
+export const GuildResourceKindPage = "guild_page";
+
+// From chroniclesdk/guild_page.go
 /**
  * GuildRosterCharacter is a guild character seen in raid logs. LastSeenAt is
  * the last time a log updated the character. AvgParse is -1 when the

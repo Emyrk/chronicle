@@ -359,7 +359,7 @@ func (api *API) Routes() chi.Router {
 						api.Auth.Authenticated(true),
 					)
 					r.Get("/", api.GetGuild)
-					r.Get("/page", api.GetGuildPage)
+					r.With(api.trackGuildPageView).Get("/page", api.GetGuildPage)
 					r.Get("/settings", api.GetGuildSettings)
 					r.Get("/speedruns/clears", api.GuildRaidClears)
 					r.Get("/characters", api.GuildCharacterRoster)
@@ -403,6 +403,7 @@ func (api *API) Routes() chi.Router {
 						r.Post("/join-requests/{requestID}/accept", api.AcceptJoinRequest)
 						r.Delete("/join-requests/{requestID}", api.DenyJoinRequest)
 
+						r.Get("/analytics", api.GuildResourceAnalytics)
 						r.Put("/page", api.UpsertGuildPage)
 						r.Post("/page/tabs", api.CreateGuildPageTab)
 						r.Put("/page/tabs/reorder", api.ReorderGuildPageTabs)
@@ -484,7 +485,7 @@ func (api *API) Routes() chi.Router {
 							r.Route("/{instance_id}", func(r chi.Router) {
 								r.Use(httpmw.InstanceIDMiddleware(api.Opts.Zed))
 								r.Get("/events/{type}", api.InstanceEvents)
-								r.Get("/", api.Instance)
+								r.With(api.trackGuildInstanceView).Get("/", api.Instance)
 
 								r.Get("/youtube", api.GetInstanceYoutube)
 								r.Get("/loot", api.GetInstanceLoot)

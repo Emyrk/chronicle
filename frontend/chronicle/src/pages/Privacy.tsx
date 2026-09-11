@@ -94,9 +94,15 @@ export function Privacy() {
               <li>Pages visited</li>
               <li>Error logs</li>
             </ul>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground mb-2">
               We use this to keep the site secure, fix bugs, and improve
               performance.
+            </p>
+            <p className="text-muted-foreground">
+              Chronicle also uses a first-party visitor cookie to provide guild
+              administrators with approximate, aggregate page and raid-log view
+              counts. The cookie contains a random identifier, not your account
+              identity, and is not used for authentication.
             </p>
           </div>
         </div>

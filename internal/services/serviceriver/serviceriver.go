@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Emyrk/chronicle/chronicle/guildanalytics"
 	"github.com/Emyrk/chronicle/chronicle/retention"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/internal/services"
@@ -124,6 +125,18 @@ func (s *Service) Start(ctx context.Context) error {
 			),
 		)
 	}
+
+	analyticsCleanup := &guildanalytics.CleanupWorker{Store: chron.Zed}
+	riverqueue.AddWorker(q, analyticsCleanup)
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return guildanalytics.ArgsCleanup{}, nil
+			},
+			&river.PeriodicJobOpts{RunOnStart: false},
+		),
+	)
 
 	// Register telemetry worker and periodic job.
 	tel := servicetelemetry.TelemetryService(s.broker)

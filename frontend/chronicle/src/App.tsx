@@ -72,7 +72,7 @@ import {
   LayoutBookSettings,
   LayoutLabSettings,
 } from "./pages/Settings"
-import { GuildPage, GuildPageEditor, GuildRoster, GuildSettings } from "./pages/GuildPage"
+import { GuildAnalytics, GuildPage, GuildPageEditor, GuildRoster, GuildSettings } from "./pages/GuildPage"
 import { ArmoryPage } from "./pages/ArmoryPage"
 import { ArmorySearchPage } from "./pages/ArmorySearch"
 import { GuildSearchPage } from "./pages/GuildSearch"
@@ -216,6 +216,7 @@ function App() {
         <Route path="/g/:guildId/:tabSlug" element={<GuildPage />} />
         <Route path="/g/:guildId/edit" element={<GuildPageEditor />} />
         <Route path="/g/:guildId/roster" element={<GuildRoster />} />
+        <Route path="/g/:guildId/analytics" element={<GuildAnalytics />} />
         <Route path="/g/:guildId/settings" element={<GuildSettings />} />
         <Route path="/game-data" element={<GameDataLayout />}>
           <Route index element={<Navigate to="/game-data/datasets" replace />} />
