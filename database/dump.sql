@@ -153,6 +153,108 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION invalidate_ranking_run_before_instance_delete() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+    PERFORM mark_ranking_run_summary_dirty(
+        COALESCE(OLD.duplicate_group_id, OLD.id)
+    );
+    RETURN OLD;
+END;
+$$;
+
+CREATE FUNCTION invalidate_ranking_run_from_instance_update() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+    PERFORM mark_ranking_run_summary_dirty(
+        COALESCE(OLD.duplicate_group_id, OLD.id)
+    );
+    PERFORM mark_ranking_run_summary_dirty(
+        COALESCE(NEW.duplicate_group_id, NEW.id)
+    );
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION invalidate_ranking_run_from_ranking_mutation() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+    IF TG_OP <> 'INSERT' THEN
+        PERFORM mark_instance_ranking_run_summary_dirty(OLD.instance_id);
+    END IF;
+    IF TG_OP <> 'DELETE' THEN
+        PERFORM mark_instance_ranking_run_summary_dirty(NEW.instance_id);
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION invalidate_ranking_runs_from_server_tenant_update() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+    logical_run_id UUID;
+BEGIN
+    FOR logical_run_id IN
+        SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id)
+        FROM log_instances li
+        JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+        WHERE wsr.server_id = NEW.id
+    LOOP
+        PERFORM mark_ranking_run_summary_dirty(logical_run_id);
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION mark_instance_ranking_run_summary_dirty(p_instance_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+    logical_run_id UUID;
+BEGIN
+    SELECT COALESCE(duplicate_group_id, id)
+    INTO logical_run_id
+    FROM log_instances
+    WHERE id = p_instance_id;
+
+    PERFORM mark_ranking_run_summary_dirty(logical_run_id);
+END;
+$$;
+
+CREATE FUNCTION mark_ranking_run_summary_dirty(p_run_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+    current_transaction_id XID8 := pg_current_xact_id();
+BEGIN
+    IF p_run_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    INSERT INTO ranking_run_summary_dirty (
+        run_id, generation, last_transaction_id, updated_at
+    ) VALUES (
+        p_run_id, 1, current_transaction_id, now()
+    )
+    ON CONFLICT (run_id) DO UPDATE SET
+        generation = ranking_run_summary_dirty.generation + 1,
+        last_transaction_id = EXCLUDED.last_transaction_id,
+        updated_at = EXCLUDED.updated_at
+    WHERE ranking_run_summary_dirty.last_transaction_id
+          IS DISTINCT FROM EXCLUDED.last_transaction_id;
+END;
+$$;
+
 CREATE FUNCTION reattach_by_slug() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -1270,6 +1372,65 @@ CREATE TABLE raid_compositions (
     CONSTRAINT raid_compositions_name_length_chk CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100)))
 );
 
+CREATE TABLE ranking_player_run_summaries (
+    run_id uuid NOT NULL,
+    tenant_id uuid,
+    player_guid text NOT NULL,
+    player_name text NOT NULL,
+    player_class text DEFAULT 'Unknown'::text NOT NULL,
+    player_spec text DEFAULT 'Unknown'::text NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL,
+    player_role text DEFAULT 'dps'::text NOT NULL,
+    player_level smallint DEFAULT 0 NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    realm_id uuid NOT NULL,
+    realm_name text NOT NULL,
+    guild_name text DEFAULT ''::text NOT NULL,
+    damage_done bigint NOT NULL,
+    healing_done bigint DEFAULT 0 NOT NULL,
+    absorbed_done bigint DEFAULT 0 NOT NULL,
+    duration_secs double precision NOT NULL,
+    dps double precision NOT NULL,
+    hps double precision DEFAULT 0 NOT NULL,
+    avg_ilvl smallint DEFAULT 0 NOT NULL,
+    log_hashed_slug text DEFAULT ''::text NOT NULL,
+    killed_at timestamp with time zone NOT NULL,
+    talent_sub_spec text DEFAULT ''::text NOT NULL,
+    talent_layout text DEFAULT ''::text NOT NULL,
+    summary_version smallint NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY ranking_player_run_summaries FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE ranking_run_summary_dirty (
+    run_id uuid NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    last_transaction_id xid8 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE ranking_runs (
+    run_id uuid NOT NULL,
+    representative_instance_id uuid NOT NULL,
+    tenant_id uuid,
+    instance_name text NOT NULL,
+    realm_id uuid NOT NULL,
+    realm_name text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    boss_coverage integer DEFAULT 0 NOT NULL,
+    encounter_names text[] DEFAULT '{}'::text[] NOT NULL,
+    summary_version smallint NOT NULL,
+    source_generation bigint NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY ranking_runs FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE ranking_snapshot_members (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     snapshot_id uuid NOT NULL,
@@ -2145,6 +2306,15 @@ ALTER TABLE ONLY parsed_log_group
 ALTER TABLE ONLY raid_compositions
     ADD CONSTRAINT raid_compositions_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY ranking_player_run_summaries
+    ADD CONSTRAINT ranking_player_run_summaries_pkey PRIMARY KEY (run_id, player_guid);
+
+ALTER TABLE ONLY ranking_run_summary_dirty
+    ADD CONSTRAINT ranking_run_summary_dirty_pkey PRIMARY KEY (run_id);
+
+ALTER TABLE ONLY ranking_runs
+    ADD CONSTRAINT ranking_runs_pkey PRIMARY KEY (run_id);
+
 ALTER TABLE ONLY ranking_snapshot_members
     ADD CONSTRAINT ranking_snapshot_members_pkey PRIMARY KEY (id);
 
@@ -2444,6 +2614,20 @@ CREATE INDEX idx_psreceipt_snapshot ON parse_score_receipts USING btree (snapsho
 
 CREATE INDEX idx_psreceipt_tenant ON parse_score_receipts USING btree (tenant_id);
 
+CREATE INDEX idx_ranking_player_run_summaries_killed_at ON ranking_player_run_summaries USING btree (killed_at);
+
+CREATE INDEX idx_ranking_player_run_summaries_tenant_cohort ON ranking_player_run_summaries USING btree (tenant_id, instance_name, realm_id, difficulty_name, max_players, player_class, player_spec, player_sub_spec, player_role);
+
+CREATE INDEX idx_ranking_player_run_summaries_tenant_dps ON ranking_player_run_summaries USING btree (tenant_id, dps DESC);
+
+CREATE INDEX idx_ranking_player_run_summaries_tenant_hps ON ranking_player_run_summaries USING btree (tenant_id, hps DESC);
+
+CREATE INDEX idx_ranking_run_summary_dirty_updated_at ON ranking_run_summary_dirty USING btree (updated_at);
+
+CREATE INDEX idx_ranking_runs_summary_version ON ranking_runs USING btree (summary_version);
+
+CREATE INDEX idx_ranking_runs_tenant_instance_cohort ON ranking_runs USING btree (tenant_id, instance_name, realm_id, difficulty_name, max_players);
+
 CREATE INDEX idx_ranking_snapshot_members_ranking_id ON ranking_snapshot_members USING btree (ranking_id);
 
 CREATE INDEX idx_regression_snapshots_fixture ON regression_snapshots USING btree (fixture_id, created_at DESC);
@@ -2549,6 +2733,14 @@ CREATE INDEX user_talent_builds_user_tenant_idx ON user_talent_builds USING btre
 CREATE TRIGGER trg_cleanup_after_soft_delete AFTER UPDATE OF user_id ON user_panel_layouts FOR EACH ROW WHEN ((new.user_id IS NULL)) EXECUTE FUNCTION cleanup_orphaned_layout();
 
 CREATE TRIGGER trg_cleanup_after_untrack AFTER DELETE ON user_tracked_layouts FOR EACH ROW EXECUTE FUNCTION cleanup_orphaned_layout();
+
+CREATE TRIGGER trg_invalidate_ranking_run_before_instance_delete BEFORE DELETE ON log_instances FOR EACH ROW EXECUTE FUNCTION invalidate_ranking_run_before_instance_delete();
+
+CREATE TRIGGER trg_invalidate_ranking_run_from_instance_update AFTER UPDATE OF duplicate_group_id, name, realm_id, start_time ON log_instances FOR EACH ROW WHEN (((old.duplicate_group_id IS DISTINCT FROM new.duplicate_group_id) OR (old.name IS DISTINCT FROM new.name) OR (old.realm_id IS DISTINCT FROM new.realm_id) OR (old.start_time IS DISTINCT FROM new.start_time))) EXECUTE FUNCTION invalidate_ranking_run_from_instance_update();
+
+CREATE TRIGGER trg_invalidate_ranking_run_from_ranking_mutation AFTER INSERT OR DELETE OR UPDATE ON encounter_dps_rankings FOR EACH ROW EXECUTE FUNCTION invalidate_ranking_run_from_ranking_mutation();
+
+CREATE TRIGGER trg_invalidate_ranking_runs_from_server_tenant_update AFTER UPDATE OF tenant_id ON wow_servers FOR EACH ROW WHEN ((old.tenant_id IS DISTINCT FROM new.tenant_id)) EXECUTE FUNCTION invalidate_ranking_runs_from_server_tenant_update();
 
 CREATE TRIGGER trg_reattach_by_slug AFTER INSERT ON log_instances FOR EACH ROW EXECUTE FUNCTION reattach_by_slug();
 
@@ -2833,6 +3025,21 @@ ALTER TABLE ONLY raid_compositions
 ALTER TABLE ONLY raid_compositions
     ADD CONSTRAINT raid_compositions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY ranking_player_run_summaries
+    ADD CONSTRAINT ranking_player_run_summaries_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY ranking_player_run_summaries
+    ADD CONSTRAINT ranking_player_run_summaries_run_id_fkey FOREIGN KEY (run_id) REFERENCES ranking_runs(run_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY ranking_player_run_summaries
+    ADD CONSTRAINT ranking_player_run_summaries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY ranking_runs
+    ADD CONSTRAINT ranking_runs_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY ranking_runs
+    ADD CONSTRAINT ranking_runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL;
+
 ALTER TABLE ONLY ranking_snapshot_members
     ADD CONSTRAINT ranking_snapshot_members_ranking_id_fkey FOREIGN KEY (ranking_id) REFERENCES encounter_dps_rankings(id) ON DELETE CASCADE;
 
@@ -2993,15 +3200,29 @@ ALTER TABLE encounter_dps_rankings ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE item_daily_prices ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE ranking_player_run_summaries ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE ranking_runs ENABLE ROW LEVEL SECURITY;
+
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON item_daily_prices USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON ranking_player_run_summaries USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON ranking_runs USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON wow_server_realms USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON wow_servers USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_isolation ON encounter_dps_rankings USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON ranking_player_run_summaries USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON ranking_runs USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
 
 CREATE POLICY tenant_isolation ON wow_servers USING (
