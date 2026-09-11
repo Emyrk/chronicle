@@ -1704,6 +1704,7 @@ type RaidComposition struct {
 
 type RankingPlayerRunSummary struct {
 	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	TenantID       uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
 	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
@@ -1736,6 +1737,7 @@ type RankingPlayerRunSummary struct {
 type RankingRun struct {
 	RunID                    uuid.UUID          `db:"run_id" json:"run_id"`
 	RepresentativeInstanceID uuid.UUID          `db:"representative_instance_id" json:"representative_instance_id"`
+	TenantID                 uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
 	InstanceName             string             `db:"instance_name" json:"instance_name"`
 	RealmID                  uuid.UUID          `db:"realm_id" json:"realm_id"`
 	RealmName                string             `db:"realm_name" json:"realm_name"`
@@ -1750,6 +1752,7 @@ type RankingRun struct {
 
 type RankingRunSummaryDirty struct {
 	RunID             uuid.UUID          `db:"run_id" json:"run_id"`
+	TenantID          uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
 	Generation        int64              `db:"generation" json:"generation"`
 	LastTransactionID pgtype.Uint64      `db:"last_transaction_id" json:"last_transaction_id"`
 	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`

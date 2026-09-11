@@ -157,8 +157,18 @@ CREATE FUNCTION invalidate_ranking_run_before_instance_delete() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
+DECLARE
+    old_tenant_id UUID;
 BEGIN
-    PERFORM mark_ranking_run_summary_dirty(COALESCE(OLD.duplicate_group_id, OLD.id));
+    SELECT ws.tenant_id
+    INTO old_tenant_id
+    FROM wow_server_realms wsr
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    WHERE wsr.id = OLD.realm_id;
+
+    PERFORM mark_ranking_run_summary_dirty(
+        COALESCE(OLD.duplicate_group_id, OLD.id), old_tenant_id
+    );
     RETURN OLD;
 END;
 $$;
@@ -167,9 +177,28 @@ CREATE FUNCTION invalidate_ranking_run_from_instance_update() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
+DECLARE
+    old_tenant_id UUID;
+    new_tenant_id UUID;
 BEGIN
-    PERFORM mark_ranking_run_summary_dirty(COALESCE(OLD.duplicate_group_id, OLD.id));
-    PERFORM mark_ranking_run_summary_dirty(COALESCE(NEW.duplicate_group_id, NEW.id));
+    SELECT ws.tenant_id
+    INTO old_tenant_id
+    FROM wow_server_realms wsr
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    WHERE wsr.id = OLD.realm_id;
+
+    SELECT ws.tenant_id
+    INTO new_tenant_id
+    FROM wow_server_realms wsr
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    WHERE wsr.id = NEW.realm_id;
+
+    PERFORM mark_ranking_run_summary_dirty(
+        COALESCE(OLD.duplicate_group_id, OLD.id), old_tenant_id
+    );
+    PERFORM mark_ranking_run_summary_dirty(
+        COALESCE(NEW.duplicate_group_id, NEW.id), new_tenant_id
+    );
     RETURN NULL;
 END;
 $$;
@@ -189,23 +218,45 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION mark_instance_ranking_run_summary_dirty(p_instance_id uuid) RETURNS void
+CREATE FUNCTION invalidate_ranking_runs_from_server_tenant_update() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
 DECLARE
     logical_run_id UUID;
 BEGIN
-    SELECT COALESCE(duplicate_group_id, id)
-    INTO logical_run_id
-    FROM log_instances
-    WHERE id = p_instance_id;
-
-    PERFORM mark_ranking_run_summary_dirty(logical_run_id);
+    FOR logical_run_id IN
+        SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id)
+        FROM log_instances li
+        JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+        WHERE wsr.server_id = NEW.id
+    LOOP
+        PERFORM mark_ranking_run_summary_dirty(logical_run_id, NEW.tenant_id);
+    END LOOP;
+    RETURN NULL;
 END;
 $$;
 
-CREATE FUNCTION mark_ranking_run_summary_dirty(p_run_id uuid) RETURNS void
+CREATE FUNCTION mark_instance_ranking_run_summary_dirty(p_instance_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+    logical_run_id UUID;
+    owning_tenant_id UUID;
+BEGIN
+    SELECT COALESCE(li.duplicate_group_id, li.id), ws.tenant_id
+    INTO logical_run_id, owning_tenant_id
+    FROM log_instances li
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    JOIN wow_servers ws ON ws.id = wsr.server_id
+    WHERE li.id = p_instance_id;
+
+    PERFORM mark_ranking_run_summary_dirty(logical_run_id, owning_tenant_id);
+END;
+$$;
+
+CREATE FUNCTION mark_ranking_run_summary_dirty(p_run_id uuid, p_tenant_id uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
@@ -217,11 +268,12 @@ BEGIN
     END IF;
 
     INSERT INTO ranking_run_summary_dirty (
-        run_id, generation, last_transaction_id, updated_at
+        run_id, tenant_id, generation, last_transaction_id, updated_at
     ) VALUES (
-        p_run_id, 1, current_transaction_id, now()
+        p_run_id, p_tenant_id, 1, current_transaction_id, now()
     )
     ON CONFLICT (run_id) DO UPDATE SET
+        tenant_id = EXCLUDED.tenant_id,
         generation = CASE
             WHEN ranking_run_summary_dirty.last_transaction_id
                  IS DISTINCT FROM EXCLUDED.last_transaction_id
@@ -1337,6 +1389,7 @@ CREATE TABLE raid_compositions (
 
 CREATE TABLE ranking_player_run_summaries (
     run_id uuid NOT NULL,
+    tenant_id uuid,
     player_guid text NOT NULL,
     player_name text NOT NULL,
     player_class text DEFAULT 'Unknown'::text NOT NULL,
@@ -1370,6 +1423,7 @@ ALTER TABLE ONLY ranking_player_run_summaries FORCE ROW LEVEL SECURITY;
 
 CREATE TABLE ranking_run_summary_dirty (
     run_id uuid NOT NULL,
+    tenant_id uuid,
     generation bigint DEFAULT 1 NOT NULL,
     last_transaction_id xid8 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
@@ -1378,6 +1432,7 @@ CREATE TABLE ranking_run_summary_dirty (
 CREATE TABLE ranking_runs (
     run_id uuid NOT NULL,
     representative_instance_id uuid NOT NULL,
+    tenant_id uuid,
     instance_name text NOT NULL,
     realm_id uuid NOT NULL,
     realm_name text NOT NULL,
@@ -2565,19 +2620,19 @@ CREATE INDEX idx_psreceipt_snapshot ON parse_score_receipts USING btree (snapsho
 
 CREATE INDEX idx_psreceipt_tenant ON parse_score_receipts USING btree (tenant_id);
 
-CREATE INDEX idx_ranking_player_run_summaries_cohort ON ranking_player_run_summaries USING btree (instance_name, realm_id, difficulty_name, max_players, player_class, player_spec, player_sub_spec, player_role);
-
-CREATE INDEX idx_ranking_player_run_summaries_dps ON ranking_player_run_summaries USING btree (dps DESC);
-
-CREATE INDEX idx_ranking_player_run_summaries_hps ON ranking_player_run_summaries USING btree (hps DESC);
-
 CREATE INDEX idx_ranking_player_run_summaries_killed_at ON ranking_player_run_summaries USING btree (killed_at);
 
-CREATE INDEX idx_ranking_run_summary_dirty_updated_at ON ranking_run_summary_dirty USING btree (updated_at);
+CREATE INDEX idx_ranking_player_run_summaries_tenant_cohort ON ranking_player_run_summaries USING btree (tenant_id, instance_name, realm_id, difficulty_name, max_players, player_class, player_spec, player_sub_spec, player_role);
 
-CREATE INDEX idx_ranking_runs_instance_cohort ON ranking_runs USING btree (instance_name, realm_id, difficulty_name, max_players);
+CREATE INDEX idx_ranking_player_run_summaries_tenant_dps ON ranking_player_run_summaries USING btree (tenant_id, dps DESC);
+
+CREATE INDEX idx_ranking_player_run_summaries_tenant_hps ON ranking_player_run_summaries USING btree (tenant_id, hps DESC);
+
+CREATE INDEX idx_ranking_run_summary_dirty_tenant_updated_at ON ranking_run_summary_dirty USING btree (tenant_id, updated_at);
 
 CREATE INDEX idx_ranking_runs_summary_version ON ranking_runs USING btree (summary_version);
+
+CREATE INDEX idx_ranking_runs_tenant_instance_cohort ON ranking_runs USING btree (tenant_id, instance_name, realm_id, difficulty_name, max_players);
 
 CREATE INDEX idx_ranking_snapshot_members_ranking_id ON ranking_snapshot_members USING btree (ranking_id);
 
@@ -2690,6 +2745,8 @@ CREATE TRIGGER trg_invalidate_ranking_run_before_instance_delete BEFORE DELETE O
 CREATE TRIGGER trg_invalidate_ranking_run_from_instance_update AFTER UPDATE OF duplicate_group_id, name, realm_id, start_time ON log_instances FOR EACH ROW WHEN (((old.duplicate_group_id IS DISTINCT FROM new.duplicate_group_id) OR (old.name IS DISTINCT FROM new.name) OR (old.realm_id IS DISTINCT FROM new.realm_id) OR (old.start_time IS DISTINCT FROM new.start_time))) EXECUTE FUNCTION invalidate_ranking_run_from_instance_update();
 
 CREATE TRIGGER trg_invalidate_ranking_run_from_ranking_mutation AFTER INSERT OR DELETE OR UPDATE ON encounter_dps_rankings FOR EACH ROW EXECUTE FUNCTION invalidate_ranking_run_from_ranking_mutation();
+
+CREATE TRIGGER trg_invalidate_ranking_runs_from_server_tenant_update AFTER UPDATE OF tenant_id ON wow_servers FOR EACH ROW WHEN ((old.tenant_id IS DISTINCT FROM new.tenant_id)) EXECUTE FUNCTION invalidate_ranking_runs_from_server_tenant_update();
 
 CREATE TRIGGER trg_reattach_by_slug AFTER INSERT ON log_instances FOR EACH ROW EXECUTE FUNCTION reattach_by_slug();
 
@@ -2974,8 +3031,17 @@ ALTER TABLE ONLY ranking_player_run_summaries
 ALTER TABLE ONLY ranking_player_run_summaries
     ADD CONSTRAINT ranking_player_run_summaries_run_id_fkey FOREIGN KEY (run_id) REFERENCES ranking_runs(run_id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY ranking_player_run_summaries
+    ADD CONSTRAINT ranking_player_run_summaries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY ranking_run_summary_dirty
+    ADD CONSTRAINT ranking_run_summary_dirty_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL;
+
 ALTER TABLE ONLY ranking_runs
     ADD CONSTRAINT ranking_runs_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY ranking_runs
+    ADD CONSTRAINT ranking_runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY ranking_snapshot_members
     ADD CONSTRAINT ranking_snapshot_members_ranking_id_fkey FOREIGN KEY (ranking_id) REFERENCES encounter_dps_rankings(id) ON DELETE CASCADE;
@@ -3156,11 +3222,21 @@ CREATE POLICY tenant_admin_bypass ON wow_servers USING ((current_setting('app.te
 CREATE POLICY tenant_isolation ON encounter_dps_rankings USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
 
-CREATE POLICY tenant_isolation ON ranking_player_run_summaries USING ((realm_id IN ( SELECT wow_server_realms.id
-   FROM wow_server_realms)));
+CREATE POLICY tenant_isolation ON ranking_player_run_summaries USING (
+CASE
+    WHEN (NULLIF(current_setting('app.tenant_id'::text, true), ''::text) IS NULL) THEN ((tenant_id IS NULL) OR (tenant_id IN ( SELECT tenants.id
+       FROM tenants
+      WHERE (tenants.include_in_all = true))))
+    ELSE (tenant_id = (current_setting('app.tenant_id'::text, true))::uuid)
+END);
 
-CREATE POLICY tenant_isolation ON ranking_runs USING ((realm_id IN ( SELECT wow_server_realms.id
-   FROM wow_server_realms)));
+CREATE POLICY tenant_isolation ON ranking_runs USING (
+CASE
+    WHEN (NULLIF(current_setting('app.tenant_id'::text, true), ''::text) IS NULL) THEN ((tenant_id IS NULL) OR (tenant_id IN ( SELECT tenants.id
+       FROM tenants
+      WHERE (tenants.include_in_all = true))))
+    ELSE (tenant_id = (current_setting('app.tenant_id'::text, true))::uuid)
+END);
 
 CREATE POLICY tenant_isolation ON wow_servers USING (
 CASE
