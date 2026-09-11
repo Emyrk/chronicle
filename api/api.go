@@ -16,7 +16,6 @@ import (
 	"github.com/Emyrk/chronicle/api/gearbuilderapi"
 	"github.com/Emyrk/chronicle/api/gearprogressionapi"
 	"github.com/Emyrk/chronicle/api/guildapi"
-	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/api/linkedapi"
 	"github.com/Emyrk/chronicle/api/panellayoutapi"
@@ -343,7 +342,7 @@ func (api *API) Routes() chi.Router {
 				r.Post("/requeue-version", api.RegressionRequeueVersion)
 			})
 
-			r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { httpapi.Write(r.Context(), w, http.StatusOK, "OK") })
+			r.Get("/healthz", healthz)
 			if api.Opts.WoWDB != nil {
 				r.Mount("/wowdb", api.Opts.WoWDB)
 			}
