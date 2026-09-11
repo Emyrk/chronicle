@@ -69,6 +69,8 @@ type Service struct {
 	itemPricingBaseURL    string
 	discordAuth           chronauth.DiscordOAuth
 	app                   *api.API
+	serverLn              net.Listener
+	httpHandler           *switchableHandler
 	closeListener         func()
 }
 
@@ -126,10 +128,10 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	datasetSvc := servicedataset.Dataset(s.broker)
 
-	serverLn, err := ProvisionListener(logger, s.httpAddress)
-	if err != nil {
+	if err := s.StartStartupServer(ctx, logger); err != nil {
 		return err
 	}
+	serverLn := s.serverLn
 
 	accessURL := serviceaccessurl.AccessURL(s.broker)
 	if accessURL == "" {
@@ -218,15 +220,17 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("create api: %w", err)
 	}
 
-	closeServer := ServeHandler(ctx, logger, handler.Routes(), serverLn, "api")
-	s.closeListener = closeServer
+	s.httpHandler.Set(handler.Routes())
 	s.app = handler
 
 	return nil
 }
 
 func (s *Service) Close(_ context.Context) error {
-	defer s.closeListener()
+	defer s.CloseHTTPServer()
+	if s.app == nil {
+		return nil
+	}
 	return s.app.Close()
 }
 
