@@ -8,6 +8,8 @@ import (
 	"sync"
 )
 
+const startupPagePreviewPath = "/example-not-ready"
+
 const startupPage = `<!doctype html>
 <html lang="en">
 <head>
@@ -48,6 +50,11 @@ func (h *switchableHandler) Set(handler http.Handler) {
 }
 
 func (h *switchableHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == startupPagePreviewPath {
+		startupPageHandler().ServeHTTP(w, r)
+		return
+	}
+
 	h.mu.RLock()
 	handler := h.handler
 	h.mu.RUnlock()

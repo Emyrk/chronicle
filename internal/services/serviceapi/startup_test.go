@@ -41,4 +41,9 @@ func TestSwitchableHandler(t *testing.T) {
 	after := httptest.NewRecorder()
 	handler.ServeHTTP(after, httptest.NewRequest(http.MethodGet, "/", nil))
 	require.Equal(t, "ready", after.Body.String())
+
+	preview := httptest.NewRecorder()
+	handler.ServeHTTP(preview, httptest.NewRequest(http.MethodGet, startupPagePreviewPath, nil))
+	require.Equal(t, http.StatusServiceUnavailable, preview.Code)
+	require.Contains(t, preview.Body.String(), "Please wait")
 }
