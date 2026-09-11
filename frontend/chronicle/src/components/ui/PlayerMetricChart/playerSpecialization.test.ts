@@ -1,18 +1,36 @@
 import { describe, expect, it } from "vitest";
-import type { ClassTalentData, TalentTabData } from "@/components/ui/TalentTreeViewer/talentLogic";
+import type { ClassTalentData, TalentEntry, TalentTabData } from "@/components/ui/TalentTreeViewer/talentLogic";
 import {
   dominantTalentTreeIndex,
   resolvePlayerSpecialization,
 } from "./playerSpecialization";
 
-function tab(name: string, iconTexture: string, orderIndex: number): TalentTabData {
+function talent(name: string, tabIndex: number): TalentEntry {
+  return {
+    id: tabIndex + 1,
+    name,
+    tierID: 0,
+    columnIndex: tabIndex,
+    maxRank: 5,
+    tabIndex,
+    spellRanks: [],
+    iconTexture: "",
+  };
+}
+
+function tab(
+  name: string,
+  iconTexture: string,
+  orderIndex: number,
+  talents: TalentEntry[] = [],
+): TalentTabData {
   return {
     id: orderIndex + 1,
     name,
     backgroundFile: "",
     orderIndex,
     iconTexture,
-    talents: [],
+    talents,
   };
 }
 
@@ -40,7 +58,7 @@ describe("dominantTalentTreeIndex", () => {
 describe("resolvePlayerSpecialization", () => {
   it("uses talent tab order rather than response array order", () => {
     expect(resolvePlayerSpecialization(
-      { heroClass: "Warrior", summary: [0, 31, 20] },
+      { heroClass: "Warrior", summary: [0, 31, 20], trees: ["", "", ""] },
       { "1": warrior },
     )).toEqual({
       name: "Fury",
@@ -48,9 +66,37 @@ describe("resolvePlayerSpecialization", () => {
     });
   });
 
+  it("resolves configured subspecs from full talent ranks", () => {
+    const shaman: ClassTalentData = {
+      id: 7,
+      name: "Shaman",
+      tabs: [
+        tab("Elemental", "", 0),
+        tab("Enhancement", "", 1, [
+          talent("Totemic Alignment", 0),
+          talent("Ancestral Guardian", 1),
+          talent("Spirit Armor", 2),
+        ]),
+        tab("Restoration", "", 2),
+      ],
+    };
+
+    expect(resolvePlayerSpecialization(
+      { heroClass: "Shaman", summary: [22, 29, 0], trees: ["", "111", ""] },
+      { "7": shaman },
+      ["vanilla", "nightmare-of-ursol"],
+    )).toMatchObject({ name: "Enhancement", subSpec: "Tank" });
+
+    expect(resolvePlayerSpecialization(
+      { heroClass: "Shaman", summary: [22, 29, 0], trees: ["", "101", ""] },
+      { "7": shaman },
+      ["vanilla", "nightmare-of-ursol"],
+    )).toMatchObject({ name: "Enhancement", subSpec: "DPS" });
+  });
+
   it("normalizes spaced class names and falls back when metadata is missing", () => {
     expect(resolvePlayerSpecialization(
-      { heroClass: "Death Knight", summary: [51, 0, 0] },
+      { heroClass: "Death Knight", summary: [51, 0, 0], trees: ["", "", ""] },
       {},
     )).toBeNull();
   });

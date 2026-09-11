@@ -17,10 +17,12 @@ const PlayerSpecializationContext = createContext<ReadonlyMap<string, PlayerSpec
 
 export function PlayerSpecializationProvider({
   datasetId,
+  flavor,
   selectedEncounterIds,
   children,
 }: {
   datasetId?: string;
+  flavor: readonly string[];
   selectedEncounterIds: readonly string[];
   children: React.ReactNode;
 }) {
@@ -48,6 +50,7 @@ export function PlayerSpecializationProvider({
               nextSnapshots.set(event.guid, {
                 heroClass: event.heroClass,
                 summary: [...event.talents.summary],
+                trees: [...event.talents.trees],
               });
             }
           }
@@ -71,12 +74,12 @@ export function PlayerSpecializationProvider({
     if (!talentTrees) return resolved;
 
     for (const [playerID, snapshot] of snapshots) {
-      const specialization = resolvePlayerSpecialization(snapshot, talentTrees.classes);
+      const specialization = resolvePlayerSpecialization(snapshot, talentTrees.classes, flavor);
       if (!specialization) continue;
       resolved.set(playerID, specialization);
     }
     return resolved;
-  }, [snapshots, talentTrees]);
+  }, [flavor, snapshots, talentTrees]);
 
   return (
     <PlayerSpecializationContext.Provider value={specializations}>

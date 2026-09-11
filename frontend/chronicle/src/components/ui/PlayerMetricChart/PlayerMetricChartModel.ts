@@ -3,6 +3,7 @@ export interface PlayerMetricChartData {
   playerName: string
   className: string
   specialization: string
+  subSpec?: string
   specializationIconUrl?: string
   value: number
   // stackedValue is used for overhealing.

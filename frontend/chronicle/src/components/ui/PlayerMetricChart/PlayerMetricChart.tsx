@@ -130,6 +130,7 @@ export function PlayerMetricChart({
       return {
         ...player,
         specialization: specialization.name,
+        subSpec: specialization.subSpec,
         specializationIconUrl: specialization.iconUrl,
       };
     }),
@@ -795,7 +796,7 @@ export function PlayerMetricRow({
               />
               <span className="font-medium">{player.playerName}</span>
               <span className="text-muted-foreground text-xs ml-auto">
-                {playerClassLabel(player.className, player.specialization, parsePill?.subSpec)}
+                {playerClassLabel(player.className, player.specialization, player.subSpec ?? parsePill?.subSpec)}
               </span>
             </div>
           </div>
@@ -813,7 +814,7 @@ export function PlayerMetricRow({
         onClose={handleClose}
         panelTitle={panelTitle}
         breakout={breakout}
-        subSpec={parsePill?.subSpec}
+        subSpec={player.subSpec ?? parsePill?.subSpec}
       />
     )}
   </>
