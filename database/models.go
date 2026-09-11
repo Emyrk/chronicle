@@ -1720,6 +1720,61 @@ type RaidComposition struct {
 	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type RankingPlayerRunSummary struct {
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	TenantID       uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+	PlayerLevel    int16              `db:"player_level" json:"player_level"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName      string             `db:"realm_name" json:"realm_name"`
+	GuildName      string             `db:"guild_name" json:"guild_name"`
+	DamageDone     int64              `db:"damage_done" json:"damage_done"`
+	HealingDone    int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone   int64              `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs   float64            `db:"duration_secs" json:"duration_secs"`
+	Dps            float64            `db:"dps" json:"dps"`
+	Hps            float64            `db:"hps" json:"hps"`
+	AvgIlvl        int16              `db:"avg_ilvl" json:"avg_ilvl"`
+	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	TalentSubSpec  string             `db:"talent_sub_spec" json:"talent_sub_spec"`
+	TalentLayout   string             `db:"talent_layout" json:"talent_layout"`
+	SummaryVersion int16              `db:"summary_version" json:"summary_version"`
+	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type RankingRun struct {
+	RunID                    uuid.UUID          `db:"run_id" json:"run_id"`
+	RepresentativeInstanceID uuid.UUID          `db:"representative_instance_id" json:"representative_instance_id"`
+	TenantID                 uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	InstanceName             string             `db:"instance_name" json:"instance_name"`
+	RealmID                  uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName                string             `db:"realm_name" json:"realm_name"`
+	DifficultyName           string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers               int16              `db:"max_players" json:"max_players"`
+	BossCoverage             int32              `db:"boss_coverage" json:"boss_coverage"`
+	EncounterNames           []string           `db:"encounter_names" json:"encounter_names"`
+	SummaryVersion           int16              `db:"summary_version" json:"summary_version"`
+	SourceGeneration         int64              `db:"source_generation" json:"source_generation"`
+	UpdatedAt                pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type RankingRunSummaryDirty struct {
+	RunID             uuid.UUID          `db:"run_id" json:"run_id"`
+	Generation        int64              `db:"generation" json:"generation"`
+	LastTransactionID pgtype.Uint64      `db:"last_transaction_id" json:"last_transaction_id"`
+	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type RankingSnapshot struct {
 	ID                  uuid.UUID          `db:"id" json:"id"`
 	TenantID            uuid.UUID          `db:"tenant_id" json:"tenant_id"`
