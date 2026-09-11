@@ -133,9 +133,12 @@ func TestOpenAPISpec(t *testing.T) {
 	instance, ok := document.Paths["/raidlogs/instances/{instance_id}"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Get a raid instance", instance.Summary)
-	require.Len(t, instance.Parameters, 1)
+	require.Len(t, instance.Parameters, 2)
 	require.Equal(t, []string{"Raid Instance"}, instance.Tags)
 	require.Equal(t, "instance_id", instance.Parameters[0].Name)
+	require.Equal(t, "attendance_only", instance.Parameters[1].Name)
+	require.Equal(t, "boolean", instance.Parameters[1].Schema.Type)
+	require.Contains(t, instance.Description, "omitting encounters and units")
 
 	rankingRecords, ok := document.Paths["/raidlogs/instances/{instance_id}/ranking-records"]["get"]
 	require.True(t, ok)

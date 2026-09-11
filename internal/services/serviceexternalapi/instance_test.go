@@ -72,6 +72,50 @@ func TestGetInstanceBySlugCompactsHostilePeriods(t *testing.T) {
 	require.NotContains(t, string(body), "large parser payload")
 }
 
+func TestGetInstanceBySlugAttendanceOnly(t *testing.T) {
+	t.Parallel()
+
+	instanceID := uuid.New()
+	realmID := uuid.New()
+	datasetID := uuid.New()
+	playerGUID := guid.GUID(1234)
+	store := &fakeExternalAPIStore{
+		instance: database.LogInstancesGuild{
+			ID: instanceID, RealmID: realmID, LogGroupID: uuid.New(),
+			Name: "Molten Core", HashedSlug: pgtype.Text{String: "example-instance", Valid: true},
+			RealmName: "Example Realm",
+		},
+		players: []database.LogInstancePlayer{{
+			InstanceID: instanceID,
+			UnitGuid:   playerGUID,
+			Name:       "Example",
+			Level:      60,
+		}},
+		datasetResolution: database.ResolveDatasetByRealmRow{
+			ServerDatasetID: uuid.NullUUID{UUID: uuid.Nil, Valid: true},
+			TenantDatasetID: uuid.NullUUID{UUID: datasetID, Valid: true},
+		},
+	}
+	service := &Service{db: store}
+	service.setupRoutes()
+
+	req := httptest.NewRequest(http.MethodGet, "/raidlogs/instances/example-instance?attendance_only=true", nil)
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var response map[string]json.RawMessage
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	require.Contains(t, response, "players")
+	require.JSONEq(t, `"`+datasetID.String()+`"`, string(response["dataset_id"]))
+	require.NotContains(t, response, "encounters")
+	require.NotContains(t, response, "units")
+	require.False(t, store.encountersCalled)
+	require.False(t, store.unitsCalled)
+	require.False(t, store.hostilesCalled)
+	require.False(t, store.phasesCalled)
+}
+
 func TestGetInstanceRankingRecordsBySlug(t *testing.T) {
 	t.Parallel()
 

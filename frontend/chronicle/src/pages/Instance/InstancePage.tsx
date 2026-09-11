@@ -125,7 +125,7 @@ function transformToInstance(
     start_time?: string;
     end_time?: string;
     realm_name?: string;
-    dataset_id?: string;
+    dataset_id?: string | null;
     icon_base_url?: string;
     guild?: { id: string; name: string };
     encounters: readonly WoWEncounterWithHostiles[] | null;
@@ -204,7 +204,7 @@ function transformToInstance(
     slug: apiInstance.slug,
     name: apiInstance.name,
     realm: apiInstance.realm_name,
-    datasetId: apiInstance.dataset_id,
+    datasetId: apiInstance.dataset_id ?? undefined,
     iconBaseUrl: apiInstance.icon_base_url,
     guild: apiInstance.guild,
     startTime,

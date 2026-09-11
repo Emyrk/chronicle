@@ -1939,12 +1939,19 @@ func (q *sqlQuerier) ListTenantsByDataset(ctx context.Context, defaultDatasetID 
 }
 
 const resolveDatasetByRealm = `-- name: ResolveDatasetByRealm :one
-SELECT COALESCE(s.default_dataset_id, t.default_dataset_id) AS dataset_id
+SELECT
+    s.default_dataset_id AS server_dataset_id,
+    t.default_dataset_id AS tenant_dataset_id
 FROM wow_server_realms r
 JOIN wow_servers s ON s.id = r.server_id
 LEFT JOIN tenants t ON t.id = s.tenant_id
 WHERE r.id = $1
 `
+
+type ResolveDatasetByRealmRow struct {
+	ServerDatasetID uuid.NullUUID `db:"server_dataset_id" json:"server_dataset_id"`
+	TenantDatasetID uuid.NullUUID `db:"tenant_dataset_id" json:"tenant_dataset_id"`
+}
 
 // Resolves the dataset for a realm. Precedence:
 //
@@ -1953,11 +1960,11 @@ WHERE r.id = $1
 // The result is NULL when neither is set (and when the realm is unknown the
 // query returns no rows); in both cases the caller falls back to the
 // compiled-in default dataset.
-func (q *sqlQuerier) ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error) {
+func (q *sqlQuerier) ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetByRealmRow, error) {
 	row := q.db.QueryRow(ctx, resolveDatasetByRealm, id)
-	var dataset_id uuid.NullUUID
-	err := row.Scan(&dataset_id)
-	return dataset_id, err
+	var i ResolveDatasetByRealmRow
+	err := row.Scan(&i.ServerDatasetID, &i.TenantDatasetID)
+	return i, err
 }
 
 const resolveDatasetWithFlavorByRealm = `-- name: ResolveDatasetWithFlavorByRealm :one
@@ -1965,7 +1972,10 @@ SELECT d.id AS dataset_id, d.default_flavor, COALESCE(t.additional_flavor, '{}')
 FROM wow_server_realms r
 JOIN wow_servers s ON s.id = r.server_id
 LEFT JOIN tenants t ON t.id = s.tenant_id
-JOIN datasets d ON d.id = COALESCE(s.default_dataset_id, t.default_dataset_id)
+JOIN datasets d ON d.id = COALESCE(
+    NULLIF(s.default_dataset_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    NULLIF(t.default_dataset_id, '00000000-0000-0000-0000-000000000000'::uuid)
+)
 WHERE r.id = $1
 `
 

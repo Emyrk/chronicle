@@ -108,8 +108,8 @@ type WoWInstance struct {
 	// DatasetID is the resolved game-data dataset for this instance's realm.
 	// Frontends use it to fetch matching talent/spell data regardless of the
 	// tenant domain serving the request. Only populated on the detail endpoint.
-	DatasetID   uuid.UUID `json:"dataset_id,omitempty"`
-	IconBaseURL string    `json:"icon_base_url,omitempty"`
+	DatasetID   *uuid.UUID `json:"dataset_id"`
+	IconBaseURL string     `json:"icon_base_url,omitempty"`
 	// Format is the log group's parse format (e.g. "1.12a-cc-addon").
 	// Flavor is the server-mechanics tag set. Both come from the log group and
 	// are only populated on the detail endpoint.
@@ -299,6 +299,14 @@ type InstancePlayer struct {
 	Class types.HeroClasses `json:"class"`
 	Race  types.HeroRaces   `json:"race"`
 	Level int32             `json:"level"`
+}
+
+// WoWAttendanceInstance is the lightweight instance detail response used when
+// only the raid roster is needed.
+type WoWAttendanceInstance struct {
+	WoWInstance
+	RealmName string                        `json:"realm_name,omitempty"`
+	Players   map[GUIDString]InstancePlayer `json:"players"`
 }
 
 type WoWParsedInstance struct {

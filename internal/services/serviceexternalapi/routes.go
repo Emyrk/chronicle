@@ -100,9 +100,10 @@ func (s *Service) registerRoutes() {
 	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}", OpenAPIOperation{
 		Tags:        []string{"Raid Instance"},
 		Summary:     "Get a raid instance",
-		Description: "Returns parsed raid-instance metadata, encounters, units, and players for an instance ID. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
+		Description: "Returns parsed raid-instance metadata, encounters, units, and players for an instance ID. Set attendance_only to true to return only instance metadata and players, omitting encounters and units. Hostile activity periods omit internal parser reasons and messages to keep the response compact.",
 		Parameters: []OpenAPIParameter{
-			pathParameter("instance_id", "Instance UUID", "11111111-1111-1111-1111-111111111111"),
+			pathParameter("instance_id", "Instance UUID or slug", "example-instance"),
+			queryParameter("attendance_only", "Return only instance metadata and players, omitting encounters and units", false, "boolean", nil),
 		},
 		Responses: okResponse(InstanceResponse{
 			WoWInstance: chroniclesdk.WoWInstance{Name: "Molten Core", Slug: "example-instance", DifficultyName: "Normal", MaxPlayers: 40},

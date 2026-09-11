@@ -218,13 +218,27 @@ function EndpointCard({ endpoint, server }: { endpoint: APIEndpoint; server: str
                           <span className="font-mono text-[9px] uppercase tracking-wider text-slate-500">{parameter.in}</span>
                           {parameter.required && <span className="text-rose-400">required</span>}
                         </span>
-                        <Input
-                          value={values[key] ?? ""}
-                          onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
-                          placeholder={parameter.description ?? `${parameter.schema.type} value`}
-                          title={parameter.description}
-                          className="h-9 border-white/10 bg-black/20 font-mono text-sm text-slate-100"
-                        />
+                        {parameter.schema.type === "boolean" ? (
+                          <select
+                            value={values[key] ?? ""}
+                            onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
+                            title={parameter.description}
+                            className="h-9 w-full rounded-md border border-white/10 bg-[#0b111d] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-cyan-300/50"
+                          >
+                            <option value="">Any</option>
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                          </select>
+                        ) : (
+                          <Input
+                            value={values[key] ?? ""}
+                            onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
+                            placeholder={parameter.description ?? `${parameter.schema.type} value`}
+                            title={parameter.description}
+                            className="h-9 border-white/10 bg-black/20 font-mono text-sm text-slate-100"
+                          />
+                        )}
+                        {parameter.description && <span className="block text-[11px] leading-4 text-slate-500">{parameter.description}</span>}
                       </label>
                     )
                   })}

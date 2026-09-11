@@ -50,7 +50,9 @@ ORDER BY t.name;
 -- The result is NULL when neither is set (and when the realm is unknown the
 -- query returns no rows); in both cases the caller falls back to the
 -- compiled-in default dataset.
-SELECT COALESCE(s.default_dataset_id, t.default_dataset_id) AS dataset_id
+SELECT
+    s.default_dataset_id AS server_dataset_id,
+    t.default_dataset_id AS tenant_dataset_id
 FROM wow_server_realms r
 JOIN wow_servers s ON s.id = r.server_id
 LEFT JOIN tenants t ON t.id = s.tenant_id
@@ -64,7 +66,10 @@ SELECT d.id AS dataset_id, d.default_flavor, COALESCE(t.additional_flavor, '{}')
 FROM wow_server_realms r
 JOIN wow_servers s ON s.id = r.server_id
 LEFT JOIN tenants t ON t.id = s.tenant_id
-JOIN datasets d ON d.id = COALESCE(s.default_dataset_id, t.default_dataset_id)
+JOIN datasets d ON d.id = COALESCE(
+    NULLIF(s.default_dataset_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    NULLIF(t.default_dataset_id, '00000000-0000-0000-0000-000000000000'::uuid)
+)
 WHERE r.id = $1;
 
 -- name: GetDatasetImportSummary :one

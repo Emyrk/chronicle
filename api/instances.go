@@ -99,6 +99,36 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 
 	db := api.Opts.Zed
 
+	players, err := db.InstancePlayersByInstanceID(ctx, inst.ID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch instance players",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	setDataset := func(out *chroniclesdk.WoWInstance) {
+		datasetID, ok := api.Opts.Dataset.LookupDatasetForRealm(ctx, inst.RealmID)
+		if !ok {
+			return
+		}
+		out.DatasetID = &datasetID
+		if ds, err := api.Opts.Dataset.GetDataset(ctx, datasetID); err == nil {
+			out.IconBaseURL = ds.IconBaseUrl
+		}
+		w.Header().Set(httpapi.DatasetHeader, datasetID.String())
+	}
+
+	if attendanceOnly(r) {
+		out := db2sdk.WowAttendanceInstance(inst, players)
+		setDataset(&out.WoWInstance)
+		httpapi.Write(ctx, w, http.StatusOK, out)
+		return
+	}
+
 	encounters, err := db.EncountersByInstanceID(ctx, inst.ID)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -115,17 +145,6 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
 				Message: "Failed to fetch instance units",
-				Detail:  err.Error(),
-			},
-		})
-		return
-	}
-
-	players, err := db.InstancePlayersByInstanceID(ctx, inst.ID)
-	if err != nil {
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
-			Response: chroniclesdk.Response{
-				Message: "Failed to fetch instance players",
 				Detail:  err.Error(),
 			},
 		})
@@ -155,12 +174,13 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights, phases)
-	out.DatasetID = api.Opts.Dataset.ResolveDatasetForRealm(ctx, inst.RealmID)
-	if ds, err := api.Opts.Dataset.GetDataset(ctx, out.DatasetID); err == nil {
-		out.IconBaseURL = ds.IconBaseUrl
-	}
-	w.Header().Set(httpapi.DatasetHeader, out.DatasetID.String())
+	setDataset(&out.WoWInstance)
 	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+func attendanceOnly(r *http.Request) bool {
+	value, err := strconv.ParseBool(r.URL.Query().Get("attendance_only"))
+	return err == nil && value
 }
 
 func (api *API) InstanceOverviewMetrics(w http.ResponseWriter, r *http.Request) {
