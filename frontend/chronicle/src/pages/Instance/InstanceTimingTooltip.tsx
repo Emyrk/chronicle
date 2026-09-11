@@ -5,7 +5,8 @@ function formatDurationMs(ms: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}hr ${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+  if (hours > 0)
+    return `${hours}hr ${minutes}m ${seconds.toString().padStart(2, "0")}s`;
   return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
 }
 
@@ -24,7 +25,9 @@ function TimingRow({
       <div>
         <div className="flex items-baseline justify-between gap-4">
           <span className="font-medium">{label}</span>
-          <span className="font-mono tabular-nums">{formatDurationMs(durationMs)}</span>
+          <span className="font-mono tabular-nums">
+            {formatDurationMs(durationMs)}
+          </span>
         </div>
         <p className="mt-0.5 leading-snug opacity-65">{description}</p>
       </div>
@@ -35,10 +38,12 @@ function TimingRow({
 export function InstanceTimingTooltip({
   elapsedDurationMs,
   rankedDurationMs,
+  bossToBossDurationMs,
   combatDurationMs,
 }: {
   elapsedDurationMs: number;
   rankedDurationMs?: number;
+  bossToBossDurationMs?: number;
   combatDurationMs: number;
 }) {
   return (
@@ -50,9 +55,16 @@ export function InstanceTimingTooltip({
       />
       {rankedDurationMs !== undefined && (
         <TimingRow
-          label="Ranked time"
+          label="Full raid time"
           durationMs={rankedDurationMs}
-          description="Leaderboard time from the first required boss pull to the final required boss encounter end."
+          description="Clear leaderboard time after applying any instance-specific start rule."
+        />
+      )}
+      {bossToBossDurationMs !== undefined && (
+        <TimingRow
+          label="Boss time"
+          durationMs={bossToBossDurationMs}
+          description="From the first required boss pull to the final required boss encounter end."
         />
       )}
       <TimingRow

@@ -43,6 +43,9 @@ const (
 type SpeedrunRules struct {
 	Requirements []SpeedrunRequirement  `json:"requirements"`
 	LevelRange   *LevelRangeRequirement `json:"level_range,omitempty"`
+	// RankedStartAfterRequirement starts ranked clear timing at the end of the
+	// fight that satisfies the named requirement instead of at the first fight.
+	RankedStartAfterRequirement string `json:"ranked_start_after_requirement,omitempty"`
 	// ReentryGap controls when a completed run can be split from a later entry
 	// into the same zone. Zero uses DefaultReentryGap.
 	ReentryGap time.Duration `json:"-"`
@@ -89,15 +92,18 @@ type LevelRangeResult struct {
 
 // SpeedrunResult is the outcome of evaluating speedrun rules against an instance.
 type SpeedrunResult struct {
-	Qualified            bool              `json:"qualified"`
-	StartTime            time.Time         `json:"start_time"`
-	CompletionTime       time.Time         `json:"completion_time"`
-	Duration             time.Duration     `json:"duration"`
-	RankedStartTime      time.Time         `json:"ranked_start_time"`
-	RankedCompletionTime time.Time         `json:"ranked_completion_time"`
-	RankedDuration       time.Duration     `json:"ranked_duration"`
-	Proof                []SpeedrunProof   `json:"proof"`
-	LevelRange           *LevelRangeResult `json:"level_range,omitempty"`
+	Qualified                bool              `json:"qualified"`
+	StartTime                time.Time         `json:"start_time"`
+	CompletionTime           time.Time         `json:"completion_time"`
+	Duration                 time.Duration     `json:"duration"`
+	RankedStartTime          time.Time         `json:"ranked_start_time"`
+	RankedCompletionTime     time.Time         `json:"ranked_completion_time"`
+	RankedDuration           time.Duration     `json:"ranked_duration"`
+	BossToBossStartTime      time.Time         `json:"boss_to_boss_start_time"`
+	BossToBossCompletionTime time.Time         `json:"boss_to_boss_completion_time"`
+	BossToBossDuration       time.Duration     `json:"boss_to_boss_duration"`
+	Proof                    []SpeedrunProof   `json:"proof"`
+	LevelRange               *LevelRangeResult `json:"level_range,omitempty"`
 }
 
 // SpeedrunProofPayload is the JSON structure stored in the database proof column.

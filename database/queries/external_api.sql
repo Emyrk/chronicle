@@ -230,16 +230,16 @@ SELECT
     duplicate.id,
     duplicate.hashed_slug,
     COALESCE(CASE
-        WHEN @use_ranked_timing::boolean THEN duplicate_speedrun.ranked_duration_ms
-        ELSE duplicate_speedrun.duration_ms
+        WHEN @use_ranked_timing::boolean THEN duplicate_speedrun.boss_to_boss_duration_ms
+        ELSE duplicate_speedrun.ranked_duration_ms
     END, 0)::bigint AS duration_ms,
     CASE
-        WHEN @use_ranked_timing::boolean THEN duplicate_speedrun.ranked_start_time
-        ELSE duplicate_speedrun.start_time
+        WHEN @use_ranked_timing::boolean THEN duplicate_speedrun.boss_to_boss_start_time
+        ELSE duplicate_speedrun.ranked_start_time
     END::timestamptz AS start_time,
     CASE
-        WHEN @use_ranked_timing::boolean THEN duplicate_speedrun.ranked_completion_time
-        ELSE duplicate_speedrun.completion_time
+        WHEN @use_ranked_timing::boolean THEN duplicate_speedrun.boss_to_boss_completion_time
+        ELSE duplicate_speedrun.ranked_completion_time
     END::timestamptz AS completion_time,
     duplicate.parser_version,
     COALESCE(duplicate_speedrun.addon_version, '')::text AS addon_version,

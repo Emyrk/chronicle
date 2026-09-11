@@ -1,11 +1,16 @@
 import type { SpeedrunProof, SpeedrunResult } from "@/api/typesGenerated";
 import { GUID } from "@/lib/guid/guid";
-import type { EntitySelection, PanelContext, PanelRenderProps } from "../../types";
+import type {
+  EntitySelection,
+  PanelContext,
+  PanelRenderProps,
+} from "../../types";
 import type { Instance } from "../../../InstancePage";
 import type { LeaderboardPanelResult } from "../leaderboard.processor";
 
 export const FIXTURE_DURATION_MS = 8_624_000;
 export const FIXTURE_RANKED_DURATION_MS = 7_824_000;
+export const FIXTURE_BOSS_TO_BOSS_DURATION_MS = 7_224_000;
 
 function proof(
   name: string,
@@ -58,6 +63,9 @@ export const QUALIFIED_FIXTURE_SPEEDRUN: SpeedrunResult = {
   ranked_start_time: "2026-07-18T20:10:00Z",
   ranked_completion_time: "2026-07-18T22:20:24Z",
   ranked_duration_ms: FIXTURE_RANKED_DURATION_MS,
+  boss_to_boss_start_time: "2026-07-18T20:20:00Z",
+  boss_to_boss_completion_time: "2026-07-18T22:20:24Z",
+  boss_to_boss_duration_ms: FIXTURE_BOSS_TO_BOSS_DURATION_MS,
   proof: QUALIFIED_PROOF,
   version_status: {
     parser_version: "v0.0.424",

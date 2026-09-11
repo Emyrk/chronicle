@@ -164,18 +164,18 @@ WITH clears AS (
         sr.instance_name,
         li.difficulty_name,
         li.max_players,
-        sr.duration_ms,
-        sr.completion_time
+        sr.ranked_duration_ms::bigint AS duration_ms,
+        sr.ranked_completion_time::timestamptz AS completion_time
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id::uuid
-      AND sr.duration_ms > 0
+      AND sr.ranked_duration_ms > 0
       AND CASE
-          WHEN @since_days::bigint > 0 THEN sr.completion_time >= now() - make_interval(days => @since_days::int)
+          WHEN @since_days::bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => @since_days::int)
           ELSE true
       END
-    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.ranked_duration_ms ASC
 ), scored AS (
     SELECT
         c.*,

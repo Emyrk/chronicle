@@ -2474,7 +2474,7 @@ SELECT
   wsr.name AS realm_name,
   g.name AS guild_name,
   t.slug AS tenant_slug,
-  sr.duration_ms AS clear_duration_ms,
+  sr.ranked_duration_ms AS clear_duration_ms,
   COALESCE(guild_average.avg_duration_ms, 0)::bigint AS guild_avg_duration_ms,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
 FROM log_instances li
@@ -2484,12 +2484,12 @@ LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN wow_servers ws ON ws.id = wsr.server_id
 LEFT JOIN tenants t ON t.id = ws.tenant_id
 LEFT JOIN guilds g ON g.id = li.guild_id
-LEFT JOIN instance_speedruns sr ON sr.instance_id = li.id AND sr.qualified = TRUE AND sr.duration_ms > 0
+LEFT JOIN instance_speedruns sr ON sr.instance_id = li.id AND sr.qualified = TRUE AND sr.ranked_duration_ms > 0
 LEFT JOIN LATERAL (
   SELECT AVG(previous.duration_ms)::bigint AS avg_duration_ms
   FROM (
     SELECT DISTINCT ON (COALESCE(previous_li.duplicate_group_id, previous_li.id))
-      previous_sr.duration_ms
+      previous_sr.ranked_duration_ms AS duration_ms
     FROM instance_speedruns previous_sr
     JOIN log_instances previous_li ON previous_li.id = previous_sr.instance_id
     WHERE previous_sr.guild_id = li.guild_id
@@ -2497,9 +2497,9 @@ LEFT JOIN LATERAL (
       AND previous_li.difficulty_name = li.difficulty_name
       AND previous_li.max_players = li.max_players
       AND previous_sr.qualified = TRUE
-      AND previous_sr.duration_ms > 0
+      AND previous_sr.ranked_duration_ms > 0
       AND COALESCE(previous_li.duplicate_group_id, previous_li.id) != COALESCE(li.duplicate_group_id, li.id)
-    ORDER BY COALESCE(previous_li.duplicate_group_id, previous_li.id), previous_sr.duration_ms ASC
+    ORDER BY COALESCE(previous_li.duplicate_group_id, previous_li.id), previous_sr.ranked_duration_ms ASC
   ) previous
 ) guild_average ON TRUE
 WHERE COALESCE(li.duplicate_group_id, li.id) = $1::uuid
@@ -3005,16 +3005,16 @@ SELECT
     duplicate.id,
     duplicate.hashed_slug,
     COALESCE(CASE
-        WHEN $1::boolean THEN duplicate_speedrun.ranked_duration_ms
-        ELSE duplicate_speedrun.duration_ms
+        WHEN $1::boolean THEN duplicate_speedrun.boss_to_boss_duration_ms
+        ELSE duplicate_speedrun.ranked_duration_ms
     END, 0)::bigint AS duration_ms,
     CASE
-        WHEN $1::boolean THEN duplicate_speedrun.ranked_start_time
-        ELSE duplicate_speedrun.start_time
+        WHEN $1::boolean THEN duplicate_speedrun.boss_to_boss_start_time
+        ELSE duplicate_speedrun.ranked_start_time
     END::timestamptz AS start_time,
     CASE
-        WHEN $1::boolean THEN duplicate_speedrun.ranked_completion_time
-        ELSE duplicate_speedrun.completion_time
+        WHEN $1::boolean THEN duplicate_speedrun.boss_to_boss_completion_time
+        ELSE duplicate_speedrun.ranked_completion_time
     END::timestamptz AS completion_time,
     duplicate.parser_version,
     COALESCE(duplicate_speedrun.addon_version, '')::text AS addon_version,
@@ -5820,18 +5820,18 @@ WITH clears AS (
         sr.instance_name,
         li.difficulty_name,
         li.max_players,
-        sr.duration_ms,
-        sr.completion_time
+        sr.ranked_duration_ms::bigint AS duration_ms,
+        sr.ranked_completion_time::timestamptz AS completion_time
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = $2::uuid
-      AND sr.duration_ms > 0
+      AND sr.ranked_duration_ms > 0
       AND CASE
-          WHEN $3::bigint > 0 THEN sr.completion_time >= now() - make_interval(days => $3::int)
+          WHEN $3::bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $3::int)
           ELSE true
       END
-    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.ranked_duration_ms ASC
 ), scored AS (
     SELECT
         c.run_id, c.instance_id, c.instance_slug, c.instance_name, c.difficulty_name, c.max_players, c.duration_ms, c.completion_time,
@@ -14480,18 +14480,18 @@ const guildRaidClears = `-- name: GuildRaidClears :many
 WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         sr.instance_name,
-        sr.duration_ms,
-        sr.completion_time
+        sr.ranked_duration_ms::bigint AS duration_ms,
+        sr.ranked_completion_time::timestamptz AS completion_time
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = $1 :: uuid
-      AND sr.duration_ms > 0
+      AND sr.ranked_duration_ms > 0
       AND CASE
-          WHEN $2 :: bigint > 0 THEN sr.completion_time >= now() - make_interval(days => $2::int)
+          WHEN $2 :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $2::int)
           ELSE true
       END
-    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.ranked_duration_ms ASC
 )
 SELECT
     instance_name,
@@ -14562,27 +14562,30 @@ INSERT INTO instance_speedruns (
     $1, $2, $3, $4,
     $5, $6, $7, $8,
     $9, $10, $11,
-    $9, $10, $11,
-    $12, $13, $14, $15
+    $12, $13, $14,
+    $15, $16, $17, $18
 )
 `
 
 type InsertInstanceSpeedrunParams struct {
-	InstanceID           uuid.UUID          `db:"instance_id" json:"instance_id"`
-	InstanceName         string             `db:"instance_name" json:"instance_name"`
-	RealmID              uuid.UUID          `db:"realm_id" json:"realm_id"`
-	GuildID              uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	Qualified            bool               `db:"qualified" json:"qualified"`
-	StartTime            pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	CompletionTime       pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
-	DurationMs           int64              `db:"duration_ms" json:"duration_ms"`
-	RankedStartTime      pgtype.Timestamptz `db:"ranked_start_time" json:"ranked_start_time"`
-	RankedCompletionTime pgtype.Timestamptz `db:"ranked_completion_time" json:"ranked_completion_time"`
-	RankedDurationMs     pgtype.Int8        `db:"ranked_duration_ms" json:"ranked_duration_ms"`
-	Proof                []byte             `db:"proof" json:"proof"`
-	AddonVersion         string             `db:"addon_version" json:"addon_version"`
-	ParserVersionNum     int64              `db:"parser_version_num" json:"parser_version_num"`
-	AddonVersionNum      int64              `db:"addon_version_num" json:"addon_version_num"`
+	InstanceID               uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceName             string             `db:"instance_name" json:"instance_name"`
+	RealmID                  uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID                  uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	Qualified                bool               `db:"qualified" json:"qualified"`
+	StartTime                pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime           pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	DurationMs               int64              `db:"duration_ms" json:"duration_ms"`
+	RankedStartTime          pgtype.Timestamptz `db:"ranked_start_time" json:"ranked_start_time"`
+	RankedCompletionTime     pgtype.Timestamptz `db:"ranked_completion_time" json:"ranked_completion_time"`
+	RankedDurationMs         pgtype.Int8        `db:"ranked_duration_ms" json:"ranked_duration_ms"`
+	BossToBossStartTime      pgtype.Timestamptz `db:"boss_to_boss_start_time" json:"boss_to_boss_start_time"`
+	BossToBossCompletionTime pgtype.Timestamptz `db:"boss_to_boss_completion_time" json:"boss_to_boss_completion_time"`
+	BossToBossDurationMs     pgtype.Int8        `db:"boss_to_boss_duration_ms" json:"boss_to_boss_duration_ms"`
+	Proof                    []byte             `db:"proof" json:"proof"`
+	AddonVersion             string             `db:"addon_version" json:"addon_version"`
+	ParserVersionNum         int64              `db:"parser_version_num" json:"parser_version_num"`
+	AddonVersionNum          int64              `db:"addon_version_num" json:"addon_version_num"`
 }
 
 func (q *sqlQuerier) InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error {
@@ -14598,6 +14601,9 @@ func (q *sqlQuerier) InsertInstanceSpeedrun(ctx context.Context, arg InsertInsta
 		arg.RankedStartTime,
 		arg.RankedCompletionTime,
 		arg.RankedDurationMs,
+		arg.BossToBossStartTime,
+		arg.BossToBossCompletionTime,
+		arg.BossToBossDurationMs,
 		arg.Proof,
 		arg.AddonVersion,
 		arg.ParserVersionNum,
@@ -14627,7 +14633,7 @@ deduped AS (
         li.hashed_slug,
         sr.start_time,
         sr.completion_time,
-        sr.duration_ms,
+        sr.ranked_duration_ms::bigint AS duration_ms,
         sr.qualified,
         sr.proof,
         sr.guild_id,
@@ -14674,8 +14680,8 @@ deduped AS (
     ORDER BY
         COALESCE(li.duplicate_group_id, li.id),
         sr.qualified DESC,
-        (sr.duration_ms > 0) DESC,
-        sr.duration_ms ASC,
+        (sr.ranked_duration_ms > 0) DESC,
+        sr.ranked_duration_ms ASC,
         sr.start_time DESC
 )
 SELECT instance_id, hashed_slug, start_time, completion_time, duration_ms, qualified, proof, guild_id, guild_name, requirements_complete, player_deaths, wipe_count, top_incoming_damage_abilities, encounter_span_duration_ms, total_combat_duration_ms, total_boss_duration_ms, metrics_version, encounter_kill_times_json
@@ -14766,7 +14772,7 @@ JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.instance_name = $1
   AND sr.qualified = true
-  AND sr.ranked_duration_ms IS NOT NULL
+  AND sr.boss_to_boss_duration_ms IS NOT NULL
 ORDER BY li.difficulty_name
 `
 
@@ -14870,7 +14876,7 @@ FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.qualified = true
-  AND sr.ranked_duration_ms IS NOT NULL
+  AND sr.boss_to_boss_duration_ms IS NOT NULL
 ORDER BY sr.instance_name, li.difficulty_name
 `
 
@@ -14909,9 +14915,9 @@ WITH deduped AS (
         sr.instance_name,
         li.difficulty_name,
         sr.guild_id,
-        CASE WHEN $5::boolean THEN COALESCE(sr.ranked_duration_ms, 0) ELSE sr.duration_ms END::bigint AS duration_ms,
-        CASE WHEN $5::boolean THEN COALESCE(sr.ranked_start_time, sr.start_time) ELSE sr.start_time END::timestamptz AS start_time,
-        CASE WHEN $5::boolean THEN COALESCE(sr.ranked_completion_time, sr.completion_time) ELSE sr.completion_time END::timestamptz AS completion_time,
+        CASE WHEN $5::boolean THEN sr.boss_to_boss_duration_ms ELSE sr.ranked_duration_ms END::bigint AS duration_ms,
+        CASE WHEN $5::boolean THEN sr.boss_to_boss_start_time ELSE sr.ranked_start_time END::timestamptz AS start_time,
+        CASE WHEN $5::boolean THEN sr.boss_to_boss_completion_time ELSE sr.ranked_completion_time END::timestamptz AS completion_time,
         sr.qualified,
         sr.addon_version,
         li.hashed_slug,
@@ -14937,7 +14943,7 @@ WITH deduped AS (
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.instance_name = $6
       AND sr.qualified = true
-      AND (NOT $5::boolean OR sr.ranked_duration_ms IS NOT NULL)
+      AND (NOT $5::boolean OR sr.boss_to_boss_duration_ms IS NOT NULL)
       AND sr.guild_id IS NOT NULL
       AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
       AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
@@ -14952,7 +14958,7 @@ WITH deduped AS (
       END
       AND CASE
           WHEN $9 :: bigint > 0 THEN
-              CASE WHEN $5::boolean THEN sr.ranked_completion_time ELSE sr.completion_time END >= now() - make_interval(days => $9::int)
+              CASE WHEN $5::boolean THEN sr.boss_to_boss_completion_time ELSE sr.ranked_completion_time END >= now() - make_interval(days => $9::int)
           ELSE true
       END
       AND CASE
@@ -14960,7 +14966,7 @@ WITH deduped AS (
           ELSE true
       END
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        CASE WHEN $5::boolean THEN sr.ranked_duration_ms ELSE sr.duration_ms END ASC
+        CASE WHEN $5::boolean THEN sr.boss_to_boss_duration_ms ELSE sr.ranked_duration_ms END ASC
 ),
 best AS (
     SELECT DISTINCT ON (
@@ -15019,7 +15025,7 @@ type SpeedrunLeaderboardRow struct {
 // Excludes runs without a guild. Optional filters: realm, player count, guild.
 // Each difficulty has its own board: set filter_difficulty to select the board
 // matching difficulty_name (empty string matches runs with no recorded difficulty).
-// use_ranked_timing selects boss-to-boss ranked timing; false selects full clear timing.
+// use_ranked_timing selects boss-to-boss timing; false selects ranked clear timing.
 // When no guild filter: keep only the best run per guild.
 // When guild filter is set: keep all runs for that guild.
 func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error) {
@@ -15078,7 +15084,7 @@ SELECT DISTINCT COALESCE(wsr.name, '') AS realm_name
 FROM instance_speedruns sr
 JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
 WHERE sr.qualified = true
-  AND sr.ranked_duration_ms IS NOT NULL
+  AND sr.boss_to_boss_duration_ms IS NOT NULL
 ORDER BY realm_name
 `
 
@@ -15618,17 +15624,17 @@ eligible AS (
         sr.instance_name,
         li.difficulty_name,
         li.max_players,
-        sr.duration_ms,
-        sr.start_time
+        sr.ranked_duration_ms::bigint AS duration_ms,
+        sr.ranked_start_time::timestamptz AS start_time
     FROM instance_speedruns sr
     JOIN representative_instances ri ON ri.id = sr.instance_id
     JOIN log_instances li ON li.id = sr.instance_id
     CROSS JOIN snapshot s
     WHERE sr.qualified = true
-      AND sr.duration_ms > 0
+      AND sr.ranked_duration_ms > 0
       AND sr.start_time < s.cutoff
       AND (s.window_start IS NULL OR sr.start_time >= s.window_start)
-    ORDER BY ri.run_id, sr.duration_ms ASC, sr.start_time ASC, sr.instance_id ASC
+    ORDER BY ri.run_id, sr.ranked_duration_ms ASC, sr.start_time ASC, sr.instance_id ASC
 )
 INSERT INTO time_parse_clear_time_members (
     snapshot_id, instance_id, run_id,
@@ -16005,7 +16011,7 @@ WITH clear_stats AS (
             sr.instance_id::text || '|' ||
             COALESCE(li.duplicate_group_id, li.id)::text || '|' ||
             sr.qualified::text || '|' ||
-            sr.duration_ms::text || '|' ||
+            sr.ranked_duration_ms::text || '|' ||
             sr.instance_name || '|' ||
             li.difficulty_name || '|' ||
             li.max_players::text || '|' ||
@@ -16015,7 +16021,7 @@ WITH clear_stats AS (
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     WHERE sr.qualified = true
-      AND sr.duration_ms > 0
+      AND sr.ranked_duration_ms > 0
       AND sr.start_time < $1
       AND ($2::timestamptz IS NULL OR sr.start_time >= $2)
 ),
