@@ -192,7 +192,9 @@ FROM deduped d
 GROUP BY d.encounter_name
 ORDER BY (d.encounter_name = 'Trash'), d.encounter_name;
 
--- name: RankingsLeaderboard :many
+-- name: RankingsLeaderboardSlow :many
+-- Reference implementation for paginated player rankings. Keep this query as the
+-- correctness fallback when summary-backed reads are unavailable or unsupported.
 -- Returns paginated DPS rankings showing each player's best single run.
 -- A "run" is one instance_id (deduplicated by duplicate_group_id).
 -- Within a run, damage and duration are summed across encounters to get run DPS.

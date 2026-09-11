@@ -11683,7 +11683,7 @@ func (q *sqlQuerier) RankingsKillTimeStats(ctx context.Context, arg RankingsKill
 	return items, nil
 }
 
-const rankingsLeaderboard = `-- name: RankingsLeaderboard :many
+const rankingsLeaderboardSlow = `-- name: RankingsLeaderboardSlow :many
 WITH candidate_runs AS (
     -- Class/spec/sub-spec/role filters usually narrow the leaderboard to a small
     -- fraction of raid logs. Find those duplicate groups first so representative
@@ -11878,7 +11878,7 @@ LIMIT $3::bigint
 OFFSET $2::bigint
 `
 
-type RankingsLeaderboardParams struct {
+type RankingsLeaderboardSlowParams struct {
 	Metric           string   `db:"metric" json:"metric"`
 	QueryOffset      int64    `db:"query_offset" json:"query_offset"`
 	QueryLimit       int64    `db:"query_limit" json:"query_limit"`
@@ -11895,7 +11895,7 @@ type RankingsLeaderboardParams struct {
 	FilterMaxPlayers int16    `db:"filter_max_players" json:"filter_max_players"`
 }
 
-type RankingsLeaderboardRow struct {
+type RankingsLeaderboardSlowRow struct {
 	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
@@ -11924,6 +11924,8 @@ type RankingsLeaderboardRow struct {
 	TotalCount     int64              `db:"total_count" json:"total_count"`
 }
 
+// Reference implementation for paginated player rankings. Keep this query as the
+// correctness fallback when summary-backed reads are unavailable or unsupported.
 // Returns paginated DPS rankings showing each player's best single run.
 // A "run" is one instance_id (deduplicated by duplicate_group_id).
 // Within a run, damage and duration are summed across encounters to get run DPS.
@@ -11934,8 +11936,8 @@ type RankingsLeaderboardRow struct {
 // union across realms would exclude every run when multiple realms are shown.
 // Step 1: aggregate per player per run (sum encounters within a single instance run).
 // Step 2: pick each player's best run.
-func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error) {
-	rows, err := q.db.Query(ctx, rankingsLeaderboard,
+func (q *sqlQuerier) RankingsLeaderboardSlow(ctx context.Context, arg RankingsLeaderboardSlowParams) ([]RankingsLeaderboardSlowRow, error) {
+	rows, err := q.db.Query(ctx, rankingsLeaderboardSlow,
 		arg.Metric,
 		arg.QueryOffset,
 		arg.QueryLimit,
@@ -11955,9 +11957,9 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RankingsLeaderboardRow
+	var items []RankingsLeaderboardSlowRow
 	for rows.Next() {
-		var i RankingsLeaderboardRow
+		var i RankingsLeaderboardSlowRow
 		if err := rows.Scan(
 			&i.PlayerGuid,
 			&i.PlayerName,

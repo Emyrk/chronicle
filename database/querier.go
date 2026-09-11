@@ -659,6 +659,8 @@ type sqlcQuerier interface {
 	// Box plot stats on encounter duration (seconds) per encounter name.
 	// Deduplicates encounters across duplicate log groups.
 	RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error)
+	// Reference implementation for paginated player rankings. Keep this query as the
+	// correctness fallback when summary-backed reads are unavailable or unsupported.
 	// Returns paginated DPS rankings showing each player's best single run.
 	// A "run" is one instance_id (deduplicated by duplicate_group_id).
 	// Within a run, damage and duration are summed across encounters to get run DPS.
@@ -669,7 +671,7 @@ type sqlcQuerier interface {
 	// union across realms would exclude every run when multiple realms are shown.
 	// Step 1: aggregate per player per run (sum encounters within a single instance run).
 	// Step 2: pick each player's best run.
-	RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
+	RankingsLeaderboardSlow(ctx context.Context, arg RankingsLeaderboardSlowParams) ([]RankingsLeaderboardSlowRow, error)
 	// Distinct realm names that have DPS ranking data, for the realm filter dropdown.
 	// Rows with an empty realm name are excluded: they cannot be filtered on, and
 	// selecting "all realms" must collapse to no filter so those rows still appear.

@@ -318,7 +318,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		classParam = string(db2sdk.HeroClassToDB(types.HeroClasses(classParam)))
 	}
 
-	rows, err := s.store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+	rows, err := s.store.RankingsLeaderboardSlow(ctx, database.RankingsLeaderboardSlowParams{
 		InstanceNames:    splitCSV(q.Get("instance_names")),
 		EncounterNames:   splitCSV(q.Get("encounter_names")),
 		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
