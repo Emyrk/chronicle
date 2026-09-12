@@ -916,6 +916,11 @@ CREATE TABLE instance_speedruns (
     ranked_start_time timestamp with time zone,
     ranked_completion_time timestamp with time zone,
     ranked_duration_ms bigint,
+    boss_to_boss_start_time timestamp with time zone,
+    boss_to_boss_completion_time timestamp with time zone,
+    boss_to_boss_duration_ms bigint,
+    CONSTRAINT instance_speedruns_boss_to_boss_duration_nonnegative CHECK (((boss_to_boss_duration_ms IS NULL) OR (boss_to_boss_duration_ms >= 0))),
+    CONSTRAINT instance_speedruns_boss_to_boss_timing_complete CHECK ((((boss_to_boss_start_time IS NULL) AND (boss_to_boss_completion_time IS NULL) AND (boss_to_boss_duration_ms IS NULL)) OR ((boss_to_boss_start_time IS NOT NULL) AND (boss_to_boss_completion_time IS NOT NULL) AND (boss_to_boss_duration_ms IS NOT NULL)))),
     CONSTRAINT instance_speedruns_ranked_duration_nonnegative CHECK (((ranked_duration_ms IS NULL) OR (ranked_duration_ms >= 0))),
     CONSTRAINT instance_speedruns_ranked_timing_complete CHECK ((((ranked_start_time IS NULL) AND (ranked_completion_time IS NULL) AND (ranked_duration_ms IS NULL)) OR ((ranked_start_time IS NOT NULL) AND (ranked_completion_time IS NOT NULL) AND (ranked_duration_ms IS NOT NULL))))
 );
@@ -2395,6 +2400,8 @@ CREATE INDEX idx_instance_loot_instance ON instance_loot USING btree (instance_i
 CREATE INDEX idx_instance_loot_item ON instance_loot USING btree (item_id);
 
 CREATE INDEX idx_instance_loot_received ON instance_loot USING btree (received_guid);
+
+CREATE INDEX idx_instance_speedruns_boss_to_boss_leaderboard ON instance_speedruns USING btree (instance_name, boss_to_boss_duration_ms) WHERE ((qualified = true) AND (boss_to_boss_duration_ms IS NOT NULL));
 
 CREATE INDEX idx_instance_speedruns_leaderboard ON instance_speedruns USING btree (instance_name, duration_ms) WHERE (qualified = true);
 
