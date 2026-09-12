@@ -90,7 +90,7 @@ func TestHandleLeaderboardVerificationAuthorization(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/leaderboard?verify=true", nil).WithContext(tc.ctx)
 			rec := httptest.NewRecorder()
 
-			handleLeaderboardWithDependencies(store, tc.authorizer, nil, nil, rec, req)
+			handleLeaderboardWithDependencies(store, tc.authorizer, nil, nil, false, rec, req)
 
 			assert.Equal(t, tc.wantStatus, rec.Code)
 			assert.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
@@ -119,7 +119,7 @@ func TestHandleLeaderboardVerificationMatchUsesIdenticalFilters(t *testing.T) {
 		WithContext(authenticatedLeaderboardContext())
 	rec := httptest.NewRecorder()
 
-	handleLeaderboardWithDependencies(store, authorizer, nil, nil, rec, req)
+	handleLeaderboardWithDependencies(store, authorizer, nil, nil, false, rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
@@ -268,7 +268,7 @@ func TestNormalLeaderboardDoesNotAuthorizeOrDisableCaching(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/leaderboard", nil)
 	rec := httptest.NewRecorder()
 
-	handleLeaderboardWithDependencies(store, authorizer, nil, nil, rec, req)
+	handleLeaderboardWithDependencies(store, authorizer, nil, nil, true, rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Empty(t, rec.Header().Get("Cache-Control"))
