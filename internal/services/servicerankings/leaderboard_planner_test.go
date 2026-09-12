@@ -13,20 +13,22 @@ import (
 )
 
 type fakeRankingsLeaderboardStore struct {
-	eligibility    database.RankingsLeaderboardFastEligibilityRow
-	eligibilityErr error
-	fastRows       []database.RankingsLeaderboardFastRow
-	fastErr        error
-	slowRows       []database.RankingsLeaderboardSlowRow
-	slowErr        error
-	eligibilityArg database.RankingsLeaderboardFastEligibilityParams
-	fastArg        database.RankingsLeaderboardFastParams
-	slowArg        database.RankingsLeaderboardSlowParams
-	fastCalls      int
-	slowCalls      int
+	eligibility      database.RankingsLeaderboardFastEligibilityRow
+	eligibilityErr   error
+	fastRows         []database.RankingsLeaderboardFastRow
+	fastErr          error
+	slowRows         []database.RankingsLeaderboardSlowRow
+	slowErr          error
+	eligibilityArg   database.RankingsLeaderboardFastEligibilityParams
+	fastArg          database.RankingsLeaderboardFastParams
+	slowArg          database.RankingsLeaderboardSlowParams
+	eligibilityCalls int
+	fastCalls        int
+	slowCalls        int
 }
 
 func (f *fakeRankingsLeaderboardStore) RankingsLeaderboardFastEligibility(_ context.Context, arg database.RankingsLeaderboardFastEligibilityParams) (database.RankingsLeaderboardFastEligibilityRow, error) {
+	f.eligibilityCalls++
 	f.eligibilityArg = arg
 	return f.eligibility, f.eligibilityErr
 }
@@ -73,7 +75,7 @@ func TestRankingsLeaderboardPlannerFallbackReasons(t *testing.T) {
 			if tc.name == "eligibility error" {
 				store.eligibilityErr = errors.New("plan failed")
 			}
-			rows, metadata, err := rankingsLeaderboard(context.Background(), store, nil, nil, tc.params)
+			rows, metadata, err := rankingsLeaderboard(context.Background(), store, nil, nil, true, tc.params)
 			require.NoError(t, err)
 			assert.Equal(t, leaderboardQueryMetadata{Path: "slow", Reason: tc.wantReason}, metadata)
 			assert.Equal(t, 1, store.slowCalls)
@@ -81,6 +83,25 @@ func TestRankingsLeaderboardPlannerFallbackReasons(t *testing.T) {
 			assert.Equal(t, "slow", rows[0].PlayerGuid)
 		})
 	}
+}
+
+func TestRankingsLeaderboardPlannerRolloutDisabled(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeRankingsLeaderboardStore{
+		eligibility: database.RankingsLeaderboardFastEligibilityRow{EncountersMatch: true},
+		fastRows:    []database.RankingsLeaderboardFastRow{{PlayerGuid: "fast"}},
+		slowRows:    []database.RankingsLeaderboardSlowRow{{PlayerGuid: "slow"}},
+	}
+
+	rows, metadata, err := rankingsLeaderboard(context.Background(), store, nil, nil, false, database.RankingsLeaderboardSlowParams{})
+	require.NoError(t, err)
+	assert.Equal(t, leaderboardQueryMetadata{Path: "slow", Reason: "rollout_disabled"}, metadata)
+	assert.Zero(t, store.eligibilityCalls)
+	assert.Zero(t, store.fastCalls)
+	assert.Equal(t, 1, store.slowCalls)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "slow", rows[0].PlayerGuid)
 }
 
 func TestRankingsLeaderboardPlannerFastTenantAndRoot(t *testing.T) {
@@ -109,7 +130,7 @@ func TestRankingsLeaderboardPlannerFastTenantAndRoot(t *testing.T) {
 			if tc.filter {
 				tc.tenantID = servicetenant.TenantIDFromContext(tc.ctx)
 			}
-			rows, metadata, err := rankingsLeaderboard(tc.ctx, store, nil, nil, params)
+			rows, metadata, err := rankingsLeaderboard(tc.ctx, store, nil, nil, true, params)
 			require.NoError(t, err)
 			assert.Equal(t, leaderboardQueryMetadata{Path: "fast", Reason: "eligible"}, metadata)
 			assert.Zero(t, store.slowCalls)

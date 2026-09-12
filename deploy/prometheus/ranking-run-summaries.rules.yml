@@ -1,0 +1,19 @@
+groups:
+  - name: chronicle-ranking-run-summaries
+    rules:
+      - alert: ChronicleRankingLeaderboardMismatch
+        expr: increase(chronicle_rankings_run_summaries_leaderboard_verifications_total{status="mismatch"}[10m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: Ranking leaderboard verification found a mismatch
+          description: At least one administrator verification found different fast and reference leaderboard responses in the last 10 minutes. Disable fast reads and investigate before continuing rollout.
+
+      - alert: ChronicleRankingRunSummaryDirtyWorkStale
+        expr: chronicle_rankings_run_summaries_oldest_dirty_age_seconds > 900
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Ranking run summary dirty work is stale
+          description: The oldest dirty ranking run has remained older than 15 minutes for 10 minutes. Keep fast reads disabled or roll them back until the rebuild queue recovers.

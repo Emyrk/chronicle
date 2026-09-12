@@ -48,12 +48,13 @@ func OnRankings() string {
 
 // Service provides DPS rankings, speedrun leaderboard, and related queries.
 type Service struct {
-	broker   *services.Services
-	router   chi.Router
-	logger   *slog.Logger
-	store    *authz.Authz
-	registry *registry.Registry
-	metrics  *rankingRunSummaryMetrics
+	broker           *services.Services
+	router           chi.Router
+	logger           *slog.Logger
+	store            *authz.Authz
+	registry         *registry.Registry
+	metrics          *rankingRunSummaryMetrics
+	fastReadsEnabled bool
 
 	// RunSummaryBackfillWorker marks missing or stale run summaries dirty.
 	RunSummaryBackfillWorker *WorkerBackfillRankingRunSummaries
@@ -105,7 +106,17 @@ func (s *Service) DependsOn() []string {
 
 func (s *Service) Configures() []string { return []string{} }
 func (s *Service) Options() serpent.OptionSet {
-	return serpent.OptionSet{}
+	return serpent.OptionSet{
+		{
+			Name:        "Ranking Summary Fast Reads",
+			Description: "Serve eligible player leaderboards from ranking run summaries. Unsupported, stale, dirty, or failed fast queries automatically fall back to the reference query.",
+			Required:    false,
+			Flag:        "ranking-summary-fast-reads",
+			Env:         "CHRONICLE_RANKING_SUMMARY_FAST_READS",
+			Default:     "false",
+			Value:       serpent.BoolOf(&s.fastReadsEnabled),
+		},
+	}
 }
 
 func (s *Service) Start(_ context.Context) error {
@@ -175,7 +186,7 @@ func (s *Service) Start(_ context.Context) error {
 	s.router = chi.NewRouter()
 	s.setupRoutes()
 
-	s.logger.Info("rankings service started")
+	s.logger.Info("rankings service started", slog.Bool("ranking_summary_fast_reads", s.fastReadsEnabled))
 	return nil
 }
 
@@ -417,8 +428,18 @@ func rankingsLeaderboard(
 	store rankingsLeaderboardStore,
 	logger *slog.Logger,
 	metrics *rankingRunSummaryMetrics,
+	fastReadsEnabled bool,
 	params database.RankingsLeaderboardSlowParams,
 ) ([]database.RankingsLeaderboardSlowRow, leaderboardQueryMetadata, error) {
+	if !fastReadsEnabled {
+		metadata := leaderboardQueryMetadata{Path: "slow", Reason: "rollout_disabled"}
+		if metrics != nil {
+			metrics.leaderboardPath.WithLabelValues(metadata.Path, metadata.Reason).Inc()
+		}
+		rows, err := store.RankingsLeaderboardSlow(ctx, params)
+		return rows, metadata, err
+	}
+
 	rows, metadata, available, fastErr := rankingsLeaderboardFast(ctx, store, logger, params)
 	if available && fastErr == nil {
 		if metrics != nil {
@@ -634,7 +655,7 @@ func verifyRankingsLeaderboard(
 //
 //	GET /leaderboard?instance_names=Molten+Core&encounter_names=Ragnaros&period=90d
 func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
-	handleLeaderboardWithDependencies(s.store, s.store, s.logger, s.metrics, w, r)
+	handleLeaderboardWithDependencies(s.store, s.store, s.logger, s.metrics, s.fastReadsEnabled, w, r)
 }
 
 func handleLeaderboardWithDependencies(
@@ -642,6 +663,7 @@ func handleLeaderboardWithDependencies(
 	authorizer rankingsLeaderboardAuthorizer,
 	logger *slog.Logger,
 	metrics *rankingRunSummaryMetrics,
+	fastReadsEnabled bool,
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
@@ -714,7 +736,7 @@ func handleLeaderboardWithDependencies(
 		return
 	}
 
-	rows, _, err := rankingsLeaderboard(ctx, store, logger, metrics, params)
+	rows, _, err := rankingsLeaderboard(ctx, store, logger, metrics, fastReadsEnabled, params)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
