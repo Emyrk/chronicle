@@ -257,6 +257,12 @@ func (s *Service) listCharacterLogs(w http.ResponseWriter, r *http.Request) {
 func (s *Service) listIndividualLeaderboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
+	if q.Get("verify") == "true" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Leaderboard verification is only available through the authenticated browser API",
+		})
+		return
+	}
 
 	limit := int64(50)
 	if value := q.Get("limit"); value != "" {

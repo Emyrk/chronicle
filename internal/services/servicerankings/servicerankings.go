@@ -2,11 +2,16 @@ package servicerankings
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -14,6 +19,7 @@ import (
 	types "github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
@@ -21,6 +27,8 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/authzed/gochugaru/consistency"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 
 	"github.com/coder/serpent"
@@ -310,35 +318,32 @@ type rankingsLeaderboardStore interface {
 	RankingsLeaderboardSlow(context.Context, database.RankingsLeaderboardSlowParams) ([]database.RankingsLeaderboardSlowRow, error)
 }
 
+type rankingsLeaderboardAuthorizer interface {
+	CheckOne(context.Context, *consistency.Strategy, rel.Interface) (bool, error)
+}
+
 type leaderboardQueryMetadata struct {
 	Path   string
 	Reason string
 }
 
-func rankingsLeaderboard(
+const maxLeaderboardVerificationDifferences = 20
+
+func rankingsLeaderboardFast(
 	ctx context.Context,
 	store rankingsLeaderboardStore,
 	logger *slog.Logger,
-	metrics *rankingRunSummaryMetrics,
 	params database.RankingsLeaderboardSlowParams,
-) ([]database.RankingsLeaderboardSlowRow, leaderboardQueryMetadata, error) {
-	fallback := func(reason string) ([]database.RankingsLeaderboardSlowRow, leaderboardQueryMetadata, error) {
-		metadata := leaderboardQueryMetadata{Path: "slow", Reason: reason}
-		if metrics != nil {
-			metrics.leaderboardPath.WithLabelValues(metadata.Path, metadata.Reason).Inc()
-		}
-		if logger != nil {
-			logger.Debug("using slow rankings leaderboard", slog.String("reason", reason))
-		}
-		rows, err := store.RankingsLeaderboardSlow(ctx, params)
-		return rows, metadata, err
+) ([]database.RankingsLeaderboardSlowRow, leaderboardQueryMetadata, bool, error) {
+	unavailable := func(reason string) ([]database.RankingsLeaderboardSlowRow, leaderboardQueryMetadata, bool, error) {
+		return nil, leaderboardQueryMetadata{Path: "slow", Reason: reason}, false, nil
 	}
 
 	// A relative cutoff is applied to individual encounter rows by the reference
 	// query. The run projection only stores the final killed_at, so it cannot safely
 	// reproduce a cutoff that falls inside a run.
 	if params.SinceDays > 0 {
-		return fallback("unsupported_since")
+		return unavailable("unsupported_since")
 	}
 
 	tenant := servicetenant.TenantFromContext(ctx)
@@ -358,22 +363,22 @@ func rankingsLeaderboard(
 		if logger != nil {
 			logger.Warn("plan fast rankings leaderboard", slog.String("error", err.Error()))
 		}
-		return fallback("eligibility_error")
+		return nil, leaderboardQueryMetadata{Path: "slow", Reason: "eligibility_error"}, false, err
 	}
 
 	switch {
 	case eligibility.MissingRunCount > 0:
-		return fallback("missing_summary")
+		return unavailable("missing_summary")
 	case eligibility.StaleRunCount > 0 || eligibility.StalePlayerCount > 0:
-		return fallback("stale_summary")
+		return unavailable("stale_summary")
 	case eligibility.DirtyRunCount > 0:
-		return fallback("dirty_summary")
+		return unavailable("dirty_summary")
 	case eligibility.OrphanRunCount > 0:
-		return fallback("orphan_summary")
+		return unavailable("orphan_summary")
 	case eligibility.NonstandardRunCount > 0:
-		return fallback("nonstandard_encounters")
+		return unavailable("nonstandard_encounters")
 	case !eligibility.EncountersMatch:
-		return fallback("encounter_subset")
+		return unavailable("encounter_subset")
 	}
 
 	fastRows, err := store.RankingsLeaderboardFast(ctx, database.RankingsLeaderboardFastParams{
@@ -397,83 +402,46 @@ func rankingsLeaderboard(
 		if logger != nil {
 			logger.Warn("query fast rankings leaderboard", slog.String("error", err.Error()))
 		}
-		return fallback("fast_query_error")
+		return nil, leaderboardQueryMetadata{Path: "fast", Reason: "fast_query_error"}, true, err
 	}
 
 	rows := make([]database.RankingsLeaderboardSlowRow, 0, len(fastRows))
 	for _, row := range fastRows {
 		rows = append(rows, database.RankingsLeaderboardSlowRow(row))
 	}
-	metadata := leaderboardQueryMetadata{Path: "fast", Reason: "eligible"}
+	return rows, leaderboardQueryMetadata{Path: "fast", Reason: "eligible"}, true, nil
+}
+
+func rankingsLeaderboard(
+	ctx context.Context,
+	store rankingsLeaderboardStore,
+	logger *slog.Logger,
+	metrics *rankingRunSummaryMetrics,
+	params database.RankingsLeaderboardSlowParams,
+) ([]database.RankingsLeaderboardSlowRow, leaderboardQueryMetadata, error) {
+	rows, metadata, available, fastErr := rankingsLeaderboardFast(ctx, store, logger, params)
+	if available && fastErr == nil {
+		if metrics != nil {
+			metrics.leaderboardPath.WithLabelValues(metadata.Path, metadata.Reason).Inc()
+		}
+		if logger != nil {
+			logger.Debug("using fast rankings leaderboard")
+		}
+		return rows, metadata, nil
+	}
+
+	metadata.Path = "slow"
 	if metrics != nil {
 		metrics.leaderboardPath.WithLabelValues(metadata.Path, metadata.Reason).Inc()
 	}
 	if logger != nil {
-		logger.Debug("using fast rankings leaderboard", slog.Int64("source_runs", eligibility.SourceRunCount))
+		logger.Debug("using slow rankings leaderboard", slog.String("reason", metadata.Reason))
 	}
-	return rows, metadata, nil
+	rows, err := store.RankingsLeaderboardSlow(ctx, params)
+	return rows, metadata, err
 }
 
-// handleLeaderboard returns paginated DPS rankings with filters.
-//
-//	GET /leaderboard?instance_names=Molten+Core&encounter_names=Ragnaros&period=90d
-func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	q := r.URL.Query()
-
-	var limit int64 = 50
-	if v := q.Get("limit"); v != "" {
-		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
-	if limit > 200 {
-		limit = 200
-	}
-
-	var offset int64
-	if v := q.Get("offset"); v != "" {
-		offset, _ = strconv.ParseInt(v, 10, 64)
-	}
-
-	var sinceDays int64
-	if v := q.Get("period"); v != "" {
-		sinceDays = periodToDays(v)
-	}
-
-	// Normalize class name: the frontend sends SDK-form names (e.g. DEATHKNIGHT)
-	// but the DB stores DB-form names (e.g. DEATH_KNIGHT).
-	classParam := q.Get("class")
-	if classParam != "" {
-		classParam = string(db2sdk.HeroClassToDB(types.HeroClasses(classParam)))
-	}
-
-	rows, _, err := rankingsLeaderboard(ctx, s.store, s.logger, s.metrics, database.RankingsLeaderboardSlowParams{
-		InstanceNames:    splitCSV(q.Get("instance_names")),
-		EncounterNames:   splitCSV(q.Get("encounter_names")),
-		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
-		RealmNames:       splitCSV(q.Get("realm_names")),
-		Class:            classParam,
-		Spec:             q.Get("spec"),
-		SubSpec:          q.Get("sub_spec"),
-		Role:             q.Get("role"),
-		SinceDays:        sinceDays,
-		HideUnknowns:     q.Get("hide_unknowns") == "true",
-		Metric:           normalizeMetric(q.Get("metric")),
-		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
-		QueryLimit:       limit,
-		QueryOffset:      offset,
-	})
-	if err != nil {
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
-			Response: chroniclesdk.Response{
-				Message: "Failed to fetch rankings leaderboard",
-				Detail:  err.Error(),
-			},
-		})
-		return
-	}
-
+func rankingsLeaderboardResponse(rows []database.RankingsLeaderboardSlowRow) chroniclesdk.RankingsLeaderboardResponse {
 	var totalCount int64
 	entries := make([]chroniclesdk.RankingsEntry, 0, len(rows))
 	for _, row := range rows {
@@ -502,8 +470,8 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 			KilledAt:       row.KilledAt.Time,
 		}
 		if row.AvgIlvl > 0 {
-			v := row.AvgIlvl
-			entry.AvgIlvl = &v
+			value := row.AvgIlvl
+			entry.AvgIlvl = &value
 		}
 		if row.PlayerSubSpec != "" {
 			entry.SubSpec = &row.PlayerSubSpec
@@ -513,11 +481,251 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		}
 		entries = append(entries, entry)
 	}
+	return chroniclesdk.RankingsLeaderboardResponse{Entries: entries, TotalCount: totalCount}
+}
 
-	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.RankingsLeaderboardResponse{
-		Entries:    entries,
-		TotalCount: totalCount,
-	})
+func leaderboardFloatEqual(a, b float64) bool {
+	const relativeTolerance = 1e-6
+	return math.Abs(a-b) <= relativeTolerance*math.Max(1, math.Max(math.Abs(a), math.Abs(b)))
+}
+
+func leaderboardFieldEqual(field string, fast, slow reflect.Value) bool {
+	if field == "DurationSecs" || field == "DPS" || field == "HPS" {
+		return leaderboardFloatEqual(fast.Float(), slow.Float())
+	}
+	return reflect.DeepEqual(fast.Interface(), slow.Interface())
+}
+
+func leaderboardValueString(value reflect.Value) string {
+	if value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return "null"
+		}
+		value = value.Elem()
+	}
+	return fmt.Sprint(value.Interface())
+}
+
+func compareRankingsLeaderboards(fast, slow chroniclesdk.RankingsLeaderboardResponse) (int, []chroniclesdk.RankingsLeaderboardDifference) {
+	differenceCount := 0
+	differences := make([]chroniclesdk.RankingsLeaderboardDifference, 0)
+	add := func(entryIndex int, field string, fastValue, slowValue reflect.Value) {
+		differenceCount++
+		if len(differences) >= maxLeaderboardVerificationDifferences {
+			return
+		}
+		differences = append(differences, chroniclesdk.RankingsLeaderboardDifference{
+			EntryIndex: entryIndex,
+			Field:      field,
+			FastValue:  leaderboardValueString(fastValue),
+			SlowValue:  leaderboardValueString(slowValue),
+		})
+	}
+
+	if fast.TotalCount != slow.TotalCount {
+		add(0, "total_count", reflect.ValueOf(fast.TotalCount), reflect.ValueOf(slow.TotalCount))
+	}
+	if len(fast.Entries) != len(slow.Entries) {
+		add(0, "entry_count", reflect.ValueOf(len(fast.Entries)), reflect.ValueOf(len(slow.Entries)))
+	}
+
+	entryType := reflect.TypeOf(chroniclesdk.RankingsEntry{})
+	entryCount := min(len(fast.Entries), len(slow.Entries))
+	for i := range entryCount {
+		fastEntry := reflect.ValueOf(fast.Entries[i])
+		slowEntry := reflect.ValueOf(slow.Entries[i])
+		for fieldIndex := range entryType.NumField() {
+			field := entryType.Field(fieldIndex)
+			fastValue := fastEntry.Field(fieldIndex)
+			slowValue := slowEntry.Field(fieldIndex)
+			if leaderboardFieldEqual(field.Name, fastValue, slowValue) {
+				continue
+			}
+			fieldName := field.Tag.Get("json")
+			if comma := strings.IndexByte(fieldName, ','); comma >= 0 {
+				fieldName = fieldName[:comma]
+			}
+			add(i+1, fieldName, fastValue, slowValue)
+		}
+	}
+	return differenceCount, differences
+}
+
+func authorizeLeaderboardVerification(ctx context.Context, authorizer rankingsLeaderboardAuthorizer) (bool, bool, error) {
+	claims, authenticated := chronauth.AuthenticatedClaims(ctx)
+	if !authenticated {
+		return false, false, nil
+	}
+	allowed, err := authorizer.CheckOne(
+		ctx,
+		nil,
+		policy.New().GlobalChronicle().CanAdmin_speedrun_requirements_User(policy.New().User(claims.Subject)),
+	)
+	return true, allowed, err
+}
+
+func verifyRankingsLeaderboard(
+	ctx context.Context,
+	store rankingsLeaderboardStore,
+	logger *slog.Logger,
+	metrics *rankingRunSummaryMetrics,
+	params database.RankingsLeaderboardSlowParams,
+) chroniclesdk.RankingsLeaderboardResponse {
+	fastStarted := time.Now()
+	fastRows, fastMetadata, fastAvailable, fastErr := rankingsLeaderboardFast(ctx, store, logger, params)
+	fastDuration := time.Since(fastStarted)
+	if metrics != nil {
+		metrics.leaderboardQueryDuration.WithLabelValues("fast").Observe(fastDuration.Seconds())
+	}
+
+	slowStarted := time.Now()
+	slowRows, slowErr := store.RankingsLeaderboardSlow(ctx, params)
+	slowDuration := time.Since(slowStarted)
+	if metrics != nil {
+		metrics.leaderboardQueryDuration.WithLabelValues("slow").Observe(slowDuration.Seconds())
+	}
+
+	fastResponse := rankingsLeaderboardResponse(fastRows)
+	slowResponse := rankingsLeaderboardResponse(slowRows)
+	verification := &chroniclesdk.RankingsLeaderboardVerification{
+		FastDurationMS: fastDuration.Milliseconds(),
+		SlowDurationMS: slowDuration.Milliseconds(),
+		FastQueryPath:  fastMetadata.Path,
+		Differences:    []chroniclesdk.RankingsLeaderboardDifference{},
+	}
+
+	response := fastResponse
+	switch {
+	case fastErr != nil:
+		verification.Status = "fast_error"
+		verification.FallbackReason = fastMetadata.Reason
+		response = slowResponse
+	case slowErr != nil:
+		verification.Status = "slow_error"
+	case !fastAvailable:
+		verification.Status = "fast_unavailable"
+		verification.FallbackReason = fastMetadata.Reason
+		response = slowResponse
+	default:
+		verification.DifferenceCount, verification.Differences = compareRankingsLeaderboards(fastResponse, slowResponse)
+		if verification.DifferenceCount == 0 {
+			verification.Status = "match"
+		} else {
+			verification.Status = "mismatch"
+			if logger != nil {
+				logger.Error("rankings leaderboard verification mismatch",
+					slog.Any("filters", params),
+					slog.Int("difference_count", verification.DifferenceCount),
+					slog.Any("differences", verification.Differences),
+					slog.Duration("fast_duration", fastDuration),
+					slog.Duration("slow_duration", slowDuration),
+				)
+			}
+		}
+	}
+	response.Verification = verification
+	if metrics != nil {
+		metrics.leaderboardVerification.WithLabelValues(verification.Status).Inc()
+	}
+	return response
+}
+
+// handleLeaderboard returns paginated DPS rankings with filters.
+//
+//	GET /leaderboard?instance_names=Molten+Core&encounter_names=Ragnaros&period=90d
+func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
+	handleLeaderboardWithDependencies(s.store, s.store, s.logger, s.metrics, w, r)
+}
+
+func handleLeaderboardWithDependencies(
+	store rankingsLeaderboardStore,
+	authorizer rankingsLeaderboardAuthorizer,
+	logger *slog.Logger,
+	metrics *rankingRunSummaryMetrics,
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	ctx := r.Context()
+	q := r.URL.Query()
+	verify := q.Get("verify") == "true"
+	if verify {
+		w.Header().Set("Cache-Control", "private, no-store")
+		authenticated, allowed, err := authorizeLeaderboardVerification(ctx, authorizer)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		if !authenticated {
+			httpapi.Write(ctx, w, http.StatusUnauthorized, chroniclesdk.Response{Message: "Authentication is required to verify leaderboard results"})
+			return
+		}
+		if !allowed {
+			httpapi.Forbidden(w, nil)
+			return
+		}
+	}
+
+	var limit int64 = 50
+	if value := q.Get("limit"); value != "" {
+		if parsed, err := strconv.ParseInt(value, 10, 64); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	var offset int64
+	if value := q.Get("offset"); value != "" {
+		offset, _ = strconv.ParseInt(value, 10, 64)
+	}
+
+	var sinceDays int64
+	if value := q.Get("period"); value != "" {
+		sinceDays = periodToDays(value)
+	}
+
+	// Normalize class name: the frontend sends SDK-form names (e.g. DEATHKNIGHT)
+	// but the DB stores DB-form names (e.g. DEATH_KNIGHT).
+	classParam := q.Get("class")
+	if classParam != "" {
+		classParam = string(db2sdk.HeroClassToDB(types.HeroClasses(classParam)))
+	}
+
+	params := database.RankingsLeaderboardSlowParams{
+		InstanceNames:    splitCSV(q.Get("instance_names")),
+		EncounterNames:   splitCSV(q.Get("encounter_names")),
+		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+		RealmNames:       splitCSV(q.Get("realm_names")),
+		Class:            classParam,
+		Spec:             q.Get("spec"),
+		SubSpec:          q.Get("sub_spec"),
+		Role:             q.Get("role"),
+		SinceDays:        sinceDays,
+		HideUnknowns:     q.Get("hide_unknowns") == "true",
+		Metric:           normalizeMetric(q.Get("metric")),
+		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+		QueryLimit:       limit,
+		QueryOffset:      offset,
+	}
+
+	if verify {
+		httpapi.Write(ctx, w, http.StatusOK, verifyRankingsLeaderboard(ctx, store, logger, metrics, params))
+		return
+	}
+
+	rows, _, err := rankingsLeaderboard(ctx, store, logger, metrics, params)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch rankings leaderboard",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, rankingsLeaderboardResponse(rows))
 }
 
 // handleFilters returns backend-discovered class/spec/sub-spec options.

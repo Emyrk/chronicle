@@ -257,6 +257,24 @@ func TestListIndividualLeaderboardMatchesRankingsQueryContract(t *testing.T) {
 	require.Equal(t, "example-log", response.Entries[0].LogHashedSlug)
 }
 
+func TestIndividualLeaderboardRejectsVerification(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeExternalAPIStore{}
+	service := &Service{db: store}
+	service.setupRoutes()
+
+	req := httptest.NewRequest(http.MethodGet, "/leaderboards?verify=true", nil)
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Empty(t, store.dpsLeaderboardParams.Metric)
+	var response chroniclesdk.Response
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	require.Contains(t, response.Message, "authenticated browser API")
+}
+
 func TestIndividualLeaderboardDefaultsToDPSAndCapsLimit(t *testing.T) {
 	t.Parallel()
 
