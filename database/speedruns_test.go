@@ -65,26 +65,13 @@ func TestEncounterKillTimesIncludePartialKills(t *testing.T) {
 		killTimes[1].EncounterName,
 	})
 
-	rankedStart := startedAt.Add(10 * time.Minute)
-	rankedCompletion := startedAt.Add(time.Hour)
-	rankedDurationMs := int64(rankedCompletion.Sub(rankedStart) / time.Millisecond)
 	require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
 		InstanceID: instanceID, InstanceName: "Molten Core", RealmID: realmID,
 		StartTime: database.Timestamptz(startedAt), CompletionTime: database.Timestamptz(startedAt.Add(time.Hour)),
-		DurationMs:           int64(time.Hour / time.Millisecond),
-		RankedStartTime:      database.Timestamptz(rankedStart),
-		RankedCompletionTime: database.Timestamptz(rankedCompletion),
-		RankedDurationMs:     pgtype.Int8{Int64: rankedDurationMs, Valid: true},
-		Proof:                []byte(`{"proof":[]}`),
+		DurationMs:      int64(time.Hour / time.Millisecond),
+		RankedStartTime: database.Timestamptz(startedAt), RankedCompletionTime: database.Timestamptz(startedAt.Add(time.Hour)),
+		RankedDurationMs: pgtype.Int8{Int64: int64(time.Hour / time.Millisecond), Valid: true}, Proof: []byte(`{"proof":[]}`),
 	}))
-
-	speedrun, err := store.GetInstanceSpeedrun(ctx, instanceID)
-	require.NoError(t, err)
-	require.True(t, speedrun.BossToBossStartTime.Valid)
-	require.True(t, rankedStart.Equal(speedrun.BossToBossStartTime.Time))
-	require.True(t, speedrun.BossToBossCompletionTime.Valid)
-	require.True(t, rankedCompletion.Equal(speedrun.BossToBossCompletionTime.Time))
-	require.Equal(t, pgtype.Int8{Int64: rankedDurationMs, Valid: true}, speedrun.BossToBossDurationMs)
 
 	cohort, err := store.InstanceSpeedrunCohort(ctx, database.InstanceSpeedrunCohortParams{
 		InstanceID: instanceID, LookbackDays: 60, Scope: "server", MetricsVersion: 1,
@@ -184,13 +171,15 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
 
-	insertRun := func(guildID uuid.UUID, clearDuration, rankedDuration time.Duration, offset time.Duration) uuid.UUID {
+	insertRun := func(guildID uuid.UUID, rawDuration, rankedDuration, bossToBossDuration time.Duration, offset time.Duration) uuid.UUID {
 		t.Helper()
 		id := uuid.New()
 		clearStart := startedAt.Add(offset)
-		clearEnd := clearStart.Add(clearDuration)
-		rankedStart := clearStart.Add(10 * time.Minute)
+		clearEnd := clearStart.Add(rawDuration)
+		rankedStart := clearStart.Add(5 * time.Minute)
 		rankedEnd := rankedStart.Add(rankedDuration)
+		bossToBossStart := clearStart.Add(10 * time.Minute)
+		bossToBossEnd := bossToBossStart.Add(bossToBossDuration)
 		_, err := store.InsertInstance(ctx, database.InsertInstanceParams{
 			ID: id, RealmID: realmID, LogGroupID: logGroupID,
 			Name: "Molten Core", HashedSlug: pgtype.Text{String: "ranked-" + id.String()[:8], Valid: true},
@@ -203,16 +192,18 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 			InstanceID: id, InstanceName: "Molten Core", RealmID: realmID,
 			GuildID: uuid.NullUUID{UUID: guildID, Valid: true}, Qualified: true,
 			StartTime: database.Timestamptz(clearStart), CompletionTime: database.Timestamptz(clearEnd),
-			DurationMs:      int64(clearDuration / time.Millisecond),
+			DurationMs:      int64(rawDuration / time.Millisecond),
 			RankedStartTime: database.Timestamptz(rankedStart), RankedCompletionTime: database.Timestamptz(rankedEnd),
-			RankedDurationMs: pgtype.Int8{Int64: int64(rankedDuration / time.Millisecond), Valid: true},
-			Proof:            []byte(`{"proof":[]}`),
+			RankedDurationMs:    pgtype.Int8{Int64: int64(rankedDuration / time.Millisecond), Valid: true},
+			BossToBossStartTime: database.Timestamptz(bossToBossStart), BossToBossCompletionTime: database.Timestamptz(bossToBossEnd),
+			BossToBossDurationMs: pgtype.Int8{Int64: int64(bossToBossDuration / time.Millisecond), Valid: true},
+			Proof:                []byte(`{"proof":[]}`),
 		}))
 		return id
 	}
 
-	rankedWinner := insertRun(rankedGuildID, 60*time.Minute, 30*time.Minute, 0)
-	fullWinner := insertRun(fullGuildID, 50*time.Minute, 40*time.Minute, 2*time.Hour)
+	bossWinner := insertRun(rankedGuildID, 60*time.Minute, 55*time.Minute, 30*time.Minute, 0)
+	fullWinner := insertRun(fullGuildID, 50*time.Minute, 40*time.Minute, 35*time.Minute, 2*time.Hour)
 
 	rankedRows, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
 		InstanceName: "Molten Core", RealmNames: []string{},
@@ -220,7 +211,7 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, rankedRows, 2)
-	require.Equal(t, rankedWinner, rankedRows[0].InstanceID)
+	require.Equal(t, bossWinner, rankedRows[0].InstanceID)
 	require.EqualValues(t, 30*time.Minute/time.Millisecond, rankedRows[0].DurationMs)
 
 	fullRows, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
@@ -230,7 +221,7 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, fullRows, 2)
 	require.Equal(t, fullWinner, fullRows[0].InstanceID)
-	require.EqualValues(t, 50*time.Minute/time.Millisecond, fullRows[0].DurationMs)
+	require.EqualValues(t, 40*time.Minute/time.Millisecond, fullRows[0].DurationMs)
 
 	firstPage, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
 		InstanceName: "Molten Core", RealmNames: []string{}, ResultLimit: 1,
@@ -246,7 +237,7 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, secondPage, 1)
-	require.Equal(t, rankedWinner, secondPage[0].InstanceID)
+	require.Equal(t, bossWinner, secondPage[0].InstanceID)
 }
 
 func TestExternalAPILeaderboardDuplicateLogsFollowTimingMode(t *testing.T) {
@@ -274,12 +265,14 @@ func TestExternalAPILeaderboardDuplicateLogsFollowTimingMode(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
 
-	insertRun := func(slug string, clearDuration, rankedDuration time.Duration) uuid.UUID {
+	insertRun := func(slug string, rawDuration, rankedDuration, bossToBossDuration time.Duration) uuid.UUID {
 		t.Helper()
 		id := uuid.New()
-		clearEnd := startedAt.Add(clearDuration)
-		rankedStart := startedAt.Add(10 * time.Minute)
+		clearEnd := startedAt.Add(rawDuration)
+		rankedStart := startedAt.Add(5 * time.Minute)
 		rankedEnd := rankedStart.Add(rankedDuration)
+		bossToBossStart := startedAt.Add(10 * time.Minute)
+		bossToBossEnd := bossToBossStart.Add(bossToBossDuration)
 		_, err := store.InsertInstance(ctx, database.InsertInstanceParams{
 			ID: id, RealmID: realmID, LogGroupID: logGroupID,
 			Name: "Molten Core", HashedSlug: pgtype.Text{String: slug, Valid: true},
@@ -292,19 +285,21 @@ func TestExternalAPILeaderboardDuplicateLogsFollowTimingMode(t *testing.T) {
 			InstanceID: id, InstanceName: "Molten Core", RealmID: realmID,
 			GuildID: uuid.NullUUID{UUID: guildID, Valid: true}, Qualified: true,
 			StartTime: database.Timestamptz(startedAt), CompletionTime: database.Timestamptz(clearEnd),
-			DurationMs:      int64(clearDuration / time.Millisecond),
+			DurationMs:      int64(rawDuration / time.Millisecond),
 			RankedStartTime: database.Timestamptz(rankedStart), RankedCompletionTime: database.Timestamptz(rankedEnd),
-			RankedDurationMs: pgtype.Int8{Int64: int64(rankedDuration / time.Millisecond), Valid: true},
-			Proof:            []byte(`{"proof":[]}`),
+			RankedDurationMs:    pgtype.Int8{Int64: int64(rankedDuration / time.Millisecond), Valid: true},
+			BossToBossStartTime: database.Timestamptz(bossToBossStart), BossToBossCompletionTime: database.Timestamptz(bossToBossEnd),
+			BossToBossDurationMs: pgtype.Int8{Int64: int64(bossToBossDuration / time.Millisecond), Valid: true},
+			Proof:                []byte(`{"proof":[]}`),
 		}))
 		return id
 	}
 
-	fullWinner := insertRun("full-winner", 50*time.Minute, 40*time.Minute)
-	rankedWinner := insertRun("ranked-winner", 60*time.Minute, 30*time.Minute)
+	fullWinner := insertRun("full-winner", 50*time.Minute, 40*time.Minute, 35*time.Minute)
+	bossWinner := insertRun("ranked-winner", 60*time.Minute, 45*time.Minute, 30*time.Minute)
 	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
 		DuplicateGroupID: uuid.NullUUID{UUID: fullWinner, Valid: true},
-		Ids:              []uuid.UUID{fullWinner, rankedWinner},
+		Ids:              []uuid.UUID{fullWinner, bossWinner},
 	}))
 	insertVideo := func(instanceID uuid.UUID, slug, url string) {
 		t.Helper()
@@ -318,7 +313,7 @@ func TestExternalAPILeaderboardDuplicateLogsFollowTimingMode(t *testing.T) {
 		}))
 	}
 	insertVideo(fullWinner, "full-winner", "https://youtube.com/watch?v=full")
-	insertVideo(rankedWinner, "ranked-winner", "https://youtube.com/watch?v=ranked")
+	insertVideo(bossWinner, "ranked-winner", "https://youtube.com/watch?v=ranked")
 
 	assertMode := func(useRankedTiming bool, selectedID, duplicateID uuid.UUID, duplicateDuration time.Duration, selectedURL, duplicateURL string) {
 		t.Helper()
@@ -345,8 +340,8 @@ func TestExternalAPILeaderboardDuplicateLogsFollowTimingMode(t *testing.T) {
 		require.Equal(t, duplicateURL, duplicates[0].YoutubeUrl)
 	}
 
-	assertMode(false, fullWinner, rankedWinner, 60*time.Minute,
+	assertMode(false, fullWinner, bossWinner, 45*time.Minute,
 		"https://youtube.com/watch?v=full", "https://youtube.com/watch?v=ranked")
-	assertMode(true, rankedWinner, fullWinner, 40*time.Minute,
+	assertMode(true, bossWinner, fullWinner, 35*time.Minute,
 		"https://youtube.com/watch?v=ranked", "https://youtube.com/watch?v=full")
 }

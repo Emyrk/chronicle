@@ -237,7 +237,8 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Log
 	// Score every complete clear against the qualified clear-time cohort.
 	// Qualification controls cohort membership and public leaderboard eligibility,
 	// not whether a full clear can receive a parse score.
-	if speedrun.DurationMs > 0 {
+	clearDurationMs := speedrun.RankedDurationMs.Int64
+	if speedrun.RankedDurationMs.Valid && clearDurationMs > 0 {
 		cohort, cErr := store.GetTimeParseSnapshotClearTimeCohort(ctx, database.GetTimeParseSnapshotClearTimeCohortParams{
 			SnapshotID:     snapshot.ID,
 			InstanceName:   speedrun.InstanceName,
@@ -250,9 +251,9 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Log
 				"error", cErr,
 			)
 		} else {
-			scoreResult, scored := timeparsepolicy.ScoreTime(cohort, speedrun.DurationMs)
+			scoreResult, scored := timeparsepolicy.ScoreTime(cohort, clearDurationMs)
 			clearScore := &chroniclesdk.TimeParseScore{
-				DurationMs: speedrun.DurationMs,
+				DurationMs: clearDurationMs,
 				SampleSize: scoreResult.SampleSize,
 				Status:     string(scoreResult.Status),
 			}

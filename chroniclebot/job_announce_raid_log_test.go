@@ -180,7 +180,9 @@ func TestAnnouncementDeliveryErrorIsPersisted(t *testing.T) {
 			InstanceID: instanceID, InstanceName: "Molten Core", RealmID: realmID,
 			GuildID: uuid.NullUUID{UUID: guild.ID, Valid: true}, Qualified: true,
 			StartTime: database.Timestamptz(start), CompletionTime: database.Timestamptz(start.Add(duration)),
-			DurationMs: int64(duration / time.Millisecond), Proof: []byte(`{"proof":[]}`),
+			DurationMs:      int64(duration / time.Millisecond),
+			RankedStartTime: database.Timestamptz(start), RankedCompletionTime: database.Timestamptz(start.Add(duration)),
+			RankedDurationMs: pgtype.Int8{Int64: int64(duration / time.Millisecond), Valid: true}, Proof: []byte(`{"proof":[]}`),
 		}))
 	}
 

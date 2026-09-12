@@ -4,18 +4,20 @@ import { LeaderboardDetails } from "./LeaderboardPanel";
 import { QUALIFIED_FIXTURE_SPEEDRUN } from "./explain/fixture";
 
 describe("LeaderboardDetails", () => {
-  it("shows ranked and clear times for qualified runs", () => {
+  it("shows full raid, boss, and raw times for qualified runs", () => {
     const markup = renderToStaticMarkup(
       <LeaderboardDetails speedrun={QUALIFIED_FIXTURE_SPEEDRUN} />,
     );
 
-    expect(markup).toContain("Ranked time");
+    expect(markup).toContain("Full raid");
     expect(markup).toContain("2h 10m 24s");
-    expect(markup).toContain("Clear time");
+    expect(markup).toContain("Boss time");
+    expect(markup).toContain("2h 0m 24s");
+    expect(markup).toContain("Raw time");
     expect(markup).toContain("2h 23m 44s");
   });
 
-  it("falls back to clear time when ranked timing is unavailable", () => {
+  it("does not substitute raw time when ranked clear timing is unavailable", () => {
     const markup = renderToStaticMarkup(
       <LeaderboardDetails
         speedrun={{
@@ -27,6 +29,7 @@ describe("LeaderboardDetails", () => {
       />,
     );
 
-    expect(markup.match(/2h 23m 44s/g)).toHaveLength(2);
+    expect(markup).toContain("Unavailable");
+    expect(markup.match(/2h 23m 44s/g)).toHaveLength(1);
   });
 });

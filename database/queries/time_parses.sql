@@ -100,17 +100,17 @@ eligible AS (
         sr.instance_name,
         li.difficulty_name,
         li.max_players,
-        sr.duration_ms,
-        sr.start_time
+        sr.ranked_duration_ms::bigint AS duration_ms,
+        sr.ranked_start_time::timestamptz AS start_time
     FROM instance_speedruns sr
     JOIN representative_instances ri ON ri.id = sr.instance_id
     JOIN log_instances li ON li.id = sr.instance_id
     CROSS JOIN snapshot s
     WHERE sr.qualified = true
-      AND sr.duration_ms > 0
+      AND sr.ranked_duration_ms > 0
       AND sr.start_time < s.cutoff
       AND (s.window_start IS NULL OR sr.start_time >= s.window_start)
-    ORDER BY ri.run_id, sr.duration_ms ASC, sr.start_time ASC, sr.instance_id ASC
+    ORDER BY ri.run_id, sr.ranked_duration_ms ASC, sr.start_time ASC, sr.instance_id ASC
 )
 INSERT INTO time_parse_clear_time_members (
     snapshot_id, instance_id, run_id,
@@ -214,7 +214,7 @@ WITH clear_stats AS (
             sr.instance_id::text || '|' ||
             COALESCE(li.duplicate_group_id, li.id)::text || '|' ||
             sr.qualified::text || '|' ||
-            sr.duration_ms::text || '|' ||
+            sr.ranked_duration_ms::text || '|' ||
             sr.instance_name || '|' ||
             li.difficulty_name || '|' ||
             li.max_players::text || '|' ||
@@ -224,7 +224,7 @@ WITH clear_stats AS (
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     WHERE sr.qualified = true
-      AND sr.duration_ms > 0
+      AND sr.ranked_duration_ms > 0
       AND sr.start_time < @cutoff
       AND (@window_start::timestamptz IS NULL OR sr.start_time >= @window_start)
 ),

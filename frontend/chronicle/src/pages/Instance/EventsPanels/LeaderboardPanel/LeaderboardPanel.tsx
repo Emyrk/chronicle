@@ -78,7 +78,8 @@ function LeaderboardEmptyState() {
 export function LeaderboardDetails({ speedrun }: { speedrun: SpeedrunResult }) {
   const satisfied = speedrun.proof.filter((p) => p.satisfied).length;
   const total = speedrun.proof.length;
-  const rankedDurationMs = speedrun.ranked_duration_ms ?? speedrun.duration_ms;
+  const rankedDurationMs = speedrun.ranked_duration_ms;
+  const bossToBossDurationMs = speedrun.boss_to_boss_duration_ms;
 
   return (
     <div className="p-3">
@@ -95,16 +96,24 @@ export function LeaderboardDetails({ speedrun }: { speedrun: SpeedrunResult }) {
           {speedrun.qualified ? (
             <>
               <Clock className="h-3.5 w-3.5 text-emerald-400" />
-              <div className="grid grid-cols-2 gap-x-3 text-right">
+              <div className="grid grid-cols-3 gap-x-3 text-right">
                 <div>
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Ranked time</div>
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Full raid</div>
                   <div className="font-mono text-sm font-semibold text-emerald-400">
-                    {formatDuration(rankedDurationMs)}
+                    {rankedDurationMs === undefined ? "Unavailable" : formatDuration(rankedDurationMs)}
                   </div>
                 </div>
+                {bossToBossDurationMs !== undefined && (
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Boss time</div>
+                    <div className="font-mono text-sm font-semibold text-zinc-300">
+                      {formatDuration(bossToBossDurationMs)}
+                    </div>
+                  </div>
+                )}
                 <div>
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Clear time</div>
-                  <div className="font-mono text-sm font-semibold text-zinc-300">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Raw time</div>
+                  <div className="font-mono text-sm font-semibold text-zinc-400">
                     {formatDuration(speedrun.duration_ms)}
                   </div>
                 </div>

@@ -138,7 +138,7 @@ SELECT
   wsr.name AS realm_name,
   g.name AS guild_name,
   t.slug AS tenant_slug,
-  sr.duration_ms AS clear_duration_ms,
+  sr.ranked_duration_ms AS clear_duration_ms,
   COALESCE(guild_average.avg_duration_ms, 0)::bigint AS guild_avg_duration_ms,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
 FROM log_instances li
@@ -148,12 +148,12 @@ LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN wow_servers ws ON ws.id = wsr.server_id
 LEFT JOIN tenants t ON t.id = ws.tenant_id
 LEFT JOIN guilds g ON g.id = li.guild_id
-LEFT JOIN instance_speedruns sr ON sr.instance_id = li.id AND sr.qualified = TRUE AND sr.duration_ms > 0
+LEFT JOIN instance_speedruns sr ON sr.instance_id = li.id AND sr.qualified = TRUE AND sr.ranked_duration_ms > 0
 LEFT JOIN LATERAL (
   SELECT AVG(previous.duration_ms)::bigint AS avg_duration_ms
   FROM (
     SELECT DISTINCT ON (COALESCE(previous_li.duplicate_group_id, previous_li.id))
-      previous_sr.duration_ms
+      previous_sr.ranked_duration_ms AS duration_ms
     FROM instance_speedruns previous_sr
     JOIN log_instances previous_li ON previous_li.id = previous_sr.instance_id
     WHERE previous_sr.guild_id = li.guild_id
@@ -161,9 +161,9 @@ LEFT JOIN LATERAL (
       AND previous_li.difficulty_name = li.difficulty_name
       AND previous_li.max_players = li.max_players
       AND previous_sr.qualified = TRUE
-      AND previous_sr.duration_ms > 0
+      AND previous_sr.ranked_duration_ms > 0
       AND COALESCE(previous_li.duplicate_group_id, previous_li.id) != COALESCE(li.duplicate_group_id, li.id)
-    ORDER BY COALESCE(previous_li.duplicate_group_id, previous_li.id), previous_sr.duration_ms ASC
+    ORDER BY COALESCE(previous_li.duplicate_group_id, previous_li.id), previous_sr.ranked_duration_ms ASC
   ) previous
 ) guild_average ON TRUE
 WHERE COALESCE(li.duplicate_group_id, li.id) = @run_id::uuid
