@@ -65,11 +65,26 @@ func TestEncounterKillTimesIncludePartialKills(t *testing.T) {
 		killTimes[1].EncounterName,
 	})
 
+	rankedStart := startedAt.Add(10 * time.Minute)
+	rankedCompletion := startedAt.Add(time.Hour)
+	rankedDurationMs := int64(rankedCompletion.Sub(rankedStart) / time.Millisecond)
 	require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
 		InstanceID: instanceID, InstanceName: "Molten Core", RealmID: realmID,
 		StartTime: database.Timestamptz(startedAt), CompletionTime: database.Timestamptz(startedAt.Add(time.Hour)),
-		DurationMs: int64(time.Hour / time.Millisecond), Proof: []byte(`{"proof":[]}`),
+		DurationMs:           int64(time.Hour / time.Millisecond),
+		RankedStartTime:      database.Timestamptz(rankedStart),
+		RankedCompletionTime: database.Timestamptz(rankedCompletion),
+		RankedDurationMs:     pgtype.Int8{Int64: rankedDurationMs, Valid: true},
+		Proof:                []byte(`{"proof":[]}`),
 	}))
+
+	speedrun, err := store.GetInstanceSpeedrun(ctx, instanceID)
+	require.NoError(t, err)
+	require.True(t, speedrun.BossToBossStartTime.Valid)
+	require.True(t, rankedStart.Equal(speedrun.BossToBossStartTime.Time))
+	require.True(t, speedrun.BossToBossCompletionTime.Valid)
+	require.True(t, rankedCompletion.Equal(speedrun.BossToBossCompletionTime.Time))
+	require.Equal(t, pgtype.Int8{Int64: rankedDurationMs, Valid: true}, speedrun.BossToBossDurationMs)
 
 	cohort, err := store.InstanceSpeedrunCohort(ctx, database.InstanceSpeedrunCohortParams{
 		InstanceID: instanceID, LookbackDays: 60, Scope: "server", MetricsVersion: 1,

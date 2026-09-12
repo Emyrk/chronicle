@@ -3,10 +3,12 @@ INSERT INTO instance_speedruns (
     instance_id, instance_name, realm_id, guild_id,
     qualified, start_time, completion_time, duration_ms,
     ranked_start_time, ranked_completion_time, ranked_duration_ms,
+    boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms,
     proof, addon_version, parser_version_num, addon_version_num
 ) VALUES (
     @instance_id, @instance_name, @realm_id, @guild_id,
     @qualified, @start_time, @completion_time, @duration_ms,
+    @ranked_start_time, @ranked_completion_time, @ranked_duration_ms,
     @ranked_start_time, @ranked_completion_time, @ranked_duration_ms,
     @proof, @addon_version, @parser_version_num, @addon_version_num
 );
