@@ -22,7 +22,8 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
 import type { RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
-import { useSiteConfig } from "@/api/queries"
+import { useAuthorizationCheck, useSiteConfig } from "@/api/queries"
+import { useAuth } from "@/hooks/useAuth"
 import {
   useRankingsEncounters,
   useRankingsInstances,
@@ -42,6 +43,7 @@ import { RankingsTable } from "./RankingsTable"
 import { KillTimeTable } from "./KillTimeTable"
 import { ClassSpecFilter } from "./ClassSpecFilter"
 import { RankingsLoadingState } from "./RankingsLoadingState"
+import { LeaderboardVerificationControl } from "./LeaderboardVerificationControl"
 import { getRankingsQueryEnablement } from "./rankingsQueryState"
 import {
   groupByParamForValue,
@@ -70,6 +72,15 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const [params, setParams] = useSearchParams()
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { isAuthenticated } = useAuth()
+  const verificationChecks = useMemo(
+    () => ({ verifyLeaderboard: "chronicle:chronicle#admin_speedrun_requirements" }),
+    [],
+  )
+  const { data: verificationAuthz } = useAuthorizationCheck(verificationChecks, {
+    enabled: isAuthenticated,
+  })
+  const canVerifyLeaderboard = verificationAuthz?.verifyLeaderboard ?? false
 
   // ── API queries ───────────────────────────────────────────────────────
   const { data: encounterSummaries, isLoading: encountersLoading } = useRankingsEncounters(instanceName)
@@ -448,7 +459,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return rawBoxPlotStats.filter((s) => s.player_class !== "Unknown" && s.player_spec !== "Unknown")
   }, [rawBoxPlotStats, hideUnknowns])
 
-  const { data: leaderboardData, isLoading: leaderboardLoading } = useRankingsLeaderboard({
+  const leaderboardParams = useMemo(() => ({
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
     difficulty_names: difficultyNamesParam,
@@ -462,7 +473,25 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     metric: valueMetric,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
-  }, queryEnablement.playerLeaderboard)
+  }), [
+    difficultyNamesParam,
+    encounterNamesParam,
+    filterClass,
+    filterRole,
+    filterSpec,
+    filterSubSpec,
+    hideUnknowns,
+    instanceName,
+    page,
+    periodParam,
+    realmNamesParam,
+    valueMetric,
+  ])
+
+  const { data: leaderboardData, isLoading: leaderboardLoading } = useRankingsLeaderboard(
+    leaderboardParams,
+    queryEnablement.playerLeaderboard,
+  )
 
   // Derive available difficulties from instance summaries (unaffected by difficulty filter)
   const { data: instanceSummaries } = useRankingsInstances()
@@ -700,6 +729,10 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           {sidebarOpen ? <X className="h-5 w-5" /> : <List className="h-5 w-5" />}
         </Button>,
         document.body,
+      )}
+
+      {canVerifyLeaderboard && queryEnablement.playerLeaderboard && (
+        <LeaderboardVerificationControl params={leaderboardParams} />
       )}
 
       {/* Sidebar — desktop: always present (empty when not DPS to preserve layout), mobile: overlay */}
