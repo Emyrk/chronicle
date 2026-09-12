@@ -34,31 +34,72 @@ function formatRelativeTime(date: Date): string {
 
 interface RaidCardProps {
   instance: RecentInstance;
+  instances?: RecentInstance[];
   bossCount?: number;
   /** Average guild parse for this raid; shown as a badge in the top-right corner. */
   parseScore?: number;
 }
 
-export function RaidCard({ instance, bossCount, parseScore }: RaidCardProps) {
+export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCardProps) {
+  const uploads = instances && instances.length > 0 ? instances : [instance];
+  const [activeUploadIndex, setActiveUploadIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const firstEncounterAt = new Date(instance.first_encounter_time);
-  const backgroundImage = getInstanceBackground(instance.name);
+  const activeInstance = uploads[activeUploadIndex] ?? uploads[0];
+  const firstEncounterAt = new Date(activeInstance.first_encounter_time);
+  const backgroundImage = getInstanceBackground(activeInstance.name);
   
-  const isFullClear = bossCount != null && instance.boss_kills === bossCount;
+  const isFullClear = bossCount != null && activeInstance.boss_kills === bossCount;
 
   // Build instance URL - prefer slug if available
-  const instanceUrl = instance.slug 
-    ? `/instances/${instance.slug}` 
-    : `/instances/${instance.id}`;
+  const instanceUrl = activeInstance.slug
+    ? `/instances/${activeInstance.slug}`
+    : `/instances/${activeInstance.id}`;
 
   return (
-    <Link to={instanceUrl}>
-      <div 
-        className="relative h-full rounded-lg overflow-hidden group cursor-pointer transition-all hover:scale-[1.02] hover:shadow-xl"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
+    <div
+      className="group relative h-full group/raid-card"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        setActiveUploadIndex(0);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setActiveUploadIndex(0);
+        }
+      }}
+    >
+      {uploads.length > 1 && (
+        <div
+          className="absolute left-0 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-1 opacity-0 transition-[transform,opacity] duration-200 ease-out group-hover/raid-card:-translate-x-[calc(100%+0.25rem)] group-hover/raid-card:opacity-100 group-focus-within/raid-card:-translate-x-[calc(100%+0.25rem)] group-focus-within/raid-card:opacity-100"
+          role="group"
+          aria-label="Uploads"
+        >
+          {uploads.map((upload, index) => (
+            <button
+              key={upload.id}
+              type="button"
+              aria-pressed={activeUploadIndex === index}
+              aria-label={`Upload ${index + 1} from ${upload.recorder_name || upload.uploader_name}`}
+              title={upload.recorder_name || upload.uploader_name}
+              className={`flex h-7 min-w-7 items-center justify-center rounded-md border px-2 text-xs font-bold tabular-nums shadow-lg backdrop-blur-md transition-all duration-150 ${
+                activeUploadIndex === index
+                  ? "border-amber-300/70 bg-amber-300 text-black"
+                  : "border-white/15 bg-black/75 text-white/75 hover:border-white/35 hover:bg-black/90 hover:text-white"
+              }`}
+              onMouseEnter={() => setActiveUploadIndex(index)}
+              onFocus={() => setActiveUploadIndex(index)}
+              onClick={() => setActiveUploadIndex(index)}
+            >
+              {index + 1}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <Link to={instanceUrl} className="block h-full">
+        <div className="relative h-full rounded-lg overflow-hidden cursor-pointer transition-all hover:scale-[1.02] hover:shadow-xl">
         {/* Solid color fallback background */}
         <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900" />
         
@@ -86,8 +127,18 @@ export function RaidCard({ instance, bossCount, parseScore }: RaidCardProps) {
         {/* Dark gradient overlay for text readability */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
         
+        {uploads.length > 1 && (
+          <div
+            className="absolute left-2 top-2 z-20 flex h-7 min-w-7 items-center justify-center rounded-md border border-white/20 bg-black/65 px-2 text-xs font-bold tabular-nums text-white shadow-lg backdrop-blur-md transition-opacity group-hover/raid-card:opacity-0 group-focus-within/raid-card:opacity-0"
+            aria-label={`${uploads.length} uploads`}
+            title={`${uploads.length} uploads`}
+          >
+            {uploads.length}
+          </div>
+        )}
+
         {/* Badge stack - top right corner */}
-        {(parseScore !== undefined || instance.has_youtube_video || isHeroic(instance)) && (
+        {(parseScore !== undefined || activeInstance.has_youtube_video || isHeroic(activeInstance)) && (
           <div className="absolute top-2 right-2 z-20 flex flex-col items-end gap-1.5">
             {parseScore !== undefined && (
               <div
@@ -97,22 +148,22 @@ export function RaidCard({ instance, bossCount, parseScore }: RaidCardProps) {
                 {Math.round(parseScore)}
               </div>
             )}
-            {instance.has_youtube_video && (
+            {activeInstance.has_youtube_video && (
               <div className="flex items-center gap-1.5 bg-red-600/75 backdrop-blur-sm text-white/85 px-2 py-1 rounded shadow-lg" title="Has YouTube video">
                 <Youtube className="h-4 w-4" />
                 <span className="text-xs font-semibold">Video</span>
               </div>
             )}
-            {isHeroic(instance) && <HeroicBadge />}
+            {isHeroic(activeInstance) && <HeroicBadge />}
           </div>
         )}
         
         {/* Animated DPS bars - only shown on hover for cards with video */}
-        {instance.has_youtube_video && isHovered && (
+        {activeInstance.has_youtube_video && isHovered && (
           <div className="absolute bottom-20 left-4 right-16 z-5 space-y-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
             {(() => {
               // Use uploaded_at as seed for deterministic randomization
-              const seed = new Date(instance.uploaded_at).getTime();
+              const seed = new Date(activeInstance.uploaded_at).getTime();
               const seededRandom = (i: number) => {
                 const x = Math.sin(seed + i * 9999) * 10000;
                 return x - Math.floor(x);
@@ -159,22 +210,22 @@ export function RaidCard({ instance, bossCount, parseScore }: RaidCardProps) {
           {/* Header: Instance name */}
           <div className="mb-2">
             <h3 className="font-bold text-base text-white drop-shadow-lg group-hover:text-amber-300 transition-colors">
-              {instance.name}
+              {activeInstance.name}
             </h3>
             <p className="text-xs text-white/70 drop-shadow">
-              {instance.guild_name ? (
+              {activeInstance.guild_name ? (
                 <>
-                  <span className="text-amber-300/90">&lt;{instance.guild_name}&gt;</span>
+                  <span className="text-amber-300/90">&lt;{activeInstance.guild_name}&gt;</span>
                   <span className="mx-1">·</span>
-                  by {instance.uploader_name}
+                  by {activeInstance.uploader_name}
                 </>
               ) : (
-                <>by {instance.uploader_name}</>
+                <>by {activeInstance.uploader_name}</>
               )}
             </p>
-            {instance.max_players > 0 && (
+            {activeInstance.max_players > 0 && (
               <p className="text-xs text-white/70 font-medium drop-shadow">
-                {instance.max_players} Player
+                {activeInstance.max_players} Player
               </p>
             )}
           </div>
@@ -186,11 +237,11 @@ export function RaidCard({ instance, bossCount, parseScore }: RaidCardProps) {
           <div className="flex items-center gap-3 text-xs text-white/80 mb-2">
             <span className="flex items-center gap-1 bg-black/40 px-2 py-0.5 rounded">
               <Users className="h-3 w-3" />
-              {instance.player_count}
+              {activeInstance.player_count}
             </span>
             <span data-chromatic="ignore" className="flex items-center gap-1 bg-black/40 px-2 py-0.5 rounded">
               <Clock className="h-3 w-3" />
-              {formatDuration(instance.duration_ms)}
+              {formatDuration(activeInstance.duration_ms)}
             </span>
           </div>
 
@@ -204,7 +255,7 @@ export function RaidCard({ instance, bossCount, parseScore }: RaidCardProps) {
               }`}>
                 <Swords className="h-3.5 w-3.5" />
                 <span className="text-sm font-semibold">
-                  {instance.boss_kills}/{bossCount}
+                  {activeInstance.boss_kills}/{bossCount}
                 </span>
                 {isFullClear && <CheckCircle className="h-3.5 w-3.5" />}
               </div>
@@ -212,9 +263,9 @@ export function RaidCard({ instance, bossCount, parseScore }: RaidCardProps) {
           )}
 
           {/* Encounter tags (optional, show first few) */}
-          {instance.encounters && instance.encounters.length > 0 && (
+          {activeInstance.encounters && activeInstance.encounters.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2">
-              {instance.encounters
+              {activeInstance.encounters
                 .filter(e => e.boss)
                 .slice(0, 3)
                 .map((enc, i) => {
@@ -236,9 +287,9 @@ export function RaidCard({ instance, bossCount, parseScore }: RaidCardProps) {
                     </span>
                   );
                 })}
-              {instance.encounters.filter(e => e.boss).length > 3 && (
+              {activeInstance.encounters.filter(e => e.boss).length > 3 && (
                 <span className="text-xs text-white/60 bg-black/40 px-1.5 py-0.5 rounded">
-                  +{instance.encounters.filter(e => e.boss).length - 3}
+                  +{activeInstance.encounters.filter(e => e.boss).length - 3}
                 </span>
               )}
             </div>
@@ -247,10 +298,11 @@ export function RaidCard({ instance, bossCount, parseScore }: RaidCardProps) {
           {/* Footer: Time and realm */}
           <div data-chromatic="ignore" className="pt-2 border-t border-white/20 flex items-center justify-between text-xs text-white/60">
             <span>{formatRelativeTime(firstEncounterAt)}</span>
-            <span className="truncate ml-2">{instance.realm_name}</span>
+            <span className="truncate ml-2">{activeInstance.realm_name}</span>
+          </div>
           </div>
         </div>
-      </div>
-    </Link>
+      </Link>
+    </div>
   );
 }

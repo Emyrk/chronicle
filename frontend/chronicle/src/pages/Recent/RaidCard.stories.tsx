@@ -385,6 +385,40 @@ export const MissingImage: Story = {
 
 
 /**
+ * Multiple uploads of the same run. Hover the numbered tabs to preview each upload.
+ */
+export const GroupedUploads: Story = {
+  args: {
+    instance: baseInstance,
+    instances: [
+      baseInstance,
+      {
+        ...baseInstance,
+        id: "22345678-1234-1234-1234-123456789012",
+        slug: "molten-core-duplicate-2",
+        uploader_id: "user-2",
+        uploader_name: "Steven",
+        recorder_name: "Steven",
+        boss_kills: 8,
+        duration_ms: 76 * 60 * 1000,
+        has_youtube_video: true,
+      },
+      {
+        ...baseInstance,
+        id: "32345678-1234-1234-1234-123456789012",
+        slug: "molten-core-duplicate-3",
+        uploader_id: "user-3",
+        uploader_name: "Raidlogger",
+        recorder_name: "Mira",
+        player_count: 38,
+        boss_kills: 6,
+        duration_ms: 61 * 60 * 1000,
+      },
+    ],
+  },
+};
+
+/**
  * Grid of multiple cards showing different instances - demonstrates the visual variety.
  */
 export const GridPreview: StoryObj = {

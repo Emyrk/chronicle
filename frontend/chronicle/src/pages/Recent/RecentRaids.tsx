@@ -431,13 +431,17 @@ export function RecentRaids() {
         {instanceGroups.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {instanceGroups.map(([instance]) => (
-                <RaidCard
-                  key={instance.id}
-                  instance={instance}
-                  bossCount={bossCounts?.get(instance.name)}
-                />
-              ))}
+              {instanceGroups.map((group) => {
+                const instance = group[0];
+                return (
+                  <RaidCard
+                    key={instance.id}
+                    instance={instance}
+                    instances={group}
+                    bossCount={bossCounts?.get(instance.name)}
+                  />
+                );
+              })}
             </div>
 
             {/* Infinite scroll trigger */}
