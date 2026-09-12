@@ -3,10 +3,12 @@ INSERT INTO instance_speedruns (
     instance_id, instance_name, realm_id, guild_id,
     qualified, start_time, completion_time, duration_ms,
     ranked_start_time, ranked_completion_time, ranked_duration_ms,
+    boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms,
     proof, addon_version, parser_version_num, addon_version_num
 ) VALUES (
     @instance_id, @instance_name, @realm_id, @guild_id,
     @qualified, @start_time, @completion_time, @duration_ms,
+    @start_time, @completion_time, @duration_ms,
     @ranked_start_time, @ranked_completion_time, @ranked_duration_ms,
     @proof, @addon_version, @parser_version_num, @addon_version_num
 );
@@ -128,16 +130,18 @@ ORDER BY start_time DESC;
 -- Excludes runs without a guild. Optional filters: realm, player count, guild.
 -- Each difficulty has its own board: set filter_difficulty to select the board
 -- matching difficulty_name (empty string matches runs with no recorded difficulty).
--- use_ranked_timing selects boss-to-boss ranked timing; false selects full clear timing.
+-- use_ranked_timing selects boss-to-boss timing; false selects full clear timing.
+-- During the staged rollout, boss timing falls back to the historical ranked
+-- columns until the manual backfill has populated boss_to_boss_* for every row.
 WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         sr.instance_id,
         sr.instance_name,
         li.difficulty_name,
         sr.guild_id,
-        CASE WHEN @use_ranked_timing::boolean THEN COALESCE(sr.ranked_duration_ms, 0) ELSE sr.duration_ms END::bigint AS duration_ms,
-        CASE WHEN @use_ranked_timing::boolean THEN COALESCE(sr.ranked_start_time, sr.start_time) ELSE sr.start_time END::timestamptz AS start_time,
-        CASE WHEN @use_ranked_timing::boolean THEN COALESCE(sr.ranked_completion_time, sr.completion_time) ELSE sr.completion_time END::timestamptz AS completion_time,
+        CASE WHEN @use_ranked_timing::boolean THEN COALESCE(sr.boss_to_boss_duration_ms, sr.ranked_duration_ms) ELSE sr.duration_ms END::bigint AS duration_ms,
+        CASE WHEN @use_ranked_timing::boolean THEN COALESCE(sr.boss_to_boss_start_time, sr.ranked_start_time) ELSE sr.start_time END::timestamptz AS start_time,
+        CASE WHEN @use_ranked_timing::boolean THEN COALESCE(sr.boss_to_boss_completion_time, sr.ranked_completion_time) ELSE sr.completion_time END::timestamptz AS completion_time,
         sr.qualified,
         sr.addon_version,
         li.hashed_slug,
@@ -163,7 +167,7 @@ WITH deduped AS (
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.instance_name = @instance_name
       AND sr.qualified = true
-      AND (NOT @use_ranked_timing::boolean OR sr.ranked_duration_ms IS NOT NULL)
+      AND (NOT @use_ranked_timing::boolean OR COALESCE(sr.boss_to_boss_duration_ms, sr.ranked_duration_ms) IS NOT NULL)
       AND sr.guild_id IS NOT NULL
       AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
       AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
@@ -178,7 +182,7 @@ WITH deduped AS (
       END
       AND CASE
           WHEN @since_days :: bigint > 0 THEN
-              CASE WHEN @use_ranked_timing::boolean THEN sr.ranked_completion_time ELSE sr.completion_time END >= now() - make_interval(days => @since_days::int)
+              CASE WHEN @use_ranked_timing::boolean THEN COALESCE(sr.boss_to_boss_completion_time, sr.ranked_completion_time) ELSE sr.completion_time END >= now() - make_interval(days => @since_days::int)
           ELSE true
       END
       AND CASE
@@ -186,7 +190,7 @@ WITH deduped AS (
           ELSE true
       END
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        CASE WHEN @use_ranked_timing::boolean THEN sr.ranked_duration_ms ELSE sr.duration_ms END ASC
+        CASE WHEN @use_ranked_timing::boolean THEN COALESCE(sr.boss_to_boss_duration_ms, sr.ranked_duration_ms) ELSE sr.duration_ms END ASC
 ),
 -- When no guild filter: keep only the best run per guild.
 -- When guild filter is set: keep all runs for that guild.
@@ -215,7 +219,7 @@ FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.qualified = true
-  AND sr.ranked_duration_ms IS NOT NULL
+  AND COALESCE(sr.boss_to_boss_duration_ms, sr.ranked_duration_ms) IS NOT NULL
 ORDER BY sr.instance_name, li.difficulty_name;
 
 -- name: SpeedrunDifficulties :many
@@ -228,7 +232,7 @@ JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.instance_name = @instance_name
   AND sr.qualified = true
-  AND sr.ranked_duration_ms IS NOT NULL
+  AND COALESCE(sr.boss_to_boss_duration_ms, sr.ranked_duration_ms) IS NOT NULL
 ORDER BY li.difficulty_name;
 
 -- name: SpeedrunRealmNames :many
@@ -237,7 +241,7 @@ SELECT DISTINCT COALESCE(wsr.name, '') AS realm_name
 FROM instance_speedruns sr
 JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
 WHERE sr.qualified = true
-  AND sr.ranked_duration_ms IS NOT NULL
+  AND COALESCE(sr.boss_to_boss_duration_ms, sr.ranked_duration_ms) IS NOT NULL
 ORDER BY realm_name;
 
 -- name: GuildRaidClears :many
