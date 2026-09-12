@@ -27,8 +27,8 @@ class RankingsAPIError extends Error {
   }
 }
 
-async function fetchJSON<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
   if (!response.ok) {
     throw new RankingsAPIError(`Rankings API error: ${response.status}`, response.status);
   }
@@ -110,7 +110,7 @@ export function useRankingsFilters(instanceName?: string) {
   });
 }
 
-export function useRankingsLeaderboard(params: {
+export interface RankingsLeaderboardParams {
   instance_names?: string;
   encounter_names?: string;
   difficulty_names?: string;
@@ -125,7 +125,9 @@ export function useRankingsLeaderboard(params: {
   max_players?: number;
   limit?: number;
   offset?: number;
-}, enabled = true) {
+}
+
+export function rankingsLeaderboardSearchParams(params: RankingsLeaderboardParams) {
   const searchParams = new URLSearchParams();
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
   if (params.encounter_names) searchParams.set("encounter_names", params.encounter_names);
@@ -141,7 +143,11 @@ export function useRankingsLeaderboard(params: {
   if (params.max_players) searchParams.set("max_players", String(params.max_players));
   if (params.limit != null) searchParams.set("limit", String(params.limit));
   if (params.offset != null) searchParams.set("offset", String(params.offset));
-  const qs = searchParams.toString();
+  return searchParams;
+}
+
+export function useRankingsLeaderboard(params: RankingsLeaderboardParams, enabled = true) {
+  const qs = rankingsLeaderboardSearchParams(params).toString();
 
   return useQuery({
     queryKey: ["rankings", "leaderboard", params],
@@ -150,6 +156,15 @@ export function useRankingsLeaderboard(params: {
     staleTime: RANKINGS_STALE_TIME,
     enabled,
   });
+}
+
+export function verifyRankingsLeaderboard(params: RankingsLeaderboardParams) {
+  const searchParams = rankingsLeaderboardSearchParams(params);
+  searchParams.set("verify", "true");
+  return fetchJSON<RankingsLeaderboardResponse>(
+    `/api/v1/rankings/leaderboard?${searchParams.toString()}`,
+    { cache: "no-store" },
+  );
 }
 
 export function useRankingsStats(params: {
