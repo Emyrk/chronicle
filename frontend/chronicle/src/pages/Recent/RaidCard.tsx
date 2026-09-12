@@ -83,7 +83,7 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
             {uploads.length}
           </button>
           <div
-            className="pointer-events-none absolute left-1/2 top-full mt-1 flex min-w-9 -translate-x-1/2 -translate-y-1 origin-top flex-col rounded-md border bg-popover p-1 text-popover-foreground opacity-0 shadow-md scale-y-75 transition-[transform,opacity] duration-150 ease-out group-hover/uploads:pointer-events-auto group-hover/uploads:translate-y-0 group-hover/uploads:scale-y-100 group-hover/uploads:opacity-100 group-focus-within/uploads:pointer-events-auto group-focus-within/uploads:translate-y-0 group-focus-within/uploads:scale-y-100 group-focus-within/uploads:opacity-100"
+            className="pointer-events-none absolute left-1/2 top-full flex -translate-x-1/2 -translate-y-1 origin-top flex-col gap-1 pt-1 opacity-0 scale-y-75 transition-[transform,opacity] duration-150 ease-out group-hover/uploads:pointer-events-auto group-hover/uploads:translate-y-0 group-hover/uploads:scale-y-100 group-hover/uploads:opacity-100 group-focus-within/uploads:pointer-events-auto group-focus-within/uploads:translate-y-0 group-focus-within/uploads:scale-y-100 group-focus-within/uploads:opacity-100"
             role="group"
             aria-label="Uploads"
           >
@@ -94,10 +94,10 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
                 aria-current={activeUploadIndex === index ? "true" : undefined}
                 aria-label={`Upload ${index + 1} from ${upload.recorder_name || upload.uploader_name}`}
                 title={upload.recorder_name || upload.uploader_name}
-                className={`flex h-7 min-w-7 items-center justify-center rounded-sm px-2 text-xs font-medium tabular-nums outline-none transition-colors ${
+                className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-bold tabular-nums shadow-lg backdrop-blur-md outline-none transition-colors ${
                   activeUploadIndex === index
-                    ? "bg-accent text-accent-foreground"
-                    : "text-popover-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                    ? "border-sky-300/40 bg-sky-300/70 text-white"
+                    : "border-white/20 bg-black/75 text-white/80 hover:border-white/40 hover:bg-black/90 hover:text-white focus:border-white/40 focus:bg-black/90 focus:text-white"
                 }`}
                 onMouseEnter={() => setActiveUploadIndex(index)}
                 onFocus={() => setActiveUploadIndex(index)}

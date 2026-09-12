@@ -47,8 +47,8 @@ describe("RaidCard grouped uploads", () => {
     expect(markup).toContain("left-1/2 top-full");
     expect(markup).toContain("-translate-x-1/2");
     expect(markup).toContain("flex-col");
-    expect(markup).toContain("bg-popover");
-    expect(markup).toContain("hover:bg-accent");
+    expect(markup).toContain("rounded-full");
+    expect(markup).toContain("bg-black/75");
     expect(markup).toContain('aria-label="Upload 1 from Emyrk"');
     expect(markup).toContain('aria-label="Upload 2 from Steven"');
     expect(markup).toContain('href="/instances/second"');
