@@ -6,15 +6,17 @@ import (
 )
 
 type rankingRunSummaryMetrics struct {
-	queueDepth      prometheus.Gauge
-	oldestDirtyAge  prometheus.Gauge
-	rebuildDuration prometheus.Histogram
-	failures        prometheus.Counter
-	runsProcessed   prometheus.Counter
-	runsRebuilt     prometheus.Counter
-	runsDeleted     prometheus.Counter
-	runsRetained    prometheus.Counter
-	leaderboardPath *prometheus.CounterVec
+	queueDepth               prometheus.Gauge
+	oldestDirtyAge           prometheus.Gauge
+	rebuildDuration          prometheus.Histogram
+	failures                 prometheus.Counter
+	runsProcessed            prometheus.Counter
+	runsRebuilt              prometheus.Counter
+	runsDeleted              prometheus.Counter
+	runsRetained             prometheus.Counter
+	leaderboardPath          *prometheus.CounterVec
+	leaderboardQueryDuration *prometheus.HistogramVec
+	leaderboardVerification  *prometheus.CounterVec
 }
 
 func newRankingRunSummaryMetrics(reg prometheus.Registerer) *rankingRunSummaryMetrics {
@@ -78,5 +80,18 @@ func newRankingRunSummaryMetrics(reg prometheus.Registerer) *rankingRunSummaryMe
 			Name:      "leaderboard_queries_total",
 			Help:      "Total player leaderboard queries by selected path and fallback reason.",
 		}, []string{"path", "reason"}),
+		leaderboardQueryDuration: factory.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "chronicle",
+			Subsystem: "rankings_run_summaries",
+			Name:      "leaderboard_query_duration_seconds",
+			Help:      "Duration of administrator verification leaderboard queries by implementation.",
+			Buckets:   prometheus.DefBuckets,
+		}, []string{"implementation"}),
+		leaderboardVerification: factory.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "chronicle",
+			Subsystem: "rankings_run_summaries",
+			Name:      "leaderboard_verifications_total",
+			Help:      "Total administrator leaderboard verifications by result status.",
+		}, []string{"status"}),
 	}
 }

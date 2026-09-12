@@ -18,8 +18,11 @@ type fakeRankingsLeaderboardStore struct {
 	fastRows       []database.RankingsLeaderboardFastRow
 	fastErr        error
 	slowRows       []database.RankingsLeaderboardSlowRow
+	slowErr        error
 	eligibilityArg database.RankingsLeaderboardFastEligibilityParams
 	fastArg        database.RankingsLeaderboardFastParams
+	slowArg        database.RankingsLeaderboardSlowParams
+	fastCalls      int
 	slowCalls      int
 }
 
@@ -29,13 +32,15 @@ func (f *fakeRankingsLeaderboardStore) RankingsLeaderboardFastEligibility(_ cont
 }
 
 func (f *fakeRankingsLeaderboardStore) RankingsLeaderboardFast(_ context.Context, arg database.RankingsLeaderboardFastParams) ([]database.RankingsLeaderboardFastRow, error) {
+	f.fastCalls++
 	f.fastArg = arg
 	return f.fastRows, f.fastErr
 }
 
-func (f *fakeRankingsLeaderboardStore) RankingsLeaderboardSlow(_ context.Context, _ database.RankingsLeaderboardSlowParams) ([]database.RankingsLeaderboardSlowRow, error) {
+func (f *fakeRankingsLeaderboardStore) RankingsLeaderboardSlow(_ context.Context, arg database.RankingsLeaderboardSlowParams) ([]database.RankingsLeaderboardSlowRow, error) {
 	f.slowCalls++
-	return f.slowRows, nil
+	f.slowArg = arg
+	return f.slowRows, f.slowErr
 }
 
 func TestRankingsLeaderboardPlannerFallbackReasons(t *testing.T) {

@@ -2809,11 +2809,37 @@ export interface RankingsKillTimeStats {
 
 // From chroniclesdk/rankings.go
 /**
+ * RankingsLeaderboardDifference identifies one bounded field-level verification mismatch.
+ */
+export interface RankingsLeaderboardDifference {
+    readonly entry_index: number;
+    readonly field: string;
+    readonly fast_value: string;
+    readonly slow_value: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
  * RankingsLeaderboardResponse wraps leaderboard entries with total count for pagination.
  */
 export interface RankingsLeaderboardResponse {
     readonly entries: readonly RankingsEntry[];
     readonly total_count: number;
+    readonly verification?: RankingsLeaderboardVerification;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsLeaderboardVerification reports an administrator-requested fast/slow comparison.
+ */
+export interface RankingsLeaderboardVerification {
+    readonly status: string;
+    readonly fast_duration_ms: number;
+    readonly slow_duration_ms: number;
+    readonly fast_query_path: string;
+    readonly fallback_reason?: string;
+    readonly difference_count: number;
+    readonly differences: readonly RankingsLeaderboardDifference[];
 }
 
 // From chroniclesdk/rankings.go

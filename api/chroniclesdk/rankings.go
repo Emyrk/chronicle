@@ -88,8 +88,28 @@ type InstanceRankingRecord struct {
 
 // RankingsLeaderboardResponse wraps leaderboard entries with total count for pagination.
 type RankingsLeaderboardResponse struct {
-	Entries    []RankingsEntry `json:"entries"`
-	TotalCount int64           `json:"total_count"`
+	Entries      []RankingsEntry                  `json:"entries"`
+	TotalCount   int64                            `json:"total_count"`
+	Verification *RankingsLeaderboardVerification `json:"verification,omitempty"`
+}
+
+// RankingsLeaderboardVerification reports an administrator-requested fast/slow comparison.
+type RankingsLeaderboardVerification struct {
+	Status          string                          `json:"status"`
+	FastDurationMS  int64                           `json:"fast_duration_ms"`
+	SlowDurationMS  int64                           `json:"slow_duration_ms"`
+	FastQueryPath   string                          `json:"fast_query_path"`
+	FallbackReason  string                          `json:"fallback_reason,omitempty"`
+	DifferenceCount int                             `json:"difference_count"`
+	Differences     []RankingsLeaderboardDifference `json:"differences"`
+}
+
+// RankingsLeaderboardDifference identifies one bounded field-level verification mismatch.
+type RankingsLeaderboardDifference struct {
+	EntryIndex int    `json:"entry_index"`
+	Field      string `json:"field"`
+	FastValue  string `json:"fast_value"`
+	SlowValue  string `json:"slow_value"`
 }
 
 // RankingsFilterClass describes the specs and sub-specs available for one class.
