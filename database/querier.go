@@ -599,6 +599,10 @@ type sqlcQuerier interface {
 	// independent of snapshot membership (the instance may not be a member of the
 	// snapshot it scores against, e.g. historical canonical snapshots).
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
+	// Pages logical runs, then returns every upload in each selected duplicate group.
+	// The first row for each run is its representative: most boss encounters, then
+	// most total encounters, then the duplicate-group anchor and stable tie-breakers.
+	ListRecentInstanceGroups(ctx context.Context, arg ListRecentInstanceGroupsParams) ([]ListRecentInstanceGroupsRow, error)
 	ListRecentInstances(ctx context.Context, arg ListRecentInstancesParams) ([]ListRecentInstancesRow, error)
 	ListRecentInstancesByPlayer(ctx context.Context, arg ListRecentInstancesByPlayerParams) ([]ListRecentInstancesByPlayerRow, error)
 	ListRegressionFixtures(ctx context.Context) ([]ListRegressionFixturesRow, error)
