@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Users, CheckCircle, XCircle, Youtube, Swords } from "lucide-react";
+import { Clock, Copy, Users, CheckCircle, XCircle, Youtube, Swords } from "lucide-react";
 import type { RecentInstance } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { HeroicBadge } from "@/components/HeroicBadge";
@@ -74,15 +74,16 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
         <div className="group/uploads absolute right-2 top-2 z-30">
           <button
             type="button"
-            className="flex h-7 min-w-7 items-center justify-center rounded-md border border-white/20 bg-black/65 px-2 text-xs font-bold tabular-nums text-white shadow-lg backdrop-blur-md transition-colors hover:border-white/40 hover:bg-black/85 focus-visible:border-amber-300 focus-visible:outline-none"
-            aria-label={`${uploads.length} uploads`}
+            className="flex h-7 items-center justify-center gap-1.5 rounded-full border border-white/20 bg-black/75 px-2.5 text-xs font-bold tabular-nums text-white shadow-lg backdrop-blur-md transition-colors hover:border-white/40 hover:bg-black/90 focus-visible:border-amber-300 focus-visible:outline-none"
+            aria-label={`${uploads.length} duplicate logs`}
             aria-haspopup="true"
-            title={`${uploads.length} uploads`}
+            title={`${uploads.length} duplicate logs`}
           >
+            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
             {uploads.length}
           </button>
           <div
-            className="pointer-events-none absolute right-0 top-full flex origin-top flex-col gap-1 pt-1 opacity-0 -translate-y-1 scale-y-75 transition-[transform,opacity] duration-150 ease-out group-hover/uploads:pointer-events-auto group-hover/uploads:translate-y-0 group-hover/uploads:scale-y-100 group-hover/uploads:opacity-100 group-focus-within/uploads:pointer-events-auto group-focus-within/uploads:translate-y-0 group-focus-within/uploads:scale-y-100 group-focus-within/uploads:opacity-100"
+            className="pointer-events-none absolute left-1/2 top-full mt-1 flex min-w-9 -translate-x-1/2 -translate-y-1 origin-top flex-col rounded-md border bg-popover p-1 text-popover-foreground opacity-0 shadow-md scale-y-75 transition-[transform,opacity] duration-150 ease-out group-hover/uploads:pointer-events-auto group-hover/uploads:translate-y-0 group-hover/uploads:scale-y-100 group-hover/uploads:opacity-100 group-focus-within/uploads:pointer-events-auto group-focus-within/uploads:translate-y-0 group-focus-within/uploads:scale-y-100 group-focus-within/uploads:opacity-100"
             role="group"
             aria-label="Uploads"
           >
@@ -93,10 +94,10 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
                 aria-current={activeUploadIndex === index ? "true" : undefined}
                 aria-label={`Upload ${index + 1} from ${upload.recorder_name || upload.uploader_name}`}
                 title={upload.recorder_name || upload.uploader_name}
-                className={`flex h-7 min-w-7 items-center justify-center rounded-md border px-2 text-xs font-bold tabular-nums shadow-lg backdrop-blur-md transition-colors duration-150 ${
+                className={`flex h-7 min-w-7 items-center justify-center rounded-sm px-2 text-xs font-medium tabular-nums outline-none transition-colors ${
                   activeUploadIndex === index
-                    ? "border-amber-300/70 bg-amber-300 text-black"
-                    : "border-white/15 bg-black/75 text-white/75 hover:border-white/35 hover:bg-black/90 hover:text-white"
+                    ? "bg-accent text-accent-foreground"
+                    : "text-popover-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
                 }`}
                 onMouseEnter={() => setActiveUploadIndex(index)}
                 onFocus={() => setActiveUploadIndex(index)}
@@ -139,7 +140,7 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
         
         {/* Badge stack - top right corner */}
         {(parseScore !== undefined || activeInstance.has_youtube_video || isHeroic(activeInstance)) && (
-          <div className={`absolute top-2 z-20 flex flex-col items-end gap-1.5 ${uploads.length > 1 ? "right-12" : "right-2"}`}>
+          <div className={`absolute right-2 z-20 flex flex-col items-end gap-1.5 ${uploads.length > 1 ? "top-11" : "top-2"}`}>
             {parseScore !== undefined && (
               <div
                 className={`bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded shadow-lg text-sm font-bold tabular-nums ${parseColor(Math.round(parseScore))}`}

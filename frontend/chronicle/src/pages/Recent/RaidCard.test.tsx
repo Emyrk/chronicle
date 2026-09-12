@@ -28,7 +28,7 @@ function recentInstance(id: string, uploaderName: string): RecentInstance {
 }
 
 describe("RaidCard grouped uploads", () => {
-  it("renders a top-right count that reveals numbered controls on badge hover", () => {
+  it("renders a top-right icon badge that reveals numbered controls downward", () => {
     const instances = [
       recentInstance("canonical", "Emyrk"),
       recentInstance("second", "Steven"),
@@ -41,14 +41,18 @@ describe("RaidCard grouped uploads", () => {
       </MemoryRouter>,
     );
 
-    expect(markup).toContain('aria-label="3 uploads"');
+    expect(markup).toContain('aria-label="3 duplicate logs"');
     expect(markup).toContain("group-hover/uploads:opacity-100");
     expect(markup).toContain("absolute right-2 top-2");
+    expect(markup).toContain("left-1/2 top-full");
+    expect(markup).toContain("-translate-x-1/2");
+    expect(markup).toContain("flex-col");
+    expect(markup).toContain("bg-popover");
+    expect(markup).toContain("hover:bg-accent");
     expect(markup).toContain('aria-label="Upload 1 from Emyrk"');
     expect(markup).toContain('aria-label="Upload 2 from Steven"');
     expect(markup).toContain('href="/instances/second"');
     expect(markup).toContain('aria-label="Upload 3 from Mira"');
-    expect(markup).not.toContain("duplicate");
   });
 
   it("does not render upload controls for a single record", () => {
@@ -60,6 +64,6 @@ describe("RaidCard grouped uploads", () => {
     );
 
     expect(markup).not.toContain('aria-label="Uploads"');
-    expect(markup).not.toContain('aria-label="1 uploads"');
+    expect(markup).not.toContain('aria-label="1 duplicate logs"');
   });
 });
