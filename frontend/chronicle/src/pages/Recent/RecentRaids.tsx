@@ -10,6 +10,7 @@ import { INSTANCE_CONFIG } from "@/pages/Logs/utils/instanceImages";
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { RaidCard } from "./RaidCard";
 import { expandInstanceOptions, expandInstanceQuery } from "./recentRaids.utils";
+import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
 
 function renderItems(names: string[], selected: string[], onToggle: (name: string) => void) {
@@ -199,6 +200,7 @@ export function RecentRaids() {
   const hasVideoParam = videoFilter === "with" ? "true" : "";
 
   const PAGE_SIZE = 24;
+  const instanceGroups = useMemo(() => groupDuplicateInstances(instances), [instances]);
 
   const fetchInstances = useCallback(async (offset?: number) => {
     if (hasConflictingFilters) {
@@ -250,7 +252,7 @@ export function RecentRaids() {
         setInstances((prev) => [...prev, ...data.instances]);
       }
 
-      setHasMore(data.instances.length >= PAGE_SIZE);
+      setHasMore(groupDuplicateInstances([...data.instances]).length >= PAGE_SIZE);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load recent raids");
     } finally {
@@ -287,14 +289,14 @@ export function RecentRaids() {
   // Infinite scroll observer
   const loadMoreRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!hasMore || loadingMore || hasConflictingFilters || instances.length === 0) {
+    if (!hasMore || loadingMore || hasConflictingFilters || instanceGroups.length === 0) {
       return;
     }
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          fetchInstances(instances.length);
+          fetchInstances(instanceGroups.length);
         }
       },
       { threshold: 0.1 },
@@ -305,7 +307,7 @@ export function RecentRaids() {
     }
 
     return () => observer.disconnect();
-  }, [fetchInstances, hasConflictingFilters, hasMore, instances.length, loadingMore]);
+  }, [fetchInstances, hasConflictingFilters, hasMore, instanceGroups.length, loadingMore]);
 
   const toggleInstance = useCallback((name: string) => {
     setSelectedInstances((prev) => {
@@ -426,10 +428,10 @@ export function RecentRaids() {
         )}
 
         {/* Raid grid */}
-        {instances.length > 0 && (
+        {instanceGroups.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {instances.map((instance) => (
+              {instanceGroups.map(([instance]) => (
                 <RaidCard
                   key={instance.id}
                   instance={instance}
@@ -450,9 +452,9 @@ export function RecentRaids() {
             )}
 
             {/* End of results */}
-            {!loading && !hasMore && instances.length > 0 && (
+            {!loading && !hasMore && instanceGroups.length > 0 && (
               <p className="text-center text-sm text-muted-foreground py-8">
-                You&apos;ve reached the end! {instances.length} raids shown.
+                You&apos;ve reached the end! {instanceGroups.length} raids shown.
               </p>
             )}
           </>
