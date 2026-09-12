@@ -71,30 +71,40 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
       }}
     >
       {uploads.length > 1 && (
-        <div
-          className="absolute left-0 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-1 opacity-0 transition-[transform,opacity] duration-200 ease-out group-hover/raid-card:-translate-x-[calc(100%+0.25rem)] group-hover/raid-card:opacity-100 group-focus-within/raid-card:-translate-x-[calc(100%+0.25rem)] group-focus-within/raid-card:opacity-100"
-          role="group"
-          aria-label="Uploads"
-        >
-          {uploads.map((upload, index) => (
-            <button
-              key={upload.id}
-              type="button"
-              aria-pressed={activeUploadIndex === index}
-              aria-label={`Upload ${index + 1} from ${upload.recorder_name || upload.uploader_name}`}
-              title={upload.recorder_name || upload.uploader_name}
-              className={`flex h-7 min-w-7 items-center justify-center rounded-md border px-2 text-xs font-bold tabular-nums shadow-lg backdrop-blur-md transition-all duration-150 ${
-                activeUploadIndex === index
-                  ? "border-amber-300/70 bg-amber-300 text-black"
-                  : "border-white/15 bg-black/75 text-white/75 hover:border-white/35 hover:bg-black/90 hover:text-white"
-              }`}
-              onMouseEnter={() => setActiveUploadIndex(index)}
-              onFocus={() => setActiveUploadIndex(index)}
-              onClick={() => setActiveUploadIndex(index)}
-            >
-              {index + 1}
-            </button>
-          ))}
+        <div className="group/uploads absolute right-2 top-2 z-30">
+          <button
+            type="button"
+            className="flex h-7 min-w-7 items-center justify-center rounded-md border border-white/20 bg-black/65 px-2 text-xs font-bold tabular-nums text-white shadow-lg backdrop-blur-md transition-colors hover:border-white/40 hover:bg-black/85 focus-visible:border-amber-300 focus-visible:outline-none"
+            aria-label={`${uploads.length} uploads`}
+            aria-haspopup="true"
+            title={`${uploads.length} uploads`}
+          >
+            {uploads.length}
+          </button>
+          <div
+            className="pointer-events-none absolute right-0 top-full flex origin-top flex-col gap-1 pt-1 opacity-0 -translate-y-1 scale-y-75 transition-[transform,opacity] duration-150 ease-out group-hover/uploads:pointer-events-auto group-hover/uploads:translate-y-0 group-hover/uploads:scale-y-100 group-hover/uploads:opacity-100 group-focus-within/uploads:pointer-events-auto group-focus-within/uploads:translate-y-0 group-focus-within/uploads:scale-y-100 group-focus-within/uploads:opacity-100"
+            role="group"
+            aria-label="Uploads"
+          >
+            {uploads.map((upload, index) => (
+              <Link
+                key={upload.id}
+                to={upload.slug ? `/instances/${upload.slug}` : `/instances/${upload.id}`}
+                aria-current={activeUploadIndex === index ? "true" : undefined}
+                aria-label={`Upload ${index + 1} from ${upload.recorder_name || upload.uploader_name}`}
+                title={upload.recorder_name || upload.uploader_name}
+                className={`flex h-7 min-w-7 items-center justify-center rounded-md border px-2 text-xs font-bold tabular-nums shadow-lg backdrop-blur-md transition-colors duration-150 ${
+                  activeUploadIndex === index
+                    ? "border-amber-300/70 bg-amber-300 text-black"
+                    : "border-white/15 bg-black/75 text-white/75 hover:border-white/35 hover:bg-black/90 hover:text-white"
+                }`}
+                onMouseEnter={() => setActiveUploadIndex(index)}
+                onFocus={() => setActiveUploadIndex(index)}
+              >
+                {index + 1}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 
@@ -127,19 +137,9 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
         {/* Dark gradient overlay for text readability */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
         
-        {uploads.length > 1 && (
-          <div
-            className="absolute left-2 top-2 z-20 flex h-7 min-w-7 items-center justify-center rounded-md border border-white/20 bg-black/65 px-2 text-xs font-bold tabular-nums text-white shadow-lg backdrop-blur-md transition-opacity group-hover/raid-card:opacity-0 group-focus-within/raid-card:opacity-0"
-            aria-label={`${uploads.length} uploads`}
-            title={`${uploads.length} uploads`}
-          >
-            {uploads.length}
-          </div>
-        )}
-
         {/* Badge stack - top right corner */}
         {(parseScore !== undefined || activeInstance.has_youtube_video || isHeroic(activeInstance)) && (
-          <div className="absolute top-2 right-2 z-20 flex flex-col items-end gap-1.5">
+          <div className={`absolute top-2 z-20 flex flex-col items-end gap-1.5 ${uploads.length > 1 ? "right-12" : "right-2"}`}>
             {parseScore !== undefined && (
               <div
                 className={`bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded shadow-lg text-sm font-bold tabular-nums ${parseColor(Math.round(parseScore))}`}

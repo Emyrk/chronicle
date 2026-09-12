@@ -28,7 +28,7 @@ function recentInstance(id: string, uploaderName: string): RecentInstance {
 }
 
 describe("RaidCard grouped uploads", () => {
-  it("renders only the compact count and numbered upload controls", () => {
+  it("renders a top-right count that reveals numbered controls on badge hover", () => {
     const instances = [
       recentInstance("canonical", "Emyrk"),
       recentInstance("second", "Steven"),
@@ -42,8 +42,11 @@ describe("RaidCard grouped uploads", () => {
     );
 
     expect(markup).toContain('aria-label="3 uploads"');
+    expect(markup).toContain("group-hover/uploads:opacity-100");
+    expect(markup).toContain("absolute right-2 top-2");
     expect(markup).toContain('aria-label="Upload 1 from Emyrk"');
     expect(markup).toContain('aria-label="Upload 2 from Steven"');
+    expect(markup).toContain('href="/instances/second"');
     expect(markup).toContain('aria-label="Upload 3 from Mira"');
     expect(markup).not.toContain("duplicate");
   });
