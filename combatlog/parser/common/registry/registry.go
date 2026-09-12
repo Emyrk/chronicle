@@ -288,15 +288,16 @@ type InstanceDetailUnit struct {
 
 // InstanceDetail holds enriched metadata for a registered instance.
 type InstanceDetail struct {
-	Name         string
-	Comment      string
-	Category     instances.InstanceCategory
-	Fallback     bool
-	ZoneNames    []string
-	DerivedNames []string
-	BossCount    *int
-	Bosses       []InstanceDetailUnit
-	Trash        []InstanceDetailUnit
+	Name              string
+	Comment           string
+	Category          instances.InstanceCategory
+	Fallback          bool
+	ZoneNames         []string
+	DerivedNames      []string
+	BossCount         *int
+	ProgressionBosses []string
+	Bosses            []InstanceDetailUnit
+	Trash             []InstanceDetailUnit
 }
 
 // speedrunBossCount returns the number of distinct boss encounters required by
@@ -337,6 +338,48 @@ func speedrunBossCount(entry *Entry) *int {
 	return &count
 }
 
+func progressionBosses(entry *Entry) []string {
+	if entry.SpeedrunRules == nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	bosses := make([]string, 0, len(entry.SpeedrunRules.Requirements))
+	appendBoss := func(name string) {
+		if name == "" {
+			return
+		}
+		if _, ok := seen[name]; ok {
+			return
+		}
+		seen[name] = struct{}{}
+		bosses = append(bosses, name)
+	}
+
+	for _, requirement := range entry.SpeedrunRules.Requirements {
+		if requirement.Category != rankings.SpeedrunCategoryBosses {
+			continue
+		}
+
+		matchedEncounter := false
+		for _, entryID := range requirement.EntryIDs {
+			identity, ok := entry.HostileEntries[entryID]
+			if !ok || !identity.Boss || identity.EncounterName == "" {
+				continue
+			}
+			appendBoss(identity.EncounterName)
+			matchedEncounter = true
+		}
+		if !matchedEncounter {
+			appendBoss(requirement.Name)
+		}
+	}
+	if len(bosses) == 0 {
+		return nil
+	}
+	return bosses
+}
+
 // AllInstanceDetails returns enriched metadata for every registered instance,
 // including zone names, boss names, and trash mob names.
 func (r *Registry) AllInstanceDetails() []InstanceDetail {
@@ -366,15 +409,16 @@ func (r *Registry) AllInstanceDetails() []InstanceDetail {
 			sort.Slice(trash, func(i, j int) bool { return trash[i].Name < trash[j].Name })
 
 			result = append(result, InstanceDetail{
-				Name:         entry.Name,
-				Comment:      entry.Comment,
-				Category:     entry.Category,
-				Fallback:     fallback,
-				ZoneNames:    entry.ZoneNames,
-				DerivedNames: entry.DerivedNames,
-				BossCount:    speedrunBossCount(entry),
-				Bosses:       bosses,
-				Trash:        trash,
+				Name:              entry.Name,
+				Comment:           entry.Comment,
+				Category:          entry.Category,
+				Fallback:          fallback,
+				ZoneNames:         entry.ZoneNames,
+				DerivedNames:      entry.DerivedNames,
+				BossCount:         speedrunBossCount(entry),
+				ProgressionBosses: progressionBosses(entry),
+				Bosses:            bosses,
+				Trash:             trash,
 			})
 		}
 	}

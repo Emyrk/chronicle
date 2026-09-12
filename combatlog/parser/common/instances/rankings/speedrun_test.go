@@ -57,6 +57,15 @@ func singleBossRules(name string, entryID uint32) SpeedrunRules {
 	}
 }
 
+func TestRankingsRanksEncounter(t *testing.T) {
+	t.Parallel()
+
+	rules := &Rankings{ExcludedEncounters: []string{"Optional Boss"}}
+	assert.False(t, rules.RanksEncounter("Optional Boss"))
+	assert.True(t, rules.RanksEncounter("Required Boss"))
+	assert.False(t, (*Rankings)(nil).RanksEncounter("Required Boss"))
+}
+
 func TestSpeedrunTracker_ActivityChange_SlainSatisfiesRequirement(t *testing.T) {
 	t.Parallel()
 	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil)

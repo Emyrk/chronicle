@@ -839,6 +839,9 @@ var UlduarFactory = &instances.CommonFactory{
 	ZoneNames: []string{"ulduar"},
 	MapIDs:    []uint32{603},
 	Hostiles:  instances.FromMap(UlduarHostiles()),
+	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
+		return UlduarSpeedrunRequirements()
+	},
 	Preprocessors: func() []instancehook.Preprocessor {
 		return []instancehook.Preprocessor{&thorimArenaStarterCombat{}}
 	},

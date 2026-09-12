@@ -770,6 +770,26 @@ export function useSupportedInstanceBossCounts() {
   });
 }
 
+export function selectSupportedInstanceProgressionBosses(instances: SupportedInstance[]) {
+  return new Map(
+    instances.flatMap((instance) =>
+      instance.progression_bosses == null
+        ? []
+        : [[instance.name, new Set(instance.progression_bosses)] as const],
+    ),
+  );
+}
+
+export function useSupportedInstanceProgressionBosses() {
+  return useQuery({
+    queryKey: supportedInstancesQueryKey(),
+    queryFn: fetchSupportedInstances,
+    staleTime: supportedInstancesCacheTime,
+    gcTime: supportedInstancesCacheTime,
+    select: selectSupportedInstanceProgressionBosses,
+  });
+}
+
 export function useLogGroups(options?: Omit<UseQueryOptions<WoWLogGroup[]>, "queryKey" | "queryFn"> & {
   start?: string;
   end?: string;

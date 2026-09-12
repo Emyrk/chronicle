@@ -1,6 +1,7 @@
 package rankings
 
 import (
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,7 +56,13 @@ type SpeedrunRules struct {
 // Nil sub-fields mean that ranking category doesn't apply.
 type Rankings struct {
 	Speedrun *SpeedrunRules `json:"speedrun,omitempty"`
-	// Future: DPS *DPSRules, etc.
+	// ExcludedEncounters remain boss encounters in parsed logs but do not produce
+	// player DPS or HPS ranking rows.
+	ExcludedEncounters []string `json:"excluded_encounters,omitempty"`
+}
+
+func (r *Rankings) RanksEncounter(name string) bool {
+	return r != nil && !slices.Contains(r.ExcludedEncounters, name)
 }
 
 // --- Proof (output, JSON-serializable) ---
