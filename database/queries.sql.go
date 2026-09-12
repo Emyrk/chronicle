@@ -8489,6 +8489,246 @@ func (q *sqlQuerier) ListInstancesByTimeRange(ctx context.Context, arg ListInsta
 	return items, nil
 }
 
+const listRecentInstanceGroups = `-- name: ListRecentInstanceGroups :many
+WITH instance_rows AS (
+    SELECT
+        li.id,
+        li.hashed_slug AS slug,
+        COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) AS name,
+        li.realm_id,
+        wsr.name AS realm_name,
+        wlg.owner AS uploader_id,
+        u.username AS uploader_name,
+        wlg.created_at AS uploaded_at,
+        COALESCE(encounters.first_encounter_time, wlg.created_at)::timestamptz AS first_encounter_time,
+        COALESCE(players.player_count, 0)::bigint AS player_count,
+        COALESCE(encounters.boss_count, 0)::bigint AS boss_count,
+        COALESCE(encounters.encounter_count, 0)::bigint AS encounter_count,
+        COALESCE(encounters.boss_kills, 0)::bigint AS boss_kills,
+        COALESCE(encounters.duration_ms, 0)::float8 AS duration_ms,
+        iom.total_combat_duration_ms AS combat_duration_ms,
+        g.id AS guild_id,
+        g.name AS guild_name,
+        youtube.has_youtube_video,
+        li.duplicate_group_id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        li.recorder_name,
+        li.difficulty_name,
+        li.max_players,
+        li.dynamic_difficulty
+    FROM log_instances li
+    JOIN parsed_log_group plg ON plg.id = li.log_group_id
+    JOIN wow_log_groups wlg ON wlg.id = plg.id
+    LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
+    LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
+    JOIN users u ON u.id = wlg.owner
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    LEFT JOIN guilds g ON g.id = li.guild_id
+    LEFT JOIN LATERAL (
+        SELECT COUNT(*)::bigint AS player_count
+        FROM log_instance_players lip
+        WHERE lip.instance_id = li.id
+    ) players ON true
+    LEFT JOIN LATERAL (
+        SELECT
+            MIN(lie.start_time) AS first_encounter_time,
+            COUNT(*)::bigint AS encounter_count,
+            COUNT(*) FILTER (WHERE lie.boss = true)::bigint AS boss_count,
+            COUNT(*) FILTER (
+                WHERE lie.boss = true
+                  AND lie.kill_type IN ('clean', 'partial')
+            )::bigint AS boss_kills,
+            EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000 AS duration_ms
+        FROM log_instance_encounters lie
+        WHERE lie.instance_id = li.id
+    ) encounters ON true
+    LEFT JOIN LATERAL (
+        SELECT EXISTS (
+            SELECT 1
+            FROM log_instance_youtube_timestamped yt
+            WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+        ) AS has_youtube_video
+    ) youtube ON true
+),
+matching_runs AS (
+    SELECT DISTINCT run_id
+    FROM instance_rows
+    WHERE first_encounter_time >= $1::timestamptz
+      AND first_encounter_time < $2::timestamptz
+      AND (
+          COALESCE(cardinality($3::text[]), 0) = 0
+          OR name = ANY($3::text[])
+      )
+      AND (
+          $4::text = ''
+          OR ($4::text = 'true' AND has_youtube_video)
+          OR ($4::text = 'false' AND NOT has_youtube_video)
+      )
+      AND (
+          $5::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+          OR realm_id = $5::uuid
+      )
+      AND (
+          $6::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+          OR guild_id = $6::uuid
+      )
+      AND (
+          $7::wow_guid = '0x0000000000000000'::wow_guid
+          OR EXISTS (
+              SELECT 1
+              FROM log_instance_players lip_filter
+              WHERE lip_filter.instance_id = instance_rows.id
+                AND lip_filter.unit_guid = $7
+          )
+      )
+),
+ranked_instances AS (
+    SELECT
+        instance_rows.id, instance_rows.slug, instance_rows.name, instance_rows.realm_id, instance_rows.realm_name, instance_rows.uploader_id, instance_rows.uploader_name, instance_rows.uploaded_at, instance_rows.first_encounter_time, instance_rows.player_count, instance_rows.boss_count, instance_rows.encounter_count, instance_rows.boss_kills, instance_rows.duration_ms, instance_rows.combat_duration_ms, instance_rows.guild_id, instance_rows.guild_name, instance_rows.has_youtube_video, instance_rows.duplicate_group_id, instance_rows.run_id, instance_rows.recorder_name, instance_rows.difficulty_name, instance_rows.max_players, instance_rows.dynamic_difficulty,
+        ROW_NUMBER() OVER (
+            PARTITION BY instance_rows.run_id
+            ORDER BY
+                instance_rows.boss_count DESC,
+                instance_rows.encounter_count DESC,
+                (instance_rows.id = instance_rows.duplicate_group_id) DESC NULLS LAST,
+                instance_rows.first_encounter_time ASC,
+                instance_rows.id ASC
+        ) AS representative_rank
+    FROM instance_rows
+    JOIN matching_runs USING (run_id)
+),
+selected_runs AS (
+    SELECT id, run_id, first_encounter_time
+    FROM ranked_instances
+    WHERE representative_rank = 1
+    ORDER BY first_encounter_time DESC, id DESC
+    LIMIT CASE WHEN $9::int > 0 THEN $9 ELSE NULL END
+    OFFSET $8
+)
+SELECT
+    ranked_instances.id,
+    ranked_instances.slug,
+    ranked_instances.name,
+    ranked_instances.realm_id,
+    ranked_instances.realm_name,
+    ranked_instances.uploader_id,
+    ranked_instances.uploader_name,
+    ranked_instances.uploaded_at,
+    ranked_instances.first_encounter_time,
+    ranked_instances.player_count,
+    ranked_instances.boss_count,
+    ranked_instances.boss_kills,
+    ranked_instances.duration_ms,
+    ranked_instances.combat_duration_ms,
+    ranked_instances.guild_id,
+    ranked_instances.guild_name,
+    ranked_instances.has_youtube_video,
+    ranked_instances.duplicate_group_id,
+    ranked_instances.recorder_name,
+    ranked_instances.difficulty_name,
+    ranked_instances.max_players,
+    ranked_instances.dynamic_difficulty
+FROM ranked_instances
+JOIN selected_runs USING (run_id)
+ORDER BY
+    selected_runs.first_encounter_time DESC,
+    selected_runs.id DESC,
+    ranked_instances.representative_rank ASC
+`
+
+type ListRecentInstanceGroupsParams struct {
+	StartTime     pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime       pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	InstanceNames []string           `db:"instance_names" json:"instance_names"`
+	HasVideo      string             `db:"has_video" json:"has_video"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	PlayerGuid    guid.GUID          `db:"player_guid" json:"player_guid"`
+	OffsetCount   int32              `db:"offset_count" json:"offset_count"`
+	LimitCount    int32              `db:"limit_count" json:"limit_count"`
+}
+
+type ListRecentInstanceGroupsRow struct {
+	ID                 uuid.UUID          `db:"id" json:"id"`
+	Slug               pgtype.Text        `db:"slug" json:"slug"`
+	Name               string             `db:"name" json:"name"`
+	RealmID            uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName          string             `db:"realm_name" json:"realm_name"`
+	UploaderID         uuid.UUID          `db:"uploader_id" json:"uploader_id"`
+	UploaderName       string             `db:"uploader_name" json:"uploader_name"`
+	UploadedAt         pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
+	FirstEncounterTime pgtype.Timestamptz `db:"first_encounter_time" json:"first_encounter_time"`
+	PlayerCount        int64              `db:"player_count" json:"player_count"`
+	BossCount          int64              `db:"boss_count" json:"boss_count"`
+	BossKills          int64              `db:"boss_kills" json:"boss_kills"`
+	DurationMs         float64            `db:"duration_ms" json:"duration_ms"`
+	CombatDurationMs   pgtype.Int8        `db:"combat_duration_ms" json:"combat_duration_ms"`
+	GuildID            uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName          pgtype.Text        `db:"guild_name" json:"guild_name"`
+	HasYoutubeVideo    bool               `db:"has_youtube_video" json:"has_youtube_video"`
+	DuplicateGroupID   uuid.NullUUID      `db:"duplicate_group_id" json:"duplicate_group_id"`
+	RecorderName       string             `db:"recorder_name" json:"recorder_name"`
+	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers         int32              `db:"max_players" json:"max_players"`
+	DynamicDifficulty  int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+}
+
+// Pages logical runs, then returns every upload in each selected duplicate group.
+// The first row for each run is its representative: most boss encounters, then
+// most total encounters, then the duplicate-group anchor and stable tie-breakers.
+func (q *sqlQuerier) ListRecentInstanceGroups(ctx context.Context, arg ListRecentInstanceGroupsParams) ([]ListRecentInstanceGroupsRow, error) {
+	rows, err := q.db.Query(ctx, listRecentInstanceGroups,
+		arg.StartTime,
+		arg.EndTime,
+		arg.InstanceNames,
+		arg.HasVideo,
+		arg.RealmID,
+		arg.GuildID,
+		arg.PlayerGuid,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentInstanceGroupsRow
+	for rows.Next() {
+		var i ListRecentInstanceGroupsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.RealmID,
+			&i.RealmName,
+			&i.UploaderID,
+			&i.UploaderName,
+			&i.UploadedAt,
+			&i.FirstEncounterTime,
+			&i.PlayerCount,
+			&i.BossCount,
+			&i.BossKills,
+			&i.DurationMs,
+			&i.CombatDurationMs,
+			&i.GuildID,
+			&i.GuildName,
+			&i.HasYoutubeVideo,
+			&i.DuplicateGroupID,
+			&i.RecorderName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DynamicDifficulty,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentInstances = `-- name: ListRecentInstances :many
 SELECT 
     li.id,

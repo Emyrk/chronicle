@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -36,7 +37,7 @@ func (api *API) RecentInstances(w http.ResponseWriter, r *http.Request) {
 		q.Set("limit", "25")
 	}
 	r.URL.RawQuery = q.Encode()
-	api.InstancesByTimeRange(w, r)
+	api.instancesByTimeRange(w, r, true)
 }
 
 // InstancesByTimeRange returns instances within a given time range.
@@ -54,6 +55,10 @@ func (api *API) RecentInstances(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} chroniclesdk.RecentInstancesResponse
 // @Router /api/v1/raidlogs/range [get]
 func (api *API) InstancesByTimeRange(w http.ResponseWriter, r *http.Request) {
+	api.instancesByTimeRange(w, r, false)
+}
+
+func (api *API) instancesByTimeRange(w http.ResponseWriter, r *http.Request, groupDuplicates bool) {
 	ctx := r.Context()
 
 	q := r.URL.Query()
@@ -115,6 +120,26 @@ func (api *API) InstancesByTimeRange(w http.ResponseWriter, r *http.Request) {
 		if parsed, err := strconv.Atoi(o); err == nil && parsed > 0 {
 			offsetCount = int32(parsed)
 		}
+	}
+
+	if groupDuplicates {
+		rows, err := api.Opts.Zed.ListRecentInstanceGroups(ctx, database.ListRecentInstanceGroupsParams{
+			StartTime:     pgtype.Timestamptz{Time: startTime, Valid: true},
+			EndTime:       pgtype.Timestamptz{Time: endTime, Valid: true},
+			InstanceNames: instanceNames,
+			HasVideo:      hasVideo,
+			RealmID:       realmID,
+			GuildID:       guildID,
+			PlayerGuid:    playerGUID,
+			LimitCount:    limitCount,
+			OffsetCount:   offsetCount,
+		})
+		if err != nil {
+			writeRecentInstancesError(ctx, w, err)
+			return
+		}
+		api.writeRecentInstanceGroups(ctx, w, rows)
+		return
 	}
 
 	rows, err := api.Opts.Zed.ListInstancesByTimeRange(ctx, database.ListInstancesByTimeRangeParams{
@@ -208,4 +233,83 @@ func (api *API) InstancesByTimeRange(w http.ResponseWriter, r *http.Request) {
 		HasMore:   false,
 	}
 	httpapi.Write(ctx, w, http.StatusOK, response)
+}
+
+func writeRecentInstancesError(ctx context.Context, w http.ResponseWriter, err error) {
+	httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+		Response: chroniclesdk.Response{
+			Message: "Failed to fetch instances",
+			Detail:  err.Error(),
+		},
+		Status:  http.StatusInternalServerError,
+		Wrapped: err,
+	})
+}
+
+func (api *API) writeRecentInstanceGroups(ctx context.Context, w http.ResponseWriter, rows []database.ListRecentInstanceGroupsRow) {
+	instanceIDs := make([]uuid.UUID, len(rows))
+	for i, row := range rows {
+		instanceIDs[i] = row.ID
+	}
+
+	encountersByInstance := make(map[uuid.UUID][]chroniclesdk.RecentEncounter)
+	if len(instanceIDs) > 0 {
+		allEncounters, err := api.Opts.Zed.GetEncounterSummariesByInstanceIDs(ctx, instanceIDs)
+		if err == nil {
+			for _, enc := range allEncounters {
+				encountersByInstance[enc.InstanceID] = append(encountersByInstance[enc.InstanceID], chroniclesdk.RecentEncounter{
+					Name:     enc.Name,
+					Boss:     enc.Boss,
+					KillType: chroniclesdk.KillType(enc.KillType),
+				})
+			}
+		}
+	}
+
+	instances := make([]chroniclesdk.RecentInstance, 0, len(rows))
+	for _, row := range rows {
+		inst := chroniclesdk.RecentInstance{
+			ID:                 row.ID,
+			Slug:               row.Slug.String,
+			Name:               row.Name,
+			RealmID:            row.RealmID,
+			RealmName:          row.RealmName,
+			UploaderID:         row.UploaderID,
+			UploaderName:       row.UploaderName,
+			UploadedAt:         row.UploadedAt.Time,
+			FirstEncounterTime: row.FirstEncounterTime.Time,
+			PlayerCount:        row.PlayerCount,
+			BossCount:          row.BossCount,
+			BossKills:          row.BossKills,
+			HasYoutubeVideo:    row.HasYoutubeVideo,
+			Encounters:         encountersByInstance[row.ID],
+			RecorderName:       row.RecorderName,
+			DifficultyName:     row.DifficultyName,
+			MaxPlayers:         int(row.MaxPlayers),
+			DynamicDifficulty:  int(row.DynamicDifficulty),
+		}
+		if row.DuplicateGroupID.Valid {
+			inst.DuplicateGroupID = &row.DuplicateGroupID.UUID
+		}
+		if row.DurationMs != 0 {
+			d := row.DurationMs
+			inst.DurationMs = &d
+		}
+		if row.CombatDurationMs.Valid {
+			c := row.CombatDurationMs.Int64
+			inst.CombatDurationMs = &c
+		}
+		if row.GuildID.Valid {
+			inst.GuildID = &row.GuildID.UUID
+		}
+		if row.GuildName.Valid {
+			inst.GuildName = &row.GuildName.String
+		}
+		instances = append(instances, inst)
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.RecentInstancesResponse{
+		Instances: instances,
+		HasMore:   false,
+	})
 }
