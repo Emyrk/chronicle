@@ -1,7 +1,12 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ArmoryLootItem, ArmoryPlayer } from "@/api/typesGenerated";
-import { useArmoryGearHistory, useArmoryLoot, useSupportedInstanceBossCounts } from "@/api/queries";
+import {
+  useArmoryGearHistory,
+  useArmoryLoot,
+  useSupportedInstanceBossCounts,
+  useSupportedInstanceProgressionBosses,
+} from "@/api/queries";
 import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
 import { averageScoreByInstance, bestScoreByInstance, summarizeProgress, summarizeRaids } from "../parseAggregation";
 import type { ParseMetric } from "./util";
@@ -59,9 +64,10 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
   const encountersQuery = useCharacterEncounters(player.id, !isPerformance);
   const lootQuery = useArmoryLoot(player.realm_name, player.id, !isPerformance);
   const { data: bossCounts } = useSupportedInstanceBossCounts();
+  const { data: progressionBosses } = useSupportedInstanceProgressionBosses();
   const progress = useMemo(
-    () => summarizeProgress(encountersQuery.data?.encounters ?? []),
-    [encountersQuery.data],
+    () => summarizeProgress(encountersQuery.data?.encounters ?? [], progressionBosses),
+    [encountersQuery.data, progressionBosses],
   );
   const lootByInstance = useMemo(() => {
     const map = new Map<string, ArmoryLootItem[]>();
@@ -123,6 +129,7 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
             <ProgressionCard
               progress={progress}
               bossCounts={bossCounts}
+              progressionBosses={progressionBosses}
               isLoading={encountersQuery.isLoading}
             />
           </div>

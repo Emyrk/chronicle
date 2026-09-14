@@ -7,11 +7,21 @@ import {
   useSupportedInstanceProgressionBosses,
   useSupportedInstances,
 } from "@/api/queries";
+import {
+  ProgressionBossIndicator,
+  ProgressionPips,
+} from "@/components/ui/Progression/ProgressionBossDetails";
+import {
+  groupProgression,
+  progressionTotal,
+  progressionVariantLabel,
+  type InstanceProgression,
+  type ProgressionVariant,
+} from "@/components/ui/Progression/progression";
 import { cn } from "@/lib/utils";
 import { getInstanceContentLevel } from "@/pages/Logs/utils/instanceImages";
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
-import { filterCanonicalProgressionEncounters } from "./progressUtils";
 
 type CategoryFilter = "all" | "raid" | "dungeon";
 type ContentLevelFilter = "all" | "60" | "70" | "80";
@@ -23,85 +33,9 @@ interface ProgressConfig {
   contentLevel: ContentLevelFilter;
 }
 
-/** One size/difficulty lockout of a raid, e.g. "25-player Heroic". */
-interface VariantProgress {
-  difficultyName: string;
-  maxPlayers: number;
-  heroic: boolean;
-  encountersDown: number;
-  lastKilledAt: string;
-}
 
-/** A raid with every size/difficulty variant nested under it. */
-interface RaidProgress {
-  instanceName: string;
-  variants: VariantProgress[];
-  lastKilledAt: string;
-}
-
-/**
- * Groups per-encounter kills into per-raid progression, most recent activity
- * first. Every size/difficulty combination is a lockout of the same raid, so
- * it nests as a variant under that raid rather than repeating the name.
- */
-function groupProgress(encounters: GuildEncounterKill[]): RaidProgress[] {
-  const byVariant = new Map<string, VariantProgress & { instanceName: string }>();
-  for (const e of encounters) {
-    const key = `${e.instance_name}|${e.difficulty_name}|${e.max_players}`;
-    const variant = byVariant.get(key);
-    if (variant) {
-      variant.encountersDown += 1;
-      if (e.last_killed_at > variant.lastKilledAt) variant.lastKilledAt = e.last_killed_at;
-    } else {
-      byVariant.set(key, {
-        instanceName: e.instance_name,
-        difficultyName: e.difficulty_name,
-        maxPlayers: e.max_players,
-        heroic: e.difficulty_name.includes("Heroic"),
-        encountersDown: 1,
-        lastKilledAt: e.last_killed_at,
-      });
-    }
-  }
-
-  const byRaid = new Map<string, RaidProgress>();
-  for (const { instanceName, ...variant } of byVariant.values()) {
-    const raid = byRaid.get(instanceName);
-    if (raid) {
-      raid.variants.push(variant);
-      if (variant.lastKilledAt > raid.lastKilledAt) raid.lastKilledAt = variant.lastKilledAt;
-    } else {
-      byRaid.set(instanceName, {
-        instanceName,
-        variants: [variant],
-        lastKilledAt: variant.lastKilledAt,
-      });
-    }
-  }
-
-  for (const raid of byRaid.values()) {
-    raid.variants.sort(
-      (a, b) => b.maxPlayers - a.maxPlayers || Number(b.heroic) - Number(a.heroic),
-    );
-  }
-  return [...byRaid.values()].sort((a, b) => b.lastKilledAt.localeCompare(a.lastKilledAt));
-}
-
-/** Short lockout label, e.g. "40", "10 HC". Empty when there is no size and no heroic mode. */
-function variantLabel(variant: VariantProgress): string {
-  const parts = [];
-  if (variant.maxPlayers > 0) parts.push(String(variant.maxPlayers));
-  if (variant.heroic) parts.push("HC");
-  return parts.join(" ");
-}
-
-function totalFor(bossCounts: Map<string, number> | undefined, raid: RaidProgress) {
-  const known = bossCounts?.get(raid.instanceName) ?? 0;
-  return Math.max(known, ...raid.variants.map((v) => v.encountersDown));
-}
-
-function VariantChip({ variant, complete }: { variant: VariantProgress; complete: boolean }) {
-  const label = variantLabel(variant);
+function VariantChip({ variant, complete }: { variant: ProgressionVariant; complete: boolean }) {
+  const label = progressionVariantLabel(variant);
   if (!label) return null;
   return (
     <span
@@ -119,32 +53,27 @@ function VariantChip({ variant, complete }: { variant: VariantProgress; complete
   );
 }
 
-function KillPips({ variant, total }: { variant: VariantProgress; total: number }) {
-  const complete = variant.encountersDown === total;
-  const killColor = variant.heroic
-    ? "var(--color-purple-500)"
-    : complete
-      ? "var(--color-amber-500)"
-      : "var(--color-green-400)";
-  return (
-    <div className="flex min-w-0 flex-1 gap-1">
-      {Array.from({ length: total }, (_, i) => (
-        <span
-          key={i}
-          className="h-2 flex-1 rounded-xs"
-          style={{ background: i < variant.encountersDown ? killColor : "var(--border)" }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function VariantRow({ variant, total }: { variant: VariantProgress; total: number }) {
+function VariantRow({
+  instanceName,
+  variant,
+  total,
+  canonicalBosses,
+}: {
+  instanceName: string;
+  variant: ProgressionVariant;
+  total: number;
+  canonicalBosses?: Set<string>;
+}) {
   const complete = variant.encountersDown === total;
   return (
     <div className="flex items-center gap-x-2.5">
       <VariantChip variant={variant} complete={complete} />
-      <KillPips variant={variant} total={total} />
+      <ProgressionBossIndicator
+        instanceName={instanceName}
+        variant={variant}
+        canonicalBosses={canonicalBosses}
+      />
+      <ProgressionPips variant={variant} total={total} />
       <p
         className={cn(
           "text-sm font-bold tabular-nums whitespace-nowrap",
@@ -157,7 +86,15 @@ function VariantRow({ variant, total }: { variant: VariantProgress; total: numbe
   );
 }
 
-function DetailRaid({ raid, total }: { raid: RaidProgress; total: number }) {
+function DetailRaid({
+  raid,
+  total,
+  canonicalBosses,
+}: {
+  raid: InstanceProgression;
+  total: number;
+  canonicalBosses?: Set<string>;
+}) {
   // A raid with a single lockout type needs no section header — the raid name
   // and the variant collapse into one row.
   if (raid.variants.length === 1) {
@@ -166,15 +103,20 @@ function DetailRaid({ raid, total }: { raid: RaidProgress; total: number }) {
     return (
       <div>
         <div className="mb-1.5 flex items-baseline justify-between gap-3">
-          <div className="flex min-w-0 items-baseline gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <p className="min-w-0 truncate text-sm text-foreground">{raid.instanceName}</p>
+            <ProgressionBossIndicator
+              instanceName={raid.instanceName}
+              variant={variant}
+              canonicalBosses={canonicalBosses}
+            />
             <VariantChip variant={variant} complete={complete} />
           </div>
           <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
             {variant.encountersDown} / {total}
           </p>
         </div>
-        <KillPips variant={variant} total={total} />
+        <ProgressionPips variant={variant} total={total} />
       </div>
     );
   }
@@ -188,8 +130,10 @@ function DetailRaid({ raid, total }: { raid: RaidProgress; total: number }) {
         {raid.variants.map((variant) => (
           <VariantRow
             key={`${variant.difficultyName}|${variant.maxPlayers}`}
+            instanceName={raid.instanceName}
             variant={variant}
             total={total}
+            canonicalBosses={canonicalBosses}
           />
         ))}
       </div>
@@ -198,14 +142,22 @@ function DetailRaid({ raid, total }: { raid: RaidProgress; total: number }) {
 }
 
 /** Compact: no pips — the whole raid collapses to one line of variant pills. */
-function CompactRaid({ raid, total }: { raid: RaidProgress; total: number }) {
+function CompactRaid({
+  raid,
+  total,
+  canonicalBosses,
+}: {
+  raid: InstanceProgression;
+  total: number;
+  canonicalBosses?: Set<string>;
+}) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border/50 py-1.5">
       <p className="min-w-0 flex-1 truncate text-sm text-foreground">{raid.instanceName}</p>
       <div className="flex flex-wrap justify-end gap-1">
         {raid.variants.map((variant) => {
           const complete = variant.encountersDown === total;
-          const label = variantLabel(variant);
+          const label = progressionVariantLabel(variant);
           return (
             <span
               key={`${variant.difficultyName}|${variant.maxPlayers}`}
@@ -232,6 +184,11 @@ function CompactRaid({ raid, total }: { raid: RaidProgress; total: number }) {
               >
                 {variant.encountersDown}/{total}
               </span>
+              <ProgressionBossIndicator
+                instanceName={raid.instanceName}
+                variant={variant}
+                canonicalBosses={canonicalBosses}
+              />
             </span>
           );
         })}
@@ -283,7 +240,9 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
         getInstanceContentLevel(e.instance_name, e.max_players) === Number(contentLevel);
       return matchesCategory && matchesContentLevel;
     });
-    return groupProgress(filterCanonicalProgressionEncounters(filtered, progressionBosses));
+    return groupProgression(filtered, progressionBosses).sort((a, b) =>
+      b.lastKilledAt.localeCompare(a.lastKilledAt),
+    );
   }, [
     config.category,
     config.contentLevel,
@@ -327,7 +286,12 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
       >
         {progress.map((raid) => (
-          <CompactRaid key={raid.instanceName} raid={raid} total={totalFor(bossCounts, raid)} />
+          <CompactRaid
+            key={raid.instanceName}
+            raid={raid}
+            total={progressionTotal(raid.instanceName, raid.variants, bossCounts, progressionBosses)}
+            canonicalBosses={progressionBosses?.get(raid.instanceName)}
+          />
         ))}
       </div>
     );
@@ -339,7 +303,12 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {progress.map((raid) => (
-        <DetailRaid key={raid.instanceName} raid={raid} total={totalFor(bossCounts, raid)} />
+        <DetailRaid
+          key={raid.instanceName}
+          raid={raid}
+          total={progressionTotal(raid.instanceName, raid.variants, bossCounts, progressionBosses)}
+          canonicalBosses={progressionBosses?.get(raid.instanceName)}
+        />
       ))}
     </div>
   );

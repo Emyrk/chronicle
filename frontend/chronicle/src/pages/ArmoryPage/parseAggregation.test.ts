@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { CharacterParse, PlayerOutfit } from "@/api/typesGenerated";
+import type { CharacterEncounterStats, CharacterParse, PlayerOutfit } from "@/api/typesGenerated";
 import {
   averageItemLevel,
   bestScoreByInstance,
+  summarizeProgress,
   summarizeRaids,
   topEncounters,
 } from "./parseAggregation";
@@ -107,6 +108,54 @@ describe("bestScoreByInstance", () => {
     ]);
     expect(map.get("a")).toBe(90);
     expect(map.get("b")).toBe(10);
+  });
+});
+
+function encounter(overrides: Partial<CharacterEncounterStats>): CharacterEncounterStats {
+  return {
+    instance_name: "Ulduar",
+    encounter_name: "Flame Leviathan",
+    difficulty_name: "10 Player",
+    max_players: 10,
+    kills: 1,
+    first_killed_at: "2026-09-01T00:00:00Z",
+    last_killed_at: "2026-09-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+describe("summarizeProgress", () => {
+  it("uses canonical bosses and excludes optional encounters", () => {
+    const progress = summarizeProgress(
+      [
+        encounter({ encounter_name: "Flame Leviathan", kills: 3 }),
+        encounter({ encounter_name: "Ignis the Furnace Master", kills: 2 }),
+        encounter({ encounter_name: "Elder Brightleaf", kills: 5 }),
+      ],
+      new Map([
+        ["Ulduar", new Set(["Flame Leviathan", "Ignis the Furnace Master", "Razorscale"])],
+      ]),
+    );
+
+    expect(progress).toHaveLength(1);
+    expect(progress[0]).toMatchObject({
+      instanceName: "Ulduar",
+      difficultyName: "10 Player",
+      maxPlayers: 10,
+      encountersDown: 2,
+      killedBosses: ["Flame Leviathan", "Ignis the Furnace Master"],
+      kills: 5,
+    });
+  });
+
+  it("preserves all encounters for instances without canonical metadata", () => {
+    const progress = summarizeProgress([
+      encounter({ instance_name: "Molten Core", encounter_name: "Lucifron" }),
+      encounter({ instance_name: "Molten Core", encounter_name: "Magmadar" }),
+    ]);
+
+    expect(progress[0].killedBosses).toEqual(["Lucifron", "Magmadar"]);
+    expect(progress[0].encountersDown).toBe(2);
   });
 });
 

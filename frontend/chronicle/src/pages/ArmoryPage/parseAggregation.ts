@@ -4,6 +4,11 @@ import type {
   PlayerOutfit,
 } from "@/api/typesGenerated";
 
+import {
+  groupProgression,
+  type ProgressionVariant,
+} from "@/components/ui/Progression/progression";
+
 /**
  * Client-side aggregation over the character parse history endpoint
  * (/api/v1/rankings/characters/{guid}/parses), which returns every
@@ -161,39 +166,19 @@ export function averageScoreByInstance(parses: readonly CharacterParse[]): Map<s
   return map;
 }
 
-export interface RaidProgress {
-  instanceName: string;
-  difficultyName: string;
-  maxPlayers: number;
-  /** Distinct bosses this character has killed in the raid. */
-  encountersDown: number;
-  /** Total kills across the raid's encounters. */
-  kills: number;
-}
+export type RaidProgress = ProgressionVariant;
 
 /**
- * Groups all-time encounter kill aggregates into per-raid progression,
- * ordered by total kills descending.
+ * Returns one row per instance variant, ordered by total kills descending.
+ * The shared progression model handles canonical encounter filtering.
  */
-export function summarizeProgress(stats: readonly CharacterEncounterStats[]): RaidProgress[] {
-  const byRaid = new Map<string, RaidProgress>();
-  for (const s of stats) {
-    const key = `${s.instance_name}|${s.difficulty_name}|${s.max_players}`;
-    const raid = byRaid.get(key);
-    if (raid) {
-      raid.encountersDown++;
-      raid.kills += s.kills;
-    } else {
-      byRaid.set(key, {
-        instanceName: s.instance_name,
-        difficultyName: s.difficulty_name,
-        maxPlayers: s.max_players,
-        encountersDown: 1,
-        kills: s.kills,
-      });
-    }
-  }
-  return [...byRaid.values()].sort((a, b) => b.kills - a.kills);
+export function summarizeProgress(
+  stats: readonly CharacterEncounterStats[],
+  progressionBosses?: Map<string, Set<string>>,
+): RaidProgress[] {
+  return groupProgression(stats, progressionBosses)
+    .flatMap((instance) => instance.variants)
+    .sort((a, b) => b.kills - a.kills);
 }
 
 /** PlayerOutfit slots that never count toward average item level. */
