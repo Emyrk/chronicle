@@ -200,6 +200,38 @@ func TestZulGurubProgressionBossesDependOnFlavor(t *testing.T) {
 	}
 }
 
+func TestBlackwingLairProgressionBossesDependOnFlavor(t *testing.T) {
+	t.Parallel()
+
+	vanilla := instanceDetailByName(t,
+		RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla}),
+		"Blackwing Lair",
+	)
+	require.Contains(t, vanilla.ProgressionBosses, "Vaelastrasz the Corrupt")
+	require.Contains(t, vanilla.ProgressionBosses, "Ebonroc")
+	require.Contains(t, vanilla.ProgressionBosses, "Flamegor")
+
+	vanillaPlus := instanceDetailByName(t,
+		RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}),
+		"Blackwing Lair",
+	)
+	require.Equal(t, []string{
+		"Razorgore the Untamed",
+		"Elementium Decapitator Mk III",
+		"Broodlord Lashlayer",
+		"Firemaw",
+		"Master Elemental Shaper Krixix",
+		"Flamegor & Ebonroc",
+		"Chromaggus",
+		"Nefarian",
+	}, vanillaPlus.ProgressionBosses)
+	require.Equal(t, len(vanillaPlus.ProgressionBosses), *vanillaPlus.BossCount)
+	require.NotContains(t, vanillaPlus.ProgressionBosses, "Vaelastrasz the Chained")
+	require.NotContains(t, vanillaPlus.ProgressionBosses, "Ebonroc")
+	require.NotContains(t, vanillaPlus.ProgressionBosses, "Flamegor")
+	require.NotContains(t, vanillaPlus.ProgressionBosses, "Vaelastrasz the Corrupt")
+}
+
 func TestProgressionBossesUseCanonicalEncounterNames(t *testing.T) {
 	t.Parallel()
 

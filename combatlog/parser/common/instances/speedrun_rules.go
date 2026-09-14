@@ -137,6 +137,25 @@ func MoltenCoreSpeedrunRequirements(fl database.WoWFlavor) []rankings.SpeedrunRe
 	return mc
 }
 
+// BlackwingLairProgressionBosses returns the ordered boss encounters used for
+// progression. Vanilla+ adds the Decapitator and Krixix, combines Ebonroc with
+// Flamegor, and records Vaelastrasz as part of the Nefarian encounter.
+func BlackwingLairProgressionBosses(flavor database.WoWFlavor) []string {
+	if !flavor.Has(database.FlavorVanillaPlus) {
+		return nil
+	}
+	return []string{
+		"Razorgore the Untamed",
+		"Elementium Decapitator Mk III",
+		"Broodlord Lashlayer",
+		"Firemaw",
+		"Master Elemental Shaper Krixix",
+		"Flamegor & Ebonroc",
+		"Chromaggus",
+		"Nefarian",
+	}
+}
+
 // BlackwingLairSpeedrunRequirements returns the boss kills required for a
 // valid Blackwing Lair speedrun.
 func BlackwingLairSpeedrunRequirements(flavor database.WoWFlavor) []rankings.SpeedrunRequirement {

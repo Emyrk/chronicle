@@ -280,18 +280,12 @@ var (
 	}
 
 	BlackwingLairFactory = &CommonFactory{
-		Name:      "Blackwing Lair",
-		Category:  InstanceCategoryRaid,
-		ZoneNames: []string{"blackwing lair", "黑翼之巢"},
-		MapIDs:    []uint32{469},
-		Hostiles:  BlackwingLairHostiles,
-		BossCount: func(fl database.WoWFlavor) *int {
-			if !fl.Has(database.FlavorVanillaPlus) {
-				return nil
-			}
-			count := 8
-			return &count
-		},
+		Name:              "Blackwing Lair",
+		Category:          InstanceCategoryRaid,
+		ZoneNames:         []string{"blackwing lair", "黑翼之巢"},
+		MapIDs:            []uint32{469},
+		Hostiles:          BlackwingLairHostiles,
+		ProgressionBosses: BlackwingLairProgressionBosses,
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{
 				Speedrun: &rankings.SpeedrunRules{
