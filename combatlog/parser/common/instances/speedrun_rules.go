@@ -226,6 +226,25 @@ func NaxxramasSpeedrunRequirements() []rankings.SpeedrunRequirement {
 	}
 }
 
+// ZulGurubProgressionBosses returns the ordered boss encounters used for
+// progression. Summoned bosses remain available as encounters but are optional.
+func ZulGurubProgressionBosses(flavor database.WoWFlavor) []string {
+	bosses := []string{
+		"High Priestess Jeklik",
+		"High Priest Venoxis",
+		"High Priestess Mar'li",
+		"Bloodlord Mandokir",
+		"High Priest Thekal",
+		"High Priestess Arlokk",
+		"Jin'do the Hexxer",
+		"Hakkar",
+	}
+	if flavor.Has(database.FlavorVanillaPlus) {
+		bosses = append(bosses, "Azus the Bloodseeker", "The Nameless Hermit")
+	}
+	return bosses
+}
+
 // ZulGurubSpeedrunRequirements returns the boss kills required for a
 // valid Zul'Gurub speedrun.
 func ZulGurubSpeedrunRequirements(flavor database.WoWFlavor) []rankings.SpeedrunRequirement {
@@ -238,8 +257,6 @@ func ZulGurubSpeedrunRequirements(flavor database.WoWFlavor) []rankings.Speedrun
 		{Name: "High Priestess Arlokk", EntryIDs: []uint32{14515}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		{Name: "Jin'do the Hexxer", EntryIDs: []uint32{11380}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		{Name: "Hakkar", EntryIDs: []uint32{14834}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "Gahz'ranka", EntryIDs: []uint32{15114}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "Edge of Madness", EntryIDs: []uint32{15083, 15084, 15085, 15082}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 	}
 
 	if flavor.Has(database.FlavorVanillaPlus) {

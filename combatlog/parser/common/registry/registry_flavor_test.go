@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
@@ -156,6 +157,49 @@ func TestUlduarProgressionBosses(t *testing.T) {
 	t.Fatal("Ulduar not found")
 }
 
+func TestZulGurubProgressionBossesDependOnFlavor(t *testing.T) {
+	t.Parallel()
+
+	baseBosses := []string{
+		"High Priestess Jeklik",
+		"High Priest Venoxis",
+		"High Priestess Mar'li",
+		"Bloodlord Mandokir",
+		"High Priest Thekal",
+		"High Priestess Arlokk",
+		"Jin'do the Hexxer",
+		"Hakkar",
+	}
+
+	for _, tc := range []struct {
+		name     string
+		flavor   database.WoWFlavor
+		expected []string
+	}{
+		{name: "vanilla", flavor: database.WoWFlavor{database.FlavorVanilla}, expected: baseBosses},
+		{
+			name:   "vanilla plus",
+			flavor: database.WoWFlavor{database.FlavorVanillaPlus},
+			expected: append(slices.Clone(baseBosses),
+				"Azus the Bloodseeker",
+				"The Nameless Hermit",
+			),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			reg := RegistryForFlavor(nil, tc.flavor)
+			detail := instanceDetailByName(t, reg, "Zul'Gurub")
+			require.Equal(t, tc.expected, detail.ProgressionBosses)
+			require.Equal(t, len(tc.expected), *detail.BossCount)
+			for _, optional := range []string{"Gahz'ranka", "Hazza'rah", "Renataki", "Wushoolay", "Gri'lek"} {
+				require.NotContains(t, detail.ProgressionBosses, optional)
+			}
+		})
+	}
+}
+
 func TestProgressionBossesUseCanonicalEncounterNames(t *testing.T) {
 	t.Parallel()
 
@@ -203,6 +247,17 @@ func TestInstanceDetailsCategories(t *testing.T) {
 
 	require.Equal(t, instances.InstanceCategoryDungeon, categoryFor(database.WoWFlavor{database.FlavorVanilla}, "Scarlet Monastery"))
 	require.Equal(t, instances.InstanceCategoryRaid, categoryFor(database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, "Scarlet Monastery"))
+}
+
+func instanceDetailByName(t *testing.T, reg *Registry, name string) InstanceDetail {
+	t.Helper()
+	for _, detail := range reg.AllInstanceDetails() {
+		if detail.Name == name {
+			return detail
+		}
+	}
+	t.Fatalf("instance %q not found", name)
+	return InstanceDetail{}
 }
 
 func intPtr(value int) *int {

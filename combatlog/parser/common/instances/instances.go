@@ -209,11 +209,12 @@ var (
 	}
 
 	ZulGurubFactory = &CommonFactory{
-		Name:      "Zul'Gurub",
-		Category:  InstanceCategoryRaid,
-		ZoneNames: []string{"zul'gurub", "祖尔格拉布"},
-		MapIDs:    []uint32{309},
-		Hostiles:  ZulGurubHostiles,
+		Name:              "Zul'Gurub",
+		Category:          InstanceCategoryRaid,
+		ZoneNames:         []string{"zul'gurub", "祖尔格拉布"},
+		MapIDs:            []uint32{309},
+		Hostiles:          ZulGurubHostiles,
+		ProgressionBosses: ZulGurubProgressionBosses,
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{
 				Speedrun: &rankings.SpeedrunRules{

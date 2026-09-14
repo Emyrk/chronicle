@@ -34,6 +34,27 @@ func TestUlduarSpeedrunRequirements(t *testing.T) {
 	}, rules.Speedrun.Requirements)
 }
 
+func TestUlduarProgressionBosses(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []string{
+		"Flame Leviathan",
+		"Ignis the Furnace Master",
+		"Razorscale",
+		"XT-002 Deconstructor",
+		"Assembly of Iron",
+		"Kologarn",
+		"Auriaya",
+		"Hodir",
+		"Thorim",
+		"Freya",
+		"Mimiron",
+		"General Vezax",
+		"Yogg-Saron",
+		"Algalon the Observer",
+	}, UlduarFactory.ProgressionBosses(database.WoWFlavor{database.FlavorWrath}))
+}
+
 func TestUlduarOptionalEldersRemainBossesButAreNotRequired(t *testing.T) {
 	t.Parallel()
 

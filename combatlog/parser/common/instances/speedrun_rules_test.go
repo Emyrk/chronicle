@@ -78,6 +78,30 @@ func TestVanillaPlusScarletMonasterySpeedrunRequirements(t *testing.T) {
 	}, rules.Speedrun.Requirements)
 }
 
+func TestZulGurubOptionalBossesAreNotRequired(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanillaPlus}
+	rules := ZulGurubFactory.FlavoredRankings(flavor)
+	require.NotNil(t, rules)
+	require.NotNil(t, rules.Speedrun)
+	for _, required := range []rankings.SpeedrunRequirement{
+		{Name: "Azus the Bloodseeker", EntryIDs: []uint32{25031}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "The Nameless Hermit", EntryIDs: []uint32{25030}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	} {
+		require.Contains(t, rules.Speedrun.Requirements, required)
+	}
+
+	hostiles := ZulGurubHostiles(flavor).HostileEntries()
+	for _, entryID := range []uint32{15114, 15083, 15084, 15085, 15082} {
+		require.Contains(t, hostiles, entryID)
+		require.True(t, hostiles[entryID].Boss)
+		for _, requirement := range rules.Speedrun.Requirements {
+			require.NotContains(t, requirement.EntryIDs, entryID)
+		}
+	}
+}
+
 func TestVanillaRaidLevel60Caps(t *testing.T) {
 	t.Parallel()
 

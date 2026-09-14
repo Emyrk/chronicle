@@ -78,11 +78,14 @@ type CommonFactory struct {
 	// speedrun tracker. Keys must match the names used in DerivedName.
 	DerivedRankings map[string]func(database.WoWFlavor) *rankings.Rankings
 	// BossCount overrides the encounter count inferred from speedrun requirements.
-	BossCount        func(flavor database.WoWFlavor) *int
-	ZoneNames        []string
-	MapIDs           []uint32
-	Hostiles         func(flavor database.WoWFlavor) *identifier.Identifier
-	FlavoredRankings func(flavor database.WoWFlavor) *rankings.Rankings
+	BossCount func(flavor database.WoWFlavor) *int
+	// ProgressionBosses returns the ordered boss encounters used for progression.
+	// When nil, canonical bosses are inferred from speedrun requirements.
+	ProgressionBosses func(flavor database.WoWFlavor) []string
+	ZoneNames         []string
+	MapIDs            []uint32
+	Hostiles          func(flavor database.WoWFlavor) *identifier.Identifier
+	FlavoredRankings  func(flavor database.WoWFlavor) *rankings.Rankings
 	// Preprocessors creates fresh message preprocessors for each parsed instance.
 	Preprocessors func() []instancehook.Preprocessor
 }

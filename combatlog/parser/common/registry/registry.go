@@ -43,6 +43,8 @@ type Entry struct {
 	SpeedrunRules *rankings.SpeedrunRules
 	// BossCount overrides the encounter count inferred from SpeedrunRules.
 	BossCount *int
+	// ProgressionBosses is the ordered boss encounter list used for progression.
+	ProgressionBosses []string
 	// DerivedNames are instance names selected from encounter data within a shared zone.
 	DerivedNames []string
 	// DerivedSpeedrunRules holds per-sub-instance speedrun rules when
@@ -75,16 +77,22 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 		bossCount = f.BossCount(flavor)
 	}
 
+	var progressionBosses []string
+	if f.ProgressionBosses != nil {
+		progressionBosses = f.ProgressionBosses(flavor)
+	}
+
 	entry := Entry{
-		commonFactory:  f,
-		Name:           f.Name,
-		Category:       f.Category,
-		MultiZone:      f.MultiZone,
-		Factory:        wrap(f.New),
-		ZoneNames:      f.ZoneNames,
-		HostileEntries: hostiles,
-		SpeedrunRules:  speedrun,
-		BossCount:      bossCount,
+		commonFactory:     f,
+		Name:              f.Name,
+		Category:          f.Category,
+		MultiZone:         f.MultiZone,
+		Factory:           wrap(f.New),
+		ZoneNames:         f.ZoneNames,
+		HostileEntries:    hostiles,
+		SpeedrunRules:     speedrun,
+		BossCount:         bossCount,
+		ProgressionBosses: progressionBosses,
 	}
 
 	if f.DerivedName != nil {
@@ -308,12 +316,15 @@ func rankedStartAfterRequirement(entry *Entry) string {
 	return entry.SpeedrunRules.RankedStartAfterRequirement
 }
 
-// speedrunBossCount returns the number of distinct boss encounters required by
-// the speedrun rules. Hostile encounter names collapse multi-unit encounters,
-// while the requirement name covers dynamically named encounters.
-func speedrunBossCount(entry *Entry) *int {
+// progressionBossCount returns the canonical boss count when configured, then
+// falls back to the distinct boss encounters required by the speedrun rules.
+func progressionBossCount(entry *Entry) *int {
 	if entry.BossCount != nil {
 		return entry.BossCount
+	}
+	if entry.ProgressionBosses != nil {
+		count := len(entry.ProgressionBosses)
+		return &count
 	}
 	if entry.SpeedrunRules == nil {
 		return nil
@@ -347,6 +358,9 @@ func speedrunBossCount(entry *Entry) *int {
 }
 
 func progressionBosses(entry *Entry) []string {
+	if entry.ProgressionBosses != nil {
+		return entry.ProgressionBosses
+	}
 	if entry.SpeedrunRules == nil {
 		return nil
 	}
@@ -423,7 +437,7 @@ func (r *Registry) AllInstanceDetails() []InstanceDetail {
 				Fallback:                    fallback,
 				ZoneNames:                   entry.ZoneNames,
 				DerivedNames:                entry.DerivedNames,
-				BossCount:                   speedrunBossCount(entry),
+				BossCount:                   progressionBossCount(entry),
 				ProgressionBosses:           progressionBosses(entry),
 				RankedStartAfterRequirement: rankedStartAfterRequirement(entry),
 				Bosses:                      bosses,

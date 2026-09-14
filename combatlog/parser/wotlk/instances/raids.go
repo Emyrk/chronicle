@@ -833,12 +833,32 @@ func UlduarHostiles() map[uint32]instances.Identity {
 	return hostile
 }
 
+func UlduarProgressionBosses(database.WoWFlavor) []string {
+	return []string{
+		"Flame Leviathan",
+		"Ignis the Furnace Master",
+		"Razorscale",
+		"XT-002 Deconstructor",
+		"Assembly of Iron",
+		"Kologarn",
+		"Auriaya",
+		"Hodir",
+		"Thorim",
+		"Freya",
+		"Mimiron",
+		"General Vezax",
+		"Yogg-Saron",
+		"Algalon the Observer",
+	}
+}
+
 var UlduarFactory = &instances.CommonFactory{
-	Name:      "Ulduar",
-	Category:  instances.InstanceCategoryRaid,
-	ZoneNames: []string{"ulduar"},
-	MapIDs:    []uint32{603},
-	Hostiles:  instances.FromMap(UlduarHostiles()),
+	Name:              "Ulduar",
+	Category:          instances.InstanceCategoryRaid,
+	ZoneNames:         []string{"ulduar"},
+	MapIDs:            []uint32{603},
+	Hostiles:          instances.FromMap(UlduarHostiles()),
+	ProgressionBosses: UlduarProgressionBosses,
 	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 		return UlduarSpeedrunRequirements()
 	},
