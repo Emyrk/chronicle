@@ -11609,9 +11609,10 @@ WITH representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
-    -- Scope representative selection before calculating boss coverage. Without
-    -- this filter, an instance-specific box plot ranks duplicate uploads for
-    -- every instance in the database and discards unrelated runs only later.
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
+    -- Scope representative selection by tenant and instance before calculating
+    -- boss coverage. Without these filters, an instance-specific box plot ranks
+    -- duplicate uploads that will only be discarded later.
     WHERE (cardinality($2 :: text[]) = 0
            OR li.name = ANY($2 :: text[]))
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -11839,6 +11840,7 @@ WITH representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -12192,8 +12194,10 @@ representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
-    -- Avoid calculating boss coverage for unrelated instances and, when a
-    -- player archetype is selected, duplicate groups that cannot contribute.
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
+    -- Apply tenant RLS before calculating boss coverage, then avoid unrelated
+    -- instances and duplicate groups that cannot contribute.
+    -- When a player archetype is selected, candidate_runs narrows further.
     WHERE (cardinality($8 :: text[]) = 0
            OR li.name = ANY($8 :: text[]))
       AND (($4 :: text = '' AND $5 :: text = '' AND $6 :: text = '' AND $7 :: text = '')
@@ -12687,6 +12691,7 @@ WITH representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
