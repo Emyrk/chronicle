@@ -8496,7 +8496,62 @@ func (q *sqlQuerier) ListInstancesByTimeRange(ctx context.Context, arg ListInsta
 }
 
 const listRecentInstanceGroups = `-- name: ListRecentInstanceGroups :many
-WITH instance_rows AS (
+WITH matching_runs AS (
+    SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    JOIN parsed_log_group plg ON plg.id = li.log_group_id
+    JOIN wow_log_groups wlg ON wlg.id = plg.id
+    LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
+    WHERE (
+          (li.start_time >= $1::timestamptz AND li.start_time < $2::timestamptz)
+          OR (
+              li.start_time IS NULL
+              AND wlg.created_at >= $1::timestamptz
+              AND wlg.created_at < $2::timestamptz
+          )
+      )
+      AND (
+          COALESCE(cardinality($3::text[]), 0) = 0
+          OR COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY($3::text[])
+      )
+      AND (
+          $4::text = ''
+          OR (
+              $4::text = 'true'
+              AND EXISTS (
+                  SELECT 1
+                  FROM log_instance_youtube_timestamped yt
+                  WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+              )
+          )
+          OR (
+              $4::text = 'false'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM log_instance_youtube_timestamped yt
+                  WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+              )
+          )
+      )
+      AND (
+          $5::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+          OR li.realm_id = $5::uuid
+      )
+      AND (
+          $6::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+          OR li.guild_id = $6::uuid
+      )
+      AND (
+          $7::wow_guid = '0x0000000000000000'::wow_guid
+          OR EXISTS (
+              SELECT 1
+              FROM log_instance_players lip_filter
+              WHERE lip_filter.instance_id = li.id
+                AND lip_filter.unit_guid = $7
+          )
+      )
+),
+instance_rows AS (
     SELECT
         li.id,
         li.hashed_slug AS slug,
@@ -8506,7 +8561,7 @@ WITH instance_rows AS (
         wlg.owner AS uploader_id,
         u.username AS uploader_name,
         wlg.created_at AS uploaded_at,
-        COALESCE(encounters.first_encounter_time, wlg.created_at)::timestamptz AS first_encounter_time,
+        COALESCE(li.start_time, encounters.first_encounter_time, wlg.created_at)::timestamptz AS first_encounter_time,
         COALESCE(players.player_count, 0)::bigint AS player_count,
         COALESCE(encounters.boss_count, 0)::bigint AS boss_count,
         COALESCE(encounters.encounter_count, 0)::bigint AS encounter_count,
@@ -8523,6 +8578,7 @@ WITH instance_rows AS (
         li.max_players,
         li.dynamic_difficulty
     FROM log_instances li
+    JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
     LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
@@ -8555,38 +8611,6 @@ WITH instance_rows AS (
             WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
         ) AS has_youtube_video
     ) youtube ON true
-),
-matching_runs AS (
-    SELECT DISTINCT run_id
-    FROM instance_rows
-    WHERE first_encounter_time >= $1::timestamptz
-      AND first_encounter_time < $2::timestamptz
-      AND (
-          COALESCE(cardinality($3::text[]), 0) = 0
-          OR name = ANY($3::text[])
-      )
-      AND (
-          $4::text = ''
-          OR ($4::text = 'true' AND has_youtube_video)
-          OR ($4::text = 'false' AND NOT has_youtube_video)
-      )
-      AND (
-          $5::uuid = '00000000-0000-0000-0000-000000000000'::uuid
-          OR realm_id = $5::uuid
-      )
-      AND (
-          $6::uuid = '00000000-0000-0000-0000-000000000000'::uuid
-          OR guild_id = $6::uuid
-      )
-      AND (
-          $7::wow_guid = '0x0000000000000000'::wow_guid
-          OR EXISTS (
-              SELECT 1
-              FROM log_instance_players lip_filter
-              WHERE lip_filter.instance_id = instance_rows.id
-                AND lip_filter.unit_guid = $7
-          )
-      )
 ),
 ranked_instances AS (
     SELECT

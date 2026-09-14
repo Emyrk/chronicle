@@ -323,7 +323,62 @@ OFFSET @offset_count;
 -- Pages logical runs, then returns every upload in each selected duplicate group.
 -- The first row for each run is its representative: most boss encounters, then
 -- most total encounters, then the duplicate-group anchor and stable tie-breakers.
-WITH instance_rows AS (
+WITH matching_runs AS (
+    SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    JOIN parsed_log_group plg ON plg.id = li.log_group_id
+    JOIN wow_log_groups wlg ON wlg.id = plg.id
+    LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
+    WHERE (
+          (li.start_time >= @start_time::timestamptz AND li.start_time < @end_time::timestamptz)
+          OR (
+              li.start_time IS NULL
+              AND wlg.created_at >= @start_time::timestamptz
+              AND wlg.created_at < @end_time::timestamptz
+          )
+      )
+      AND (
+          COALESCE(cardinality(@instance_names::text[]), 0) = 0
+          OR COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY(@instance_names::text[])
+      )
+      AND (
+          @has_video::text = ''
+          OR (
+              @has_video::text = 'true'
+              AND EXISTS (
+                  SELECT 1
+                  FROM log_instance_youtube_timestamped yt
+                  WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+              )
+          )
+          OR (
+              @has_video::text = 'false'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM log_instance_youtube_timestamped yt
+                  WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
+              )
+          )
+      )
+      AND (
+          @realm_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+          OR li.realm_id = @realm_id::uuid
+      )
+      AND (
+          @guild_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+          OR li.guild_id = @guild_id::uuid
+      )
+      AND (
+          @player_guid::wow_guid = '0x0000000000000000'::wow_guid
+          OR EXISTS (
+              SELECT 1
+              FROM log_instance_players lip_filter
+              WHERE lip_filter.instance_id = li.id
+                AND lip_filter.unit_guid = @player_guid
+          )
+      )
+),
+instance_rows AS (
     SELECT
         li.id,
         li.hashed_slug AS slug,
@@ -333,7 +388,7 @@ WITH instance_rows AS (
         wlg.owner AS uploader_id,
         u.username AS uploader_name,
         wlg.created_at AS uploaded_at,
-        COALESCE(encounters.first_encounter_time, wlg.created_at)::timestamptz AS first_encounter_time,
+        COALESCE(li.start_time, encounters.first_encounter_time, wlg.created_at)::timestamptz AS first_encounter_time,
         COALESCE(players.player_count, 0)::bigint AS player_count,
         COALESCE(encounters.boss_count, 0)::bigint AS boss_count,
         COALESCE(encounters.encounter_count, 0)::bigint AS encounter_count,
@@ -350,6 +405,7 @@ WITH instance_rows AS (
         li.max_players,
         li.dynamic_difficulty
     FROM log_instances li
+    JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
     LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
@@ -382,38 +438,6 @@ WITH instance_rows AS (
             WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
         ) AS has_youtube_video
     ) youtube ON true
-),
-matching_runs AS (
-    SELECT DISTINCT run_id
-    FROM instance_rows
-    WHERE first_encounter_time >= @start_time::timestamptz
-      AND first_encounter_time < @end_time::timestamptz
-      AND (
-          COALESCE(cardinality(@instance_names::text[]), 0) = 0
-          OR name = ANY(@instance_names::text[])
-      )
-      AND (
-          @has_video::text = ''
-          OR (@has_video::text = 'true' AND has_youtube_video)
-          OR (@has_video::text = 'false' AND NOT has_youtube_video)
-      )
-      AND (
-          @realm_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
-          OR realm_id = @realm_id::uuid
-      )
-      AND (
-          @guild_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
-          OR guild_id = @guild_id::uuid
-      )
-      AND (
-          @player_guid::wow_guid = '0x0000000000000000'::wow_guid
-          OR EXISTS (
-              SELECT 1
-              FROM log_instance_players lip_filter
-              WHERE lip_filter.instance_id = instance_rows.id
-                AND lip_filter.unit_guid = @player_guid
-          )
-      )
 ),
 ranked_instances AS (
     SELECT

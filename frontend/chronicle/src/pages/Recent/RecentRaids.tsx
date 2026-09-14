@@ -252,7 +252,7 @@ export function RecentRaids() {
         setInstances((prev) => [...prev, ...data.instances]);
       }
 
-      setHasMore(groupDuplicateInstances([...data.instances]).length >= PAGE_SIZE);
+      setHasMore(data.has_more);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load recent raids");
     } finally {

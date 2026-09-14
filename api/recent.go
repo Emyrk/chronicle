@@ -28,7 +28,7 @@ import (
 func (api *API) RecentInstances(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if q.Get("start") == "" {
-		q.Set("start", time.Now().AddDate(0, 0, -365).UTC().Format(time.RFC3339))
+		q.Set("start", time.Now().AddDate(0, 0, -14).UTC().Format(time.RFC3339))
 	}
 	if q.Get("end") == "" {
 		q.Set("end", time.Now().Add(24*time.Hour).UTC().Format(time.RFC3339))
@@ -123,6 +123,11 @@ func (api *API) instancesByTimeRange(w http.ResponseWriter, r *http.Request, gro
 	}
 
 	if groupDuplicates {
+		queryLimit := limitCount
+		if queryLimit > 0 {
+			queryLimit++
+		}
+
 		rows, err := api.Opts.Zed.ListRecentInstanceGroups(ctx, database.ListRecentInstanceGroupsParams{
 			StartTime:     pgtype.Timestamptz{Time: startTime, Valid: true},
 			EndTime:       pgtype.Timestamptz{Time: endTime, Valid: true},
@@ -131,14 +136,14 @@ func (api *API) instancesByTimeRange(w http.ResponseWriter, r *http.Request, gro
 			RealmID:       realmID,
 			GuildID:       guildID,
 			PlayerGuid:    playerGUID,
-			LimitCount:    limitCount,
+			LimitCount:    queryLimit,
 			OffsetCount:   offsetCount,
 		})
 		if err != nil {
 			writeRecentInstancesError(ctx, w, err)
 			return
 		}
-		api.writeRecentInstanceGroups(ctx, w, rows)
+		api.writeRecentInstanceGroups(ctx, w, rows, limitCount)
 		return
 	}
 
@@ -246,7 +251,9 @@ func writeRecentInstancesError(ctx context.Context, w http.ResponseWriter, err e
 	})
 }
 
-func (api *API) writeRecentInstanceGroups(ctx context.Context, w http.ResponseWriter, rows []database.ListRecentInstanceGroupsRow) {
+func (api *API) writeRecentInstanceGroups(ctx context.Context, w http.ResponseWriter, rows []database.ListRecentInstanceGroupsRow, limitCount int32) {
+	rows, hasMore := trimRecentInstanceGroups(rows, limitCount)
+
 	instanceIDs := make([]uuid.UUID, len(rows))
 	for i, row := range rows {
 		instanceIDs[i] = row.ID
@@ -310,6 +317,32 @@ func (api *API) writeRecentInstanceGroups(ctx context.Context, w http.ResponseWr
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.RecentInstancesResponse{
 		Instances: instances,
-		HasMore:   false,
+		HasMore:   hasMore,
 	})
+}
+
+func trimRecentInstanceGroups(rows []database.ListRecentInstanceGroupsRow, limitCount int32) ([]database.ListRecentInstanceGroupsRow, bool) {
+	if limitCount <= 0 {
+		return rows, false
+	}
+
+	var previousRunID uuid.UUID
+	runCount := int32(0)
+	for i, row := range rows {
+		runID := row.ID
+		if row.DuplicateGroupID.Valid {
+			runID = row.DuplicateGroupID.UUID
+		}
+		if i > 0 && runID == previousRunID {
+			continue
+		}
+
+		runCount++
+		if runCount > limitCount {
+			return rows[:i], true
+		}
+		previousRunID = runID
+	}
+
+	return rows, false
 }
