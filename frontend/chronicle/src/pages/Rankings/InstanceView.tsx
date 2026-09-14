@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
-import { ArrowLeft, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, List, Loader2, X } from "lucide-react"
+import { ArrowLeft, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, List, Loader2, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox"
 import {
   Tooltip,
@@ -43,7 +43,11 @@ import { KillTimeTable } from "./KillTimeTable"
 import { ClassSpecFilter } from "./ClassSpecFilter"
 import { RankingsLoadingState } from "./RankingsLoadingState"
 import { getRankingsQueryEnablement } from "./rankingsQueryState"
-import { defaultRankingBossNames, rankingEncounterSections } from "./rankingsEncounterSelection"
+import {
+  defaultRankingBossNames,
+  rankingEncounterNames,
+  rankingEncounterSections,
+} from "./rankingsEncounterSelection"
 import {
   groupByParamForValue,
   parseGroupByClass,
@@ -81,9 +85,17 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     configuredCohortMode === "class" || configuredCohortMode === "disabled"
       ? configuredCohortMode
       : "spec"
-  const encounterNames = useMemo(
+  const recordedEncounterNames = useMemo(
     () => (encounterSummaries ?? []).map((e) => e.encounter_name),
     [encounterSummaries],
+  )
+  const recordedEncounterNameSet = useMemo(
+    () => new Set(recordedEncounterNames),
+    [recordedEncounterNames],
+  )
+  const encounterNames = useMemo(
+    () => rankingEncounterNames(instanceName, recordedEncounterNames, progressionBosses),
+    [instanceName, progressionBosses, recordedEncounterNames],
   )
   // We derive boss vs trash: "Trash" is the only trash encounter name by convention
   const bossNames = useMemo(
@@ -91,16 +103,20 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [encounterNames],
   )
   const defaultBossNames = useMemo(
-    () => defaultRankingBossNames(instanceName, encounterNames, progressionBosses),
-    [encounterNames, instanceName, progressionBosses],
+    () => defaultRankingBossNames(instanceName, recordedEncounterNames, progressionBosses),
+    [instanceName, progressionBosses, recordedEncounterNames],
+  )
+  const progressionBossNames = useMemo(
+    () => progressionBosses?.get(instanceName) ?? bossNames,
+    [bossNames, instanceName, progressionBosses],
   )
   const trashNames = useMemo(
     () => new Set<string>(encounterNames.filter((n) => n === "Trash")),
     [encounterNames],
   )
   const encounterSections = useMemo(
-    () => rankingEncounterSections(encounterNames, defaultBossNames),
-    [defaultBossNames, encounterNames],
+    () => rankingEncounterSections(encounterNames, progressionBossNames),
+    [encounterNames, progressionBossNames],
   )
 
   // ── URL state ────────────────────────────────────────────────────────
@@ -664,7 +680,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
             <div className="space-y-1">
               {section.names.map((name) => {
                 const isSelected = selectedEncounters.has(name)
-                const isSubdued = section.kind !== "boss"
+                const hasRankings = recordedEncounterNameSet.has(name)
+                const isSubdued = section.kind !== "boss" || !hasRankings
+                const EncounterIcon = hasRankings ? CheckCircle : CircleDashed
                 return (
                   <div
                     role="button"
@@ -684,17 +702,20 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                         : "hover:bg-accent/50 hover:translate-x-0.5",
                       !isSelected && isSubdued && "text-muted-foreground",
                     )}
-                    title={`${name} — Click to select, Ctrl+Click to toggle`}
+                    title={`${name}${hasRankings ? "" : " (no kills yet)"}. Click to select, Ctrl+Click to toggle`}
                   >
-                    <CheckCircle
+                    <EncounterIcon
                       className={cn(
                         "h-4 w-4 shrink-0",
-                        isSubdued ? "text-green-500/60" : "text-green-500",
+                        hasRankings ? (isSubdued ? "text-green-500/60" : "text-green-500") : "text-muted-foreground/50",
                       )}
                     />
                     <span className={cn("truncate flex-1", section.kind === "trash" && !isSelected && "italic")}>
                       {name}
                     </span>
+                    {!hasRankings && (
+                      <span className="shrink-0 text-[10px] text-muted-foreground/60">No kills</span>
+                    )}
                   </div>
                 )
               })}

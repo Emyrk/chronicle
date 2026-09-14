@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { defaultRankingBossNames, rankingEncounterSections } from "./rankingsEncounterSelection";
+import {
+  defaultRankingBossNames,
+  rankingEncounterNames,
+  rankingEncounterSections,
+} from "./rankingsEncounterSelection";
+
+describe("rankingEncounterNames", () => {
+  it("includes canonical progression bosses without recorded kills", () => {
+    const progressionBosses = new Map([
+      ["Ulduar", new Set(["Flame Leviathan", "Ignis the Furnace Master", "Razorscale", "XT-002 Deconstructor"])],
+    ]);
+
+    expect(
+      rankingEncounterNames("Ulduar", ["Flame Leviathan", "Razorscale", "Trash"], progressionBosses),
+    ).toEqual([
+      "Flame Leviathan",
+      "Ignis the Furnace Master",
+      "Razorscale",
+      "XT-002 Deconstructor",
+      "Trash",
+    ]);
+  });
+
+  it("preserves recorded encounters when canonical metadata is unavailable", () => {
+    expect(rankingEncounterNames("Unknown", ["Boss", "Trash"], new Map())).toEqual(["Boss", "Trash"]);
+  });
+});
 
 describe("defaultRankingBossNames", () => {
   it("uses canonical progression bosses while leaving optional bosses available", () => {

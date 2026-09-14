@@ -4,6 +4,17 @@ export interface RankingEncounterSection {
   names: string[];
 }
 
+export function rankingEncounterNames(
+  instanceName: string,
+  recordedEncounterNames: string[],
+  progressionBosses: Map<string, Set<string>> | undefined,
+): string[] {
+  const canonicalBosses = progressionBosses?.get(instanceName);
+  if (canonicalBosses == null) return recordedEncounterNames;
+
+  return [...canonicalBosses, ...recordedEncounterNames.filter((name) => !canonicalBosses.has(name))];
+}
+
 export function defaultRankingBossNames(
   instanceName: string,
   encounterNames: string[],
