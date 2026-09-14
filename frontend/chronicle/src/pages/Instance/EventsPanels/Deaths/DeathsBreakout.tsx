@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
-import type { DeathsResult } from "./deaths.processor";
+import type { DeathsSummaryResult } from "./deathsSummary.processor";
 import type { PanelContext } from "../types";
 
 // ============================================================================
@@ -121,7 +121,7 @@ type DeathMode = "players" | "enemies";
  * Get the aggregated death data for a unit across selected encounters.
  */
 function getDeathsForUnit(
-  result: DeathsResult,
+  result: DeathsSummaryResult,
   unitID: string,
   selectedEncounterIds: string[],
   mode: DeathMode
@@ -162,7 +162,7 @@ function getDeathsForUnit(
 }
 
 export interface UseDeathsBreakoutOptions {
-  result: DeathsResult | undefined;
+  result: DeathsSummaryResult | undefined;
   context: PanelContext;
   loading?: boolean;
   processing?: boolean;

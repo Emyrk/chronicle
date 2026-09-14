@@ -7,6 +7,7 @@ import { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProce
 import { damageTakenProcessor, enemyDamageTakenProcessor } from "../DamageTaken/damageTaken.processor";
 import { extraAttacksProcessor } from "../ExtraAttacks/extraAttacks.processor";
 import { deathsProcessor } from "../Deaths/deaths.processor";
+import { deathsSummaryProcessor } from "../Deaths/deathsSummary.processor";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 import { unifiedHealingProcessor } from "./healing.processor";
 import { mitigationProcessor } from "./mitigation.processor";
@@ -48,6 +49,7 @@ export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProce
 export { damageTakenProcessor, enemyDamageTakenProcessor } from "../DamageTaken/damageTaken.processor";
 export { extraAttacksProcessor } from "../ExtraAttacks/extraAttacks.processor";
 export { deathsProcessor } from "../Deaths/deaths.processor";
+export { deathsSummaryProcessor } from "../Deaths/deathsSummary.processor";
 export { allActivityProcessor } from "./allActivityDebug.processor";
 export { unifiedHealingProcessor } from "./healing.processor";
 export { mitigationProcessor } from "./mitigation.processor";
@@ -90,6 +92,7 @@ export type { DamageTakenResult as DamageTakenState, DamageTakenData, DamageTarg
 export type { UnifiedHealingResult, HealerData, HealingReceiverData, HealingTargetData, HealingSourceData } from "./healing.processor";
 export type { ExtraAttacksResult as ExtraAttacksState, ExtraAttacksData } from "../ExtraAttacks/extraAttacks.processor";
 export type { DeathsResult as DeathsState, DeathEvent, DeathRecapEntry, PlayerDeathsData } from "../Deaths/deaths.processor";
+export type { DeathsSummaryResult } from "../Deaths/deathsSummary.processor";
 export type { AllActivityDebugState as AllActivityState, RawDebugEvent, EncounterMeta, ResourceType } from "./allActivityDebug.processor";
 export type { MitigationResult, MitigationData, EncounterMitigation } from "./mitigation.processor";
 export type { AvoidanceResult, AvoidanceData, EncounterAvoidance } from "./avoidance.processor";
@@ -151,8 +154,8 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   consumables: consumablesProcessor,
   consumables_total: consumablesTotalProcessor,
   consumables_ledger: consumablesLedgerProcessor,
-  deaths: deathsProcessor,
-  death_log: deathsProcessor, // Same processor, different view
+  deaths: deathsSummaryProcessor,
+  death_log: deathsProcessor,
   all_activity: allActivityProcessor,
   mitigation: mitigationProcessor,
   avoidance: avoidanceProcessor,

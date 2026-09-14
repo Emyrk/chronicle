@@ -4,20 +4,20 @@
 
 import { Skull } from "lucide-react";
 import type { PanelDefinition, PanelRenderProps } from "../types";
-import { deathsProcessor, type DeathsResult } from "./deaths.processor";
+import { deathsSummaryProcessor, type DeathsSummaryResult } from "./deathsSummary.processor";
 import { DeathsContent } from "./DeathsContent";
 
 /**
  * Create the Deaths panel definition.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function createDeathsPanel(): PanelDefinition<DeathsResult, any> {
+export function createDeathsPanel(): PanelDefinition<DeathsSummaryResult, any> {
   return {
-    ...deathsProcessor,
+    ...deathsSummaryProcessor,
     label: "Deaths",
     icon: <Skull className="h-4 w-4" />,
 
-    render: (props: PanelRenderProps<DeathsResult>) => {
+    render: (props: PanelRenderProps<DeathsSummaryResult>) => {
       return <DeathsContent {...props} />;
     },
   };

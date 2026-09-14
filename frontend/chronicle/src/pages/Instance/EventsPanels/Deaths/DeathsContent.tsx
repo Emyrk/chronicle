@@ -2,7 +2,8 @@ import { useEffect, useMemo } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
-import type { DeathsResult, UnitDeaths } from "./deaths.processor";
+import type { UnitDeaths } from "./deaths.processor";
+import type { DeathsSummaryResult } from "./deathsSummary.processor";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDeathsBreakout } from "./DeathsBreakout";
 
@@ -39,7 +40,7 @@ function aggregateForEncounters(
   return Array.from(aggregated.values());
 }
 
-type DeathsContentProps = PanelRenderProps<DeathsResult>;
+type DeathsContentProps = PanelRenderProps<DeathsSummaryResult>;
 
 export const DeathsContent = (props: DeathsContentProps) => {
   const { result, context, loading, processing } = props;
