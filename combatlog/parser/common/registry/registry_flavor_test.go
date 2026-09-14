@@ -150,6 +150,7 @@ func TestUlduarProgressionBosses(t *testing.T) {
 			"Algalon the Observer",
 		}, detail.ProgressionBosses)
 		require.NotContains(t, detail.ProgressionBosses, "Elder Brightleaf")
+		require.Equal(t, "Flame Leviathan", detail.RankedStartAfterRequirement)
 		return
 	}
 	t.Fatal("Ulduar not found")

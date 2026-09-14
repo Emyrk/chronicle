@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSupportedInstances } from "@/api/queries";
-import { Loader2, X, Shield, MapPin, Skull, Swords } from "lucide-react";
+import { Clock3, Loader2, X, Shield, MapPin, Skull, Swords } from "lucide-react";
 import type { SupportedInstance, SupportedInstanceUnit } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import type { InstanceCategory } from "@/pages/Logs/utils/instanceCategory";
@@ -113,6 +113,22 @@ function InstanceDetailModal({ instance, onClose }: InstanceDetailModalProps) {
               <span className="font-medium">
                 {bossCount} {bossCount === 1 ? "boss" : "bosses"} required for a full clear
               </span>
+            </div>
+          )}
+
+          {instance.ranked_start_after_requirement && (
+            <div className="rounded-md border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-sm text-sky-700 dark:text-sky-300">
+              <div className="flex items-start gap-2">
+                <Clock3 className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <div>
+                  <p className="font-medium">Special ranked timing</p>
+                  <p className="mt-0.5 text-xs text-sky-700/80 dark:text-sky-300/80">
+                    Full raid timing begins after the fight that satisfies{" "}
+                    <strong>{instance.ranked_start_after_requirement}</strong> ends.
+                    Boss time still begins on the first required boss pull.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -240,6 +256,12 @@ function InstanceCard({ instance, onClick }: InstanceCardProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {instance.ranked_start_after_requirement && (
+            <span className="flex items-center gap-1 text-[10px] text-sky-200 bg-sky-950/70 px-1.5 py-0.5 rounded">
+              <Clock3 className="h-3 w-3" />
+              Special timing
+            </span>
+          )}
           {bossCount != null && bossCount > 0 && (
             <span className="flex items-center gap-1 text-[10px] text-white/70 bg-black/40 px-1.5 py-0.5 rounded">
               <Skull className="h-3 w-3" />

@@ -3509,6 +3509,7 @@ export interface SupportedInstance {
     readonly derived_names?: readonly string[];
     readonly boss_count?: number;
     readonly progression_bosses?: readonly string[];
+    readonly ranked_start_after_requirement?: string;
     readonly bosses?: readonly SupportedInstanceUnit[];
     readonly trash?: readonly SupportedInstanceUnit[];
 }

@@ -1,3 +1,4 @@
+import { useSupportedInstances } from "@/api/queries"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert"
 import { AlertTriangle, Check, Clock3, Flag, Skull, Swords, Trophy } from "lucide-react"
 
@@ -82,6 +83,11 @@ function SpeedrunTimingDiagram() {
 }
 
 export function SpeedrunningPage() {
+  const { data: supportedInstances } = useSupportedInstances()
+  const specialTimingInstances = supportedInstances?.filter(
+    (instance) => instance.ranked_start_after_requirement,
+  ) ?? []
+
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8">
       <h1 className="mb-2 text-3xl font-bold">How Speedrunning Works</h1>
@@ -139,6 +145,30 @@ export function SpeedrunningPage() {
           </div>
         </div>
       </section>
+
+      {specialTimingInstances.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-xl font-semibold">Instance-specific Ranked Timing</h2>
+          <p className="mb-3 text-muted-foreground">
+            Some instances use a special starting point for the Full raid time shown
+            on the leaderboard. These exceptions come from the active server&apos;s
+            supported instance rules.
+          </p>
+          <ul className="space-y-3">
+            {specialTimingInstances.map((instance) => (
+              <li key={instance.name} className="rounded-lg border bg-card p-4 text-sm">
+                <strong>{instance.name}</strong>
+                <p className="mt-1 text-muted-foreground">
+                  Full raid timing begins after the fight that satisfies{" "}
+                  <strong>{instance.ranked_start_after_requirement}</strong> ends.
+                  Boss time still begins on the first required boss pull, and the
+                  named requirement still counts toward qualification.
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="mb-8 rounded-lg bg-muted/30 p-4">
         <h2 className="mb-3 text-xl font-semibold">Why There Are Two Timers</h2>

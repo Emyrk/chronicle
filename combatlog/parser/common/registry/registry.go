@@ -288,16 +288,24 @@ type InstanceDetailUnit struct {
 
 // InstanceDetail holds enriched metadata for a registered instance.
 type InstanceDetail struct {
-	Name              string
-	Comment           string
-	Category          instances.InstanceCategory
-	Fallback          bool
-	ZoneNames         []string
-	DerivedNames      []string
-	BossCount         *int
-	ProgressionBosses []string
-	Bosses            []InstanceDetailUnit
-	Trash             []InstanceDetailUnit
+	Name                        string
+	Comment                     string
+	Category                    instances.InstanceCategory
+	Fallback                    bool
+	ZoneNames                   []string
+	DerivedNames                []string
+	BossCount                   *int
+	ProgressionBosses           []string
+	RankedStartAfterRequirement string
+	Bosses                      []InstanceDetailUnit
+	Trash                       []InstanceDetailUnit
+}
+
+func rankedStartAfterRequirement(entry *Entry) string {
+	if entry.SpeedrunRules == nil {
+		return ""
+	}
+	return entry.SpeedrunRules.RankedStartAfterRequirement
 }
 
 // speedrunBossCount returns the number of distinct boss encounters required by
@@ -409,16 +417,17 @@ func (r *Registry) AllInstanceDetails() []InstanceDetail {
 			sort.Slice(trash, func(i, j int) bool { return trash[i].Name < trash[j].Name })
 
 			result = append(result, InstanceDetail{
-				Name:              entry.Name,
-				Comment:           entry.Comment,
-				Category:          entry.Category,
-				Fallback:          fallback,
-				ZoneNames:         entry.ZoneNames,
-				DerivedNames:      entry.DerivedNames,
-				BossCount:         speedrunBossCount(entry),
-				ProgressionBosses: progressionBosses(entry),
-				Bosses:            bosses,
-				Trash:             trash,
+				Name:                        entry.Name,
+				Comment:                     entry.Comment,
+				Category:                    entry.Category,
+				Fallback:                    fallback,
+				ZoneNames:                   entry.ZoneNames,
+				DerivedNames:                entry.DerivedNames,
+				BossCount:                   speedrunBossCount(entry),
+				ProgressionBosses:           progressionBosses(entry),
+				RankedStartAfterRequirement: rankedStartAfterRequirement(entry),
+				Bosses:                      bosses,
+				Trash:                       trash,
 			})
 		}
 	}
