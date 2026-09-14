@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/Tooltip/tooltip"
 import type { RankingsBoxPlotStats } from "@/api/typesGenerated"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
+import { formatBoxPlotTick, getBoxPlotScale } from "./boxPlotScale"
 
 // ── Box Plot Row ──────────────────────────────────────────────────────────
 
@@ -175,16 +176,7 @@ export function BoxPlotChart({
     return Math.max(...stats.map((s) => s.max_dps))
   }, [stats])
 
-  const ticks = useMemo(() => {
-    const step = scaleMax <= 600 ? 100 : 200
-    const result: number[] = []
-    for (let v = 0; v <= scaleMax; v += step) result.push(v)
-    if (result[result.length - 1] < scaleMax) {
-      result.push(Math.ceil(scaleMax / step) * step)
-    }
-    const finalMax = result[result.length - 1]
-    return { values: result, max: finalMax }
-  }, [scaleMax])
+  const ticks = useMemo(() => getBoxPlotScale(scaleMax), [scaleMax])
 
   const mobileTicks = [0, ticks.max / 2, ticks.max]
 
@@ -218,30 +210,30 @@ export function BoxPlotChart({
             {/* X-axis ticks */}
             <div className="flex items-center gap-3 pt-2 sm:px-1">
               <div className="hidden w-32 shrink-0 sm:block" />
-              <div className="relative h-5 flex-1">
+              <div className="relative h-6 flex-1 border-t border-border/60">
                 {mobileTicks.map((v, i) => (
                   <span
                     key={`mobile-${v}`}
-                    className={`absolute font-mono text-[10px] text-muted-foreground/60 sm:hidden ${
+                    className={`absolute top-1.5 font-mono text-[10px] tabular-nums text-muted-foreground/70 sm:hidden ${
                       i === 0 ? "" : i === mobileTicks.length - 1 ? "-translate-x-full" : "-translate-x-1/2"
                     }`}
                     style={{ left: `${(v / ticks.max) * 100}%` }}
                   >
-                    {Math.round(v).toLocaleString()}
+                    {formatBoxPlotTick(v)}
                   </span>
                 ))}
-                {ticks.values.map((v) => {
-                  const pct = (v / ticks.max) * 100
-                  return (
-                    <span
-                      key={v}
-                      className="absolute hidden -translate-x-1/2 font-mono text-[10px] text-muted-foreground/60 sm:block"
-                      style={{ left: `${pct}%` }}
-                    >
-                      {v.toLocaleString()}
-                    </span>
-                  )
-                })}
+                {ticks.values.map((v, i) => (
+                  <span
+                    key={v}
+                    className={`absolute top-0 hidden flex-col items-center font-mono text-[10px] tabular-nums text-muted-foreground/70 sm:flex ${
+                      i === 0 ? "items-start" : i === ticks.values.length - 1 ? "-translate-x-full items-end" : "-translate-x-1/2"
+                    }`}
+                    style={{ left: `${(v / ticks.max) * 100}%` }}
+                  >
+                    <span className="h-1.5 w-px bg-border" />
+                    <span className="mt-0.5">{formatBoxPlotTick(v)}</span>
+                  </span>
+                ))}
               </div>
               <div className="hidden w-24 shrink-0 sm:block" />
             </div>
