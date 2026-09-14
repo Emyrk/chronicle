@@ -102,6 +102,16 @@ func TestZulGurubOptionalBossesAreNotRequired(t *testing.T) {
 	}
 }
 
+func TestEmeraldSanctumRankingsWithoutSpeedrun(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla}
+	rules := EmeraldSanctumFactory.FlavoredRankings(flavor)
+	require.NotNil(t, rules)
+	require.Nil(t, rules.Speedrun)
+	require.Equal(t, []string{"Erennius", "Solnius"}, EmeraldSanctumFactory.ProgressionBosses(flavor))
+}
+
 func TestVanillaRaidLevel60Caps(t *testing.T) {
 	t.Parallel()
 

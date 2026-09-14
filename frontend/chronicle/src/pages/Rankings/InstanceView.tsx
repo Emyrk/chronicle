@@ -37,6 +37,14 @@ import {
 import type { RankedEntry } from "./RankingsTable"
 import type { RankedKillTimeEntry } from "./KillTimeTable"
 import type { TimePeriod } from "./timePeriod"
+import { EmeraldSanctumModeSwitch } from "./EmeraldSanctumModeSwitch"
+import {
+  EMERALD_SANCTUM_INSTANCE,
+  emeraldSanctumModeParamForValue,
+  getEmeraldSanctumEncounterNames,
+  parseEmeraldSanctumMode,
+  type EmeraldSanctumMode,
+} from "./emeraldSanctumState"
 import { BoxPlotChart } from "./BoxPlotChart"
 import { RankingsTable } from "./RankingsTable"
 import { KillTimeTable } from "./KillTimeTable"
@@ -75,6 +83,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const [params, setParams] = useSearchParams()
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const isEmeraldSanctum = instanceName === EMERALD_SANCTUM_INSTANCE
 
   // ── API queries ───────────────────────────────────────────────────────
   const { data: encounterSummaries, isLoading: encountersLoading } = useRankingsEncounters(instanceName)
@@ -115,8 +125,11 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [encounterNames],
   )
   const encounterSections = useMemo(
-    () => rankingEncounterSections(encounterNames, progressionBossNames),
-    [encounterNames, progressionBossNames],
+    () => rankingEncounterSections(
+      encounterNames,
+      isEmeraldSanctum ? bossNames : progressionBossNames,
+    ),
+    [bossNames, encounterNames, isEmeraldSanctum, progressionBossNames],
   )
 
   // ── URL state ────────────────────────────────────────────────────────
@@ -195,12 +208,21 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return new Set(raw.split(",").filter(Boolean))
   }, [params])
 
-  // Default (no URL param) = canonical progression bosses; optional bosses and trash are opt-in.
+  const emeraldSanctumMode = parseEmeraldSanctumMode(params.get("es_mode"))
+
+  // Emerald Sanctum has mutually exclusive Normal and Hard Mode Solnius encounters.
+  // Other instances default to canonical progression bosses; optional bosses and trash are opt-in.
+  const defaultSelectedEncounters = useMemo(
+    () => isEmeraldSanctum
+      ? getEmeraldSanctumEncounterNames(emeraldSanctumMode, bossNames)
+      : new Set(defaultBossNames),
+    [bossNames, defaultBossNames, emeraldSanctumMode, isEmeraldSanctum],
+  )
   const selectedEncounters: Set<string> = useMemo(() => {
     const raw = params.get("encounters")
-    if (!raw) return new Set(defaultBossNames)
+    if (!raw) return defaultSelectedEncounters
     return new Set(raw.split(",").filter(Boolean))
-  }, [params, defaultBossNames])
+  }, [defaultSelectedEncounters, params])
 
   // ── Setters ──────────────────────────────────────────────────────────
 
@@ -216,6 +238,21 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [setParams],
   )
 
+  const handleEmeraldSanctumModeChange = useCallback(
+    (mode: EmeraldSanctumMode) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        const value = emeraldSanctumModeParamForValue(mode)
+        if (value === null) next.delete("es_mode")
+        else next.set("es_mode", value)
+        next.delete("encounters")
+        next.delete("page")
+        return next
+      })
+    },
+    [setParams],
+  )
+
   const handleBack = useCallback(() => {
     setParams((prev) => {
       const next = new URLSearchParams(prev)
@@ -225,6 +262,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       next.delete("encounters")
       next.delete("period")
       next.delete("diff")
+      next.delete("es_mode")
       next.delete("realms")
       next.delete("page")
       next.delete("class")
@@ -384,14 +422,16 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       setParams((prev) => {
         const next = new URLSearchParams(prev)
         const raw = prev.get("encounters")
-        const current = raw ? new Set(raw.split(",").filter(Boolean)) : new Set(defaultBossNames)
+        const current = raw
+          ? new Set(raw.split(",").filter(Boolean))
+          : new Set(defaultSelectedEncounters)
 
         if (ctrlKey) {
           // Toggle individual
           if (current.has(name)) current.delete(name)
           else current.add(name)
         } else {
-          // Single-select: if already solo-selected, reset to the progression default; otherwise select only this one
+          // Single-select: if already solo-selected, reset to the instance default; otherwise select only this one
           if (current.size === 1 && current.has(name)) {
             next.delete("encounters")
             return next
@@ -400,9 +440,10 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           current.add(name)
         }
 
-        // No param = progression default. An empty selection also resets to default.
+        // No param = the instance default. An empty selection also resets to default.
         const isDefault =
-          current.size === defaultBossNames.size && [...current].every((n) => defaultBossNames.has(n))
+          current.size === defaultSelectedEncounters.size &&
+          [...current].every((name) => defaultSelectedEncounters.has(name))
         if (current.size === 0 || isDefault) {
           next.delete("encounters")
         } else {
@@ -411,7 +452,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         return next
       })
     },
-    [setParams, defaultBossNames],
+    [defaultSelectedEncounters, setParams],
   )
 
   const handleQuickSelect = useCallback(
@@ -664,11 +705,17 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       </div>
 
       {/* Quick-select buttons */}
-      <div className="flex gap-1 mt-1.5">
-        <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("all")} title="Select all encounters">All</Button>
-        <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("progression")} title="Select progression bosses">Progression</Button>
-        <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("trash")} title="Select trash encounters only">Trash</Button>
-      </div>
+      {isEmeraldSanctum ? (
+        <p className="mt-1.5 rounded-md border border-emerald-500/15 bg-emerald-500/5 px-2 py-1.5 text-[11px] leading-relaxed text-emerald-100/70">
+          {emeraldSanctumMode === "hard" ? "Hard Mode" : "Normal"} route selects the matching Solnius encounter.
+        </p>
+      ) : (
+        <div className="flex gap-1 mt-1.5">
+          <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("all")} title="Select all encounters">All</Button>
+          <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("progression")} title="Select progression bosses">Progression</Button>
+          <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("trash")} title="Select trash encounters only">Trash</Button>
+        </div>
+      )}
 
       {/* Encounter list */}
       <div className="mt-3 space-y-4">
@@ -837,6 +884,13 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                       </DropdownMenuRadioGroup>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                )}
+
+                {isPlayerMetric && isEmeraldSanctum && (
+                  <EmeraldSanctumModeSwitch
+                    value={emeraldSanctumMode}
+                    onChange={handleEmeraldSanctumModeChange}
+                  />
                 )}
 
                 {availableDifficulties.length > 1 && (
