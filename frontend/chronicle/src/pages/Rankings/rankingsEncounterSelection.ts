@@ -4,6 +4,10 @@ export interface RankingEncounterSection {
   names: string[];
 }
 
+const DEFAULT_EXCLUDED_BOSSES = new Map([
+  ["Ulduar", new Set(["Flame Leviathan"])],
+]);
+
 export function rankingEncounterNames(
   instanceName: string,
   recordedEncounterNames: string[],
@@ -22,8 +26,11 @@ export function defaultRankingBossNames(
 ): Set<string> {
   const allBosses = encounterNames.filter((name) => name !== "Trash");
   const canonicalBosses = progressionBosses?.get(instanceName);
-  if (canonicalBosses == null) return new Set(allBosses);
-  return new Set(allBosses.filter((name) => canonicalBosses.has(name)));
+  const defaultBosses = canonicalBosses == null
+    ? allBosses
+    : allBosses.filter((name) => canonicalBosses.has(name));
+  const excludedBosses = DEFAULT_EXCLUDED_BOSSES.get(instanceName);
+  return new Set(defaultBosses.filter((name) => !excludedBosses?.has(name)));
 }
 
 export function rankingEncounterSections(

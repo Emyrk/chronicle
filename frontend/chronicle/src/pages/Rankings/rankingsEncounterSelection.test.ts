@@ -37,8 +37,19 @@ describe("defaultRankingBossNames", () => {
         encounterNames,
         new Map([["Ulduar", new Set(["Flame Leviathan", "Freya"])]]),
       )],
-    ).toEqual(["Flame Leviathan", "Freya"]);
+    ).toEqual(["Freya"]);
+    expect(encounterNames).toContain("Flame Leviathan");
     expect(encounterNames).toContain("Elder Brightleaf");
+  });
+
+  it("only excludes Flame Leviathan from Ulduar defaults", () => {
+    expect(
+      [...defaultRankingBossNames(
+        "Another Raid",
+        ["Flame Leviathan"],
+        new Map([["Another Raid", new Set(["Flame Leviathan"])]]),
+      )],
+    ).toEqual(["Flame Leviathan"]);
   });
 
   it("defaults to every boss when canonical metadata is unavailable", () => {
