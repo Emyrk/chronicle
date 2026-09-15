@@ -431,7 +431,7 @@ func TestParserMessages(t *testing.T) {
 	// })
 }
 
-func TestParseRaidGroup(t *testing.T) {
+func TestParseRaidGroupLegacy(t *testing.T) {
 	t.Parallel()
 
 	fields := make([]string, messages.RaidGroupCount*messages.RaidGroupSize)
@@ -460,6 +460,42 @@ func TestParseRaidGroup(t *testing.T) {
 	require.True(t, p.SawRaidGroup())
 }
 
+func TestParseRaidComposition(t *testing.T) {
+	t.Parallel()
+
+	const line = "1778208220441|RAID_COMPOSITION|RAID_ROSTER_UPDATE|3|0x000000000000000B,1,2;0x000000000000000C,2,0;0x060000000008DCCC,6,1"
+	ctx := context.Background()
+	p, err := New(ctx, slog.Default(), strings.NewReader(line), &stubGameDB{}, nil)
+	require.NoError(t, err)
+
+	msgs, err := p.Advance(ctx)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	raidGroup, ok := msgs[0].(*messages.RaidGroup)
+	require.True(t, ok)
+	require.Equal(t, guid.GUID(0xB), raidGroup.Groups[0][0])
+	require.Equal(t, guid.GUID(0xC), raidGroup.Groups[0][1])
+	require.Equal(t, guid.GUID(0x060000000008DCCC), raidGroup.Groups[1][0])
+	require.Equal(t, []guid.GUID{0xB, 0xC, 0x060000000008DCCC}, raidGroup.Affects())
+	require.True(t, p.SawRaidGroup())
+}
+
+func TestParseRaidCompositionDisband(t *testing.T) {
+	t.Parallel()
+
+	const line = "1778208220441|RAID_COMPOSITION|PARTY_MEMBERS_CHANGED|0|"
+	ctx := context.Background()
+	p, err := New(ctx, slog.Default(), strings.NewReader(line), &stubGameDB{}, nil)
+	require.NoError(t, err)
+
+	msgs, err := p.Advance(ctx)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Empty(t, msgs[0].(*messages.RaidGroup).Affects())
+	require.True(t, p.SawRaidGroup())
+}
+
 func TestParseRaidGroupRejectsMalformedPayloads(t *testing.T) {
 	t.Parallel()
 
@@ -475,6 +511,27 @@ func TestParseRaidGroupRejectsMalformedPayloads(t *testing.T) {
 		p := &Parser{}
 		_, err := p.raidGroup(context.Background(), time.UnixMilli(1778208220441), &Matched{parts: []string{payload}})
 		require.Error(t, err, payload)
+		require.False(t, p.SawRaidGroup())
+	}
+}
+
+func TestParseRaidCompositionRejectsMalformedPayloads(t *testing.T) {
+	t.Parallel()
+
+	tests := [][]string{
+		{"RAID_ROSTER_UPDATE", "41", ""},
+		{"RAID_ROSTER_UPDATE", "2", "0x000000000000000B,1,2"},
+		{"RAID_ROSTER_UPDATE", "1", "not-a-guid,1,2"},
+		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,0,2"},
+		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,41,2"},
+		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,1,3"},
+		{"RAID_ROSTER_UPDATE", "2", "0x000000000000000B,1,2;0x000000000000000C,1,0"},
+		{"RAID_ROSTER_UPDATE", "2", "0x000000000000000B,2,2;0x000000000000000C,1,0"},
+	}
+	for _, parts := range tests {
+		p := &Parser{}
+		_, err := p.raidComposition(context.Background(), time.UnixMilli(1778208220441), &Matched{parts: parts})
+		require.Error(t, err, parts)
 		require.False(t, p.SawRaidGroup())
 	}
 }

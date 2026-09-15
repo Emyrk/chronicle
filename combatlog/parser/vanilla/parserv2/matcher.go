@@ -236,6 +236,84 @@ func (p *Parser) aura(ctx context.Context, event string, ts time.Time, buff bool
 	})
 }
 
+// raidComposition parses a roster-index snapshot. Roster indexes map directly
+// to the fixed eight-by-five layout used by RaidGroup messages. Rank and reason
+// are validated here but are not part of the downstream message model.
+func (p *Parser) raidComposition(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
+	reason := m.String()
+	memberCount := m.Int32()
+	payload := m.String()
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+	if m.Remain() != 0 {
+		return nil, fmt.Errorf("raid composition: unexpected extra fields")
+	}
+	if reason == "" {
+		return nil, fmt.Errorf("raid composition: reason is required")
+	}
+	if memberCount < 0 || memberCount > messages.RaidGroupCount*messages.RaidGroupSize {
+		return nil, fmt.Errorf("raid composition: invalid member count %d", memberCount)
+	}
+
+	result := &messages.RaidGroup{MessageBase: messages.Base(ts)}
+	if memberCount == 0 {
+		if payload != "" {
+			return nil, fmt.Errorf("raid composition: expected empty payload for zero members")
+		}
+		p.sawRaidGroup = true
+		return set(result)
+	}
+
+	entries := strings.Split(payload, ";")
+	if len(entries) != int(memberCount) {
+		return nil, fmt.Errorf("raid composition: expected %d members, got %d", memberCount, len(entries))
+	}
+
+	previousIndex := 0
+	for i, entry := range entries {
+		parts := strings.Split(entry, ",")
+		if len(parts) != 3 {
+			return nil, fmt.Errorf("raid composition: member %d expected 3 fields, got %d", i+1, len(parts))
+		}
+
+		member, err := parseRaidGUID(parts[0])
+		if err != nil {
+			return nil, fmt.Errorf("raid composition: invalid GUID %q at member %d: %w", parts[0], i+1, err)
+		}
+		raidIndex, err := strconv.Atoi(parts[1])
+		if err != nil || raidIndex < 1 || raidIndex > messages.RaidGroupCount*messages.RaidGroupSize {
+			return nil, fmt.Errorf("raid composition: invalid raid index %q at member %d", parts[1], i+1)
+		}
+		if raidIndex <= previousIndex {
+			return nil, fmt.Errorf("raid composition: raid indexes must be strictly ascending")
+		}
+		rank, err := strconv.Atoi(parts[2])
+		if err != nil || rank < 0 || rank > 2 {
+			return nil, fmt.Errorf("raid composition: invalid rank %q at member %d", parts[2], i+1)
+		}
+
+		zeroIndex := raidIndex - 1
+		result.Groups[zeroIndex/messages.RaidGroupSize][zeroIndex%messages.RaidGroupSize] = member
+		previousIndex = raidIndex
+	}
+
+	p.sawRaidGroup = true
+	return set(result)
+}
+
+func parseRaidGUID(field string) (guid.GUID, error) {
+	hex := strings.TrimPrefix(strings.TrimPrefix(field, "0x"), "0X")
+	value, err := strconv.ParseUint(hex, 16, 64)
+	if err != nil || value == 0 {
+		if err == nil {
+			err = fmt.Errorf("zero GUID")
+		}
+		return 0, err
+	}
+	return guid.GUID(value), nil
+}
+
 // raidGroup parses forty compact hexadecimal GUID fields representing eight
 // five-player raid groups. Empty fields preserve unused slots and subgroup boundaries.
 func (p *Parser) raidGroup(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
@@ -255,11 +333,11 @@ func (p *Parser) raidGroup(_ context.Context, ts time.Time, m *Matched) ([]messa
 			continue
 		}
 
-		value, err := strconv.ParseUint(field, 16, 64)
-		if err != nil || value == 0 {
-			return nil, fmt.Errorf("raid group: invalid GUID %q at field %d", field, i+1)
+		member, err := parseRaidGUID(field)
+		if err != nil {
+			return nil, fmt.Errorf("raid group: invalid GUID %q at field %d: %w", field, i+1, err)
 		}
-		result.Groups[i/messages.RaidGroupSize][i%messages.RaidGroupSize] = guid.GUID(value)
+		result.Groups[i/messages.RaidGroupSize][i%messages.RaidGroupSize] = member
 	}
 
 	p.sawRaidGroup = true

@@ -118,6 +118,8 @@ func (p *Parser) advance(ctx context.Context) (_ []messages.Message, final error
 		return p.zoneInfo(ctx, ts, m)
 	case "RG":
 		return p.raidGroup(ctx, ts, m)
+	case "RAID_COMPOSITION":
+		return p.raidComposition(ctx, ts, m)
 	case "UNIT_INFO":
 		return p.unitInfo(ctx, ts, m)
 	case "COMBATANT_TRANSMOG":
