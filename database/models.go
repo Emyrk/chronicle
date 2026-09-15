@@ -1545,6 +1545,7 @@ type LogInstance struct {
 	DynamicDifficulty       int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
 	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
 	Category                pgtype.Text        `db:"category" json:"category"`
+	UpdatedAt               pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type LogInstanceEncounter struct {
@@ -1721,6 +1722,21 @@ type RaidComposition struct {
 	PublicView bool               `db:"public_view" json:"public_view"`
 	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type RankingRun struct {
+	RunID                    uuid.UUID          `db:"run_id" json:"run_id"`
+	RepresentativeInstanceID uuid.UUID          `db:"representative_instance_id" json:"representative_instance_id"`
+	RealmID                  uuid.UUID          `db:"realm_id" json:"realm_id"`
+	InstanceName             string             `db:"instance_name" json:"instance_name"`
+	DifficultyName           string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers               int32              `db:"max_players" json:"max_players"`
+	StartTime                pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime                  pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	BossCoverage             int32              `db:"boss_coverage" json:"boss_coverage"`
+	MemberCount              int32              `db:"member_count" json:"member_count"`
+	SourceUpdatedAt          pgtype.Timestamptz `db:"source_updated_at" json:"source_updated_at"`
+	UpdatedAt                pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type RankingSnapshot struct {
