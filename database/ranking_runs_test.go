@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -115,6 +116,49 @@ func TestRankingRunRepresentativeTieBreakers(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, sources, 1)
 	assert.Equal(t, anchorID, sources[0].RepresentativeInstanceID, "anchor wins an equal-coverage tie before start time")
+}
+
+func TestRankingRunRefreshConvergesAfterReorderUnlinkAndDelete(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	anchorID := uuid.New()
+	duplicateID := uuid.New()
+	start := time.Date(2026, 9, 3, 20, 0, 0, 0, time.UTC)
+	insertRankingRunSource(t, pool, store, realmID, anchorID, start, "Lucifron")
+	insertRankingRunSource(t, pool, store, realmID, duplicateID, start.Add(time.Second), "Lucifron", "Ragnaros")
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true}, Ids: []uuid.UUID{anchorID, duplicateID},
+	}))
+
+	created, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{duplicateID, anchorID, duplicateID})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), created.CreatedCount)
+	repeated, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{anchorID, duplicateID})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), repeated.UnchangedCount)
+
+	require.NoError(t, store.ClearDuplicateGroupID(ctx, duplicateID))
+	unlinked, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{duplicateID, anchorID})
+	require.NoError(t, err)
+	assert.Equal(t, 2, unlinked.ResolvedRunCount)
+	standalone, err := store.RankingRunByID(ctx, duplicateID)
+	require.NoError(t, err)
+	assert.Equal(t, duplicateID, standalone.RepresentativeInstanceID)
+	group, err := store.RankingRunByID(ctx, anchorID)
+	require.NoError(t, err)
+	assert.Equal(t, anchorID, group.RepresentativeInstanceID)
+
+	identities, err := store.RankingRunIdentitiesByInstanceIDs(ctx, []uuid.UUID{duplicateID})
+	require.NoError(t, err)
+	require.Len(t, identities, 1)
+	_, err = store.DeleteLogInstancesByIDs(ctx, []uuid.UUID{duplicateID})
+	require.NoError(t, err)
+	deleted, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{identities[0].InstanceID, identities[0].RunID})
+	require.NoError(t, err)
+	assert.Zero(t, deleted.DeletedCount, "the representative FK cascade removes the standalone row before refresh")
+	_, err = store.RankingRunByID(ctx, duplicateID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestRankingRunRepairDiscoveryCutoffLimitAndOrphans(t *testing.T) {

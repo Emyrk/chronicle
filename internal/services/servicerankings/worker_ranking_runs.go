@@ -55,22 +55,23 @@ type WorkerRefreshRankingRuns struct {
 	Logger *slog.Logger
 }
 
-func (w *WorkerRefreshRankingRuns) Work(ctx context.Context, job *river.Job[rankingargs.ArgsRefreshRankingRuns]) (err error) {
+func (w *WorkerRefreshRankingRuns) Work(ctx context.Context, job *river.Job[rankingargs.ArgsRefreshRankingRuns]) error {
 	started := time.Now()
-	output := RefreshRankingRunsOutput{}
-	defer func() {
-		output.DurationMS = time.Since(started).Milliseconds()
-		_ = river.RecordOutput(ctx, output)
-	}()
+	output, err := RefreshRankingRuns(ctx, w.Store, job.Args.AffectedIDs)
+	output.DurationMS = time.Since(started).Milliseconds()
+	_ = river.RecordOutput(ctx, output)
+	return err
+}
 
+func RefreshRankingRuns(ctx context.Context, store database.Store, ids []uuid.UUID) (RefreshRankingRunsOutput, error) {
 	ctx = servicetenant.AdminBypass(ctx)
-	affectedIDs := rankingargs.NormalizeIDs(job.Args.AffectedIDs)
-	output.AffectedIDCount = len(affectedIDs)
+	affectedIDs := rankingargs.NormalizeIDs(ids)
+	output := RefreshRankingRunsOutput{AffectedIDCount: len(affectedIDs)}
 	if len(affectedIDs) == 0 {
-		return nil
+		return output, nil
 	}
 
-	err = w.Store.InTx(ctx, func(tx database.Store) error {
+	err := store.InTx(ctx, func(tx database.Store) error {
 		sources, err := tx.RankingRunSources(ctx, affectedIDs)
 		if err != nil {
 			return fmt.Errorf("resolve ranking run sources: %w", err)
@@ -104,7 +105,7 @@ func (w *WorkerRefreshRankingRuns) Work(ctx context.Context, job *river.Job[rank
 		}
 		return nil
 	}, nil)
-	return err
+	return output, err
 }
 
 type WorkerRepairRankingRuns struct {
