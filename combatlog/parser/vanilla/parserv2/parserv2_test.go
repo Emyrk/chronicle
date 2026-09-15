@@ -463,7 +463,7 @@ func TestParseRaidGroupLegacy(t *testing.T) {
 func TestParseRaidComposition(t *testing.T) {
 	t.Parallel()
 
-	const line = "1778208220441|RAID_COMPOSITION|RAID_ROSTER_UPDATE|3|0x000000000000000B,1,1,2;0x000000000000000C,2,3,0;0x060000000008DCCC,6,2,1"
+	const line = "1778208220441|RAID_COMPOSITION|RAID_ROSTER_UPDATE|4|0x000000000000000B,1,1,2;0x000000000000000C,2,3,0;0x000000000000000D,5,1,0;0x060000000008DCCC,6,2,1"
 	ctx := context.Background()
 	p, err := New(ctx, slog.Default(), strings.NewReader(line), &stubGameDB{}, nil)
 	require.NoError(t, err)
@@ -475,9 +475,10 @@ func TestParseRaidComposition(t *testing.T) {
 	raidGroup, ok := msgs[0].(*messages.RaidGroup)
 	require.True(t, ok)
 	require.Equal(t, guid.GUID(0xB), raidGroup.Groups[0][0])
+	require.Equal(t, guid.GUID(0xD), raidGroup.Groups[0][1])
 	require.Equal(t, guid.GUID(0x060000000008DCCC), raidGroup.Groups[1][0])
 	require.Equal(t, guid.GUID(0xC), raidGroup.Groups[2][0])
-	require.Equal(t, []guid.GUID{0xB, 0x060000000008DCCC, 0xC}, raidGroup.Affects())
+	require.Equal(t, []guid.GUID{0xB, 0xD, 0x060000000008DCCC, 0xC}, raidGroup.Affects())
 	require.True(t, p.SawRaidGroup())
 }
 

@@ -236,9 +236,9 @@ func (p *Parser) aura(ctx context.Context, event string, ts time.Time, buff bool
 	})
 }
 
-// raidComposition parses a roster-index snapshot. The encoded subgroup maps
-// members into the fixed eight-by-five layout used by RaidGroup messages. Rank,
-// roster index, and reason are validated but are not part of the downstream model.
+// raidComposition parses a roster-index snapshot. The encoded subgroup is the
+// authority for group membership. Raid index orders members within each group.
+// Rank, roster index, and reason are not part of the downstream message model.
 func (p *Parser) raidComposition(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	reason := m.String()
 	memberCount := m.Int32()
