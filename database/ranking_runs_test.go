@@ -161,6 +161,45 @@ func TestRankingRunRefreshConvergesAfterReorderUnlinkAndDelete(t *testing.T) {
 	assert.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
+func TestRankingRunRefreshMergesGroupsAndReplacesDeletedRepresentative(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	anchorID := uuid.New()
+	representativeID := uuid.New()
+	otherGroupID := uuid.New()
+	start := time.Date(2026, 9, 4, 20, 0, 0, 0, time.UTC)
+	insertRankingRunSource(t, pool, store, realmID, anchorID, start, "Lucifron")
+	insertRankingRunSource(t, pool, store, realmID, representativeID, start.Add(time.Second), "Lucifron", "Magmadar", "Ragnaros")
+	insertRankingRunSource(t, pool, store, realmID, otherGroupID, start.Add(2*time.Second), "Lucifron", "Magmadar")
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true}, Ids: []uuid.UUID{anchorID, representativeID},
+	}))
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: otherGroupID, Valid: true}, Ids: []uuid.UUID{otherGroupID},
+	}))
+	_, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{anchorID, otherGroupID})
+	require.NoError(t, err)
+
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true}, Ids: []uuid.UUID{anchorID, otherGroupID},
+	}))
+	merged, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{otherGroupID, anchorID})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), merged.DeletedCount)
+	_, err = store.RankingRunByID(ctx, otherGroupID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+
+	_, err = store.DeleteLogInstancesByIDs(ctx, []uuid.UUID{representativeID})
+	require.NoError(t, err)
+	_, err = servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{representativeID, anchorID})
+	require.NoError(t, err)
+	run, err := store.RankingRunByID(ctx, anchorID)
+	require.NoError(t, err)
+	assert.Equal(t, otherGroupID, run.RepresentativeInstanceID)
+	assert.Equal(t, int32(2), run.BossCoverage)
+}
+
 func TestRankingRunRepairDiscoveryCutoffLimitAndOrphans(t *testing.T) {
 	t.Parallel()
 	pool, store, realmID := setupParsesTest(t)

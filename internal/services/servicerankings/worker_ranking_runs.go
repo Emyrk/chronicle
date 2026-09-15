@@ -77,8 +77,16 @@ func RefreshRankingRuns(ctx context.Context, store database.Store, ids []uuid.UU
 			return fmt.Errorf("resolve ranking run sources: %w", err)
 		}
 		resolvedRunIDs := make([]uuid.UUID, 0, len(sources))
+		representativeInstanceIDs := make([]uuid.UUID, 0, len(sources))
 		for _, source := range sources {
 			resolvedRunIDs = append(resolvedRunIDs, source.RunID)
+			representativeInstanceIDs = append(representativeInstanceIDs, source.RepresentativeInstanceID)
+		}
+		if err := tx.DeleteConflictingRankingRunRepresentatives(ctx, database.DeleteConflictingRankingRunRepresentativesParams{
+			RunIds:                    resolvedRunIDs,
+			RepresentativeInstanceIds: representativeInstanceIDs,
+		}); err != nil {
+			return fmt.Errorf("release conflicting ranking run representatives: %w", err)
 		}
 		deleted, err := tx.DeleteObsoleteRankingRuns(ctx, database.DeleteObsoleteRankingRunsParams{
 			AffectedIds:    affectedIDs,
@@ -191,8 +199,9 @@ func (w *WorkerRepairRankingRuns) Work(ctx context.Context, job *river.Job[ranki
 					rivertype.JobStateRetryable,
 				},
 			},
-			Queue:    riverconst.QueueRankings,
-			Priority: riverconst.PriorityLow,
+			MaxAttempts: 5,
+			Queue:       riverconst.QueueRankings,
+			Priority:    riverconst.PriorityLow,
 		}
 		result, insertErr := w.Queue.Insert(ctx, rankingargs.ArgsRepairRankingRuns{
 			FullScan: job.Args.FullScan,

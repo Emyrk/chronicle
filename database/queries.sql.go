@@ -11397,6 +11397,29 @@ func (q *sqlQuerier) UpdateRaidCompositionSharing(ctx context.Context, arg Updat
 	return i, err
 }
 
+const deleteConflictingRankingRunRepresentatives = `-- name: DeleteConflictingRankingRunRepresentatives :exec
+DELETE FROM ranking_runs existing
+USING (
+    SELECT
+        unnest($1::uuid[]) AS run_id,
+        unnest($2::uuid[]) AS representative_instance_id
+) desired
+WHERE existing.representative_instance_id = desired.representative_instance_id
+  AND existing.run_id <> desired.run_id
+`
+
+type DeleteConflictingRankingRunRepresentativesParams struct {
+	RunIds                    []uuid.UUID `db:"run_ids" json:"run_ids"`
+	RepresentativeInstanceIds []uuid.UUID `db:"representative_instance_ids" json:"representative_instance_ids"`
+}
+
+// Release representative IDs that moved to a different logical run before the
+// state-based refresh upserts all desired rows in arbitrary UUID order.
+func (q *sqlQuerier) DeleteConflictingRankingRunRepresentatives(ctx context.Context, arg DeleteConflictingRankingRunRepresentativesParams) error {
+	_, err := q.db.Exec(ctx, deleteConflictingRankingRunRepresentatives, arg.RunIds, arg.RepresentativeInstanceIds)
+	return err
+}
+
 const deleteObsoleteRankingRuns = `-- name: DeleteObsoleteRankingRuns :many
 DELETE FROM ranking_runs
 WHERE run_id = ANY($1::uuid[])

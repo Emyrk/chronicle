@@ -74,6 +74,9 @@ type sqlcQuerier interface {
 	CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error)
 	DeleteAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
+	// Release representative IDs that moved to a different logical run before the
+	// state-based refresh upserts all desired rows in arbitrary UUID order.
+	DeleteConflictingRankingRunRepresentatives(ctx context.Context, arg DeleteConflictingRankingRunRepresentativesParams) error
 	DeleteConsumableDisambiguation(ctx context.Context, arg DeleteConsumableDisambiguationParams) error
 	DeleteConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDataGrant(ctx context.Context, arg DeleteDataGrantParams) error
