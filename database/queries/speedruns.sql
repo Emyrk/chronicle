@@ -69,7 +69,7 @@ deduped AS (
         li.hashed_slug,
         sr.start_time,
         sr.completion_time,
-        sr.ranked_duration_ms::bigint AS duration_ms,
+        sr.ranked_duration_ms AS duration_ms,
         sr.qualified,
         sr.proof,
         sr.guild_id,

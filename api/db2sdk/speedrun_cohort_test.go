@@ -33,7 +33,7 @@ func TestSpeedrunCohortRun(t *testing.T) {
 		HashedSlug:             pgtype.Text{String: "raid-slug", Valid: true},
 		StartTime:              pgtype.Timestamptz{Time: startedAt, Valid: true},
 		CompletionTime:         pgtype.Timestamptz{Time: completedAt, Valid: true},
-		DurationMs:             duration,
+		DurationMs:             pgtype.Int8{Int64: duration, Valid: true},
 		Qualified:              true,
 		Proof:                  proof,
 		GuildID:                uuid.NullUUID{UUID: guildID, Valid: true},
@@ -183,7 +183,7 @@ func TestSpeedrunCohortRunIncompleteLegacyProof(t *testing.T) {
 	run := SpeedrunCohortRun(database.InstanceSpeedrunCohortRow{
 		InstanceID: uuid.New(),
 		StartTime:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		DurationMs: -1,
+		DurationMs: pgtype.Int8{Int64: -1, Valid: true},
 		Proof:      proof,
 	})
 

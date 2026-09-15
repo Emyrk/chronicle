@@ -14668,7 +14668,7 @@ deduped AS (
         li.hashed_slug,
         sr.start_time,
         sr.completion_time,
-        sr.ranked_duration_ms::bigint AS duration_ms,
+        sr.ranked_duration_ms AS duration_ms,
         sr.qualified,
         sr.proof,
         sr.guild_id,
@@ -14736,7 +14736,7 @@ type InstanceSpeedrunCohortRow struct {
 	HashedSlug                 pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
 	StartTime                  pgtype.Timestamptz `db:"start_time" json:"start_time"`
 	CompletionTime             pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
-	DurationMs                 int64              `db:"duration_ms" json:"duration_ms"`
+	DurationMs                 pgtype.Int8        `db:"duration_ms" json:"duration_ms"`
 	Qualified                  bool               `db:"qualified" json:"qualified"`
 	Proof                      []byte             `db:"proof" json:"proof"`
 	GuildID                    uuid.NullUUID      `db:"guild_id" json:"guild_id"`

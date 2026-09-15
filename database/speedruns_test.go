@@ -73,11 +73,28 @@ func TestEncounterKillTimesIncludePartialKills(t *testing.T) {
 		RankedDurationMs: pgtype.Int8{Int64: int64(time.Hour / time.Millisecond), Valid: true}, Proof: []byte(`{"proof":[]}`),
 	}))
 
+	legacyInstanceID := uuid.New()
+	legacyStartedAt := startedAt.Add(-time.Hour)
+	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+		ID: legacyInstanceID, RealmID: realmID, LogGroupID: logGroupID,
+		Name: "Molten Core", HashedSlug: pgtype.Text{String: "legacy-unranked-raid", Valid: true},
+		StartTime: database.Timestamptz(legacyStartedAt), EndTime: database.Timestamptz(legacyStartedAt.Add(time.Hour)),
+		Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40,
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
+		InstanceID: legacyInstanceID, InstanceName: "Molten Core", RealmID: realmID,
+		StartTime: database.Timestamptz(legacyStartedAt), CompletionTime: database.Timestamptz(legacyStartedAt.Add(time.Hour)),
+		DurationMs: int64(time.Hour / time.Millisecond), Proof: []byte(`{"proof":[]}`),
+	}))
+
 	cohort, err := store.InstanceSpeedrunCohort(ctx, database.InstanceSpeedrunCohortParams{
 		InstanceID: instanceID, LookbackDays: 60, Scope: "server", MetricsVersion: 1,
 	})
 	require.NoError(t, err)
-	require.Len(t, cohort, 1)
+	require.Len(t, cohort, 2)
+
+	require.False(t, cohort[1].DurationMs.Valid)
 
 	var cohortKillTimes []struct {
 		EncounterName string `json:"encounter_name"`

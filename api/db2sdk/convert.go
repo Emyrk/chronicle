@@ -430,8 +430,8 @@ func SpeedrunCohortRun(row database.InstanceSpeedrunCohortRow) chroniclesdk.Spee
 	if row.GuildID.Valid {
 		run.GuildID = &row.GuildID.UUID
 	}
-	if row.DurationMs > 0 {
-		duration := row.DurationMs
+	if row.DurationMs.Valid && row.DurationMs.Int64 > 0 {
+		duration := row.DurationMs.Int64
 		run.DurationMs = &duration
 	}
 	if !row.CompletionTime.Time.IsZero() {
