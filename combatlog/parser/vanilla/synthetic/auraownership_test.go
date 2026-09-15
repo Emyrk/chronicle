@@ -94,6 +94,71 @@ func TestAuraOwnershipRequiresMatchingTargetAndSpell(t *testing.T) {
 	assert.Nil(t, aura.Source)
 }
 
+func TestAuraOwnershipQueuesOverlappingCastersInOrder(t *testing.T) {
+	t.Parallel()
+
+	processor := newAuraOwnership()
+	ts := time.UnixMilli(1000)
+	casterA := guid.GUID(1)
+	casterB := guid.GUID(2)
+	target := guid.GUID(3)
+	spell := &chrondbc.Spell{ID: 6077}
+
+	processor.ProcessMessages([]messages.Message{
+		&messages.AuraCast{MessageBase: messages.Base(ts), Caster: casterA, Target: &target, Spell: spell},
+		&messages.AuraCast{MessageBase: messages.Base(ts.Add(time.Millisecond)), Caster: casterB, Target: &target, Spell: spell},
+	})
+
+	firstAura := &messages.Aura{MessageBase: messages.Base(ts.Add(2 * time.Millisecond)), Target: target, SpellData: spell, State: types.AuraStateAdded}
+	secondAura := &messages.Aura{MessageBase: messages.Base(ts.Add(3 * time.Millisecond)), Target: target, SpellData: spell, State: types.AuraStateAdded}
+	processor.ProcessMessages([]messages.Message{firstAura, secondAura})
+
+	require.NotNil(t, firstAura.Source)
+	require.NotNil(t, secondAura.Source)
+	assert.Equal(t, casterA, *firstAura.Source)
+	assert.Equal(t, casterB, *secondAura.Source)
+}
+
+func TestAuraOwnershipCollapsesDuplicateEffectEvidence(t *testing.T) {
+	t.Parallel()
+
+	processor := newAuraOwnership()
+	ts := time.UnixMilli(1000)
+	caster := guid.GUID(1)
+	target := guid.GUID(2)
+	spell := &chrondbc.Spell{ID: 6077}
+	cast := &messages.AuraCast{MessageBase: messages.Base(ts), Caster: caster, Target: &target, Spell: spell}
+
+	processor.ProcessMessages([]messages.Message{cast, cast})
+
+	firstAura := &messages.Aura{MessageBase: messages.Base(ts.Add(time.Millisecond)), Target: target, SpellData: spell, State: types.AuraStateAdded}
+	secondAura := &messages.Aura{MessageBase: messages.Base(ts.Add(2 * time.Millisecond)), Target: target, SpellData: spell, State: types.AuraStateAdded}
+	processor.ProcessMessages([]messages.Message{firstAura, secondAura})
+
+	require.NotNil(t, firstAura.Source)
+	assert.Equal(t, caster, *firstAura.Source)
+	assert.Nil(t, secondAura.Source)
+}
+
+func TestAuraOwnershipIncludesExactWindowBoundary(t *testing.T) {
+	t.Parallel()
+
+	processor := newAuraOwnership()
+	ts := time.UnixMilli(1000)
+	caster := guid.GUID(1)
+	target := guid.GUID(2)
+	spell := &chrondbc.Spell{ID: 6077}
+	aura := &messages.Aura{MessageBase: messages.Base(ts.Add(auraCastCorrelationWindow)), Target: target, SpellData: spell, State: types.AuraStateAdded}
+
+	processor.ProcessMessages([]messages.Message{
+		&messages.AuraCast{MessageBase: messages.Base(ts), Caster: caster, Target: &target, Spell: spell},
+		aura,
+	})
+
+	require.NotNil(t, aura.Source)
+	assert.Equal(t, caster, *aura.Source)
+}
+
 func TestAuraOwnershipDoesNotOverrideAuthoritativeSource(t *testing.T) {
 	t.Parallel()
 

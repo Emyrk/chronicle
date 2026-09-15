@@ -25,11 +25,11 @@ type pendingAuraCast struct {
 }
 
 type auraOwnership struct {
-	pending map[auraOwnershipKey]pendingAuraCast
+	pending map[auraOwnershipKey][]pendingAuraCast
 }
 
 func newAuraOwnership() *auraOwnership {
-	return &auraOwnership{pending: make(map[auraOwnershipKey]pendingAuraCast)}
+	return &auraOwnership{pending: make(map[auraOwnershipKey][]pendingAuraCast)}
 }
 
 // ProcessMessages enriches 1.12a Aura messages with caster evidence from the
@@ -53,10 +53,22 @@ func (a *auraOwnership) record(msg *messages.AuraCast) {
 		return
 	}
 
-	a.pending[auraOwnershipKey{target: *msg.Target, spellID: msg.Spell.ID}] = pendingAuraCast{
+	key := auraOwnershipKey{target: *msg.Target, spellID: msg.Spell.ID}
+	queue := a.pending[key]
+
+	// A single cast can emit one AURA_CAST per effect. Collapse exact duplicate
+	// ownership evidence while retaining distinct casts in arrival order.
+	if len(queue) > 0 {
+		last := queue[len(queue)-1]
+		if last.caster == msg.Caster && last.at.Equal(msg.Date()) {
+			return
+		}
+	}
+
+	a.pending[key] = append(queue, pendingAuraCast{
 		caster: msg.Caster,
 		at:     msg.Date(),
-	}
+	})
 }
 
 func (a *auraOwnership) correlate(msg *messages.Aura) {
@@ -65,15 +77,21 @@ func (a *auraOwnership) correlate(msg *messages.Aura) {
 	}
 
 	key := auraOwnershipKey{target: msg.Target, spellID: msg.SpellData.ID}
-	pending, ok := a.pending[key]
-	if !ok {
+	queue := a.pending[key]
+	if len(queue) == 0 {
 		return
 	}
-	delete(a.pending, key)
 
+	pending := queue[0]
 	delta := msg.Date().Sub(pending.at)
 	if delta < 0 || delta > auraCastCorrelationWindow {
 		return
+	}
+
+	if len(queue) == 1 {
+		delete(a.pending, key)
+	} else {
+		a.pending[key] = queue[1:]
 	}
 
 	caster := pending.caster
@@ -82,9 +100,17 @@ func (a *auraOwnership) correlate(msg *messages.Aura) {
 }
 
 func (a *auraOwnership) expire(now time.Time) {
-	for key, pending := range a.pending {
-		if now.Sub(pending.at) > auraCastCorrelationWindow {
+	for key, queue := range a.pending {
+		firstValid := 0
+		for firstValid < len(queue) && now.Sub(queue[firstValid].at) > auraCastCorrelationWindow {
+			firstValid++
+		}
+
+		switch {
+		case firstValid == len(queue):
 			delete(a.pending, key)
+		case firstValid > 0:
+			a.pending[key] = queue[firstValid:]
 		}
 	}
 }

@@ -457,6 +457,36 @@ func TestJudgementOfLightCreditsTarget(t *testing.T) {
 	require.Equal(t, heal.Target, heal.Caster)
 }
 
+func TestAuraCastCorrelation(t *testing.T) {
+	t.Parallel()
+
+	spell := &chrondbc.Spell{ID: 6077}
+	spell.Name_lang = i18n.Text{i18n.English: "Power Word: Fortitude"}
+	db := &stubGameDB{spells: map[chrondbc.SpellID]*chrondbc.Spell{spell.ID: spell}}
+	input := strings.Join([]string{
+		"1771872293684|AURA_CAST|6077|0x00000000005DBA66|0x00000000005542BE|6|8|3000|0|15000|0",
+		"1771872293687|BUFF_ADD|0x00000000005542BE|1|6077|1|60|0|0",
+	}, "\n")
+
+	parser, err := New(context.Background(), slog.Default(), strings.NewReader(input), db, nil)
+	require.NoError(t, err)
+
+	castMessages, err := parser.Advance(context.Background())
+	require.NoError(t, err)
+	require.Len(t, castMessages, 1)
+	_, ok := castMessages[0].(*messages.AuraCast)
+	require.True(t, ok)
+
+	auraMessages, err := parser.Advance(context.Background())
+	require.NoError(t, err)
+	require.Len(t, auraMessages, 1)
+	aura, ok := auraMessages[0].(*messages.Aura)
+	require.True(t, ok)
+	require.NotNil(t, aura.Source)
+	require.Equal(t, guid.GUID(0x00000000005DBA66), *aura.Source)
+	require.Equal(t, messages.AuraTransitionApplied, aura.Transition)
+}
+
 // stubGameDB is a minimal gamedb.GameDB for tests that need specific spell data
 // without loading a real Spell.dbc (which varies by build tag / server).
 type stubGameDB struct {
