@@ -11,15 +11,17 @@ ORDER BY instance_name, difficulty_name, max_players;
 -- (instance, difficulty, max_players, tenant) combo.
 -- The caller sets tenant context so RLS on encounter_dps_rankings
 -- scopes to the correct realms automatically.
-WITH representative_instances AS (
+WITH fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM ranking_runs rr
+        WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
+    )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        -- Prefer the upload with the broadest boss-ranking coverage. The group
-        -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
          FROM encounter_dps_rankings coverage
          WHERE coverage.instance_id = li.id
@@ -27,6 +29,16 @@ WITH representative_instances AS (
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
+),
+representative_instances AS (
+    SELECT rr.representative_instance_id AS id, rr.run_id
+    FROM ranking_runs rr
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
+    WHERE rr.instance_name = @instance_name
+      AND rr.difficulty_name = @difficulty_name
+      AND rr.max_players = @max_players
+    UNION ALL
+    SELECT id, run_id FROM fallback_representative_instances
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
@@ -160,15 +172,17 @@ WHERE tenant_id = @tenant_id;
 
 -- name: RankingsEncounterList :many
 -- Returns encounters available in rankings for a given instance.
-WITH representative_instances AS (
+WITH fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM ranking_runs rr
+        WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
+    )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        -- Prefer the upload with the broadest boss-ranking coverage. The group
-        -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
          FROM encounter_dps_rankings coverage
          WHERE coverage.instance_id = li.id
@@ -176,6 +190,14 @@ WITH representative_instances AS (
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
+),
+representative_instances AS (
+    SELECT rr.representative_instance_id AS id, rr.run_id
+    FROM ranking_runs rr
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
+    WHERE rr.instance_name = @instance_name
+    UNION ALL
+    SELECT id, run_id FROM fallback_representative_instances
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
@@ -215,7 +237,7 @@ WITH candidate_runs AS (
       AND (@sub_spec :: text = '' OR candidate.player_sub_spec = @sub_spec)
       AND (@role :: text = '' OR candidate.player_role = @role)
 ),
-representative_instances AS (
+fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
@@ -228,6 +250,10 @@ representative_instances AS (
            OR li.name = ANY(@instance_names :: text[]))
       AND ((@class :: text = '' AND @spec :: text = '' AND @sub_spec :: text = '' AND @role :: text = '')
            OR COALESCE(li.duplicate_group_id, li.id) IN (SELECT run_id FROM candidate_runs))
+      AND NOT EXISTS (
+          SELECT 1 FROM ranking_runs rr
+          WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
+      )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -238,6 +264,17 @@ representative_instances AS (
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
+),
+representative_instances AS (
+    SELECT rr.representative_instance_id AS id, rr.run_id
+    FROM ranking_runs rr
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
+    WHERE (cardinality(@instance_names :: text[]) = 0
+           OR rr.instance_name = ANY(@instance_names :: text[]))
+      AND ((@class :: text = '' AND @spec :: text = '' AND @sub_spec :: text = '' AND @role :: text = '')
+           OR rr.run_id IN (SELECT run_id FROM candidate_runs))
+    UNION ALL
+    SELECT id, run_id FROM fallback_representative_instances
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
@@ -417,7 +454,7 @@ ORDER BY edr.player_class, edr.player_spec, edr.player_sub_spec;
 -- Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
 -- DPS is aggregated per run (sum damage / sum duration across encounters in one
 -- instance run), so each run is one data point. Matches leaderboard aggregation.
-WITH representative_instances AS (
+WITH fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
@@ -428,6 +465,10 @@ WITH representative_instances AS (
     -- duplicate uploads that will only be discarded later.
     WHERE (cardinality(@instance_names :: text[]) = 0
            OR li.name = ANY(@instance_names :: text[]))
+      AND NOT EXISTS (
+          SELECT 1 FROM ranking_runs rr
+          WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
+      )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -438,6 +479,15 @@ WITH representative_instances AS (
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
+),
+representative_instances AS (
+    SELECT rr.representative_instance_id AS id, rr.run_id
+    FROM ranking_runs rr
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
+    WHERE (cardinality(@instance_names :: text[]) = 0
+           OR rr.instance_name = ANY(@instance_names :: text[]))
+    UNION ALL
+    SELECT id, run_id FROM fallback_representative_instances
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)

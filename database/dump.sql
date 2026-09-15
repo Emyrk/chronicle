@@ -1112,6 +1112,7 @@ CREATE TABLE log_instances (
     dynamic_difficulty integer DEFAULT 0 NOT NULL,
     vehicle_control_intervals jsonb DEFAULT '{}'::jsonb NOT NULL,
     category text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text])))
 );
 
@@ -1273,6 +1274,21 @@ CREATE TABLE raid_compositions (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT raid_compositions_data_size_chk CHECK ((pg_column_size(data) <= 131072)),
     CONSTRAINT raid_compositions_name_length_chk CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100)))
+);
+
+CREATE TABLE ranking_runs (
+    run_id uuid NOT NULL,
+    representative_instance_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players integer NOT NULL,
+    start_time timestamp with time zone,
+    end_time timestamp with time zone,
+    boss_coverage integer NOT NULL,
+    member_count integer NOT NULL,
+    source_updated_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE ranking_snapshot_members (
@@ -2150,6 +2166,9 @@ ALTER TABLE ONLY parsed_log_group
 ALTER TABLE ONLY raid_compositions
     ADD CONSTRAINT raid_compositions_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY ranking_runs
+    ADD CONSTRAINT ranking_runs_pkey PRIMARY KEY (run_id);
+
 ALTER TABLE ONLY ranking_snapshot_members
     ADD CONSTRAINT ranking_snapshot_members_pkey PRIMARY KEY (id);
 
@@ -2521,6 +2540,12 @@ CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (
 
 CREATE INDEX raid_compositions_user_tenant_idx ON raid_compositions USING btree (user_id, tenant_id);
 
+CREATE INDEX ranking_runs_instance_filter_idx ON ranking_runs USING btree (instance_name, difficulty_name, max_players, realm_id);
+
+CREATE INDEX ranking_runs_realm_end_time_idx ON ranking_runs USING btree (realm_id, end_time DESC);
+
+CREATE UNIQUE INDEX ranking_runs_representative_instance_idx ON ranking_runs USING btree (representative_instance_id);
+
 CREATE UNIQUE INDEX ranking_snapshots_published_key_idx ON ranking_snapshots USING btree (tenant_id, cutoff, lookback_days, cohort_mode, policy_version, query_version) WHERE (status = 'published'::text);
 
 CREATE INDEX river_job_args_index ON river_job USING gin (args);
@@ -2839,6 +2864,12 @@ ALTER TABLE ONLY raid_compositions
 
 ALTER TABLE ONLY raid_compositions
     ADD CONSTRAINT raid_compositions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY ranking_runs
+    ADD CONSTRAINT ranking_runs_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY ranking_runs
+    ADD CONSTRAINT ranking_runs_representative_instance_id_fkey FOREIGN KEY (representative_instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY ranking_snapshot_members
     ADD CONSTRAINT ranking_snapshot_members_ranking_id_fkey FOREIGN KEY (ranking_id) REFERENCES encounter_dps_rankings(id) ON DELETE CASCADE;

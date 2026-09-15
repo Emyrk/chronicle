@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/guildanalytics"
 	"github.com/Emyrk/chronicle/chronicle/retention"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
@@ -170,6 +171,9 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, rank.RepairDispatchWorker)
 	rank.RepairParseScoresWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RepairParseScoresWorker)
+	riverqueue.AddWorker(q, rank.RankingRunRefreshWorker)
+	rank.RankingRunRepairWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RankingRunRepairWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -206,6 +210,16 @@ func (s *Service) Start(ctx context.Context) error {
 			river.PeriodicInterval(24*time.Hour),
 			func() (river.JobArgs, *river.InsertOpts) {
 				return servicerankings.ArgsDispatchParseScoreRepairs{}, nil
+			},
+			&river.PeriodicJobOpts{RunOnStart: false},
+		),
+	)
+	// Daily bounded repair and incremental backfill for persisted ranking runs.
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return rankingargs.ArgsRepairRankingRuns{}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: false},
 		),

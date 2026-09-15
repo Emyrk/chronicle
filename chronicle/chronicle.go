@@ -628,7 +628,12 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 }
 
 func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) error {
-	err := c.RemoveWoWLogFilesFromStorage(ctx, logID)
+	identities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logID)
+	if err != nil {
+		return fmt.Errorf("load ranking run identities: %w", err)
+	}
+
+	err = c.RemoveWoWLogFilesFromStorage(ctx, logID)
 	if err != nil {
 		return fmt.Errorf("remove log files from storage: %w", err)
 	}
@@ -636,6 +641,9 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 	err = c.Zed.DeleteWoWLogGroup(ctx, logID)
 	if err != nil {
 		return fmt.Errorf("delete log group: %w", err)
+	}
+	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
+		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after log group deletion", slog.Any("error", err))
 	}
 
 	return nil
@@ -659,7 +667,11 @@ func (c *Chronicle) DeleteWoWLogGroupFiles(ctx context.Context, logID uuid.UUID)
 }
 
 func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID uuid.UUID) error {
-	_, err := c.Zed.DeleteLogInstanceByIDAndGroup(ctx, database.DeleteLogInstanceByIDAndGroupParams{
+	identities, err := c.Zed.RankingRunIdentitiesByInstanceIDs(ctx, []uuid.UUID{instanceID})
+	if err != nil {
+		return fmt.Errorf("load ranking run identity: %w", err)
+	}
+	_, err = c.Zed.DeleteLogInstanceByIDAndGroup(ctx, database.DeleteLogInstanceByIDAndGroupParams{
 		ID:         instanceID,
 		LogGroupID: logID,
 	})
@@ -676,6 +688,9 @@ func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID 
 	})
 	if err != nil {
 		return fmt.Errorf("prune deleted instance from output: %w", err)
+	}
+	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunIdentitySeeds(identities)...); err != nil {
+		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after instance deletion", slog.Any("error", err))
 	}
 
 	return nil

@@ -721,9 +721,12 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		// Duplicate detection is best-effort, but it must use its own transaction.
 		// A failed statement aborts a PostgreSQL transaction even when the Go error
 		// is logged, which would otherwise roll back the successfully parsed instance.
+		rankingRunAffectedIDs := []uuid.UUID{dbinstance.ID}
 		if instanceStart.Valid {
 			dupErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-				return detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, dbinstance.DynamicDifficulty, instanceStart, builder.participants)
+				var err error
+				rankingRunAffectedIDs, err = detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, dbinstance.DynamicDifficulty, instanceStart, builder.participants)
+				return err
 			}, nil)
 			if dupErr != nil {
 				slog.WarnContext(ctx, "duplicate detection failed", slog.String("err", dupErr.Error()))
@@ -736,7 +739,10 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		// transaction so a ranking error cannot roll back the parsed instance.
 		if finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-				return insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData)
+				if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {
+					return err
+				}
+				return tx.TouchLogInstanceRankingSource(ctx, dbinstance.ID)
 			}, nil)
 			if rankErr != nil {
 				slog.WarnContext(ctx, "insert dps rankings failed",
@@ -744,6 +750,11 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 					slog.String("err", rankErr.Error()),
 				)
 			}
+		}
+
+		if err := w.parent.EnqueueRankingRunRefresh(ctx, rankingRunAffectedIDs...); err != nil {
+			w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh",
+				slog.String("instance_id", dbinstance.ID.String()), slog.Any("error", err))
 		}
 
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
@@ -1076,7 +1087,7 @@ func detectAndLinkDuplicate(
 	dynamicDifficulty int32,
 	startTime pgtype.Timestamptz,
 	players []database.InsertInstancePlayersParams,
-) error {
+) ([]uuid.UUID, error) {
 	windowStart := database.Timestamptz(startTime.Time.Add(-30 * time.Minute))
 	windowEnd := database.Timestamptz(startTime.Time.Add(30 * time.Minute))
 
@@ -1090,7 +1101,7 @@ func detectAndLinkDuplicate(
 		ExcludeID:         instanceID,
 	})
 	if err != nil {
-		return fmt.Errorf("find duplicate candidates: %w", err)
+		return nil, fmt.Errorf("find duplicate candidates: %w", err)
 	}
 
 	// Build a set of our player GUIDs for fast lookup.
@@ -1128,7 +1139,7 @@ func detectAndLinkDuplicate(
 	}
 
 	if len(matched) == 0 {
-		return nil
+		return []uuid.UUID{instanceID}, nil
 	}
 
 	// Pick a canonical group ID: prefer the first existing group, otherwise
@@ -1148,19 +1159,25 @@ func detectAndLinkDuplicate(
 	// also reassigns any instance whose duplicate_group_id matches one of
 	// these IDs, merging previously-separate groups in one statement.
 	ids := make([]uuid.UUID, 0, len(matched)+1)
+	affectedIDs := make([]uuid.UUID, 0, len(matched)*2+2)
 	for _, m := range matched {
 		ids = append(ids, m.ID)
+		affectedIDs = append(affectedIDs, m.ID)
+		if m.DuplicateGroupID.Valid {
+			affectedIDs = append(affectedIDs, m.DuplicateGroupID.UUID)
+		}
 	}
 	ids = append(ids, instanceID)
+	affectedIDs = append(affectedIDs, instanceID, groupID.UUID)
 
 	if err := tx.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
 		DuplicateGroupID: groupID,
 		Ids:              ids,
 	}); err != nil {
-		return fmt.Errorf("set duplicate group: %w", err)
+		return nil, fmt.Errorf("set duplicate group: %w", err)
 	}
 
-	return nil
+	return affectedIDs, nil
 }
 
 // insertDPSRankings persists per-player DPS rankings for each clean-kill encounter.

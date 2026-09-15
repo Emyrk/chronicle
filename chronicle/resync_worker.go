@@ -292,9 +292,17 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 	// Only delete parsed data after every raw file has been downloaded and a
 	// real River log-parse job has been staged successfully. The pending job
 	// cannot run until it is explicitly released below.
+	identities, err := w.parent.Zed.RankingRunIdentitiesByLogGroupID(adminCtx, logGroupID)
+	if err != nil {
+		_, _ = w.parent.queue.JobDelete(adminCtx, parseInsert.Job.ID)
+		return fmt.Errorf("load ranking run identities: %w", err)
+	}
 	if err := w.parent.Zed.DeleteAllParsedLogsByGroupID(adminCtx, logGroupID); err != nil {
 		_, _ = w.parent.queue.JobDelete(adminCtx, parseInsert.Job.ID)
 		return fmt.Errorf("delete parsed logs: %w", err)
+	}
+	if err := w.parent.EnqueueRankingRunRefresh(adminCtx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
+		w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh after resync cleanup", "error", err)
 	}
 	if _, err := w.parent.queue.JobRetry(parseCtx, parseInsert.Job.ID); err != nil {
 		return fmt.Errorf("release isolated log-parse job %d: %w", parseInsert.Job.ID, err)
