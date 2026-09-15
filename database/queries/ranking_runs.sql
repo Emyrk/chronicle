@@ -144,6 +144,18 @@ WHERE (
 )
 RETURNING (xmax = 0) AS created;
 
+-- name: DeleteConflictingRankingRunRepresentatives :exec
+-- Release representative IDs that moved to a different logical run before the
+-- state-based refresh upserts all desired rows in arbitrary UUID order.
+DELETE FROM ranking_runs existing
+USING (
+    SELECT
+        unnest(sqlc.arg(run_ids)::uuid[]) AS run_id,
+        unnest(sqlc.arg(representative_instance_ids)::uuid[]) AS representative_instance_id
+) desired
+WHERE existing.representative_instance_id = desired.representative_instance_id
+  AND existing.run_id <> desired.run_id;
+
 -- name: DeleteObsoleteRankingRuns :many
 DELETE FROM ranking_runs
 WHERE run_id = ANY(@affected_ids::uuid[])

@@ -200,8 +200,12 @@ func (w *RealmWorker) Work(ctx context.Context, job *river.Job[ArgsRetentionReal
 		for _, identity := range identities {
 			affectedIDs = append(affectedIDs, identity.InstanceID, identity.RunID)
 		}
-		if _, err := w.Queue.Insert(ctx, rankingargs.NewRefreshRankingRuns(affectedIDs...), nil); err != nil {
-			logger.ErrorContext(ctx, "failed to enqueue ranking run refresh after retention deletion", slog.Any("error", err))
+		const rankingRefreshBatchSize = 500
+		for start := 0; start < len(affectedIDs); start += rankingRefreshBatchSize {
+			end := min(start+rankingRefreshBatchSize, len(affectedIDs))
+			if _, err := w.Queue.Insert(ctx, rankingargs.NewRefreshRankingRuns(affectedIDs[start:end]...), nil); err != nil {
+				logger.ErrorContext(ctx, "failed to enqueue ranking run refresh after retention deletion", slog.Any("error", err))
+			}
 		}
 
 		_ = w.Store.UpdateRetentionPolicyStats(ctx, database.UpdateRetentionPolicyStatsParams{
