@@ -11,6 +11,16 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb"
 )
 
+type Option func(*Synthetic)
+
+// WithAuraCastCorrelation enables correlation of separate AuraCast and Aura
+// messages produced by the 1.12a CC v2 log format.
+func WithAuraCastCorrelation() Option {
+	return func(s *Synthetic) {
+		s.auraOwner = newAuraOwnership()
+	}
+}
+
 // Synthetic processes the raw combat log events, and occasionally will insert
 // or mutate synthetic events to help downstream consumers.
 type Synthetic struct {
@@ -27,6 +37,7 @@ type Synthetic struct {
 	knownArmor   *knownArmor
 	vanillaPlus  *vanillaplus
 	absorption   *Absorption
+	auraOwner    *auraOwnership
 
 	slainDur        time.Duration
 	extraAttackDur  time.Duration
@@ -37,11 +48,12 @@ type Synthetic struct {
 	knownArmorDur   time.Duration
 	vanillaPlusDur  time.Duration
 	absorptionDur   time.Duration
+	auraOwnerDur    time.Duration
 }
 
-func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB) *Synthetic {
+func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, opts ...Option) *Synthetic {
 	fl, _ := parsectx.Flavor(ctx)
-	return &Synthetic{
+	s := &Synthetic{
 		logger:       logger,
 		slain:        NewSlainDetective(),
 		mitigation:   newMitigator(logger, wowDB),
@@ -56,23 +68,34 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB) *Synthet
 		wowDB:        wowDB,
 		flavor:       fl,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *Synthetic) DetailedTimes() map[string]time.Duration {
 	return map[string]time.Duration{
-		"parser.synthetic.slain":         s.slainDur,
-		"parser.synthetic.extra_attack":  s.extraAttackDur,
-		"parser.synthetic.demons":        s.demonsDur,
-		"parser.synthetic.possession":    s.possessionDur,
-		"parser.synthetic.known_objects": s.knownObjectsDur,
-		"parser.synthetic.razuvious":     s.razuviousDur,
-		"parser.synthetic.known_armor":   s.knownArmorDur,
-		"parser.synthetic.vanilla_plus":  s.vanillaPlusDur,
-		"parser.synthetic.absorption":    s.absorptionDur,
+		"parser.synthetic.slain":          s.slainDur,
+		"parser.synthetic.extra_attack":   s.extraAttackDur,
+		"parser.synthetic.demons":         s.demonsDur,
+		"parser.synthetic.possession":     s.possessionDur,
+		"parser.synthetic.known_objects":  s.knownObjectsDur,
+		"parser.synthetic.razuvious":      s.razuviousDur,
+		"parser.synthetic.known_armor":    s.knownArmorDur,
+		"parser.synthetic.vanilla_plus":   s.vanillaPlusDur,
+		"parser.synthetic.absorption":     s.absorptionDur,
+		"parser.synthetic.aura_ownership": s.auraOwnerDur,
 	}
 }
 
 func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message, error) {
+	if s.auraOwner != nil {
+		now := time.Now()
+		s.auraOwner.ProcessMessages(msgs)
+		s.auraOwnerDur += time.Since(now)
+	}
+
 	now := time.Now()
 	s.slain.ProcessMessages(msgs)
 	s.slainDur += time.Since(now)

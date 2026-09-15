@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/types/gameversions"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/gameversions"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/synthetic"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -44,7 +44,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 		logger:       logger,
 		wowDB:        wowDB,
 		scanner:      bufio.NewScanner(r),
-		synthetics:   synthetic.New(ctx, logger, wowDB),
+		synthetics:   synthetic.New(ctx, logger, wowDB, synthetic.WithAuraCastCorrelation()),
 		itemFetcher:  gear,
 		missedSpells: make(map[chrondbc.SpellID]missedSpellEntry),
 	}, nil
