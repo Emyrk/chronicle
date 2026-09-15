@@ -164,6 +164,14 @@ continuation line that doesn't have framing`,
 			expected:  "",
 		},
 
+		// ── HermesProxy 1.14.2 companion ─────────────────────────────
+		{
+			name:      "hermesproxy/companion_header",
+			logFormat: database.LogFormatHermesproxy1142Cc,
+			input:     `9/9 22:45:47.545  SPELL_CAST_FAILED,Player-1-00004AAF,"Brainfever-",0x511,0x0,0000000000000000,nil,0x80000000,0x80000000,10161,"Cone of Cold",0x10,"[5Z:Blackrock Spire,party,0,,0,0,0,229,0,][6H:0.8,Kronos V,enUS,1.14.2,42597,da29,1788986746,120]"`,
+			expected:  "Kronos V",
+		},
+
 		// ── Blizzard combat log v9 ───────────────────────────────────
 		{
 			name:      "v9/dominant_engaged_realm",

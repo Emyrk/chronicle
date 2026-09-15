@@ -232,7 +232,7 @@ func (w *WorkerLogParse) parseCombatLog(
 			logCapabilities = append(logCapabilities, "raidgroup")
 		}
 
-	case database.LogFormatV9Cleu:
+	case database.LogFormatV9Cleu, database.LogFormatHermesproxy1142Cc:
 		logCapabilities = append(logCapabilities, "interrupt")
 		loadStart := time.Now()
 		data := preloadedFirst
@@ -248,7 +248,16 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		p, err := blizzardv9.New(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+		var p *blizzardv9.Parser
+		var err error
+		if logFormat == database.LogFormatHermesproxy1142Cc {
+			p, err = blizzardv9.NewHermesProxy(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+			if err == nil {
+				p.SetRealmClockInfo(scanCompanionHeaderClock(data))
+			}
+		} else {
+			p, err = blizzardv9.New(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("create v9 CLEU parser: %w", err)
 		}
@@ -258,6 +267,9 @@ func (w *WorkerLogParse) parseCombatLog(
 			return nil, fmt.Errorf("consume v9 CLEU log: %w", consumeErr)
 		}
 		totalLines = p.Metrics().TotalLinesParsed
+		if p.SawRaidGroup() {
+			logCapabilities = append(logCapabilities, "raidgroup")
+		}
 
 	case database.LogFormatAzerothcoreMod:
 		logCapabilities = append(logCapabilities, "interrupt", "server-side")

@@ -14,18 +14,30 @@ import (
 const advancedCombatFields = 18
 
 type transformReader struct {
-	scanner *bufio.Scanner
-	guids   *guidNormalizer
-	names   map[string]string
-	buf     bytes.Buffer
-	err     error
+	scanner              *bufio.Scanner
+	guids                *guidNormalizer
+	names                map[string]string
+	preserveTimestamp    bool
+	advancedCombatFields int
+	buf                  bytes.Buffer
+	err                  error
 }
 
 func newTransformReader(r io.Reader) *transformReader {
+	return newTransformReaderWithOptions(r, false, advancedCombatFields)
+}
+
+func newHermesProxyTransformReader(r io.Reader) *transformReader {
+	return newTransformReaderWithOptions(r, true, 16)
+}
+
+func newTransformReaderWithOptions(r io.Reader, preserveTimestamp bool, advancedFields int) *transformReader {
 	return &transformReader{
-		scanner: bufio.NewScanner(r),
-		guids:   newGUIDNormalizer(),
-		names:   make(map[string]string),
+		scanner:              bufio.NewScanner(r),
+		guids:                newGUIDNormalizer(),
+		names:                make(map[string]string),
+		preserveTimestamp:    preserveTimestamp,
+		advancedCombatFields: advancedFields,
 	}
 }
 
@@ -63,11 +75,14 @@ func (r *transformReader) transform(line string) (string, error) {
 	if idx < 0 {
 		return "", fmt.Errorf("v9 CLEU line has no separator: %q", truncate(line, 100))
 	}
-	ts, err := parseTimestamp(line[:idx])
-	if err != nil {
-		return "", err
+	prefix := line[:idx+2]
+	if !r.preserveTimestamp {
+		ts, err := parseTimestamp(line[:idx])
+		if err != nil {
+			return "", err
+		}
+		prefix = ts.UTC().Format("1/2 15:04:05.000") + "  "
 	}
-	prefix := ts.UTC().Format("1/2 15:04:05.000") + "  "
 	fields := splitTopLevel(line[idx+2:])
 	if len(fields) == 0 {
 		return "", nil
@@ -132,17 +147,54 @@ func (r *transformReader) transform(line string) (string, error) {
 		body = body[3:]
 	}
 
-	if len(body) >= advancedCombatFields && isModernGUID(body[0]) {
-		body = body[advancedCombatFields:]
+	if len(body) >= r.advancedCombatFields && isModernGUID(body[0]) {
+		body = body[r.advancedCombatFields:]
 	}
 	body, err = normalizeSuffix(event, body)
 	if err != nil {
 		return "", err
 	}
+	if event == "SPELL_CAST_FAILED" && len(body) > 0 {
+		body[len(body)-1], err = r.normalizeCompanionGUIDs(body[len(body)-1])
+		if err != nil {
+			return "", err
+		}
+	}
 
 	out := append(base, spell...)
 	out = append(out, body...)
 	return prefix + event + "," + strings.Join(out, ","), nil
+}
+
+func (r *transformReader) normalizeCompanionGUIDs(field string) (string, error) {
+	prefixes := []string{"Player-", "Creature-", "Pet-", "Vehicle-", "GameObject-", "Corpse-"}
+	var out strings.Builder
+	for pos := 0; pos < len(field); {
+		start := -1
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(field[pos:], prefix) {
+				start = pos
+				break
+			}
+		}
+		if start < 0 {
+			out.WriteByte(field[pos])
+			pos++
+			continue
+		}
+
+		end := start
+		for end < len(field) && field[end] != ';' && field[end] != ',' && field[end] != ']' && field[end] != '}' && field[end] != '"' {
+			end++
+		}
+		normalized, err := r.guids.normalize(field[start:end])
+		if err != nil {
+			return "", fmt.Errorf("normalize companion GUID: %w", err)
+		}
+		out.WriteString(normalized)
+		pos = end
+	}
+	return out.String(), nil
 }
 
 func (r *transformReader) transformAbsorbed(prefix string, args []string) (string, error) {

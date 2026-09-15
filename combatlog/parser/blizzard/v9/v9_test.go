@@ -1,17 +1,54 @@
 package v9
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
+	"github.com/Emyrk/chronicle/database/gamedb/talents"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var _ gamedb.GameDB = hermesProxyTestDB{}
+
+type hermesProxyTestDB struct{}
+
+func (hermesProxyTestDB) ResolveGear([]combatant.GearItem) {}
+func (hermesProxyTestDB) Creature(int32) (*database.WorldCreatureTemplate, bool) {
+	return nil, false
+}
+func (hermesProxyTestDB) Spell(_ context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	return &chrondbc.Spell{ID: id}, nil
+}
+func (hermesProxyTestDB) SpellsByName(context.Context, string) ([]*chrondbc.Spell, error) {
+	return nil, nil
+}
+func (hermesProxyTestDB) TalentTrees(context.Context, uuid.UUID) (*talents.TalentTreeData, error) {
+	return nil, nil
+}
+func (hermesProxyTestDB) ExtraAttackSpell(context.Context, int32) (dbcmem.ExtraAttackSpell, bool) {
+	return dbcmem.ExtraAttackSpell{}, false
+}
+func (hermesProxyTestDB) DurationModifiers(context.Context) (*chrondbc.DurationModifierSet, error) {
+	return &chrondbc.DurationModifierSet{}, nil
+}
+func (hermesProxyTestDB) PeriodicSpells(context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+	return nil, nil
+}
 
 func TestReadBaseYearPreservesInput(t *testing.T) {
 	t.Parallel()
@@ -175,6 +212,65 @@ func TestCombatantInfoLeavesUnknownLevelUnset(t *testing.T) {
 	combatant, ok := parsed[0].(*messages.Combatant)
 	require.True(t, ok)
 	require.Nil(t, combatant.Level)
+}
+
+func TestTransformHermesProxyAdvancedFields(t *testing.T) {
+	t.Parallel()
+
+	line := `9/9 22:36:06.095  SPELL_CAST_SUCCESS,Player-1-0000C4A1,"Curtuvas-",0x512,0x0,0000000000000000,nil,0x80000000,0x80000000,1787,"Stealth",0x1,Player-1-0000C4A1,0000000000000000,0,100,0,0,0,-1,0,0,0,79.10,-231.26,0,4.8183,0`
+	converted, err := newHermesProxyTransformReader(strings.NewReader(line)).transform(line)
+	require.NoError(t, err)
+	assert.Equal(t, `9/9 22:36:06.095  SPELL_CAST_SUCCESS,0x000000010000C4A1,"Curtuvas-",0x512,0x0000000000000000,nil,0x80000000,1787,"Stealth",0x1`, converted)
+}
+
+func TestTransformHermesProxyCastFailed(t *testing.T) {
+	t.Parallel()
+
+	line := `9/9 22:45:28.337  SPELL_CAST_FAILED,Player-1-00004AAF,"Brainfever-",0x511,0x0,0000000000000000,nil,0x80000000,0x80000000,23246,"Purple Skeletal Warhorse",0x1,"[1H:0.8,Kronos V,enUS,1.14.2,42597,da29,1788986746,120][2PPlayer-1-00004AAF;T1,1,230255]"`
+	converted, err := newHermesProxyTransformReader(strings.NewReader(line)).transform(line)
+	require.NoError(t, err)
+	assert.Equal(t, `9/9 22:45:28.337  SPELL_CAST_FAILED,0x0000000100004AAF,"Brainfever-",0x511,0x0000000000000000,nil,0x80000000,23246,"Purple Skeletal Warhorse",0x1,"[1H:0.8,Kronos V,enUS,1.14.2,42597,da29,1788986746,120][2P0x0000000100004AAF;T1,1,230255]"`, converted)
+}
+
+func TestHermesProxyParserDecodesCompanionHeader(t *testing.T) {
+	t.Parallel()
+
+	input := strings.Join([]string{
+		`9/9 22:45:28.337  COMBAT_LOG_VERSION,9,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.14.2,PROJECT_ID,2`,
+		`9/9 22:45:28.337  SPELL_CAST_FAILED,Player-1-00004AAF,"Brainfever-",0x511,0x0,0000000000000000,nil,0x80000000,0x80000000,23246,"Purple Skeletal Warhorse",0x1,"[1H:0.8,Kronos V,enUS,1.14.2,42597,da29,1788986746,120]"`,
+	}, "\n")
+
+	p, err := NewHermesProxy(context.Background(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil)
+	require.NoError(t, err)
+
+	var parsed []messages.Message
+	for {
+		batch, advanceErr := p.Advance(context.Background())
+		parsed = append(parsed, batch...)
+		if advanceErr == io.EOF {
+			break
+		}
+		require.NoError(t, advanceErr)
+	}
+
+	var foundRealm bool
+	for _, msg := range parsed {
+		realmMessage, ok := msg.(*messages.Realm)
+		if !ok {
+			continue
+		}
+		foundRealm = true
+		assert.Equal(t, "Kronos V", realmMessage.Info.RealmName)
+		assert.Equal(t, "1.14.2", realmMessage.Info.Version)
+		assert.Equal(t, 42597, realmMessage.Info.Build)
+	}
+	assert.True(t, foundRealm)
+
+	convertedGUID, err := newGUIDNormalizer().normalize("Player-1-00004AAF")
+	require.NoError(t, err)
+	parsedGUID, err := guid.FromString(convertedGUID)
+	require.NoError(t, err)
+	assert.Equal(t, guid.GUID(0x0000000100004AAF), parsedGUID)
 }
 
 func TestTransformEncounterBoundaries(t *testing.T) {

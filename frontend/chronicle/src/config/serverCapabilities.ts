@@ -15,7 +15,8 @@ export type LogFormat =
   | "2.4.3-cc-addon"
   | "3.3.5a-cc-addon"
   | "azerothcore-mod"
-  | "v9-cleu";
+  | "v9-cleu"
+  | "hermesproxy_1_14_2_cc";
 
 /** Selectable parse formats (admin upload/reparse overrides). */
 export const LOG_FORMAT_OPTIONS: readonly { value: LogFormat; label: string }[] = [
@@ -25,6 +26,7 @@ export const LOG_FORMAT_OPTIONS: readonly { value: LogFormat; label: string }[] 
   { value: "3.3.5a-cc-addon", label: "3.3.5a · ChronicleCompanion" },
   { value: "azerothcore-mod", label: "AzerothCore Mod" },
   { value: "v9-cleu", label: "TBC Anniversary · Blizzard Combat Log" },
+  { value: "hermesproxy_1_14_2_cc", label: "HermesProxy 1.14.2 · ChronicleCompanion" },
 ];
 
 

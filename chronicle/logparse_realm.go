@@ -133,7 +133,7 @@ func scanRealmName(logFormat database.LogFormat, data []byte) string {
 				}
 			}
 
-		case database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
+		case database.LogFormat243CcAddon, database.LogFormat335aCcAddon, database.LogFormatHermesproxy1142Cc:
 			// The TBC/WotLK companion smuggles data in SPELL_CAST_FAILED's failedType
 			// as bin-packed frames: [1Z:zone...][2H:ver,realm,...][3P...][4P...]
 			// The payload can span multiple lines when long, but the H: header
@@ -292,6 +292,10 @@ func (w *WorkerLogParse) realmRejectionMessage(ctx context.Context, db *authz.Au
 
 	if format == database.LogFormat335aCcAddon || format == database.LogFormatAzerothcoreMod {
 		r.AddonURL = "https://github.com/Emyrk/ChronicleCompanionWoTLK"
+	}
+
+	if format == database.LogFormatHermesproxy1142Cc {
+		r.AddonURL = "https://github.com/Smopraq/ChronicleCompanionJimsProxy"
 	}
 
 	if format == database.LogFormat112aCcAddon {

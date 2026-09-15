@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
@@ -63,11 +64,26 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	if err != nil {
 		return nil, err
 	}
-	inner, err := wotlk.New(ctx, logger, newTransformReader(r), wowDB, gear, reg)
+	p, err := newParser(ctx, logger, newTransformReader(r), wowDB, gear, reg)
 	if err != nil {
 		return nil, err
 	}
-	inner.SetBaseYear(year)
+	p.inner.SetBaseYear(year)
+	return p, nil
+}
+
+// NewHermesProxy creates a parser for HermesProxy 1.14.2 combat logs. Their
+// event payloads use Blizzard's v9 layout, while timestamps use the legacy
+// month/day layout and ChronicleCompanion data is relayed through cast failures.
+func NewHermesProxy(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
+	return newParser(ctx, logger, newHermesProxyTransformReader(r), wowDB, gear, reg)
+}
+
+func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
+	inner, err := wotlk.New(ctx, logger, r, wowDB, gear, reg)
+	if err != nil {
+		return nil, err
+	}
 	inner.ConfigureSynthetics(ctx, reg, wotlksynthetic.Options{
 		CreditEarthShield: true,
 		GenerateAbsorbs:   false,
@@ -89,6 +105,14 @@ func (p *Parser) Advance(ctx context.Context) ([]messages.Message, error) {
 
 func (p *Parser) Metrics() vanilla.Metrics {
 	return p.inner.Metrics()
+}
+
+func (p *Parser) SetRealmClockInfo(info *realmclock.Info) {
+	p.inner.SetRealmClockInfo(info)
+}
+
+func (p *Parser) SawRaidGroup() bool {
+	return p.inner.SawRaidGroup()
 }
 
 func (p *Parser) DetailedTimes() map[string]time.Duration {

@@ -1,10 +1,16 @@
-/** Upload instructions for 2.4.3/3.3.5a ChronicleCompanion and AzerothCore formats. */
-export function InstructionsWotlk({ tbc = false }: { tbc?: boolean }) {
-  const addonName = tbc ? "ChronicleCompanionTBC" : "ChronicleCompanionWoTLK";
-  const addonUrl = tbc
-    ? "https://github.com/Emyrk/ChronicleCompanionTBC"
-    : "https://github.com/Emyrk/ChronicleCompanionWoTLK";
-  const clientVersion = tbc ? "2.4.3" : "3.3.5a";
+/** Upload instructions for CLEU formats enriched by a ChronicleCompanion addon. */
+export function InstructionsWotlk({ tbc = false, hermesProxy = false }: { tbc?: boolean; hermesProxy?: boolean }) {
+  const addonName = hermesProxy
+    ? "ChronicleCompanionJimsProxy"
+    : tbc
+      ? "ChronicleCompanionTBC"
+      : "ChronicleCompanionWoTLK";
+  const addonUrl = hermesProxy
+    ? "https://github.com/Smopraq/ChronicleCompanionJimsProxy"
+    : tbc
+      ? "https://github.com/Emyrk/ChronicleCompanionTBC"
+      : "https://github.com/Emyrk/ChronicleCompanionWoTLK";
+  const clientVersion = hermesProxy ? "1.14.2 through HermesProxy" : tbc ? "2.4.3" : "3.3.5a";
 
   return (
     <>

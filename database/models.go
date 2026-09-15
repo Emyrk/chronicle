@@ -152,6 +152,7 @@ const (
 	LogFormatAzerothcoreMod    LogFormat = "azerothcore-mod"
 	LogFormat243CcAddon        LogFormat = "2.4.3-cc-addon"
 	LogFormatV9Cleu            LogFormat = "v9-cleu"
+	LogFormatHermesproxy1142Cc LogFormat = "hermesproxy_1_14_2_cc"
 )
 
 func (e *LogFormat) Scan(src interface{}) error {
@@ -196,7 +197,8 @@ func (e LogFormat) Valid() bool {
 		LogFormat335aCcAddon,
 		LogFormatAzerothcoreMod,
 		LogFormat243CcAddon,
-		LogFormatV9Cleu:
+		LogFormatV9Cleu,
+		LogFormatHermesproxy1142Cc:
 		return true
 	}
 	return false
@@ -210,6 +212,7 @@ func AllLogFormatValues() []LogFormat {
 		LogFormatAzerothcoreMod,
 		LogFormat243CcAddon,
 		LogFormatV9Cleu,
+		LogFormatHermesproxy1142Cc,
 	}
 }
 

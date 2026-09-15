@@ -473,8 +473,11 @@ export function UploadView({
           <div className="space-y-6 text-sm">
             {effectiveFormat === "1.12a-superwow-addon" ? (
               <InstructionsSuperwow />
-            ) : effectiveFormat === "2.4.3-cc-addon" || effectiveFormat === "3.3.5a-cc-addon" || effectiveFormat === "azerothcore-mod" ? (
-              <InstructionsWotlk tbc={effectiveFormat === "2.4.3-cc-addon"} />
+            ) : effectiveFormat === "2.4.3-cc-addon" || effectiveFormat === "3.3.5a-cc-addon" || effectiveFormat === "azerothcore-mod" || effectiveFormat === "hermesproxy_1_14_2_cc" ? (
+              <InstructionsWotlk
+                tbc={effectiveFormat === "2.4.3-cc-addon"}
+                hermesProxy={effectiveFormat === "hermesproxy_1_14_2_cc"}
+              />
             ) : (
               <InstructionsChronicleCompanion />
             )}

@@ -227,6 +227,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				msg += "; the ChronicleCompanionTBC addon is required for 2.4.3 client-side logs (https://github.com/Emyrk/ChronicleCompanionTBC)"
 			case database.LogFormat335aCcAddon:
 				msg += "; the ChronicleCompanionWoTLK addon is required for 3.3.5a client-side logs (https://github.com/Emyrk/ChronicleCompanionWoTLK)"
+			case database.LogFormatHermesproxy1142Cc:
+				msg += "; the ChronicleCompanionJimsProxy addon is required for HermesProxy 1.14.2 logs (https://github.com/Smopraq/ChronicleCompanionJimsProxy)"
 			}
 			return river.JobCancel(fmt.Errorf("%s", msg))
 		}
