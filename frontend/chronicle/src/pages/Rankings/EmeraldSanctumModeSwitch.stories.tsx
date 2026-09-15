@@ -35,11 +35,10 @@ function EmeraldSanctumRankingsMock() {
     <div className="min-h-screen bg-background p-5 text-foreground sm:p-10">
       <div className="mx-auto grid max-w-6xl gap-5 md:grid-cols-[220px_1fr]">
         <aside className="rounded-xl border bg-card/50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Encounters</p>
-          <p className="mt-2 rounded-md border border-emerald-500/15 bg-emerald-500/5 px-2 py-1.5 text-[11px] text-emerald-100/70">
-            {mode === "hard" ? "Hard Mode" : "Normal"} route selects the matching Solnius encounter.
-          </p>
-          <div className="mt-4 space-y-1.5">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Mode</p>
+          <EmeraldSanctumModeSwitch value={mode} onChange={setMode} />
+          <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Encounters</p>
+          <div className="mt-3 space-y-1.5">
             {ENCOUNTERS.map((encounter) => {
               const selected = selectedEncounters.has(encounter)
               return (
@@ -73,10 +72,9 @@ function EmeraldSanctumRankingsMock() {
                 <p className="text-xs text-muted-foreground">Back to Rankings</p>
                 <h1 className="mt-2 text-2xl font-bold">Emerald Sanctum</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Combined DPS across the selected two-encounter route.
+                  DPS across the selected Normal or Hard Mode route.
                 </p>
               </div>
-              <EmeraldSanctumModeSwitch value={mode} onChange={setMode} />
             </div>
           </section>
 
@@ -85,7 +83,7 @@ function EmeraldSanctumRankingsMock() {
               <div>
                 <p className="text-sm font-semibold">DPS Rankings</p>
                 <p className="text-xs text-muted-foreground">
-                  Erennius + {mode === "hard" ? "Solnius (Hard Mode)" : "Solnius"}
+                  {mode === "hard" ? "Solnius (Hard Mode)" : "Erennius + Solnius"}
                 </p>
               </div>
               <BarChart3 className="h-5 w-5 text-emerald-400" />

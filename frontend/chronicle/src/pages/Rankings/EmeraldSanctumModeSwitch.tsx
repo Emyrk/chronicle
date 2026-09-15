@@ -24,7 +24,7 @@ export function EmeraldSanctumModeSwitch({
   return (
     <div
       className={cn(
-        "flex h-8 w-full items-center gap-0.5 rounded-md border border-border/70 bg-background/55 p-0.5 backdrop-blur-sm sm:h-7 sm:w-auto",
+        "inline-flex h-7 w-fit items-center gap-0.5 rounded-md border border-border/70 bg-background/55 p-0.5 backdrop-blur-sm",
         className,
       )}
       role="group"
@@ -47,7 +47,7 @@ export function EmeraldSanctumModeSwitch({
             )}
             aria-pressed={selected}
             onClick={() => onChange(option.value)}
-            title={option.value === "hard" ? "Erennius and Solnius (Hard Mode)" : "Erennius and Solnius"}
+            title={option.value === "hard" ? "Solnius (Hard Mode)" : "Erennius and Solnius"}
           >
             <Icon className="h-3 w-3" />
             {option.label}

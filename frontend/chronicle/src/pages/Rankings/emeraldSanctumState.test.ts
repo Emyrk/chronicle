@@ -26,18 +26,15 @@ describe("Emerald Sanctum ranking mode", () => {
     ])
   })
 
-  it("maps Hard Mode to the hard two-encounter route", () => {
+  it("maps Hard Mode to the combined hard-mode encounter", () => {
     expect([...getEmeraldSanctumEncounterNames("hard", AVAILABLE_ENCOUNTERS)]).toEqual([
-      "Erennius",
       "Solnius (Hard Mode)",
     ])
   })
 
   it("never selects unavailable encounters or all three boss variants", () => {
-    expect([...getEmeraldSanctumEncounterNames("hard", ["Erennius", "Solnius"])]).toEqual([
-      "Erennius",
-    ])
+    expect([...getEmeraldSanctumEncounterNames("hard", ["Erennius", "Solnius"])]).toEqual([])
     expect(getEmeraldSanctumEncounterNames("normal", AVAILABLE_ENCOUNTERS).size).toBe(2)
-    expect(getEmeraldSanctumEncounterNames("hard", AVAILABLE_ENCOUNTERS).size).toBe(2)
+    expect(getEmeraldSanctumEncounterNames("hard", AVAILABLE_ENCOUNTERS).size).toBe(1)
   })
 })

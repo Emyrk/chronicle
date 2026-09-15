@@ -109,7 +109,11 @@ func TestEmeraldSanctumRankingsWithoutSpeedrun(t *testing.T) {
 	rules := EmeraldSanctumFactory.FlavoredRankings(flavor)
 	require.NotNil(t, rules)
 	require.Nil(t, rules.Speedrun)
-	require.Equal(t, []string{"Erennius", "Solnius"}, EmeraldSanctumFactory.ProgressionBosses(flavor))
+	require.Equal(t, []string{
+		"Erennius",
+		"Solnius",
+		"Solnius (Hard Mode)",
+	}, EmeraldSanctumFactory.ProgressionBosses(flavor))
 }
 
 func TestVanillaRaidLevel60Caps(t *testing.T) {

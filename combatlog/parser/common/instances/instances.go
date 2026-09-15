@@ -231,7 +231,7 @@ var (
 		ZoneNames: []string{"emerald sanctum", "翡翠圣殿"},
 		Hostiles:  FromMap(EmeraldSanctumHostiles()),
 		ProgressionBosses: func(database.WoWFlavor) []string {
-			return []string{"Erennius", "Solnius"}
+			return []string{"Erennius", "Solnius", "Solnius (Hard Mode)"}
 		},
 		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{}

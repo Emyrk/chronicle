@@ -1,22 +1,32 @@
+import { useEffect } from "react"
 import { useSearchParams, Navigate } from "react-router-dom"
 import { RankingsLanding } from "../Rankings/RankingsLanding"
 import { InstanceView } from "../Rankings/InstanceView"
 import { SpeedrunLeaderboard } from "../Leaderboard/SpeedrunLeaderboard"
 import { Swords, Timer } from "lucide-react"
-
-type Tab = "dps" | "speedrun"
-
-function isTab(v: string | null): v is Tab {
-  return v === "dps" || v === "speedrun"
-}
+import {
+  resolveLeaderboardsTab,
+  supportsSpeedruns,
+  type LeaderboardsTab,
+} from "./leaderboardsState"
 
 export function LeaderboardsPage() {
   const [params, setParams] = useSearchParams()
   const instance = params.get("instance")
   const rawTab = params.get("tab")
-  const tab: Tab = isTab(rawTab) ? rawTab : "dps"
+  const speedrunsVisible = supportsSpeedruns(instance)
+  const tab = resolveLeaderboardsTab(rawTab, instance)
 
-  const setTab = (t: Tab) => {
+  useEffect(() => {
+    if (rawTab !== "speedrun" || speedrunsVisible) return
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete("tab")
+      return next
+    }, { replace: true })
+  }, [rawTab, setParams, speedrunsVisible])
+
+  const setTab = (t: LeaderboardsTab) => {
     setParams((prev) => {
       const next = new URLSearchParams(prev)
       if (t === "dps") {
@@ -42,12 +52,14 @@ export function LeaderboardsPage() {
                 icon={<Swords className="h-4 w-4" />}
                 label="Statistics"
               />
-              <TabButton
-                active={tab === "speedrun"}
-                onClick={() => setTab("speedrun")}
-                icon={<Timer className="h-4 w-4" />}
-                label="Speedruns"
-              />
+              {speedrunsVisible && (
+                <TabButton
+                  active={tab === "speedrun"}
+                  onClick={() => setTab("speedrun")}
+                  icon={<Timer className="h-4 w-4" />}
+                  label="Speedruns"
+                />
+              )}
             </div>
           </div>
         </div>

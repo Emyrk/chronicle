@@ -4,7 +4,7 @@ export type EmeraldSanctumMode = "normal" | "hard"
 
 const EMERALD_SANCTUM_ENCOUNTERS: Record<EmeraldSanctumMode, readonly string[]> = {
   normal: ["Erennius", "Solnius"],
-  hard: ["Erennius", "Solnius (Hard Mode)"],
+  hard: ["Solnius (Hard Mode)"],
 }
 
 export function parseEmeraldSanctumMode(value: string | null): EmeraldSanctumMode {

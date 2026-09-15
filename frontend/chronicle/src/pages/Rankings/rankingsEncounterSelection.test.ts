@@ -46,6 +46,21 @@ describe("defaultRankingBossNames", () => {
   });
 });
 
+describe("Emerald Sanctum progression", () => {
+  it("treats Erennius and both Solnius variants as progression bosses", () => {
+    const encounterNames = ["Erennius", "Solnius", "Solnius (Hard Mode)"];
+    const progressionBosses = new Set(encounterNames);
+
+    expect(rankingEncounterSections(encounterNames, progressionBosses)).toEqual([
+      {
+        label: "Bosses",
+        kind: "boss",
+        names: encounterNames,
+      },
+    ]);
+  });
+});
+
 describe("rankingEncounterSections", () => {
   it("places optional bosses between progression bosses and trash", () => {
     const encounterNames = ["Flame Leviathan", "Elder Brightleaf", "Freya", "Trash"];

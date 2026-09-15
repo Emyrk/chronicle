@@ -125,11 +125,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [encounterNames],
   )
   const encounterSections = useMemo(
-    () => rankingEncounterSections(
-      encounterNames,
-      isEmeraldSanctum ? bossNames : progressionBossNames,
-    ),
-    [bossNames, encounterNames, isEmeraldSanctum, progressionBossNames],
+    () => rankingEncounterSections(encounterNames, progressionBossNames),
+    [encounterNames, progressionBossNames],
   )
 
   // ── URL state ────────────────────────────────────────────────────────
@@ -687,6 +684,18 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   const sidebarContent = (
     <>
+      {isEmeraldSanctum && (
+        <div className="mb-4">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            Mode
+          </p>
+          <EmeraldSanctumModeSwitch
+            value={emeraldSanctumMode}
+            onChange={handleEmeraldSanctumModeChange}
+          />
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Encounters
@@ -705,11 +714,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       </div>
 
       {/* Quick-select buttons */}
-      {isEmeraldSanctum ? (
-        <p className="mt-1.5 rounded-md border border-emerald-500/15 bg-emerald-500/5 px-2 py-1.5 text-[11px] leading-relaxed text-emerald-100/70">
-          {emeraldSanctumMode === "hard" ? "Hard Mode" : "Normal"} route selects the matching Solnius encounter.
-        </p>
-      ) : (
+      {!isEmeraldSanctum && (
         <div className="flex gap-1 mt-1.5">
           <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("all")} title="Select all encounters">All</Button>
           <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("progression")} title="Select progression bosses">Progression</Button>
@@ -884,13 +889,6 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                       </DropdownMenuRadioGroup>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                )}
-
-                {isPlayerMetric && isEmeraldSanctum && (
-                  <EmeraldSanctumModeSwitch
-                    value={emeraldSanctumMode}
-                    onChange={handleEmeraldSanctumModeChange}
-                  />
                 )}
 
                 {availableDifficulties.length > 1 && (
