@@ -18,25 +18,27 @@ type transformReader struct {
 	guids                *guidNormalizer
 	names                map[string]string
 	preserveTimestamp    bool
+	trimPlayerNameSuffix bool
 	advancedCombatFields int
 	buf                  bytes.Buffer
 	err                  error
 }
 
 func newTransformReader(r io.Reader) *transformReader {
-	return newTransformReaderWithOptions(r, false, advancedCombatFields)
+	return newTransformReaderWithOptions(r, false, false, advancedCombatFields)
 }
 
 func newHermesProxyTransformReader(r io.Reader) *transformReader {
-	return newTransformReaderWithOptions(r, true, 16)
+	return newTransformReaderWithOptions(r, true, true, 16)
 }
 
-func newTransformReaderWithOptions(r io.Reader, preserveTimestamp bool, advancedFields int) *transformReader {
+func newTransformReaderWithOptions(r io.Reader, preserveTimestamp, trimPlayerNameSuffix bool, advancedFields int) *transformReader {
 	return &transformReader{
 		scanner:              bufio.NewScanner(r),
 		guids:                newGUIDNormalizer(),
 		names:                make(map[string]string),
 		preserveTimestamp:    preserveTimestamp,
+		trimPlayerNameSuffix: trimPlayerNameSuffix,
 		advancedCombatFields: advancedFields,
 	}
 }
@@ -120,11 +122,13 @@ func (r *transformReader) transform(line string) (string, error) {
 	}
 
 	base := make([]string, 0, 6)
-	if strings.HasPrefix(args[0], "Player-") && args[1] != "nil" {
-		r.names[args[0]] = strings.Trim(args[1], "\"")
+	sourceName := r.normalizeUnitName(args[0], args[1])
+	destName := r.normalizeUnitName(args[4], args[5])
+	if strings.HasPrefix(args[0], "Player-") && sourceName != "nil" {
+		r.names[args[0]] = strings.Trim(sourceName, "\"")
 	}
-	if strings.HasPrefix(args[4], "Player-") && args[5] != "nil" {
-		r.names[args[4]] = strings.Trim(args[5], "\"")
+	if strings.HasPrefix(args[4], "Player-") && destName != "nil" {
+		r.names[args[4]] = strings.Trim(destName, "\"")
 	}
 	source, err := r.guids.normalize(args[0])
 	if err != nil {
@@ -134,7 +138,7 @@ func (r *transformReader) transform(line string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	base = append(base, source, args[1], args[2], dest, args[5], args[6])
+	base = append(base, source, sourceName, args[2], dest, destName, args[6])
 
 	body := args[8:]
 	spellPrefix := eventHasSpellPrefix(event)
@@ -164,6 +168,17 @@ func (r *transformReader) transform(line string) (string, error) {
 	out := append(base, spell...)
 	out = append(out, body...)
 	return prefix + event + "," + strings.Join(out, ","), nil
+}
+
+func (r *transformReader) normalizeUnitName(rawGUID, quotedName string) string {
+	if !r.trimPlayerNameSuffix || !strings.HasPrefix(rawGUID, "Player-") || quotedName == "nil" {
+		return quotedName
+	}
+	name, err := strconv.Unquote(quotedName)
+	if err != nil {
+		return quotedName
+	}
+	return strconv.Quote(strings.TrimSuffix(name, "-"))
 }
 
 func (r *transformReader) normalizeCompanionGUIDs(field string) (string, error) {

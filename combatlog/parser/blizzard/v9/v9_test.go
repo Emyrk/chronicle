@@ -214,13 +214,32 @@ func TestCombatantInfoLeavesUnknownLevelUnset(t *testing.T) {
 	require.Nil(t, combatant.Level)
 }
 
+func TestTransformHermesProxyTrimsPlayerNameSuffixes(t *testing.T) {
+	t.Parallel()
+
+	line := `9/9 22:35:51.725  PARTY_KILL,Player-1-0000C4A1,"Curtuvas-",0x512,0x0,Player-1-00006F26,"Jeb-",0x528,0x0`
+	converted, err := newHermesProxyTransformReader(strings.NewReader(line)).transform(line)
+	require.NoError(t, err)
+	assert.Equal(t, `9/9 22:35:51.725  PARTY_KILL,0x000000010000C4A1,"Curtuvas",0x512,0x0000000100006F26,"Jeb",0x528`, converted)
+}
+
+func TestTransformV9PreservesPlayerRealmSuffix(t *testing.T) {
+	t.Parallel()
+
+	line := `9/3/2026 18:57:03.000-6  PARTY_KILL,Player-6065-049DF19A,"Toptier-Nightslayer-US",0x514,0x0,Player-6065-03CAC527,"Rewben-Nightslayer-US",0x511,0x0`
+	converted, err := newTransformReader(strings.NewReader(line)).transform(line)
+	require.NoError(t, err)
+	assert.Contains(t, converted, `"Toptier-Nightslayer-US"`)
+	assert.Contains(t, converted, `"Rewben-Nightslayer-US"`)
+}
+
 func TestTransformHermesProxyAdvancedFields(t *testing.T) {
 	t.Parallel()
 
 	line := `9/9 22:36:06.095  SPELL_CAST_SUCCESS,Player-1-0000C4A1,"Curtuvas-",0x512,0x0,0000000000000000,nil,0x80000000,0x80000000,1787,"Stealth",0x1,Player-1-0000C4A1,0000000000000000,0,100,0,0,0,-1,0,0,0,79.10,-231.26,0,4.8183,0`
 	converted, err := newHermesProxyTransformReader(strings.NewReader(line)).transform(line)
 	require.NoError(t, err)
-	assert.Equal(t, `9/9 22:36:06.095  SPELL_CAST_SUCCESS,0x000000010000C4A1,"Curtuvas-",0x512,0x0000000000000000,nil,0x80000000,1787,"Stealth",0x1`, converted)
+	assert.Equal(t, `9/9 22:36:06.095  SPELL_CAST_SUCCESS,0x000000010000C4A1,"Curtuvas",0x512,0x0000000000000000,nil,0x80000000,1787,"Stealth",0x1`, converted)
 }
 
 func TestTransformHermesProxyCastFailed(t *testing.T) {
@@ -229,7 +248,7 @@ func TestTransformHermesProxyCastFailed(t *testing.T) {
 	line := `9/9 22:45:28.337  SPELL_CAST_FAILED,Player-1-00004AAF,"Brainfever-",0x511,0x0,0000000000000000,nil,0x80000000,0x80000000,23246,"Purple Skeletal Warhorse",0x1,"[1H:0.8,Kronos V,enUS,1.14.2,42597,da29,1788986746,120][2PPlayer-1-00004AAF;T1,1,230255]"`
 	converted, err := newHermesProxyTransformReader(strings.NewReader(line)).transform(line)
 	require.NoError(t, err)
-	assert.Equal(t, `9/9 22:45:28.337  SPELL_CAST_FAILED,0x0000000100004AAF,"Brainfever-",0x511,0x0000000000000000,nil,0x80000000,23246,"Purple Skeletal Warhorse",0x1,"[1H:0.8,Kronos V,enUS,1.14.2,42597,da29,1788986746,120][2P0x0000000100004AAF;T1,1,230255]"`, converted)
+	assert.Equal(t, `9/9 22:45:28.337  SPELL_CAST_FAILED,0x0000000100004AAF,"Brainfever",0x511,0x0000000000000000,nil,0x80000000,23246,"Purple Skeletal Warhorse",0x1,"[1H:0.8,Kronos V,enUS,1.14.2,42597,da29,1788986746,120][2P0x0000000100004AAF;T1,1,230255]"`, converted)
 }
 
 func TestHermesProxyParserDecodesCompanionHeader(t *testing.T) {
