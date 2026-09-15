@@ -189,6 +189,7 @@ export function stepResultToEvents(
       amount: 1,
       application: 1, // Gains (deprecated but included)
       state: 1, // AuraState.Added
+      transition: 1, // AuraTransition.Applied
       isBuff: false,
     };
     events.push({ type: "aura", event: auraEvent, streamType: "aura" });
@@ -207,6 +208,7 @@ export function stepResultToEvents(
       amount: 0,
       application: 2, // Fades (deprecated)
       state: 2, // AuraState.Removed
+      transition: 4, // AuraTransition.Removed
       isBuff: false,
     };
     events.push({ type: "aura", event: auraEvent, streamType: "aura" });

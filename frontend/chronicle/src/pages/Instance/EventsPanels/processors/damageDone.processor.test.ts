@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createDamageDoneProcessor } from '../DamageDone/damageDone.processor';
 import { resolveSelectedVulnerability } from '../VulnerabilityEffect/vulnerabilityConfig';
 import type { VulnerabilitySpell } from '../VulnerabilityEffect/useVulnerabilitySpells';
-import { AuraApplication, AuraState, type AuraProcessorEvent, type DamageProcessorEvent, type ProcessorContext, type SlainProcessorEvent } from '../processorTypes';
+import { AuraApplication, AuraState, AuraTransition, type AuraProcessorEvent, type DamageProcessorEvent, type ProcessorContext, type SlainProcessorEvent } from '../processorTypes';
 import { HitTypeFullAbsorb, HitTypeHit, HitTypePartialAbsorb } from '@/lib/hittype/hittype';
 
 // Vulnerability effects are derived per-dataset from the spell lookup at runtime;
@@ -79,6 +79,7 @@ describe('damageDoneProcessor', () => {
       amount: 1,
       application: AuraApplication.Gains,
       state: AuraState.Added,
+      transition: AuraTransition.Applied,
       isBuff: false,
       activity: [],
       activityCount: 0,
@@ -349,6 +350,7 @@ describe('vulnerabilityEffectProcessor', () => {
       amount: 1,
       application: AuraApplication.Gains,
       state: AuraState.Added,
+      transition: AuraTransition.Applied,
       isBuff: false,
       activity: [],
       activityCount: 0,

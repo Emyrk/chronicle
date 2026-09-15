@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import { AuraApplication, AuraState, type AuraProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent } from "../processorTypes";
+import { AuraApplication, AuraState, AuraTransition, type AuraProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -186,6 +186,7 @@ describe("allActivityProcessor", () => {
       amount: 1,
       application: AuraApplication.Gains,
       state: AuraState.Added,
+      transition: AuraTransition.Applied,
       isBuff: true,
       activity: [],
       activityCount: 0,

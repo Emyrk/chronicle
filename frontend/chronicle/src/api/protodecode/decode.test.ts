@@ -1,5 +1,5 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { AuraSchema, CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { AuraSchema, AuraTransition, CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
 import { AuraDecoder, FastCombatantInfoCursor, FastConsumeCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
@@ -257,7 +257,7 @@ describe('FastConsumeCursor', () => {
 });
 
 describe('AuraDecoder', () => {
-  it('decodes aura caster, buff state, and synthetic metadata', () => {
+  it('decodes aura caster, transition, buff state, and synthetic metadata', () => {
     const decoder = new AuraDecoder();
     const aura = create(AuraSchema, {
       meta: create(EventMetaSchema, { isSynthetic: true }),
@@ -266,6 +266,7 @@ describe('AuraDecoder', () => {
       spellName: 'Power Word: Shield',
       currentAmount: 1,
       isBuff: true,
+      transition: AuraTransition.TransitionRefreshed,
     });
     const encoded = toBinary(AuraSchema, aura);
 
@@ -274,16 +275,18 @@ describe('AuraDecoder', () => {
       caster: '0xCASTER',
       spellName: 'Power Word: Shield',
       amount: 1,
+      transition: AuraTransition.TransitionRefreshed,
       isBuff: true,
       isSynthetic: true,
     });
   });
 
-  it('resets optional caster, buff state, and synthetic metadata', () => {
+  it('resets optional caster, transition, buff state, and synthetic metadata', () => {
     const decoder = new AuraDecoder();
     const populated = toBinary(AuraSchema, create(AuraSchema, {
       meta: create(EventMetaSchema, { isSynthetic: true }),
       caster: '0xCASTER',
+      transition: AuraTransition.TransitionRefreshed,
       isBuff: true,
     }));
     decoder.decode(populated, 0, populated.length);
@@ -291,6 +294,7 @@ describe('AuraDecoder', () => {
     const emptyAura = new Uint8Array([]);
     expect(decoder.decode(emptyAura, 0, emptyAura.length)).toMatchObject({
       caster: null,
+      transition: AuraTransition.TransitionUnknown,
       isBuff: false,
       isSynthetic: false,
     });

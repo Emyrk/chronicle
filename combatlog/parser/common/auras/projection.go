@@ -190,6 +190,7 @@ func (p *Projection) emitProjection(firstReal messages.Message) {
 				SpellName:   aura.SpellName,
 				SpellData:   aura.Spell,
 				Amount:      aura.Stacks,
+				Transition:  messages.AuraTransitionApplied,
 				State:       types.AuraStateAdded,
 			})
 
@@ -260,6 +261,7 @@ func (p *Projection) emitSyntheticExpiries(m messages.Message) {
 			SpellName:   pa.SpellName,
 			SpellData:   pa.Spell,
 			Amount:      0,
+			Transition:  messages.AuraTransitionRemoved,
 			State:       types.AuraStateRemoved,
 		})
 		delete(p.projectedAuras, key)

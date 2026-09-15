@@ -281,7 +281,7 @@ func TestTracking_PreservesCasterAcrossProjection(t *testing.T) {
 	assert.True(t, projected[0].IsSynthetic())
 }
 
-func TestTracking_UpdatesCasterOnlyWhenKnown(t *testing.T) {
+func TestTracking_UpdatesCasterByTransition(t *testing.T) {
 	t.Parallel()
 
 	tr := auras.New(nil)
@@ -290,14 +290,22 @@ func TestTracking_UpdatesCasterOnlyWhenKnown(t *testing.T) {
 	msg.Source = &originalCaster
 	tr.Process(msg)
 
-	unknownRefresh := makeAuraMsg(t0.Add(time.Second), testUnit, testSpell, types.AuraStateAdded, 1, false)
-	tr.Process(unknownRefresh)
+	stackChange := makeAuraMsg(t0.Add(time.Second), testUnit, testSpell, types.AuraStateModified, 2, false)
+	stackChange.Transition = messages.AuraTransitionStackChanged
+	tr.Process(stackChange)
 	state := tr.ActiveAuras(testUnit)[testSpell.ID]
 	require.NotNil(t, state.Source)
 	assert.Equal(t, originalCaster, *state.Source)
 
+	unknownRefresh := makeAuraMsg(t0.Add(2*time.Second), testUnit, testSpell, types.AuraStateModified, 2, false)
+	unknownRefresh.Transition = messages.AuraTransitionRefreshed
+	tr.Process(unknownRefresh)
+	state = tr.ActiveAuras(testUnit)[testSpell.ID]
+	assert.Nil(t, state.Source)
+
 	newCaster := guid.GUID(20)
-	knownRefresh := makeAuraMsg(t0.Add(2*time.Second), testUnit, testSpell, types.AuraStateAdded, 1, false)
+	knownRefresh := makeAuraMsg(t0.Add(3*time.Second), testUnit, testSpell, types.AuraStateModified, 2, false)
+	knownRefresh.Transition = messages.AuraTransitionRefreshed
 	knownRefresh.Source = &newCaster
 	tr.Process(knownRefresh)
 	state = tr.ActiveAuras(testUnit)[testSpell.ID]

@@ -1,5 +1,5 @@
 import type { AuraProcessorEvent, ProcessorEvent, SlainProcessorEvent } from "../processorTypes";
-import { AuraState } from "../processorTypes";
+import { AuraState, AuraTransition } from "../processorTypes";
 
 /**
  * Aura reference for lookup operations.
@@ -129,6 +129,17 @@ function removeMatchingAuras(
   }
 }
 
+function effectiveAuraTransition(event: AuraProcessorEvent): AuraTransition {
+  if (event.transition !== AuraTransition.Unknown) {
+    return event.transition;
+  }
+
+  // Match the backend fallback for parsers without explicit transition metadata.
+  return event.state === AuraState.Modified
+    ? AuraTransition.StackChanged
+    : AuraTransition.Refreshed;
+}
+
 function applyAuraStateEvent(
   state: AuraProcessorState,
   encounterID: string,
@@ -155,12 +166,18 @@ function applyAuraStateEvent(
   }
 
   const stacks = event.amount;
-
+  const transition = effectiveAuraTransition(event);
   const previous = targetAuras.get(key);
+  const caster = event.caster ?? (
+    transition === AuraTransition.StackChanged
+      ? previous?.caster ?? null
+      : null
+  );
+
   targetAuras.set(key, {
     spellId: event.spellId,
     normalizedSpellName,
-    caster: event.caster ?? previous?.caster ?? null,
+    caster,
     isBuff: event.isBuff,
     stacks,
   });

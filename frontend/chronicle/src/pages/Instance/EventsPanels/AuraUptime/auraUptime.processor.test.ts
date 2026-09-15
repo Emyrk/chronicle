@@ -3,6 +3,7 @@ import { auraUptimeProcessor } from "./auraUptime.processor";
 import {
   AuraApplication,
   AuraState,
+  AuraTransition,
   type AuraProcessorEvent,
   type ProcessorContext,
 } from "../processorTypes";
@@ -36,6 +37,7 @@ function createAuraEvent(overrides: Partial<AuraProcessorEvent> = {}): AuraProce
     amount: 1,
     application: AuraApplication.Gains,
     state: AuraState.Added,
+    transition: AuraTransition.Applied,
     isBuff: false,
     activity: [],
     activityCount: 0,

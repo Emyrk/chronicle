@@ -152,26 +152,21 @@ func (t *Tracking) applyAura(msg *messages.Aura) {
 		return
 	}
 
+	transition := effectiveAuraTransition(msg)
+
 	state.Buff = msg.IsBuff
 	if msg.Source != nil {
 		state.Source = cloneGUID(msg.Source)
+	} else if transition != messages.AuraTransitionStackChanged {
+		// Only stack-only changes are guaranteed to belong to the existing aura.
+		// A source-less refresh or reapplication may have come from another caster.
+		state.Source = nil
 	}
 	state.Stacks = msg.Amount
 	state.LastUpdatedAt = msg.Date()
 	state.SpellID = msg.SpellData.ID
 	state.SpellName = msg.SpellName
 	state.Spell = msg.SpellData
-
-	transition := msg.Transition
-	if transition == messages.AuraTransitionUnknown {
-		// Backward-compatible fallback for parsers without explicit transition
-		// metadata, such as the 1.12a CC addon parser.
-		if msg.State == types.AuraStateModified {
-			transition = messages.AuraTransitionStackChanged
-		} else {
-			transition = messages.AuraTransitionRefreshed
-		}
-	}
 
 	if transition == messages.AuraTransitionStackChanged {
 		t.notify(Notification{
@@ -198,6 +193,19 @@ func (t *Tracking) applyAura(msg *messages.Aura) {
 		Stacks:    msg.Amount,
 		Timestamp: msg.Date(),
 	})
+}
+
+func effectiveAuraTransition(msg *messages.Aura) messages.AuraTransition {
+	if msg.Transition != messages.AuraTransitionUnknown {
+		return msg.Transition
+	}
+
+	// Backward-compatible fallback for parsers without explicit transition
+	// metadata, such as the 1.12a CC addon parser.
+	if msg.State == types.AuraStateModified {
+		return messages.AuraTransitionStackChanged
+	}
+	return messages.AuraTransitionRefreshed
 }
 
 func cloneGUID(source *guid.GUID) *guid.GUID {
@@ -331,6 +339,7 @@ func (t *Tracking) ProjectAllAuras(ts time.Time) []*messages.Aura {
 				SpellName:   aura.SpellName,
 				SpellData:   aura.Spell,
 				Amount:      aura.Stacks,
+				Transition:  messages.AuraTransitionApplied,
 				State:       types.AuraStateAdded,
 			})
 		}

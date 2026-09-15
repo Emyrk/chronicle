@@ -181,11 +181,13 @@ func TestAuraPreservesCaster(t *testing.T) {
 		SpellData:   &chrondbc.Spell{ID: 17},
 		SpellName:   "Power Word: Shield",
 		Amount:      1,
+		Transition:  messages.AuraTransitionRefreshed,
 		State:       types.AuraStateAdded,
 		IsBuff:      true,
 	})
 
 	require.Equal(t, caster.String(), got.GetCaster())
+	require.Equal(t, chronicleproto.AuraTransition_TransitionRefreshed, got.Transition)
 	require.True(t, got.IsBuff)
 	require.True(t, got.Meta.IsSynthetic)
 	require.Equal(t, int32(4), got.Meta.Index)
