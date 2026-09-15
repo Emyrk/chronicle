@@ -260,9 +260,9 @@ func TestHermesProxyParserDecodesCompanionHeader(t *testing.T) {
 			continue
 		}
 		foundRealm = true
-		assert.Equal(t, "Kronos V", realmMessage.Info.RealmName)
-		assert.Equal(t, "1.14.2", realmMessage.Info.Version)
-		assert.Equal(t, 42597, realmMessage.Info.Build)
+		assert.Equal(t, "Kronos V", realmMessage.RealmName)
+		assert.Equal(t, "1.14.2", realmMessage.Version)
+		assert.Equal(t, 42597, realmMessage.Build)
 	}
 	assert.True(t, foundRealm)
 
