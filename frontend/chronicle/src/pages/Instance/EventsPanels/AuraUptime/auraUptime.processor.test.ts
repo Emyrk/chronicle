@@ -3,6 +3,7 @@ import { auraUptimeProcessor } from "./auraUptime.processor";
 import {
   AuraApplication,
   AuraState,
+  AuraTransition,
   type AuraProcessorEvent,
   type ProcessorContext,
 } from "../processorTypes";
@@ -30,11 +31,14 @@ function createAuraEvent(overrides: Partial<AuraProcessorEvent> = {}): AuraProce
     index: 0,
     offsetMilli: 0,
     target: TARGET_GUID,
+    caster: null,
     spellName: "Fireball!",
     spellId: 11198,
     amount: 1,
     application: AuraApplication.Gains,
     state: AuraState.Added,
+    transition: AuraTransition.Applied,
+    isBuff: false,
     activity: [],
     activityCount: 0,
     isSynthetic: false,

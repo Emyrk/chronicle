@@ -51,6 +51,7 @@ type Observer func(Notification)
 // AuraState holds the current stack count for an aura.
 type AuraState struct {
 	Buff          bool
+	Source        *guid.GUID
 	Stacks        int32
 	AppliedAt     time.Time
 	LastUpdatedAt time.Time
@@ -131,6 +132,7 @@ func (t *Tracking) applyAura(msg *messages.Aura) {
 		state = &AuraState{}
 		t.units[msg.Target][msg.SpellData.ID] = state
 		state.Buff = msg.IsBuff
+		state.Source = cloneGUID(msg.Source)
 		state.Stacks = msg.Amount
 		state.AppliedAt = msg.Date()
 		state.LastUpdatedAt = msg.Date()
@@ -150,23 +152,21 @@ func (t *Tracking) applyAura(msg *messages.Aura) {
 		return
 	}
 
+	transition := effectiveAuraTransition(msg)
+
 	state.Buff = msg.IsBuff
+	if msg.Source != nil {
+		state.Source = cloneGUID(msg.Source)
+	} else if transition != messages.AuraTransitionStackChanged {
+		// Only stack-only changes are guaranteed to belong to the existing aura.
+		// A source-less refresh or reapplication may have come from another caster.
+		state.Source = nil
+	}
 	state.Stacks = msg.Amount
 	state.LastUpdatedAt = msg.Date()
 	state.SpellID = msg.SpellData.ID
 	state.SpellName = msg.SpellName
 	state.Spell = msg.SpellData
-
-	transition := msg.Transition
-	if transition == messages.AuraTransitionUnknown {
-		// Backward-compatible fallback for parsers without explicit transition
-		// metadata, such as the 1.12a CC addon parser.
-		if msg.State == types.AuraStateModified {
-			transition = messages.AuraTransitionStackChanged
-		} else {
-			transition = messages.AuraTransitionRefreshed
-		}
-	}
 
 	if transition == messages.AuraTransitionStackChanged {
 		t.notify(Notification{
@@ -193,6 +193,27 @@ func (t *Tracking) applyAura(msg *messages.Aura) {
 		Stacks:    msg.Amount,
 		Timestamp: msg.Date(),
 	})
+}
+
+func effectiveAuraTransition(msg *messages.Aura) messages.AuraTransition {
+	if msg.Transition != messages.AuraTransitionUnknown {
+		return msg.Transition
+	}
+
+	// Backward-compatible fallback for parsers without explicit transition
+	// metadata, such as the 1.12a CC addon parser.
+	if msg.State == types.AuraStateModified {
+		return messages.AuraTransitionStackChanged
+	}
+	return messages.AuraTransitionRefreshed
+}
+
+func cloneGUID(source *guid.GUID) *guid.GUID {
+	if source == nil {
+		return nil
+	}
+	cloned := *source
+	return &cloned
 }
 
 func maximumExpiry(appliedAt time.Time, spell *chrondbc.Spell, mods *chrondbc.DurationModifierSet) time.Time {
@@ -293,6 +314,7 @@ func (t *Tracking) SnapshotAll() map[guid.GUID]map[chrondbc.SpellID]*AuraState {
 		snap := make(map[chrondbc.SpellID]*AuraState, len(spells))
 		for id, state := range spells {
 			copy := *state
+			copy.Source = cloneGUID(state.Source)
 			snap[id] = &copy
 		}
 		result[unit] = snap
@@ -312,10 +334,12 @@ func (t *Tracking) ProjectAllAuras(ts time.Time) []*messages.Aura {
 			out = append(out, &messages.Aura{
 				MessageBase: messages.Base(ts, messages.WithSynthetic()),
 				IsBuff:      aura.Buff,
+				Source:      cloneGUID(aura.Source),
 				Target:      unitGUID,
 				SpellName:   aura.SpellName,
 				SpellData:   aura.Spell,
 				Amount:      aura.Stacks,
+				Transition:  messages.AuraTransitionApplied,
 				State:       types.AuraStateAdded,
 			})
 		}
@@ -353,6 +377,7 @@ func (t *Tracking) ActiveAuras(unit guid.GUID) map[chrondbc.SpellID]*AuraState {
 	result := make(map[chrondbc.SpellID]*AuraState, len(spells))
 	for id, state := range spells {
 		copy := *state
+		copy.Source = cloneGUID(state.Source)
 		result[id] = &copy
 	}
 	return result

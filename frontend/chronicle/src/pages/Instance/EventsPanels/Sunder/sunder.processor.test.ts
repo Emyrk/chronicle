@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AuraApplication,
   AuraState,
+  AuraTransition,
   type AuraCastProcessorEvent,
   type AuraProcessorEvent,
   type ProcessorContext,
@@ -66,12 +67,15 @@ function createAuraEvent(
     activityCount: 0,
     isSynthetic: false,
     target: TARGET_GUID,
+    caster: null,
     spellName: "",
     spellId,
     spellAttackOutcome: null,
     amount: 1,
     application: AuraApplication.Gains,
     state: AuraState.Added,
+    transition: AuraTransition.Applied,
+    isBuff: false,
     ...overrides,
   };
 }

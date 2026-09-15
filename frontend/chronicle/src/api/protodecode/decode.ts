@@ -2273,6 +2273,19 @@ export const AuraState = {
 export type AuraState = (typeof AuraState)[keyof typeof AuraState];
 
 /**
+ * Aura transition types from proto enum.
+ */
+export const AuraTransition = {
+  Unknown: 0,
+  Applied: 1,
+  Refreshed: 2,
+  StackChanged: 3,
+  Removed: 4,
+} as const;
+
+export type AuraTransition = (typeof AuraTransition)[keyof typeof AuraTransition];
+
+/**
  * Reusable Aura message object
  */
 export interface ReusableAura {
@@ -2280,12 +2293,15 @@ export interface ReusableAura {
   index: number;
   offsetMilli: number;
   target: string;
+  caster: string | null;
   spellName: string;
   spellId: number | null;
   spellAttackOutcome: number | null;
   amount: number;
   application: AuraApplication;
   state: AuraState;
+  transition: AuraTransition;
+  isBuff: boolean;
   activity: ReusableActivityEntry[];
   activityCount: number;
   isSynthetic: boolean;
@@ -2300,6 +2316,11 @@ export interface ReusableAura {
  *   3: spellName (string)
  *   4: amount (int32)
  *   5: application (AuraApplication enum)
+ *   6: state (AuraState enum)
+ *   7: spellData (SpellData)
+ *   8: isBuff (bool)
+ *   9: caster (optional string)
+ *   10: transition (AuraTransition enum)
  */
 export class AuraDecoder {
   // Use shared TextDecoder for better memory efficiency
@@ -2311,12 +2332,15 @@ export class AuraDecoder {
     index: 0,
     offsetMilli: 0,
     target: "",
+    caster: null,
     spellName: "",
     spellId: null,
     spellAttackOutcome: null,
     amount: 0,
     application: AuraApplication.Unknown,
     state: AuraState.Unknown,
+    transition: AuraTransition.Unknown,
+    isBuff: false,
     activity: [],
     activityCount: 0,
     isSynthetic: false,
@@ -2334,12 +2358,15 @@ export class AuraDecoder {
     msg.index = 0;
     msg.offsetMilli = 0;
     msg.target = "";
+    msg.caster = null;
     msg.spellName = "";
     msg.spellId = null;
     msg.spellAttackOutcome = null;
     msg.amount = 0;
     msg.application = AuraApplication.Unknown;
     msg.state = AuraState.Unknown;
+    msg.transition = AuraTransition.Unknown;
+    msg.isBuff = false;
     msg.activityCount = 0;
     msg.isSynthetic = false;
     
@@ -2356,6 +2383,8 @@ export class AuraDecoder {
         if (fieldNumber === 4) msg.amount = value;
         else if (fieldNumber === 5) msg.application = value as AuraApplication;
         else if (fieldNumber === 6) msg.state = value as AuraState;
+        else if (fieldNumber === 8) msg.isBuff = value !== 0;
+        else if (fieldNumber === 10) msg.transition = value as AuraTransition;
       } else if (wireType === 2) {
         // Length-delimited
         const { value: len, bytesRead } = readVarintFast(data, offset);
@@ -2409,6 +2438,9 @@ export class AuraDecoder {
           offset += len;
         } else if (fieldNumber === 3) {
           msg.spellName = this.textDecoder.decode(data.subarray(offset, offset + len));
+          offset += len;
+        } else if (fieldNumber === 9) {
+          msg.caster = this.textDecoder.decode(data.subarray(offset, offset + len));
           offset += len;
         } else if (fieldNumber === 7) {
           // SpellData - decode nested message (field 1: id, field 2: name)

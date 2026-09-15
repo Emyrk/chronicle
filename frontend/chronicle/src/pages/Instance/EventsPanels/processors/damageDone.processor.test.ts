@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createDamageDoneProcessor } from '../DamageDone/damageDone.processor';
 import { resolveSelectedVulnerability } from '../VulnerabilityEffect/vulnerabilityConfig';
 import type { VulnerabilitySpell } from '../VulnerabilityEffect/useVulnerabilitySpells';
-import { AuraApplication, AuraState, type AuraProcessorEvent, type DamageProcessorEvent, type ProcessorContext, type SlainProcessorEvent } from '../processorTypes';
+import { AuraApplication, AuraState, AuraTransition, type AuraProcessorEvent, type DamageProcessorEvent, type ProcessorContext, type SlainProcessorEvent } from '../processorTypes';
 import { HitTypeFullAbsorb, HitTypeHit, HitTypePartialAbsorb } from '@/lib/hittype/hittype';
 
 // Vulnerability effects are derived per-dataset from the spell lookup at runtime;
@@ -72,12 +72,15 @@ describe('damageDoneProcessor', () => {
       index: 0,
       offsetMilli: 0,
       target: '0xF130000CE0000001',
+      caster: null,
       spellName: 'Sunder Armor',
       spellId: 7386,
       spellAttackOutcome: null,
       amount: 1,
       application: AuraApplication.Gains,
       state: AuraState.Added,
+      transition: AuraTransition.Applied,
+      isBuff: false,
       activity: [],
       activityCount: 0,
       isSynthetic: false,
@@ -340,12 +343,15 @@ describe('vulnerabilityEffectProcessor', () => {
       index: 0,
       offsetMilli: 0,
       target: '0xF130000CE0000001',
+      caster: null,
       spellName: 'Spell Vulnerability',
       spellId: spellVulnerabilityId,
       spellAttackOutcome: null,
       amount: 1,
       application: AuraApplication.Gains,
       state: AuraState.Added,
+      transition: AuraTransition.Applied,
+      isBuff: false,
       activity: [],
       activityCount: 0,
       isSynthetic: false,

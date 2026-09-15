@@ -260,6 +260,59 @@ func TestTracking_ProjectAllAuras(t *testing.T) {
 	}
 }
 
+func TestTracking_PreservesCasterAcrossProjection(t *testing.T) {
+	t.Parallel()
+
+	tr := auras.New(nil)
+	caster := guid.GUID(10)
+	msg := makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false)
+	msg.Source = &caster
+	tr.Process(msg)
+
+	state := tr.ActiveAuras(testUnit)[testSpell.ID]
+	require.NotNil(t, state)
+	require.NotNil(t, state.Source)
+	assert.Equal(t, caster, *state.Source)
+
+	projected := tr.ProjectAllAuras(t0.Add(5 * time.Second))
+	require.Len(t, projected, 1)
+	require.NotNil(t, projected[0].Source)
+	assert.Equal(t, caster, *projected[0].Source)
+	assert.True(t, projected[0].IsSynthetic())
+}
+
+func TestTracking_UpdatesCasterByTransition(t *testing.T) {
+	t.Parallel()
+
+	tr := auras.New(nil)
+	originalCaster := guid.GUID(10)
+	msg := makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false)
+	msg.Source = &originalCaster
+	tr.Process(msg)
+
+	stackChange := makeAuraMsg(t0.Add(time.Second), testUnit, testSpell, types.AuraStateModified, 2, false)
+	stackChange.Transition = messages.AuraTransitionStackChanged
+	tr.Process(stackChange)
+	state := tr.ActiveAuras(testUnit)[testSpell.ID]
+	require.NotNil(t, state.Source)
+	assert.Equal(t, originalCaster, *state.Source)
+
+	unknownRefresh := makeAuraMsg(t0.Add(2*time.Second), testUnit, testSpell, types.AuraStateModified, 2, false)
+	unknownRefresh.Transition = messages.AuraTransitionRefreshed
+	tr.Process(unknownRefresh)
+	state = tr.ActiveAuras(testUnit)[testSpell.ID]
+	assert.Nil(t, state.Source)
+
+	newCaster := guid.GUID(20)
+	knownRefresh := makeAuraMsg(t0.Add(3*time.Second), testUnit, testSpell, types.AuraStateModified, 2, false)
+	knownRefresh.Transition = messages.AuraTransitionRefreshed
+	knownRefresh.Source = &newCaster
+	tr.Process(knownRefresh)
+	state = tr.ActiveAuras(testUnit)[testSpell.ID]
+	require.NotNil(t, state.Source)
+	assert.Equal(t, newCaster, *state.Source)
+}
+
 func TestTracking_Finalize(t *testing.T) {
 	t.Parallel()
 	tr := auras.New(nil)

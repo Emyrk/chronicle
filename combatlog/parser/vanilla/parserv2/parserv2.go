@@ -45,7 +45,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 		logger:       logger,
 		wowDB:        wowDB,
 		scanner:      bufio.NewScanner(r),
-		synthetics:   synthetic.New(ctx, logger, wowDB),
+		synthetics:   synthetic.New(ctx, logger, wowDB, synthetic.WithAuraCastCorrelation()),
 		itemFetcher:  gear,
 		missedSpells: make(map[chrondbc.SpellID]missedSpellEntry),
 	}, nil

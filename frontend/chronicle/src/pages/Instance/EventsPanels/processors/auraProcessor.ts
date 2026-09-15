@@ -1,5 +1,5 @@
 import type { AuraProcessorEvent, ProcessorEvent, SlainProcessorEvent } from "../processorTypes";
-import { AuraState } from "../processorTypes";
+import { AuraState, AuraTransition } from "../processorTypes";
 
 /**
  * Aura reference for lookup operations.
@@ -10,9 +10,11 @@ export interface AuraRef {
   spellName?: string;
 }
 
-interface ActiveAura {
+export interface ActiveAura {
   spellId: number | null;
   normalizedSpellName: string;
+  caster: string | null;
+  isBuff: boolean;
   stacks: number;
 }
 
@@ -127,6 +129,17 @@ function removeMatchingAuras(
   }
 }
 
+function effectiveAuraTransition(event: AuraProcessorEvent): AuraTransition {
+  if (event.transition !== AuraTransition.Unknown) {
+    return event.transition;
+  }
+
+  // Match the backend fallback for parsers without explicit transition metadata.
+  return event.state === AuraState.Modified
+    ? AuraTransition.StackChanged
+    : AuraTransition.Refreshed;
+}
+
 function applyAuraStateEvent(
   state: AuraProcessorState,
   encounterID: string,
@@ -153,10 +166,19 @@ function applyAuraStateEvent(
   }
 
   const stacks = event.amount;
+  const transition = effectiveAuraTransition(event);
+  const previous = targetAuras.get(key);
+  const caster = event.caster ?? (
+    transition === AuraTransition.StackChanged
+      ? previous?.caster ?? null
+      : null
+  );
 
   targetAuras.set(key, {
     spellId: event.spellId,
     normalizedSpellName,
+    caster,
+    isBuff: event.isBuff,
     stacks,
   });
 
@@ -248,6 +270,39 @@ export function getAuraStacks(
   }
 
   return maxStacks;
+}
+
+/**
+ * Return the known caster for a tracked aura, or null when unavailable.
+ */
+export function getAuraCaster(
+  state: AuraProcessorState,
+  encounterID: string,
+  targetGuid: string,
+  auraRef: AuraRef,
+): string | null {
+  const targetAuras = getTargetAuras(state, encounterID, targetGuid);
+  if (!targetAuras) return null;
+
+  const spellId = "spellId" in auraRef ? auraRef.spellId : undefined;
+  if (spellId != null) {
+    const aura = targetAuras.get(spellIdKey(spellId));
+    if (aura) return aura.caster;
+  }
+
+  const normalizedSpellName = normalizeSpellName("spellName" in auraRef ? auraRef.spellName : undefined);
+  if (!normalizedSpellName) return null;
+
+  const namedAura = targetAuras.get(spellNameKey(normalizedSpellName));
+  if (namedAura) return namedAura.caster;
+
+  for (const aura of targetAuras.values()) {
+    if (aura.normalizedSpellName === normalizedSpellName) {
+      return aura.caster;
+    }
+  }
+
+  return null;
 }
 
 /**

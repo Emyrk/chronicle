@@ -206,12 +206,26 @@ export const AuraState = {
 export type AuraState = (typeof AuraState)[keyof typeof AuraState];
 
 /**
+ * Aura transition constants matching AuraTransition proto.
+ */
+export const AuraTransition = {
+  Unknown: 0,
+  Applied: 1,
+  Refreshed: 2,
+  StackChanged: 3,
+  Removed: 4,
+} as const;
+
+export type AuraTransition = (typeof AuraTransition)[keyof typeof AuraTransition];
+
+/**
  * Aura event from the "aura" stream.
  * Tracks buff/debuff gains, fades, and removals.
  */
 export interface AuraProcessorEvent extends EventMeta {
   type: "aura";
   target: string;  // The unit affected by the aura
+  caster: string | null;  // The known caster, or null when the log format cannot attribute it
   spellName: string;  // Name of the aura/buff/debuff
   spellId: number | null;  // Spell ID from SpellData (if available)
   /** AttackOutcome bitmask of possible hit table results (from SpellData) */
@@ -219,6 +233,8 @@ export interface AuraProcessorEvent extends EventMeta {
   amount: number;  // Stack count (for Modified events, 0 means ended)
   application: AuraApplication;  // Deprecated: use state instead
   state: AuraState;  // Added, Removed, or Modified
+  transition: AuraTransition;  // Applied, refreshed, stack changed, or removed
+  isBuff: boolean;  // True for buffs, false for debuffs
 }
 
 /**

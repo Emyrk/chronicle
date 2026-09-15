@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { AuraApplication, AuraState, type AuraProcessorEvent, type ProcessorEvent, type SlainProcessorEvent } from "../processorTypes";
-import { applyAuraEvent, applySlainEvent, createAuraProcessorState, getAuraStacks, hasAura } from "./auraProcessor";
+import { AuraApplication, AuraState, AuraTransition, type AuraProcessorEvent, type ProcessorEvent, type SlainProcessorEvent } from "../processorTypes";
+import { applyAuraEvent, applySlainEvent, createAuraProcessorState, getAuraCaster, getAuraStacks, hasAura } from "./auraProcessor";
 
 function createAuraEvent(overrides: Partial<AuraProcessorEvent> = {}): AuraProcessorEvent {
   return {
@@ -8,11 +8,14 @@ function createAuraEvent(overrides: Partial<AuraProcessorEvent> = {}): AuraProce
     index: 0,
     offsetMilli: 0,
     target: "target-1",
+    caster: null,
     spellName: "Sunder Armor",
     spellId: 7386,
     amount: 1,
     application: AuraApplication.Gains,
     state: AuraState.Added,
+    transition: AuraTransition.Applied,
+    isBuff: false,
     activity: [],
     activityCount: 0,
     isSynthetic: false,
@@ -54,6 +57,42 @@ describe("auraProcessor", () => {
     applyAuraEvent(state, "enc1", createAuraEvent({ amount: 4, state: AuraState.Modified }));
 
     expect(getAuraStacks(state, "enc1", "target-1", { spellId: 7386 })).toBe(4);
+  });
+
+  it("keeps the known caster across a source-less stack change", () => {
+    const state = createAuraProcessorState();
+
+    applyAuraEvent(state, "enc1", createAuraEvent({ caster: "caster-1", amount: 1 }));
+    applyAuraEvent(state, "enc1", createAuraEvent({
+      caster: null,
+      amount: 2,
+      state: AuraState.Modified,
+      transition: AuraTransition.StackChanged,
+    }));
+
+    expect(getAuraCaster(state, "enc1", "target-1", { spellId: 7386 })).toBe("caster-1");
+  });
+
+  it("clears the known caster on a source-less refresh", () => {
+    const state = createAuraProcessorState();
+
+    applyAuraEvent(state, "enc1", createAuraEvent({ caster: "caster-1", amount: 1 }));
+    applyAuraEvent(state, "enc1", createAuraEvent({
+      caster: null,
+      state: AuraState.Modified,
+      transition: AuraTransition.Refreshed,
+    }));
+
+    expect(getAuraCaster(state, "enc1", "target-1", { spellId: 7386 })).toBeNull();
+  });
+
+  it("updates the caster when a later event has direct attribution", () => {
+    const state = createAuraProcessorState();
+
+    applyAuraEvent(state, "enc1", createAuraEvent({ caster: "caster-1", amount: 1 }));
+    applyAuraEvent(state, "enc1", createAuraEvent({ caster: "caster-2", amount: 1, state: AuraState.Added }));
+
+    expect(getAuraCaster(state, "enc1", "target-1", { spellName: "Sunder Armor" })).toBe("caster-2");
   });
 
   it("removes aura on Modified=0", () => {

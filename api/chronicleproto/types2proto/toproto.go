@@ -198,6 +198,8 @@ func Aura(from time.Time, idx int32, a *messages.Aura) *chronicleproto.Aura {
 		State:         AuraState(a.State),
 		SpellData:     SpellData(a.SpellData),
 		IsBuff:        a.IsBuff,
+		Caster:        OptionalGUID(a.Source),
+		Transition:    AuraTransition(a.Transition),
 	}
 }
 
@@ -258,6 +260,21 @@ func AuraState(app types.AuraState) chronicleproto.AuraState {
 		return chronicleproto.AuraState_StateAdded
 	default:
 		return chronicleproto.AuraState_StateUnknown
+	}
+}
+
+func AuraTransition(transition messages.AuraTransition) chronicleproto.AuraTransition {
+	switch transition {
+	case messages.AuraTransitionApplied:
+		return chronicleproto.AuraTransition_TransitionApplied
+	case messages.AuraTransitionRefreshed:
+		return chronicleproto.AuraTransition_TransitionRefreshed
+	case messages.AuraTransitionStackChanged:
+		return chronicleproto.AuraTransition_TransitionStackChanged
+	case messages.AuraTransitionRemoved:
+		return chronicleproto.AuraTransition_TransitionRemoved
+	default:
+		return chronicleproto.AuraTransition_TransitionUnknown
 	}
 }
 

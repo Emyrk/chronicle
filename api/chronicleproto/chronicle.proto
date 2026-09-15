@@ -38,6 +38,14 @@ enum AuraState {
   StateModified = 3;
 }
 
+enum AuraTransition {
+  TransitionUnknown = 0;
+  TransitionApplied = 1;
+  TransitionRefreshed = 2;
+  TransitionStackChanged = 3;
+  TransitionRemoved = 4;
+}
+
 message SpellData {
   int32 id = 1;
   string name = 2;
@@ -148,6 +156,8 @@ message Aura {
   AuraState state = 6;
   optional SpellData spellData = 7;
   bool isBuff = 8;
+  optional string caster = 9;
+  AuraTransition transition = 10;
 }
 
 message AuraCast {

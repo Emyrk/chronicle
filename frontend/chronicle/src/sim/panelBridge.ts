@@ -108,7 +108,6 @@ export interface SimProcessorEvent {
 export function stepResultToEvents(
   step: StepResult,
   spells: Map<number, SpellData>,
-  _playerName: string,
 ): SimProcessorEvent[] {
   const events: SimProcessorEvent[] = [];
 
@@ -183,12 +182,15 @@ export function stepResultToEvents(
       ...meta(step.timeMs),
       type: "aura" as const,
       target: SIM_TARGET_GUID,
+      caster: SIM_PLAYER_GUID,
       spellName: spell?.name ?? `Aura ${auraId}`,
       spellId: auraId,
       spellAttackOutcome: null,
       amount: 1,
       application: 1, // Gains (deprecated but included)
       state: 1, // AuraState.Added
+      transition: 1, // AuraTransition.Applied
+      isBuff: false,
     };
     events.push({ type: "aura", event: auraEvent, streamType: "aura" });
   }
@@ -199,12 +201,15 @@ export function stepResultToEvents(
       ...meta(step.timeMs),
       type: "aura" as const,
       target: SIM_TARGET_GUID,
+      caster: SIM_PLAYER_GUID,
       spellName: spell?.name ?? `Aura ${auraId}`,
       spellId: auraId,
       spellAttackOutcome: null,
       amount: 0,
       application: 2, // Fades (deprecated)
       state: 2, // AuraState.Removed
+      transition: 4, // AuraTransition.Removed
+      isBuff: false,
     };
     events.push({ type: "aura", event: auraEvent, streamType: "aura" });
   }
@@ -278,7 +283,7 @@ export function runSimWithProcessor<TResult>(
   const state = processor.createState();
 
   for (const step of steps) {
-    const simEvents = stepResultToEvents(step, spells, playerName);
+    const simEvents = stepResultToEvents(step, spells);
     for (const se of simEvents) {
       processor.processEvent(
         state,
