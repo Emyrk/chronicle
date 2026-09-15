@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/types/gameversions"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/gameversions"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/synthetic"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -28,6 +28,7 @@ type Parser struct {
 	itemFetcher gamedb.GearResolver
 
 	gameVersions *gameversions.GameVersion
+	sawRaidGroup bool
 
 	lineParseDur  time.Duration
 	syntheticsDur time.Duration
@@ -48,6 +49,11 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 		itemFetcher:  gear,
 		missedSpells: make(map[chrondbc.SpellID]missedSpellEntry),
 	}, nil
+}
+
+// SawRaidGroup reports whether the companion addon emitted a valid raid layout.
+func (p *Parser) SawRaidGroup() bool {
+	return p.sawRaidGroup
 }
 
 func (p *Parser) DetailedTimes() map[string]time.Duration {
@@ -110,6 +116,8 @@ func (p *Parser) advance(ctx context.Context) (_ []messages.Message, final error
 		return p.header(ctx, ts, m)
 	case "ZONE_INFO":
 		return p.zoneInfo(ctx, ts, m)
+	case "RG":
+		return p.raidGroup(ctx, ts, m)
 	case "UNIT_INFO":
 		return p.unitInfo(ctx, ts, m)
 	case "COMBATANT_TRANSMOG":

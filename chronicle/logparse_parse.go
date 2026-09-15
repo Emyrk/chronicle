@@ -191,6 +191,10 @@ func (w *WorkerLogParse) parseCombatLog(
 			return nil, fmt.Errorf("consume v2 log: %w", consumeErr)
 		}
 
+		if p.SawRaidGroup() {
+			logCapabilities = append(logCapabilities, "raidgroup")
+		}
+
 	case database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
 		logCapabilities = append(logCapabilities, "interrupt")
 		loadStart := time.Now()

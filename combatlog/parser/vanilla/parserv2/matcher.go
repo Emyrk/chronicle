@@ -236,6 +236,36 @@ func (p *Parser) aura(ctx context.Context, event string, ts time.Time, buff bool
 	})
 }
 
+// raidGroup parses forty compact hexadecimal GUID fields representing eight
+// five-player raid groups. Empty fields preserve unused slots and subgroup boundaries.
+func (p *Parser) raidGroup(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
+	fields := strings.Split(m.String(), ",")
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+
+	expectedFields := messages.RaidGroupCount * messages.RaidGroupSize
+	if len(fields) != expectedFields {
+		return nil, fmt.Errorf("raid group: expected %d fields, got %d", expectedFields, len(fields))
+	}
+
+	result := &messages.RaidGroup{MessageBase: messages.Base(ts)}
+	for i, field := range fields {
+		if field == "" {
+			continue
+		}
+
+		value, err := strconv.ParseUint(field, 16, 64)
+		if err != nil || value == 0 {
+			return nil, fmt.Errorf("raid group: invalid GUID %q at field %d", field, i+1)
+		}
+		result.Groups[i/messages.RaidGroupSize][i%messages.RaidGroupSize] = guid.GUID(value)
+	}
+
+	p.sawRaidGroup = true
+	return set(result)
+}
+
 func (p *Parser) zoneInfo(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	name := m.String()
 	instanceID := m.OptionalUint32()

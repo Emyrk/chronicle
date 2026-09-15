@@ -431,6 +431,54 @@ func TestParserMessages(t *testing.T) {
 	// })
 }
 
+func TestParseRaidGroup(t *testing.T) {
+	t.Parallel()
+
+	fields := make([]string, messages.RaidGroupCount*messages.RaidGroupSize)
+	fields[0] = "B"
+	fields[4] = "C"
+	fields[5] = "D"
+	fields[39] = "60000000008DCCC"
+	line := "1778208220441|RG|" + strings.Join(fields, ",")
+
+	ctx := context.Background()
+	p, err := New(ctx, slog.Default(), strings.NewReader(line), &stubGameDB{}, nil)
+	require.NoError(t, err)
+
+	msgs, err := p.Advance(ctx)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	raidGroup, ok := msgs[0].(*messages.RaidGroup)
+	require.True(t, ok)
+	require.Equal(t, time.UnixMilli(1778208220441), raidGroup.Date())
+	require.Equal(t, guid.GUID(0xB), raidGroup.Groups[0][0])
+	require.Equal(t, guid.GUID(0xC), raidGroup.Groups[0][4])
+	require.Equal(t, guid.GUID(0xD), raidGroup.Groups[1][0])
+	require.Equal(t, guid.GUID(0x060000000008DCCC), raidGroup.Groups[7][4])
+	require.Equal(t, []guid.GUID{0xB, 0xC, 0xD, 0x060000000008DCCC}, raidGroup.Affects())
+	require.True(t, p.SawRaidGroup())
+}
+
+func TestParseRaidGroupRejectsMalformedPayloads(t *testing.T) {
+	t.Parallel()
+
+	validFields := make([]string, messages.RaidGroupCount*messages.RaidGroupSize)
+	validFields[0] = "B"
+
+	tests := []string{
+		strings.Join(validFields[:len(validFields)-1], ","),
+		strings.Join(append([]string{"not-a-guid"}, validFields[1:]...), ","),
+		strings.Join(append([]string{"0"}, validFields[1:]...), ","),
+	}
+	for _, payload := range tests {
+		p := &Parser{}
+		_, err := p.raidGroup(context.Background(), time.UnixMilli(1778208220441), &Matched{parts: []string{payload}})
+		require.Error(t, err, payload)
+		require.False(t, p.SawRaidGroup())
+	}
+}
+
 func TestJudgementOfLightCreditsTarget(t *testing.T) {
 	t.Parallel()
 
