@@ -463,7 +463,7 @@ func TestParseRaidGroupLegacy(t *testing.T) {
 func TestParseRaidComposition(t *testing.T) {
 	t.Parallel()
 
-	const line = "1778208220441|RAID_COMPOSITION|RAID_ROSTER_UPDATE|3|0x000000000000000B,1,2;0x000000000000000C,2,0;0x060000000008DCCC,6,1"
+	const line = "1778208220441|RAID_COMPOSITION|RAID_ROSTER_UPDATE|3|0x000000000000000B,1,1,2;0x000000000000000C,2,3,0;0x060000000008DCCC,6,2,1"
 	ctx := context.Background()
 	p, err := New(ctx, slog.Default(), strings.NewReader(line), &stubGameDB{}, nil)
 	require.NoError(t, err)
@@ -475,9 +475,9 @@ func TestParseRaidComposition(t *testing.T) {
 	raidGroup, ok := msgs[0].(*messages.RaidGroup)
 	require.True(t, ok)
 	require.Equal(t, guid.GUID(0xB), raidGroup.Groups[0][0])
-	require.Equal(t, guid.GUID(0xC), raidGroup.Groups[0][1])
 	require.Equal(t, guid.GUID(0x060000000008DCCC), raidGroup.Groups[1][0])
-	require.Equal(t, []guid.GUID{0xB, 0xC, 0x060000000008DCCC}, raidGroup.Affects())
+	require.Equal(t, guid.GUID(0xC), raidGroup.Groups[2][0])
+	require.Equal(t, []guid.GUID{0xB, 0x060000000008DCCC, 0xC}, raidGroup.Affects())
 	require.True(t, p.SawRaidGroup())
 }
 
@@ -520,13 +520,16 @@ func TestParseRaidCompositionRejectsMalformedPayloads(t *testing.T) {
 
 	tests := [][]string{
 		{"RAID_ROSTER_UPDATE", "41", ""},
-		{"RAID_ROSTER_UPDATE", "2", "0x000000000000000B,1,2"},
-		{"RAID_ROSTER_UPDATE", "1", "not-a-guid,1,2"},
-		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,0,2"},
-		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,41,2"},
-		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,1,3"},
-		{"RAID_ROSTER_UPDATE", "2", "0x000000000000000B,1,2;0x000000000000000C,1,0"},
-		{"RAID_ROSTER_UPDATE", "2", "0x000000000000000B,2,2;0x000000000000000C,1,0"},
+		{"RAID_ROSTER_UPDATE", "2", "0x000000000000000B,1,1,2"},
+		{"RAID_ROSTER_UPDATE", "1", "not-a-guid,1,1,2"},
+		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,0,1,2"},
+		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,41,1,2"},
+		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,1,0,2"},
+		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,1,9,2"},
+		{"RAID_ROSTER_UPDATE", "1", "0x000000000000000B,1,1,3"},
+		{"RAID_ROSTER_UPDATE", "2", "0x000000000000000B,1,1,2;0x000000000000000C,1,1,0"},
+		{"RAID_ROSTER_UPDATE", "2", "0x000000000000000B,2,1,2;0x000000000000000C,1,1,0"},
+		{"RAID_ROSTER_UPDATE", "6", "0x0000000000000001,1,1,0;0x0000000000000002,2,1,0;0x0000000000000003,3,1,0;0x0000000000000004,4,1,0;0x0000000000000005,5,1,0;0x0000000000000006,6,1,0"},
 	}
 	for _, parts := range tests {
 		p := &Parser{}

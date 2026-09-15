@@ -236,9 +236,9 @@ func (p *Parser) aura(ctx context.Context, event string, ts time.Time, buff bool
 	})
 }
 
-// raidComposition parses a roster-index snapshot. Roster indexes map directly
-// to the fixed eight-by-five layout used by RaidGroup messages. Rank and reason
-// are validated here but are not part of the downstream message model.
+// raidComposition parses a roster-index snapshot. The encoded subgroup maps
+// members into the fixed eight-by-five layout used by RaidGroup messages. Rank,
+// roster index, and reason are validated but are not part of the downstream model.
 func (p *Parser) raidComposition(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	reason := m.String()
 	memberCount := m.Int32()
@@ -271,10 +271,11 @@ func (p *Parser) raidComposition(_ context.Context, ts time.Time, m *Matched) ([
 	}
 
 	previousIndex := 0
+	groupSizes := [messages.RaidGroupCount]int{}
 	for i, entry := range entries {
 		parts := strings.Split(entry, ",")
-		if len(parts) != 3 {
-			return nil, fmt.Errorf("raid composition: member %d expected 3 fields, got %d", i+1, len(parts))
+		if len(parts) != 4 {
+			return nil, fmt.Errorf("raid composition: member %d expected 4 fields, got %d", i+1, len(parts))
 		}
 
 		member, err := parseRaidGUID(parts[0])
@@ -288,13 +289,22 @@ func (p *Parser) raidComposition(_ context.Context, ts time.Time, m *Matched) ([
 		if raidIndex <= previousIndex {
 			return nil, fmt.Errorf("raid composition: raid indexes must be strictly ascending")
 		}
-		rank, err := strconv.Atoi(parts[2])
+		subgroup, err := strconv.Atoi(parts[2])
+		if err != nil || subgroup < 1 || subgroup > messages.RaidGroupCount {
+			return nil, fmt.Errorf("raid composition: invalid subgroup %q at member %d", parts[2], i+1)
+		}
+		rank, err := strconv.Atoi(parts[3])
 		if err != nil || rank < 0 || rank > 2 {
-			return nil, fmt.Errorf("raid composition: invalid rank %q at member %d", parts[2], i+1)
+			return nil, fmt.Errorf("raid composition: invalid rank %q at member %d", parts[3], i+1)
 		}
 
-		zeroIndex := raidIndex - 1
-		result.Groups[zeroIndex/messages.RaidGroupSize][zeroIndex%messages.RaidGroupSize] = member
+		groupIndex := subgroup - 1
+		slotIndex := groupSizes[groupIndex]
+		if slotIndex >= messages.RaidGroupSize {
+			return nil, fmt.Errorf("raid composition: subgroup %d has more than %d members", subgroup, messages.RaidGroupSize)
+		}
+		result.Groups[groupIndex][slotIndex] = member
+		groupSizes[groupIndex]++
 		previousIndex = raidIndex
 	}
 
