@@ -9,10 +9,10 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
-// auraCastCorrelationWindow is intentionally tight. In 1.12a CC v2 logs the
-// AURA_CAST and corresponding BUFF_ADD/DEBUFF_ADD records are emitted a few
-// milliseconds apart.
-const auraCastCorrelationWindow = 25 * time.Millisecond
+// auraCastCorrelationWindow allows for the separate aura-slot update used by
+// 1.12a CC v2 logs. Analysis of two real logs found that 100ms captures the
+// normal update delay while rejecting the uncertain long tail.
+const auraCastCorrelationWindow = 100 * time.Millisecond
 
 type auraOwnershipKey struct {
 	target  guid.GUID
@@ -25,11 +25,11 @@ type pendingAuraCast struct {
 }
 
 type auraOwnership struct {
-	pending map[auraOwnershipKey][]pendingAuraCast
+	pending map[auraOwnershipKey]pendingAuraCast
 }
 
 func newAuraOwnership() *auraOwnership {
-	return &auraOwnership{pending: make(map[auraOwnershipKey][]pendingAuraCast)}
+	return &auraOwnership{pending: make(map[auraOwnershipKey]pendingAuraCast)}
 }
 
 // ProcessMessages enriches 1.12a Aura messages with caster evidence from the
@@ -54,21 +54,14 @@ func (a *auraOwnership) record(msg *messages.AuraCast) {
 	}
 
 	key := auraOwnershipKey{target: *msg.Target, spellID: msg.Spell.ID}
-	queue := a.pending[key]
 
-	// A single cast can emit one AURA_CAST per effect. Collapse exact duplicate
-	// ownership evidence while retaining distinct casts in arrival order.
-	if len(queue) > 0 {
-		last := queue[len(queue)-1]
-		if last.caster == msg.Caster && last.at.Equal(msg.Date()) {
-			return
-		}
-	}
-
-	a.pending[key] = append(queue, pendingAuraCast{
+	// A single cast can emit one AURA_CAST per effect. They all carry the same
+	// ownership evidence. A later cast replaces the candidate so the latest
+	// caster wins when multiple players apply the same aura to one target.
+	a.pending[key] = pendingAuraCast{
 		caster: msg.Caster,
 		at:     msg.Date(),
-	})
+	}
 }
 
 func (a *auraOwnership) correlate(msg *messages.Aura) {
@@ -77,40 +70,27 @@ func (a *auraOwnership) correlate(msg *messages.Aura) {
 	}
 
 	key := auraOwnershipKey{target: msg.Target, spellID: msg.SpellData.ID}
-	queue := a.pending[key]
-	if len(queue) == 0 {
+	pending, ok := a.pending[key]
+	if !ok {
 		return
 	}
 
-	pending := queue[0]
 	delta := msg.Date().Sub(pending.at)
 	if delta < 0 || delta > auraCastCorrelationWindow {
 		return
 	}
 
-	if len(queue) == 1 {
-		delete(a.pending, key)
-	} else {
-		a.pending[key] = queue[1:]
-	}
-
+	// Keep the candidate until expiry because one cast can produce multiple
+	// BUFF_ADD/DEBUFF_ADD records for different aura effects.
 	caster := pending.caster
 	msg.Source = &caster
 	msg.Transition = messages.AuraTransitionApplied
 }
 
 func (a *auraOwnership) expire(now time.Time) {
-	for key, queue := range a.pending {
-		firstValid := 0
-		for firstValid < len(queue) && now.Sub(queue[firstValid].at) > auraCastCorrelationWindow {
-			firstValid++
-		}
-
-		switch {
-		case firstValid == len(queue):
+	for key, pending := range a.pending {
+		if now.Sub(pending.at) > auraCastCorrelationWindow {
 			delete(a.pending, key)
-		case firstValid > 0:
-			a.pending[key] = queue[firstValid:]
 		}
 	}
 }

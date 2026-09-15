@@ -94,7 +94,7 @@ func TestAuraOwnershipRequiresMatchingTargetAndSpell(t *testing.T) {
 	assert.Nil(t, aura.Source)
 }
 
-func TestAuraOwnershipQueuesOverlappingCastersInOrder(t *testing.T) {
+func TestAuraOwnershipLatestCasterWins(t *testing.T) {
 	t.Parallel()
 
 	processor := newAuraOwnership()
@@ -115,11 +115,11 @@ func TestAuraOwnershipQueuesOverlappingCastersInOrder(t *testing.T) {
 
 	require.NotNil(t, firstAura.Source)
 	require.NotNil(t, secondAura.Source)
-	assert.Equal(t, casterA, *firstAura.Source)
+	assert.Equal(t, casterB, *firstAura.Source)
 	assert.Equal(t, casterB, *secondAura.Source)
 }
 
-func TestAuraOwnershipCollapsesDuplicateEffectEvidence(t *testing.T) {
+func TestAuraOwnershipReusesCastForMultipleAuraEffects(t *testing.T) {
 	t.Parallel()
 
 	processor := newAuraOwnership()
@@ -136,8 +136,9 @@ func TestAuraOwnershipCollapsesDuplicateEffectEvidence(t *testing.T) {
 	processor.ProcessMessages([]messages.Message{firstAura, secondAura})
 
 	require.NotNil(t, firstAura.Source)
+	require.NotNil(t, secondAura.Source)
 	assert.Equal(t, caster, *firstAura.Source)
-	assert.Nil(t, secondAura.Source)
+	assert.Equal(t, caster, *secondAura.Source)
 }
 
 func TestAuraOwnershipIncludesExactWindowBoundary(t *testing.T) {
