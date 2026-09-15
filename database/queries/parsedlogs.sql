@@ -603,7 +603,8 @@ LIMIT 40;
 
 -- name: SetDuplicateGroupIDs :exec
 UPDATE log_instances
-SET duplicate_group_id = @duplicate_group_id
+SET duplicate_group_id = @duplicate_group_id,
+    updated_at = now()
 WHERE id = ANY(@ids::uuid[])
    OR (duplicate_group_id IS NOT NULL AND duplicate_group_id = ANY(@ids::uuid[]));
 
@@ -611,7 +612,10 @@ WHERE id = ANY(@ids::uuid[])
 SELECT unit_guid FROM log_instance_players WHERE instance_id = $1;
 
 -- name: ClearDuplicateGroupID :exec
-UPDATE log_instances SET duplicate_group_id = NULL WHERE id = @id;
+UPDATE log_instances
+SET duplicate_group_id = NULL,
+    updated_at = now()
+WHERE id = @id;
 -- name: ListInstancesByDuplicateGroup :many
 SELECT
     li.id,

@@ -7440,7 +7440,10 @@ func (q *sqlQuerier) UpsertInstanceOverviewMetrics(ctx context.Context, arg Upse
 }
 
 const clearDuplicateGroupID = `-- name: ClearDuplicateGroupID :exec
-UPDATE log_instances SET duplicate_group_id = NULL WHERE id = $1
+UPDATE log_instances
+SET duplicate_group_id = NULL,
+    updated_at = now()
+WHERE id = $1
 `
 
 func (q *sqlQuerier) ClearDuplicateGroupID(ctx context.Context, id uuid.UUID) error {
@@ -9120,7 +9123,8 @@ func (q *sqlQuerier) PruneParsedInstanceFromLogOutput(ctx context.Context, arg P
 
 const setDuplicateGroupIDs = `-- name: SetDuplicateGroupIDs :exec
 UPDATE log_instances
-SET duplicate_group_id = $1
+SET duplicate_group_id = $1,
+    updated_at = now()
 WHERE id = ANY($2::uuid[])
    OR (duplicate_group_id IS NOT NULL AND duplicate_group_id = ANY($2::uuid[]))
 `
