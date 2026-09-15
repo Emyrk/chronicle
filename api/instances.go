@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -482,6 +483,9 @@ func (api *API) UngroupInstance(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
+	}
+	if err := api.Chronicle.EnqueueRankingRunRefresh(ctx, inst.ID, inst.DuplicateGroupID.UUID); err != nil {
+		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after unlink", slog.Any("error", err))
 	}
 
 	httpapi.Write(ctx, w, http.StatusNoContent, nil)

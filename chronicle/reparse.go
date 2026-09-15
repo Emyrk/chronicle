@@ -67,9 +67,16 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 		return fmt.Errorf("fetch log group: %w", err)
 	}
 
+	identities, err := db.RankingRunIdentitiesByLogGroupID(ctx, job.Args.LogID)
+	if err != nil {
+		return fmt.Errorf("load ranking run identities: %w", err)
+	}
 	err = db.DeleteAllParsedLogsByGroupID(ctx, job.Args.LogID)
 	if err != nil {
 		return fmt.Errorf("delete parsed logs for group: %w", err)
+	}
+	if err := w.parent.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
+		w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh after reparse cleanup", "error", err)
 	}
 
 	list, err := w.parent.ListLogGroupJobs(ctx, job.Args.LogID)
