@@ -223,6 +223,7 @@ export function RecentRaids() {
     try {
       const params = new URLSearchParams();
       params.set("limit", String(PAGE_SIZE));
+      params.set("days", "60");
       if (offset) {
         params.set("offset", String(offset));
       }

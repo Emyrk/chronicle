@@ -355,6 +355,7 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
       const fetchLimit = category !== "all" ? limit * 4 : limit;
       const params = new URLSearchParams();
       params.set("limit", String(Math.min(fetchLimit, 100)));
+      params.set("days", "60");
       if (guild.id) params.set("guild_id", guild.id);
       if (hasVideo) params.set("has_video", "true");
 

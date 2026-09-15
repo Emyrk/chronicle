@@ -14,11 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// RecentInstances returns instances from the last 2 weeks.
+// RecentInstances returns instances from a configurable recent time window.
 // It delegates to InstancesByTimeRange with a preset time window.
-// @Summary List recent raid/dungeon instances (last 2 weeks)
+// @Summary List recent raid/dungeon instances
 // @Tags raidlogs
 // @Produce json
+// @Param days query int false "Number of days to look back (default 14, max 365)"
 // @Param instance_name query []string false "Filter by instance names"
 // @Param has_video query string false "Filter by video presence (true, false)"
 // @Param realm_id query string false "Filter by realm UUID"
@@ -27,17 +28,34 @@ import (
 // @Router /api/v1/raidlogs/recent [get]
 func (api *API) RecentInstances(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	now := time.Now()
 	if q.Get("start") == "" {
-		q.Set("start", time.Now().AddDate(0, 0, -14).UTC().Format(time.RFC3339))
+		q.Set("start", now.AddDate(0, 0, -recentWindowDays(q.Get("days"))).UTC().Format(time.RFC3339))
 	}
 	if q.Get("end") == "" {
-		q.Set("end", time.Now().Add(24*time.Hour).UTC().Format(time.RFC3339))
+		q.Set("end", now.Add(24*time.Hour).UTC().Format(time.RFC3339))
 	}
 	if q.Get("limit") == "" {
 		q.Set("limit", "25")
 	}
 	r.URL.RawQuery = q.Encode()
 	api.instancesByTimeRange(w, r, true)
+}
+
+func recentWindowDays(value string) int {
+	const (
+		defaultDays = 14
+		maxDays     = 365
+	)
+
+	days, err := strconv.Atoi(value)
+	if err != nil || days < 1 {
+		return defaultDays
+	}
+	if days > maxDays {
+		return maxDays
+	}
+	return days
 }
 
 // InstancesByTimeRange returns instances within a given time range.

@@ -8,6 +8,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestRecentWindowDays(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value string
+		want  int
+	}{
+		{name: "default", want: 14},
+		{name: "invalid", value: "nope", want: 14},
+		{name: "zero", value: "0", want: 14},
+		{name: "negative", value: "-1", want: 14},
+		{name: "custom", value: "60", want: 60},
+		{name: "maximum", value: "365", want: 365},
+		{name: "clamped", value: "366", want: 365},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, recentWindowDays(test.value))
+		})
+	}
+}
+
 func TestTrimRecentInstanceGroups(t *testing.T) {
 	t.Parallel()
 
