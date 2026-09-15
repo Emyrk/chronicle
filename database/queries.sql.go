@@ -12234,7 +12234,7 @@ func (q *sqlQuerier) PruneStaleRankingsInstanceSummaries(ctx context.Context, te
 }
 
 const rankingsBoxPlotStats = `-- name: RankingsBoxPlotStats :many
-WITH representative_instances AS (
+WITH fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
@@ -12245,6 +12245,10 @@ WITH representative_instances AS (
     -- duplicate uploads that will only be discarded later.
     WHERE (cardinality($2 :: text[]) = 0
            OR li.name = ANY($2 :: text[]))
+      AND NOT EXISTS (
+          SELECT 1 FROM ranking_runs rr
+          WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
+      )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -12255,6 +12259,15 @@ WITH representative_instances AS (
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
+),
+representative_instances AS (
+    SELECT rr.representative_instance_id AS id, rr.run_id
+    FROM ranking_runs rr
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
+    WHERE (cardinality($2 :: text[]) = 0
+           OR rr.instance_name = ANY($2 :: text[]))
+    UNION ALL
+    SELECT id, run_id FROM fallback_representative_instances
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
@@ -12465,15 +12478,17 @@ func (q *sqlQuerier) RankingsDistinctSummaryKeys(ctx context.Context) ([]Ranking
 }
 
 const rankingsEncounterList = `-- name: RankingsEncounterList :many
-WITH representative_instances AS (
+WITH fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM ranking_runs rr
+        WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
+    )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        -- Prefer the upload with the broadest boss-ranking coverage. The group
-        -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
          FROM encounter_dps_rankings coverage
          WHERE coverage.instance_id = li.id
@@ -12481,6 +12496,14 @@ WITH representative_instances AS (
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
+),
+representative_instances AS (
+    SELECT rr.representative_instance_id AS id, rr.run_id
+    FROM ranking_runs rr
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
+    WHERE rr.instance_name = $1
+    UNION ALL
+    SELECT id, run_id FROM fallback_representative_instances
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
@@ -12819,7 +12842,7 @@ WITH candidate_runs AS (
       AND ($6 :: text = '' OR candidate.player_sub_spec = $6)
       AND ($7 :: text = '' OR candidate.player_role = $7)
 ),
-representative_instances AS (
+fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
@@ -12832,6 +12855,10 @@ representative_instances AS (
            OR li.name = ANY($8 :: text[]))
       AND (($4 :: text = '' AND $5 :: text = '' AND $6 :: text = '' AND $7 :: text = '')
            OR COALESCE(li.duplicate_group_id, li.id) IN (SELECT run_id FROM candidate_runs))
+      AND NOT EXISTS (
+          SELECT 1 FROM ranking_runs rr
+          WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
+      )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -12842,6 +12869,17 @@ representative_instances AS (
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
+),
+representative_instances AS (
+    SELECT rr.representative_instance_id AS id, rr.run_id
+    FROM ranking_runs rr
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
+    WHERE (cardinality($8 :: text[]) = 0
+           OR rr.instance_name = ANY($8 :: text[]))
+      AND (($4 :: text = '' AND $5 :: text = '' AND $6 :: text = '' AND $7 :: text = '')
+           OR rr.run_id IN (SELECT run_id FROM candidate_runs))
+    UNION ALL
+    SELECT id, run_id FROM fallback_representative_instances
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
@@ -13316,15 +13354,17 @@ func (q *sqlQuerier) RankingsSummaryStatus(ctx context.Context, tenantID uuid.UU
 }
 
 const upsertRankingsInstanceSummary = `-- name: UpsertRankingsInstanceSummary :exec
-WITH representative_instances AS (
+WITH fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM ranking_runs rr
+        WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
+    )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        -- Prefer the upload with the broadest boss-ranking coverage. The group
-        -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
          FROM encounter_dps_rankings coverage
          WHERE coverage.instance_id = li.id
@@ -13332,6 +13372,16 @@ WITH representative_instances AS (
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
         li.start_time ASC,
         li.id ASC
+),
+representative_instances AS (
+    SELECT rr.representative_instance_id AS id, rr.run_id
+    FROM ranking_runs rr
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
+    WHERE rr.instance_name = $1
+      AND rr.difficulty_name = $2
+      AND rr.max_players = $3
+    UNION ALL
+    SELECT id, run_id FROM fallback_representative_instances
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
