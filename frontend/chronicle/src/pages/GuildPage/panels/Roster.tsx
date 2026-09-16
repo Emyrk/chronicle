@@ -1,11 +1,18 @@
+/* eslint-disable react-refresh/only-export-components -- Panel registry files export a definition alongside their render components. */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, AlertCircle } from "lucide-react";
+import { Users, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import type { GuildCharacterRosterResponse, GuildRosterCharacter } from "@/api/typesGenerated";
+import { Button } from "@/components/ui/button";
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import { parseColor } from "@/pages/Instance/parseColors";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
-import { formatLastSeen } from "./rosterUtils";
+import {
+  filterRosterMembers,
+  formatLastSeen,
+  paginateRosterMembers,
+  sortRosterMembers,
+} from "./rosterUtils";
 
 interface RosterConfig {
   seenWithinDays: "30" | "60" | "90";
@@ -29,11 +36,19 @@ function memberSubtitle(member: GuildRosterCharacter): string {
   return parts.join(" · ");
 }
 
-function ClassChips({ members }: { members: GuildRosterCharacter[] }) {
+function ClassChips({
+  members,
+  selectedClass,
+  onSelect,
+}: {
+  members: readonly GuildRosterCharacter[];
+  selectedClass: string | null;
+  onSelect: (characterClass: string | null) => void;
+}) {
   const counts = useMemo(() => {
     const byClass = new Map<string, number>();
-    for (const m of members) {
-      byClass.set(m.class, (byClass.get(m.class) ?? 0) + 1);
+    for (const member of members) {
+      byClass.set(member.class, (byClass.get(member.class) ?? 0) + 1);
     }
     return [...byClass.entries()].sort((a, b) => b[1] - a[1]);
   }, [members]);
@@ -43,19 +58,34 @@ function ClassChips({ members }: { members: GuildRosterCharacter[] }) {
       className="grid gap-1.5 pb-2"
       style={{ gridTemplateColumns: "repeat(auto-fill, minmax(105px, 1fr))" }}
     >
-      {counts.map(([cls, count]) => (
-        <span
-          key={cls}
-          className="flex min-w-0 items-center gap-1.5 rounded-full border border-border/50 bg-muted/30 px-2.5 py-0.5 text-[11px] text-muted-foreground"
-        >
-          <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ backgroundColor: CLASS_CSS_VAR[cls] ?? CLASS_CSS_VAR.UNKNOWN }}
-          />
-          <span className="truncate">{CLASS_DISPLAY[cls] ?? cls}</span>
-          <span className="ml-auto tabular-nums opacity-70">{count}</span>
-        </span>
-      ))}
+      {counts.map(([characterClass, count]) => {
+        const selected = selectedClass === characterClass;
+        const label = CLASS_DISPLAY[characterClass] ?? characterClass;
+        return (
+          <button
+            key={characterClass}
+            type="button"
+            aria-pressed={selected}
+            title={selected ? `Clear ${label} filter` : `Show only ${label} characters`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(selected ? null : characterClass);
+            }}
+            className={`flex min-w-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+              selected
+                ? "border-primary/60 bg-primary/15 text-foreground"
+                : "border-border/50 bg-muted/30 text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground"
+            }`}
+          >
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: CLASS_CSS_VAR[characterClass] ?? CLASS_CSS_VAR.UNKNOWN }}
+            />
+            <span className="truncate">{label}</span>
+            <span className="ml-auto tabular-nums opacity-70">{count}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -109,6 +139,8 @@ function RosterContent({ config, position, guild }: GuildPanelRenderProps<Roster
   const [members, setMembers] = useState<GuildRosterCharacter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
 
   // Normalize unknown saved values (e.g. from an older config shape) to the default.
   const seenWithinDays = ["30", "90"].includes(config.seenWithinDays) ? config.seenWithinDays : "60";
@@ -122,8 +154,8 @@ function RosterContent({ config, position, guild }: GuildPanelRenderProps<Roster
       try {
         const params = new URLSearchParams();
         params.set("seen_within_days", seenWithinDays);
-        // Fetch the full roster (server cap) so the total count is accurate;
-        // the display limit is applied client-side.
+        // Fetch the full roster (server cap) so filters and pagination can be
+        // applied client-side without another request.
         params.set("limit", "500");
         const response = await fetch(`/api/v1/guilds/${guild.id}/characters?${params}`);
         if (!response.ok) throw new Error("Failed to fetch guild roster");
@@ -141,24 +173,19 @@ function RosterContent({ config, position, guild }: GuildPanelRenderProps<Roster
     };
   }, [guild.id, seenWithinDays]);
 
-  const sorted = useMemo(() => {
-    const list = [...members];
-    switch (config.sortBy) {
-      case "level":
-        list.sort((a, b) => b.level - a.level || b.avg_parse - a.avg_parse);
-        break;
-      case "lastSeen":
-        list.sort((a, b) => new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime());
-        break;
-      case "name":
-        list.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      default:
-        // Server already orders by parse; keep as-is.
-        break;
-    }
-    return list.slice(0, limit);
-  }, [members, config.sortBy, limit]);
+  const effectiveSelectedClass = config.showClassChips !== false
+    && selectedClass
+    && members.some((member) => member.class === selectedClass)
+    ? selectedClass
+    : null;
+  const filteredAndSorted = useMemo(
+    () => sortRosterMembers(filterRosterMembers(members, effectiveSelectedClass), config.sortBy),
+    [members, effectiveSelectedClass, config.sortBy],
+  );
+  const paginated = useMemo(
+    () => paginateRosterMembers(filteredAndSorted, page, limit),
+    [filteredAndSorted, page, limit],
+  );
 
   if (loading) {
     return (
@@ -192,23 +219,69 @@ function RosterContent({ config, position, guild }: GuildPanelRenderProps<Roster
     <div className="flex h-full flex-col p-1">
       <div className="flex items-center justify-between pb-1 text-[11px] text-muted-foreground">
         <span>
-          {members.length} {members.length === 1 ? "member" : "members"}
+          {effectiveSelectedClass
+            ? `${filteredAndSorted.length} of ${members.length} members`
+            : `${members.length} ${members.length === 1 ? "member" : "members"}`}
         </span>
         <span>Seen in last {seenWithinDays} days</span>
       </div>
-      {config.showClassChips !== false && <ClassChips members={members} />}
+      {config.showClassChips !== false && (
+        <ClassChips
+          members={members}
+          selectedClass={effectiveSelectedClass}
+          onSelect={(characterClass) => {
+            setSelectedClass(characterClass);
+            setPage(0);
+          }}
+        />
+      )}
       <div
         className="grid gap-x-6 content-start"
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
       >
-        {sorted.map((member) => (
+        {paginated.members.map((member) => (
           <MemberRow key={member.id} member={member} showParse={config.showParseScores !== false} />
         ))}
       </div>
-      {members.length > sorted.length && (
-        <p className="pt-2 text-[11px] text-muted-foreground">
-          Showing {sorted.length} of {members.length} members
-        </p>
+      {paginated.totalPages > 1 && (
+        <div className="mt-auto flex items-center justify-between border-t border-border/40 pt-2 text-[11px] text-muted-foreground">
+          <span>
+            {paginated.start + 1}-{paginated.end} of {filteredAndSorted.length}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-6 w-6"
+              aria-label="Previous roster page"
+              disabled={paginated.page === 0}
+              onClick={(event) => {
+                event.stopPropagation();
+                setPage(Math.max(0, paginated.page - 1));
+              }}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="min-w-14 text-center tabular-nums">
+              Page {paginated.page + 1} of {paginated.totalPages}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-6 w-6"
+              aria-label="Next roster page"
+              disabled={paginated.page >= paginated.totalPages - 1}
+              onClick={(event) => {
+                event.stopPropagation();
+                setPage(Math.min(paginated.totalPages - 1, paginated.page + 1));
+              }}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -248,7 +321,7 @@ export const RosterPanel: GuildPanelDefinition<RosterConfig> = {
     },
     {
       name: "limit",
-      label: "Number of members to show",
+      label: "Members per page",
       type: "number",
       defaultValue: 20,
     },
