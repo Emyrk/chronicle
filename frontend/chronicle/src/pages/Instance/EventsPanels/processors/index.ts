@@ -18,6 +18,7 @@ import { loggingMetadataProcessor } from "../LoggingMetadata/loggingMetadata.pro
 
 import { resourceRegenProcessor } from "../ResourceRegen/resourceRegen.processor";
 import { innervateProcessor } from "../Innervate/innervate.processor";
+import { faerieFireProcessor } from "../FaerieFire/faerieFire.processor";
 import { sunderProcessor } from "../Sunder/sunder.processor";
 import { judgementProcessor } from "../Judgement/judgement.processor";
 import { metricsProcessor } from "../Metrics/metrics.processor";
@@ -61,6 +62,7 @@ export { loggingMetadataProcessor } from "../LoggingMetadata/loggingMetadata.pro
 
 export { resourceRegenProcessor } from "../ResourceRegen/resourceRegen.processor";
 export { innervateProcessor } from "../Innervate/innervate.processor";
+export { faerieFireProcessor } from "../FaerieFire/faerieFire.processor";
 export { sunderProcessor } from "../Sunder/sunder.processor";
 export { judgementProcessor } from "../Judgement/judgement.processor";
 export { metricsProcessor } from "../Metrics/metrics.processor";
@@ -102,6 +104,7 @@ export type { EmptyResult } from "../Empty/empty.processor";
 export type { MetricsResult } from "../Metrics/metrics.processor";
 export type { ResourceRegenResult, PlayerResourceData, ResourceAbilityData } from "../ResourceRegen/resourceRegen.processor";
 export type { InnervateResult, InnervateCast } from "../Innervate/innervate.processor";
+export type { FaerieFireResult, DruidFaerieFireStats, TargetFaerieFireStats, FaerieFireDebugEvent } from "../FaerieFire/faerieFire.processor";
 export type { SunderResult, WarriorSunderStats, TargetSunderStats, ConfirmedSunder, SunderDebugEvent } from "../Sunder/sunder.processor";
 export type { JudgementResult, TargetJudgementStats, JudgementApplication, JudgementType, JudgementOfLightBenefit } from "../Judgement/judgement.processor";
 export type { AuraUptimeResult, AuraData, TargetUptimeData, UptimeSegment } from "../AuraUptime/auraUptime.processor";
@@ -170,6 +173,7 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   // Note: roles panel doesn't have its own processor - it reuses damage_taken and healing_done
   // Class: Druid
   innervate: innervateProcessor,
+  faerie_fire: faerieFireProcessor,
   // Class: Warrior
   sunder: sunderProcessor,
   // Class: Paladin

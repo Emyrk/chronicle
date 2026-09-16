@@ -62,7 +62,7 @@ const PANEL_CATEGORIES: PanelCategory[] = [
     subcategories: [
       {
         label: "Druid",
-        items: ["innervate"],
+        items: ["innervate", "faerie_fire"],
         icon: <Leaf className="h-4 w-4" />,
       },
       {

@@ -54,6 +54,7 @@ import { createEmptyPanel } from "./Empty/Empty";
 import { createLeaderboardPanel } from "./LeaderboardPanel/LeaderboardPanel";
 import { createResourceRegenPanel } from "./ResourceRegen/ResourceRegen";
 import { createInnervatePanel } from "./Innervate/Innervate";
+import { createFaerieFirePanel } from "./FaerieFire/FaerieFire";
 import { createSunderPanel } from "./Sunder/Sunder";
 import { createJudgementPanel } from "./Judgement/Judgement";
 import { createAuraUptimePanel } from "./AuraUptime/AuraUptime";
@@ -116,6 +117,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   leaderboard: createLeaderboardPanel(),
   // Class: Druid
   innervate: createInnervatePanel(),
+  faerie_fire: createFaerieFirePanel(),
   // Class: Warrior
   sunder: createSunderPanel(),
   // Class: Paladin

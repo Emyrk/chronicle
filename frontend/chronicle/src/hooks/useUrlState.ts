@@ -632,6 +632,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   leaderboard: 'lb',
   // Class: Druid
   innervate: 'inn',
+  faerie_fire: 'ff',
   // Class: Warrior
   sunder: 'sun',
   // Class: Paladin
