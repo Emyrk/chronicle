@@ -1,8 +1,9 @@
 import { useMemo } from "react";
-import { Shield, Skull, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
+import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ import {
   type UnitAuraSegment,
   type UnitAurasResult,
 } from "./unitAuras.processor";
+import { UnitIcon } from "./UnitIcon";
 import { UnitSearch, type UnitSearchOption } from "./UnitSearch";
 
 interface DisplaySegment extends UnitAuraSegment {
@@ -202,6 +204,7 @@ function AuraSection({
 export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
   const { context, durationMs, panelOption, setPanelOption, result } = props;
   const selectedGuid = parseSelectedUnit(panelOption);
+  const playerSpecializations = usePlayerSpecializations();
 
   const encounterOffsets = useMemo(() => {
     const offsets = new Map<string, number>();
@@ -234,15 +237,27 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
   const searchUnits = useMemo<UnitSearchOption[]>(() => [...byUnit.values()]
     .map((unit) => {
       const owner = context.instance.units?.[unit.guid]?.owner?.toString() ?? null;
-      const friendly = Boolean(context.instance.players?.[unit.guid])
-        || Boolean(owner && context.instance.players?.[owner]);
+      const playerGuid = context.instance.players?.[unit.guid]
+        ? unit.guid
+        : owner && context.instance.players?.[owner]
+          ? owner
+          : null;
+      const player = playerGuid ? context.instance.players?.[playerGuid] : null;
+      const specialization = playerGuid ? playerSpecializations.get(playerGuid) : null;
       return {
         guid: unit.guid,
         name: unit.name,
-        relation: friendly ? "friendly" as const : "hostile" as const,
+        relation: playerGuid ? "friendly" as const : "hostile" as const,
+        className: player?.class,
+        specializationIconUrl: specialization?.iconUrl,
       };
     })
-    .sort((a, b) => a.name.localeCompare(b.name)), [byUnit, context.instance.players, context.instance.units]);
+    .sort((a, b) => a.name.localeCompare(b.name)), [
+      byUnit,
+      context.instance.players,
+      context.instance.units,
+      playerSpecializations,
+    ]);
 
   const rows = useMemo(() => {
     const unit = selectedGuid ? byUnit.get(selectedGuid) : null;
@@ -298,9 +313,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
           <ScrollArea className="min-h-0 flex-1 rounded-md border border-border/70 bg-background/25">
             <div className="min-w-0">
               <div className="flex items-center gap-2 border-b border-border/60 bg-muted/15 px-3 py-2">
-                {selected.relation === "friendly"
-                  ? <Shield className="size-3.5 text-sky-400" />
-                  : <Skull className="size-3.5 text-rose-400" />}
+                <UnitIcon unit={selected} />
                 <span className="truncate text-xs font-semibold">{selected.name}</span>
                 <span className="ml-auto text-[10px] text-muted-foreground">
                   {rows.buffs.length} buffs · {rows.debuffs.length} debuffs

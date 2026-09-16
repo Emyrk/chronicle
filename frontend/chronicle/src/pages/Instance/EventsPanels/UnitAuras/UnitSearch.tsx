@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { Search, Shield, Skull, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UnitIcon } from "./UnitIcon";
 import { scoreUnitSearchMatch } from "./unitSearchMatch";
 
 export interface UnitSearchOption {
   guid: string;
   name: string;
   relation: "friendly" | "hostile";
+  className?: string;
+  specializationIconUrl?: string;
 }
 
 interface UnitSearchProps {
@@ -65,7 +68,11 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
         "group flex h-9 items-center gap-2 rounded-md border border-border/80 bg-background/70 px-2.5",
         "shadow-inner transition-colors focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/25",
       )}>
-        <Search className="size-4 shrink-0 text-muted-foreground transition-colors group-focus-within:text-primary" />
+        {selected && !open ? (
+          <UnitIcon unit={selected} className="size-5" />
+        ) : (
+          <Search className="size-4 shrink-0 text-muted-foreground transition-colors group-focus-within:text-primary" />
+        )}
         <input
           type="text"
           role="combobox"
@@ -111,7 +118,6 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
           <div className="max-h-72 overflow-y-auto p-1 styled-scrollbar">
             {matches.length > 0 ? matches.map((unit) => {
               const friendly = unit.relation === "friendly";
-              const Icon = friendly ? Shield : Skull;
               return (
                 <button
                   key={unit.guid}
@@ -128,12 +134,7 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
                     selectedGuid === unit.guid && "bg-accent/60",
                   )}
                 >
-                  <span className={cn(
-                    "flex size-6 shrink-0 items-center justify-center rounded",
-                    friendly ? "bg-sky-500/12 text-sky-400" : "bg-rose-500/12 text-rose-400",
-                  )}>
-                    <Icon className="size-3.5" />
-                  </span>
+                  <UnitIcon unit={unit} />
                   <span className="min-w-0 flex-1 truncate font-medium">{unit.name}</span>
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                     {friendly ? "Friendly" : "Hostile"}
