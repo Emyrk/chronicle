@@ -33,6 +33,13 @@ describe("summarizeAuraSources", () => {
     ]);
   });
 
+  it("omits unknown-only attribution from the applier list", () => {
+    expect(uniqueAuraAppliers([
+      segment(null, null, 0, 1000),
+      segment(null, null, 1000, 2000),
+    ])).toEqual([]);
+  });
+
   it("merges touching refresh segments from the same source", () => {
     expect(mergeAdjacentAuraSegments([
       segment("caster", "Brannor", 1000, 3000),

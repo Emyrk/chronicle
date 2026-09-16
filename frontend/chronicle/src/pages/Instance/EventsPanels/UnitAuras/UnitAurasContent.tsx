@@ -6,6 +6,7 @@ import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
+import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
 import {
   materializeActiveUnitAuras,
@@ -187,19 +188,23 @@ function CompactAuraTile({
   const appliers = uniqueAuraAppliers(row.segments).map((source) => ({
     guid: source.guid,
     name: resolveSourceName(source.guid, source.name, players, units),
+    className: players?.[source.guid]?.class,
   }));
-  const tooltipFooter = (
+  const tooltipFooter = appliers.length > 0 ? (
     <div className="mt-2 border-t border-zinc-700 pt-2 text-xs text-zinc-200">
       <div className="mb-1 font-semibold text-zinc-400">Applied by</div>
       <div className="space-y-0.5">
-        {appliers.length > 0 ? appliers.map((applier) => (
-          <div key={applier.guid}>{applier.name}</div>
-        )) : (
-          <div>Unknown</div>
-        )}
+        {appliers.map((applier) => (
+          <div
+            key={applier.guid}
+            style={applier.className ? { color: getClassColorVar(applier.className) } : undefined}
+          >
+            {applier.name}
+          </div>
+        ))}
       </div>
     </div>
-  );
+  ) : undefined;
 
   return (
     <div
