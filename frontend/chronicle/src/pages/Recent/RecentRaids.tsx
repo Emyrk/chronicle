@@ -336,7 +336,7 @@ export function RecentRaids() {
             Recent
           </h1>
           <p className="text-muted-foreground mt-1">
-            Browse the latest dungeon & raid uploads from the community
+            Browse community dungeon & raid uploads from the last 14 days. Older uploads are not shown here.
           </p>
         </div>
 
