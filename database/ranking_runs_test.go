@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"sync"
@@ -438,6 +439,94 @@ func TestRankingReadsFallbackFromInvalidPersistedRepresentative(t *testing.T) {
 	upsertRankingRunSource(t, store, sourceB)
 	transitionPersisted := readRankingConsumers(t, store, tenantID)
 	assertRankingConsumersEqual(t, transitionFallback, transitionPersisted)
+type explainPlan struct {
+	Plan explainNode `json:"Plan"`
+}
+
+type explainNode struct {
+	NodeType     string        `json:"Node Type"`
+	RelationName string        `json:"Relation Name"`
+	IndexName    string        `json:"Index Name"`
+	Plans        []explainNode `json:"Plans"`
+}
+
+func (n explainNode) hasIndex(indexName string) bool {
+	if n.IndexName == indexName {
+		return true
+	}
+	for _, child := range n.Plans {
+		if child.hasIndex(indexName) {
+			return true
+		}
+	}
+	return false
+}
+
+func (n explainNode) hasSequentialScan(relationName string) bool {
+	if n.NodeType == "Seq Scan" && n.RelationName == relationName {
+		return true
+	}
+	for _, child := range n.Plans {
+		if child.hasSequentialScan(relationName) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRankingRunLogicalMemberLookupUsesIndex(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	anchorID := uuid.New()
+	duplicateID := uuid.New()
+	start := time.Date(2026, 9, 16, 20, 0, 0, 0, time.UTC)
+	insertRankingRunSource(t, pool, store, realmID, anchorID, start)
+	insertRankingRunSource(t, pool, store, realmID, duplicateID, start.Add(time.Second))
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true}, Ids: []uuid.UUID{anchorID, duplicateID},
+	}))
+
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `
+		INSERT INTO log_instances (id, realm_id, log_group_id, name)
+		SELECT gen_random_uuid(), source.realm_id, source.log_group_id, source.name
+		FROM log_instances source
+		CROSS JOIN generate_series(1, 6000)
+		WHERE source.id = $1`, anchorID)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "ANALYZE log_instances")
+	require.NoError(t, err)
+
+	var rawPlan []byte
+	err = conn.QueryRow(ctx, `
+		EXPLAIN (ANALYZE, BUFFERS, SETTINGS, FORMAT JSON)
+		WITH affected_runs AS MATERIALIZED (
+			SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
+			FROM log_instances li
+			WHERE li.id = ANY($1::uuid[])
+			   OR li.duplicate_group_id = ANY($1::uuid[])
+		)
+		SELECT li.id
+		FROM affected_runs
+		CROSS JOIN LATERAL (
+			SELECT candidate.id
+			FROM log_instances candidate
+			WHERE COALESCE(candidate.duplicate_group_id, candidate.id) = affected_runs.run_id
+			OFFSET 0
+		) li`, []uuid.UUID{duplicateID}).Scan(&rawPlan)
+	require.NoError(t, err)
+
+	t.Logf("logical-run lookup plan: %s", rawPlan)
+	var plans []explainPlan
+	require.NoError(t, json.Unmarshal(rawPlan, &plans))
+	require.Len(t, plans, 1)
+	assert.True(t, plans[0].Plan.hasIndex("idx_log_instances_logical_run"), "plan: %s", rawPlan)
+	assert.False(t, plans[0].Plan.hasSequentialScan("log_instances"), "plan: %s", rawPlan)
 }
 
 func TestRankingRunRepresentativePrefersBroaderDuplicate(t *testing.T) {
