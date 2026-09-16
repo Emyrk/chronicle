@@ -5971,7 +5971,6 @@ LEFT JOIN LATERAL (
         FROM parse_score_results psr
         WHERE psr.tenant_id = $1
           AND psr.player_guid = gp.id::text
-          AND psr.metric = 'dps'
           AND psr.status IN ('ok', 'low_confidence')
           AND psr.instance_id IN (
               SELECT recent.instance_id
@@ -5980,7 +5979,6 @@ LEFT JOIN LATERAL (
                   FROM parse_score_results psr2
                   WHERE psr2.tenant_id = $1
                     AND psr2.player_guid = gp.id::text
-                    AND psr2.metric = 'dps'
                     AND psr2.status IN ('ok', 'low_confidence')
                   GROUP BY psr2.instance_id
                   ORDER BY latest_kill DESC NULLS LAST

@@ -163,9 +163,9 @@ func TestGuildCharacterRoster(t *testing.T) {
 	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(1), playerName: "Activeguy", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 80, killedAt: now.Add(-24 * time.Hour)})
 	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(1), playerName: "Activeguy", playerRole: "dps", metric: "dps", encounter: "Golemagg", score: 60, killedAt: now.Add(-24 * time.Hour)})
 	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(1), playerName: "Activeguy", playerRole: "dps", metric: "hps", encounter: "Ragnaros", score: 99, killedAt: now.Add(-24 * time.Hour)})
-	// Healgirl (heal): her hps parses count, her dps parse does not.
+	// Healgirl (heal): detect her role from the hps result even when no usable
+	// dps score exists, then use that hps parse for the roster score.
 	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(2), playerName: "Healgirl", playerRole: "heal", metric: "hps", encounter: "Ragnaros", score: 90, killedAt: now.Add(-48 * time.Hour)})
-	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(2), playerName: "Healgirl", playerRole: "heal", metric: "dps", encounter: "Ragnaros", score: 5, killedAt: now.Add(-48 * time.Hour)})
 
 	rows, err := f.store.GuildCharacterRoster(ctx, database.GuildCharacterRosterParams{
 		TenantID:        uuid.Nil,
