@@ -3,10 +3,12 @@ package chronicle
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
@@ -21,6 +23,10 @@ type ArgsLogReparse struct {
 	TenantID     uuid.UUID `json:"tenant_id,omitempty"`
 	Verbose      bool      `json:"verbose,omitempty"`
 	IdentityMode bool      `json:"identity_mode,omitempty"`
+}
+
+type logReparseMetadata struct {
+	PreviousRankingRunIDs []uuid.UUID `json:"previous_ranking_run_ids,omitempty"`
 }
 
 func (ArgsLogReparse) InsertOpts() river.InsertOpts {
@@ -67,16 +73,19 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 		return fmt.Errorf("fetch log group: %w", err)
 	}
 
-	identities, err := db.RankingRunIdentitiesByLogGroupID(ctx, job.Args.LogID)
-	if err != nil {
-		return fmt.Errorf("load ranking run identities: %w", err)
+	var metadata logReparseMetadata
+	if len(job.Metadata) > 0 {
+		if err := json.Unmarshal(job.Metadata, &metadata); err != nil {
+			return fmt.Errorf("decode reparse metadata: %w", err)
+		}
 	}
-	err = db.DeleteAllParsedLogsByGroupID(ctx, job.Args.LogID)
-	if err != nil {
-		return fmt.Errorf("delete parsed logs for group: %w", err)
-	}
-	if err := w.parent.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
-		w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh after reparse cleanup", "error", err)
+	previousRankingRunIDs := metadata.PreviousRankingRunIDs
+	if len(previousRankingRunIDs) == 0 {
+		identities, err := db.RankingRunIdentitiesByLogGroupID(ctx, job.Args.LogID)
+		if err != nil {
+			return fmt.Errorf("load ranking run identities: %w", err)
+		}
+		previousRankingRunIDs = rankingRunLogGroupIdentitySeeds(identities)
 	}
 
 	list, err := w.parent.ListLogGroupJobs(ctx, job.Args.LogID)
@@ -102,14 +111,25 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 		}
 	}
 
-	// Inject tenant context so EnqueueParseLog preserves the TenantID.
 	parseCtx := ctx
 	if job.Args.TenantID != uuid.Nil {
 		parseCtx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
 	}
-	res, err := w.parent.EnqueueParseLog(parseCtx, logGroup.WoWLogGroup, job.Args.Verbose, job.Args.IdentityMode, job.Args.RealmID)
+	parseArgs := newReplacementArgsLogParse(parseCtx, job.Args.LogID, job.Args.Verbose, job.Args.IdentityMode, job.Args.RealmID, previousRankingRunIDs)
+	insertOpts := parseArgs.InsertOpts()
+	insertOpts.Pending = true
+	insertOpts.Tags = []string{fmt.Sprintf("owner_%s", logGroup.WoWLogGroup.Owner.String())}
+	res, err := w.parent.queue.Insert(parseCtx, parseArgs, &insertOpts)
 	if err != nil {
-		return fmt.Errorf("enqueue log parse job: %w", err)
+		return fmt.Errorf("stage replacement log parse job: %w", err)
+	}
+
+	if err := db.DeleteAllParsedLogsByGroupID(ctx, job.Args.LogID); err != nil {
+		_, _ = w.parent.queue.JobDelete(ctx, res.Job.ID)
+		return fmt.Errorf("delete parsed logs for group: %w", err)
+	}
+	if _, err := w.parent.queue.JobRetry(parseCtx, res.Job.ID); err != nil {
+		return fmt.Errorf("release replacement log parse job %d: %w", res.Job.ID, err)
 	}
 
 	_ = river.RecordOutput(ctx, map[string]any{
@@ -119,6 +139,18 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 }
 
 func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
+	identities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logID)
+	if err != nil {
+		return nil, fmt.Errorf("load ranking run identities: %w", err)
+	}
+
+	metadata, err := json.Marshal(logReparseMetadata{
+		PreviousRankingRunIDs: rankingargs.NormalizeIDs(rankingRunLogGroupIdentitySeeds(identities)),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("encode reparse metadata: %w", err)
+	}
+
 	t := servicetenant.TenantIDFromContext(ctx)
 	res, err := c.queue.Insert(ctx, ArgsLogReparse{
 		LogID:        logID,
@@ -127,7 +159,8 @@ func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verb
 		Verbose:      verbose,
 		IdentityMode: identityMode,
 	}, &river.InsertOpts{
-		Tags: []string{},
+		Tags:     []string{},
+		Metadata: metadata,
 	})
 
 	return res, err
