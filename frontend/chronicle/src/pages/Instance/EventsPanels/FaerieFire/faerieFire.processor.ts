@@ -74,7 +74,8 @@ export interface FaerieFireResult {
   druids: Record<string, DruidFaerieFireStats>;
   targets: Record<string, TargetFaerieFireStats>;
   _encounterStarts: Record<string, number>;
-  _activeTargets: Record<string, true>;
+  /** Active Faerie Fire start offset by encounter/target key. */
+  _activeTargets: Record<string, number>;
   _pendingCasts: PendingFaerieFire[];
 }
 
@@ -200,7 +201,7 @@ function processAura(
   const key = targetKey(encounterId, event.target);
   if (event.state === AuraState.Removed || event.amount <= 0) {
     const target = state.targets[event.target];
-    if (state._activeTargets[key] && target) {
+    if (state._activeTargets[key] !== undefined && target) {
       const offsetMs = timestampMs - (state._encounterStarts[encounterId] ?? timestampMs);
       closeActiveUptime(target, offsetMs);
       target.debugEvents.push({
@@ -219,7 +220,9 @@ function processAura(
     && timestampMs - pending.timestampMs <= CONFIRMATION_WINDOW_MS
   );
   if (pendingIndex === -1) {
-    state._activeTargets[key] = true;
+    // Synthetic/pre-existing aura events can arrive without a matching cast.
+    // Preserve their start time so a later refresh still has real uptime.
+    state._activeTargets[key] ??= timestampMs - (state._encounterStarts[encounterId] ?? timestampMs);
     return;
   }
 
@@ -310,7 +313,11 @@ function recordSuccessfulCast(state: FaerieFireResult, data: FaerieFireEventData
   const key = targetKey(data.encounterId, data.targetGuid);
   const target = getOrCreateTarget(state, data);
   const druid = getOrCreateDruid(state, data);
-  const wasActive = state._activeTargets[key] === true;
+  const activeSinceMs = state._activeTargets[key];
+  const wasActive = activeSinceMs !== undefined;
+  if (wasActive && target.activeSinceMs === null) {
+    target.activeSinceMs = activeSinceMs;
+  }
 
   target.debugEvents.push({
     offsetMs: encounterOffset(state, data),
@@ -334,7 +341,7 @@ function recordSuccessfulCast(state: FaerieFireResult, data: FaerieFireEventData
     }
   }
 
-  state._activeTargets[key] = true;
+  state._activeTargets[key] = target.activeSinceMs ?? encounterOffset(state, data);
 }
 
 function expirePendingCasts(state: FaerieFireResult, timestampMs: number): void {

@@ -276,6 +276,50 @@ describe("faerieFireProcessor", () => {
     expect(state.targets[TARGET_GUID].firstApplicationMs).toBe(1010);
   });
 
+  it("preserves uptime from an unpaired active aura when later casts are refreshes", () => {
+    const state = faerieFireProcessor.createState();
+    const context = createContext();
+
+    // Active-at-pull and synthetic aura records may not have a matching cast.
+    faerieFireProcessor.processEvent(
+      state,
+      createAuraEvent(9907, { offsetMilli: 0 }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura",
+      context,
+    );
+    faerieFireProcessor.processEvent(
+      state,
+      createAuraCastEvent(9907, { offsetMilli: 10000 }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura_cast",
+      context,
+    );
+    faerieFireProcessor.processEvent(
+      state,
+      createSlainEvent({ offsetMilli: 30000 }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "slain",
+      context,
+    );
+
+    const target = state.targets[TARGET_GUID];
+    expect(state.druids[CASTER_GUID]).toMatchObject({ applications: 0, refreshes: 1 });
+    expect(target).toMatchObject({
+      activeSinceMs: null,
+      uptimeMs: 30000,
+      deathOffsetMs: 30000,
+    });
+    expect(calculateFaerieFireUptime(target, 60000)).toEqual({
+      uptimeMs: 30000,
+      eligibleMs: 30000,
+      percent: 100,
+    });
+  });
+
   it("caps uptime eligibility at target death", () => {
     const state = faerieFireProcessor.createState();
     const context = createContext();
