@@ -288,7 +288,8 @@ func TestRankingRunRefreshSerializesSourceTransitions(t *testing.T) {
 				})
 			},
 			mutate: func(ctx context.Context, store database.Store, _ uuid.UUID, duplicateID uuid.UUID) error {
-				return store.ClearDuplicateGroupID(ctx, duplicateID)
+				_, err := store.UnlinkDuplicateGroup(ctx, duplicateID)
+				return err
 			},
 		},
 	}
@@ -856,7 +857,8 @@ func TestRankingRunRepairSignalAfterIdentityTransitions(t *testing.T) {
 
 	// Unlink the member. The old group needs a survivor touch while the new
 	// standalone identity is found as a missing projection.
-	require.NoError(t, store.ClearDuplicateGroupID(ctx, movedID))
+	_, err = store.UnlinkDuplicateGroup(ctx, movedID)
+	require.NoError(t, err)
 	repairs, err = store.RankingRunsNeedingRepair(ctx, database.RankingRunsNeedingRepairParams{
 		SourceCutoff: database.Timestamptz(time.Now().Add(time.Hour)), QueryLimit: 10,
 	})
