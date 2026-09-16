@@ -15,7 +15,6 @@ import {
 } from "./unitAuras.processor";
 import {
   compactAuraColors,
-  compactAuraKind,
   compactAuraPercent,
   formatCompactAuraPercent,
 } from "./compactAura";
@@ -121,13 +120,17 @@ function AuraTimeline({
                 }}
               />
             </TooltipTrigger>
-            <TooltipContent side="top" hideArrow className="text-xs">
-              <div className="font-medium">{name}</div>
-              <div className="text-muted-foreground">
+            <TooltipContent
+              side="top"
+              hideArrow
+              className="border border-zinc-700 bg-[#111118] text-xs text-zinc-100 shadow-xl"
+            >
+              <div className="font-medium text-zinc-100">{name}</div>
+              <div className="text-zinc-400">
                 {formatTime(segment.startMs)}–{formatTime(segment.endMs)}
               </div>
               {encounterNames.get(segment.encounterId) && (
-                <div className="max-w-48 truncate text-muted-foreground/70">
+                <div className="max-w-48 truncate text-zinc-500">
                   {encounterNames.get(segment.encounterId)}
                 </div>
               )}
@@ -204,7 +207,6 @@ function CompactAuraTile({
       style={{
         background: `conic-gradient(${colors.ring} ${percent * 3.6}deg, rgba(82, 82, 82, 0.5) 0deg)`,
       }}
-      title={`${row.spellName} · ${compactAuraKind(row.isBuff)} · ${formatPercent(row.totalUptimeMs, durationMs)} uptime`}
     >
       <div
         className="relative flex size-full items-center justify-center overflow-hidden rounded-[7px] border border-black/30 shadow-inner"
