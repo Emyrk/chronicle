@@ -165,6 +165,48 @@ function SourceSummary({
   );
 }
 
+function CompactAuraGrid({
+  rows,
+  durationMs,
+}: {
+  rows: AuraRow[];
+  durationMs: number;
+}) {
+  return (
+    <ScrollArea className="min-h-0 flex-1 rounded border border-border/70 bg-background/25">
+      <div className="flex flex-wrap content-start gap-1.5 p-2">
+        {rows.map((row) => (
+          <div
+            key={row.auraKey}
+            className={cn(
+              "rounded border bg-muted/15 px-1.5 py-1 transition-colors hover:bg-muted/30",
+              row.isBuff ? "border-sky-500/20" : "border-rose-500/20",
+            )}
+          >
+            {row.spellId !== null ? (
+              <SpellIdTooltip
+                spellId={row.spellId}
+                name={formatPercent(row.totalUptimeMs, durationMs)}
+                size={26}
+                className="font-mono text-[10px] tabular-nums text-muted-foreground"
+              />
+            ) : (
+              <span className="inline-flex items-center gap-2">
+                <span className="flex size-[26px] items-center justify-center rounded border border-border bg-muted text-muted-foreground">
+                  <Sparkles className="size-3.5" />
+                </span>
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {formatPercent(row.totalUptimeMs, durationMs)}
+                </span>
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </ScrollArea>
+  );
+}
+
 function AuraSection({
   title,
   rows,
@@ -222,7 +264,7 @@ function AuraSection({
 }
 
 export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
-  const { context, durationMs, panelOption, setPanelOption, result } = props;
+  const { context, durationMs, panelOption, setPanelOption, result, checkboxChecked } = props;
   const selectedGuid = parseSelectedUnit(panelOption);
   const playerSpecializations = usePlayerSpecializations();
 
@@ -337,6 +379,11 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
           <div className="flex min-h-32 flex-1 items-center justify-center text-xs text-muted-foreground">
             No auras recorded for {selected.name}.
           </div>
+        ) : checkboxChecked ? (
+          <CompactAuraGrid
+            rows={[...rows.buffs, ...rows.debuffs]}
+            durationMs={durationMs}
+          />
         ) : (
           <ScrollArea className="min-h-0 flex-1 rounded border border-border/70 bg-background/25">
             <div className="min-w-0">
