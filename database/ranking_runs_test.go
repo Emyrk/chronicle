@@ -439,6 +439,8 @@ func TestRankingReadsFallbackFromInvalidPersistedRepresentative(t *testing.T) {
 	upsertRankingRunSource(t, store, sourceB)
 	transitionPersisted := readRankingConsumers(t, store, tenantID)
 	assertRankingConsumersEqual(t, transitionFallback, transitionPersisted)
+}
+
 type explainPlan struct {
 	Plan explainNode `json:"Plan"`
 }
