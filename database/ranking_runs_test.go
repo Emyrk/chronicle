@@ -334,6 +334,59 @@ func TestRankingRunRepairSignalAfterIdentityTransitions(t *testing.T) {
 	assert.Equal(t, int32(1), standalone.MemberCount)
 }
 
+func TestRankingRunRepairSignalWritesAtMostOneSurvivorPerRun(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	start := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+	type runMembers struct {
+		runID   uuid.UUID
+		keepIDs []uuid.UUID
+		delete  uuid.UUID
+	}
+	runs := make([]runMembers, 2)
+	allIDs := make([]uuid.UUID, 0, 6)
+	deleteIDs := make([]uuid.UUID, 0, 2)
+	for i := range runs {
+		runs[i] = runMembers{
+			runID:   uuid.New(),
+			keepIDs: []uuid.UUID{uuid.New(), uuid.New()},
+			delete:  uuid.New(),
+		}
+		ids := []uuid.UUID{runs[i].runID, runs[i].keepIDs[0], runs[i].keepIDs[1], runs[i].delete}
+		for j, id := range ids {
+			insertRankingRunSource(t, pool, store, realmID, id, start.Add(time.Duration(i*10+j)*time.Second), "Lucifron")
+		}
+		require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+			DuplicateGroupID: uuid.NullUUID{UUID: runs[i].runID, Valid: true}, Ids: ids,
+		}))
+		allIDs = append(allIDs, ids...)
+		deleteIDs = append(deleteIDs, runs[i].delete)
+	}
+
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+	baseline := time.Date(2026, 9, 16, 12, 30, 0, 0, time.UTC)
+	_, err = conn.Exec(ctx, "UPDATE log_instances SET updated_at = $1 WHERE id = ANY($2)", baseline, allIDs)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "DELETE FROM log_instances WHERE id = ANY($1)", deleteIDs)
+	require.NoError(t, err)
+
+	for _, run := range runs {
+		var touched int
+		err = conn.QueryRow(ctx, `
+			SELECT COUNT(*)
+			FROM log_instances
+			WHERE (id = $1 OR duplicate_group_id = $1)
+			  AND updated_at > $2`, run.runID, baseline).Scan(&touched)
+		require.NoError(t, err)
+		assert.Equal(t, 1, touched)
+	}
+	conn.Release()
+}
+
 func TestRankingRunRepairDiscoveryCutoffLimitAndOrphans(t *testing.T) {
 	t.Parallel()
 	pool, store, realmID := setupParsesTest(t)
