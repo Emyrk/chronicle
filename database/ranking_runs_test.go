@@ -1,10 +1,15 @@
 package database_test
 
 import (
+	"context"
 	"errors"
+	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
@@ -13,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,6 +75,63 @@ func upsertRankingRunSource(t *testing.T, store database.Store, source database.
 	created, err := store.UpsertRankingRun(testutil.Context(t, testutil.WaitShort), database.UpsertRankingRunParams(source))
 	require.NoError(t, err)
 	return created
+}
+
+type blockingRankingRunRefreshStore struct {
+	database.Store
+	started     chan struct{}
+	release     chan struct{}
+	startedOnce sync.Once
+}
+
+func (s *blockingRankingRunRefreshStore) InTx(ctx context.Context, f func(database.Store) error, opts *pgx.TxOptions) error {
+	return s.Store.InTx(ctx, func(tx database.Store) error {
+		s.startedOnce.Do(func() { close(s.started) })
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-s.release:
+		}
+		return f(tx)
+	}, opts)
+}
+
+func TestRankingRunRefreshQueueAllowsIdenticalJobWhileRunning(t *testing.T) {
+	t.Parallel()
+	pool, store, _ := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	blockingStore := &blockingRankingRunRefreshStore{
+		Store:   store,
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(blockingStore.release) }) }
+	t.Cleanup(release)
+
+	queue, err := riverqueue.New(ctx, riverqueue.Options{Logger: slog.Default(), Pool: pool})
+	require.NoError(t, err)
+	riverqueue.AddWorker(queue, &servicerankings.WorkerRefreshRankingRuns{
+		Store: blockingStore, Logger: slog.Default(),
+	})
+	queue.AddQueue(riverqueue.QueueRankings, river.QueueConfig{MaxWorkers: 1})
+	require.NoError(t, queue.Start(ctx))
+	t.Cleanup(func() { _ = queue.Stop(context.Background()) })
+
+	args := rankingargs.NewRefreshRankingRuns(uuid.New())
+	first, err := queue.Insert(ctx, args, nil)
+	require.NoError(t, err)
+	select {
+	case <-ctx.Done():
+		require.FailNow(t, "refresh job did not start", ctx.Err())
+	case <-blockingStore.started:
+	}
+
+	second, err := queue.Insert(ctx, args, nil)
+	require.NoError(t, err)
+	assert.False(t, second.UniqueSkippedAsDuplicate)
+	assert.NotEqual(t, first.Job.ID, second.Job.ID)
+	release()
 }
 
 func TestRankingRunRepresentativePrefersBroaderDuplicate(t *testing.T) {

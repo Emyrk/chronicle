@@ -38,10 +38,6 @@ func (ArgsRefreshRankingRuns) InsertOpts() river.InsertOpts {
 		Queue:       riverconst.QueueRankings,
 		Priority:    riverconst.PriorityHigh,
 		MaxAttempts: 5,
-		UniqueOpts: river.UniqueOpts{
-			ByArgs:  true,
-			ByState: activeStates,
-		},
 	}
 }
 
