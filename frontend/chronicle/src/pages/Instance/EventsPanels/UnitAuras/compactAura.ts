@@ -19,6 +19,10 @@ export function compactAuraColors(percent: number): CompactAuraColors {
   };
 }
 
+export function compactAuraKind(isBuff: boolean): "Buff" | "Debuff" {
+  return isBuff ? "Buff" : "Debuff";
+}
+
 export function formatCompactAuraPercent(percent: number): string {
   if (percent >= 10) return Math.round(percent).toString();
   return percent.toFixed(1);

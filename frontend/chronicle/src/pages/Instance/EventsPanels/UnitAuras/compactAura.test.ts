@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compactAuraColors,
+  compactAuraKind,
   compactAuraPercent,
   formatCompactAuraPercent,
 } from "./compactAura";
@@ -18,6 +19,11 @@ describe("compact aura display", () => {
     expect(compactAuraColors(100).ring).toBe("hsl(145 72% 50%)");
     expect(compactAuraColors(-20)).toEqual(compactAuraColors(0));
     expect(compactAuraColors(120)).toEqual(compactAuraColors(100));
+  });
+
+  it("labels buffs and debuffs independently of uptime", () => {
+    expect(compactAuraKind(true)).toBe("Buff");
+    expect(compactAuraKind(false)).toBe("Debuff");
   });
 
   it("keeps a decimal for single-digit percentages", () => {

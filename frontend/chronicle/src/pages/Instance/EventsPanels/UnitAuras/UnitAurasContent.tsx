@@ -15,6 +15,7 @@ import {
 } from "./unitAuras.processor";
 import {
   compactAuraColors,
+  compactAuraKind,
   compactAuraPercent,
   formatCompactAuraPercent,
 } from "./compactAura";
@@ -177,7 +178,7 @@ function CompactAuraTile({ row, durationMs }: { row: AuraRow; durationMs: number
       style={{
         background: `conic-gradient(${colors.ring} ${percent * 3.6}deg, rgba(82, 82, 82, 0.5) 0deg)`,
       }}
-      title={`${row.spellName}: ${formatPercent(row.totalUptimeMs, durationMs)} uptime`}
+      title={`${row.spellName} · ${compactAuraKind(row.isBuff)} · ${formatPercent(row.totalUptimeMs, durationMs)} uptime`}
     >
       <div
         className="relative flex size-full items-center justify-center overflow-hidden rounded-[7px] border border-black/30 shadow-inner"
@@ -195,6 +196,12 @@ function CompactAuraTile({ row, durationMs }: { row: AuraRow; durationMs: number
           )}
         />
       </div>
+      {!row.isBuff && (
+        <span
+          aria-label="Debuff"
+          className="absolute -left-1 -top-1 z-20 size-3 rounded-full border-2 border-card bg-rose-500 shadow-sm"
+        />
+      )}
       <span
         className="absolute -bottom-1 -right-1 z-20 rounded-[3px] px-1 py-0.5 font-mono text-[9px] font-bold leading-none text-slate-950 tabular-nums shadow-sm"
         style={{ backgroundColor: colors.badge }}
