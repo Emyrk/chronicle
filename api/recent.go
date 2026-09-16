@@ -14,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const recentInstancesCacheControl = "public, max-age=60, stale-while-revalidate=300"
+
 // RecentInstances returns instances from a configurable recent time window.
 // It delegates to InstancesByTimeRange with a preset time window.
 // @Summary List recent raid/dungeon instances
@@ -333,6 +335,7 @@ func (api *API) writeRecentInstanceGroups(ctx context.Context, w http.ResponseWr
 		instances = append(instances, inst)
 	}
 
+	w.Header().Set("Cache-Control", recentInstancesCacheControl)
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.RecentInstancesResponse{
 		Instances: instances,
 		HasMore:   hasMore,

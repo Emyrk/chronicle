@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/Emyrk/chronicle/database"
@@ -31,6 +34,16 @@ func TestRecentWindowDays(t *testing.T) {
 			require.Equal(t, test.want, recentWindowDays(test.value))
 		})
 	}
+}
+
+func TestWriteRecentInstanceGroupsCacheControl(t *testing.T) {
+	t.Parallel()
+
+	recorder := httptest.NewRecorder()
+	(&API{}).writeRecentInstanceGroups(context.Background(), recorder, nil, 25)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, recentInstancesCacheControl, recorder.Header().Get("Cache-Control"))
 }
 
 func TestTrimRecentInstanceGroups(t *testing.T) {
