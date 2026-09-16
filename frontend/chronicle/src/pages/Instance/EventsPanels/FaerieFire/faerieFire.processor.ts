@@ -77,6 +77,8 @@ export interface FaerieFireResult {
   /** Active Faerie Fire start offset by encounter/target key. */
   _activeTargets: Record<string, number>;
   _pendingCasts: PendingFaerieFire[];
+  /** Recently counted successes used to deduplicate aura and cast representations. */
+  _recentSuccesses: FaerieFireEventData[];
 }
 
 type FaerieFireEvent =
@@ -95,6 +97,7 @@ export const faerieFireProcessor: PanelProcessor<FaerieFireResult, FaerieFireEve
     _encounterStarts: {},
     _activeTargets: {},
     _pendingCasts: [],
+    _recentSuccesses: [],
   }),
 
   processEvent: (
@@ -111,13 +114,14 @@ export const faerieFireProcessor: PanelProcessor<FaerieFireResult, FaerieFireEve
     state._encounterStarts[encounterId] ??= encounterStartMs;
     const timestampMs = encounterStartMs + event.offsetMilli;
     expirePendingCasts(state, timestampMs);
+    expireRecentSuccesses(state, timestampMs);
 
     if (streamType === "aura_cast" && event.type === "aura_cast") {
       processAuraCast(state, event, timestampMs, encounterId, context);
     } else if (streamType === "spell_go" && event.type === "spell_go") {
       processSpellGo(state, event, timestampMs, encounterId, context);
     } else if (streamType === "aura" && event.type === "aura") {
-      processAura(state, event, timestampMs, encounterId);
+      processAura(state, event, timestampMs, encounterId, context);
     } else if (streamType === "slain" && event.type === "slain") {
       processSlain(state, event, timestampMs, encounterId);
     }
@@ -159,7 +163,9 @@ function processAuraCast(
     || Math.abs(pending.timestampMs - timestampMs) > CONFIRMATION_WINDOW_MS
   );
 
+  if (consumeMatchingRecentSuccess(state, data)) return;
   recordSuccessfulCast(state, data);
+  state._recentSuccesses.push(data);
 }
 
 function processSpellGo(
@@ -195,6 +201,7 @@ function processAura(
   event: AuraProcessorEvent,
   timestampMs: number,
   encounterId: string,
+  context: ProcessorContext,
 ): void {
   if (!isFaerieFireAura(event)) return;
 
@@ -219,15 +226,26 @@ function processAura(
     && timestampMs >= pending.timestampMs
     && timestampMs - pending.timestampMs <= CONFIRMATION_WINDOW_MS
   );
-  if (pendingIndex === -1) {
-    // Synthetic/pre-existing aura events can arrive without a matching cast.
-    // Preserve their start time so a later refresh still has real uptime.
-    state._activeTargets[key] ??= timestampMs - (state._encounterStarts[encounterId] ?? timestampMs);
+  if (pendingIndex !== -1) {
+    const [pending] = state._pendingCasts.splice(pendingIndex, 1);
+    const data = { ...pending, timestampMs };
+    if (consumeMatchingRecentSuccess(state, data)) return;
+    recordSuccessfulCast(state, data);
+    state._recentSuccesses.push(data);
     return;
   }
 
-  const [pending] = state._pendingCasts.splice(pendingIndex, 1);
-  recordSuccessfulCast(state, { ...pending, timestampMs });
+  const data = auraEventData(event, timestampMs, encounterId, context);
+  if (data) {
+    if (consumeMatchingRecentSuccess(state, data)) return;
+    recordSuccessfulCast(state, data);
+    state._recentSuccesses.push(data);
+    return;
+  }
+
+  // Synthetic/pre-existing aura events can still lack caster attribution.
+  // Preserve their start time so a later refresh has real uptime.
+  state._activeTargets[key] ??= timestampMs - (state._encounterStarts[encounterId] ?? timestampMs);
 }
 
 function processSlain(
@@ -280,6 +298,54 @@ export function calculateFaerieFireUptime(
     eligibleMs,
     percent: eligibleMs > 0 ? (uptimeMs / eligibleMs) * 100 : 0,
   };
+}
+
+function auraEventData(
+  event: AuraProcessorEvent,
+  timestampMs: number,
+  encounterId: string,
+  context: ProcessorContext,
+): FaerieFireEventData | null {
+  if (!event.caster) return null;
+
+  const caster = context.players[event.caster];
+  if (!caster) return null;
+
+  if (context.entitySelection.enemyIds.size > 0
+    && !context.entitySelection.enemyIds.has(event.target)) {
+    return null;
+  }
+
+  return {
+    timestampMs,
+    casterGuid: event.caster,
+    casterName: caster.name,
+    abilityName: event.spellName,
+    targetGuid: event.target,
+    targetName: context.units?.[event.target]?.name ?? event.target,
+    encounterId,
+  };
+}
+
+function consumeMatchingRecentSuccess(
+  state: FaerieFireResult,
+  data: FaerieFireEventData,
+): boolean {
+  const matchIndex = state._recentSuccesses.findIndex((success) =>
+    success.encounterId === data.encounterId
+    && success.casterGuid === data.casterGuid
+    && success.targetGuid === data.targetGuid
+    && Math.abs(success.timestampMs - data.timestampMs) <= CONFIRMATION_WINDOW_MS
+  );
+  if (matchIndex === -1) return false;
+  state._recentSuccesses.splice(matchIndex, 1);
+  return true;
+}
+
+function expireRecentSuccesses(state: FaerieFireResult, timestampMs: number): void {
+  state._recentSuccesses = state._recentSuccesses.filter(
+    (success) => timestampMs - success.timestampMs <= CONFIRMATION_WINDOW_MS,
+  );
 }
 
 function eventData(

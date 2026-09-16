@@ -276,6 +276,85 @@ describe("faerieFireProcessor", () => {
     expect(state.targets[TARGET_GUID].firstApplicationMs).toBe(1010);
   });
 
+  it("attributes an unpaired aura application to its caster", () => {
+    const state = faerieFireProcessor.createState();
+
+    faerieFireProcessor.processEvent(
+      state,
+      createAuraEvent(9907, { offsetMilli: 1000, caster: CASTER_GUID }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura",
+      createContext(),
+    );
+
+    expect(state.druids[CASTER_GUID]).toMatchObject({
+      applications: 1,
+      refreshes: 0,
+      failures: 0,
+    });
+    expect(state.targets[TARGET_GUID]).toMatchObject({
+      firstApplicationMs: 1000,
+      firstCasterGuid: CASTER_GUID,
+      firstCasterName: "Leafy",
+      applications: 1,
+      activeSinceMs: 1000,
+    });
+    expect(state.targets[TARGET_GUID].debugEvents).toEqual([
+      expect.objectContaining({ type: "applied", casterName: "Leafy" }),
+    ]);
+  });
+
+  it("deduplicates an attributed aura followed by its aura-cast event", () => {
+    const state = faerieFireProcessor.createState();
+    const context = createContext();
+
+    faerieFireProcessor.processEvent(
+      state,
+      createAuraEvent(9907, { offsetMilli: 1000, caster: CASTER_GUID }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura",
+      context,
+    );
+    faerieFireProcessor.processEvent(
+      state,
+      createAuraCastEvent(9907, { offsetMilli: 1010 }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura_cast",
+      context,
+    );
+
+    expect(state.druids[CASTER_GUID]).toMatchObject({ applications: 1, refreshes: 0 });
+    expect(state.targets[TARGET_GUID].debugEvents).toHaveLength(1);
+  });
+
+  it("deduplicates an aura-cast event followed by its attributed aura", () => {
+    const state = faerieFireProcessor.createState();
+    const context = createContext();
+
+    faerieFireProcessor.processEvent(
+      state,
+      createAuraCastEvent(9907, { offsetMilli: 1000 }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura_cast",
+      context,
+    );
+    faerieFireProcessor.processEvent(
+      state,
+      createAuraEvent(9907, { offsetMilli: 1010, caster: CASTER_GUID }),
+      ENCOUNTER_ID,
+      FIRST_TIMESTAMP,
+      "aura",
+      context,
+    );
+
+    expect(state.druids[CASTER_GUID]).toMatchObject({ applications: 1, refreshes: 0 });
+    expect(state.targets[TARGET_GUID].debugEvents).toHaveLength(1);
+  });
+
   it("preserves uptime from an unpaired active aura when later casts are refreshes", () => {
     const state = faerieFireProcessor.createState();
     const context = createContext();
@@ -307,7 +386,7 @@ describe("faerieFireProcessor", () => {
     );
 
     const target = state.targets[TARGET_GUID];
-    expect(state.druids[CASTER_GUID]).toMatchObject({ applications: 0, refreshes: 1 });
+    expect(state.druids[CASTER_GUID]).toMatchObject({ applications: 1, refreshes: 1 });
     expect(target).toMatchObject({
       activeSinceMs: null,
       uptimeMs: 30000,
