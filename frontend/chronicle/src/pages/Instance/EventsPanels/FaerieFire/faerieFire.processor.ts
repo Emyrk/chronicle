@@ -61,6 +61,12 @@ export interface TargetFaerieFireStats {
   firstCasterName: string | null;
   applications: number;
   refreshes: number;
+  /** Completed Faerie Fire uptime before the current active interval. */
+  uptimeMs: number;
+  /** Start of the current active interval, relative to encounter start. */
+  activeSinceMs: number | null;
+  /** Target death offset. Uptime eligibility ends here instead of at encounter end. */
+  deathOffsetMs: number | null;
   debugEvents: FaerieFireDebugEvent[];
 }
 
@@ -112,7 +118,7 @@ export const faerieFireProcessor: PanelProcessor<FaerieFireResult, FaerieFireEve
     } else if (streamType === "aura" && event.type === "aura") {
       processAura(state, event, timestampMs, encounterId);
     } else if (streamType === "slain" && event.type === "slain") {
-      delete state._activeTargets[targetKey(encounterId, event.target)];
+      processSlain(state, event, timestampMs, encounterId);
     }
   },
 };
@@ -193,14 +199,16 @@ function processAura(
 
   const key = targetKey(encounterId, event.target);
   if (event.state === AuraState.Removed || event.amount <= 0) {
-    delete state._activeTargets[key];
     const target = state.targets[event.target];
-    if (target) {
+    if (state._activeTargets[key] && target) {
+      const offsetMs = timestampMs - (state._encounterStarts[encounterId] ?? timestampMs);
+      closeActiveUptime(target, offsetMs);
       target.debugEvents.push({
-        offsetMs: timestampMs - (state._encounterStarts[encounterId] ?? timestampMs),
+        offsetMs,
         type: "removed",
       });
     }
+    delete state._activeTargets[key];
     return;
   }
 
@@ -217,6 +225,58 @@ function processAura(
 
   const [pending] = state._pendingCasts.splice(pendingIndex, 1);
   recordSuccessfulCast(state, { ...pending, timestampMs });
+}
+
+function processSlain(
+  state: FaerieFireResult,
+  event: SlainProcessorEvent,
+  timestampMs: number,
+  encounterId: string,
+): void {
+  const target = state.targets[event.target];
+  if (!target || target.encounterId !== encounterId) return;
+
+  const offsetMs = timestampMs - (state._encounterStarts[encounterId] ?? timestampMs);
+  target.deathOffsetMs = target.deathOffsetMs === null
+    ? offsetMs
+    : Math.min(target.deathOffsetMs, offsetMs);
+  closeActiveUptime(target, offsetMs);
+  delete state._activeTargets[targetKey(encounterId, event.target)];
+}
+
+function closeActiveUptime(target: TargetFaerieFireStats, endOffsetMs: number): void {
+  if (target.activeSinceMs === null) return;
+  target.uptimeMs += Math.max(0, endOffsetMs - target.activeSinceMs);
+  target.activeSinceMs = null;
+}
+
+export interface FaerieFireUptime {
+  uptimeMs: number;
+  eligibleMs: number;
+  percent: number;
+}
+
+/** Calculate uptime against the target's lifetime, ending eligibility at death. */
+export function calculateFaerieFireUptime(
+  target: TargetFaerieFireStats,
+  encounterDurationMs: number,
+  targetActiveFromMs = 0,
+): FaerieFireUptime {
+  const eligibleEndMs = Math.max(
+    targetActiveFromMs,
+    Math.min(target.deathOffsetMs ?? encounterDurationMs, encounterDurationMs),
+  );
+  const eligibleMs = Math.max(0, eligibleEndMs - targetActiveFromMs);
+  const activeUptimeMs = target.activeSinceMs === null
+    ? 0
+    : Math.max(0, eligibleEndMs - Math.max(target.activeSinceMs, targetActiveFromMs));
+  const uptimeMs = Math.min(eligibleMs, target.uptimeMs + activeUptimeMs);
+
+  return {
+    uptimeMs,
+    eligibleMs,
+    percent: eligibleMs > 0 ? (uptimeMs / eligibleMs) * 100 : 0,
+  };
 }
 
 function eventData(
@@ -263,10 +323,12 @@ function recordSuccessfulCast(state: FaerieFireResult, data: FaerieFireEventData
     druid.refreshes++;
     target.refreshes++;
   } else {
+    const offsetMs = encounterOffset(state, data);
     druid.applications++;
     target.applications++;
+    target.activeSinceMs = offsetMs;
     if (target.firstApplicationMs === null) {
-      target.firstApplicationMs = encounterOffset(state, data);
+      target.firstApplicationMs = offsetMs;
       target.firstCasterGuid = data.casterGuid;
       target.firstCasterName = data.casterName;
     }
@@ -322,6 +384,9 @@ function getOrCreateTarget(
     firstCasterName: null,
     applications: 0,
     refreshes: 0,
+    uptimeMs: 0,
+    activeSinceMs: null,
+    deathOffsetMs: null,
     debugEvents: [],
   };
 }

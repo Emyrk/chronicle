@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
+  calculateFaerieFireUptime,
   faerieFireProcessor,
   type DruidFaerieFireStats,
   type FaerieFireDebugEvent,
@@ -25,6 +26,10 @@ function formatTimeMs(ms: number): string {
   return `${seconds}.${millis.toString().padStart(3, "0")}s`;
 }
 
+function formatPercent(percent: number): string {
+  return `${percent >= 99.95 ? "100" : percent.toFixed(1)}%`;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createFaerieFirePanel(): PanelDefinition<FaerieFireResult, any> {
   return {
@@ -38,7 +43,14 @@ export function createFaerieFirePanel(): PanelDefinition<FaerieFireResult, any> 
 }
 
 function FaerieFireContent(props: PanelRenderProps<FaerieFireResult>) {
-  const { result, checkboxChecked: showTargets, panelOption, setPanelOption } = props;
+  const {
+    result,
+    checkboxChecked: showTargets,
+    context,
+    durationMs,
+    panelOption,
+    setPanelOption,
+  } = props;
   const selectedTargetGuid = useMemo(() => panelOption
     ?.split(",")
     .map((token) => token.trim())
@@ -57,6 +69,25 @@ function FaerieFireContent(props: PanelRenderProps<FaerieFireResult>) {
         (b.applications + b.refreshes + b.failures)
         - (a.applications + a.refreshes + a.failures))
     : [];
+  const targetActiveFromOffsets = useMemo(() => {
+    const offsets = new Map<string, number>();
+    for (const encounter of context.instance.encounters) {
+      const encounterStartMs = new Date(encounter.start_time).getTime();
+      for (const enemy of encounter.enemies ?? []) {
+        const firstStart = enemy.periods
+          .map((period) => period.start?.timestamp)
+          .filter((timestamp): timestamp is string => Boolean(timestamp))
+          .map((timestamp) => new Date(timestamp).getTime() - encounterStartMs)
+          .filter((offset) => Number.isFinite(offset) && offset >= 0)
+          .sort((a, b) => a - b)[0];
+        if (firstStart !== undefined) {
+          offsets.set(`${encounter.id}:${enemy.id}`, firstStart);
+        }
+      }
+    }
+    return offsets;
+  }, [context.instance.encounters]);
+
   const targets = result
     ? Object.values(result.targets).sort((a, b) => {
         if (a.firstApplicationMs === null) return 1;
@@ -74,6 +105,12 @@ function FaerieFireContent(props: PanelRenderProps<FaerieFireResult>) {
       ) : showTargets ? (
         <TargetsView
           targets={targets}
+          encounterDurations={new Map(context.instance.encounters.map((encounter) => [
+            encounter.id,
+            Math.max(0, new Date(encounter.end_time).getTime() - new Date(encounter.start_time).getTime()),
+          ]))}
+          targetActiveFromOffsets={targetActiveFromOffsets}
+          fallbackDurationMs={durationMs}
           selectedTargetGuid={selectedTargetGuid}
           onSelectTargetGuid={setSelectedTargetGuid}
         />
@@ -125,11 +162,21 @@ function DruidsView({ druids }: { druids: DruidFaerieFireStats[] }) {
 
 interface TargetsViewProps {
   targets: TargetFaerieFireStats[];
+  encounterDurations: Map<string, number>;
+  targetActiveFromOffsets: Map<string, number>;
+  fallbackDurationMs: number;
   selectedTargetGuid: string | null;
   onSelectTargetGuid: (guid: string | null) => void;
 }
 
-function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid }: TargetsViewProps) {
+function TargetsView({
+  targets,
+  encounterDurations,
+  targetActiveFromOffsets,
+  fallbackDurationMs,
+  selectedTargetGuid,
+  onSelectTargetGuid,
+}: TargetsViewProps) {
   const selectedTarget = selectedTargetGuid
     ? targets.find((target) => target.guid === selectedTargetGuid)
     : null;
@@ -150,7 +197,12 @@ function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid }: Target
       </div>
 
       {selectedTarget ? (
-        <DebugBreakout target={selectedTarget} onClose={() => onSelectTargetGuid(null)} />
+        <DebugBreakout
+          target={selectedTarget}
+          encounterDurationMs={encounterDurations.get(selectedTarget.encounterId) ?? fallbackDurationMs}
+          targetActiveFromMs={targetActiveFromOffsets.get(`${selectedTarget.encounterId}:${selectedTarget.guid}`) ?? 0}
+          onClose={() => onSelectTargetGuid(null)}
+        />
       ) : (
         <ScrollArea className="min-h-0 flex-1">
           <table className="w-full text-xs">
@@ -159,26 +211,37 @@ function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid }: Target
                 <th className="px-2 py-1.5 text-left font-medium">Target</th>
                 <th className="px-2 py-1.5 text-right font-medium whitespace-nowrap">First applied</th>
                 <th className="px-2 py-1.5 text-left font-medium">Applied by</th>
+                <th className="px-2 py-1.5 text-right font-medium">Uptime</th>
                 <th className="px-2 py-1.5 text-right font-medium">Refreshes</th>
               </tr>
             </thead>
             <tbody>
-              {targets.map((target) => (
-                <tr
-                  key={target.guid}
-                  className="cursor-pointer border-b border-border/10 hover:bg-muted/50"
-                  onClick={() => onSelectTargetGuid(target.guid)}
-                >
-                  <td className="px-2 py-1 font-medium text-orange-400 whitespace-nowrap">{target.name}</td>
-                  <td className="px-2 py-1 text-right font-mono text-2xs whitespace-nowrap">
-                    {target.firstApplicationMs === null ? "—" : formatTimeMs(target.firstApplicationMs)}
-                  </td>
-                  <td className="px-2 py-1 text-[var(--color-class-druid)] whitespace-nowrap">
-                    {target.firstCasterName ?? "—"}
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono">{target.refreshes}</td>
-                </tr>
-              ))}
+              {targets.map((target) => {
+                const uptime = calculateFaerieFireUptime(
+                  target,
+                  encounterDurations.get(target.encounterId) ?? fallbackDurationMs,
+                  targetActiveFromOffsets.get(`${target.encounterId}:${target.guid}`) ?? 0,
+                );
+                return (
+                  <tr
+                    key={target.guid}
+                    className="cursor-pointer border-b border-border/10 hover:bg-muted/50"
+                    onClick={() => onSelectTargetGuid(target.guid)}
+                  >
+                    <td className="px-2 py-1 font-medium text-orange-400 whitespace-nowrap">{target.name}</td>
+                    <td className="px-2 py-1 text-right font-mono text-2xs whitespace-nowrap">
+                      {target.firstApplicationMs === null ? "—" : formatTimeMs(target.firstApplicationMs)}
+                    </td>
+                    <td className="px-2 py-1 text-[var(--color-class-druid)] whitespace-nowrap">
+                      {target.firstCasterName ?? "—"}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-green-400">
+                      {formatPercent(uptime.percent)}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono">{target.refreshes}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </ScrollArea>
@@ -187,8 +250,19 @@ function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid }: Target
   );
 }
 
-function DebugBreakout({ target, onClose }: { target: TargetFaerieFireStats; onClose: () => void }) {
+function DebugBreakout({
+  target,
+  encounterDurationMs,
+  targetActiveFromMs,
+  onClose,
+}: {
+  target: TargetFaerieFireStats;
+  encounterDurationMs: number;
+  targetActiveFromMs: number;
+  onClose: () => void;
+}) {
   const events = [...target.debugEvents].sort((a, b) => a.offsetMs - b.offsetMs);
+  const uptime = calculateFaerieFireUptime(target, encounterDurationMs, targetActiveFromMs);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -206,6 +280,10 @@ function DebugBreakout({ target, onClose }: { target: TargetFaerieFireStats; onC
       <div className="shrink-0 text-2xs text-muted-foreground">
         First applied: <span className="font-medium text-foreground">
           {target.firstApplicationMs !== null ? formatTimeMs(target.firstApplicationMs) : "never"}
+        </span>
+        {" • "}
+        Uptime: <span className="font-medium text-green-400" title={`${formatTimeMs(uptime.uptimeMs)} of ${formatTimeMs(uptime.eligibleMs)} eligible`}>
+          {formatPercent(uptime.percent)}
         </span>
         {" • "}
         Total events: <span className="font-medium text-foreground">{events.length}</span>
