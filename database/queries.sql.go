@@ -12253,7 +12253,11 @@ WITH fallback_representative_instances AS (
     WHERE (cardinality($2 :: text[]) = 0
            OR li.name = ANY($2 :: text[]))
       AND NOT EXISTS (
-          SELECT 1 FROM ranking_runs rr
+          SELECT 1
+          FROM ranking_runs rr
+          JOIN log_instances representative
+            ON representative.id = rr.representative_instance_id
+           AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -12270,6 +12274,9 @@ WITH fallback_representative_instances AS (
 representative_instances AS (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
+    JOIN log_instances representative
+      ON representative.id = rr.representative_instance_id
+     AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE (cardinality($2 :: text[]) = 0
            OR rr.instance_name = ANY($2 :: text[]))
@@ -12492,7 +12499,11 @@ WITH fallback_representative_instances AS (
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     WHERE NOT EXISTS (
-        SELECT 1 FROM ranking_runs rr
+        SELECT 1
+        FROM ranking_runs rr
+        JOIN log_instances representative
+          ON representative.id = rr.representative_instance_id
+         AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
         WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -12507,6 +12518,9 @@ WITH fallback_representative_instances AS (
 representative_instances AS (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
+    JOIN log_instances representative
+      ON representative.id = rr.representative_instance_id
+     AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE rr.instance_name = $1
     UNION ALL
@@ -12863,7 +12877,11 @@ fallback_representative_instances AS (
       AND (($4 :: text = '' AND $5 :: text = '' AND $6 :: text = '' AND $7 :: text = '')
            OR COALESCE(li.duplicate_group_id, li.id) IN (SELECT run_id FROM candidate_runs))
       AND NOT EXISTS (
-          SELECT 1 FROM ranking_runs rr
+          SELECT 1
+          FROM ranking_runs rr
+          JOIN log_instances representative
+            ON representative.id = rr.representative_instance_id
+           AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -12880,6 +12898,9 @@ fallback_representative_instances AS (
 representative_instances AS (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
+    JOIN log_instances representative
+      ON representative.id = rr.representative_instance_id
+     AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE (cardinality($8 :: text[]) = 0
            OR rr.instance_name = ANY($8 :: text[]))
@@ -13368,7 +13389,11 @@ WITH fallback_representative_instances AS (
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     WHERE NOT EXISTS (
-        SELECT 1 FROM ranking_runs rr
+        SELECT 1
+        FROM ranking_runs rr
+        JOIN log_instances representative
+          ON representative.id = rr.representative_instance_id
+         AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
         WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -13383,6 +13408,9 @@ WITH fallback_representative_instances AS (
 representative_instances AS (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
+    JOIN log_instances representative
+      ON representative.id = rr.representative_instance_id
+     AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE rr.instance_name = $1
       AND rr.difficulty_name = $2
