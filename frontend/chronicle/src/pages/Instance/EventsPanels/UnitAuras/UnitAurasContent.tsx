@@ -13,7 +13,7 @@ import {
   type UnitAuraSegment,
   type UnitAurasResult,
 } from "./unitAuras.processor";
-import { UnitIcon } from "./UnitIcon";
+import { mergeAdjacentAuraSegments, summarizeAuraSources } from "./sourceSummary";
 import { UnitSearch, type UnitSearchOption } from "./UnitSearch";
 
 interface DisplaySegment extends UnitAuraSegment {
@@ -56,6 +56,14 @@ function formatTime(ms: number): string {
   return `${minutes}:${(seconds % 60).toString().padStart(2, "0")}`;
 }
 
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+}
+
 function formatPercent(uptimeMs: number, durationMs: number): string {
   if (durationMs <= 0) return "0%";
   const percent = Math.min(100, (uptimeMs / durationMs) * 100);
@@ -63,16 +71,17 @@ function formatPercent(uptimeMs: number, durationMs: number): string {
 }
 
 function resolveSourceName(
-  segment: DisplaySegment,
+  sourceGuid: string | null,
+  sourceName: string | null,
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"],
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"],
 ): string {
-  if (!segment.sourceGuid) return "Unknown source";
-  if (segment.sourceName === "Self") return "Self";
-  return players?.[segment.sourceGuid]?.name
-    ?? units?.[segment.sourceGuid]?.name
-    ?? segment.sourceName
-    ?? segment.sourceGuid;
+  if (!sourceGuid) return "Unknown";
+  if (sourceName === "Self") return "Self";
+  return players?.[sourceGuid]?.name
+    ?? units?.[sourceGuid]?.name
+    ?? sourceName
+    ?? sourceGuid;
 }
 
 function AuraTimeline({
@@ -80,11 +89,13 @@ function AuraTimeline({
   durationMs,
   players,
   units,
+  encounterNames,
 }: {
   segments: DisplaySegment[];
   durationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
+  encounterNames: ReadonlyMap<string, string>;
 }) {
   if (durationMs <= 0) return null;
 
@@ -94,7 +105,7 @@ function AuraTimeline({
         const left = (segment.displayStartMs / durationMs) * 100;
         const width = ((segment.displayEndMs - segment.displayStartMs) / durationMs) * 100;
         if (width <= 0) return null;
-        const name = resolveSourceName(segment, players, units);
+        const name = resolveSourceName(segment.sourceGuid, segment.sourceName, players, units);
         return (
           <HintTooltip key={`${segment.encounterId}-${segment.startMs}-${index}`} delayDuration={50}>
             <TooltipTrigger asChild>
@@ -112,6 +123,11 @@ function AuraTimeline({
               <div className="text-muted-foreground">
                 {formatTime(segment.startMs)}–{formatTime(segment.endMs)}
               </div>
+              {encounterNames.get(segment.encounterId) && (
+                <div className="max-w-48 truncate text-muted-foreground/70">
+                  {encounterNames.get(segment.encounterId)}
+                </div>
+              )}
             </TooltipContent>
           </HintTooltip>
         );
@@ -120,7 +136,7 @@ function AuraTimeline({
   );
 }
 
-function SourceLegend({
+function SourceSummary({
   segments,
   players,
   units,
@@ -129,27 +145,22 @@ function SourceLegend({
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
 }) {
-  const groups = new Map<string, { guid: string | null; name: string; ranges: string[] }>();
-  for (const segment of segments) {
-    const key = segment.sourceGuid ?? "unknown";
-    const group = groups.get(key) ?? {
-      guid: segment.sourceGuid,
-      name: resolveSourceName(segment, players, units),
-      ranges: [],
-    };
-    group.ranges.push(`${formatTime(segment.startMs)}–${formatTime(segment.endMs)}`);
-    groups.set(key, group);
-  }
+  const sources = summarizeAuraSources(segments);
+  const visible = sources.slice(0, 3);
+  const hiddenCount = sources.length - visible.length;
 
   return (
-    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10px] leading-none text-muted-foreground">
-      {[...groups.values()].map((group) => (
-        <span key={group.guid ?? "unknown"} className="inline-flex min-w-0 items-center gap-1">
-          <span className="size-1.5 shrink-0 rounded-[2px]" style={{ backgroundColor: sourceColor(group.guid) }} />
-          <span className="max-w-28 truncate text-foreground/75">{group.name}</span>
-          <span>{group.ranges.join(", ")}</span>
+    <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden text-[10px] leading-none text-muted-foreground">
+      {visible.map((source) => (
+        <span key={source.guid ?? "unknown"} className="inline-flex min-w-0 shrink items-center gap-1">
+          <span className="size-1.5 shrink-0 rounded-[2px]" style={{ backgroundColor: sourceColor(source.guid) }} />
+          <span className="max-w-24 truncate text-foreground/70">
+            {resolveSourceName(source.guid, source.name, players, units)}
+          </span>
+          <span className="shrink-0 tabular-nums">{formatDuration(source.uptimeMs)}</span>
         </span>
       ))}
+      {hiddenCount > 0 && <span className="shrink-0">+{hiddenCount} sources</span>}
     </div>
   );
 }
@@ -160,12 +171,14 @@ function AuraSection({
   durationMs,
   players,
   units,
+  encounterNames,
 }: {
   title: "Buffs" | "Debuffs";
   rows: AuraRow[];
   durationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
+  encounterNames: ReadonlyMap<string, string>;
 }) {
   const buffs = title === "Buffs";
   if (rows.length === 0) return null;
@@ -173,27 +186,34 @@ function AuraSection({
   return (
     <section>
       <div className={cn(
-        "sticky top-0 z-10 border-y border-border/60 bg-card/95 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] backdrop-blur-sm",
+        "sticky top-0 z-10 flex items-center gap-1.5 border-y border-border/60 bg-card/95 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] backdrop-blur-sm",
         buffs ? "text-sky-400" : "text-rose-400",
       )}>
-        {title}
+        <span>{title}</span>
+        <span className="font-mono font-normal tracking-normal text-muted-foreground">{rows.length}</span>
       </div>
       <div className="divide-y divide-border/45">
         {rows.map((row) => (
-          <div key={row.auraKey} className="px-3 py-2.5 transition-colors hover:bg-muted/20">
-            <div className="mb-2 flex items-center gap-2.5">
+          <div key={row.auraKey} className="px-2.5 py-2 transition-colors hover:bg-muted/20">
+            <div className="mb-1.5 flex items-center gap-2">
               <SpellIdTooltip
                 spellId={row.spellId}
                 name={row.spellName}
-                size={30}
+                size={24}
                 className="min-w-0 flex-1 truncate text-xs font-medium"
               />
               <div className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
                 {formatPercent(row.totalUptimeMs, durationMs)}
               </div>
             </div>
-            <AuraTimeline segments={row.segments} durationMs={durationMs} players={players} units={units} />
-            <SourceLegend segments={row.segments} players={players} units={units} />
+            <AuraTimeline
+              segments={row.segments}
+              durationMs={durationMs}
+              players={players}
+              units={units}
+              encounterNames={encounterNames}
+            />
+            <SourceSummary segments={row.segments} players={players} units={units} />
           </div>
         ))}
       </div>
@@ -216,6 +236,10 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
     }
     return offsets;
   }, [context.instance.encounters, context.selectedEncounterIds]);
+
+  const encounterNames = useMemo(() => new Map(
+    context.instance.encounters.map((encounter) => [encounter.id, encounter.name]),
+  ), [context.instance.encounters]);
 
   const encounterEndOffsets = useMemo(() => {
     const offsets = new Map<string, number>();
@@ -265,16 +289,20 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
 
     const mapped = [...unit.auras.values()].map((aura): AuraRow => ({
       ...aura,
-      segments: aura.segments
-        .map((segment) => {
-          const offset = encounterOffsets.get(segment.encounterId) ?? 0;
-          return {
-            ...segment,
-            displayStartMs: offset + segment.startMs,
-            displayEndMs: offset + segment.endMs,
-          };
-        })
-        .sort((a, b) => a.displayStartMs - b.displayStartMs),
+      segments: mergeAdjacentAuraSegments(
+        [...aura.segments].sort((a, b) => {
+          const aOffset = encounterOffsets.get(a.encounterId) ?? 0;
+          const bOffset = encounterOffsets.get(b.encounterId) ?? 0;
+          return aOffset + a.startMs - (bOffset + b.startMs);
+        }),
+      ).map((segment) => {
+        const offset = encounterOffsets.get(segment.encounterId) ?? 0;
+        return {
+          ...segment,
+          displayStartMs: offset + segment.startMs,
+          displayEndMs: offset + segment.endMs,
+        };
+      }),
     }));
 
     const byUptime = (a: AuraRow, b: AuraRow) => b.totalUptimeMs - a.totalUptimeMs || a.spellName.localeCompare(b.spellName);
@@ -288,7 +316,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
 
   return (
     <GenericPanel {...props}>
-      <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5">
         <UnitSearch
           units={searchUnits}
           selectedGuid={selectedGuid}
@@ -310,17 +338,24 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
             No auras recorded for {selected.name}.
           </div>
         ) : (
-          <ScrollArea className="min-h-0 flex-1 rounded-md border border-border/70 bg-background/25">
+          <ScrollArea className="min-h-0 flex-1 rounded border border-border/70 bg-background/25">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 border-b border-border/60 bg-muted/15 px-3 py-2">
-                <UnitIcon unit={selected} />
-                <span className="truncate text-xs font-semibold">{selected.name}</span>
-                <span className="ml-auto text-[10px] text-muted-foreground">
-                  {rows.buffs.length} buffs · {rows.debuffs.length} debuffs
-                </span>
-              </div>
-              <AuraSection title="Buffs" rows={rows.buffs} durationMs={durationMs} players={context.instance.players} units={context.instance.units} />
-              <AuraSection title="Debuffs" rows={rows.debuffs} durationMs={durationMs} players={context.instance.players} units={context.instance.units} />
+              <AuraSection
+                title="Buffs"
+                rows={rows.buffs}
+                durationMs={durationMs}
+                players={context.instance.players}
+                units={context.instance.units}
+                encounterNames={encounterNames}
+              />
+              <AuraSection
+                title="Debuffs"
+                rows={rows.debuffs}
+                durationMs={durationMs}
+                players={context.instance.players}
+                units={context.instance.units}
+                encounterNames={encounterNames}
+              />
             </div>
           </ScrollArea>
         )}

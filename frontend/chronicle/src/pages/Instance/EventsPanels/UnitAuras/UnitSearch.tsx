@@ -65,7 +65,7 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
   return (
     <div ref={rootRef} className="relative shrink-0">
       <div className={cn(
-        "group flex h-9 items-center gap-2 rounded-md border border-border/80 bg-background/70 px-2.5",
+        "group flex h-8 items-center gap-2 rounded border border-border/80 bg-background/70 px-2",
         "shadow-inner transition-colors focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/25",
       )}>
         {selected && !open ? (
@@ -91,16 +91,6 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
           onKeyDown={handleKeyDown}
           className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
         />
-        {selected && !open && (
-          <span className={cn(
-            "hidden rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide sm:inline-flex",
-            selected.relation === "friendly"
-              ? "bg-sky-500/12 text-sky-400"
-              : "bg-rose-500/12 text-rose-400",
-          )}>
-            {selected.relation === "friendly" ? "Friendly" : "Hostile"}
-          </span>
-        )}
         {selected && (
           <button
             type="button"
