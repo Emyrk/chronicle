@@ -507,7 +507,8 @@ func TestRankingRunRefreshConvergesAfterReorderUnlinkAndDelete(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), repeated.UnchangedCount)
 
-	require.NoError(t, store.ClearDuplicateGroupID(ctx, duplicateID))
+	_, err = store.UnlinkDuplicateGroup(ctx, duplicateID)
+	require.NoError(t, err)
 	unlinked, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{duplicateID, anchorID})
 	require.NoError(t, err)
 	assert.Equal(t, 2, unlinked.ResolvedRunCount)
@@ -528,6 +529,87 @@ func TestRankingRunRefreshConvergesAfterReorderUnlinkAndDelete(t *testing.T) {
 	assert.Zero(t, deleted.DeletedCount, "the representative FK cascade removes the standalone row before refresh")
 	_, err = store.RankingRunByID(ctx, duplicateID)
 	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestUnlinkDuplicateGroupMaintainsDistinctRankingRunIdentities(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		memberCount int
+		unlinkIndex int
+	}{
+		{name: "two member anchor", memberCount: 2, unlinkIndex: 0},
+		{name: "larger group anchor", memberCount: 3, unlinkIndex: 0},
+		{name: "two member non-anchor", memberCount: 2, unlinkIndex: 1},
+		{name: "larger group non-anchor", memberCount: 3, unlinkIndex: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pool, store, realmID := setupParsesTest(t)
+			ctx := testutil.Context(t, testutil.WaitMedium)
+			start := time.Date(2026, 9, 16, 20, 0, 0, 0, time.UTC)
+			instanceIDs := make([]uuid.UUID, tt.memberCount)
+			for i := range instanceIDs {
+				instanceIDs[i] = uuid.New()
+				insertRankingRunSource(t, pool, store, realmID, instanceIDs[i], start.Add(time.Duration(i)*time.Second), "Lucifron")
+			}
+			anchorID := instanceIDs[0]
+			require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+				DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true},
+				Ids:              instanceIDs,
+			}))
+			_, err := servicerankings.RefreshRankingRuns(ctx, store, instanceIDs)
+			require.NoError(t, err)
+
+			unlinkedID := instanceIDs[tt.unlinkIndex]
+			result, err := store.UnlinkDuplicateGroup(ctx, unlinkedID)
+			require.NoError(t, err)
+			require.Equal(t, uuid.NullUUID{UUID: anchorID, Valid: true}, result.PreviousGroupID)
+
+			expectedGroupID := anchorID
+			if tt.unlinkIndex == 0 {
+				expectedGroupID = instanceIDs[1]
+				require.Equal(t, uuid.NullUUID{UUID: expectedGroupID, Valid: true}, result.NewGroupID)
+			} else {
+				require.False(t, result.NewGroupID.Valid)
+			}
+
+			refresh, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{
+				unlinkedID,
+				result.PreviousGroupID.UUID,
+				result.NewGroupID.UUID,
+			})
+			require.NoError(t, err)
+			require.Equal(t, 2, refresh.ResolvedRunCount)
+
+			for i, instanceID := range instanceIDs {
+				instance, err := store.Instance(ctx, instanceID)
+				require.NoError(t, err)
+				if i == tt.unlinkIndex {
+					require.False(t, instance.DuplicateGroupID.Valid)
+					continue
+				}
+				require.Equal(t, uuid.NullUUID{UUID: expectedGroupID, Valid: true}, instance.DuplicateGroupID)
+			}
+
+			duplicates, err := store.ListInstancesByDuplicateGroup(ctx, uuid.NullUUID{UUID: expectedGroupID, Valid: true})
+			require.NoError(t, err)
+			require.Len(t, duplicates, tt.memberCount-1)
+
+			runIDs := []uuid.UUID{unlinkedID, expectedGroupID}
+			for _, runID := range runIDs {
+				_, err := store.RankingRunByID(ctx, runID)
+				require.NoError(t, err)
+			}
+			var persistedRunCount int
+			require.NoError(t, pool.QueryRow(ctx, "SELECT COUNT(*) FROM ranking_runs").Scan(&persistedRunCount))
+			require.Equal(t, 2, persistedRunCount)
+		})
+	}
 }
 
 func TestRankingRunRefreshMergesGroupsAndReplacesDeletedRepresentative(t *testing.T) {
