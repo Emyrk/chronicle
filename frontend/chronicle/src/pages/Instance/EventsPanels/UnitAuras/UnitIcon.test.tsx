@@ -6,6 +6,7 @@ const FRIENDLY = {
   guid: "player",
   name: "Brannor",
   relation: "friendly" as const,
+  group: "player" as const,
   className: "PRIEST",
 };
 
@@ -26,7 +27,7 @@ describe("UnitIcon", () => {
 
   it("uses the hostile marker for hostile units", () => {
     const markup = renderToStaticMarkup(
-      <UnitIcon unit={{ guid: "enemy", name: "Solnius", relation: "hostile" }} />,
+      <UnitIcon unit={{ guid: "enemy", name: "Solnius", relation: "hostile", group: "enemy" }} />,
     );
 
     expect(markup).not.toContain("<img");

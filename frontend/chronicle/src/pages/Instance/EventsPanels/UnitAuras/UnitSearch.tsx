@@ -1,28 +1,33 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { Search, X } from "lucide-react";
+import { Check, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UnitIcon } from "./UnitIcon";
-import { scoreUnitSearchMatch } from "./unitSearchMatch";
+import { compareUnitSearchOptions, scoreUnitSearchMatch } from "./unitSearchMatch";
+
+export type UnitSearchGroup = "player" | "friendly" | "enemy";
 
 export interface UnitSearchOption {
   guid: string;
   name: string;
   relation: "friendly" | "hostile";
+  group: UnitSearchGroup;
   className?: string;
   specializationIconUrl?: string;
 }
 
 interface UnitSearchProps {
   units: UnitSearchOption[];
-  selectedGuid: string | null;
-  onChange: (guid: string | null) => void;
+  selectedGuids: ReadonlySet<string>;
+  onToggle: (guid: string) => void;
+  onClear: () => void;
 }
 
-export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
+export function UnitSearch({ units, selectedGuids, onToggle, onClear }: UnitSearchProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
-  const selected = units.find((unit) => unit.guid === selectedGuid) ?? null;
+  const selected = units.filter((unit) => selectedGuids.has(unit.guid));
+  const singleSelected = selected.length === 1 ? selected[0] : null;
 
   useEffect(() => {
     const close = (event: globalThis.MouseEvent) => {
@@ -38,13 +43,13 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
   const matches = useMemo(() => units
     .map((unit) => ({ unit, score: scoreUnitSearchMatch(query, unit) }))
     .filter((match): match is { unit: UnitSearchOption; score: number } => match.score !== null)
-    .sort((a, b) => b.score - a.score || a.unit.name.localeCompare(b.unit.name))
+    .sort((a, b) => b.score - a.score || compareUnitSearchOptions(a.unit, b.unit))
     .slice(0, 80)
     .map(({ unit }) => unit), [query, units]);
 
   const handleClear = (event: MouseEvent) => {
     event.stopPropagation();
-    onChange(null);
+    onClear();
     setQuery("");
     setOpen(true);
   };
@@ -56,8 +61,7 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
       event.currentTarget.blur();
     }
     if (event.key === "Enter" && matches.length === 1) {
-      onChange(matches[0].guid);
-      setOpen(false);
+      onToggle(matches[0].guid);
       setQuery("");
     }
   };
@@ -68,8 +72,8 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
         "group flex h-8 items-center gap-2 rounded border border-border/80 bg-background/70 px-2",
         "shadow-inner transition-colors focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/25",
       )}>
-        {selected && !open ? (
-          <UnitIcon unit={selected} className="size-5" />
+        {singleSelected && !open ? (
+          <UnitIcon unit={singleSelected} className="size-5" />
         ) : (
           <Search className="size-4 shrink-0 text-muted-foreground transition-colors group-focus-within:text-primary" />
         )}
@@ -79,7 +83,7 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
           aria-expanded={open}
           aria-label="Search friendly and hostile units"
           placeholder="Search friendly or hostile units…"
-          value={open ? query : selected?.name ?? ""}
+          value={open ? query : singleSelected?.name ?? (selected.length > 1 ? `${selected.length} units selected` : "")}
           onFocus={() => {
             setOpen(true);
             setQuery("");
@@ -91,10 +95,10 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
           onKeyDown={handleKeyDown}
           className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
         />
-        {selected && (
+        {selected.length > 0 && (
           <button
             type="button"
-            aria-label="Clear selected unit"
+            aria-label="Clear selected units"
             onClick={handleClear}
             className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
@@ -107,27 +111,37 @@ export function UnitSearch({ units, selectedGuid, onChange }: UnitSearchProps) {
         <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-xl animate-in fade-in-0 zoom-in-95">
           <div className="max-h-72 overflow-y-auto p-1 styled-scrollbar">
             {matches.length > 0 ? matches.map((unit) => {
-              const friendly = unit.relation === "friendly";
+              const isSelected = selectedGuids.has(unit.guid);
+              const groupLabel = unit.group === "player"
+                ? "Player"
+                : unit.group === "friendly"
+                  ? "Friendly"
+                  : "Enemy";
               return (
                 <button
                   key={unit.guid}
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
-                    onChange(unit.guid);
+                    onToggle(unit.guid);
                     setQuery("");
-                    setOpen(false);
                   }}
                   className={cn(
                     "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors",
                     "hover:bg-accent hover:text-accent-foreground",
-                    selectedGuid === unit.guid && "bg-accent/60",
+                    isSelected && "bg-accent/60",
                   )}
                 >
+                  <span className={cn(
+                    "flex size-4 shrink-0 items-center justify-center rounded border",
+                    isSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40",
+                  )}>
+                    {isSelected && <Check className="size-3" />}
+                  </span>
                   <UnitIcon unit={unit} />
                   <span className="min-w-0 flex-1 truncate font-medium">{unit.name}</span>
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    {friendly ? "Friendly" : "Hostile"}
+                    {groupLabel}
                   </span>
                 </button>
               );

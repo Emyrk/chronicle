@@ -10,7 +10,7 @@ export function createUnitAurasPanel(): PanelDefinition<UnitAurasResult, any> {
     label: "Unit Auras",
     icon: <ScanSearch className="h-4 w-4" />,
     supportsPerSecond: true,
-    checkboxLabel: "Compact",
+    checkboxLabel: "Detailed",
     renderOnlyOptionTokens: ["u:"],
     render: (props: PanelRenderProps<UnitAurasResult>) => <UnitAurasContent {...props} />,
   };
