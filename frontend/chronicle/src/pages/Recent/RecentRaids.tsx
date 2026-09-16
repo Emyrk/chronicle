@@ -98,6 +98,7 @@ function InstanceCombobox({
 }
 
 const API_BASE = "/api/v1/raidlogs";
+const RECENT_WINDOW_DAYS = 30;
 
 type CategoryFilter = "all" | "raid" | "dungeon";
 type VideoFilter = "all" | "with";
@@ -222,6 +223,7 @@ export function RecentRaids() {
 
     try {
       const params = new URLSearchParams();
+      params.set("days", String(RECENT_WINDOW_DAYS));
       params.set("limit", String(PAGE_SIZE));
       if (offset) {
         params.set("offset", String(offset));
@@ -336,7 +338,7 @@ export function RecentRaids() {
             Recent
           </h1>
           <p className="text-muted-foreground mt-1">
-            Browse community dungeon & raid uploads from the last 14 days. Older uploads are not shown here.
+            Browse community dungeon & raid uploads from the last {RECENT_WINDOW_DAYS} days. Older uploads are not shown here.
           </p>
         </div>
 
