@@ -26,6 +26,8 @@ interface SpellIconWithTooltipProps {
   children?: ReactNode;
   /** Optional header rendered above the spell tooltip inside the tooltip popover. */
   tooltipHeader?: ReactNode;
+  /** Optional footer rendered inside the spell tooltip below its spell details. */
+  tooltipFooter?: ReactNode;
 }
 
 /**
@@ -44,6 +46,7 @@ export function SpellIconWithTooltip({
   detailed = false,
   children,
   tooltipHeader,
+  tooltipFooter,
 }: SpellIconWithTooltipProps) {
   const iconBaseUrl = useIconBaseUrl();
   const iconUrl = getSpellIconUrl(spell.spell_icon, iconBaseUrl);
@@ -92,7 +95,7 @@ export function SpellIconWithTooltip({
           hideArrow
         >
           {tooltipHeader}
-          <SpellTooltip spell={spell} locale={locale} detailed={detailed} />
+          <SpellTooltip spell={spell} locale={locale} detailed={detailed} footer={tooltipFooter} />
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

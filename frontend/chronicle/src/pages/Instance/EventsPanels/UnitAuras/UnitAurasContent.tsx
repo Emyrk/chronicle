@@ -188,8 +188,8 @@ function CompactAuraTile({
     guid: source.guid,
     name: resolveSourceName(source.guid, source.name, players, units),
   }));
-  const tooltipHeader = (
-    <div className="rounded-t border border-b-0 border-zinc-700 bg-[#1a1a2e] px-3 py-2 text-xs text-zinc-200">
+  const tooltipFooter = (
+    <div className="mt-2 border-t border-zinc-700 pt-2 text-xs text-zinc-200">
       <div className="mb-1 font-semibold text-zinc-400">Applied by</div>
       <div className="space-y-0.5">
         {appliers.length > 0 ? appliers.map((applier) => (
@@ -217,7 +217,7 @@ function CompactAuraTile({
           spellId={row.spellId}
           name={row.spellName}
           size={40}
-          tooltipHeader={tooltipHeader}
+          tooltipFooter={tooltipFooter}
           className={cn(
             "relative z-10 flex size-full items-center justify-center overflow-hidden text-[0px]",
             "[&_img]:size-full [&_img]:rounded-[6px] [&_img]:border-0 [&_img]:object-cover",

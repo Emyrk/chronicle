@@ -18,6 +18,8 @@ interface SpellIdTooltipProps {
   className?: string;
   /** Optional content rendered above the spell tooltip. */
   tooltipHeader?: ReactNode;
+  /** Optional content rendered inside the spell tooltip below its spell details. */
+  tooltipFooter?: ReactNode;
 }
 
 /**
@@ -34,6 +36,7 @@ export function SpellIdTooltip({
   loadOnHover = false,
   className,
   tooltipHeader,
+  tooltipFooter,
 }: SpellIdTooltipProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -85,7 +88,7 @@ export function SpellIdTooltip({
           hideArrow
         >
           {tooltipHeader}
-          {spell ? <SpellTooltip spell={spell} /> : <span className="rounded bg-popover px-2 py-1 text-xs text-popover-foreground">Loading…</span>}
+          {spell ? <SpellTooltip spell={spell} footer={tooltipFooter} /> : <span className="rounded bg-popover px-2 py-1 text-xs text-popover-foreground">Loading…</span>}
         </TooltipContent>
       </Tooltip>
     );
@@ -99,6 +102,7 @@ export function SpellIdTooltip({
           size={size}
           showTooltip
           tooltipHeader={tooltipHeader}
+          tooltipFooter={tooltipFooter}
         >
           {name}
         </SpellIconWithTooltip>

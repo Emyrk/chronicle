@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useQueries } from "@tanstack/react-query";
 import type { WoWSpell, LocaleIndex } from "@/api/wowdb";
 import {
@@ -19,9 +19,11 @@ interface SpellTooltipProps {
   locale?: LocaleIndex;
   /** Show detailed view with duration and aura effects. Defaults to false (simple view). */
   detailed?: boolean;
+  /** Optional content rendered below the spell details. */
+  footer?: ReactNode;
 }
 
-export function SpellTooltip({ spell, locale = "0", detailed = false }: SpellTooltipProps) {
+export function SpellTooltip({ spell, locale = "0", detailed = false, footer }: SpellTooltipProps) {
   const iconBaseUrl = useIconBaseUrl();
   const name = getLocalizedText(spell.name, locale);
   const rank = getLocalizedText(spell.subtext, locale);
@@ -172,6 +174,8 @@ export function SpellTooltip({ spell, locale = "0", detailed = false }: SpellToo
           )}
         </div>
       )}
+
+      {footer}
     </div>
   );
 }
