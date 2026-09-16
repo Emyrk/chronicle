@@ -13,6 +13,8 @@ import (
 )
 
 type sqlcQuerier interface {
+	// Serialize refresh snapshots and commits across logical-run identity changes.
+	AcquireRankingRunRefreshLock(ctx context.Context) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
 	// Populate a pending snapshot's members from eligible encounter_dps_rankings rows.
