@@ -423,17 +423,17 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
             </div>
           </div>
         ) : !checkboxChecked ? (
-          <ScrollArea className="min-h-0 flex-1 rounded border border-border/70 bg-background/25">
-            <div className="divide-y divide-border/60">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded border border-border/70 bg-background/25 styled-scrollbar">
+            <div className="min-w-0 divide-y divide-border/60">
               {selectedUnits.map((unit) => {
                 const rows = rowsByUnit.get(unit.guid);
                 if (!rows) return null;
                 return (
-                  <section key={unit.guid}>
-                    <div className="sticky top-0 z-10 flex items-center gap-2 bg-card/95 px-2.5 py-1.5 backdrop-blur-sm">
+                  <section key={unit.guid} className="min-w-0 py-1 first:pt-0 last:pb-0">
+                    <div className="flex min-w-0 items-center gap-2 border-b border-border/40 bg-card/70 px-2.5 py-1.5">
                       <UnitIcon unit={unit} className="size-5" />
                       <span className="min-w-0 flex-1 truncate text-xs font-semibold">{unit.name}</span>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
                         {rows.buffs.length} buffs · {rows.debuffs.length} debuffs
                       </span>
                     </div>
@@ -442,7 +442,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                 );
               })}
             </div>
-          </ScrollArea>
+          </div>
         ) : detailedUnit && detailedRows ? (
           <div className="flex min-h-0 flex-1 flex-col gap-1.5">
             <div className="flex shrink-0 gap-1 overflow-x-auto pb-0.5 styled-scrollbar">
