@@ -71,6 +71,110 @@ func upsertRankingRunSource(t *testing.T, store database.Store, source database.
 	return created
 }
 
+type rankingConsumerResults struct {
+	summaries   []database.RankingsInstanceSummariesRow
+	encounters  []database.RankingsEncounterListRow
+	leaderboard []database.RankingsLeaderboardRow
+	boxplots    []database.RankingsBoxPlotStatsRow
+}
+
+func readRankingConsumers(t *testing.T, store database.Store, tenantID uuid.UUID) rankingConsumerResults {
+	t.Helper()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	require.NoError(t, store.UpsertRankingsInstanceSummary(ctx, database.UpsertRankingsInstanceSummaryParams{
+		InstanceName: "Molten Core", DifficultyName: "Normal", MaxPlayers: 40,
+		TenantID: tenantID, QueryVersion: 1,
+	}))
+	summaries, err := store.RankingsInstanceSummaries(ctx, tenantID)
+	require.NoError(t, err)
+	encounters, err := store.RankingsEncounterList(ctx, "Molten Core")
+	require.NoError(t, err)
+	leaderboard, err := store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+		Metric: "dps", QueryLimit: 10, InstanceNames: []string{"Molten Core"},
+	})
+	require.NoError(t, err)
+	boxplots, err := store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
+		Metric: "dps", InstanceNames: []string{"Molten Core"},
+	})
+	require.NoError(t, err)
+	return rankingConsumerResults{
+		summaries: summaries, encounters: encounters, leaderboard: leaderboard, boxplots: boxplots,
+	}
+}
+
+func assertRankingConsumersEqual(t *testing.T, expected, actual rankingConsumerResults) {
+	t.Helper()
+	assert.Equal(t, expected.summaries, actual.summaries, "ranking summaries")
+	assert.Equal(t, expected.encounters, actual.encounters, "encounter list")
+	assert.Equal(t, expected.leaderboard, actual.leaderboard, "leaderboard")
+	assert.Equal(t, expected.boxplots, actual.boxplots, "boxplots")
+}
+
+func TestRankingReadsFallbackFromInvalidPersistedRepresentative(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	tenantID := uuid.New()
+	anchorA := uuid.New()
+	anchorB := uuid.New()
+	representativeB := uuid.New()
+	start := time.Date(2026, 9, 16, 20, 0, 0, 0, time.UTC)
+
+	insertRankingRunSource(t, pool, store, realmID, anchorA, start, "Lucifron")
+	insertRankingRunSource(t, pool, store, realmID, anchorB, start.Add(time.Second), "Lucifron", "Magmadar")
+	insertRankingRunSource(t, pool, store, realmID, representativeB, start.Add(2*time.Second), "Lucifron", "Magmadar", "Ragnaros")
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: anchorB, Valid: true},
+		Ids:              []uuid.UUID{anchorB, representativeB},
+	}))
+
+	func() {
+		conn, err := pool.Acquire(ctx)
+		require.NoError(t, err)
+		defer conn.Release()
+		_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+		require.NoError(t, err)
+		for instanceID, dps := range map[uuid.UUID]float64{
+			anchorA: 100, anchorB: 200, representativeB: 900,
+		} {
+			_, err = conn.Exec(ctx, `
+				UPDATE encounter_dps_rankings
+				SET damage_done = $2, dps = $3
+				WHERE instance_id = $1
+			`, instanceID, int64(dps*10), dps)
+			require.NoError(t, err)
+		}
+	}()
+
+	fallback := readRankingConsumers(t, store, tenantID)
+	sources, err := store.RankingRunSources(ctx, []uuid.UUID{anchorA, anchorB, representativeB})
+	require.NoError(t, err)
+	require.Len(t, sources, 2)
+	var sourceB database.RankingRunSourcesRow
+	for _, source := range sources {
+		upsertRankingRunSource(t, store, source)
+		if source.RunID == anchorB {
+			sourceB = source
+		}
+	}
+	require.Equal(t, representativeB, sourceB.RepresentativeInstanceID)
+	persisted := readRankingConsumers(t, store, tenantID)
+	assertRankingConsumersEqual(t, fallback, persisted)
+
+	// Move the persisted representative from run B into run A without refreshing
+	// ranking_runs. Reads must ignore B's stale row and use B's fallback representative.
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: anchorA, Valid: true},
+		Ids:              []uuid.UUID{representativeB},
+	}))
+	_, err = pool.Exec(ctx, "DELETE FROM ranking_runs WHERE run_id = $1", anchorB)
+	require.NoError(t, err)
+	transitionFallback := readRankingConsumers(t, store, tenantID)
+	upsertRankingRunSource(t, store, sourceB)
+	transitionPersisted := readRankingConsumers(t, store, tenantID)
+	assertRankingConsumersEqual(t, transitionFallback, transitionPersisted)
+}
+
 func TestRankingRunRepresentativePrefersBroaderDuplicate(t *testing.T) {
 	t.Parallel()
 	pool, store, realmID := setupParsesTest(t)
