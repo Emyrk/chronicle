@@ -19,7 +19,7 @@ import {
   compactAuraPercent,
   formatCompactAuraPercent,
 } from "./compactAura";
-import { mergeAdjacentAuraSegments, summarizeAuraSources } from "./sourceSummary";
+import { mergeAdjacentAuraSegments, summarizeAuraSources, uniqueAuraAppliers } from "./sourceSummary";
 import { parseSelectedUnits, serializeSelectedUnits } from "./unitSelection";
 import { UnitIcon } from "./UnitIcon";
 import { UnitSearch, type UnitSearchOption } from "./UnitSearch";
@@ -168,9 +168,35 @@ function SourceSummary({
   );
 }
 
-function CompactAuraTile({ row, durationMs }: { row: AuraRow; durationMs: number }) {
+function CompactAuraTile({
+  row,
+  durationMs,
+  players,
+  units,
+}: {
+  row: AuraRow;
+  durationMs: number;
+  players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
+  units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
+}) {
   const percent = compactAuraPercent(row.totalUptimeMs, durationMs);
   const colors = compactAuraColors(percent);
+  const appliers = uniqueAuraAppliers(row.segments).map((source) => ({
+    guid: source.guid,
+    name: resolveSourceName(source.guid, source.name, players, units),
+  }));
+  const tooltipHeader = (
+    <div className="rounded-t border border-b-0 border-zinc-700 bg-[#1a1a2e] px-3 py-2 text-xs text-zinc-200">
+      <div className="mb-1 font-semibold text-zinc-400">Applied by</div>
+      <div className="space-y-0.5">
+        {appliers.length > 0 ? appliers.map((applier) => (
+          <div key={applier.guid}>{applier.name}</div>
+        )) : (
+          <div>Unknown</div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div
@@ -189,6 +215,7 @@ function CompactAuraTile({ row, durationMs }: { row: AuraRow; durationMs: number
           spellId={row.spellId}
           name={row.spellName}
           size={40}
+          tooltipHeader={tooltipHeader}
           className={cn(
             "relative z-10 flex size-full items-center justify-center overflow-hidden text-[0px]",
             "[&_img]:size-full [&_img]:rounded-[6px] [&_img]:border-0 [&_img]:object-cover",
@@ -215,14 +242,24 @@ function CompactAuraTile({ row, durationMs }: { row: AuraRow; durationMs: number
 function CompactAuraGrid({
   rows,
   durationMs,
+  players,
+  units,
 }: {
   rows: AuraRow[];
   durationMs: number;
+  players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
+  units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
 }) {
   return (
     <div className="flex flex-wrap content-start gap-3 p-3">
       {rows.map((row) => (
-        <CompactAuraTile key={row.auraKey} row={row} durationMs={durationMs} />
+        <CompactAuraTile
+          key={row.auraKey}
+          row={row}
+          durationMs={durationMs}
+          players={players}
+          units={units}
+        />
       ))}
     </div>
   );
@@ -444,7 +481,12 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                         {rows.buffs.length} buffs · {rows.debuffs.length} debuffs
                       </span>
                     </div>
-                    <CompactAuraGrid rows={[...rows.buffs, ...rows.debuffs]} durationMs={durationMs} />
+                    <CompactAuraGrid
+                      rows={[...rows.buffs, ...rows.debuffs]}
+                      durationMs={durationMs}
+                      players={context.instance.players}
+                      units={context.instance.units}
+                    />
                   </section>
                 );
               })}

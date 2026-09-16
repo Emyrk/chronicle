@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useSpell } from "@/api/queries";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
@@ -16,6 +16,8 @@ interface SpellIdTooltipProps {
   loadOnHover?: boolean;
   /** Additional class name for the wrapper */
   className?: string;
+  /** Optional content rendered above the spell tooltip. */
+  tooltipHeader?: ReactNode;
 }
 
 /**
@@ -31,6 +33,7 @@ export function SpellIdTooltip({
   size = 16,
   loadOnHover = false,
   className,
+  tooltipHeader,
 }: SpellIdTooltipProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -81,6 +84,7 @@ export function SpellIdTooltip({
           className="z-[10000] border-0 bg-transparent p-0"
           hideArrow
         >
+          {tooltipHeader}
           {spell ? <SpellTooltip spell={spell} /> : <span className="rounded bg-popover px-2 py-1 text-xs text-popover-foreground">Loading…</span>}
         </TooltipContent>
       </Tooltip>
@@ -94,6 +98,7 @@ export function SpellIdTooltip({
           spell={spell} 
           size={size}
           showTooltip
+          tooltipHeader={tooltipHeader}
         >
           {name}
         </SpellIconWithTooltip>

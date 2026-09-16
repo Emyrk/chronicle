@@ -32,6 +32,25 @@ export function mergeAdjacentAuraSegments<T extends UnitAuraSegment>(
   return merged;
 }
 
+export interface AuraApplier {
+  guid: string;
+  name: string | null;
+}
+
+export function uniqueAuraAppliers(
+  segments: readonly UnitAuraSegment[],
+): AuraApplier[] {
+  const appliers = new Map<string, AuraApplier>();
+  for (const segment of segments) {
+    if (!segment.sourceGuid || appliers.has(segment.sourceGuid)) continue;
+    appliers.set(segment.sourceGuid, {
+      guid: segment.sourceGuid,
+      name: segment.sourceName,
+    });
+  }
+  return [...appliers.values()];
+}
+
 export function summarizeAuraSources(
   segments: readonly UnitAuraSegment[],
 ): AuraSourceSummary[] {
