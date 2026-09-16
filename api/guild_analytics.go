@@ -104,11 +104,16 @@ func (api *API) GuildResourceAnalytics(w http.ResponseWriter, r *http.Request) {
 
 	days := make([]chroniclesdk.GuildResourceAnalyticsDay, 0, len(rows))
 	for _, row := range rows {
+		instanceDate := ""
+		if row.InstanceDate.Valid {
+			instanceDate = row.InstanceDate.Time.Format("2006-01-02")
+		}
 		days = append(days, chroniclesdk.GuildResourceAnalyticsDay{
 			ResourceKind:     row.ResourceKind,
 			ResourceKey:      row.ResourceKey,
 			ResourceGroupKey: row.ResourceGroupKey,
 			ResourceName:     row.ResourceName,
+			InstanceDate:     instanceDate,
 			ViewedOn:         row.ViewedOn.Time.Format("2006-01-02"),
 			Views:            row.Views,
 			UniqueVisitors:   row.UniqueVisitors,

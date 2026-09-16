@@ -112,10 +112,16 @@ func TestGuildInstanceViewsMergeDuplicateGroup(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 3)
 
+	var wantInstanceDate pgtype.Date
+	require.NoError(t, fixture.pool.QueryRow(ctx, `
+		SELECT start_time::date FROM log_instances WHERE id = $1
+	`, fixture.instanceID).Scan(&wantInstanceDate))
+
 	byKey := make(map[string]database.GuildResourceAnalyticsRow, len(rows))
 	for _, row := range rows {
 		byKey[row.ResourceKind+":"+row.ResourceKey] = row
 		require.Equal(t, canonicalSlug, row.ResourceGroupKey)
+		require.Equal(t, wantInstanceDate, row.InstanceDate)
 	}
 
 	group := byKey["instance:"+canonicalSlug]

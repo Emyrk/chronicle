@@ -6407,7 +6407,12 @@ SELECT
         WHEN stats.resource_kind = 'guild_page' THEN g.name
         WHEN stats.resource_kind IN ('instance', 'instance_member') THEN COALESCE(instance.name, stats.resource_key)
         ELSE stats.resource_key
-    END)::text AS resource_name
+    END)::text AS resource_name,
+    (CASE
+        WHEN stats.resource_kind IN ('instance', 'instance_member')
+            THEN COALESCE(group_instance.start_time, instance.start_time)
+        ELSE NULL
+    END)::date AS instance_date
 FROM guild_resource_daily_stats AS stats
 JOIN guilds AS g ON g.id = stats.guild_id
 LEFT JOIN log_instances AS instance
@@ -6433,6 +6438,7 @@ type GuildResourceAnalyticsRow struct {
 	Views            int64       `db:"views" json:"views"`
 	UniqueVisitors   int64       `db:"unique_visitors" json:"unique_visitors"`
 	ResourceName     string      `db:"resource_name" json:"resource_name"`
+	InstanceDate     pgtype.Date `db:"instance_date" json:"instance_date"`
 }
 
 func (q *sqlQuerier) GuildResourceAnalytics(ctx context.Context, arg GuildResourceAnalyticsParams) ([]GuildResourceAnalyticsRow, error) {
@@ -6452,6 +6458,7 @@ func (q *sqlQuerier) GuildResourceAnalytics(ctx context.Context, arg GuildResour
 			&i.Views,
 			&i.UniqueVisitors,
 			&i.ResourceName,
+			&i.InstanceDate,
 		); err != nil {
 			return nil, err
 		}

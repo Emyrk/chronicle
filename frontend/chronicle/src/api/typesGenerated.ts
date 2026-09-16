@@ -1527,6 +1527,7 @@ export interface GuildResourceAnalyticsDay {
     readonly resource_key: string;
     readonly resource_group_key: string;
     readonly resource_name: string;
+    readonly instance_date: string;
     readonly viewed_on: string;
     readonly views: number;
     readonly unique_visitors: number;

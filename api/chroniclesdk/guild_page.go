@@ -353,6 +353,7 @@ type GuildResourceAnalyticsDay struct {
 	ResourceKey      string `json:"resource_key"`
 	ResourceGroupKey string `json:"resource_group_key"`
 	ResourceName     string `json:"resource_name"`
+	InstanceDate     string `json:"instance_date"`
 	ViewedOn         string `json:"viewed_on"`
 	Views            int64  `json:"views"`
 	UniqueVisitors   int64  `json:"unique_visitors"`

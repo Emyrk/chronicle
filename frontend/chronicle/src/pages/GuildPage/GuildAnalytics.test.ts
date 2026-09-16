@@ -8,6 +8,7 @@ function row(overrides: Partial<GuildResourceAnalyticsDay>): GuildResourceAnalyt
     resource_key: "canonical-slug",
     resource_group_key: "canonical-slug",
     resource_name: "Molten Core",
+    instance_date: "2026-09-06",
     viewed_on: new Date().toISOString().slice(0, 10),
     views: 0,
     unique_visitors: 0,
@@ -46,6 +47,7 @@ describe("buildSummary", () => {
     expect(total.instances).toHaveLength(1);
     expect(total.instances[0]).toMatchObject({
       key: "canonical-slug",
+      date: "2026-09-06",
       total: 4,
     });
     expect(total.instances[0].members).toEqual([

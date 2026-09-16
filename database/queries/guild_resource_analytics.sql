@@ -107,7 +107,12 @@ SELECT
         WHEN stats.resource_kind = 'guild_page' THEN g.name
         WHEN stats.resource_kind IN ('instance', 'instance_member') THEN COALESCE(instance.name, stats.resource_key)
         ELSE stats.resource_key
-    END)::text AS resource_name
+    END)::text AS resource_name,
+    (CASE
+        WHEN stats.resource_kind IN ('instance', 'instance_member')
+            THEN COALESCE(group_instance.start_time, instance.start_time)
+        ELSE NULL
+    END)::date AS instance_date
 FROM guild_resource_daily_stats AS stats
 JOIN guilds AS g ON g.id = stats.guild_id
 LEFT JOIN log_instances AS instance

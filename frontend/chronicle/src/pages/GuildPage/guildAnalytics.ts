@@ -20,6 +20,7 @@ interface InstanceMemberSummary {
 interface InstanceSummary {
   key: string;
   name: string;
+  date: string;
   color: string;
   total: number;
   prevTotal: number;
@@ -65,6 +66,7 @@ function pctDelta(current: number, prior: number): number {
 export function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: number, metric: Metric) {
   const guildPageByDate = new Map<string, { views: number; uniqueVisitors: number }>();
   const instanceNames = new Map<string, string>();
+  const instanceDates = new Map<string, string>();
   const instanceByDate = new Map<string, Map<string, { views: number; uniqueVisitors: number }>>();
   const memberNames = new Map<string, Map<string, string>>();
   const memberByDate = new Map<string, Map<string, Map<string, { views: number; uniqueVisitors: number }>>>();
@@ -78,6 +80,7 @@ export function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: 
     } else if (row.resource_kind === "instance") {
       const groupKey = row.resource_group_key;
       instanceNames.set(groupKey, row.resource_name);
+      if (row.instance_date) instanceDates.set(groupKey, row.instance_date);
       let byDate = instanceByDate.get(groupKey);
       if (!byDate) {
         byDate = new Map();
@@ -146,6 +149,7 @@ export function buildSummary(rows: readonly GuildResourceAnalyticsDay[], range: 
       return {
         key,
         name,
+        date: instanceDates.get(key) ?? "",
         color: getInstanceAccentColor(name),
         total,
         prevTotal,

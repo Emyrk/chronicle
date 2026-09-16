@@ -40,6 +40,11 @@ function formatDayTitle(date: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
+function formatInstanceDate(date: string): string {
+  if (!date) return "";
+  const d = new Date(`${date}T00:00:00Z`);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
 
 export function GuildAnalytics() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -132,7 +137,14 @@ export function GuildAnalytics() {
                 <span className="text-xs text-muted-foreground">across {summary.instances.length} deduplicated instances</span>
               </MetricCard>
               <MetricCard icon={Star} label="Most viewed instance" value={summary.instances[0]?.name ?? "—"} valueClassName="font-wow text-xl">
-                <span className="text-xs text-amber-500">{summary.instances[0] ? `${compactFormatter.format(summary.instances[0].total)} ${METRIC_UNIT[metric]}` : "No views yet"}</span>
+                {summary.instances[0] ? (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                    {summary.instances[0].date && <span className="text-muted-foreground">{formatInstanceDate(summary.instances[0].date)}</span>}
+                    <span className="text-amber-500">{compactFormatter.format(summary.instances[0].total)} {METRIC_UNIT[metric]}</span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-amber-500">No views yet</span>
+                )}
               </MetricCard>
               <MetricCard icon={CalendarDays} label="Busiest day" value={summary.busiestDay ? formatDayTitle(summary.busiestDay.date) : "—"}>
                 <span className="text-xs text-muted-foreground">{summary.busiestDay ? `${numberFormatter.format(metricValue(summary.busiestDay, metric))} guild page ${METRIC_UNIT[metric]}` : "No views yet"}</span>
@@ -202,8 +214,12 @@ export function GuildAnalytics() {
                           <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: instance.color, boxShadow: `0 0 6px ${instance.color}55` }} />
                           <div className="w-48 shrink-0">
                             <div className="font-wow truncate text-sm font-semibold">{instance.name}</div>
-                            {instance.members.length > 1 && (
-                              <div className="text-[10px] text-muted-foreground">{instance.members.length} duplicate uploads</div>
+                            {(instance.date || instance.members.length > 1) && (
+                              <div className="truncate text-[10px] text-muted-foreground">
+                                {[formatInstanceDate(instance.date), instance.members.length > 1 ? `${instance.members.length} duplicate uploads` : ""]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </div>
                             )}
                           </div>
                           <div className="flex h-5 min-w-0 flex-1 items-end gap-[3px]">
