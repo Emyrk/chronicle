@@ -29,6 +29,10 @@ export function UnitSearch({ units, selectedGuids, onToggle, onClear }: UnitSear
   const selected = units.filter((unit) => selectedGuids.has(unit.guid));
   const singleSelected = selected.length === 1 ? selected[0] : null;
 
+  // Keep the legacy singular name available across Vite Fast Refresh updates
+  // while transitioning this picker from single-select to multi-select.
+  const selectedGuid = singleSelected?.guid ?? null;
+
   useEffect(() => {
     const close = (event: globalThis.MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
@@ -72,7 +76,7 @@ export function UnitSearch({ units, selectedGuids, onToggle, onClear }: UnitSear
         "group flex h-8 items-center gap-2 rounded border border-border/80 bg-background/70 px-2",
         "shadow-inner transition-colors focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/25",
       )}>
-        {singleSelected && !open ? (
+        {selectedGuid && singleSelected && !open ? (
           <UnitIcon unit={singleSelected} className="size-5" />
         ) : (
           <Search className="size-4 shrink-0 text-muted-foreground transition-colors group-focus-within:text-primary" />
