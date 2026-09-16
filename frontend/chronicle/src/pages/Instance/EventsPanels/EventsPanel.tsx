@@ -57,6 +57,7 @@ import { createInnervatePanel } from "./Innervate/Innervate";
 import { createSunderPanel } from "./Sunder/Sunder";
 import { createJudgementPanel } from "./Judgement/Judgement";
 import { createAuraUptimePanel } from "./AuraUptime/AuraUptime";
+import { createUnitAurasPanel } from "./UnitAuras/UnitAuras";
 import { createMetricsPanel } from "./Metrics/Metrics";
 import { PeriodsPanel } from "./PeriodsPanel/PeriodsPanel";
 import { createPossessionPanel } from "./PossessionPanel/PossessionPanel";
@@ -121,6 +122,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   judgement: createJudgementPanel(),
   // Aura tracking
   aura_uptime: createAuraUptimePanel(),
+  unit_auras: createUnitAurasPanel(),
   // Debug/Analysis
   metrics: createMetricsPanel(),
   periods: PeriodsPanel,

@@ -22,6 +22,7 @@ import { sunderProcessor } from "../Sunder/sunder.processor";
 import { judgementProcessor } from "../Judgement/judgement.processor";
 import { metricsProcessor } from "../Metrics/metrics.processor";
 import { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
+import { unitAurasProcessor } from "../UnitAuras/unitAuras.processor";
 import { comparisonProcessor } from "../ComparisonPanel/comparison.processor";
 import { timelineProcessor } from "../Timeline/timeline.processor";
 import { rotationsProcessor } from "../Rotations/rotations.processor";
@@ -64,6 +65,7 @@ export { sunderProcessor } from "../Sunder/sunder.processor";
 export { judgementProcessor } from "../Judgement/judgement.processor";
 export { metricsProcessor } from "../Metrics/metrics.processor";
 export { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
+export { unitAurasProcessor } from "../UnitAuras/unitAuras.processor";
 export { comparisonProcessor } from "../ComparisonPanel/comparison.processor";
 export { timelineProcessor } from "../Timeline/timeline.processor";
 export { rotationsProcessor } from "../Rotations/rotations.processor";
@@ -103,6 +105,7 @@ export type { InnervateResult, InnervateCast } from "../Innervate/innervate.proc
 export type { SunderResult, WarriorSunderStats, TargetSunderStats, ConfirmedSunder, SunderDebugEvent } from "../Sunder/sunder.processor";
 export type { JudgementResult, TargetJudgementStats, JudgementApplication, JudgementType, JudgementOfLightBenefit } from "../Judgement/judgement.processor";
 export type { AuraUptimeResult, AuraData, TargetUptimeData, UptimeSegment } from "../AuraUptime/auraUptime.processor";
+export type { UnitAurasResult, UnitAuraData, UnitAuraEntry, UnitAuraSegment } from "../UnitAuras/unitAuras.processor";
 export type { TimelineResult, TimelineSeriesMeta } from "../Timeline/timeline.processor";
 export type { TimelineSeriesConfig, AggregationType, TimelineSettings } from "../Timeline/timelineTypes";
 export type { RotationsResult, CastEntry, AuraSegment } from "../Rotations/rotations.processor";
@@ -173,6 +176,7 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   judgement: judgementProcessor,
   // Aura tracking
   aura_uptime: auraUptimeProcessor,
+  unit_auras: unitAurasProcessor,
   // Debug/analysis
   metrics: metricsProcessor,
   // Cross-panel comparison

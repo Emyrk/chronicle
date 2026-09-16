@@ -49,7 +49,7 @@ const PANEL_CATEGORIES: PanelCategory[] = [
   },
   {
     label: "Buffs",
-    items: ["aura_uptime"],
+    items: ["aura_uptime", "unit_auras"],
   },
   {
     label: "Dispels & Interrupts",

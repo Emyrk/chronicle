@@ -638,6 +638,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   judgement: 'jdg',
   // Aura tracking
   aura_uptime: 'au',
+  unit_auras: 'ua',
   // Debug/Analysis
   metrics: 'met',
   periods: 'per',
