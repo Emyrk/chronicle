@@ -37,7 +37,6 @@ type sqlcQuerier interface {
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
-	ClearDuplicateGroupID(ctx context.Context, id uuid.UUID) error
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	CountActiveRegressionJobs(ctx context.Context) (int64, error)
@@ -800,6 +799,7 @@ type sqlcQuerier interface {
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
 	UnassignWorldFromServer(ctx context.Context, arg UnassignWorldFromServerParams) error
+	UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (UnlinkDuplicateGroupRow, error)
 	UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error
 	UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error)
 	// Only non-null params are applied; NULL means "keep existing value".
