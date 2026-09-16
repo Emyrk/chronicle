@@ -7439,18 +7439,6 @@ func (q *sqlQuerier) UpsertInstanceOverviewMetrics(ctx context.Context, arg Upse
 	return err
 }
 
-const clearDuplicateGroupID = `-- name: ClearDuplicateGroupID :exec
-UPDATE log_instances
-SET duplicate_group_id = NULL,
-    updated_at = now()
-WHERE id = $1
-`
-
-func (q *sqlQuerier) ClearDuplicateGroupID(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, clearDuplicateGroupID, id)
-	return err
-}
-
 const deleteAllParsedLogsByGroupID = `-- name: DeleteAllParsedLogsByGroupID :exec
 DELETE FROM
   parsed_log_group
@@ -9137,6 +9125,63 @@ type SetDuplicateGroupIDsParams struct {
 func (q *sqlQuerier) SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error {
 	_, err := q.db.Exec(ctx, setDuplicateGroupIDs, arg.DuplicateGroupID, arg.Ids)
 	return err
+}
+
+const unlinkDuplicateGroup = `-- name: UnlinkDuplicateGroup :one
+WITH target AS MATERIALIZED (
+    SELECT li.id, li.duplicate_group_id
+    FROM log_instances li
+    WHERE li.id = $1
+    FOR UPDATE
+),
+remaining_group AS MATERIALIZED (
+    SELECT li.id, li.start_time
+    FROM log_instances li
+    JOIN target ON li.duplicate_group_id = target.duplicate_group_id
+    WHERE target.duplicate_group_id = target.id
+      AND li.id <> target.id
+    ORDER BY li.start_time, li.id
+    FOR UPDATE
+),
+new_anchor AS MATERIALIZED (
+    SELECT id
+    FROM remaining_group
+    LIMIT 1
+),
+reanchored AS (
+    UPDATE log_instances li
+    SET duplicate_group_id = new_anchor.id,
+        updated_at = now()
+    FROM new_anchor
+    WHERE li.id IN (SELECT id FROM remaining_group)
+    RETURNING li.id
+),
+unlinked AS (
+    UPDATE log_instances li
+    SET duplicate_group_id = NULL,
+        updated_at = now()
+    FROM target
+    WHERE li.id = target.id
+    RETURNING li.id
+)
+SELECT
+    target.duplicate_group_id AS previous_group_id,
+    new_anchor.id AS new_group_id
+FROM target
+LEFT JOIN new_anchor ON true
+WHERE EXISTS (SELECT 1 FROM unlinked)
+`
+
+type UnlinkDuplicateGroupRow struct {
+	PreviousGroupID uuid.NullUUID `db:"previous_group_id" json:"previous_group_id"`
+	NewGroupID      uuid.NullUUID `db:"new_group_id" json:"new_group_id"`
+}
+
+func (q *sqlQuerier) UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (UnlinkDuplicateGroupRow, error) {
+	row := q.db.QueryRow(ctx, unlinkDuplicateGroup, id)
+	var i UnlinkDuplicateGroupRow
+	err := row.Scan(&i.PreviousGroupID, &i.NewGroupID)
+	return i, err
 }
 
 const deleteParseScoreResultsForTenantInstance = `-- name: DeleteParseScoreResultsForTenantInstance :exec

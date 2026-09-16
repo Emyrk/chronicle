@@ -473,18 +473,24 @@ func (api *API) GetInstanceLoot(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, db2sdk.InstanceLoot(loot))
 }
 
-// UngroupInstance removes an instance from its duplicate group by clearing
-// duplicate_group_id. Requires admin_logs permission.
+// UngroupInstance removes an instance from its duplicate group. If the instance
+// anchors the group, the remaining members are first moved to a new stable anchor.
+// Requires admin_logs permission.
 func (api *API) UngroupInstance(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	inst := httpmw.Instance(ctx)
 
-	err := api.Opts.Zed.ClearDuplicateGroupID(ctx, inst.ID)
+	unlinked, err := api.Opts.Zed.UnlinkDuplicateGroup(ctx, inst.ID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if err := api.Chronicle.EnqueueRankingRunRefresh(ctx, inst.ID, inst.DuplicateGroupID.UUID); err != nil {
+	if err := api.Chronicle.EnqueueRankingRunRefresh(
+		ctx,
+		inst.ID,
+		unlinked.PreviousGroupID.UUID,
+		unlinked.NewGroupID.UUID,
+	); err != nil {
 		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after unlink", slog.Any("error", err))
 	}
 
