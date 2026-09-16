@@ -52,6 +52,28 @@ func TestNewArgsLogParseMatchesTenantReparse(t *testing.T) {
 	}, got)
 }
 
+func TestNewReplacementArgsLogParseCarriesPreviousRankingRuns(t *testing.T) {
+	t.Parallel()
+
+	logID := uuid.New()
+	realmID := uuid.New()
+	tenantID := uuid.New()
+	oldInstanceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	oldRunID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	ctx := servicetenant.WithTenantID(t.Context(), tenantID)
+
+	got := newReplacementArgsLogParse(ctx, logID, true, true, realmID, []uuid.UUID{oldRunID, oldInstanceID, oldRunID})
+	require.Equal(t, ArgsLogParse{
+		LogID:                 logID,
+		RealmID:               realmID,
+		TenantID:              tenantID,
+		Verbose:               true,
+		IdentityMode:          true,
+		Replacement:           true,
+		PreviousRankingRunIDs: []uuid.UUID{oldInstanceID, oldRunID},
+	}, got)
+}
+
 func TestResyncTenantID(t *testing.T) {
 	t.Parallel()
 
