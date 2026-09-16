@@ -1,10 +1,15 @@
 package database_test
 
 import (
+	"context"
 	"errors"
+	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
@@ -13,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,6 +75,265 @@ func upsertRankingRunSource(t *testing.T, store database.Store, source database.
 	created, err := store.UpsertRankingRun(testutil.Context(t, testutil.WaitShort), database.UpsertRankingRunParams(source))
 	require.NoError(t, err)
 	return created
+}
+
+type blockingRankingRunRefreshStore struct {
+	database.Store
+	started     chan struct{}
+	release     chan struct{}
+	startedOnce sync.Once
+}
+
+func (s *blockingRankingRunRefreshStore) InTx(ctx context.Context, f func(database.Store) error, opts *pgx.TxOptions) error {
+	return s.Store.InTx(ctx, func(tx database.Store) error {
+		s.startedOnce.Do(func() { close(s.started) })
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-s.release:
+		}
+		return f(tx)
+	}, opts)
+}
+
+func TestRankingRunRefreshQueueAllowsIdenticalJobWhileRunning(t *testing.T) {
+	t.Parallel()
+	pool, store, _ := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	blockingStore := &blockingRankingRunRefreshStore{
+		Store:   store,
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(blockingStore.release) }) }
+	t.Cleanup(release)
+
+	queue, err := riverqueue.New(ctx, riverqueue.Options{Logger: slog.Default(), Pool: pool})
+	require.NoError(t, err)
+	riverqueue.AddWorker(queue, &servicerankings.WorkerRefreshRankingRuns{
+		Store: blockingStore, Logger: slog.Default(),
+	})
+	queue.AddQueue(riverqueue.QueueRankings, river.QueueConfig{MaxWorkers: 1})
+	require.NoError(t, queue.Start(ctx))
+	t.Cleanup(func() { _ = queue.Stop(context.Background()) })
+
+	args := rankingargs.NewRefreshRankingRuns(uuid.New())
+	first, err := queue.Insert(ctx, args, nil)
+	require.NoError(t, err)
+	select {
+	case <-ctx.Done():
+		require.FailNow(t, "refresh job did not start", ctx.Err())
+	case <-blockingStore.started:
+	}
+
+	second, err := queue.Insert(ctx, args, nil)
+	require.NoError(t, err)
+	assert.False(t, second.UniqueSkippedAsDuplicate)
+	assert.NotEqual(t, first.Job.ID, second.Job.ID)
+	release()
+}
+
+type pausingRankingRunSourceStore struct {
+	database.Store
+	snapshotRead chan struct{}
+	release      chan struct{}
+	snapshotOnce sync.Once
+}
+
+func (s *pausingRankingRunSourceStore) InTx(ctx context.Context, f func(database.Store) error, opts *pgx.TxOptions) error {
+	return s.Store.InTx(ctx, func(tx database.Store) error {
+		return f(&pausingRankingRunSourceTx{Store: tx, parent: s})
+	}, opts)
+}
+
+type pausingRankingRunSourceTx struct {
+	database.Store
+	parent *pausingRankingRunSourceStore
+}
+
+func (tx *pausingRankingRunSourceTx) RankingRunSources(ctx context.Context, affectedIDs []uuid.UUID) ([]database.RankingRunSourcesRow, error) {
+	sources, err := tx.Store.RankingRunSources(ctx, affectedIDs)
+	if err != nil {
+		return nil, err
+	}
+	tx.parent.snapshotOnce.Do(func() { close(tx.parent.snapshotRead) })
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-tx.parent.release:
+		return sources, nil
+	}
+}
+
+type rankingRunRefreshResult struct {
+	output servicerankings.RefreshRankingRunsOutput
+	err    error
+}
+
+func refreshRankingRunsAsync(ctx context.Context, store database.Store, affectedIDs []uuid.UUID) <-chan rankingRunRefreshResult {
+	result := make(chan rankingRunRefreshResult, 1)
+	go func() {
+		output, err := servicerankings.RefreshRankingRuns(ctx, store, affectedIDs)
+		result <- rankingRunRefreshResult{output: output, err: err}
+	}()
+	return result
+}
+
+func observeNewerRefresh(t *testing.T, ctx context.Context, pool *pgxpool.Pool, result <-chan rankingRunRefreshResult) *rankingRunRefreshResult {
+	t.Helper()
+	const (
+		waitTimeout  = 5 * time.Second
+		pollInterval = 10 * time.Millisecond
+	)
+	timer := time.NewTimer(waitTimeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case refresh := <-result:
+			return &refresh
+		case <-ticker.C:
+			var waiting bool
+			err := pool.QueryRow(ctx, `
+				SELECT EXISTS (
+					SELECT 1
+					FROM pg_locks
+					WHERE locktype = 'advisory'
+					  AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+					  AND classid = 1128813135
+					  AND objid = 1381322323
+					  AND objsubid = 2
+					  AND NOT granted
+				)
+			`).Scan(&waiting)
+			require.NoError(t, err)
+			if waiting {
+				return nil
+			}
+		case <-timer.C:
+			require.FailNow(t, "newer refresh neither completed nor waited for the advisory lock")
+		case <-ctx.Done():
+			require.FailNow(t, "context expired while observing newer refresh", ctx.Err())
+		}
+	}
+}
+
+func assertRankingRunsMatchSources(t *testing.T, ctx context.Context, pool *pgxpool.Pool, store database.Store, affectedIDs []uuid.UUID) {
+	t.Helper()
+	sources, err := store.RankingRunSources(ctx, affectedIDs)
+	require.NoError(t, err)
+	expectedRunIDs := make([]uuid.UUID, 0, len(sources))
+	for _, source := range sources {
+		expectedRunIDs = append(expectedRunIDs, source.RunID)
+	}
+
+	rows, err := pool.Query(ctx, "SELECT run_id FROM ranking_runs ORDER BY run_id")
+	require.NoError(t, err)
+	defer rows.Close()
+	actualRunIDs := make([]uuid.UUID, 0, len(sources))
+	for rows.Next() {
+		var runID uuid.UUID
+		require.NoError(t, rows.Scan(&runID))
+		actualRunIDs = append(actualRunIDs, runID)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, expectedRunIDs, actualRunIDs)
+
+	for _, source := range sources {
+		run, err := store.RankingRunByID(ctx, source.RunID)
+		require.NoError(t, err)
+		assert.Equal(t, source.RunID, run.RunID)
+		assert.Equal(t, source.RepresentativeInstanceID, run.RepresentativeInstanceID)
+		assert.Equal(t, source.RealmID, run.RealmID)
+		assert.Equal(t, source.InstanceName, run.InstanceName)
+		assert.Equal(t, source.DifficultyName, run.DifficultyName)
+		assert.Equal(t, source.MaxPlayers, run.MaxPlayers)
+		assert.Equal(t, source.StartTime, run.StartTime)
+		assert.Equal(t, source.EndTime, run.EndTime)
+		assert.Equal(t, source.BossCoverage, run.BossCoverage)
+		assert.Equal(t, source.MemberCount, run.MemberCount)
+		assert.Equal(t, source.SourceUpdatedAt, run.SourceUpdatedAt)
+	}
+}
+
+func TestRankingRunRefreshSerializesSourceTransitions(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		configure func(context.Context, database.Store, uuid.UUID, uuid.UUID) error
+		mutate    func(context.Context, database.Store, uuid.UUID, uuid.UUID) error
+	}{
+		{
+			name: "merge",
+			configure: func(context.Context, database.Store, uuid.UUID, uuid.UUID) error {
+				return nil
+			},
+			mutate: func(ctx context.Context, store database.Store, anchorID, duplicateID uuid.UUID) error {
+				return store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+					DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true},
+					Ids:              []uuid.UUID{anchorID, duplicateID},
+				})
+			},
+		},
+		{
+			name: "unlink",
+			configure: func(ctx context.Context, store database.Store, anchorID, duplicateID uuid.UUID) error {
+				return store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+					DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true},
+					Ids:              []uuid.UUID{anchorID, duplicateID},
+				})
+			},
+			mutate: func(ctx context.Context, store database.Store, _ uuid.UUID, duplicateID uuid.UUID) error {
+				return store.ClearDuplicateGroupID(ctx, duplicateID)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			pool, store, realmID := setupParsesTest(t)
+			ctx := testutil.Context(t, testutil.WaitMedium)
+			anchorID := uuid.New()
+			duplicateID := uuid.New()
+			affectedIDs := []uuid.UUID{anchorID, duplicateID}
+			start := time.Date(2026, 9, 5, 20, 0, 0, 0, time.UTC)
+			insertRankingRunSource(t, pool, store, realmID, anchorID, start, "Lucifron")
+			insertRankingRunSource(t, pool, store, realmID, duplicateID, start.Add(time.Second), "Lucifron", "Ragnaros")
+			require.NoError(t, test.configure(ctx, store, anchorID, duplicateID))
+			_, err := servicerankings.RefreshRankingRuns(ctx, store, affectedIDs)
+			require.NoError(t, err)
+
+			pausedStore := &pausingRankingRunSourceStore{
+				Store: store, snapshotRead: make(chan struct{}), release: make(chan struct{}),
+			}
+			var releaseOnce sync.Once
+			release := func() { releaseOnce.Do(func() { close(pausedStore.release) }) }
+			t.Cleanup(release)
+			oldRefresh := refreshRankingRunsAsync(ctx, pausedStore, affectedIDs)
+			select {
+			case <-pausedStore.snapshotRead:
+			case <-ctx.Done():
+				require.FailNow(t, "old refresh did not read its source snapshot", ctx.Err())
+			}
+
+			require.NoError(t, test.mutate(ctx, store, anchorID, duplicateID))
+			newRefresh := refreshRankingRunsAsync(ctx, store, affectedIDs)
+			newRefreshResult := observeNewerRefresh(t, ctx, pool, newRefresh)
+			release()
+
+			oldRefreshResult := <-oldRefresh
+			require.NoError(t, oldRefreshResult.err)
+			if newRefreshResult == nil {
+				result := <-newRefresh
+				newRefreshResult = &result
+			}
+			require.NoError(t, newRefreshResult.err)
+			assertRankingRunsMatchSources(t, ctx, pool, store, affectedIDs)
+		})
+	}
 }
 
 func TestRankingRunRepresentativePrefersBroaderDuplicate(t *testing.T) {

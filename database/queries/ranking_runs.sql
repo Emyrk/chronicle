@@ -24,6 +24,10 @@ SELECT *
 FROM ranking_runs
 WHERE run_id = @run_id;
 
+-- name: AcquireRankingRunRefreshLock :exec
+-- Serialize refresh snapshots and commits across logical-run identity changes.
+SELECT pg_advisory_xact_lock(1128813135, 1381322323);
+
 -- name: RankingRunSources :many
 WITH affected_runs AS MATERIALIZED (
     SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
