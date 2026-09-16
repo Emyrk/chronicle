@@ -134,50 +134,60 @@ function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid }: Target
     ? targets.find((target) => target.guid === selectedTargetGuid)
     : null;
 
-  if (selectedTarget) {
-    return <TargetTimeline target={selectedTarget} onClose={() => onSelectTargetGuid(null)} />;
-  }
-
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
+    <div className="flex h-full min-h-0 flex-col gap-2" data-faerie-fire-targets>
       <div className="shrink-0 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">{targets.length}</span> targets tracked
+        <span className="font-medium text-foreground">{targets.length}</span> targets had Faerie Fire applied
+        {selectedTarget && (
+          <button
+            type="button"
+            onClick={() => onSelectTargetGuid(null)}
+            className="ml-2 cursor-pointer text-blue-400 hover:text-blue-300"
+          >
+            [clear selection]
+          </button>
+        )}
       </div>
-      <ScrollArea className="min-h-0 flex-1">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-card">
-            <tr className="border-b border-border text-muted-foreground">
-              <th className="px-2 py-1.5 text-left font-medium">Target</th>
-              <th className="px-2 py-1.5 text-right font-medium whitespace-nowrap">First applied</th>
-              <th className="px-2 py-1.5 text-left font-medium">Applied by</th>
-              <th className="px-2 py-1.5 text-right font-medium">Refreshes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {targets.map((target) => (
-              <tr
-                key={target.guid}
-                className="cursor-pointer border-b border-border/10 hover:bg-muted/50"
-                onClick={() => onSelectTargetGuid(target.guid)}
-              >
-                <td className="px-2 py-1 font-medium text-orange-400 whitespace-nowrap">{target.name}</td>
-                <td className="px-2 py-1 text-right font-mono text-2xs whitespace-nowrap">
-                  {target.firstApplicationMs === null ? "—" : formatTimeMs(target.firstApplicationMs)}
-                </td>
-                <td className="px-2 py-1 text-[var(--color-class-druid)] whitespace-nowrap">
-                  {target.firstCasterName ?? "—"}
-                </td>
-                <td className="px-2 py-1 text-right font-mono">{target.refreshes}</td>
+
+      {selectedTarget ? (
+        <DebugBreakout target={selectedTarget} onClose={() => onSelectTargetGuid(null)} />
+      ) : (
+        <ScrollArea className="min-h-0 flex-1">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-card">
+              <tr className="border-b border-border text-muted-foreground">
+                <th className="px-2 py-1.5 text-left font-medium">Target</th>
+                <th className="px-2 py-1.5 text-right font-medium whitespace-nowrap">First applied</th>
+                <th className="px-2 py-1.5 text-left font-medium">Applied by</th>
+                <th className="px-2 py-1.5 text-right font-medium">Refreshes</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </ScrollArea>
+            </thead>
+            <tbody>
+              {targets.map((target) => (
+                <tr
+                  key={target.guid}
+                  className="cursor-pointer border-b border-border/10 hover:bg-muted/50"
+                  onClick={() => onSelectTargetGuid(target.guid)}
+                >
+                  <td className="px-2 py-1 font-medium text-orange-400 whitespace-nowrap">{target.name}</td>
+                  <td className="px-2 py-1 text-right font-mono text-2xs whitespace-nowrap">
+                    {target.firstApplicationMs === null ? "—" : formatTimeMs(target.firstApplicationMs)}
+                  </td>
+                  <td className="px-2 py-1 text-[var(--color-class-druid)] whitespace-nowrap">
+                    {target.firstCasterName ?? "—"}
+                  </td>
+                  <td className="px-2 py-1 text-right font-mono">{target.refreshes}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollArea>
+      )}
     </div>
   );
 }
 
-function TargetTimeline({ target, onClose }: { target: TargetFaerieFireStats; onClose: () => void }) {
+function DebugBreakout({ target, onClose }: { target: TargetFaerieFireStats; onClose: () => void }) {
   const events = [...target.debugEvents].sort((a, b) => a.offsetMs - b.offsetMs);
 
   return (
@@ -189,45 +199,63 @@ function TargetTimeline({ target, onClose }: { target: TargetFaerieFireStats; on
           onClick={onClose}
           className="cursor-pointer text-xs text-muted-foreground hover:text-foreground"
         >
-          Close
+          ✕ close
         </button>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-1 pr-2">
-          {events.map((event, index) => (
-            <TimelineRow key={`${event.offsetMs}-${index}`} event={event} />
-          ))}
-        </div>
+
+      <div className="shrink-0 text-2xs text-muted-foreground">
+        First applied: <span className="font-medium text-foreground">
+          {target.firstApplicationMs !== null ? formatTimeMs(target.firstApplicationMs) : "never"}
+        </span>
+        {" • "}
+        Total events: <span className="font-medium text-foreground">{events.length}</span>
+      </div>
+
+      <ScrollArea className="min-h-0 flex-1" data-faerie-fire-debug-scroll>
+        <table className="w-full text-2xs font-mono">
+          <thead className="sticky top-0 bg-card">
+            <tr className="border-b border-border text-muted-foreground">
+              <th className="px-2 py-1 text-right font-medium">Offset</th>
+              <th className="px-2 py-1 text-left font-medium">Type</th>
+              <th className="px-2 py-1 text-left font-medium">Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {events.map((event: FaerieFireDebugEvent, index: number) => (
+              <tr
+                key={index}
+                data-faerie-fire-debug-row
+                className={cn(
+                  "border-b border-border/10",
+                  event.type === "applied" && "bg-green-500/5",
+                  event.type === "refreshed" && "bg-yellow-500/5",
+                  event.type === "failed" && "bg-red-500/5 opacity-50",
+                  event.type === "removed" && "opacity-50",
+                )}
+              >
+                <td className="px-2 py-0.5 text-right font-mono">
+                  {formatTimeMs(event.offsetMs)}
+                </td>
+                <td className={cn(
+                  "px-2 py-0.5",
+                  event.type === "applied" && "text-green-400",
+                  event.type === "refreshed" && "text-yellow-400",
+                  event.type === "failed" && "text-red-400",
+                  event.type === "removed" && "text-muted-foreground",
+                )}>
+                  {event.type}
+                </td>
+                <td className="px-2 py-0.5">
+                  <span className="text-[var(--color-class-druid)]">{event.casterName}</span>
+                  {event.abilityName && (
+                    <span className="ml-2 text-muted-foreground">via {event.abilityName}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </ScrollArea>
-    </div>
-  );
-}
-
-function TimelineRow({ event }: { event: FaerieFireDebugEvent }) {
-  const label = event.type === "applied"
-    ? "Applied"
-    : event.type === "refreshed"
-      ? "Refreshed"
-      : event.type === "failed"
-        ? "Failed"
-        : "Removed";
-
-  return (
-    <div className="flex items-center gap-2 border-b border-border/10 px-1 py-1 text-xs">
-      <span className="w-16 shrink-0 font-mono text-2xs text-muted-foreground">
-        {formatTimeMs(event.offsetMs)}
-      </span>
-      <span className={cn(
-        "w-16 shrink-0 font-medium",
-        event.type === "applied" && "text-green-400",
-        event.type === "refreshed" && "text-yellow-400",
-        event.type === "failed" && "text-red-400",
-        event.type === "removed" && "text-muted-foreground",
-      )}>
-        {label}
-      </span>
-      <span className="truncate text-[var(--color-class-druid)]">{event.casterName ?? ""}</span>
-      <span className="truncate text-muted-foreground">{event.abilityName ?? ""}</span>
     </div>
   );
 }
