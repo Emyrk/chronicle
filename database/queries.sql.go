@@ -11397,6 +11397,16 @@ func (q *sqlQuerier) UpdateRaidCompositionSharing(ctx context.Context, arg Updat
 	return i, err
 }
 
+const acquireRankingRunRefreshLock = `-- name: AcquireRankingRunRefreshLock :exec
+SELECT pg_advisory_xact_lock(1128813135, 1381322323)
+`
+
+// Serialize refresh snapshots and commits across logical-run identity changes.
+func (q *sqlQuerier) AcquireRankingRunRefreshLock(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, acquireRankingRunRefreshLock)
+	return err
+}
+
 const deleteConflictingRankingRunRepresentatives = `-- name: DeleteConflictingRankingRunRepresentatives :exec
 DELETE FROM ranking_runs existing
 USING (

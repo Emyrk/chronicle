@@ -72,6 +72,9 @@ func RefreshRankingRuns(ctx context.Context, store database.Store, ids []uuid.UU
 	}
 
 	err := store.InTx(ctx, func(tx database.Store) error {
+		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+			return fmt.Errorf("acquire ranking run refresh lock: %w", err)
+		}
 		sources, err := tx.RankingRunSources(ctx, affectedIDs)
 		if err != nil {
 			return fmt.Errorf("resolve ranking run sources: %w", err)
