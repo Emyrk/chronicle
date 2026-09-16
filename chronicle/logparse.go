@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/parseargs"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
@@ -69,6 +70,9 @@ type ArgsLogParse struct {
 	TenantID     uuid.UUID `json:"tenant_id,omitempty"`
 	Verbose      bool      `json:"verbose,omitempty"`
 	IdentityMode bool      `json:"identity_mode,omitempty"`
+
+	Replacement           bool        `json:"replacement,omitempty"`
+	PreviousRankingRunIDs []uuid.UUID `json:"previous_ranking_run_ids,omitempty"`
 }
 
 func (ArgsLogParse) InsertOpts() river.InsertOpts {
@@ -90,6 +94,49 @@ func (ArgsLogParse) InsertOpts() river.InsertOpts {
 }
 
 func (a ArgsLogParse) Kind() string { return KindLogParse }
+
+type rankingRunRefreshPlan struct {
+	replacement bool
+	affectedIDs []uuid.UUID
+}
+
+func newRankingRunRefreshPlan(args ArgsLogParse) *rankingRunRefreshPlan {
+	return &rankingRunRefreshPlan{
+		replacement: args.Replacement,
+		affectedIDs: append([]uuid.UUID(nil), args.PreviousRankingRunIDs...),
+	}
+}
+
+// AfterRankingCommit records identities only after the instance and ranking
+// transactions have finished. Regular parses refresh immediately, while
+// replacement parses defer until every replacement instance has been written.
+func (p *rankingRunRefreshPlan) AfterRankingCommit(ids ...uuid.UUID) []uuid.UUID {
+	if !p.replacement {
+		return rankingargs.NormalizeIDs(ids)
+	}
+	p.affectedIDs = append(p.affectedIDs, ids...)
+	return nil
+}
+
+func (p *rankingRunRefreshPlan) Complete() []uuid.UUID {
+	if !p.replacement {
+		return nil
+	}
+	return rankingargs.NormalizeIDs(p.affectedIDs)
+}
+
+func replacementParseFailureRefreshIDs(ctx context.Context, job *river.Job[ArgsLogParse], workErr error) []uuid.UUID {
+	if workErr == nil || !job.Args.Replacement {
+		return nil
+	}
+
+	var cancelErr *river.JobCancelError
+	permanent := job.Attempt >= job.MaxAttempts || errors.As(workErr, &cancelErr) || errors.Is(context.Cause(ctx), river.ErrJobCancelledRemotely)
+	if !permanent {
+		return nil
+	}
+	return rankingargs.NormalizeIDs(job.Args.PreviousRankingRunIDs)
+}
 
 type WorkerLogParse struct {
 	parent *Chronicle
@@ -124,6 +171,17 @@ func slugCollisionFromLookup(err error) (bool, error) {
 }
 
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
+	err := w.work(ctx, job)
+	failureIDs := replacementParseFailureRefreshIDs(ctx, job, err)
+	if len(failureIDs) > 0 {
+		if refreshErr := w.parent.EnqueueRankingRunRefresh(ctx, failureIDs...); refreshErr != nil {
+			w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run cleanup after replacement parse failure", slog.Any("error", refreshErr))
+		}
+	}
+	return err
+}
+
+func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
 	if job.Args.TenantID != uuid.Nil {
 		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
 	}
@@ -318,6 +376,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	// Track total finalize and DB insert durations
 	var totalFinalizeDuration time.Duration
 	var totalDBInsertDuration time.Duration
+
+	rankingRunRefresh := newRankingRunRefreshPlan(job.Args)
 
 	for i, inst := range encountersState.Instances {
 		instanceID := uuid.New()
@@ -752,12 +812,21 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 		}
 
-		if err := w.parent.EnqueueRankingRunRefresh(ctx, rankingRunAffectedIDs...); err != nil {
-			w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh",
-				slog.String("instance_id", dbinstance.ID.String()), slog.Any("error", err))
+		refreshIDs := rankingRunRefresh.AfterRankingCommit(rankingRunAffectedIDs...)
+		if len(refreshIDs) > 0 {
+			if err := w.parent.EnqueueRankingRunRefresh(ctx, refreshIDs...); err != nil {
+				w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh",
+					slog.String("instance_id", dbinstance.ID.String()), slog.Any("error", err))
+			}
 		}
 
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
+	}
+
+	if refreshIDs := rankingRunRefresh.Complete(); len(refreshIDs) > 0 {
+		if err := w.parent.EnqueueRankingRunRefresh(ctx, refreshIDs...); err != nil {
+			w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh after replacement parse", slog.Any("error", err))
+		}
 	}
 
 	// Enqueue parse score computation for each successfully parsed instance.
@@ -1046,6 +1115,13 @@ func newArgsLogParse(ctx context.Context, logID uuid.UUID, verbose bool, identit
 		Verbose:      verbose,
 		IdentityMode: identityMode,
 	}
+}
+
+func newReplacementArgsLogParse(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID, previousRankingRunIDs []uuid.UUID) ArgsLogParse {
+	args := newArgsLogParse(ctx, logID, verbose, identityMode, realmID)
+	args.Replacement = true
+	args.PreviousRankingRunIDs = rankingargs.NormalizeIDs(previousRankingRunIDs)
+	return args
 }
 
 func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGroup, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
