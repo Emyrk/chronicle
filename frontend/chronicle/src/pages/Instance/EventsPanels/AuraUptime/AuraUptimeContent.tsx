@@ -7,7 +7,7 @@
 
 import { useMemo } from "react";
 import type { PanelRenderProps } from "../types";
-import { type AuraUptimeResult } from "./auraUptime.processor";
+import { materializeActiveAuraUptime, type AuraData, type AuraUptimeResult } from "./auraUptime.processor";
 import { GenericPanel } from "../GenericPanel";
 import { AuraSelector } from "./AuraSelector";
 import { UptimeTimeline, type DisplaySegment } from "./UptimeTimeline";
@@ -119,6 +119,32 @@ export function AuraUptimeContent(props: PanelRenderProps<AuraUptimeResult>) {
     return names;
   }, [context.instance.encounters]);
   
+  const encounterEndOffsets = useMemo(() => {
+    const endOffsets = new Map<string, number>();
+    for (const encounter of context.instance.encounters) {
+      if (!context.selectedEncounterIds.includes(encounter.id)) continue;
+      endOffsets.set(
+        encounter.id,
+        new Date(encounter.end_time).getTime() - new Date(encounter.start_time).getTime(),
+      );
+    }
+
+    // During single-encounter Sync playback durationMs is the elapsed playhead
+    // duration, so active uptime grows with the cursor instead of showing the future.
+    if (context.selectedEncounterIds.length === 1) {
+      endOffsets.set(context.selectedEncounterIds[0], durationMs);
+    }
+
+    return endOffsets;
+  }, [context.instance.encounters, context.selectedEncounterIds, durationMs]);
+
+  const byAura = useMemo<Map<string, AuraData>>(
+    () => cachedResult ? materializeActiveAuraUptime(cachedResult, encounterEndOffsets) : new Map(),
+    [cachedResult, encounterEndOffsets],
+  );
+
+  const selectedEncounterCount = context.selectedEncounterIds.length;
+
   // Build per-target per-aura row data, filtered by selected entities
   const rows = useMemo((): TargetAuraRow[] => {
     if (!cachedResult || selectedAuras.length === 0) return [];
@@ -126,7 +152,7 @@ export function AuraUptimeContent(props: PanelRenderProps<AuraUptimeResult>) {
     const result: TargetAuraRow[] = [];
     
     for (const auraName of selectedAuras) {
-      const auraData = cachedResult.byAura.get(auraName);
+      const auraData = byAura.get(auraName);
       if (!auraData) continue;
       
       for (const [guid, targetData] of auraData.perTarget) {
@@ -137,7 +163,7 @@ export function AuraUptimeContent(props: PanelRenderProps<AuraUptimeResult>) {
         
         // Transform segments to unified timeline offsets with metadata for tooltips
         // Only include encounter name if multiple encounters are selected
-        const showEncounterName = context.selectedEncounterIds.length > 1;
+        const showEncounterName = selectedEncounterCount > 1;
         const adjustedSegments: DisplaySegment[] = targetData.segments
           .map(seg => {
             const encounterOffset = encounterOffsets.get(seg.encounterId) ?? 0;
@@ -172,7 +198,7 @@ export function AuraUptimeContent(props: PanelRenderProps<AuraUptimeResult>) {
     
     // Sort by uptime descending
     return result.sort((a, b) => b.totalUptimeMs - a.totalUptimeMs);
-  }, [cachedResult, selectedAuras, filteredTargetGuids, encounterOffsets, encounterNames]);
+  }, [cachedResult, selectedAuras, filteredTargetGuids, encounterOffsets, encounterNames, byAura, selectedEncounterCount]);
   
   // Summary text for filter state
   const filterSummary = useMemo(() => {

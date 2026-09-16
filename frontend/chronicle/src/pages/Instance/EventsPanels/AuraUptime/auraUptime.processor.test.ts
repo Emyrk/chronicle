@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { auraUptimeProcessor } from "./auraUptime.processor";
+import { auraUptimeProcessor, materializeActiveAuraUptime } from "./auraUptime.processor";
 import {
   AuraApplication,
   AuraState,
@@ -93,5 +93,72 @@ describe("auraUptimeProcessor", () => {
       endMs: 5000,
       encounterId: "enc1",
     });
+  });
+
+  it("keeps active instances separate across encounters", () => {
+    const state = auraUptimeProcessor.createState();
+    const context = createContext({ selectedEncounterIds: new Set(["enc1", "enc2"]) });
+
+    for (const encounterID of ["enc1", "enc2"]) {
+      auraUptimeProcessor.processEvent(
+        state,
+        createAuraEvent({ spellName: "Prayer of Fortitude", spellId: 21564, isBuff: true }),
+        encounterID,
+        new Date(0),
+        "aura",
+        context,
+      );
+    }
+
+    const byAura = materializeActiveAuraUptime(
+      state,
+      new Map([["enc1", 5000], ["enc2", 7000]]),
+    );
+    const targetData = byAura.get("Prayer of Fortitude")?.perTarget.get(TARGET_GUID);
+
+    expect(targetData?.applicationCount).toBe(2);
+    expect(targetData?.totalUptimeMs).toBe(12000);
+    expect(targetData?.segments).toEqual([
+      { startMs: 0, endMs: 5000, encounterId: "enc1" },
+      { startMs: 0, endMs: 7000, encounterId: "enc2" },
+    ]);
+  });
+
+  it("includes auras that remain active through the final encounter", () => {
+    const state = auraUptimeProcessor.createState();
+    const context = createContext();
+
+    auraUptimeProcessor.processEvent(
+      state,
+      createAuraEvent({
+        index: 1,
+        offsetMilli: 0,
+        spellName: "Prayer of Fortitude",
+        spellId: 21564,
+        isBuff: true,
+        isSynthetic: true,
+      }),
+      "enc1",
+      new Date(0),
+      "aura",
+      context,
+    );
+
+    expect(state.byAura.has("Prayer of Fortitude")).toBe(false);
+
+    const encounterEndOffsets = new Map([["enc1", 5000]]);
+    const firstResult = materializeActiveAuraUptime(state, encounterEndOffsets);
+    const secondResult = materializeActiveAuraUptime(state, encounterEndOffsets);
+    const targetData = firstResult.get("Prayer of Fortitude")?.perTarget.get(TARGET_GUID);
+
+    expect(targetData).toEqual({
+      guid: TARGET_GUID,
+      name: "Test Target",
+      applicationCount: 1,
+      totalUptimeMs: 5000,
+      segments: [{ startMs: 0, endMs: 5000, encounterId: "enc1" }],
+    });
+    expect(secondResult.get("Prayer of Fortitude")?.perTarget.get(TARGET_GUID)).toEqual(targetData);
+    expect(state.byAura.has("Prayer of Fortitude")).toBe(false);
   });
 });

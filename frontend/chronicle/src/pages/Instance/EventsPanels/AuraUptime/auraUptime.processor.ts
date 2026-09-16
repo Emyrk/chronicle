@@ -54,19 +54,17 @@ export interface AuraUptimeResult {
   auraNameSet: Set<string>;
   /** Per-aura data: auraName -> { perTarget: Map<guid, UptimeData> } */
   byAura: Map<string, AuraData>;
-  /** Active auras for finalization (key: "target:spellName") */
+  /** Active auras for finalization (key: "encounter:target:spellName") */
   activeAuras: Map<string, ActiveAura>;
   /** Max offset per encounter (for finalizing active auras at encounter end) */
   maxOffsetByEncounter: Map<string, number>;
-  /** Last encounter ID processed (for detecting transitions) */
-  lastEncounterId: string | null;
   /** Central aura tracker used for lifecycle transitions */
   auraState: AuraProcessorState;
 }
 
-/** Create a composite key for active auras */
-function activeKey(targetGuid: string, spellName: string): string {
-  return `${targetGuid}:${spellName}`;
+/** Create a composite key for active auras within an encounter. */
+function activeKey(encounterId: string, targetGuid: string, spellName: string): string {
+  return `${encounterId}:${targetGuid}:${spellName}`;
 }
 
 function eventAuraRef(event: AuraProcessorEvent): AuraRef {
@@ -131,12 +129,17 @@ function finalizeActiveAura(
   targetData.applicationCount++;
 }
 
-/** Finalize all active auras on a specific target (when they die) */
-function finalizeAurasOnTarget(state: AuraUptimeResult, targetGuid: string, endOffsetMs: number): void {
+/** Finalize all active auras on a specific target in one encounter (when they die). */
+function finalizeAurasOnTarget(
+  state: AuraUptimeResult,
+  encounterId: string,
+  targetGuid: string,
+  endOffsetMs: number,
+): void {
   const keysToRemove: string[] = [];
   
   for (const [key, active] of state.activeAuras) {
-    if (active.targetGuid !== targetGuid) continue;
+    if (active.encounterId !== encounterId || active.targetGuid !== targetGuid) continue;
     finalizeActiveAura(state, active, endOffsetMs);
     keysToRemove.push(key);
   }
@@ -146,22 +149,13 @@ function finalizeAurasOnTarget(state: AuraUptimeResult, targetGuid: string, endO
   }
 }
 
-/** Finalize all active auras (at encounter transition) */
-function finalizeAllActiveAuras(state: AuraUptimeResult): void {
-  for (const [, active] of state.activeAuras) {
-    const endOffsetMs = state.maxOffsetByEncounter.get(active.encounterId) ?? active.startOffsetMs;
-    finalizeActiveAura(state, active, endOffsetMs);
-  }
-  state.activeAuras.clear();
-}
-
 function startActiveAura(
   state: AuraUptimeResult,
   event: AuraProcessorEvent,
   encounterID: string,
   context: ProcessorContext,
 ): void {
-  const key = activeKey(event.target, event.spellName);
+  const key = activeKey(encounterID, event.target, event.spellName);
   const targetName = context.units?.[event.target]?.name ?? context.players[event.target]?.name ?? event.target;
 
   state.activeAuras.set(key, {
@@ -179,6 +173,47 @@ function startActiveAura(
   }
 }
 
+export function materializeActiveAuraUptime(
+  state: AuraUptimeResult,
+  encounterEndOffsets: ReadonlyMap<string, number> = state.maxOffsetByEncounter,
+): Map<string, AuraData> {
+  const byAura = new Map(state.byAura);
+
+  for (const active of state.activeAuras.values()) {
+    const endOffsetMs = encounterEndOffsets.get(active.encounterId)
+      ?? state.maxOffsetByEncounter.get(active.encounterId)
+      ?? active.startOffsetMs;
+    const uptimeMs = endOffsetMs - active.startOffsetMs;
+    if (uptimeMs <= 0) continue;
+
+    const existingAuraData = byAura.get(active.spellName);
+    const perTarget = new Map(existingAuraData?.perTarget);
+    const existingTarget = perTarget.get(active.targetGuid);
+    const targetData: TargetUptimeData = existingTarget
+      ? {
+          ...existingTarget,
+          segments: [...existingTarget.segments],
+        }
+      : initTargetData(active.targetGuid, active.targetName);
+
+    targetData.segments.push({
+      startMs: active.startOffsetMs,
+      endMs: endOffsetMs,
+      encounterId: active.encounterId,
+    });
+    targetData.totalUptimeMs += uptimeMs;
+    targetData.applicationCount++;
+    perTarget.set(active.targetGuid, targetData);
+
+    byAura.set(active.spellName, {
+      spellId: existingAuraData?.spellId ?? active.spellId,
+      perTarget,
+    });
+  }
+
+  return byAura;
+}
+
 type AuraUptimeEvent = AuraProcessorEvent | SlainProcessorEvent;
 
 /**
@@ -194,7 +229,6 @@ export const auraUptimeProcessor: PanelProcessor<AuraUptimeResult, AuraUptimeEve
     byAura: new Map(),
     activeAuras: new Map(),
     maxOffsetByEncounter: new Map(),
-    lastEncounterId: null,
     auraState: createAuraProcessorState(),
   }),
   
@@ -206,12 +240,6 @@ export const auraUptimeProcessor: PanelProcessor<AuraUptimeResult, AuraUptimeEve
     _streamType: StreamType,
     context: ProcessorContext,
   ): void => {
-    // Detect encounter transition - finalize all active auras from previous encounter
-    if (state.lastEncounterId !== null && state.lastEncounterId !== encounterID) {
-      finalizeAllActiveAuras(state);
-    }
-    state.lastEncounterId = encounterID;
-
     if (!context.selectedEncounterIds.has(encounterID)) return;
     
     // Track max offset per encounter for calculating active aura uptime
@@ -238,7 +266,7 @@ function processAuraEvent(
   if (context.entitySelection.playerIds.size !== 0 && !context.entitySelection.playerIds.has(event.target)) return;
   if (context.entitySelection.enemyIds.size !== 0 && !context.entitySelection.enemyIds.has(event.target)) return;
 
-  const key = activeKey(event.target, event.spellName);
+  const key = activeKey(encounterID, event.target, event.spellName);
   const auraRef = eventAuraRef(event);
   const wasActive = hasAura(state.auraState, encounterID, event.target, auraRef);
 
@@ -276,5 +304,5 @@ function processSlainEvent(
 ): void {
   applyAuraEvent(state.auraState, encounterID, event);
   // When a target dies, finalize any active auras on it
-  finalizeAurasOnTarget(state, event.target, event.offsetMilli);
+  finalizeAurasOnTarget(state, encounterID, event.target, event.offsetMilli);
 }
