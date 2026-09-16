@@ -117,10 +117,15 @@ function MemberRow({ member, showParse }: { member: GuildRosterCharacter; showPa
       {showParse &&
         (hasParse ? (
           <span
-            className={`text-right text-base font-bold tabular-nums ${parseColor(score)}`}
+            className="flex flex-col items-end"
             title="Average parse over the recent scoring window"
           >
-            {score}
+            <span className={`text-base font-bold leading-none tabular-nums ${parseColor(score)}`}>
+              {score}
+            </span>
+            <span className="text-[9px] leading-none text-muted-foreground">
+              {member.role === "heal" ? "hps" : "dps"}
+            </span>
           </span>
         ) : (
           <span className="text-right text-sm text-muted-foreground/50">—</span>
