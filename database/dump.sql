@@ -2532,6 +2532,8 @@ CREATE INDEX idx_log_instances_guild ON log_instances USING btree (guild_id) WHE
 
 CREATE INDEX idx_log_instances_log_group_id ON log_instances USING btree (log_group_id);
 
+CREATE INDEX idx_log_instances_logical_run ON log_instances USING btree (COALESCE(duplicate_group_id, id));
+
 CREATE INDEX idx_log_instances_realm_id ON log_instances USING btree (realm_id);
 
 CREATE UNIQUE INDEX idx_mod_requests_pending ON application_modification_requests USING btree (application_id, type, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE ((status = 'pending'::text) AND (type <> ALL (ARRAY['server'::text, 'realm'::text])));

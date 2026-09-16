@@ -37,7 +37,7 @@ WITH affected_runs AS MATERIALIZED (
 ),
 members AS MATERIALIZED (
     SELECT
-        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        affected_runs.run_id,
         li.id,
         li.realm_id,
         li.name AS instance_name,
@@ -50,10 +50,25 @@ members AS MATERIALIZED (
         COUNT(DISTINCT coverage.encounter_name) FILTER (
             WHERE coverage.encounter_id IS NOT NULL
         )::integer AS boss_coverage
-    FROM log_instances li
+    FROM affected_runs
+    CROSS JOIN LATERAL (
+        SELECT candidate.*
+        FROM log_instances candidate
+        WHERE COALESCE(candidate.duplicate_group_id, candidate.id) = affected_runs.run_id
+        -- Prevent flattening into a hash join that scans all log_instances.
+        OFFSET 0
+    ) li
     LEFT JOIN encounter_dps_rankings coverage ON coverage.instance_id = li.id
-    WHERE COALESCE(li.duplicate_group_id, li.id) IN (SELECT run_id FROM affected_runs)
-    GROUP BY li.id
+    GROUP BY affected_runs.run_id,
+        li.id,
+        li.realm_id,
+        li.name,
+        li.difficulty_name,
+        li.max_players,
+        li.start_time,
+        li.end_time,
+        li.duplicate_group_id,
+        li.updated_at
 ),
 ranked AS (
     SELECT
