@@ -274,11 +274,17 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 	if w.parent.queue == nil {
 		return fmt.Errorf("isolated log-parse queue is not configured")
 	}
+	identities, err := w.parent.Zed.RankingRunIdentitiesByLogGroupID(adminCtx, logGroupID)
+	if err != nil {
+		return fmt.Errorf("load ranking run identities: %w", err)
+	}
+	previousRankingRunIDs := rankingRunLogGroupIdentitySeeds(identities)
+
 	parseCtx := ctx
 	if tenantID != uuid.Nil {
 		parseCtx = servicetenant.WithTenantID(parseCtx, tenantID)
 	}
-	parseArgs := newArgsLogParse(parseCtx, logGroupID, false, false, parseRealmID)
+	parseArgs := newReplacementArgsLogParse(parseCtx, logGroupID, false, false, parseRealmID, previousRankingRunIDs)
 	insertOpts := resyncParseInsertOpts(parseArgs, w.parseQueue)
 	parseInsert, err := w.parent.queue.Insert(parseCtx, parseArgs, &insertOpts)
 	if err != nil {
@@ -292,17 +298,9 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 	// Only delete parsed data after every raw file has been downloaded and a
 	// real River log-parse job has been staged successfully. The pending job
 	// cannot run until it is explicitly released below.
-	identities, err := w.parent.Zed.RankingRunIdentitiesByLogGroupID(adminCtx, logGroupID)
-	if err != nil {
-		_, _ = w.parent.queue.JobDelete(adminCtx, parseInsert.Job.ID)
-		return fmt.Errorf("load ranking run identities: %w", err)
-	}
 	if err := w.parent.Zed.DeleteAllParsedLogsByGroupID(adminCtx, logGroupID); err != nil {
 		_, _ = w.parent.queue.JobDelete(adminCtx, parseInsert.Job.ID)
 		return fmt.Errorf("delete parsed logs: %w", err)
-	}
-	if err := w.parent.EnqueueRankingRunRefresh(adminCtx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
-		w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh after resync cleanup", "error", err)
 	}
 	if _, err := w.parent.queue.JobRetry(parseCtx, parseInsert.Job.ID); err != nil {
 		return fmt.Errorf("release isolated log-parse job %d: %w", parseInsert.Job.ID, err)
