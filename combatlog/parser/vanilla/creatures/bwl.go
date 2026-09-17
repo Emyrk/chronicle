@@ -110,23 +110,24 @@ const broodlordLashlayerEntry = 12017
 var broodlordWhelpEntries = []uint32{14022, 14024, 14025, 14023}
 
 type broodlordLashlayer struct {
-	*characters.AdsGoWithBoss
+	*characters.StartsNewFight
 	all *characters.Characters
 }
-
-func (*broodlordLashlayer) SplitActiveFightOnStart() {}
 
 func NewBroodlordLashlayer(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	boss, ok := characters.NewAdsGoWithBoss(broodlordLashlayerEntry, broodlordWhelpEntries...)(id, all)
 	if !ok {
 		return nil, false
 	}
-	return &broodlordLashlayer{AdsGoWithBoss: boss, all: all}, true
+	return &broodlordLashlayer{
+		StartsNewFight: characters.NewStartsNewFight(boss),
+		all:            all,
+	}, true
 }
 
 func (c *broodlordLashlayer) Process(m messages.Message) error {
 	wasActive := c.IsActive()
-	if err := c.AdsGoWithBoss.Process(m); err != nil {
+	if err := c.StartsNewFight.Process(m); err != nil {
 		return err
 	}
 

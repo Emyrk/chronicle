@@ -37,7 +37,9 @@ type Character interface {
 }
 
 // FightStartSplitter marks a character whose activity start should begin a new
-// fight instead of joining an already-active trash fight.
+// fight instead of joining an already-active trash fight. Encounter characters
+// should normally opt in through NewStartsNewFight rather than implement this
+// interface directly.
 type FightStartSplitter interface {
 	SplitActiveFightOnStart()
 }
