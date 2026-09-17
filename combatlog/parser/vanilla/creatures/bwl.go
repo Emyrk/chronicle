@@ -1,9 +1,11 @@
 package creatures
 
 import (
+	"slices"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -103,14 +105,50 @@ func isNefarianEntry(entry uint32) bool {
 	return false
 }
 
+const broodlordLashlayerEntry = 12017
+
+var broodlordWhelpEntries = []uint32{14022, 14024, 14025, 14023}
+
+type broodlordLashlayer struct {
+	*characters.AdsGoWithBoss
+	all *characters.Characters
+}
+
 func NewBroodlordLashlayer(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
-	return characters.NewAdsGoWithBoss(12017,
-		// Whelps in the room keep spawning. Don't count them for the time of the boss fight.
-		14022,
-		14024,
-		14025,
-		14023,
-	)(id, all)
+	boss, ok := characters.NewAdsGoWithBoss(broodlordLashlayerEntry, broodlordWhelpEntries...)(id, all)
+	if !ok {
+		return nil, false
+	}
+	return &broodlordLashlayer{AdsGoWithBoss: boss, all: all}, true
+}
+
+func (c *broodlordLashlayer) Process(m messages.Message) error {
+	wasActive := c.IsActive()
+	if err := c.AdsGoWithBoss.Process(m); err != nil {
+		return err
+	}
+
+	if !wasActive && c.IsActive() {
+		for _, entry := range broodlordWhelpEntries {
+			for _, whelp := range c.all.ByEntry[entry] {
+				if ender, ok := whelp.(interface {
+					End(string, messages.Message, period.EndState)
+				}); ok {
+					ender.End("broodlord_engaged", m, period.EndStateReset)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func NewBroodlordWhelp(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	entry, ok := id.GetEntry()
+	if !ok || !slices.Contains(broodlordWhelpEntries, entry) {
+		return nil, false
+	}
+	return characters.NewCommonCharacter(id, all).
+		WithTimeoutAsDeathIf(characters.IfEntryAlive(broodlordLashlayerEntry)), true
 }
 
 type RazorAdCharacter struct {

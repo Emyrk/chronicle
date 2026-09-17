@@ -34,6 +34,90 @@ func eggCast(ts time.Time, caster guid.GUID, spellID int32) *messages.SpellGo {
 	}
 }
 
+func TestBroodlordEngagementEndsWhelpActivity(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	boss := creatureGUID(12017, 0x1)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	for i, entry := range []uint32{14022, 14024, 14025, 14023} {
+		whelp := creatureGUID(entry, uint32(i+2))
+		_, err := chars.Process(damage(base, player, whelp))
+		require.NoError(t, err)
+	}
+
+	_, err := chars.Process(damage(base.Add(time.Second), player, boss))
+	require.NoError(t, err)
+
+	for _, entry := range []uint32{14022, 14024, 14025, 14023} {
+		whelps := chars.ByEntry[entry]
+		require.Len(t, whelps, 1)
+		require.False(t, whelps[0].IsActive())
+		require.Len(t, whelps[0].Periods(), 1)
+		require.Equal(t, period.EndStateReset, whelps[0].Periods()[0].EndState)
+		require.Equal(t, "broodlord_engaged", whelps[0].Periods()[0].End.Reason)
+	}
+}
+
+func TestBroodlordWhelpTimeoutIsDeathWhileBossAlive(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	boss := creatureGUID(12017, 0x1)
+	whelp := creatureGUID(14022, 0x2)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, boss))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(time.Second), player, whelp))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(62*time.Second), player, boss))
+	require.NoError(t, err)
+
+	whelpChar, ok := chars.Get(whelp)
+	require.True(t, ok)
+	require.False(t, whelpChar.IsActive())
+	require.Len(t, whelpChar.Periods(), 1)
+	require.Equal(t, period.EndStateSlain, whelpChar.Periods()[0].EndState)
+	require.Equal(t, "Timeout: inactivity", whelpChar.Periods()[0].End.Reason)
+}
+
+func TestBroodlordDeathKillsActiveWhelps(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	boss := creatureGUID(12017, 0x1)
+	whelp := creatureGUID(14022, 0x2)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, boss))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(time.Second), player, whelp))
+	require.NoError(t, err)
+	_, err = chars.Process(slain(base.Add(2*time.Second), player, boss))
+	require.NoError(t, err)
+
+	whelpChar, ok := chars.Get(whelp)
+	require.True(t, ok)
+	require.False(t, whelpChar.IsActive())
+	require.Len(t, whelpChar.Periods(), 1)
+	require.Equal(t, period.EndStateSlain, whelpChar.Periods()[0].EndState)
+	require.Equal(t, "linked_boss_inactive", whelpChar.Periods()[0].End.Reason)
+}
+
 // TestRazorgoreEggs_VanillaPlus_KillsAddsAt30 verifies that on the VanillaPlus
 // flavor, casting "Destroy Egg" (spell 19873) 30 times marks the phase-1 adds
 // (Blackwing Legionnaire, Blackwing Mage, Death Talon Dragonspawn) as killed.
