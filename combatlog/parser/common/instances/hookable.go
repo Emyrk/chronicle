@@ -581,10 +581,48 @@ func (h *Hookable) process(m messages.Message) (finalError error) {
 	return nil
 }
 
+func (h *Hookable) splitFightOnCharacterStart(m messages.Message) error {
+	if h.currentFight == nil || !h.currentFight.active() {
+		return nil
+	}
+
+	for id, activity := range m.Activity() {
+		if activity != messages.ActivityStart {
+			continue
+		}
+		if _, alreadyInFight := h.currentFight.ActiveHostiles[id]; alreadyInFight {
+			continue
+		}
+		char, ok := h.Characters.Get(id)
+		if !ok {
+			continue
+		}
+		if _, ok := char.(characters.FightStartSplitter); !ok {
+			continue
+		}
+
+		for _, hook := range h.hooks {
+			hook.FightEnded(h.currentFight.EncounterID, m)
+		}
+		h.currentFight.End = &period.Moment{
+			Timestamp: m,
+			Reason:    "new fight started",
+		}
+		return timings.Do1(h.timings, timingsFinalizeFight, func() error {
+			return h.finalizeFight()
+		})
+	}
+	return nil
+}
+
 // FightDetectionHandler manages the life of "currentFight".
 // Updates live fight state based on character activity changes.
 // Call this after Characters.Process returns true (activity changed).
 func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, error) {
+	if err := h.splitFightOnCharacterStart(m); err != nil {
+		return nil, fmt.Errorf("splitting fight on character start: %w", err)
+	}
+
 	if h.currentFight == nil {
 		// this is the only place a new fight should be instantiated.
 		// The ongoingFight struct can handle itself. Make sure it exists.

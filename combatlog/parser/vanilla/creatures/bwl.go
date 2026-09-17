@@ -114,6 +114,8 @@ type broodlordLashlayer struct {
 	all *characters.Characters
 }
 
+func (*broodlordLashlayer) SplitActiveFightOnStart() {}
+
 func NewBroodlordLashlayer(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	boss, ok := characters.NewAdsGoWithBoss(broodlordLashlayerEntry, broodlordWhelpEntries...)(id, all)
 	if !ok {

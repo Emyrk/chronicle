@@ -36,6 +36,12 @@ type Character interface {
 	SetPeriodHook(hook period.Hook)
 }
 
+// FightStartSplitter marks a character whose activity start should begin a new
+// fight instead of joining an already-active trash fight.
+type FightStartSplitter interface {
+	SplitActiveFightOnStart()
+}
+
 // InstanceUnitPersister marks characters that should be stored in instance unit
 // metadata even when they never produce an activity period.
 type InstanceUnitPersister interface {
