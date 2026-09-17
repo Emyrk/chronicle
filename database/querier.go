@@ -13,6 +13,8 @@ import (
 )
 
 type sqlcQuerier interface {
+	// Serialize refresh snapshots and commits across logical-run identity changes.
+	AcquireRankingRunRefreshLock(ctx context.Context) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
 	// Populate a pending snapshot's members from eligible encounter_dps_rankings rows.
@@ -35,7 +37,6 @@ type sqlcQuerier interface {
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
-	ClearDuplicateGroupID(ctx context.Context, id uuid.UUID) error
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	CountActiveRegressionJobs(ctx context.Context) (int64, error)
@@ -74,6 +75,9 @@ type sqlcQuerier interface {
 	CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error)
 	DeleteAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
+	// Release representative IDs that moved to a different logical run before the
+	// state-based refresh upserts all desired rows in arbitrary UUID order.
+	DeleteConflictingRankingRunRepresentatives(ctx context.Context, arg DeleteConflictingRankingRunRepresentativesParams) error
 	DeleteConsumableDisambiguation(ctx context.Context, arg DeleteConsumableDisambiguationParams) error
 	DeleteConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDataGrant(ctx context.Context, arg DeleteDataGrantParams) error
@@ -95,6 +99,7 @@ type sqlcQuerier interface {
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
+	DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error)
 	// Remove parse score results for a tenant+instance (before re-computation).
 	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
 	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
@@ -631,6 +636,7 @@ type sqlcQuerier interface {
 	ListWorlds(ctx context.Context) ([]World, error)
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
+	OrphanRankingRuns(ctx context.Context, queryLimit int32) ([]uuid.UUID, error)
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
@@ -640,6 +646,12 @@ type sqlcQuerier interface {
 	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Transition a pending time-parse snapshot to published. Idempotent on already-published.
 	PublishTimeParseSnapshot(ctx context.Context, id uuid.UUID) (TimeParseSnapshot, error)
+	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
+	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
+	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
+	RankingRunSources(ctx context.Context, affectedIds []uuid.UUID) ([]RankingRunSourcesRow, error)
+	RankingRunsNeedingFullScanRepair(ctx context.Context, arg RankingRunsNeedingFullScanRepairParams) ([]RankingRunsNeedingFullScanRepairRow, error)
+	RankingRunsNeedingRepair(ctx context.Context, arg RankingRunsNeedingRepairParams) ([]RankingRunsNeedingRepairRow, error)
 	// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
 	// DPS is aggregated per run (sum damage / sum duration across encounters in one
 	// instance run), so each run is one data point. Matches leaderboard aggregation.
@@ -783,9 +795,11 @@ type sqlcQuerier interface {
 	// Returns instance and unique player counts per discoverable tenant within a
 	// time window. Used by the discovery endpoint to surface activity metrics.
 	TenantDiscoveryStats(ctx context.Context, since pgtype.Timestamptz) ([]TenantDiscoveryStatsRow, error)
+	TouchLogInstanceRankingSource(ctx context.Context, instanceID uuid.UUID) error
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
 	UnassignWorldFromServer(ctx context.Context, arg UnassignWorldFromServerParams) error
+	UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (UnlinkDuplicateGroupRow, error)
 	UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error
 	UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error)
 	// Only non-null params are applied; NULL means "keep existing value".
@@ -844,6 +858,7 @@ type sqlcQuerier interface {
 	UpsertPendingModificationRequest(ctx context.Context, arg UpsertPendingModificationRequestParams) (ApplicationModificationRequest, error)
 	UpsertPlayerGearHistory(ctx context.Context, arg []UpsertPlayerGearHistoryParams) *UpsertPlayerGearHistoryBatchResults
 	UpsertPlayers(ctx context.Context, arg []UpsertPlayersParams) *UpsertPlayersBatchResults
+	UpsertRankingRun(ctx context.Context, arg UpsertRankingRunParams) (bool, error)
 	// Recompute and upsert the rankings summary for a single
 	// (instance, difficulty, max_players, tenant) combo.
 	// The caller sets tenant context so RLS on encounter_dps_rankings

@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/parseargs"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
@@ -69,6 +70,9 @@ type ArgsLogParse struct {
 	TenantID     uuid.UUID `json:"tenant_id,omitempty"`
 	Verbose      bool      `json:"verbose,omitempty"`
 	IdentityMode bool      `json:"identity_mode,omitempty"`
+
+	Replacement           bool        `json:"replacement,omitempty"`
+	PreviousRankingRunIDs []uuid.UUID `json:"previous_ranking_run_ids,omitempty"`
 }
 
 func (ArgsLogParse) InsertOpts() river.InsertOpts {
@@ -90,6 +94,49 @@ func (ArgsLogParse) InsertOpts() river.InsertOpts {
 }
 
 func (a ArgsLogParse) Kind() string { return KindLogParse }
+
+type rankingRunRefreshPlan struct {
+	replacement bool
+	affectedIDs []uuid.UUID
+}
+
+func newRankingRunRefreshPlan(args ArgsLogParse) *rankingRunRefreshPlan {
+	return &rankingRunRefreshPlan{
+		replacement: args.Replacement,
+		affectedIDs: append([]uuid.UUID(nil), args.PreviousRankingRunIDs...),
+	}
+}
+
+// AfterRankingCommit records identities only after the instance and ranking
+// transactions have finished. Regular parses refresh immediately, while
+// replacement parses defer until every replacement instance has been written.
+func (p *rankingRunRefreshPlan) AfterRankingCommit(ids ...uuid.UUID) []uuid.UUID {
+	if !p.replacement {
+		return rankingargs.NormalizeIDs(ids)
+	}
+	p.affectedIDs = append(p.affectedIDs, ids...)
+	return nil
+}
+
+func (p *rankingRunRefreshPlan) Complete() []uuid.UUID {
+	if !p.replacement {
+		return nil
+	}
+	return rankingargs.NormalizeIDs(p.affectedIDs)
+}
+
+func replacementParseFailureRefreshIDs(ctx context.Context, job *river.Job[ArgsLogParse], workErr error) []uuid.UUID {
+	if workErr == nil || !job.Args.Replacement {
+		return nil
+	}
+
+	var cancelErr *river.JobCancelError
+	permanent := job.Attempt >= job.MaxAttempts || errors.As(workErr, &cancelErr) || errors.Is(context.Cause(ctx), river.ErrJobCancelledRemotely)
+	if !permanent {
+		return nil
+	}
+	return rankingargs.NormalizeIDs(job.Args.PreviousRankingRunIDs)
+}
 
 type WorkerLogParse struct {
 	parent *Chronicle
@@ -124,6 +171,17 @@ func slugCollisionFromLookup(err error) (bool, error) {
 }
 
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
+	err := w.work(ctx, job)
+	failureIDs := replacementParseFailureRefreshIDs(ctx, job, err)
+	if len(failureIDs) > 0 {
+		if refreshErr := w.parent.EnqueueRankingRunRefresh(ctx, failureIDs...); refreshErr != nil {
+			w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run cleanup after replacement parse failure", slog.Any("error", refreshErr))
+		}
+	}
+	return err
+}
+
+func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
 	if job.Args.TenantID != uuid.Nil {
 		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
 	}
@@ -320,6 +378,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	// Track total finalize and DB insert durations
 	var totalFinalizeDuration time.Duration
 	var totalDBInsertDuration time.Duration
+
+	rankingRunRefresh := newRankingRunRefreshPlan(job.Args)
 
 	for i, inst := range encountersState.Instances {
 		instanceID := uuid.New()
@@ -723,9 +783,12 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		// Duplicate detection is best-effort, but it must use its own transaction.
 		// A failed statement aborts a PostgreSQL transaction even when the Go error
 		// is logged, which would otherwise roll back the successfully parsed instance.
+		rankingRunAffectedIDs := []uuid.UUID{dbinstance.ID}
 		if instanceStart.Valid {
 			dupErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-				return detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, dbinstance.DynamicDifficulty, instanceStart, builder.participants)
+				var err error
+				rankingRunAffectedIDs, err = detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, dbinstance.DynamicDifficulty, instanceStart, builder.participants)
+				return err
 			}, nil)
 			if dupErr != nil {
 				slog.WarnContext(ctx, "duplicate detection failed", slog.String("err", dupErr.Error()))
@@ -738,7 +801,10 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		// transaction so a ranking error cannot roll back the parsed instance.
 		if finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-				return insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData)
+				if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {
+					return err
+				}
+				return tx.TouchLogInstanceRankingSource(ctx, dbinstance.ID)
 			}, nil)
 			if rankErr != nil {
 				slog.WarnContext(ctx, "insert dps rankings failed",
@@ -748,7 +814,21 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 		}
 
+		refreshIDs := rankingRunRefresh.AfterRankingCommit(rankingRunAffectedIDs...)
+		if len(refreshIDs) > 0 {
+			if err := w.parent.EnqueueRankingRunRefresh(ctx, refreshIDs...); err != nil {
+				w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh",
+					slog.String("instance_id", dbinstance.ID.String()), slog.Any("error", err))
+			}
+		}
+
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
+	}
+
+	if refreshIDs := rankingRunRefresh.Complete(); len(refreshIDs) > 0 {
+		if err := w.parent.EnqueueRankingRunRefresh(ctx, refreshIDs...); err != nil {
+			w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh after replacement parse", slog.Any("error", err))
+		}
 	}
 
 	// Enqueue parse score computation for each successfully parsed instance.
@@ -1039,6 +1119,13 @@ func newArgsLogParse(ctx context.Context, logID uuid.UUID, verbose bool, identit
 	}
 }
 
+func newReplacementArgsLogParse(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID, previousRankingRunIDs []uuid.UUID) ArgsLogParse {
+	args := newArgsLogParse(ctx, logID, verbose, identityMode, realmID)
+	args.Replacement = true
+	args.PreviousRankingRunIDs = rankingargs.NormalizeIDs(previousRankingRunIDs)
+	return args
+}
+
 func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGroup, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
 	res, err := c.queue.Insert(ctx, newArgsLogParse(ctx, log.ID, verbose, identityMode, realmID), &river.InsertOpts{
 		Tags: []string{
@@ -1078,7 +1165,7 @@ func detectAndLinkDuplicate(
 	dynamicDifficulty int32,
 	startTime pgtype.Timestamptz,
 	players []database.InsertInstancePlayersParams,
-) error {
+) ([]uuid.UUID, error) {
 	windowStart := database.Timestamptz(startTime.Time.Add(-30 * time.Minute))
 	windowEnd := database.Timestamptz(startTime.Time.Add(30 * time.Minute))
 
@@ -1092,7 +1179,7 @@ func detectAndLinkDuplicate(
 		ExcludeID:         instanceID,
 	})
 	if err != nil {
-		return fmt.Errorf("find duplicate candidates: %w", err)
+		return nil, fmt.Errorf("find duplicate candidates: %w", err)
 	}
 
 	// Build a set of our player GUIDs for fast lookup.
@@ -1130,7 +1217,7 @@ func detectAndLinkDuplicate(
 	}
 
 	if len(matched) == 0 {
-		return nil
+		return []uuid.UUID{instanceID}, nil
 	}
 
 	// Pick a canonical group ID: prefer the first existing group, otherwise
@@ -1150,19 +1237,25 @@ func detectAndLinkDuplicate(
 	// also reassigns any instance whose duplicate_group_id matches one of
 	// these IDs, merging previously-separate groups in one statement.
 	ids := make([]uuid.UUID, 0, len(matched)+1)
+	affectedIDs := make([]uuid.UUID, 0, len(matched)*2+2)
 	for _, m := range matched {
 		ids = append(ids, m.ID)
+		affectedIDs = append(affectedIDs, m.ID)
+		if m.DuplicateGroupID.Valid {
+			affectedIDs = append(affectedIDs, m.DuplicateGroupID.UUID)
+		}
 	}
 	ids = append(ids, instanceID)
+	affectedIDs = append(affectedIDs, instanceID, groupID.UUID)
 
 	if err := tx.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
 		DuplicateGroupID: groupID,
 		Ids:              ids,
 	}); err != nil {
-		return fmt.Errorf("set duplicate group: %w", err)
+		return nil, fmt.Errorf("set duplicate group: %w", err)
 	}
 
-	return nil
+	return affectedIDs, nil
 }
 
 // insertDPSRankings persists per-player DPS rankings for each clean-kill encounter.

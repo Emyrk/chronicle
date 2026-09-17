@@ -187,6 +187,91 @@ CREATE FUNCTION river_job_state_in_bitmask(bitmask bit, state river_job_state) R
     END = 1;
 $$;
 
+CREATE FUNCTION signal_ranking_run_sources_after_delete() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    affected_run_ids UUID[];
+BEGIN
+    SELECT array_agg(DISTINCT COALESCE(deleted.duplicate_group_id, deleted.id))
+    INTO affected_run_ids
+    FROM deleted_log_instances deleted;
+
+    PERFORM touch_ranking_run_repair_sources(affected_run_ids);
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION signal_ranking_run_sources_after_identity_update() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    affected_run_ids UUID[];
+BEGIN
+    -- The helper updates only updated_at on log_instances, which invokes this
+    -- unqualified statement trigger recursively. Skip that inner invocation.
+    IF pg_trigger_depth() > 1 THEN
+        RETURN NULL;
+    END IF;
+
+    SELECT array_agg(affected.run_id)
+    INTO affected_run_ids
+    FROM (
+        SELECT COALESCE(old_rows.duplicate_group_id, old_rows.id) AS run_id
+        FROM old_log_instances old_rows
+        JOIN new_log_instances new_rows USING (id)
+        WHERE old_rows.duplicate_group_id IS DISTINCT FROM new_rows.duplicate_group_id
+        UNION
+        SELECT COALESCE(new_rows.duplicate_group_id, new_rows.id) AS run_id
+        FROM old_log_instances old_rows
+        JOIN new_log_instances new_rows USING (id)
+        WHERE old_rows.duplicate_group_id IS DISTINCT FROM new_rows.duplicate_group_id
+    ) affected;
+
+    PERFORM touch_ranking_run_repair_sources(affected_run_ids);
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION touch_ranking_run_repair_sources(affected_run_ids uuid[]) RETURNS void
+    LANGUAGE sql
+    AS $$
+    WITH affected_runs AS MATERIALIZED (
+        SELECT DISTINCT affected.run_id
+        FROM unnest(affected_run_ids) AS affected(run_id)
+        WHERE affected.run_id IS NOT NULL
+    ),
+    surviving_members AS MATERIALIZED (
+        SELECT DISTINCT ON (affected.run_id)
+            affected.run_id,
+            member.id
+        FROM affected_runs affected
+        JOIN log_instances member
+          ON member.duplicate_group_id = affected.run_id
+          OR (member.id = affected.run_id AND member.duplicate_group_id IS NULL)
+        ORDER BY affected.run_id, member.updated_at DESC, member.id
+    ),
+    repair_watermarks AS (
+        SELECT
+            surviving.id,
+            GREATEST(
+                clock_timestamp(),
+                MAX(member.updated_at),
+                ranking_runs.source_updated_at
+            ) + INTERVAL '1 microsecond' AS updated_at
+        FROM surviving_members surviving
+        JOIN log_instances member
+          ON member.duplicate_group_id = surviving.run_id
+          OR (member.id = surviving.run_id AND member.duplicate_group_id IS NULL)
+        LEFT JOIN ranking_runs ON ranking_runs.run_id = surviving.run_id
+        GROUP BY surviving.run_id, surviving.id, ranking_runs.source_updated_at
+    )
+    UPDATE log_instances target
+    SET updated_at = repair.updated_at
+    FROM repair_watermarks repair
+    WHERE target.id = repair.id;
+$$;
+
 CREATE TABLE application_modification_requests (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     application_id uuid NOT NULL,
@@ -1113,6 +1198,7 @@ CREATE TABLE log_instances (
     dynamic_difficulty integer DEFAULT 0 NOT NULL,
     vehicle_control_intervals jsonb DEFAULT '{}'::jsonb NOT NULL,
     category text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text])))
 );
 
@@ -1274,6 +1360,21 @@ CREATE TABLE raid_compositions (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT raid_compositions_data_size_chk CHECK ((pg_column_size(data) <= 131072)),
     CONSTRAINT raid_compositions_name_length_chk CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100)))
+);
+
+CREATE TABLE ranking_runs (
+    run_id uuid NOT NULL,
+    representative_instance_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players integer NOT NULL,
+    start_time timestamp with time zone,
+    end_time timestamp with time zone,
+    boss_coverage integer NOT NULL,
+    member_count integer NOT NULL,
+    source_updated_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE ranking_snapshot_members (
@@ -2151,6 +2252,9 @@ ALTER TABLE ONLY parsed_log_group
 ALTER TABLE ONLY raid_compositions
     ADD CONSTRAINT raid_compositions_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY ranking_runs
+    ADD CONSTRAINT ranking_runs_pkey PRIMARY KEY (run_id);
+
 ALTER TABLE ONLY ranking_snapshot_members
     ADD CONSTRAINT ranking_snapshot_members_pkey PRIMARY KEY (id);
 
@@ -2428,6 +2532,8 @@ CREATE INDEX idx_log_instances_guild ON log_instances USING btree (guild_id) WHE
 
 CREATE INDEX idx_log_instances_log_group_id ON log_instances USING btree (log_group_id);
 
+CREATE INDEX idx_log_instances_logical_run ON log_instances USING btree (COALESCE(duplicate_group_id, id));
+
 CREATE INDEX idx_log_instances_realm_id ON log_instances USING btree (realm_id);
 
 CREATE UNIQUE INDEX idx_mod_requests_pending ON application_modification_requests USING btree (application_id, type, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE ((status = 'pending'::text) AND (type <> ALL (ARRAY['server'::text, 'realm'::text])));
@@ -2522,6 +2628,12 @@ CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (
 
 CREATE INDEX raid_compositions_user_tenant_idx ON raid_compositions USING btree (user_id, tenant_id);
 
+CREATE INDEX ranking_runs_instance_filter_idx ON ranking_runs USING btree (instance_name, difficulty_name, max_players, realm_id);
+
+CREATE INDEX ranking_runs_realm_end_time_idx ON ranking_runs USING btree (realm_id, end_time DESC);
+
+CREATE UNIQUE INDEX ranking_runs_representative_instance_idx ON ranking_runs USING btree (representative_instance_id);
+
 CREATE UNIQUE INDEX ranking_snapshots_published_key_idx ON ranking_snapshots USING btree (tenant_id, cutoff, lookback_days, cohort_mode, policy_version, query_version) WHERE (status = 'published'::text);
 
 CREATE INDEX river_job_args_index ON river_job USING gin (args);
@@ -2553,6 +2665,10 @@ CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts 
 CREATE UNIQUE INDEX user_talent_builds_user_name_ci_uidx ON user_talent_builds USING btree (user_id, tenant_id, name_normalized);
 
 CREATE INDEX user_talent_builds_user_tenant_idx ON user_talent_builds USING btree (user_id, tenant_id);
+
+CREATE TRIGGER signal_ranking_run_sources_after_delete AFTER DELETE ON log_instances REFERENCING OLD TABLE AS deleted_log_instances FOR EACH STATEMENT EXECUTE FUNCTION signal_ranking_run_sources_after_delete();
+
+CREATE TRIGGER signal_ranking_run_sources_after_identity_update AFTER UPDATE ON log_instances REFERENCING OLD TABLE AS old_log_instances NEW TABLE AS new_log_instances FOR EACH STATEMENT EXECUTE FUNCTION signal_ranking_run_sources_after_identity_update();
 
 CREATE TRIGGER trg_cleanup_after_soft_delete AFTER UPDATE OF user_id ON user_panel_layouts FOR EACH ROW WHEN ((new.user_id IS NULL)) EXECUTE FUNCTION cleanup_orphaned_layout();
 
@@ -2840,6 +2956,12 @@ ALTER TABLE ONLY raid_compositions
 
 ALTER TABLE ONLY raid_compositions
     ADD CONSTRAINT raid_compositions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY ranking_runs
+    ADD CONSTRAINT ranking_runs_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY ranking_runs
+    ADD CONSTRAINT ranking_runs_representative_instance_id_fkey FOREIGN KEY (representative_instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY ranking_snapshot_members
     ADD CONSTRAINT ranking_snapshot_members_ranking_id_fkey FOREIGN KEY (ranking_id) REFERENCES encounter_dps_rankings(id) ON DELETE CASCADE;
