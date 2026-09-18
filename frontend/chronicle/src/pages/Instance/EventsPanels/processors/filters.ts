@@ -14,6 +14,7 @@ export type PanelFilterType =
   | "ability_hittype"
   | "source_type"
   | "target_type"
+  | "shield_caster"
   | "time_range"
   | "event_value"
   | "event_type";
@@ -373,6 +374,11 @@ const FILTER_COMPILERS: Record<PanelFilterType, FilterCompiler> = {
 
   target_type: (value, context) =>
     compileEntityTypeFilter(value, context, "target"),
+
+  shield_caster: (value, context) => {
+    const matchesCaster = compileEntityTypeFilter(value, context, "caster");
+    return (event) => event.type === "absorbed" && matchesCaster(event);
+  },
 
   time_range: (value) => {
     const raw = typeof value === "string" ? value : (value[0] ?? "");

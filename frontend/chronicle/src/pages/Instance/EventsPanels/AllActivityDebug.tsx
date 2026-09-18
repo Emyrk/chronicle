@@ -373,10 +373,17 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
         </span>
         <span className="truncate px-1.5 text-foreground/80">{timeStr}</span>
         <span
-          className={cn("truncate px-1.5", entityTextColor(event.sourceClass, event.sourceIsEnemy, "text-orange-300"))}
+          className="flex min-w-0 items-center gap-1 px-1.5"
           title={event.caster || undefined}
         >
-          {event.casterName || "—"}
+          <span className={cn("truncate", entityTextColor(event.sourceClass, event.sourceIsEnemy, "text-orange-300"))}>
+            {event.casterName || "—"}
+          </span>
+          {event.shieldCasterName && (
+            <span className={cn("truncate", entityTextColor(event.shieldCasterClass, false, "text-foreground"))}>
+              ({event.shieldCasterName})
+            </span>
+          )}
         </span>
         <span className="min-w-0 truncate px-1.5">
           {event.spellId ? (

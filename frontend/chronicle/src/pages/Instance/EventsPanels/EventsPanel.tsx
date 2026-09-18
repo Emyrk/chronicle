@@ -200,6 +200,7 @@ const FILTER_TYPE_LABELS: Record<PanelFilterType, string> = {
   ability_hittype: "Hit Type",
   source_type: "Source",
   target_type: "Target",
+  shield_caster: "Shield Caster",
   players: "Players",
   enemies: "Enemies",
   time_range: "Time Range",
