@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import { AuraApplication, AuraState, AuraTransition, type AuraProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent } from "../processorTypes";
+import { AuraApplication, AuraState, AuraTransition, type AbsorbedProcessorEvent, type AuraProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
   return {
     players: {
       player: { name: "Sathite", class: "SHAMAN" },
+      priest: { name: "Whitemane", class: "PRIEST" },
     },
     units: {
       doan: { name: "Doan", owner: null, entry: 25223 },
@@ -138,6 +139,45 @@ describe("allActivityProcessor", () => {
     );
 
     expect(state.rawEventsByStream.damage[0].flags).toEqual(["GLANCING", "CRUSHING"]);
+  });
+
+  it("shows the attacker and shield caster in the absorb source column", () => {
+    const state = allActivityProcessor.createState();
+    const event: AbsorbedProcessorEvent = {
+      type: "absorbed",
+      index: 8,
+      offsetMilli: 1500,
+      attacker: "doan",
+      target: "player",
+      damageSpellId: 133,
+      damageSpellName: "Fireball",
+      caster: "priest",
+      absorbSpellId: 17,
+      absorbSpellName: "Power Word: Shield",
+      absorbSchool: 3,
+      amount: 500,
+      estimated: false,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "absorbed",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.absorbed[0]).toMatchObject({
+      caster: "doan",
+      casterName: "Doan",
+      shieldCasterName: "Whitemane",
+      shieldCasterClass: "PRIEST",
+      sourceName: "Power Word: Shield",
+    });
   });
 
   it("captures extra-attack spell details", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ConsumeProcessorEvent, DamageProcessorEvent, HealProcessorEvent, ProcessorContext, ProcessorEvent } from "../processorTypes";
+import type { AbsorbedProcessorEvent, ConsumeProcessorEvent, DamageProcessorEvent, HealProcessorEvent, ProcessorContext, ProcessorEvent } from "../processorTypes";
 import { evaluateFilters, compileFilters, type PanelFilter } from "./filters";
 
 function createContext(overrides: Partial<ProcessorContext> = {}): ProcessorContext {
@@ -62,6 +62,29 @@ function createHealEvent(overrides: Partial<HealProcessorEvent> = {}): HealProce
     absorbed: 0,
     school: 3,
     spellId: 2061,
+    ...overrides,
+  };
+}
+
+function createAbsorbedEvent(overrides: Partial<AbsorbedProcessorEvent> = {}): AbsorbedProcessorEvent {
+  return {
+    type: "absorbed",
+    index: 0,
+    offsetMilli: 0,
+    globalOffsetMilli: 0,
+    activity: [],
+    activityCount: 0,
+    isSynthetic: false,
+    attacker: "0xF130000000000001",
+    target: "0x0000000000000001",
+    damageSpellId: 1,
+    damageSpellName: "Melee",
+    caster: "0x0000000000000001",
+    absorbSpellId: 17,
+    absorbSpellName: "Power Word: Shield",
+    absorbSchool: 2,
+    amount: 100,
+    estimated: false,
     ...overrides,
   };
 }
@@ -327,6 +350,37 @@ describe("evaluateFilters", () => {
       expect(evaluateFilters(filters, createDamageEvent({ caster: ENEMY_PET_GUID }), ctx)).toBe(false);
     });
 
+  });
+
+  describe("shield_caster", () => {
+    it("matches the shield caster on absorbed events", () => {
+      const shieldCaster = "0xF130000000000099";
+      const filters: PanelFilter[] = [{ type: "shield_caster", value: ["custom", shieldCaster] }];
+      const event = createAbsorbedEvent({
+        attacker: "0x0000000000000001",
+        target: "0x0000000000000001",
+        caster: shieldCaster,
+      });
+
+      expect(evaluateFilters(filters, event, createContext())).toBe(true);
+    });
+
+    it("rejects non-absorbed events even when their caster matches", () => {
+      const filters: PanelFilter[] = [{ type: "shield_caster", value: ["player"] }];
+
+      expect(evaluateFilters(filters, createDamageEvent(), createContext())).toBe(false);
+    });
+
+    it("can scope the filter to absorbed message types", () => {
+      const filters: PanelFilter[] = [{
+        type: "shield_caster",
+        value: ["player"],
+        applyTo: ["absorbed"],
+      }];
+
+      expect(evaluateFilters(filters, createAbsorbedEvent(), createContext())).toBe(true);
+      expect(evaluateFilters(filters, createDamageEvent(), createContext())).toBe(true);
+    });
   });
 
   it("matches ability_hittype using bitmask", () => {

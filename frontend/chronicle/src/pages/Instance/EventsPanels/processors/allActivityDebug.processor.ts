@@ -47,6 +47,9 @@ export interface RawDebugEvent {
   casterName: string;
   sourceClass?: string;
   sourceIsEnemy?: boolean;
+  /** Absorb-only caster shown beside the damage source in the Source column. */
+  shieldCasterName?: string;
+  shieldCasterClass?: string;
   sourceName: string;
   target: string | null;
   targetClass?: string;
@@ -598,6 +601,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       rawEvent.casterName = context.players[absorbedEvent.attacker]?.name
         ?? context.units?.[absorbedEvent.attacker]?.name
         ?? absorbedEvent.attacker;
+      rawEvent.shieldCasterName = shieldCasterName || "Unknown";
+      rawEvent.shieldCasterClass = context.players[absorbedEvent.caster]?.class;
       rawEvent.spellId = absorbedEvent.absorbSpellId ?? undefined;
       rawEvent.extra = `${absorbedEvent.damageSpellName ?? "Melee"} absorbed by ${absorbedEvent.absorbSpellName ?? "shield"}`;
       rawEvent.details = [
