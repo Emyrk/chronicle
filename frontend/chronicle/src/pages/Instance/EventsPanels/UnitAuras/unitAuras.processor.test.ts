@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   materializeActiveUnitAuras,
   unitAurasProcessor,
+  unitAuraUptimeDurationMs,
 } from "./unitAuras.processor";
 import {
   AuraApplication,
@@ -9,6 +10,8 @@ import {
   AuraTransition,
   type AuraProcessorEvent,
   type ProcessorContext,
+  type ResurrectionProcessorEvent,
+  type SlainProcessorEvent,
 } from "../processorTypes";
 
 const TARGET = "0xF130000001000001";
@@ -52,8 +55,42 @@ function aura(overrides: Partial<AuraProcessorEvent> = {}): AuraProcessorEvent {
   };
 }
 
-function process(event: AuraProcessorEvent, state = unitAurasProcessor.createState(), encounterId = "enc1") {
-  unitAurasProcessor.processEvent(state, event, encounterId, new Date(0), "aura", context());
+function slain(overrides: Partial<SlainProcessorEvent> = {}): SlainProcessorEvent {
+  return {
+    type: "slain",
+    index: 2,
+    offsetMilli: 7500,
+    target: CASTER,
+    caster: TARGET,
+    attribution: null,
+    activity: [],
+    activityCount: 0,
+    isSynthetic: false,
+    ...overrides,
+  };
+}
+
+function resurrection(overrides: Partial<ResurrectionProcessorEvent> = {}): ResurrectionProcessorEvent {
+  return {
+    type: "ressurection",
+    index: 3,
+    offsetMilli: 8500,
+    source: TARGET,
+    target: CASTER,
+    spell: { id: 20484, name: "Rebirth" },
+    activity: [],
+    activityCount: 0,
+    isSynthetic: false,
+    ...overrides,
+  };
+}
+
+function process(
+  event: AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent,
+  state = unitAurasProcessor.createState(),
+  encounterId = "enc1",
+) {
+  unitAurasProcessor.processEvent(state, event, encounterId, new Date(0), event.type, context());
   return state;
 }
 
@@ -192,6 +229,27 @@ describe("unitAurasProcessor", () => {
     expect(first.get(TARGET)?.auras.get("id:772")?.totalUptimeMs).toBe(7000);
     expect(second).toEqual(first);
     expect(state.byUnit.size).toBe(0);
+  });
+
+  it("excludes time after a player dies from the uptime denominator", () => {
+    const state = unitAurasProcessor.createState();
+    process(aura({ target: CASTER, caster: CASTER }), state);
+    process(slain(), state);
+
+    const encounterEndOffsets = new Map([["enc1", 10_000]]);
+    const materialized = materializeActiveUnitAuras(state, encounterEndOffsets);
+
+    expect(materialized.get(CASTER)?.auras.get("id:1243")?.totalUptimeMs).toBe(7500);
+    expect(unitAuraUptimeDurationMs(state, CASTER, encounterEndOffsets)).toBe(7500);
+    expect(unitAuraUptimeDurationMs(state, TARGET, encounterEndOffsets)).toBe(10_000);
+  });
+
+  it("includes time after a player is resurrected in the uptime denominator", () => {
+    const state = unitAurasProcessor.createState();
+    process(slain({ offsetMilli: 3000 }), state);
+    process(resurrection({ offsetMilli: 5000 }), state);
+
+    expect(unitAuraUptimeDurationMs(state, CASTER, new Map([["enc1", 10_000]]))).toBe(8000);
   });
 
   it("keeps identical aura names with different spell IDs separate", () => {
