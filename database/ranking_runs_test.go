@@ -950,7 +950,7 @@ type rollbackProbeRankingRunRepairTx struct {
 }
 
 func (tx *rollbackProbeRankingRunRepairTx) RankingRunsNeedingRepair(ctx context.Context, _ int32) ([]database.RankingRunsNeedingRepairRow, error) {
-	_, err := tx.Store.DeleteObsoleteRankingRuns(ctx, database.DeleteObsoleteRankingRunsParams{
+	_, err := tx.DeleteObsoleteRankingRuns(ctx, database.DeleteObsoleteRankingRunsParams{
 		AffectedIds: []uuid.UUID{tx.runID},
 	})
 	if err != nil {
