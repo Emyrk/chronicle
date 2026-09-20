@@ -7,6 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
   useMyCharacters,
+  useMyFavorites,
   useSession,
   useSetPrimaryCharacter,
   useUnlinkMyCharacter,
@@ -62,6 +63,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip
 import { getSpellIconUrl } from "@/api/wowdb";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
+import { FavoritesList } from "@/components/Favorites";
 
 const LAYOUT_LAB_INSTANCE_REFERENCE_STORAGE_KEY = "layout-lab.instance-reference";
 const LAYOUT_LAB_RESIZE_HINT_DISMISSED_STORAGE_KEY = "layout-lab.resize-hint-dismissed";
@@ -468,6 +470,7 @@ function ExternalVerificationCard() {
 
 export function CharacterSettings() {
   const { data: characters, isLoading } = useMyCharacters();
+  const favorites = useMyFavorites();
   const setPrimary = useSetPrimaryCharacter();
   const unlink = useUnlinkMyCharacter();
 
@@ -498,6 +501,8 @@ export function CharacterSettings() {
         <h2 className="text-xl font-semibold">Characters</h2>
         <p className="text-muted-foreground">In-game characters linked to your account.</p>
       </div>
+
+      <FavoritesList data={favorites.data} isLoading={favorites.isLoading} />
 
       <ExternalVerificationCard />
 
