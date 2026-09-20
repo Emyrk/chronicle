@@ -1334,8 +1334,8 @@ export interface Guild {
 // From chroniclesdk/guild_page.go
 /**
  * GuildBestRun is the guild's best full clear of one instance within the
- * requested window — fastest, or highest average parse when ranked by parse.
- * AvgParse is -1 when the run has no parses.
+ * requested window, fastest or highest historical clear-time parse.
+ * ClearTimeParse is -1 when no eligible time-parse snapshot is available.
  */
 export interface GuildBestRun {
     readonly run_id: string;
@@ -1346,8 +1346,8 @@ export interface GuildBestRun {
     readonly max_players: number;
     readonly duration_ms: number;
     readonly completed_at: string;
-    readonly avg_parse: number;
-    readonly parse_count: number;
+    readonly clear_time_parse: number;
+    readonly parse_sample_size: number;
 }
 
 // From chroniclesdk/guild_page.go

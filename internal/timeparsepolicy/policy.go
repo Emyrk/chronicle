@@ -24,6 +24,10 @@ package timeparsepolicy
 // Snapshots record which version produced them so results are reproducible.
 const PolicyVersion = 1
 
+// SnapshotQueryVersion is bumped whenever the query that populates time-parse
+// snapshot membership changes.
+const SnapshotQueryVersion int16 = 1
+
 // Sample-size thresholds. These count datapoints (runs for clear time,
 // kills for boss time) not distinct players or guilds.
 const (
