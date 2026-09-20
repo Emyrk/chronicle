@@ -5827,6 +5827,7 @@ WITH clears AS (
         sr.instance_name,
         li.difficulty_name,
         li.max_players,
+        li.start_time AS instance_start_time,
         sr.ranked_duration_ms::bigint AS duration_ms,
         sr.ranked_completion_time::timestamptz AS completion_time
     FROM instance_speedruns sr
@@ -5841,27 +5842,37 @@ WITH clears AS (
     ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.ranked_duration_ms ASC
 ), scored AS (
     SELECT
-        c.run_id, c.instance_id, c.instance_slug, c.instance_name, c.difficulty_name, c.max_players, c.duration_ms, c.completion_time,
-        COALESCE(p.avg_parse, -1)::float8 AS avg_parse,
-        COALESCE(p.parse_count, 0)::bigint AS parse_count
+        c.run_id, c.instance_id, c.instance_slug, c.instance_name, c.difficulty_name, c.max_players, c.instance_start_time, c.duration_ms, c.completion_time,
+        CASE
+            WHEN COALESCE(cohort.sample_size, 0) >= $4::bigint
+                THEN (cohort.at_least_as_slow::float8 / cohort.sample_size::float8) * 100.0
+            ELSE -1
+        END::float8 AS clear_time_parse,
+        COALESCE(cohort.sample_size, 0)::bigint AS parse_sample_size
     FROM clears c
     LEFT JOIN LATERAL (
-        SELECT AVG(d.precise_score) AS avg_parse, COUNT(*) AS parse_count
-        FROM (
-            SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
-                psr.precise_score
-            FROM parse_score_results psr
-            WHERE psr.tenant_id = $4
-              AND psr.run_id = c.run_id
-              AND psr.guild_id = $2::uuid
-              AND psr.status IN ('ok', 'low_confidence')
-              AND (
-                  (psr.player_role = 'heal' AND psr.metric = 'hps')
-                  OR (psr.player_role != 'heal' AND psr.metric = 'dps')
-              )
-            ORDER BY psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
-        ) d
-    ) p ON true
+        SELECT tps.id
+        FROM time_parse_snapshots tps
+        WHERE $1::boolean
+          AND tps.tenant_id = $5
+          AND tps.lookback_days = $6::int
+          AND tps.policy_version = $7::smallint
+          AND tps.query_version = $8::smallint
+          AND tps.status = 'published'
+          AND tps.cutoff <= c.instance_start_time
+        ORDER BY tps.cutoff DESC
+        LIMIT 1
+    ) snapshot ON true
+    LEFT JOIN LATERAL (
+        SELECT
+            COUNT(*)::bigint AS sample_size,
+            COUNT(*) FILTER (WHERE member.duration_ms >= c.duration_ms)::bigint AS at_least_as_slow
+        FROM time_parse_clear_time_members member
+        WHERE member.snapshot_id = snapshot.id
+          AND member.instance_name = c.instance_name
+          AND member.difficulty_name = c.difficulty_name
+          AND member.max_players = c.max_players
+    ) cohort ON true
 )
 SELECT DISTINCT ON (instance_name)
     run_id,
@@ -5872,46 +5883,55 @@ SELECT DISTINCT ON (instance_name)
     max_players,
     duration_ms,
     completion_time,
-    avg_parse,
-    parse_count
+    clear_time_parse,
+    parse_sample_size
 FROM scored
 ORDER BY instance_name,
-    CASE WHEN $1::boolean THEN -avg_parse ELSE duration_ms::float8 END ASC,
+    CASE WHEN $1::boolean THEN -clear_time_parse ELSE duration_ms::float8 END ASC,
     duration_ms ASC
 `
 
 type GuildBestRunsParams struct {
-	ByParse   bool      `db:"by_parse" json:"by_parse"`
-	GuildID   uuid.UUID `db:"guild_id" json:"guild_id"`
-	SinceDays int64     `db:"since_days" json:"since_days"`
-	TenantID  uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ByParse        bool      `db:"by_parse" json:"by_parse"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	SinceDays      int64     `db:"since_days" json:"since_days"`
+	MinParseSample int64     `db:"min_parse_sample" json:"min_parse_sample"`
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LookbackDays   int32     `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion  int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16     `db:"query_version" json:"query_version"`
 }
 
 type GuildBestRunsRow struct {
-	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
-	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
-	InstanceSlug   string             `db:"instance_slug" json:"instance_slug"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int32              `db:"max_players" json:"max_players"`
-	DurationMs     int64              `db:"duration_ms" json:"duration_ms"`
-	CompletionTime pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
-	AvgParse       float64            `db:"avg_parse" json:"avg_parse"`
-	ParseCount     int64              `db:"parse_count" json:"parse_count"`
+	RunID           uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceID      uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceSlug    string             `db:"instance_slug" json:"instance_slug"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int32              `db:"max_players" json:"max_players"`
+	DurationMs      int64              `db:"duration_ms" json:"duration_ms"`
+	CompletionTime  pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	ClearTimeParse  float64            `db:"clear_time_parse" json:"clear_time_parse"`
+	ParseSampleSize int64              `db:"parse_sample_size" json:"parse_sample_size"`
 }
 
 // Returns the guild's single best full clear of each instance within the
 // window, for the guild page "Best Performance" panel. @by_parse picks the
-// winner by highest guild average parse instead of fastest clear. Duplicate
-// uploads collapse to one run (fastest duration per group). Includes
-// unqualified runs: qualification only affects the public leaderboard.
+// winner by highest historical clear-time parse instead of fastest clear.
+// Duplicate uploads collapse to one run (fastest duration per group). Includes
+// unqualified runs: qualification only affects cohort and leaderboard membership,
+// not whether a completed clear can receive a time parse.
 // JOINs wow_server_realms so RLS tenant filtering cascades.
 func (q *sqlQuerier) GuildBestRuns(ctx context.Context, arg GuildBestRunsParams) ([]GuildBestRunsRow, error) {
 	rows, err := q.db.Query(ctx, guildBestRuns,
 		arg.ByParse,
 		arg.GuildID,
 		arg.SinceDays,
+		arg.MinParseSample,
 		arg.TenantID,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
 	)
 	if err != nil {
 		return nil, err
@@ -5929,8 +5949,8 @@ func (q *sqlQuerier) GuildBestRuns(ctx context.Context, arg GuildBestRunsParams)
 			&i.MaxPlayers,
 			&i.DurationMs,
 			&i.CompletionTime,
-			&i.AvgParse,
-			&i.ParseCount,
+			&i.ClearTimeParse,
+			&i.ParseSampleSize,
 		); err != nil {
 			return nil, err
 		}

@@ -168,6 +168,45 @@ func TestInstanceRankingRecordsIncludesZeroMetrics(t *testing.T) {
 	assert.Zero(t, rows[0].Hps)
 }
 
+func TestTrashRankingsAllowDistinctSubSpecs(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	instanceID := uuid.New()
+	killedAt := time.Date(2026, 9, 20, 15, 44, 32, 0, time.UTC)
+
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Trash", instanceName: "Molten Core",
+		playerGUID: "P-FERAL", playerClass: "DRUID", playerSpec: "Feral", playerSubSpec: "Cat",
+		durationSecs: 300, damageDone: 150_000, dps: 500,
+		killedAt: killedAt, instanceID: instanceID,
+	})
+
+	require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+		InstanceID:    instanceID,
+		EncounterName: "Trash",
+		InstanceName:  "Molten Core",
+		PlayerGuid:    "P-FERAL",
+		PlayerName:    "Player-P-FERAL",
+		PlayerClass:   "DRUID",
+		PlayerSpec:    "Feral",
+		PlayerSubSpec: "Bear",
+		RealmID:       realmID,
+		RealmName:     "test-realm",
+		DamageDone:    120_000,
+		DurationSecs:  300,
+		Dps:           400,
+		KilledAt:      database.Timestamptz(killedAt.Add(time.Minute)),
+		LogHashedSlug: "sub-spec-regression",
+	}))
+
+	rows, err := store.InstanceRankingRecords(ctx, instanceID)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	assert.ElementsMatch(t, []string{"Cat", "Bear"}, []string{rows[0].PlayerSubSpec, rows[1].PlayerSubSpec})
+}
+
 func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	t.Parallel()
 

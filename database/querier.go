@@ -406,9 +406,10 @@ type sqlcQuerier interface {
 	GetWorldsByServer(ctx context.Context, serverID uuid.UUID) ([]World, error)
 	// Returns the guild's single best full clear of each instance within the
 	// window, for the guild page "Best Performance" panel. @by_parse picks the
-	// winner by highest guild average parse instead of fastest clear. Duplicate
-	// uploads collapse to one run (fastest duration per group). Includes
-	// unqualified runs: qualification only affects the public leaderboard.
+	// winner by highest historical clear-time parse instead of fastest clear.
+	// Duplicate uploads collapse to one run (fastest duration per group). Includes
+	// unqualified runs: qualification only affects cohort and leaderboard membership,
+	// not whether a completed clear can receive a time parse.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	GuildBestRuns(ctx context.Context, arg GuildBestRunsParams) ([]GuildBestRunsRow, error)
 	// Queries backing guild page panels (roster, top parses, recent raid scores).
