@@ -12,9 +12,10 @@ interface GuildActionsMenuProps {
   guildId: string;
   canEdit: boolean;
   canViewRoster: boolean;
+  hasFavoriteButton?: boolean;
 }
 
-export function GuildActionsMenu({ guildId, canEdit, canViewRoster }: GuildActionsMenuProps) {
+export function GuildActionsMenu({ guildId, canEdit, canViewRoster, hasFavoriteButton = false }: GuildActionsMenuProps) {
   if (!canEdit && !canViewRoster) return null;
 
   return (
@@ -23,7 +24,7 @@ export function GuildActionsMenu({ guildId, canEdit, canViewRoster }: GuildActio
         <Button
           variant="outline"
           size="icon"
-          className="absolute top-2 right-4 z-10 hidden md:flex h-8 w-8"
+          className={`absolute top-2 z-10 hidden h-8 w-8 md:flex ${hasFavoriteButton ? "right-32" : "right-4"}`}
         >
           <MoreVertical className="h-4 w-4" />
         </Button>

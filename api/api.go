@@ -199,6 +199,12 @@ func (api *API) Routes() chi.Router {
 				r.Get("/me/storage", api.GetMyStorage)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
 
+				r.Get("/me/favorites", api.ListMyFavorites)
+				r.Put("/me/favorites/guilds/{guildID}", api.AddMyFavoriteGuild)
+				r.Delete("/me/favorites/guilds/{guildID}", api.DeleteMyFavoriteGuild)
+				r.Put("/me/favorites/players/{realmID}/{characterGUID}", api.AddMyFavoritePlayer)
+				r.Delete("/me/favorites/players/{realmID}/{characterGUID}", api.DeleteMyFavoritePlayer)
+
 				r.Get("/me/talent-builds", api.ListMyTalentBuilds)
 				r.Post("/me/talent-builds", api.CreateMyTalentBuild)
 				r.Patch("/me/talent-builds/{buildID}", api.UpdateMyTalentBuild)

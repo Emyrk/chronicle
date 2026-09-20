@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAuthorizationCheck, useSiteConfig } from "@/api/queries";
 import type { Branding } from "@/api/typesGenerated";
 import { Button } from "../ui/button";
+import { FavoritesMenu } from "../Favorites";
 import {
   Sheet,
   SheetContent,
@@ -282,7 +283,8 @@ export function NavBar() {
                 Account
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[200px]">
+            <DropdownMenuContent align="end" className="w-[300px]">
+              <FavoritesMenu />
               {accountMenuItems.map((item) =>
                 "href" in item ? (
                   <DropdownMenuItem key={item.title} asChild>

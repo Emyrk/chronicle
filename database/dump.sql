@@ -1612,6 +1612,19 @@ CREATE TABLE user_character_links (
     link_source text DEFAULT 'manual'::text NOT NULL
 );
 
+CREATE TABLE user_favorite_guilds (
+    user_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE user_favorite_players (
+    user_id uuid NOT NULL,
+    character_guid wow_guid NOT NULL,
+    realm_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE user_panel_layouts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid,
@@ -2280,6 +2293,12 @@ ALTER TABLE ONLY user_character_links
 
 ALTER TABLE ONLY user_character_links
     ADD CONSTRAINT user_character_links_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY user_favorite_guilds
+    ADD CONSTRAINT user_favorite_guilds_pkey PRIMARY KEY (user_id, guild_id);
+
+ALTER TABLE ONLY user_favorite_players
+    ADD CONSTRAINT user_favorite_players_pkey PRIMARY KEY (user_id, character_guid, realm_id);
 
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_code_key UNIQUE (code);
@@ -2951,6 +2970,21 @@ ALTER TABLE ONLY user_character_links
 
 ALTER TABLE ONLY user_character_links
     ADD CONSTRAINT user_character_links_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_favorite_guilds
+    ADD CONSTRAINT user_favorite_guilds_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_favorite_guilds
+    ADD CONSTRAINT user_favorite_guilds_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_favorite_players
+    ADD CONSTRAINT user_favorite_players_character_guid_realm_id_fkey FOREIGN KEY (character_guid, realm_id) REFERENCES game_players(id, realm_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_favorite_players
+    ADD CONSTRAINT user_favorite_players_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_favorite_players
+    ADD CONSTRAINT user_favorite_players_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

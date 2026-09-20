@@ -17463,6 +17463,185 @@ func (q *sqlQuerier) UpsertExternalCharacterLinkSync(ctx context.Context, arg Up
 	return err
 }
 
+const addUserFavoriteGuild = `-- name: AddUserFavoriteGuild :exec
+INSERT INTO user_favorite_guilds (user_id, guild_id)
+VALUES ($1, $2)
+ON CONFLICT (user_id, guild_id) DO NOTHING
+`
+
+type AddUserFavoriteGuildParams struct {
+	UserID  uuid.UUID `db:"user_id" json:"user_id"`
+	GuildID uuid.UUID `db:"guild_id" json:"guild_id"`
+}
+
+func (q *sqlQuerier) AddUserFavoriteGuild(ctx context.Context, arg AddUserFavoriteGuildParams) error {
+	_, err := q.db.Exec(ctx, addUserFavoriteGuild, arg.UserID, arg.GuildID)
+	return err
+}
+
+const addUserFavoritePlayer = `-- name: AddUserFavoritePlayer :exec
+INSERT INTO user_favorite_players (user_id, character_guid, realm_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id, character_guid, realm_id) DO NOTHING
+`
+
+type AddUserFavoritePlayerParams struct {
+	UserID        uuid.UUID `db:"user_id" json:"user_id"`
+	CharacterGuid guid.GUID `db:"character_guid" json:"character_guid"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error {
+	_, err := q.db.Exec(ctx, addUserFavoritePlayer, arg.UserID, arg.CharacterGuid, arg.RealmID)
+	return err
+}
+
+const deleteUserFavoriteGuild = `-- name: DeleteUserFavoriteGuild :exec
+DELETE FROM user_favorite_guilds
+WHERE user_id = $1 AND guild_id = $2
+`
+
+type DeleteUserFavoriteGuildParams struct {
+	UserID  uuid.UUID `db:"user_id" json:"user_id"`
+	GuildID uuid.UUID `db:"guild_id" json:"guild_id"`
+}
+
+func (q *sqlQuerier) DeleteUserFavoriteGuild(ctx context.Context, arg DeleteUserFavoriteGuildParams) error {
+	_, err := q.db.Exec(ctx, deleteUserFavoriteGuild, arg.UserID, arg.GuildID)
+	return err
+}
+
+const deleteUserFavoritePlayer = `-- name: DeleteUserFavoritePlayer :exec
+DELETE FROM user_favorite_players
+WHERE user_id = $1 AND character_guid = $2 AND realm_id = $3
+`
+
+type DeleteUserFavoritePlayerParams struct {
+	UserID        uuid.UUID `db:"user_id" json:"user_id"`
+	CharacterGuid guid.GUID `db:"character_guid" json:"character_guid"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) DeleteUserFavoritePlayer(ctx context.Context, arg DeleteUserFavoritePlayerParams) error {
+	_, err := q.db.Exec(ctx, deleteUserFavoritePlayer, arg.UserID, arg.CharacterGuid, arg.RealmID)
+	return err
+}
+
+const listUserFavoriteGuilds = `-- name: ListUserFavoriteGuilds :many
+SELECT
+  g.id,
+  g.name,
+  g.realm_id,
+  r.name AS realm_name,
+  ufg.created_at
+FROM user_favorite_guilds ufg
+JOIN guilds g ON g.id = ufg.guild_id
+JOIN wow_server_realms r ON r.id = g.realm_id
+WHERE ufg.user_id = $1
+ORDER BY ufg.created_at ASC
+`
+
+type ListUserFavoriteGuildsRow struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	Name      string             `db:"name" json:"name"`
+	RealmID   uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName string             `db:"realm_name" json:"realm_name"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+func (q *sqlQuerier) ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error) {
+	rows, err := q.db.Query(ctx, listUserFavoriteGuilds, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserFavoriteGuildsRow
+	for rows.Next() {
+		var i ListUserFavoriteGuildsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.RealmID,
+			&i.RealmName,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserFavoritePlayers = `-- name: ListUserFavoritePlayers :many
+SELECT
+  gp.id,
+  gp.realm_id,
+  r.name AS realm_name,
+  gp.name,
+  gp.class,
+  gp.race,
+  gp.gender,
+  gp.level,
+  gp.guild_id,
+  COALESCE(g.name, '') AS guild_name,
+  ufp.created_at
+FROM user_favorite_players ufp
+JOIN game_players gp ON gp.id = ufp.character_guid AND gp.realm_id = ufp.realm_id
+JOIN wow_server_realms r ON r.id = gp.realm_id
+LEFT JOIN guilds g ON g.id = gp.guild_id
+WHERE ufp.user_id = $1
+ORDER BY ufp.created_at ASC
+`
+
+type ListUserFavoritePlayersRow struct {
+	ID        guid.GUID          `db:"id" json:"id"`
+	RealmID   uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName string             `db:"realm_name" json:"realm_name"`
+	Name      string             `db:"name" json:"name"`
+	Class     WowPlayableClass   `db:"class" json:"class"`
+	Race      WowPlayableRace    `db:"race" json:"race"`
+	Gender    WowPlayableGender  `db:"gender" json:"gender"`
+	Level     int16              `db:"level" json:"level"`
+	GuildID   uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName string             `db:"guild_name" json:"guild_name"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+func (q *sqlQuerier) ListUserFavoritePlayers(ctx context.Context, userID uuid.UUID) ([]ListUserFavoritePlayersRow, error) {
+	rows, err := q.db.Query(ctx, listUserFavoritePlayers, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserFavoritePlayersRow
+	for rows.Next() {
+		var i ListUserFavoritePlayersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.RealmName,
+			&i.Name,
+			&i.Class,
+			&i.Race,
+			&i.Gender,
+			&i.Level,
+			&i.GuildID,
+			&i.GuildName,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserPanelLayoutDefaults = `-- name: GetUserPanelLayoutDefaults :one
 SELECT
   default_desktop_layout_id,

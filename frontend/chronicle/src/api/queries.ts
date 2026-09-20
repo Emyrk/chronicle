@@ -77,6 +77,7 @@ import type {
   UpdateSiteConfigRequest,
   Dataset,
   UpsertDatasetRequest,
+  UserFavoritesResponse,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -196,6 +197,58 @@ function buildAPIError(defaultMessage: string, error: unknown): RequestError {
   }
 
   return new Error(defaultMessage) as RequestError;
+}
+
+export function useMyFavorites(
+  options?: Omit<UseQueryOptions<UserFavoritesResponse>, "queryKey" | "queryFn">
+) {
+  return useQuery({
+    queryKey: ["my-favorites"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/favorites", { credentials: "include" });
+      if (!response.ok) {
+        throw buildAPIError("Failed to fetch favorites", await response.json().catch(() => null));
+      }
+      return response.json() as Promise<UserFavoritesResponse>;
+    },
+    ...options,
+  });
+}
+
+export function useToggleFavoriteGuild() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ guildID, favorite }: { guildID: string; favorite: boolean }) => {
+      const response = await fetch(`/api/v1/me/favorites/guilds/${encodeURIComponent(guildID)}`, {
+        method: favorite ? "PUT" : "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw buildAPIError("Failed to update favorite guild", await response.json().catch(() => null));
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-favorites"] }),
+  });
+}
+
+export function useToggleFavoritePlayer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ realmID, characterGUID, favorite }: {
+      realmID: string;
+      characterGUID: string;
+      favorite: boolean;
+    }) => {
+      const response = await fetch(
+        `/api/v1/me/favorites/players/${encodeURIComponent(realmID)}/${encodeURIComponent(characterGUID)}`,
+        { method: favorite ? "PUT" : "DELETE", credentials: "include" },
+      );
+      if (!response.ok) {
+        throw buildAPIError("Failed to update favorite player", await response.json().catch(() => null));
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-favorites"] }),
+  });
 }
 
 export function useUserPanelLayouts(

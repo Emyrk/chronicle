@@ -2056,6 +2056,19 @@ type UserCharacterLink struct {
 	LinkSource    string             `db:"link_source" json:"link_source"`
 }
 
+type UserFavoriteGuild struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type UserFavoritePlayer struct {
+	UserID        uuid.UUID          `db:"user_id" json:"user_id"`
+	CharacterGuid guid.GUID          `db:"character_guid" json:"character_guid"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type UserPanelLayout struct {
 	ID              uuid.UUID          `db:"id" json:"id"`
 	UserID          uuid.NullUUID      `db:"user_id" json:"user_id"`
