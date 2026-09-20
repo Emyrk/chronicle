@@ -259,21 +259,58 @@ function PerformanceTrend({
         </div>
       </div>
       <div className="relative h-72 overflow-hidden rounded-lg border border-border/70 bg-black/10">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label={`${display === "parse" ? "Parse" : metric.toUpperCase()} performance trend`}>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none h-full w-full" aria-hidden="true">
           {[20, 40, 60, 80].map((line) => (
             <line key={line} x1="4" x2="96" y1={line} y2={line} stroke="currentColor" strokeWidth="0.25" className="text-border" vectorEffect="non-scaling-stroke" />
           ))}
           {runs.length > 1 && (
             <polyline points={points} fill="none" stroke="rgb(56 189 248)" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
           )}
-          {runs.map((run, index) => (
-            <g key={run.run_id}>
-              <circle cx={x(index)} cy={y(values[index])} r="1.5" fill={display === "parse" ? parseColor(values[index]) : "rgb(96 165 250)"} vectorEffect="non-scaling-stroke">
-                <title>{`${new Date(run.started_at).toLocaleDateString()}: ${formatValue(values[index])}`}</title>
-              </circle>
-            </g>
-          ))}
         </svg>
+        {runs.map((run, index) => {
+          const pointX = x(index);
+          const pointY = y(values[index]);
+          const value = formatValue(values[index]);
+          const valueLabel = display === "parse" ? "Parse" : metric.toUpperCase();
+          const tooltipX = pointX < 15 ? "left-0" : pointX > 85 ? "right-0" : "left-1/2 -translate-x-1/2";
+          const tooltipY = pointY < 24 ? "top-full mt-2" : "bottom-full mb-2";
+
+          return (
+            <div
+              key={run.run_id}
+              className="group absolute z-10 -translate-x-1/2 -translate-y-1/2"
+              style={{ left: `${pointX}%`, top: `${pointY}%` }}
+            >
+              <button
+                type="button"
+                className="flex size-5 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-sky-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label={`${new Date(run.started_at).toLocaleDateString()}, ${value} ${valueLabel}`}
+              >
+                <span
+                  className="size-2.5 rounded-full border-2 border-background shadow-[0_0_0_1px_rgba(125,211,252,0.75),0_2px_7px_rgba(0,0,0,0.55)] transition-transform duration-150 group-hover:scale-125 group-focus-within:scale-125"
+                  style={{ backgroundColor: display === "parse" ? parseColor(values[index]) : "rgb(96 165 250)" }}
+                />
+              </button>
+              <div
+                role="tooltip"
+                className={cn(
+                  "pointer-events-none absolute hidden min-w-36 rounded-md border border-white/10 bg-zinc-950/95 px-3 py-2 text-xs shadow-xl shadow-black/40 backdrop-blur-sm group-hover:block group-focus-within:block",
+                  tooltipX,
+                  tooltipY,
+                )}
+              >
+                <div className="font-medium text-foreground">{new Date(run.started_at).toLocaleDateString()}</div>
+                <div className="mt-1 flex items-baseline justify-between gap-4">
+                  <span className="text-muted-foreground">{valueLabel}</span>
+                  <span className="font-mono font-semibold tabular-nums text-sky-300">{value}</span>
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground">
+                  {run.player_spec}{run.player_sub_spec && run.player_sub_spec !== run.player_spec ? ` · ${run.player_sub_spec}` : ""}
+                </div>
+              </div>
+            </div>
+          );
+        })}
         <div className="pointer-events-none absolute inset-x-4 bottom-2 flex justify-between text-[10px] text-muted-foreground">
           <span>{new Date(runs[0].started_at).toLocaleDateString()}</span>
           <span>{new Date(runs[runs.length - 1].started_at).toLocaleDateString()}</span>
