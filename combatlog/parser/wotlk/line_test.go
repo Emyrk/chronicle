@@ -74,6 +74,27 @@ func TestParseLine_SpellAuraAppliedDose(t *testing.T) {
 	require.NoError(t, m.Error())
 }
 
+func TestParseLine_MultiSchool(t *testing.T) {
+	t.Parallel()
+	line := `1/14 20:40:08.481  SPELL_DAMAGE,0x00000000000019CA,"Mage",0x512,0xF1300023890000A9,"Target",0xa48,44614,"Frostfire Bolt",0x14,1000,0,20,0,0,0,nil,nil,nil`
+
+	_, event, m, err := ParseLine(line)
+	require.NoError(t, err)
+	assert.Equal(t, "SPELL_DAMAGE", event)
+
+	_ = m.Guid()
+	_ = m.String()
+	_ = m.HexUint32()
+	_ = m.Guid()
+	_ = m.String()
+	_ = m.HexUint32()
+	_ = m.Int32()
+	_ = m.String()
+
+	assert.Equal(t, types.FireSchool|types.FrostSchool, m.School())
+	require.NoError(t, m.Error())
+}
+
 func TestParseLine_SpellCastSuccess(t *testing.T) {
 	t.Parallel()
 	line := `1/14 20:40:09.143  SPELL_CAST_SUCCESS,0x00000000000019CA,"Ioser",0x512,0xF1300023890000A9,"Scarshield Legionnaire",0xa48,6774,"Slice and Dice",0x1`
