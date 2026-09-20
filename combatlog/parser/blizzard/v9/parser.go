@@ -52,11 +52,12 @@ func readBaseYear(r io.Reader) (io.Reader, int, error) {
 	}
 }
 
-// Parser adapts Blizzard combat-log version 9 records to Chronicle's CLEU
-// parser while retaining v9-only metadata such as gear and talent summaries.
+// Parser adapts modern Blizzard combat-log records to Chronicle's CLEU parser
+// while retaining version-specific metadata such as gear and talent summaries.
 type Parser struct {
 	inner *wotlk.Parser
 	wowDB gamedb.SpellFetcher
+	guids *guidNormalizer
 }
 
 func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
@@ -64,10 +65,12 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	if err != nil {
 		return nil, err
 	}
-	p, err := newParser(ctx, logger, newTransformReader(r), wowDB, gear, reg)
+	transformer := newTransformReader(r)
+	p, err := newParser(ctx, logger, transformer, wowDB, gear, reg)
 	if err != nil {
 		return nil, err
 	}
+	p.guids = transformer.guids
 	p.inner.SetBaseYear(year)
 	return p, nil
 }
@@ -76,7 +79,13 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 // event payloads use Blizzard's v9 layout, while timestamps use the legacy
 // month/day layout and ChronicleCompanion data is relayed through cast failures.
 func NewHermesProxy(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
-	return newParser(ctx, logger, newHermesProxyTransformReader(r), wowDB, gear, reg)
+	transformer := newHermesProxyTransformReader(r)
+	p, err := newParser(ctx, logger, transformer, wowDB, gear, reg)
+	if err != nil {
+		return nil, err
+	}
+	p.guids = transformer.guids
+	return p, nil
 }
 
 func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
@@ -97,6 +106,16 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 	inner.WithEventHook("V9_ENCOUNTER_START", p.encounterStart)
 	inner.WithEventHook("V9_ENCOUNTER_END", p.encounterEnd)
 	return p, nil
+}
+
+// GUIDMappings returns a snapshot of the canonical Blizzard GUIDs observed so
+// far and their legacy-compatible Chronicle representations. Callers can persist
+// this dictionary without changing existing event and aggregation GUID fields.
+func (p *Parser) GUIDMappings() []GUIDMapping {
+	if p == nil || p.guids == nil {
+		return nil
+	}
+	return p.guids.mappings()
 }
 
 func (p *Parser) Advance(ctx context.Context) ([]messages.Message, error) {

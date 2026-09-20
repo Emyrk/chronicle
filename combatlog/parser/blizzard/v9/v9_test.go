@@ -81,6 +81,27 @@ func TestGUIDNormalizer(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("0xF140004AF5%06X", hash24(petRaw)), pet)
 }
 
+func TestGUIDNormalizerRetainsCanonicalMappings(t *testing.T) {
+	t.Parallel()
+
+	n := newGUIDNormalizer()
+	playerRaw := "Player-6065-037BA400"
+	player, err := n.normalize(playerRaw)
+	require.NoError(t, err)
+	creatureRaw := "Creature-0-6783-0-16021-1512-0001303730"
+	creature, err := n.normalize(creatureRaw)
+	require.NoError(t, err)
+
+	playerGUID, err := guid.FromString(player)
+	require.NoError(t, err)
+	creatureGUID, err := guid.FromString(creature)
+	require.NoError(t, err)
+	assert.Equal(t, []GUIDMapping{
+		{Canonical: creatureRaw, Compatibility: creatureGUID},
+		{Canonical: playerRaw, Compatibility: playerGUID},
+	}, n.mappings())
+}
+
 func TestGUIDNormalizerUsesCompleteWorldGUID(t *testing.T) {
 	t.Parallel()
 

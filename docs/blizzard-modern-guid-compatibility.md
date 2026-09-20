@@ -2,7 +2,7 @@
 
 Chronicle's Blizzard parser accepts modern string GUIDs from Blizzard combat logs, including `COMBAT_LOG_VERSION,22` logs, but much of Chronicle still consumes the legacy 64-bit `guid.GUID` type. The compatibility mapping is implemented by `guidNormalizer.normalize` in `combatlog/parser/blizzard/v9/guid.go` and is applied by `transformReader` in `combatlog/parser/blizzard/v9/transform.go`.
 
-The modern raw GUID is the canonical identity. The generated 64-bit value is a compatibility representation for existing parser and analysis code. In particular, a mapped world GUID must not be treated as a canonical cross-log identity.
+The modern raw GUID is the canonical identity. The generated 64-bit value is a compatibility representation for existing parser and analysis code. In particular, a mapped world GUID must not be treated as a canonical cross-log identity. `Parser.GUIDMappings` exposes the observed canonical and compatibility values as a dictionary that can be persisted alongside parse results.
 
 ## Accepted input forms
 
@@ -84,9 +84,9 @@ Do not join world entities across logs by the compatibility GUID. Store and comp
 
 ## Known limitations and future direction
 
-- World mappings discard the original modern fields after transformation. The raw GUID cannot be reconstructed from the 64-bit surrogate.
+- The 64-bit surrogate does not encode the original modern fields and cannot be reversed. The parser retains the raw value in `GUIDMapping` records returned by `Parser.GUIDMappings`, but callers must persist that dictionary if it is needed after parsing.
 - The 24-bit identity is a bounded per-type, per-entry namespace. Linear probing prevents probabilistic parse failure from ordinary hash collisions, but it does not make the assigned value canonical.
 - Existing `0x` GUIDs pass through without this allocator, preserving compatibility with legacy input.
 - `Corpse` and `GameObject` share the legacy object type. Their complete raw strings influence their identity, but the 64-bit value does not preserve the modern prefix as a separate type.
 
-The long-term direction is to carry the raw Blizzard GUID as the canonical identity through storage and APIs, while treating the numeric `guid.GUID` value as a compatibility surrogate for code that still requires the legacy layout. Any migration should preserve the raw value before normalization and define explicit boundaries where legacy consumers receive the surrogate.
+The long-term direction is to carry the raw Blizzard GUID as the canonical identity through storage and APIs, while treating the numeric `guid.GUID` value as a compatibility surrogate for code that still requires the legacy layout. `Parser.GUIDMappings` provides the first boundary for that migration: existing events continue to use the surrogate, while parse persistence can save the canonical dictionary without changing event consumers.
