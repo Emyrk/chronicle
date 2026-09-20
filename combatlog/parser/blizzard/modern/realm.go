@@ -1,4 +1,4 @@
-package v9
+package modern
 
 import (
 	"bufio"
@@ -75,9 +75,13 @@ func recordPlayerRealm(players map[string]string, rawGUID, quotedName string) {
 	if !strings.HasPrefix(rawGUID, "Player-") {
 		return
 	}
-	name := strings.Trim(quotedName, "\"")
+	name := strings.TrimSuffix(strings.Trim(quotedName, "\""), "-")
 	parts := strings.Split(name, "-")
-	if len(parts) < 3 {
+	if len(parts) < 2 {
+		return
+	}
+	if len(parts) == 2 {
+		players[rawGUID] = parts[1]
 		return
 	}
 	players[rawGUID] = strings.Join(parts[len(parts)-2:], "-")

@@ -1,4 +1,4 @@
-package v9
+package modern
 
 import (
 	"bufio"
@@ -35,7 +35,7 @@ func readBaseYear(r io.Reader) (io.Reader, int, error) {
 		if trimmed != "" {
 			idx := strings.Index(trimmed, "  ")
 			if idx < 0 {
-				return nil, 0, fmt.Errorf("v9 CLEU first record has no separator")
+				return nil, 0, fmt.Errorf("modern Blizzard CLEU first record has no separator")
 			}
 			ts, parseErr := parseTimestamp(trimmed[:idx])
 			if parseErr != nil {
@@ -45,18 +45,19 @@ func readBaseYear(r io.Reader) (io.Reader, int, error) {
 		}
 		if err != nil {
 			if err == io.EOF {
-				return nil, 0, fmt.Errorf("v9 CLEU log is empty")
+				return nil, 0, fmt.Errorf("modern Blizzard CLEU log is empty")
 			}
-			return nil, 0, fmt.Errorf("read v9 CLEU header: %w", err)
+			return nil, 0, fmt.Errorf("read modern Blizzard CLEU header: %w", err)
 		}
 	}
 }
 
-// Parser adapts Blizzard combat-log version 9 records to Chronicle's CLEU
-// parser while retaining v9-only metadata such as gear and talent summaries.
+// Parser adapts modern Blizzard combat-log records to Chronicle's CLEU parser
+// while retaining version-specific metadata such as gear and talent summaries.
 type Parser struct {
 	inner *wotlk.Parser
 	wowDB gamedb.SpellFetcher
+	guids *guidNormalizer
 }
 
 func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
@@ -64,10 +65,12 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	if err != nil {
 		return nil, err
 	}
-	p, err := newParser(ctx, logger, newTransformReader(r), wowDB, gear, reg)
+	transformer := newTransformReader(r)
+	p, err := newParser(ctx, logger, transformer, wowDB, gear, reg)
 	if err != nil {
 		return nil, err
 	}
+	p.guids = transformer.guids
 	p.inner.SetBaseYear(year)
 	return p, nil
 }
@@ -76,7 +79,13 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 // event payloads use Blizzard's v9 layout, while timestamps use the legacy
 // month/day layout and ChronicleCompanion data is relayed through cast failures.
 func NewHermesProxy(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
-	return newParser(ctx, logger, newHermesProxyTransformReader(r), wowDB, gear, reg)
+	transformer := newHermesProxyTransformReader(r)
+	p, err := newParser(ctx, logger, transformer, wowDB, gear, reg)
+	if err != nil {
+		return nil, err
+	}
+	p.guids = transformer.guids
+	return p, nil
 }
 
 func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
@@ -90,13 +99,23 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 		DetectZone:        false,
 	})
 	p := &Parser{inner: inner, wowDB: wowDB}
-	inner.WithEventHook("V9_COMBAT_LOG_VERSION", p.combatLogVersion)
-	inner.WithEventHook("V9_ZONE_CHANGE", p.zoneChange)
-	inner.WithEventHook("V9_COMBATANT_INFO", p.combatantInfo)
-	inner.WithEventHook("V9_SPELL_ABSORBED", p.spellAbsorbed)
-	inner.WithEventHook("V9_ENCOUNTER_START", p.encounterStart)
-	inner.WithEventHook("V9_ENCOUNTER_END", p.encounterEnd)
+	inner.WithEventHook("BLIZZARD_COMBAT_LOG_VERSION", p.combatLogVersion)
+	inner.WithEventHook("BLIZZARD_ZONE_CHANGE", p.zoneChange)
+	inner.WithEventHook("BLIZZARD_COMBATANT_INFO", p.combatantInfo)
+	inner.WithEventHook("BLIZZARD_SPELL_ABSORBED", p.spellAbsorbed)
+	inner.WithEventHook("BLIZZARD_ENCOUNTER_START", p.encounterStart)
+	inner.WithEventHook("BLIZZARD_ENCOUNTER_END", p.encounterEnd)
 	return p, nil
+}
+
+// GUIDMappings returns a snapshot of the canonical Blizzard GUIDs observed so
+// far and their legacy-compatible Chronicle representations. Callers can persist
+// this dictionary without changing existing event and aggregation GUID fields.
+func (p *Parser) GUIDMappings() []GUIDMapping {
+	if p == nil || p.guids == nil {
+		return nil
+	}
+	return p.guids.mappings()
 }
 
 func (p *Parser) Advance(ctx context.Context) ([]messages.Message, error) {
@@ -240,11 +259,11 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 	}
 	raw, err := base64.RawStdEncoding.DecodeString(encoded)
 	if err != nil {
-		return nil, fmt.Errorf("decode v9 COMBATANT_INFO: %w", err)
+		return nil, fmt.Errorf("decode Blizzard COMBATANT_INFO: %w", err)
 	}
 	fields := splitTopLevel(string(raw))
 	if len(fields) < 27 {
-		return nil, fmt.Errorf("v9 COMBATANT_INFO has %d fields, need at least 27", len(fields))
+		return nil, fmt.Errorf("blizzard COMBATANT_INFO has %d fields, need at least 27", len(fields))
 	}
 
 	talents, err := parseTalentSummary(fields[24])

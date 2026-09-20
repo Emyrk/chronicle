@@ -1,4 +1,4 @@
-package v9
+package modern
 
 import (
 	"context"
@@ -81,6 +81,27 @@ func TestGUIDNormalizer(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("0xF140004AF5%06X", hash24(petRaw)), pet)
 }
 
+func TestGUIDNormalizerRetainsCanonicalMappings(t *testing.T) {
+	t.Parallel()
+
+	n := newGUIDNormalizer()
+	playerRaw := "Player-6065-037BA400"
+	player, err := n.normalize(playerRaw)
+	require.NoError(t, err)
+	creatureRaw := "Creature-0-6783-0-16021-1512-0001303730"
+	creature, err := n.normalize(creatureRaw)
+	require.NoError(t, err)
+
+	playerGUID, err := guid.FromString(player)
+	require.NoError(t, err)
+	creatureGUID, err := guid.FromString(creature)
+	require.NoError(t, err)
+	assert.Equal(t, []GUIDMapping{
+		{Canonical: creatureRaw, Compatibility: creatureGUID},
+		{Canonical: playerRaw, Compatibility: playerGUID},
+	}, n.mappings())
+}
+
 func TestGUIDNormalizerUsesCompleteWorldGUID(t *testing.T) {
 	t.Parallel()
 
@@ -131,6 +152,33 @@ func TestGUIDNormalizerPlayerGUIDsAreLossless(t *testing.T) {
 	assert.NotEqual(t, first, third)
 }
 
+func TestTransformV22Damage(t *testing.T) {
+	t.Parallel()
+
+	r := newTransformReader(strings.NewReader(""))
+	_, err := r.transform(`9/20/2026 15:02:05.988-5  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,0,BUILD_VERSION,1.60.1,PROJECT_ID,18`)
+	require.NoError(t, err)
+
+	line := `9/20/2026 15:02:08.135-5  SPELL_DAMAGE,Player-4618-00C7EC79,"Tester-ClassicBetaPvE-",0x518,0x80000000,Creature-0-6783-0-16021-1512-0000B03B52,"Duskbat",0xa28,0x80000000,686,"Shadow Bolt",0x20,Creature-0-6783-0-16021-1512-0000B03B52,0000000000000000,18,42,3,0,20,0,0,0,1,0,0,0,1751.67,1697.84,1420,4.4674,1,15,15,-1,32,0,0,0,nil,nil,nil,ST`
+	converted, err := r.transform(line)
+	require.NoError(t, err)
+	assert.Contains(t, converted, `"Tester-ClassicBetaPvE"`)
+	assert.Contains(t, converted, `686,"Shadow Bolt",0x20,15,-1,32,0,0,0,nil,nil,nil`)
+}
+
+func TestTransformV22HealUsesTotalAmount(t *testing.T) {
+	t.Parallel()
+
+	r := newTransformReader(strings.NewReader(""))
+	_, err := r.transform(`9/20/2026 15:02:05.988-5  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18`)
+	require.NoError(t, err)
+
+	line := `9/20/2026 15:02:14.039-5  SPELL_HEAL,Player-4620-00C80D47,"Healer-ClassicBetaPvE2-",0x518,0x80000000,Player-4620-00C80D47,"Healer-ClassicBetaPvE2-",0x518,0x80000000,2050,"Lesser Heal",0x2,Player-4620-00C80D47,0000000000000000,62,62,22,0,43,0,0,0,0,130,130,0,1696.47,1669.13,1420,5.8493,0,40,52,12,0,nil`
+	converted, err := r.transform(line)
+	require.NoError(t, err)
+	assert.Contains(t, converted, `2050,"Lesser Heal",0x2,52,12,0,nil`)
+}
+
 func TestTransformDamage(t *testing.T) {
 	t.Parallel()
 
@@ -161,7 +209,7 @@ func TestTransformAbsorbedVariants(t *testing.T) {
 	} {
 		converted, err := newTransformReader(strings.NewReader(line)).transform(line)
 		require.NoError(t, err)
-		assert.Contains(t, converted, "V9_SPELL_ABSORBED")
+		assert.Contains(t, converted, "BLIZZARD_SPELL_ABSORBED")
 		assert.Contains(t, converted, `25218,"Power Word: Shield",0x2`)
 	}
 }
@@ -178,6 +226,16 @@ func TestDominantEngagedRealm(t *testing.T) {
 		fmt.Sprintf(base, `ENCOUNTER_END,601,"Boss",4,25,1`),
 	}, "\n")
 	assert.Equal(t, "Nightslayer-US", DominantEngagedRealm([]byte(log)))
+}
+
+func TestDominantEngagedRealmV22TrailingRegionSeparator(t *testing.T) {
+	t.Parallel()
+
+	log := strings.Join([]string{
+		`9/20/2026 15:02:05.988-5  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,0,BUILD_VERSION,1.60.1,PROJECT_ID,18`,
+		`9/20/2026 15:02:08.135-5  SPELL_DAMAGE,Player-4618-00C7EC79,"Tester-ClassicBetaPvE-",0x518,0x80000000,Creature-0-6783-0-16021-1512-0000B03B52,"Duskbat",0xa28,0x80000000,686,"Shadow Bolt",0x20,15,-1,32,0,0,0,nil,nil,nil`,
+	}, "\n")
+	assert.Equal(t, "ClassicBetaPvE", DominantEngagedRealm([]byte(log)))
 }
 
 func TestParseCombatantMetadata(t *testing.T) {
@@ -203,7 +261,7 @@ func TestCombatantInfoLeavesUnknownLevelUnset(t *testing.T) {
 	fields[24] = "(8,0,53)"
 	fields[26] = "[]"
 	encoded := base64.RawStdEncoding.EncodeToString([]byte(strings.Join(fields, ",")))
-	ts, _, matched, err := wotlk.ParseLine(`9/8 12:00:00.000  V9_COMBATANT_INFO,0x000017B1037BA400,"Player-Nightslayer-US",` + encoded)
+	ts, _, matched, err := wotlk.ParseLine(`9/8 12:00:00.000  BLIZZARD_COMBATANT_INFO,0x000017B1037BA400,"Player-Nightslayer-US",` + encoded)
 	require.NoError(t, err)
 
 	parsed, err := (&Parser{}).combatantInfo(ts, matched, "")
@@ -298,7 +356,7 @@ func TestTransformEncounterBoundaries(t *testing.T) {
 	reader := newTransformReader(strings.NewReader(""))
 	start, err := reader.transform(`9/8/2026 12:00:00.000-6  ENCOUNTER_START,601,"Boss",4,25,564,5`)
 	require.NoError(t, err)
-	assert.Equal(t, `9/8 18:00:00.000  V9_ENCOUNTER_START,601,"Boss",4,25,564,5`, start)
+	assert.Equal(t, `9/8 18:00:00.000  BLIZZARD_ENCOUNTER_START,601,"Boss",4,25,564,5`, start)
 	ts, _, matched, err := wotlk.ParseLine(start)
 	require.NoError(t, err)
 	parsed, err := (&Parser{}).encounterStart(ts, matched, "")
@@ -310,5 +368,5 @@ func TestTransformEncounterBoundaries(t *testing.T) {
 
 	end, err := reader.transform(`9/8/2026 12:05:00.000-6  ENCOUNTER_END,601,"Boss",4,25,1`)
 	require.NoError(t, err)
-	assert.Equal(t, `9/8 18:05:00.000  V9_ENCOUNTER_END,601,"Boss",4,25,1`, end)
+	assert.Equal(t, `9/8 18:05:00.000  BLIZZARD_ENCOUNTER_END,601,"Boss",4,25,1`, end)
 }

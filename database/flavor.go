@@ -29,6 +29,8 @@ const (
 	FlavorTBC FlavorTag = "tbc"
 	// FlavorTBCAnniversary is Blizzard's official TBC Anniversary behavior.
 	FlavorTBCAnniversary FlavorTag = "tbc_anniversary"
+	// FlavorWoWForever is Blizzard's official WoW Forever behavior.
+	FlavorWoWForever FlavorTag = "wow-forever"
 	// FlavorWrath is 3.3.5a (WotLK)-era behavior (Warmane, Epoch, AzerothCore).
 	FlavorWrath FlavorTag = "wrath"
 	// FlavorTurtle is Turtle WoW-specific behavior.
@@ -65,6 +67,7 @@ func AllFlavorTagValues() []FlavorTag {
 		FlavorVanilla,
 		FlavorTBC,
 		FlavorTBCAnniversary,
+		FlavorWoWForever,
 		FlavorWrath,
 		FlavorTurtle,
 		FlavorKronos,
@@ -93,7 +96,7 @@ var serverFlavors = map[string]WoWFlavor{
 // ServerFlavor builds the default flavor tag set for a server build. base is
 // the era tag the build belongs to (FlavorVanilla for 1.12, FlavorWrath for
 // 3.3.5a); serverName is services.ServerName, whose value doubles as the
-// server-specific tag (e.g. "turtle", "epoch").
+// server-specific tag (e.g. "turtle", "epoch", "wow-forever").
 //
 // Servers with shared/custom content are listed explicitly in serverFlavors;
 // everything else falls back to the generic {base, serverTag}.

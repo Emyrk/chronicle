@@ -1,10 +1,13 @@
-package v9
+package modern
 
 import (
 	"fmt"
 	"hash/fnv"
+	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 const (
@@ -13,6 +16,14 @@ const (
 	legacyPetHigh      = uint64(0xF140)
 	legacyVehicleHigh  = uint64(0xF150)
 )
+
+// GUIDMapping links the canonical Blizzard GUID to Chronicle's legacy-compatible
+// 64-bit representation. Canonical is the identity authority; Compatibility is
+// retained for existing parser, storage, API, and frontend consumers.
+type GUIDMapping struct {
+	Canonical     string
+	Compatibility guid.GUID
+}
 
 // guidNormalizer converts Blizzard's modern string GUIDs into Chronicle's
 // legacy 64-bit GUID representation. Player GUIDs are lossless. World-object
@@ -30,6 +41,20 @@ func newGUIDNormalizer() *guidNormalizer {
 	}
 }
 
+func (n *guidNormalizer) mappings() []GUIDMapping {
+	result := make([]GUIDMapping, 0, len(n.rawToValue))
+	for canonical, compatibility := range n.rawToValue {
+		result = append(result, GUIDMapping{
+			Canonical:     canonical,
+			Compatibility: guid.GUID(compatibility),
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Canonical < result[j].Canonical
+	})
+	return result
+}
+
 func hash24(raw string) uint32 {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(raw))
@@ -43,6 +68,10 @@ func (n *guidNormalizer) normalize(raw string) (string, error) {
 	}
 	if strings.HasPrefix(raw, "0x") {
 		return raw, nil
+	}
+
+	if existing, ok := n.rawToValue[raw]; ok {
+		return fmt.Sprintf("0x%016X", existing), nil
 	}
 
 	parts := strings.Split(raw, "-")
@@ -61,6 +90,11 @@ func (n *guidNormalizer) normalize(raw string) (string, error) {
 			return "", fmt.Errorf("parse player id in %q: %w", raw, err)
 		}
 		value = server<<32 | id
+		if existing, occupied := n.valueToRaw[value]; occupied && existing != raw {
+			return "", fmt.Errorf("blizzard GUID %q conflicts with %q", raw, existing)
+		}
+		n.rawToValue[raw] = value
+		n.valueToRaw[value] = raw
 
 	case "Creature", "Pet", "Vehicle", "GameObject", "Corpse":
 		if len(parts) < 7 {
@@ -92,9 +126,6 @@ func (n *guidNormalizer) normalize(raw string) (string, error) {
 		// complete GUID and probe forward if another GUID already owns that slot.
 		// This distinguishes spawns whose modern IDs differ only above 24 bits
 		// without making parsing probabilistically fail on a hash collision.
-		if existing, ok := n.rawToValue[raw]; ok {
-			return fmt.Sprintf("0x%016X", existing), nil
-		}
 		prefix := high<<48 | entry<<24
 		start := hash24(raw)
 		for offset := uint32(0); offset < 1<<24; offset++ {
