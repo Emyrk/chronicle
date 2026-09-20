@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronUp, Plus, X, Monitor, Smartphone, PanelLeftClose, List } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, X, PanelLeftClose, List, Lock } from "lucide-react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import type { GuildPageTab, DeviceVisibility } from "@/api/typesGenerated";
+import { isRequiredGuildPageTab } from "../guildPageTabs";
 import { Button } from "@/components/ui/button";
 
 interface TabBarProps {
@@ -17,26 +18,6 @@ interface TabBarProps {
   onTabRename?: (tabId: string, label: string) => void;
   onTabVisibilityChange?: (tabId: string, visibility: DeviceVisibility) => void;
   onTabMove?: (tabId: string, direction: "up" | "down") => void;
-}
-
-// Visibility icon indicator
-function VisibilityIcon({ visibility }: { visibility: DeviceVisibility | undefined }) {
-  if (!visibility || visibility === "all") return null;
-  if (visibility === "desktop") {
-    return (
-      <span title="Desktop only" className="text-blue-400">
-        <Monitor className="h-3 w-3" />
-      </span>
-    );
-  }
-  if (visibility === "mobile") {
-    return (
-      <span title="Mobile only" className="text-green-400">
-        <Smartphone className="h-3 w-3" />
-      </span>
-    );
-  }
-  return null;
 }
 
 // Visibility dropdown for editing
@@ -101,6 +82,7 @@ function TabSidebar({
       <div className="space-y-1">
         {tabs.map((tab, index) => {
           const isActive = activeTab === tab.slug;
+          const isRequired = isEditing && isRequiredGuildPageTab(tab);
           return (
             <div
               key={tab.id}
@@ -108,10 +90,13 @@ function TabSidebar({
               tabIndex={0}
               className={cn(
                 "group w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-all duration-150 cursor-pointer",
-                isActive
-                  ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
-                  : "hover:bg-accent/50 hover:translate-x-0.5 text-muted-foreground"
+                isRequired
+                  ? "bg-muted/40 text-muted-foreground opacity-70"
+                  : isActive
+                    ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
+                    : "hover:bg-accent/50 hover:translate-x-0.5 text-muted-foreground"
               )}
+              title={isRequired ? "This page is required" : undefined}
               onClick={() => onTabChange(tab.slug)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -120,16 +105,16 @@ function TabSidebar({
                 }
               }}
             >
-              {isEditing ? (
+              {isRequired ? (
+                <Lock className="h-3.5 w-3.5 shrink-0" aria-label="This page is required" />
+              ) : isEditing ? (
                 <VisibilityDropdown
                   visibility={tab.visibility}
                   onChange={(v) => onTabVisibilityChange?.(tab.id, v)}
                 />
-              ) : (
-                <VisibilityIcon visibility={tab.visibility} />
-              )}
+              ) : null}
 
-              {isEditing ? (
+              {isEditing && !isRequired ? (
                 <input
                   type="text"
                   value={tab.label}
@@ -143,38 +128,40 @@ function TabSidebar({
                 <span className="truncate flex-1 font-medium">{tab.label}</span>
               )}
 
-              {isEditing && tabs.length > 1 && (
+              {isEditing && !isRequired && tabs.length > 1 && (
                 <div className="flex shrink-0 flex-col">
-                  <button
-                    type="button"
-                    disabled={index === 0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTabMove?.(tab.id, "up");
-                    }}
-                    className="rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-20"
-                    title={`Move ${tab.label} up`}
-                    aria-label={`Move ${tab.label} up`}
-                  >
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={index === tabs.length - 1}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTabMove?.(tab.id, "down");
-                    }}
-                    className="rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-20"
-                    title={`Move ${tab.label} down`}
-                    aria-label={`Move ${tab.label} down`}
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </button>
+                  {index > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTabMove?.(tab.id, "up");
+                      }}
+                      className="rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title={`Move ${tab.label} up`}
+                      aria-label={`Move ${tab.label} up`}
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {index < tabs.length - 1 && !isRequiredGuildPageTab(tabs[index + 1]) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTabMove?.(tab.id, "down");
+                      }}
+                      className="rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title={`Move ${tab.label} down`}
+                      aria-label={`Move ${tab.label} down`}
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               )}
 
-              {isEditing && tabs.length > 1 && (
+              {isEditing && !isRequired && tabs.length > 1 && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

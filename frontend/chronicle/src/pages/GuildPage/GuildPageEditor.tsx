@@ -9,7 +9,13 @@ import { ArrowLeft, Eye, Save, Monitor, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LayoutItem } from "react-grid-layout";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { moveGuildPageTab, orderGuildPageTabs, type TabMoveDirection } from "./guildPageTabs";
+import {
+  ensureRequiredRaidsTab,
+  isRequiredGuildPageTab,
+  moveGuildPageTab,
+  orderGuildPageTabs,
+  type TabMoveDirection,
+} from "./guildPageTabs";
 
 export function GuildPageEditor() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -26,9 +32,11 @@ export function GuildPageEditor() {
   const { data: pageConfig, isLoading } = useGuildPage(guildId);
   const saveGuildPage = useSaveGuildPage(guildId);
 
-  const displayTabs = tabs.length > 0 ? orderGuildPageTabs(tabs) : orderGuildPageTabs(pageConfig?.tabs || []);
+  const sourceTabs = tabs.length > 0 ? tabs : (pageConfig?.tabs || []);
+  const displayTabs = orderGuildPageTabs(ensureRequiredRaidsTab(sourceTabs, pageConfig?.id));
   const currentTab = displayTabs.find((tab) => tab.slug === activeTab) || displayTabs[0];
   const currentTabSlug = currentTab?.slug ?? "";
+  const currentTabIsRequired = currentTab ? isRequiredGuildPageTab(currentTab) : false;
 
   const handleLayoutChange = useCallback((layout: LayoutItem[]) => {
     setTabs((prevTabs) => {
@@ -298,9 +306,11 @@ export function GuildPageEditor() {
           <HeaderEditor theme={currentTheme} onChange={handleThemeChange} />
         </div>
 
-        <div className="mb-4">
-          <AddPanelDrawer onAddPanel={handleAddPanel} />
-        </div>
+        {!currentTabIsRequired && (
+          <div className="mb-4">
+            <AddPanelDrawer onAddPanel={handleAddPanel} />
+          </div>
+        )}
 
         {/* Sidebar + Content */}
         <div className="flex gap-6 relative">
@@ -338,7 +348,7 @@ export function GuildPageEditor() {
               <GuildPageCanvas
                 guild={pageConfig!.guild}
                 panels={[...currentTab.panels]}
-                isEditing={true}
+                isEditing={!currentTabIsRequired}
                 onLayoutChange={handleLayoutChange}
                 onPanelConfig={handlePanelConfig}
                 onPanelDelete={handlePanelDelete}
