@@ -1,4 +1,4 @@
-package v9
+package modern
 
 import (
 	"bufio"
@@ -80,7 +80,7 @@ func (r *transformReader) Read(p []byte) (int, error) {
 func (r *transformReader) transform(line string) (string, error) {
 	idx := strings.Index(line, "  ")
 	if idx < 0 {
-		return "", fmt.Errorf("v9 CLEU line has no separator: %q", truncate(line, 100))
+		return "", fmt.Errorf("modern Blizzard CLEU line has no separator: %q", truncate(line, 100))
 	}
 	prefix := line[:idx+2]
 	if !r.preserveTimestamp {
@@ -102,25 +102,25 @@ func (r *transformReader) transform(line string) (string, error) {
 		if err := r.configureCombatLogVersion(args); err != nil {
 			return "", err
 		}
-		return prefix + "V9_COMBAT_LOG_VERSION," + strings.Join(args, ","), nil
+		return prefix + "BLIZZARD_COMBAT_LOG_VERSION," + strings.Join(args, ","), nil
 	case "ZONE_CHANGE":
-		return prefix + "V9_ZONE_CHANGE," + strings.Join(args, ","), nil
+		return prefix + "BLIZZARD_ZONE_CHANGE," + strings.Join(args, ","), nil
 	case "COMBATANT_INFO":
 		if len(args) == 0 {
-			return "", fmt.Errorf("v9 COMBATANT_INFO missing player GUID")
+			return "", fmt.Errorf("blizzard COMBATANT_INFO missing player GUID")
 		}
 		player, err := r.guids.normalize(args[0])
 		if err != nil {
 			return "", err
 		}
 		encoded := base64.RawStdEncoding.EncodeToString([]byte(strings.Join(args, ",")))
-		return prefix + "V9_COMBATANT_INFO," + player + "," + strconv.Quote(r.names[args[0]]) + "," + encoded, nil
+		return prefix + "BLIZZARD_COMBATANT_INFO," + player + "," + strconv.Quote(r.names[args[0]]) + "," + encoded, nil
 	case "SPELL_ABSORBED":
 		return r.transformAbsorbed(prefix, args)
 	case "ENCOUNTER_START":
-		return prefix + "V9_ENCOUNTER_START," + strings.Join(args, ","), nil
+		return prefix + "BLIZZARD_ENCOUNTER_START," + strings.Join(args, ","), nil
 	case "ENCOUNTER_END":
-		return prefix + "V9_ENCOUNTER_END," + strings.Join(args, ","), nil
+		return prefix + "BLIZZARD_ENCOUNTER_END," + strings.Join(args, ","), nil
 	case "MAP_CHANGE", "EMOTE", "SWING_DAMAGE_LANDED":
 		return "", nil
 	}
@@ -153,7 +153,7 @@ func (r *transformReader) transform(line string) (string, error) {
 	var spell []string
 	if spellPrefix {
 		if len(body) < 3 {
-			return "", fmt.Errorf("v9 CLEU %s missing spell prefix", event)
+			return "", fmt.Errorf("modern Blizzard CLEU %s missing spell prefix", event)
 		}
 		spell = body[:3]
 		body = body[3:]
@@ -266,7 +266,7 @@ func (r *transformReader) transformAbsorbed(prefix string, args []string) (strin
 	absorbSpellName := args[index+5]
 	absorbSchool := args[index+6]
 	amount := args[index+7]
-	return prefix + "V9_SPELL_ABSORBED," + strings.Join([]string{
+	return prefix + "BLIZZARD_SPELL_ABSORBED," + strings.Join([]string{
 		attacker, target, damageSpellID, caster, absorbSpellID,
 		absorbSpellName, absorbSchool, amount,
 	}, ","), nil
@@ -330,17 +330,17 @@ func normalizeDamage(fields []string) []string {
 func parseTimestamp(raw string) (time.Time, error) {
 	offsetAt := strings.LastIndexAny(raw, "+-")
 	if offsetAt < 0 {
-		return time.Time{}, fmt.Errorf("v9 CLEU timestamp %q has no UTC offset", raw)
+		return time.Time{}, fmt.Errorf("modern Blizzard CLEU timestamp %q has no UTC offset", raw)
 	}
 	offsetHours, err := strconv.Atoi(raw[offsetAt:])
 	if err != nil {
-		return time.Time{}, fmt.Errorf("parse v9 CLEU UTC offset in %q: %w", raw, err)
+		return time.Time{}, fmt.Errorf("parse modern Blizzard CLEU UTC offset in %q: %w", raw, err)
 	}
 	wall, err := time.Parse("1/2/2006 15:04:05.000", raw[:offsetAt])
 	if err != nil {
-		return time.Time{}, fmt.Errorf("parse v9 CLEU timestamp %q: %w", raw, err)
+		return time.Time{}, fmt.Errorf("parse modern Blizzard CLEU timestamp %q: %w", raw, err)
 	}
-	location := time.FixedZone("v9-cleu", offsetHours*60*60)
+	location := time.FixedZone("modern Blizzard CLEU", offsetHours*60*60)
 	return time.Date(wall.Year(), wall.Month(), wall.Day(), wall.Hour(), wall.Minute(), wall.Second(), wall.Nanosecond(), location), nil
 }
 

@@ -1,4 +1,4 @@
-package v9
+package modern
 
 import (
 	"bufio"

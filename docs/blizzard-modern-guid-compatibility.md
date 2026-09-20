@@ -1,6 +1,6 @@
 # Blizzard modern GUID compatibility mapping
 
-Chronicle's Blizzard parser accepts modern string GUIDs from Blizzard combat logs, including `COMBAT_LOG_VERSION,22` logs, but much of Chronicle still consumes the legacy 64-bit `guid.GUID` type. The compatibility mapping is implemented by `guidNormalizer.normalize` in `combatlog/parser/blizzard/v9/guid.go` and is applied by `transformReader` in `combatlog/parser/blizzard/v9/transform.go`.
+Chronicle's Blizzard parser accepts modern string GUIDs from Blizzard combat logs, including `COMBAT_LOG_VERSION,22` logs, but much of Chronicle still consumes the legacy 64-bit `guid.GUID` type. The compatibility mapping is implemented by `guidNormalizer.normalize` in `combatlog/parser/blizzard/modern/guid.go` and is applied by `transformReader` in `combatlog/parser/blizzard/modern/transform.go`.
 
 The modern raw GUID is the canonical identity. The generated 64-bit value is a compatibility representation for existing parser and analysis code. In particular, a mapped world GUID must not be treated as a canonical cross-log identity. `Parser.GUIDMappings` exposes the observed canonical and compatibility values as a dictionary that can be persisted alongside parse results.
 
@@ -13,7 +13,7 @@ The modern raw GUID is the canonical identity. The generated 64-bit value is a c
 - Existing strings beginning with `0x`, which pass through unchanged after whitespace trimming.
 - Empty strings, `nil`, `0000000000000000`, and `0x0000000000000000`, which all normalize to `0x0000000000000000`.
 
-The accepted modern prefixes are also listed by `isModernGUID` in `combatlog/parser/blizzard/v9/transform.go`. Unsupported prefixes and malformed numeric fields return errors.
+The accepted modern prefixes are also listed by `isModernGUID` in `combatlog/parser/blizzard/modern/transform.go`. Unsupported prefixes and malformed numeric fields return errors.
 
 ## Legacy 64-bit layout
 
@@ -26,7 +26,7 @@ The compatibility type is `guid.GUID` in `combatlog/parser/guid/guid.go`. World 
 +----------------------------------+------------------------+------------------------+
 ```
 
-`combatlog/parser/blizzard/v9/guid.go` assigns these legacy high values:
+`combatlog/parser/blizzard/modern/guid.go` assigns these legacy high values:
 
 | Modern prefix | Legacy high value |
 | --- | --- |
@@ -52,7 +52,7 @@ Although this numeric form preserves all accepted player fields, Chronicle shoul
 
 ## World mapping
 
-Modern world GUIDs do not fit losslessly into the legacy 64-bit layout. `hash24` in `combatlog/parser/blizzard/v9/guid.go` computes FNV-1a over the complete trimmed raw GUID and keeps the low 24 bits. `guidNormalizer.normalize` uses that result as the initial identity:
+Modern world GUIDs do not fit losslessly into the legacy 64-bit layout. `hash24` in `combatlog/parser/blizzard/modern/guid.go` computes FNV-1a over the complete trimmed raw GUID and keeps the low 24 bits. `guidNormalizer.normalize` uses that result as the initial identity:
 
 ```text
 value = legacyHigh << 48 | entry << 24 | hash24(rawGUID)
@@ -60,7 +60,7 @@ value = legacyHigh << 48 | entry << 24 | hash24(rawGUID)
 
 The complete raw string participates in the hash, not only the final spawn field. This distinguishes GUIDs whose components differ outside the retained legacy fields.
 
-Examples covered by `TestGUIDNormalizer` in `combatlog/parser/blizzard/v9/v9_test.go` include:
+Examples covered by `TestGUIDNormalizer` in `combatlog/parser/blizzard/modern/modern_test.go` include:
 
 | Modern GUID | Compatibility GUID |
 | --- | --- |

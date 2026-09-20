@@ -1,4 +1,4 @@
-package v9
+package modern
 
 import (
 	"context"
@@ -209,7 +209,7 @@ func TestTransformAbsorbedVariants(t *testing.T) {
 	} {
 		converted, err := newTransformReader(strings.NewReader(line)).transform(line)
 		require.NoError(t, err)
-		assert.Contains(t, converted, "V9_SPELL_ABSORBED")
+		assert.Contains(t, converted, "BLIZZARD_SPELL_ABSORBED")
 		assert.Contains(t, converted, `25218,"Power Word: Shield",0x2`)
 	}
 }
@@ -261,7 +261,7 @@ func TestCombatantInfoLeavesUnknownLevelUnset(t *testing.T) {
 	fields[24] = "(8,0,53)"
 	fields[26] = "[]"
 	encoded := base64.RawStdEncoding.EncodeToString([]byte(strings.Join(fields, ",")))
-	ts, _, matched, err := wotlk.ParseLine(`9/8 12:00:00.000  V9_COMBATANT_INFO,0x000017B1037BA400,"Player-Nightslayer-US",` + encoded)
+	ts, _, matched, err := wotlk.ParseLine(`9/8 12:00:00.000  BLIZZARD_COMBATANT_INFO,0x000017B1037BA400,"Player-Nightslayer-US",` + encoded)
 	require.NoError(t, err)
 
 	parsed, err := (&Parser{}).combatantInfo(ts, matched, "")
@@ -356,7 +356,7 @@ func TestTransformEncounterBoundaries(t *testing.T) {
 	reader := newTransformReader(strings.NewReader(""))
 	start, err := reader.transform(`9/8/2026 12:00:00.000-6  ENCOUNTER_START,601,"Boss",4,25,564,5`)
 	require.NoError(t, err)
-	assert.Equal(t, `9/8 18:00:00.000  V9_ENCOUNTER_START,601,"Boss",4,25,564,5`, start)
+	assert.Equal(t, `9/8 18:00:00.000  BLIZZARD_ENCOUNTER_START,601,"Boss",4,25,564,5`, start)
 	ts, _, matched, err := wotlk.ParseLine(start)
 	require.NoError(t, err)
 	parsed, err := (&Parser{}).encounterStart(ts, matched, "")
@@ -368,5 +368,5 @@ func TestTransformEncounterBoundaries(t *testing.T) {
 
 	end, err := reader.transform(`9/8/2026 12:05:00.000-6  ENCOUNTER_END,601,"Boss",4,25,1`)
 	require.NoError(t, err)
-	assert.Equal(t, `9/8 18:05:00.000  V9_ENCOUNTER_END,601,"Boss",4,25,1`, end)
+	assert.Equal(t, `9/8 18:05:00.000  BLIZZARD_ENCOUNTER_END,601,"Boss",4,25,1`, end)
 }

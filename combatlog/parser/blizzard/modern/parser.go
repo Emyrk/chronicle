@@ -1,4 +1,4 @@
-package v9
+package modern
 
 import (
 	"bufio"
@@ -35,7 +35,7 @@ func readBaseYear(r io.Reader) (io.Reader, int, error) {
 		if trimmed != "" {
 			idx := strings.Index(trimmed, "  ")
 			if idx < 0 {
-				return nil, 0, fmt.Errorf("v9 CLEU first record has no separator")
+				return nil, 0, fmt.Errorf("modern Blizzard CLEU first record has no separator")
 			}
 			ts, parseErr := parseTimestamp(trimmed[:idx])
 			if parseErr != nil {
@@ -45,9 +45,9 @@ func readBaseYear(r io.Reader) (io.Reader, int, error) {
 		}
 		if err != nil {
 			if err == io.EOF {
-				return nil, 0, fmt.Errorf("v9 CLEU log is empty")
+				return nil, 0, fmt.Errorf("modern Blizzard CLEU log is empty")
 			}
-			return nil, 0, fmt.Errorf("read v9 CLEU header: %w", err)
+			return nil, 0, fmt.Errorf("read modern Blizzard CLEU header: %w", err)
 		}
 	}
 }
@@ -99,12 +99,12 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 		DetectZone:        false,
 	})
 	p := &Parser{inner: inner, wowDB: wowDB}
-	inner.WithEventHook("V9_COMBAT_LOG_VERSION", p.combatLogVersion)
-	inner.WithEventHook("V9_ZONE_CHANGE", p.zoneChange)
-	inner.WithEventHook("V9_COMBATANT_INFO", p.combatantInfo)
-	inner.WithEventHook("V9_SPELL_ABSORBED", p.spellAbsorbed)
-	inner.WithEventHook("V9_ENCOUNTER_START", p.encounterStart)
-	inner.WithEventHook("V9_ENCOUNTER_END", p.encounterEnd)
+	inner.WithEventHook("BLIZZARD_COMBAT_LOG_VERSION", p.combatLogVersion)
+	inner.WithEventHook("BLIZZARD_ZONE_CHANGE", p.zoneChange)
+	inner.WithEventHook("BLIZZARD_COMBATANT_INFO", p.combatantInfo)
+	inner.WithEventHook("BLIZZARD_SPELL_ABSORBED", p.spellAbsorbed)
+	inner.WithEventHook("BLIZZARD_ENCOUNTER_START", p.encounterStart)
+	inner.WithEventHook("BLIZZARD_ENCOUNTER_END", p.encounterEnd)
 	return p, nil
 }
 
@@ -259,11 +259,11 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 	}
 	raw, err := base64.RawStdEncoding.DecodeString(encoded)
 	if err != nil {
-		return nil, fmt.Errorf("decode v9 COMBATANT_INFO: %w", err)
+		return nil, fmt.Errorf("decode Blizzard COMBATANT_INFO: %w", err)
 	}
 	fields := splitTopLevel(string(raw))
 	if len(fields) < 27 {
-		return nil, fmt.Errorf("v9 COMBATANT_INFO has %d fields, need at least 27", len(fields))
+		return nil, fmt.Errorf("blizzard COMBATANT_INFO has %d fields, need at least 27", len(fields))
 	}
 
 	talents, err := parseTalentSummary(fields[24])

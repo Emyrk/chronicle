@@ -34,6 +34,7 @@ func TestAllFlavorTagValuesIncludesKnownTags(t *testing.T) {
 	for _, tag := range []database.FlavorTag{
 		database.FlavorTBC,
 		database.FlavorTBCAnniversary,
+		database.FlavorWoWForever,
 		database.FlavorChromieCraft,
 		database.FlavorAzerothcoreProgression,
 		database.FlavorLunatic,
@@ -110,6 +111,7 @@ func TestServerFlavor(t *testing.T) {
 		{"turtle", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorNightmareOfUrsol, database.FlavorTurtle}},
 		{"kronos", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorKronos}},
 		{"vanillaplus", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorVanillaPlus}},
+		{"wow-forever", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorWoWForever}},
 		{"octowow", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorNightmareOfUrsol, database.FlavorOctoWoW}},
 		{"epoch", database.FlavorWrath, []database.FlavorTag{database.FlavorWrath, database.FlavorEpoch}},
 		{"azerothcore", database.FlavorWrath, []database.FlavorTag{database.FlavorWrath, database.FlavorAzerothcore}},
