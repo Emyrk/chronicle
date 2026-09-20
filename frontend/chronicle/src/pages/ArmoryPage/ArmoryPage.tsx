@@ -251,7 +251,12 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
         {/* Tab content: overview, gear, and talents stay in center column. */}
         {activeTab === "overview" && (
           <div className="mt-6">
-            <OverviewTab player={player} onOpenTab={openTab} metric={metric} />
+            <OverviewTab
+              player={player}
+              onOpenTab={openTab}
+              metric={metric}
+              onMetricChange={setMetric}
+            />
           </div>
         )}
         {activeTab === "gear" && (
