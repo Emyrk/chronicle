@@ -118,6 +118,7 @@ func unquote(s string) string {
 	}
 	return s
 }
+
 // splitCSVFields splits a comma-separated string, treating commas inside
 // double-quoted segments as literal characters rather than delimiters.
 // This handles AzerothCore spell descriptions like:
@@ -196,7 +197,13 @@ func (m *Matched) NilString() *string {
 
 // Guid parses the next field as a 64-bit WoW GUID ("0xABCD...").
 func (m *Matched) Guid() guid.GUID {
-	return parseMatch(m, guid.FromString)
+	return parseMatch(m, func(s string) (guid.GUID, error) {
+		id, err := guid.FromString(s)
+		if err != nil {
+			return 0, err
+		}
+		return syntheticGUID(id), nil
+	})
 }
 
 // OptionalGuid returns nil for "0x0000000000000000", "nil", or empty fields.
@@ -212,6 +219,7 @@ func (m *Matched) OptionalGuid() *guid.GUID {
 		if id == 0 {
 			return nil, nil
 		}
+		id = syntheticGUID(id)
 		return &id, nil
 	})
 }

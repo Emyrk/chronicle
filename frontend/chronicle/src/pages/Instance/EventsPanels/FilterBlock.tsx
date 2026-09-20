@@ -65,6 +65,7 @@ const SOURCE_TYPE_TYPE_OPTIONS = [
   { label: "Pet", value: "pet" },
   { label: "Enemy Pet", value: "enemy_pet" },
   { label: "Enemy", value: "enemy" },
+  { label: "Vehicle", value: "vehicle" },
   { label: "Object", value: "object" },
   { label: "None", value: "none" },
 ] as const;

@@ -268,6 +268,7 @@ describe("evaluateFilters", () => {
     const ENEMY_PET_GUID = "0x0040000000000020";    // also a pet GUID
     const ENEMY_BOSS_GUID = "0xF130000000000001";   // high & 0x00f0 = 0x0030 = creature
     const ENEMY_OWNER_GUID = "0xF130000000000099";  // creature (non-player owner)
+    const VEHICLE_GUID = "0xF1500081420007AD";      // Pool of Tar (entry 33090), normalized by the WotLK parser
 
     function ctxWithUnits(): ProcessorContext {
       return createContext({
@@ -313,6 +314,18 @@ describe("evaluateFilters", () => {
       const filters: PanelFilter[] = [{ type: "source_type", value: "enemy" }];
       expect(evaluateFilters(filters, createDamageEvent({ caster: FRIENDLY_PET_GUID }), ctxWithUnits())).toBe(false);
       expect(evaluateFilters(filters, createDamageEvent({ caster: ENEMY_PET_GUID }), ctxWithUnits())).toBe(false);
+    });
+
+    it("vehicle matches vehicle sources", () => {
+      const filters: PanelFilter[] = [{ type: "source_type", value: "vehicle" }];
+      expect(evaluateFilters(filters, createDamageEvent({ caster: VEHICLE_GUID }), ctxWithUnits())).toBe(true);
+      expect(evaluateFilters(filters, createDamageEvent({ caster: ENEMY_BOSS_GUID }), ctxWithUnits())).toBe(false);
+    });
+
+    it("negated vehicle filters out vehicle damage", () => {
+      const filters: PanelFilter[] = [{ type: "source_type", value: "vehicle", negate: true }];
+      expect(evaluateFilters(filters, createDamageEvent({ caster: VEHICLE_GUID }), ctxWithUnits())).toBe(false);
+      expect(evaluateFilters(filters, createDamageEvent({ caster: ENEMY_BOSS_GUID }), ctxWithUnits())).toBe(true);
     });
 
     it("player,pet matches both players and friendly pets", () => {

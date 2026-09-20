@@ -119,6 +119,19 @@ func TestGUID(t *testing.T) {
 	}
 }
 
+func TestAsVehicle(t *testing.T) {
+	t.Parallel()
+
+	poolOfTar := guid.GUID(0xF1300081420007AD)
+	vehicle := poolOfTar.AsVehicle()
+
+	require.Equal(t, "0xF1500081420007AD", vehicle.String())
+	require.True(t, vehicle.IsVehicle())
+	entry, ok := vehicle.GetEntry()
+	require.True(t, ok)
+	require.Equal(t, uint32(33090), entry)
+}
+
 func TestGUIDJSON(t *testing.T) {
 	t.Parallel()
 

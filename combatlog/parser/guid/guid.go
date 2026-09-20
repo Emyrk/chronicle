@@ -104,6 +104,11 @@ func (g GUID) IsVehicle() bool {
 	return g.GetHigh()&0x00F0 == 0x0050
 }
 
+func (g GUID) AsVehicle() GUID {
+	// Clear type bits (0x00F0 at position 48) and set vehicle type (0x0050).
+	return GUID((uint64(g) &^ 0x00F0000000000000) | 0x0050000000000000)
+}
+
 // IsAnyCreature returns true if the GUID represents any type of creature (creature, pet, or vehicle)
 func (g GUID) IsAnyCreature() bool {
 	return g.IsCreature() || g.IsPet() || g.IsVehicle()
