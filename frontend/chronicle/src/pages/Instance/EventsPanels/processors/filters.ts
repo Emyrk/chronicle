@@ -64,10 +64,7 @@ function getEventAbilityId(event: ProcessorEvent): number | null {
 }
 
 function getEventSchools(event: ProcessorEvent): number[] | null {
-  if ("schools" in event && Array.isArray(event.schools) && event.schools.length > 0) {
-    return event.schools;
-  }
-  if ("school" in event && typeof event.school === "number") return [event.school];
+  if ("schools" in event && Array.isArray(event.schools)) return event.schools;
   return null;
 }
 

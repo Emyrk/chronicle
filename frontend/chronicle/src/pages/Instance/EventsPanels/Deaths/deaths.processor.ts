@@ -254,7 +254,7 @@ export function createDeathsProcessor(): PanelProcessor<DeathsResult, ProcessorE
           targetID: dmg.target,
           targetClass: resolveCasterClass(dmg.target, context, guidCache),
           amount: dmg.amount,
-          school: dmg.school,
+          school: dmg.schools[0],
           hitType: dmg.hitType,
           spellId: dmg.spellId,
           type: "damage",
@@ -281,7 +281,7 @@ export function createDeathsProcessor(): PanelProcessor<DeathsResult, ProcessorE
           targetID: heal.target,
           targetClass: resolveCasterClass(heal.target, context, guidCache),
           amount: heal.amount,
-          school: heal.school,
+          school: heal.schools[0],
           hitType: heal.hitType,
           spellId: heal.spellId,
           type: "heal",
@@ -305,7 +305,7 @@ export function createDeathsProcessor(): PanelProcessor<DeathsResult, ProcessorE
           targetID: abs.target,
           targetClass: resolveCasterClass(abs.target, context, guidCache),
           amount: abs.amount,
-          school: abs.absorbSchool,
+          school: abs.absorbSchools[0],
           hitType: 0,
           spellId: abs.damageSpellId,
           type: "absorbed",
@@ -449,7 +449,7 @@ export function createDeathsProcessor(): PanelProcessor<DeathsResult, ProcessorE
         attribution = {
           sourceName: slain.attribution.sourceName,
           amount: slain.attribution.amount,
-          school: slain.attribution.school,
+          school: slain.attribution.schools[0],
           hitType: slain.attribution.hitType,
         };
       }

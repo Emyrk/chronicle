@@ -256,8 +256,7 @@ export function createDamageDoneProcessor(
       let schoolMatchesSelectedVulnerability = true;
 
       if (selectedVulnerability) {
-        const schools = event.schools?.length ? event.schools : [event.school];
-        const schoolBitmask = schools.reduce(
+        const schoolBitmask = event.schools.reduce(
           (mask, school) => mask | normalizeDamageSchoolToBitmask(school),
           0,
         );

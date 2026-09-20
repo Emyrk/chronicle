@@ -139,7 +139,7 @@ export const interruptProcessor: PanelProcessor<InterruptResult, InterruptProces
       targetClass,
       spellName,
       extraSpellId: event.extraSpellId,
-      extraSchool: event.extraSchool,
+      extraSchool: event.extraSchools[0],
     });
   },
 };

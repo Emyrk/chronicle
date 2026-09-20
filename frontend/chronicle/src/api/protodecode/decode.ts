@@ -247,7 +247,6 @@ export interface ReusableDamage {
   target: string;
   hitType: number;
   amount: number;
-  school: number;
   schools: number[];
   tailers: ReusableTailer[];
   tailerCount: number;  // Actual number of tailers (tailers array may have extra capacity)
@@ -277,7 +276,6 @@ export class DamageDecoder {
     target: "",
     hitType: 0,
     amount: 0,
-    school: 0,
     schools: [],
     tailers: [],
     tailerCount: 0,
@@ -296,6 +294,7 @@ export class DamageDecoder {
   decode(data: Uint8Array, offset: number, length: number): ReusableDamage {
     const end = offset + length;
     const msg = this.message;
+    let legacySchool = 0;
     
     // Reset fields
     msg.index = 0;
@@ -305,7 +304,6 @@ export class DamageDecoder {
     msg.target = "";
     msg.hitType = 0;
     msg.amount = 0;
-    msg.school = 0;
     msg.schools.length = 0;
     msg.tailerCount = 0;
     msg.activityCount = 0;
@@ -326,7 +324,7 @@ export class DamageDecoder {
         
         if (fieldNumber === 6) msg.hitType = value;
         else if (fieldNumber === 7) msg.amount = value;
-        else if (fieldNumber === 8) msg.school = value;
+        else if (fieldNumber === 8) legacySchool = value;
         else if (fieldNumber === 11) msg.overkill = value;
         else if (fieldNumber === 12) msg.schools.push(value);
       } else if (wireType === 2) {
@@ -439,7 +437,7 @@ export class DamageDecoder {
       }
     }
 
-    if (msg.schools.length === 0) msg.schools.push(msg.school);
+    if (msg.schools.length === 0) msg.schools.push(legacySchool);
     return msg;
   }
 }
@@ -456,7 +454,6 @@ export interface ReusableHeal {
   target: string;
   hitType: number;
   amount: number;
-  school: number;
   schools: number[];
   activity: ReusableActivityEntry[];
   activityCount: number;
@@ -494,7 +491,6 @@ export class HealDecoder {
     target: "",
     hitType: 0,
     amount: 0,
-    school: 0,
     schools: [],
     overheal: 0,
     absorbed: 0,
@@ -512,6 +508,7 @@ export class HealDecoder {
   decode(data: Uint8Array, offset: number, length: number): ReusableHeal {
     const end = offset + length;
     const msg = this.message;
+    let legacySchool = 0;
     
     // Reset fields
     msg.index = 0;
@@ -521,7 +518,6 @@ export class HealDecoder {
     msg.target = "";
     msg.hitType = 0;
     msg.amount = 0;
-    msg.school = 0;
     msg.schools.length = 0;
     msg.activityCount = 0;
     msg.isSynthetic = false;
@@ -542,7 +538,7 @@ export class HealDecoder {
         
         if (fieldNumber === 6) msg.amount = value;
         else if (fieldNumber === 7) msg.hitType = value;
-        else if (fieldNumber === 9) msg.school = value;
+        else if (fieldNumber === 9) legacySchool = value;
         else if (fieldNumber === 10) msg.overheal = value;
         else if (fieldNumber === 11) msg.absorbed = value;
         else if (fieldNumber === 12) msg.schools.push(value);
@@ -631,7 +627,7 @@ export class HealDecoder {
       }
     }
 
-    if (msg.schools.length === 0) msg.schools.push(msg.school);
+    if (msg.schools.length === 0) msg.schools.push(legacySchool);
     return msg;
   }
 }
@@ -1368,7 +1364,6 @@ export interface ReusableAttributionDamage {
   sourceName: string;
   hitType: number;
   amount: number;
-  school: number;
   schools: number[];
   spellId: number | null;
   spellAttackOutcome: number | null;
@@ -1417,7 +1412,6 @@ export class SlainDecoder {
     sourceName: "",
     hitType: 0,
     amount: 0,
-    school: 0,
     schools: [],
     spellId: null,
     spellAttackOutcome: null,
@@ -1519,8 +1513,8 @@ export class SlainDecoder {
           attr.sourceName = "";
           attr.hitType = 0;
           attr.amount = 0;
-          attr.school = 0;
           attr.schools.length = 0;
+          let legacySchool = 0;
           attr.spellId = null;
           attr.spellAttackOutcome = null;
           
@@ -1536,7 +1530,7 @@ export class SlainDecoder {
               offset += bytesRead;
               if (attrField === 6) attr.hitType = value;
               else if (attrField === 7) attr.amount = value;
-              else if (attrField === 8) attr.school = value;
+              else if (attrField === 8) legacySchool = value;
               else if (attrField === 12) attr.schools.push(value);
             } else if (attrWire === 2) {
               // Length-delimited fields
@@ -1572,7 +1566,7 @@ export class SlainDecoder {
               }
             }
           }
-          if (attr.schools.length === 0) attr.schools.push(attr.school);
+          if (attr.schools.length === 0) attr.schools.push(legacySchool);
           msg.attribution = attr;
         } else {
           offset += len;
@@ -4459,7 +4453,6 @@ export interface ReusableInterrupt {
   target: string;
   spellName: string;
   extraSpellId: number;
-  extraSchool: InterruptSchool;
   extraSchools: InterruptSchool[];
   activity: ReusableActivityEntry[];
   activityCount: number;
@@ -4489,7 +4482,6 @@ export class InterruptDecoder {
     target: "",
     spellName: "",
     extraSpellId: 0,
-    extraSchool: InterruptSchool.Unknown,
     extraSchools: [],
     activity: [],
     activityCount: 0,
@@ -4499,6 +4491,7 @@ export class InterruptDecoder {
   decode(data: Uint8Array, offset: number, length: number): ReusableInterrupt {
     const end = offset + length;
     const msg = this.message;
+    let legacySchool: InterruptSchool = InterruptSchool.Unknown;
 
     // Reset fields
     msg.index = 0;
@@ -4507,7 +4500,6 @@ export class InterruptDecoder {
     msg.target = "";
     msg.spellName = "";
     msg.extraSpellId = 0;
-    msg.extraSchool = InterruptSchool.Unknown;
     msg.extraSchools.length = 0;
     msg.activityCount = 0;
     msg.isSynthetic = false;
@@ -4585,12 +4577,12 @@ export class InterruptDecoder {
         const { value, bytesRead } = readVarintFast(data, offset);
         offset += bytesRead;
         if (fieldNumber === 5) msg.extraSpellId = value;
-        else if (fieldNumber === 6) msg.extraSchool = value as InterruptSchool;
+        else if (fieldNumber === 6) legacySchool = value as InterruptSchool;
         else if (fieldNumber === 7) msg.extraSchools.push(value as InterruptSchool);
       }
     }
 
-    if (msg.extraSchools.length === 0) msg.extraSchools.push(msg.extraSchool);
+    if (msg.extraSchools.length === 0) msg.extraSchools.push(legacySchool);
     return msg;
   }
 }
@@ -4722,7 +4714,6 @@ export interface ReusableAbsorbed {
   caster: string;
   absorbSpellId: number | null;
   absorbSpellName: string | null;
-  absorbSchool: number;
   absorbSchools: number[];
   amount: number;
   /** True when absorb attribution was synthetically inferred (e.g. vanilla logs). */
@@ -4761,7 +4752,6 @@ export class AbsorbedDecoder {
     caster: "",
     absorbSpellId: null,
     absorbSpellName: null,
-    absorbSchool: 0,
     absorbSchools: [],
     amount: 0,
     estimated: false,
@@ -4773,6 +4763,7 @@ export class AbsorbedDecoder {
   decode(data: Uint8Array, offset: number, length: number): ReusableAbsorbed {
     const end = offset + length;
     const msg = this.message;
+    let legacySchool = 0;
 
     // Reset fields
     msg.index = 0;
@@ -4784,7 +4775,6 @@ export class AbsorbedDecoder {
     msg.caster = "";
     msg.absorbSpellId = null;
     msg.absorbSpellName = null;
-    msg.absorbSchool = 0;
     msg.absorbSchools.length = 0;
     msg.amount = 0;
     msg.estimated = false;
@@ -4904,14 +4894,14 @@ export class AbsorbedDecoder {
         // Varint
         const { value, bytesRead } = readVarintFast(data, offset);
         offset += bytesRead;
-        if (fieldNumber === 7) msg.absorbSchool = value;
+        if (fieldNumber === 7) legacySchool = value;
         else if (fieldNumber === 8) msg.amount = value;
         else if (fieldNumber === 9) msg.estimated = value !== 0;
         else if (fieldNumber === 10) msg.absorbSchools.push(value);
       }
     }
 
-    if (msg.absorbSchools.length === 0) msg.absorbSchools.push(msg.absorbSchool);
+    if (msg.absorbSchools.length === 0) msg.absorbSchools.push(legacySchool);
     return msg;
   }
 }

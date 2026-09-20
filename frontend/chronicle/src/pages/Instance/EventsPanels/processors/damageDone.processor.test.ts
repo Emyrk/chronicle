@@ -53,7 +53,7 @@ describe('damageDoneProcessor', () => {
       target: '0xF130000CE0000001', // enemy by default
       hitType: 0,
       amount: 1000,
-      school: 1, // physical
+      schools: [1], // physical
       tailers: [],
       tailerCount: 0,
       activity: [],
@@ -324,7 +324,7 @@ describe('vulnerabilityEffectProcessor', () => {
       target: '0xF130000CE0000001',
       hitType: 0,
       amount: 1100,
-      school: 4,
+      schools: [4],
       tailers: [],
       tailerCount: 0,
       activity: [],
@@ -372,7 +372,7 @@ describe('vulnerabilityEffectProcessor', () => {
     const context = createContext();
 
     processor.processEvent(state, createSpellVulnerabilityAuraEvent(), 'enc1', new Date(), 'aura', context);
-    processor.processEvent(state, createDamageEvent({ amount: 1100, school: 4 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1100, schools: [4] }), 'enc1', new Date(), 'damage', context);
 
     const percentAffect = VulnerabilitySpells[spellVulnerabilityId].percentAffect!;
     const expectedBase = 1100 / (1 + percentAffect / 100);
@@ -391,7 +391,7 @@ describe('vulnerabilityEffectProcessor', () => {
 
     processor.processEvent(state, createVulnerabilityAuraEvent(curseOfElementsRank1Id), 'enc1', new Date(), 'aura', context);
     // Fire school in chronicleproto.School enum = 4.
-    processor.processEvent(state, createDamageEvent({ amount: 1060, school: 4 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1060, schools: [4] }), 'enc1', new Date(), 'damage', context);
 
     const percentAffect = VulnerabilitySpells[curseOfElementsRank1Id].percentAffect!;
     const expectedBase = 1060 / (1 + percentAffect / 100);
@@ -409,7 +409,7 @@ describe('vulnerabilityEffectProcessor', () => {
     const context = createContext({ panelOption: curseOfElementsRank3Id.toString() });
 
     processor.processEvent(state, createVulnerabilityAuraEvent(curseOfElementsRank3Id), 'enc1', new Date(), 'aura', context);
-    processor.processEvent(state, createDamageEvent({ amount: 1100, school: 4 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1100, schools: [4] }), 'enc1', new Date(), 'damage', context);
 
     const percentAffect = VulnerabilitySpells[curseOfElementsRank3Id].percentAffect!;
     const expectedBase = 1100 / (1 + percentAffect / 100);
@@ -429,7 +429,7 @@ describe('vulnerabilityEffectProcessor', () => {
     const context = createContext({ panelOption: curseOfElementsRank3Id.toString() });
 
     processor.processEvent(state, createVulnerabilityAuraEvent(curseOfElementsRank3Id), 'enc1', new Date(), 'aura', context);
-    processor.processEvent(state, createDamageEvent({ amount: 1000, school: 8, sourceName: 'Arcane Missiles' }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1000, schools: [8], sourceName: 'Arcane Missiles' }), 'enc1', new Date(), 'damage', context);
 
     const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
     const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
@@ -449,7 +449,7 @@ describe('vulnerabilityEffectProcessor', () => {
     const context = createContext({ panelContext: { selectedVulnerability } });
 
     processor.processEvent(state, createVulnerabilityAuraEvent(curseOfElementsRank3Id), 'enc1', new Date(), 'aura', context);
-    processor.processEvent(state, createDamageEvent({ amount: 1100, school: 8, sourceName: 'Arcane Missiles' }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1100, schools: [8], sourceName: 'Arcane Missiles' }), 'enc1', new Date(), 'damage', context);
 
     const expectedBase = 1100 / (1 + 10 / 100);
     const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
@@ -465,7 +465,7 @@ describe('vulnerabilityEffectProcessor', () => {
 
     processor.processEvent(state, createVulnerabilityAuraEvent(curseOfShadowRank1Id), 'enc1', new Date(), 'aura', context);
     // Shadow school in chronicleproto.School enum = 7.
-    processor.processEvent(state, createDamageEvent({ amount: 1080, school: 7 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1080, schools: [7] }), 'enc1', new Date(), 'damage', context);
 
     const percentAffect = VulnerabilitySpells[curseOfShadowRank1Id].percentAffect!;
     const expectedBase = 1080 / (1 + percentAffect / 100);
@@ -483,7 +483,7 @@ describe('vulnerabilityEffectProcessor', () => {
     const context = createContext({ panelOption: curseOfShadowRank2Id.toString() });
 
     processor.processEvent(state, createVulnerabilityAuraEvent(curseOfShadowRank2Id), 'enc1', new Date(), 'aura', context);
-    processor.processEvent(state, createDamageEvent({ amount: 1100, school: 7 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1100, schools: [7] }), 'enc1', new Date(), 'damage', context);
 
     const percentAffect = VulnerabilitySpells[curseOfShadowRank2Id].percentAffect!;
     const expectedBase = 1100 / (1 + percentAffect / 100);
@@ -500,7 +500,7 @@ describe('vulnerabilityEffectProcessor', () => {
     const context = createContext({ panelOption: giftOfArthasId.toString() });
 
     processor.processEvent(state, createVulnerabilityAuraEvent(giftOfArthasId), 'enc1', new Date(), 'aura', context);
-    processor.processEvent(state, createDamageEvent({ amount: 1000, school: 2 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1000, schools: [2] }), 'enc1', new Date(), 'damage', context);
 
     const flatAffect = VulnerabilitySpells[giftOfArthasId].flatAffect!;
     const expectedBase = 1000 - flatAffect;
@@ -518,7 +518,7 @@ describe('vulnerabilityEffectProcessor', () => {
     const context = createContext({ panelOption: giftOfArthasId.toString() });
 
     processor.processEvent(state, createVulnerabilityAuraEvent(giftOfArthasId), 'enc1', new Date(), 'aura', context);
-    processor.processEvent(state, createDamageEvent({ amount: 1000, school: 4 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1000, schools: [4] }), 'enc1', new Date(), 'damage', context);
 
     const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
     const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
@@ -532,7 +532,7 @@ describe('vulnerabilityEffectProcessor', () => {
     const context = createContext({ panelOption: giftOfArthasId.toString() });
 
     processor.processEvent(state, createVulnerabilityAuraEvent(giftOfArthasId), 'enc1', new Date(), 'aura', context);
-    processor.processEvent(state, createDamageEvent({ amount: 100, school: 2, hitType: 0x00200000 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 100, schools: [2], hitType: 0x00200000 }), 'enc1', new Date(), 'damage', context);
 
     const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
     const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
@@ -547,7 +547,7 @@ describe('vulnerabilityEffectProcessor', () => {
     const context = createContext({ panelOption: null });
 
     processor.processEvent(state, createSpellVulnerabilityAuraEvent(), 'enc1', new Date(), 'aura', context);
-    processor.processEvent(state, createDamageEvent({ amount: 900, school: 4 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 900, schools: [4] }), 'enc1', new Date(), 'damage', context);
 
     const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
     const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
@@ -563,7 +563,7 @@ describe('vulnerabilityEffectProcessor', () => {
 
     processor.processEvent(state, createSpellVulnerabilityAuraEvent(), 'enc1', new Date(), 'aura', context);
     // Damage stream school is chronicleproto.School enum; Physical = 2.
-    processor.processEvent(state, createDamageEvent({ amount: 1000, school: 2 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1000, schools: [2] }), 'enc1', new Date(), 'damage', context);
 
     const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
     const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
@@ -582,7 +582,7 @@ describe('vulnerabilityEffectProcessor', () => {
 
     processor.processEvent(state, createSpellVulnerabilityAuraEvent(), 'enc1', new Date(), 'aura', context);
     // Physical school does not match Spell Vulnerability's school bitmask.
-    processor.processEvent(state, createDamageEvent({ amount: 1000, school: 2 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1000, schools: [2] }), 'enc1', new Date(), 'damage', context);
 
     const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
     const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
@@ -601,7 +601,7 @@ describe('vulnerabilityEffectProcessor', () => {
 
     processor.processEvent(state, createSpellVulnerabilityAuraEvent(), 'enc1', new Date(), 'aura', context);
     // Fire school matches Spell Vulnerability's school bitmask.
-    processor.processEvent(state, createDamageEvent({ amount: 1100, school: 4 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1100, schools: [4] }), 'enc1', new Date(), 'damage', context);
 
     const percentAffect = VulnerabilitySpells[spellVulnerabilityId].percentAffect!;
     const expectedBase = 1100 / (1 + percentAffect / 100);
@@ -625,7 +625,7 @@ describe('vulnerabilityEffectProcessor', () => {
 
     processor.processEvent(state, createVulnerabilityAuraEvent(giftOfArthasId), 'enc1', new Date(), 'aura', context);
     // Physical DoT tick — school matches but flat bonus doesn't apply to DoTs
-    processor.processEvent(state, createDamageEvent({ amount: 100, school: 2, hitType: 0x00200000 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 100, schools: [2], hitType: 0x00200000 }), 'enc1', new Date(), 'damage', context);
 
     const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
     const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
@@ -639,7 +639,7 @@ describe('vulnerabilityEffectProcessor', () => {
     const state = processor.createState();
     const context = createContext();
 
-    processor.processEvent(state, createDamageEvent({ amount: 1000, school: 4 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1000, schools: [4] }), 'enc1', new Date(), 'damage', context);
 
     const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
     const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
@@ -681,7 +681,7 @@ describe('enemyDamageDoneProcessor', () => {
       target: '0x0000000000001234', // player
       hitType: 0,
       amount: 2000,
-      school: 1,
+      schools: [1],
       tailers: [],
       tailerCount: 0,
       activity: [],
@@ -720,7 +720,7 @@ describe('enemyDamageDoneProcessor', () => {
       target: '0x0000000000001234',
       hitType: 0,
       amount: 1200,
-      school: 1,
+      schools: [1],
       tailers: [],
       tailerCount: 0,
       activity: [],
@@ -740,7 +740,7 @@ describe('enemyDamageDoneProcessor', () => {
       target: '0x0000000000001234',
       hitType: 0,
       amount: 800,
-      school: 1,
+      schools: [1],
       tailers: [],
       tailerCount: 0,
       activity: [],
@@ -776,7 +776,7 @@ describe('enemyDamageDoneProcessor', () => {
       target: '0x0000000000001234',
       hitType: 0,
       amount: 1200,
-      school: 1,
+      schools: [1],
       tailers: [],
       tailerCount: 0,
       activity: [],
@@ -796,7 +796,7 @@ describe('enemyDamageDoneProcessor', () => {
       target: '0x0000000000001234',
       hitType: 0,
       amount: 800,
-      school: 1,
+      schools: [1],
       tailers: [],
       tailerCount: 0,
       activity: [],
@@ -831,7 +831,7 @@ describe('enemyDamageDoneProcessor', () => {
       target: '0x0000000000001234',
       hitType: 0,
       amount: 700,
-      school: 1,
+      schools: [1],
       tailers: [],
       tailerCount: 0,
       activity: [],
@@ -859,7 +859,7 @@ describe('enemyDamageDoneProcessor', () => {
       target: '0xF130000CE0000001', // enemy
       hitType: 0,
       amount: 1000,
-      school: 1,
+      schools: [1],
       tailers: [],
       tailerCount: 0,
       activity: [],
@@ -908,7 +908,7 @@ describe('petDamageDoneProcessor', () => {
       target: '0xF130000CE0000001',
       hitType: 0,
       amount: 500,
-      school: 1,
+      schools: [1],
       tailers: [],
       tailerCount: 0,
       activity: [],
@@ -1094,7 +1094,7 @@ describe('petDamageDoneProcessor', () => {
       target: '0xF130000CE0000001',
       hitType: 0,
       amount: 1000,
-      school: 1,
+      schools: [1],
       tailers: [],
       tailerCount: 0,
       activity: [],

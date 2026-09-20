@@ -31,7 +31,7 @@ function createDamageEvent(overrides: Partial<DamageProcessorEvent> = {}): Damag
     target: '0x0000000000099515',
     hitType: HitTypeHit,
     amount: 1000,
-    school: 6, // Frost
+    schools: [6], // Frost
     tailers: [],
     tailerCount: 0,
     activity: [],
@@ -112,7 +112,7 @@ describe('resistsProcessor', () => {
         sourceName: 'Frostbolt',
         hitType: HitTypeHit, // Hit is still a hit — resist is on the tailer
         amount: 1083,
-        school: 6, // Arcane
+        schools: [6], // Arcane
         spellId: 51099,
         spellAttackOutcome: AttackOutcomeHit | AttackOutcomeCrit | AttackOutcomeResist,
         tailers: [{ amount: 1082, hitType: HitTypePartialResist }],

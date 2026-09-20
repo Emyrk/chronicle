@@ -32,7 +32,7 @@ describe('enemyDamageTakenProcessor', () => {
       target: '0xF130000CE0000001',
       hitType: 0,
       amount: 1000,
-      school: 1,
+      schools: [1],
       tailers: [],
       tailerCount: 0,
       activity: [],

@@ -96,7 +96,7 @@ export function createAvoidanceProcessor(): PanelProcessor<AvoidanceResult, Dama
       if (!event.target) return;
 
       // Only track physical damage (school = 1)
-      const isPhysical = event.school === PHYSICAL_SCHOOL || event.school === 0;
+      const isPhysical = event.schools.includes(PHYSICAL_SCHOOL) || event.schools.includes(0);
       if (!isPhysical) return;
 
       // Check for physical avoidance hit types

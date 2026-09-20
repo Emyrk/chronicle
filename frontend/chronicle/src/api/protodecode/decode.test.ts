@@ -96,6 +96,21 @@ describe('FastCombatantInfoCursor', () => {
 });
 
 describe('FastDamageCursor', () => {
+  it('promotes the legacy school to a one-element schools array', () => {
+    const message = create(DamageSchema, {
+      target: '0xTARGET',
+      sourceName: 'Fireball',
+      school: School.Fire,
+    });
+    const encoded = toBinary(DamageSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    const cursor = new FastDamageCursor(payload);
+
+    expect(cursor.next()?.schools).toEqual([School.Fire]);
+  });
+
   it('decodes every spell school', () => {
     const message = create(DamageSchema, {
       meta: create(EventMetaSchema, { index: 9, offsetMilli: 2500n }),
@@ -111,7 +126,6 @@ describe('FastDamageCursor', () => {
     const cursor = new FastDamageCursor(payload);
 
     expect(cursor.next()).toMatchObject({
-      school: School.Fire,
       schools: [School.Fire, School.Frost],
     });
   });
