@@ -2378,7 +2378,7 @@ CREATE INDEX idx_edr_player_guid ON encounter_dps_rankings USING btree (player_g
 
 CREATE INDEX idx_edr_realm ON encounter_dps_rankings USING btree (realm_id);
 
-CREATE UNIQUE INDEX idx_edr_trash_unique ON encounter_dps_rankings USING btree (instance_id, player_guid, player_spec) WHERE (encounter_id IS NULL);
+CREATE UNIQUE INDEX idx_edr_trash_unique ON encounter_dps_rankings USING btree (instance_id, player_guid, player_spec, player_sub_spec) WHERE (encounter_id IS NULL);
 
 CREATE INDEX idx_encounter_dps_rankings_instance_id ON encounter_dps_rankings USING btree (instance_id);
 
