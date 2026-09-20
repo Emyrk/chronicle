@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { Star } from "lucide-react";
-import { useMyFavorites } from "@/api/queries";
-import type { FavoritePlayer } from "@/api/typesGenerated";
+import type { FavoritePlayer, UserFavoritesResponse } from "@/api/typesGenerated";
 import {
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -37,8 +36,7 @@ function PlayerFavorite({ player, nested = false }: { player: FavoritePlayer; ne
   );
 }
 
-export function FavoritesMenu() {
-  const { data } = useMyFavorites();
+export function FavoritesMenu({ data }: { data?: UserFavoritesResponse }) {
   if (!data || (data.guilds.length === 0 && data.players.length === 0)) return null;
 
   const grouped = groupFavorites(data);

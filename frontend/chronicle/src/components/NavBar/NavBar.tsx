@@ -4,7 +4,7 @@ import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, 
 import type { LucideIcon } from "lucide-react";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthorizationCheck, useSiteConfig } from "@/api/queries";
+import { useAuthorizationCheck, useMyFavorites, useSiteConfig } from "@/api/queries";
 import type { Branding } from "@/api/typesGenerated";
 import { Button } from "../ui/button";
 import { FavoritesMenu } from "../Favorites";
@@ -51,6 +51,8 @@ export function NavBar() {
   const hasAdminLogs = authz?.adminLogs ?? false;
 
   const { data: siteConfig } = useSiteConfig();
+  const { data: favorites } = useMyFavorites({ enabled: isAuthenticated });
+  const hasFavorites = !!favorites && (favorites.guilds.length > 0 || favorites.players.length > 0);
   const uploadsEnabled = !siteConfig?.client_uploads_disabled || hasAdminLogs;
 
   // Resolve branding: tenant overrides site-level.
@@ -283,8 +285,8 @@ export function NavBar() {
                 Account
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[300px]">
-              <FavoritesMenu />
+            <DropdownMenuContent align="end" className={hasFavorites ? "w-[300px]" : "w-[200px]"}>
+              <FavoritesMenu data={favorites} />
               {accountMenuItems.map((item) =>
                 "href" in item ? (
                   <DropdownMenuItem key={item.title} asChild>
