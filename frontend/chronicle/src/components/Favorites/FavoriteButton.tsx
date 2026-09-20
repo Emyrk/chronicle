@@ -24,7 +24,7 @@ export function FavoriteButton({
   return (
     <Button
       type="button"
-      variant="outline"
+      variant={iconOnly ? "ghost" : "outline"}
       size={iconOnly ? "icon" : "sm"}
       aria-label={`${action}: ${label}`}
       title={action}

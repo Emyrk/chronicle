@@ -108,10 +108,20 @@ export function GuildPage() {
           isFavorite={isFavorite}
           isPending={toggleFavorite.isPending || favorites.isLoading}
           label={pageConfig.guild.name}
-          onToggle={() => toggleFavorite.mutate(
-            { guildID: guildId!, favorite: !isFavorite },
-            { onError: (mutationError) => toast.error(mutationError.message) },
-          )}
+          onToggle={() => {
+            const favorite = !isFavorite;
+            toggleFavorite.mutate(
+              { guildID: guildId!, favorite },
+              {
+                onSuccess: () => toast.success(
+                  favorite
+                    ? `${pageConfig.guild.name} added to favorites`
+                    : `${pageConfig.guild.name} removed from favorites`,
+                ),
+                onError: (mutationError) => toast.error(mutationError.message),
+              },
+            );
+          }}
           className="absolute right-4 top-2 z-10"
         />
       )}
