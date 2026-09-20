@@ -184,8 +184,8 @@ type pausingRankingRunRepairTx struct {
 	parent *pausingRankingRunRepairStore
 }
 
-func (tx *pausingRankingRunRepairTx) RankingRunsNeedingRepair(ctx context.Context, limit int32) ([]database.RankingRunsNeedingRepairRow, error) {
-	rows, err := tx.Store.RankingRunsNeedingRepair(ctx, limit)
+func (tx *pausingRankingRunRepairTx) RankingRunRepairVerification(ctx context.Context, limit int32) ([]database.RankingRunRepairVerificationRow, error) {
+	rows, err := tx.Store.RankingRunRepairVerification(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -949,16 +949,16 @@ type rollbackProbeRankingRunRepairTx struct {
 	runID uuid.UUID
 }
 
-func (tx *rollbackProbeRankingRunRepairTx) RankingRunsNeedingRepair(ctx context.Context, _ int32) ([]database.RankingRunsNeedingRepairRow, error) {
+func (tx *rollbackProbeRankingRunRepairTx) RankingRunRepairVerification(ctx context.Context, _ int32) ([]database.RankingRunRepairVerificationRow, error) {
 	_, err := tx.DeleteObsoleteRankingRuns(ctx, database.DeleteObsoleteRankingRunsParams{
 		AffectedIds: []uuid.UUID{tx.runID},
 	})
 	if err != nil {
 		return nil, err
 	}
-	rows := make([]database.RankingRunsNeedingRepairRow, 10_000)
+	rows := make([]database.RankingRunRepairVerificationRow, 10_000)
 	for i := range rows {
-		rows[i] = database.RankingRunsNeedingRepairRow{RunID: uuid.New(), Missing: true}
+		rows[i] = database.RankingRunRepairVerificationRow{RunID: uuid.New(), Missing: true}
 	}
 	return rows, nil
 }

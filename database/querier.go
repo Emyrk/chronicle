@@ -649,8 +649,8 @@ type sqlcQuerier interface {
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
+	RankingRunRepairVerification(ctx context.Context, queryLimit int32) ([]RankingRunRepairVerificationRow, error)
 	RankingRunSources(ctx context.Context, affectedIds []uuid.UUID) ([]RankingRunSourcesRow, error)
-	RankingRunsNeedingRepair(ctx context.Context, queryLimit int32) ([]RankingRunsNeedingRepairRow, error)
 	// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
 	// DPS is aggregated per run (sum damage / sum duration across encounters in one
 	// instance run), so each run is one data point. Matches leaderboard aggregation.

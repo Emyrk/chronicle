@@ -182,7 +182,7 @@ WHERE run_id = ANY(@affected_ids::uuid[])
   AND NOT (run_id = ANY(@resolved_run_ids::uuid[]))
 RETURNING run_id;
 
--- name: RankingRunsNeedingRepair :many
+-- name: RankingRunRepairVerification :many
 WITH members AS MATERIALIZED (
     SELECT
         COALESCE(li.duplicate_group_id, li.id) AS run_id,

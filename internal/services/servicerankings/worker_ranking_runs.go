@@ -147,7 +147,7 @@ func RepairRankingRuns(ctx context.Context, store database.Store) (RepairRanking
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
 			return fmt.Errorf("acquire ranking run repair lock: %w", err)
 		}
-		rows, err := tx.RankingRunsNeedingRepair(ctx, rankingRunRepairSafetyBound)
+		rows, err := tx.RankingRunRepairVerification(ctx, rankingRunRepairSafetyBound)
 		if err != nil {
 			return fmt.Errorf("discover ranking run repairs: %w", err)
 		}
