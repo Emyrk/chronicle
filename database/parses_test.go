@@ -273,6 +273,22 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	insertEncounterRanking(duplicateID, "Magmadar", "PRIEST", "Holy", "Bear", 900, baseTime.Add(time.Minute))
 	insertEncounterRanking(duplicateID, "Ragnaros", "PRIEST", "Holy", "Bear", 900, baseTime.Add(2*time.Minute))
 
+	equivalenceParams := database.RankingsLeaderboardParams{
+		Metric: "hps", QueryLimit: 10,
+		InstanceNames:  []string{"Molten Core"},
+		EncounterNames: []string{"Lucifron", "Magmadar", "Ragnaros"},
+	}
+	fallbackRows, err := store.RankingsLeaderboard(ctx, equivalenceParams)
+	require.NoError(t, err)
+	sources, err := store.RankingRunSources(ctx, []uuid.UUID{canonicalID, duplicateID})
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	_, err = store.UpsertRankingRun(ctx, database.UpsertRankingRunParams(sources[0]))
+	require.NoError(t, err)
+	persistedRows, err := store.RankingsLeaderboard(ctx, equivalenceParams)
+	require.NoError(t, err)
+	assert.Equal(t, fallbackRows, persistedRows)
+
 	for _, params := range []database.RankingsLeaderboardParams{
 		{
 			Metric: "hps", QueryLimit: 10,

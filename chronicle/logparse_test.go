@@ -1,6 +1,7 @@
 package chronicle
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"testing"
@@ -8,9 +9,88 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRankingRunRefreshPlanSuccessfulReplacement(t *testing.T) {
+	t.Parallel()
+
+	oldInstanceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	oldRunID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	newInstanceID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	newRunID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
+	plan := newRankingRunRefreshPlan(ArgsLogParse{
+		Replacement:           true,
+		PreviousRankingRunIDs: []uuid.UUID{oldRunID, oldInstanceID, oldRunID},
+	})
+
+	require.Empty(t, plan.AfterRankingCommit(newRunID, newInstanceID))
+	require.Equal(t, []uuid.UUID{oldInstanceID, oldRunID, newInstanceID, newRunID}, plan.Complete())
+}
+
+func TestRankingRunRefreshPlanDefersUntilAllRankingWritesCommit(t *testing.T) {
+	t.Parallel()
+
+	oldRunID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	firstInstanceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	secondInstanceID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	plan := newRankingRunRefreshPlan(ArgsLogParse{
+		Replacement:           true,
+		PreviousRankingRunIDs: []uuid.UUID{oldRunID},
+	})
+
+	require.Empty(t, plan.AfterRankingCommit(firstInstanceID), "the first committed instance must not enqueue an intermediate refresh")
+	require.Empty(t, plan.AfterRankingCommit(secondInstanceID), "the second committed instance must remain part of the same refresh")
+	require.Equal(t, []uuid.UUID{oldRunID, firstInstanceID, secondInstanceID}, plan.Complete())
+}
+
+func TestReplacementParseFailureRefreshIDs(t *testing.T) {
+	t.Parallel()
+
+	oldInstanceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	oldRunID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	newInstanceID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	newRunID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
+	args := ArgsLogParse{
+		Replacement:           true,
+		PreviousRankingRunIDs: []uuid.UUID{oldRunID, oldInstanceID, oldRunID},
+	}
+
+	for _, tt := range []struct {
+		name         string
+		args         ArgsLogParse
+		committedIDs []uuid.UUID
+		attempt      int
+		maxAttempts  int
+		err          error
+		want         []uuid.UUID
+	}{
+		{name: "retryable failure waits", args: args, attempt: 1, maxAttempts: 2, err: errors.New("retry")},
+		{name: "final attempt cleans old identities", args: args, attempt: 2, maxAttempts: 2, err: errors.New("discard"), want: []uuid.UUID{oldInstanceID, oldRunID}},
+		{name: "final attempt cleans old and committed identities", args: args, committedIDs: []uuid.UUID{newRunID, newInstanceID}, attempt: 2, maxAttempts: 2, err: errors.New("discard"), want: []uuid.UUID{oldInstanceID, oldRunID, newInstanceID, newRunID}},
+		{name: "cancelled parse cleans old identities", args: args, attempt: 1, maxAttempts: 2, err: river.JobCancel(errors.New("invalid log")), want: []uuid.UUID{oldInstanceID, oldRunID}},
+		{name: "ordinary parse never uses replacement cleanup", args: ArgsLogParse{}, attempt: 1, maxAttempts: 1, err: errors.New("discard")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := newRankingRunRefreshPlan(tt.args)
+			plan.AfterRankingCommit(tt.committedIDs...)
+			job := &river.Job[ArgsLogParse]{
+				Args: tt.args,
+				JobRow: &rivertype.JobRow{
+					Attempt:     tt.attempt,
+					MaxAttempts: tt.maxAttempts,
+				},
+			}
+			require.Equal(t, tt.want, replacementParseFailureRefreshIDs(context.Background(), job, plan, tt.err))
+		})
+	}
+}
 
 func TestInferTalentSubSpec(t *testing.T) {
 	t.Parallel()

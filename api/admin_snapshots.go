@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
@@ -522,6 +523,16 @@ func (api *API) AdminRankingsRefreshStatus(w http.ResponseWriter, r *http.Reques
 //	POST /api/v1/admin/parses/rankings/refresh
 func (api *API) AdminRefreshRankings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	if _, err := api.Queues.Insert(ctx, rankingargs.ArgsRepairRankingRuns{}, nil); err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to enqueue ranking run repair",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
 
 	results, err := servicerankings.EnqueueRankingsSummaryRefreshAllTenants(
 		ctx,

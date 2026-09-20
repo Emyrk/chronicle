@@ -603,15 +603,58 @@ LIMIT 40;
 
 -- name: SetDuplicateGroupIDs :exec
 UPDATE log_instances
-SET duplicate_group_id = @duplicate_group_id
+SET duplicate_group_id = @duplicate_group_id,
+    updated_at = now()
 WHERE id = ANY(@ids::uuid[])
    OR (duplicate_group_id IS NOT NULL AND duplicate_group_id = ANY(@ids::uuid[]));
 
 -- name: InstancePlayerGUIDsByInstanceID :many
 SELECT unit_guid FROM log_instance_players WHERE instance_id = $1;
 
--- name: ClearDuplicateGroupID :exec
-UPDATE log_instances SET duplicate_group_id = NULL WHERE id = @id;
+-- name: UnlinkDuplicateGroup :one
+WITH target AS MATERIALIZED (
+    SELECT li.id, li.duplicate_group_id
+    FROM log_instances li
+    WHERE li.id = @id
+    FOR UPDATE
+),
+remaining_group AS MATERIALIZED (
+    SELECT li.id, li.start_time
+    FROM log_instances li
+    JOIN target ON li.duplicate_group_id = target.duplicate_group_id
+    WHERE target.duplicate_group_id = target.id
+      AND li.id <> target.id
+    ORDER BY li.start_time, li.id
+    FOR UPDATE
+),
+new_anchor AS MATERIALIZED (
+    SELECT id
+    FROM remaining_group
+    LIMIT 1
+),
+reanchored AS (
+    UPDATE log_instances li
+    SET duplicate_group_id = new_anchor.id,
+        updated_at = now()
+    FROM new_anchor
+    WHERE li.id IN (SELECT id FROM remaining_group)
+    RETURNING li.id
+),
+unlinked AS (
+    UPDATE log_instances li
+    SET duplicate_group_id = NULL,
+        updated_at = now()
+    FROM target
+    WHERE li.id = target.id
+    RETURNING li.id
+)
+SELECT
+    target.duplicate_group_id AS previous_group_id,
+    new_anchor.id AS new_group_id
+FROM target
+LEFT JOIN new_anchor ON true
+WHERE EXISTS (SELECT 1 FROM unlinked);
+
 -- name: ListInstancesByDuplicateGroup :many
 SELECT
     li.id,

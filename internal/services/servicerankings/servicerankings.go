@@ -66,6 +66,11 @@ type Service struct {
 	RepairDispatchWorker *WorkerDispatchParseScoreRepairs
 	// RepairParseScoresWorker dispatches bounded repair jobs for one tenant.
 	RepairParseScoresWorker *WorkerRepairParseScores
+
+	// RankingRunRefreshWorker rebuilds persisted logical-run representatives.
+	RankingRunRefreshWorker *WorkerRefreshRankingRuns
+	// RankingRunRepairWorker discovers missed or stale representative rows.
+	RankingRunRepairWorker *WorkerRepairRankingRuns
 }
 
 func New(broker *services.Services) *Service {
@@ -142,6 +147,14 @@ func (s *Service) Start(_ context.Context) error {
 		Store:  store,
 		Logger: namedLogger,
 		// Queue is set by serviceriver after queue creation.
+	}
+	s.RankingRunRefreshWorker = &WorkerRefreshRankingRuns{
+		Store:  store,
+		Logger: namedLogger,
+	}
+	s.RankingRunRepairWorker = &WorkerRepairRankingRuns{
+		Store:  store,
+		Logger: namedLogger,
 	}
 
 	s.router = chi.NewRouter()

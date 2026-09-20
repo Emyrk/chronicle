@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
@@ -187,9 +188,24 @@ func (w *RealmWorker) Work(ctx context.Context, job *river.Job[ArgsRetentionReal
 			_, _ = w.Storage.RemoveFile(ctx, "raidlogs", []string{groupID.String()})
 		}
 
+		identities, err := w.Store.RankingRunIdentitiesByInstanceIDs(ctx, toDelete)
+		if err != nil {
+			return fmt.Errorf("load ranking run identities: %w", err)
+		}
 		deleted, err := w.Store.DeleteLogInstancesByIDs(ctx, toDelete)
 		if err != nil {
 			return fmt.Errorf("delete instances: %w", err)
+		}
+		affectedIDs := make([]uuid.UUID, 0, len(identities)*2)
+		for _, identity := range identities {
+			affectedIDs = append(affectedIDs, identity.InstanceID, identity.RunID)
+		}
+		const rankingRefreshBatchSize = 500
+		for start := 0; start < len(affectedIDs); start += rankingRefreshBatchSize {
+			end := min(start+rankingRefreshBatchSize, len(affectedIDs))
+			if _, err := w.Queue.Insert(ctx, rankingargs.NewRefreshRankingRuns(affectedIDs[start:end]...), nil); err != nil {
+				logger.ErrorContext(ctx, "failed to enqueue ranking run refresh after retention deletion", slog.Any("error", err))
+			}
 		}
 
 		_ = w.Store.UpdateRetentionPolicyStats(ctx, database.UpdateRetentionPolicyStatsParams{
