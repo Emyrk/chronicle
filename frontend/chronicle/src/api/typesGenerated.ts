@@ -1080,6 +1080,29 @@ export interface ExternalVerificationPublic {
     readonly callout?: string;
 }
 
+// From chroniclesdk/favorites.go
+export interface FavoriteGuild {
+    readonly id: string;
+    readonly name: string;
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly logo_url?: string;
+}
+
+// From chroniclesdk/favorites.go
+export interface FavoritePlayer {
+    readonly id: string;
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly name: string;
+    readonly class: string;
+    readonly race: string;
+    readonly gender: string;
+    readonly level: number;
+    readonly guild_id?: string;
+    readonly guild_name?: string;
+}
+
 // From chroniclesdk/log.go
 export type GUIDString = string;
 
@@ -3885,6 +3908,12 @@ export interface User {
      * RawLogRetentionHours is how long to keep raw log files. nil means keep forever.
      */
     readonly raw_log_retention_hours: number | null;
+}
+
+// From chroniclesdk/favorites.go
+export interface UserFavoritesResponse {
+    readonly guilds: readonly FavoriteGuild[];
+    readonly players: readonly FavoritePlayer[];
 }
 
 // From chroniclesdk/panel_layout.go

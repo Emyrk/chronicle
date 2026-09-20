@@ -1,10 +1,18 @@
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Shield, Calendar, Sparkles, LayoutDashboard, Hammer } from "lucide-react";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
-import { useArmoryLoot, useArmoryPlayer } from "@/api/queries";
+import {
+  useArmoryLoot,
+  useArmoryPlayer,
+  useMyFavorites,
+  useToggleFavoritePlayer,
+} from "@/api/queries";
 import { useCharacterParses } from "@/api/rankingsQueries";
 import { Button } from "@/components/ui/button";
+import { FavoriteButton } from "@/components/Favorites";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/Card/Card";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { AdminLinkControls } from "./AdminLinkControls";
@@ -95,6 +103,12 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   const mode: OverviewMode =
     searchParams.get("mode") === "performance" ? "performance" : "journey";
   const [metric, setMetric] = useState<ParseMetric>(() => defaultMetric(player));
+  const { isAuthenticated } = useAuth();
+  const favorites = useMyFavorites({ enabled: isAuthenticated });
+  const toggleFavorite = useToggleFavoritePlayer();
+  const isFavorite = favorites.data?.players.some(
+    (favorite) => favorite.realm_id === player.realm_id && favorite.id === player.id,
+  ) ?? false;
 
   const isOverview = activeTab === "overview";
   const activity = useRecentActivity(player, isOverview);
@@ -130,8 +144,35 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
     setSearchParams(next);
   };
 
+  const favoriteButton = isAuthenticated ? (
+    <FavoriteButton
+      isFavorite={isFavorite}
+      isPending={toggleFavorite.isPending || favorites.isLoading}
+      label={player.name}
+      iconOnly
+      onToggle={() => {
+        const favorite = !isFavorite;
+        toggleFavorite.mutate(
+          {
+            realmID: player.realm_id,
+            characterGUID: player.id,
+            favorite,
+          },
+          {
+            onSuccess: () => toast.success(
+              favorite
+                ? `${player.name} added to favorites`
+                : `${player.name} removed from favorites`,
+            ),
+            onError: (mutationError) => toast.error(mutationError.message),
+          },
+        );
+      }}
+    />
+  ) : undefined;
+
   const modeSelector = activeTab === "overview" ? (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {MODES.map(([key, label]) => (
         <Button
           key={key}
@@ -177,7 +218,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
 
         {/* Keep one identity header mounted while its tab-specific controls change. */}
         <div className="mt-8">
-          <IdentityHeader player={player} actions={modeSelector}>
+          <IdentityHeader player={player} titleAction={favoriteButton} actions={modeSelector}>
             <div className="lg:w-[480px]">
               {activeTab === "overview" && mode === "performance" && (
                 <ScoreCard
