@@ -30,9 +30,10 @@ type Config struct {
 
 // Bot represents a Discord bot instance.
 type Bot struct {
-	session *discordgo.Session
-	logger  *slog.Logger
-	config  Config
+	session         *discordgo.Session
+	httpDiagnostics *discordHTTPDiagnostics
+	logger          *slog.Logger
+	config          Config
 
 	mu       sync.RWMutex
 	handlers []func()
@@ -59,10 +60,13 @@ func New(ctx context.Context, logger *slog.Logger, config Config) (*Bot, error) 
 		return nil, err
 	}
 
+	httpDiagnostics := newDiscordHTTPDiagnostics(session.Client.Transport, config.Token)
+	session.Client.Transport = httpDiagnostics
 	bot := &Bot{
-		session: session,
-		logger:  logger.With(slog.String("component", "discord-bot")),
-		config:  config,
+		session:         session,
+		httpDiagnostics: httpDiagnostics,
+		logger:          logger.With(slog.String("component", "discord-bot")),
+		config:          config,
 	}
 
 	// Register default handlers
@@ -127,8 +131,9 @@ func (b *Bot) Open(ctx context.Context) error {
 		discordgo.IntentsGuildMessages |
 		discordgo.IntentsDirectMessages
 
+	b.httpDiagnostics.reset()
 	if err := b.session.Open(); err != nil {
-		return fmt.Errorf("open discord session: %w", err)
+		return fmt.Errorf("open discord session: %w", b.httpDiagnostics.annotate(err))
 	}
 
 	var username, discriminator string
