@@ -58,6 +58,7 @@ export interface DamageProcessorEvent extends EventMeta {
   hitType: number;
   amount: number;
   school: number;
+  schools?: number[];
   /** Additional damage entries (procs, enchants, etc.) */
   tailers: TailerEntry[];
   tailerCount: number;
@@ -81,6 +82,7 @@ export interface HealProcessorEvent extends EventMeta {
   overheal: number;
   absorbed: number;
   school: number;
+  schools?: number[];
   spellId: number | null;
   /** AttackOutcome bitmask of possible hit table results (from SpellData) */
   spellAttackOutcome: number | null;
@@ -125,6 +127,7 @@ export interface AttributionDamage {
   hitType: number;
   amount: number;
   school: number;
+  schools?: number[];
   spellId?: number | null;
   spellAttackOutcome?: number | null;
 }
@@ -346,7 +349,8 @@ export interface InterruptProcessorEvent extends EventMeta {
   target: string;        // The unit being interrupted
   spellName: string;     // Name of the interrupted spell
   extraSpellId: number;  // ID of the interrupted spell
-  extraSchool: number;   // 0=Unknown, 1=None, 2=Physical, 3=Holy, 4=Fire, 5=Nature, 6=Frost, 7=Shadow, 8=Arcane
+  extraSchool: number;   // Legacy primary school
+  extraSchools?: number[];
 }
 
 export interface AbsorbedProcessorEvent extends EventMeta {
@@ -358,7 +362,8 @@ export interface AbsorbedProcessorEvent extends EventMeta {
   caster: string;                // Unit that cast the absorb shield
   absorbSpellId: number | null;  // e.g. Power Word: Shield
   absorbSpellName: string | null;
-  absorbSchool: number;          // School of the absorb spell
+  absorbSchool: number;          // Legacy primary school of the absorb spell
+  absorbSchools?: number[];
   amount: number;                // Damage absorbed
   estimated: boolean;            // Attribution was inferred rather than reported directly
 }

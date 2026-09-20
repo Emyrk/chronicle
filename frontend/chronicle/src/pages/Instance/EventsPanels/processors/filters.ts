@@ -63,8 +63,11 @@ function getEventAbilityId(event: ProcessorEvent): number | null {
   return null;
 }
 
-function getEventSchool(event: ProcessorEvent): number | null {
-  if ("school" in event && typeof event.school === "number") return event.school;
+function getEventSchools(event: ProcessorEvent): number[] | null {
+  if ("schools" in event && Array.isArray(event.schools) && event.schools.length > 0) {
+    return event.schools;
+  }
+  if ("school" in event && typeof event.school === "number") return [event.school];
   return null;
 }
 
@@ -349,9 +352,9 @@ const FILTER_COMPILERS: Record<PanelFilterType, FilterCompiler> = {
     }, 0);
     if (mask === 0) return () => false;
     return (event) => {
-      const school = getEventSchool(event);
-      if (school === null) return false;
-      return (normalizeDamageSchoolToBitmask(school) & mask) !== 0;
+      const schools = getEventSchools(event);
+      if (schools === null) return false;
+      return schools.some((school) => (normalizeDamageSchoolToBitmask(school) & mask) !== 0);
     };
   },
 

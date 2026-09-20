@@ -243,6 +243,8 @@ describe("evaluateFilters", () => {
     expect(evaluateFilters(filters, createDamageEvent({ school: 4 }), createContext())).toBe(true);  // Fire
     expect(evaluateFilters(filters, createDamageEvent({ school: 7 }), createContext())).toBe(true);  // Shadow
     expect(evaluateFilters(filters, createDamageEvent({ school: 5 }), createContext())).toBe(false); // Nature
+    const frostFilters: PanelFilter[] = [{ type: "ability_school", value: "frost" }];
+    expect(evaluateFilters(frostFilters, createDamageEvent({ school: 4, schools: [4, 6] }), createContext())).toBe(true);
   });
 
   it("negate works with any filter type", () => {
