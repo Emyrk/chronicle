@@ -5989,18 +5989,38 @@ LEFT JOIN LATERAL (
     ) combos
 ) latest ON true
 LEFT JOIN LATERAL (
-    SELECT AVG(best.precise_score)::float8 AS avg_parse
+    SELECT AVG(encounter_scores.avg_parse)::float8 AS avg_parse
     FROM (
-        SELECT DISTINCT ON (psr.instance_name, psr.encounter_name)
-            psr.precise_score
-        FROM parse_score_results psr
-        WHERE psr.tenant_id = $1
-          AND psr.player_guid = gp.id::text
-          AND psr.metric = CASE WHEN latest.player_role = 'heal' THEN 'hps' ELSE 'dps' END
-          AND psr.status IN ('ok', 'low_confidence')
-          AND psr.killed_at >= now() - make_interval(days => $2::int)
-        ORDER BY psr.instance_name, psr.encounter_name, psr.precise_score DESC
-    ) best
+        SELECT
+            ranked.instance_name,
+            ranked.encounter_name,
+            AVG(ranked.precise_score)::float8 AS avg_parse
+        FROM (
+            SELECT
+                deduped.instance_name,
+                deduped.encounter_name,
+                deduped.precise_score,
+                ROW_NUMBER() OVER (
+                    PARTITION BY deduped.instance_name, deduped.encounter_name
+                    ORDER BY deduped.precise_score DESC
+                ) AS score_rank
+            FROM (
+                SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+                    psr.instance_name,
+                    psr.encounter_name,
+                    psr.precise_score
+                FROM parse_score_results psr
+                WHERE psr.tenant_id = $1
+                  AND psr.player_guid = gp.id::text
+                  AND psr.metric = CASE WHEN latest.player_role = 'heal' THEN 'hps' ELSE 'dps' END
+                  AND psr.status IN ('ok', 'low_confidence')
+                  AND psr.killed_at >= now() - make_interval(days => $2::int)
+                ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+            ) deduped
+        ) ranked
+        WHERE ranked.score_rank <= 3
+        GROUP BY ranked.instance_name, ranked.encounter_name
+    ) encounter_scores
 ) scores ON true
 WHERE gp.guild_id = $3::uuid
   AND CASE
@@ -6041,9 +6061,10 @@ type GuildCharacterRosterRow struct {
 // player_spec/player_role come from the character's most recent parse;
 // spec_roles_json lists every distinct spec+role combo observed across the
 // character's 3 most recent parsed instances (players often swap specs raid
-// to raid), most recent first. avg_parse averages the best parse per
-// encounter over the last @parse_window_days, using hps for healers and dps
-// for everyone else (-1 when the character has no parses).
+// to raid), most recent first. avg_parse matches the Armory score: deduplicate
+// uploads by run, average the best 3 parses per encounter over the last
+// @parse_window_days, then average those encounter scores. It uses hps for
+// healers and dps for everyone else (-1 when the character has no parses).
 // JOINs wow_server_realms so RLS tenant filtering cascades.
 func (q *sqlQuerier) GuildCharacterRoster(ctx context.Context, arg GuildCharacterRosterParams) ([]GuildCharacterRosterRow, error) {
 	rows, err := q.db.Query(ctx, guildCharacterRoster,

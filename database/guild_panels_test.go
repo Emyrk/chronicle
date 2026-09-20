@@ -158,9 +158,14 @@ func TestGuildCharacterRoster(t *testing.T) {
 	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(3), name: "Idleguy", class: "MAGE", guildID: f.guildID, level: 60, updatedAt: now.Add(-100 * 24 * time.Hour)})
 	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(4), name: "Outsider", class: "ROGUE", guildID: otherGuildID, level: 60, updatedAt: now})
 
-	// Activeguy (dps): two encounters at 80 and 60 -> avg 70. The hps row must
-	// not contribute because his role is dps.
-	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(1), playerName: "Activeguy", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 80, killedAt: now.Add(-24 * time.Hour)})
+	// Activeguy (dps): Ragnaros uses the best 3 of four runs
+	// (100+90+80)/3 = 90, while Golemagg is 60, producing an Armory-matching
+	// score of (90+60)/2 = 75. The hps row must not contribute because his role
+	// is dps.
+	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(1), playerName: "Activeguy", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 100, killedAt: now.Add(-24 * time.Hour)})
+	f.insertParse(t, guildPanelParse{runID: uuid.New(), playerGUID: testGUID(1), playerName: "Activeguy", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 90, killedAt: now.Add(-48 * time.Hour)})
+	f.insertParse(t, guildPanelParse{runID: uuid.New(), playerGUID: testGUID(1), playerName: "Activeguy", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 80, killedAt: now.Add(-72 * time.Hour)})
+	f.insertParse(t, guildPanelParse{runID: uuid.New(), playerGUID: testGUID(1), playerName: "Activeguy", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 10, killedAt: now.Add(-96 * time.Hour)})
 	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(1), playerName: "Activeguy", playerRole: "dps", metric: "dps", encounter: "Golemagg", score: 60, killedAt: now.Add(-24 * time.Hour)})
 	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(1), playerName: "Activeguy", playerRole: "dps", metric: "hps", encounter: "Ragnaros", score: 99, killedAt: now.Add(-24 * time.Hour)})
 	// Healgirl (heal): detect her role from the hps result even when no usable
@@ -181,7 +186,7 @@ func TestGuildCharacterRoster(t *testing.T) {
 	for _, row := range rows {
 		byName[row.Name] = row
 	}
-	require.InDelta(t, 70, byName["Activeguy"].AvgParse, 0.01)
+	require.InDelta(t, 75, byName["Activeguy"].AvgParse, 0.01)
 	require.Equal(t, "dps", byName["Activeguy"].PlayerRole)
 	require.InDelta(t, 90, byName["Healgirl"].AvgParse, 0.01)
 	require.Equal(t, "heal", byName["Healgirl"].PlayerRole)
