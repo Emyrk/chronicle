@@ -53,27 +53,33 @@ func TestReplacementParseFailureRefreshIDs(t *testing.T) {
 
 	oldInstanceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	oldRunID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	newInstanceID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	newRunID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
 	args := ArgsLogParse{
 		Replacement:           true,
 		PreviousRankingRunIDs: []uuid.UUID{oldRunID, oldInstanceID, oldRunID},
 	}
 
 	for _, tt := range []struct {
-		name        string
-		args        ArgsLogParse
-		attempt     int
-		maxAttempts int
-		err         error
-		want        []uuid.UUID
+		name         string
+		args         ArgsLogParse
+		committedIDs []uuid.UUID
+		attempt      int
+		maxAttempts  int
+		err          error
+		want         []uuid.UUID
 	}{
 		{name: "retryable failure waits", args: args, attempt: 1, maxAttempts: 2, err: errors.New("retry")},
 		{name: "final attempt cleans old identities", args: args, attempt: 2, maxAttempts: 2, err: errors.New("discard"), want: []uuid.UUID{oldInstanceID, oldRunID}},
+		{name: "final attempt cleans old and committed identities", args: args, committedIDs: []uuid.UUID{newRunID, newInstanceID}, attempt: 2, maxAttempts: 2, err: errors.New("discard"), want: []uuid.UUID{oldInstanceID, oldRunID, newInstanceID, newRunID}},
 		{name: "cancelled parse cleans old identities", args: args, attempt: 1, maxAttempts: 2, err: river.JobCancel(errors.New("invalid log")), want: []uuid.UUID{oldInstanceID, oldRunID}},
 		{name: "ordinary parse never uses replacement cleanup", args: ArgsLogParse{}, attempt: 1, maxAttempts: 1, err: errors.New("discard")},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
+			plan := newRankingRunRefreshPlan(tt.args)
+			plan.AfterRankingCommit(tt.committedIDs...)
 			job := &river.Job[ArgsLogParse]{
 				Args: tt.args,
 				JobRow: &rivertype.JobRow{
@@ -81,7 +87,7 @@ func TestReplacementParseFailureRefreshIDs(t *testing.T) {
 					MaxAttempts: tt.maxAttempts,
 				},
 			}
-			require.Equal(t, tt.want, replacementParseFailureRefreshIDs(context.Background(), job, tt.err))
+			require.Equal(t, tt.want, replacementParseFailureRefreshIDs(context.Background(), job, plan, tt.err))
 		})
 	}
 }

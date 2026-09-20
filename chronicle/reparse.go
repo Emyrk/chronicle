@@ -98,11 +98,11 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 			continue
 		}
 
-		if job.State == rivertype.JobStateAvailable ||
-			job.State == rivertype.JobStatePending ||
-			job.State == rivertype.JobStateRunning ||
-			job.State == rivertype.JobStateScheduled ||
-			job.State == rivertype.JobStateRetryable {
+		if existingJob.State == rivertype.JobStateAvailable ||
+			existingJob.State == rivertype.JobStatePending ||
+			existingJob.State == rivertype.JobStateRunning ||
+			existingJob.State == rivertype.JobStateScheduled ||
+			existingJob.State == rivertype.JobStateRetryable {
 			// Cancel existing jobs that are not the current one
 			_, err = w.parent.queue.JobCancel(ctx, existingJob.ID)
 			if err != nil {

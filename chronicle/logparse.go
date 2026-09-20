@@ -125,7 +125,7 @@ func (p *rankingRunRefreshPlan) Complete() []uuid.UUID {
 	return rankingargs.NormalizeIDs(p.affectedIDs)
 }
 
-func replacementParseFailureRefreshIDs(ctx context.Context, job *river.Job[ArgsLogParse], workErr error) []uuid.UUID {
+func replacementParseFailureRefreshIDs(ctx context.Context, job *river.Job[ArgsLogParse], plan *rankingRunRefreshPlan, workErr error) []uuid.UUID {
 	if workErr == nil || !job.Args.Replacement {
 		return nil
 	}
@@ -135,7 +135,7 @@ func replacementParseFailureRefreshIDs(ctx context.Context, job *river.Job[ArgsL
 	if !permanent {
 		return nil
 	}
-	return rankingargs.NormalizeIDs(job.Args.PreviousRankingRunIDs)
+	return plan.Complete()
 }
 
 type WorkerLogParse struct {
@@ -171,8 +171,9 @@ func slugCollisionFromLookup(err error) (bool, error) {
 }
 
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
-	err := w.work(ctx, job)
-	failureIDs := replacementParseFailureRefreshIDs(ctx, job, err)
+	rankingRunRefresh := newRankingRunRefreshPlan(job.Args)
+	err := w.work(ctx, job, rankingRunRefresh)
+	failureIDs := replacementParseFailureRefreshIDs(ctx, job, rankingRunRefresh, err)
 	if len(failureIDs) > 0 {
 		if refreshErr := w.parent.EnqueueRankingRunRefresh(ctx, failureIDs...); refreshErr != nil {
 			w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run cleanup after replacement parse failure", slog.Any("error", refreshErr))
@@ -181,7 +182,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	return err
 }
 
-func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
+func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse], rankingRunRefresh *rankingRunRefreshPlan) error {
 	if job.Args.TenantID != uuid.Nil {
 		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
 	}
@@ -378,8 +379,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse])
 	// Track total finalize and DB insert durations
 	var totalFinalizeDuration time.Duration
 	var totalDBInsertDuration time.Duration
-
-	rankingRunRefresh := newRankingRunRefreshPlan(job.Args)
 
 	for i, inst := range encountersState.Instances {
 		instanceID := uuid.New()
