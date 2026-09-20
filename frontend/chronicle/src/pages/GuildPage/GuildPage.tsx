@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import type { DeviceVisibility } from "@/api/typesGenerated";
 import {
@@ -107,7 +108,10 @@ export function GuildPage() {
           isFavorite={isFavorite}
           isPending={toggleFavorite.isPending || favorites.isLoading}
           label={pageConfig.guild.name}
-          onToggle={() => toggleFavorite.mutate({ guildID: guildId!, favorite: !isFavorite })}
+          onToggle={() => toggleFavorite.mutate(
+            { guildID: guildId!, favorite: !isFavorite },
+            { onError: (mutationError) => toast.error(mutationError.message) },
+          )}
           className="absolute right-4 top-2 z-10"
         />
       )}

@@ -1617,7 +1617,9 @@ CREATE TABLE user_favorite_guilds (
     guild_id uuid NOT NULL,
     tenant_id uuid,
     tenant_scope_id uuid GENERATED ALWAYS AS (COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)) STORED,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    slot smallint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_favorite_guilds_slot_check CHECK (((slot >= 1) AND (slot <= 3)))
 );
 
 CREATE TABLE user_favorite_players (
@@ -2297,10 +2299,10 @@ ALTER TABLE ONLY user_character_links
     ADD CONSTRAINT user_character_links_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY user_favorite_guilds
-    ADD CONSTRAINT user_favorite_guilds_one_per_tenant UNIQUE (user_id, tenant_scope_id);
+    ADD CONSTRAINT user_favorite_guilds_pkey PRIMARY KEY (user_id, guild_id);
 
 ALTER TABLE ONLY user_favorite_guilds
-    ADD CONSTRAINT user_favorite_guilds_pkey PRIMARY KEY (user_id, guild_id);
+    ADD CONSTRAINT user_favorite_guilds_slot_per_tenant UNIQUE (user_id, tenant_scope_id, slot);
 
 ALTER TABLE ONLY user_favorite_players
     ADD CONSTRAINT user_favorite_players_pkey PRIMARY KEY (user_id, character_guid, realm_id);

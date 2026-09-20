@@ -81,11 +81,18 @@ func (api *API) AddMyFavoriteGuild(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if err := api.Opts.Zed.AddUserFavoriteGuild(ctx, database.AddUserFavoriteGuildParams{
+	favorited, err := api.Opts.Zed.AddUserFavoriteGuild(ctx, database.AddUserFavoriteGuildParams{
 		UserID:  claims.Subject,
 		GuildID: guildID,
-	}); err != nil {
+	})
+	if err != nil {
 		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !favorited.Valid || !favorited.Bool {
+		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{
+			Message: "You can favorite up to 3 guilds per tenant",
+		})
 		return
 	}
 	httpapi.Write(ctx, w, http.StatusNoContent, nil)

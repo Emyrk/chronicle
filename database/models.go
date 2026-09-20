@@ -2061,6 +2061,7 @@ type UserFavoriteGuild struct {
 	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
 	TenantID      uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
 	TenantScopeID uuid.NullUUID      `db:"tenant_scope_id" json:"tenant_scope_id"`
+	Slot          int16              `db:"slot" json:"slot"`
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 

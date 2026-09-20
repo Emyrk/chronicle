@@ -7,10 +7,11 @@ CREATE TABLE user_favorite_guilds (
   tenant_scope_id UUID GENERATED ALWAYS AS (
     COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::UUID)
   ) STORED,
+  slot SMALLINT NOT NULL CHECK (slot BETWEEN 1 AND 3),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, guild_id),
-  CONSTRAINT user_favorite_guilds_one_per_tenant
-    UNIQUE (user_id, tenant_scope_id)
+  CONSTRAINT user_favorite_guilds_slot_per_tenant
+    UNIQUE (user_id, tenant_scope_id, slot)
 );
 
 CREATE TABLE user_favorite_players (
