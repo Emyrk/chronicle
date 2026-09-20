@@ -52,7 +52,7 @@ function damage(offsetMilli: number, hitType = HitTypeHit): DamageProcessorEvent
     type: "damage", index: 3, offsetMilli, activity: [], activityCount: 0,
     isSynthetic: false,
     caster: PLAYER, sourceName: "Smite", target: ENEMY, hitType, amount: 100,
-    school: 3, tailers: [], tailerCount: 0, spellId: 585,
+    schools: [3], tailers: [], tailerCount: 0, spellId: 585,
     spellAttackOutcome: null, overkill: 0,
   };
 }
@@ -62,7 +62,7 @@ function heal(offsetMilli: number, hitType = HitTypeHit): HealProcessorEvent {
     type: "heal", index: 4, offsetMilli, activity: [], activityCount: 0,
     isSynthetic: false,
     caster: PLAYER, sourceName: "Heal", target: OTHER, hitType, amount: 100,
-    overheal: 0, absorbed: 0, school: 3, spellId: 2054,
+    overheal: 0, absorbed: 0, schools: [3], spellId: 2054,
     spellAttackOutcome: null,
   };
 }

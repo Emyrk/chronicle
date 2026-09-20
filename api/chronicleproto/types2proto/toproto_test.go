@@ -101,6 +101,7 @@ func TestDamageSchoolBackfill(t *testing.T) {
 			SpellData:   arcaneSpell(),
 		})
 		require.Equal(t, chronicleproto.School_Arcane, got.School)
+		require.Equal(t, []chronicleproto.School{chronicleproto.School_Arcane}, got.Schools)
 	})
 
 	t.Run("PresentSchoolKept", func(t *testing.T) {
@@ -112,6 +113,7 @@ func TestDamageSchoolBackfill(t *testing.T) {
 			SpellData:   arcaneSpell(),
 		})
 		require.Equal(t, chronicleproto.School_Fire, got.School)
+		require.Equal(t, []chronicleproto.School{chronicleproto.School_Fire}, got.Schools)
 	})
 
 	t.Run("MissingSchoolNoSpellStaysNone", func(t *testing.T) {
@@ -123,6 +125,21 @@ func TestDamageSchoolBackfill(t *testing.T) {
 			SpellData:   nil, // e.g. melee / no spell data
 		})
 		require.Equal(t, chronicleproto.School_None, got.School)
+		require.Equal(t, []chronicleproto.School{chronicleproto.School_None}, got.Schools)
+	})
+
+	t.Run("MultipleSchoolsPreserved", func(t *testing.T) {
+		t.Parallel()
+		got := Damage(ts, 0, &messages.Damage{
+			MessageBase: messages.Base(ts),
+			Target:      guid.GUID(1),
+			School:      types.FireSchool | types.FrostSchool,
+		})
+		require.Equal(t, chronicleproto.School_Fire, got.School)
+		require.Equal(t, []chronicleproto.School{
+			chronicleproto.School_Fire,
+			chronicleproto.School_Frost,
+		}, got.Schools)
 	})
 }
 
@@ -138,6 +155,7 @@ func TestHealSchoolBackfill(t *testing.T) {
 		SpellData:   arcaneSpell(),
 	})
 	require.Equal(t, chronicleproto.School_Arcane, got.School)
+	require.Equal(t, []chronicleproto.School{chronicleproto.School_Arcane}, got.Schools)
 }
 
 func TestInterruptExtraSchoolBackfill(t *testing.T) {
@@ -152,6 +170,24 @@ func TestInterruptExtraSchoolBackfill(t *testing.T) {
 		InterruptedSpell: arcaneSpell(),
 	})
 	require.Equal(t, chronicleproto.School_Arcane, got.ExtraSchool)
+	require.Equal(t, []chronicleproto.School{chronicleproto.School_Arcane}, got.ExtraSchools)
+}
+
+func TestInterruptMultipleSchools(t *testing.T) {
+	t.Parallel()
+	ts := time.UnixMilli(1000)
+
+	got := Interrupt(ts, 0, &messages.Interrupt{
+		MessageBase: messages.Base(ts),
+		Caster:      guid.GUID(1),
+		Target:      guid.GUID(2),
+		ExtraSchool: types.NatureSchool | types.ShadowSchool,
+	})
+	require.Equal(t, chronicleproto.School_Nature, got.ExtraSchool)
+	require.Equal(t, []chronicleproto.School{
+		chronicleproto.School_Nature,
+		chronicleproto.School_Shadow,
+	}, got.ExtraSchools)
 }
 
 func TestAbsorbedSchoolBackfill(t *testing.T) {
@@ -167,6 +203,25 @@ func TestAbsorbedSchoolBackfill(t *testing.T) {
 		AbsorbSpell:  arcaneSpell(),
 	})
 	require.Equal(t, chronicleproto.School_Arcane, got.AbsorbSchool)
+	require.Equal(t, []chronicleproto.School{chronicleproto.School_Arcane}, got.AbsorbSchools)
+}
+
+func TestAbsorbedMultipleSchools(t *testing.T) {
+	t.Parallel()
+	ts := time.UnixMilli(1000)
+
+	got := Absorbed(ts, 0, &messages.Absorbed{
+		MessageBase:  messages.Base(ts),
+		Attacker:     guid.GUID(1),
+		Target:       guid.GUID(2),
+		Caster:       guid.GUID(3),
+		AbsorbSchool: types.HolySchool | types.FireSchool,
+	})
+	require.Equal(t, chronicleproto.School_Holy, got.AbsorbSchool)
+	require.Equal(t, []chronicleproto.School{
+		chronicleproto.School_Holy,
+		chronicleproto.School_Fire,
+	}, got.AbsorbSchools)
 }
 
 func TestAuraPreservesCaster(t *testing.T) {

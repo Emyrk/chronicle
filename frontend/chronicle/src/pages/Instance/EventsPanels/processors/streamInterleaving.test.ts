@@ -81,7 +81,7 @@ function buildDamageMessage(opts: {
   target: string;
   amount: number;
   hitType?: number;
-  school?: number;
+  schools?: number[];
 }): number[] {
   const content: number[] = [];
   
@@ -115,10 +115,12 @@ function buildDamageMessage(opts: {
   content.push(encodeTag(7, 0));
   content.push(...encodeVarint(opts.amount));
   
-  // Field 8: school (varint)
-  if (opts.school) {
-    content.push(encodeTag(8, 0));
-    content.push(...encodeVarint(opts.school));
+  // Field 12: schools (packed repeated enum)
+  if (opts.schools?.length) {
+    const schools = opts.schools.flatMap(encodeVarint);
+    content.push(encodeTag(12, 2));
+    content.push(...encodeVarint(schools.length));
+    content.push(...schools);
   }
   
   return content;
@@ -510,7 +512,7 @@ describe('Stream interleaving', () => {
         target: 'boss',
         amount: 1234,
         hitType: 2,
-        school: 1,
+        schools: [1],
       }),
     ]);
 
@@ -527,7 +529,7 @@ describe('Stream interleaving', () => {
     expect(event!.target).toBe('boss');
     expect(event!.amount).toBe(1234);
     expect(event!.hitType).toBe(2);
-    expect(event!.school).toBe(1);
+    expect(event!.schools).toEqual([1]);
   });
 
   it('correctly decodes heal message fields', () => {

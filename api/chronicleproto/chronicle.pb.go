@@ -733,9 +733,10 @@ type Heal struct {
 	Amount        int32                  `protobuf:"varint,6,opt,name=amount,proto3" json:"amount,omitempty"`
 	HitType       uint32                 `protobuf:"varint,7,opt,name=hitType,proto3" json:"hitType,omitempty"`
 	SpellData     *SpellData             `protobuf:"bytes,8,opt,name=spellData,proto3,oneof" json:"spellData,omitempty"`
-	School        School                 `protobuf:"varint,9,opt,name=school,proto3,enum=chronicleproto.School" json:"school,omitempty"`
+	School        School                 `protobuf:"varint,9,opt,name=school,proto3,enum=chronicleproto.School" json:"school,omitempty"` // Legacy primary school; use schools for complete data.
 	Overheal      int32                  `protobuf:"varint,10,opt,name=overheal,proto3" json:"overheal,omitempty"`
 	Absorbed      int32                  `protobuf:"varint,11,opt,name=absorbed,proto3" json:"absorbed,omitempty"`
+	Schools       []School               `protobuf:"varint,12,rep,packed,name=schools,proto3,enum=chronicleproto.School" json:"schools,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -840,6 +841,13 @@ func (x *Heal) GetAbsorbed() int32 {
 	return 0
 }
 
+func (x *Heal) GetSchools() []School {
+	if x != nil {
+		return x.Schools
+	}
+	return nil
+}
+
 type Damage struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Meta   *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -849,10 +857,11 @@ type Damage struct {
 	Target        string     `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
 	HitType       uint32     `protobuf:"varint,6,opt,name=hitType,proto3" json:"hitType,omitempty"`
 	Amount        int32      `protobuf:"varint,7,opt,name=amount,proto3" json:"amount,omitempty"`
-	School        School     `protobuf:"varint,8,opt,name=school,proto3,enum=chronicleproto.School" json:"school,omitempty"`
+	School        School     `protobuf:"varint,8,opt,name=school,proto3,enum=chronicleproto.School" json:"school,omitempty"` // Legacy primary school; use schools for complete data.
 	Tailers       []*Tailer  `protobuf:"bytes,9,rep,name=tailers,proto3" json:"tailers,omitempty"`
 	SpellData     *SpellData `protobuf:"bytes,10,opt,name=spellData,proto3,oneof" json:"spellData,omitempty"`
 	Overkill      int32      `protobuf:"varint,11,opt,name=overkill,proto3" json:"overkill,omitempty"`
+	Schools       []School   `protobuf:"varint,12,rep,packed,name=schools,proto3,enum=chronicleproto.School" json:"schools,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -955,6 +964,13 @@ func (x *Damage) GetOverkill() int32 {
 		return x.Overkill
 	}
 	return 0
+}
+
+func (x *Damage) GetSchools() []School {
+	if x != nil {
+		return x.Schools
+	}
+	return nil
 }
 
 type ResourceChange struct {
@@ -2204,7 +2220,8 @@ type Interrupt struct {
 	Target        string                 `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
 	SpellName     string                 `protobuf:"bytes,4,opt,name=spell_name,json=spellName,proto3" json:"spell_name,omitempty"`                                   // name of interrupted spell
 	ExtraSpellId  int32                  `protobuf:"varint,5,opt,name=extra_spell_id,json=extraSpellId,proto3" json:"extra_spell_id,omitempty"`                       // ID of interrupted spell
-	ExtraSchool   School                 `protobuf:"varint,6,opt,name=extra_school,json=extraSchool,proto3,enum=chronicleproto.School" json:"extra_school,omitempty"` // school of interrupted spell
+	ExtraSchool   School                 `protobuf:"varint,6,opt,name=extra_school,json=extraSchool,proto3,enum=chronicleproto.School" json:"extra_school,omitempty"` // legacy primary school of interrupted spell
+	ExtraSchools  []School               `protobuf:"varint,7,rep,packed,name=extra_schools,json=extraSchools,proto3,enum=chronicleproto.School" json:"extra_schools,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2281,6 +2298,13 @@ func (x *Interrupt) GetExtraSchool() School {
 	return School_Unknown
 }
 
+func (x *Interrupt) GetExtraSchools() []School {
+	if x != nil {
+		return x.ExtraSchools
+	}
+	return nil
+}
+
 type Absorbed struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Meta            *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -2294,7 +2318,8 @@ type Absorbed struct {
 	// estimated is true when the absorb attribution was synthetically inferred
 	// from aura tracking heuristics rather than reported by the server (e.g.
 	// vanilla 1.12 logs). AzerothCore events leave this false.
-	Estimated     bool `protobuf:"varint,9,opt,name=estimated,proto3" json:"estimated,omitempty"`
+	Estimated     bool     `protobuf:"varint,9,opt,name=estimated,proto3" json:"estimated,omitempty"`
+	AbsorbSchools []School `protobuf:"varint,10,rep,packed,name=absorb_schools,json=absorbSchools,proto3,enum=chronicleproto.School" json:"absorb_schools,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2390,6 +2415,13 @@ func (x *Absorbed) GetEstimated() bool {
 		return x.Estimated
 	}
 	return false
+}
+
+func (x *Absorbed) GetAbsorbSchools() []School {
+	if x != nil {
+		return x.AbsorbSchools
+	}
+	return nil
 }
 
 // Consume records a single piece of evidence that a player consumed an item.
@@ -2808,7 +2840,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x05index\x18\x01 \x01(\x05R\x05index\x12 \n" +
 	"\voffsetMilli\x18\x02 \x01(\x03R\voffsetMilli\x129\n" +
 	"\bactivity\x18\x03 \x03(\v2\x1d.chronicleproto.ActivityEntryR\bactivity\x12!\n" +
-	"\fis_synthetic\x18\x04 \x01(\bR\visSynthetic\"\xeb\x02\n" +
+	"\fis_synthetic\x18\x04 \x01(\bR\visSynthetic\"\x9d\x03\n" +
 	"\x04Heal\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06caster\x18\x03 \x01(\tR\x06caster\x12\x16\n" +
@@ -2822,9 +2854,10 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x06school\x18\t \x01(\x0e2\x16.chronicleproto.SchoolR\x06school\x12\x1a\n" +
 	"\boverheal\x18\n" +
 	" \x01(\x05R\boverheal\x12\x1a\n" +
-	"\babsorbed\x18\v \x01(\x05R\babsorbedB\f\n" +
+	"\babsorbed\x18\v \x01(\x05R\babsorbed\x120\n" +
+	"\aschools\x18\f \x03(\x0e2\x16.chronicleproto.SchoolR\aschoolsB\f\n" +
 	"\n" +
-	"_spellData\"\x93\x03\n" +
+	"_spellData\"\xc5\x03\n" +
 	"\x06Damage\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x1b\n" +
 	"\x06caster\x18\x03 \x01(\tH\x00R\x06caster\x88\x01\x01\x12\x1e\n" +
@@ -2838,7 +2871,8 @@ const file_chronicle_proto_rawDesc = "" +
 	"\atailers\x18\t \x03(\v2\x16.chronicleproto.TailerR\atailers\x12<\n" +
 	"\tspellData\x18\n" +
 	" \x01(\v2\x19.chronicleproto.SpellDataH\x01R\tspellData\x88\x01\x01\x12\x1a\n" +
-	"\boverkill\x18\v \x01(\x05R\boverkillB\t\n" +
+	"\boverkill\x18\v \x01(\x05R\boverkill\x120\n" +
+	"\aschools\x18\f \x03(\x0e2\x16.chronicleproto.SchoolR\aschoolsB\t\n" +
 	"\a_casterB\f\n" +
 	"\n" +
 	"_spellData\"\xfd\x02\n" +
@@ -2997,7 +3031,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"\n" +
 	"_guildNameB\n" +
 	"\n" +
-	"\b_talents\"\xea\x01\n" +
+	"\b_talents\"\xa7\x02\n" +
 	"\tInterrupt\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06caster\x18\x02 \x01(\tR\x06caster\x12\x16\n" +
@@ -3005,7 +3039,8 @@ const file_chronicle_proto_rawDesc = "" +
 	"\n" +
 	"spell_name\x18\x04 \x01(\tR\tspellName\x12$\n" +
 	"\x0eextra_spell_id\x18\x05 \x01(\x05R\fextraSpellId\x129\n" +
-	"\fextra_school\x18\x06 \x01(\x0e2\x16.chronicleproto.SchoolR\vextraSchool\"\xb3\x03\n" +
+	"\fextra_school\x18\x06 \x01(\x0e2\x16.chronicleproto.SchoolR\vextraSchool\x12;\n" +
+	"\rextra_schools\x18\a \x03(\x0e2\x16.chronicleproto.SchoolR\fextraSchools\"\xf2\x03\n" +
 	"\bAbsorbed\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x1a\n" +
 	"\battacker\x18\x02 \x01(\tR\battacker\x12\x16\n" +
@@ -3015,7 +3050,9 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x0fabsorbSpellData\x18\x06 \x01(\v2\x19.chronicleproto.SpellDataH\x01R\x0fabsorbSpellData\x88\x01\x01\x12:\n" +
 	"\fabsorbSchool\x18\a \x01(\x0e2\x16.chronicleproto.SchoolR\fabsorbSchool\x12\x16\n" +
 	"\x06amount\x18\b \x01(\x05R\x06amount\x12\x1c\n" +
-	"\testimated\x18\t \x01(\bR\testimatedB\x12\n" +
+	"\testimated\x18\t \x01(\bR\testimated\x12=\n" +
+	"\x0eabsorb_schools\x18\n" +
+	" \x03(\x0e2\x16.chronicleproto.SchoolR\rabsorbSchoolsB\x12\n" +
 	"\x10_damageSpellDataB\x12\n" +
 	"\x10_absorbSpellData\"\xd9\x05\n" +
 	"\aConsume\x12-\n" +
@@ -3184,58 +3221,62 @@ var file_chronicle_proto_depIdxs = []int32{
 	11, // 1: chronicleproto.Heal.meta:type_name -> chronicleproto.EventMeta
 	8,  // 2: chronicleproto.Heal.spellData:type_name -> chronicleproto.SpellData
 	0,  // 3: chronicleproto.Heal.school:type_name -> chronicleproto.School
-	11, // 4: chronicleproto.Damage.meta:type_name -> chronicleproto.EventMeta
-	0,  // 5: chronicleproto.Damage.school:type_name -> chronicleproto.School
-	9,  // 6: chronicleproto.Damage.tailers:type_name -> chronicleproto.Tailer
-	8,  // 7: chronicleproto.Damage.spellData:type_name -> chronicleproto.SpellData
-	11, // 8: chronicleproto.ResourceChange.meta:type_name -> chronicleproto.EventMeta
-	8,  // 9: chronicleproto.ResourceChange.spellData:type_name -> chronicleproto.SpellData
-	11, // 10: chronicleproto.ExtraAttack.meta:type_name -> chronicleproto.EventMeta
-	8,  // 11: chronicleproto.ExtraAttack.spellData:type_name -> chronicleproto.SpellData
-	11, // 12: chronicleproto.Slain.meta:type_name -> chronicleproto.EventMeta
-	13, // 13: chronicleproto.Slain.attribution:type_name -> chronicleproto.Damage
-	11, // 14: chronicleproto.Resurrection.meta:type_name -> chronicleproto.EventMeta
-	8,  // 15: chronicleproto.Resurrection.spell:type_name -> chronicleproto.SpellData
-	11, // 16: chronicleproto.Cast.meta:type_name -> chronicleproto.EventMeta
-	1,  // 17: chronicleproto.Cast.action:type_name -> chronicleproto.CastAction
-	18, // 18: chronicleproto.Cast.spell:type_name -> chronicleproto.Spell
-	11, // 19: chronicleproto.Aura.meta:type_name -> chronicleproto.EventMeta
-	2,  // 20: chronicleproto.Aura.application:type_name -> chronicleproto.AuraApplication
-	3,  // 21: chronicleproto.Aura.state:type_name -> chronicleproto.AuraState
-	8,  // 22: chronicleproto.Aura.spellData:type_name -> chronicleproto.SpellData
-	4,  // 23: chronicleproto.Aura.transition:type_name -> chronicleproto.AuraTransition
-	11, // 24: chronicleproto.AuraCast.meta:type_name -> chronicleproto.EventMeta
-	8,  // 25: chronicleproto.AuraCast.spell:type_name -> chronicleproto.SpellData
-	11, // 26: chronicleproto.SpellGo.meta:type_name -> chronicleproto.EventMeta
-	8,  // 27: chronicleproto.SpellGo.spellData:type_name -> chronicleproto.SpellData
-	11, // 28: chronicleproto.SpellStart.meta:type_name -> chronicleproto.EventMeta
-	8,  // 29: chronicleproto.SpellStart.spellData:type_name -> chronicleproto.SpellData
-	11, // 30: chronicleproto.SpellFail.meta:type_name -> chronicleproto.EventMeta
-	8,  // 31: chronicleproto.SpellFail.spellData:type_name -> chronicleproto.SpellData
-	11, // 32: chronicleproto.UnitClassification.meta:type_name -> chronicleproto.EventMeta
-	11, // 33: chronicleproto.Dispel.meta:type_name -> chronicleproto.EventMeta
-	8,  // 34: chronicleproto.Dispel.spellData:type_name -> chronicleproto.SpellData
-	5,  // 35: chronicleproto.Dispel.dispelType:type_name -> chronicleproto.DispelType
-	11, // 36: chronicleproto.CombatantInfo.meta:type_name -> chronicleproto.EventMeta
-	31, // 37: chronicleproto.CombatantInfo.gear:type_name -> chronicleproto.CombatantGearSlot
-	32, // 38: chronicleproto.CombatantInfo.talents:type_name -> chronicleproto.CombatantTalents
-	11, // 39: chronicleproto.Interrupt.meta:type_name -> chronicleproto.EventMeta
-	0,  // 40: chronicleproto.Interrupt.extra_school:type_name -> chronicleproto.School
-	11, // 41: chronicleproto.Absorbed.meta:type_name -> chronicleproto.EventMeta
-	8,  // 42: chronicleproto.Absorbed.damageSpellData:type_name -> chronicleproto.SpellData
-	8,  // 43: chronicleproto.Absorbed.absorbSpellData:type_name -> chronicleproto.SpellData
-	0,  // 44: chronicleproto.Absorbed.absorbSchool:type_name -> chronicleproto.School
-	11, // 45: chronicleproto.Consume.meta:type_name -> chronicleproto.EventMeta
-	8,  // 46: chronicleproto.Consume.spellData:type_name -> chronicleproto.SpellData
-	6,  // 47: chronicleproto.Consume.kind:type_name -> chronicleproto.EvidenceKind
-	7,  // 48: chronicleproto.Consume.confidence:type_name -> chronicleproto.EvidenceConfidence
-	11, // 49: chronicleproto.CompanionStats.meta:type_name -> chronicleproto.EventMeta
-	11, // 50: chronicleproto.RaidGroup.meta:type_name -> chronicleproto.EventMeta
-	51, // [51:51] is the sub-list for method output_type
-	51, // [51:51] is the sub-list for method input_type
-	51, // [51:51] is the sub-list for extension type_name
-	51, // [51:51] is the sub-list for extension extendee
-	0,  // [0:51] is the sub-list for field type_name
+	0,  // 4: chronicleproto.Heal.schools:type_name -> chronicleproto.School
+	11, // 5: chronicleproto.Damage.meta:type_name -> chronicleproto.EventMeta
+	0,  // 6: chronicleproto.Damage.school:type_name -> chronicleproto.School
+	9,  // 7: chronicleproto.Damage.tailers:type_name -> chronicleproto.Tailer
+	8,  // 8: chronicleproto.Damage.spellData:type_name -> chronicleproto.SpellData
+	0,  // 9: chronicleproto.Damage.schools:type_name -> chronicleproto.School
+	11, // 10: chronicleproto.ResourceChange.meta:type_name -> chronicleproto.EventMeta
+	8,  // 11: chronicleproto.ResourceChange.spellData:type_name -> chronicleproto.SpellData
+	11, // 12: chronicleproto.ExtraAttack.meta:type_name -> chronicleproto.EventMeta
+	8,  // 13: chronicleproto.ExtraAttack.spellData:type_name -> chronicleproto.SpellData
+	11, // 14: chronicleproto.Slain.meta:type_name -> chronicleproto.EventMeta
+	13, // 15: chronicleproto.Slain.attribution:type_name -> chronicleproto.Damage
+	11, // 16: chronicleproto.Resurrection.meta:type_name -> chronicleproto.EventMeta
+	8,  // 17: chronicleproto.Resurrection.spell:type_name -> chronicleproto.SpellData
+	11, // 18: chronicleproto.Cast.meta:type_name -> chronicleproto.EventMeta
+	1,  // 19: chronicleproto.Cast.action:type_name -> chronicleproto.CastAction
+	18, // 20: chronicleproto.Cast.spell:type_name -> chronicleproto.Spell
+	11, // 21: chronicleproto.Aura.meta:type_name -> chronicleproto.EventMeta
+	2,  // 22: chronicleproto.Aura.application:type_name -> chronicleproto.AuraApplication
+	3,  // 23: chronicleproto.Aura.state:type_name -> chronicleproto.AuraState
+	8,  // 24: chronicleproto.Aura.spellData:type_name -> chronicleproto.SpellData
+	4,  // 25: chronicleproto.Aura.transition:type_name -> chronicleproto.AuraTransition
+	11, // 26: chronicleproto.AuraCast.meta:type_name -> chronicleproto.EventMeta
+	8,  // 27: chronicleproto.AuraCast.spell:type_name -> chronicleproto.SpellData
+	11, // 28: chronicleproto.SpellGo.meta:type_name -> chronicleproto.EventMeta
+	8,  // 29: chronicleproto.SpellGo.spellData:type_name -> chronicleproto.SpellData
+	11, // 30: chronicleproto.SpellStart.meta:type_name -> chronicleproto.EventMeta
+	8,  // 31: chronicleproto.SpellStart.spellData:type_name -> chronicleproto.SpellData
+	11, // 32: chronicleproto.SpellFail.meta:type_name -> chronicleproto.EventMeta
+	8,  // 33: chronicleproto.SpellFail.spellData:type_name -> chronicleproto.SpellData
+	11, // 34: chronicleproto.UnitClassification.meta:type_name -> chronicleproto.EventMeta
+	11, // 35: chronicleproto.Dispel.meta:type_name -> chronicleproto.EventMeta
+	8,  // 36: chronicleproto.Dispel.spellData:type_name -> chronicleproto.SpellData
+	5,  // 37: chronicleproto.Dispel.dispelType:type_name -> chronicleproto.DispelType
+	11, // 38: chronicleproto.CombatantInfo.meta:type_name -> chronicleproto.EventMeta
+	31, // 39: chronicleproto.CombatantInfo.gear:type_name -> chronicleproto.CombatantGearSlot
+	32, // 40: chronicleproto.CombatantInfo.talents:type_name -> chronicleproto.CombatantTalents
+	11, // 41: chronicleproto.Interrupt.meta:type_name -> chronicleproto.EventMeta
+	0,  // 42: chronicleproto.Interrupt.extra_school:type_name -> chronicleproto.School
+	0,  // 43: chronicleproto.Interrupt.extra_schools:type_name -> chronicleproto.School
+	11, // 44: chronicleproto.Absorbed.meta:type_name -> chronicleproto.EventMeta
+	8,  // 45: chronicleproto.Absorbed.damageSpellData:type_name -> chronicleproto.SpellData
+	8,  // 46: chronicleproto.Absorbed.absorbSpellData:type_name -> chronicleproto.SpellData
+	0,  // 47: chronicleproto.Absorbed.absorbSchool:type_name -> chronicleproto.School
+	0,  // 48: chronicleproto.Absorbed.absorb_schools:type_name -> chronicleproto.School
+	11, // 49: chronicleproto.Consume.meta:type_name -> chronicleproto.EventMeta
+	8,  // 50: chronicleproto.Consume.spellData:type_name -> chronicleproto.SpellData
+	6,  // 51: chronicleproto.Consume.kind:type_name -> chronicleproto.EvidenceKind
+	7,  // 52: chronicleproto.Consume.confidence:type_name -> chronicleproto.EvidenceConfidence
+	11, // 53: chronicleproto.CompanionStats.meta:type_name -> chronicleproto.EventMeta
+	11, // 54: chronicleproto.RaidGroup.meta:type_name -> chronicleproto.EventMeta
+	55, // [55:55] is the sub-list for method output_type
+	55, // [55:55] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_chronicle_proto_init() }

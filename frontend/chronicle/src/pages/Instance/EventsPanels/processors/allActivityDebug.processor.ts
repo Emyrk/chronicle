@@ -492,7 +492,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const damageEvent = event as DamageProcessorEvent;
       rawEvent.spellId = damageEvent.spellId ?? undefined;
       const outcomes = outcomeLabels(damageEvent.hitType);
-      const detail = [...outcomes, schoolName(damageEvent.school)];
+      const detail = [...outcomes, damageEvent.schools.map(schoolName).join("/")];
       if (damageEvent.overkill > 0) {
         detail.push(`${damageEvent.overkill.toLocaleString()} overkill`);
         rawEvent.flags?.push("OVERKILL");
@@ -517,7 +517,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const healEvent = event as HealProcessorEvent;
       rawEvent.spellId = healEvent.spellId ?? undefined;
       const outcomes = outcomeLabels(healEvent.hitType);
-      const detail = [...outcomes, schoolName(healEvent.school)];
+      const detail = [...outcomes, healEvent.schools.map(schoolName).join("/")];
       if (healEvent.overheal > 0) {
         detail.push(`${healEvent.overheal.toLocaleString()} overheal`);
         rawEvent.flags?.push("OVERHEAL");
@@ -550,7 +550,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       // Show death info in extra field
       if (slainEvent.attribution) {
         rawEvent.spellId = slainEvent.attribution.spellId ?? undefined;
-        rawEvent.extra = `${outcomeLabels(slainEvent.attribution.hitType).join(" · ")} · ${schoolName(slainEvent.attribution.school)}`;
+        rawEvent.extra = `${outcomeLabels(slainEvent.attribution.hitType).join(" · ")} · ${slainEvent.attribution.schools.map(schoolName).join("/")}`;
       } else {
         rawEvent.extra = "attribution unavailable";
         rawEvent.flags?.push("NO ATTRIB");
@@ -591,7 +591,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     } else if (streamType === "interrupt") {
       const interruptEvent = event as InterruptProcessorEvent;
       rawEvent.spellId = interruptEvent.extraSpellId || undefined;
-      rawEvent.extra = `interrupted · school=${interruptEvent.extraSchool}`;
+      rawEvent.extra = `interrupted · schools=${interruptEvent.extraSchools.join(",")}`;
     } else if (streamType === "absorbed") {
       const absorbedEvent = event as AbsorbedProcessorEvent;
       const shieldCasterName = context.players[absorbedEvent.caster]?.name
@@ -609,7 +609,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
         { label: "Shield caster", value: shieldCasterName || "Unknown" },
         { label: "Shield caster GUID", value: absorbedEvent.caster || "—" },
         { label: "Damage spell", value: absorbedEvent.damageSpellName ?? "Melee" },
-        { label: "Absorb school", value: String(absorbedEvent.absorbSchool) },
+        { label: "Absorb schools", value: absorbedEvent.absorbSchools.join(",") },
       ];
       if (absorbedEvent.estimated) rawEvent.flags?.push("ESTIMATED");
     } else if (streamType === "extra_attack") {

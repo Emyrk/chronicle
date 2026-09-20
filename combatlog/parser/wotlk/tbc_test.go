@@ -41,6 +41,23 @@ func TestTBCDamageSuffix(t *testing.T) {
 	assert.True(t, damage.HitType.Has(types.HitTypePartialAbsorb))
 }
 
+func TestWotLKDamagePreservesMultipleSchools(t *testing.T) {
+	t.Parallel()
+
+	line := `1/14 20:40:08.481  SPELL_DAMAGE,0x00000000000019CA,"Mage",0x512,0xF1300023890000A9,"Target",0xa48,44614,"Frostfire Bolt",0x14,1000,0,20,0,0,0,nil,nil,nil`
+	parser, err := New(context.Background(), slog.Default(), strings.NewReader(line), auraTestDB{}, auraTestDB{}, nil)
+	require.NoError(t, err)
+	parser.SetSynthetics(passthroughSynthetics{})
+
+	parsed, err := parser.Advance(context.Background())
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+
+	damage, ok := parsed[0].(*messages.Damage)
+	require.True(t, ok)
+	assert.Equal(t, types.FireSchool|types.FrostSchool, damage.School)
+}
+
 func TestTBCHealSuffix(t *testing.T) {
 	t.Parallel()
 

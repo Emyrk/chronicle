@@ -79,9 +79,10 @@ message Heal {
   int32 amount = 6;
   uint32 hitType = 7;
   optional SpellData spellData = 8;
-  School school = 9;
+  School school = 9; // Legacy primary school; use schools for complete data.
   int32 overheal = 10;
   int32 absorbed = 11;
+  repeated School schools = 12;
 }
 
 message Damage {
@@ -93,10 +94,11 @@ message Damage {
   string target = 5;
   uint32 hitType = 6;
   int32 amount = 7;
-  School school = 8;
+  School school = 8; // Legacy primary school; use schools for complete data.
   repeated Tailer tailers = 9;
   optional SpellData spellData = 10;
   int32 overkill = 11;
+  repeated School schools = 12;
 }
 
 message ResourceChange {
@@ -249,7 +251,8 @@ message Interrupt {
   string target = 3;
   string spell_name = 4;        // name of interrupted spell
   int32 extra_spell_id = 5;     // ID of interrupted spell
-  School extra_school = 6;      // school of interrupted spell
+  School extra_school = 6;      // legacy primary school of interrupted spell
+  repeated School extra_schools = 7;
 }
 message Absorbed {
   EventMeta meta = 1;
@@ -264,6 +267,7 @@ message Absorbed {
   // from aura tracking heuristics rather than reported by the server (e.g.
   // vanilla 1.12 logs). AzerothCore events leave this false.
   bool estimated = 9;
+  repeated School absorb_schools = 10;
 }
 
 

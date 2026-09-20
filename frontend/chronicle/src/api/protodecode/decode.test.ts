@@ -1,7 +1,7 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { AuraSchema, AuraTransition, CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { AuraSchema, AuraTransition, CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, School, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
-import { AuraDecoder, FastCombatantInfoCursor, FastConsumeCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
+import { AuraDecoder, FastCombatantInfoCursor, FastConsumeCursor, FastDamageCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
 describe('readVarint', () => {
   it('reads single-byte varints', () => {
@@ -92,6 +92,42 @@ describe('FastCombatantInfoCursor', () => {
     const cursor = new FastCombatantInfoCursor(payload);
 
     expect(cursor.next()?.gear[0].gemEnchantIds).toEqual([0, 0, 3637, 0]);
+  });
+});
+
+describe('FastDamageCursor', () => {
+  it('promotes the legacy school to a one-element schools array', () => {
+    const message = create(DamageSchema, {
+      target: '0xTARGET',
+      sourceName: 'Fireball',
+      school: School.Fire,
+    });
+    const encoded = toBinary(DamageSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    const cursor = new FastDamageCursor(payload);
+
+    expect(cursor.next()?.schools).toEqual([School.Fire]);
+  });
+
+  it('decodes every spell school', () => {
+    const message = create(DamageSchema, {
+      meta: create(EventMetaSchema, { index: 9, offsetMilli: 2500n }),
+      target: '0xTARGET',
+      sourceName: 'Frostfire Bolt',
+      school: School.Fire,
+      schools: [School.Fire, School.Frost],
+    });
+    const encoded = toBinary(DamageSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    const cursor = new FastDamageCursor(payload);
+
+    expect(cursor.next()).toMatchObject({
+      schools: [School.Fire, School.Frost],
+    });
   });
 });
 

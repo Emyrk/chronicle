@@ -193,7 +193,7 @@ export const resistsProcessor: PanelProcessor<ResistsResult, DamageProcessorEven
       let ab = abilities.get(abilityName);
       if (!ab) {
         ab = createEmptyBreakout();
-        ab.school = event.school;
+        ab.school = event.schools[0];
         abilities.set(abilityName, ab);
       }
 

@@ -99,7 +99,7 @@ function heal(overrides: Partial<HealProcessorEvent> = {}): HealProcessorEvent {
     amount: 2_000,
     overheal: 500,
     absorbed: 0,
-    school: 0,
+    schools: [0],
     spellId: 2060,
     spellAttackOutcome: null,
     ...overrides,

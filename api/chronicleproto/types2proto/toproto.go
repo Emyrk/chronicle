@@ -41,6 +41,7 @@ func SpellData(spell *chrondbc.Spell) *chronicleproto.SpellData {
 }
 
 func Damage(from time.Time, idx int32, dmg *messages.Damage) *chronicleproto.Damage {
+	school := schoolWithFallback(dmg.School, dmg.SpellData)
 	return &chronicleproto.Damage{
 		Meta:       EventMeta(from, idx, dmg),
 		Caster:     OptionalGUID(dmg.Caster),
@@ -48,7 +49,8 @@ func Damage(from time.Time, idx int32, dmg *messages.Damage) *chronicleproto.Dam
 		Target:     dmg.Target.String(),
 		HitType:    HitType(dmg.HitType),
 		Amount:     dmg.Amount,
-		School:     schoolWithFallback(dmg.School, dmg.SpellData),
+		School:     School(school),
+		Schools:    Schools(school),
 		Tailers:    slice.List(dmg.Trailer, TrailerEntry),
 		SpellData:  SpellData(dmg.SpellData),
 		Overkill:   dmg.Overkill,
@@ -56,6 +58,7 @@ func Damage(from time.Time, idx int32, dmg *messages.Damage) *chronicleproto.Dam
 }
 
 func Heal(from time.Time, idx int32, heal *messages.Heal) *chronicleproto.Heal {
+	school := schoolWithFallback(heal.School, heal.SpellData)
 	return &chronicleproto.Heal{
 		Meta:       EventMeta(from, idx, heal),
 		Caster:     heal.Caster.String(),
@@ -64,7 +67,8 @@ func Heal(from time.Time, idx int32, heal *messages.Heal) *chronicleproto.Heal {
 		Amount:     heal.Amount,
 		HitType:    HitType(heal.HitType),
 		SpellData:  SpellData(heal.SpellData),
-		School:     schoolWithFallback(heal.School, heal.SpellData),
+		School:     School(school),
+		Schools:    Schools(school),
 		Overheal:   heal.Overheal,
 		Absorbed:   heal.Absorbed,
 	}
@@ -388,27 +392,49 @@ func TalentSummary(t *combatant.Talents) *chronicleproto.CombatantTalents {
 	}
 }
 
+var schoolMappings = []struct {
+	mask  types.School
+	proto chronicleproto.School
+}{
+	{types.PhysicalSchool, chronicleproto.School_Physical},
+	{types.HolySchool, chronicleproto.School_Holy},
+	{types.FireSchool, chronicleproto.School_Fire},
+	{types.NatureSchool, chronicleproto.School_Nature},
+	{types.FrostSchool, chronicleproto.School_Frost},
+	{types.ShadowSchool, chronicleproto.School_Shadow},
+	{types.ArcaneSchool, chronicleproto.School_Arcane},
+}
+
+// School returns the first school in a school mask for legacy scalar proto
+// fields. New consumers should use Schools to preserve every school.
 func School(school types.School) chronicleproto.School {
-	switch school {
-	case types.NoneSchool:
+	if school == types.NoneSchool {
 		return chronicleproto.School_None
-	case types.PhysicalSchool:
-		return chronicleproto.School_Physical
-	case types.HolySchool:
-		return chronicleproto.School_Holy
-	case types.FireSchool:
-		return chronicleproto.School_Fire
-	case types.NatureSchool:
-		return chronicleproto.School_Nature
-	case types.FrostSchool:
-		return chronicleproto.School_Frost
-	case types.ShadowSchool:
-		return chronicleproto.School_Shadow
-	case types.ArcaneSchool:
-		return chronicleproto.School_Arcane
-	default:
-		return chronicleproto.School_Unknown
 	}
+	for _, mapping := range schoolMappings {
+		if school.Has(mapping.mask) {
+			return mapping.proto
+		}
+	}
+	return chronicleproto.School_Unknown
+}
+
+// Schools expands a school bitmask into its component proto enum values.
+func Schools(school types.School) []chronicleproto.School {
+	if school == types.NoneSchool {
+		return []chronicleproto.School{chronicleproto.School_None}
+	}
+
+	schools := make([]chronicleproto.School, 0, len(schoolMappings))
+	for _, mapping := range schoolMappings {
+		if school.Has(mapping.mask) {
+			schools = append(schools, mapping.proto)
+		}
+	}
+	if len(schools) == 0 {
+		return []chronicleproto.School{chronicleproto.School_Unknown}
+	}
+	return schools
 }
 
 // schoolWithFallback keeps the combat log's parsed school as authoritative, but
@@ -418,11 +444,11 @@ func School(school types.School) chronicleproto.School {
 // vulnerability-effect filtering and resist analysis would see the wrong school.
 // spell may be nil (melee, or parsers that don't attach spell data), in which
 // case the parsed value is used as-is.
-func schoolWithFallback(parsed types.School, spell *chrondbc.Spell) chronicleproto.School {
+func schoolWithFallback(parsed types.School, spell *chrondbc.Spell) types.School {
 	if parsed == types.NoneSchool && spell != nil {
-		parsed = spell.School.ToType()
+		return spell.School.ToType()
 	}
-	return School(parsed)
+	return parsed
 }
 
 func Dispel(from time.Time, idx int32, d *messages.Dispel) *chronicleproto.Dispel {
@@ -440,16 +466,19 @@ func Dispel(from time.Time, idx int32, d *messages.Dispel) *chronicleproto.Dispe
 }
 
 func Interrupt(from time.Time, idx int32, i *messages.Interrupt) *chronicleproto.Interrupt {
+	school := schoolWithFallback(i.ExtraSchool, i.InterruptedSpell)
 	return &chronicleproto.Interrupt{
 		Meta:         EventMeta(from, idx, i),
 		Caster:       i.Caster.String(),
 		Target:       i.Target.String(),
 		SpellName:    i.SpellName,
 		ExtraSpellId: i.ExtraSpellID,
-		ExtraSchool:  schoolWithFallback(i.ExtraSchool, i.InterruptedSpell),
+		ExtraSchool:  School(school),
+		ExtraSchools: Schools(school),
 	}
 }
 func Absorbed(from time.Time, idx int32, a *messages.Absorbed) *chronicleproto.Absorbed {
+	school := schoolWithFallback(a.AbsorbSchool, a.AbsorbSpell)
 	return &chronicleproto.Absorbed{
 		Meta:            EventMeta(from, idx, a),
 		Attacker:        a.Attacker.String(),
@@ -457,7 +486,8 @@ func Absorbed(from time.Time, idx int32, a *messages.Absorbed) *chronicleproto.A
 		DamageSpellData: SpellData(a.DamageSpell),
 		Caster:          a.Caster.String(),
 		AbsorbSpellData: SpellData(a.AbsorbSpell),
-		AbsorbSchool:    schoolWithFallback(a.AbsorbSchool, a.AbsorbSpell),
+		AbsorbSchool:    School(school),
+		AbsorbSchools:   Schools(school),
 		Amount:          a.Amount,
 		Estimated:       a.IsSynthetic(),
 	}

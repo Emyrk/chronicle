@@ -35,7 +35,7 @@ function createDamageEvent(overrides: Partial<DamageProcessorEvent> = {}): Damag
     target: "0xF130000000000001",
     hitType: 1,
     amount: 100,
-    school: 4,
+    schools: [4],
     tailers: [],
     tailerCount: 0,
     spellId: 133,
@@ -60,7 +60,7 @@ function createHealEvent(overrides: Partial<HealProcessorEvent> = {}): HealProce
     amount: 100,
     overheal: 0,
     absorbed: 0,
-    school: 3,
+    schools: [3],
     spellId: 2061,
     ...overrides,
   };
@@ -82,7 +82,7 @@ function createAbsorbedEvent(overrides: Partial<AbsorbedProcessorEvent> = {}): A
     caster: "0x0000000000000001",
     absorbSpellId: 17,
     absorbSpellName: "Power Word: Shield",
-    absorbSchool: 2,
+    absorbSchools: [2],
     amount: 100,
     estimated: false,
     ...overrides,
@@ -240,9 +240,11 @@ describe("evaluateFilters", () => {
     const filters: PanelFilter[] = [
       { type: "ability_school", value: ["shadow", "fire"] },
     ];
-    expect(evaluateFilters(filters, createDamageEvent({ school: 4 }), createContext())).toBe(true);  // Fire
-    expect(evaluateFilters(filters, createDamageEvent({ school: 7 }), createContext())).toBe(true);  // Shadow
-    expect(evaluateFilters(filters, createDamageEvent({ school: 5 }), createContext())).toBe(false); // Nature
+    expect(evaluateFilters(filters, createDamageEvent({ schools: [4] }), createContext())).toBe(true);  // Fire
+    expect(evaluateFilters(filters, createDamageEvent({ schools: [7] }), createContext())).toBe(true);  // Shadow
+    expect(evaluateFilters(filters, createDamageEvent({ schools: [5] }), createContext())).toBe(false); // Nature
+    const frostFilters: PanelFilter[] = [{ type: "ability_school", value: "frost" }];
+    expect(evaluateFilters(frostFilters, createDamageEvent({ schools: [4, 6] }), createContext())).toBe(true);
   });
 
   it("negate works with any filter type", () => {
