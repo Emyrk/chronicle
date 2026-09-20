@@ -34,7 +34,7 @@ export function FavoriteButton({
     >
       <Star
         className={cn(
-          "h-4 w-4",
+          iconOnly ? "size-5" : "size-4",
           isFavorite && "fill-amber-400 text-amber-400",
         )}
       />
