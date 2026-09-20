@@ -201,7 +201,8 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/instances/{instanceID}/parses", s.handleInstanceParses)
 	s.router.Get("/instances/{instanceID}/time-parses", s.handleInstanceTimeParses)
 
-	// Character parse history
+	// Character performance and parse history
+	s.router.Get("/characters/{playerGUID}/performance", s.handleCharacterPerformance)
 	s.router.Get("/characters/{playerGUID}/parses", s.handleCharacterParseHistory)
 	s.router.Get("/characters/{playerGUID}/encounters", s.handleCharacterEncounterStats)
 

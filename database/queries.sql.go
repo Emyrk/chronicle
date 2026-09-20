@@ -12094,6 +12094,173 @@ func (q *sqlQuerier) GetCharacterEncounterStats(ctx context.Context, playerGuid 
 	return items, nil
 }
 
+const getCharacterPerformanceRuns = `-- name: GetCharacterPerformanceRuns :many
+WITH selected_encounters AS MATERIALIZED (
+    SELECT DISTINCT unnest($2::text[]) AS encounter_name
+),
+raw_rows AS MATERIALIZED (
+    SELECT DISTINCT ON (rr.run_id, edr.encounter_name)
+        rr.run_id,
+        rr.representative_instance_id,
+        rr.start_time,
+        edr.encounter_name,
+        edr.player_name,
+        edr.player_class,
+        edr.player_spec,
+        edr.player_sub_spec,
+        edr.damage_done,
+        edr.healing_done,
+        edr.absorbed_done,
+        edr.duration_secs,
+        edr.log_hashed_slug,
+        edr.killed_at
+    FROM ranking_runs rr
+    JOIN encounter_dps_rankings edr
+      ON edr.instance_id = rr.representative_instance_id
+    JOIN selected_encounters selected ON selected.encounter_name = edr.encounter_name
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
+    WHERE edr.player_guid = $3
+      AND edr.encounter_id IS NOT NULL
+      AND rr.instance_name = $4
+      AND ($5::text = '' OR rr.difficulty_name = $5)
+      AND ($6::smallint = 0 OR rr.max_players = $6)
+    ORDER BY rr.run_id, edr.encounter_name,
+        (CASE WHEN $1::text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
+),
+parse_rows AS MATERIALIZED (
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+        psr.run_id,
+        psr.encounter_name,
+        psr.precise_score
+    FROM parse_score_results psr
+    JOIN selected_encounters selected ON selected.encounter_name = psr.encounter_name
+    WHERE psr.tenant_id = $7
+      AND psr.player_guid = $3
+      AND psr.metric = $1
+      AND psr.status IN ('ok', 'low_confidence')
+    ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+),
+per_run AS (
+    SELECT
+        raw.run_id,
+        raw.representative_instance_id,
+        MIN(raw.start_time)::timestamptz AS started_at,
+        MAX(raw.killed_at)::timestamptz AS killed_at,
+        ((array_agg(raw.player_name ORDER BY raw.damage_done DESC))[1])::text AS player_name,
+        ((array_agg(raw.player_class ORDER BY raw.damage_done DESC))[1])::text AS player_class,
+        CASE
+            WHEN COUNT(DISTINCT raw.player_spec) = 1 THEN MIN(raw.player_spec)
+            ELSE 'Mixed'
+        END::text AS player_spec,
+        CASE
+            WHEN COUNT(DISTINCT raw.player_spec) > 1 OR COUNT(DISTINCT raw.player_sub_spec) > 1 THEN 'Mixed'
+            ELSE MIN(raw.player_sub_spec)
+        END::text AS player_sub_spec,
+        COUNT(DISTINCT raw.encounter_name)::integer AS encounter_count,
+        SUM(raw.damage_done)::bigint AS damage_done,
+        SUM(raw.healing_done)::bigint AS healing_done,
+        SUM(raw.absorbed_done)::bigint AS absorbed_done,
+        SUM(raw.duration_secs)::double precision AS duration_secs,
+        (SUM(raw.damage_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS dps,
+        (SUM(raw.healing_done + raw.absorbed_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS hps,
+        ((array_agg(raw.log_hashed_slug ORDER BY raw.killed_at DESC))[1])::text AS log_hashed_slug,
+        COUNT(parse.precise_score)::integer AS parse_count,
+        COALESCE(AVG(parse.precise_score), 0)::double precision AS average_parse
+    FROM raw_rows raw
+    LEFT JOIN parse_rows parse
+      ON parse.run_id = raw.run_id
+     AND parse.encounter_name = raw.encounter_name
+    GROUP BY raw.run_id, raw.representative_instance_id
+)
+SELECT run_id, representative_instance_id, started_at, killed_at, player_name, player_class, player_spec, player_sub_spec, encounter_count, damage_done, healing_done, absorbed_done, duration_secs, dps, hps, log_hashed_slug, parse_count, average_parse
+FROM per_run
+WHERE encounter_count = (SELECT COUNT(*) FROM selected_encounters)
+  AND (CASE WHEN $1::text = 'hps' THEN hps ELSE dps END) > 0
+ORDER BY started_at ASC, run_id ASC
+`
+
+type GetCharacterPerformanceRunsParams struct {
+	Metric         string    `db:"metric" json:"metric"`
+	EncounterNames []string  `db:"encounter_names" json:"encounter_names"`
+	PlayerGuid     string    `db:"player_guid" json:"player_guid"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+type GetCharacterPerformanceRunsRow struct {
+	RunID                    uuid.UUID          `db:"run_id" json:"run_id"`
+	RepresentativeInstanceID uuid.UUID          `db:"representative_instance_id" json:"representative_instance_id"`
+	StartedAt                pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	KilledAt                 pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	PlayerName               string             `db:"player_name" json:"player_name"`
+	PlayerClass              string             `db:"player_class" json:"player_class"`
+	PlayerSpec               string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec            string             `db:"player_sub_spec" json:"player_sub_spec"`
+	EncounterCount           int32              `db:"encounter_count" json:"encounter_count"`
+	DamageDone               int64              `db:"damage_done" json:"damage_done"`
+	HealingDone              int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone             int64              `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs             float64            `db:"duration_secs" json:"duration_secs"`
+	Dps                      float64            `db:"dps" json:"dps"`
+	Hps                      float64            `db:"hps" json:"hps"`
+	LogHashedSlug            string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	ParseCount               int32              `db:"parse_count" json:"parse_count"`
+	AverageParse             float64            `db:"average_parse" json:"average_parse"`
+}
+
+// Return complete canonical runs for one character and a selected boss set.
+// Raw DPS/HPS is aggregated from the persisted representative upload. Cached
+// per-boss parses are averaged when every selected encounter has a usable
+// score. parse_count tells the caller whether the cached average is complete.
+func (q *sqlQuerier) GetCharacterPerformanceRuns(ctx context.Context, arg GetCharacterPerformanceRunsParams) ([]GetCharacterPerformanceRunsRow, error) {
+	rows, err := q.db.Query(ctx, getCharacterPerformanceRuns,
+		arg.Metric,
+		arg.EncounterNames,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.TenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetCharacterPerformanceRunsRow
+	for rows.Next() {
+		var i GetCharacterPerformanceRunsRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.RepresentativeInstanceID,
+			&i.StartedAt,
+			&i.KilledAt,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.EncounterCount,
+			&i.DamageDone,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.Hps,
+			&i.LogHashedSlug,
+			&i.ParseCount,
+			&i.AverageParse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const hasInstanceDpsRankings = `-- name: HasInstanceDpsRankings :one
 SELECT EXISTS(
     SELECT 1 FROM encounter_dps_rankings WHERE instance_id = $1
