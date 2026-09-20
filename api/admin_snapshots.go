@@ -524,7 +524,7 @@ func (api *API) AdminRankingsRefreshStatus(w http.ResponseWriter, r *http.Reques
 func (api *API) AdminRefreshRankings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if _, err := api.Queues.Insert(ctx, rankingargs.ArgsRepairRankingRuns{FullScan: true}, nil); err != nil {
+	if _, err := api.Queues.Insert(ctx, rankingargs.ArgsRepairRankingRuns{}, nil); err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
 				Message: "Failed to enqueue ranking run repair",

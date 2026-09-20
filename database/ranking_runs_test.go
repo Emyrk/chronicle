@@ -17,7 +17,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/assert"
@@ -185,8 +184,8 @@ type pausingRankingRunRepairTx struct {
 	parent *pausingRankingRunRepairStore
 }
 
-func (tx *pausingRankingRunRepairTx) RankingRunsNeedingRepair(ctx context.Context, params database.RankingRunsNeedingRepairParams) ([]database.RankingRunsNeedingRepairRow, error) {
-	rows, err := tx.Store.RankingRunsNeedingRepair(ctx, params)
+func (tx *pausingRankingRunRepairTx) RankingRunsNeedingRepair(ctx context.Context, limit int32) ([]database.RankingRunsNeedingRepairRow, error) {
+	rows, err := tx.Store.RankingRunsNeedingRepair(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +384,7 @@ func TestRankingRunRepairDiscoverySerializesWithTargetedRefresh(t *testing.T) {
 	go func() {
 		worker := &servicerankings.WorkerRepairRankingRuns{Store: pausedStore, Logger: slog.Default()}
 		repairResult <- worker.Work(ctx, &river.Job[rankingargs.ArgsRepairRankingRuns]{
-			Args: rankingargs.ArgsRepairRankingRuns{Limit: 1},
+			Args: rankingargs.ArgsRepairRankingRuns{},
 		})
 	}()
 	select {
@@ -807,75 +806,36 @@ func TestRankingRunRefreshMergesGroupsAndReplacesDeletedRepresentative(t *testin
 	assert.Equal(t, int32(2), run.BossCoverage)
 }
 
-func TestRankingRunRepairSignalAfterDeletion(t *testing.T) {
+func TestRankingRunRepairRepairsMissedDeletion(t *testing.T) {
 	t.Parallel()
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	anchorID := uuid.New()
+	deletedID := uuid.New()
+	start := time.Date(2026, 9, 16, 9, 0, 0, 0, time.UTC)
+	insertRankingRunSource(t, pool, store, realmID, anchorID, start, "Lucifron", "Magmadar")
+	insertRankingRunSource(t, pool, store, realmID, deletedID, start.Add(time.Second), "Lucifron")
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true}, Ids: []uuid.UUID{anchorID, deletedID},
+	}))
+	_, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{anchorID})
+	require.NoError(t, err)
 
-	for _, tc := range []struct {
-		name             string
-		anchorUpdatedAt  time.Time
-		deletedUpdatedAt time.Time
-	}{
-		{
-			name:             "non-representative member",
-			anchorUpdatedAt:  time.Date(2026, 9, 16, 10, 1, 0, 0, time.UTC),
-			deletedUpdatedAt: time.Date(2026, 9, 16, 10, 0, 0, 0, time.UTC),
-		},
-		{
-			name:             "newest-timestamp member",
-			anchorUpdatedAt:  time.Date(2026, 9, 16, 10, 0, 0, 0, time.UTC),
-			deletedUpdatedAt: time.Date(2026, 9, 16, 10, 1, 0, 0, time.UTC),
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			pool, store, realmID := setupParsesTest(t)
-			ctx := testutil.Context(t, testutil.WaitMedium)
-			anchorID := uuid.New()
-			deletedID := uuid.New()
-			start := time.Date(2026, 9, 16, 9, 0, 0, 0, time.UTC)
-			insertRankingRunSource(t, pool, store, realmID, anchorID, start, "Lucifron", "Magmadar")
-			insertRankingRunSource(t, pool, store, realmID, deletedID, start.Add(time.Second), "Lucifron")
-			require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
-				DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true}, Ids: []uuid.UUID{anchorID, deletedID},
-			}))
+	// Simulate losing the post-commit targeted refresh after deletion.
+	_, err = store.DeleteLogInstancesByIDs(ctx, []uuid.UUID{deletedID})
+	require.NoError(t, err)
+	output, err := servicerankings.RepairRankingRuns(ctx, store)
+	require.NoError(t, err)
+	assert.Equal(t, 1, output.DiscoveredCount)
+	assert.Equal(t, 1, output.StaleCount)
+	assert.Equal(t, int64(1), output.UpdatedCount)
 
-			conn, err := pool.Acquire(ctx)
-			require.NoError(t, err)
-			_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-			require.NoError(t, err)
-			_, err = conn.Exec(ctx, `UPDATE log_instances SET updated_at = CASE id WHEN $1 THEN $2::timestamptz ELSE $3::timestamptz END WHERE id = ANY($4)`,
-				anchorID, tc.anchorUpdatedAt, tc.deletedUpdatedAt, []uuid.UUID{anchorID, deletedID})
-			conn.Release()
-			require.NoError(t, err)
-
-			_, err = servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{anchorID})
-			require.NoError(t, err)
-			before, err := store.RankingRunByID(ctx, anchorID)
-			require.NoError(t, err)
-			assert.Equal(t, int32(2), before.MemberCount)
-
-			// Simulate losing the targeted refresh enqueue after the delete. The
-			// statement trigger must leave enough state for incremental repair.
-			_, err = store.DeleteLogInstancesByIDs(ctx, []uuid.UUID{deletedID})
-			require.NoError(t, err)
-			repairs, err := store.RankingRunsNeedingRepair(ctx, database.RankingRunsNeedingRepairParams{
-				SourceCutoff: database.Timestamptz(time.Now().Add(time.Hour)), QueryLimit: 10,
-			})
-			require.NoError(t, err)
-			require.Len(t, repairs, 1)
-			assert.Equal(t, anchorID, repairs[0].RunID)
-			assert.True(t, repairs[0].Stale)
-
-			_, err = servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{repairs[0].RunID})
-			require.NoError(t, err)
-			after, err := store.RankingRunByID(ctx, anchorID)
-			require.NoError(t, err)
-			assert.Equal(t, int32(1), after.MemberCount)
-			assert.True(t, after.SourceUpdatedAt.Time.After(before.SourceUpdatedAt.Time))
-		})
-	}
+	run, err := store.RankingRunByID(ctx, anchorID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), run.MemberCount)
 }
 
-func TestRankingRunRepairSignalAfterIdentityTransitions(t *testing.T) {
+func TestRankingRunRepairRepairsMissedIdentityTransition(t *testing.T) {
 	t.Parallel()
 	pool, store, realmID := setupParsesTest(t)
 	ctx := testutil.Context(t, testutil.WaitMedium)
@@ -889,151 +849,131 @@ func TestRankingRunRepairSignalAfterIdentityTransitions(t *testing.T) {
 	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
 		DuplicateGroupID: uuid.NullUUID{UUID: oldRunID, Valid: true}, Ids: []uuid.UUID{oldRunID, movedID},
 	}))
-	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
-		DuplicateGroupID: uuid.NullUUID{UUID: newRunID, Valid: true}, Ids: []uuid.UUID{newRunID},
-	}))
 	_, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{oldRunID, newRunID})
 	require.NoError(t, err)
 
-	// Reassign one member. Incremental repair must discover both the old and
-	// new logical identities even if the targeted enqueue is missed.
+	// Simulate losing the post-commit targeted refresh after reassignment.
 	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
 		DuplicateGroupID: uuid.NullUUID{UUID: newRunID, Valid: true}, Ids: []uuid.UUID{movedID},
 	}))
-	repairs, err := store.RankingRunsNeedingRepair(ctx, database.RankingRunsNeedingRepairParams{
-		SourceCutoff: database.Timestamptz(time.Now().Add(time.Hour)), QueryLimit: 10,
-	})
+	output, err := servicerankings.RepairRankingRuns(ctx, store)
 	require.NoError(t, err)
-	repairIDs := make([]uuid.UUID, 0, len(repairs))
-	for _, repair := range repairs {
-		repairIDs = append(repairIDs, repair.RunID)
-		assert.True(t, repair.Stale)
-	}
-	require.ElementsMatch(t, []uuid.UUID{oldRunID, newRunID}, repairIDs)
-	_, err = servicerankings.RefreshRankingRuns(ctx, store, repairIDs)
-	require.NoError(t, err)
+	assert.Equal(t, 2, output.DiscoveredCount)
+	assert.Equal(t, 2, output.StaleCount)
+	assert.Equal(t, int64(2), output.UpdatedCount)
+
 	oldRun, err := store.RankingRunByID(ctx, oldRunID)
 	require.NoError(t, err)
 	newRun, err := store.RankingRunByID(ctx, newRunID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), oldRun.MemberCount)
 	assert.Equal(t, int32(2), newRun.MemberCount)
+}
 
-	// Unlink the member. The old group needs a survivor touch while the new
-	// standalone identity is found as a missing projection.
-	_, err = store.UnlinkDuplicateGroup(ctx, movedID)
+func TestRankingRunRepairRepairsMissedUnlink(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	anchorID := uuid.New()
+	unlinkedID := uuid.New()
+	start := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+	insertRankingRunSource(t, pool, store, realmID, anchorID, start, "Lucifron", "Magmadar")
+	insertRankingRunSource(t, pool, store, realmID, unlinkedID, start.Add(time.Second), "Lucifron")
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true}, Ids: []uuid.UUID{anchorID, unlinkedID},
+	}))
+	_, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{anchorID})
 	require.NoError(t, err)
-	repairs, err = store.RankingRunsNeedingRepair(ctx, database.RankingRunsNeedingRepairParams{
-		SourceCutoff: database.Timestamptz(time.Now().Add(time.Hour)), QueryLimit: 10,
-	})
+
+	// Simulate losing the post-commit targeted refresh after unlinking.
+	_, err = store.UnlinkDuplicateGroup(ctx, unlinkedID)
 	require.NoError(t, err)
-	repairIDs = repairIDs[:0]
-	for _, repair := range repairs {
-		repairIDs = append(repairIDs, repair.RunID)
-	}
-	require.ElementsMatch(t, []uuid.UUID{newRunID, movedID}, repairIDs)
-	_, err = servicerankings.RefreshRankingRuns(ctx, store, repairIDs)
+	output, err := servicerankings.RepairRankingRuns(ctx, store)
 	require.NoError(t, err)
-	newRun, err = store.RankingRunByID(ctx, newRunID)
+	assert.Equal(t, 2, output.DiscoveredCount)
+	assert.Equal(t, 1, output.MissingCount)
+	assert.Equal(t, 1, output.StaleCount)
+	assert.Equal(t, int64(1), output.CreatedCount)
+	assert.Equal(t, int64(1), output.UpdatedCount)
+
+	group, err := store.RankingRunByID(ctx, anchorID)
 	require.NoError(t, err)
-	standalone, err := store.RankingRunByID(ctx, movedID)
+	standalone, err := store.RankingRunByID(ctx, unlinkedID)
 	require.NoError(t, err)
-	assert.Equal(t, int32(1), newRun.MemberCount)
+	assert.Equal(t, int32(1), group.MemberCount)
 	assert.Equal(t, int32(1), standalone.MemberCount)
 }
 
-func TestRankingRunRepairSignalWritesAtMostOneSurvivorPerRun(t *testing.T) {
+func TestRankingRunRepairCleansOrphanAndReportsMutations(t *testing.T) {
 	t.Parallel()
 	pool, store, realmID := setupParsesTest(t)
 	ctx := testutil.Context(t, testutil.WaitMedium)
-	start := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
-	type runMembers struct {
-		runID   uuid.UUID
-		keepIDs []uuid.UUID
-		delete  uuid.UUID
-	}
-	runs := make([]runMembers, 2)
-	allIDs := make([]uuid.UUID, 0, 6)
-	deleteIDs := make([]uuid.UUID, 0, 2)
-	for i := range runs {
-		runs[i] = runMembers{
-			runID:   uuid.New(),
-			keepIDs: []uuid.UUID{uuid.New(), uuid.New()},
-			delete:  uuid.New(),
-		}
-		ids := []uuid.UUID{runs[i].runID, runs[i].keepIDs[0], runs[i].keepIDs[1], runs[i].delete}
-		for j, id := range ids {
-			insertRankingRunSource(t, pool, store, realmID, id, start.Add(time.Duration(i*10+j)*time.Second), "Lucifron")
-		}
-		require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
-			DuplicateGroupID: uuid.NullUUID{UUID: runs[i].runID, Valid: true}, Ids: ids,
-		}))
-		allIDs = append(allIDs, ids...)
-		deleteIDs = append(deleteIDs, runs[i].delete)
-	}
-
-	conn, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-	require.NoError(t, err)
-	baseline := time.Date(2026, 9, 16, 12, 30, 0, 0, time.UTC)
-	_, err = conn.Exec(ctx, "UPDATE log_instances SET updated_at = $1 WHERE id = ANY($2)", baseline, allIDs)
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "DELETE FROM log_instances WHERE id = ANY($1)", deleteIDs)
-	require.NoError(t, err)
-
-	for _, run := range runs {
-		var touched int
-		err = conn.QueryRow(ctx, `
-			SELECT COUNT(*)
-			FROM log_instances
-			WHERE (id = $1 OR duplicate_group_id = $1)
-			  AND updated_at > $2`, run.runID, baseline).Scan(&touched)
-		require.NoError(t, err)
-		assert.Equal(t, 1, touched)
-	}
-	conn.Release()
-}
-
-func TestRankingRunRepairDiscoveryCutoffLimitAndOrphans(t *testing.T) {
-	t.Parallel()
-	pool, store, realmID := setupParsesTest(t)
-	ctx := testutil.Context(t, testutil.WaitMedium)
-	old := time.Now().Add(-2 * time.Hour)
-	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
-	for _, id := range ids {
-		insertRankingRunSource(t, pool, store, realmID, id, old, "Lucifron")
-	}
-	conn, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "UPDATE log_instances SET updated_at = $1 WHERE id = ANY($2)", old, ids)
-	conn.Release()
-	require.NoError(t, err)
-
-	rows, err := store.RankingRunsNeedingRepair(ctx, database.RankingRunsNeedingRepairParams{
-		SourceCutoff: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}, QueryLimit: 2,
-	})
-	require.NoError(t, err)
-	require.Len(t, rows, 2)
-	assert.True(t, rows[0].Missing)
-	assert.True(t, rows[1].Missing)
-
-	recentRows, err := store.RankingRunsNeedingRepair(ctx, database.RankingRunsNeedingRepairParams{
-		SourceCutoff: pgtype.Timestamptz{Time: old.Add(-time.Minute), Valid: true}, QueryLimit: 10,
-	})
-	require.NoError(t, err)
-	assert.Empty(t, recentRows)
-
-	sources, err := store.RankingRunSources(ctx, []uuid.UUID{ids[0]})
+	instanceID := uuid.New()
+	insertRankingRunSource(t, pool, store, realmID, instanceID, time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC), "Lucifron")
+	sources, err := store.RankingRunSources(ctx, []uuid.UUID{instanceID})
 	require.NoError(t, err)
 	require.Len(t, sources, 1)
+
+	orphanID := uuid.New()
 	orphan := database.UpsertRankingRunParams(sources[0])
-	orphan.RunID = uuid.New()
+	orphan.RunID = orphanID
 	_, err = store.UpsertRankingRun(ctx, orphan)
 	require.NoError(t, err)
-	orphans, err := store.OrphanRankingRuns(ctx, 10)
+
+	output, err := servicerankings.RepairRankingRuns(ctx, store)
 	require.NoError(t, err)
-	require.Contains(t, orphans, orphan.RunID)
+	assert.Equal(t, 2, output.DiscoveredCount)
+	assert.Equal(t, 1, output.MissingCount)
+	assert.Equal(t, 1, output.OrphanCount)
+	assert.Equal(t, int64(1), output.CreatedCount)
+	assert.Equal(t, int64(1), output.DeletedCount)
+	_, err = store.RankingRunByID(ctx, orphanID)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = store.RankingRunByID(ctx, instanceID)
+	require.NoError(t, err)
+}
+
+type rollbackProbeRankingRunRepairStore struct {
+	database.Store
+	runID uuid.UUID
+}
+
+func (s *rollbackProbeRankingRunRepairStore) InTx(ctx context.Context, f func(database.Store) error, opts *pgx.TxOptions) error {
+	return s.Store.InTx(ctx, func(tx database.Store) error {
+		return f(&rollbackProbeRankingRunRepairTx{Store: tx, runID: s.runID})
+	}, opts)
+}
+
+type rollbackProbeRankingRunRepairTx struct {
+	database.Store
+	runID uuid.UUID
+}
+
+func (tx *rollbackProbeRankingRunRepairTx) RankingRunsNeedingRepair(ctx context.Context, _ int32) ([]database.RankingRunsNeedingRepairRow, error) {
+	_, err := tx.Store.DeleteObsoleteRankingRuns(ctx, database.DeleteObsoleteRankingRunsParams{
+		AffectedIds: []uuid.UUID{tx.runID},
+	})
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]database.RankingRunsNeedingRepairRow, 10_000)
+	for i := range rows {
+		rows[i] = database.RankingRunsNeedingRepairRow{RunID: uuid.New(), Missing: true}
+	}
+	return rows, nil
+}
+
+func TestRankingRunRepairSafetyBoundRollsBack(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	runID := uuid.New()
+	insertRankingRunSource(t, pool, store, realmID, runID, time.Date(2026, 9, 16, 13, 0, 0, 0, time.UTC), "Lucifron")
+	_, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{runID})
+	require.NoError(t, err)
+
+	_, err = servicerankings.RepairRankingRuns(ctx, &rollbackProbeRankingRunRepairStore{Store: store, runID: runID})
+	require.ErrorContains(t, err, "reached safety bound of 10000 logical runs")
+	_, err = store.RankingRunByID(ctx, runID)
+	require.NoError(t, err, "safety-bound failure must roll back transaction mutations")
 }
