@@ -167,6 +167,38 @@ func (tx *pausingRankingRunSourceTx) RankingRunSources(ctx context.Context, affe
 	}
 }
 
+type pausingRankingRunRepairStore struct {
+	database.Store
+	discoveryRead chan struct{}
+	release       chan struct{}
+	discoveryOnce sync.Once
+}
+
+func (s *pausingRankingRunRepairStore) InTx(ctx context.Context, f func(database.Store) error, opts *pgx.TxOptions) error {
+	return s.Store.InTx(ctx, func(tx database.Store) error {
+		return f(&pausingRankingRunRepairTx{Store: tx, parent: s})
+	}, opts)
+}
+
+type pausingRankingRunRepairTx struct {
+	database.Store
+	parent *pausingRankingRunRepairStore
+}
+
+func (tx *pausingRankingRunRepairTx) RankingRunsNeedingRepair(ctx context.Context, params database.RankingRunsNeedingRepairParams) ([]database.RankingRunsNeedingRepairRow, error) {
+	rows, err := tx.Store.RankingRunsNeedingRepair(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	tx.parent.discoveryOnce.Do(func() { close(tx.parent.discoveryRead) })
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-tx.parent.release:
+		return rows, nil
+	}
+}
+
 type rankingRunRefreshResult struct {
 	output servicerankings.RefreshRankingRunsOutput
 	err    error
@@ -336,6 +368,38 @@ func TestRankingRunRefreshSerializesSourceTransitions(t *testing.T) {
 			assertRankingRunsMatchSources(t, ctx, pool, store, affectedIDs)
 		})
 	}
+}
+
+func TestRankingRunRepairDiscoverySerializesWithTargetedRefresh(t *testing.T) {
+	t.Parallel()
+	pool, store, _ := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	pausedStore := &pausingRankingRunRepairStore{
+		Store: store, discoveryRead: make(chan struct{}), release: make(chan struct{}),
+	}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(pausedStore.release) }) }
+	t.Cleanup(release)
+
+	repairResult := make(chan error, 1)
+	go func() {
+		worker := &servicerankings.WorkerRepairRankingRuns{Store: pausedStore, Logger: slog.Default()}
+		repairResult <- worker.Work(ctx, &river.Job[rankingargs.ArgsRepairRankingRuns]{
+			Args: rankingargs.ArgsRepairRankingRuns{Limit: 1},
+		})
+	}()
+	select {
+	case <-pausedStore.discoveryRead:
+	case <-ctx.Done():
+		require.FailNow(t, "repair did not enter discovery", ctx.Err())
+	}
+
+	refreshResult := refreshRankingRunsAsync(ctx, store, []uuid.UUID{uuid.New()})
+	require.Nil(t, observeNewerRefresh(t, ctx, pool, refreshResult),
+		"targeted refresh completed while repair discovery held the shared advisory lock")
+	release()
+	require.NoError(t, <-repairResult)
+	require.NoError(t, (<-refreshResult).err)
 }
 
 type rankingConsumerResults struct {

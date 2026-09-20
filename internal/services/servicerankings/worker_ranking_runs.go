@@ -141,43 +141,59 @@ func (w *WorkerRepairRankingRuns) Work(ctx context.Context, job *river.Job[ranki
 	ctx = servicetenant.AdminBypass(ctx)
 	cutoff := database.Timestamptz(time.Now().Add(-rankingRunRepairCutoff))
 	affectedIDs := make([]uuid.UUID, 0, limit)
-	if job.Args.FullScan {
-		rows, queryErr := w.Store.RankingRunsNeedingFullScanRepair(ctx, database.RankingRunsNeedingFullScanRepairParams{
-			SourceCutoff: cutoff, QueryLimit: limit,
-		})
-		if queryErr != nil {
-			return fmt.Errorf("discover full-scan ranking run repairs: %w", queryErr)
+	enqueueRefresh := false
+	enqueueContinuation := false
+	if txErr := w.Store.InTx(ctx, func(tx database.Store) error {
+		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+			return fmt.Errorf("acquire ranking run repair lock: %w", err)
 		}
-		for _, row := range rows {
-			affectedIDs = append(affectedIDs, row.RunID)
-			countRankingRunRepairReason(&output, row.Missing, row.Stale, row.InvalidRepresentative)
+		if job.Args.FullScan {
+			rows, queryErr := tx.RankingRunsNeedingFullScanRepair(ctx, database.RankingRunsNeedingFullScanRepairParams{
+				SourceCutoff: cutoff, QueryLimit: limit,
+			})
+			if queryErr != nil {
+				return fmt.Errorf("discover full-scan ranking run repairs: %w", queryErr)
+			}
+			for _, row := range rows {
+				affectedIDs = append(affectedIDs, row.RunID)
+				countRankingRunRepairReason(&output, row.Missing, row.Stale, row.InvalidRepresentative)
+			}
+		} else {
+			rows, queryErr := tx.RankingRunsNeedingRepair(ctx, database.RankingRunsNeedingRepairParams{
+				SourceCutoff: cutoff, QueryLimit: limit,
+			})
+			if queryErr != nil {
+				return fmt.Errorf("discover ranking run repairs: %w", queryErr)
+			}
+			for _, row := range rows {
+				affectedIDs = append(affectedIDs, row.RunID)
+				countRankingRunRepairReason(&output, row.Missing, row.Stale, row.InvalidRepresentative)
+			}
 		}
-	} else {
-		rows, queryErr := w.Store.RankingRunsNeedingRepair(ctx, database.RankingRunsNeedingRepairParams{
-			SourceCutoff: cutoff, QueryLimit: limit,
-		})
-		if queryErr != nil {
-			return fmt.Errorf("discover ranking run repairs: %w", queryErr)
+
+		remaining := limit - int32(len(affectedIDs))
+		if remaining > 0 {
+			orphans, queryErr := tx.OrphanRankingRuns(ctx, remaining)
+			if queryErr != nil {
+				return fmt.Errorf("discover orphan ranking runs: %w", queryErr)
+			}
+			affectedIDs = append(affectedIDs, orphans...)
+			output.OrphanCount = len(orphans)
 		}
-		for _, row := range rows {
-			affectedIDs = append(affectedIDs, row.RunID)
-			countRankingRunRepairReason(&output, row.Missing, row.Stale, row.InvalidRepresentative)
-		}
+		affectedIDs = rankingargs.NormalizeIDs(affectedIDs)
+		output.RefreshAffectedIDCount = len(affectedIDs)
+		enqueueRefresh = len(affectedIDs) > 0
+		enqueueContinuation = len(affectedIDs) == int(limit)
+		return nil
+	}, nil); txErr != nil {
+		return txErr
 	}
 
-	remaining := limit - int32(len(affectedIDs))
-	if remaining > 0 {
-		orphans, queryErr := w.Store.OrphanRankingRuns(ctx, remaining)
-		if queryErr != nil {
-			return fmt.Errorf("discover orphan ranking runs: %w", queryErr)
-		}
-		affectedIDs = append(affectedIDs, orphans...)
-		output.OrphanCount = len(orphans)
-	}
-	affectedIDs = rankingargs.NormalizeIDs(affectedIDs)
-	output.RefreshAffectedIDCount = len(affectedIDs)
+	// The transaction commit releases the advisory lock after the complete source
+	// discovery snapshot. River inserts use another pooled connection, so enqueue
+	// only after commit rather than waiting for that connection while holding one.
 
-	if len(affectedIDs) > 0 {
+	if enqueueRefresh {
 		if w.Queue == nil {
 			return errors.New("ranking run repair queue is not configured")
 		}
@@ -188,7 +204,7 @@ func (w *WorkerRepairRankingRuns) Work(ctx context.Context, job *river.Job[ranki
 		output.RefreshJobCount++
 	}
 
-	if len(affectedIDs) == int(limit) {
+	if enqueueContinuation {
 		if w.Queue == nil {
 			return errors.New("ranking run repair queue is not configured")
 		}
