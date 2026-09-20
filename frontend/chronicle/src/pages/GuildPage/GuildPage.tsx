@@ -7,7 +7,7 @@ import { GuildPageCanvas, TabBar, GuildPageHeader, GuildActionsMenu } from "./co
 import { Shield, PanelLeft, UserPlus, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { orderGuildPageTabs } from "./guildPageTabs";
+import { ensureRequiredRaidsTab, orderGuildPageTabs } from "./guildPageTabs";
 
 // Helper to check if an item should be visible on current device
 function isVisibleOnDevice(visibility: DeviceVisibility | undefined, isMobile: boolean): boolean {
@@ -34,7 +34,7 @@ export function GuildPage() {
   const createJoinRequest = useCreateJoinRequest(guildId);
 
   // Filter tabs and panels based on device visibility.
-  const visibleTabs = orderGuildPageTabs(pageConfig?.tabs || [])
+  const visibleTabs = orderGuildPageTabs(ensureRequiredRaidsTab(pageConfig?.tabs || [], pageConfig?.id))
     .filter((tab) => isVisibleOnDevice(tab.visibility, isMobile))
     .map((tab) => ({
       ...tab,
