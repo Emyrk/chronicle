@@ -287,19 +287,19 @@ type GuildTopParsesResponse struct {
 // Guild best runs (guild page "Best Performance" panel)
 
 // GuildBestRun is the guild's best full clear of one instance within the
-// requested window — fastest, or highest average parse when ranked by parse.
-// AvgParse is -1 when the run has no parses.
+// requested window, fastest or highest historical clear-time parse.
+// ClearTimeParse is -1 when no eligible time-parse snapshot is available.
 type GuildBestRun struct {
-	RunID          uuid.UUID `json:"run_id"`
-	InstanceID     uuid.UUID `json:"instance_id"`
-	InstanceSlug   string    `json:"instance_slug,omitempty"`
-	InstanceName   string    `json:"instance_name"`
-	DifficultyName string    `json:"difficulty_name"`
-	MaxPlayers     int32     `json:"max_players"`
-	DurationMs     int64     `json:"duration_ms"`
-	CompletedAt    time.Time `json:"completed_at"`
-	AvgParse       float64   `json:"avg_parse"`
-	ParseCount     int64     `json:"parse_count"`
+	RunID           uuid.UUID `json:"run_id"`
+	InstanceID      uuid.UUID `json:"instance_id"`
+	InstanceSlug    string    `json:"instance_slug,omitempty"`
+	InstanceName    string    `json:"instance_name"`
+	DifficultyName  string    `json:"difficulty_name"`
+	MaxPlayers      int32     `json:"max_players"`
+	DurationMs      int64     `json:"duration_ms"`
+	CompletedAt     time.Time `json:"completed_at"`
+	ClearTimeParse  float64   `json:"clear_time_parse"`
+	ParseSampleSize int64     `json:"parse_sample_size"`
 }
 
 type GuildBestRunsResponse struct {

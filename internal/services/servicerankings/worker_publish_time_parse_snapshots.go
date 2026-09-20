@@ -19,10 +19,6 @@ import (
 	"github.com/riverqueue/river/rivertype"
 )
 
-// timeParseSnapshotQueryVersion is bumped whenever the batch-insert query
-// logic for time-parse snapshots changes.
-const timeParseSnapshotQueryVersion int16 = 1
-
 // ---------------------------------------------------------------------------
 // ArgsPublishTimeParseSnapshots — dispatch job (periodic).
 // Fans out one ArgsPublishTimeParseSnapshotTenant per tenant per lookback.
@@ -194,7 +190,7 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 		TenantID:      args.TenantID,
 		LookbackDays:  args.LookbackDays,
 		PolicyVersion: args.PolicyVersion,
-		QueryVersion:  timeParseSnapshotQueryVersion,
+		QueryVersion:  timeparsepolicy.SnapshotQueryVersion,
 		Cutoff:        cutoff,
 	})
 	if alreadyErr == nil {
@@ -229,7 +225,7 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 			TenantID:      args.TenantID,
 			LookbackDays:  args.LookbackDays,
 			PolicyVersion: args.PolicyVersion,
-			QueryVersion:  timeParseSnapshotQueryVersion,
+			QueryVersion:  timeparsepolicy.SnapshotQueryVersion,
 		})
 		if prevErr == nil && prev.SourceFingerprint == sourceStats.Fingerprint {
 			w.Logger.Debug("skipping unchanged time-parse snapshot",
@@ -258,7 +254,7 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 			WindowStart:       windowStart,
 			LookbackDays:      args.LookbackDays,
 			PolicyVersion:     args.PolicyVersion,
-			QueryVersion:      timeParseSnapshotQueryVersion,
+			QueryVersion:      timeparsepolicy.SnapshotQueryVersion,
 			SourceRowCount:    sourceStats.RowCount,
 			SourceWatermark:   sourceStats.Watermark,
 			SourceFingerprint: sourceStats.Fingerprint,

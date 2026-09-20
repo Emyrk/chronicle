@@ -115,7 +115,7 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Log
 	// Resolve snapshot — always filter to the current policy+query version
 	// so old-policy snapshots are never selected.
 	policyVer := int16(timeparsepolicy.PolicyVersion)
-	queryVer := timeParseSnapshotQueryVersion
+	queryVer := timeparsepolicy.SnapshotQueryVersion
 
 	var snapshot database.TimeParseSnapshot
 	switch timeframe {

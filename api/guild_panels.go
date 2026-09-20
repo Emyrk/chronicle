@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 )
 
 // GuildCharacterRoster returns the guild's characters seen in raid logs.
@@ -164,11 +165,20 @@ func (api *API) GuildBestRuns(w http.ResponseWriter, r *http.Request) {
 		sinceDays, _ = strconv.ParseInt(v, 10, 64)
 	}
 
+	lookbackDays := int32(sinceDays)
+	if lookbackDays <= 0 {
+		lookbackDays = int32(parsepolicy.DefaultLookbackDays)
+	}
+
 	rows, err := api.Opts.Zed.GuildBestRuns(ctx, database.GuildBestRunsParams{
-		TenantID:  servicetenant.TenantIDFromContext(ctx),
-		GuildID:   guild.ID,
-		SinceDays: sinceDays,
-		ByParse:   r.URL.Query().Get("by") == "parse",
+		TenantID:       servicetenant.TenantIDFromContext(ctx),
+		GuildID:        guild.ID,
+		SinceDays:      sinceDays,
+		ByParse:        r.URL.Query().Get("by") == "parse",
+		LookbackDays:   lookbackDays,
+		PolicyVersion:  int16(timeparsepolicy.PolicyVersion),
+		QueryVersion:   timeparsepolicy.SnapshotQueryVersion,
+		MinParseSample: timeparsepolicy.MinSampleForParse,
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -183,16 +193,16 @@ func (api *API) GuildBestRuns(w http.ResponseWriter, r *http.Request) {
 	runs := make([]chroniclesdk.GuildBestRun, len(rows))
 	for i, row := range rows {
 		runs[i] = chroniclesdk.GuildBestRun{
-			RunID:          row.RunID,
-			InstanceID:     row.InstanceID,
-			InstanceSlug:   row.InstanceSlug,
-			InstanceName:   row.InstanceName,
-			DifficultyName: row.DifficultyName,
-			MaxPlayers:     row.MaxPlayers,
-			DurationMs:     row.DurationMs,
-			CompletedAt:    row.CompletionTime.Time,
-			AvgParse:       row.AvgParse,
-			ParseCount:     row.ParseCount,
+			RunID:           row.RunID,
+			InstanceID:      row.InstanceID,
+			InstanceSlug:    row.InstanceSlug,
+			InstanceName:    row.InstanceName,
+			DifficultyName:  row.DifficultyName,
+			MaxPlayers:      row.MaxPlayers,
+			DurationMs:      row.DurationMs,
+			CompletedAt:     row.CompletionTime.Time,
+			ClearTimeParse:  row.ClearTimeParse,
+			ParseSampleSize: row.ParseSampleSize,
 		}
 	}
 

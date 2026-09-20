@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Award, AlertCircle } from "lucide-react";
-import type {
-  GuildBestRun,
-  GuildBestRunsResponse,
-  InstanceTimeParsesResponse,
-} from "@/api/typesGenerated";
+import type { GuildBestRun, GuildBestRunsResponse } from "@/api/typesGenerated";
 import { parseColor } from "@/pages/Instance/parseColors";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 import { instanceAccentGradient } from "./instanceColors";
@@ -93,7 +89,6 @@ function BestRunRow({
 
 function BestPerformanceContent({ config, guild }: GuildPanelRenderProps<BestPerformanceConfig>) {
   const [runs, setRuns] = useState<GuildBestRun[]>([]);
-  const [clearParses, setClearParses] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,40 +120,10 @@ function BestPerformanceContent({ config, guild }: GuildPanelRenderProps<BestPer
     };
   }, [guild.id, timeWindow, rankBy]);
 
-  // The parse shown is the run's clear-time parse (the whole clear scored
-  // against the population), fetched per winning run.
-  useEffect(() => {
-    if (runs.length === 0) return;
-    let cancelled = false;
-    const fetchParses = async () => {
-      const entries = await Promise.all(
-        runs.map(async (run) => {
-          try {
-            const response = await fetch(
-              `/api/v1/rankings/instances/${run.instance_id}/time-parses?period=${timeWindow}d`,
-            );
-            if (!response.ok) return null;
-            const data = (await response.json()) as InstanceTimeParsesResponse;
-            if (!data.available || !data.clear_time) return null;
-            return [run.run_id, data.clear_time.display_score] as const;
-          } catch {
-            return null;
-          }
-        }),
-      );
-      if (cancelled) return;
-      setClearParses(Object.fromEntries(entries.filter((e): e is [string, number] => e !== null)));
-    };
-    fetchParses();
-    return () => {
-      cancelled = true;
-    };
-  }, [runs, timeWindow]);
-
   const sorted = useMemo(() => {
     const list = [...runs];
     if (rankBy === "parse") {
-      list.sort((a, b) => b.avg_parse - a.avg_parse);
+      list.sort((a, b) => b.clear_time_parse - a.clear_time_parse);
     } else {
       list.sort((a, b) => a.instance_name.localeCompare(b.instance_name));
     }
@@ -194,13 +159,18 @@ function BestPerformanceContent({ config, guild }: GuildPanelRenderProps<BestPer
     <div className="flex h-full flex-col p-1">
       <div className="flex items-center justify-between pb-1 text-[11px] text-muted-foreground">
         <span className="uppercase tracking-wider">
-          Best {rankBy === "parse" ? "parse" : "time"} per raid
+          Best {rankBy === "parse" ? "clear time parse" : "time"} per raid
         </span>
         <span>Last {timeWindow} days</span>
       </div>
       <div className="flex flex-col gap-2">
         {sorted.map((run) => (
-          <BestRunRow key={run.run_id} run={run} rankBy={rankBy} clearParse={clearParses[run.run_id]} />
+          <BestRunRow
+            key={run.run_id}
+            run={run}
+            rankBy={rankBy}
+            clearParse={run.clear_time_parse >= 0 ? Math.round(run.clear_time_parse) : undefined}
+          />
         ))}
       </div>
     </div>
@@ -211,7 +181,7 @@ export const BestPerformancePanel: GuildPanelDefinition<BestPerformanceConfig> =
   type: "best_performance",
   label: "Best Performance",
   icon: <Award className="h-4 w-4" />,
-  description: "The guild's best full clear of each raid, by parse or by clear time",
+  description: "The guild's best full clear of each raid, by clear time parse or clear time",
   defaultSize: { w: 4, h: 4 },
   minSize: { w: 3, h: 2 },
   maxSize: { w: 12, h: 10 },
@@ -221,7 +191,7 @@ export const BestPerformancePanel: GuildPanelDefinition<BestPerformanceConfig> =
       label: "Pick the best run by",
       type: "select",
       options: [
-        { value: "parse", label: "Average parse" },
+        { value: "parse", label: "Clear time parse" },
         { value: "time", label: "Clear time" },
       ],
       defaultValue: "parse",
