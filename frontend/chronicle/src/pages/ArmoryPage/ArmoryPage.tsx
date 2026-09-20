@@ -255,7 +255,6 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
               player={player}
               onOpenTab={openTab}
               metric={metric}
-              onMetricChange={setMetric}
             />
           </div>
         )}

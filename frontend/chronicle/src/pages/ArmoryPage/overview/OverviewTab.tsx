@@ -20,16 +20,14 @@ import { ProgressionCard } from "./ProgressionCard";
 import { FirstKillsCard } from "./FirstKillsCard";
 import { GearTrendCard } from "./GearTrendCard";
 import { LootCard } from "./LootCard";
-import { PerformanceExplorer } from "./PerformanceExplorer";
 
 interface OverviewTabProps {
   player: ArmoryPlayer;
   onOpenTab: (tab: "gear" | "talents" | "activity") => void;
   metric: ParseMetric;
-  onMetricChange: (metric: ParseMetric) => void;
 }
 
-export function OverviewTab({ player, onOpenTab, metric, onMetricChange }: OverviewTabProps) {
+export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
   const [searchParams] = useSearchParams();
   const isPerformance = searchParams.get("mode") === "performance";
 
@@ -109,13 +107,6 @@ export function OverviewTab({ player, onOpenTab, metric, onMetricChange }: Overv
 
         {isPerformance ? (
         <>
-          <div className="lg:col-span-12">
-            <PerformanceExplorer
-              player={player}
-              metric={metric}
-              onMetricChange={onMetricChange}
-            />
-          </div>
           <div className="lg:col-span-12">
             <RaidScoresCard
               raids={raids}

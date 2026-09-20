@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ExternalLink, TrendingUp } from "lucide-react";
+import { CheckCircle, ExternalLink, TrendingUp } from "lucide-react";
 import type { ArmoryPlayer, CharacterPerformanceRun } from "@/api/typesGenerated";
 import { useCharacterEncounters, useCharacterPerformance } from "@/api/rankingsQueries";
 import { Button } from "@/components/ui/button";
@@ -78,7 +78,12 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
     setSubSpec(null);
   };
 
-  const toggleEncounter = (encounter: string) => {
+  const selectEncounter = (encounter: string, additive: boolean) => {
+    if (!additive) {
+      setSelectedEncounters([encounter]);
+      return;
+    }
+
     const current = effectiveEncounters;
     if (current.includes(encounter)) {
       if (current.length > 1) setSelectedEncounters(current.filter((item) => item !== encounter));
@@ -117,90 +122,114 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
           <EmptyState loading={encountersQuery.isLoading} />
         ) : (
           <>
-            <div className="grid gap-4 lg:grid-cols-[minmax(15rem,0.36fr)_1fr]">
-              <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
-                Instance
-                <select
-                  value={variant?.key ?? ""}
-                  onChange={(event) => selectVariant(event.target.value)}
-                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-sky-500/70"
-                >
-                  {variants.map((item) => (
-                    <option key={item.key} value={item.key}>
-                      {variantLabel(item.instanceName, item.difficultyName, item.maxPlayers)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <label className="block max-w-sm space-y-1.5 text-xs font-medium text-muted-foreground">
+              Instance
+              <select
+                value={variant?.key ?? ""}
+                onChange={(event) => selectVariant(event.target.value)}
+                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-sky-500/70"
+              >
+                {variants.map((item) => (
+                  <option key={item.key} value={item.key}>
+                    {variantLabel(item.instanceName, item.difficultyName, item.maxPlayers)}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-                  <span>Encounters</span>
-                  <button
-                    type="button"
-                    className="text-sky-400 hover:text-sky-300"
+            <div className="flex flex-col border-t border-border/60 pt-5 lg:flex-row">
+              <aside className="shrink-0 border-b border-border/60 pb-5 lg:w-64 lg:border-r lg:border-b-0 lg:pr-5 lg:pb-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Encounters</h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-5 px-1.5 text-xs"
                     onClick={() => setSelectedEncounters([])}
+                    title="Select all encounters"
                   >
-                    Select all
-                  </button>
+                    All
+                  </Button>
                 </div>
-                <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto pr-1 styled-scrollbar">
-                  {variant?.encounters.map((encounter) => (
-                    <button
-                      type="button"
-                      key={encounter}
-                      onClick={() => toggleEncounter(encounter)}
-                      className={cn(
-                        "rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
-                        effectiveEncounters.includes(encounter)
-                          ? "border-sky-400/60 bg-sky-400/15 text-sky-100"
-                          : "border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground",
-                      )}
-                    >
-                      {encounter}
-                    </button>
-                  ))}
+                <div className="mt-3">
+                  <h4 className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    Bosses
+                  </h4>
+                  <div className="space-y-1">
+                    {variant?.encounters.map((encounter) => {
+                      const selected = effectiveEncounters.includes(encounter);
+                      return (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          key={encounter}
+                          onClick={(event) => selectEncounter(encounter, event.ctrlKey || event.metaKey)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              selectEncounter(encounter, event.ctrlKey || event.metaKey);
+                            }
+                          }}
+                          className={cn(
+                            "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-all duration-150",
+                            selected
+                              ? "border-l-3 border-l-primary-foreground/70 bg-primary-darker text-primary-foreground shadow-sm"
+                              : "hover:translate-x-0.5 hover:bg-accent/50",
+                          )}
+                          title={`${encounter}. Click to select, Ctrl+Click to toggle`}
+                        >
+                          <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
+                          <span className="min-w-0 flex-1 truncate">{encounter}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            </div>
+                <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
+                  Click to select one boss. Ctrl+Click or Cmd+Click to compare multiple bosses.
+                </p>
+              </aside>
 
-            {specs.length > 0 && (
-              <div className="space-y-2 border-t border-border/60 pt-4">
-                <div className="text-xs font-medium text-muted-foreground">Spec and subspec</div>
-                <div className="flex flex-wrap gap-1.5">
-                  <FilterButton active={!spec} onClick={() => { setSpec(null); setSubSpec(null); }}>All specs</FilterButton>
-                  {specs.map((option) => (
-                    <FilterButton
-                      key={option}
-                      active={spec === option}
-                      onClick={() => { setSpec(spec === option ? null : option); setSubSpec(null); }}
-                    >
-                      {option}
-                    </FilterButton>
-                  ))}
-                </div>
-                {spec && subSpecs.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pl-2">
-                    <FilterButton active={!subSpec} onClick={() => setSubSpec(null)}>All {spec}</FilterButton>
-                    {subSpecs.map((option) => (
-                      <FilterButton key={option} active={subSpec === option} onClick={() => setSubSpec(subSpec === option ? null : option)}>
-                        {option}
-                      </FilterButton>
-                    ))}
+              <div className="min-w-0 flex-1 pt-5 lg:pl-6 lg:pt-0">
+                {specs.length > 0 && (
+                  <div className="space-y-2 pb-4">
+                    <div className="text-xs font-medium text-muted-foreground">Spec and subspec</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <FilterButton active={!spec} onClick={() => { setSpec(null); setSubSpec(null); }}>All specs</FilterButton>
+                      {specs.map((option) => (
+                        <FilterButton
+                          key={option}
+                          active={spec === option}
+                          onClick={() => { setSpec(spec === option ? null : option); setSubSpec(null); }}
+                        >
+                          {option}
+                        </FilterButton>
+                      ))}
+                    </div>
+                    {spec && subSpecs.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pl-2">
+                        <FilterButton active={!subSpec} onClick={() => setSubSpec(null)}>All {spec}</FilterButton>
+                        {subSpecs.map((option) => (
+                          <FilterButton key={option} active={subSpec === option} onClick={() => setSubSpec(subSpec === option ? null : option)}>
+                            {option}
+                          </FilterButton>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
+
+                <PerformanceTrend
+                  runs={runs}
+                  metric={metric}
+                  display={display}
+                  loading={performanceQuery.isLoading}
+                  omittedParseCount={display === "parse" ? matchingRawRuns.length - runs.length : 0}
+                />
+
+                <PerformanceTable runs={runs} metric={metric} selectedCount={effectiveEncounters.length} />
               </div>
-            )}
-
-            <PerformanceTrend
-              runs={runs}
-              metric={metric}
-              display={display}
-              loading={performanceQuery.isLoading}
-              omittedParseCount={display === "parse" ? matchingRawRuns.length - runs.length : 0}
-            />
-
-            <PerformanceTable runs={runs} metric={metric} selectedCount={effectiveEncounters.length} />
+            </div>
           </>
         )}
       </CardContent>
