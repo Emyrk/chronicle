@@ -173,12 +173,14 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) setupRoutes() {
-	// All rankings/leaderboard data is public and changes infrequently.
-	// Cache for 5 minutes to reduce load on repeat visits.
+	// All rankings/leaderboard data is public and changes infrequently. Browsers
+	// may reuse responses for 5 minutes, while Cloudflare can share common URLs
+	// across visitors for 15 minutes and serve stale data during revalidation.
 	s.router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet {
 				w.Header().Set("Cache-Control", "public, max-age=300")
+				w.Header().Set("Cloudflare-CDN-Cache-Control", "public, max-age=900, stale-while-revalidate=60")
 			}
 			next.ServeHTTP(w, r)
 		})
