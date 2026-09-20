@@ -118,7 +118,12 @@ export function GuildPage() {
                     ? `${pageConfig.guild.name} added to favorites`
                     : `${pageConfig.guild.name} removed from favorites`,
                 ),
-                onError: (mutationError) => toast.error(mutationError.message),
+                onError: (mutationError) => toast.error(mutationError.message, {
+                  classNames: {
+                    title: "!text-destructive",
+                    icon: "!text-destructive",
+                  },
+                }),
               },
             );
           }}

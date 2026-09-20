@@ -91,7 +91,7 @@ func (api *API) AddMyFavoriteGuild(w http.ResponseWriter, r *http.Request) {
 	}
 	if !favorited.Valid || !favorited.Bool {
 		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{
-			Message: "You can favorite up to 3 guilds per tenant",
+			Message: "You can only favorite up to 3 guilds. Unfavorite another guild to free up a space",
 		})
 		return
 	}
