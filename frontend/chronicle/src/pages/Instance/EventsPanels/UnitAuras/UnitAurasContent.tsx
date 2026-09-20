@@ -13,6 +13,7 @@ import {
   type UnitAuraEntry,
   type UnitAuraSegment,
   type UnitAurasResult,
+  unitAuraUptimeDurationMs,
 } from "./unitAuras.processor";
 import {
   compactAuraColors,
@@ -275,14 +276,16 @@ function CompactAuraGrid({
 function AuraSection({
   title,
   rows,
-  durationMs,
+  uptimeDurationMs,
+  timelineDurationMs,
   players,
   units,
   encounterNames,
 }: {
   title: "Buffs" | "Debuffs";
   rows: AuraRow[];
-  durationMs: number;
+  uptimeDurationMs: number;
+  timelineDurationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
   encounterNames: ReadonlyMap<string, string>;
@@ -310,12 +313,12 @@ function AuraSection({
                 className="min-w-0 flex-1 truncate text-xs font-medium"
               />
               <div className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-                {formatPercent(row.totalUptimeMs, durationMs)}
+                {formatPercent(row.totalUptimeMs, uptimeDurationMs)}
               </div>
             </div>
             <AuraTimeline
               segments={row.segments}
-              durationMs={durationMs}
+              durationMs={timelineDurationMs}
               players={players}
               units={units}
               encounterNames={encounterNames}
@@ -439,6 +442,12 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
     () => selectedGuids.map((guid) => unitLookup.get(guid)).filter((unit): unit is UnitSearchOption => Boolean(unit)),
     [selectedGuids, unitLookup],
   );
+  const uptimeDurationByUnit = useMemo(() => new Map(
+    selectedUnits.map((unit) => [
+      unit.guid,
+      unitAuraUptimeDurationMs(result, unit.guid, encounterEndOffsets),
+    ]),
+  ), [encounterEndOffsets, result, selectedUnits]);
   const rowsByUnit = useMemo(() => new Map(
     selectedUnits.map((unit) => [unit.guid, buildUnitAuraRows(unit.guid, byUnit, encounterOffsets)]),
   ), [byUnit, encounterOffsets, selectedUnits]);
@@ -490,7 +499,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                     </div>
                     <CompactAuraGrid
                       rows={[...rows.buffs, ...rows.debuffs]}
-                      durationMs={durationMs}
+                      durationMs={uptimeDurationByUnit.get(unit.guid) ?? durationMs}
                       players={context.instance.players}
                       units={context.instance.units}
                     />
@@ -524,7 +533,8 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                 <AuraSection
                   title="Buffs"
                   rows={detailedRows.buffs}
-                  durationMs={durationMs}
+                  uptimeDurationMs={uptimeDurationByUnit.get(detailedUnit.guid) ?? durationMs}
+                  timelineDurationMs={durationMs}
                   players={context.instance.players}
                   units={context.instance.units}
                   encounterNames={encounterNames}
@@ -532,7 +542,8 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                 <AuraSection
                   title="Debuffs"
                   rows={detailedRows.debuffs}
-                  durationMs={durationMs}
+                  uptimeDurationMs={uptimeDurationByUnit.get(detailedUnit.guid) ?? durationMs}
+                  timelineDurationMs={durationMs}
                   players={context.instance.players}
                   units={context.instance.units}
                   encounterNames={encounterNames}

@@ -2,6 +2,7 @@ import type {
   AuraProcessorEvent,
   PanelProcessor,
   ProcessorContext,
+  ResurrectionProcessorEvent,
   SlainProcessorEvent,
 } from "../processorTypes";
 import { AuraState, AuraTransition } from "../processorTypes";
@@ -52,10 +53,16 @@ interface ActiveUnitAura {
   sourceName: string | null;
 }
 
+interface UnitLifeTransition {
+  offsetMs: number;
+  alive: boolean;
+}
+
 export interface UnitAurasResult {
   byUnit: Map<string, UnitAuraData>;
   activeAuras: Map<string, ActiveUnitAura>;
   maxOffsetByEncounter: Map<string, number>;
+  playerLifeTransitions: Map<string, UnitLifeTransition[]>;
   auraState: AuraProcessorState;
 }
 
@@ -65,6 +72,56 @@ function auraKey(spellId: number | null, spellName: string): string {
 
 function activeKey(encounterId: string, targetGuid: string, key: string): string {
   return `${encounterId}\u0000${targetGuid}\u0000${key}`;
+}
+
+function lifeKey(encounterId: string, playerGuid: string): string {
+  return `${encounterId}\u0000${playerGuid}`;
+}
+
+function appendPlayerLifeTransition(
+  state: UnitAurasResult,
+  encounterId: string,
+  playerGuid: string,
+  transition: UnitLifeTransition,
+): void {
+  const key = lifeKey(encounterId, playerGuid);
+  const transitions = state.playerLifeTransitions.get(key) ?? [];
+  const previous = transitions.at(-1);
+  if (previous?.alive === transition.alive) return;
+  transitions.push(transition);
+  state.playerLifeTransitions.set(key, transitions);
+}
+
+export function unitAuraUptimeDurationMs(
+  state: UnitAurasResult,
+  unitGuid: string,
+  encounterEndOffsets: ReadonlyMap<string, number>,
+): number {
+  let totalMs = 0;
+
+  for (const [encounterId, endOffsetMs] of encounterEndOffsets) {
+    const transitions = state.playerLifeTransitions.get(lifeKey(encounterId, unitGuid));
+    if (!transitions || transitions.length === 0) {
+      totalMs += endOffsetMs;
+      continue;
+    }
+
+    let aliveSince = 0;
+    let alive = true;
+    for (const transition of transitions) {
+      const offsetMs = Math.max(0, Math.min(endOffsetMs, transition.offsetMs));
+      if (alive && !transition.alive) {
+        totalMs += Math.max(0, offsetMs - aliveSince);
+        alive = false;
+      } else if (!alive && transition.alive) {
+        aliveSince = offsetMs;
+        alive = true;
+      }
+    }
+    if (alive) totalMs += Math.max(0, endOffsetMs - aliveSince);
+  }
+
+  return totalMs;
 }
 
 function auraRef(event: AuraProcessorEvent): AuraRef {
@@ -214,16 +271,17 @@ export function materializeActiveUnitAuras(
   return byUnit;
 }
 
-type UnitAurasEvent = AuraProcessorEvent | SlainProcessorEvent;
+type UnitAurasEvent = AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent;
 
 export const unitAurasProcessor: PanelProcessor<UnitAurasResult, UnitAurasEvent> = {
   id: "unit_auras",
-  streams: ["aura", "slain"] as StreamType[],
+  streams: ["aura", "slain", "ressurection"] as StreamType[],
 
   createState: (): UnitAurasResult => ({
     byUnit: new Map(),
     activeAuras: new Map(),
     maxOffsetByEncounter: new Map(),
+    playerLifeTransitions: new Map(),
     auraState: createAuraProcessorState(),
   }),
 
@@ -238,6 +296,22 @@ export const unitAurasProcessor: PanelProcessor<UnitAurasResult, UnitAurasEvent>
     if (event.type === "slain") {
       applyAuraEvent(state.auraState, encounterId, event);
       finishAurasOnTarget(state, encounterId, event.target, event.offsetMilli);
+      if (context.players[event.target]) {
+        appendPlayerLifeTransition(state, encounterId, event.target, {
+          offsetMs: event.offsetMilli,
+          alive: false,
+        });
+      }
+      return;
+    }
+
+    if (event.type === "ressurection") {
+      if (context.players[event.target]) {
+        appendPlayerLifeTransition(state, encounterId, event.target, {
+          offsetMs: event.offsetMilli,
+          alive: true,
+        });
+      }
       return;
     }
 
