@@ -3,8 +3,14 @@ BEGIN;
 CREATE TABLE user_favorite_guilds (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   guild_id UUID NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  tenant_scope_id UUID GENERATED ALWAYS AS (
+    COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::UUID)
+  ) STORED,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (user_id, guild_id)
+  PRIMARY KEY (user_id, guild_id),
+  CONSTRAINT user_favorite_guilds_one_per_tenant
+    UNIQUE (user_id, tenant_scope_id)
 );
 
 CREATE TABLE user_favorite_players (

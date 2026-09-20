@@ -2057,9 +2057,11 @@ type UserCharacterLink struct {
 }
 
 type UserFavoriteGuild struct {
-	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
-	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UserID        uuid.UUID          `db:"user_id" json:"user_id"`
+	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	TenantID      uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	TenantScopeID uuid.NullUUID      `db:"tenant_scope_id" json:"tenant_scope_id"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type UserFavoritePlayer struct {

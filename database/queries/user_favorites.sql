@@ -12,9 +12,16 @@ WHERE ufg.user_id = $1
 ORDER BY ufg.created_at ASC;
 
 -- name: AddUserFavoriteGuild :exec
-INSERT INTO user_favorite_guilds (user_id, guild_id)
-VALUES ($1, $2)
-ON CONFLICT (user_id, guild_id) DO NOTHING;
+INSERT INTO user_favorite_guilds (user_id, guild_id, tenant_id)
+SELECT @user_id, g.id, ws.tenant_id
+FROM guilds g
+JOIN wow_server_realms r ON r.id = g.realm_id
+JOIN wow_servers ws ON ws.id = r.server_id
+WHERE g.id = @guild_id
+ON CONFLICT (user_id, tenant_scope_id) DO UPDATE
+SET guild_id = EXCLUDED.guild_id,
+    tenant_id = EXCLUDED.tenant_id,
+    created_at = NOW();
 
 -- name: DeleteUserFavoriteGuild :exec
 DELETE FROM user_favorite_guilds

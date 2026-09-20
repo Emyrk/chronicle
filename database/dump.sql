@@ -1615,6 +1615,8 @@ CREATE TABLE user_character_links (
 CREATE TABLE user_favorite_guilds (
     user_id uuid NOT NULL,
     guild_id uuid NOT NULL,
+    tenant_id uuid,
+    tenant_scope_id uuid GENERATED ALWAYS AS (COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)) STORED,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -2295,6 +2297,9 @@ ALTER TABLE ONLY user_character_links
     ADD CONSTRAINT user_character_links_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY user_favorite_guilds
+    ADD CONSTRAINT user_favorite_guilds_one_per_tenant UNIQUE (user_id, tenant_scope_id);
+
+ALTER TABLE ONLY user_favorite_guilds
     ADD CONSTRAINT user_favorite_guilds_pkey PRIMARY KEY (user_id, guild_id);
 
 ALTER TABLE ONLY user_favorite_players
@@ -2973,6 +2978,9 @@ ALTER TABLE ONLY user_character_links
 
 ALTER TABLE ONLY user_favorite_guilds
     ADD CONSTRAINT user_favorite_guilds_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_favorite_guilds
+    ADD CONSTRAINT user_favorite_guilds_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_favorite_guilds
     ADD CONSTRAINT user_favorite_guilds_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

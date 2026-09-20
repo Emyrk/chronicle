@@ -11,12 +11,14 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func TestUserFavorites(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
-	db, _ := dbtestutil.NewDB(t)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	db := database.New(pool)
 
 	userID := uuid.New()
 	_, err := db.InsertUser(ctx, database.InsertUserParams{
@@ -45,6 +47,54 @@ func TestUserFavorites(t *testing.T) {
 		CreatedAt: database.Timestamptz(time.Now()),
 	})
 	require.NoError(t, err)
+	replacementGuild, err := db.UpsertGuild(ctx, database.UpsertGuildParams{
+		RealmID:   realm.ID,
+		Name:      "Replacement Guild",
+		CreatedAt: database.Timestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+
+	tenant, err := db.InsertTenant(ctx, database.InsertTenantParams{
+		ID:               uuid.New(),
+		Name:             "Favorites Tenant",
+		Slug:             pgtype.Text{String: "favorites-tenant", Valid: true},
+		IncludeInAll:     true,
+		AvailableFormats: []string{},
+	})
+	require.NoError(t, err)
+	tenantServerID := uuid.New()
+	_, err = db.InsertWoWServer(ctx, database.InsertWoWServerParams{
+		ID:   tenantServerID,
+		Name: "Tenant Favorites Server",
+	})
+	require.NoError(t, err)
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "UPDATE wow_servers SET tenant_id = $1 WHERE id = $2", tenant.ID, tenantServerID)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "RESET app.tenant_bypass")
+	require.NoError(t, err)
+	conn.Release()
+	tenantRealm, err := db.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{
+		ID:       uuid.New(),
+		ServerID: tenantServerID,
+		Name:     "Tenant Favorites Realm",
+	})
+	require.NoError(t, err)
+	tenantGuild, err := db.UpsertGuild(ctx, database.UpsertGuildParams{
+		RealmID:   tenantRealm.ID,
+		Name:      "Tenant Guild",
+		CreatedAt: database.Timestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+	tenantReplacementGuild, err := db.UpsertGuild(ctx, database.UpsertGuildParams{
+		RealmID:   tenantRealm.ID,
+		Name:      "Tenant Replacement Guild",
+		CreatedAt: database.Timestamptz(time.Now()),
+	})
+	require.NoError(t, err)
 
 	characterGUID := guid.GUID(0x1234)
 	players := db.UpsertPlayers(ctx, []database.UpsertPlayersParams{{
@@ -60,11 +110,19 @@ func TestUserFavorites(t *testing.T) {
 	}})
 	require.NoError(t, players.Close())
 
-	for range 2 {
+	for _, guildID := range []uuid.UUID{
+		guild.ID,
+		guild.ID, // Favoriting the same guild is idempotent.
+		replacementGuild.ID,
+		tenantGuild.ID,
+		tenantReplacementGuild.ID,
+	} {
 		require.NoError(t, db.AddUserFavoriteGuild(ctx, database.AddUserFavoriteGuildParams{
 			UserID:  userID,
-			GuildID: guild.ID,
+			GuildID: guildID,
 		}))
+	}
+	for range 2 {
 		require.NoError(t, db.AddUserFavoritePlayer(ctx, database.AddUserFavoritePlayerParams{
 			UserID:        userID,
 			CharacterGuid: characterGUID,
@@ -74,9 +132,11 @@ func TestUserFavorites(t *testing.T) {
 
 	guilds, err := db.ListUserFavoriteGuilds(ctx, userID)
 	require.NoError(t, err)
-	require.Len(t, guilds, 1)
-	require.Equal(t, guild.ID, guilds[0].ID)
-	require.Equal(t, "Favorites Realm", guilds[0].RealmName)
+	require.Len(t, guilds, 2)
+	require.ElementsMatch(t, []uuid.UUID{replacementGuild.ID, tenantReplacementGuild.ID}, []uuid.UUID{
+		guilds[0].ID,
+		guilds[1].ID,
+	})
 
 	playersList, err := db.ListUserFavoritePlayers(ctx, userID)
 	require.NoError(t, err)
@@ -90,10 +150,12 @@ func TestUserFavorites(t *testing.T) {
 		CharacterGuid: characterGUID,
 		RealmID:       realm.ID,
 	}))
-	require.NoError(t, db.DeleteUserFavoriteGuild(ctx, database.DeleteUserFavoriteGuildParams{
-		UserID:  userID,
-		GuildID: guild.ID,
-	}))
+	for _, guildID := range []uuid.UUID{replacementGuild.ID, tenantReplacementGuild.ID} {
+		require.NoError(t, db.DeleteUserFavoriteGuild(ctx, database.DeleteUserFavoriteGuildParams{
+			UserID:  userID,
+			GuildID: guildID,
+		}))
+	}
 
 	guilds, err = db.ListUserFavoriteGuilds(ctx, userID)
 	require.NoError(t, err)
