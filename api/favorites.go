@@ -36,6 +36,7 @@ func (api *API) ListMyFavorites(w http.ResponseWriter, r *http.Request) {
 			Name:      row.Name,
 			RealmID:   row.RealmID,
 			RealmName: row.RealmName,
+			LogoURL:   row.LogoUrl,
 		})
 	}
 

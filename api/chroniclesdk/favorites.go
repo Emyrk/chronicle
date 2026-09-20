@@ -12,6 +12,7 @@ type FavoriteGuild struct {
 	Name      string    `json:"name"`
 	RealmID   uuid.UUID `json:"realm_id"`
 	RealmName string    `json:"realm_name"`
+	LogoURL   string    `json:"logo_url,omitempty"`
 }
 
 type FavoritePlayer struct {

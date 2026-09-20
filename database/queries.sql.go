@@ -17540,10 +17540,12 @@ SELECT
   g.name,
   g.realm_id,
   r.name AS realm_name,
+  COALESCE(gp.theme->>'logo_url', '')::text AS logo_url,
   ufg.created_at
 FROM user_favorite_guilds ufg
 JOIN guilds g ON g.id = ufg.guild_id
 JOIN wow_server_realms r ON r.id = g.realm_id
+LEFT JOIN guild_pages gp ON gp.guild_id = g.id
 WHERE ufg.user_id = $1
 ORDER BY ufg.created_at ASC
 `
@@ -17553,6 +17555,7 @@ type ListUserFavoriteGuildsRow struct {
 	Name      string             `db:"name" json:"name"`
 	RealmID   uuid.UUID          `db:"realm_id" json:"realm_id"`
 	RealmName string             `db:"realm_name" json:"realm_name"`
+	LogoUrl   string             `db:"logo_url" json:"logo_url"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
@@ -17570,6 +17573,7 @@ func (q *sqlQuerier) ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUI
 			&i.Name,
 			&i.RealmID,
 			&i.RealmName,
+			&i.LogoUrl,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

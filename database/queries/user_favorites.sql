@@ -4,10 +4,12 @@ SELECT
   g.name,
   g.realm_id,
   r.name AS realm_name,
+  COALESCE(gp.theme->>'logo_url', '')::text AS logo_url,
   ufg.created_at
 FROM user_favorite_guilds ufg
 JOIN guilds g ON g.id = ufg.guild_id
 JOIN wow_server_realms r ON r.id = g.realm_id
+LEFT JOIN guild_pages gp ON gp.guild_id = g.id
 WHERE ufg.user_id = $1
 ORDER BY ufg.created_at ASC;
 

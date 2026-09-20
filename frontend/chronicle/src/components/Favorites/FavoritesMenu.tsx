@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Star } from "lucide-react";
+import { Shield, Star } from "lucide-react";
 import type { FavoritePlayer, UserFavoritesResponse } from "@/api/typesGenerated";
 import {
   DropdownMenuItem,
@@ -51,7 +51,17 @@ export function FavoritesMenu({ data }: { data?: UserFavoritesResponse }) {
         <div key={guild.id}>
           <DropdownMenuItem asChild>
             <Link to={`/g/${guild.id}`}>
-              <Star className="size-4 fill-amber-400 text-amber-400" />
+              {guild.logo_url ? (
+                <img
+                  src={guild.logo_url}
+                  alt={`${guild.name} logo`}
+                  className="size-8 shrink-0 rounded border border-border bg-muted object-cover"
+                />
+              ) : (
+                <span className="flex size-8 shrink-0 items-center justify-center rounded border border-border bg-muted">
+                  <Shield className="size-4 text-amber-500" />
+                </span>
+              )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-semibold text-amber-500">{guild.name}</span>
                 <span className="block truncate text-xs text-muted-foreground">{guild.realm_name}</span>

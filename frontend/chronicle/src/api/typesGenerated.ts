@@ -1086,6 +1086,7 @@ export interface FavoriteGuild {
     readonly name: string;
     readonly realm_id: string;
     readonly realm_name: string;
+    readonly logo_url?: string;
 }
 
 // From chroniclesdk/favorites.go
