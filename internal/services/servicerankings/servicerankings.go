@@ -155,7 +155,6 @@ func (s *Service) Start(_ context.Context) error {
 	s.RankingRunRepairWorker = &WorkerRepairRankingRuns{
 		Store:  store,
 		Logger: namedLogger,
-		// Queue is set by serviceriver after queue creation.
 	}
 
 	s.router = chi.NewRouter()

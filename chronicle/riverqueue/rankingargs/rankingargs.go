@@ -41,10 +41,7 @@ func (ArgsRefreshRankingRuns) InsertOpts() river.InsertOpts {
 	}
 }
 
-type ArgsRepairRankingRuns struct {
-	FullScan bool  `json:"full_scan,omitempty"`
-	Limit    int32 `json:"limit,omitempty"`
-}
+type ArgsRepairRankingRuns struct{}
 
 func (ArgsRepairRankingRuns) Kind() string { return KindRepairRankingRuns }
 

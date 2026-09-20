@@ -172,7 +172,6 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.RepairParseScoresWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RepairParseScoresWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRefreshWorker)
-	rank.RankingRunRepairWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RankingRunRepairWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
@@ -214,7 +213,7 @@ func (s *Service) Start(ctx context.Context) error {
 			&river.PeriodicJobOpts{RunOnStart: false},
 		),
 	)
-	// Daily bounded repair and incremental backfill for persisted ranking runs.
+	// Daily bounded authoritative verification and repair for persisted ranking runs.
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(
 			river.PeriodicInterval(24*time.Hour),

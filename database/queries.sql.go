@@ -11478,7 +11478,7 @@ func (q *sqlQuerier) AcquireRankingRunRefreshLock(ctx context.Context) error {
 	return err
 }
 
-const deleteConflictingRankingRunRepresentatives = `-- name: DeleteConflictingRankingRunRepresentatives :exec
+const deleteConflictingRankingRunRepresentatives = `-- name: DeleteConflictingRankingRunRepresentatives :many
 DELETE FROM ranking_runs existing
 USING (
     SELECT
@@ -11487,6 +11487,7 @@ USING (
 ) desired
 WHERE existing.representative_instance_id = desired.representative_instance_id
   AND existing.run_id <> desired.run_id
+RETURNING existing.run_id
 `
 
 type DeleteConflictingRankingRunRepresentativesParams struct {
@@ -11496,25 +11497,8 @@ type DeleteConflictingRankingRunRepresentativesParams struct {
 
 // Release representative IDs that moved to a different logical run before the
 // state-based refresh upserts all desired rows in arbitrary UUID order.
-func (q *sqlQuerier) DeleteConflictingRankingRunRepresentatives(ctx context.Context, arg DeleteConflictingRankingRunRepresentativesParams) error {
-	_, err := q.db.Exec(ctx, deleteConflictingRankingRunRepresentatives, arg.RunIds, arg.RepresentativeInstanceIds)
-	return err
-}
-
-const deleteObsoleteRankingRuns = `-- name: DeleteObsoleteRankingRuns :many
-DELETE FROM ranking_runs
-WHERE run_id = ANY($1::uuid[])
-  AND NOT (run_id = ANY($2::uuid[]))
-RETURNING run_id
-`
-
-type DeleteObsoleteRankingRunsParams struct {
-	AffectedIds    []uuid.UUID `db:"affected_ids" json:"affected_ids"`
-	ResolvedRunIds []uuid.UUID `db:"resolved_run_ids" json:"resolved_run_ids"`
-}
-
-func (q *sqlQuerier) DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, deleteObsoleteRankingRuns, arg.AffectedIds, arg.ResolvedRunIds)
+func (q *sqlQuerier) DeleteConflictingRankingRunRepresentatives(ctx context.Context, arg DeleteConflictingRankingRunRepresentativesParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, deleteConflictingRankingRunRepresentatives, arg.RunIds, arg.RepresentativeInstanceIds)
 	if err != nil {
 		return nil, err
 	}
@@ -11533,20 +11517,20 @@ func (q *sqlQuerier) DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteOb
 	return items, nil
 }
 
-const orphanRankingRuns = `-- name: OrphanRankingRuns :many
-SELECT ranking_runs.run_id
-FROM ranking_runs
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM log_instances li
-    WHERE COALESCE(li.duplicate_group_id, li.id) = ranking_runs.run_id
-)
-ORDER BY ranking_runs.updated_at, ranking_runs.run_id
-LIMIT $1
+const deleteObsoleteRankingRuns = `-- name: DeleteObsoleteRankingRuns :many
+DELETE FROM ranking_runs
+WHERE run_id = ANY($1::uuid[])
+  AND NOT (run_id = ANY($2::uuid[]))
+RETURNING run_id
 `
 
-func (q *sqlQuerier) OrphanRankingRuns(ctx context.Context, queryLimit int32) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, orphanRankingRuns, queryLimit)
+type DeleteObsoleteRankingRunsParams struct {
+	AffectedIds    []uuid.UUID `db:"affected_ids" json:"affected_ids"`
+	ResolvedRunIds []uuid.UUID `db:"resolved_run_ids" json:"resolved_run_ids"`
+}
+
+func (q *sqlQuerier) DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, deleteObsoleteRankingRuns, arg.AffectedIds, arg.ResolvedRunIds)
 	if err != nil {
 		return nil, err
 	}
@@ -11649,6 +11633,151 @@ func (q *sqlQuerier) RankingRunIdentitiesByLogGroupID(ctx context.Context, logGr
 	for rows.Next() {
 		var i RankingRunIdentitiesByLogGroupIDRow
 		if err := rows.Scan(&i.InstanceID, &i.RunID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rankingRunRepairVerification = `-- name: RankingRunRepairVerification :many
+WITH members AS MATERIALIZED (
+    SELECT
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        li.id,
+        li.realm_id,
+        li.name AS instance_name,
+        li.difficulty_name,
+        li.max_players,
+        li.start_time,
+        li.end_time,
+        li.duplicate_group_id,
+        li.updated_at AS instance_updated_at,
+        COUNT(DISTINCT coverage.encounter_name) FILTER (
+            WHERE coverage.encounter_id IS NOT NULL
+        )::integer AS boss_coverage
+    FROM log_instances li
+    LEFT JOIN encounter_dps_rankings coverage ON coverage.instance_id = li.id
+    GROUP BY li.id
+),
+ranked AS (
+    SELECT
+        members.run_id, members.id, members.realm_id, members.instance_name, members.difficulty_name, members.max_players, members.start_time, members.end_time, members.duplicate_group_id, members.instance_updated_at, members.boss_coverage,
+        COUNT(*) OVER (PARTITION BY run_id)::integer AS member_count,
+        (MAX(instance_updated_at) OVER (PARTITION BY run_id))::timestamptz AS source_updated_at,
+        ROW_NUMBER() OVER (
+            PARTITION BY run_id
+            ORDER BY boss_coverage DESC,
+                (id = duplicate_group_id) DESC NULLS LAST,
+                start_time ASC,
+                id ASC
+        ) AS representative_rank
+    FROM members
+),
+expected AS MATERIALIZED (
+    SELECT run_id, id, realm_id, instance_name, difficulty_name, max_players, start_time, end_time, duplicate_group_id, instance_updated_at, boss_coverage, member_count, source_updated_at, representative_rank FROM ranked
+    WHERE representative_rank = 1
+),
+discrepancies AS (
+    SELECT
+        expected.run_id,
+        (ranking_runs.run_id IS NULL)::boolean AS missing,
+        (ranking_runs.run_id IS NOT NULL AND (
+            ranking_runs.realm_id,
+            ranking_runs.instance_name,
+            ranking_runs.difficulty_name,
+            ranking_runs.max_players,
+            ranking_runs.start_time,
+            ranking_runs.end_time,
+            ranking_runs.boss_coverage,
+            ranking_runs.member_count,
+            ranking_runs.source_updated_at
+        ) IS DISTINCT FROM (
+            expected.realm_id,
+            expected.instance_name,
+            expected.difficulty_name,
+            expected.max_players,
+            expected.start_time,
+            expected.end_time,
+            expected.boss_coverage,
+            expected.member_count,
+            expected.source_updated_at
+        ))::boolean AS stale,
+        (ranking_runs.run_id IS NOT NULL
+            AND ranking_runs.representative_instance_id <> expected.id)::boolean AS invalid_representative,
+        false::boolean AS orphan
+    FROM expected
+    LEFT JOIN ranking_runs ON ranking_runs.run_id = expected.run_id
+    WHERE ranking_runs.run_id IS NULL
+       OR ranking_runs.representative_instance_id <> expected.id
+       OR (
+            ranking_runs.realm_id,
+            ranking_runs.instance_name,
+            ranking_runs.difficulty_name,
+            ranking_runs.max_players,
+            ranking_runs.start_time,
+            ranking_runs.end_time,
+            ranking_runs.boss_coverage,
+            ranking_runs.member_count,
+            ranking_runs.source_updated_at
+       ) IS DISTINCT FROM (
+            expected.realm_id,
+            expected.instance_name,
+            expected.difficulty_name,
+            expected.max_players,
+            expected.start_time,
+            expected.end_time,
+            expected.boss_coverage,
+            expected.member_count,
+            expected.source_updated_at
+       )
+    UNION ALL
+    SELECT
+        ranking_runs.run_id,
+        false::boolean AS missing,
+        false::boolean AS stale,
+        false::boolean AS invalid_representative,
+        true::boolean AS orphan
+    FROM ranking_runs
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM expected
+        WHERE expected.run_id = ranking_runs.run_id
+    )
+)
+SELECT run_id, missing, stale, invalid_representative, orphan
+FROM discrepancies
+ORDER BY run_id
+LIMIT $1
+`
+
+type RankingRunRepairVerificationRow struct {
+	RunID                 uuid.UUID `db:"run_id" json:"run_id"`
+	Missing               bool      `db:"missing" json:"missing"`
+	Stale                 bool      `db:"stale" json:"stale"`
+	InvalidRepresentative bool      `db:"invalid_representative" json:"invalid_representative"`
+	Orphan                bool      `db:"orphan" json:"orphan"`
+}
+
+func (q *sqlQuerier) RankingRunRepairVerification(ctx context.Context, queryLimit int32) ([]RankingRunRepairVerificationRow, error) {
+	rows, err := q.db.Query(ctx, rankingRunRepairVerification, queryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingRunRepairVerificationRow
+	for rows.Next() {
+		var i RankingRunRepairVerificationRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.Missing,
+			&i.Stale,
+			&i.InvalidRepresentative,
+			&i.Orphan,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -11767,210 +11896,6 @@ func (q *sqlQuerier) RankingRunSources(ctx context.Context, affectedIds []uuid.U
 			&i.BossCoverage,
 			&i.MemberCount,
 			&i.SourceUpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const rankingRunsNeedingFullScanRepair = `-- name: RankingRunsNeedingFullScanRepair :many
-WITH members AS MATERIALIZED (
-    SELECT
-        COALESCE(li.duplicate_group_id, li.id) AS run_id,
-        li.id,
-        li.realm_id,
-        li.name AS instance_name,
-        li.difficulty_name,
-        li.max_players,
-        li.start_time,
-        li.end_time,
-        li.duplicate_group_id,
-        li.updated_at AS instance_updated_at,
-        COUNT(DISTINCT coverage.encounter_name) FILTER (
-            WHERE coverage.encounter_id IS NOT NULL
-        )::integer AS boss_coverage
-    FROM log_instances li
-    LEFT JOIN encounter_dps_rankings coverage ON coverage.instance_id = li.id
-    GROUP BY li.id
-),
-ranked AS (
-    SELECT
-        members.run_id, members.id, members.realm_id, members.instance_name, members.difficulty_name, members.max_players, members.start_time, members.end_time, members.duplicate_group_id, members.instance_updated_at, members.boss_coverage,
-        COUNT(*) OVER (PARTITION BY run_id)::integer AS member_count,
-        (MAX(instance_updated_at) OVER (PARTITION BY run_id))::timestamptz AS source_updated_at,
-        ROW_NUMBER() OVER (
-            PARTITION BY run_id
-            ORDER BY boss_coverage DESC,
-                (id = duplicate_group_id) DESC NULLS LAST,
-                start_time ASC,
-                id ASC
-        ) AS representative_rank
-    FROM members
-),
-expected AS (
-    SELECT run_id, id, realm_id, instance_name, difficulty_name, max_players, start_time, end_time, duplicate_group_id, instance_updated_at, boss_coverage, member_count, source_updated_at, representative_rank FROM ranked
-    WHERE representative_rank = 1
-      AND source_updated_at <= $2::timestamptz
-)
-SELECT
-    expected.run_id,
-    (ranking_runs.run_id IS NULL)::boolean AS missing,
-    (ranking_runs.run_id IS NOT NULL AND (
-        ranking_runs.source_updated_at < expected.source_updated_at
-        OR (
-            ranking_runs.realm_id,
-            ranking_runs.instance_name,
-            ranking_runs.difficulty_name,
-            ranking_runs.max_players,
-            ranking_runs.start_time,
-            ranking_runs.end_time,
-            ranking_runs.boss_coverage,
-            ranking_runs.member_count
-        ) IS DISTINCT FROM (
-            expected.realm_id,
-            expected.instance_name,
-            expected.difficulty_name,
-            expected.max_players,
-            expected.start_time,
-            expected.end_time,
-            expected.boss_coverage,
-            expected.member_count
-        )
-    ))::boolean AS stale,
-    (ranking_runs.run_id IS NOT NULL
-        AND ranking_runs.representative_instance_id <> expected.id)::boolean AS invalid_representative
-FROM expected
-LEFT JOIN ranking_runs ON ranking_runs.run_id = expected.run_id
-WHERE ranking_runs.run_id IS NULL
-   OR ranking_runs.representative_instance_id <> expected.id
-   OR ranking_runs.source_updated_at < expected.source_updated_at
-   OR (
-        ranking_runs.realm_id,
-        ranking_runs.instance_name,
-        ranking_runs.difficulty_name,
-        ranking_runs.max_players,
-        ranking_runs.start_time,
-        ranking_runs.end_time,
-        ranking_runs.boss_coverage,
-        ranking_runs.member_count
-   ) IS DISTINCT FROM (
-        expected.realm_id,
-        expected.instance_name,
-        expected.difficulty_name,
-        expected.max_players,
-        expected.start_time,
-        expected.end_time,
-        expected.boss_coverage,
-        expected.member_count
-   )
-ORDER BY expected.source_updated_at, expected.run_id
-LIMIT $1
-`
-
-type RankingRunsNeedingFullScanRepairParams struct {
-	QueryLimit   int32              `db:"query_limit" json:"query_limit"`
-	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
-}
-
-type RankingRunsNeedingFullScanRepairRow struct {
-	RunID                 uuid.UUID `db:"run_id" json:"run_id"`
-	Missing               bool      `db:"missing" json:"missing"`
-	Stale                 bool      `db:"stale" json:"stale"`
-	InvalidRepresentative bool      `db:"invalid_representative" json:"invalid_representative"`
-}
-
-func (q *sqlQuerier) RankingRunsNeedingFullScanRepair(ctx context.Context, arg RankingRunsNeedingFullScanRepairParams) ([]RankingRunsNeedingFullScanRepairRow, error) {
-	rows, err := q.db.Query(ctx, rankingRunsNeedingFullScanRepair, arg.QueryLimit, arg.SourceCutoff)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RankingRunsNeedingFullScanRepairRow
-	for rows.Next() {
-		var i RankingRunsNeedingFullScanRepairRow
-		if err := rows.Scan(
-			&i.RunID,
-			&i.Missing,
-			&i.Stale,
-			&i.InvalidRepresentative,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const rankingRunsNeedingRepair = `-- name: RankingRunsNeedingRepair :many
-WITH current_runs AS MATERIALIZED (
-    SELECT
-        COALESCE(li.duplicate_group_id, li.id) AS run_id,
-        MAX(li.updated_at) AS source_updated_at
-    FROM log_instances li
-    GROUP BY COALESCE(li.duplicate_group_id, li.id)
-)
-SELECT
-    current_runs.run_id,
-    (ranking_runs.run_id IS NULL)::boolean AS missing,
-    (ranking_runs.run_id IS NOT NULL
-        AND ranking_runs.source_updated_at < current_runs.source_updated_at)::boolean AS stale,
-    (ranking_runs.run_id IS NOT NULL AND NOT EXISTS (
-        SELECT 1
-        FROM log_instances representative
-        WHERE representative.id = ranking_runs.representative_instance_id
-          AND COALESCE(representative.duplicate_group_id, representative.id) = current_runs.run_id
-    ))::boolean AS invalid_representative
-FROM current_runs
-LEFT JOIN ranking_runs ON ranking_runs.run_id = current_runs.run_id
-WHERE current_runs.source_updated_at <= $1::timestamptz
-  AND (
-      ranking_runs.run_id IS NULL
-      OR ranking_runs.source_updated_at < current_runs.source_updated_at
-      OR NOT EXISTS (
-          SELECT 1
-          FROM log_instances representative
-          WHERE representative.id = ranking_runs.representative_instance_id
-            AND COALESCE(representative.duplicate_group_id, representative.id) = current_runs.run_id
-      )
-  )
-ORDER BY current_runs.source_updated_at, current_runs.run_id
-LIMIT $2
-`
-
-type RankingRunsNeedingRepairParams struct {
-	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
-	QueryLimit   int32              `db:"query_limit" json:"query_limit"`
-}
-
-type RankingRunsNeedingRepairRow struct {
-	RunID                 uuid.UUID `db:"run_id" json:"run_id"`
-	Missing               bool      `db:"missing" json:"missing"`
-	Stale                 bool      `db:"stale" json:"stale"`
-	InvalidRepresentative bool      `db:"invalid_representative" json:"invalid_representative"`
-}
-
-func (q *sqlQuerier) RankingRunsNeedingRepair(ctx context.Context, arg RankingRunsNeedingRepairParams) ([]RankingRunsNeedingRepairRow, error) {
-	rows, err := q.db.Query(ctx, rankingRunsNeedingRepair, arg.SourceCutoff, arg.QueryLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RankingRunsNeedingRepairRow
-	for rows.Next() {
-		var i RankingRunsNeedingRepairRow
-		if err := rows.Scan(
-			&i.RunID,
-			&i.Missing,
-			&i.Stale,
-			&i.InvalidRepresentative,
 		); err != nil {
 			return nil, err
 		}

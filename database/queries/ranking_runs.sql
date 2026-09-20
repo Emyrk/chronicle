@@ -163,7 +163,7 @@ WHERE (
 )
 RETURNING (xmax = 0) AS created;
 
--- name: DeleteConflictingRankingRunRepresentatives :exec
+-- name: DeleteConflictingRankingRunRepresentatives :many
 -- Release representative IDs that moved to a different logical run before the
 -- state-based refresh upserts all desired rows in arbitrary UUID order.
 DELETE FROM ranking_runs existing
@@ -173,7 +173,8 @@ USING (
         unnest(sqlc.arg(representative_instance_ids)::uuid[]) AS representative_instance_id
 ) desired
 WHERE existing.representative_instance_id = desired.representative_instance_id
-  AND existing.run_id <> desired.run_id;
+  AND existing.run_id <> desired.run_id
+RETURNING existing.run_id;
 
 -- name: DeleteObsoleteRankingRuns :many
 DELETE FROM ranking_runs
@@ -181,42 +182,7 @@ WHERE run_id = ANY(@affected_ids::uuid[])
   AND NOT (run_id = ANY(@resolved_run_ids::uuid[]))
 RETURNING run_id;
 
--- name: RankingRunsNeedingRepair :many
-WITH current_runs AS MATERIALIZED (
-    SELECT
-        COALESCE(li.duplicate_group_id, li.id) AS run_id,
-        MAX(li.updated_at) AS source_updated_at
-    FROM log_instances li
-    GROUP BY COALESCE(li.duplicate_group_id, li.id)
-)
-SELECT
-    current_runs.run_id,
-    (ranking_runs.run_id IS NULL)::boolean AS missing,
-    (ranking_runs.run_id IS NOT NULL
-        AND ranking_runs.source_updated_at < current_runs.source_updated_at)::boolean AS stale,
-    (ranking_runs.run_id IS NOT NULL AND NOT EXISTS (
-        SELECT 1
-        FROM log_instances representative
-        WHERE representative.id = ranking_runs.representative_instance_id
-          AND COALESCE(representative.duplicate_group_id, representative.id) = current_runs.run_id
-    ))::boolean AS invalid_representative
-FROM current_runs
-LEFT JOIN ranking_runs ON ranking_runs.run_id = current_runs.run_id
-WHERE current_runs.source_updated_at <= @source_cutoff::timestamptz
-  AND (
-      ranking_runs.run_id IS NULL
-      OR ranking_runs.source_updated_at < current_runs.source_updated_at
-      OR NOT EXISTS (
-          SELECT 1
-          FROM log_instances representative
-          WHERE representative.id = ranking_runs.representative_instance_id
-            AND COALESCE(representative.duplicate_group_id, representative.id) = current_runs.run_id
-      )
-  )
-ORDER BY current_runs.source_updated_at, current_runs.run_id
-LIMIT @query_limit;
-
--- name: RankingRunsNeedingFullScanRepair :many
+-- name: RankingRunRepairVerification :many
 WITH members AS MATERIALIZED (
     SELECT
         COALESCE(li.duplicate_group_id, li.id) AS run_id,
@@ -250,17 +216,15 @@ ranked AS (
         ) AS representative_rank
     FROM members
 ),
-expected AS (
+expected AS MATERIALIZED (
     SELECT * FROM ranked
     WHERE representative_rank = 1
-      AND source_updated_at <= @source_cutoff::timestamptz
-)
-SELECT
-    expected.run_id,
-    (ranking_runs.run_id IS NULL)::boolean AS missing,
-    (ranking_runs.run_id IS NOT NULL AND (
-        ranking_runs.source_updated_at < expected.source_updated_at
-        OR (
+),
+discrepancies AS (
+    SELECT
+        expected.run_id,
+        (ranking_runs.run_id IS NULL)::boolean AS missing,
+        (ranking_runs.run_id IS NOT NULL AND (
             ranking_runs.realm_id,
             ranking_runs.instance_name,
             ranking_runs.difficulty_name,
@@ -268,7 +232,8 @@ SELECT
             ranking_runs.start_time,
             ranking_runs.end_time,
             ranking_runs.boss_coverage,
-            ranking_runs.member_count
+            ranking_runs.member_count,
+            ranking_runs.source_updated_at
         ) IS DISTINCT FROM (
             expected.realm_id,
             expected.instance_name,
@@ -277,45 +242,52 @@ SELECT
             expected.start_time,
             expected.end_time,
             expected.boss_coverage,
-            expected.member_count
-        )
-    ))::boolean AS stale,
-    (ranking_runs.run_id IS NOT NULL
-        AND ranking_runs.representative_instance_id <> expected.id)::boolean AS invalid_representative
-FROM expected
-LEFT JOIN ranking_runs ON ranking_runs.run_id = expected.run_id
-WHERE ranking_runs.run_id IS NULL
-   OR ranking_runs.representative_instance_id <> expected.id
-   OR ranking_runs.source_updated_at < expected.source_updated_at
-   OR (
-        ranking_runs.realm_id,
-        ranking_runs.instance_name,
-        ranking_runs.difficulty_name,
-        ranking_runs.max_players,
-        ranking_runs.start_time,
-        ranking_runs.end_time,
-        ranking_runs.boss_coverage,
-        ranking_runs.member_count
-   ) IS DISTINCT FROM (
-        expected.realm_id,
-        expected.instance_name,
-        expected.difficulty_name,
-        expected.max_players,
-        expected.start_time,
-        expected.end_time,
-        expected.boss_coverage,
-        expected.member_count
-   )
-ORDER BY expected.source_updated_at, expected.run_id
-LIMIT @query_limit;
-
--- name: OrphanRankingRuns :many
-SELECT ranking_runs.run_id
-FROM ranking_runs
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM log_instances li
-    WHERE COALESCE(li.duplicate_group_id, li.id) = ranking_runs.run_id
+            expected.member_count,
+            expected.source_updated_at
+        ))::boolean AS stale,
+        (ranking_runs.run_id IS NOT NULL
+            AND ranking_runs.representative_instance_id <> expected.id)::boolean AS invalid_representative,
+        false::boolean AS orphan
+    FROM expected
+    LEFT JOIN ranking_runs ON ranking_runs.run_id = expected.run_id
+    WHERE ranking_runs.run_id IS NULL
+       OR ranking_runs.representative_instance_id <> expected.id
+       OR (
+            ranking_runs.realm_id,
+            ranking_runs.instance_name,
+            ranking_runs.difficulty_name,
+            ranking_runs.max_players,
+            ranking_runs.start_time,
+            ranking_runs.end_time,
+            ranking_runs.boss_coverage,
+            ranking_runs.member_count,
+            ranking_runs.source_updated_at
+       ) IS DISTINCT FROM (
+            expected.realm_id,
+            expected.instance_name,
+            expected.difficulty_name,
+            expected.max_players,
+            expected.start_time,
+            expected.end_time,
+            expected.boss_coverage,
+            expected.member_count,
+            expected.source_updated_at
+       )
+    UNION ALL
+    SELECT
+        ranking_runs.run_id,
+        false::boolean AS missing,
+        false::boolean AS stale,
+        false::boolean AS invalid_representative,
+        true::boolean AS orphan
+    FROM ranking_runs
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM expected
+        WHERE expected.run_id = ranking_runs.run_id
+    )
 )
-ORDER BY ranking_runs.updated_at, ranking_runs.run_id
+SELECT *
+FROM discrepancies
+ORDER BY run_id
 LIMIT @query_limit;
