@@ -8,6 +8,7 @@ interface FavoriteButtonProps {
   label: string;
   onToggle: () => void;
   className?: string;
+  iconOnly?: boolean;
 }
 
 export function FavoriteButton({
@@ -16,6 +17,7 @@ export function FavoriteButton({
   label,
   onToggle,
   className,
+  iconOnly = false,
 }: FavoriteButtonProps) {
   const action = isFavorite ? "Remove from favorites" : "Add to favorites";
 
@@ -23,12 +25,12 @@ export function FavoriteButton({
     <Button
       type="button"
       variant="outline"
-      size="sm"
+      size={iconOnly ? "icon" : "sm"}
       aria-label={`${action}: ${label}`}
       title={action}
       disabled={isPending}
       onClick={onToggle}
-      className={cn("gap-1.5", className)}
+      className={cn("gap-1.5", iconOnly && "size-8", className)}
     >
       <Star
         className={cn(
@@ -36,7 +38,7 @@ export function FavoriteButton({
           isFavorite && "fill-amber-400 text-amber-400",
         )}
       />
-      <span className="hidden sm:inline">{isFavorite ? "Favorited" : "Favorite"}</span>
+      {!iconOnly && <span className="hidden sm:inline">{isFavorite ? "Favorited" : "Favorite"}</span>}
     </Button>
   );
 }

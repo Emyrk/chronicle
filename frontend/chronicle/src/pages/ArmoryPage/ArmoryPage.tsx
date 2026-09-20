@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Shield, Calendar, Sparkles, LayoutDashboard, Hammer } from "lucide-react";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
@@ -143,21 +144,36 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
     setSearchParams(next);
   };
 
-  const headerActions = (
-    <div className="flex flex-wrap items-center gap-2">
-      {isAuthenticated && (
-        <FavoriteButton
-          isFavorite={isFavorite}
-          isPending={toggleFavorite.isPending || favorites.isLoading}
-          label={player.name}
-          onToggle={() => toggleFavorite.mutate({
+  const favoriteButton = isAuthenticated ? (
+    <FavoriteButton
+      isFavorite={isFavorite}
+      isPending={toggleFavorite.isPending || favorites.isLoading}
+      label={player.name}
+      iconOnly
+      onToggle={() => {
+        const favorite = !isFavorite;
+        toggleFavorite.mutate(
+          {
             realmID: player.realm_id,
             characterGUID: player.id,
-            favorite: !isFavorite,
-          })}
-        />
-      )}
-      {activeTab === "overview" && MODES.map(([key, label]) => (
+            favorite,
+          },
+          {
+            onSuccess: () => toast.success(
+              favorite
+                ? `${player.name} added to favorites`
+                : `${player.name} removed from favorites`,
+            ),
+            onError: (mutationError) => toast.error(mutationError.message),
+          },
+        );
+      }}
+    />
+  ) : undefined;
+
+  const modeSelector = activeTab === "overview" ? (
+    <div className="flex flex-wrap items-center gap-2">
+      {MODES.map(([key, label]) => (
         <Button
           key={key}
           variant={mode === key ? "secondary" : "outline"}
@@ -168,7 +184,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
         </Button>
       ))}
     </div>
-  );
+  ) : undefined;
 
   return (
     <div className="w-full py-8 px-4 grid gap-x-4 grid-cols-[1fr_minmax(0,72rem)_1fr]">
@@ -202,7 +218,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
 
         {/* Keep one identity header mounted while its tab-specific controls change. */}
         <div className="mt-8">
-          <IdentityHeader player={player} actions={headerActions}>
+          <IdentityHeader player={player} titleAction={favoriteButton} actions={modeSelector}>
             <div className="lg:w-[480px]">
               {activeTab === "overview" && mode === "performance" && (
                 <ScoreCard
