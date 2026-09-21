@@ -5,6 +5,7 @@ import {
   assignPerformanceSeriesColors,
   assignSpecPointShapes,
   buildPerformanceVariants,
+  calculatePerformanceWaterlineMarkers,
   calculatePerformanceWaterlines,
   filterPerformanceRuns,
   filterPerformanceRunsByDate,
@@ -179,6 +180,25 @@ describe("calculatePerformanceWaterlines", () => {
   it("uses all available values when fewer than three runs exist", () => {
     expect(calculatePerformanceWaterlines([100, 300])?.bestThreeAverage).toBe(200);
     expect(calculatePerformanceWaterlines([])).toBeNull();
+  });
+});
+
+describe("calculatePerformanceWaterlineMarkers", () => {
+  it("returns average and best-three markers for one visible series with enough runs", () => {
+    expect(calculatePerformanceWaterlineMarkers([[100, 200, 300, 400]])).toEqual([
+      { kind: "average", value: 250 },
+      { kind: "best-three-average", value: 300 },
+    ]);
+  });
+
+  it("returns only an average marker when fewer than three runs exist", () => {
+    expect(calculatePerformanceWaterlineMarkers([[100, 300]])).toEqual([
+      { kind: "average", value: 200 },
+    ]);
+  });
+
+  it("returns no markers when multiple series are visible", () => {
+    expect(calculatePerformanceWaterlineMarkers([[100, 200, 300], [150, 250, 350]])).toEqual([]);
   });
 });
 

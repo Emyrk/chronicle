@@ -34,6 +34,7 @@ import {
   assignPerformanceSeriesColors,
   assignSpecPointShapes,
   buildPerformanceVariants,
+  calculatePerformanceWaterlineMarkers,
   filterPerformanceRunSeries,
   performanceValue,
   type PerformanceDateRange,
@@ -793,6 +794,34 @@ function PerformanceTrend({
     position,
     value: floor + ((90 - position) / 76) * (ceiling - floor),
   }));
+  const performanceMarkers = calculatePerformanceWaterlineMarkers(
+    series.map((item) => item.runs.map((run) => performanceValue(run, metric, display))),
+  ).map((marker) => marker.kind === "average"
+    ? {
+        key: marker.kind,
+        label: "Avg",
+        value: marker.value,
+        dashArray: "7 5",
+        opacity: 0.65,
+      }
+    : {
+        key: marker.kind,
+        label: "Best 3 avg",
+        value: marker.value,
+        dashArray: "2 4",
+        opacity: 0.9,
+      });
+  const markerLabels = performanceMarkers.map((marker, index) => {
+    const position = y(marker.value);
+    const overlaps = performanceMarkers.some((other, otherIndex) => (
+      otherIndex !== index && Math.abs(y(other.value) - position) < 5
+    ));
+    return {
+      ...marker,
+      position,
+      offset: overlaps ? (index === 0 ? -7 : 7) : 0,
+    };
+  });
   const parseTierBands = display === "parse"
     ? [
         { min: 0, max: 25, color: "#9d9d9d" },
@@ -864,6 +893,20 @@ function PerformanceTrend({
           {yAxisTicks.map((tick) => (
             <line key={tick.position} x1="4" x2="96" y1={tick.position} y2={tick.position} stroke="currentColor" strokeWidth="0.25" className="text-border" vectorEffect="non-scaling-stroke" />
           ))}
+          {performanceMarkers.map((marker) => (
+            <line
+              key={marker.key}
+              x1="4"
+              x2="96"
+              y1={y(marker.value)}
+              y2={y(marker.value)}
+              stroke={series[0].player.color}
+              strokeWidth="1"
+              strokeDasharray={marker.dashArray}
+              opacity={marker.opacity}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
           {hoverX !== null && (
             <line
               x1={hoverX}
@@ -907,6 +950,20 @@ function PerformanceTrend({
             style={{ top: `${tick.position}%` }}
           >
             {display === "parse" ? tick.value.toFixed(1) : formatCompact(tick.value)}
+          </span>
+        ))}
+        {markerLabels.map((marker) => (
+          <span
+            key={marker.key}
+            className="pointer-events-none absolute right-[4%] z-[2] -translate-y-1/2 rounded border bg-zinc-950/90 px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums shadow-sm backdrop-blur-sm"
+            style={{
+              top: `${marker.position}%`,
+              color: series[0].player.color,
+              borderColor: series[0].player.color,
+              transform: `translateY(calc(-50% + ${marker.offset}px))`,
+            }}
+          >
+            {marker.label} · {formatValue(marker.value)}
           </span>
         ))}
         {chartPoints.map(({ id, player: pointPlayer, run, value: rawValue, shape, day }) => {

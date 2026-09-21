@@ -167,6 +167,28 @@ export function calculatePerformanceWaterlines(values: readonly number[]): Perfo
   return { average, bestThreeAverage };
 }
 
+export interface PerformanceWaterlineMarker {
+  kind: "average" | "best-three-average";
+  value: number;
+}
+
+export function calculatePerformanceWaterlineMarkers(
+  visibleSeriesValues: readonly (readonly number[])[],
+): PerformanceWaterlineMarker[] {
+  if (visibleSeriesValues.length !== 1) return [];
+
+  const values = visibleSeriesValues[0];
+  const waterlines = calculatePerformanceWaterlines(values);
+  if (!waterlines) return [];
+
+  return [
+    { kind: "average", value: waterlines.average },
+    ...(values.length >= 3
+      ? [{ kind: "best-three-average" as const, value: waterlines.bestThreeAverage }]
+      : []),
+  ];
+}
+
 export interface ChartCollisionPoint {
   id: string;
   group: number;
