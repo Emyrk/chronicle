@@ -188,7 +188,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   ) : undefined;
 
   return (
-    <div className="w-full py-8 px-4 grid gap-x-4 grid-cols-[1fr_minmax(0,72rem)_1fr]">
+    <div className="grid w-full grid-cols-[1fr_minmax(0,72rem)_1fr] gap-x-4 px-2 py-8 sm:px-4">
       {/* Left placeholder column */}
       <div />
 
@@ -220,7 +220,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
         {/* Keep one identity header mounted while its tab-specific controls change. */}
         <div className="mt-8">
           <IdentityHeader player={player} titleAction={favoriteButton} actions={modeSelector}>
-            <div className="lg:w-[480px]">
+            <div className="w-full lg:w-[480px]">
               {activeTab === "overview" && mode === "performance" && (
                 <ScoreCard
                   score={parsesQuery.data?.score}
