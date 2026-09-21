@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom";
-import { ChevronDown, ExternalLink, Filter, Undo2 } from "lucide-react";
+import { ChevronDown, ExternalLink, Filter, Search, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import type { StripOrientation } from "@/components/layout/GridLayoutEditor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import { PortalContainerProvider, usePortalContainer } from "@/components/ui/PortalContainerContext";
+import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/lib/utils";
 import { PanelFilterEditor } from "../PanelFilterEditor";
@@ -307,45 +308,210 @@ function StripMessage({ children }: { children: React.ReactNode }) {
   return <div className="flex h-full items-center justify-center px-4 text-xs text-muted-foreground">{children}</div>;
 }
 
+interface StripDropdownPosition {
+  left: number;
+  top?: number;
+  bottom?: number;
+  resultsMaxHeight: number;
+}
+
+function fuzzyStripMatch(pattern: string, label: string): { match: boolean; score: number } {
+  const patternLower = pattern.toLowerCase();
+  const labelLower = label.toLowerCase();
+  let patternIndex = 0;
+  let score = 0;
+  let consecutiveBonus = 0;
+
+  for (let index = 0; index < labelLower.length && patternIndex < patternLower.length; index++) {
+    if (labelLower[index] === patternLower[patternIndex]) {
+      score += 1 + consecutiveBonus;
+      consecutiveBonus += 1;
+      if (index === 0 || label[index - 1] === " ") score += 2;
+      patternIndex += 1;
+    } else {
+      consecutiveBonus = 0;
+    }
+  }
+
+  return { match: patternIndex === patternLower.length, score };
+}
+
 function StripSelector({ value, onChange }: { value: StripType; onChange: (value: StripType) => void }) {
+  const portalContainer = usePortalContainer();
+  const portalWindow = portalContainer?.ownerDocument.defaultView;
   const [open, setOpen] = useState(false);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dropdownPosition, setDropdownPosition] = useState<StripDropdownPosition | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const selected = STRIPS[value];
 
-  const cancelClose = () => {
-    if (closeTimer.current === null) return;
-    clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-  };
+  const stripOptions = useMemo(() => {
+    const options = Object.entries(STRIPS) as Array<[StripType, StripDefinition<unknown>]>;
+    const query = searchQuery.trim();
+    if (!query) return options;
 
-  const scheduleClose = () => {
-    cancelClose();
-    closeTimer.current = setTimeout(() => {
-      setOpen(false);
-      closeTimer.current = null;
-    }, 250);
-  };
+    return options
+      .map(([type, definition]) => ({
+        type,
+        definition,
+        ...fuzzyStripMatch(query, definition.label),
+      }))
+      .filter((option) => option.match)
+      .sort((a, b) => b.score - a.score)
+      .map(({ type, definition }) => [type, definition] as [StripType, StripDefinition<unknown>]);
+  }, [searchQuery]);
 
-  useEffect(() => cancelClose, []);
+  const updateDropdownPosition = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect || !portalWindow) return;
+
+    const viewportMargin = 8;
+    const dropdownGap = 4;
+    const searchHeight = 58;
+    const spaceBelow = portalWindow.innerHeight - rect.bottom - viewportMargin - dropdownGap;
+    const spaceAbove = rect.top - viewportMargin - dropdownGap;
+    const openBelow = spaceBelow >= 240 || spaceBelow >= spaceAbove;
+    const availableHeight = Math.max(80, openBelow ? spaceBelow : spaceAbove);
+    const left = Math.min(
+      Math.max(viewportMargin, rect.left),
+      Math.max(viewportMargin, portalWindow.innerWidth - 260 - viewportMargin),
+    );
+
+    setDropdownPosition({
+      left,
+      ...(openBelow
+        ? { top: rect.bottom + dropdownGap }
+        : { bottom: portalWindow.innerHeight - rect.top + dropdownGap }),
+      resultsMaxHeight: Math.max(40, Math.min(350, availableHeight - searchHeight)),
+    });
+  }, [portalWindow]);
+
+  useEffect(() => {
+    const portalDocument = portalContainer?.ownerDocument;
+    if (!portalDocument) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!containerRef.current?.contains(target) && !dropdownRef.current?.contains(target)) {
+        setOpen(false);
+        setDropdownPosition(null);
+        setSearchQuery("");
+      }
+    };
+
+    portalDocument.addEventListener("mousedown", handleClickOutside);
+    return () => portalDocument.removeEventListener("mousedown", handleClickOutside);
+  }, [portalContainer]);
+
+  useEffect(() => {
+    const portalDocument = portalContainer?.ownerDocument;
+    if (!open || !portalDocument || !portalWindow) return;
+
+    portalWindow.addEventListener("resize", updateDropdownPosition);
+    portalDocument.addEventListener("scroll", updateDropdownPosition, true);
+    return () => {
+      portalWindow.removeEventListener("resize", updateDropdownPosition);
+      portalDocument.removeEventListener("scroll", updateDropdownPosition, true);
+    };
+  }, [open, portalContainer, portalWindow, updateDropdownPosition]);
+
+  useEffect(() => {
+    if (open) searchInputRef.current?.focus();
+  }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    setDropdownPosition(null);
+    setSearchQuery("");
+  };
 
   return (
-    <div className="relative" onMouseEnter={cancelClose} onMouseLeave={scheduleClose}>
-      <button type="button" onClick={() => setOpen((current) => !current)} className="flex items-center gap-1 text-xs font-medium">
-        {selected.icon}{selected.label}<ChevronDown className="h-3 w-3" />
+    <div ref={containerRef} className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => {
+          if (open) {
+            close();
+          } else {
+            updateDropdownPosition();
+            setOpen(true);
+          }
+        }}
+        className="flex items-center gap-1.5 bg-transparent text-xs font-medium transition-colors hover:text-muted-foreground cursor-pointer"
+      >
+        {selected.icon}
+        {selected.label}
+        <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />
       </button>
-      {open ? (
-        <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
-          <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Strips</div>
-          {(Object.entries(STRIPS) as Array<[StripType, StripDefinition<unknown>]>).map(([type, definition]) => (
-            <button key={type} type="button" onClick={() => { onChange(type); setOpen(false); }} className={cn("flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent", type === value && "bg-accent/50")}>
-              {definition.icon}{definition.label}
-            </button>
-          ))}
-          <div className="mt-1 border-t px-2 py-2 text-center text-[10px] text-muted-foreground">
-            Panels not supported here
+
+      {open && dropdownPosition && portalContainer && ReactDOM.createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed z-[9999] flex w-[260px] flex-col overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95"
+          style={{
+            left: dropdownPosition.left,
+            top: dropdownPosition.top,
+            bottom: dropdownPosition.bottom,
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              close();
+              triggerRef.current?.focus();
+            }
+          }}
+        >
+          <div className="border-b p-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search strips..."
+                className="w-full rounded border bg-transparent py-1.5 pl-8 pr-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
           </div>
-        </div>
-      ) : null}
+
+          <ScrollArea
+            className="styled-scrollbar"
+            style={{ maxHeight: dropdownPosition.resultsMaxHeight }}
+          >
+            <div className="p-1">
+              {stripOptions.length > 0 ? stripOptions.map(([type, definition]) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    onChange(type);
+                    close();
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer",
+                    type === value && "bg-accent/50",
+                  )}
+                >
+                  <span className="shrink-0 text-muted-foreground">{definition.icon}</span>
+                  <span className="truncate">{definition.label}</span>
+                </button>
+              )) : (
+                <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                  No strips found
+                </div>
+              )}
+              <div className="mt-1 border-t px-2 py-2 text-center text-[10px] text-muted-foreground">
+                Panels not supported here
+              </div>
+            </div>
+          </ScrollArea>
+        </div>,
+        portalContainer,
+      )}
     </div>
   );
 }
