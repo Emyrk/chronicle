@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import type {
   RankingsInstanceSummary,
   RankingsEncounterSummary,
@@ -74,8 +74,7 @@ export interface CharacterPerformanceParams {
   metric: "dps" | "hps";
 }
 
-/** Canonical runs aggregated across a selected set of boss encounters. */
-export function useCharacterPerformance(params: CharacterPerformanceParams) {
+function characterPerformanceQuery(params: CharacterPerformanceParams) {
   const searchParams = new URLSearchParams();
   if (params.instanceName) searchParams.set("instance_name", params.instanceName);
   if (params.encounterNames.length > 0) searchParams.set("encounter_names", params.encounterNames.join(","));
@@ -83,8 +82,8 @@ export function useCharacterPerformance(params: CharacterPerformanceParams) {
   if (params.maxPlayers) searchParams.set("max_players", String(params.maxPlayers));
   searchParams.set("metric", params.metric);
 
-  return useQuery({
-    queryKey: ["rankings", "character-performance", params],
+  return {
+    queryKey: ["rankings", "character-performance", params] as const,
     queryFn: () =>
       fetchJSON<CharacterPerformanceResponse>(
         `/api/v1/rankings/characters/${encodeURIComponent(params.playerGuid!)}/performance?${searchParams.toString()}`,
@@ -92,7 +91,17 @@ export function useCharacterPerformance(params: CharacterPerformanceParams) {
     staleTime: RANKINGS_STALE_TIME,
     enabled: !!params.playerGuid && !!params.instanceName && params.encounterNames.length > 0,
     retry: retryUnlessClientError,
-  });
+  };
+}
+
+/** Canonical runs aggregated across a selected set of boss encounters. */
+export function useCharacterPerformance(params: CharacterPerformanceParams) {
+  return useQuery(characterPerformanceQuery(params));
+}
+
+/** Canonical runs for a dynamic list of characters. */
+export function useCharacterPerformances(params: readonly CharacterPerformanceParams[]) {
+  return useQueries({ queries: params.map(characterPerformanceQuery) });
 }
 
 /** Per-encounter kill aggregates for a character across all recorded logs. */

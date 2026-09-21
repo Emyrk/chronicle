@@ -5,6 +5,7 @@ import {
   calculatePerformanceWaterlines,
   filterPerformanceRuns,
   filterPerformanceRunsByDate,
+  filterPerformanceRunSeries,
   performanceValue,
 } from "./performanceExplorerModel";
 
@@ -89,6 +90,36 @@ describe("filterPerformanceRunsByDate", () => {
     ]);
     expect(filterPerformanceRunsByDate(runs, "60d", now).map((item) => item.run_id)).toEqual(["recent", "within-60"]);
     expect(filterPerformanceRunsByDate(runs, "30d", now).map((item) => item.run_id)).toEqual(["recent"]);
+  });
+});
+
+describe("filterPerformanceRunSeries", () => {
+  const now = new Date("2026-09-20T12:00:00Z");
+
+  it("applies independent spec and subspec filters for each player", () => {
+    const shadow = run({ run_id: "shadow", player_spec: "Shadow", player_sub_spec: "Deep Shadow", started_at: "2026-09-10T12:00:00Z" });
+    const discipline = run({ run_id: "discipline", player_spec: "Discipline", player_sub_spec: "Power Infusion", started_at: "2026-09-11T12:00:00Z" });
+    const fire = run({ run_id: "fire", player_spec: "Fire", player_sub_spec: "Deep Fire", started_at: "2026-09-12T12:00:00Z" });
+
+    const result = filterPerformanceRunSeries([
+      { id: "priest", runs: [shadow, discipline], spec: "Shadow", subSpec: "Deep Shadow" },
+      { id: "mage", runs: [fire], spec: null, subSpec: null },
+    ], "raw", "180d", now);
+
+    expect(result[0].runs.map((item) => item.run_id)).toEqual(["shadow"]);
+    expect(result[1].runs.map((item) => item.run_id)).toEqual(["fire"]);
+  });
+
+  it("tracks raw runs separately when parse mode omits an unscored player run", () => {
+    const scored = run({ run_id: "scored", started_at: "2026-09-10T12:00:00Z" });
+    const unscored = run({ run_id: "unscored", average_parse: undefined, started_at: "2026-09-11T12:00:00Z" });
+
+    const [result] = filterPerformanceRunSeries([
+      { id: "priest", runs: [scored, unscored], spec: null, subSpec: null },
+    ], "parse", "180d", now);
+
+    expect(result.rawRuns).toHaveLength(2);
+    expect(result.runs.map((item) => item.run_id)).toEqual(["scored"]);
   });
 });
 

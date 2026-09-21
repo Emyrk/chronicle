@@ -69,6 +69,40 @@ export function filterPerformanceRunsByDate(
   return runs.filter((run) => new Date(run.started_at).getTime() >= cutoff);
 }
 
+export interface PerformanceRunFilter {
+  id: string;
+  runs: readonly CharacterPerformanceRun[];
+  spec: string | null;
+  subSpec: string | null;
+}
+
+export interface FilteredPerformanceRunSeries {
+  id: string;
+  rawRuns: CharacterPerformanceRun[];
+  runs: CharacterPerformanceRun[];
+}
+
+export function filterPerformanceRunSeries(
+  filters: readonly PerformanceRunFilter[],
+  display: "raw" | "parse",
+  range: PerformanceDateRange,
+  now = new Date(),
+): FilteredPerformanceRunSeries[] {
+  return filters.map((filter) => ({
+    id: filter.id,
+    rawRuns: filterPerformanceRunsByDate(
+      filterPerformanceRuns(filter.runs, filter.spec, filter.subSpec, "raw"),
+      range,
+      now,
+    ),
+    runs: filterPerformanceRunsByDate(
+      filterPerformanceRuns(filter.runs, filter.spec, filter.subSpec, display),
+      range,
+      now,
+    ),
+  }));
+}
+
 export interface PerformanceWaterlines {
   average: number;
   bestThreeAverage: number;
