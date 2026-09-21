@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
+import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
 import type { WoWSpell } from "./wowdb";
 import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse } from "./typesGenerated";
 import type { 
@@ -1647,9 +1647,9 @@ export function useArmorySearch(
   });
 }
 
-export function useArmoryPlayer(realmName?: string, playerIdentifier?: string) {
-  return useQuery({
-    queryKey: ["armory", realmName, playerIdentifier],
+function armoryPlayerQuery(realmName?: string, playerIdentifier?: string) {
+  return {
+    queryKey: ["armory", realmName, playerIdentifier] as const,
     queryFn: async () => {
       const response = await fetch(
         `/api/v1/armory/${encodeURIComponent(realmName!)}/${encodeURIComponent(playerIdentifier!)}`,
@@ -1662,6 +1662,16 @@ export function useArmoryPlayer(realmName?: string, playerIdentifier?: string) {
     enabled: !!realmName && !!playerIdentifier,
     staleTime: 5 * 60 * 1000,
     retry: false,
+  };
+}
+
+export function useArmoryPlayer(realmName?: string, playerIdentifier?: string) {
+  return useQuery(armoryPlayerQuery(realmName, playerIdentifier));
+}
+
+export function useArmoryPlayers(realmName: string, playerIdentifiers: readonly string[]) {
+  return useQueries({
+    queries: playerIdentifiers.slice(0, 5).map((playerIdentifier) => armoryPlayerQuery(realmName, playerIdentifier)),
   });
 }
 

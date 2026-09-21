@@ -73,7 +73,7 @@ import {
   LayoutLabSettings,
 } from "./pages/Settings"
 import { GuildAnalytics, GuildPage, GuildPageEditor, GuildRoster, GuildSettings } from "./pages/GuildPage"
-import { ArmoryAnalysisPage, ArmoryPage } from "./pages/ArmoryPage"
+import { ArmoryAnalysisRedirect, ArmoryPage, PerformanceComparisonPage } from "./pages/ArmoryPage"
 import { ArmorySearchPage } from "./pages/ArmorySearch"
 import { GuildSearchPage } from "./pages/GuildSearch"
 import { ApplyPage } from "./pages/Apply/ApplyPage"
@@ -132,8 +132,9 @@ function App() {
         <Route path="/s/:code" element={<SharedViewRedirect />} />
         <Route path="/guilds" element={<GuildSearchPage />} />
         <Route path="/armory" element={<ArmorySearchPage />} />
-        {/* Unlinked while Armory analysis tools are in development. */}
-        <Route path="/armory/:realmName/:playerIdentifier/analysis" element={<ArmoryAnalysisPage />} />
+        {/* Unlinked while player analysis tools are in development. */}
+        <Route path="/performance-comparison" element={<PerformanceComparisonPage />} />
+        <Route path="/armory/:realmName/:playerIdentifier/analysis" element={<ArmoryAnalysisRedirect />} />
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
         <Route path="/sim" element={<SimPage />} />
         <Route path="/talents" element={<TalentCalculatorPage />} />

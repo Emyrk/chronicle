@@ -1,44 +1,142 @@
 import { useState } from "react";
-import { ArrowLeft, ChartNoAxesCombined } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
-import { useArmoryPlayer } from "@/api/queries";
+import { ArrowLeft, ChartNoAxesCombined, Search } from "lucide-react";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { useArmoryPlayers, useArmorySearch } from "@/api/queries";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/Card/Card";
+import { Input } from "@/components/ui/input";
 import { DatasetProvider } from "@/hooks/useDatasetId";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { getClassColorVar } from "./types";
 import { IdentityHeader } from "./overview/IdentityHeader";
+import {
+  DEFAULT_PERFORMANCE_COMPARISON_STATE,
+  parsePerformanceComparisonState,
+  serializePerformanceComparisonState,
+  type PerformanceComparisonState,
+} from "./overview/performanceComparisonState";
 import { PerformanceExplorer } from "./overview/PerformanceExplorer";
-import { defaultMetric, type ParseMetric } from "./overview/util";
 
-/** Hidden workspace for experimental Armory analysis tools. */
-export function ArmoryAnalysisPage() {
-  const { realmName, playerIdentifier } = useParams<{
-    realmName: string;
-    playerIdentifier: string;
-  }>();
-  const { data: player, isLoading, error } = useArmoryPlayer(realmName, playerIdentifier);
+/** Shareable workspace for player performance comparisons and future analysis tools. */
+export function PerformanceComparisonPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const state = parsePerformanceComparisonState(searchParams);
+  const playerQueries = useArmoryPlayers(state.realmName, state.players.map((player) => player.id));
 
-  if (isLoading) {
-    return <div className="flex min-h-[400px] items-center justify-center text-muted-foreground">Loading character…</div>;
+  if (!state.realmName || state.players.length === 0) {
+    return <PerformanceComparisonLanding onSelect={(realmName, playerId) => {
+      setSearchParams(serializePerformanceComparisonState({
+        ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
+        realmName,
+        players: [{ id: playerId, spec: null, subSpec: null }],
+      }));
+    }} />;
   }
 
-  if (error || !player) {
+  if (playerQueries.some((query) => query.isLoading)) {
+    return <div className="flex min-h-[400px] items-center justify-center text-muted-foreground">Loading characters…</div>;
+  }
+
+  const players = playerQueries.flatMap((query) => query.data ? [query.data] : []);
+  if (players.length === 0) {
     return (
       <div className="flex min-h-[400px] items-center justify-center text-muted-foreground">
-        Character not found: {realmName}/{playerIdentifier}
+        No selected characters could be loaded.
       </div>
     );
   }
 
+  const updateState = (nextState: PerformanceComparisonState) => {
+    setSearchParams(serializePerformanceComparisonState(nextState), { replace: true });
+  };
+
   return (
-    <DatasetProvider datasetId={player.dataset_id} iconBaseUrl={player.icon_base_url}>
-      <AnalysisContent player={player} />
+    <DatasetProvider datasetId={players[0].dataset_id} iconBaseUrl={players[0].icon_base_url}>
+      <AnalysisContent players={players} state={state} onStateChange={updateState} />
     </DatasetProvider>
   );
 }
 
-function AnalysisContent({ player }: { player: ArmoryPlayer }) {
-  const [metric, setMetric] = useState<ParseMetric>(() => defaultMetric(player));
-  const armoryPath = `/armory/${encodeURIComponent(player.realm_name)}/${encodeURIComponent(player.id)}`;
+/** Preserve old direct Armory analysis links while moving state into the query string. */
+export function ArmoryAnalysisRedirect() {
+  const { realmName = "", playerIdentifier = "" } = useParams<{
+    realmName: string;
+    playerIdentifier: string;
+  }>();
+  const search = serializePerformanceComparisonState({
+    ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
+    realmName,
+    players: playerIdentifier ? [{ id: playerIdentifier, spec: null, subSpec: null }] : [],
+  });
+  return <Navigate replace to={`/performance-comparison?${search.toString()}`} />;
+}
+
+function PerformanceComparisonLanding({ onSelect }: { onSelect: (realmName: string, playerId: string) => void }) {
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+  const search = useArmorySearch({ q: debouncedQuery });
+
+  return (
+    <main className="mx-auto w-full max-w-3xl px-4 py-12">
+      <Card className="p-8">
+        <div className="mx-auto max-w-xl text-center">
+          <ChartNoAxesCombined className="mx-auto h-8 w-8 text-sky-400" />
+          <h1 className="mt-4 text-xl font-semibold">Player Analysis</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Choose a player to explore performance history and build a comparison.
+          </p>
+          <div className="relative mt-6 text-left">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search player name…"
+              className="pl-9"
+            />
+          </div>
+          {debouncedQuery.length >= 2 && (
+            <div className="mt-2 max-h-80 overflow-y-auto rounded-md border border-border text-left styled-scrollbar">
+              {search.isLoading ? (
+                <div className="p-6 text-center text-sm text-muted-foreground">Searching…</div>
+              ) : (search.data?.players ?? []).length === 0 ? (
+                <div className="p-6 text-center text-sm text-muted-foreground">No players found.</div>
+              ) : (
+                (search.data?.players ?? []).slice(0, 15).map((player) => (
+                  <button
+                    key={player.id}
+                    type="button"
+                    onClick={() => onSelect(player.realm_name, player.id)}
+                    className="flex w-full items-center justify-between border-b border-border/60 px-3 py-2.5 text-left last:border-0 hover:bg-accent/50"
+                  >
+                    <span>
+                      <span className="font-medium" style={{ color: getClassColorVar(player.class) }}>{player.name}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">{player.class}</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">{player.realm_name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </Card>
+    </main>
+  );
+}
+
+function AnalysisContent({
+  players,
+  state,
+  onStateChange,
+}: {
+  players: ArmoryPlayer[];
+  state: PerformanceComparisonState;
+  onStateChange: (state: PerformanceComparisonState) => void;
+}) {
+  const primaryPlayer = players[0];
+  const armoryPath = `/armory/${encodeURIComponent(primaryPlayer.realm_name)}/${encodeURIComponent(primaryPlayer.id)}`;
 
   return (
     <div className="mx-auto w-full max-w-[92rem] px-4 py-8">
@@ -56,10 +154,10 @@ function AnalysisContent({ player }: { player: ArmoryPlayer }) {
         <div aria-hidden="true" />
       </div>
 
-      <IdentityHeader player={player} />
+      <IdentityHeader player={primaryPlayer} />
 
       <main className="mt-8">
-        <PerformanceExplorer player={player} metric={metric} onMetricChange={setMetric} />
+        <PerformanceExplorer players={players} state={state} onStateChange={onStateChange} />
       </main>
     </div>
   );

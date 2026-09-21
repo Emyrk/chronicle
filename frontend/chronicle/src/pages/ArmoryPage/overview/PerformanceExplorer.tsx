@@ -19,15 +19,15 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { cn } from "@/lib/utils";
 import { getClassColorVar } from "../types";
 import type { ParseMetric } from "./util";
+import type { PerformanceComparisonState, PerformanceDisplayMode } from "./performanceComparisonState";
 import {
   buildPerformanceVariants,
   calculatePerformanceWaterlines,
   filterPerformanceRunSeries,
   performanceValue,
-  type PerformanceDateRange,
 } from "./performanceExplorerModel";
 
-type DisplayMode = "raw" | "parse";
+type DisplayMode = PerformanceDisplayMode;
 
 type PlayerDialog = "add" | string | null;
 
@@ -50,43 +50,45 @@ interface PerformanceSeries {
 }
 
 interface PerformanceExplorerProps {
-  player: ArmoryPlayer;
-  metric: ParseMetric;
-  onMetricChange: (metric: ParseMetric) => void;
+  players: ArmoryPlayer[];
+  state: PerformanceComparisonState;
+  onStateChange: (state: PerformanceComparisonState) => void;
 }
 
 const SERIES_COLORS = ["#38bdf8", "#f59e0b", "#a78bfa", "#34d399", "#fb7185"];
 
-export function PerformanceExplorer({ player, metric, onMetricChange }: PerformanceExplorerProps) {
-  const encountersQuery = useCharacterEncounters(player.id);
+export function PerformanceExplorer({ players, state, onStateChange }: PerformanceExplorerProps) {
+  const primaryPlayer = players[0];
+  const encountersQuery = useCharacterEncounters(primaryPlayer.id);
   const variants = useMemo(
     () => buildPerformanceVariants(encountersQuery.data?.encounters ?? []),
     [encountersQuery.data],
   );
-  const [variantKey, setVariantKey] = useState("");
-  const [selectedEncounters, setSelectedEncounters] = useState<string[]>([]);
-  const [display, setDisplay] = useState<DisplayMode>("raw");
-  const [dateRange, setDateRange] = useState<PerformanceDateRange>("180d");
-  const [showAverage, setShowAverage] = useState(true);
-  const [showBestThreeAverage, setShowBestThreeAverage] = useState(true);
-  const [selectedPlayers, setSelectedPlayers] = useState<SelectedPerformancePlayer[]>(() => [{
-    id: player.id,
-    name: player.name,
-    className: player.class,
-    realmName: player.realm_name,
-    spec: null,
-    subSpec: null,
-    color: SERIES_COLORS[0],
-  }]);
   const [playerDialog, setPlayerDialog] = useState<PlayerDialog>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim(), 250);
-  const playerSearch = useArmorySearch({ q: debouncedSearch, realm: player.realm_name });
-
-  const variant = variants.find((item) => item.key === variantKey) ?? variants[0];
-  const effectiveEncounters = selectedEncounters.length > 0
-    ? selectedEncounters
+  const playerSearch = useArmorySearch({ q: debouncedSearch, realm: state.realmName });
+  const selectedPlayers: SelectedPerformancePlayer[] = state.players.flatMap((selection, index) => {
+    const profile = players.find((player) => player.id === selection.id);
+    return profile ? [{
+      id: profile.id,
+      name: profile.name,
+      className: profile.class,
+      realmName: profile.realm_name,
+      spec: selection.spec,
+      subSpec: selection.subSpec,
+      color: SERIES_COLORS[index],
+    }] : [];
+  });
+  const variant = variants.find((item) => (
+    item.instanceName === state.instanceName
+    && item.difficultyName === state.difficultyName
+    && item.maxPlayers === state.maxPlayers
+  )) ?? variants[0];
+  const effectiveEncounters = state.encounters.length > 0
+    ? state.encounters.filter((encounter) => variant?.encounters.includes(encounter))
     : variant?.encounters ?? [];
+  const { metric, display, dateRange, showAverage, showBestThreeAverage } = state;
   const performanceQueries = useCharacterPerformances(selectedPlayers.map((selectedPlayer) => ({
     playerGuid: selectedPlayer.id,
     instanceName: variant?.instanceName,
@@ -130,50 +132,56 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
     : 0;
 
   const selectVariant = (key: string) => {
-    setVariantKey(key);
-    setSelectedEncounters([]);
-    setSelectedPlayers((current) => current.map((item) => ({ ...item, spec: null, subSpec: null })));
+    const nextVariant = variants.find((item) => item.key === key);
+    if (!nextVariant) return;
+    onStateChange({
+      ...state,
+      instanceName: nextVariant.instanceName,
+      difficultyName: nextVariant.difficultyName,
+      maxPlayers: nextVariant.maxPlayers,
+      encounters: [],
+      players: state.players.map((item) => ({ ...item, spec: null, subSpec: null })),
+    });
   };
 
   const selectEncounter = (encounter: string, additive: boolean) => {
     if (!additive) {
-      setSelectedEncounters([encounter]);
+      onStateChange({ ...state, encounters: [encounter] });
       return;
     }
 
     const current = effectiveEncounters;
     if (current.includes(encounter)) {
-      if (current.length > 1) setSelectedEncounters(current.filter((item) => item !== encounter));
+      if (current.length > 1) onStateChange({ ...state, encounters: current.filter((item) => item !== encounter) });
       return;
     }
     if (variant) {
-      setSelectedEncounters(variant.encounters.filter((item) => current.includes(item) || item === encounter));
+      onStateChange({
+        ...state,
+        encounters: variant.encounters.filter((item) => current.includes(item) || item === encounter),
+      });
     }
   };
 
   const updatePlayerFilter = (id: string, spec: string | null, subSpec: string | null = null) => {
-    setSelectedPlayers((current) => current.map((item) => item.id === id ? { ...item, spec, subSpec } : item));
+    onStateChange({
+      ...state,
+      players: state.players.map((item) => item.id === id ? { ...item, spec, subSpec } : item),
+    });
   };
 
   const addPlayer = (result: ArmorySearchResult) => {
-    if (selectedPlayers.length >= SERIES_COLORS.length || selectedPlayers.some((item) => item.id === result.id)) return;
-    setSelectedPlayers((current) => [...current, {
-      id: result.id,
-      name: result.name,
-      className: result.class,
-      realmName: result.realm_name,
-      spec: null,
-      subSpec: null,
-      color: SERIES_COLORS[current.length],
-    }]);
+    if (state.players.length >= SERIES_COLORS.length || state.players.some((item) => item.id === result.id)) return;
+    onStateChange({
+      ...state,
+      players: [...state.players, { id: result.id, spec: null, subSpec: null }],
+    });
     setSearchQuery("");
     setPlayerDialog(result.id);
   };
 
   const removePlayer = (id: string) => {
-    setSelectedPlayers((current) => current
-      .filter((item) => item.id !== id)
-      .map((item, index) => ({ ...item, color: SERIES_COLORS[index] })));
+    onStateChange({ ...state, players: state.players.filter((item) => item.id !== id) });
     setPlayerDialog(null);
   };
 
@@ -207,11 +215,11 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
                 <div className="space-y-1.5">
                   <div className="text-xs font-medium text-muted-foreground">Metric</div>
                   <div className="flex gap-2">
-                    <SegmentedButton active={metric === "dps"} onClick={() => onMetricChange("dps")}>
+                    <SegmentedButton active={metric === "dps"} onClick={() => onStateChange({ ...state, metric: "dps" })}>
                       <Swords className="h-4 w-4" />
                       DPS
                     </SegmentedButton>
-                    <SegmentedButton active={metric === "hps"} onClick={() => onMetricChange("hps")}>
+                    <SegmentedButton active={metric === "hps"} onClick={() => onStateChange({ ...state, metric: "hps" })}>
                       <HeartPulse className="h-4 w-4" />
                       HPS
                     </SegmentedButton>
@@ -220,11 +228,11 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
                 <div className="space-y-1.5">
                   <div className="text-xs font-medium text-muted-foreground">Display</div>
                   <div className="flex gap-2">
-                    <SegmentedButton active={display === "raw"} onClick={() => setDisplay("raw")}>
+                    <SegmentedButton active={display === "raw"} onClick={() => onStateChange({ ...state, display: "raw" })}>
                       <Database className="h-4 w-4" />
                       Raw
                     </SegmentedButton>
-                    <SegmentedButton active={display === "parse"} onClick={() => setDisplay("parse")}>
+                    <SegmentedButton active={display === "parse"} onClick={() => onStateChange({ ...state, display: "parse" })}>
                       <Percent className="h-4 w-4" />
                       Parse
                     </SegmentedButton>
@@ -241,7 +249,7 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
                     variant="outline"
                     size="sm"
                     className="h-5 px-1.5 text-xs"
-                    onClick={() => setSelectedEncounters([])}
+                    onClick={() => onStateChange({ ...state, encounters: [] })}
                     title="Select all encounters"
                   >
                     All
@@ -291,9 +299,9 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
                   <div className="shrink-0 space-y-2">
                     <div className="text-xs font-medium text-muted-foreground">Date range</div>
                     <div className="flex items-center gap-1.5">
-                      <RangeButton active={dateRange === "180d"} onClick={() => setDateRange("180d")}>180d</RangeButton>
-                      <RangeButton active={dateRange === "60d"} onClick={() => setDateRange("60d")}>60d</RangeButton>
-                      <RangeButton active={dateRange === "30d"} onClick={() => setDateRange("30d")}>30d</RangeButton>
+                      <RangeButton active={dateRange === "180d"} onClick={() => onStateChange({ ...state, dateRange: "180d" })}>180d</RangeButton>
+                      <RangeButton active={dateRange === "60d"} onClick={() => onStateChange({ ...state, dateRange: "60d" })}>60d</RangeButton>
+                      <RangeButton active={dateRange === "30d"} onClick={() => onStateChange({ ...state, dateRange: "30d" })}>30d</RangeButton>
                     </div>
                   </div>
 
@@ -337,14 +345,14 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
                 <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-border/60 py-4">
                   <WaterlineToggle
                     checked={showAverage}
-                    onCheckedChange={setShowAverage}
+                    onCheckedChange={(checked) => onStateChange({ ...state, showAverage: checked })}
                     color="rgb(148 163 184)"
                   >
                     Average
                   </WaterlineToggle>
                   <WaterlineToggle
                     checked={showBestThreeAverage}
-                    onCheckedChange={setShowBestThreeAverage}
+                    onCheckedChange={(checked) => onStateChange({ ...state, showBestThreeAverage: checked })}
                     color="rgb(251 191 36)"
                   >
                     Best 3 avg
@@ -375,7 +383,7 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
               <DialogHeader>
                 <DialogTitle>Add player</DialogTitle>
                 <DialogDescription>
-                  Compare up to five players from {player.realm_name} on the same encounters and date range.
+                  Compare up to five players from {primaryPlayer.realm_name} on the same encounters and date range.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
@@ -477,7 +485,7 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
                     No complete runs are available for this player and encounter selection.
                   </div>
                 )}
-                {configuredSeries.player.id !== player.id && (
+                {configuredSeries.player.id !== primaryPlayer.id && (
                   <div className="flex justify-end border-t border-border/60 pt-4">
                     <Button variant="destructive" size="sm" onClick={() => removePlayer(configuredSeries.player.id)}>
                       <Trash2 className="h-4 w-4" />
