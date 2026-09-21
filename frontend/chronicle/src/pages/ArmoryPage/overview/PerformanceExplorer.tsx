@@ -302,10 +302,26 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                 <div className="flex items-start gap-4 pb-4">
                   <div className="shrink-0 space-y-2">
                     <div className="text-xs font-medium text-muted-foreground">Date range</div>
-                    <div className="flex items-center gap-1.5">
-                      <RangeButton active={dateRange === "180d"} onClick={() => onStateChange({ ...state, dateRange: "180d" })}>180d</RangeButton>
-                      <RangeButton active={dateRange === "60d"} onClick={() => onStateChange({ ...state, dateRange: "60d" })}>60d</RangeButton>
-                      <RangeButton active={dateRange === "30d"} onClick={() => onStateChange({ ...state, dateRange: "30d" })}>30d</RangeButton>
+                    <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
+                      {([
+                        { value: "180d" as const, label: "180d" },
+                        { value: "60d" as const, label: "60d" },
+                        { value: "30d" as const, label: "30d" },
+                      ]).map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => onStateChange({ ...state, dateRange: option.value })}
+                          className={cn(
+                            "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                            dateRange === option.value
+                              ? "bg-[#5F8FA6] text-white"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -748,20 +764,6 @@ function PerformanceTable({ series, metric, selectedCount }: { series: readonly 
         {rows.length === 0 && <div className="py-10 text-center text-sm text-muted-foreground">No runs to summarize.</div>}
       </div>
     </div>
-  );
-}
-
-function RangeButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant={active ? "secondary" : "ghost"}
-      className="h-7 px-2.5 text-xs"
-      onClick={onClick}
-    >
-      {children}
-    </Button>
   );
 }
 
