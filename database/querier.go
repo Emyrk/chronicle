@@ -181,6 +181,11 @@ type sqlcQuerier interface {
 	// The caller groups by (instance_name, encounter_name), takes best 3 per group,
 	// averages each group, then averages groups for the Score.
 	GetCharacterParseHistory(ctx context.Context, arg GetCharacterParseHistoryParams) ([]GetCharacterParseHistoryRow, error)
+	// Return complete canonical runs for one character and a selected boss set.
+	// Raw DPS/HPS is aggregated from the persisted representative upload. Cached
+	// per-boss parses are averaged when every selected encounter has a usable
+	// score. parse_count tells the caller whether the cached average is complete.
+	GetCharacterPerformanceRuns(ctx context.Context, arg GetCharacterPerformanceRunsParams) ([]GetCharacterPerformanceRunsRow, error)
 	GetCreatureTemplatesByEntries(ctx context.Context, arg GetCreatureTemplatesByEntriesParams) ([]WorldCreatureTemplate, error)
 	GetDBCItemDisplayInfoByID(ctx context.Context, arg GetDBCItemDisplayInfoByIDParams) (DbcItemDisplayInfo, error)
 	// Dataset queries. These run with AdminBypass context since the datasets table

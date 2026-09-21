@@ -565,6 +565,43 @@ export interface CharacterParseHistoryResponse {
 
 // From chroniclesdk/parse_scores.go
 /**
+ * CharacterPerformanceResponse contains canonical ranking runs for one selected
+ * instance variant and boss set.
+ */
+export interface CharacterPerformanceResponse {
+    readonly player_guid: string;
+    readonly metric: string;
+    readonly runs: readonly CharacterPerformanceRun[];
+}
+
+// From chroniclesdk/parse_scores.go
+/**
+ * CharacterPerformanceRun aggregates all selected encounters from one persisted
+ * canonical ranking run. AverageParse is nil when any selected encounter lacks
+ * a usable cached parse.
+ */
+export interface CharacterPerformanceRun {
+    readonly run_id: string;
+    readonly representative_instance_id: string;
+    readonly started_at: string;
+    readonly killed_at: string;
+    readonly player_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec?: string;
+    readonly encounter_count: number;
+    readonly damage_done: number;
+    readonly healing_done: number;
+    readonly absorbed_done: number;
+    readonly duration_secs: number;
+    readonly dps: number;
+    readonly hps: number;
+    readonly log_hashed_slug: string;
+    readonly average_parse?: number;
+}
+
+// From chroniclesdk/parse_scores.go
+/**
  * CharacterScore is the derived Score from best 3 parse scores per
  * (instance_name, encounter_name) group, averaged per group, then averaged
  * across groups.

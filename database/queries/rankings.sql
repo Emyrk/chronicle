@@ -660,6 +660,94 @@ WHERE edr.player_guid = @player_guid
 GROUP BY edr.instance_name, edr.encounter_name, edr.difficulty_name, edr.max_players
 ORDER BY edr.instance_name, edr.encounter_name;
 
+-- name: GetCharacterPerformanceRuns :many
+-- Return complete canonical runs for one character and a selected boss set.
+-- Raw DPS/HPS is aggregated from the persisted representative upload. Cached
+-- per-boss parses are averaged when every selected encounter has a usable
+-- score. parse_count tells the caller whether the cached average is complete.
+WITH selected_encounters AS MATERIALIZED (
+    SELECT DISTINCT unnest(@encounter_names::text[]) AS encounter_name
+),
+raw_rows AS MATERIALIZED (
+    SELECT DISTINCT ON (rr.run_id, edr.encounter_name)
+        rr.run_id,
+        rr.representative_instance_id,
+        rr.start_time,
+        edr.encounter_name,
+        edr.player_name,
+        edr.player_class,
+        edr.player_spec,
+        edr.player_sub_spec,
+        edr.damage_done,
+        edr.healing_done,
+        edr.absorbed_done,
+        edr.duration_secs,
+        edr.log_hashed_slug,
+        edr.killed_at
+    FROM ranking_runs rr
+    JOIN encounter_dps_rankings edr
+      ON edr.instance_id = rr.representative_instance_id
+    JOIN selected_encounters selected ON selected.encounter_name = edr.encounter_name
+    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
+    WHERE edr.player_guid = @player_guid
+      AND edr.encounter_id IS NOT NULL
+      AND rr.instance_name = @instance_name
+      AND (@difficulty_name::text = '' OR rr.difficulty_name = @difficulty_name)
+      AND (@max_players::smallint = 0 OR rr.max_players = @max_players)
+    ORDER BY rr.run_id, edr.encounter_name,
+        (CASE WHEN @metric::text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
+),
+parse_rows AS MATERIALIZED (
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+        psr.run_id,
+        psr.encounter_name,
+        psr.precise_score
+    FROM parse_score_results psr
+    JOIN selected_encounters selected ON selected.encounter_name = psr.encounter_name
+    WHERE psr.tenant_id = @tenant_id
+      AND psr.player_guid = @player_guid
+      AND psr.metric = @metric
+      AND psr.status IN ('ok', 'low_confidence')
+    ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+),
+per_run AS (
+    SELECT
+        raw.run_id,
+        raw.representative_instance_id,
+        MIN(raw.start_time)::timestamptz AS started_at,
+        MAX(raw.killed_at)::timestamptz AS killed_at,
+        ((array_agg(raw.player_name ORDER BY raw.damage_done DESC))[1])::text AS player_name,
+        ((array_agg(raw.player_class ORDER BY raw.damage_done DESC))[1])::text AS player_class,
+        CASE
+            WHEN COUNT(DISTINCT raw.player_spec) = 1 THEN MIN(raw.player_spec)
+            ELSE 'Mixed'
+        END::text AS player_spec,
+        CASE
+            WHEN COUNT(DISTINCT raw.player_spec) > 1 OR COUNT(DISTINCT raw.player_sub_spec) > 1 THEN 'Mixed'
+            ELSE MIN(raw.player_sub_spec)
+        END::text AS player_sub_spec,
+        COUNT(DISTINCT raw.encounter_name)::integer AS encounter_count,
+        SUM(raw.damage_done)::bigint AS damage_done,
+        SUM(raw.healing_done)::bigint AS healing_done,
+        SUM(raw.absorbed_done)::bigint AS absorbed_done,
+        SUM(raw.duration_secs)::double precision AS duration_secs,
+        (SUM(raw.damage_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS dps,
+        (SUM(raw.healing_done + raw.absorbed_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS hps,
+        ((array_agg(raw.log_hashed_slug ORDER BY raw.killed_at DESC))[1])::text AS log_hashed_slug,
+        COUNT(parse.precise_score)::integer AS parse_count,
+        COALESCE(AVG(parse.precise_score), 0)::double precision AS average_parse
+    FROM raw_rows raw
+    LEFT JOIN parse_rows parse
+      ON parse.run_id = raw.run_id
+     AND parse.encounter_name = raw.encounter_name
+    GROUP BY raw.run_id, raw.representative_instance_id
+)
+SELECT *
+FROM per_run
+WHERE encounter_count = (SELECT COUNT(*) FROM selected_encounters)
+  AND (CASE WHEN @metric::text = 'hps' THEN hps ELSE dps END) > 0
+ORDER BY started_at ASC, run_id ASC;
+
 -- name: InsertEncounterDpsRanking :exec
 INSERT INTO encounter_dps_rankings (
     encounter_id, instance_id, encounter_name, instance_name,
