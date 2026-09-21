@@ -57,18 +57,74 @@ export function filterPerformanceRuns(
   });
 }
 
-export type PerformanceDateRange = "all" | "60d" | "30d";
+export type PerformanceDateRange = "180d" | "60d" | "30d";
 
 export function filterPerformanceRunsByDate(
   runs: readonly CharacterPerformanceRun[],
   range: PerformanceDateRange,
   now = new Date(),
 ): CharacterPerformanceRun[] {
-  if (range === "all") return [...runs];
-
-  const days = range === "60d" ? 60 : 30;
+  const days = range === "180d" ? 180 : range === "60d" ? 60 : 30;
   const cutoff = now.getTime() - days * 24 * 60 * 60 * 1000;
   return runs.filter((run) => new Date(run.started_at).getTime() >= cutoff);
+}
+
+export interface PerformanceRunFilter {
+  id: string;
+  runs: readonly CharacterPerformanceRun[];
+  spec: string | null;
+  subSpec: string | null;
+}
+
+export interface FilteredPerformanceRunSeries {
+  id: string;
+  rawRuns: CharacterPerformanceRun[];
+  runs: CharacterPerformanceRun[];
+}
+
+export function filterPerformanceRunSeries(
+  filters: readonly PerformanceRunFilter[],
+  display: "raw" | "parse",
+  range: PerformanceDateRange,
+  now = new Date(),
+): FilteredPerformanceRunSeries[] {
+  return filters.map((filter) => ({
+    id: filter.id,
+    rawRuns: filterPerformanceRunsByDate(
+      filterPerformanceRuns(filter.runs, filter.spec, filter.subSpec, "raw"),
+      range,
+      now,
+    ),
+    runs: filterPerformanceRunsByDate(
+      filterPerformanceRuns(filter.runs, filter.spec, filter.subSpec, display),
+      range,
+      now,
+    ),
+  }));
+}
+
+const DUPLICATE_CLASS_SERIES_COLORS = ["#38bdf8", "#f59e0b", "#a78bfa", "#34d399", "#fb7185"];
+
+export function assignPerformanceSeriesColors(classNames: readonly string[]): string[] {
+  const classCounts = new Map<string, number>();
+  const usedColors = new Set<string>();
+
+  return classNames.map((className, index) => {
+    const normalizedClass = className.toLowerCase();
+    const occurrence = classCounts.get(normalizedClass) ?? 0;
+    classCounts.set(normalizedClass, occurrence + 1);
+
+    if (occurrence === 0) {
+      const classColor = `var(--color-class-${normalizedClass})`;
+      usedColors.add(classColor);
+      return classColor;
+    }
+
+    const fallback = DUPLICATE_CLASS_SERIES_COLORS.find((color) => !usedColors.has(color))
+      ?? DUPLICATE_CLASS_SERIES_COLORS[index % DUPLICATE_CLASS_SERIES_COLORS.length];
+    usedColors.add(fallback);
+    return fallback;
+  });
 }
 
 export interface PerformanceWaterlines {

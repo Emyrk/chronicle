@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { CharacterEncounterStats, CharacterPerformanceRun } from "@/api/typesGenerated";
 import {
+  assignPerformanceSeriesColors,
   buildPerformanceVariants,
   calculatePerformanceWaterlines,
   filterPerformanceRuns,
   filterPerformanceRunsByDate,
+  filterPerformanceRunSeries,
   performanceValue,
 } from "./performanceExplorerModel";
 
@@ -77,13 +79,65 @@ describe("filterPerformanceRunsByDate", () => {
   const runs = [
     run({ run_id: "recent", started_at: "2026-09-10T12:00:00Z" }),
     run({ run_id: "within-60", started_at: "2026-08-01T12:00:00Z" }),
-    run({ run_id: "old", started_at: "2026-06-01T12:00:00Z" }),
+    run({ run_id: "within-180", started_at: "2026-06-01T12:00:00Z" }),
+    run({ run_id: "older-than-180", started_at: "2026-03-01T12:00:00Z" }),
   ];
 
-  it("supports all-time, 60-day, and 30-day windows", () => {
-    expect(filterPerformanceRunsByDate(runs, "all", now)).toHaveLength(3);
+  it("supports 180-day, 60-day, and 30-day windows", () => {
+    expect(filterPerformanceRunsByDate(runs, "180d", now).map((item) => item.run_id)).toEqual([
+      "recent",
+      "within-60",
+      "within-180",
+    ]);
     expect(filterPerformanceRunsByDate(runs, "60d", now).map((item) => item.run_id)).toEqual(["recent", "within-60"]);
     expect(filterPerformanceRunsByDate(runs, "30d", now).map((item) => item.run_id)).toEqual(["recent"]);
+  });
+});
+
+describe("filterPerformanceRunSeries", () => {
+  const now = new Date("2026-09-20T12:00:00Z");
+
+  it("applies independent spec and subspec filters for each player", () => {
+    const shadow = run({ run_id: "shadow", player_spec: "Shadow", player_sub_spec: "Deep Shadow", started_at: "2026-09-10T12:00:00Z" });
+    const discipline = run({ run_id: "discipline", player_spec: "Discipline", player_sub_spec: "Power Infusion", started_at: "2026-09-11T12:00:00Z" });
+    const fire = run({ run_id: "fire", player_spec: "Fire", player_sub_spec: "Deep Fire", started_at: "2026-09-12T12:00:00Z" });
+
+    const result = filterPerformanceRunSeries([
+      { id: "priest", runs: [shadow, discipline], spec: "Shadow", subSpec: "Deep Shadow" },
+      { id: "mage", runs: [fire], spec: null, subSpec: null },
+    ], "raw", "180d", now);
+
+    expect(result[0].runs.map((item) => item.run_id)).toEqual(["shadow"]);
+    expect(result[1].runs.map((item) => item.run_id)).toEqual(["fire"]);
+  });
+
+  it("tracks raw runs separately when parse mode omits an unscored player run", () => {
+    const scored = run({ run_id: "scored", started_at: "2026-09-10T12:00:00Z" });
+    const unscored = run({ run_id: "unscored", average_parse: undefined, started_at: "2026-09-11T12:00:00Z" });
+
+    const [result] = filterPerformanceRunSeries([
+      { id: "priest", runs: [scored, unscored], spec: null, subSpec: null },
+    ], "parse", "180d", now);
+
+    expect(result.rawRuns).toHaveLength(2);
+    expect(result.runs.map((item) => item.run_id)).toEqual(["scored"]);
+  });
+});
+
+describe("assignPerformanceSeriesColors", () => {
+  it("uses each player's class color when classes are unique", () => {
+    expect(assignPerformanceSeriesColors(["WARLOCK", "PALADIN", "MAGE"])).toEqual([
+      "var(--color-class-warlock)",
+      "var(--color-class-paladin)",
+      "var(--color-class-mage)",
+    ]);
+  });
+
+  it("uses distinct fallback colors for repeated classes", () => {
+    const colors = assignPerformanceSeriesColors(["WARLOCK", "WARLOCK", "WARLOCK"]);
+
+    expect(colors[0]).toBe("var(--color-class-warlock)");
+    expect(new Set(colors).size).toBe(3);
   });
 });
 

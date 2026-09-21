@@ -1,2 +1,2 @@
 export { ArmoryPage } from "./ArmoryPage";
-export { ArmoryAnalysisPage } from "./AnalysisPage";
+export { ArmoryAnalysisRedirect, PerformanceComparisonPage } from "./AnalysisPage";
