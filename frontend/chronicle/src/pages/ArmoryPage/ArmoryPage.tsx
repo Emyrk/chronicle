@@ -188,7 +188,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   ) : undefined;
 
   return (
-    <div className="grid w-full grid-cols-[1fr_minmax(0,72rem)_1fr] gap-x-4 px-2 py-8 sm:px-4">
+    <div className="grid w-full grid-cols-[1fr_minmax(0,72rem)_1fr] px-1 py-8 sm:gap-x-4 sm:px-4">
       {/* Left placeholder column */}
       <div />
 
