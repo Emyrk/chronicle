@@ -70,7 +70,7 @@ WITH representative_instances AS (
         li.id ASC
 ),
 snapshot AS (
-    SELECT id, cutoff, window_start
+    SELECT id, cutoff, window_start, cohort_mode
     FROM ranking_snapshots WHERE id = @snapshot_id
 ),
 eligible AS (
@@ -100,6 +100,10 @@ eligible AS (
     WHERE edr.encounter_id IS NOT NULL      -- boss kills only
       AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: include healers with zero damage
       AND edr.duration_secs > 0
+      -- Unknown classes are never valid cohorts. Unknown specs are valid in
+      -- class mode because the cohort does not use spec as a dimension.
+      AND lower(btrim(edr.player_class)) NOT IN ('', 'unknown')
+      AND (s.cohort_mode <> 'spec' OR lower(btrim(edr.player_spec)) NOT IN ('', 'unknown'))
       -- Exclusive upper bound: data strictly before the snapshot cutoff (00:00 UTC boundary).
       AND edr.killed_at < s.cutoff
       AND (s.window_start IS NULL OR edr.killed_at >= s.window_start)
@@ -193,6 +197,7 @@ SELECT
     rsm.player_guid,
     CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END AS metric_value
 FROM ranking_snapshot_members rsm
+JOIN ranking_snapshots rs ON rs.id = rsm.snapshot_id
 WHERE rsm.snapshot_id = @snapshot_id
   AND rsm.encounter_name = @encounter_name
   AND rsm.difficulty_name = @difficulty_name
@@ -200,6 +205,10 @@ WHERE rsm.snapshot_id = @snapshot_id
   AND rsm.player_class = @player_class
   AND (sqlc.narg('player_spec')::text IS NULL OR rsm.player_spec = @player_spec)
   AND (sqlc.narg('player_sub_spec')::text IS NULL OR rsm.player_sub_spec = @player_sub_spec)
+  -- Hide invalid cohorts from snapshots published before membership filtering.
+  -- Unknown specs remain valid for class-mode snapshots.
+  AND lower(btrim(rsm.player_class)) NOT IN ('', 'unknown')
+  AND (rs.cohort_mode <> 'spec' OR lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown'))
   -- Only include rows with a positive value for the requested metric so
   -- zero-DPS healers don't appear in DPS cohorts and vice versa.
   AND CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0;
@@ -281,6 +290,8 @@ JOIN log_instances li ON li.id = edr.instance_id
 WHERE edr.encounter_id IS NOT NULL      -- boss kills only
   AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: must match BatchInsertSnapshotMembersFromRankings
   AND edr.duration_secs > 0
+  AND lower(btrim(edr.player_class)) NOT IN ('', 'unknown')
+  AND (@cohort_mode::text <> 'spec' OR lower(btrim(edr.player_spec)) NOT IN ('', 'unknown'))
   -- Exclusive upper bound: must match BatchInsertSnapshotMembersFromRankings.
   AND edr.killed_at < @cutoff
   AND (@window_start::timestamptz IS NULL OR edr.killed_at >= @window_start);
@@ -313,6 +324,7 @@ SELECT
     CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END AS metric_value
 FROM ranking_snapshot_members rsm
 JOIN encounter_dps_rankings edr ON edr.id = rsm.ranking_id
+JOIN ranking_snapshots rs ON rs.id = rsm.snapshot_id
 WHERE rsm.snapshot_id = @snapshot_id
   AND rsm.encounter_name = @encounter_name
   AND rsm.player_class = @player_class
@@ -323,6 +335,8 @@ WHERE rsm.snapshot_id = @snapshot_id
   -- viewer may leave them unselected, meaning "any".
   AND (sqlc.narg('difficulty_name')::text IS NULL OR rsm.difficulty_name = @difficulty_name)
   AND (sqlc.narg('max_players')::smallint IS NULL OR rsm.max_players = @max_players)
+  AND lower(btrim(rsm.player_class)) NOT IN ('', 'unknown')
+  AND (rs.cohort_mode <> 'spec' OR lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown'))
   AND CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
 ORDER BY CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END DESC;
 
@@ -337,7 +351,10 @@ SELECT DISTINCT
     rsm.difficulty_name,
     rsm.max_players
 FROM ranking_snapshot_members rsm
+JOIN ranking_snapshots rs ON rs.id = rsm.snapshot_id
 WHERE rsm.snapshot_id = @snapshot_id
+  AND lower(btrim(rsm.player_class)) NOT IN ('', 'unknown')
+  AND (rs.cohort_mode <> 'spec' OR lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown'))
 ORDER BY rsm.encounter_name, rsm.player_class, rsm.player_spec, rsm.player_sub_spec;
 
 -- name: GetLatestPublishedSnapshotForGuard :one

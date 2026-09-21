@@ -21,7 +21,7 @@ import (
 
 // snapshotQueryVersion is bumped whenever the BatchInsertSnapshotMembersFromRankings
 // query logic changes. Stored on each snapshot for reproducibility.
-const snapshotQueryVersion int16 = 2
+const snapshotQueryVersion int16 = 3
 
 // ---------------------------------------------------------------------------
 // ArgsPublishParseSnapshots — dispatch job (periodic).
@@ -274,6 +274,7 @@ func (w *WorkerPublishParseSnapshotTenant) Work(ctx context.Context, job *river.
 	sourceStats, err := w.Store.GetSnapshotSourceStats(ctx, database.GetSnapshotSourceStatsParams{
 		Cutoff:      cutoff,
 		WindowStart: windowStart,
+		CohortMode:  cohortMode,
 	})
 	if err != nil {
 		return fmt.Errorf("get source stats: %w", err)
