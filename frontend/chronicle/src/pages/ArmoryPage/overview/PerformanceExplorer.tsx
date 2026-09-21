@@ -34,7 +34,7 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
   const [variantKey, setVariantKey] = useState("");
   const [selectedEncounters, setSelectedEncounters] = useState<string[]>([]);
   const [display, setDisplay] = useState<DisplayMode>("raw");
-  const [dateRange, setDateRange] = useState<PerformanceDateRange>("all");
+  const [dateRange, setDateRange] = useState<PerformanceDateRange>("180d");
   const [showAverage, setShowAverage] = useState(true);
   const [showBestThreeAverage, setShowBestThreeAverage] = useState(true);
   const [spec, setSpec] = useState<string | null>(null);
@@ -211,57 +211,60 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
               </aside>
 
               <div className="min-w-0 flex-1 pt-5 lg:pl-6 lg:pt-0">
-                {specs.length > 0 && (
-                  <div className="space-y-2 pb-4">
-                    <div className="text-xs font-medium text-muted-foreground">Spec and subspec</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <FilterButton active={!spec} onClick={() => { setSpec(null); setSubSpec(null); }}>All specs</FilterButton>
-                      {specs.map((option) => (
-                        <FilterButton
-                          key={option}
-                          active={spec === option}
-                          onClick={() => { setSpec(spec === option ? null : option); setSubSpec(null); }}
-                        >
-                          {option}
-                        </FilterButton>
-                      ))}
-                    </div>
-                    {spec && subSpecs.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pl-2">
-                        <FilterButton active={!subSpec} onClick={() => setSubSpec(null)}>All {spec}</FilterButton>
-                        {subSpecs.map((option) => (
-                          <FilterButton key={option} active={subSpec === option} onClick={() => setSubSpec(subSpec === option ? null : option)}>
+                <div className="flex flex-col gap-4 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                  {specs.length > 0 && (
+                    <div className="min-w-0 space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">Spec and subspec</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <FilterButton active={!spec} onClick={() => { setSpec(null); setSubSpec(null); }}>All specs</FilterButton>
+                        {specs.map((option) => (
+                          <FilterButton
+                            key={option}
+                            active={spec === option}
+                            onClick={() => { setSpec(spec === option ? null : option); setSubSpec(null); }}
+                          >
                             {option}
                           </FilterButton>
                         ))}
                       </div>
-                    )}
-                  </div>
-                )}
+                      {spec && subSpecs.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pl-2">
+                          <FilterButton active={!subSpec} onClick={() => setSubSpec(null)}>All {spec}</FilterButton>
+                          {subSpecs.map((option) => (
+                            <FilterButton key={option} active={subSpec === option} onClick={() => setSubSpec(subSpec === option ? null : option)}>
+                              {option}
+                            </FilterButton>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                <div className="flex flex-col gap-3 border-t border-border/60 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="mr-1 text-xs font-medium text-muted-foreground">Range</span>
-                    <RangeButton active={dateRange === "all"} onClick={() => setDateRange("all")}>All time</RangeButton>
-                    <RangeButton active={dateRange === "60d"} onClick={() => setDateRange("60d")}>60d</RangeButton>
-                    <RangeButton active={dateRange === "30d"} onClick={() => setDateRange("30d")}>30d</RangeButton>
+                  <div className="shrink-0 space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground">Date range</div>
+                    <div className="flex items-center gap-1.5">
+                      <RangeButton active={dateRange === "180d"} onClick={() => setDateRange("180d")}>180d</RangeButton>
+                      <RangeButton active={dateRange === "60d"} onClick={() => setDateRange("60d")}>60d</RangeButton>
+                      <RangeButton active={dateRange === "30d"} onClick={() => setDateRange("30d")}>30d</RangeButton>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <WaterlineToggle
-                      checked={showAverage}
-                      onCheckedChange={setShowAverage}
-                      color="rgb(148 163 184)"
-                    >
-                      Average
-                    </WaterlineToggle>
-                    <WaterlineToggle
-                      checked={showBestThreeAverage}
-                      onCheckedChange={setShowBestThreeAverage}
-                      color="rgb(251 191 36)"
-                    >
-                      Best 3 avg
-                    </WaterlineToggle>
-                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-border/60 py-4">
+                  <WaterlineToggle
+                    checked={showAverage}
+                    onCheckedChange={setShowAverage}
+                    color="rgb(148 163 184)"
+                  >
+                    Average
+                  </WaterlineToggle>
+                  <WaterlineToggle
+                    checked={showBestThreeAverage}
+                    onCheckedChange={setShowBestThreeAverage}
+                    color="rgb(251 191 36)"
+                  >
+                    Best 3 avg
+                  </WaterlineToggle>
                 </div>
 
                 <PerformanceTrend
@@ -565,7 +568,7 @@ function EmptyState({ loading }: { loading: boolean }) {
 function dateRangeLabel(range: PerformanceDateRange) {
   if (range === "60d") return "Last 60 days";
   if (range === "30d") return "Last 30 days";
-  return "All-time";
+  return "Last 180 days";
 }
 
 function variantLabel(instance: string, difficulty: string, maxPlayers: number) {

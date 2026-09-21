@@ -57,16 +57,14 @@ export function filterPerformanceRuns(
   });
 }
 
-export type PerformanceDateRange = "all" | "60d" | "30d";
+export type PerformanceDateRange = "180d" | "60d" | "30d";
 
 export function filterPerformanceRunsByDate(
   runs: readonly CharacterPerformanceRun[],
   range: PerformanceDateRange,
   now = new Date(),
 ): CharacterPerformanceRun[] {
-  if (range === "all") return [...runs];
-
-  const days = range === "60d" ? 60 : 30;
+  const days = range === "180d" ? 180 : range === "60d" ? 60 : 30;
   const cutoff = now.getTime() - days * 24 * 60 * 60 * 1000;
   return runs.filter((run) => new Date(run.started_at).getTime() >= cutoff);
 }
