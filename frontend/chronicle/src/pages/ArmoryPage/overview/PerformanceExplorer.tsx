@@ -196,8 +196,8 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
           <EmptyState loading={encountersQuery.isLoading} />
         ) : (
           <>
-            <div className="flex flex-col gap-4 border-b border-border/60 pb-5 xl:flex-row xl:items-end">
-              <label className="block min-w-0 flex-1 space-y-1.5 text-xs font-medium text-muted-foreground xl:max-w-xl">
+            <div className="border-b border-border/60 pb-5">
+              <label className="block min-w-0 max-w-xl space-y-1.5 text-xs font-medium text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <Map className="h-3.5 w-3.5 text-sky-400" />
                   Instance
@@ -214,35 +214,6 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                   ))}
                 </select>
               </label>
-
-              <div className="flex flex-wrap items-end gap-4">
-                <div className="space-y-1.5">
-                  <div className="text-xs font-medium text-muted-foreground">Metric</div>
-                  <div className="flex gap-2">
-                    <SegmentedButton active={metric === "dps"} onClick={() => onStateChange({ ...state, metric: "dps" })}>
-                      <Swords className="h-4 w-4" />
-                      DPS
-                    </SegmentedButton>
-                    <SegmentedButton active={metric === "hps"} onClick={() => onStateChange({ ...state, metric: "hps" })}>
-                      <HeartPulse className="h-4 w-4" />
-                      HPS
-                    </SegmentedButton>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <div className="text-xs font-medium text-muted-foreground">Display</div>
-                  <div className="flex gap-2">
-                    <SegmentedButton active={display === "raw"} onClick={() => onStateChange({ ...state, display: "raw" })}>
-                      <Database className="h-4 w-4" />
-                      Raw
-                    </SegmentedButton>
-                    <SegmentedButton active={display === "parse"} onClick={() => onStateChange({ ...state, display: "parse" })}>
-                      <Percent className="h-4 w-4" />
-                      Parse
-                    </SegmentedButton>
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div className="flex flex-col lg:flex-row">
@@ -300,9 +271,8 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
 
               <div className="min-w-0 flex-1 pt-5 lg:pl-6 lg:pt-0">
                 <div className="flex items-start gap-4 pb-4">
-                  <div className="shrink-0 space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground">Date range</div>
-                    <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
+                  <div className="shrink-0 space-y-1.5 rounded-lg border border-white/10 bg-black/20 p-1.5">
+                    <div className="flex gap-1">
                       {([
                         { value: "180d" as const, label: "180d" },
                         { value: "60d" as const, label: "60d" },
@@ -313,7 +283,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                           type="button"
                           onClick={() => onStateChange({ ...state, dateRange: option.value })}
                           className={cn(
-                            "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                            "flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors",
                             dateRange === option.value
                               ? "bg-[#5F8FA6] text-white"
                               : "text-muted-foreground hover:text-foreground",
@@ -323,9 +293,65 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                         </button>
                       ))}
                     </div>
+                    <div className="flex gap-1 border-t border-white/10 pt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onStateChange({ ...state, metric: "dps" })}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
+                          metric === "dps"
+                            ? "bg-red-500/20 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.5)] ring-1 ring-inset ring-red-400/50"
+                            : "text-muted-foreground hover:text-red-300",
+                        )}
+                      >
+                        <Swords className="h-3.5 w-3.5" />
+                        DPS
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onStateChange({ ...state, metric: "hps" })}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
+                          metric === "hps"
+                            ? "bg-emerald-500/20 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.5)] ring-1 ring-inset ring-emerald-400/50"
+                            : "text-muted-foreground hover:text-emerald-300",
+                        )}
+                      >
+                        <HeartPulse className="h-3.5 w-3.5" />
+                        HPS
+                      </button>
+                    </div>
+                    <div className="flex gap-1 border-t border-white/10 pt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onStateChange({ ...state, display: "raw" })}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                          display === "raw"
+                            ? "bg-white/15 text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <Database className="h-3.5 w-3.5" />
+                        Raw
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onStateChange({ ...state, display: "parse" })}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                          display === "parse"
+                            ? "bg-white/15 text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <Percent className="h-3.5 w-3.5" />
+                        Parse
+                      </button>
+                    </div>
                   </div>
 
-                  <div aria-hidden="true" className="h-14 w-px shrink-0 bg-border/80" />
+                  <div aria-hidden="true" className="h-[7.75rem] w-px shrink-0 bg-border/80" />
                   <div className="min-w-0 space-y-2">
                     <div className="text-xs font-medium text-muted-foreground">Players</div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -796,10 +822,6 @@ function WaterlineLabel({ top, color, label, value }: { top: number; color: stri
       {label} {value}
     </div>
   );
-}
-
-function SegmentedButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return <Button type="button" size="sm" variant={active ? "secondary" : "outline"} onClick={onClick}>{children}</Button>;
 }
 
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
