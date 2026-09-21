@@ -17,10 +17,12 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { cn } from "@/lib/utils";
+import { getClassIconUrl } from "../characterDisplay";
 import { getClassColorVar } from "../types";
 import type { ParseMetric } from "./util";
 import type { PerformanceComparisonState, PerformanceDisplayMode } from "./performanceComparisonState";
 import {
+  assignPerformanceSeriesColors,
   buildPerformanceVariants,
   calculatePerformanceWaterlines,
   filterPerformanceRunSeries,
@@ -55,7 +57,7 @@ interface PerformanceExplorerProps {
   onStateChange: (state: PerformanceComparisonState) => void;
 }
 
-const SERIES_COLORS = ["#38bdf8", "#f59e0b", "#a78bfa", "#34d399", "#fb7185"];
+const MAX_COMPARISON_PLAYERS = 5;
 
 export function PerformanceExplorer({ players, state, onStateChange }: PerformanceExplorerProps) {
   const primaryPlayer = players[0];
@@ -68,18 +70,20 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim(), 250);
   const playerSearch = useArmorySearch({ q: debouncedSearch, realm: state.realmName });
-  const selectedPlayers: SelectedPerformancePlayer[] = state.players.flatMap((selection, index) => {
+  const selectedPlayerProfiles = state.players.flatMap((selection) => {
     const profile = players.find((player) => player.id === selection.id);
-    return profile ? [{
-      id: profile.id,
-      name: profile.name,
-      className: profile.class,
-      realmName: profile.realm_name,
-      spec: selection.spec,
-      subSpec: selection.subSpec,
-      color: SERIES_COLORS[index],
-    }] : [];
+    return profile ? [{ selection, profile }] : [];
   });
+  const seriesColors = assignPerformanceSeriesColors(selectedPlayerProfiles.map(({ profile }) => profile.class));
+  const selectedPlayers: SelectedPerformancePlayer[] = selectedPlayerProfiles.map(({ selection, profile }, index) => ({
+    id: profile.id,
+    name: profile.name,
+    className: profile.class,
+    realmName: profile.realm_name,
+    spec: selection.spec,
+    subSpec: selection.subSpec,
+    color: seriesColors[index],
+  }));
   const variant = variants.find((item) => (
     item.instanceName === state.instanceName
     && item.difficultyName === state.difficultyName
@@ -171,7 +175,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   };
 
   const addPlayer = (result: ArmorySearchResult) => {
-    if (state.players.length >= SERIES_COLORS.length || state.players.some((item) => item.id === result.id)) return;
+    if (state.players.length >= MAX_COMPARISON_PLAYERS || state.players.some((item) => item.id === result.id)) return;
     onStateChange({
       ...state,
       players: [...state.players, { id: result.id, spec: null, subSpec: null }],
@@ -314,16 +318,24 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                           key={selectedPlayer.id}
                           type="button"
                           onClick={() => setPlayerDialog(selectedPlayer.id)}
-                          className="group flex h-8 items-center gap-2 rounded-md border border-border bg-background/70 px-2.5 text-left text-xs transition-colors hover:border-border/80 hover:bg-accent/50"
+                          className="group flex h-10 items-center gap-2 rounded-md border border-border bg-background/70 pr-2.5 text-left text-xs transition-colors hover:bg-accent/50"
+                          style={{ borderColor: selectedPlayer.color }}
                         >
-                          <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: selectedPlayer.color }} />
-                          <span className="font-semibold" style={{ color: getClassColorVar(selectedPlayer.className) }}>
-                            {selectedPlayer.name}
+                          <img
+                            src={getClassIconUrl(selectedPlayer.className)}
+                            alt={`${selectedPlayer.className} class`}
+                            className="size-10 shrink-0 rounded-l-[5px] border-r object-cover"
+                            style={{ borderColor: selectedPlayer.color }}
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold" style={{ color: selectedPlayer.color }}>
+                              {selectedPlayer.name}
+                            </span>
+                            <span className="block truncate text-[10px] text-muted-foreground">
+                              {selectedPlayer.spec ? `${selectedPlayer.spec}${selectedPlayer.subSpec ? ` / ${selectedPlayer.subSpec}` : ""}` : "All specs"}
+                            </span>
                           </span>
-                          <span className="text-muted-foreground">
-                            {selectedPlayer.className}{selectedPlayer.spec ? ` · ${selectedPlayer.spec}${selectedPlayer.subSpec ? ` / ${selectedPlayer.subSpec}` : ""}` : " · All specs"}
-                          </span>
-                          <Settings2 className="h-3.5 w-3.5 text-muted-foreground/60 transition-colors group-hover:text-foreground" />
+                          <Settings2 className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-foreground" />
                         </button>
                       ))}
                       <Button
@@ -331,7 +343,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                         size="sm"
                         variant="outline"
                         className="h-8 px-2.5 text-xs"
-                        disabled={selectedPlayers.length >= SERIES_COLORS.length}
+                        disabled={selectedPlayers.length >= MAX_COMPARISON_PLAYERS}
                         onClick={() => setPlayerDialog("add")}
                       >
                         <Plus className="h-3.5 w-3.5" />

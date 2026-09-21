@@ -103,6 +103,30 @@ export function filterPerformanceRunSeries(
   }));
 }
 
+const DUPLICATE_CLASS_SERIES_COLORS = ["#38bdf8", "#f59e0b", "#a78bfa", "#34d399", "#fb7185"];
+
+export function assignPerformanceSeriesColors(classNames: readonly string[]): string[] {
+  const classCounts = new Map<string, number>();
+  const usedColors = new Set<string>();
+
+  return classNames.map((className, index) => {
+    const normalizedClass = className.toLowerCase();
+    const occurrence = classCounts.get(normalizedClass) ?? 0;
+    classCounts.set(normalizedClass, occurrence + 1);
+
+    if (occurrence === 0) {
+      const classColor = `var(--color-class-${normalizedClass})`;
+      usedColors.add(classColor);
+      return classColor;
+    }
+
+    const fallback = DUPLICATE_CLASS_SERIES_COLORS.find((color) => !usedColors.has(color))
+      ?? DUPLICATE_CLASS_SERIES_COLORS[index % DUPLICATE_CLASS_SERIES_COLORS.length];
+    usedColors.add(fallback);
+    return fallback;
+  });
+}
+
 export interface PerformanceWaterlines {
   average: number;
   bestThreeAverage: number;

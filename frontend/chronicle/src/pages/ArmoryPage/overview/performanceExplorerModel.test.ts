@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CharacterEncounterStats, CharacterPerformanceRun } from "@/api/typesGenerated";
 import {
+  assignPerformanceSeriesColors,
   buildPerformanceVariants,
   calculatePerformanceWaterlines,
   filterPerformanceRuns,
@@ -120,6 +121,23 @@ describe("filterPerformanceRunSeries", () => {
 
     expect(result.rawRuns).toHaveLength(2);
     expect(result.runs.map((item) => item.run_id)).toEqual(["scored"]);
+  });
+});
+
+describe("assignPerformanceSeriesColors", () => {
+  it("uses each player's class color when classes are unique", () => {
+    expect(assignPerformanceSeriesColors(["WARLOCK", "PALADIN", "MAGE"])).toEqual([
+      "var(--color-class-warlock)",
+      "var(--color-class-paladin)",
+      "var(--color-class-mage)",
+    ]);
+  });
+
+  it("uses distinct fallback colors for repeated classes", () => {
+    const colors = assignPerformanceSeriesColors(["WARLOCK", "WARLOCK", "WARLOCK"]);
+
+    expect(colors[0]).toBe("var(--color-class-warlock)");
+    expect(new Set(colors).size).toBe(3);
   });
 });
 
