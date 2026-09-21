@@ -770,6 +770,98 @@ func TestRankingSnapshots(t *testing.T) {
 	_ = ctx // parent context used for setup
 }
 
+func TestSnapshotExcludesUnknownCohorts(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	baseTime := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+
+	for _, opts := range []rankingOpts{
+		{
+			encounterName: "Known Cohort Boss", instanceName: "Test Raid",
+			playerGUID: "P-KNOWN", playerClass: "WARRIOR", playerSpec: "Fury",
+			damageDone: 30_000, durationSecs: 60, dps: 500,
+			killedAt: baseTime, isBoss: true,
+		},
+		{
+			encounterName: "Unknown Spec Boss", instanceName: "Test Raid",
+			playerGUID: "P-UNKNOWN-SPEC", playerClass: "WARRIOR", playerSpec: "Unknown",
+			damageDone: 24_000, durationSecs: 60, dps: 400,
+			killedAt: baseTime, isBoss: true,
+		},
+		{
+			encounterName: "Unknown Class Boss", instanceName: "Test Raid",
+			playerGUID: "P-UNKNOWN-CLASS", playerClass: "Unknown", playerSpec: "Fury",
+			damageDone: 18_000, durationSecs: 60, dps: 300,
+			killedAt: baseTime, isBoss: true,
+		},
+	} {
+		insertRankingRow(t, pool, store, realmID, opts)
+	}
+
+	cutoff := database.Timestamptz(baseTime.Add(time.Hour))
+	stats, err := store.GetSnapshotSourceStats(ctx, database.GetSnapshotSourceStatsParams{Cutoff: cutoff})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), stats.RowCount)
+
+	snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+		TenantID:      uuid.Nil,
+		Cutoff:        cutoff,
+		LookbackDays:  0,
+		CohortMode:    "spec",
+		PolicyVersion: 1,
+		QueryVersion:  1,
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID))
+
+	memberCount, err := store.CountSnapshotMembers(ctx, snapshot.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), memberCount)
+
+	// Simulate an older snapshot published before the membership filter existed.
+	// Cohort reads must still hide its Unknown class/spec rows.
+	_, err = pool.Exec(ctx, `
+		INSERT INTO ranking_snapshot_members (
+			snapshot_id, ranking_id, instance_id, run_id,
+			instance_name, encounter_name,
+			player_guid, player_class, player_spec, player_sub_spec,
+			difficulty_name, max_players,
+			killed_at, created_at_ranking,
+			damage_done, healing_done, absorbed_done,
+			duration_secs, dps, hps
+		)
+		SELECT
+			$1, id, instance_id, instance_id,
+			instance_name, encounter_name,
+			player_guid, player_class, player_spec, player_sub_spec,
+			difficulty_name, max_players,
+			killed_at, created_at,
+			damage_done, healing_done, absorbed_done,
+			duration_secs, dps, hps
+		FROM encounter_dps_rankings
+		WHERE player_guid IN ('P-UNKNOWN-SPEC', 'P-UNKNOWN-CLASS')
+	`, snapshot.ID)
+	require.NoError(t, err)
+
+	buckets, err := store.ListDistinctCohortBuckets(ctx, snapshot.ID)
+	require.NoError(t, err)
+	require.Len(t, buckets, 1)
+	assert.Equal(t, "WARRIOR", buckets[0].PlayerClass)
+	assert.Equal(t, "Fury", buckets[0].PlayerSpec)
+
+	unknownValues, err := store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
+		SnapshotID:    snapshot.ID,
+		EncounterName: "Unknown Spec Boss",
+		PlayerClass:   "WARRIOR",
+		PlayerSpec:    pgtype.Text{String: "Unknown", Valid: true},
+		Metric:        "dps",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, unknownValues)
+}
+
 func TestSnapshotDedupe(t *testing.T) {
 	t.Parallel()
 

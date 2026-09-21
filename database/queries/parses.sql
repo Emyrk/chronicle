@@ -100,6 +100,10 @@ eligible AS (
     WHERE edr.encounter_id IS NOT NULL      -- boss kills only
       AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: include healers with zero damage
       AND edr.duration_secs > 0
+      -- Unknown identities are not valid cohort dimensions. Exclude them at
+      -- membership creation so snapshots never publish Unknown class/spec cohorts.
+      AND lower(btrim(edr.player_class)) NOT IN ('', 'unknown')
+      AND lower(btrim(edr.player_spec)) NOT IN ('', 'unknown')
       -- Exclusive upper bound: data strictly before the snapshot cutoff (00:00 UTC boundary).
       AND edr.killed_at < s.cutoff
       AND (s.window_start IS NULL OR edr.killed_at >= s.window_start)
@@ -200,6 +204,10 @@ WHERE rsm.snapshot_id = @snapshot_id
   AND rsm.player_class = @player_class
   AND (sqlc.narg('player_spec')::text IS NULL OR rsm.player_spec = @player_spec)
   AND (sqlc.narg('player_sub_spec')::text IS NULL OR rsm.player_sub_spec = @player_sub_spec)
+  -- Hide invalid cohorts from snapshots published before Unknown identities
+  -- were excluded at membership creation.
+  AND lower(btrim(rsm.player_class)) NOT IN ('', 'unknown')
+  AND lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown')
   -- Only include rows with a positive value for the requested metric so
   -- zero-DPS healers don't appear in DPS cohorts and vice versa.
   AND CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0;
@@ -281,6 +289,8 @@ JOIN log_instances li ON li.id = edr.instance_id
 WHERE edr.encounter_id IS NOT NULL      -- boss kills only
   AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: must match BatchInsertSnapshotMembersFromRankings
   AND edr.duration_secs > 0
+  AND lower(btrim(edr.player_class)) NOT IN ('', 'unknown')
+  AND lower(btrim(edr.player_spec)) NOT IN ('', 'unknown')
   -- Exclusive upper bound: must match BatchInsertSnapshotMembersFromRankings.
   AND edr.killed_at < @cutoff
   AND (@window_start::timestamptz IS NULL OR edr.killed_at >= @window_start);
@@ -323,6 +333,8 @@ WHERE rsm.snapshot_id = @snapshot_id
   -- viewer may leave them unselected, meaning "any".
   AND (sqlc.narg('difficulty_name')::text IS NULL OR rsm.difficulty_name = @difficulty_name)
   AND (sqlc.narg('max_players')::smallint IS NULL OR rsm.max_players = @max_players)
+  AND lower(btrim(rsm.player_class)) NOT IN ('', 'unknown')
+  AND lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown')
   AND CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
 ORDER BY CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END DESC;
 
@@ -338,6 +350,8 @@ SELECT DISTINCT
     rsm.max_players
 FROM ranking_snapshot_members rsm
 WHERE rsm.snapshot_id = @snapshot_id
+  AND lower(btrim(rsm.player_class)) NOT IN ('', 'unknown')
+  AND lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown')
 ORDER BY rsm.encounter_name, rsm.player_class, rsm.player_spec, rsm.player_sub_spec;
 
 -- name: GetLatestPublishedSnapshotForGuard :one
