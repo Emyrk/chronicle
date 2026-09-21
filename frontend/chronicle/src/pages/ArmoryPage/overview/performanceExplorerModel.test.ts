@@ -191,8 +191,8 @@ describe("calculatePerformanceWaterlineMarkers", () => {
     ]);
   });
 
-  it("returns only an average marker when fewer than three runs exist", () => {
-    expect(calculatePerformanceWaterlineMarkers([[100, 300]])).toEqual([
+  it("returns only an average marker when three or fewer runs exist", () => {
+    expect(calculatePerformanceWaterlineMarkers([[100, 200, 300]])).toEqual([
       { kind: "average", value: 200 },
     ]);
   });

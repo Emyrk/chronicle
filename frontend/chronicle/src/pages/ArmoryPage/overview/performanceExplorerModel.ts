@@ -183,7 +183,7 @@ export function calculatePerformanceWaterlineMarkers(
 
   return [
     { kind: "average", value: waterlines.average },
-    ...(values.length >= 3
+    ...(values.length > 3
       ? [{ kind: "best-three-average" as const, value: waterlines.bestThreeAverage }]
       : []),
   ];
