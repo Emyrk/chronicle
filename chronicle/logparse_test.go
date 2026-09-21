@@ -3,12 +3,6 @@ package chronicle
 import (
 	"context"
 	"errors"
-	"slices"
-	"testing"
-	"time"
-
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
@@ -17,72 +11,9 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
+	"slices"
+	"testing"
 )
-
-func TestPlayerDeathCounts(t *testing.T) {
-	t.Parallel()
-
-	playerOne := guid.GUID(1)
-	playerTwo := guid.GUID(2)
-	counts := playerDeathCounts([]messages.Message{
-		&messages.Slain{Victim: playerOne},
-		&messages.Slain{Victim: playerTwo},
-		&messages.Slain{Victim: playerOne},
-	})
-
-	require.Equal(t, int32(2), counts[playerOne])
-	require.Equal(t, int32(1), counts[playerTwo])
-	require.Zero(t, counts[guid.GUID(3)])
-}
-
-func TestPlayerAliveStats(t *testing.T) {
-	t.Parallel()
-
-	start := time.Date(2026, time.September, 21, 12, 0, 0, 0, time.UTC)
-	end := start.Add(100 * time.Second)
-	player := guid.GUID(1)
-	otherPlayer := guid.GUID(2)
-
-	for _, test := range []struct {
-		name          string
-		events        []messages.Message
-		wantAliveSecs float64
-		wantPercent   float64
-	}{
-		{name: "alive for full encounter", wantAliveSecs: 100, wantPercent: 100},
-		{
-			name: "dead through encounter end",
-			events: []messages.Message{
-				&messages.Slain{MessageBase: messages.MessageBase{Timestamp: start.Add(30 * time.Second)}, Victim: player},
-			},
-			wantAliveSecs: 30,
-			wantPercent:   30,
-		},
-		{
-			name: "multiple deaths and resurrections",
-			events: []messages.Message{
-				&messages.Slain{MessageBase: messages.MessageBase{Timestamp: start.Add(20 * time.Second)}, Victim: player},
-				&messages.Slain{MessageBase: messages.MessageBase{Timestamp: start.Add(25 * time.Second)}, Victim: otherPlayer},
-				&messages.Resurrection{MessageBase: messages.MessageBase{Timestamp: start.Add(40 * time.Second)}, Target: player},
-				&messages.Slain{MessageBase: messages.MessageBase{Timestamp: start.Add(70 * time.Second)}, Victim: player},
-				&messages.Resurrection{MessageBase: messages.MessageBase{Timestamp: start.Add(80 * time.Second)}, Target: player},
-			},
-			wantAliveSecs: 70,
-			wantPercent:   70,
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			aliveSecs, percentage, ok := playerAliveStats(player, start, end, test.events)
-			require.True(t, ok)
-			require.InDelta(t, test.wantAliveSecs, aliveSecs, 0.001)
-			require.InDelta(t, test.wantPercent, percentage, 0.001)
-		})
-	}
-
-	_, _, ok := playerAliveStats(player, start, start, nil)
-	require.False(t, ok)
-}
 
 func TestRankingRunRefreshPlanSuccessfulReplacement(t *testing.T) {
 	t.Parallel()

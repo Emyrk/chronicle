@@ -2,6 +2,7 @@ package instancehook
 
 import (
 	"context"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/google/uuid"
@@ -26,6 +27,12 @@ type Hook interface {
 
 	// CharacterActive/CharacterInactive are not needed here.
 	// Use character.SetHook.ActivityChange for character activity changes.
+}
+
+// FightFinalizedHook receives the exact materialized fight boundaries after
+// FightEnded and before the encounter is stored.
+type FightFinalizedHook interface {
+	FightFinalized(encounterID uuid.UUID, start, end time.Time)
 }
 
 // BaseHook provides no-op implementations of all optional Hook methods.

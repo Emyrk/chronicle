@@ -15,8 +15,7 @@ type ongoingFight struct {
 	Events         *encounterevents.EncounterEventsInProgress
 
 	// PlayerDeaths helps track a reset vs a "wipe".
-	PlayerDeaths     []messages.Message
-	PlayerLifeEvents []messages.Message
+	PlayerDeaths []messages.Message
 
 	// Phases tracks live encounter phase state. Initialized when a fight
 	// starts and a participating hostile provides phase definitions.
@@ -56,11 +55,6 @@ func (f *ongoingFight) Process(m messages.Message) error {
 	case *messages.Slain:
 		if msg.Victim.IsPlayer() {
 			f.PlayerDeaths = append(f.PlayerDeaths, msg)
-			f.PlayerLifeEvents = append(f.PlayerLifeEvents, msg)
-		}
-	case *messages.Resurrection:
-		if msg.Target.IsPlayer() {
-			f.PlayerLifeEvents = append(f.PlayerLifeEvents, msg)
 		}
 	}
 

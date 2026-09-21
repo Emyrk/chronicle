@@ -24,7 +24,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
@@ -1258,70 +1257,6 @@ func detectAndLinkDuplicate(
 	return affectedIDs, nil
 }
 
-func playerDeathCounts(deaths []messages.Message) map[guid.GUID]int32 {
-	counts := make(map[guid.GUID]int32)
-	for _, message := range deaths {
-		slain, ok := message.(*messages.Slain)
-		if ok {
-			counts[slain.Victim]++
-		}
-	}
-	return counts
-}
-
-// playerAliveStats assumes ranked players are alive at encounter start and uses
-// explicit death/resurrection transitions to subtract dead time.
-func playerAliveStats(playerGUID guid.GUID, start, end time.Time, events []messages.Message) (aliveDurationSecs float64, alivePercentage float64, ok bool) {
-	duration := end.Sub(start)
-	if duration <= 0 {
-		return 0, 0, false
-	}
-
-	aliveDuration := duration
-	var deadSince *time.Time
-	clamp := func(timestamp time.Time) time.Time {
-		if timestamp.Before(start) {
-			return start
-		}
-		if timestamp.After(end) {
-			return end
-		}
-		return timestamp
-	}
-
-	for _, message := range events {
-		switch event := message.(type) {
-		case *messages.Slain:
-			if event.Victim != playerGUID || deadSince != nil {
-				continue
-			}
-			timestamp := clamp(event.Date())
-			deadSince = &timestamp
-		case *messages.Resurrection:
-			if event.Target != playerGUID || deadSince == nil {
-				continue
-			}
-			timestamp := clamp(event.Date())
-			if timestamp.After(*deadSince) {
-				aliveDuration -= timestamp.Sub(*deadSince)
-			}
-			deadSince = nil
-		}
-	}
-	if deadSince != nil && end.After(*deadSince) {
-		aliveDuration -= end.Sub(*deadSince)
-	}
-	if aliveDuration < 0 {
-		aliveDuration = 0
-	}
-	if aliveDuration > duration {
-		aliveDuration = duration
-	}
-
-	aliveDurationSecs = aliveDuration.Seconds()
-	return aliveDurationSecs, aliveDurationSecs / duration.Seconds() * 100, true
-}
-
 // insertDPSRankings persists per-player DPS rankings for each clean-kill encounter.
 // Roles are computed statistically from damage done/taken/healing per encounter.
 // Players outside the configured level range are excluded.
@@ -1376,7 +1311,7 @@ func insertDPSRankings(
 			}
 		}
 
-		deathCounts := playerDeathCounts(enc.Combat.PlayerDeaths)
+		survivabilityResult := finalized.Rankings.Survivability[enc.Combat.EncounterID]
 
 		// Sum pet/totem damage and healing into their owner's totals.
 		// The DPS tracker records metrics under the raw caster GUID (pet or player).
@@ -1459,7 +1394,12 @@ func insertDPSRankings(
 			totalHealing := stats.HealingDone + ownerHealing[unitGUID]
 			totalAbsorbed := stats.HealingAbsorbed + ownerAbsorb[unitGUID]
 			hps := float64(totalHealing+totalAbsorbed) / durationSecs
-			_, alivePercentage, hasAlivePercentage := playerAliveStats(unitGUID, enc.Combat.Start, enc.Combat.End, enc.Combat.PlayerLifeEvents)
+			playerSurvivability := rankings.PlayerSurvivability{AliveDurationSecs: durationSecs, AlivePercentage: 100}
+			if survivabilityResult != nil {
+				if tracked, ok := survivabilityResult.Players[unitGUID]; ok {
+					playerSurvivability = tracked
+				}
+			}
 
 			playerGuildName := findPlayerGuild(finalized.Guilds.Guilds, unitGUID)
 
@@ -1491,8 +1431,8 @@ func insertDPSRankings(
 				HealingDone:     totalHealing,
 				AbsorbedDone:    totalAbsorbed,
 				Hps:             hps,
-				AlivePercentage: pgtype.Float8{Float64: alivePercentage, Valid: hasAlivePercentage},
-				PlayerDeaths:    pgtype.Int4{Int32: deathCounts[unitGUID], Valid: true},
+				AlivePercentage: pgtype.Float8{Float64: playerSurvivability.AlivePercentage, Valid: true},
+				PlayerDeaths:    pgtype.Int4{Int32: playerSurvivability.Deaths, Valid: true},
 				LogHashedSlug:   dbinstance.HashedSlug.String,
 				KilledAt:        database.Timestamptz(enc.Combat.End),
 			})
@@ -1579,7 +1519,7 @@ func insertTrashRankings(
 			}
 		}
 
-		deathCounts := playerDeathCounts(enc.Combat.PlayerDeaths)
+		survivabilityResult := finalized.Rankings.Survivability[enc.Combat.EncounterID]
 
 		// Sum pet damage and healing into owner for this encounter.
 		ownerDamage := make(map[guid.GUID]int64)
@@ -1614,9 +1554,14 @@ func insertTrashRankings(
 			a.DamageTaken += stats.DamageTaken
 			a.HealingDone += stats.HealingDone + ownerHealing[unitGUID]
 			a.AbsorbedDone += stats.HealingAbsorbed + ownerAbsorb[unitGUID]
-			aliveDurationSecs, _, _ := playerAliveStats(unitGUID, enc.Combat.Start, enc.Combat.End, enc.Combat.PlayerLifeEvents)
-			a.AliveDurationSecs += aliveDurationSecs
-			a.Deaths += deathCounts[unitGUID]
+			playerSurvivability := rankings.PlayerSurvivability{AliveDurationSecs: durationSecs, AlivePercentage: 100}
+			if survivabilityResult != nil {
+				if tracked, ok := survivabilityResult.Players[unitGUID]; ok {
+					playerSurvivability = tracked
+				}
+			}
+			a.AliveDurationSecs += playerSurvivability.AliveDurationSecs
+			a.Deaths += playerSurvivability.Deaths
 			a.DurationSecs += durationSecs
 			if enc.Combat.End.After(a.LastKilledAt) {
 				a.LastKilledAt = enc.Combat.End
