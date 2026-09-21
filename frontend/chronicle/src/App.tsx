@@ -132,8 +132,7 @@ function App() {
         <Route path="/s/:code" element={<SharedViewRedirect />} />
         <Route path="/guilds" element={<GuildSearchPage />} />
         <Route path="/armory" element={<ArmorySearchPage />} />
-        {/* Unlinked while player analysis tools are in development. */}
-        <Route path="/performance-comparison" element={<PerformanceComparisonPage />} />
+        <Route path="/performance-history" element={<PerformanceComparisonPage />} />
         <Route path="/armory/:realmName/:playerIdentifier/analysis" element={<ArmoryAnalysisRedirect />} />
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
         <Route path="/sim" element={<SimPage />} />

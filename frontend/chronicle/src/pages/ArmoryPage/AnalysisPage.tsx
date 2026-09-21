@@ -67,7 +67,7 @@ export function ArmoryAnalysisRedirect() {
     realmName,
     players: playerIdentifier ? [{ id: playerIdentifier, spec: null, subSpec: null }] : [],
   });
-  return <Navigate replace to={`/performance-comparison?${search.toString()}`} />;
+  return <Navigate replace to={`/performance-history?${search.toString()}`} />;
 }
 
 function PerformanceComparisonLanding({ onSelect }: { onSelect: (realmName: string, playerId: string) => void }) {

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch } from "lucide-react"
+import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined } from "lucide-react"
 
 const faq = [
   {
@@ -34,6 +34,12 @@ const tools = [
     description: "Look up character profiles, gear, and talent builds.",
     to: "/armory",
     icon: <Swords className="h-6 w-6" />,
+  },
+  {
+    name: "Performance History",
+    description: "Explore and compare player performance history across raid encounters.",
+    to: "/performance-history",
+    icon: <ChartNoAxesCombined className="h-6 w-6" />,
   },
   {
     name: "Gear Progression Builder",
