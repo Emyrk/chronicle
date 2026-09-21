@@ -117,4 +117,6 @@ type RankingsResult struct {
 	Speedrun *SpeedrunResult `json:"speedrun,omitempty"`
 	// DPS maps encounter ID → per-unit damage results.
 	DPS map[uuid.UUID]*DPSResult `json:"-"`
+	// Survivability maps encounter ID → per-player death and alive-time results.
+	Survivability map[uuid.UUID]*SurvivabilityResult `json:"-"`
 }

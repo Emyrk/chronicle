@@ -48,42 +48,46 @@ type RankingsEntry struct {
 	// TalentLayout is the player's talent build detected from the combat
 	// log: one digit (rank) per talent per tree, trees separated by '}',
 	// e.g. "05230...}30200...}0000". Empty when no build was detected.
-	TalentLayout  *string   `json:"talent_layout,omitempty"`
-	RealmID       uuid.UUID `json:"realm_id"`
-	RealmName     string    `json:"realm_name"`
-	GuildName     string    `json:"guild_name"`
-	DamageDone    int64     `json:"damage_done"`
-	HealingDone   int64     `json:"healing_done"`
-	AbsorbedDone  int64     `json:"absorbed_done"`
-	DurationSecs  float64   `json:"duration_secs"`
-	DPS           float64   `json:"dps"`
-	HPS           float64   `json:"hps"`
-	AvgIlvl       *int16    `json:"avg_ilvl,omitempty"`
-	LogHashedSlug string    `json:"log_hashed_slug"`
-	KilledAt      time.Time `json:"killed_at"`
+	TalentLayout    *string   `json:"talent_layout,omitempty"`
+	RealmID         uuid.UUID `json:"realm_id"`
+	RealmName       string    `json:"realm_name"`
+	GuildName       string    `json:"guild_name"`
+	DamageDone      int64     `json:"damage_done"`
+	HealingDone     int64     `json:"healing_done"`
+	AbsorbedDone    int64     `json:"absorbed_done"`
+	AlivePercentage *float64  `json:"alive_percentage,omitempty"`
+	PlayerDeaths    *int32    `json:"player_deaths,omitempty"`
+	DurationSecs    float64   `json:"duration_secs"`
+	DPS             float64   `json:"dps"`
+	HPS             float64   `json:"hps"`
+	AvgIlvl         *int16    `json:"avg_ilvl,omitempty"`
+	LogHashedSlug   string    `json:"log_hashed_slug"`
+	KilledAt        time.Time `json:"killed_at"`
 }
 
 // InstanceRankingRecord is a raw per-player ranking row recorded for one encounter
 // in a specific log instance. Zero-value metrics are retained for debugging.
 type InstanceRankingRecord struct {
-	ID            uuid.UUID  `json:"id"`
-	EncounterID   *uuid.UUID `json:"encounter_id,omitempty"`
-	EncounterName string     `json:"encounter_name"`
-	PlayerGUID    string     `json:"player_guid"`
-	PlayerName    string     `json:"player_name"`
-	PlayerClass   string     `json:"player_class"`
-	PlayerSpec    string     `json:"player_spec"`
-	PlayerSubSpec string     `json:"player_sub_spec,omitempty"`
-	PlayerRole    string     `json:"player_role"`
-	PlayerLevel   int16      `json:"player_level"`
-	DamageDone    int64      `json:"damage_done"`
-	HealingDone   int64      `json:"healing_done"`
-	AbsorbedDone  int64      `json:"absorbed_done"`
-	DurationSecs  float64    `json:"duration_secs"`
-	DPS           float64    `json:"dps"`
-	HPS           float64    `json:"hps"`
-	LogHashedSlug string     `json:"log_hashed_slug"`
-	KilledAt      time.Time  `json:"killed_at"`
+	ID              uuid.UUID  `json:"id"`
+	EncounterID     *uuid.UUID `json:"encounter_id,omitempty"`
+	EncounterName   string     `json:"encounter_name"`
+	PlayerGUID      string     `json:"player_guid"`
+	PlayerName      string     `json:"player_name"`
+	PlayerClass     string     `json:"player_class"`
+	PlayerSpec      string     `json:"player_spec"`
+	PlayerSubSpec   string     `json:"player_sub_spec,omitempty"`
+	PlayerRole      string     `json:"player_role"`
+	PlayerLevel     int16      `json:"player_level"`
+	DamageDone      int64      `json:"damage_done"`
+	HealingDone     int64      `json:"healing_done"`
+	AbsorbedDone    int64      `json:"absorbed_done"`
+	AlivePercentage *float64   `json:"alive_percentage,omitempty"`
+	PlayerDeaths    *int32     `json:"player_deaths,omitempty"`
+	DurationSecs    float64    `json:"duration_secs"`
+	DPS             float64    `json:"dps"`
+	HPS             float64    `json:"hps"`
+	LogHashedSlug   string     `json:"log_hashed_slug"`
+	KilledAt        time.Time  `json:"killed_at"`
 }
 
 // RankingsLeaderboardResponse wraps leaderboard entries with total count for pagination.

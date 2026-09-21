@@ -39,23 +39,25 @@ func setupParsesTest(t *testing.T) (*pgxpool.Pool, database.Store, uuid.UUID) {
 }
 
 type rankingOpts struct {
-	encounterName  string
-	instanceName   string
-	playerGUID     string
-	playerClass    string
-	playerSpec     string
-	playerSubSpec  string
-	difficultyName string
-	maxPlayers     int16
-	damageDone     int64
-	healingDone    int64
-	durationSecs   float64
-	dps            float64
-	hps            float64
-	killedAt       time.Time
-	isBoss         bool
-	instanceID     uuid.UUID
-	dupGroupID     *uuid.UUID
+	encounterName   string
+	instanceName    string
+	playerGUID      string
+	playerClass     string
+	playerSpec      string
+	playerSubSpec   string
+	difficultyName  string
+	maxPlayers      int16
+	damageDone      int64
+	healingDone     int64
+	durationSecs    float64
+	dps             float64
+	alivePercentage pgtype.Float8
+	playerDeaths    pgtype.Int4
+	hps             float64
+	killedAt        time.Time
+	isBoss          bool
+	instanceID      uuid.UUID
+	dupGroupID      *uuid.UUID
 }
 
 // insertRankingRow creates an encounter_dps_rankings row and supporting log data.
@@ -120,26 +122,28 @@ func insertRankingRow(t *testing.T, pool *pgxpool.Pool, store database.Store, re
 	}
 
 	err = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
-		EncounterID:    encounterID,
-		InstanceID:     instanceID,
-		EncounterName:  opts.encounterName,
-		InstanceName:   opts.instanceName,
-		PlayerGuid:     opts.playerGUID,
-		PlayerName:     "Player-" + opts.playerGUID,
-		PlayerClass:    opts.playerClass,
-		PlayerSpec:     opts.playerSpec,
-		PlayerSubSpec:  opts.playerSubSpec,
-		DifficultyName: opts.difficultyName,
-		MaxPlayers:     opts.maxPlayers,
-		RealmID:        realmID,
-		RealmName:      "test-realm",
-		DamageDone:     opts.damageDone,
-		HealingDone:    opts.healingDone,
-		DurationSecs:   opts.durationSecs,
-		Dps:            opts.dps,
-		Hps:            opts.hps,
-		KilledAt:       database.Timestamptz(opts.killedAt),
-		LogHashedSlug:  "slug-" + uuid.NewString()[:8],
+		EncounterID:     encounterID,
+		InstanceID:      instanceID,
+		EncounterName:   opts.encounterName,
+		InstanceName:    opts.instanceName,
+		PlayerGuid:      opts.playerGUID,
+		PlayerName:      "Player-" + opts.playerGUID,
+		PlayerClass:     opts.playerClass,
+		PlayerSpec:      opts.playerSpec,
+		PlayerSubSpec:   opts.playerSubSpec,
+		DifficultyName:  opts.difficultyName,
+		MaxPlayers:      opts.maxPlayers,
+		RealmID:         realmID,
+		RealmName:       "test-realm",
+		DamageDone:      opts.damageDone,
+		HealingDone:     opts.healingDone,
+		AlivePercentage: opts.alivePercentage,
+		PlayerDeaths:    opts.playerDeaths,
+		DurationSecs:    opts.durationSecs,
+		Dps:             opts.dps,
+		Hps:             opts.hps,
+		KilledAt:        database.Timestamptz(opts.killedAt),
+		LogHashedSlug:   "slug-" + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)
 }
@@ -165,7 +169,35 @@ func TestInstanceRankingRecordsIncludesZeroMetrics(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, "P-ROGGIA", rows[0].PlayerGuid)
 	assert.Zero(t, rows[0].Dps)
+	assert.False(t, rows[0].AlivePercentage.Valid)
+	assert.False(t, rows[0].PlayerDeaths.Valid)
 	assert.Zero(t, rows[0].Hps)
+}
+
+func TestInstanceRankingRecordsPreservePlayerDeathsNullability(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	instanceID := uuid.New()
+	killedAt := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
+
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros", instanceName: "Molten Core",
+		playerGUID: "P-DEATHS", playerClass: "WARRIOR", playerSpec: "Fury",
+		durationSecs: 120, damageDone: 120_000, dps: 1_000,
+		alivePercentage: pgtype.Float8{Float64: 75, Valid: true},
+		playerDeaths:    pgtype.Int4{Int32: 2, Valid: true},
+		killedAt:        killedAt, isBoss: true, instanceID: instanceID,
+	})
+
+	rows, err := store.InstanceRankingRecords(ctx, instanceID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.True(t, rows[0].AlivePercentage.Valid)
+	assert.InDelta(t, 75, rows[0].AlivePercentage.Float64, 0.001)
+	require.True(t, rows[0].PlayerDeaths.Valid)
+	assert.Equal(t, int32(2), rows[0].PlayerDeaths.Int32)
 }
 
 func TestTrashRankingsAllowDistinctSubSpecs(t *testing.T) {

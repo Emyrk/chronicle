@@ -93,7 +93,7 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
       </div>
 
       <div className="styled-scrollbar min-h-0 flex-1 overflow-auto rounded border border-border">
-        <table className="w-full min-w-[980px] border-collapse tabular-nums">
+        <table className="w-full min-w-[1100px] border-collapse tabular-nums">
           <thead className="sticky top-0 z-10 bg-card text-left text-muted-foreground">
             <tr className="border-b border-border">
               <th className="px-2 py-1.5 font-medium">Encounter</th>
@@ -105,6 +105,8 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
               <th className="px-2 py-1.5 text-right font-medium">Healing</th>
               <th className="px-2 py-1.5 text-right font-medium">Absorb</th>
               <th className="px-2 py-1.5 text-right font-medium">HPS</th>
+              <th className="px-2 py-1.5 text-right font-medium">Deaths</th>
+              <th className="px-2 py-1.5 text-right font-medium">Alive %</th>
             </tr>
           </thead>
           <tbody>
@@ -132,6 +134,12 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
                 <td className="px-2 py-1.5 text-right">{formatNumber(record.absorbed_done)}</td>
                 <td className={record.hps === 0 ? "px-2 py-1.5 text-right text-amber-400" : "px-2 py-1.5 text-right"}>
                   {formatNumber(record.hps, 2)}
+                </td>
+                <td className={record.player_deaths && record.player_deaths > 0 ? "px-2 py-1.5 text-right font-semibold text-red-400" : "px-2 py-1.5 text-right text-muted-foreground"}>
+                  {record.player_deaths ?? "—"}
+                </td>
+                <td className="px-2 py-1.5 text-right text-muted-foreground">
+                  {record.alive_percentage === undefined ? "—" : `${record.alive_percentage.toFixed(1)}%`}
                 </td>
               </tr>
             ))}

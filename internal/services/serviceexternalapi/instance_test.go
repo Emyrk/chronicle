@@ -128,24 +128,26 @@ func TestGetInstanceRankingRecordsBySlug(t *testing.T) {
 			ID: instanceID, HashedSlug: pgtype.Text{String: "example-instance", Valid: true},
 		},
 		rankingRecords: []database.EncounterDpsRanking{{
-			ID:            recordID,
-			EncounterID:   uuid.NullUUID{UUID: encounterID, Valid: true},
-			InstanceID:    instanceID,
-			EncounterName: "Ragnaros",
-			PlayerGuid:    "Player-00000001",
-			PlayerName:    "Example",
-			PlayerClass:   "WARRIOR",
-			PlayerSpec:    "Fury",
-			PlayerRole:    "dps",
-			PlayerLevel:   60,
-			DamageDone:    123456,
-			HealingDone:   789,
-			AbsorbedDone:  100,
-			DurationSecs:  120.5,
-			Dps:           1024.53,
-			Hps:           6.55,
-			LogHashedSlug: "example-log",
-			KilledAt:      pgtype.Timestamptz{Time: killedAt, Valid: true},
+			ID:              recordID,
+			EncounterID:     uuid.NullUUID{UUID: encounterID, Valid: true},
+			InstanceID:      instanceID,
+			EncounterName:   "Ragnaros",
+			PlayerGuid:      "Player-00000001",
+			PlayerName:      "Example",
+			PlayerClass:     "WARRIOR",
+			PlayerSpec:      "Fury",
+			PlayerRole:      "dps",
+			PlayerLevel:     60,
+			DamageDone:      123456,
+			HealingDone:     789,
+			AbsorbedDone:    100,
+			AlivePercentage: pgtype.Float8{Float64: 75, Valid: true},
+			PlayerDeaths:    pgtype.Int4{Int32: 2, Valid: true},
+			DurationSecs:    120.5,
+			Dps:             1024.53,
+			Hps:             6.55,
+			LogHashedSlug:   "example-log",
+			KilledAt:        pgtype.Timestamptz{Time: killedAt, Valid: true},
 		}},
 	}
 	store.parseScores = []database.ParseScoreResult{
@@ -184,6 +186,10 @@ func TestGetInstanceRankingRecordsBySlug(t *testing.T) {
 	require.Equal(t, encounterID, *response[0].EncounterID)
 	require.Equal(t, "Ragnaros", response[0].EncounterName)
 	require.Equal(t, 1024.53, response[0].DPS)
+	require.NotNil(t, response[0].AlivePercentage)
+	require.InDelta(t, 75, *response[0].AlivePercentage, 0.001)
+	require.NotNil(t, response[0].PlayerDeaths)
+	require.Equal(t, int32(2), *response[0].PlayerDeaths)
 	require.Equal(t, 6.55, response[0].HPS)
 	require.Equal(t, killedAt, response[0].KilledAt)
 	require.NotNil(t, response[0].DPSParse)

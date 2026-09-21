@@ -705,7 +705,9 @@ CREATE TABLE encounter_dps_rankings (
     healing_done bigint DEFAULT 0 NOT NULL,
     absorbed_done bigint DEFAULT 0 NOT NULL,
     hps double precision DEFAULT 0 NOT NULL,
-    player_sub_spec text DEFAULT ''::text NOT NULL
+    player_sub_spec text DEFAULT ''::text NOT NULL,
+    player_deaths integer,
+    alive_percentage double precision
 );
 
 ALTER TABLE ONLY encounter_dps_rankings FORCE ROW LEVEL SECURITY;

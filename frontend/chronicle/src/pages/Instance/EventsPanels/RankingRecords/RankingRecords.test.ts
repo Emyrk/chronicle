@@ -11,6 +11,8 @@ const record = {
   player_class: "DRUID",
   player_spec: "Feral",
   player_sub_spec: "Bear",
+  alive_percentage: 75,
+  player_deaths: 2,
   player_role: "tank",
 } as InstanceRankingRecord;
 

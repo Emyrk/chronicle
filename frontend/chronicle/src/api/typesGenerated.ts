@@ -1949,6 +1949,8 @@ export interface InstanceRankingRecord {
     readonly damage_done: number;
     readonly healing_done: number;
     readonly absorbed_done: number;
+    readonly alive_percentage?: number;
+    readonly player_deaths?: number;
     readonly duration_secs: number;
     readonly dps: number;
     readonly hps: number;
@@ -2708,6 +2710,8 @@ export interface RankingsEntry {
     readonly damage_done: number;
     readonly healing_done: number;
     readonly absorbed_done: number;
+    readonly alive_percentage?: number;
+    readonly player_deaths?: number;
     readonly duration_secs: number;
     readonly dps: number;
     readonly hps: number;

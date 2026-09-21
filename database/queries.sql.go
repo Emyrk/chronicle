@@ -12281,7 +12281,7 @@ INSERT INTO encounter_dps_rankings (
     talent_build_id, difficulty_name, max_players,
     realm_id, realm_name, guild_id, guild_name,
     damage_done, duration_secs, dps, avg_ilvl,
-    healing_done, absorbed_done, hps,
+    healing_done, absorbed_done, hps, player_deaths, alive_percentage,
     log_hashed_slug, killed_at
 ) VALUES (
     $1, $2, $3, $4,
@@ -12289,39 +12289,41 @@ INSERT INTO encounter_dps_rankings (
     $12, $13, $14,
     $15, $16, $17, $18,
     $19, $20, $21, $22,
-    $23, $24, $25,
-    $26, $27
+    $23, $24, $25, $26, $27,
+    $28, $29
 ) ON CONFLICT (encounter_id, player_guid) DO NOTHING
 `
 
 type InsertEncounterDpsRankingParams struct {
-	EncounterID    uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
-	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
-	PlayerName     string             `db:"player_name" json:"player_name"`
-	PlayerClass    string             `db:"player_class" json:"player_class"`
-	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
-	PlayerRole     string             `db:"player_role" json:"player_role"`
-	PlayerLevel    int16              `db:"player_level" json:"player_level"`
-	TalentBuildID  uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
-	RealmName      string             `db:"realm_name" json:"realm_name"`
-	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	GuildName      string             `db:"guild_name" json:"guild_name"`
-	DamageDone     int64              `db:"damage_done" json:"damage_done"`
-	DurationSecs   float64            `db:"duration_secs" json:"duration_secs"`
-	Dps            float64            `db:"dps" json:"dps"`
-	AvgIlvl        pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
-	HealingDone    int64              `db:"healing_done" json:"healing_done"`
-	AbsorbedDone   int64              `db:"absorbed_done" json:"absorbed_done"`
-	Hps            float64            `db:"hps" json:"hps"`
-	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
-	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	EncounterID     uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
+	InstanceID      uuid.UUID          `db:"instance_id" json:"instance_id"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	PlayerGuid      string             `db:"player_guid" json:"player_guid"`
+	PlayerName      string             `db:"player_name" json:"player_name"`
+	PlayerClass     string             `db:"player_class" json:"player_class"`
+	PlayerSpec      string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec   string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole      string             `db:"player_role" json:"player_role"`
+	PlayerLevel     int16              `db:"player_level" json:"player_level"`
+	TalentBuildID   uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName       string             `db:"realm_name" json:"realm_name"`
+	GuildID         uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName       string             `db:"guild_name" json:"guild_name"`
+	DamageDone      int64              `db:"damage_done" json:"damage_done"`
+	DurationSecs    float64            `db:"duration_secs" json:"duration_secs"`
+	Dps             float64            `db:"dps" json:"dps"`
+	AvgIlvl         pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
+	HealingDone     int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone    int64              `db:"absorbed_done" json:"absorbed_done"`
+	Hps             float64            `db:"hps" json:"hps"`
+	PlayerDeaths    pgtype.Int4        `db:"player_deaths" json:"player_deaths"`
+	AlivePercentage pgtype.Float8      `db:"alive_percentage" json:"alive_percentage"`
+	LogHashedSlug   string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt        pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 }
 
 func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error {
@@ -12351,6 +12353,8 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 		arg.HealingDone,
 		arg.AbsorbedDone,
 		arg.Hps,
+		arg.PlayerDeaths,
+		arg.AlivePercentage,
 		arg.LogHashedSlug,
 		arg.KilledAt,
 	)
@@ -12358,7 +12362,7 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 }
 
 const instanceRankingRecords = `-- name: InstanceRankingRecords :many
-SELECT id, encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name, player_class, player_spec, player_role, player_level, talent_build_id, difficulty_name, max_players, realm_id, realm_name, guild_id, guild_name, damage_done, duration_secs, dps, avg_ilvl, log_hashed_slug, killed_at, created_at, healing_done, absorbed_done, hps, player_sub_spec
+SELECT id, encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name, player_class, player_spec, player_role, player_level, talent_build_id, difficulty_name, max_players, realm_id, realm_name, guild_id, guild_name, damage_done, duration_secs, dps, avg_ilvl, log_hashed_slug, killed_at, created_at, healing_done, absorbed_done, hps, player_sub_spec, player_deaths, alive_percentage
 FROM encounter_dps_rankings
 WHERE instance_id = $1
 ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name
@@ -12405,6 +12409,8 @@ func (q *sqlQuerier) InstanceRankingRecords(ctx context.Context, instanceID uuid
 			&i.AbsorbedDone,
 			&i.Hps,
 			&i.PlayerSubSpec,
+			&i.PlayerDeaths,
+			&i.AlivePercentage,
 		); err != nil {
 			return nil, err
 		}
@@ -12726,7 +12732,7 @@ representative_instances AS (
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
-        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec
+        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage
     FROM encounter_dps_rankings edr
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -13126,6 +13132,8 @@ deduped AS (
         edr.damage_done,
         edr.healing_done,
         edr.absorbed_done,
+        edr.alive_percentage,
+        edr.player_deaths,
         edr.duration_secs,
         edr.avg_ilvl,
         edr.log_hashed_slug,
@@ -13210,6 +13218,15 @@ per_run AS (
         SUM(d.damage_done)::bigint AS damage_done,
         SUM(d.healing_done)::bigint AS healing_done,
         SUM(d.absorbed_done)::bigint AS absorbed_done,
+        COALESCE((CASE
+            WHEN COUNT(d.alive_percentage) = COUNT(*) THEN
+                SUM(d.duration_secs * d.alive_percentage) / NULLIF(SUM(d.duration_secs), 0)
+            ELSE NULL
+        END), -1)::double precision AS alive_percentage,
+        COALESCE((CASE
+            WHEN COUNT(d.player_deaths) = COUNT(*) THEN SUM(d.player_deaths)
+            ELSE NULL
+        END), -1)::integer AS player_deaths,
         SUM(d.duration_secs)::double precision AS duration_secs,
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
         (SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS hps,
@@ -13243,6 +13260,8 @@ aggregated AS (
         pr.damage_done,
         pr.healing_done,
         pr.absorbed_done,
+        pr.alive_percentage,
+        pr.player_deaths,
         pr.duration_secs,
         pr.dps,
         pr.hps,
@@ -13255,7 +13274,7 @@ aggregated AS (
     ORDER BY pr.player_guid, (CASE WHEN $1 :: text = 'hps' THEN pr.hps ELSE pr.dps END) DESC
 )
 SELECT
-    a.player_guid, a.player_name, a.player_class, a.player_spec, a.player_sub_spec, a.player_role, a.player_level, a.instance_name, a.encounter_name, a.difficulty_name, a.max_players, a.realm_id, a.realm_name, a.guild_name, a.damage_done, a.healing_done, a.absorbed_done, a.duration_secs, a.dps, a.hps, a.avg_ilvl, a.log_hashed_slug, a.killed_at, a.talent_sub_spec, a.talent_layout,
+    a.player_guid, a.player_name, a.player_class, a.player_spec, a.player_sub_spec, a.player_role, a.player_level, a.instance_name, a.encounter_name, a.difficulty_name, a.max_players, a.realm_id, a.realm_name, a.guild_name, a.damage_done, a.healing_done, a.absorbed_done, a.alive_percentage, a.player_deaths, a.duration_secs, a.dps, a.hps, a.avg_ilvl, a.log_hashed_slug, a.killed_at, a.talent_sub_spec, a.talent_layout,
     COUNT(*) OVER() AS total_count
 FROM aggregated a
 WHERE (CASE WHEN $1 :: text = 'hps' THEN a.hps ELSE a.dps END) > 0
@@ -13282,32 +13301,34 @@ type RankingsLeaderboardParams struct {
 }
 
 type RankingsLeaderboardRow struct {
-	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
-	PlayerName     string             `db:"player_name" json:"player_name"`
-	PlayerClass    string             `db:"player_class" json:"player_class"`
-	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
-	PlayerRole     string             `db:"player_role" json:"player_role"`
-	PlayerLevel    int16              `db:"player_level" json:"player_level"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
-	RealmName      string             `db:"realm_name" json:"realm_name"`
-	GuildName      string             `db:"guild_name" json:"guild_name"`
-	DamageDone     int64              `db:"damage_done" json:"damage_done"`
-	HealingDone    int64              `db:"healing_done" json:"healing_done"`
-	AbsorbedDone   int64              `db:"absorbed_done" json:"absorbed_done"`
-	DurationSecs   float64            `db:"duration_secs" json:"duration_secs"`
-	Dps            float64            `db:"dps" json:"dps"`
-	Hps            float64            `db:"hps" json:"hps"`
-	AvgIlvl        int16              `db:"avg_ilvl" json:"avg_ilvl"`
-	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
-	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
-	TalentSubSpec  string             `db:"talent_sub_spec" json:"talent_sub_spec"`
-	TalentLayout   string             `db:"talent_layout" json:"talent_layout"`
-	TotalCount     int64              `db:"total_count" json:"total_count"`
+	PlayerGuid      string             `db:"player_guid" json:"player_guid"`
+	PlayerName      string             `db:"player_name" json:"player_name"`
+	PlayerClass     string             `db:"player_class" json:"player_class"`
+	PlayerSpec      string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec   string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole      string             `db:"player_role" json:"player_role"`
+	PlayerLevel     int16              `db:"player_level" json:"player_level"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName       string             `db:"realm_name" json:"realm_name"`
+	GuildName       string             `db:"guild_name" json:"guild_name"`
+	DamageDone      int64              `db:"damage_done" json:"damage_done"`
+	HealingDone     int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone    int64              `db:"absorbed_done" json:"absorbed_done"`
+	AlivePercentage float64            `db:"alive_percentage" json:"alive_percentage"`
+	PlayerDeaths    int32              `db:"player_deaths" json:"player_deaths"`
+	DurationSecs    float64            `db:"duration_secs" json:"duration_secs"`
+	Dps             float64            `db:"dps" json:"dps"`
+	Hps             float64            `db:"hps" json:"hps"`
+	AvgIlvl         int16              `db:"avg_ilvl" json:"avg_ilvl"`
+	LogHashedSlug   string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt        pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	TalentSubSpec   string             `db:"talent_sub_spec" json:"talent_sub_spec"`
+	TalentLayout    string             `db:"talent_layout" json:"talent_layout"`
+	TotalCount      int64              `db:"total_count" json:"total_count"`
 }
 
 // Returns paginated DPS rankings showing each player's best single run.
@@ -13362,6 +13383,8 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 			&i.DamageDone,
 			&i.HealingDone,
 			&i.AbsorbedDone,
+			&i.AlivePercentage,
+			&i.PlayerDeaths,
 			&i.DurationSecs,
 			&i.Dps,
 			&i.Hps,
