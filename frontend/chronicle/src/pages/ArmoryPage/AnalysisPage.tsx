@@ -27,16 +27,16 @@ export function PerformanceComparisonPage() {
       setSearchParams(serializePerformanceComparisonState({
         ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
         realmName,
-        players: [{ id: playerId, spec: null, subSpec: null }],
+        players: [{ id: playerId, spec: null, subSpec: null, hidden: false }],
       }));
     }} />;
   }
 
-  if (playerQueries.some((query) => query.isLoading)) {
+  const players = playerQueries.flatMap((query) => query.data ? [query.data] : []);
+  if (players.length === 0 && playerQueries.some((query) => query.isLoading)) {
     return <div className="flex min-h-[400px] items-center justify-center text-muted-foreground">Loading characters…</div>;
   }
 
-  const players = playerQueries.flatMap((query) => query.data ? [query.data] : []);
   if (players.length === 0) {
     return (
       <div className="flex min-h-[400px] items-center justify-center text-muted-foreground">
@@ -65,7 +65,7 @@ export function ArmoryAnalysisRedirect() {
   const search = serializePerformanceComparisonState({
     ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
     realmName,
-    players: playerIdentifier ? [{ id: playerIdentifier, spec: null, subSpec: null }] : [],
+    players: playerIdentifier ? [{ id: playerIdentifier, spec: null, subSpec: null, hidden: false }] : [],
   });
   return <Navigate replace to={`/performance-history?${search.toString()}`} />;
 }
@@ -134,8 +134,8 @@ function AnalysisContent({
   onStateChange: (state: PerformanceComparisonState) => void;
 }) {
   return (
-    <div className="mx-auto w-full max-w-[92rem] px-4 py-8">
-      <div className="mb-6 flex items-center justify-center border-b border-border pb-3">
+    <div className="mx-auto w-full max-w-[92rem] px-2 py-4 sm:px-4 sm:py-8">
+      <div className="mb-4 flex items-center justify-center border-b border-border pb-3 sm:mb-6">
         <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-foreground">
           <ChartNoAxesCombined className="h-4 w-4 text-sky-400" />
           Player Analysis

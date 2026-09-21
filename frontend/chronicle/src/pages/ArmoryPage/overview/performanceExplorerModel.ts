@@ -127,6 +127,32 @@ export function assignPerformanceSeriesColors(classNames: readonly string[]): st
   });
 }
 
+export type PerformancePointShape = "circle" | "diamond" | "square" | "triangle" | "hexagon";
+
+const PERFORMANCE_POINT_SHAPES: readonly PerformancePointShape[] = [
+  "circle",
+  "diamond",
+  "square",
+  "triangle",
+  "hexagon",
+];
+
+export function assignSpecPointShapes(specs: readonly string[]): Record<string, PerformancePointShape> {
+  const counts = new Map<string, number>();
+  for (const spec of specs) {
+    if (!spec || spec === "Mixed") continue;
+    counts.set(spec, (counts.get(spec) ?? 0) + 1);
+  }
+
+  return Object.fromEntries(
+    [...counts.entries()]
+      .sort(([leftSpec, leftCount], [rightSpec, rightCount]) => (
+        rightCount - leftCount || leftSpec.localeCompare(rightSpec)
+      ))
+      .map(([spec], index) => [spec, PERFORMANCE_POINT_SHAPES[index % PERFORMANCE_POINT_SHAPES.length]]),
+  );
+}
+
 export interface PerformanceWaterlines {
   average: number;
   bestThreeAverage: number;
@@ -139,6 +165,51 @@ export function calculatePerformanceWaterlines(values: readonly number[]): Perfo
   const bestThree = [...values].sort((a, b) => b - a).slice(0, 3);
   const bestThreeAverage = bestThree.reduce((sum, value) => sum + value, 0) / bestThree.length;
   return { average, bestThreeAverage };
+}
+
+export interface ChartCollisionPoint {
+  id: string;
+  group: number;
+  position: number;
+}
+
+export function assignChartCollisionOffsets(
+  points: readonly ChartCollisionPoint[],
+  collisionDistance = 3.5,
+  spacing = 8,
+): Record<string, number> {
+  const offsets: Record<string, number> = {};
+  const grouped = new Map<number, ChartCollisionPoint[]>();
+
+  for (const point of points) {
+    const group = grouped.get(point.group) ?? [];
+    group.push(point);
+    grouped.set(point.group, group);
+    offsets[point.id] = 0;
+  }
+
+  for (const group of grouped.values()) {
+    const sorted = [...group].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+    let clusterStart = 0;
+
+    const assignCluster = (end: number) => {
+      const cluster = sorted.slice(clusterStart, end);
+      if (cluster.length < 2) return;
+      const center = (cluster.length - 1) / 2;
+      cluster.forEach((point, index) => {
+        offsets[point.id] = (index - center) * spacing;
+      });
+    };
+
+    for (let index = 1; index <= sorted.length; index += 1) {
+      if (index === sorted.length || sorted[index].position - sorted[index - 1].position > collisionDistance) {
+        assignCluster(index);
+        clusterStart = index;
+      }
+    }
+  }
+
+  return offsets;
 }
 
 export function performanceValue(

@@ -11,8 +11,8 @@ describe("performance comparison URL state", () => {
       ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
       realmName: "N'Zoth",
       players: [
-        { id: "player-1", spec: "Shadow", subSpec: "Deep Shadow" },
-        { id: "player-2", spec: "Fire", subSpec: null },
+        { id: "player-1", spec: "Shadow", subSpec: "Deep Shadow", hidden: false },
+        { id: "player-2", spec: "Fire", subSpec: null, hidden: true },
       ],
       metric: "hps" as const,
       display: "parse" as const,
@@ -41,6 +41,18 @@ describe("performance comparison URL state", () => {
     expect(state.maxPlayers).toBe(0);
   });
 
+  it("restores hidden players by id without changing player alignment", () => {
+    const searchParams = new URLSearchParams();
+    searchParams.append("player", "player-1");
+    searchParams.append("player", "player-2");
+    searchParams.append("hidden", "player-2");
+
+    expect(parsePerformanceComparisonState(searchParams).players).toEqual([
+      { id: "player-1", spec: null, subSpec: null, hidden: false },
+      { id: "player-2", spec: null, subSpec: null, hidden: true },
+    ]);
+  });
+
   it("preserves empty aligned spec values between players", () => {
     const searchParams = new URLSearchParams();
     searchParams.append("player", "player-1");
@@ -51,8 +63,8 @@ describe("performance comparison URL state", () => {
     searchParams.append("subspec", "Deep Fire");
 
     expect(parsePerformanceComparisonState(searchParams).players).toEqual([
-      { id: "player-1", spec: null, subSpec: null },
-      { id: "player-2", spec: "Fire", subSpec: "Deep Fire" },
+      { id: "player-1", spec: null, subSpec: null, hidden: false },
+      { id: "player-2", spec: "Fire", subSpec: "Deep Fire", hidden: false },
     ]);
   });
 });
