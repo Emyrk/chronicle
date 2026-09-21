@@ -955,7 +955,7 @@ function PerformanceTrend({
         {markerLabels.map((marker) => (
           <span
             key={marker.key}
-            className="pointer-events-none absolute right-[4%] z-[2] -translate-y-1/2 rounded border bg-zinc-950/90 px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums shadow-sm backdrop-blur-sm"
+            className="pointer-events-none absolute right-[4%] z-[2] -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums shadow-sm ring-4 ring-background"
             style={{
               top: `${marker.position}%`,
               color: series[0].player.color,
