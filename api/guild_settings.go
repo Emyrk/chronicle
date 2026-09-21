@@ -295,8 +295,9 @@ func (api *API) UpdateGuildDiscordIntegration(w http.ResponseWriter, r *http.Req
 }
 
 const (
-	discordOAuthTokenURL      = "https://discord.com/api/oauth2/token"
-	discordInstallPermissions = discordgo.PermissionViewChannel |
+	discordOAuthTokenURL       = "https://discord.com/api/oauth2/token"
+	discordInstallCallbackPath = "/api/v1/discord-integration/callback"
+	discordInstallPermissions  = discordgo.PermissionViewChannel |
 		discordgo.PermissionSendMessages |
 		discordgo.PermissionEmbedLinks |
 		discordgo.PermissionAttachFiles |
@@ -307,7 +308,7 @@ const (
 
 func (api *API) discordInstallCallbackURL() string {
 	return api.Opts.AccessURL.ResolveReference(&url.URL{
-		Path: "/api/v1/discord-integration/callback",
+		Path: discordInstallCallbackPath,
 	}).String()
 }
 

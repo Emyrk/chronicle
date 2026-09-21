@@ -184,7 +184,7 @@ func (api *API) Routes() chi.Router {
 		r.Group(func(r chi.Router) {
 
 			r.Use(
-				httpmw.BrowserOnly(api.Opts.AccessURL),
+				httpmw.BrowserOnly(api.Opts.AccessURL, discordInstallCallbackPath),
 				api.Auth.AuthenticationMiddleware,
 			)
 
