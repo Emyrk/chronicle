@@ -9,7 +9,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { Check, ChevronDown, Shield, Star, UserRound, UsersRound } from "lucide-react";
+import { Check, ChevronDown, MousePointer2, Shield, Star, UserRound, UsersRound } from "lucide-react";
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 
@@ -88,7 +88,7 @@ function IntroScene() {
   );
 }
 
-function PlayerHeader() {
+function PlayerHeader({ favorited, starScale }: { favorited: boolean; starScale: number }) {
   return (
     <div className="rounded-xl border border-zinc-700 bg-[#101318] p-7 shadow-2xl">
       <div className="flex items-center gap-5">
@@ -96,7 +96,10 @@ function PlayerHeader() {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
             <span className="font-wow text-4xl text-[#168ff0]">Welfs</span>
-            <Star className="size-7 fill-amber-300 text-amber-300" />
+            <span className="relative grid size-9 place-items-center" style={{ scale: starScale }}>
+              {favorited && <span className="absolute inset-0 rounded-full bg-amber-300/25 blur-md" />}
+              <Star className={`relative size-7 ${favorited ? "fill-amber-300 text-amber-300" : "text-zinc-400"}`} />
+            </span>
           </div>
           <div className="mt-2 text-lg text-zinc-400">&lt;Cleave&gt; · 60 Restoration Shaman</div>
         </div>
@@ -112,22 +115,28 @@ function PlayerHeader() {
 
 function FavoriteActionScene() {
   const frame = useCurrentFrame();
-  const cursorX = interpolate(frame, [15, 58, 90, 130], [1030, 790, 790, 960], {
+  const cursorX = interpolate(frame, [12, 50, 66, 118], [1080, 326, 326, 960], {
     ...clamp,
     easing: Easing.bezier(0.16, 1, 0.3, 1),
   });
-  const cursorY = interpolate(frame, [15, 58, 90, 130], [620, 285, 285, 565], {
+  const cursorY = interpolate(frame, [12, 50, 66, 118], [610, 184, 184, 565], {
     ...clamp,
     easing: Easing.bezier(0.16, 1, 0.3, 1),
   });
-  const clicked = frame >= 64;
+  const clicked = frame >= 62;
+  const starScale = clicked
+    ? interpolate(frame, [62, 67, 76], [0.82, 1.28, 1], {
+        ...clamp,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+      })
+    : 1;
   const toastIn = spring({ frame: frame - 72, fps: 30, config: { damping: 18 }, durationInFrames: 24 });
 
   return (
     <AbsoluteFill style={{ opacity: sceneOpacity(frame, 170) }}>
       <Brand />
       <div className="absolute left-20 top-32 w-[770px]" style={{ scale: 0.98 }}>
-        <PlayerHeader />
+        <PlayerHeader favorited={clicked} starScale={starScale} />
       </div>
       <div className="absolute right-16 top-40 w-[310px]">
         <div className="text-sm font-semibold uppercase tracking-[.24em] text-amber-300">One simple action</div>
@@ -143,12 +152,15 @@ function FavoriteActionScene() {
           Welfs added to favorites
         </div>
       )}
-      <div
-        className="absolute z-20"
-        style={{ left: cursorX, top: cursorY, scale: frame >= 58 && frame < 66 ? 0.82 : 1 }}
-      >
-        <div className="size-0 border-x-[10px] border-b-0 border-t-[24px] border-x-transparent border-t-white drop-shadow-xl" style={{ rotate: "-35deg" }} />
-      </div>
+      <MousePointer2
+        className="absolute z-20 size-8 fill-white text-zinc-900 drop-shadow-xl"
+        style={{
+          left: cursorX,
+          top: cursorY,
+          scale: frame >= 57 && frame < 66 ? 0.78 : 1,
+          rotate: "-12deg",
+        }}
+      />
     </AbsoluteFill>
   );
 }
