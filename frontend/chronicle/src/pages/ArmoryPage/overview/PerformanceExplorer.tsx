@@ -211,35 +211,7 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
               </aside>
 
               <div className="min-w-0 flex-1 pt-5 lg:pl-6 lg:pt-0">
-                <div className="flex flex-col gap-4 pb-4 sm:flex-row sm:items-start sm:justify-between">
-                  {specs.length > 0 && (
-                    <div className="min-w-0 space-y-2">
-                      <div className="text-xs font-medium text-muted-foreground">Spec and subspec</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        <FilterButton active={!spec} onClick={() => { setSpec(null); setSubSpec(null); }}>All specs</FilterButton>
-                        {specs.map((option) => (
-                          <FilterButton
-                            key={option}
-                            active={spec === option}
-                            onClick={() => { setSpec(spec === option ? null : option); setSubSpec(null); }}
-                          >
-                            {option}
-                          </FilterButton>
-                        ))}
-                      </div>
-                      {spec && subSpecs.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pl-2">
-                          <FilterButton active={!subSpec} onClick={() => setSubSpec(null)}>All {spec}</FilterButton>
-                          {subSpecs.map((option) => (
-                            <FilterButton key={option} active={subSpec === option} onClick={() => setSubSpec(subSpec === option ? null : option)}>
-                              {option}
-                            </FilterButton>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
+                <div className="flex items-start gap-4 pb-4">
                   <div className="shrink-0 space-y-2">
                     <div className="text-xs font-medium text-muted-foreground">Date range</div>
                     <div className="flex items-center gap-1.5">
@@ -248,6 +220,37 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
                       <RangeButton active={dateRange === "30d"} onClick={() => setDateRange("30d")}>30d</RangeButton>
                     </div>
                   </div>
+
+                  {specs.length > 0 && (
+                    <>
+                      <div aria-hidden="true" className="h-14 w-px shrink-0 bg-border/80" />
+                      <div className="min-w-0 space-y-2">
+                        <div className="text-xs font-medium text-muted-foreground">Spec and subspec</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <FilterButton active={!spec} onClick={() => { setSpec(null); setSubSpec(null); }}>All specs</FilterButton>
+                          {specs.map((option) => (
+                            <FilterButton
+                              key={option}
+                              active={spec === option}
+                              onClick={() => { setSpec(spec === option ? null : option); setSubSpec(null); }}
+                            >
+                              {option}
+                            </FilterButton>
+                          ))}
+                        </div>
+                        {spec && subSpecs.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pl-2">
+                            <FilterButton active={!subSpec} onClick={() => setSubSpec(null)}>All {spec}</FilterButton>
+                            {subSpecs.map((option) => (
+                              <FilterButton key={option} active={subSpec === option} onClick={() => setSubSpec(subSpec === option ? null : option)}>
+                                {option}
+                              </FilterButton>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-border/60 py-4">
@@ -345,7 +348,7 @@ function PerformanceTrend({
           <div>Best {formatValue(max)}</div>
         </div>
       </div>
-      <div className="relative h-72 overflow-hidden rounded-lg border border-border/70 bg-black/10">
+      <div className="relative h-72 overflow-visible rounded-lg border border-border/70 bg-black/10">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none h-full w-full" aria-hidden="true">
           {[20, 40, 60, 80].map((line) => (
             <line key={line} x1="4" x2="96" y1={line} y2={line} stroke="currentColor" strokeWidth="0.25" className="text-border" vectorEffect="non-scaling-stroke" />
