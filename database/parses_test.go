@@ -801,9 +801,19 @@ func TestSnapshotExcludesUnknownCohorts(t *testing.T) {
 	}
 
 	cutoff := database.Timestamptz(baseTime.Add(time.Hour))
-	stats, err := store.GetSnapshotSourceStats(ctx, database.GetSnapshotSourceStatsParams{Cutoff: cutoff})
+	specStats, err := store.GetSnapshotSourceStats(ctx, database.GetSnapshotSourceStatsParams{
+		Cutoff:     cutoff,
+		CohortMode: "spec",
+	})
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), stats.RowCount)
+	assert.Equal(t, int64(1), specStats.RowCount)
+
+	classStats, err := store.GetSnapshotSourceStats(ctx, database.GetSnapshotSourceStatsParams{
+		Cutoff:     cutoff,
+		CohortMode: "class",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), classStats.RowCount)
 
 	snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
 		TenantID:      uuid.Nil,
@@ -860,6 +870,31 @@ func TestSnapshotExcludesUnknownCohorts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Empty(t, unknownValues)
+
+	classSnapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+		TenantID:      uuid.Nil,
+		Cutoff:        cutoff,
+		LookbackDays:  0,
+		CohortMode:    "class",
+		PolicyVersion: 1,
+		QueryVersion:  1,
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.BatchInsertSnapshotMembersFromRankings(ctx, classSnapshot.ID))
+
+	classMemberCount, err := store.CountSnapshotMembers(ctx, classSnapshot.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), classMemberCount)
+
+	classValues, err := store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
+		SnapshotID:    classSnapshot.ID,
+		EncounterName: "Unknown Spec Boss",
+		PlayerClass:   "WARRIOR",
+		Metric:        "dps",
+	})
+	require.NoError(t, err)
+	require.Len(t, classValues, 1)
+	assert.Equal(t, 400.0, classValues[0].MetricValue)
 }
 
 func TestSnapshotDedupe(t *testing.T) {
