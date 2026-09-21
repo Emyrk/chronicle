@@ -34,6 +34,7 @@ import {
   assignPerformanceSeriesColors,
   assignSpecPointShapes,
   buildPerformanceVariants,
+  calculatePerformanceWaterlineMarkers,
   filterPerformanceRunSeries,
   performanceValue,
   type PerformanceDateRange,
@@ -793,6 +794,25 @@ function PerformanceTrend({
     position,
     value: floor + ((90 - position) / 76) * (ceiling - floor),
   }));
+  const performanceMarkers = calculatePerformanceWaterlineMarkers(
+    series.map((item) => item.runs.map((run) => performanceValue(run, metric, display))),
+  ).map((marker) => marker.kind === "average"
+    ? {
+        key: marker.kind,
+        label: "Avg",
+        value: marker.value,
+        dashArray: "7 5",
+        color: "#38bdf8",
+        opacity: 0.75,
+      }
+    : {
+        key: marker.kind,
+        label: "Best 3 avg",
+        value: marker.value,
+        dashArray: "2 4",
+        color: "#f59e0b",
+        opacity: 0.9,
+      });
   const parseTierBands = display === "parse"
     ? [
         { min: 0, max: 25, color: "#9d9d9d" },
@@ -844,6 +864,26 @@ function PerformanceTrend({
 
   return (
     <div className="space-y-3 border-t border-border/60 pt-5">
+      {performanceMarkers.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 px-1 text-[11px] text-muted-foreground">
+          {performanceMarkers.map((marker) => (
+            <div key={marker.key} className="flex items-center gap-2">
+              <span
+                className="w-6 border-t-2"
+                style={{
+                  borderColor: marker.color,
+                  borderTopStyle: marker.key === "average" ? "dashed" : "dotted",
+                }}
+                aria-hidden="true"
+              />
+              <span>{marker.label}</span>
+              <span className="font-mono font-medium tabular-nums" style={{ color: marker.color }}>
+                {formatValue(marker.value)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <div
         className="relative h-72 cursor-crosshair overflow-visible rounded-lg border border-border/70 bg-black/10"
         onPointerMove={updateHoverDay}
@@ -863,6 +903,20 @@ function PerformanceTrend({
           ))}
           {yAxisTicks.map((tick) => (
             <line key={tick.position} x1="4" x2="96" y1={tick.position} y2={tick.position} stroke="currentColor" strokeWidth="0.25" className="text-border" vectorEffect="non-scaling-stroke" />
+          ))}
+          {performanceMarkers.map((marker) => (
+            <line
+              key={marker.key}
+              x1="4"
+              x2="96"
+              y1={y(marker.value)}
+              y2={y(marker.value)}
+              stroke={marker.color}
+              strokeWidth="1"
+              strokeDasharray={marker.dashArray}
+              opacity={marker.opacity}
+              vectorEffect="non-scaling-stroke"
+            />
           ))}
           {hoverX !== null && (
             <line
