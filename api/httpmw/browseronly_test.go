@@ -22,27 +22,33 @@ func TestBrowserOnly(t *testing.T) {
 	})
 
 	tests := []struct {
-		name       string
-		accessURL  *url.URL
-		secFetch   string
-		origin     string
-		wantStatus int
+		name                  string
+		accessURL             *url.URL
+		path                  string
+		secFetch              string
+		origin                string
+		allowedCrossSitePaths []string
+		wantStatus            int
 	}{
-		{"prod same-origin allowed", prodURL, "same-origin", "", http.StatusOK},
-		{"prod same-site allowed", prodURL, "same-site", "", http.StatusOK},
-		{"prod none allowed", prodURL, "none", "", http.StatusOK},
-		{"prod cross-site wiki allowed", prodURL, "cross-site", "https://wiki.chronicleclassic.com", http.StatusOK},
-		{"prod cross-site rejected", prodURL, "cross-site", "", http.StatusForbidden},
-		{"prod missing header rejected", prodURL, "", "", http.StatusForbidden},
-		{"dev missing header allowed", devURL, "", "", http.StatusOK},
+		{name: "prod same-origin allowed", accessURL: prodURL, path: "/api/v1/whoami", secFetch: "same-origin", wantStatus: http.StatusOK},
+		{name: "prod same-site allowed", accessURL: prodURL, path: "/api/v1/whoami", secFetch: "same-site", wantStatus: http.StatusOK},
+		{name: "prod none allowed", accessURL: prodURL, path: "/api/v1/whoami", secFetch: "none", wantStatus: http.StatusOK},
+		{name: "prod cross-site wiki allowed", accessURL: prodURL, path: "/api/v1/whoami", secFetch: "cross-site", origin: "https://wiki.chronicleclassic.com", wantStatus: http.StatusOK},
+		{name: "prod cross-site Discord allowed", accessURL: prodURL, path: "/api/v1/whoami", secFetch: "cross-site", origin: "https://discord.com", wantStatus: http.StatusOK},
+		{name: "prod cross-site callback allowed", accessURL: prodURL, path: "/api/v1/discord-integration/callback", secFetch: "cross-site", allowedCrossSitePaths: []string{"/api/v1/discord-integration/callback"}, wantStatus: http.StatusOK},
+		{name: "prod callback without browser header rejected", accessURL: prodURL, path: "/api/v1/discord-integration/callback", allowedCrossSitePaths: []string{"/api/v1/discord-integration/callback"}, wantStatus: http.StatusForbidden},
+		{name: "prod cross-site similar callback rejected", accessURL: prodURL, path: "/api/v1/discord-integration/callback/other", secFetch: "cross-site", allowedCrossSitePaths: []string{"/api/v1/discord-integration/callback"}, wantStatus: http.StatusForbidden},
+		{name: "prod cross-site rejected", accessURL: prodURL, path: "/api/v1/whoami", secFetch: "cross-site", wantStatus: http.StatusForbidden},
+		{name: "prod missing header rejected", accessURL: prodURL, path: "/api/v1/whoami", wantStatus: http.StatusForbidden},
+		{name: "dev missing header allowed", accessURL: devURL, path: "/api/v1/whoami", wantStatus: http.StatusOK},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			handler := httpmw.BrowserOnly(tc.accessURL)(ok)
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
+			handler := httpmw.BrowserOnly(tc.accessURL, tc.allowedCrossSitePaths...)(ok)
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			if tc.secFetch != "" {
 				req.Header.Set("Sec-Fetch-Site", tc.secFetch)
 			}
