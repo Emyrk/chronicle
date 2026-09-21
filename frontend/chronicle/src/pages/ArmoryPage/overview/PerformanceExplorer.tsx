@@ -114,15 +114,12 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
               Each point combines the selected bosses from one canonical raid run.
             </CardDescription>
           </div>
-          <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
-              <SegmentedButton active={metric === "dps"} onClick={() => onMetricChange("dps")}>DPS</SegmentedButton>
-              <SegmentedButton active={metric === "hps"} onClick={() => onMetricChange("hps")}>HPS</SegmentedButton>
-            </div>
-            <div className="flex gap-2">
-              <SegmentedButton active={display === "raw"} onClick={() => setDisplay("raw")}>Raw</SegmentedButton>
-              <SegmentedButton active={display === "parse"} onClick={() => setDisplay("parse")}>Parse</SegmentedButton>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            <SegmentedButton active={metric === "dps"} onClick={() => onMetricChange("dps")}>DPS</SegmentedButton>
+            <SegmentedButton active={metric === "hps"} onClick={() => onMetricChange("hps")}>HPS</SegmentedButton>
+            <div className="mx-1 w-px bg-border" />
+            <SegmentedButton active={display === "raw"} onClick={() => setDisplay("raw")}>Raw</SegmentedButton>
+            <SegmentedButton active={display === "parse"} onClick={() => setDisplay("parse")}>Parse</SegmentedButton>
           </div>
         </div>
       </CardHeader>
