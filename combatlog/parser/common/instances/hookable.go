@@ -765,6 +765,7 @@ func (h *Hookable) finalizeFight() error {
 		End:                  h.currentFight.End.Timestamp.Date(),
 		EncounterID:          h.currentFight.EncounterID,
 		PlayerDeaths:         h.currentFight.PlayerDeaths,
+		PlayerLifeEvents:     h.currentFight.PlayerLifeEvents,
 		Phases:               h.currentFight.Phases.materialized(),
 		PhaseEncounterName:   h.currentFight.Phases.encounterName(),
 		AuthoritativeName:    h.currentFight.AuthoritativeName,

@@ -86,6 +86,16 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
                   {entry.sub_spec ? `${entry.player_spec} (${entry.sub_spec})` : entry.player_spec}
                 </span>
                 <span className="truncate text-muted-foreground">{entry.realm_name}</span>
+                {entry.player_deaths !== undefined && (
+                  <span className={entry.player_deaths > 0 ? "shrink-0 font-medium text-red-400" : "shrink-0 text-muted-foreground"}>
+                    {entry.player_deaths} {entry.player_deaths === 1 ? "death" : "deaths"}
+                  </span>
+                )}
+                {entry.alive_percentage !== undefined && (
+                  <span className="shrink-0 text-muted-foreground">
+                    {entry.alive_percentage.toFixed(1)}% alive
+                  </span>
+                )}
                 <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
                   {formatDate(entry.killed_at)}
                 </span>
@@ -106,6 +116,8 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
               <th className="px-4 py-3">Spec</th>
               <th className="px-4 py-3 text-right">{metric === "hps" ? "HPS" : "DPS"}</th>
               <th className="px-4 py-3 text-right">Duration</th>
+              <th className="px-4 py-3 text-right">Deaths</th>
+              <th className="px-4 py-3 text-right">Alive %</th>
               <th className="px-4 py-3">Guild</th>
               <th className="px-4 py-3 text-right">Date</th>
               <th className="w-12 px-4 py-3" />
@@ -159,6 +171,12 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-muted-foreground">
                   {formatDuration(entry.duration_secs)}
+                </td>
+                <td className={entry.player_deaths && entry.player_deaths > 0 ? "px-4 py-3 text-right font-mono font-semibold text-red-400" : "px-4 py-3 text-right font-mono text-muted-foreground"}>
+                  {entry.player_deaths ?? "—"}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                  {entry.alive_percentage === undefined ? "—" : `${entry.alive_percentage.toFixed(1)}%`}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{entry.guild_name}</td>
                 <td className="px-4 py-3 text-right text-muted-foreground">

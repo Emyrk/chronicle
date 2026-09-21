@@ -24,6 +24,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
@@ -1257,6 +1258,70 @@ func detectAndLinkDuplicate(
 	return affectedIDs, nil
 }
 
+func playerDeathCounts(deaths []messages.Message) map[guid.GUID]int32 {
+	counts := make(map[guid.GUID]int32)
+	for _, message := range deaths {
+		slain, ok := message.(*messages.Slain)
+		if ok {
+			counts[slain.Victim]++
+		}
+	}
+	return counts
+}
+
+// playerAliveStats assumes ranked players are alive at encounter start and uses
+// explicit death/resurrection transitions to subtract dead time.
+func playerAliveStats(playerGUID guid.GUID, start, end time.Time, events []messages.Message) (aliveDurationSecs float64, alivePercentage float64, ok bool) {
+	duration := end.Sub(start)
+	if duration <= 0 {
+		return 0, 0, false
+	}
+
+	aliveDuration := duration
+	var deadSince *time.Time
+	clamp := func(timestamp time.Time) time.Time {
+		if timestamp.Before(start) {
+			return start
+		}
+		if timestamp.After(end) {
+			return end
+		}
+		return timestamp
+	}
+
+	for _, message := range events {
+		switch event := message.(type) {
+		case *messages.Slain:
+			if event.Victim != playerGUID || deadSince != nil {
+				continue
+			}
+			timestamp := clamp(event.Date())
+			deadSince = &timestamp
+		case *messages.Resurrection:
+			if event.Target != playerGUID || deadSince == nil {
+				continue
+			}
+			timestamp := clamp(event.Date())
+			if timestamp.After(*deadSince) {
+				aliveDuration -= timestamp.Sub(*deadSince)
+			}
+			deadSince = nil
+		}
+	}
+	if deadSince != nil && end.After(*deadSince) {
+		aliveDuration -= end.Sub(*deadSince)
+	}
+	if aliveDuration < 0 {
+		aliveDuration = 0
+	}
+	if aliveDuration > duration {
+		aliveDuration = duration
+	}
+
+	aliveDurationSecs = aliveDuration.Seconds()
+	return aliveDurationSecs, aliveDurationSecs / duration.Seconds() * 100, true
+}
+
 // insertDPSRankings persists per-player DPS rankings for each clean-kill encounter.
 // Roles are computed statistically from damage done/taken/healing per encounter.
 // Players outside the configured level range are excluded.
@@ -1310,6 +1375,8 @@ func insertDPSRankings(
 				continue
 			}
 		}
+
+		deathCounts := playerDeathCounts(enc.Combat.PlayerDeaths)
 
 		// Sum pet/totem damage and healing into their owner's totals.
 		// The DPS tracker records metrics under the raw caster GUID (pet or player).
@@ -1392,6 +1459,8 @@ func insertDPSRankings(
 			totalHealing := stats.HealingDone + ownerHealing[unitGUID]
 			totalAbsorbed := stats.HealingAbsorbed + ownerAbsorb[unitGUID]
 			hps := float64(totalHealing+totalAbsorbed) / durationSecs
+			_, alivePercentage, hasAlivePercentage := playerAliveStats(unitGUID, enc.Combat.Start, enc.Combat.End, enc.Combat.PlayerLifeEvents)
+
 			playerGuildName := findPlayerGuild(finalized.Guilds.Guilds, unitGUID)
 
 			err := tx.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
@@ -1399,31 +1468,33 @@ func insertDPSRankings(
 					UUID:  enc.Combat.EncounterID,
 					Valid: true,
 				},
-				InstanceID:     dbinstance.ID,
-				EncounterName:  enc.Name,
-				InstanceName:   instanceName,
-				PlayerGuid:     unitGUID.String(),
-				PlayerName:     player.Name,
-				PlayerClass:    className,
-				PlayerSpec:     spec,
-				PlayerSubSpec:  subSpec,
-				PlayerRole:     roles[unitGUID],
-				PlayerLevel:    playerLevel,
-				TalentBuildID:  talentBuildID,
-				DifficultyName: dbinstance.DifficultyName,
-				MaxPlayers:     int16(dbinstance.MaxPlayers),
-				RealmID:        dbinstance.RealmID,
-				RealmName:      realmName,
-				GuildID:        uuid.NullUUID{}, // guild_name is sufficient; avoid FK constraint issues
-				GuildName:      playerGuildName,
-				DamageDone:     totalDamage,
-				DurationSecs:   durationSecs,
-				Dps:            dps,
-				HealingDone:    totalHealing,
-				AbsorbedDone:   totalAbsorbed,
-				Hps:            hps,
-				LogHashedSlug:  dbinstance.HashedSlug.String,
-				KilledAt:       database.Timestamptz(enc.Combat.End),
+				InstanceID:      dbinstance.ID,
+				EncounterName:   enc.Name,
+				InstanceName:    instanceName,
+				PlayerGuid:      unitGUID.String(),
+				PlayerName:      player.Name,
+				PlayerClass:     className,
+				PlayerSpec:      spec,
+				PlayerSubSpec:   subSpec,
+				PlayerRole:      roles[unitGUID],
+				PlayerLevel:     playerLevel,
+				TalentBuildID:   talentBuildID,
+				DifficultyName:  dbinstance.DifficultyName,
+				MaxPlayers:      int16(dbinstance.MaxPlayers),
+				RealmID:         dbinstance.RealmID,
+				RealmName:       realmName,
+				GuildID:         uuid.NullUUID{}, // guild_name is sufficient; avoid FK constraint issues
+				GuildName:       playerGuildName,
+				DamageDone:      totalDamage,
+				DurationSecs:    durationSecs,
+				Dps:             dps,
+				HealingDone:     totalHealing,
+				AbsorbedDone:    totalAbsorbed,
+				Hps:             hps,
+				AlivePercentage: pgtype.Float8{Float64: alivePercentage, Valid: hasAlivePercentage},
+				PlayerDeaths:    pgtype.Int4{Int32: deathCounts[unitGUID], Valid: true},
+				LogHashedSlug:   dbinstance.HashedSlug.String,
+				KilledAt:        database.Timestamptz(enc.Combat.End),
 			})
 			if err != nil {
 				if database.IsRLSViolation(err) {
@@ -1451,15 +1522,17 @@ type trashPlayerKey struct {
 
 // trashPlayerAccum accumulates trash stats for one (player, spec) pair.
 type trashPlayerAccum struct {
-	DamageDone    int64
-	DamageTaken   int64
-	HealingDone   int64
-	AbsorbedDone  int64
-	DurationSecs  float64
-	Talents       *combatant.Talents
-	TalentLayout  string
-	TalentSummary []int16
-	LastKilledAt  time.Time
+	DamageDone        int64
+	DamageTaken       int64
+	HealingDone       int64
+	AbsorbedDone      int64
+	Deaths            int32
+	AliveDurationSecs float64
+	DurationSecs      float64
+	Talents           *combatant.Talents
+	TalentLayout      string
+	TalentSummary     []int16
+	LastKilledAt      time.Time
 }
 
 func insertTrashRankings(
@@ -1506,6 +1579,8 @@ func insertTrashRankings(
 			}
 		}
 
+		deathCounts := playerDeathCounts(enc.Combat.PlayerDeaths)
+
 		// Sum pet damage and healing into owner for this encounter.
 		ownerDamage := make(map[guid.GUID]int64)
 		ownerHealing := make(map[guid.GUID]int64)
@@ -1539,6 +1614,9 @@ func insertTrashRankings(
 			a.DamageTaken += stats.DamageTaken
 			a.HealingDone += stats.HealingDone + ownerHealing[unitGUID]
 			a.AbsorbedDone += stats.HealingAbsorbed + ownerAbsorb[unitGUID]
+			aliveDurationSecs, _, _ := playerAliveStats(unitGUID, enc.Combat.Start, enc.Combat.End, enc.Combat.PlayerLifeEvents)
+			a.AliveDurationSecs += aliveDurationSecs
+			a.Deaths += deathCounts[unitGUID]
 			a.DurationSecs += durationSecs
 			if enc.Combat.End.After(a.LastKilledAt) {
 				a.LastKilledAt = enc.Combat.End
@@ -1604,35 +1682,39 @@ func insertTrashRankings(
 
 		dps := float64(a.DamageDone) / a.DurationSecs
 		hps := float64(a.HealingDone+a.AbsorbedDone) / a.DurationSecs
+		alivePercentage := a.AliveDurationSecs / a.DurationSecs * 100
+
 		playerGuildName := findPlayerGuild(finalized.Guilds.Guilds, key.GUID)
 
 		err := tx.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
-			EncounterID:    uuid.NullUUID{}, // NULL for trash
-			InstanceID:     dbinstance.ID,
-			EncounterName:  "Trash",
-			InstanceName:   instanceName,
-			PlayerGuid:     key.GUID.String(),
-			PlayerName:     player.Name,
-			PlayerClass:    className,
-			PlayerSpec:     key.Spec,
-			PlayerSubSpec:  key.SubSpec,
-			PlayerRole:     roles[key],
-			PlayerLevel:    playerLevel,
-			TalentBuildID:  talentBuildID,
-			DifficultyName: dbinstance.DifficultyName,
-			MaxPlayers:     int16(dbinstance.MaxPlayers),
-			RealmID:        dbinstance.RealmID,
-			RealmName:      realmName,
-			GuildID:        uuid.NullUUID{}, // guild_name is sufficient; avoid FK constraint issues
-			GuildName:      playerGuildName,
-			DamageDone:     a.DamageDone,
-			DurationSecs:   a.DurationSecs,
-			Dps:            dps,
-			HealingDone:    a.HealingDone,
-			AbsorbedDone:   a.AbsorbedDone,
-			Hps:            hps,
-			LogHashedSlug:  dbinstance.HashedSlug.String,
-			KilledAt:       database.Timestamptz(a.LastKilledAt),
+			EncounterID:     uuid.NullUUID{}, // NULL for trash
+			InstanceID:      dbinstance.ID,
+			EncounterName:   "Trash",
+			InstanceName:    instanceName,
+			PlayerGuid:      key.GUID.String(),
+			PlayerName:      player.Name,
+			PlayerClass:     className,
+			PlayerSpec:      key.Spec,
+			PlayerSubSpec:   key.SubSpec,
+			PlayerRole:      roles[key],
+			PlayerLevel:     playerLevel,
+			TalentBuildID:   talentBuildID,
+			DifficultyName:  dbinstance.DifficultyName,
+			MaxPlayers:      int16(dbinstance.MaxPlayers),
+			RealmID:         dbinstance.RealmID,
+			RealmName:       realmName,
+			GuildID:         uuid.NullUUID{}, // guild_name is sufficient; avoid FK constraint issues
+			GuildName:       playerGuildName,
+			DamageDone:      a.DamageDone,
+			DurationSecs:    a.DurationSecs,
+			Dps:             dps,
+			HealingDone:     a.HealingDone,
+			AbsorbedDone:    a.AbsorbedDone,
+			Hps:             hps,
+			AlivePercentage: pgtype.Float8{Float64: alivePercentage, Valid: true},
+			PlayerDeaths:    pgtype.Int4{Int32: a.Deaths, Valid: true},
+			LogHashedSlug:   dbinstance.HashedSlug.String,
+			KilledAt:        database.Timestamptz(a.LastKilledAt),
 		})
 		if err != nil {
 			if database.IsRLSViolation(err) {

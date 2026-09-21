@@ -327,6 +327,14 @@ func (s *Service) listIndividualLeaderboard(w http.ResponseWriter, r *http.Reque
 			LogHashedSlug:  row.LogHashedSlug,
 			KilledAt:       row.KilledAt.Time,
 		}
+		if row.AlivePercentage >= 0 {
+			value := row.AlivePercentage
+			entry.AlivePercentage = &value
+		}
+		if row.PlayerDeaths >= 0 {
+			value := row.PlayerDeaths
+			entry.PlayerDeaths = &value
+		}
 		if row.AvgIlvl > 0 {
 			value := row.AvgIlvl
 			entry.AvgIlvl = &value

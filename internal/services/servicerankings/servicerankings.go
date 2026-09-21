@@ -391,6 +391,14 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 			v := row.AvgIlvl
 			entry.AvgIlvl = &v
 		}
+		if row.AlivePercentage >= 0 {
+			value := row.AlivePercentage
+			entry.AlivePercentage = &value
+		}
+		if row.PlayerDeaths >= 0 {
+			value := row.PlayerDeaths
+			entry.PlayerDeaths = &value
+		}
 		if row.PlayerSubSpec != "" {
 			entry.SubSpec = &row.PlayerSubSpec
 		}

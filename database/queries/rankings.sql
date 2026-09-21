@@ -316,6 +316,8 @@ deduped AS (
         edr.damage_done,
         edr.healing_done,
         edr.absorbed_done,
+        edr.alive_percentage,
+        edr.player_deaths,
         edr.duration_secs,
         edr.avg_ilvl,
         edr.log_hashed_slug,
@@ -404,6 +406,15 @@ per_run AS (
         SUM(d.damage_done)::bigint AS damage_done,
         SUM(d.healing_done)::bigint AS healing_done,
         SUM(d.absorbed_done)::bigint AS absorbed_done,
+        COALESCE((CASE
+            WHEN COUNT(d.alive_percentage) = COUNT(*) THEN
+                SUM(d.duration_secs * d.alive_percentage) / NULLIF(SUM(d.duration_secs), 0)
+            ELSE NULL
+        END), -1)::double precision AS alive_percentage,
+        COALESCE((CASE
+            WHEN COUNT(d.player_deaths) = COUNT(*) THEN SUM(d.player_deaths)
+            ELSE NULL
+        END), -1)::integer AS player_deaths,
         SUM(d.duration_secs)::double precision AS duration_secs,
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
         (SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS hps,
@@ -438,6 +449,8 @@ aggregated AS (
         pr.damage_done,
         pr.healing_done,
         pr.absorbed_done,
+        pr.alive_percentage,
+        pr.player_deaths,
         pr.duration_secs,
         pr.dps,
         pr.hps,
@@ -755,7 +768,7 @@ INSERT INTO encounter_dps_rankings (
     talent_build_id, difficulty_name, max_players,
     realm_id, realm_name, guild_id, guild_name,
     damage_done, duration_secs, dps, avg_ilvl,
-    healing_done, absorbed_done, hps,
+    healing_done, absorbed_done, hps, player_deaths, alive_percentage,
     log_hashed_slug, killed_at
 ) VALUES (
     @encounter_id, @instance_id, @encounter_name, @instance_name,
@@ -763,7 +776,7 @@ INSERT INTO encounter_dps_rankings (
     @talent_build_id, @difficulty_name, @max_players,
     @realm_id, @realm_name, @guild_id, @guild_name,
     @damage_done, @duration_secs, @dps, @avg_ilvl,
-    @healing_done, @absorbed_done, @hps,
+    @healing_done, @absorbed_done, @hps, @player_deaths, @alive_percentage,
     @log_hashed_slug, @killed_at
 ) ON CONFLICT (encounter_id, player_guid) DO NOTHING;
 

@@ -78,8 +78,9 @@ type Fight struct {
 	// Hostiles contains all hostile characters that participated in this fight.
 	// Each CharacterFight contains all activity periods from that character
 	// that belong to this fight.
-	Hostiles     map[guid.GUID]CharacterFight
-	PlayerDeaths []messages.Message
+	Hostiles         map[guid.GUID]CharacterFight
+	PlayerDeaths     []messages.Message
+	PlayerLifeEvents []messages.Message
 
 	// Phases holds live-materialized encounter phases. Populated during the
 	// fight by the phase tracker and copied at finalization. The final phase's
