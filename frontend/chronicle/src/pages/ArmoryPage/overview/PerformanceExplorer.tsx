@@ -1,10 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle, ExternalLink, TrendingUp } from "lucide-react";
+import { CheckCircle, Database, ExternalLink, HeartPulse, Map, Percent, Swords } from "lucide-react";
 import type { ArmoryPlayer, CharacterPerformanceRun } from "@/api/typesGenerated";
 import { useCharacterEncounters, useCharacterPerformance } from "@/api/rankingsQueries";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
+import { Card, CardContent } from "@/components/ui/Card/Card";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 import type { ParseMetric } from "./util";
@@ -103,48 +103,61 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
 
   return (
     <Card className="overflow-hidden border-border/80 bg-gradient-to-b from-card to-card/70">
-      <CardHeader className="border-b border-border/70">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <TrendingUp className="h-5 w-5 text-sky-400" />
-              Performance explorer
-            </CardTitle>
-            <CardDescription className="mt-1">
-              Each point combines the selected bosses from one canonical raid run.
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <SegmentedButton active={metric === "dps"} onClick={() => onMetricChange("dps")}>DPS</SegmentedButton>
-            <SegmentedButton active={metric === "hps"} onClick={() => onMetricChange("hps")}>HPS</SegmentedButton>
-            <div className="mx-1 w-px bg-border" />
-            <SegmentedButton active={display === "raw"} onClick={() => setDisplay("raw")}>Raw</SegmentedButton>
-            <SegmentedButton active={display === "parse"} onClick={() => setDisplay("parse")}>Parse</SegmentedButton>
-          </div>
-        </div>
-      </CardHeader>
-
       <CardContent className="space-y-5">
         {variants.length === 0 ? (
           <EmptyState loading={encountersQuery.isLoading} />
         ) : (
           <>
-            <label className="block max-w-sm space-y-1.5 text-xs font-medium text-muted-foreground">
-              Instance
-              <select
-                value={variant?.key ?? ""}
-                onChange={(event) => selectVariant(event.target.value)}
-                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-sky-500/70"
-              >
-                {variants.map((item) => (
-                  <option key={item.key} value={item.key}>
-                    {variantLabel(item.instanceName, item.difficultyName, item.maxPlayers)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="flex flex-col gap-4 border-b border-border/60 pb-5 xl:flex-row xl:items-end">
+              <label className="block min-w-0 flex-1 space-y-1.5 text-xs font-medium text-muted-foreground xl:max-w-xl">
+                <span className="flex items-center gap-1.5">
+                  <Map className="h-3.5 w-3.5 text-sky-400" />
+                  Instance
+                </span>
+                <select
+                  value={variant?.key ?? ""}
+                  onChange={(event) => selectVariant(event.target.value)}
+                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-sky-500/70"
+                >
+                  {variants.map((item) => (
+                    <option key={item.key} value={item.key}>
+                      {variantLabel(item.instanceName, item.difficultyName, item.maxPlayers)}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <div className="flex flex-col border-t border-border/60 pt-5 lg:flex-row">
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="space-y-1.5">
+                  <div className="text-xs font-medium text-muted-foreground">Metric</div>
+                  <div className="flex gap-2">
+                    <SegmentedButton active={metric === "dps"} onClick={() => onMetricChange("dps")}>
+                      <Swords className="h-4 w-4" />
+                      DPS
+                    </SegmentedButton>
+                    <SegmentedButton active={metric === "hps"} onClick={() => onMetricChange("hps")}>
+                      <HeartPulse className="h-4 w-4" />
+                      HPS
+                    </SegmentedButton>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="text-xs font-medium text-muted-foreground">Display</div>
+                  <div className="flex gap-2">
+                    <SegmentedButton active={display === "raw"} onClick={() => setDisplay("raw")}>
+                      <Database className="h-4 w-4" />
+                      Raw
+                    </SegmentedButton>
+                    <SegmentedButton active={display === "parse"} onClick={() => setDisplay("parse")}>
+                      <Percent className="h-4 w-4" />
+                      Parse
+                    </SegmentedButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col lg:flex-row">
               <aside className="shrink-0 border-b border-border/60 pb-5 lg:w-64 lg:border-r lg:border-b-0 lg:pr-5 lg:pb-0">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Encounters</h3>

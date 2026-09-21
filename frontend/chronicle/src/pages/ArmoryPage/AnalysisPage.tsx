@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, FlaskConical } from "lucide-react";
+import { ArrowLeft, ChartNoAxesCombined } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { useArmoryPlayer } from "@/api/queries";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
@@ -42,17 +42,18 @@ function AnalysisContent({ player }: { player: ArmoryPlayer }) {
 
   return (
     <div className="mx-auto w-full max-w-[92rem] px-4 py-8">
-      <div className="mb-6 flex items-center justify-between gap-4 border-b border-border pb-3">
-        <Button variant="ghost" size="sm" asChild>
+      <div className="mb-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-border pb-3">
+        <Button variant="ghost" size="sm" className="justify-self-start" asChild>
           <Link to={armoryPath}>
             <ArrowLeft className="h-4 w-4" />
             Back to Armory
           </Link>
         </Button>
-        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">
-          <FlaskConical className="h-4 w-4 text-sky-400" />
-          Analysis workspace
+        <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-foreground">
+          <ChartNoAxesCombined className="h-4 w-4 text-sky-400" />
+          Player Analysis
         </div>
+        <div aria-hidden="true" />
       </div>
 
       <IdentityHeader player={player} />
