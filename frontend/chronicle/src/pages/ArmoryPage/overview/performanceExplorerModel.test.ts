@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { CharacterEncounterStats, CharacterPerformanceRun } from "@/api/typesGenerated";
 import {
   buildPerformanceVariants,
+  calculatePerformanceWaterlines,
   filterPerformanceRuns,
+  filterPerformanceRunsByDate,
   performanceValue,
 } from "./performanceExplorerModel";
 
@@ -67,6 +69,35 @@ describe("filterPerformanceRuns", () => {
   it("omits runs without a complete cached parse in parse mode", () => {
     const runs = [run(), run({ run_id: "run-2", average_parse: undefined })];
     expect(filterPerformanceRuns(runs, null, null, "parse")).toEqual([runs[0]]);
+  });
+});
+
+describe("filterPerformanceRunsByDate", () => {
+  const now = new Date("2026-09-20T12:00:00Z");
+  const runs = [
+    run({ run_id: "recent", started_at: "2026-09-10T12:00:00Z" }),
+    run({ run_id: "within-60", started_at: "2026-08-01T12:00:00Z" }),
+    run({ run_id: "old", started_at: "2026-06-01T12:00:00Z" }),
+  ];
+
+  it("supports all-time, 60-day, and 30-day windows", () => {
+    expect(filterPerformanceRunsByDate(runs, "all", now)).toHaveLength(3);
+    expect(filterPerformanceRunsByDate(runs, "60d", now).map((item) => item.run_id)).toEqual(["recent", "within-60"]);
+    expect(filterPerformanceRunsByDate(runs, "30d", now).map((item) => item.run_id)).toEqual(["recent"]);
+  });
+});
+
+describe("calculatePerformanceWaterlines", () => {
+  it("calculates the full average and the average of the best three values", () => {
+    expect(calculatePerformanceWaterlines([100, 200, 300, 400])).toEqual({
+      average: 250,
+      bestThreeAverage: 300,
+    });
+  });
+
+  it("uses all available values when fewer than three runs exist", () => {
+    expect(calculatePerformanceWaterlines([100, 300])?.bestThreeAverage).toBe(200);
+    expect(calculatePerformanceWaterlines([])).toBeNull();
   });
 });
 

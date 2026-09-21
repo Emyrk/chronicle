@@ -5,12 +5,16 @@ import type { ArmoryPlayer, CharacterPerformanceRun } from "@/api/typesGenerated
 import { useCharacterEncounters, useCharacterPerformance } from "@/api/rankingsQueries";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
+import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 import type { ParseMetric } from "./util";
 import {
   buildPerformanceVariants,
+  calculatePerformanceWaterlines,
   filterPerformanceRuns,
+  filterPerformanceRunsByDate,
   performanceValue,
+  type PerformanceDateRange,
 } from "./performanceExplorerModel";
 
 type DisplayMode = "raw" | "parse";
@@ -30,6 +34,9 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
   const [variantKey, setVariantKey] = useState("");
   const [selectedEncounters, setSelectedEncounters] = useState<string[]>([]);
   const [display, setDisplay] = useState<DisplayMode>("raw");
+  const [dateRange, setDateRange] = useState<PerformanceDateRange>("all");
+  const [showAverage, setShowAverage] = useState(true);
+  const [showBestThreeAverage, setShowBestThreeAverage] = useState(true);
   const [spec, setSpec] = useState<string | null>(null);
   const [subSpec, setSubSpec] = useState<string | null>(null);
 
@@ -63,12 +70,12 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
     [allRuns, spec],
   );
   const matchingRawRuns = useMemo(
-    () => filterPerformanceRuns(allRuns, spec, subSpec, "raw"),
-    [allRuns, spec, subSpec],
+    () => filterPerformanceRunsByDate(filterPerformanceRuns(allRuns, spec, subSpec, "raw"), dateRange),
+    [allRuns, dateRange, spec, subSpec],
   );
   const runs = useMemo(
-    () => filterPerformanceRuns(allRuns, spec, subSpec, display),
-    [allRuns, display, spec, subSpec],
+    () => filterPerformanceRunsByDate(filterPerformanceRuns(allRuns, spec, subSpec, display), dateRange),
+    [allRuns, dateRange, display, spec, subSpec],
   );
 
   const selectVariant = (key: string) => {
@@ -219,10 +226,38 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
                   </div>
                 )}
 
+                <div className="flex flex-col gap-3 border-t border-border/60 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="mr-1 text-xs font-medium text-muted-foreground">Range</span>
+                    <RangeButton active={dateRange === "all"} onClick={() => setDateRange("all")}>All time</RangeButton>
+                    <RangeButton active={dateRange === "60d"} onClick={() => setDateRange("60d")}>60d</RangeButton>
+                    <RangeButton active={dateRange === "30d"} onClick={() => setDateRange("30d")}>30d</RangeButton>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <WaterlineToggle
+                      checked={showAverage}
+                      onCheckedChange={setShowAverage}
+                      color="rgb(148 163 184)"
+                    >
+                      Average
+                    </WaterlineToggle>
+                    <WaterlineToggle
+                      checked={showBestThreeAverage}
+                      onCheckedChange={setShowBestThreeAverage}
+                      color="rgb(251 191 36)"
+                    >
+                      Best 3 avg
+                    </WaterlineToggle>
+                  </div>
+                </div>
+
                 <PerformanceTrend
                   runs={runs}
                   metric={metric}
                   display={display}
+                  dateRange={dateRange}
+                  showAverage={showAverage}
+                  showBestThreeAverage={showBestThreeAverage}
                   loading={performanceQuery.isLoading}
                   omittedParseCount={display === "parse" ? matchingRawRuns.length - runs.length : 0}
                 />
@@ -241,12 +276,18 @@ function PerformanceTrend({
   runs,
   metric,
   display,
+  dateRange,
+  showAverage,
+  showBestThreeAverage,
   loading,
   omittedParseCount,
 }: {
   runs: readonly CharacterPerformanceRun[];
   metric: ParseMetric;
   display: DisplayMode;
+  dateRange: PerformanceDateRange;
+  showAverage: boolean;
+  showBestThreeAverage: boolean;
   loading: boolean;
   omittedParseCount: number;
 }) {
@@ -260,6 +301,7 @@ function PerformanceTrend({
   }
 
   const values = runs.map((run) => performanceValue(run, metric, display));
+  const waterlines = calculatePerformanceWaterlines(values);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const spread = Math.max(max - min, max * 0.1, 1);
@@ -274,7 +316,7 @@ function PerformanceTrend({
     <div className="space-y-3 border-t border-border/60 pt-5">
       <div className="flex items-baseline justify-between gap-4">
         <div>
-          <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">All-time trend</div>
+          <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{dateRangeLabel(dateRange)} trend</div>
           <div className="mt-1 font-mono text-2xl font-semibold tabular-nums text-sky-300">
             {formatValue(values[values.length - 1])}
             <span className="ml-2 text-xs font-normal text-muted-foreground">
@@ -292,10 +334,52 @@ function PerformanceTrend({
           {[20, 40, 60, 80].map((line) => (
             <line key={line} x1="4" x2="96" y1={line} y2={line} stroke="currentColor" strokeWidth="0.25" className="text-border" vectorEffect="non-scaling-stroke" />
           ))}
+          {showAverage && waterlines && (
+            <line
+              x1="4"
+              x2="96"
+              y1={y(waterlines.average)}
+              y2={y(waterlines.average)}
+              stroke="rgb(148 163 184)"
+              strokeWidth="1"
+              strokeDasharray="5 5"
+              opacity="0.75"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+          {showBestThreeAverage && waterlines && (
+            <line
+              x1="4"
+              x2="96"
+              y1={y(waterlines.bestThreeAverage)}
+              y2={y(waterlines.bestThreeAverage)}
+              stroke="rgb(251 191 36)"
+              strokeWidth="1"
+              strokeDasharray="5 5"
+              opacity="0.8"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
           {runs.length > 1 && (
             <polyline points={points} fill="none" stroke="rgb(56 189 248)" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
           )}
         </svg>
+        {showAverage && waterlines && (
+          <WaterlineLabel
+            top={y(waterlines.average)}
+            color="rgb(148 163 184)"
+            label="Average"
+            value={formatValue(waterlines.average)}
+          />
+        )}
+        {showBestThreeAverage && waterlines && (
+          <WaterlineLabel
+            top={y(waterlines.bestThreeAverage)}
+            color="rgb(251 191 36)"
+            label="Best 3 avg"
+            value={formatValue(waterlines.bestThreeAverage)}
+          />
+        )}
         {runs.map((run, index) => {
           const pointX = x(index);
           const pointY = y(values[index]);
@@ -404,6 +488,51 @@ function PerformanceTable({ runs, metric, selectedCount }: { runs: readonly Char
   );
 }
 
+function RangeButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={active ? "secondary" : "ghost"}
+      className="h-7 px-2.5 text-xs"
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function WaterlineToggle({
+  checked,
+  onCheckedChange,
+  color,
+  children,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  color: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+      <Switch size="sm" checked={checked} onCheckedChange={onCheckedChange} />
+      <span className="inline-block h-px w-4 border-t border-dashed" style={{ borderColor: color }} />
+      <span>{children}</span>
+    </label>
+  );
+}
+
+function WaterlineLabel({ top, color, label, value }: { top: number; color: string; label: string; value: string }) {
+  return (
+    <div
+      className="pointer-events-none absolute right-[4%] z-[5] -translate-y-1/2 rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-[10px] tabular-nums shadow-sm backdrop-blur-sm"
+      style={{ top: `${top}%`, color }}
+    >
+      {label} {value}
+    </div>
+  );
+}
+
 function SegmentedButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <Button type="button" size="sm" variant={active ? "secondary" : "outline"} onClick={onClick}>{children}</Button>;
 }
@@ -418,6 +547,12 @@ function FilterButton({ active, onClick, children }: { active: boolean; onClick:
 
 function EmptyState({ loading }: { loading: boolean }) {
   return <div className="py-16 text-center text-sm text-muted-foreground">{loading ? "Loading encounters…" : "No ranked boss encounters are available for this character."}</div>;
+}
+
+function dateRangeLabel(range: PerformanceDateRange) {
+  if (range === "60d") return "Last 60 days";
+  if (range === "30d") return "Last 30 days";
+  return "All-time";
 }
 
 function variantLabel(instance: string, difficulty: string, maxPlayers: number) {

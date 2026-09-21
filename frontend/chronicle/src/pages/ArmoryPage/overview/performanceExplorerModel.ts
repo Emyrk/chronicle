@@ -57,6 +57,34 @@ export function filterPerformanceRuns(
   });
 }
 
+export type PerformanceDateRange = "all" | "60d" | "30d";
+
+export function filterPerformanceRunsByDate(
+  runs: readonly CharacterPerformanceRun[],
+  range: PerformanceDateRange,
+  now = new Date(),
+): CharacterPerformanceRun[] {
+  if (range === "all") return [...runs];
+
+  const days = range === "60d" ? 60 : 30;
+  const cutoff = now.getTime() - days * 24 * 60 * 60 * 1000;
+  return runs.filter((run) => new Date(run.started_at).getTime() >= cutoff);
+}
+
+export interface PerformanceWaterlines {
+  average: number;
+  bestThreeAverage: number;
+}
+
+export function calculatePerformanceWaterlines(values: readonly number[]): PerformanceWaterlines | null {
+  if (values.length === 0) return null;
+
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const bestThree = [...values].sort((a, b) => b - a).slice(0, 3);
+  const bestThreeAverage = bestThree.reduce((sum, value) => sum + value, 0) / bestThree.length;
+  return { average, bestThreeAverage };
+}
+
 export function performanceValue(
   run: CharacterPerformanceRun,
   metric: "dps" | "hps",
