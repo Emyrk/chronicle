@@ -1,15 +1,13 @@
 import { useState } from "react";
-import { ArrowLeft, ChartNoAxesCombined, Search } from "lucide-react";
-import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { ChartNoAxesCombined, Search } from "lucide-react";
+import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import { useArmoryPlayers, useArmorySearch } from "@/api/queries";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import { Input } from "@/components/ui/input";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { getClassColorVar } from "./types";
-import { IdentityHeader } from "./overview/IdentityHeader";
 import {
   DEFAULT_PERFORMANCE_COMPARISON_STATE,
   parsePerformanceComparisonState,
@@ -135,28 +133,16 @@ function AnalysisContent({
   state: PerformanceComparisonState;
   onStateChange: (state: PerformanceComparisonState) => void;
 }) {
-  const primaryPlayer = players[0];
-  const armoryPath = `/armory/${encodeURIComponent(primaryPlayer.realm_name)}/${encodeURIComponent(primaryPlayer.id)}`;
-
   return (
     <div className="mx-auto w-full max-w-[92rem] px-4 py-8">
-      <div className="mb-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-border pb-3">
-        <Button variant="ghost" size="sm" className="justify-self-start" asChild>
-          <Link to={armoryPath}>
-            <ArrowLeft className="h-4 w-4" />
-            Back to Armory
-          </Link>
-        </Button>
+      <div className="mb-6 flex items-center justify-center border-b border-border pb-3">
         <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-foreground">
           <ChartNoAxesCombined className="h-4 w-4 text-sky-400" />
           Player Analysis
         </div>
-        <div aria-hidden="true" />
       </div>
 
-      <IdentityHeader player={primaryPlayer} />
-
-      <main className="mt-8">
+      <main>
         <PerformanceExplorer players={players} state={state} onStateChange={onStateChange} />
       </main>
     </div>

@@ -497,14 +497,12 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                     No complete runs are available for this player and encounter selection.
                   </div>
                 )}
-                {configuredSeries.player.id !== primaryPlayer.id && (
-                  <div className="flex justify-end border-t border-border/60 pt-4">
-                    <Button variant="destructive" size="sm" onClick={() => removePlayer(configuredSeries.player.id)}>
-                      <Trash2 className="h-4 w-4" />
-                      Remove player
-                    </Button>
-                  </div>
-                )}
+                <div className="flex justify-end border-t border-border/60 pt-4">
+                  <Button variant="destructive" size="sm" onClick={() => removePlayer(configuredSeries.player.id)}>
+                    <Trash2 className="h-4 w-4" />
+                    Remove player
+                  </Button>
+                </div>
               </div>
             </>
           ) : (
