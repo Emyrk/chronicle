@@ -35,6 +35,7 @@ func rootCmd() *serpent.Command {
 		cli.ExtractLoadingScreensCmd(),
 		cli.ExtractTalentBackgroundsCmd(),
 		cli.ImportCmd(),
+		cli.ImportWowdataCmd(),
 		demo(),
 		jsonDump(),
 	)
