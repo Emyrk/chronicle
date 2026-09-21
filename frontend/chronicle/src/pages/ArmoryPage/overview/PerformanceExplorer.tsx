@@ -802,26 +802,17 @@ function PerformanceTrend({
         label: "Avg",
         value: marker.value,
         dashArray: "7 5",
-        opacity: 0.65,
+        color: "#38bdf8",
+        opacity: 0.75,
       }
     : {
         key: marker.kind,
         label: "Best 3 avg",
         value: marker.value,
         dashArray: "2 4",
+        color: "#f59e0b",
         opacity: 0.9,
       });
-  const markerLabels = performanceMarkers.map((marker, index) => {
-    const position = y(marker.value);
-    const overlaps = performanceMarkers.some((other, otherIndex) => (
-      otherIndex !== index && Math.abs(y(other.value) - position) < 5
-    ));
-    return {
-      ...marker,
-      position,
-      offset: overlaps ? (index === 0 ? -7 : 7) : 0,
-    };
-  });
   const parseTierBands = display === "parse"
     ? [
         { min: 0, max: 25, color: "#9d9d9d" },
@@ -873,6 +864,26 @@ function PerformanceTrend({
 
   return (
     <div className="space-y-3 border-t border-border/60 pt-5">
+      {performanceMarkers.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 px-1 text-[11px] text-muted-foreground">
+          {performanceMarkers.map((marker) => (
+            <div key={marker.key} className="flex items-center gap-2">
+              <span
+                className="w-6 border-t-2"
+                style={{
+                  borderColor: marker.color,
+                  borderTopStyle: marker.key === "average" ? "dashed" : "dotted",
+                }}
+                aria-hidden="true"
+              />
+              <span>{marker.label}</span>
+              <span className="font-mono font-medium tabular-nums" style={{ color: marker.color }}>
+                {formatValue(marker.value)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <div
         className="relative h-72 cursor-crosshair overflow-visible rounded-lg border border-border/70 bg-black/10"
         onPointerMove={updateHoverDay}
@@ -900,7 +911,7 @@ function PerformanceTrend({
               x2="96"
               y1={y(marker.value)}
               y2={y(marker.value)}
-              stroke={series[0].player.color}
+              stroke={marker.color}
               strokeWidth="1"
               strokeDasharray={marker.dashArray}
               opacity={marker.opacity}
@@ -950,20 +961,6 @@ function PerformanceTrend({
             style={{ top: `${tick.position}%` }}
           >
             {display === "parse" ? tick.value.toFixed(1) : formatCompact(tick.value)}
-          </span>
-        ))}
-        {markerLabels.map((marker) => (
-          <span
-            key={marker.key}
-            className="pointer-events-none absolute right-[4%] z-20 -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums shadow-sm ring-4 ring-background"
-            style={{
-              top: `${marker.position}%`,
-              color: series[0].player.color,
-              borderColor: series[0].player.color,
-              transform: `translateY(calc(-50% + ${marker.offset}px))`,
-            }}
-          >
-            {marker.label} · {formatValue(marker.value)}
           </span>
         ))}
         {chartPoints.map(({ id, player: pointPlayer, run, value: rawValue, shape, day }) => {
