@@ -3,9 +3,11 @@
  */
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronRight, Leaf, Scale, Search, Sword, Toolbox, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { PANELS, type EventsPanelType } from "./EventsPanel";
 
@@ -269,6 +271,13 @@ function CategoryNode({
   );
 }
 
+interface DropdownPosition {
+  left: number;
+  top?: number;
+  bottom?: number;
+  resultsMaxHeight: number;
+}
+
 export interface PanelSelectorProps {
   value: EventsPanelType;
   onChange: (value: EventsPanelType) => void;
@@ -277,6 +286,8 @@ export interface PanelSelectorProps {
 
 export function PanelSelector({ value, onChange, className }: PanelSelectorProps) {
   const [searchParams] = useSearchParams();
+  const portalContainer = usePortalContainer();
+  const portalWindow = portalContainer?.ownerDocument.defaultView;
   const isDebug = searchParams.get("debug") === "true";
   const isPanelVisible = useCallback(
     (key: EventsPanelType) => !PANELS[key].hidden || isDebug,
@@ -286,7 +297,10 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
   const [searchQuery, setSearchQuery] = useState("");
   // Track expanded categories by their path (e.g., "Class" or "Class/Druid")
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Toggle a category's expanded state (accordion behavior - only one branch at a time)
@@ -316,18 +330,64 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
     });
   };
 
-  // Close on outside click
+  const updateDropdownPosition = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect || !portalWindow) return;
+
+    const viewportMargin = 8;
+    const dropdownGap = 4;
+    const searchHeight = 58;
+    const spaceBelow = portalWindow.innerHeight - rect.bottom - viewportMargin - dropdownGap;
+    const spaceAbove = rect.top - viewportMargin - dropdownGap;
+    const openBelow = spaceBelow >= 240 || spaceBelow >= spaceAbove;
+    const availableHeight = Math.max(80, openBelow ? spaceBelow : spaceAbove);
+    const left = Math.min(
+      Math.max(viewportMargin, rect.left),
+      Math.max(viewportMargin, portalWindow.innerWidth - 260 - viewportMargin),
+    );
+
+    setDropdownPosition({
+      left,
+      ...(openBelow
+        ? { top: rect.bottom + dropdownGap }
+        : { bottom: portalWindow.innerHeight - rect.top + dropdownGap }),
+      resultsMaxHeight: Math.max(40, Math.min(350, availableHeight - searchHeight)),
+    });
+  }, [portalWindow]);
+
+  // Close on outside click. The dropdown is portaled, so check both roots.
   useEffect(() => {
+    const portalDocument = portalContainer?.ownerDocument;
+    if (!portalDocument) return;
+
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        !containerRef.current?.contains(target) &&
+        !dropdownRef.current?.contains(target)
+      ) {
         setIsOpen(false);
+        setDropdownPosition(null);
         setSearchQuery("");
         setExpandedPaths(new Set());
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    portalDocument.addEventListener("mousedown", handleClickOutside);
+    return () => portalDocument.removeEventListener("mousedown", handleClickOutside);
+  }, [portalContainer]);
+
+  // Keep the portaled dropdown anchored while its panel or viewport moves.
+  useEffect(() => {
+    const portalDocument = portalContainer?.ownerDocument;
+    if (!isOpen || !portalDocument || !portalWindow) return;
+
+    portalWindow.addEventListener("resize", updateDropdownPosition);
+    portalDocument.addEventListener("scroll", updateDropdownPosition, true);
+    return () => {
+      portalWindow.removeEventListener("resize", updateDropdownPosition);
+      portalDocument.removeEventListener("scroll", updateDropdownPosition, true);
+    };
+  }, [isOpen, portalContainer, portalWindow, updateDropdownPosition]);
 
   // Focus search input when opened
   useEffect(() => {
@@ -361,6 +421,7 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
   const handleSelect = (panelValue: EventsPanelType) => {
     onChange(panelValue);
     setIsOpen(false);
+    setDropdownPosition(null);
     setSearchQuery("");
     setExpandedPaths(new Set());
   };
@@ -368,8 +429,10 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       setIsOpen(false);
+      setDropdownPosition(null);
       setSearchQuery("");
       setExpandedPaths(new Set());
+      triggerRef.current?.focus();
     }
   };
 
@@ -377,8 +440,17 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
     <div ref={containerRef} className={cn("relative", className)}>
       {/* Trigger button */}
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (isOpen) {
+            setIsOpen(false);
+            setDropdownPosition(null);
+          } else {
+            updateDropdownPosition();
+            setIsOpen(true);
+          }
+        }}
         className="flex items-center gap-1.5 text-sm font-medium bg-transparent cursor-pointer hover:text-muted-foreground transition-colors"
         data-help-panel-selector
       >
@@ -387,10 +459,16 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
         <ChevronDown className={cn("size-4 transition-transform", isOpen && "rotate-180")} />
       </button>
 
-      {/* Dropdown panel */}
-      {isOpen && (
+      {/* Dropdown panel. Render outside PanelCard's overflow boundary. */}
+      {isOpen && dropdownPosition && portalContainer && createPortal(
         <div
-          className="absolute left-0 top-full mt-1 z-50 w-[260px] bg-popover text-popover-foreground border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
+          ref={dropdownRef}
+          className="fixed z-[9999] flex w-[260px] flex-col bg-popover text-popover-foreground border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
+          style={{
+            left: dropdownPosition.left,
+            top: dropdownPosition.top,
+            bottom: dropdownPosition.bottom,
+          }}
           onKeyDown={handleKeyDown}
         >
           {/* Search input */}
@@ -409,7 +487,10 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
           </div>
 
           {/* Results */}
-          <ScrollArea className="max-h-[350px]">
+          <ScrollArea
+            className="styled-scrollbar"
+            style={{ maxHeight: dropdownPosition.resultsMaxHeight }}
+          >
             <div className="p-1">
               {filteredResults ? (
                 // Search results
@@ -455,7 +536,8 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
               </div>
             </div>
           </ScrollArea>
-        </div>
+        </div>,
+        portalContainer,
       )}
     </div>
   );
