@@ -241,62 +241,6 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                       </button>
                     ))}
                   </div>
-                  <div className="flex gap-1 border-t border-white/10 pt-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onStateChange({ ...state, metric: "dps" })}
-                      className={cn(
-                        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
-                        metric === "dps"
-                          ? "bg-red-500/20 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.5)] ring-1 ring-inset ring-red-400/50"
-                          : "text-muted-foreground hover:text-red-300",
-                      )}
-                    >
-                      <Swords className="h-3.5 w-3.5" />
-                      DPS
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onStateChange({ ...state, metric: "hps" })}
-                      className={cn(
-                        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
-                        metric === "hps"
-                          ? "bg-emerald-500/20 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.5)] ring-1 ring-inset ring-emerald-400/50"
-                          : "text-muted-foreground hover:text-emerald-300",
-                      )}
-                    >
-                      <HeartPulse className="h-3.5 w-3.5" />
-                      HPS
-                    </button>
-                  </div>
-                  <div className="flex gap-1 border-t border-white/10 pt-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onStateChange({ ...state, display: "raw" })}
-                      className={cn(
-                        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                        display === "raw"
-                          ? "bg-white/15 text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      <Database className="h-3.5 w-3.5" />
-                      Raw
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onStateChange({ ...state, display: "parse" })}
-                      className={cn(
-                        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                        display === "parse"
-                          ? "bg-white/15 text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      <Percent className="h-3.5 w-3.5" />
-                      Parse
-                    </button>
-                  </div>
                 </div>
 
                 <div className="mt-5 border-t border-border/60 pt-5">
@@ -357,6 +301,63 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                   <div className="min-w-0 space-y-2">
                     <div className="text-xs font-medium text-muted-foreground">Players</div>
                     <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
+                        <button
+                          type="button"
+                          onClick={() => onStateChange({ ...state, metric: "dps" })}
+                          className={cn(
+                            "flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
+                            metric === "dps"
+                              ? "bg-red-500/20 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.5)] ring-1 ring-inset ring-red-400/50"
+                              : "text-muted-foreground hover:text-red-300",
+                          )}
+                        >
+                          <Swords className="h-3.5 w-3.5" />
+                          DPS
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onStateChange({ ...state, metric: "hps" })}
+                          className={cn(
+                            "flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
+                            metric === "hps"
+                              ? "bg-emerald-500/20 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.5)] ring-1 ring-inset ring-emerald-400/50"
+                              : "text-muted-foreground hover:text-emerald-300",
+                          )}
+                        >
+                          <HeartPulse className="h-3.5 w-3.5" />
+                          HPS
+                        </button>
+                      </div>
+                      <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
+                        <button
+                          type="button"
+                          onClick={() => onStateChange({ ...state, display: "raw" })}
+                          className={cn(
+                            "flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                            display === "raw"
+                              ? "bg-white/15 text-foreground"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          <Database className="h-3.5 w-3.5" />
+                          Raw
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onStateChange({ ...state, display: "parse" })}
+                          className={cn(
+                            "flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                            display === "parse"
+                              ? "bg-white/15 text-foreground"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          <Percent className="h-3.5 w-3.5" />
+                          Parse
+                        </button>
+                      </div>
+                      <div aria-hidden="true" className="h-8 w-px shrink-0 bg-border/80" />
                       {selectedPlayers.map((selectedPlayer) => (
                         <button
                           key={selectedPlayer.id}
