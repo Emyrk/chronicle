@@ -10093,7 +10093,7 @@ WITH representative_instances AS (
         li.id ASC
 ),
 snapshot AS (
-    SELECT id, cutoff, window_start
+    SELECT id, cutoff, window_start, cohort_mode
     FROM ranking_snapshots WHERE id = $1
 ),
 eligible AS (
@@ -10123,10 +10123,10 @@ eligible AS (
     WHERE edr.encounter_id IS NOT NULL      -- boss kills only
       AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: include healers with zero damage
       AND edr.duration_secs > 0
-      -- Unknown identities are not valid cohort dimensions. Exclude them at
-      -- membership creation so snapshots never publish Unknown class/spec cohorts.
+      -- Unknown classes are never valid cohorts. Unknown specs are valid in
+      -- class mode because the cohort does not use spec as a dimension.
       AND lower(btrim(edr.player_class)) NOT IN ('', 'unknown')
-      AND lower(btrim(edr.player_spec)) NOT IN ('', 'unknown')
+      AND (s.cohort_mode <> 'spec' OR lower(btrim(edr.player_spec)) NOT IN ('', 'unknown'))
       -- Exclusive upper bound: data strictly before the snapshot cutoff (00:00 UTC boundary).
       AND edr.killed_at < s.cutoff
       AND (s.window_start IS NULL OR edr.killed_at >= s.window_start)
@@ -10452,6 +10452,7 @@ SELECT
     CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END AS metric_value
 FROM ranking_snapshot_members rsm
 JOIN encounter_dps_rankings edr ON edr.id = rsm.ranking_id
+JOIN ranking_snapshots rs ON rs.id = rsm.snapshot_id
 WHERE rsm.snapshot_id = $2
   AND rsm.encounter_name = $3
   AND rsm.player_class = $4
@@ -10463,7 +10464,7 @@ WHERE rsm.snapshot_id = $2
   AND ($7::text IS NULL OR rsm.difficulty_name = $7)
   AND ($8::smallint IS NULL OR rsm.max_players = $8)
   AND lower(btrim(rsm.player_class)) NOT IN ('', 'unknown')
-  AND lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown')
+  AND (rs.cohort_mode <> 'spec' OR lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown'))
   AND CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
 ORDER BY CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END DESC
 `
@@ -10543,6 +10544,7 @@ SELECT
     rsm.player_guid,
     CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END AS metric_value
 FROM ranking_snapshot_members rsm
+JOIN ranking_snapshots rs ON rs.id = rsm.snapshot_id
 WHERE rsm.snapshot_id = $2
   AND rsm.encounter_name = $3
   AND rsm.difficulty_name = $4
@@ -10550,10 +10552,10 @@ WHERE rsm.snapshot_id = $2
   AND rsm.player_class = $6
   AND ($7::text IS NULL OR rsm.player_spec = $7)
   AND ($8::text IS NULL OR rsm.player_sub_spec = $8)
-  -- Hide invalid cohorts from snapshots published before Unknown identities
-  -- were excluded at membership creation.
+  -- Hide invalid cohorts from snapshots published before membership filtering.
+  -- Unknown specs remain valid for class-mode snapshots.
   AND lower(btrim(rsm.player_class)) NOT IN ('', 'unknown')
-  AND lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown')
+  AND (rs.cohort_mode <> 'spec' OR lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown'))
   -- Only include rows with a positive value for the requested metric so
   -- zero-DPS healers don't appear in DPS cohorts and vice versa.
   AND CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
@@ -10631,13 +10633,14 @@ WHERE edr.encounter_id IS NOT NULL      -- boss kills only
   AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: must match BatchInsertSnapshotMembersFromRankings
   AND edr.duration_secs > 0
   AND lower(btrim(edr.player_class)) NOT IN ('', 'unknown')
-  AND lower(btrim(edr.player_spec)) NOT IN ('', 'unknown')
+  AND ($1::text <> 'spec' OR lower(btrim(edr.player_spec)) NOT IN ('', 'unknown'))
   -- Exclusive upper bound: must match BatchInsertSnapshotMembersFromRankings.
-  AND edr.killed_at < $1
-  AND ($2::timestamptz IS NULL OR edr.killed_at >= $2)
+  AND edr.killed_at < $2
+  AND ($3::timestamptz IS NULL OR edr.killed_at >= $3)
 `
 
 type GetSnapshotSourceStatsParams struct {
+	CohortMode  string             `db:"cohort_mode" json:"cohort_mode"`
 	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
 	WindowStart pgtype.Timestamptz `db:"window_start" json:"window_start"`
 }
@@ -10652,7 +10655,7 @@ type GetSnapshotSourceStatsRow struct {
 // to skip redundant snapshot publication when source data is unchanged.
 // IMPORTANT: keep the WHERE clause in sync with BatchInsertSnapshotMembersFromRankings.
 func (q *sqlQuerier) GetSnapshotSourceStats(ctx context.Context, arg GetSnapshotSourceStatsParams) (GetSnapshotSourceStatsRow, error) {
-	row := q.db.QueryRow(ctx, getSnapshotSourceStats, arg.Cutoff, arg.WindowStart)
+	row := q.db.QueryRow(ctx, getSnapshotSourceStats, arg.CohortMode, arg.Cutoff, arg.WindowStart)
 	var i GetSnapshotSourceStatsRow
 	err := row.Scan(&i.RowCount, &i.Watermark)
 	return i, err
@@ -10871,9 +10874,10 @@ SELECT DISTINCT
     rsm.difficulty_name,
     rsm.max_players
 FROM ranking_snapshot_members rsm
+JOIN ranking_snapshots rs ON rs.id = rsm.snapshot_id
 WHERE rsm.snapshot_id = $1
   AND lower(btrim(rsm.player_class)) NOT IN ('', 'unknown')
-  AND lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown')
+  AND (rs.cohort_mode <> 'spec' OR lower(btrim(rsm.player_spec)) NOT IN ('', 'unknown'))
 ORDER BY rsm.encounter_name, rsm.player_class, rsm.player_spec, rsm.player_sub_spec
 `
 
