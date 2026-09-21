@@ -62,7 +62,7 @@ export const RemotionRoot: React.FC = () => {
   return (
     <>
       <Folder name="FeatureDemos">
-        <Composition id="PerformanceHistoryPromo" component={PerformanceHistoryPromo} durationInFrames={620} fps={30} width={1280} height={720} />
+        <Composition id="PerformanceHistoryPromo" component={PerformanceHistoryPromo} durationInFrames={770} fps={30} width={1280} height={720} />
         <Composition id="FavoritesPromo" component={FavoritesPromo} durationInFrames={620} fps={30} width={1280} height={720} />
         <Composition id="EncounterPhasesDiscord" component={EncounterPhasesDiscordVideo} durationInFrames={650} fps={30} width={1280} height={720} />
         <Composition id="RankedSpeedrunTiming" component={RankedSpeedrunTimingVideo} durationInFrames={710} fps={30} width={1280} height={720} />

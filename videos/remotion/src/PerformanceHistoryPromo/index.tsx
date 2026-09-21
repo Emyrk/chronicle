@@ -3,6 +3,7 @@ import { Backdrop } from "./shared";
 import { IntroScene } from "./IntroScene";
 import { CompareScene } from "./CompareScene";
 import { FilterScene } from "./FilterScene";
+import { MenuScene } from "./MenuScene";
 import { FinaleScene } from "./FinaleScene";
 
 export default function PerformanceHistoryPromo() {
@@ -12,7 +13,8 @@ export default function PerformanceHistoryPromo() {
       <Sequence durationInFrames={155} name="Introduction"><IntroScene /></Sequence>
       <Sequence from={135} durationInFrames={190} name="Compare players"><CompareScene /></Sequence>
       <Sequence from={305} durationInFrames={180} name="Filter and share"><FilterScene /></Sequence>
-      <Sequence from={465} durationInFrames={155} name="Finale"><FinaleScene /></Sequence>
+      <Sequence from={465} durationInFrames={170} name="Find in navigation"><MenuScene /></Sequence>
+      <Sequence from={615} durationInFrames={155} name="Finale"><FinaleScene /></Sequence>
     </AbsoluteFill>
   );
 }
