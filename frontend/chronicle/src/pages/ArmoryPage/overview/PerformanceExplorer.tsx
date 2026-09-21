@@ -219,140 +219,141 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
 
             <div className="flex flex-col lg:flex-row">
               <aside className="shrink-0 border-b border-border/60 pb-5 lg:w-64 lg:border-r lg:border-b-0 lg:pr-5 lg:pb-0">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Encounters</h3>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-5 px-1.5 text-xs"
-                    onClick={() => onStateChange({ ...state, encounters: [] })}
-                    title="Select all encounters"
-                  >
-                    All
-                  </Button>
-                </div>
-                <div className="mt-3">
-                  <h4 className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                    Bosses
-                  </h4>
-                  <div className="space-y-1">
-                    {variant?.encounters.map((encounter) => {
-                      const selected = effectiveEncounters.includes(encounter);
-                      return (
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          key={encounter}
-                          onClick={(event) => selectEncounter(encounter, event.ctrlKey || event.metaKey)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              selectEncounter(encounter, event.ctrlKey || event.metaKey);
-                            }
-                          }}
-                          className={cn(
-                            "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-all duration-150",
-                            selected
-                              ? "border-l-3 border-l-primary-foreground/70 bg-primary-darker text-primary-foreground shadow-sm"
-                              : "hover:translate-x-0.5 hover:bg-accent/50",
-                          )}
-                          title={`${encounter}. Click to select, Ctrl+Click to toggle`}
-                        >
-                          <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
-                          <span className="min-w-0 flex-1 truncate">{encounter}</span>
-                        </div>
-                      );
-                    })}
+                <div className="shrink-0 space-y-1.5 rounded-lg border border-white/10 bg-black/20 p-1.5">
+                  <div className="flex gap-1">
+                    {([
+                      { value: "180d" as const, label: "180d" },
+                      { value: "60d" as const, label: "60d" },
+                      { value: "30d" as const, label: "30d" },
+                    ]).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => onStateChange({ ...state, dateRange: option.value })}
+                        className={cn(
+                          "flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                          dateRange === option.value
+                            ? "bg-[#5F8FA6] text-white"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-1 border-t border-white/10 pt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onStateChange({ ...state, metric: "dps" })}
+                      className={cn(
+                        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
+                        metric === "dps"
+                          ? "bg-red-500/20 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.5)] ring-1 ring-inset ring-red-400/50"
+                          : "text-muted-foreground hover:text-red-300",
+                      )}
+                    >
+                      <Swords className="h-3.5 w-3.5" />
+                      DPS
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onStateChange({ ...state, metric: "hps" })}
+                      className={cn(
+                        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
+                        metric === "hps"
+                          ? "bg-emerald-500/20 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.5)] ring-1 ring-inset ring-emerald-400/50"
+                          : "text-muted-foreground hover:text-emerald-300",
+                      )}
+                    >
+                      <HeartPulse className="h-3.5 w-3.5" />
+                      HPS
+                    </button>
+                  </div>
+                  <div className="flex gap-1 border-t border-white/10 pt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onStateChange({ ...state, display: "raw" })}
+                      className={cn(
+                        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                        display === "raw"
+                          ? "bg-white/15 text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <Database className="h-3.5 w-3.5" />
+                      Raw
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onStateChange({ ...state, display: "parse" })}
+                      className={cn(
+                        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                        display === "parse"
+                          ? "bg-white/15 text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <Percent className="h-3.5 w-3.5" />
+                      Parse
+                    </button>
                   </div>
                 </div>
-                <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
-                  Click to select one boss. Ctrl+Click or Cmd+Click to compare multiple bosses.
-                </p>
+
+                <div className="mt-5 border-t border-border/60 pt-5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Encounters</h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-5 px-1.5 text-xs"
+                      onClick={() => onStateChange({ ...state, encounters: [] })}
+                      title="Select all encounters"
+                    >
+                      All
+                    </Button>
+                  </div>
+                  <div className="mt-3">
+                    <h4 className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                      Bosses
+                    </h4>
+                    <div className="space-y-1">
+                      {variant?.encounters.map((encounter) => {
+                        const selected = effectiveEncounters.includes(encounter);
+                        return (
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            key={encounter}
+                            onClick={(event) => selectEncounter(encounter, event.ctrlKey || event.metaKey)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                selectEncounter(encounter, event.ctrlKey || event.metaKey);
+                              }
+                            }}
+                            className={cn(
+                              "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-all duration-150",
+                              selected
+                                ? "border-l-3 border-l-primary-foreground/70 bg-primary-darker text-primary-foreground shadow-sm"
+                                : "hover:translate-x-0.5 hover:bg-accent/50",
+                            )}
+                            title={`${encounter}. Click to select, Ctrl+Click to toggle`}
+                          >
+                            <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
+                            <span className="min-w-0 flex-1 truncate">{encounter}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
+                    Click to select one boss. Ctrl+Click or Cmd+Click to compare multiple bosses.
+                  </p>
+                </div>
               </aside>
 
               <div className="min-w-0 flex-1 pt-5 lg:pl-6 lg:pt-0">
-                <div className="flex items-start gap-4 pb-4">
-                  <div className="shrink-0 space-y-1.5 rounded-lg border border-white/10 bg-black/20 p-1.5">
-                    <div className="flex gap-1">
-                      {([
-                        { value: "180d" as const, label: "180d" },
-                        { value: "60d" as const, label: "60d" },
-                        { value: "30d" as const, label: "30d" },
-                      ]).map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => onStateChange({ ...state, dateRange: option.value })}
-                          className={cn(
-                            "flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                            dateRange === option.value
-                              ? "bg-[#5F8FA6] text-white"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex gap-1 border-t border-white/10 pt-1.5">
-                      <button
-                        type="button"
-                        onClick={() => onStateChange({ ...state, metric: "dps" })}
-                        className={cn(
-                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
-                          metric === "dps"
-                            ? "bg-red-500/20 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.5)] ring-1 ring-inset ring-red-400/50"
-                            : "text-muted-foreground hover:text-red-300",
-                        )}
-                      >
-                        <Swords className="h-3.5 w-3.5" />
-                        DPS
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onStateChange({ ...state, metric: "hps" })}
-                        className={cn(
-                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
-                          metric === "hps"
-                            ? "bg-emerald-500/20 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.5)] ring-1 ring-inset ring-emerald-400/50"
-                            : "text-muted-foreground hover:text-emerald-300",
-                        )}
-                      >
-                        <HeartPulse className="h-3.5 w-3.5" />
-                        HPS
-                      </button>
-                    </div>
-                    <div className="flex gap-1 border-t border-white/10 pt-1.5">
-                      <button
-                        type="button"
-                        onClick={() => onStateChange({ ...state, display: "raw" })}
-                        className={cn(
-                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                          display === "raw"
-                            ? "bg-white/15 text-foreground"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        <Database className="h-3.5 w-3.5" />
-                        Raw
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onStateChange({ ...state, display: "parse" })}
-                        className={cn(
-                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                          display === "parse"
-                            ? "bg-white/15 text-foreground"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        <Percent className="h-3.5 w-3.5" />
-                        Parse
-                      </button>
-                    </div>
-                  </div>
-
-                  <div aria-hidden="true" className="h-[7.75rem] w-px shrink-0 bg-border/80" />
+                <div className="pb-4">
                   <div className="min-w-0 space-y-2">
                     <div className="text-xs font-medium text-muted-foreground">Players</div>
                     <div className="flex flex-wrap items-center gap-2">
