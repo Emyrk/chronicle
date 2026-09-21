@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { CharacterEncounterStats, CharacterPerformanceRun } from "@/api/typesGenerated";
 import {
+  assignChartCollisionOffsets,
   assignPerformanceSeriesColors,
+  assignSpecPointShapes,
   buildPerformanceVariants,
   calculatePerformanceWaterlines,
   filterPerformanceRuns,
@@ -141,6 +143,31 @@ describe("assignPerformanceSeriesColors", () => {
   });
 });
 
+describe("assignSpecPointShapes", () => {
+  it("uses a circle for the most common spec and distinct shapes for the rest", () => {
+    expect(assignSpecPointShapes([
+      "Protection",
+      "Fury",
+      "Protection",
+      "Arms",
+      "Protection",
+      "Fury",
+    ])).toEqual({
+      Protection: "circle",
+      Fury: "diamond",
+      Arms: "square",
+    });
+  });
+
+  it("breaks equal-count ties alphabetically and ignores mixed runs", () => {
+    expect(assignSpecPointShapes(["Shadow", "Holy", "Mixed", "Unknown"])).toEqual({
+      Holy: "circle",
+      Shadow: "diamond",
+      Unknown: "square",
+    });
+  });
+});
+
 describe("calculatePerformanceWaterlines", () => {
   it("calculates the full average and the average of the best three values", () => {
     expect(calculatePerformanceWaterlines([100, 200, 300, 400])).toEqual({
@@ -152,6 +179,31 @@ describe("calculatePerformanceWaterlines", () => {
   it("uses all available values when fewer than three runs exist", () => {
     expect(calculatePerformanceWaterlines([100, 300])?.bestThreeAverage).toBe(200);
     expect(calculatePerformanceWaterlines([])).toBeNull();
+  });
+});
+
+describe("assignChartCollisionOffsets", () => {
+  it("fans overlapping points symmetrically within the same day", () => {
+    expect(assignChartCollisionOffsets([
+      { id: "a", group: 1, position: 40 },
+      { id: "b", group: 1, position: 41 },
+      { id: "c", group: 1, position: 42 },
+    ])).toEqual({ a: -8, b: 0, c: 8 });
+  });
+
+  it("does not offset separated points or points on different days", () => {
+    expect(assignChartCollisionOffsets([
+      { id: "a", group: 1, position: 20 },
+      { id: "b", group: 1, position: 40 },
+      { id: "c", group: 2, position: 20 },
+    ])).toEqual({ a: 0, b: 0, c: 0 });
+  });
+
+  it("uses half spacing for a two-point collision", () => {
+    expect(assignChartCollisionOffsets([
+      { id: "a", group: 1, position: 50 },
+      { id: "b", group: 1, position: 52 },
+    ])).toEqual({ a: -4, b: 4 });
   });
 });
 
