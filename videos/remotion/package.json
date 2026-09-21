@@ -9,6 +9,7 @@
     "@remotion/cli": "4.0.505",
     "@remotion/media": "4.0.505",
     "@remotion/tailwind-v4": "4.0.505",
+    "lucide-react": "0.562.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "remotion": "4.0.505",
