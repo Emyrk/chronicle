@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/Switch/Switch";
+import { specializationIconUrl } from "@/config/specializationIcon";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { cn } from "@/lib/utils";
 import { getClassIconUrl } from "../characterDisplay";
@@ -507,7 +508,14 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                         active={configuredSeries.player.spec === option}
                         onClick={() => updatePlayerFilter(configuredSeries.player.id, option)}
                       >
-                        {option}
+                        <span className="flex items-center gap-1.5">
+                          <img
+                            src={specializationIconUrl(configuredSeries.player.className, option)}
+                            alt=""
+                            className="size-4 rounded-sm"
+                          />
+                          {option}
+                        </span>
                       </FilterButton>
                     ))}
                   </div>
