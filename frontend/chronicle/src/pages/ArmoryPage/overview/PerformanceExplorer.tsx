@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle, Database, ExternalLink, HeartPulse, Map, Percent, Plus, Search, Settings2, Swords, Trash2 } from "lucide-react";
+import { CheckCircle, Database, ExternalLink, HeartPulse, List, Map, Percent, Plus, Search, Settings2, Swords, Trash2 } from "lucide-react";
 import type { ArmoryPlayer, ArmorySearchResult, CharacterPerformanceRun } from "@/api/typesGenerated";
 import { useArmorySearch } from "@/api/queries";
 import { useCharacterEncounters, useCharacterPerformances } from "@/api/rankingsQueries";
@@ -14,6 +14,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { specializationIconUrl } from "@/config/specializationIcon";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -28,6 +35,8 @@ import {
   calculatePerformanceWaterlines,
   filterPerformanceRunSeries,
   performanceValue,
+  type PerformanceDateRange,
+  type PerformanceInstanceVariant,
 } from "./performanceExplorerModel";
 
 type DisplayMode = PerformanceDisplayMode;
@@ -68,6 +77,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
     [encountersQuery.data],
   );
   const [playerDialog, setPlayerDialog] = useState<PlayerDialog>(null);
+  const [mobileEncounterOpen, setMobileEncounterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim(), 250);
   const playerSearch = useArmorySearch({ q: debouncedSearch, realm: state.realmName });
@@ -218,82 +228,15 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
             </div>
 
             <div className="flex flex-col lg:flex-row">
-              <aside className="shrink-0 border-b border-border/60 pb-5 lg:w-64 lg:border-r lg:border-b-0 lg:pr-5 lg:pb-0">
-                <div className="shrink-0 space-y-1.5 rounded-lg border border-white/10 bg-black/20 p-1.5">
-                  <div className="flex gap-1">
-                    {([
-                      { value: "180d" as const, label: "180d" },
-                      { value: "60d" as const, label: "60d" },
-                      { value: "30d" as const, label: "30d" },
-                    ]).map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => onStateChange({ ...state, dateRange: option.value })}
-                        className={cn(
-                          "flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                          dateRange === option.value
-                            ? "bg-[#5F8FA6] text-white"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-5 border-t border-border/60 pt-5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Encounters</h3>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-5 px-1.5 text-xs"
-                      onClick={() => onStateChange({ ...state, encounters: [] })}
-                      title="Select all encounters"
-                    >
-                      All
-                    </Button>
-                  </div>
-                  <div className="mt-3">
-                    <h4 className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                      Bosses
-                    </h4>
-                    <div className="space-y-1">
-                      {variant?.encounters.map((encounter) => {
-                        const selected = effectiveEncounters.includes(encounter);
-                        return (
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            key={encounter}
-                            onClick={(event) => selectEncounter(encounter, event.ctrlKey || event.metaKey)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                selectEncounter(encounter, event.ctrlKey || event.metaKey);
-                              }
-                            }}
-                            className={cn(
-                              "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-all duration-150",
-                              selected
-                                ? "border-l-3 border-l-primary-foreground/70 bg-primary-darker text-primary-foreground shadow-sm"
-                                : "hover:translate-x-0.5 hover:bg-accent/50",
-                            )}
-                            title={`${encounter}. Click to select, Ctrl+Click to toggle`}
-                          >
-                            <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
-                            <span className="min-w-0 flex-1 truncate">{encounter}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
-                    Click to select one boss. Ctrl+Click or Cmd+Click to compare multiple bosses.
-                  </p>
-                </div>
+              <aside className="hidden shrink-0 lg:block lg:w-64 lg:border-r lg:border-border/60 lg:pr-5">
+                <EncounterSelectorControls
+                  variant={variant}
+                  dateRange={dateRange}
+                  effectiveEncounters={effectiveEncounters}
+                  onDateRangeChange={(nextDateRange) => onStateChange({ ...state, dateRange: nextDateRange })}
+                  onSelectAll={() => onStateChange({ ...state, encounters: [] })}
+                  onSelectEncounter={selectEncounter}
+                />
               </aside>
 
               <div className="min-w-0 flex-1 pt-5 lg:pl-6 lg:pt-0">
@@ -433,6 +376,36 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
         )}
       </CardContent>
 
+      <Sheet open={mobileEncounterOpen} onOpenChange={setMobileEncounterOpen}>
+        <SheetTrigger asChild>
+          <Button
+            type="button"
+            variant="default"
+            size="icon"
+            className="fixed bottom-8 left-8 z-40 h-14 w-14 rounded-full shadow-lg lg:hidden"
+            title="Select encounters"
+          >
+            <List className="h-5 w-5" />
+            <span className="sr-only">Select encounters</span>
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-[19rem] max-w-[85vw] gap-0 p-0 lg:hidden">
+          <SheetHeader className="border-b border-border">
+            <SheetTitle>Encounter selection</SheetTitle>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 styled-scrollbar">
+            <EncounterSelectorControls
+              variant={variant}
+              dateRange={dateRange}
+              effectiveEncounters={effectiveEncounters}
+              onDateRangeChange={(nextDateRange) => onStateChange({ ...state, dateRange: nextDateRange })}
+              onSelectAll={() => onStateChange({ ...state, encounters: [] })}
+              onSelectEncounter={selectEncounter}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <Dialog open={playerDialog !== null} onOpenChange={(open) => { if (!open) { setPlayerDialog(null); setSearchQuery(""); } }}>
         <DialogContent className="max-w-lg">
           {playerDialog === "add" ? (
@@ -563,6 +536,102 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
         </DialogContent>
       </Dialog>
     </Card>
+  );
+}
+
+function EncounterSelectorControls({
+  variant,
+  dateRange,
+  effectiveEncounters,
+  onDateRangeChange,
+  onSelectAll,
+  onSelectEncounter,
+}: {
+  variant?: PerformanceInstanceVariant;
+  dateRange: PerformanceDateRange;
+  effectiveEncounters: readonly string[];
+  onDateRangeChange: (dateRange: PerformanceDateRange) => void;
+  onSelectAll: () => void;
+  onSelectEncounter: (encounter: string, additive: boolean) => void;
+}) {
+  return (
+    <>
+      <div className="rounded-lg border border-white/10 bg-black/20 p-1.5">
+        <div className="flex gap-1">
+          {([
+            { value: "180d" as const, label: "180d" },
+            { value: "60d" as const, label: "60d" },
+            { value: "30d" as const, label: "30d" },
+          ]).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onDateRangeChange(option.value)}
+              className={cn(
+                "flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                dateRange === option.value
+                  ? "bg-[#5F8FA6] text-white"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5 border-t border-border/60 pt-5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Encounters</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-5 px-1.5 text-xs"
+            onClick={onSelectAll}
+            title="Select all encounters"
+          >
+            All
+          </Button>
+        </div>
+        <div className="mt-3">
+          <h4 className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            Bosses
+          </h4>
+          <div className="space-y-1">
+            {variant?.encounters.map((encounter) => {
+              const selected = effectiveEncounters.includes(encounter);
+              return (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  key={encounter}
+                  onClick={(event) => onSelectEncounter(encounter, event.ctrlKey || event.metaKey)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelectEncounter(encounter, event.ctrlKey || event.metaKey);
+                    }
+                  }}
+                  className={cn(
+                    "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-all duration-150",
+                    selected
+                      ? "border-l-3 border-l-primary-foreground/70 bg-primary-darker text-primary-foreground shadow-sm"
+                      : "hover:translate-x-0.5 hover:bg-accent/50",
+                  )}
+                  title={`${encounter}. Click to select, Ctrl+Click to toggle`}
+                >
+                  <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
+                  <span className="min-w-0 flex-1 truncate">{encounter}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
+          Click to select one boss. Ctrl+Click or Cmd+Click to compare multiple bosses.
+        </p>
+      </div>
+    </>
   );
 }
 
