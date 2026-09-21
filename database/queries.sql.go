@@ -6653,7 +6653,7 @@ func (q *sqlQuerier) RecordGuildResourceView(ctx context.Context, arg RecordGuil
 const consumeGuildDiscordInstallState = `-- name: ConsumeGuildDiscordInstallState :one
 DELETE FROM guild_discord_install_states
 WHERE state = $1 AND expires_at > NOW()
-RETURNING state, guild_id, user_id, expires_at, created_at
+RETURNING state, guild_id, user_id, expires_at, created_at, tenant_slug
 `
 
 func (q *sqlQuerier) ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error) {
@@ -6665,6 +6665,7 @@ func (q *sqlQuerier) ConsumeGuildDiscordInstallState(ctx context.Context, state 
 		&i.UserID,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.TenantSlug,
 	)
 	return i, err
 }
@@ -6682,16 +6683,17 @@ func (q *sqlQuerier) CountGuildDiscordInstallationsByDiscordGuildID(ctx context.
 
 const createGuildDiscordInstallState = `-- name: CreateGuildDiscordInstallState :one
 
-INSERT INTO guild_discord_install_states (state, guild_id, user_id, expires_at)
-VALUES ($1, $2, $3, $4)
-RETURNING state, guild_id, user_id, expires_at, created_at
+INSERT INTO guild_discord_install_states (state, guild_id, user_id, tenant_slug, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING state, guild_id, user_id, expires_at, created_at, tenant_slug
 `
 
 type CreateGuildDiscordInstallStateParams struct {
-	State     string             `db:"state" json:"state"`
-	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`
-	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
-	ExpiresAt pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	State      string             `db:"state" json:"state"`
+	GuildID    uuid.UUID          `db:"guild_id" json:"guild_id"`
+	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
+	TenantSlug pgtype.Text        `db:"tenant_slug" json:"tenant_slug"`
+	ExpiresAt  pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 }
 
 // Discord Integration
@@ -6700,6 +6702,7 @@ func (q *sqlQuerier) CreateGuildDiscordInstallState(ctx context.Context, arg Cre
 		arg.State,
 		arg.GuildID,
 		arg.UserID,
+		arg.TenantSlug,
 		arg.ExpiresAt,
 	)
 	var i GuildDiscordInstallState
@@ -6709,6 +6712,7 @@ func (q *sqlQuerier) CreateGuildDiscordInstallState(ctx context.Context, arg Cre
 		&i.UserID,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.TenantSlug,
 	)
 	return i, err
 }

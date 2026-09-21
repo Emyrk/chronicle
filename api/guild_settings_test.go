@@ -53,6 +53,57 @@ func TestDiscordInstallPermissions(t *testing.T) {
 	}
 }
 
+func TestDiscordInstallCallbackURL(t *testing.T) {
+	t.Parallel()
+
+	accessURL := mustParseURL("https://legacy.chronicleclassic.com")
+	api := &API{Opts: &Options{AccessURL: accessURL}}
+	require.Equal(t,
+		"https://legacy.chronicleclassic.com/api/v1/discord-integration/callback",
+		api.discordInstallCallbackURL(),
+	)
+}
+
+func TestDiscordInstallReturnURL(t *testing.T) {
+	t.Parallel()
+
+	accessURL := mustParseURL("https://legacy.chronicleclassic.com")
+	guildID := uuid.MustParse("00000000-0000-0000-0000-000000000123")
+
+	tests := []struct {
+		name          string
+		primaryDomain string
+		tenantSlug    pgtype.Text
+		want          string
+	}{
+		{
+			name: "primary domain",
+			want: "https://legacy.chronicleclassic.com/g/00000000-0000-0000-0000-000000000123/settings?" +
+				"tab=discord-integration",
+		},
+		{
+			name:          "tenant domain",
+			primaryDomain: "chronicleclassic.com",
+			tenantSlug:    pgtype.Text{String: "turtle", Valid: true},
+			want: "https://turtle.chronicleclassic.com/g/00000000-0000-0000-0000-000000000123/settings?" +
+				"tab=discord-integration",
+		},
+		{
+			name:       "tenant without configured primary domain",
+			tenantSlug: pgtype.Text{String: "turtle", Valid: true},
+			want: "https://legacy.chronicleclassic.com/g/00000000-0000-0000-0000-000000000123/settings?" +
+				"tab=discord-integration",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, discordInstallReturnURL(accessURL, test.primaryDomain, test.tenantSlug, guildID))
+		})
+	}
+}
+
 func TestDiscordAnnouncementAttemptsPagination(t *testing.T) {
 	t.Parallel()
 

@@ -1333,11 +1333,12 @@ type Guild struct {
 }
 
 type GuildDiscordInstallState struct {
-	State     string             `db:"state" json:"state"`
-	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`
-	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
-	ExpiresAt pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	State      string             `db:"state" json:"state"`
+	GuildID    uuid.UUID          `db:"guild_id" json:"guild_id"`
+	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
+	ExpiresAt  pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	TenantSlug pgtype.Text        `db:"tenant_slug" json:"tenant_slug"`
 }
 
 type GuildDiscordInstallation struct {

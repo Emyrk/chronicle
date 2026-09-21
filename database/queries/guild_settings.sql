@@ -13,8 +13,8 @@ RETURNING *;
 -- Discord Integration
 
 -- name: CreateGuildDiscordInstallState :one
-INSERT INTO guild_discord_install_states (state, guild_id, user_id, expires_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO guild_discord_install_states (state, guild_id, user_id, tenant_slug, expires_at)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: ConsumeGuildDiscordInstallState :one
