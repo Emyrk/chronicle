@@ -274,7 +274,6 @@ export function PerformanceExplorer({ player, metric, onMetricChange }: Performa
                   runs={runs}
                   metric={metric}
                   display={display}
-                  dateRange={dateRange}
                   showAverage={showAverage}
                   showBestThreeAverage={showBestThreeAverage}
                   loading={performanceQuery.isLoading}
@@ -295,7 +294,6 @@ function PerformanceTrend({
   runs,
   metric,
   display,
-  dateRange,
   showAverage,
   showBestThreeAverage,
   loading,
@@ -304,7 +302,6 @@ function PerformanceTrend({
   runs: readonly CharacterPerformanceRun[];
   metric: ParseMetric;
   display: DisplayMode;
-  dateRange: PerformanceDateRange;
   showAverage: boolean;
   showBestThreeAverage: boolean;
   loading: boolean;
@@ -333,21 +330,6 @@ function PerformanceTrend({
 
   return (
     <div className="space-y-3 border-t border-border/60 pt-5">
-      <div className="flex items-baseline justify-between gap-4">
-        <div>
-          <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{dateRangeLabel(dateRange)} trend</div>
-          <div className="mt-1 font-mono text-2xl font-semibold tabular-nums text-sky-300">
-            {formatValue(values[values.length - 1])}
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
-              latest {display === "parse" ? "parse" : metric.toUpperCase()}
-            </span>
-          </div>
-        </div>
-        <div className="text-right text-xs text-muted-foreground">
-          <div>{runs.length} complete {runs.length === 1 ? "run" : "runs"}</div>
-          <div>Best {formatValue(max)}</div>
-        </div>
-      </div>
       <div className="relative h-72 overflow-visible rounded-lg border border-border/70 bg-black/10">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none h-full w-full" aria-hidden="true">
           {[20, 40, 60, 80].map((line) => (
@@ -566,12 +548,6 @@ function FilterButton({ active, onClick, children }: { active: boolean; onClick:
 
 function EmptyState({ loading }: { loading: boolean }) {
   return <div className="py-16 text-center text-sm text-muted-foreground">{loading ? "Loading encounters…" : "No ranked boss encounters are available for this character."}</div>;
-}
-
-function dateRangeLabel(range: PerformanceDateRange) {
-  if (range === "60d") return "Last 60 days";
-  if (range === "30d") return "Last 30 days";
-  return "Last 180 days";
 }
 
 function variantLabel(instance: string, difficulty: string, maxPlayers: number) {
