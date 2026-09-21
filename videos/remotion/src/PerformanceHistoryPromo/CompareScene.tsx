@@ -76,6 +76,7 @@ export function CompareScene() {
                   left: 40 + x * (610 / 560),
                   top: 27 + y * (245 / 110),
                   opacity: interpolate(lineProgress, [pointIndex / 7, (pointIndex + 1) / 7], [0, 1], clamp),
+                  translate: "-50% -50%",
                   scale: interpolate(lineProgress, [pointIndex / 7, (pointIndex + 1) / 7], [0.4, 1], clamp),
                 }}
               >
