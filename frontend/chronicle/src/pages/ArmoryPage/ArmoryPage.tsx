@@ -172,12 +172,13 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   ) : undefined;
 
   const modeSelector = activeTab === "overview" ? (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
       {MODES.map(([key, label]) => (
         <Button
           key={key}
           variant={mode === key ? "secondary" : "outline"}
           size="sm"
+          className="w-full sm:w-auto"
           onClick={() => setMode(key)}
         >
           {label}
@@ -196,14 +197,14 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
         <AdminLinkControls player={player} />
 
         {/* Tab navigation */}
-        <div className="flex gap-1 border-b border-border">
+        <div className="grid grid-cols-4 border-b border-border sm:flex sm:gap-1">
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => openTab(key)}
               className={`
-                flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors
-                border-b-2 -mb-px
+                flex min-w-0 items-center justify-center gap-1 px-1 py-2 text-xs font-medium transition-colors
+                border-b-2 -mb-px sm:justify-start sm:gap-1.5 sm:px-4 sm:text-sm
                 ${activeTab === key
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"

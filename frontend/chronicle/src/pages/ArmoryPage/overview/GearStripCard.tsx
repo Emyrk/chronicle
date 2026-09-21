@@ -38,7 +38,7 @@ export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripC
       role="button"
       aria-label="View paperdoll"
     >
-      <CardContent className="flex items-center gap-5">
+      <CardContent className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-5">
         <div className="shrink-0">
           <div className="text-xs tracking-widest text-muted-foreground uppercase">Gear</div>
           <div className="mt-1 font-mono text-2xl leading-none font-bold text-foreground">
@@ -46,7 +46,7 @@ export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripC
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">avg ilvl</div>
         </div>
-        <div className="flex grow flex-wrap gap-1.5 border-l border-border pl-5">
+        <div className="col-span-2 row-start-2 flex min-w-0 flex-wrap gap-1.5 border-t border-border pt-4 sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-5">
           {items.length === 0 && (
             <div className="py-2 text-sm text-muted-foreground">No gear recorded yet.</div>
           )}
@@ -68,7 +68,9 @@ export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripC
             />
           ))}
         </div>
-        <div className="shrink-0 text-xs text-link">View paperdoll →</div>
+        <div className="col-start-2 row-start-1 shrink-0 justify-self-end text-xs text-link sm:col-start-3">
+          View paperdoll →
+        </div>
       </CardContent>
 
       {hoveredTooltip && cursor && (
