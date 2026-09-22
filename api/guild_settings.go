@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -296,9 +297,11 @@ func (api *API) UpdateGuildDiscordIntegration(w http.ResponseWriter, r *http.Req
 }
 
 const (
-	discordOAuthTokenURL       = "https://discord.com/api/oauth2/token"
-	discordInstallCallbackPath = "/api/v1/discord-integration/callback"
-	discordInstallPermissions  = discordgo.PermissionViewChannel |
+	discordOAuthTokenURL            = "https://discord.com/api/oauth2/token"
+	discordInstallCallbackPath      = "/api/v1/discord-integration/callback"
+	discordInstallCorrelationCookie = "chronicle_discord_install"
+	discordInstallStateLifetime     = 10 * time.Minute
+	discordInstallPermissions       = discordgo.PermissionViewChannel |
 		discordgo.PermissionSendMessages |
 		discordgo.PermissionEmbedLinks |
 		discordgo.PermissionAttachFiles |
@@ -311,6 +314,46 @@ func (api *API) discordInstallCallbackURL() string {
 	return api.Opts.AccessURL.ResolveReference(&url.URL{
 		Path: discordInstallCallbackPath,
 	}).String()
+}
+
+func discordInstallCookie(accessURL *url.URL, primaryDomain, state string) *http.Cookie {
+	return &http.Cookie{
+		Name:     discordInstallCorrelationCookie,
+		Value:    state,
+		Path:     discordInstallCallbackPath,
+		Domain:   primaryDomain,
+		Expires:  time.Now().Add(discordInstallStateLifetime),
+		MaxAge:   int(discordInstallStateLifetime.Seconds()),
+		HttpOnly: true,
+		Secure:   accessURL.Scheme == "https",
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+func (api *API) discordInstallCookie(state string) *http.Cookie {
+	primaryDomain := ""
+	if api.Opts.Tenant != nil {
+		primaryDomain = api.Opts.Tenant.PrimaryDomain()
+	}
+	return discordInstallCookie(api.Opts.AccessURL, primaryDomain, state)
+}
+
+func (api *API) clearDiscordInstallCookie(w http.ResponseWriter) {
+	cookie := api.discordInstallCookie("")
+	cookie.Expires = time.Unix(1, 0)
+	cookie.MaxAge = -1
+	http.SetCookie(w, cookie)
+}
+
+func validDiscordInstallCorrelation(r *http.Request, state string) bool {
+	if state == "" {
+		return false
+	}
+	cookie, err := r.Cookie(discordInstallCorrelationCookie)
+	if err != nil {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) == 1
 }
 
 func discordInstallReturnURL(accessURL *url.URL, primaryDomain string, tenantSlug pgtype.Text, guildID uuid.UUID) string {
@@ -427,12 +470,13 @@ func (api *API) BeginGuildDiscordInstall(w http.ResponseWriter, r *http.Request)
 		GuildID:    guild.ID,
 		UserID:     claims.Subject,
 		TenantSlug: tenantSlug,
-		ExpiresAt:  database.Timestamptz(time.Now().Add(10 * time.Minute)),
+		ExpiresAt:  database.Timestamptz(time.Now().Add(discordInstallStateLifetime)),
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	http.SetCookie(w, api.discordInstallCookie(state))
 
 	query := url.Values{
 		"client_id":        {api.Opts.Discord.ClientID},
@@ -456,8 +500,14 @@ type discordInstallTokenResponse struct {
 // CompleteGuildDiscordInstall verifies Discord's callback and saves the selected server.
 func (api *API) CompleteGuildDiscordInstall(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	stateParam := r.URL.Query().Get("state")
+	if !validDiscordInstallCorrelation(r, stateParam) {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Discord installation request is invalid or expired."})
+		return
+	}
+	api.clearDiscordInstallCookie(w)
 
-	state, err := api.Zed.ConsumeGuildDiscordInstallState(ctx, r.URL.Query().Get("state"))
+	state, err := api.Zed.ConsumeGuildDiscordInstallState(ctx, stateParam)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Discord installation request is invalid or expired."})
 		return
