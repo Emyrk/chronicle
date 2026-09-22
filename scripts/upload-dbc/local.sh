@@ -9,9 +9,8 @@ TARGETS=(
   "faebright|http://localhost:4000/|58942539-2d80-44c9-8441-68aca794569c"
 )
 
-WOW_FOREVER_CLIENT="${WOW_FOREVER_CLIENT:-$HOME/.steam/steam/steamapps/compatdata/3492500670/pfx/drive_c/Program Files (x86)/World of Warcraft}"
 WOWDATA_TARGETS=(
-  "wow-forever|${WOW_FOREVER_CLIENT}|http://localhost:4000|1473f805-9c3f-40e2-a4fd-588883d2e9d3|wow_classic_beta|1.60.1.69913"
+  "wow-forever|/home/steven/.steam/steam/steamapps/compatdata/3492500670/pfx/drive_c/Program Files (x86)/World of Warcraft|http://localhost:4000|1473f805-9c3f-40e2-a4fd-588883d2e9d3|wow_classic_beta|1.60.1.69913"
 )
 
 # shellcheck source=run.sh
