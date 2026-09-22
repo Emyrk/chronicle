@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowUpRight } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
@@ -13,13 +13,14 @@ import type { ParseMetric } from "./util";
 interface RaidScoresCardProps {
   raids: RaidSummary[];
   metric: ParseMetric;
+  performanceHistoryPath: string;
   /** Total boss count per instance name, from the supported-instances API. */
   bossCounts?: Map<string, number>;
   isLoading: boolean;
 }
 
 /** Per-raid score ledger; expand a raid for its per-boss breakdown. */
-export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidScoresCardProps) {
+export function RaidScoresCard({ raids, metric, performanceHistoryPath, bossCounts, isLoading }: RaidScoresCardProps) {
   const [open, setOpen] = useState<string | null>(raids[0] ? raidKey(raids[0]) : null);
   // Open the biggest raid once data arrives (state initializes before load).
   const [autoOpened, setAutoOpened] = useState(false);
@@ -31,9 +32,18 @@ export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidSco
   return (
     <Card className="gap-0 border-0 bg-transparent px-0 pt-4 pb-0 shadow-none">
       <CardHeader className="px-0 pb-4">
-        <CardTitle className="text-xs font-normal tracking-[0.2em] text-muted-foreground uppercase">
-          Raid scores
-        </CardTitle>
+        <div className="flex items-center gap-3">
+          <CardTitle className="text-xs font-normal tracking-[0.2em] text-muted-foreground uppercase">
+            Raid scores
+          </CardTitle>
+          <Link
+            to={performanceHistoryPath}
+            className="inline-flex items-center gap-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
+          >
+            View history
+            <ArrowUpRight className="size-3" />
+          </Link>
+        </div>
         <CardDescription>
           Best-3 average per boss, last 60 days · expand a raid for its bosses
         </CardDescription>

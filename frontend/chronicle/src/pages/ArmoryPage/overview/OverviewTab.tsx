@@ -9,6 +9,10 @@ import {
 } from "@/api/queries";
 import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
 import { averageScoreByInstance, bestScoreByInstance, summarizeProgress, summarizeRaids } from "../parseAggregation";
+import {
+  DEFAULT_PERFORMANCE_COMPARISON_STATE,
+  serializePerformanceComparisonState,
+} from "./performanceComparisonState";
 import type { ParseMetric } from "./util";
 import { useRecentActivity } from "./useRecentActivity";
 import { TalentsCard } from "./TalentsCard";
@@ -82,6 +86,13 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
     return map;
   }, [lootQuery.data]);
 
+  const performanceHistoryPath = `/performance-history?${serializePerformanceComparisonState({
+    ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
+    realmName: player.realm_name,
+    players: [{ id: player.id, spec: null, subSpec: null, hidden: false }],
+    metric,
+  }).toString()}`;
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
       <div className="lg:col-span-12">
@@ -111,6 +122,7 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
             <RaidScoresCard
               raids={raids}
               metric={metric}
+              performanceHistoryPath={performanceHistoryPath}
               bossCounts={bossCounts}
               isLoading={parsesQuery.isLoading}
             />
