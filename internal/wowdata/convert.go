@@ -454,10 +454,31 @@ func convertSpells(dir string, out *Import) error {
 	sort.Ints(ids)
 	out.Spells = make([]spelldb.SpellRow, 0, len(ids))
 	for _, id := range ids {
-		out.Spells = append(out.Spells, *byID[int32(id)])
+		spell := *byID[int32(id)]
+		normalizeSpellArrays(&spell)
+		out.Spells = append(out.Spells, spell)
 	}
 	return nil
 }
+
+func normalizeSpellArrays(spell *spelldb.SpellRow) {
+	if spell.Reagent == nil {
+		spell.Reagent = []int32{}
+	}
+	if spell.ReagentCount == nil {
+		spell.ReagentCount = []int32{}
+	}
+	if spell.Attributes == nil {
+		spell.Attributes = []int32{}
+	}
+	if spell.Totem == nil {
+		spell.Totem = []int32{}
+	}
+	if spell.SpellVisualID == nil {
+		spell.SpellVisualID = []int32{}
+	}
+}
+
 func ensureSpell(m map[int32]*spelldb.SpellRow, id int32) *spelldb.SpellRow {
 	if m[id] == nil {
 		m[id] = &spelldb.SpellRow{SpellID: id}
