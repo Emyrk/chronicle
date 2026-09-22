@@ -7,32 +7,64 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/Emyrk/chronicle/internal/wowdata"
 	"github.com/coder/serpent"
 )
 
-// ImportWowdataCmd imports a normalized wowdata snapshot without routing its
-// modern DB2 JSONL rows through Chronicle's legacy DBC parsers.
+// ImportWowdataCmd extracts a modern client when requested, converts its DB2
+// rows, and imports them without routing through Chronicle's legacy DBC parsers.
 func ImportWowdataCmd() *serpent.Command {
-	var snapshot, apiURL, datasetID, token, cookie, product, build, out string
+	var snapshot, client, wowdataBin, extractor, snapshotOut string
+	var apiURL, datasetID, token, cookie, product, build, region, locale, cache, out string
 	var dryRun bool
 	return &serpent.Command{
 		Use:   "import-wowdata",
-		Short: "Convert and import a WoW Forever wowdata snapshot.",
+		Short: "Extract, convert, and import WoW Forever game data.",
 		Options: serpent.OptionSet{
-			{Name: "snapshot", Description: "Directory containing manifest.json and tables/*.jsonl.", Flag: "snapshot", Required: true, Value: serpent.StringOf(&snapshot)},
+			{Name: "snapshot", Description: "Existing normalized snapshot containing manifest.json and tables/*.jsonl.", Flag: "snapshot", Value: serpent.StringOf(&snapshot)},
+			{Name: "client", Description: "WoW installation root containing .build.info and Data/. Alternative to --snapshot.", Flag: "client", Env: "WOW_CLIENT_PATH", Value: serpent.StringOf(&client)},
+			{Name: "wowdata", Description: "Wowdata executable used with --client.", Flag: "wowdata", Env: "WOWDATA_BIN", Default: "wowdata", Value: serpent.StringOf(&wowdataBin)},
+			{Name: "extractor", Description: "Path to Chronicle's wowdata extraction script.", Flag: "extractor", Default: "scripts/dbcdata/extract-wowdata.sh", Value: serpent.StringOf(&extractor)},
+			{Name: "snapshot-out", Description: "Keep the normalized snapshot at this path when extracting from --client; otherwise a temporary directory is used.", Flag: "snapshot-out", Value: serpent.StringOf(&snapshotOut)},
+			{Name: "region", Description: "Blizzard region used with --client.", Flag: "region", Env: "WOW_REGION", Default: "us", Value: serpent.StringOf(&region)},
+			{Name: "locale", Description: "Data locale used with --client.", Flag: "locale", Env: "WOW_LOCALE", Default: "enUS", Value: serpent.StringOf(&locale)},
+			{Name: "cache", Description: "Optional wowdata cache directory used with --client.", Flag: "cache", Env: "WOWDATA_CACHE", Value: serpent.StringOf(&cache)},
 			{Name: "api-url", Description: "Chronicle API base URL.", Flag: "api-url", Value: serpent.StringOf(&apiURL)},
 			{Name: "dataset-id", Description: "Dataset UUID to update.", Flag: "dataset-id", Env: "CHRONICLE_DATASET_ID", Value: serpent.StringOf(&datasetID)},
 			{Name: "token", Description: "Bearer token.", Flag: "token", Env: "CHRONICLE_TOKEN", Value: serpent.StringOf(&token)},
 			{Name: "cookie", Description: "Session cookie to exchange for a token.", Flag: "cookie", Env: "CHRONICLE_COOKIE", Value: serpent.StringOf(&cookie)},
-			{Name: "product", Description: "Expected snapshot product.", Flag: "product", Default: "wow_classic_beta", Value: serpent.StringOf(&product)},
-			{Name: "build", Description: "Expected build; empty accepts the manifest build.", Flag: "build", Value: serpent.StringOf(&build)},
-			{Name: "dry-run", Description: "Validate and convert without uploading.", Flag: "dry-run", Value: serpent.BoolOf(&dryRun)},
+			{Name: "product", Description: "Expected product or product to extract.", Flag: "product", Default: "wow_classic_beta", Value: serpent.StringOf(&product)},
+			{Name: "build", Description: "Expected build; empty accepts the snapshot manifest build.", Flag: "build", Value: serpent.StringOf(&build)},
+			{Name: "dry-run", Description: "Extract if needed and convert without uploading.", Flag: "dry-run", Value: serpent.BoolOf(&dryRun)},
 			{Name: "out", Description: "Optional path for the converted gzip JSON payload.", Flag: "out", Value: serpent.StringOf(&out)},
 		},
 		Handler: func(inv *serpent.Invocation) error {
+			if err := validateWowdataSource(snapshot, client); err != nil {
+				return err
+			}
+			if client != "" {
+				var cleanup func()
+				var err error
+				snapshot, cleanup, err = extractWowdata(inv, wowdataExtractOptions{
+					Client:      client,
+					WowdataBin:  wowdataBin,
+					Extractor:   extractor,
+					SnapshotOut: snapshotOut,
+					Product:     product,
+					Build:       build,
+					Region:      region,
+					Locale:      locale,
+					Cache:       cache,
+				})
+				if err != nil {
+					return err
+				}
+				defer cleanup()
+			}
+
 			converted, err := wowdata.Convert(snapshot, product, build)
 			if err != nil {
 				return err
@@ -81,4 +113,69 @@ func ImportWowdataCmd() *serpent.Command {
 			return nil
 		},
 	}
+}
+
+type wowdataExtractOptions struct {
+	Client      string
+	WowdataBin  string
+	Extractor   string
+	SnapshotOut string
+	Product     string
+	Build       string
+	Region      string
+	Locale      string
+	Cache       string
+}
+
+func validateWowdataSource(snapshot, client string) error {
+	if snapshot == "" && client == "" {
+		return fmt.Errorf("provide exactly one of --snapshot or --client")
+	}
+	if snapshot != "" && client != "" {
+		return fmt.Errorf("--snapshot and --client cannot be used together")
+	}
+	return nil
+}
+
+func wowdataExtractArgs(opts wowdataExtractOptions, out string) []string {
+	args := []string{
+		"--client", opts.Client,
+		"--wowdata", opts.WowdataBin,
+		"--product", opts.Product,
+		"--region", opts.Region,
+		"--locale", opts.Locale,
+		"--out", out,
+	}
+	if opts.Build != "" {
+		args = append(args, "--build", opts.Build)
+	}
+	if opts.Cache != "" {
+		args = append(args, "--cache", opts.Cache)
+	}
+	return args
+}
+
+func extractWowdata(inv *serpent.Invocation, opts wowdataExtractOptions) (string, func(), error) {
+	out := opts.SnapshotOut
+	cleanup := func() {}
+	if out == "" {
+		var err error
+		out, err = os.MkdirTemp("", "chronicle-wowdata-")
+		if err != nil {
+			return "", cleanup, fmt.Errorf("create temporary wowdata snapshot directory: %w", err)
+		}
+		cleanup = func() {
+			_ = os.RemoveAll(out)
+		}
+	}
+
+	_, _ = fmt.Fprintf(inv.Stdout, "Extracting %s %s from %s...\n", opts.Product, opts.Build, opts.Client)
+	cmd := exec.CommandContext(inv.Context(), opts.Extractor, wowdataExtractArgs(opts, out)...)
+	cmd.Stdout = inv.Stdout
+	cmd.Stderr = inv.Stderr
+	if err := cmd.Run(); err != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("extract wowdata from client: %w", err)
+	}
+	return out, cleanup, nil
 }

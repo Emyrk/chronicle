@@ -1,10 +1,36 @@
 # WoW Forever game-data import
 
-Chronicle imports WoW Forever game data through a two-stage `wowdata` workflow. Modern Blizzard clients store DB2 tables in CASC; they do not expose the legacy MPQ/DBC files consumed by `dbcdata import`.
+Chronicle imports WoW Forever game data directly from a local Blizzard client through the external `wowdata` executable. Modern clients store DB2 tables in CASC; they do not expose the legacy MPQ/DBC files consumed by `dbcdata import`.
 
-## 1. Extract a snapshot
+## Import directly from the game installation
 
-Install `wowdata`, then run:
+Install `wowdata`, then validate extraction and conversion without changing a server:
+
+```bash
+go run ./scripts/dbcdata import-wowdata \
+  --client "/path/to/World of Warcraft" \
+  --product wow_classic_beta \
+  --build 1.60.1.69913 \
+  --dry-run
+```
+
+Upload directly to a dataset:
+
+```bash
+go run ./scripts/dbcdata import-wowdata \
+  --client "/path/to/World of Warcraft" \
+  --product wow_classic_beta \
+  --build 1.60.1.69913 \
+  --api-url https://chronicle.example.com \
+  --dataset-id <dataset-uuid> \
+  --token <bearer-token>
+```
+
+The client path is the directory containing `.build.info` and `Data/`, not the `_classic_beta_` executable directory. The command extracts a temporary normalized snapshot, converts the split modern tables, uploads a gzip JSON payload, and removes the temporary snapshot. Use `--snapshot-out PATH` to retain the extracted data for inspection or reuse.
+
+## Reuse an existing snapshot
+
+Extraction remains available as a separate debugging and archival step:
 
 ```bash
 scripts/dbcdata/extract-wowdata.sh \
@@ -12,33 +38,16 @@ scripts/dbcdata/extract-wowdata.sh \
   --product wow_classic_beta \
   --build 1.60.1.69913 \
   --out ./export/wow-forever
-```
 
-The client path is the directory containing `.build.info` and `Data/`, not the `_classic_beta_` executable directory. The script writes `manifest.json`, table schemas, and normalized JSONL rows. Use `--limit` only for smoke tests; limited snapshots are intentionally rejected by the importer.
-
-## 2. Validate or upload
-
-Validate and convert without changing a server:
-
-```bash
 go run ./scripts/dbcdata import-wowdata \
   --snapshot ./export/wow-forever \
   --build 1.60.1.69913 \
   --dry-run
 ```
 
-Upload to a dataset:
+Use `--limit` on the extraction script only for smoke tests; limited snapshots are intentionally rejected by the importer.
 
-```bash
-go run ./scripts/dbcdata import-wowdata \
-  --snapshot ./export/wow-forever \
-  --build 1.60.1.69913 \
-  --api-url https://chronicle.example.com \
-  --dataset-id <dataset-uuid> \
-  --token <bearer-token>
-```
-
-The CLI converts the split modern tables into Chronicle's dataset models and sends a gzip JSON payload to:
+The importer sends the converted payload to:
 
 ```text
 PUT /api/v1/game-data/datasets/{datasetID}/wowdata-snapshot

@@ -4,7 +4,7 @@
 # Extra CLI flags ($@) are forwarded to each import run.
 #
 # TARGETS format: server|api-url|dataset-id
-# WOWDATA_TARGETS format: label|snapshot|api-url|dataset-id|product|build
+# WOWDATA_TARGETS format: label|client-path|api-url|dataset-id|product|build
 #
 # Shows all targets upfront, asks once, then runs them all.
 
@@ -33,9 +33,9 @@ if ((legacy_count > 0)); then
 fi
 if ((wowdata_count > 0)); then
   for entry in "${WOWDATA_TARGETS[@]}"; do
-    IFS='|' read -r label snapshot api_url dataset_id product build <<< "$entry"
+    IFS='|' read -r label client api_url dataset_id product build <<< "$entry"
     echo "  • wowdata target=${label}  url=${api_url}  dataset=${dataset_id}"
-    echo "      snapshot=${snapshot}  product=${product}  build=${build}"
+    echo "      client=${client}  product=${product}  build=${build}"
   done
 fi
 echo
@@ -70,10 +70,10 @@ fi
 
 if ((wowdata_count > 0)); then
   for entry in "${WOWDATA_TARGETS[@]}"; do
-    IFS='|' read -r label snapshot api_url dataset_id product build <<< "$entry"
-    echo "==> Uploading wowdata snapshot to ${api_url} (target=${label}, dataset=${dataset_id})"
+    IFS='|' read -r label client api_url dataset_id product build <<< "$entry"
+    echo "==> Extracting and uploading wowdata to ${api_url} (target=${label}, dataset=${dataset_id})"
     if go run ./scripts/dbcdata import-wowdata \
-      --snapshot "$snapshot" \
+      --client "$client" \
       --product "$product" \
       --build "$build" \
       --api-url "$api_url" \
