@@ -197,12 +197,10 @@ icons/upload: icons/manifest
 
 .PHONY: icons/wowdata-extract
 icons/wowdata-extract:
-	@test -n "$(WOWDATA_SNAPSHOT)" || (echo "WOWDATA_SNAPSHOT is required" >&2; exit 2)
-	@test -n "$(WOW_CLIENT_PATH)" || (echo "WOW_CLIENT_PATH is required" >&2; exit 2)
-	scripts/dbcdata/extract-wowdata-icons.sh \
-		--snapshot="$(WOWDATA_SNAPSHOT)" \
-		--client="$(WOW_CLIENT_PATH)" \
+	go run ./scripts/dbcdata extract-wowdata-icons \
+		--server=$(SERVER) \
 		--out=frontend/imagecache/$(SERVER)/icons \
+		$(if $(WOW_CLIENT_PATH),--dbc="$(WOW_CLIENT_PATH)") \
 		$(if $(WOWDATA_BIN),--wowdata="$(WOWDATA_BIN)") \
 		$(if $(WOWDATA_CACHE),--cache="$(WOWDATA_CACHE)")
 
@@ -214,7 +212,11 @@ icons/wowdata: icons/wowdata-extract
 
 # Full pipeline: extract → convert → manifest → upload
 .PHONY: icons
+ifeq ($(SERVER),forever)
+icons: icons/wowdata
+else
 icons: icons/upload
+endif
 .PHONY: icons/talents-extract
 icons/talents-extract:
 	go run ./scripts/dbcdata extract-talent-backgrounds --server=$(SERVER) --out=frontend/imagecache/$(SERVER)/talent-backgrounds

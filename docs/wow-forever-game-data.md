@@ -61,11 +61,10 @@ scripts/dbcdata/extract-wowdata-icons.sh \
 To export, generate `icon-list.json`, and upload through the existing R2 pipeline:
 
 ```bash
-make icons/wowdata \
-  SERVER=forever \
-  WOWDATA_SNAPSHOT=./export/wow-forever \
-  WOW_CLIENT_PATH="/path/to/World of Warcraft"
+SERVER=forever make icons
 ```
+
+This uses the configured default Forever client path, provisions the pinned `wowdata` binary when needed, creates a temporary snapshot, exports the referenced icons, and uploads them through the existing R2 pipeline. Set `WOW_CLIENT_PATH` to override the client location.
 
 The Forever dataset should use its own icon base URL, for example `https://icons.chronicleclassic.com/forever`, in the dataset settings.
 
