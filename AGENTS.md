@@ -57,6 +57,7 @@ internal/           # Shared utilities (testutil, cryptorand, etc.)
 - `chronicle/chronicle.go` – Core Chronicle service (uploads, parsing)
 - `database/sqlc.yaml` – sqlc configuration
 - `database/generate.sh` – Custom sqlc output merging script
+- `docs/spell-data-formats.md`: required context before changing spell parsing, storage, conversion, or API behavior
 - `Makefile` – Primary build/dev commands
 
 ## Essential Commands
