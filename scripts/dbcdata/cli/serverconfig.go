@@ -32,6 +32,8 @@ func DefaultClientPath(server string) string {
 		return "/home/steven/Games/LunaticPTR"
 	case "tbc":
 		return "/home/steven/Games/World of Warcraft 2.4.3"
+	case "forever":
+		return "/home/steven/.steam/steam/steamapps/compatdata/3492500670/pfx/drive_c/Program Files (x86)/World of Warcraft"
 	default:
 		return ""
 	}
