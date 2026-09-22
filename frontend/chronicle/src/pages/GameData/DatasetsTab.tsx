@@ -23,6 +23,7 @@ const KNOWN_ICON_CDNS = [
   { url: "https://icons.chronicleclassic.com/octowow", label: "OctoWoW" },
   { url: "https://icons.chronicleclassic.com/vanillaplus", label: "VanillaPlus" },
   { url: "https://icons.chronicleclassic.com/ascension", label: "Ascension" },
+  { url: "https://icons.chronicleclassic.com/forever", label: "WoW Forever" },
 ] as const;
 
 /** Known WoW client versions and their build numbers (suggestions only — any
