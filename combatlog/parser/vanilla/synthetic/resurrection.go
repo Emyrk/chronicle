@@ -41,8 +41,8 @@ func DetectResurrections(msgs []messages.Message) []messages.Message {
 }
 
 func resurrectionEffects(spell *chrondbc.Spell) (selfResurrection bool, resurrection bool) {
-	for _, effect := range spell.Effect {
-		switch effect {
+	for _, effect := range spell.Effects {
+		switch effect.Effect {
 		case chrondbc.EffectSelfResurrect:
 			selfResurrection = true
 			resurrection = true

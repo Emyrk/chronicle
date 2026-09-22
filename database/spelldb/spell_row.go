@@ -343,32 +343,54 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 		s.SpellVisualID[i] = r.SpellVisualID[i]
 	}
 
-	// Effects 0-2
-	s.Effect = [3]chrondbc.Effect{chrondbc.Effect(r.Effect0), chrondbc.Effect(r.Effect1), chrondbc.Effect(r.Effect2)}
-	s.EffectDieSides = [3]int32{r.EffectDieSides0, r.EffectDieSides1, r.EffectDieSides2}
-	s.EffectRealPointsPerLevel = [3]float32{r.EffectRealPtsPerLevel0, r.EffectRealPtsPerLevel1, r.EffectRealPtsPerLevel2}
-	s.EffectBasePoints = [3]int32{r.EffectBasePoints0, r.EffectBasePoints1, r.EffectBasePoints2}
-	s.EffectBasePointsF = append([]float32(nil), r.EffectBasePointsF...)
-	s.EffectMechanic = [3]int32{r.EffectMechanic0, r.EffectMechanic1, r.EffectMechanic2}
-	s.EffectRadiusIndex_ = [3]int32{r.EffectRadiusIndex0, r.EffectRadiusIndex1, r.EffectRadiusIndex2}
-	s.EffectRadius = [3]dbcmem.SpellRadius{
-		{ID: r.EffectRadiusIndex0},
-		{ID: r.EffectRadiusIndex1},
-		{ID: r.EffectRadiusIndex2},
+	// The wide dbc_spells row can represent only legacy indexes 0-2.
+	effectTypes := [3]int32{r.Effect0, r.Effect1, r.Effect2}
+	dieSides := [3]int32{r.EffectDieSides0, r.EffectDieSides1, r.EffectDieSides2}
+	realPointsPerLevel := [3]float32{r.EffectRealPtsPerLevel0, r.EffectRealPtsPerLevel1, r.EffectRealPtsPerLevel2}
+	basePoints := [3]int32{r.EffectBasePoints0, r.EffectBasePoints1, r.EffectBasePoints2}
+	mechanics := [3]int32{r.EffectMechanic0, r.EffectMechanic1, r.EffectMechanic2}
+	radiusIndexes := [3]int32{r.EffectRadiusIndex0, r.EffectRadiusIndex1, r.EffectRadiusIndex2}
+	auras := [3]int32{r.EffectAura0, r.EffectAura1, r.EffectAura2}
+	auraPeriods := [3]int32{r.EffectAuraPeriod0, r.EffectAuraPeriod1, r.EffectAuraPeriod2}
+	amplitudes := [3]float32{r.EffectAmplitude0, r.EffectAmplitude1, r.EffectAmplitude2}
+	chainTargets := [3]int32{r.EffectChainTargets0, r.EffectChainTargets1, r.EffectChainTargets2}
+	itemTypes := [3]int32{r.EffectItemType0, r.EffectItemType1, r.EffectItemType2}
+	miscValues := [3]int32{r.EffectMiscValue0, r.EffectMiscValue1, r.EffectMiscValue2}
+	triggerSpells := [3]int32{r.EffectTriggerSpell0, r.EffectTriggerSpell1, r.EffectTriggerSpell2}
+	pointsPerCombo := [3]float32{r.EffectPtsPerCombo0, r.EffectPtsPerCombo1, r.EffectPtsPerCombo2}
+	baseDice := [3]int32{r.EffectBaseDice0, r.EffectBaseDice1, r.EffectBaseDice2}
+	dicePerLevel := [3]int32{r.EffectDicePerLevel0, r.EffectDicePerLevel1, r.EffectDicePerLevel2}
+	chainAmplitudes := [3]float32{r.EffectChainAmplitude0, r.EffectChainAmplitude1, r.EffectChainAmplitude2}
+	implicitTargetA := [3]int32{r.ImplicitTargetA0, r.ImplicitTargetA1, r.ImplicitTargetA2}
+	implicitTargetB := [3]int32{r.ImplicitTargetB0, r.ImplicitTargetB1, r.ImplicitTargetB2}
+	s.Effects = make([]chrondbc.SpellEffect, 3)
+	for i := range s.Effects {
+		effect := &s.Effects[i]
+		effect.EffectIndex = int32(i)
+		effect.Effect = chrondbc.Effect(effectTypes[i])
+		effect.EffectDieSides = dieSides[i]
+		effect.EffectRealPointsPerLevel = realPointsPerLevel[i]
+		effect.EffectBasePoints = basePoints[i]
+		if i < len(r.EffectBasePointsF) {
+			value := r.EffectBasePointsF[i]
+			effect.EffectBasePointsF = &value
+		}
+		effect.EffectMechanic = mechanics[i]
+		effect.EffectRadius = dbcmem.SpellRadius{ID: radiusIndexes[i]}
+		effect.EffectRadiusIndex = []int32{radiusIndexes[i]}
+		effect.EffectAura = chrondbc.AuraEffect(auras[i])
+		effect.EffectAuraPeriod = auraPeriods[i]
+		effect.EffectAmplitude = amplitudes[i]
+		effect.EffectChainTargets = chainTargets[i]
+		effect.EffectItemType = chrondbc.ItemID(itemTypes[i])
+		effect.EffectMiscValue = []int32{miscValues[i]}
+		effect.EffectTriggerSpell = chrondbc.SpellID(triggerSpells[i])
+		effect.EffectPointsPerCombo = pointsPerCombo[i]
+		effect.EffectBaseDice = baseDice[i]
+		effect.EffectDicePerLevel = dicePerLevel[i]
+		effect.EffectChainAmplitude = chainAmplitudes[i]
+		effect.ImplicitTarget = []int32{implicitTargetA[i], implicitTargetB[i]}
 	}
-	s.EffectAura = [3]chrondbc.AuraEffect{chrondbc.AuraEffect(r.EffectAura0), chrondbc.AuraEffect(r.EffectAura1), chrondbc.AuraEffect(r.EffectAura2)}
-	s.EffectAuraPeriod = [3]int32{r.EffectAuraPeriod0, r.EffectAuraPeriod1, r.EffectAuraPeriod2}
-	s.EffectAmplitude = [3]float32{r.EffectAmplitude0, r.EffectAmplitude1, r.EffectAmplitude2}
-	s.EffectChainTargets = [3]int32{r.EffectChainTargets0, r.EffectChainTargets1, r.EffectChainTargets2}
-	s.EffectItemType = [3]chrondbc.ItemID{chrondbc.ItemID(r.EffectItemType0), chrondbc.ItemID(r.EffectItemType1), chrondbc.ItemID(r.EffectItemType2)}
-	s.EffectMiscValue = [3]int32{r.EffectMiscValue0, r.EffectMiscValue1, r.EffectMiscValue2}
-	s.EffectTriggerSpell = [3]chrondbc.SpellID{chrondbc.SpellID(r.EffectTriggerSpell0), chrondbc.SpellID(r.EffectTriggerSpell1), chrondbc.SpellID(r.EffectTriggerSpell2)}
-	s.EffectPointsPerCombo = [3]float32{r.EffectPtsPerCombo0, r.EffectPtsPerCombo1, r.EffectPtsPerCombo2}
-	s.EffectBaseDice = [3]int32{r.EffectBaseDice0, r.EffectBaseDice1, r.EffectBaseDice2}
-	s.EffectDicePerLevel = [3]int32{r.EffectDicePerLevel0, r.EffectDicePerLevel1, r.EffectDicePerLevel2}
-	s.EffectChainAmplitude = [3]float32{r.EffectChainAmplitude0, r.EffectChainAmplitude1, r.EffectChainAmplitude2}
-	s.ImplicitTargetA = [3]chrondbc.ImplicitTarget{chrondbc.ImplicitTarget(r.ImplicitTargetA0), chrondbc.ImplicitTarget(r.ImplicitTargetA1), chrondbc.ImplicitTarget(r.ImplicitTargetA2)}
-	s.ImplicitTargetB = [3]chrondbc.ImplicitTarget{chrondbc.ImplicitTarget(r.ImplicitTargetB0), chrondbc.ImplicitTarget(r.ImplicitTargetB1), chrondbc.ImplicitTarget(r.ImplicitTargetB2)}
 
 	// Resolve JOINed metadata when available. When the companion DBC
 	// tables have not been imported for this dataset, LEFT JOINs return
@@ -394,13 +416,13 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 		s.Category = dbcmem.SpellCategory{ID: r.Category, Flags: derefOr(r.CatFlags), UsesPerWeek: derefOr(r.CatUsesPerWeek), Name: derefOrS(r.CatName), MaxCharges: derefOr(r.CatMaxCharges), ChargeRecoveryTime: derefOr(r.CatChargeRecoveryTime), TypeMask: derefOr(r.CatTypeMask)}
 	}
 	if r.R0Radius != nil {
-		s.EffectRadius[0] = dbcmem.SpellRadius{ID: r.EffectRadiusIndex0, Radius: *r.R0Radius, RadiusPerLevel: derefOrF(r.R0RadiusPerLevel), RadiusMin: derefOrF(r.R0RadiusMin), RadiusMax: derefOrF(r.R0RadiusMax)}
+		s.Effects[0].EffectRadius = dbcmem.SpellRadius{ID: r.EffectRadiusIndex0, Radius: *r.R0Radius, RadiusPerLevel: derefOrF(r.R0RadiusPerLevel), RadiusMin: derefOrF(r.R0RadiusMin), RadiusMax: derefOrF(r.R0RadiusMax)}
 	}
 	if r.R1Radius != nil {
-		s.EffectRadius[1] = dbcmem.SpellRadius{ID: r.EffectRadiusIndex1, Radius: *r.R1Radius, RadiusPerLevel: derefOrF(r.R1RadiusPerLevel), RadiusMin: derefOrF(r.R1RadiusMin), RadiusMax: derefOrF(r.R1RadiusMax)}
+		s.Effects[1].EffectRadius = dbcmem.SpellRadius{ID: r.EffectRadiusIndex1, Radius: *r.R1Radius, RadiusPerLevel: derefOrF(r.R1RadiusPerLevel), RadiusMin: derefOrF(r.R1RadiusMin), RadiusMax: derefOrF(r.R1RadiusMax)}
 	}
 	if r.R2Radius != nil {
-		s.EffectRadius[2] = dbcmem.SpellRadius{ID: r.EffectRadiusIndex2, Radius: *r.R2Radius, RadiusPerLevel: derefOrF(r.R2RadiusPerLevel), RadiusMin: derefOrF(r.R2RadiusMin), RadiusMax: derefOrF(r.R2RadiusMax)}
+		s.Effects[2].EffectRadius = dbcmem.SpellRadius{ID: r.EffectRadiusIndex2, Radius: *r.R2Radius, RadiusPerLevel: derefOrF(r.R2RadiusPerLevel), RadiusMin: derefOrF(r.R2RadiusMin), RadiusMax: derefOrF(r.R2RadiusMax)}
 	}
 	if r.FocusName != nil {
 		s.SpellFocus = dbcmem.SpellFocusObject{ID: r.RequiresSpellFocus, Name: *r.FocusName}
@@ -412,8 +434,29 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 	return s
 }
 
-// FromSpell converts a chrondbc.Spell to a SpellRow for database storage.
+// FromSpell converts a chrondbc.Spell to the wide SQL compatibility row.
+// Only explicit effect indexes 0-2 are representable. Effects at higher or
+// negative indexes remain on the in-memory Spell and are intentionally omitted.
 func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
+	var effects [3]chrondbc.SpellEffect
+	for i := range effects {
+		effects[i].EffectIndex = int32(i)
+	}
+	for _, effect := range s.Effects {
+		if effect.EffectIndex >= 0 && effect.EffectIndex < 3 {
+			effects[effect.EffectIndex] = effect
+		}
+	}
+	effectBasePointsF := make([]float32, 0, 3)
+	for _, effect := range effects {
+		if effect.EffectBasePointsF != nil {
+			for len(effectBasePointsF) < 3 {
+				effectBasePointsF = append(effectBasePointsF, 0)
+			}
+			effectBasePointsF[effect.EffectIndex] = *effect.EffectBasePointsF
+		}
+	}
+
 	r := SpellRow{
 		DatasetID:       datasetID,
 		SpellID:         int32(s.ID),
@@ -476,70 +519,70 @@ func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
 		EquippedItemClass:    int32(s.EquippedItemClass),
 		EquippedItemSubclass: int32(s.EquippedItemSubclass),
 		PreventionType:       int32(s.PreventionType),
-		EffectBasePointsF:    append([]float32(nil), s.EffectBasePointsF...),
+		EffectBasePointsF:    effectBasePointsF,
 
 		// Effect 0
-		Effect0:                int32(s.Effect[0]),
-		EffectDieSides0:        s.EffectDieSides[0],
-		EffectRealPtsPerLevel0: s.EffectRealPointsPerLevel[0],
-		EffectBasePoints0:      s.EffectBasePoints[0],
-		EffectMechanic0:        s.EffectMechanic[0],
-		EffectRadiusIndex0:     s.EffectRadius[0].ID,
-		EffectAura0:            int32(s.EffectAura[0]),
-		EffectAuraPeriod0:      s.EffectAuraPeriod[0],
-		EffectAmplitude0:       s.EffectAmplitude[0],
-		EffectChainTargets0:    s.EffectChainTargets[0],
-		EffectItemType0:        int32(s.EffectItemType[0]),
-		EffectMiscValue0:       s.EffectMiscValue[0],
-		EffectTriggerSpell0:    int32(s.EffectTriggerSpell[0]),
-		EffectPtsPerCombo0:     s.EffectPointsPerCombo[0],
-		EffectBaseDice0:        s.EffectBaseDice[0],
-		EffectDicePerLevel0:    s.EffectDicePerLevel[0],
-		EffectChainAmplitude0:  s.EffectChainAmplitude[0],
-		ImplicitTargetA0:       int32(s.ImplicitTargetA[0]),
-		ImplicitTargetB0:       int32(s.ImplicitTargetB[0]),
+		Effect0:                int32(effects[0].Effect),
+		EffectDieSides0:        effects[0].EffectDieSides,
+		EffectRealPtsPerLevel0: effects[0].EffectRealPointsPerLevel,
+		EffectBasePoints0:      effects[0].EffectBasePoints,
+		EffectMechanic0:        effects[0].EffectMechanic,
+		EffectRadiusIndex0:     effects[0].EffectRadius.ID,
+		EffectAura0:            int32(effects[0].EffectAura),
+		EffectAuraPeriod0:      effects[0].EffectAuraPeriod,
+		EffectAmplitude0:       effects[0].EffectAmplitude,
+		EffectChainTargets0:    effects[0].EffectChainTargets,
+		EffectItemType0:        int32(effects[0].EffectItemType),
+		EffectMiscValue0:       firstInt32(effects[0].EffectMiscValue),
+		EffectTriggerSpell0:    int32(effects[0].EffectTriggerSpell),
+		EffectPtsPerCombo0:     effects[0].EffectPointsPerCombo,
+		EffectBaseDice0:        effects[0].EffectBaseDice,
+		EffectDicePerLevel0:    effects[0].EffectDicePerLevel,
+		EffectChainAmplitude0:  effects[0].EffectChainAmplitude,
+		ImplicitTargetA0:       int32(int32At(effects[0].ImplicitTarget, 0)),
+		ImplicitTargetB0:       int32(int32At(effects[0].ImplicitTarget, 1)),
 
 		// Effect 1
-		Effect1:                int32(s.Effect[1]),
-		EffectDieSides1:        s.EffectDieSides[1],
-		EffectRealPtsPerLevel1: s.EffectRealPointsPerLevel[1],
-		EffectBasePoints1:      s.EffectBasePoints[1],
-		EffectMechanic1:        s.EffectMechanic[1],
-		EffectRadiusIndex1:     s.EffectRadius[1].ID,
-		EffectAura1:            int32(s.EffectAura[1]),
-		EffectAuraPeriod1:      s.EffectAuraPeriod[1],
-		EffectAmplitude1:       s.EffectAmplitude[1],
-		EffectChainTargets1:    s.EffectChainTargets[1],
-		EffectItemType1:        int32(s.EffectItemType[1]),
-		EffectMiscValue1:       s.EffectMiscValue[1],
-		EffectTriggerSpell1:    int32(s.EffectTriggerSpell[1]),
-		EffectPtsPerCombo1:     s.EffectPointsPerCombo[1],
-		EffectBaseDice1:        s.EffectBaseDice[1],
-		EffectDicePerLevel1:    s.EffectDicePerLevel[1],
-		EffectChainAmplitude1:  s.EffectChainAmplitude[1],
-		ImplicitTargetA1:       int32(s.ImplicitTargetA[1]),
-		ImplicitTargetB1:       int32(s.ImplicitTargetB[1]),
+		Effect1:                int32(effects[1].Effect),
+		EffectDieSides1:        effects[1].EffectDieSides,
+		EffectRealPtsPerLevel1: effects[1].EffectRealPointsPerLevel,
+		EffectBasePoints1:      effects[1].EffectBasePoints,
+		EffectMechanic1:        effects[1].EffectMechanic,
+		EffectRadiusIndex1:     effects[1].EffectRadius.ID,
+		EffectAura1:            int32(effects[1].EffectAura),
+		EffectAuraPeriod1:      effects[1].EffectAuraPeriod,
+		EffectAmplitude1:       effects[1].EffectAmplitude,
+		EffectChainTargets1:    effects[1].EffectChainTargets,
+		EffectItemType1:        int32(effects[1].EffectItemType),
+		EffectMiscValue1:       firstInt32(effects[1].EffectMiscValue),
+		EffectTriggerSpell1:    int32(effects[1].EffectTriggerSpell),
+		EffectPtsPerCombo1:     effects[1].EffectPointsPerCombo,
+		EffectBaseDice1:        effects[1].EffectBaseDice,
+		EffectDicePerLevel1:    effects[1].EffectDicePerLevel,
+		EffectChainAmplitude1:  effects[1].EffectChainAmplitude,
+		ImplicitTargetA1:       int32(int32At(effects[1].ImplicitTarget, 0)),
+		ImplicitTargetB1:       int32(int32At(effects[1].ImplicitTarget, 1)),
 
 		// Effect 2
-		Effect2:                int32(s.Effect[2]),
-		EffectDieSides2:        s.EffectDieSides[2],
-		EffectRealPtsPerLevel2: s.EffectRealPointsPerLevel[2],
-		EffectBasePoints2:      s.EffectBasePoints[2],
-		EffectMechanic2:        s.EffectMechanic[2],
-		EffectRadiusIndex2:     s.EffectRadius[2].ID,
-		EffectAura2:            int32(s.EffectAura[2]),
-		EffectAuraPeriod2:      s.EffectAuraPeriod[2],
-		EffectAmplitude2:       s.EffectAmplitude[2],
-		EffectChainTargets2:    s.EffectChainTargets[2],
-		EffectItemType2:        int32(s.EffectItemType[2]),
-		EffectMiscValue2:       s.EffectMiscValue[2],
-		EffectTriggerSpell2:    int32(s.EffectTriggerSpell[2]),
-		EffectPtsPerCombo2:     s.EffectPointsPerCombo[2],
-		EffectBaseDice2:        s.EffectBaseDice[2],
-		EffectDicePerLevel2:    s.EffectDicePerLevel[2],
-		EffectChainAmplitude2:  s.EffectChainAmplitude[2],
-		ImplicitTargetA2:       int32(s.ImplicitTargetA[2]),
-		ImplicitTargetB2:       int32(s.ImplicitTargetB[2]),
+		Effect2:                int32(effects[2].Effect),
+		EffectDieSides2:        effects[2].EffectDieSides,
+		EffectRealPtsPerLevel2: effects[2].EffectRealPointsPerLevel,
+		EffectBasePoints2:      effects[2].EffectBasePoints,
+		EffectMechanic2:        effects[2].EffectMechanic,
+		EffectRadiusIndex2:     effects[2].EffectRadius.ID,
+		EffectAura2:            int32(effects[2].EffectAura),
+		EffectAuraPeriod2:      effects[2].EffectAuraPeriod,
+		EffectAmplitude2:       effects[2].EffectAmplitude,
+		EffectChainTargets2:    effects[2].EffectChainTargets,
+		EffectItemType2:        int32(effects[2].EffectItemType),
+		EffectMiscValue2:       firstInt32(effects[2].EffectMiscValue),
+		EffectTriggerSpell2:    int32(effects[2].EffectTriggerSpell),
+		EffectPtsPerCombo2:     effects[2].EffectPointsPerCombo,
+		EffectBaseDice2:        effects[2].EffectBaseDice,
+		EffectDicePerLevel2:    effects[2].EffectDicePerLevel,
+		EffectChainAmplitude2:  effects[2].EffectChainAmplitude,
+		ImplicitTargetA2:       int32(int32At(effects[2].ImplicitTarget, 0)),
+		ImplicitTargetB2:       int32(int32At(effects[2].ImplicitTarget, 1)),
 
 		TotemsID:           s.TotemsID,
 		Totem:              int32SliceFromItemIDs(s.Totem[:]),
@@ -561,6 +604,17 @@ func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
 		ManaPerSecondPerLevel:  s.ManaPerSecondPerLevel,
 	}
 	return r
+}
+
+func firstInt32(values []int32) int32 {
+	return int32At(values, 0)
+}
+
+func int32At(values []int32, index int) int32 {
+	if index < len(values) {
+		return values[index]
+	}
+	return 0
 }
 
 func int32SliceFromItemIDs(ids []chrondbc.ItemID) []int32 {

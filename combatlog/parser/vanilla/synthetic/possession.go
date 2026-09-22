@@ -95,9 +95,9 @@ func (s *Possession) ProcessMessages(msgs []messages.Message) []messages.Message
 }
 
 func isControlSpell(spell *chrondbc.Spell) bool {
-	for i, eff := range spell.Effect {
-		if eff == chrondbc.EffectApplyAura &&
-			(spell.EffectAura[i] == chrondbc.AuraEffectModPossess || spell.EffectAura[i] == chrondbc.AuraEffectModCharm) {
+	for _, effect := range spell.Effects {
+		if effect.Effect == chrondbc.EffectApplyAura &&
+			(effect.EffectAura == chrondbc.AuraEffectModPossess || effect.EffectAura == chrondbc.AuraEffectModCharm) {
 			return true
 		}
 	}

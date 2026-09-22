@@ -125,8 +125,8 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		MaxLevel:       def.MaxLevel,
 		BaseLevel:      def.BaseLevel,
 		SpellLevel:     def.SpellLevel,
-		Category:    dbcmem.GetSpellCategory(def.Category),
-		CategoryID_: def.Category,
+		Category:       dbcmem.GetSpellCategory(def.Category),
+		CategoryID_:    def.Category,
 		MaxTargetLevel: def.MaxTargetLevel,
 
 		// === Behavior ===
@@ -148,8 +148,8 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		TargetAuraState:    AuraState(def.TargetAuraState),
 		MaxTargets:         def.MaxTargets,
 		TargetCreatureType: TargetCreatureType(def.TargetCreatureType),
-		SpellFocus:    dbcmem.GetSpellFocusObject(def.RequiresSpellFocus),
-		SpellFocusID_: def.RequiresSpellFocus,
+		SpellFocus:         dbcmem.GetSpellFocusObject(def.RequiresSpellFocus),
+		SpellFocusID_:      def.RequiresSpellFocus,
 
 		// === Resource Cost ===
 		PowerType:        Power(def.PowerType),
@@ -159,8 +159,8 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		ManaPerSecond:    def.ManaPerSecond,
 
 		// === Timing ===
-		CastTime:             dbcmem.GetCastTime(def.CastingTimeIndex),
-		CastingTimeIndex_:    def.CastingTimeIndex,
+		CastTime:          dbcmem.GetCastTime(def.CastingTimeIndex),
+		CastingTimeIndex_: def.CastingTimeIndex,
 		// DBC stores these as millisecond integers; scale to a real
 		// time.Duration so Go duration math (.Seconds(), etc.) is correct.
 		// JSON marshals time.Duration as its int64 nanosecond value.
@@ -168,10 +168,10 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		StartRecoveryCategory: def.StartRecoveryCategory,
 		StartRecoveryTime:     time.Duration(def.StartRecoveryTime) * time.Millisecond,
 		CategoryRecoveryTime:  time.Duration(def.CategoryRecoveryTime) * time.Millisecond,
-		Range:          dbcmem.GetSpellRange(def.RangeIndex),
-		Duration:       dbcmem.GetSpellDuration(def.DurationIndex),
-		RangeIndex_:    def.RangeIndex,
-		DurationIndex_: def.DurationIndex,
+		Range:                 dbcmem.GetSpellRange(def.RangeIndex),
+		Duration:              dbcmem.GetSpellDuration(def.DurationIndex),
+		RangeIndex_:           def.RangeIndex,
+		DurationIndex_:        def.DurationIndex,
 
 		// === Filtering/Logic ===
 		Attrs: SpellAttributes{
@@ -242,65 +242,69 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		s.Totem[i] = ItemID(def.Totem[i])
 	}
 
-	// === Effect Arrays (up to 3 effects) ===
+	// Legacy Spell.dbc has exactly three effect slots. Preserve all three,
+	// including empty slots, and retain their explicit indexes.
+	s.Effects = make([]SpellEffect, 3)
 	for i := 0; i < 3; i++ {
+		effect := &s.Effects[i]
+		effect.EffectIndex = int32(i)
 		if i < len(def.Effect) {
-			s.Effect[i] = Effect(def.Effect[i])
+			effect.Effect = Effect(def.Effect[i])
 		}
 		if i < len(def.EffectDieSides) {
-			s.EffectDieSides[i] = def.EffectDieSides[i]
+			effect.EffectDieSides = def.EffectDieSides[i]
 		}
 		if i < len(def.EffectRealPointsPerLevel) {
-			s.EffectRealPointsPerLevel[i] = def.EffectRealPointsPerLevel[i]
+			effect.EffectRealPointsPerLevel = def.EffectRealPointsPerLevel[i]
 		}
 		if i < len(def.EffectBasePoints) {
-			s.EffectBasePoints[i] = def.EffectBasePoints[i]
+			effect.EffectBasePoints = def.EffectBasePoints[i]
 		}
 		if i < len(def.EffectMechanic) {
-			s.EffectMechanic[i] = def.EffectMechanic[i]
+			effect.EffectMechanic = def.EffectMechanic[i]
 		}
 		if i < len(def.EffectRadiusIndex) {
-			s.EffectRadius[i] = dbcmem.GetSpellRadius(def.EffectRadiusIndex[i])
-			s.EffectRadiusIndex_[i] = def.EffectRadiusIndex[i]
+			effect.EffectRadius = dbcmem.GetSpellRadius(def.EffectRadiusIndex[i])
+			effect.EffectRadiusIndex = []int32{def.EffectRadiusIndex[i]}
 		}
 		if i < len(def.EffectAura) {
-			s.EffectAura[i] = AuraEffect(def.EffectAura[i])
+			effect.EffectAura = AuraEffect(def.EffectAura[i])
 		}
 		if i < len(def.EffectAuraPeriod) {
-			s.EffectAuraPeriod[i] = def.EffectAuraPeriod[i]
+			effect.EffectAuraPeriod = def.EffectAuraPeriod[i]
 		}
 		if i < len(def.EffectAmplitude) {
-			s.EffectAmplitude[i] = def.EffectAmplitude[i]
+			effect.EffectAmplitude = def.EffectAmplitude[i]
 		}
 		if i < len(def.EffectChainTargets) {
-			s.EffectChainTargets[i] = def.EffectChainTargets[i]
+			effect.EffectChainTargets = def.EffectChainTargets[i]
 		}
 		if i < len(def.EffectItemType) {
-			s.EffectItemType[i] = ItemID(def.EffectItemType[i])
+			effect.EffectItemType = ItemID(def.EffectItemType[i])
 		}
 		if i < len(def.EffectMiscValue) {
-			s.EffectMiscValue[i] = def.EffectMiscValue[i]
+			effect.EffectMiscValue = []int32{def.EffectMiscValue[i]}
 		}
 		if i < len(def.EffectTriggerSpell) {
-			s.EffectTriggerSpell[i] = SpellID(def.EffectTriggerSpell[i])
+			effect.EffectTriggerSpell = SpellID(def.EffectTriggerSpell[i])
 		}
 		if i < len(def.EffectPointsPerCombo) {
-			s.EffectPointsPerCombo[i] = def.EffectPointsPerCombo[i]
+			effect.EffectPointsPerCombo = def.EffectPointsPerCombo[i]
 		}
 		if i < len(def.EffectBaseDice) {
-			s.EffectBaseDice[i] = def.EffectBaseDice[i]
+			effect.EffectBaseDice = def.EffectBaseDice[i]
 		}
 		if i < len(def.EffectDicePerLevel) {
-			s.EffectDicePerLevel[i] = def.EffectDicePerLevel[i]
+			effect.EffectDicePerLevel = def.EffectDicePerLevel[i]
 		}
 		if i < len(def.EffectChainAmplitude) {
-			s.EffectChainAmplitude[i] = def.EffectChainAmplitude[i]
+			effect.EffectChainAmplitude = def.EffectChainAmplitude[i]
 		}
 		if i < len(def.ImplicitTargetA) {
-			s.ImplicitTargetA[i] = ImplicitTarget(def.ImplicitTargetA[i])
+			effect.ImplicitTarget = append(effect.ImplicitTarget, def.ImplicitTargetA[i])
 		}
 		if i < len(def.ImplicitTargetB) {
-			s.ImplicitTargetB[i] = ImplicitTarget(def.ImplicitTargetB[i])
+			effect.ImplicitTarget = append(effect.ImplicitTarget, def.ImplicitTargetB[i])
 		}
 	}
 

@@ -17,12 +17,8 @@ func TestVulnerabilitySpellFromSpell(t *testing.T) {
 
 	spell := func(id chrondbc.SpellID, aura chrondbc.AuraEffect, basePoints, schoolMask int32) *chrondbc.Spell {
 		return &chrondbc.Spell{
-			ID:               id,
-			Name_lang:        i18n.Text{i18n.English: "Vulnerability"},
-			Effect:           [3]chrondbc.Effect{chrondbc.EffectApplyAura},
-			EffectAura:       [3]chrondbc.AuraEffect{aura},
-			EffectBasePoints: [3]int32{basePoints},
-			EffectMiscValue:  [3]int32{schoolMask},
+			ID: id, Name_lang: i18n.Text{i18n.English: "Vulnerability"},
+			Effects: []chrondbc.SpellEffect{{EffectIndex: 0, Effect: chrondbc.EffectApplyAura, EffectAura: aura, EffectBasePoints: basePoints, EffectMiscValue: []int32{schoolMask}}},
 		}
 	}
 
@@ -35,6 +31,17 @@ func TestVulnerabilitySpellFromSpell(t *testing.T) {
 		require.NotNil(t, row.PercentAffect)
 		assert.Equal(t, int32(10), *row.PercentAffect)
 		assert.Nil(t, row.FlatAffect)
+	})
+
+	t.Run("modern exact base points", func(t *testing.T) {
+		candidate := spell(1490, chrondbc.AuraEffectModDamagePercentTaken, 0, 124)
+		exact := float32(15)
+		candidate.Effects[0].EffectBasePointsF = &exact
+
+		row, ok := vulnerabilitySpellFromSpell(candidate)
+		require.True(t, ok)
+		require.NotNil(t, row.PercentAffect)
+		assert.Equal(t, int32(15), *row.PercentAffect)
 	})
 
 	t.Run("flat damage taken", func(t *testing.T) {

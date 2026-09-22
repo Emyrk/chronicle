@@ -47,17 +47,16 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 			ID:        chrondbc.SpellID(rootID),
 			Name_lang: i18n.Text{i18n.English: "Use " + buffName},
 		}
-		root.Effect[0] = chrondbc.EffectTriggerSpell
-		root.EffectTriggerSpell[0] = chrondbc.SpellID(buffID)
+		root.Effects = []chrondbc.SpellEffect{{EffectIndex: 0, Effect: chrondbc.EffectTriggerSpell, EffectTriggerSpell: chrondbc.SpellID(buffID)}}
 
 		buff := chrondbc.Spell{
 			ID:        chrondbc.SpellID(buffID),
 			Name_lang: i18n.Text{i18n.English: buffName},
 		}
-		buff.Effect[0] = chrondbc.EffectApplyAura
-		// Add a cycle to prove recursive generation terminates safely.
-		buff.Effect[1] = chrondbc.EffectTriggerSpell
-		buff.EffectTriggerSpell[1] = chrondbc.SpellID(rootID)
+		buff.Effects = []chrondbc.SpellEffect{
+			{EffectIndex: 0, Effect: chrondbc.EffectApplyAura},
+			{EffectIndex: 1, Effect: chrondbc.EffectTriggerSpell, EffectTriggerSpell: chrondbc.SpellID(rootID)},
+		}
 
 		rows := []spelldb.SpellRow{
 			spelldb.FromSpell(uuid.MustParse(datasetID), &root),
@@ -72,14 +71,13 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 			ID:        chrondbc.SpellID(rootID),
 			Name_lang: i18n.Text{i18n.English: "Teach " + taughtName},
 		}
-		root.Effect[0] = chrondbc.EffectLearnSpell
-		root.EffectTriggerSpell[0] = chrondbc.SpellID(taughtID)
+		root.Effects = []chrondbc.SpellEffect{{EffectIndex: 0, Effect: chrondbc.EffectLearnSpell, EffectTriggerSpell: chrondbc.SpellID(taughtID)}}
 
 		taught := chrondbc.Spell{
 			ID:        chrondbc.SpellID(taughtID),
 			Name_lang: i18n.Text{i18n.English: taughtName},
 		}
-		taught.Effect[0] = chrondbc.EffectApplyAura
+		taught.Effects = []chrondbc.SpellEffect{{EffectIndex: 0, Effect: chrondbc.EffectApplyAura}}
 
 		rows := []spelldb.SpellRow{
 			spelldb.FromSpell(uuid.MustParse(datasetID), &root),
@@ -94,8 +92,7 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 			ID:        chrondbc.SpellID(spellID),
 			Name_lang: i18n.Text{i18n.English: name},
 		}
-		mount.Effect[0] = chrondbc.EffectApplyAura
-		mount.EffectAura[0] = chrondbc.AuraEffectMounted
+		mount.Effects = []chrondbc.SpellEffect{{EffectIndex: 0, Effect: chrondbc.EffectApplyAura, EffectAura: chrondbc.AuraEffectMounted}}
 		require.NoError(t, spelldb.UpsertBatch(ctx, pool, []spelldb.SpellRow{
 			spelldb.FromSpell(uuid.MustParse(datasetID), &mount),
 		}))

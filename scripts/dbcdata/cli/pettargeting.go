@@ -13,7 +13,7 @@ import (
 type petTargetingEntry struct {
 	ID         int32    `json:"id"`
 	Name       string   `json:"name"`
-	Class      string   `json:"class,omitempty"`      // Empty when SpellClassSet is Generic (not a class ability).
+	Class      string   `json:"class,omitempty"` // Empty when SpellClassSet is Generic (not a class ability).
 	Reasons    []string `json:"reasons"`
 	OmitReason string   `json:"omitReason,omitempty"` // Non-empty when the spell is explicitly excluded from pet ownership detection.
 }
@@ -47,25 +47,22 @@ var petAttributes = []struct {
 func PetTargetingReasons(spell *chrondbc.Spell) []string {
 	var reasons []string
 
-	// Check each effect slot (0-2).
-	for i := 0; i < 3; i++ {
-		// Effect type.
-		if label, ok := petEffects[spell.Effect[i]]; ok {
-			reasons = append(reasons, fmt.Sprintf("Effect[%d]=%s", i, label))
+	for _, effect := range spell.Effects {
+		if label, ok := petEffects[effect.Effect]; ok {
+			reasons = append(reasons, fmt.Sprintf("Effect[%d]=%s", effect.EffectIndex, label))
 		}
 
-		// Implicit targets.
-		if spell.ImplicitTargetA[i] == chrondbc.ImplicitTargetUnitPet {
-			reasons = append(reasons, fmt.Sprintf("ImplicitTargetA[%d]=UnitPet", i))
-		}
-		if spell.ImplicitTargetA[i] == chrondbc.ImplicitTargetUnitMaster {
-			reasons = append(reasons, fmt.Sprintf("ImplicitTargetA[%d]=UnitMaster", i))
-		}
-		if spell.ImplicitTargetB[i] == chrondbc.ImplicitTargetUnitPet {
-			reasons = append(reasons, fmt.Sprintf("ImplicitTargetB[%d]=UnitPet", i))
-		}
-		if spell.ImplicitTargetB[i] == chrondbc.ImplicitTargetUnitMaster {
-			reasons = append(reasons, fmt.Sprintf("ImplicitTargetB[%d]=UnitMaster", i))
+		for targetIndex, target := range effect.ImplicitTarget {
+			label := "ImplicitTargetA"
+			if targetIndex == 1 {
+				label = "ImplicitTargetB"
+			}
+			switch chrondbc.ImplicitTarget(target) {
+			case chrondbc.ImplicitTargetUnitPet:
+				reasons = append(reasons, fmt.Sprintf("%s[%d]=UnitPet", label, effect.EffectIndex))
+			case chrondbc.ImplicitTargetUnitMaster:
+				reasons = append(reasons, fmt.Sprintf("%s[%d]=UnitMaster", label, effect.EffectIndex))
+			}
 		}
 	}
 

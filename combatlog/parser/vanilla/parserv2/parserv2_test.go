@@ -643,8 +643,10 @@ func manaBurnSpell() *chrondbc.Spell {
 		ID: 10876,
 	}
 	sp.Name_lang = i18n.Text{i18n.English: "Mana Burn"}
-	sp.Effect = [3]chrondbc.Effect{chrondbc.EffectPowerBurn, 0, 0}
-	sp.EffectAmplitude = [3]float32{0.5, 0, 0}
-	sp.EffectMiscValue = [3]int32{0, 0, 0} // 0 = mana
+	sp.Effects = []chrondbc.SpellEffect{
+		{EffectIndex: 0, Effect: chrondbc.EffectPowerBurn, EffectAmplitude: 0.5, EffectMiscValue: []int32{0}}, // mana
+		{EffectIndex: 1},
+		{EffectIndex: 2},
+	}
 	return sp
 }
