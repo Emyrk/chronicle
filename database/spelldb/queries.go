@@ -81,11 +81,11 @@ func (r *SpellRow) values() []any {
 		r.CasterAuraState, r.TargetAuraState, r.MaxTargets,
 		r.TargetCreatureType, r.RequiresSpellFocus,
 		r.PowerType, r.ManaCost, r.ManaCostPct, r.ManaCostPerLevel, r.ManaPerSecond,
-		r.Reagent, r.ReagentCount,
+		nonNilInt32s(r.Reagent), nonNilInt32s(r.ReagentCount),
 		r.CastingTimeIndex, r.RecoveryTimeMs, r.StartRecoveryCategory,
 		r.StartRecoveryTimeMs, r.CategoryRecoveryTimeMs,
 		r.RangeIndex, r.DurationIndex,
-		r.Attributes, r.Targets, r.SpellClassSet, r.SpellClassMask,
+		nonNilInt32s(r.Attributes), r.Targets, r.SpellClassSet, r.SpellClassMask,
 		r.EquippedItemInvTypes, r.EquippedItemClass, r.EquippedItemSubclass,
 		r.PreventionType,
 		// Effect 0
@@ -113,10 +113,10 @@ func (r *SpellRow) values() []any {
 		r.EffectBaseDice2, r.EffectDicePerLevel2, r.EffectChainAmplitude2,
 		r.ImplicitTargetA2, r.ImplicitTargetB2,
 		// Totem
-		r.TotemsID, r.Totem,
+		r.TotemsID, nonNilInt32s(r.Totem),
 		// Other
 		r.CastUI, r.RequiredAuraVision, r.MinFactionID, r.MinReputation,
-		r.SpellVisualID,
+		nonNilInt32s(r.SpellVisualID),
 		// 3.3.5a+
 		r.RuneCostID, r.SpellMissileID, r.DescriptionVariablesID,
 		r.CasterAuraSpell, r.TargetAuraSpell,
@@ -124,6 +124,13 @@ func (r *SpellRow) values() []any {
 		r.ExcludeCasterAuraState, r.ExcludeTargetAuraState,
 		r.ManaPerSecondPerLevel,
 	}
+}
+
+func nonNilInt32s(values []int32) []int32 {
+	if values == nil {
+		return []int32{}
+	}
+	return values
 }
 
 // scanDests returns pointers to all SpellRow fields in column order for pgx row scanning.
