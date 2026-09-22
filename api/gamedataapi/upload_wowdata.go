@@ -193,7 +193,7 @@ func (h *Handler) upsertWowdataItemSets(ctx context.Context, datasetID uuid.UUID
 	}
 	b := &pgx.Batch{}
 	for _, x := range rows {
-		b.Queue(setSQL, x.ID, x.Name, x.RequiredSkill, x.RequiredSkillRank, x.ItemIDs, datasetID)
+		b.Queue(setSQL, x.ID, x.Name, x.RequiredSkill, x.RequiredSkillRank, nonNilItemIDs(x.ItemIDs), datasetID)
 		for _, item := range x.ItemIDs {
 			b.Queue(itemSQL, x.ID, item, datasetID)
 		}
@@ -208,4 +208,11 @@ func (h *Handler) upsertWowdataItemSets(ctx context.Context, datasetID uuid.UUID
 		return flushBatch(ctx, h.pool, b)
 	}
 	return nil
+}
+
+func nonNilItemIDs(itemIDs []int32) []int32 {
+	if itemIDs == nil {
+		return []int32{}
+	}
+	return itemIDs
 }

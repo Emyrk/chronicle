@@ -11,6 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNonNilItemIDs(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []int32{}, nonNilItemIDs(nil))
+	require.Equal(t, []int32{1, 2}, nonNilItemIDs([]int32{1, 2}))
+}
+
 func TestUploadWowdataSnapshotRejectsInvalidRequests(t *testing.T) {
 	t.Parallel()
 	h := New(nil, nil, nil, nil)

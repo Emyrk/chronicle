@@ -703,7 +703,7 @@ func convertTalents(dir string, out *Import) error {
 	return err
 }
 func nonzero(s []int32) []int32 {
-	var out []int32
+	out := make([]int32, 0, len(s))
 	for _, v := range s {
 		if v == 0 {
 			break

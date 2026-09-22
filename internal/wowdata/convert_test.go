@@ -31,7 +31,9 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	writeRows(t, dir, "TalentTab", map[string]any{"ID": 7, "Name_lang": "Tree", "ClassMask": 1, "SpellIconID": 999})
 	writeRows(t, dir, "SpellCastTimes", map[string]any{"ID": 1, "Base": 1500, "Minimum": 500})
 	writeRows(t, dir, "SpellItemEnchantment", map[string]any{"ID": 5, "Effect": []int{1, 2, 3}, "EffectArg": []int{4, 5, 6}, "Name_lang": "Enchant"})
-	writeRows(t, dir, "ItemSet", map[string]any{"ID": 6, "Name_lang": "Set", "ItemID": []int{1, 2, 0}})
+	writeRows(t, dir, "ItemSet",
+		map[string]any{"ID": 6, "Name_lang": "Set", "ItemID": []int{1, 2, 0}},
+		map[string]any{"ID": 7, "Name_lang": "Empty Set", "ItemID": []int{0, 0}})
 
 	got, err := Convert(dir, "wow_classic_beta", "1.60.1.69913")
 	require.NoError(t, err)
@@ -58,7 +60,10 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	require.Equal(t, []int32{3}, got.Losses.MissingItemBaseIDs)
 	require.Len(t, got.SpellCastTimes, 1)
 	require.Len(t, got.Enchantments, 1)
+	require.Len(t, got.ItemSets, 2)
 	require.Equal(t, []int32{1, 2}, got.ItemSets[0].ItemIDs)
+	require.NotNil(t, got.ItemSets[1].ItemIDs)
+	require.Empty(t, got.ItemSets[1].ItemIDs)
 	require.Contains(t, string(got.TalentTrees), `"name":"Test Spell"`)
 	require.Contains(t, string(got.TalentTrees), `"iconTexture":""`)
 }
