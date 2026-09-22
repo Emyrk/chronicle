@@ -80,14 +80,15 @@ The endpoint requires the existing global world-data administration permission.
 
 The first importer persists:
 
-- spells, resolved spell-icon texture mappings, and the supported legacy-compatible spell fields;
+- legacy-compatible `dbc_spells` rows and resolved spell-icon texture mappings;
+- normalized spell effects, powers, full attribute arrays, difficulty-aware variants, and component-only spell IDs;
 - cast-time, duration, range, category, radius, focus-object, and description-variable metadata;
 - item rows having both `Item` and `ItemSparse` records;
 - talent trees;
 - spell-item enchantments;
 - item-set metadata and membership.
 
-Conversion is deterministic: only `DifficultyID=0` rows are selected, only effects 0–2 fit Chronicle's current spell model, the lowest spell-power order wins, and missing `ItemSparse` records are reported and skipped. The CLI prints a loss report for every conversion.
+The legacy `dbc_spells` projection is deterministic: it uses `DifficultyID=0`, effects 0 through 2, the first nine attributes, and the lowest ordered spell power. The normalized spell tables preserve all imported effects, powers, attributes, and difficulty-aware component rows. The CLI loss report distinguishes compatibility-projection omissions from unsupported source data, such as missing `ItemSparse` records.
 
 ## Known limitations
 
@@ -95,7 +96,7 @@ The importer does not guess identifiers or silently treat modern fields as legac
 
 - Icon FileDataIDs without a community-listfile entry remain unresolved.
 - Item display IDs, item-icon database wiring, combat stats, damage/armor curves, item effects, random properties, and item-set bonuses are not yet reconstructed.
-- Effects after index 2, attributes after the first nine, extra power rows, and non-zero difficulty spell variants do not fit Chronicle's current spell model.
+- The legacy `dbc_spells` projection exposes only effects 0 through 2, the first nine attributes, the first ordered power, and `DifficultyID=0`. Consumers that need the complete modern data must use the normalized spell effects, powers, and variants.
 - `DBCache.bin` hotfix overlays are not applied by the extraction script.
 - Existing derived extra-attack, periodic-spell, and duration-modifier generation is not yet run from the modern representation.
 
