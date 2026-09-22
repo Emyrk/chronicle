@@ -86,7 +86,7 @@ if [[ -z "$OUT_DIR" ]]; then
 fi
 # Only remove files owned by this script so reruns cannot retain stale tables.
 rm -rf "$OUT_DIR/schemas" "$OUT_DIR/tables" "$OUT_DIR/logs"
-rm -f "$OUT_DIR/manifest.json" "$OUT_DIR/target.json" \
+rm -f "$OUT_DIR/manifest.json" "$OUT_DIR/target.json" "$OUT_DIR/icons.jsonl" \
   "$OUT_DIR/skipped-optional-tables.txt"
 mkdir -p "$OUT_DIR/schemas" "$OUT_DIR/tables" "$OUT_DIR/logs"
 
@@ -186,6 +186,22 @@ for line_number, line in enumerate(sys.stdin, 1):
 '
 }
 
+unwrap_icon_files() {
+  python3 -c '
+import json
+import sys
+
+document = json.load(sys.stdin)
+if not document.get("ok"):
+    error = document.get("error") or {}
+    raise SystemExit(error.get("message", "wowdata file search failed"))
+for entry in document.get("data", {}).get("files", []):
+    name = entry.get("fileName", "")
+    if name.lower().startswith("interface/icons/") and name.lower().endswith(".blp"):
+        print(json.dumps({"fileDataID": entry["fileDataID"], "fileName": name}, separators=(",", ":"), sort_keys=True))
+'
+}
+
 extract_table() {
   local table="$1"
   local required="$2"
@@ -242,6 +258,17 @@ for table in "${OPTIONAL_TABLES[@]}"; do
   extract_table "$table" optional
 done
 
+icons_tmp="$OUT_DIR/.icons.jsonl.tmp"
+echo "==> Interface icons"
+if "$WOWDATA_BIN" file search --query interface/icons --limit 100000 --listfile "${COMMON_ARGS[@]}" \
+    2>"$OUT_DIR/logs/icons.log" | unwrap_icon_files >"$icons_tmp"; then
+  mv "$icons_tmp" "$OUT_DIR/icons.jsonl"
+  echo "    $(wc -l <"$OUT_DIR/icons.jsonl") listfile entries"
+else
+  rm -f "$icons_tmp"
+  echo "    warning: icon listfile extraction failed (see $OUT_DIR/logs/icons.log)" >&2
+fi
+
 WOWDATA_VERSION="$($WOWDATA_BIN --version 2>/dev/null || true)" \
 OUTPUT_DIR="$OUT_DIR" \
 EXTRACT_LIMIT="$LIMIT" \
@@ -268,12 +295,21 @@ for path in sorted((out / "tables").glob("*.jsonl")):
 
 skipped_path = out / "skipped-optional-tables.txt"
 skipped = skipped_path.read_text().splitlines() if skipped_path.exists() else []
+icons_path = out / "icons.jsonl"
+icons = None
+if icons_path.exists():
+    with icons_path.open() as rows:
+        icons = {
+            "rows": str(icons_path.relative_to(out)),
+            "count": sum(1 for _ in rows),
+        }
 manifest = {
     "format": "chronicle-wowdata-snapshot-v1",
     "target": target,
     "wowdataVersion": os.environ.get("WOWDATA_VERSION", ""),
     "rowLimit": int(os.environ["EXTRACT_LIMIT"]),
     "tables": tables,
+    "icons": icons,
     "skippedOptionalTables": skipped,
     "notes": [
         "Rows are extracted modern DB2 records, not Chronicle upload artifacts.",

@@ -15,9 +15,16 @@ type Manifest struct {
 	RowLimit int             `json:"rowLimit"`
 	Target   Target          `json:"target"`
 	Tables   []ManifestTable `json:"tables"`
+	Icons    *ManifestIcons  `json:"icons,omitempty"`
+}
+
+type ManifestIcons struct {
+	Rows  string `json:"rows"`
+	Count int    `json:"count"`
 }
 
 type Target struct {
+	Region    string `json:"region"`
 	Product   string `json:"product"`
 	BuildName string `json:"buildName"`
 	Locale    string `json:"locale"`
@@ -34,6 +41,7 @@ type Import struct {
 	Product                   string                       `json:"product"`
 	Build                     string                       `json:"build"`
 	Spells                    []spelldb.SpellRow           `json:"spells"`
+	SpellIcons                []SpellIcon                  `json:"spellIcons"`
 	Items                     []database.WorldItemTemplate `json:"items"`
 	TalentTrees               json.RawMessage              `json:"talentTrees"`
 	SpellCastTimes            []SpellCastTime              `json:"spellCastTimes"`
@@ -59,6 +67,11 @@ type LossReport struct {
 	RoundedBasePoints      int      `json:"roundedBasePoints,omitempty"`
 	DroppedOrphanSpellRows int      `json:"droppedOrphanSpellRows,omitempty"`
 	Policies               []string `json:"policies"`
+}
+
+type SpellIcon struct {
+	ID              int32  `json:"id"`
+	TextureFilename string `json:"textureFilename"`
 }
 
 type SpellCastTime struct{ ID, Base, Minimum int32 }
