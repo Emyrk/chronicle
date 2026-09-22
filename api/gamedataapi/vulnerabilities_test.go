@@ -37,6 +37,25 @@ func TestVulnerabilitySpellFromSpell(t *testing.T) {
 		assert.Nil(t, row.FlatAffect)
 	})
 
+	t.Run("normalized effect is canonical", func(t *testing.T) {
+		candidate := spell(1490, chrondbc.AuraEffectDummy, 1, 1)
+		candidate.Effects = []chrondbc.SpellEffect{{
+			SpellID:           candidate.ID,
+			DifficultyID:      0,
+			EffectIndex:       0,
+			Effect:            int32(chrondbc.EffectApplyAura),
+			EffectAura:        int32(chrondbc.AuraEffectModDamagePercentTaken),
+			EffectBasePointsF: 15,
+			EffectMiscValue:   []int32{124},
+		}}
+
+		row, ok := vulnerabilitySpellFromSpell(candidate)
+		require.True(t, ok)
+		require.NotNil(t, row.PercentAffect)
+		assert.Equal(t, int32(15), *row.PercentAffect)
+		assert.Equal(t, int32(124), row.SchoolBitmask)
+	})
+
 	t.Run("flat damage taken", func(t *testing.T) {
 		row, ok := vulnerabilitySpellFromSpell(spell(11374, chrondbc.AuraEffectModDamageTaken, 7, 1))
 		require.True(t, ok)

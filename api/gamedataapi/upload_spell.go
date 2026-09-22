@@ -2,13 +2,12 @@ package gamedataapi
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/spelldb"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/google/uuid"
 )
@@ -16,12 +15,12 @@ import (
 func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table, datasetID uuid.UUID) {
 	spellDBC := chrondbc.NewSpells(table)
 
-	var spells []spelldb.SpellRow
+	var spells []chrondbc.Spell
 	err := spellDBC.Range(func(cursor *chrondbc.Spell) bool {
 		if cursor == nil {
 			return true
 		}
-		spells = append(spells, spelldb.FromSpell(datasetID, cursor))
+		spells = append(spells, *cursor)
 		return true
 	})
 	if err != nil {
@@ -44,20 +43,15 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 
-	// Batch upsert spells.
-	const batchSize = 500
-	for i := 0; i < len(spells); i += batchSize {
-		end := i + batchSize
-		if end > len(spells) {
-			end = len(spells)
-		}
-		if err := spelldb.UpsertBatch(ctx, h.pool, spells[i:end]); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: fmt.Sprintf("Failed to upsert spells (batch starting at %d)", i),
-				Detail:  err.Error(),
-			})
-			return
-		}
+	store := database.New(h.pool)
+	if err := store.InTx(ctx, func(tx database.Store) error {
+		return persistLegacySpells(ctx, tx, datasetID, spells)
+	}, nil); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Failed to persist spells",
+			Detail:  err.Error(),
+		})
+		return
 	}
 
 	// Derive extra_attacks, duration_modifiers, periodic_spells from the

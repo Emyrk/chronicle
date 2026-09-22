@@ -117,6 +117,7 @@ func NewFetcherDBOnly(ctx context.Context, pool *pgxpool.Pool, custom map[chrond
 func (f *Fetcher) Spell(ctx context.Context, datasetID uuid.UUID, id chrondbc.SpellID) (*chrondbc.Spell, error) {
 	// Custom spells (auto-attack, environment) always win.
 	if sp, ok := f.custom[id]; ok {
+		sp.EnsureNormalizedComponents()
 		return &sp, nil
 	}
 
@@ -226,9 +227,10 @@ func (f *Fetcher) populateModernComponents(ctx context.Context, datasetID uuid.U
 	if err != nil {
 		return fmt.Errorf("load modern spell components for spell %d: %w", spell.ID, err)
 	}
-	spell.ModernEffects = effects
-	spell.ModernPowers = powers
-	spell.ModernVariants = variants
+	spell.Effects = effects
+	spell.Powers = powers
+	spell.Variants = variants
+	spell.EnsureNormalizedComponents()
 	return nil
 }
 

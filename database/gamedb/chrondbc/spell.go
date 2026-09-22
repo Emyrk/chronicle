@@ -187,9 +187,9 @@ type Spell struct {
 	//PowerDisplayID          int32
 
 	// === Modern ===
-	ModernEffects  []ModernSpellEffect  `json:"modern_effects,omitempty"`
-	ModernPowers   []ModernSpellPower   `json:"modern_powers,omitempty"`
-	ModernVariants []ModernSpellVariant `json:"modern_variants,omitempty"`
+	Effects  []SpellEffect  `json:"modern_effects,omitempty"`
+	Powers   []SpellPower   `json:"modern_powers,omitempty"`
+	Variants []SpellVariant `json:"modern_variants,omitempty"`
 }
 
 func (s Spell) String() string {
@@ -281,8 +281,9 @@ func (s Spell) SpellDamageType() SpellDamageType {
 		return SpellDamageNoEngageCombat
 	}
 
-	for i, eff := range s.Effect {
-		switch eff {
+	s.EnsureNormalizedComponents()
+	for _, effect := range s.EffectsForDifficulty(0) {
+		switch Effect(effect.Effect) {
 		case EffectDummy:
 			base |= SpellDamageNoEngageCombat
 		case EffectEnvironmentalDMG:
@@ -300,7 +301,7 @@ func (s Spell) SpellDamageType() SpellDamageType {
 			EffectWeaponDamage:
 			base |= SpellDamageDirect
 		case EffectApplyAura, EffectPersistentAA:
-			switch s.EffectAura[i] {
+			switch AuraEffect(effect.EffectAura) {
 			case AuraEffectPeriodicDamage,
 				AuraEffectPeriodicHeal,
 				AuraEffectPeriodicEnergize,
@@ -324,8 +325,8 @@ func (s Spell) SpellDamageType() SpellDamageType {
 				// Spells like arcane missiles
 				base |= SpellDamagePeriodicTrigger
 			case AuraEffectModResistance:
-				if s.ImplicitTargetA[i] == ImplicitTargetUnitTargetEnemy ||
-					s.ImplicitTargetB[i] == ImplicitTargetUnitTargetEnemy {
+				if ImplicitTarget(firstInt32(effect.ImplicitTarget)) == ImplicitTargetUnitTargetEnemy ||
+					ImplicitTarget(int32At(effect.ImplicitTarget, 1)) == ImplicitTargetUnitTargetEnemy {
 					base |= SpellDamageActiveDebuff
 				}
 			}

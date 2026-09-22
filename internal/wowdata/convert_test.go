@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/database/spelldb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -102,6 +103,63 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	require.Empty(t, got.ItemSets[1].ItemIDs)
 	require.Contains(t, string(got.TalentTrees), `"name":"Test Spell"`)
 	require.Contains(t, string(got.TalentTrees), `"iconTexture":"spell_test"`)
+}
+
+func TestProjectNormalizedSpellsUsesCanonicalProjection(t *testing.T) {
+	t.Parallel()
+	rows := []spelldb.SpellRow{{
+		SpellID:           100,
+		Name:              "base data survives",
+		SpellPriority:     42,
+		School:            99,
+		Effect0:           999,
+		EffectBasePoints0: 999,
+		ManaCost:          999,
+	}}
+	effects := []SpellEffect{
+		{SourceID: 4, SpellID: 100, EffectIndex: 3, Effect: 40, EffectBasePointsF: 44},
+		{SourceID: 3, SpellID: 100, EffectIndex: 2, Effect: 30, EffectBasePointsF: 33},
+		{SourceID: 1, SpellID: 100, EffectIndex: 0, Effect: 10, EffectBasePointsF: 11, EffectRadiusIndex: []int32{51}},
+		{SourceID: 2, SpellID: 100, EffectIndex: 1, Effect: 20, EffectBasePointsF: 22},
+	}
+	powers := []SpellPower{
+		{SourceID: 2, SpellID: 100, OrderIndex: 1, ManaCost: 200, PowerType: 2},
+		{SourceID: 1, SpellID: 100, OrderIndex: 0, ManaCost: 100, PowerType: 1},
+	}
+	variants := []SpellVariant{
+		{SpellID: 100, DifficultyID: 1, Misc: &SpellMisc{SchoolMask: 88, Speed: 8}},
+		{
+			SpellID: 100, DifficultyID: 0,
+			Misc:        &SpellMisc{SchoolMask: 7, Speed: 3, Attributes: []int32{1, 2}, CastingTimeIndex: 61, DurationIndex: 62, RangeIndex: 63, SpellIconFileDataID: 64},
+			AuraOptions: &SpellAuraOptions{ProcChance: 25},
+			Cooldowns:   &SpellCooldowns{RecoveryTime: 7000},
+		},
+	}
+
+	projectNormalizedSpells(rows, effects, powers, variants)
+
+	spell := rows[0]
+	require.Equal(t, "base data survives", spell.Name)
+	require.Equal(t, int32(42), spell.SpellPriority)
+	require.Equal(t, int32(7), spell.School, "difficulty-zero normalized variant must be authoritative")
+	require.Equal(t, float32(3), spell.Speed)
+	require.Equal(t, []int32{1, 2, 0, 0, 0, 0, 0, 0, 0}, spell.Attributes)
+	require.Equal(t, int32(61), spell.CastingTimeIndex)
+	require.Equal(t, int32(62), spell.DurationIndex)
+	require.Equal(t, int32(63), spell.RangeIndex)
+	require.Equal(t, int32(64), spell.SpellIconID)
+	require.Equal(t, int32(25), spell.ProcChance)
+	require.Equal(t, int64(7000), spell.RecoveryTimeMs)
+	require.Equal(t, int32(10), spell.Effect0)
+	require.Equal(t, int32(20), spell.Effect1)
+	require.Equal(t, int32(30), spell.Effect2)
+	require.Equal(t, int32(51), spell.EffectRadiusIndex0)
+	require.Equal(t, int32(10), spell.EffectBasePoints0)
+	require.Equal(t, int32(21), spell.EffectBasePoints1)
+	require.Equal(t, int32(32), spell.EffectBasePoints2)
+	require.Equal(t, []float32{11, 22, 33}, spell.EffectBasePointsF, "the fourth normalized effect must not enter the legacy projection")
+	require.Equal(t, int32(100), spell.ManaCost, "lowest normalized power order must win")
+	require.Equal(t, int32(1), spell.PowerType)
 }
 
 func TestConvertRejectsIncompleteManifest(t *testing.T) {

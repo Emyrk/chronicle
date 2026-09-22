@@ -85,6 +85,19 @@ func TestSpell_AttackOutcome(t *testing.T) {
 			expected: AttackOutcomeMiss | AttackOutcomeHit,
 		},
 		{
+			name: "NormalizedPeriodicSpell",
+			spell: Spell{
+				Effect: [3]Effect{EffectSchoolDMG},
+				Effects: []SpellEffect{{
+					EffectIndex: 0,
+					Effect:      int32(EffectApplyAura),
+					EffectAura:  int32(AuraEffectPeriodicDamage),
+				}},
+			},
+			expected:     AttackOutcomeMiss | AttackOutcomeHit,
+			expectedType: SpellDamagePeriodic,
+		},
+		{
 			name: "Hurricane",
 			spell: Spell{
 				DefenseType: DefenseTypeMagic,

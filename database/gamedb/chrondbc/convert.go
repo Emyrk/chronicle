@@ -125,8 +125,8 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		MaxLevel:       def.MaxLevel,
 		BaseLevel:      def.BaseLevel,
 		SpellLevel:     def.SpellLevel,
-		Category:    dbcmem.GetSpellCategory(def.Category),
-		CategoryID_: def.Category,
+		Category:       dbcmem.GetSpellCategory(def.Category),
+		CategoryID_:    def.Category,
 		MaxTargetLevel: def.MaxTargetLevel,
 
 		// === Behavior ===
@@ -148,8 +148,8 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		TargetAuraState:    AuraState(def.TargetAuraState),
 		MaxTargets:         def.MaxTargets,
 		TargetCreatureType: TargetCreatureType(def.TargetCreatureType),
-		SpellFocus:    dbcmem.GetSpellFocusObject(def.RequiresSpellFocus),
-		SpellFocusID_: def.RequiresSpellFocus,
+		SpellFocus:         dbcmem.GetSpellFocusObject(def.RequiresSpellFocus),
+		SpellFocusID_:      def.RequiresSpellFocus,
 
 		// === Resource Cost ===
 		PowerType:        Power(def.PowerType),
@@ -159,8 +159,8 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		ManaPerSecond:    def.ManaPerSecond,
 
 		// === Timing ===
-		CastTime:             dbcmem.GetCastTime(def.CastingTimeIndex),
-		CastingTimeIndex_:    def.CastingTimeIndex,
+		CastTime:          dbcmem.GetCastTime(def.CastingTimeIndex),
+		CastingTimeIndex_: def.CastingTimeIndex,
 		// DBC stores these as millisecond integers; scale to a real
 		// time.Duration so Go duration math (.Seconds(), etc.) is correct.
 		// JSON marshals time.Duration as its int64 nanosecond value.
@@ -168,10 +168,10 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		StartRecoveryCategory: def.StartRecoveryCategory,
 		StartRecoveryTime:     time.Duration(def.StartRecoveryTime) * time.Millisecond,
 		CategoryRecoveryTime:  time.Duration(def.CategoryRecoveryTime) * time.Millisecond,
-		Range:          dbcmem.GetSpellRange(def.RangeIndex),
-		Duration:       dbcmem.GetSpellDuration(def.DurationIndex),
-		RangeIndex_:    def.RangeIndex,
-		DurationIndex_: def.DurationIndex,
+		Range:                 dbcmem.GetSpellRange(def.RangeIndex),
+		Duration:              dbcmem.GetSpellDuration(def.DurationIndex),
+		RangeIndex_:           def.RangeIndex,
+		DurationIndex_:        def.DurationIndex,
 
 		// === Filtering/Logic ===
 		Attrs: SpellAttributes{
@@ -304,5 +304,6 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		}
 	}
 
+	s.EnsureNormalizedComponents()
 	return s
 }

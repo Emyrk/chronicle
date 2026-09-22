@@ -613,6 +613,7 @@ func convertSpells(dir string, out *Import) error {
 	for _, key := range variantKeys {
 		out.SpellVariants = append(out.SpellVariants, *variants[key])
 	}
+	projectNormalizedSpells(out.Spells, out.SpellEffects, out.SpellPowers, out.SpellVariants)
 	return nil
 }
 

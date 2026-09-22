@@ -1182,6 +1182,9 @@ type DbcSpellEffect struct {
 	ScalingClass                   int32     `db:"scaling_class" json:"scaling_class"`
 	ImplicitTarget                 []int32   `db:"implicit_target" json:"implicit_target"`
 	Variance                       float32   `db:"variance" json:"variance"`
+	EffectDieSides                 int32     `db:"effect_die_sides" json:"effect_die_sides"`
+	EffectBaseDice                 int32     `db:"effect_base_dice" json:"effect_base_dice"`
+	EffectDicePerLevel             int32     `db:"effect_dice_per_level" json:"effect_dice_per_level"`
 }
 
 type DbcSpellFocusObject struct {

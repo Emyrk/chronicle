@@ -56,12 +56,12 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 
 		// --- Extra attacks ---
 		// Mirrors scripts/dbcdata/cli/extraattacks.go: collectExtraAttackSpells
-		for i, effect := range spell.Effect {
-			if effect == chrondbc.EffectAddExtraAttacks {
+		for _, effect := range spell.EffectsForDifficulty(0) {
+			if chrondbc.Effect(effect.Effect) == chrondbc.EffectAddExtraAttacks {
 				extraAttacks = append(extraAttacks, extraAttackRow{
 					SpellID:         int32(spell.ID),
 					Name:            spell.String(),
-					NumExtraAttacks: spell.EffectBasePoints[i] + 1,
+					NumExtraAttacks: effect.BasePoints(),
 				})
 				break
 			}
@@ -83,18 +83,18 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		if !spell.Attrs.Has(chrondbc.Attr_Passive) {
 			return true
 		}
-		for i, effect := range spell.Effect {
-			if effect != chrondbc.EffectApplyAura {
+		for _, effect := range spell.EffectsForDifficulty(0) {
+			if chrondbc.Effect(effect.Effect) != chrondbc.EffectApplyAura {
 				continue
 			}
 			// EffectMiscValue == 1 means the modifier targets duration.
-			if spell.EffectMiscValue[i] != 1 {
+			if effect.MiscValue() != 1 {
 				continue
 			}
 
-			value := spell.EffectBasePoints[i] + 1
+			value := effect.BasePoints()
 			var pct, flat int32
-			switch spell.EffectAura[i] {
+			switch chrondbc.AuraEffect(effect.EffectAura) {
 			case chrondbc.AuraEffectAddPctModifier:
 				pct = value
 			case chrondbc.AuraEffectAddFlatModifier:
@@ -106,7 +106,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 			// For modifier auras, EffectItemType holds the spell family
 			// flags bitmask. Mask to 32 bits to avoid sign-extension,
 			// then widen to int64 for BIGINT storage.
-			classMask := int64(uint32(spell.EffectItemType[i]))
+			classMask := int64(uint32(effect.EffectItemType))
 			if classMask == 0 {
 				continue
 			}
