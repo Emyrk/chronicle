@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Emyrk/chronicle/internal/wowdata"
@@ -46,11 +48,14 @@ func ImportWowdataCmd() *serpent.Command {
 				return err
 			}
 			if client != "" {
+				resolvedWowdata, err := resolveWowdataBinary(inv, wowdataBin)
+				if err != nil {
+					return err
+				}
 				var cleanup func()
-				var err error
 				snapshot, cleanup, err = extractWowdata(inv, wowdataExtractOptions{
 					Client:      client,
-					WowdataBin:  wowdataBin,
+					WowdataBin:  resolvedWowdata,
 					Extractor:   extractor,
 					SnapshotOut: snapshotOut,
 					Product:     product,
@@ -113,6 +118,69 @@ func ImportWowdataCmd() *serpent.Command {
 			return nil
 		},
 	}
+}
+
+const (
+	wowdataDefaultBinary = "wowdata"
+	wowdataRepository    = "https://github.com/Follen/wowdata.git"
+	wowdataCommit        = "6191d3dc567966b7a474849f3a11e7411390091c"
+)
+
+func resolveWowdataBinary(inv *serpent.Invocation, requested string) (string, error) {
+	path, err := exec.LookPath(requested)
+	if err == nil {
+		return path, nil
+	}
+	if requested != wowdataDefaultBinary {
+		return "", fmt.Errorf("find wowdata executable %q: %w", requested, err)
+	}
+
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("find user cache directory for wowdata: %w", err)
+	}
+	binaryName := "wowdata"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	installDir := filepath.Join(cacheDir, "chronicle", "wowdata", wowdataCommit)
+	binaryPath := filepath.Join(installDir, binaryName)
+	if info, statErr := os.Stat(binaryPath); statErr == nil && !info.IsDir() {
+		return binaryPath, nil
+	}
+
+	_, _ = fmt.Fprintf(inv.Stdout, "wowdata was not found; building pinned commit %s...\n", wowdataCommit[:12])
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		return "", fmt.Errorf("create wowdata install directory: %w", err)
+	}
+	sourceDir, err := os.MkdirTemp("", "chronicle-wowdata-source-")
+	if err != nil {
+		return "", fmt.Errorf("create temporary wowdata source directory: %w", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(sourceDir)
+	}()
+
+	commands := [][]string{
+		{"git", "init", "--quiet", sourceDir},
+		{"git", "-C", sourceDir, "remote", "add", "origin", wowdataRepository},
+		{"git", "-C", sourceDir, "fetch", "--quiet", "--depth", "1", "origin", wowdataCommit},
+		{"git", "-C", sourceDir, "checkout", "--quiet", "FETCH_HEAD"},
+		{"go", "build", "-trimpath", "-o", binaryPath, "./cmd/wowdata"},
+	}
+	for _, command := range commands {
+		cmd := exec.CommandContext(inv.Context(), command[0], command[1:]...)
+		if command[0] == "go" {
+			cmd.Dir = sourceDir
+		}
+		cmd.Stdout = inv.Stdout
+		cmd.Stderr = inv.Stderr
+		if err := cmd.Run(); err != nil {
+			_ = os.Remove(binaryPath)
+			return "", fmt.Errorf("provision wowdata with %q: %w", strings.Join(command, " "), err)
+		}
+	}
+	return binaryPath, nil
 }
 
 type wowdataExtractOptions struct {

@@ -4,7 +4,7 @@ Chronicle imports WoW Forever game data directly from a local Blizzard client th
 
 ## Import directly from the game installation
 
-Install `wowdata`, then validate extraction and conversion without changing a server:
+Validate extraction and conversion without changing a server. If `wowdata` is not installed, Chronicle builds the tested pinned revision into the user's cache automatically:
 
 ```bash
 go run ./scripts/dbcdata import-wowdata \

@@ -58,6 +58,34 @@ func TestWowdataExtractArgsOmitsOptionalValues(t *testing.T) {
 	require.NotContains(t, got, "--cache")
 }
 
+func TestResolveWowdataBinaryUsesRequestedExecutable(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "custom-wowdata")
+	require.NoError(t, os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o755))
+
+	inv := (&serpent.Invocation{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}).WithContext(context.Background())
+	got, err := resolveWowdataBinary(inv, binary)
+	require.NoError(t, err)
+	require.Equal(t, binary, got)
+}
+
+func TestResolveWowdataBinaryUsesCachedPinnedBinary(t *testing.T) {
+	cacheDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	t.Setenv("PATH", "")
+
+	binary := filepath.Join(cacheDir, "chronicle", "wowdata", wowdataCommit, "wowdata")
+	require.NoError(t, os.MkdirAll(filepath.Dir(binary), 0o755))
+	require.NoError(t, os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o755))
+
+	inv := (&serpent.Invocation{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}).WithContext(context.Background())
+	got, err := resolveWowdataBinary(inv, wowdataDefaultBinary)
+	require.NoError(t, err)
+	require.Equal(t, binary, got)
+}
+
 func TestExtractWowdataUsesTemporarySnapshot(t *testing.T) {
 	t.Parallel()
 
