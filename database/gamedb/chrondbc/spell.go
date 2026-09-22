@@ -172,29 +172,24 @@ type Spell struct {
 	//ChannelInterruptFlags   []int32
 	//FacingCasterFlags       int32
 	//ScalingID               int32     // Always 0
-	//CategoriesID            int32     // Always 0
-	//CooldownsID             int32     // Always 0
 	//Difficulty              int32     // Used for mythic/20man/heroic
 	//ShapeshiftID            int32     // Always 0
 	//ReagentsID              int32     // Always 0
 	//EffectSpellClassMaskA   []int32   // Always nil
 	//EffectSpellClassMaskB   []int32   // Always nil
 	//EffectSpellClassMaskC   []int32   // Always nil
-	//EffectBonusCoefficient  []float32 // always nil
 	//RequiredTotemCategoryID []int32   // Always nil
 	//EffectMiscValueB        []int32   // Always nil
 	//EffectRadiusIndexB      []int32   // Always nil
-	//AuraOptionsID           int32
-	//AuraRestrictionsID      int32
 	//CastingRequirementsID   int32
-	//ClassOptionsID          int32
 	//EquippedItemsID         int32
-	//InterruptsID            int32
-	//LevelsID                int32
-	//TargetRestrictionsID    int32
 	//RequiredProjectID       int32
-	//MiscID                  int32
 	//PowerDisplayID          int32
+
+	// === Modern ===
+	ModernEffects  []ModernSpellEffect  `json:"modern_effects,omitempty"`
+	ModernPowers   []ModernSpellPower   `json:"modern_powers,omitempty"`
+	ModernVariants []ModernSpellVariant `json:"modern_variants,omitempty"`
 }
 
 func (s Spell) String() string {
