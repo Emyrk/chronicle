@@ -26,6 +26,7 @@ type StoreQueries interface {
 // It extends the generated interface to add transaction support.
 type Store interface {
 	sqlcQuerier
+	DBTX
 
 	Ping(ctx context.Context) (time.Duration, error)
 	InTx(ctx context.Context, f func(Store) error, opts *pgx.TxOptions) error
@@ -47,6 +48,22 @@ type sqlQuerier struct {
 	// db is a *pgxpool.Tx). Used to detect tenant context mismatches on nested
 	// InTx calls — mixing tenant scopes within a single transaction is a bug.
 	txCtx context.Context
+}
+
+func (q *sqlQuerier) Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, sql, arguments...)
+}
+
+func (q *sqlQuerier) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return q.db.Query(ctx, sql, args...)
+}
+
+func (q *sqlQuerier) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return q.db.QueryRow(ctx, sql, args...)
+}
+
+func (q *sqlQuerier) SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults {
+	return q.db.SendBatch(ctx, batch)
 }
 
 type registerTypes struct {

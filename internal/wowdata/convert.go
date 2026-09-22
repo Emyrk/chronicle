@@ -62,9 +62,9 @@ func Convert(dir, expectedProduct, expectedBuild string) (*Import, error) {
 
 	out := &Import{Format: SnapshotFormat, Product: manifest.Target.Product, Build: manifest.Target.BuildName}
 	out.Losses.Policies = []string{
-		"Only DifficultyID=0 spell component rows are imported.",
-		"Only EffectIndex 0..2 are retained; later effects are reported and dropped.",
-		"Component rows whose SpellID is absent from the base Spell table are reported and dropped.",
+		"All modern spell effects, powers, attributes, and difficulty-aware component rows are preserved in normalized storage.",
+		"Legacy dbc_spells rows project DifficultyID=0, EffectIndex 0..2, and the first ordered power only.",
+		"Component-only spell IDs are preserved in normalized storage even when the base Spell table has no matching row.",
 		"Modern EffectBasePointsF is preserved directly and also converted to the legacy representation as round(value)-1 for consumers that still require it.",
 		"Modern icon FileDataIDs are preserved as numeric spell icon IDs; listfile-backed icon paths are imported when present, while item display IDs are not guessed.",
 		"Items without ItemSparse are reported and skipped; modern percentage stats, damage curves, armor curves, and unjoinable ItemEffect rows are not imported.",
@@ -139,58 +139,88 @@ type spellNameRow struct {
 	Name string `json:"Name_lang"`
 }
 type spellMiscRow struct {
-	ID, SpellID, DifficultyID                               int32
-	Attributes                                              []int32
-	CastingTimeIndex, DurationIndex, RangeIndex, SchoolMask int32
-	Speed                                                   float32
-	SpellIconFileDataID, ActiveIconFileDataID               int32
+	ID, SpellID, DifficultyID                        int32
+	ActiveIconFileDataID, ActiveSpellVisualScript    int32
+	Attributes                                       []int32
+	CastingTimeIndex, ContentTuningID, DurationIndex int32
+	LaunchDelay, MinDuration                         float32
+	PvPDurationIndex, RangeIndex, SchoolMask         int32
+	ShowFutureSpellPlayerConditionID                 int32
+	Speed                                            float32
+	SpellIconFileDataID, SpellVisualScript           int32
 }
 type spellEffectRow struct {
-	ID, SpellID, DifficultyID, EffectIndex, Effect, EffectMechanic int32
-	EffectAura                                                     int32
-	EffectAuraPeriod                                               int32
-	EffectAmplitude                                                float32
-	EffectBasePointsF                                              float32
-	EffectChainAmplitude                                           float32
-	EffectChainTargets, EffectItemType                             int32
-	EffectMiscValue                                                []int32
-	EffectPointsPerResource                                        float32
-	EffectRadiusIndex                                              []int32
-	EffectRealPointsPerLevel                                       float32
-	EffectTriggerSpell                                             int32
-	ImplicitTarget                                                 []int32
+	ID, SpellID, DifficultyID, EffectIndex                     int32
+	BonusCoefficientFromAP, Coefficient                        float32
+	Effect, EffectAttributes, EffectAura, EffectAuraPeriod     int32
+	EffectAmplitude, EffectBasePointsF, EffectBonusCoefficient float32
+	EffectChainAmplitude                                       float32
+	EffectChainTargets, EffectItemType, EffectMechanic         int32
+	EffectMiscValue                                            []int32
+	EffectPointsPerResource, EffectPosFacing                   float32
+	EffectRadiusIndex, EffectSpellClassMask                    []int32
+	EffectRealPointsPerLevel                                   float32
+	EffectTriggerSpell                                         int32
+	GroupSizeBasePointsCoefficient                             float32
+	NodeField120063534001                                      int32 `json:"Node__Field_12_0_0_63534_001"`
+	PvpMultiplier, ResourceCoefficient                         float32
+	ScalingClass                                               int32
+	ImplicitTarget                                             []int32
+	Variance                                                   float32
 }
 type auraOptionsRow struct {
-	ID, SpellID, DifficultyID, CumulativeAura, ProcChance, ProcCharges int32
-	ProcTypeMask                                                       []int32
+	ID, SpellID, DifficultyID, CumulativeAura, ProcCategoryRecovery int32
+	ProcChance, ProcCharges                                         int32
+	ProcTypeMask                                                    []int32
+	SpellProcsPerMinuteID                                           int32
 }
-type auraRestrictionsRow struct{ ID, SpellID, DifficultyID, CasterAuraSpell, CasterAuraState, ExcludeCasterAuraSpell, ExcludeCasterAuraState, ExcludeTargetAuraSpell, ExcludeTargetAuraState, TargetAuraSpell, TargetAuraState int32 }
+type auraRestrictionsRow struct {
+	ID, SpellID, DifficultyID, CasterAuraSpell, CasterAuraState, CasterAuraType int32
+	ExcludeCasterAuraSpell, ExcludeCasterAuraState, ExcludeCasterAuraType       int32
+	ExcludeTargetAuraSpell, ExcludeTargetAuraState, ExcludeTargetAuraType       int32
+	TargetAuraSpell, TargetAuraState, TargetAuraType                            int32
+}
 type castingReqRow struct{ ID, SpellID, MinFactionID, MinReputation, RequiredAuraVision, RequiresSpellFocus int32 }
-type categoriesRow struct{ ID, SpellID, DifficultyID, Category, DefenseType, DispelType, Mechanic, PreventionType, StartRecoveryCategory int32 }
+type categoriesRow struct {
+	ID, SpellID, DifficultyID, Category, ChargeCategory, DefenseType int32
+	DiminishType, DispelType, Mechanic, PreventionType               int32
+	StartRecoveryCategory                                            int32
+}
 type classOptionsRow struct {
 	ID, SpellID, ModalNextSpell, SpellClassSet int32
 	SpellClassMask                             []int32
 }
 type cooldownRow struct {
-	ID, SpellID, DifficultyID                             int32
-	CategoryRecoveryTime, RecoveryTime, StartRecoveryTime int64
+	ID, SpellID, DifficultyID, AuraSpellID                int32
+	CategoryRecoveryTime, RecoveryTime, StartRecoveryTime int32
 }
 type equippedRow struct{ ID, SpellID, EquippedItemClass, EquippedItemInvTypes, EquippedItemSubclass int32 }
 type interruptsRow struct {
 	ID, SpellID, DifficultyID, InterruptFlags int32
-	AuraInterruptFlags                        []int32
+	AuraInterruptFlags, ChannelInterruptFlags []int32
 }
-type levelsRow struct{ ID, SpellID, DifficultyID, BaseLevel, MaxLevel, SpellLevel int32 }
+type levelsRow struct {
+	ID, SpellID, DifficultyID, BaseLevel, MaxLevel int32
+	MaxPassiveAuraLevel, SpellLevel                int32
+}
 type powerRow struct {
-	ID, SpellID, OrderIndex, PowerType, ManaCost, ManaCostPerLevel, ManaPerSecond int32
-	PowerCostPct                                                                  float32
+	ID, SpellID, OrderIndex, AltPowerBarID, ManaCost, ManaCostPerLevel int32
+	ManaPerSecond, OptionalCost                                        int32
+	OptionalCostPct, PowerCostMaxPct, PowerCostPct                     float32
+	PowerDisplayID                                                     int32
+	PowerPctPerSecond                                                  float32
+	PowerType, RequiredAuraSpellID                                     int32
 }
 type reagentsRow struct {
 	ID, SpellID           int32
 	Reagent, ReagentCount []int32
 }
 type shapeshiftRow struct{ ID, SpellID, StanceBarOrder int32 }
-type targetRestrictionsRow struct{ ID, SpellID, DifficultyID, MaxTargetLevel, MaxTargets, TargetCreatureType, Targets int32 }
+type targetRestrictionsRow struct {
+	ID, SpellID, DifficultyID, MaxTargetLevel, MaxTargets int32
+	TargetCreatureType, Targets                           int32
+	ConeDegrees, Width                                    float32
+}
 type totemsRow struct {
 	ID, SpellID             int32
 	Totem                   []int32
@@ -267,11 +297,27 @@ func convertSpells(dir string, out *Import) error {
 		s := ensureSpell(byID, x.ID)
 		s.Name = x.Name
 	}
+	type variantKey struct{ spellID, difficultyID int32 }
+	variants := make(map[variantKey]*SpellVariant)
+	ensureVariant := func(spellID, difficultyID int32) *SpellVariant {
+		key := variantKey{spellID: spellID, difficultyID: difficultyID}
+		if variants[key] == nil {
+			variants[key] = &SpellVariant{SpellID: spellID, DifficultyID: difficultyID}
+		}
+		return variants[key]
+	}
 	misc, err := readRows[spellMiscRow](dir, "SpellMisc")
 	if err != nil {
 		return err
 	}
 	for _, x := range misc {
+		ensureVariant(x.SpellID, x.DifficultyID).Misc = &SpellMisc{
+			SourceID: x.ID, ActiveIconFileDataID: x.ActiveIconFileDataID, ActiveSpellVisualScript: x.ActiveSpellVisualScript,
+			Attributes: append([]int32(nil), x.Attributes...), CastingTimeIndex: x.CastingTimeIndex, ContentTuningID: x.ContentTuningID,
+			DurationIndex: x.DurationIndex, LaunchDelay: x.LaunchDelay, MinDuration: x.MinDuration, PvPDurationIndex: x.PvPDurationIndex,
+			RangeIndex: x.RangeIndex, SchoolMask: x.SchoolMask, ShowFutureSpellPlayerConditionID: x.ShowFutureSpellPlayerConditionID,
+			Speed: x.Speed, SpellIconFileDataID: x.SpellIconFileDataID, SpellVisualScript: x.SpellVisualScript,
+		}
 		if x.DifficultyID != 0 {
 			continue
 		}
@@ -293,6 +339,20 @@ func convertSpells(dir string, out *Import) error {
 		return err
 	}
 	for _, x := range effects {
+		out.SpellEffects = append(out.SpellEffects, SpellEffect{
+			SourceID: x.ID, SpellID: x.SpellID, DifficultyID: x.DifficultyID, EffectIndex: x.EffectIndex,
+			BonusCoefficientFromAP: x.BonusCoefficientFromAP, Coefficient: x.Coefficient, Effect: x.Effect,
+			EffectAttributes: x.EffectAttributes, EffectAura: x.EffectAura, EffectAuraPeriod: x.EffectAuraPeriod,
+			EffectAmplitude: x.EffectAmplitude, EffectBasePointsF: x.EffectBasePointsF, EffectBonusCoefficient: x.EffectBonusCoefficient,
+			EffectChainAmplitude: x.EffectChainAmplitude, EffectChainTargets: x.EffectChainTargets, EffectItemType: x.EffectItemType,
+			EffectMechanic: x.EffectMechanic, EffectMiscValue: append([]int32(nil), x.EffectMiscValue...),
+			EffectPointsPerResource: x.EffectPointsPerResource, EffectPosFacing: x.EffectPosFacing,
+			EffectRadiusIndex: append([]int32(nil), x.EffectRadiusIndex...), EffectSpellClassMask: append([]int32(nil), x.EffectSpellClassMask...),
+			EffectRealPointsPerLevel: x.EffectRealPointsPerLevel, EffectTriggerSpell: x.EffectTriggerSpell,
+			GroupSizeBasePointsCoefficient: x.GroupSizeBasePointsCoefficient, NodeField120063534001: x.NodeField120063534001,
+			PvpMultiplier: x.PvpMultiplier, ResourceCoefficient: x.ResourceCoefficient, ScalingClass: x.ScalingClass,
+			ImplicitTarget: append([]int32(nil), x.ImplicitTarget...), Variance: x.Variance,
+		})
 		if x.DifficultyID != 0 {
 			continue
 		}
@@ -312,6 +372,11 @@ func convertSpells(dir string, out *Import) error {
 		return err
 	}
 	for _, x := range aura {
+		ensureVariant(x.SpellID, x.DifficultyID).AuraOptions = &SpellAuraOptions{
+			SourceID: x.ID, CumulativeAura: x.CumulativeAura, ProcCategoryRecovery: x.ProcCategoryRecovery,
+			ProcChance: x.ProcChance, ProcCharges: x.ProcCharges, ProcTypeMask: append([]int32(nil), x.ProcTypeMask...),
+			SpellProcsPerMinuteID: x.SpellProcsPerMinuteID,
+		}
 		if x.DifficultyID != 0 {
 			continue
 		}
@@ -326,6 +391,12 @@ func convertSpells(dir string, out *Import) error {
 		return err
 	}
 	for _, x := range restrictions {
+		ensureVariant(x.SpellID, x.DifficultyID).AuraRestrictions = &SpellAuraRestrictions{
+			SourceID: x.ID, CasterAuraSpell: x.CasterAuraSpell, CasterAuraState: x.CasterAuraState, CasterAuraType: x.CasterAuraType,
+			ExcludeCasterAuraSpell: x.ExcludeCasterAuraSpell, ExcludeCasterAuraState: x.ExcludeCasterAuraState, ExcludeCasterAuraType: x.ExcludeCasterAuraType,
+			ExcludeTargetAuraSpell: x.ExcludeTargetAuraSpell, ExcludeTargetAuraState: x.ExcludeTargetAuraState, ExcludeTargetAuraType: x.ExcludeTargetAuraType,
+			TargetAuraSpell: x.TargetAuraSpell, TargetAuraState: x.TargetAuraState, TargetAuraType: x.TargetAuraType,
+		}
 		if x.DifficultyID != 0 {
 			continue
 		}
@@ -355,6 +426,7 @@ func convertSpells(dir string, out *Import) error {
 		return err
 	}
 	for _, x := range cats {
+		ensureVariant(x.SpellID, x.DifficultyID).Categories = &SpellCategories{SourceID: x.ID, Category: x.Category, ChargeCategory: x.ChargeCategory, DefenseType: x.DefenseType, DiminishType: x.DiminishType, DispelType: x.DispelType, Mechanic: x.Mechanic, PreventionType: x.PreventionType, StartRecoveryCategory: x.StartRecoveryCategory}
 		if x.DifficultyID != 0 {
 			continue
 		}
@@ -371,6 +443,10 @@ func convertSpells(dir string, out *Import) error {
 		return err
 	}
 	for _, x := range classes {
+		ensureVariant(x.SpellID, 0).ClassOptions = &SpellClassOptions{
+			SourceID: x.ID, ModalNextSpell: x.ModalNextSpell, SpellClassSet: x.SpellClassSet,
+			SpellClassMask: append([]int32(nil), x.SpellClassMask...),
+		}
 		s := ensureSpell(byID, x.SpellID)
 		s.ModalNextSpell = x.ModalNextSpell
 		s.SpellClassSet = x.SpellClassSet
@@ -381,13 +457,14 @@ func convertSpells(dir string, out *Import) error {
 		return err
 	}
 	for _, x := range cds {
+		ensureVariant(x.SpellID, x.DifficultyID).Cooldowns = &SpellCooldowns{SourceID: x.ID, AuraSpellID: x.AuraSpellID, CategoryRecoveryTime: x.CategoryRecoveryTime, RecoveryTime: x.RecoveryTime, StartRecoveryTime: x.StartRecoveryTime}
 		if x.DifficultyID != 0 {
 			continue
 		}
 		s := ensureSpell(byID, x.SpellID)
-		s.CategoryRecoveryTimeMs = x.CategoryRecoveryTime
-		s.RecoveryTimeMs = x.RecoveryTime
-		s.StartRecoveryTimeMs = x.StartRecoveryTime
+		s.CategoryRecoveryTimeMs = int64(x.CategoryRecoveryTime)
+		s.RecoveryTimeMs = int64(x.RecoveryTime)
+		s.StartRecoveryTimeMs = int64(x.StartRecoveryTime)
 	}
 	equipped, err := readRows[equippedRow](dir, "SpellEquippedItems")
 	if err != nil {
@@ -404,6 +481,7 @@ func convertSpells(dir string, out *Import) error {
 		return err
 	}
 	for _, x := range ints {
+		ensureVariant(x.SpellID, x.DifficultyID).Interrupts = &SpellInterrupts{SourceID: x.ID, InterruptFlags: x.InterruptFlags, AuraInterruptFlags: append([]int32(nil), x.AuraInterruptFlags...), ChannelInterruptFlags: append([]int32(nil), x.ChannelInterruptFlags...)}
 		if x.DifficultyID != 0 {
 			continue
 		}
@@ -416,6 +494,7 @@ func convertSpells(dir string, out *Import) error {
 		return err
 	}
 	for _, x := range levels {
+		ensureVariant(x.SpellID, x.DifficultyID).Levels = &SpellLevels{SourceID: x.ID, BaseLevel: x.BaseLevel, MaxLevel: x.MaxLevel, MaxPassiveAuraLevel: x.MaxPassiveAuraLevel, SpellLevel: x.SpellLevel}
 		if x.DifficultyID != 0 {
 			continue
 		}
@@ -439,6 +518,13 @@ func convertSpells(dir string, out *Import) error {
 	})
 	seenPower := map[int32]bool{}
 	for _, x := range powers {
+		out.SpellPowers = append(out.SpellPowers, SpellPower{
+			SourceID: x.ID, SpellID: x.SpellID, OrderIndex: x.OrderIndex, AltPowerBarID: x.AltPowerBarID,
+			ManaCost: x.ManaCost, ManaCostPerLevel: x.ManaCostPerLevel, ManaPerSecond: x.ManaPerSecond,
+			OptionalCost: x.OptionalCost, OptionalCostPct: x.OptionalCostPct, PowerCostMaxPct: x.PowerCostMaxPct,
+			PowerCostPct: x.PowerCostPct, PowerDisplayID: x.PowerDisplayID, PowerPctPerSecond: x.PowerPctPerSecond,
+			PowerType: x.PowerType, RequiredAuraSpellID: x.RequiredAuraSpellID,
+		})
 		if seenPower[x.SpellID] {
 			out.Losses.DroppedSpellPowers++
 			continue
@@ -472,6 +558,7 @@ func convertSpells(dir string, out *Import) error {
 		return err
 	}
 	for _, x := range targets {
+		ensureVariant(x.SpellID, x.DifficultyID).TargetRestrictions = &SpellTargetRestrictions{SourceID: x.ID, MaxTargetLevel: x.MaxTargetLevel, MaxTargets: x.MaxTargets, TargetCreatureType: x.TargetCreatureType, Targets: x.Targets, ConeDegrees: x.ConeDegrees, Width: x.Width}
 		if x.DifficultyID != 0 {
 			continue
 		}
@@ -511,6 +598,20 @@ func convertSpells(dir string, out *Import) error {
 		spell := *byID[int32(id)]
 		normalizeSpellArrays(&spell)
 		out.Spells = append(out.Spells, spell)
+	}
+	variantKeys := make([]variantKey, 0, len(variants))
+	for key := range variants {
+		variantKeys = append(variantKeys, key)
+	}
+	sort.Slice(variantKeys, func(i, j int) bool {
+		if variantKeys[i].spellID != variantKeys[j].spellID {
+			return variantKeys[i].spellID < variantKeys[j].spellID
+		}
+		return variantKeys[i].difficultyID < variantKeys[j].difficultyID
+	})
+	out.SpellVariants = make([]SpellVariant, 0, len(variantKeys))
+	for _, key := range variantKeys {
+		out.SpellVariants = append(out.SpellVariants, *variants[key])
 	}
 	return nil
 }

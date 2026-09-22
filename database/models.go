@@ -1149,6 +1149,41 @@ type DbcSpellDuration struct {
 	MaxDuration      int32     `db:"max_duration" json:"max_duration"`
 }
 
+type DbcSpellEffect struct {
+	DatasetID                      uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellID                        int32     `db:"spell_id" json:"spell_id"`
+	DifficultyID                   int32     `db:"difficulty_id" json:"difficulty_id"`
+	EffectIndex                    int32     `db:"effect_index" json:"effect_index"`
+	SourceID                       int32     `db:"source_id" json:"source_id"`
+	BonusCoefficientFromAp         float32   `db:"bonus_coefficient_from_ap" json:"bonus_coefficient_from_ap"`
+	Coefficient                    float32   `db:"coefficient" json:"coefficient"`
+	Effect                         int32     `db:"effect" json:"effect"`
+	EffectAmplitude                float32   `db:"effect_amplitude" json:"effect_amplitude"`
+	EffectAttributes               int32     `db:"effect_attributes" json:"effect_attributes"`
+	EffectAura                     int32     `db:"effect_aura" json:"effect_aura"`
+	EffectAuraPeriod               int32     `db:"effect_aura_period" json:"effect_aura_period"`
+	EffectBasePointsF              float32   `db:"effect_base_points_f" json:"effect_base_points_f"`
+	EffectBonusCoefficient         float32   `db:"effect_bonus_coefficient" json:"effect_bonus_coefficient"`
+	EffectChainAmplitude           float32   `db:"effect_chain_amplitude" json:"effect_chain_amplitude"`
+	EffectChainTargets             int32     `db:"effect_chain_targets" json:"effect_chain_targets"`
+	EffectItemType                 int32     `db:"effect_item_type" json:"effect_item_type"`
+	EffectMechanic                 int32     `db:"effect_mechanic" json:"effect_mechanic"`
+	EffectMiscValue                []int32   `db:"effect_misc_value" json:"effect_misc_value"`
+	EffectPointsPerResource        float32   `db:"effect_points_per_resource" json:"effect_points_per_resource"`
+	EffectPosFacing                float32   `db:"effect_pos_facing" json:"effect_pos_facing"`
+	EffectRadiusIndex              []int32   `db:"effect_radius_index" json:"effect_radius_index"`
+	EffectRealPointsPerLevel       float32   `db:"effect_real_points_per_level" json:"effect_real_points_per_level"`
+	EffectSpellClassMask           []int32   `db:"effect_spell_class_mask" json:"effect_spell_class_mask"`
+	EffectTriggerSpell             int32     `db:"effect_trigger_spell" json:"effect_trigger_spell"`
+	GroupSizeBasePointsCoefficient float32   `db:"group_size_base_points_coefficient" json:"group_size_base_points_coefficient"`
+	NodeField120063534001          int32     `db:"node_field_12_0_0_63534_001" json:"node_field_12_0_0_63534_001"`
+	PvpMultiplier                  float32   `db:"pvp_multiplier" json:"pvp_multiplier"`
+	ResourceCoefficient            float32   `db:"resource_coefficient" json:"resource_coefficient"`
+	ScalingClass                   int32     `db:"scaling_class" json:"scaling_class"`
+	ImplicitTarget                 []int32   `db:"implicit_target" json:"implicit_target"`
+	Variance                       float32   `db:"variance" json:"variance"`
+}
+
 type DbcSpellFocusObject struct {
 	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
 	ID        int32     `db:"id" json:"id"`
@@ -1185,6 +1220,25 @@ type DbcSpellItemEnchantment struct {
 	DatasetID         uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
+type DbcSpellPower struct {
+	DatasetID           uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellID             int32     `db:"spell_id" json:"spell_id"`
+	OrderIndex          int32     `db:"order_index" json:"order_index"`
+	SourceID            int32     `db:"source_id" json:"source_id"`
+	AltPowerBarID       int32     `db:"alt_power_bar_id" json:"alt_power_bar_id"`
+	ManaCost            int32     `db:"mana_cost" json:"mana_cost"`
+	ManaCostPerLevel    int32     `db:"mana_cost_per_level" json:"mana_cost_per_level"`
+	ManaPerSecond       int32     `db:"mana_per_second" json:"mana_per_second"`
+	OptionalCost        int32     `db:"optional_cost" json:"optional_cost"`
+	OptionalCostPct     float32   `db:"optional_cost_pct" json:"optional_cost_pct"`
+	PowerCostMaxPct     float32   `db:"power_cost_max_pct" json:"power_cost_max_pct"`
+	PowerCostPct        float32   `db:"power_cost_pct" json:"power_cost_pct"`
+	PowerDisplayID      int32     `db:"power_display_id" json:"power_display_id"`
+	PowerPctPerSecond   float32   `db:"power_pct_per_second" json:"power_pct_per_second"`
+	PowerType           int32     `db:"power_type" json:"power_type"`
+	RequiredAuraSpellID int32     `db:"required_aura_spell_id" json:"required_aura_spell_id"`
+}
+
 type DbcSpellRadii struct {
 	DatasetID      uuid.UUID `db:"dataset_id" json:"dataset_id"`
 	ID             int32     `db:"id" json:"id"`
@@ -1201,6 +1255,82 @@ type DbcSpellRange struct {
 	RangeMax  float32   `db:"range_max" json:"range_max"`
 	Flags     int32     `db:"flags" json:"flags"`
 	Name      string    `db:"name" json:"name"`
+}
+
+type DbcSpellVariant struct {
+	DatasetID                        uuid.UUID     `db:"dataset_id" json:"dataset_id"`
+	SpellID                          int32         `db:"spell_id" json:"spell_id"`
+	DifficultyID                     int32         `db:"difficulty_id" json:"difficulty_id"`
+	MiscID                           pgtype.Int4   `db:"misc_id" json:"misc_id"`
+	ActiveIconFileDataID             pgtype.Int4   `db:"active_icon_file_data_id" json:"active_icon_file_data_id"`
+	ActiveSpellVisualScript          pgtype.Int4   `db:"active_spell_visual_script" json:"active_spell_visual_script"`
+	Attributes                       []int32       `db:"attributes" json:"attributes"`
+	CastingTimeIndex                 pgtype.Int4   `db:"casting_time_index" json:"casting_time_index"`
+	ContentTuningID                  pgtype.Int4   `db:"content_tuning_id" json:"content_tuning_id"`
+	DurationIndex                    pgtype.Int4   `db:"duration_index" json:"duration_index"`
+	LaunchDelay                      pgtype.Float4 `db:"launch_delay" json:"launch_delay"`
+	MinDuration                      pgtype.Float4 `db:"min_duration" json:"min_duration"`
+	PvpDurationIndex                 pgtype.Int4   `db:"pvp_duration_index" json:"pvp_duration_index"`
+	RangeIndex                       pgtype.Int4   `db:"range_index" json:"range_index"`
+	SchoolMask                       pgtype.Int4   `db:"school_mask" json:"school_mask"`
+	ShowFutureSpellPlayerConditionID pgtype.Int4   `db:"show_future_spell_player_condition_id" json:"show_future_spell_player_condition_id"`
+	Speed                            pgtype.Float4 `db:"speed" json:"speed"`
+	SpellIconFileDataID              pgtype.Int4   `db:"spell_icon_file_data_id" json:"spell_icon_file_data_id"`
+	SpellVisualScript                pgtype.Int4   `db:"spell_visual_script" json:"spell_visual_script"`
+	AuraOptionsID                    pgtype.Int4   `db:"aura_options_id" json:"aura_options_id"`
+	CumulativeAura                   pgtype.Int4   `db:"cumulative_aura" json:"cumulative_aura"`
+	ProcCategoryRecovery             pgtype.Int4   `db:"proc_category_recovery" json:"proc_category_recovery"`
+	ProcChance                       pgtype.Int4   `db:"proc_chance" json:"proc_chance"`
+	ProcCharges                      pgtype.Int4   `db:"proc_charges" json:"proc_charges"`
+	ProcTypeMask                     []int32       `db:"proc_type_mask" json:"proc_type_mask"`
+	SpellProcsPerMinuteID            pgtype.Int4   `db:"spell_procs_per_minute_id" json:"spell_procs_per_minute_id"`
+	AuraRestrictionsID               pgtype.Int4   `db:"aura_restrictions_id" json:"aura_restrictions_id"`
+	CasterAuraSpell                  pgtype.Int4   `db:"caster_aura_spell" json:"caster_aura_spell"`
+	CasterAuraState                  pgtype.Int4   `db:"caster_aura_state" json:"caster_aura_state"`
+	CasterAuraType                   pgtype.Int4   `db:"caster_aura_type" json:"caster_aura_type"`
+	ExcludeCasterAuraSpell           pgtype.Int4   `db:"exclude_caster_aura_spell" json:"exclude_caster_aura_spell"`
+	ExcludeCasterAuraState           pgtype.Int4   `db:"exclude_caster_aura_state" json:"exclude_caster_aura_state"`
+	ExcludeCasterAuraType            pgtype.Int4   `db:"exclude_caster_aura_type" json:"exclude_caster_aura_type"`
+	ExcludeTargetAuraSpell           pgtype.Int4   `db:"exclude_target_aura_spell" json:"exclude_target_aura_spell"`
+	ExcludeTargetAuraState           pgtype.Int4   `db:"exclude_target_aura_state" json:"exclude_target_aura_state"`
+	ExcludeTargetAuraType            pgtype.Int4   `db:"exclude_target_aura_type" json:"exclude_target_aura_type"`
+	TargetAuraSpell                  pgtype.Int4   `db:"target_aura_spell" json:"target_aura_spell"`
+	TargetAuraState                  pgtype.Int4   `db:"target_aura_state" json:"target_aura_state"`
+	TargetAuraType                   pgtype.Int4   `db:"target_aura_type" json:"target_aura_type"`
+	ClassOptionsID                   pgtype.Int4   `db:"class_options_id" json:"class_options_id"`
+	ModalNextSpell                   pgtype.Int4   `db:"modal_next_spell" json:"modal_next_spell"`
+	SpellClassSet                    pgtype.Int4   `db:"spell_class_set" json:"spell_class_set"`
+	SpellClassMask                   []int32       `db:"spell_class_mask" json:"spell_class_mask"`
+	InterruptsID                     pgtype.Int4   `db:"interrupts_id" json:"interrupts_id"`
+	AuraInterruptFlags               []int32       `db:"aura_interrupt_flags" json:"aura_interrupt_flags"`
+	ChannelInterruptFlags            []int32       `db:"channel_interrupt_flags" json:"channel_interrupt_flags"`
+	InterruptFlags                   pgtype.Int4   `db:"interrupt_flags" json:"interrupt_flags"`
+	CategoriesID                     pgtype.Int4   `db:"categories_id" json:"categories_id"`
+	Category                         pgtype.Int4   `db:"category" json:"category"`
+	ChargeCategory                   pgtype.Int4   `db:"charge_category" json:"charge_category"`
+	DefenseType                      pgtype.Int4   `db:"defense_type" json:"defense_type"`
+	DiminishType                     pgtype.Int4   `db:"diminish_type" json:"diminish_type"`
+	DispelType                       pgtype.Int4   `db:"dispel_type" json:"dispel_type"`
+	Mechanic                         pgtype.Int4   `db:"mechanic" json:"mechanic"`
+	PreventionType                   pgtype.Int4   `db:"prevention_type" json:"prevention_type"`
+	StartRecoveryCategory            pgtype.Int4   `db:"start_recovery_category" json:"start_recovery_category"`
+	CooldownsID                      pgtype.Int4   `db:"cooldowns_id" json:"cooldowns_id"`
+	AuraSpellID                      pgtype.Int4   `db:"aura_spell_id" json:"aura_spell_id"`
+	CategoryRecoveryTime             pgtype.Int4   `db:"category_recovery_time" json:"category_recovery_time"`
+	RecoveryTime                     pgtype.Int4   `db:"recovery_time" json:"recovery_time"`
+	StartRecoveryTime                pgtype.Int4   `db:"start_recovery_time" json:"start_recovery_time"`
+	LevelsID                         pgtype.Int4   `db:"levels_id" json:"levels_id"`
+	BaseLevel                        pgtype.Int4   `db:"base_level" json:"base_level"`
+	MaxLevel                         pgtype.Int4   `db:"max_level" json:"max_level"`
+	MaxPassiveAuraLevel              pgtype.Int4   `db:"max_passive_aura_level" json:"max_passive_aura_level"`
+	SpellLevel                       pgtype.Int4   `db:"spell_level" json:"spell_level"`
+	TargetRestrictionsID             pgtype.Int4   `db:"target_restrictions_id" json:"target_restrictions_id"`
+	ConeDegrees                      pgtype.Float4 `db:"cone_degrees" json:"cone_degrees"`
+	MaxTargetLevel                   pgtype.Int4   `db:"max_target_level" json:"max_target_level"`
+	MaxTargets                       pgtype.Int4   `db:"max_targets" json:"max_targets"`
+	TargetCreatureType               pgtype.Int4   `db:"target_creature_type" json:"target_creature_type"`
+	Targets                          pgtype.Int4   `db:"targets" json:"targets"`
+	Width                            pgtype.Float4 `db:"width" json:"width"`
 }
 
 type DbcVulnerabilitySpell struct {

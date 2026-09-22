@@ -475,6 +475,41 @@ CREATE TABLE dbc_spell_durations (
     max_duration integer DEFAULT 0 NOT NULL
 );
 
+CREATE TABLE dbc_spell_effects (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    difficulty_id integer NOT NULL,
+    effect_index integer NOT NULL,
+    source_id integer NOT NULL,
+    bonus_coefficient_from_ap real NOT NULL,
+    coefficient real NOT NULL,
+    effect integer NOT NULL,
+    effect_amplitude real NOT NULL,
+    effect_attributes integer NOT NULL,
+    effect_aura integer NOT NULL,
+    effect_aura_period integer NOT NULL,
+    effect_base_points_f real NOT NULL,
+    effect_bonus_coefficient real NOT NULL,
+    effect_chain_amplitude real NOT NULL,
+    effect_chain_targets integer NOT NULL,
+    effect_item_type integer NOT NULL,
+    effect_mechanic integer NOT NULL,
+    effect_misc_value integer[] NOT NULL,
+    effect_points_per_resource real NOT NULL,
+    effect_pos_facing real NOT NULL,
+    effect_radius_index integer[] NOT NULL,
+    effect_real_points_per_level real NOT NULL,
+    effect_spell_class_mask integer[] NOT NULL,
+    effect_trigger_spell integer NOT NULL,
+    group_size_base_points_coefficient real NOT NULL,
+    node_field_12_0_0_63534_001 integer NOT NULL,
+    pvp_multiplier real NOT NULL,
+    resource_coefficient real NOT NULL,
+    scaling_class integer NOT NULL,
+    implicit_target integer[] NOT NULL,
+    variance real NOT NULL
+);
+
 CREATE TABLE dbc_spell_focus_objects (
     dataset_id uuid NOT NULL,
     id integer NOT NULL,
@@ -511,6 +546,25 @@ CREATE TABLE dbc_spell_item_enchantment (
     dataset_id uuid NOT NULL
 );
 
+CREATE TABLE dbc_spell_powers (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    order_index integer NOT NULL,
+    source_id integer NOT NULL,
+    alt_power_bar_id integer NOT NULL,
+    mana_cost integer NOT NULL,
+    mana_cost_per_level integer NOT NULL,
+    mana_per_second integer NOT NULL,
+    optional_cost integer NOT NULL,
+    optional_cost_pct real NOT NULL,
+    power_cost_max_pct real NOT NULL,
+    power_cost_pct real NOT NULL,
+    power_display_id integer NOT NULL,
+    power_pct_per_second real NOT NULL,
+    power_type integer NOT NULL,
+    required_aura_spell_id integer NOT NULL
+);
+
 CREATE TABLE dbc_spell_radii (
     dataset_id uuid NOT NULL,
     id integer NOT NULL,
@@ -527,6 +581,82 @@ CREATE TABLE dbc_spell_ranges (
     range_max real DEFAULT 0 NOT NULL,
     flags integer DEFAULT 0 NOT NULL,
     name text DEFAULT ''::text NOT NULL
+);
+
+CREATE TABLE dbc_spell_variants (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    difficulty_id integer NOT NULL,
+    misc_id integer,
+    active_icon_file_data_id integer,
+    active_spell_visual_script integer,
+    attributes integer[],
+    casting_time_index integer,
+    content_tuning_id integer,
+    duration_index integer,
+    launch_delay real,
+    min_duration real,
+    pvp_duration_index integer,
+    range_index integer,
+    school_mask integer,
+    show_future_spell_player_condition_id integer,
+    speed real,
+    spell_icon_file_data_id integer,
+    spell_visual_script integer,
+    aura_options_id integer,
+    cumulative_aura integer,
+    proc_category_recovery integer,
+    proc_chance integer,
+    proc_charges integer,
+    proc_type_mask integer[],
+    spell_procs_per_minute_id integer,
+    aura_restrictions_id integer,
+    caster_aura_spell integer,
+    caster_aura_state integer,
+    caster_aura_type integer,
+    exclude_caster_aura_spell integer,
+    exclude_caster_aura_state integer,
+    exclude_caster_aura_type integer,
+    exclude_target_aura_spell integer,
+    exclude_target_aura_state integer,
+    exclude_target_aura_type integer,
+    target_aura_spell integer,
+    target_aura_state integer,
+    target_aura_type integer,
+    class_options_id integer,
+    modal_next_spell integer,
+    spell_class_set integer,
+    spell_class_mask integer[],
+    interrupts_id integer,
+    aura_interrupt_flags integer[],
+    channel_interrupt_flags integer[],
+    interrupt_flags integer,
+    categories_id integer,
+    category integer,
+    charge_category integer,
+    defense_type integer,
+    diminish_type integer,
+    dispel_type integer,
+    mechanic integer,
+    prevention_type integer,
+    start_recovery_category integer,
+    cooldowns_id integer,
+    aura_spell_id integer,
+    category_recovery_time integer,
+    recovery_time integer,
+    start_recovery_time integer,
+    levels_id integer,
+    base_level integer,
+    max_level integer,
+    max_passive_aura_level integer,
+    spell_level integer,
+    target_restrictions_id integer,
+    cone_degrees real,
+    max_target_level integer,
+    max_targets integer,
+    target_creature_type integer,
+    targets integer,
+    width real
 );
 
 CREATE TABLE dbc_spells (
@@ -2026,6 +2156,9 @@ ALTER TABLE ONLY dbc_spell_description_variables
 ALTER TABLE ONLY dbc_spell_durations
     ADD CONSTRAINT dbc_spell_durations_pkey PRIMARY KEY (dataset_id, id);
 
+ALTER TABLE ONLY dbc_spell_effects
+    ADD CONSTRAINT dbc_spell_effects_pkey PRIMARY KEY (dataset_id, spell_id, difficulty_id, effect_index, source_id);
+
 ALTER TABLE ONLY dbc_spell_focus_objects
     ADD CONSTRAINT dbc_spell_focus_objects_pkey PRIMARY KEY (dataset_id, id);
 
@@ -2035,11 +2168,17 @@ ALTER TABLE ONLY dbc_spell_icons
 ALTER TABLE ONLY dbc_spell_item_enchantment
     ADD CONSTRAINT dbc_spell_item_enchantment_pkey PRIMARY KEY (dataset_id, id);
 
+ALTER TABLE ONLY dbc_spell_powers
+    ADD CONSTRAINT dbc_spell_powers_pkey PRIMARY KEY (dataset_id, spell_id, order_index, source_id);
+
 ALTER TABLE ONLY dbc_spell_radii
     ADD CONSTRAINT dbc_spell_radii_pkey PRIMARY KEY (dataset_id, id);
 
 ALTER TABLE ONLY dbc_spell_ranges
     ADD CONSTRAINT dbc_spell_ranges_pkey PRIMARY KEY (dataset_id, id);
+
+ALTER TABLE ONLY dbc_spell_variants
+    ADD CONSTRAINT dbc_spell_variants_pkey PRIMARY KEY (dataset_id, spell_id, difficulty_id);
 
 ALTER TABLE ONLY dbc_spells
     ADD CONSTRAINT dbc_spells_pkey PRIMARY KEY (dataset_id, spell_id);
@@ -2691,6 +2830,9 @@ ALTER TABLE ONLY dbc_spell_description_variables
 ALTER TABLE ONLY dbc_spell_durations
     ADD CONSTRAINT dbc_spell_durations_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY dbc_spell_effects
+    ADD CONSTRAINT dbc_spell_effects_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY dbc_spell_focus_objects
     ADD CONSTRAINT dbc_spell_focus_objects_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
@@ -2700,11 +2842,17 @@ ALTER TABLE ONLY dbc_spell_icons
 ALTER TABLE ONLY dbc_spell_item_enchantment
     ADD CONSTRAINT dbc_spell_item_enchantment_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id);
 
+ALTER TABLE ONLY dbc_spell_powers
+    ADD CONSTRAINT dbc_spell_powers_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY dbc_spell_radii
     ADD CONSTRAINT dbc_spell_radii_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY dbc_spell_ranges
     ADD CONSTRAINT dbc_spell_ranges_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_spell_variants
+    ADD CONSTRAINT dbc_spell_variants_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY dbc_spells
     ADD CONSTRAINT dbc_spells_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;

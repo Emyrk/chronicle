@@ -335,7 +335,9 @@ func GetSpellsByName(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUI
 }
 
 // UpsertBatch inserts multiple spells in a single round-trip using pgx Batch.
-func UpsertBatch(ctx context.Context, pool *pgxpool.Pool, rows []SpellRow) error {
+func UpsertBatch(ctx context.Context, pool interface {
+	SendBatch(context.Context, *pgx.Batch) pgx.BatchResults
+}, rows []SpellRow) error {
 	if len(rows) == 0 {
 		return nil
 	}

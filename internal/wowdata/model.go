@@ -53,7 +53,110 @@ type Import struct {
 	SpellDescriptionVariables []SpellDescriptionVariables  `json:"spellDescriptionVariables"`
 	Enchantments              []Enchantment                `json:"enchantments"`
 	ItemSets                  []ItemSet                    `json:"itemSets"`
+	SpellEffects              []SpellEffect                `json:"spellEffects"`
+	SpellPowers               []SpellPower                 `json:"spellPowers"`
+	SpellVariants             []SpellVariant               `json:"spellVariants"`
 	Losses                    LossReport                   `json:"losses"`
+}
+
+type SpellEffect struct {
+	SourceID, SpellID, DifficultyID, EffectIndex               int32
+	BonusCoefficientFromAP, Coefficient                        float32
+	Effect, EffectAttributes, EffectAura, EffectAuraPeriod     int32
+	EffectAmplitude, EffectBasePointsF, EffectBonusCoefficient float32
+	EffectChainAmplitude                                       float32
+	EffectChainTargets, EffectItemType, EffectMechanic         int32
+	EffectMiscValue                                            []int32
+	EffectPointsPerResource, EffectPosFacing                   float32
+	EffectRadiusIndex, EffectSpellClassMask                    []int32
+	EffectRealPointsPerLevel                                   float32
+	EffectTriggerSpell                                         int32
+	GroupSizeBasePointsCoefficient                             float32
+	NodeField120063534001                                      int32
+	PvpMultiplier, ResourceCoefficient                         float32
+	ScalingClass                                               int32
+	ImplicitTarget                                             []int32
+	Variance                                                   float32
+}
+
+type SpellPower struct {
+	SourceID, SpellID, OrderIndex                            int32
+	AltPowerBarID, ManaCost, ManaCostPerLevel, ManaPerSecond int32
+	OptionalCost                                             int32
+	OptionalCostPct, PowerCostMaxPct, PowerCostPct           float32
+	PowerDisplayID                                           int32
+	PowerPctPerSecond                                        float32
+	PowerType, RequiredAuraSpellID                           int32
+}
+
+type SpellVariant struct {
+	SpellID, DifficultyID int32
+	Misc                  *SpellMisc
+	AuraOptions           *SpellAuraOptions
+	AuraRestrictions      *SpellAuraRestrictions
+	ClassOptions          *SpellClassOptions
+	Interrupts            *SpellInterrupts
+	Categories            *SpellCategories
+	Cooldowns             *SpellCooldowns
+	Levels                *SpellLevels
+	TargetRestrictions    *SpellTargetRestrictions
+}
+
+type SpellMisc struct {
+	SourceID                                         int32
+	ActiveIconFileDataID, ActiveSpellVisualScript    int32
+	Attributes                                       []int32
+	CastingTimeIndex, ContentTuningID, DurationIndex int32
+	LaunchDelay, MinDuration                         float32
+	PvPDurationIndex, RangeIndex, SchoolMask         int32
+	ShowFutureSpellPlayerConditionID                 int32
+	Speed                                            float32
+	SpellIconFileDataID, SpellVisualScript           int32
+}
+
+type SpellAuraOptions struct {
+	SourceID, CumulativeAura, ProcCategoryRecovery, ProcChance int32
+	ProcCharges                                                int32
+	ProcTypeMask                                               []int32
+	SpellProcsPerMinuteID                                      int32
+}
+
+type SpellAuraRestrictions struct {
+	SourceID, CasterAuraSpell, CasterAuraState, CasterAuraType int32
+	ExcludeCasterAuraSpell, ExcludeCasterAuraState             int32
+	ExcludeCasterAuraType                                      int32
+	ExcludeTargetAuraSpell, ExcludeTargetAuraState             int32
+	ExcludeTargetAuraType                                      int32
+	TargetAuraSpell, TargetAuraState, TargetAuraType           int32
+}
+
+type SpellClassOptions struct {
+	SourceID, ModalNextSpell, SpellClassSet int32
+	SpellClassMask                          []int32
+}
+
+type SpellInterrupts struct {
+	SourceID, InterruptFlags                  int32
+	AuraInterruptFlags, ChannelInterruptFlags []int32
+}
+
+type SpellCategories struct {
+	SourceID, Category, ChargeCategory, DefenseType, DiminishType int32
+	DispelType, Mechanic, PreventionType, StartRecoveryCategory   int32
+}
+
+type SpellCooldowns struct {
+	SourceID, AuraSpellID                                 int32
+	CategoryRecoveryTime, RecoveryTime, StartRecoveryTime int32
+}
+
+type SpellLevels struct {
+	SourceID, BaseLevel, MaxLevel, MaxPassiveAuraLevel, SpellLevel int32
+}
+
+type SpellTargetRestrictions struct {
+	SourceID, MaxTargetLevel, MaxTargets, TargetCreatureType, Targets int32
+	ConeDegrees, Width                                                float32
 }
 
 type LossReport struct {
