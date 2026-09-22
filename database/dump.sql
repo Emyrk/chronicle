@@ -801,7 +801,8 @@ CREATE TABLE guild_discord_install_states (
     guild_id uuid NOT NULL,
     user_id uuid NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    tenant_slug text
 );
 
 CREATE TABLE guild_discord_installations (

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -50,6 +51,105 @@ func TestDiscordInstallPermissions(t *testing.T) {
 		discordgo.PermissionSendMessagesInThreads,
 	} {
 		require.Equal(t, permission, discordInstallPermissions&permission)
+	}
+}
+
+func TestDiscordInstallCallbackURL(t *testing.T) {
+	t.Parallel()
+
+	accessURL := mustParseURL("https://legacy.chronicleclassic.com")
+	api := &API{Opts: &Options{AccessURL: accessURL}}
+	require.Equal(t,
+		"https://legacy.chronicleclassic.com/api/v1/discord-integration/callback",
+		api.discordInstallCallbackURL(),
+	)
+}
+
+func TestDiscordInstallCookie(t *testing.T) {
+	t.Parallel()
+
+	before := time.Now()
+	cookie := discordInstallCookie(
+		mustParseURL("https://legacy.chronicleclassic.com"),
+		"chronicleclassic.com",
+		"install-state",
+	)
+
+	require.Equal(t, discordInstallCorrelationCookie, cookie.Name)
+	require.Equal(t, "install-state", cookie.Value)
+	require.Equal(t, discordInstallCallbackPath, cookie.Path)
+	require.Equal(t, "chronicleclassic.com", cookie.Domain)
+	require.True(t, cookie.HttpOnly)
+	require.True(t, cookie.Secure)
+	require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
+	require.Equal(t, int(discordInstallStateLifetime.Seconds()), cookie.MaxAge)
+	require.WithinDuration(t, before.Add(discordInstallStateLifetime), cookie.Expires, time.Second)
+}
+
+func TestValidDiscordInstallCorrelation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		state       string
+		cookieValue string
+		want        bool
+	}{
+		{name: "matching", state: "install-state", cookieValue: "install-state", want: true},
+		{name: "missing state", cookieValue: "install-state"},
+		{name: "missing cookie", state: "install-state"},
+		{name: "mismatched", state: "install-state", cookieValue: "other-state"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, discordInstallCallbackPath+"?state="+test.state, nil)
+			if test.cookieValue != "" {
+				req.AddCookie(&http.Cookie{Name: discordInstallCorrelationCookie, Value: test.cookieValue})
+			}
+			require.Equal(t, test.want, validDiscordInstallCorrelation(req, test.state))
+		})
+	}
+}
+
+func TestDiscordInstallReturnURL(t *testing.T) {
+	t.Parallel()
+
+	accessURL := mustParseURL("https://legacy.chronicleclassic.com")
+	guildID := uuid.MustParse("00000000-0000-0000-0000-000000000123")
+
+	tests := []struct {
+		name          string
+		primaryDomain string
+		tenantSlug    pgtype.Text
+		want          string
+	}{
+		{
+			name: "primary domain",
+			want: "https://legacy.chronicleclassic.com/g/00000000-0000-0000-0000-000000000123/settings?" +
+				"tab=discord-integration",
+		},
+		{
+			name:          "tenant domain",
+			primaryDomain: "chronicleclassic.com",
+			tenantSlug:    pgtype.Text{String: "turtle", Valid: true},
+			want: "https://turtle.chronicleclassic.com/g/00000000-0000-0000-0000-000000000123/settings?" +
+				"tab=discord-integration",
+		},
+		{
+			name:       "tenant without configured primary domain",
+			tenantSlug: pgtype.Text{String: "turtle", Valid: true},
+			want: "https://legacy.chronicleclassic.com/g/00000000-0000-0000-0000-000000000123/settings?" +
+				"tab=discord-integration",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, discordInstallReturnURL(accessURL, test.primaryDomain, test.tenantSlug, guildID))
+		})
 	}
 }
 

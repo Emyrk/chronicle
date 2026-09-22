@@ -188,13 +188,14 @@ func (api *API) Routes() chi.Router {
 				api.Auth.AuthenticationMiddleware,
 			)
 
+			r.Get("/discord-integration/callback", api.CompleteGuildDiscordInstall)
+
 			r.Group(func(r chi.Router) {
 				r.Use(
 					api.Auth.Authenticated(false),
 				)
 				r.Get("/whoami", api.WhoAmI)
 				r.Get("/whoami/dump", api.DumpToken)
-				r.Get("/discord-integration/callback", api.CompleteGuildDiscordInstall)
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Get("/me/storage", api.GetMyStorage)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
