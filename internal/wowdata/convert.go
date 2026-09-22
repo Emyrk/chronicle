@@ -65,7 +65,7 @@ func Convert(dir, expectedProduct, expectedBuild string) (*Import, error) {
 		"Only DifficultyID=0 spell component rows are imported.",
 		"Only EffectIndex 0..2 are retained; later effects are reported and dropped.",
 		"Component rows whose SpellID is absent from the base Spell table are reported and dropped.",
-		"Modern EffectBasePointsF is converted to the legacy stored representation as round(value)-1; Chronicle adds one when evaluating legacy base points.",
+		"Modern EffectBasePointsF is preserved directly and also converted to the legacy representation as round(value)-1 for consumers that still require it.",
 		"Modern icon FileDataIDs are preserved as numeric spell icon IDs; listfile-backed icon paths are imported when present, while item display IDs are not guessed.",
 		"Items without ItemSparse are reported and skipped; modern percentage stats, damage curves, armor curves, and unjoinable ItemEffect rows are not imported.",
 	}
@@ -553,6 +553,10 @@ func take(s []int32, n int) []int32 {
 }
 func mask64(s []int32) int64 { return int64(uint64(uint32(at(s, 0))) | uint64(uint32(at(s, 1)))<<32) }
 func setEffect(s *spelldb.SpellRow, i int, x spellEffectRow, base int32) {
+	if len(s.EffectBasePointsF) < 3 {
+		s.EffectBasePointsF = make([]float32, 3)
+	}
+	s.EffectBasePointsF[i] = x.EffectBasePointsF
 	switch i {
 	case 0:
 		s.Effect0 = x.Effect

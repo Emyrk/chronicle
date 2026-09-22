@@ -53,10 +53,12 @@ export function getScaledValue(
   op?: (n: number) => number,
 ): number[] {
   if (index < 0 || index >= 3) return [0];
-  const base = spell.effect_base_points[index] ?? 0;
-  const baseDice = spell.effect_base_dice[index] ?? 0;
-  const dieSides = spell.effect_die_sides[index] ?? 0;
-  const dicePerLevel = spell.effect_dice_per_level[index] ?? 0;
+  const modernBase = spell.effect_base_points_f?.[index];
+  const hasModernBase = modernBase !== undefined;
+  const base = modernBase ?? spell.effect_base_points[index] ?? 0;
+  const baseDice = hasModernBase ? 0 : spell.effect_base_dice[index] ?? 0;
+  const dieSides = hasModernBase ? 0 : spell.effect_die_sides[index] ?? 0;
+  const dicePerLevel = hasModernBase ? 0 : spell.effect_dice_per_level[index] ?? 0;
   const realPPL = spell.effect_real_points_per_level[index] ?? 0;
 
   const lvl = getEffectiveLevel(spell, forLevel);

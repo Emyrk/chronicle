@@ -47,6 +47,7 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	require.Equal(t, "Test Spell", spell.Name)
 	require.Equal(t, int32(4), spell.School, "DifficultyID != 0 must not overwrite the base row")
 	require.Equal(t, int32(4), spell.EffectBasePoints0, "modern actual base points are stored as legacy value-1")
+	require.Equal(t, []float32{5, 0, 0}, spell.EffectBasePointsF, "modern float base points are preserved without legacy encoding")
 	require.Equal(t, int32(10), spell.ManaCost, "lowest power OrderIndex wins")
 	require.NotNil(t, spell.Reagent)
 	require.NotNil(t, spell.ReagentCount)

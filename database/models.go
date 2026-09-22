@@ -1113,6 +1113,7 @@ type DbcSpell struct {
 	ExcludeCasterAuraState int32     `db:"exclude_caster_aura_state" json:"exclude_caster_aura_state"`
 	ExcludeTargetAuraState int32     `db:"exclude_target_aura_state" json:"exclude_target_aura_state"`
 	ManaPerSecondPerLevel  int32     `db:"mana_per_second_per_level" json:"mana_per_second_per_level"`
+	EffectBasePointsF      []float32 `db:"effect_base_points_f" json:"effect_base_points_f"`
 }
 
 type DbcSpellCastTime struct {

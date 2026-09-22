@@ -54,6 +54,7 @@ var columns = []string{
 	"effect_trigger_spell_2", "effect_pts_per_combo_2",
 	"effect_base_dice_2", "effect_dice_per_level_2", "effect_chain_amplitude_2",
 	"implicit_target_a_2", "implicit_target_b_2",
+	"effect_base_points_f",
 	// Totem
 	"totems_id", "totem",
 	// Other
@@ -112,6 +113,7 @@ func (r *SpellRow) values() []any {
 		r.EffectTriggerSpell2, r.EffectPtsPerCombo2,
 		r.EffectBaseDice2, r.EffectDicePerLevel2, r.EffectChainAmplitude2,
 		r.ImplicitTargetA2, r.ImplicitTargetB2,
+		nonNilFloat32s(r.EffectBasePointsF),
 		// Totem
 		r.TotemsID, nonNilInt32s(r.Totem),
 		// Other
@@ -129,6 +131,13 @@ func (r *SpellRow) values() []any {
 func nonNilInt32s(values []int32) []int32 {
 	if values == nil {
 		return []int32{}
+	}
+	return values
+}
+
+func nonNilFloat32s(values []float32) []float32 {
+	if values == nil {
+		return []float32{}
 	}
 	return values
 }
@@ -178,6 +187,7 @@ func (r *SpellRow) scanDests() []any {
 		&r.EffectTriggerSpell2, &r.EffectPtsPerCombo2,
 		&r.EffectBaseDice2, &r.EffectDicePerLevel2, &r.EffectChainAmplitude2,
 		&r.ImplicitTargetA2, &r.ImplicitTargetB2,
+		&r.EffectBasePointsF,
 		// Totem
 		&r.TotemsID, &r.Totem,
 		// Other

@@ -658,7 +658,8 @@ CREATE TABLE dbc_spells (
     exclude_target_aura_spell integer DEFAULT 0 NOT NULL,
     exclude_caster_aura_state integer DEFAULT 0 NOT NULL,
     exclude_target_aura_state integer DEFAULT 0 NOT NULL,
-    mana_per_second_per_level integer DEFAULT 0 NOT NULL
+    mana_per_second_per_level integer DEFAULT 0 NOT NULL,
+    effect_base_points_f real[] DEFAULT '{}'::real[] NOT NULL
 );
 
 CREATE TABLE dbc_vulnerability_spells (

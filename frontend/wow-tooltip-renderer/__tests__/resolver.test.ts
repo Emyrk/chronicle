@@ -24,6 +24,18 @@ describe("resolveSpellDescription — variable types", () => {
     );
   });
 
+  it("prefers modern base values over legacy encoded fields", () => {
+    const spell = makeSpell({
+      effect_base_points: [99, 0, 0],
+      effect_base_points_f: [1, 0, 0],
+      effect_base_dice: [7, 0, 0],
+      effect_die_sides: [9, 0, 0],
+    });
+    expect(resolveSpellDescription(spell, "Increases chance by $s1%.")).toBe(
+      "Increases chance by 1%.",
+    );
+  });
+
   it("$d duration formatting", () => {
     expect(
       resolveSpellDescription(

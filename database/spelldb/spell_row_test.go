@@ -32,8 +32,8 @@ func TestSpellRoundTrip(t *testing.T) {
 		NameSubtext_lang:      i18n.Text{i18n.English: "Rank 1"},
 		Description_lang:      i18n.Text{i18n.English: "Hurls a fiery ball that causes $s1 Fire damage."},
 		AuraDescription_lang:  i18n.Text{i18n.English: ""},
-		SpellIcon:     dbcmem.SpellIcon{ID: 11},
-		SpellIconID_:  11,
+		SpellIcon:             dbcmem.SpellIcon{ID: 11},
+		SpellIconID_:          11,
 		MaxLevel:              0,
 		BaseLevel:             1,
 		SpellLevel:            1,
@@ -89,6 +89,7 @@ func TestSpellRoundTrip(t *testing.T) {
 		EffectDieSides:           [3]int32{9, 0, 0},
 		EffectRealPointsPerLevel: [3]float32{0.8, 0, 0},
 		EffectBasePoints:         [3]int32{13, 0, 0},
+		EffectBasePointsF:        []float32{14.5, 0, 0},
 		EffectMechanic:           [3]int32{0, 0, 0},
 		EffectRadiusIndex_:       [3]int32{0, 0, 0},
 		EffectAura:               [3]chrondbc.AuraEffect{0, 0, 0},
@@ -166,6 +167,7 @@ func TestSpellRoundTrip(t *testing.T) {
 	assert.Equal(t, original.Effect, roundTripped.Effect)
 	assert.Equal(t, original.EffectDieSides, roundTripped.EffectDieSides)
 	assert.Equal(t, original.EffectBasePoints, roundTripped.EffectBasePoints)
+	assert.Equal(t, original.EffectBasePointsF, roundTripped.EffectBasePointsF)
 	assert.Equal(t, original.EffectRealPointsPerLevel, roundTripped.EffectRealPointsPerLevel)
 	assert.Equal(t, original.EffectBaseDice, roundTripped.EffectBaseDice)
 	assert.Equal(t, original.EffectChainAmplitude, roundTripped.EffectChainAmplitude)

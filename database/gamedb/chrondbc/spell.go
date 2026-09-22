@@ -107,6 +107,7 @@ type Spell struct {
 	EffectDieSides           [3]int32              `json:"effect_die_sides"`             // Random range: value = BasePoints + rand(1, DieSides)
 	EffectRealPointsPerLevel [3]float32            `json:"effect_real_points_per_level"` // Bonus points per caster level (for scaling)
 	EffectBasePoints         [3]int32              `json:"effect_base_points"`           // Base value for effect calculations
+	EffectBasePointsF        []float32             `json:"effect_base_points_f"`         // Modern DB2 effective values; empty for legacy DBC data
 	EffectMechanic           [3]int32              `json:"effect_mechanic"`              // Combat mechanic: stun, root, bleed, etc. (for immunity checks)
 	EffectRadius             [3]dbcmem.SpellRadius `json:"effect_radius"`                // Resolved AoE radius from SpellRadius.dbc
 	EffectAura               [3]AuraEffect         `json:"effect_aura"`                  // Aura type if Effect is ApplyAura (mod stat, periodic damage, etc.)
