@@ -6,6 +6,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestSpellEffectEffectiveBasePoints(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, float32(14), (SpellEffect{EffectBasePoints: 13}).EffectiveBasePoints())
+	exact := float32(0)
+	assert.Equal(t, float32(0), (SpellEffect{EffectBasePoints: 13, EffectBasePointsF: &exact}).EffectiveBasePoints())
+}
+
 func TestSpell_AttackOutcome(t *testing.T) {
 	t.Parallel()
 
@@ -88,20 +96,10 @@ func TestSpell_AttackOutcome(t *testing.T) {
 			name: "Hurricane",
 			spell: Spell{
 				DefenseType: DefenseTypeMagic,
-				Effect: [3]Effect{
-					EffectPersistentAA,
-					EffectPersistentAA,
-					EffectNone,
-				},
-				EffectAura: [3]AuraEffect{
-					AuraEffectPeriodicDamage,
-					AuraEffectModMeleeHaste,
-					AuraEffectNone,
-				},
-				ImplicitTargetA: [3]ImplicitTarget{
-					ImplicitTargetDestDynobjEnemy,
-					ImplicitTargetDestDynobjEnemy,
-					ImplicitTargetNone,
+				Effects: []SpellEffect{
+					{EffectIndex: 0, Effect: EffectPersistentAA, EffectAura: AuraEffectPeriodicDamage, ImplicitTarget: []int32{int32(ImplicitTargetDestDynobjEnemy)}},
+					{EffectIndex: 1, Effect: EffectPersistentAA, EffectAura: AuraEffectModMeleeHaste, ImplicitTarget: []int32{int32(ImplicitTargetDestDynobjEnemy)}},
+					{EffectIndex: 2},
 				},
 				Attrs: MakeSpellAttributes(AttrEx_Channeled1, AttrEx_CantBeRedirected, AttrEx_CantBeReflected,
 					AttrEx2_NoInitialThreat, AttrEx2_NotNeedShapeshift, Attr_NotShapeshift),
@@ -154,42 +152,37 @@ func TestSpell_SpellDamageNoEngageCombat_MutuallyExclusive(t *testing.T) {
 		{
 			name: "DistractOnly",
 			spell: Spell{
-				Effect: [3]Effect{EffectDistract},
+				Effects: []SpellEffect{{EffectIndex: 0, Effect: EffectDistract}},
 			},
 		},
 		{
 			name: "DistractAndDirectDamage",
 			spell: Spell{
-				Effect: [3]Effect{EffectDistract, EffectSchoolDMG},
+				Effects: []SpellEffect{{EffectIndex: 0, Effect: EffectDistract}, {EffectIndex: 1, Effect: EffectSchoolDMG}},
 			},
 		},
 		{
 			name: "DistractAndPeriodic",
 			spell: Spell{
-				Effect:     [3]Effect{EffectDistract, EffectApplyAura},
-				EffectAura: [3]AuraEffect{0, AuraEffectPeriodicDamage},
+				Effects: []SpellEffect{{EffectIndex: 0, Effect: EffectDistract}, {EffectIndex: 1, Effect: EffectApplyAura, EffectAura: AuraEffectPeriodicDamage}},
 			},
 		},
 		{
 			name: "DistractAndPeriodicTrigger",
 			spell: Spell{
-				Effect:     [3]Effect{EffectDistract, EffectApplyAura},
-				EffectAura: [3]AuraEffect{0, AuraEffectPeriodicTriggerSpell},
+				Effects: []SpellEffect{{EffectIndex: 0, Effect: EffectDistract}, {EffectIndex: 1, Effect: EffectApplyAura, EffectAura: AuraEffectPeriodicTriggerSpell}},
 			},
 		},
 		{
 			name: "DistractAndActiveDebuff",
 			spell: Spell{
-				Effect:          [3]Effect{EffectDistract, EffectApplyAura},
-				EffectAura:      [3]AuraEffect{0, AuraEffectModResistance},
-				ImplicitTargetA: [3]ImplicitTarget{0, ImplicitTargetUnitTargetEnemy},
+				Effects: []SpellEffect{{EffectIndex: 0, Effect: EffectDistract}, {EffectIndex: 1, Effect: EffectApplyAura, EffectAura: AuraEffectModResistance, ImplicitTarget: []int32{int32(ImplicitTargetUnitTargetEnemy)}}},
 			},
 		},
 		{
 			name: "ModDetectRangeOnly",
 			spell: Spell{
-				Effect:     [3]Effect{EffectApplyAura},
-				EffectAura: [3]AuraEffect{AuraEffectModDetectRange},
+				Effects: []SpellEffect{{EffectIndex: 0, Effect: EffectApplyAura, EffectAura: AuraEffectModDetectRange}},
 			},
 		},
 	}

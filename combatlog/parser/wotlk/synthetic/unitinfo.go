@@ -5,11 +5,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
@@ -81,10 +81,10 @@ func (z *unitInfo) detectClassFromSpell(sourceGUID guid.GUID, spell *chrondbc.Sp
 	if spell == nil {
 		return false
 	}
-	for i := range spell.Effect {
+	for _, effect := range spell.Effects {
 		// Skip effects that make items. Heathstone and other clickable creates confuse
 		// class detection.
-		if spell.Effect[i] == chrondbc.EffectCreateItem {
+		if effect.Effect == chrondbc.EffectCreateItem {
 			return false
 		}
 	}

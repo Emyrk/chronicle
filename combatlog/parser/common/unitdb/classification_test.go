@@ -17,12 +17,7 @@ import (
 func makeSpell(name string) *chrondbc.Spell {
 	return &chrondbc.Spell{
 		Name_lang: i18n.Text{i18n.English: name},
-		Effect: [3]chrondbc.Effect{
-			chrondbc.EffectApplyAura,
-		},
-		EffectAura: [3]chrondbc.AuraEffect{
-			chrondbc.AuraEffectModCharm,
-		},
+		Effects:   []chrondbc.SpellEffect{{EffectIndex: 0, Effect: chrondbc.EffectApplyAura, EffectAura: chrondbc.AuraEffectModCharm}},
 	}
 }
 

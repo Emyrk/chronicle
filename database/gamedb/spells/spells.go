@@ -226,7 +226,9 @@ func (f *Fetcher) populateModernComponents(ctx context.Context, datasetID uuid.U
 	if err != nil {
 		return fmt.Errorf("load modern spell components for spell %d: %w", spell.ID, err)
 	}
-	spell.ModernEffects = effects
+	if len(effects) > 0 {
+		spell.Effects = effects
+	}
 	spell.ModernPowers = powers
 	spell.ModernVariants = variants
 	return nil

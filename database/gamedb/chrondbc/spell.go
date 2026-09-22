@@ -1,6 +1,7 @@
 package chrondbc
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/internal/bitmask"
 	"github.com/Gophercraft/core/i18n"
+	"github.com/google/uuid"
 )
 
 const (
@@ -102,27 +104,10 @@ type Spell struct {
 	EquippedItemSubclass bitmask.Bitmask32    `json:"equipped_item_subclass"`  // Subclass is either ArmorSubclass or WeaponSubclass, depending on EquippedItemClass
 	PreventionType       PreventionType       `json:"prevention_type"`
 
-	// === Effect Data (up to 3 effects per spell, index 0-2) ===
-	Effect                   [3]Effect             `json:"effect"`                       // Effect type: damage, heal, apply aura, summon, etc.
-	EffectDieSides           [3]int32              `json:"effect_die_sides"`             // Random range: value = BasePoints + rand(1, DieSides)
-	EffectRealPointsPerLevel [3]float32            `json:"effect_real_points_per_level"` // Bonus points per caster level (for scaling)
-	EffectBasePoints         [3]int32              `json:"effect_base_points"`           // Base value for effect calculations
-	EffectBasePointsF        []float32             `json:"effect_base_points_f"`         // Modern DB2 effective values; empty for legacy DBC data
-	EffectMechanic           [3]int32              `json:"effect_mechanic"`              // Combat mechanic: stun, root, bleed, etc. (for immunity checks)
-	EffectRadius             [3]dbcmem.SpellRadius `json:"effect_radius"`                // Resolved AoE radius from SpellRadius.dbc
-	EffectAura               [3]AuraEffect         `json:"effect_aura"`                  // Aura type if Effect is ApplyAura (mod stat, periodic damage, etc.)
-	EffectAuraPeriod         [3]int32              `json:"effect_aura_period"`           // Tick interval in ms for periodic effects (e.g., 3000 = 3 sec)
-	EffectAmplitude          [3]float32            `json:"effect_amplitude"`             // Amplitude modifier for periodic effects
-	EffectChainTargets       [3]int32              `json:"effect_chain_targets"`         // Number of chain/bounce targets (Chain Lightning, etc.)
-	EffectItemType           [3]ItemID             `json:"effect_item_type"`             // Item created/affected by effect (Conjure Water creates item 5350)
-	EffectMiscValue          [3]int32              `json:"effect_misc_value"`            // Context-dependent: stat type, power type, creature ID, etc.
-	EffectTriggerSpell       [3]SpellID            `json:"effect_trigger_spell"`         // Spell triggered by this effect (procs, chain casts)
-	EffectPointsPerCombo     [3]float32            `json:"effect_points_per_combo"`      // Bonus points per combo point (rogue/druid finishers)
-	EffectBaseDice           [3]int32              `json:"effect_base_dice"`             // Base dice count for damage variance
-	EffectDicePerLevel       [3]int32              `json:"effect_dice_per_level"`        // Additional dice per caster level
-	EffectChainAmplitude     [3]float32            `json:"effect_chain_amplitude"`       // Damage multiplier per chain bounce (e.g., 0.7 = 30% reduction)
-	ImplicitTargetA          [3]ImplicitTarget     `json:"implicit_target_a"`            // Primary targeting for each effect: who/what the effect affects (self, enemy, ally, area, etc.)
-	ImplicitTargetB          [3]ImplicitTarget     `json:"implicit_target_b"`            // Secondary targeting for each effect: typically the location/destination (used for movement, AoE placement, etc.)
+	// === Effect Data ===
+	// Legacy Spell.dbc conversion always creates indexes 0-2, including empty
+	// slots. Modern DB2 data can contain sparse indexes and more than 3 effects.
+	Effects []SpellEffect `json:"effects"`
 
 	// === Totem Requirements (Shaman) ===
 	TotemsID int32     `json:"totems_id"` // Totem category/type ID
@@ -156,14 +141,13 @@ type Spell struct {
 	// Raw FK IDs for DB round-trip. These are the original index values
 	// from the DBC/database that reference the companion lookup tables.
 	// Not serialized to JSON — use the resolved structs above instead.
-	SpellIconID_       int32    `json:"-"`
-	ActiveIconID_      int32    `json:"-"`
-	CastingTimeIndex_  int32    `json:"-"`
-	RangeIndex_        int32    `json:"-"`
-	DurationIndex_     int32    `json:"-"`
-	CategoryID_        int32    `json:"-"`
-	EffectRadiusIndex_ [3]int32 `json:"-"`
-	SpellFocusID_      int32    `json:"-"`
+	SpellIconID_      int32 `json:"-"`
+	ActiveIconID_     int32 `json:"-"`
+	CastingTimeIndex_ int32 `json:"-"`
+	RangeIndex_       int32 `json:"-"`
+	DurationIndex_    int32 `json:"-"`
+	CategoryID_       int32 `json:"-"`
+	SpellFocusID_     int32 `json:"-"`
 
 	// No value
 	//RequiredAreaID          int32
@@ -187,9 +171,100 @@ type Spell struct {
 	//PowerDisplayID          int32
 
 	// === Modern ===
-	ModernEffects  []ModernSpellEffect  `json:"modern_effects,omitempty"`
 	ModernPowers   []ModernSpellPower   `json:"modern_powers,omitempty"`
 	ModernVariants []ModernSpellVariant `json:"modern_variants,omitempty"`
+}
+
+// EffectByIndex returns the effect with the requested explicit index.
+func (s *Spell) EffectByIndex(index int32) *SpellEffect {
+	for i := range s.Effects {
+		if s.Effects[i].EffectIndex == index {
+			return &s.Effects[i]
+		}
+	}
+	return nil
+}
+
+// MarshalJSON preserves the legacy parallel effect keys for existing API
+// consumers while also exposing Effects as the canonical representation.
+func (s Spell) MarshalJSON() ([]byte, error) {
+	type spellAlias Spell
+	payload := struct {
+		spellAlias
+		ModernEffects            []SpellEffect         `json:"modern_effects,omitempty"`
+		Effect                   [3]Effect             `json:"effect"`
+		EffectDieSides           [3]int32              `json:"effect_die_sides"`
+		EffectRealPointsPerLevel [3]float32            `json:"effect_real_points_per_level"`
+		EffectBasePoints         [3]int32              `json:"effect_base_points"`
+		EffectBasePointsF        []float32             `json:"effect_base_points_f"`
+		EffectMechanic           [3]int32              `json:"effect_mechanic"`
+		EffectRadius             [3]dbcmem.SpellRadius `json:"effect_radius"`
+		EffectAura               [3]AuraEffect         `json:"effect_aura"`
+		EffectAuraPeriod         [3]int32              `json:"effect_aura_period"`
+		EffectAmplitude          [3]float32            `json:"effect_amplitude"`
+		EffectChainTargets       [3]int32              `json:"effect_chain_targets"`
+		EffectItemType           [3]ItemID             `json:"effect_item_type"`
+		EffectMiscValue          [3]int32              `json:"effect_misc_value"`
+		EffectTriggerSpell       [3]SpellID            `json:"effect_trigger_spell"`
+		EffectPointsPerCombo     [3]float32            `json:"effect_points_per_combo"`
+		EffectBaseDice           [3]int32              `json:"effect_base_dice"`
+		EffectDicePerLevel       [3]int32              `json:"effect_dice_per_level"`
+		EffectChainAmplitude     [3]float32            `json:"effect_chain_amplitude"`
+		ImplicitTargetA          [3]ImplicitTarget     `json:"implicit_target_a"`
+		ImplicitTargetB          [3]ImplicitTarget     `json:"implicit_target_b"`
+	}{spellAlias: spellAlias(s)}
+
+	for _, effect := range s.Effects {
+		if effect.DatasetID != uuid.Nil {
+			payload.ModernEffects = s.Effects
+			break
+		}
+	}
+
+	var hasFloatBasePoints bool
+	for _, effect := range s.Effects {
+		if effect.EffectIndex < 0 || effect.EffectIndex >= 3 {
+			continue
+		}
+		i := int(effect.EffectIndex)
+		payload.Effect[i] = effect.Effect
+		payload.EffectDieSides[i] = effect.EffectDieSides
+		payload.EffectRealPointsPerLevel[i] = effect.EffectRealPointsPerLevel
+		payload.EffectBasePoints[i] = effect.EffectBasePoints
+		if effect.EffectBasePointsF != nil {
+			if payload.EffectBasePointsF == nil {
+				payload.EffectBasePointsF = make([]float32, 3)
+			}
+			payload.EffectBasePointsF[i] = *effect.EffectBasePointsF
+			hasFloatBasePoints = true
+		}
+		payload.EffectMechanic[i] = effect.EffectMechanic
+		payload.EffectRadius[i] = effect.EffectRadius
+		payload.EffectAura[i] = effect.EffectAura
+		payload.EffectAuraPeriod[i] = effect.EffectAuraPeriod
+		payload.EffectAmplitude[i] = effect.EffectAmplitude
+		payload.EffectChainTargets[i] = effect.EffectChainTargets
+		payload.EffectItemType[i] = effect.EffectItemType
+		if len(effect.EffectMiscValue) > 0 {
+			payload.EffectMiscValue[i] = effect.EffectMiscValue[0]
+		}
+		payload.EffectTriggerSpell[i] = effect.EffectTriggerSpell
+		payload.EffectPointsPerCombo[i] = effect.EffectPointsPerCombo
+		payload.EffectBaseDice[i] = effect.EffectBaseDice
+		payload.EffectDicePerLevel[i] = effect.EffectDicePerLevel
+		payload.EffectChainAmplitude[i] = effect.EffectChainAmplitude
+		if len(effect.ImplicitTarget) > 0 {
+			payload.ImplicitTargetA[i] = ImplicitTarget(effect.ImplicitTarget[0])
+		}
+		if len(effect.ImplicitTarget) > 1 {
+			payload.ImplicitTargetB[i] = ImplicitTarget(effect.ImplicitTarget[1])
+		}
+	}
+	if !hasFloatBasePoints {
+		payload.EffectBasePointsF = nil
+	}
+
+	return json.Marshal(payload)
 }
 
 func (s Spell) String() string {
@@ -217,10 +292,9 @@ func (s Spell) AuraDescription() string {
 }
 
 func (s Spell) Affects(other Spell) bool {
-	for i, effect := range s.EffectAura {
-		if effect == AuraEffectModDamagePercentTaken {
-			mask := s.EffectMiscValue[i]
-			if School(mask)&other.School != 0 {
+	for _, effect := range s.Effects {
+		if effect.EffectAura == AuraEffectModDamagePercentTaken && len(effect.EffectMiscValue) > 0 {
+			if School(effect.EffectMiscValue[0])&other.School != 0 {
 				return true
 			}
 		}
@@ -281,8 +355,8 @@ func (s Spell) SpellDamageType() SpellDamageType {
 		return SpellDamageNoEngageCombat
 	}
 
-	for i, eff := range s.Effect {
-		switch eff {
+	for _, effect := range s.Effects {
+		switch effect.Effect {
 		case EffectDummy:
 			base |= SpellDamageNoEngageCombat
 		case EffectEnvironmentalDMG:
@@ -300,7 +374,7 @@ func (s Spell) SpellDamageType() SpellDamageType {
 			EffectWeaponDamage:
 			base |= SpellDamageDirect
 		case EffectApplyAura, EffectPersistentAA:
-			switch s.EffectAura[i] {
+			switch effect.EffectAura {
 			case AuraEffectPeriodicDamage,
 				AuraEffectPeriodicHeal,
 				AuraEffectPeriodicEnergize,
@@ -324,9 +398,11 @@ func (s Spell) SpellDamageType() SpellDamageType {
 				// Spells like arcane missiles
 				base |= SpellDamagePeriodicTrigger
 			case AuraEffectModResistance:
-				if s.ImplicitTargetA[i] == ImplicitTargetUnitTargetEnemy ||
-					s.ImplicitTargetB[i] == ImplicitTargetUnitTargetEnemy {
-					base |= SpellDamageActiveDebuff
+				for _, target := range effect.ImplicitTarget {
+					if ImplicitTarget(target) == ImplicitTargetUnitTargetEnemy {
+						base |= SpellDamageActiveDebuff
+						break
+					}
 				}
 			}
 		case EffectApplyAreaAuraEnemy:

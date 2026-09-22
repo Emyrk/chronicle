@@ -101,8 +101,8 @@ func SpellExtraAttack() *serpent.Command {
 
 			wdb := servicewowdb.WoWDB(srvs).GameDB()
 			err = wdb.RangeSpells(func(spell *chrondbc.Spell) bool {
-				for _, e := range spell.Effect {
-					if e == chrondbc.EffectAddExtraAttacks {
+				for _, effect := range spell.Effects {
+					if effect.Effect == chrondbc.EffectAddExtraAttacks {
 						fmt.Printf("%d - %s\n", spell.ID, spell.String())
 						break
 					}

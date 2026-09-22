@@ -24,12 +24,12 @@ func collectExtraAttackSpells(wc *dbcdb.WoWClient) ([]extraAttackEntry, error) {
 	var entries []extraAttackEntry
 
 	err = spells.Range(func(spell *chrondbc.Spell) bool {
-		for i, effect := range spell.Effect {
-			if effect == chrondbc.EffectAddExtraAttacks {
+		for _, effect := range spell.Effects {
+			if effect.Effect == chrondbc.EffectAddExtraAttacks {
 				entries = append(entries, extraAttackEntry{
 					ID:              int32(spell.ID),
 					Name:            spell.String(),
-					NumExtraAttacks: spell.EffectBasePoints[i] + 1,
+					NumExtraAttacks: int32(effect.EffectiveBasePoints()),
 				})
 				break
 			}

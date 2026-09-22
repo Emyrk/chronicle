@@ -16,20 +16,34 @@ type vulnerabilitySpellRow struct {
 	FlatAffect    *int32
 }
 
+func firstEffectValue(values []int32) int32 {
+	if len(values) == 0 {
+		return 0
+	}
+	return values[0]
+}
+
 func vulnerabilitySpellFromSpell(spell *chrondbc.Spell) (vulnerabilitySpellRow, bool) {
 	if spell == nil {
 		return vulnerabilitySpellRow{}, false
 	}
 
-	for i, effect := range spell.Effect {
-		if effect != chrondbc.EffectApplyAura || spell.EffectBasePoints[i] == 0 {
+	for _, effect := range spell.Effects {
+		if effect.Effect != chrondbc.EffectApplyAura {
+			continue
+		}
+		if effect.EffectBasePointsF != nil {
+			if *effect.EffectBasePointsF == 0 {
+				continue
+			}
+		} else if effect.EffectBasePoints == 0 {
 			continue
 		}
 
-		value := spell.EffectBasePoints[i] + 1
+		value := int32(effect.EffectiveBasePoints())
 		var percentAffect *int32
 		var flatAffect *int32
-		switch spell.EffectAura[i] {
+		switch effect.EffectAura {
 		case chrondbc.AuraEffectModDamagePercentTaken:
 			percentAffect = &value
 		case chrondbc.AuraEffectModDamageTaken:
@@ -46,7 +60,7 @@ func vulnerabilitySpellFromSpell(spell *chrondbc.Spell) (vulnerabilitySpellRow, 
 		return vulnerabilitySpellRow{
 			SpellID:       int32(spell.ID),
 			Name:          spell.Name(),
-			SchoolBitmask: spell.EffectMiscValue[i],
+			SchoolBitmask: firstEffectValue(effect.EffectMiscValue),
 			PercentAffect: percentAffect,
 			FlatAffect:    flatAffect,
 		}, true

@@ -51,20 +51,20 @@ func collectDurationModifiers(wc *dbcdb.WoWClient) (*durationModifierTemplateDat
 			return true
 		}
 
-		for i, effect := range spell.Effect {
-			if effect != chrondbc.EffectApplyAura {
+		for _, effect := range spell.Effects {
+			if effect.Effect != chrondbc.EffectApplyAura {
 				continue
 			}
 
 			// EffectMiscValue == 1 means the modifier targets duration.
-			if spell.EffectMiscValue[i] != 1 {
+			if len(effect.EffectMiscValue) == 0 || effect.EffectMiscValue[0] != 1 {
 				continue
 			}
 
-			value := spell.EffectBasePoints[i] + 1
+			value := int32(effect.EffectiveBasePoints())
 			var pct, flat int32
 
-			switch spell.EffectAura[i] {
+			switch effect.EffectAura {
 			case chrondbc.AuraEffectAddPctModifier:
 				pct = value
 			case chrondbc.AuraEffectAddFlatModifier:
@@ -77,7 +77,7 @@ func collectDurationModifiers(wc *dbcdb.WoWClient) (*durationModifierTemplateDat
 			// flags bitmask (not an actual item ID). Mask to 32 bits to
 			// avoid sign-extension from negative ItemID values, then
 			// widen to uint64 for SpellClassMask comparison.
-			classMask := uint64(uint32(spell.EffectItemType[i]))
+			classMask := uint64(uint32(effect.EffectItemType))
 			if classMask == 0 {
 				continue
 			}

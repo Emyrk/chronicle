@@ -34,11 +34,8 @@ func auraCastAbsorbWithDuration(ts time.Time, spell *chrondbc.Spell, caster guid
 
 func makeAbsorbSpell(name string, basePoints int32, schoolMask int32) *chrondbc.Spell {
 	return &chrondbc.Spell{
-		Name_lang:        i18n.Text{i18n.English: name},
-		EffectAura:       [3]chrondbc.AuraEffect{chrondbc.AuraEffectSchoolAbsorb},
-		EffectBasePoints: [3]int32{basePoints},
-		EffectDieSides:   [3]int32{1},
-		EffectMiscValue:  [3]int32{schoolMask},
+		Name_lang: i18n.Text{i18n.English: name},
+		Effects:   []chrondbc.SpellEffect{{EffectIndex: 0, EffectAura: chrondbc.AuraEffectSchoolAbsorb, EffectBasePoints: basePoints, EffectDieSides: 1, EffectMiscValue: []int32{schoolMask}}},
 	}
 }
 
@@ -588,8 +585,8 @@ func TestAbsorption_NonAbsorbAuraCastIgnored(t *testing.T) {
 	bossGUID := mustGUID("0x0030000000000003")
 
 	nonAbsorbSpell := &chrondbc.Spell{
-		Name_lang:  i18n.Text{i18n.English: "Renew"},
-		EffectAura: [3]chrondbc.AuraEffect{chrondbc.AuraEffectPeriodicHeal},
+		Name_lang: i18n.Text{i18n.English: "Renew"},
+		Effects:   []chrondbc.SpellEffect{{EffectIndex: 0, EffectAura: chrondbc.AuraEffectPeriodicHeal}},
 	}
 
 	msgs := []messages.Message{

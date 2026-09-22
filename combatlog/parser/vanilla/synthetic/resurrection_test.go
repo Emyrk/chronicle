@@ -73,6 +73,6 @@ func TestDetectResurrections(t *testing.T) {
 func resurrectionSpell(name string, effect chrondbc.Effect) *chrondbc.Spell {
 	return &chrondbc.Spell{
 		Name_lang: i18n.Text{i18n.English: name},
-		Effect:    [3]chrondbc.Effect{effect},
+		Effects:   []chrondbc.SpellEffect{{EffectIndex: 0, Effect: effect}},
 	}
 }

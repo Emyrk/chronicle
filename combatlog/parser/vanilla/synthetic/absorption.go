@@ -53,11 +53,11 @@ type activeShield struct {
 	spell        *chrondbc.Spell
 	spellName    string
 	appliedAt    time.Time
-	durationMS   int32        // from AuraCast; 0 means no expiry known
-	caster       guid.GUID    // zero if unknown
-	estRemaining int32        // estimated remaining capacity (soft bound)
+	durationMS   int32     // from AuraCast; 0 means no expiry known
+	caster       guid.GUID // zero if unknown
+	estRemaining int32     // estimated remaining capacity (soft bound)
 	schoolMask   types.School
-	exhausted    bool         // deprioritized when capacity likely gone
+	exhausted    bool // deprioritized when capacity likely gone
 }
 
 func NewAbsorption(logger *slog.Logger) *Absorption {
@@ -103,12 +103,13 @@ func (a *Absorption) processAuraCast(ac *messages.AuraCast) {
 		return
 	}
 
-	// absorbEffect is the effect index carrying AuraEffectSchoolAbsorb, or -1.
-	absorbEffect := -1
+	// absorbEffect is the effect carrying AuraEffectSchoolAbsorb.
+	var absorbEffect *chrondbc.SpellEffect
 	if ac.Spell != nil {
-		for i, ae := range ac.Spell.EffectAura {
-			if ae == chrondbc.AuraEffectSchoolAbsorb {
-				absorbEffect = i
+		for i := range ac.Spell.Effects {
+			effect := &ac.Spell.Effects[i]
+			if effect.EffectAura == chrondbc.AuraEffectSchoolAbsorb {
+				absorbEffect = effect
 				break
 			}
 		}
@@ -116,7 +117,7 @@ func (a *Absorption) processAuraCast(ac *messages.AuraCast) {
 
 	explicit := ac.EffectAuraName == chrondbc.AuraEffectSchoolAbsorb
 	// Fallback path (WotLK): EffectAuraName not populated, rely on DBC scan.
-	fallback := ac.EffectAuraName == chrondbc.AuraEffectNone && absorbEffect >= 0
+	fallback := ac.EffectAuraName == chrondbc.AuraEffectNone && absorbEffect != nil
 	if !explicit && !fallback {
 		return
 	}
@@ -137,16 +138,18 @@ func (a *Absorption) processAuraCast(ac *messages.AuraCast) {
 	}
 
 	// Backfill capacity and school mask from DBC spell data.
-	if absorbEffect >= 0 {
-		base := ac.Spell.EffectBasePoints[absorbEffect]
-		dice := ac.Spell.EffectDieSides[absorbEffect]
+	if absorbEffect != nil {
+		base := int32(absorbEffect.EffectiveBasePoints())
+		dice := absorbEffect.EffectDieSides
 		// Use 2x capacity as a soft upper bound to account for talents
 		// (Improved PW:S), spell power scaling, and private server
 		// customizations.
 		shield.estRemaining = (base + dice) * 2
 
 		if shield.schoolMask == 0 {
-			shield.schoolMask = types.School(ac.Spell.EffectMiscValue[absorbEffect])
+			if len(absorbEffect.EffectMiscValue) > 0 {
+				shield.schoolMask = types.School(absorbEffect.EffectMiscValue[0])
+			}
 		}
 	}
 

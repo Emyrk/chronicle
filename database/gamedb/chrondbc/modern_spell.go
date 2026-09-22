@@ -1,42 +1,68 @@
 package chrondbc
 
-import "github.com/google/uuid"
+import (
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
+	"github.com/google/uuid"
+)
 
-// ModernSpellEffect is one normalized SpellEffect row for a modern spell.
-type ModernSpellEffect struct {
-	DatasetID                      uuid.UUID `json:"dataset_id"`
-	SpellID                        SpellID   `json:"spell_id"`
-	DifficultyID                   int32     `json:"difficulty_id"`
-	EffectIndex                    int32     `json:"effect_index"`
-	SourceID                       int32     `json:"source_id"`
-	BonusCoefficientFromAP         float32   `json:"bonus_coefficient_from_ap"`
-	Coefficient                    float32   `json:"coefficient"`
-	Effect                         int32     `json:"effect"`
-	EffectAmplitude                float32   `json:"effect_amplitude"`
-	EffectAttributes               int32     `json:"effect_attributes"`
-	EffectAura                     int32     `json:"effect_aura"`
-	EffectAuraPeriod               int32     `json:"effect_aura_period"`
-	EffectBasePointsF              float32   `json:"effect_base_points_f"`
-	EffectBonusCoefficient         float32   `json:"effect_bonus_coefficient"`
-	EffectChainAmplitude           float32   `json:"effect_chain_amplitude"`
-	EffectChainTargets             int32     `json:"effect_chain_targets"`
-	EffectItemType                 int32     `json:"effect_item_type"`
-	EffectMechanic                 int32     `json:"effect_mechanic"`
-	EffectMiscValue                []int32   `json:"effect_misc_value"`
-	EffectPointsPerResource        float32   `json:"effect_points_per_resource"`
-	EffectPosFacing                float32   `json:"effect_pos_facing"`
-	EffectRadiusIndex              []int32   `json:"effect_radius_index"`
-	EffectRealPointsPerLevel       float32   `json:"effect_real_points_per_level"`
-	EffectSpellClassMask           []int32   `json:"effect_spell_class_mask"`
-	EffectTriggerSpell             int32     `json:"effect_trigger_spell"`
-	GroupSizeBasePointsCoefficient float32   `json:"group_size_base_points_coefficient"`
-	NodeField120063534001          int32     `json:"node_field_12_0_0_63534_001"`
-	PVPMultiplier                  float32   `json:"pvp_multiplier"`
-	ResourceCoefficient            float32   `json:"resource_coefficient"`
-	ScalingClass                   int32     `json:"scaling_class"`
-	ImplicitTarget                 []int32   `json:"implicit_target"`
-	Variance                       float32   `json:"variance"`
+// SpellEffect is one canonical spell effect. It contains the union of fields
+// used by legacy Spell.dbc rows and normalized modern SpellEffect rows.
+type SpellEffect struct {
+	DatasetID    uuid.UUID `json:"dataset_id,omitempty"`
+	SpellID      SpellID   `json:"spell_id,omitempty"`
+	DifficultyID int32     `json:"difficulty_id,omitempty"`
+	EffectIndex  int32     `json:"effect_index"`
+	SourceID     int32     `json:"source_id,omitempty"`
+
+	Effect                   Effect             `json:"effect"`
+	EffectDieSides           int32              `json:"effect_die_sides,omitempty"`
+	EffectRealPointsPerLevel float32            `json:"effect_real_points_per_level,omitempty"`
+	EffectBasePoints         int32              `json:"effect_base_points"`
+	EffectBasePointsF        *float32           `json:"effect_base_points_f,omitempty"`
+	EffectMechanic           int32              `json:"effect_mechanic,omitempty"`
+	EffectRadius             dbcmem.SpellRadius `json:"effect_radius"`
+	EffectRadiusIndex        []int32            `json:"effect_radius_index,omitempty"`
+	EffectAura               AuraEffect         `json:"effect_aura,omitempty"`
+	EffectAuraPeriod         int32              `json:"effect_aura_period,omitempty"`
+	EffectAmplitude          float32            `json:"effect_amplitude,omitempty"`
+	EffectChainTargets       int32              `json:"effect_chain_targets,omitempty"`
+	EffectItemType           ItemID             `json:"effect_item_type,omitempty"`
+	EffectMiscValue          []int32            `json:"effect_misc_value,omitempty"`
+	EffectTriggerSpell       SpellID            `json:"effect_trigger_spell,omitempty"`
+	EffectPointsPerCombo     float32            `json:"effect_points_per_combo,omitempty"`
+	EffectBaseDice           int32              `json:"effect_base_dice,omitempty"`
+	EffectDicePerLevel       int32              `json:"effect_dice_per_level,omitempty"`
+	EffectChainAmplitude     float32            `json:"effect_chain_amplitude,omitempty"`
+	ImplicitTarget           []int32            `json:"implicit_target,omitempty"`
+
+	BonusCoefficientFromAP         float32 `json:"bonus_coefficient_from_ap,omitempty"`
+	Coefficient                    float32 `json:"coefficient,omitempty"`
+	EffectAttributes               int32   `json:"effect_attributes,omitempty"`
+	EffectBonusCoefficient         float32 `json:"effect_bonus_coefficient,omitempty"`
+	EffectPointsPerResource        float32 `json:"effect_points_per_resource,omitempty"`
+	EffectPosFacing                float32 `json:"effect_pos_facing,omitempty"`
+	EffectSpellClassMask           []int32 `json:"effect_spell_class_mask,omitempty"`
+	GroupSizeBasePointsCoefficient float32 `json:"group_size_base_points_coefficient,omitempty"`
+	NodeField120063534001          int32   `json:"node_field_12_0_0_63534_001,omitempty"`
+	PVPMultiplier                  float32 `json:"pvp_multiplier,omitempty"`
+	ResourceCoefficient            float32 `json:"resource_coefficient,omitempty"`
+	ScalingClass                   int32   `json:"scaling_class,omitempty"`
+	Variance                       float32 `json:"variance,omitempty"`
 }
+
+// EffectiveBasePoints returns the actual base points. Legacy Spell.dbc stores
+// the value minus one, while modern DB2 rows store the exact float value.
+func (e SpellEffect) EffectiveBasePoints() float32 {
+	if e.EffectBasePointsF != nil {
+		return *e.EffectBasePointsF
+	}
+	return float32(e.EffectBasePoints + 1)
+}
+
+// ModernSpellEffect is kept as a source-compatible alias for callers that
+// still use the old normalized-row name.
+// Deprecated: use SpellEffect.
+type ModernSpellEffect = SpellEffect
 
 // ModernSpellPower is one normalized SpellPower row for a modern spell.
 type ModernSpellPower struct {
