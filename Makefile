@@ -195,6 +195,23 @@ icons/upload: icons/manifest
 	$(call run-imagecache,./upload-r2.sh)
 	$(call run-imagecache,./upload-icon-list-r2.sh)
 
+.PHONY: icons/wowdata-extract
+icons/wowdata-extract:
+	@test -n "$(WOWDATA_SNAPSHOT)" || (echo "WOWDATA_SNAPSHOT is required" >&2; exit 2)
+	@test -n "$(WOW_CLIENT_PATH)" || (echo "WOW_CLIENT_PATH is required" >&2; exit 2)
+	scripts/dbcdata/extract-wowdata-icons.sh \
+		--snapshot="$(WOWDATA_SNAPSHOT)" \
+		--client="$(WOW_CLIENT_PATH)" \
+		--out=frontend/imagecache/$(SERVER)/icons \
+		$(if $(WOWDATA_BIN),--wowdata="$(WOWDATA_BIN)") \
+		$(if $(WOWDATA_CACHE),--cache="$(WOWDATA_CACHE)")
+
+.PHONY: icons/wowdata
+icons/wowdata: icons/wowdata-extract
+	go run ./scripts/dbstaticgen --icons-dir=frontend/imagecache/$(SERVER)/icons --out=frontend/imagecache/$(SERVER)/icon-list.json
+	$(call run-imagecache,./upload-r2.sh)
+	$(call run-imagecache,./upload-icon-list-r2.sh)
+
 # Full pipeline: extract → convert → manifest → upload
 .PHONY: icons
 icons: icons/upload

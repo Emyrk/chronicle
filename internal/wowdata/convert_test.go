@@ -35,6 +35,10 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 		map[string]any{"ID": 6, "Name_lang": "Set", "ItemID": []int{1, 2, 0}},
 		map[string]any{"ID": 7, "Name_lang": "Empty Set", "ItemID": []int{0, 0}})
 
+	writeIconRows(t, dir,
+		map[string]any{"fileDataID": 12345, "fileName": `Interface\Icons\Spell_Test.BLP`},
+		map[string]any{"fileDataID": 54321, "fileName": "interface/not-icons/ignored.blp"})
+
 	got, err := Convert(dir, "wow_classic_beta", "1.60.1.69913")
 	require.NoError(t, err)
 	require.Len(t, got.Spells, 1)
@@ -54,6 +58,7 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	require.Equal(t, 1, got.Losses.DroppedSpellEffects)
 	require.Equal(t, 1, got.Losses.DroppedSpellPowers)
 	require.Equal(t, 1, got.Losses.DroppedOrphanSpellRows)
+	require.Equal(t, []SpellIcon{{ID: 12345, TextureFilename: "spell_test"}}, got.SpellIcons)
 	require.Len(t, got.Items, 1)
 	require.Equal(t, int32(0), got.Items[0].DisplayID, "display IDs must not be guessed")
 	require.Equal(t, []int32{2}, got.Losses.MissingItemSparseIDs)
@@ -65,7 +70,7 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	require.NotNil(t, got.ItemSets[1].ItemIDs)
 	require.Empty(t, got.ItemSets[1].ItemIDs)
 	require.Contains(t, string(got.TalentTrees), `"name":"Test Spell"`)
-	require.Contains(t, string(got.TalentTrees), `"iconTexture":""`)
+	require.Contains(t, string(got.TalentTrees), `"iconTexture":"spell_test"`)
 }
 
 func TestConvertRejectsIncompleteManifest(t *testing.T) {
@@ -99,6 +104,27 @@ func newSnapshotFixture(t *testing.T) string {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.json"), data, 0o600))
 	return dir
 }
+func writeIconRows(t *testing.T, dir string, rows ...map[string]any) {
+	t.Helper()
+	path := filepath.Join(dir, "icons.jsonl")
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	enc := json.NewEncoder(f)
+	for _, row := range rows {
+		require.NoError(t, enc.Encode(row))
+	}
+	require.NoError(t, f.Close())
+
+	data, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	require.NoError(t, err)
+	var manifest Manifest
+	require.NoError(t, json.Unmarshal(data, &manifest))
+	manifest.Icons = &ManifestIcons{Rows: "icons.jsonl", Count: len(rows)}
+	data, err = json.Marshal(manifest)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.json"), data, 0o600))
+}
+
 func writeRows(t *testing.T, dir, table string, rows ...map[string]any) {
 	t.Helper()
 	f, err := os.Create(filepath.Join(dir, "tables", table+".jsonl"))

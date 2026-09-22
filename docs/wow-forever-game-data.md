@@ -45,7 +45,29 @@ go run ./scripts/dbcdata import-wowdata \
   --dry-run
 ```
 
-Use `--limit` on the extraction script only for smoke tests; limited snapshots are intentionally rejected by the importer.
+Use `--limit` on the extraction script only for smoke tests; limited snapshots are intentionally rejected by the importer. Snapshot extraction also records the modern listfile mapping from icon FileDataIDs to `Interface/Icons/*.blp` names. If listfile preparation is unavailable, table extraction still succeeds and prints a warning, but icon paths remain unresolved.
+
+## Extract and publish icons
+
+Export only the spell and item icons referenced by a retained snapshot. `wowdata` converts the CASC BLP textures directly to lossless WebP, so the legacy MPQ/Pillow conversion stage is not used:
+
+```bash
+scripts/dbcdata/extract-wowdata-icons.sh \
+  --snapshot ./export/wow-forever \
+  --client "/path/to/World of Warcraft" \
+  --out frontend/imagecache/forever/icons
+```
+
+To export, generate `icon-list.json`, and upload through the existing R2 pipeline:
+
+```bash
+make icons/wowdata \
+  SERVER=forever \
+  WOWDATA_SNAPSHOT=./export/wow-forever \
+  WOW_CLIENT_PATH="/path/to/World of Warcraft"
+```
+
+The Forever dataset should use its own icon base URL, for example `https://icons.chronicleclassic.com/forever`, in the dataset settings.
 
 The importer sends the converted payload to:
 
@@ -59,7 +81,7 @@ The endpoint requires the existing global world-data administration permission.
 
 The first importer persists:
 
-- spells and the supported legacy-compatible spell fields;
+- spells, resolved spell-icon texture mappings, and the supported legacy-compatible spell fields;
 - cast-time, duration, range, category, radius, focus-object, and description-variable metadata;
 - item rows having both `Item` and `ItemSparse` records;
 - talent trees;
@@ -72,10 +94,9 @@ Conversion is deterministic: only `DifficultyID=0` rows are selected, only effec
 
 The importer does not guess identifiers or silently treat modern fields as legacy equivalents. In particular:
 
-- FileDataIDs are not resolved to icon texture paths.
-- Item display IDs, combat stats, damage/armor curves, item effects, random properties, and item-set bonuses are not yet reconstructed.
+- Icon FileDataIDs without a community-listfile entry remain unresolved.
+- Item display IDs, item-icon database wiring, combat stats, damage/armor curves, item effects, random properties, and item-set bonuses are not yet reconstructed.
 - Effects after index 2, attributes after the first nine, extra power rows, and non-zero difficulty spell variants do not fit Chronicle's current spell model.
-- Talent icon textures remain empty.
 - `DBCache.bin` hotfix overlays are not applied by the extraction script.
 - Existing derived extra-attack, periodic-spell, and duration-modifier generation is not yet run from the modern representation.
 

@@ -84,6 +84,11 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 	if err := upsertItems(ctx, h.pool, datasetID, p.Items); err != nil {
 		return err
 	}
+	if p.SpellIcons != nil {
+		if err := h.upsertWowdataSpellIcons(ctx, datasetID, p.SpellIcons); err != nil {
+			return err
+		}
+	}
 	if err := h.upsertWowdataMetadata(ctx, datasetID, p); err != nil {
 		return err
 	}
@@ -112,6 +117,29 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 		h.wowDB.InvalidateExtraAttacks(datasetID)
 		h.wowDB.InvalidateDurationModifiers(datasetID)
 		h.wowDB.InvalidatePeriodicSpells(datasetID)
+	}
+	return nil
+}
+
+func (h *Handler) upsertWowdataSpellIcons(ctx context.Context, datasetID uuid.UUID, rows []wowdata.SpellIcon) error {
+	if _, err := h.pool.Exec(ctx, `DELETE FROM dbc_spell_icons WHERE dataset_id=$1`, datasetID); err != nil {
+		return fmt.Errorf("clear wowdata spell icons: %w", err)
+	}
+	const batchSize = 500
+	batch := &pgx.Batch{}
+	for _, row := range rows {
+		batch.Queue(`INSERT INTO dbc_spell_icons(dataset_id,id,texture_filename) VALUES($1,$2,$3)`, datasetID, row.ID, row.TextureFilename)
+		if batch.Len() >= batchSize {
+			if err := flushBatch(ctx, h.pool, batch); err != nil {
+				return fmt.Errorf("upsert wowdata spell icons: %w", err)
+			}
+			batch = &pgx.Batch{}
+		}
+	}
+	if batch.Len() > 0 {
+		if err := flushBatch(ctx, h.pool, batch); err != nil {
+			return fmt.Errorf("upsert wowdata spell icons: %w", err)
+		}
 	}
 	return nil
 }

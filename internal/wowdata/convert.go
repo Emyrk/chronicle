@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/spelldb"
@@ -65,10 +66,13 @@ func Convert(dir, expectedProduct, expectedBuild string) (*Import, error) {
 		"Only EffectIndex 0..2 are retained; later effects are reported and dropped.",
 		"Component rows whose SpellID is absent from the base Spell table are reported and dropped.",
 		"Modern EffectBasePointsF is converted to the legacy stored representation as round(value)-1; Chronicle adds one when evaluating legacy base points.",
-		"Modern icon FileDataIDs are preserved as numeric spell icon IDs, but icon paths and item display IDs are not guessed.",
+		"Modern icon FileDataIDs are preserved as numeric spell icon IDs; listfile-backed icon paths are imported when present, while item display IDs are not guessed.",
 		"Items without ItemSparse are reported and skipped; modern percentage stats, damage curves, armor curves, and unjoinable ItemEffect rows are not imported.",
 	}
 	if err := convertSpells(dir, out); err != nil {
+		return nil, err
+	}
+	if err := convertIcons(dir, manifest, out); err != nil {
 		return nil, err
 	}
 	if err := convertItems(dir, out); err != nil {
@@ -193,6 +197,56 @@ type totemsRow struct {
 	RequiredTotemCategoryID []int32
 }
 type descXRow struct{ ID, SpellID, SpellDescriptionVariablesID int32 }
+
+type iconFileRow struct {
+	FileDataID int32  `json:"fileDataID"`
+	FileName   string `json:"fileName"`
+}
+
+func convertIcons(dir string, manifest Manifest, out *Import) error {
+	if manifest.Icons == nil || manifest.Icons.Rows == "" {
+		return nil
+	}
+	out.SpellIcons = make([]SpellIcon, 0, manifest.Icons.Count)
+	path := filepath.Join(dir, filepath.FromSlash(manifest.Icons.Rows))
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open icons: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	s := bufio.NewScanner(f)
+	s.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	for line := 1; s.Scan(); line++ {
+		var row iconFileRow
+		if err := json.Unmarshal(s.Bytes(), &row); err != nil {
+			return fmt.Errorf("decode icons line %d: %w", line, err)
+		}
+		texture, ok := iconTextureName(row.FileName)
+		if !ok || row.FileDataID == 0 {
+			continue
+		}
+		out.SpellIcons = append(out.SpellIcons, SpellIcon{ID: row.FileDataID, TextureFilename: texture})
+	}
+	if err := s.Err(); err != nil {
+		return fmt.Errorf("scan icons: %w", err)
+	}
+	sort.Slice(out.SpellIcons, func(i, j int) bool { return out.SpellIcons[i].ID < out.SpellIcons[j].ID })
+	return nil
+}
+
+func iconTextureName(name string) (string, bool) {
+	name = strings.ToLower(strings.ReplaceAll(name, `\`, "/"))
+	const prefix = "interface/icons/"
+	if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".blp") {
+		return "", false
+	}
+	name = strings.TrimSuffix(strings.TrimPrefix(name, prefix), ".blp")
+	if name == "" || strings.ContainsRune(name, '/') {
+		return "", false
+	}
+	return name, true
+}
 
 func convertSpells(dir string, out *Import) error {
 	texts, err := readRows[spellTextRow](dir, "Spell")
@@ -656,8 +710,14 @@ func convertTalents(dir string, out *Import) error {
 		return err
 	}
 	names := map[int32]string{}
+	spellIconIDs := map[int32]int32{}
+	iconTextures := map[int32]string{}
 	for i := range out.Spells {
 		names[out.Spells[i].SpellID] = out.Spells[i].Name
+		spellIconIDs[out.Spells[i].SpellID] = out.Spells[i].SpellIconID
+	}
+	for _, icon := range out.SpellIcons {
+		iconTextures[icon.ID] = icon.TextureFilename
 	}
 	byTab := map[int32][]talentRow{}
 	for _, x := range rows {
@@ -681,13 +741,13 @@ func convertTalents(dir string, out *Import) error {
 			}
 			return ts[i].ID < ts[j].ID
 		})
-		td := talentTab{ID: tab.ID, Name: tab.Name, BackgroundFile: tab.BackgroundFile, OrderIndex: tab.OrderIndex, SpellIconID: tab.SpellIconID}
+		td := talentTab{ID: tab.ID, Name: tab.Name, BackgroundFile: tab.BackgroundFile, OrderIndex: tab.OrderIndex, SpellIconID: tab.SpellIconID, IconTexture: iconTextures[tab.SpellIconID]}
 		for i, t := range ts {
 			ranks := nonzero(t.SpellRank)
 			if len(ranks) == 0 {
 				continue
 			}
-			td.Talents = append(td.Talents, talentEntry{ID: t.ID, Name: names[ranks[0]], TierID: t.TierID, ColumnIndex: t.ColumnIndex, MaxRank: int32(len(ranks)), TabIndex: int32(i), SpellRanks: ranks, PrereqTalent: nonzero(t.PrereqTalent), PrereqRank: t.PrereqRank})
+			td.Talents = append(td.Talents, talentEntry{ID: t.ID, Name: names[ranks[0]], TierID: t.TierID, ColumnIndex: t.ColumnIndex, MaxRank: int32(len(ranks)), TabIndex: int32(i), SpellRanks: ranks, PrereqTalent: nonzero(t.PrereqTalent), PrereqRank: t.PrereqRank, IconTexture: iconTextures[spellIconIDs[ranks[0]]]})
 		}
 		for bit := int32(0); bit < 12; bit++ {
 			if tab.ClassMask&(1<<bit) == 0 {
