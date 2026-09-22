@@ -107,6 +107,7 @@ type Spell struct {
 	EffectDieSides           [3]int32              `json:"effect_die_sides"`             // Random range: value = BasePoints + rand(1, DieSides)
 	EffectRealPointsPerLevel [3]float32            `json:"effect_real_points_per_level"` // Bonus points per caster level (for scaling)
 	EffectBasePoints         [3]int32              `json:"effect_base_points"`           // Base value for effect calculations
+	EffectBasePointsF        []float32             `json:"effect_base_points_f"`         // Modern DB2 effective values; empty for legacy DBC data
 	EffectMechanic           [3]int32              `json:"effect_mechanic"`              // Combat mechanic: stun, root, bleed, etc. (for immunity checks)
 	EffectRadius             [3]dbcmem.SpellRadius `json:"effect_radius"`                // Resolved AoE radius from SpellRadius.dbc
 	EffectAura               [3]AuraEffect         `json:"effect_aura"`                  // Aura type if Effect is ApplyAura (mod stat, periodic damage, etc.)
@@ -171,29 +172,24 @@ type Spell struct {
 	//ChannelInterruptFlags   []int32
 	//FacingCasterFlags       int32
 	//ScalingID               int32     // Always 0
-	//CategoriesID            int32     // Always 0
-	//CooldownsID             int32     // Always 0
 	//Difficulty              int32     // Used for mythic/20man/heroic
 	//ShapeshiftID            int32     // Always 0
 	//ReagentsID              int32     // Always 0
 	//EffectSpellClassMaskA   []int32   // Always nil
 	//EffectSpellClassMaskB   []int32   // Always nil
 	//EffectSpellClassMaskC   []int32   // Always nil
-	//EffectBonusCoefficient  []float32 // always nil
 	//RequiredTotemCategoryID []int32   // Always nil
 	//EffectMiscValueB        []int32   // Always nil
 	//EffectRadiusIndexB      []int32   // Always nil
-	//AuraOptionsID           int32
-	//AuraRestrictionsID      int32
 	//CastingRequirementsID   int32
-	//ClassOptionsID          int32
 	//EquippedItemsID         int32
-	//InterruptsID            int32
-	//LevelsID                int32
-	//TargetRestrictionsID    int32
 	//RequiredProjectID       int32
-	//MiscID                  int32
 	//PowerDisplayID          int32
+
+	// === Modern ===
+	ModernEffects  []ModernSpellEffect  `json:"modern_effects,omitempty"`
+	ModernPowers   []ModernSpellPower   `json:"modern_powers,omitempty"`
+	ModernVariants []ModernSpellVariant `json:"modern_variants,omitempty"`
 }
 
 func (s Spell) String() string {

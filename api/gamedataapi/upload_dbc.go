@@ -11,13 +11,13 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
 	"github.com/Gophercraft/core/vsn"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const maxDBCFileSize = 50 * 1024 * 1024 // 50 MB
@@ -281,8 +281,8 @@ func (h *Handler) handleItemDisplayInfoUpload(ctx context.Context, w http.Respon
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
-func flushBatch(ctx context.Context, pool *pgxpool.Pool, batch *pgx.Batch) error {
-	br := pool.SendBatch(ctx, batch)
+func flushBatch(ctx context.Context, db database.DBTX, batch *pgx.Batch) error {
+	br := db.SendBatch(ctx, batch)
 	for i := 0; i < batch.Len(); i++ {
 		if _, err := br.Exec(); err != nil {
 			_ = br.Close()

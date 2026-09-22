@@ -12,7 +12,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/wdb"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, mode string, wdbHeader wdb.Header, records []wdb.Record, datasetID uuid.UUID) {
@@ -245,7 +244,7 @@ func itemRowArgs(datasetID uuid.UUID, r database.WorldItemTemplate) []any {
 }
 
 // upsertItems batch-upserts WorldItemTemplate rows using pgx batch.
-func upsertItems(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, rows []database.WorldItemTemplate) error {
+func upsertItems(ctx context.Context, pool database.DBTX, datasetID uuid.UUID, rows []database.WorldItemTemplate) error {
 	const batchSize = 500
 	for i := 0; i < len(rows); i += batchSize {
 		end := min(i+batchSize, len(rows))

@@ -130,6 +130,9 @@ func (f *Fetcher) Spell(ctx context.Context, datasetID uuid.UUID, id chrondbc.Sp
 		row, err := spelldb.GetSpell(ctx, f.pool, datasetID, int32(id))
 		if err == nil {
 			sp := row.ToSpell()
+			if err := f.populateModernComponents(ctx, datasetID, &sp); err != nil {
+				return nil, err
+			}
 			f.cache.Add(key, entry{Spell: &sp})
 			return &sp, nil
 		}
@@ -190,6 +193,9 @@ func (f *Fetcher) SpellsByName(ctx context.Context, datasetID uuid.UUID, name st
 		result := make([]*chrondbc.Spell, 0, len(rows))
 		for i := range rows {
 			sp := rows[i].ToSpell()
+			if err := f.populateModernComponents(ctx, datasetID, &sp); err != nil {
+				return nil, err
+			}
 			result = append(result, &sp)
 		}
 		return result, nil
@@ -213,6 +219,17 @@ func (f *Fetcher) SpellsByName(ctx context.Context, datasetID uuid.UUID, name st
 		result = append(result, sp)
 	}
 	return result, nil
+}
+
+func (f *Fetcher) populateModernComponents(ctx context.Context, datasetID uuid.UUID, spell *chrondbc.Spell) error {
+	effects, powers, variants, err := spelldb.GetModernSpellComponents(ctx, f.pool, datasetID, int32(spell.ID))
+	if err != nil {
+		return fmt.Errorf("load modern spell components for spell %d: %w", spell.ID, err)
+	}
+	spell.ModernEffects = effects
+	spell.ModernPowers = powers
+	spell.ModernVariants = variants
+	return nil
 }
 
 // InvalidateDataset evicts all cached entries for a dataset (including the

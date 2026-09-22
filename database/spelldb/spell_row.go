@@ -171,6 +171,10 @@ type SpellRow struct {
 	ImplicitTargetA2       int32   `db:"implicit_target_a_2"`
 	ImplicitTargetB2       int32   `db:"implicit_target_b_2"`
 
+	// Modern DB2 stores effective base points directly as floats. Legacy DBC
+	// rows leave this empty and continue using EffectBasePoints + dice fields.
+	EffectBasePointsF []float32 `db:"effect_base_points_f"`
+
 	// Totem Requirements
 	TotemsID int32   `db:"totems_id"`
 	Totem    []int32 `db:"totem"`
@@ -195,38 +199,38 @@ type SpellRow struct {
 	ManaPerSecondPerLevel  int32 `db:"mana_per_second_per_level"`
 
 	// Resolved metadata from LEFT JOINs (nullable — NULL when metadata tables not imported)
-	CtBase       *int32   `db:"-"` // from dbc_spell_cast_times
-	CtPerLevel   *int32   `db:"-"`
-	CtMinimum    *int32   `db:"-"`
-	DurBase      *int32   `db:"-"` // from dbc_spell_durations
-	DurPerLevel  *int32   `db:"-"`
-	DurMax       *int32   `db:"-"`
-	RangeMin     *float32 `db:"-"` // from dbc_spell_ranges
-	RangeMax     *float32 `db:"-"`
-	RangeFlags   *int32   `db:"-"`
-	RangeName    *string  `db:"-"`
-	IconTexture  *string  `db:"-"` // from dbc_spell_icons (primary)
-	ActiveIconTexture *string `db:"-"` // from dbc_spell_icons (active)
-	CatFlags     *int32   `db:"-"` // from dbc_spell_categories
-	CatUsesPerWeek *int32 `db:"-"`
-	CatName      *string  `db:"-"`
-	CatMaxCharges *int32  `db:"-"`
-	CatChargeRecoveryTime *int32 `db:"-"`
-	CatTypeMask  *int32   `db:"-"`
-	R0Radius     *float32 `db:"-"` // from dbc_spell_radii (effect 0)
-	R0RadiusPerLevel *float32 `db:"-"`
-	R0RadiusMin  *float32 `db:"-"`
-	R0RadiusMax  *float32 `db:"-"`
-	R1Radius     *float32 `db:"-"` // from dbc_spell_radii (effect 1)
-	R1RadiusPerLevel *float32 `db:"-"`
-	R1RadiusMin  *float32 `db:"-"`
-	R1RadiusMax  *float32 `db:"-"`
-	R2Radius     *float32 `db:"-"` // from dbc_spell_radii (effect 2)
-	R2RadiusPerLevel *float32 `db:"-"`
-	R2RadiusMin  *float32 `db:"-"`
-	R2RadiusMax  *float32 `db:"-"`
-	FocusName    *string  `db:"-"` // from dbc_spell_focus_objects
-	DescVariables *string `db:"-"` // from dbc_spell_description_variables
+	CtBase                *int32   `db:"-"` // from dbc_spell_cast_times
+	CtPerLevel            *int32   `db:"-"`
+	CtMinimum             *int32   `db:"-"`
+	DurBase               *int32   `db:"-"` // from dbc_spell_durations
+	DurPerLevel           *int32   `db:"-"`
+	DurMax                *int32   `db:"-"`
+	RangeMin              *float32 `db:"-"` // from dbc_spell_ranges
+	RangeMax              *float32 `db:"-"`
+	RangeFlags            *int32   `db:"-"`
+	RangeName             *string  `db:"-"`
+	IconTexture           *string  `db:"-"` // from dbc_spell_icons (primary)
+	ActiveIconTexture     *string  `db:"-"` // from dbc_spell_icons (active)
+	CatFlags              *int32   `db:"-"` // from dbc_spell_categories
+	CatUsesPerWeek        *int32   `db:"-"`
+	CatName               *string  `db:"-"`
+	CatMaxCharges         *int32   `db:"-"`
+	CatChargeRecoveryTime *int32   `db:"-"`
+	CatTypeMask           *int32   `db:"-"`
+	R0Radius              *float32 `db:"-"` // from dbc_spell_radii (effect 0)
+	R0RadiusPerLevel      *float32 `db:"-"`
+	R0RadiusMin           *float32 `db:"-"`
+	R0RadiusMax           *float32 `db:"-"`
+	R1Radius              *float32 `db:"-"` // from dbc_spell_radii (effect 1)
+	R1RadiusPerLevel      *float32 `db:"-"`
+	R1RadiusMin           *float32 `db:"-"`
+	R1RadiusMax           *float32 `db:"-"`
+	R2Radius              *float32 `db:"-"` // from dbc_spell_radii (effect 2)
+	R2RadiusPerLevel      *float32 `db:"-"`
+	R2RadiusMin           *float32 `db:"-"`
+	R2RadiusMax           *float32 `db:"-"`
+	FocusName             *string  `db:"-"` // from dbc_spell_focus_objects
+	DescVariables         *string  `db:"-"` // from dbc_spell_description_variables
 }
 
 // ToSpell converts a SpellRow to a chrondbc.Spell for use in parsing.
@@ -269,8 +273,8 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 		TargetAuraState:    chrondbc.AuraState(r.TargetAuraState),
 		MaxTargets:         r.MaxTargets,
 		TargetCreatureType: chrondbc.TargetCreatureType(r.TargetCreatureType),
-		SpellFocusID_:  r.RequiresSpellFocus,
-		SpellFocus:     dbcmem.SpellFocusObject{ID: r.RequiresSpellFocus},
+		SpellFocusID_:      r.RequiresSpellFocus,
+		SpellFocus:         dbcmem.SpellFocusObject{ID: r.RequiresSpellFocus},
 
 		PowerType:        chrondbc.Power(r.PowerType),
 		ManaCost:         r.ManaCost,
@@ -344,6 +348,7 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 	s.EffectDieSides = [3]int32{r.EffectDieSides0, r.EffectDieSides1, r.EffectDieSides2}
 	s.EffectRealPointsPerLevel = [3]float32{r.EffectRealPtsPerLevel0, r.EffectRealPtsPerLevel1, r.EffectRealPtsPerLevel2}
 	s.EffectBasePoints = [3]int32{r.EffectBasePoints0, r.EffectBasePoints1, r.EffectBasePoints2}
+	s.EffectBasePointsF = append([]float32(nil), r.EffectBasePointsF...)
 	s.EffectMechanic = [3]int32{r.EffectMechanic0, r.EffectMechanic1, r.EffectMechanic2}
 	s.EffectRadiusIndex_ = [3]int32{r.EffectRadiusIndex0, r.EffectRadiusIndex1, r.EffectRadiusIndex2}
 	s.EffectRadius = [3]dbcmem.SpellRadius{
@@ -471,6 +476,7 @@ func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
 		EquippedItemClass:    int32(s.EquippedItemClass),
 		EquippedItemSubclass: int32(s.EquippedItemSubclass),
 		PreventionType:       int32(s.PreventionType),
+		EffectBasePointsF:    append([]float32(nil), s.EffectBasePointsF...),
 
 		// Effect 0
 		Effect0:                int32(s.Effect[0]),

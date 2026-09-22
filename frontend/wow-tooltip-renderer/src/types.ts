@@ -125,6 +125,8 @@ export interface WoWSpell {
   effect: EnumValue[];
   effect_aura: EnumValue[];
   effect_base_points: number[];
+  /** Modern DB2 effective base points. Empty/absent for legacy DBC data. */
+  effect_base_points_f?: number[];
   effect_die_sides: number[];
   effect_base_dice: number[];
   effect_dice_per_level: number[];

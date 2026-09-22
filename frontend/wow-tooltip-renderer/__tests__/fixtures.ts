@@ -53,6 +53,7 @@ export function makeSpell(overrides: Partial<WoWSpell> = {}): WoWSpell {
     effect: [],
     effect_aura: [],
     effect_base_points: [0, 0, 0],
+    effect_base_points_f: [],
     effect_die_sides: [0, 0, 0],
     effect_base_dice: [0, 0, 0],
     effect_dice_per_level: [0, 0, 0],

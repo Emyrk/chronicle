@@ -89,7 +89,7 @@ func ImportWowdataCmd() *serpent.Command {
 				}
 			}
 			_, _ = fmt.Fprintf(inv.Stdout, "Converted %s %s: %d spells, %d items, %d enchantments, %d item sets (%s gzip)\n", converted.Product, converted.Build, len(converted.Spells), len(converted.Items), len(converted.Enchantments), len(converted.ItemSets), formatSize(raw.Len()))
-			_, _ = fmt.Fprintf(inv.Stdout, "Loss report: missing ItemSparse=%d, missing Item=%d, dropped effects=%d, dropped powers=%d, orphan spell rows=%d, non-integral base points=%d\n", len(converted.Losses.MissingItemSparseIDs), len(converted.Losses.MissingItemBaseIDs), converted.Losses.DroppedSpellEffects, converted.Losses.DroppedSpellPowers, converted.Losses.DroppedOrphanSpellRows, converted.Losses.RoundedBasePoints)
+			_, _ = fmt.Fprintf(inv.Stdout, "Loss report: missing ItemSparse=%d, missing Item=%d, effects outside legacy projection=%d, powers outside legacy projection=%d, component-only legacy spell rows=%d, non-integral base points=%d\n", len(converted.Losses.MissingItemSparseIDs), len(converted.Losses.MissingItemBaseIDs), converted.Losses.DroppedSpellEffects, converted.Losses.DroppedSpellPowers, converted.Losses.DroppedOrphanSpellRows, converted.Losses.RoundedBasePoints)
 			for _, policy := range converted.Losses.Policies {
 				_, _ = fmt.Fprintln(inv.Stdout, "-", policy)
 			}
