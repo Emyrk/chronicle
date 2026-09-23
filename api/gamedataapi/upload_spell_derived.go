@@ -9,6 +9,17 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// spellForDerivedMetadata returns the default spell view used by derived tables.
+// These tables do not carry difficulty context, so difficulty zero is the
+// explicit compatibility boundary. The resolved view keeps canonical powers
+// and variants intact while selecting only default effects and top-level fields.
+func spellForDerivedMetadata(spell *chrondbc.Spell) *chrondbc.Spell {
+	if spell == nil {
+		return nil
+	}
+	return spell.Resolve(0)
+}
+
 // deriveSpellMetadata analyses imported spells and populates the derived spell
 // metadata tables used by the parser and technical pages.
 func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, spellDBC *chrondbc.SpellsDBC) error {
@@ -39,6 +50,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 	var cooldowns []cooldownSpellRow
 
 	err := spellDBC.Range(func(spell *chrondbc.Spell) bool {
+		spell = spellForDerivedMetadata(spell)
 		if spell == nil {
 			return true
 		}
