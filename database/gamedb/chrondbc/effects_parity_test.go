@@ -2,9 +2,12 @@ package chrondbc
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
@@ -53,37 +56,54 @@ func assertLegacySpellEffectsFixtureParity(t *testing.T, fixture string, build v
 	table, err := dbc.NewDB(build).Open("Spell", bytes.NewReader(data))
 	require.NoError(t, err)
 
-	raw := dbcdb.WrapTable[dbdefs.Ent_Spell](table)
-	converted := NewSpells(table)
-	require.Equal(t, raw.Len(), converted.Len())
-	for row := 0; row < raw.Len(); row++ {
-		def, err := raw.Index(row)
-		require.NoError(t, err)
-		spell, err := converted.Index(row)
-		require.NoError(t, err)
-		require.Len(t, spell.Effects, 3, "spell %d", spell.ID)
-		for i := 0; i < 3; i++ {
-			effect := spell.Effects[i]
-			require.Equal(t, int32(i), effect.EffectIndex, "spell %d", spell.ID)
-			require.Equal(t, Effect(intAt(def.Effect, i)), effect.Effect, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, intAt(def.EffectDieSides, i), effect.EffectDieSides, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, floatAt(def.EffectRealPointsPerLevel, i), effect.EffectRealPointsPerLevel, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, intAt(def.EffectBasePoints, i), effect.EffectBasePoints, "spell %d effect %d", spell.ID, i)
-			require.Nil(t, effect.EffectBasePointsF, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, intAt(def.EffectMechanic, i), effect.EffectMechanic, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, []int32{intAt(def.EffectRadiusIndex, i)}, effect.EffectRadiusIndex, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, AuraEffect(intAt(def.EffectAura, i)), effect.EffectAura, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, intAt(def.EffectAuraPeriod, i), effect.EffectAuraPeriod, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, floatAt(def.EffectAmplitude, i), effect.EffectAmplitude, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, intAt(def.EffectChainTargets, i), effect.EffectChainTargets, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, ItemID(intAt(def.EffectItemType, i)), effect.EffectItemType, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, []int32{intAt(def.EffectMiscValue, i)}, effect.EffectMiscValue, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, SpellID(intAt(def.EffectTriggerSpell, i)), effect.EffectTriggerSpell, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, floatAt(def.EffectPointsPerCombo, i), effect.EffectPointsPerCombo, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, intAt(def.EffectBaseDice, i), effect.EffectBaseDice, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, intAt(def.EffectDicePerLevel, i), effect.EffectDicePerLevel, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, floatAt(def.EffectChainAmplitude, i), effect.EffectChainAmplitude, "spell %d effect %d", spell.ID, i)
-			require.Equal(t, []int32{intAt(def.ImplicitTargetA, i), intAt(def.ImplicitTargetB, i)}, effect.ImplicitTarget, "spell %d effect %d", spell.ID, i)
+	var (
+		rows       int
+		compareErr error
+	)
+	err = table.Range(func(def *dbdefs.Ent_Spell) bool {
+		spell := SpellFromDB(def)
+		expected := []SpellEffect{
+			legacySpellEffect(def, 0),
+			legacySpellEffect(def, 1),
+			legacySpellEffect(def, 2),
 		}
+		if !reflect.DeepEqual(expected, spell.Effects) {
+			compareErr = fmt.Errorf("spell %d effects mismatch:\nexpected: %#v\nactual:   %#v", spell.ID, expected, spell.Effects)
+			return false
+		}
+		rows++
+		return true
+	})
+	require.NoError(t, err)
+	require.NoError(t, compareErr)
+	require.Equal(t, table.Len(), rows)
+}
+
+func legacySpellEffect(def *dbdefs.Ent_Spell, index int) SpellEffect {
+	radiusIndex := intAt(def.EffectRadiusIndex, index)
+	return SpellEffect{
+		EffectIndex:              int32(index),
+		Effect:                   Effect(intAt(def.Effect, index)),
+		EffectDieSides:           intAt(def.EffectDieSides, index),
+		EffectRealPointsPerLevel: floatAt(def.EffectRealPointsPerLevel, index),
+		EffectBasePoints:         intAt(def.EffectBasePoints, index),
+		EffectMechanic:           intAt(def.EffectMechanic, index),
+		EffectRadius:             dbcmem.GetSpellRadius(radiusIndex),
+		EffectRadiusIndex:        []int32{radiusIndex},
+		EffectAura:               AuraEffect(intAt(def.EffectAura, index)),
+		EffectAuraPeriod:         intAt(def.EffectAuraPeriod, index),
+		EffectAmplitude:          floatAt(def.EffectAmplitude, index),
+		EffectChainTargets:       intAt(def.EffectChainTargets, index),
+		EffectItemType:           ItemID(intAt(def.EffectItemType, index)),
+		EffectMiscValue:          []int32{intAt(def.EffectMiscValue, index)},
+		EffectTriggerSpell:       SpellID(intAt(def.EffectTriggerSpell, index)),
+		EffectPointsPerCombo:     floatAt(def.EffectPointsPerCombo, index),
+		EffectBaseDice:           intAt(def.EffectBaseDice, index),
+		EffectDicePerLevel:       intAt(def.EffectDicePerLevel, index),
+		EffectChainAmplitude:     floatAt(def.EffectChainAmplitude, index),
+		ImplicitTarget: []int32{
+			intAt(def.ImplicitTargetA, index),
+			intAt(def.ImplicitTargetB, index),
+		},
 	}
 }
