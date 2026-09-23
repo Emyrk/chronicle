@@ -170,19 +170,17 @@ type Spell struct {
 	//RequiredProjectID       int32
 	//PowerDisplayID          int32
 
-	// === Modern ===
-	ModernPowers   []ModernSpellPower   `json:"modern_powers,omitempty"`
-	ModernVariants []ModernSpellVariant `json:"modern_variants,omitempty"`
+	// === Normalized Components ===
+	// Powers and Variants preserve every imported normalized row. The scalar
+	// resource and wide component fields above are compatibility projections.
+	Powers   []SpellPower   `json:"powers,omitempty"`
+	Variants []SpellVariant `json:"variants,omitempty"`
 }
 
-// EffectByIndex returns the effect with the requested explicit index.
+// EffectByIndex returns the default difficulty effect with the requested
+// explicit index.
 func (s *Spell) EffectByIndex(index int32) *SpellEffect {
-	for i := range s.Effects {
-		if s.Effects[i].EffectIndex == index {
-			return &s.Effects[i]
-		}
-	}
-	return nil
+	return s.EffectByIndexForDifficulty(0, index)
 }
 
 // MarshalJSON preserves the legacy parallel effect keys for existing API
@@ -192,6 +190,8 @@ func (s Spell) MarshalJSON() ([]byte, error) {
 	payload := struct {
 		spellAlias
 		ModernEffects            []SpellEffect         `json:"modern_effects,omitempty"`
+		ModernPowers             []SpellPower          `json:"modern_powers,omitempty"`
+		ModernVariants           []SpellVariant        `json:"modern_variants,omitempty"`
 		Effect                   [3]Effect             `json:"effect"`
 		EffectDieSides           [3]int32              `json:"effect_die_sides"`
 		EffectRealPointsPerLevel [3]float32            `json:"effect_real_points_per_level"`
@@ -221,8 +221,18 @@ func (s Spell) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	for _, power := range s.Powers {
+		if power.DatasetID != uuid.Nil {
+			payload.ModernPowers = s.Powers
+			break
+		}
+	}
+	if len(s.Variants) > 0 {
+		payload.ModernVariants = s.Variants
+	}
+
 	var hasFloatBasePoints bool
-	for _, effect := range s.Effects {
+	for _, effect := range s.DefaultEffects() {
 		if effect.EffectIndex < 0 || effect.EffectIndex >= 3 {
 			continue
 		}

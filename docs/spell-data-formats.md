@@ -22,9 +22,10 @@ The field counts above come from the checked-in DBC headers. The legacy effect-p
 - Legacy DBC conversion always creates exactly three entries with indexes 0, 1, and 2. Empty legacy slots remain present.
 - Modern DB2 effects can be sparse and can use indexes greater than 2. Normalized storage preserves all such rows.
 - The `dbc_spells` table and legacy JSON arrays expose only indexes 0 through 2. They are compatibility projections, not the canonical cardinality.
-- Use `Spell.EffectByIndex` when selecting a particular effect.
+- Use `Spell.EffectByIndex` for a default effect, or `EffectByIndexForDifficulty` when the difficulty is explicit.
+- `DefaultEffects` selects difficulty zero. `EffectsForDifficulty` selects the complete exact-difficulty set when present and otherwise falls back to difficulty zero. It does not merge or deduplicate rows by effect index.
 
-JSON exposes `effects` as the canonical representation. For compatibility, `Spell.MarshalJSON` also emits the old three-element parallel arrays such as `effect`, `effect_base_points`, and `implicit_target_a`. Modern database-backed spells additionally expose the full rows as `modern_effects`.
+JSON exposes `effects` as the canonical representation. For compatibility, `Spell.MarshalJSON` also emits the old three-element parallel arrays such as `effect`, `effect_base_points`, and `implicit_target_a`. Those arrays project difficulty zero and indexes 0 through 2 only. Modern database-backed spells additionally expose the full rows as `modern_effects`.
 
 ## Base points
 
@@ -40,18 +41,31 @@ Code that needs the actual value should call `EffectiveBasePoints()` instead of 
 
 Modern spell data is relational rather than one row per spell:
 
-- Every `SpellPower` row is preserved in `dbc_spell_powers`, ordered by `OrderIndex` and source ID. The legacy `dbc_spells` projection uses only the first ordered power.
-- Difficulty-aware components are grouped by `(SpellID, DifficultyID)` in `dbc_spell_variants`. This includes misc data and attributes, aura options and restrictions, class options, interrupts, categories, cooldowns, levels, and target restrictions.
+- `Spell.Powers` is the canonical resource-cost collection. Every modern `SpellPower` row is preserved in `dbc_spell_powers`, ordered by `OrderIndex` and source ID. Legacy spells normalize their scalar cost into one order-zero row.
+- `DefaultPower` selects the lowest `(OrderIndex, SourceID)`. Callers with stronger semantics must use `PowerByOrderIndex` or `PowerByType` rather than reading an arbitrary row. The scalar fields and legacy `dbc_spells` columns remain compatibility projections of the default power.
+- Difficulty-aware components are grouped by `(SpellID, DifficultyID)` in `dbc_spell_variants` and exposed in `Spell.Variants`. This includes misc data and attributes, aura options and restrictions, class options, interrupts, categories, cooldowns, levels, and target restrictions.
 - Normalized effects retain both `DifficultyID` and `EffectIndex`.
 - A component can reference a spell ID that has no row in the base `Spell` table. These component-only spell IDs remain in normalized storage even though no `dbc_spells` row can be projected for them.
 
 The converter's `DroppedSpellEffects`, `DroppedSpellPowers`, `DroppedSpellAttributes`, and `DroppedOrphanSpellRows` counters describe data omitted from the legacy `dbc_spells` projection. They do not mean the corresponding normalized modern rows were discarded.
 
+### Variant resolution and inheritance
+
+Top-level spell fields represent difficulty zero. `Resolve(difficultyID)` returns a non-mutating resolved view with these rules:
+
+1. If the spell has no nonzero-difficulty effects or variants, it returns the receiver immediately.
+2. Effects use the complete exact-difficulty set when present, otherwise the complete difficulty-zero set. Effect rows are never merged or deduplicated by index.
+3. An exact `SpellVariant` overrides each component it contains. A missing component inherits the top-level difficulty-zero values. Inheritance is component-level, not field-level: zero values inside a present component are explicit values.
+4. If no exact variant exists, top-level fields remain at difficulty zero.
+5. The resolved copy retains the full canonical `Powers` and `Variants` collections. Array-valued component data remains available there even where a legacy scalar or fixed-width field can represent only part of it.
+
+`Resolve` never changes spell identity. Fetch and cache keys remain `(datasetID, spellID)`; difficulty is selection context supplied by the caller.
+
 ## Compatibility policy
 
 Preserve modern source data losslessly in the normalized tables. Keep the three-slot SQL and legacy JSON forms only for existing consumers that still require them.
 
-Do not reduce normalized data to fit the legacy model. Update consumers to use `Spell.Effects`, `ModernPowers`, and `ModernVariants` incrementally as concrete semantic gaps arise. A consumer fix should define its intended difficulty, power, and effect-index behavior rather than applying a repository-wide lossy rule.
+Do not reduce normalized data to fit the legacy model. Update consumers to use `Spell.Effects`, `Spell.Powers`, and `Spell.Variants` incrementally as concrete semantic gaps arise. A consumer fix should define its intended difficulty, power, and effect-index behavior rather than applying a repository-wide lossy rule.
 
 ## Relevant implementation files
 

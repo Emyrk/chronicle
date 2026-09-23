@@ -60,6 +60,11 @@ internal/           # Shared utilities (testutil, cryptorand, etc.)
 - `docs/spell-data-formats.md`: required context before changing spell parsing, storage, conversion, or API behavior
 - `Makefile` – Primary build/dev commands
 
+When spell golden fields or semantics change, run `make update-spell-goldens`
+(or `go test ./database/gamedb/chrondbc -run '^TestLegacySpellGoldenParity$' -update`),
+then review and commit the golden TSV diffs. The `-update` flag regenerates golden
+values; do not pass it to `go test ./...`.
+
 ## Essential Commands
 
 ### Build
