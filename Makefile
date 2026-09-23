@@ -16,6 +16,10 @@ database/querier.go: database/sqlc.yaml database/dump.sql $(wildcard database/qu
 test:
 	gotestsum --format testname -- -tags $(SERVER) -race $$(go list -tags $(SERVER) ./...)
 
+.PHONY: update-spell-goldens
+update-spell-goldens:
+	go test ./database/gamedb/chrondbc -run '^TestLegacySpellGoldenParity$$' -update
+
 .PHONY: lint
 lint:
 	golangci-lint run --build-tags $(SERVER)
