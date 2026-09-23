@@ -301,12 +301,17 @@ func (s Spell) AuraDescription() string {
 	return s.AuraDescription_lang.String()
 }
 
+// Affects reports whether this spell's default-difficulty damage-taken aura
+// applies to the other spell's school. Callers have no runtime difficulty
+// context, so nonzero-difficulty effects must not change this classification.
 func (s Spell) Affects(other Spell) bool {
-	for _, effect := range s.Effects {
-		if effect.EffectAura == AuraEffectModDamagePercentTaken && len(effect.EffectMiscValue) > 0 {
-			if School(effect.EffectMiscValue[0])&other.School != 0 {
-				return true
-			}
+	for _, effect := range s.DefaultEffects() {
+		if effect.EffectAura != AuraEffectModDamagePercentTaken {
+			continue
+		}
+		schoolMask, ok := effect.DamageTakenSchoolMask()
+		if ok && schoolMask&other.School != 0 {
+			return true
 		}
 	}
 	return false
@@ -330,8 +335,9 @@ const (
 )
 
 // SpellDamageType is chronicle's category for the spell. It's essentially an
-// analysis of the spell's effects to determine how it functions in combat, which
-// is useful for filtering and logic.
+// analysis of the spell's default-difficulty effects to determine how it
+// functions in combat, which is useful for filtering and logic. Callers have no
+// runtime difficulty context, so nonzero-difficulty effects are excluded.
 func (s Spell) SpellDamageType() SpellDamageType {
 	var base SpellDamageType
 
@@ -365,7 +371,7 @@ func (s Spell) SpellDamageType() SpellDamageType {
 		return SpellDamageNoEngageCombat
 	}
 
-	for _, effect := range s.Effects {
+	for _, effect := range s.DefaultEffects() {
 		switch effect.Effect {
 		case EffectDummy:
 			base |= SpellDamageNoEngageCombat
