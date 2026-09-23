@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Check, CheckCircle, CircleQuestionMark, Database, ExternalLink, Eye, EyeOff, HeartPulse, Keyboard, Layers3, List, Map, MousePointerClick, Percent, Plus, Search, Settings2, Swords, Trash2 } from "lucide-react";
 import type { ArmoryPlayer, ArmorySearchResult, CharacterPerformanceRun } from "@/api/typesGenerated";
-import { useArmorySearch } from "@/api/queries";
+import { useArmorySearch, useSupportedInstanceProgressionBosses } from "@/api/queries";
 import { useCharacterEncounters, useCharacterPerformances } from "@/api/rankingsQueries";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/Card/Card";
@@ -37,6 +37,7 @@ import {
   calculatePerformanceWaterlineMarkers,
   filterPerformanceRunSeries,
   performanceValue,
+  selectPerformanceEncounterNames,
   type PerformanceDateRange,
   type PerformanceInstanceVariant,
   type PerformancePointShape,
@@ -77,6 +78,7 @@ const MAX_COMPARISON_PLAYERS = 5;
 export function PerformanceExplorer({ players, state, onStateChange }: PerformanceExplorerProps) {
   const primaryPlayer = players[0];
   const encountersQuery = useCharacterEncounters(primaryPlayer.id);
+  const progressionBossesQuery = useSupportedInstanceProgressionBosses();
   const variants = useMemo(
     () => buildPerformanceVariants(encountersQuery.data?.encounters ?? []),
     [encountersQuery.data],
@@ -107,9 +109,9 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
     && item.difficultyName === state.difficultyName
     && item.maxPlayers === state.maxPlayers
   )) ?? variants[0];
-  const effectiveEncounters = state.encounters.length > 0
-    ? state.encounters.filter((encounter) => variant?.encounters.includes(encounter))
-    : variant?.encounters ?? [];
+  const effectiveEncounters = state.encounters.length === 0 && progressionBossesQuery.isLoading
+    ? []
+    : selectPerformanceEncounterNames(variant, state.encounters, progressionBossesQuery.data);
   const { metric, display, dateRange } = state;
   const performanceQueries = useCharacterPerformances(selectedPlayers.map((selectedPlayer) => ({
     playerGuid: selectedPlayer.id,
@@ -261,7 +263,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                   dateRange={dateRange}
                   effectiveEncounters={effectiveEncounters}
                   onDateRangeChange={(nextDateRange) => onStateChange({ ...state, dateRange: nextDateRange })}
-                  onSelectAll={() => onStateChange({ ...state, encounters: [] })}
+                  onSelectAll={() => onStateChange({ ...state, encounters: variant?.encounters ?? [] })}
                   onSelectEncounter={selectEncounter}
                 />
               </aside>
@@ -427,7 +429,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
               dateRange={dateRange}
               effectiveEncounters={effectiveEncounters}
               onDateRangeChange={(nextDateRange) => onStateChange({ ...state, dateRange: nextDateRange })}
-              onSelectAll={() => onStateChange({ ...state, encounters: [] })}
+              onSelectAll={() => onStateChange({ ...state, encounters: variant?.encounters ?? [] })}
               onSelectEncounter={selectEncounter}
             />
           </div>
