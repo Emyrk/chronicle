@@ -7,12 +7,12 @@ Read this document before changing spell parsing, storage, conversion, or API be
 | Source | Repository evidence | Shape | Chronicle handling |
 | --- | --- | --- | --- |
 | Vanilla and custom Vanilla 1.12.1 | The Kronos, OctoWoW, Turtle, and VanillaPlus `Spell.dbc` fixtures have 173 fields and 692-byte records. | One monolithic `Spell.dbc` row with three effect slots. | Parsed with the 1.12.1 layout. Conversion creates effects at indexes 0, 1, and 2, including empty slots. |
-| TBC | No TBC `Spell.dbc` fixture or effect-parity case exists in this repository. | Unverified here. | Do not claim TBC spell support from the generic DBC definitions alone. Add a representative fixture and parity coverage before documenting support. |
+| TBC 2.4.3 | The checked-in TBC `Spell.dbc` fixture has 216 fields and 864-byte records. | One monolithic `Spell.dbc` row with three effect slots. | Parsed with the 2.4.3 build 8606 layout and covered by the legacy effect-parity test. |
 | Stock WotLK 3.3.5a | The Epoch fixture has 234 fields and 936-byte records. | One monolithic `Spell.dbc` row with three effect slots. | Parsed with the stock 3.3.5a layout. |
 | AzerothCore and Ascension | Both fixtures have 239 fields and 956-byte records. `spell_layout_extended.go` documents the extra effect dice columns and removed `Difficulty` column. | Chronicle's extended WotLK layout, not stock 3.3.5a. | Parsed with pseudo-build `12341` through `SpellBuildOverride`. |
 | WoW Forever | The extractor and converter read split modern DB2 tables such as `Spell`, `SpellName`, `SpellMisc`, `SpellEffect`, and `SpellPower`. | Base spell data plus normalized effects, powers, and difficulty-aware component variants. | A legacy-compatible `dbc_spells` projection is stored alongside lossless normalized tables. |
 
-The field counts above come from the checked-in DBC headers. The legacy effect-parity test covers Ascension, AzerothCore, Epoch, Kronos, OctoWoW, Turtle, and VanillaPlus.
+The field counts above come from the checked-in DBC headers. The legacy effect-parity test covers Ascension, AzerothCore, Epoch, TBC 2.4.3, Kronos, OctoWoW, Turtle, and VanillaPlus.
 
 ## Effects and indexing
 
