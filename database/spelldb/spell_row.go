@@ -320,6 +320,18 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 		ManaPerSecondPerLevel:  r.ManaPerSecondPerLevel,
 	}
 
+	// The wide row is a compatibility projection with one scalar power. Expose
+	// it through the canonical ordered collection as well.
+	s.Powers = []chrondbc.SpellPower{{
+		SpellID:          s.ID,
+		OrderIndex:       0,
+		ManaCost:         s.ManaCost,
+		ManaCostPerLevel: s.ManaCostPerLevel,
+		ManaPerSecond:    s.ManaPerSecond,
+		PowerCostPct:     float32(s.ManaCostPct),
+		PowerType:        int32(s.PowerType),
+	}}
+
 	// Reagents: [8]ItemID from []int32
 	for i := 0; i < 8 && i < len(r.Reagent); i++ {
 		s.Reagent[i] = chrondbc.ItemID(r.Reagent[i])
@@ -603,6 +615,14 @@ func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
 		ExcludeTargetAuraState: s.ExcludeTargetAuraState,
 		ManaPerSecondPerLevel:  s.ManaPerSecondPerLevel,
 	}
+	if power := s.DefaultPower(); power != nil {
+		r.PowerType = power.PowerType
+		r.ManaCost = power.ManaCost
+		r.ManaCostPct = int32(power.PowerCostPct)
+		r.ManaCostPerLevel = power.ManaCostPerLevel
+		r.ManaPerSecond = power.ManaPerSecond
+	}
+
 	return r
 }
 

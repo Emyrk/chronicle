@@ -64,8 +64,9 @@ func (e SpellEffect) EffectiveBasePoints() float32 {
 // Deprecated: use SpellEffect.
 type ModernSpellEffect = SpellEffect
 
-// ModernSpellPower is one normalized SpellPower row for a modern spell.
-type ModernSpellPower struct {
+// SpellPower is one canonical resource-cost row for a spell. Legacy Spell.dbc
+// data produces one row, while modern DB2 data can produce multiple ordered rows.
+type SpellPower struct {
 	DatasetID           uuid.UUID `json:"dataset_id"`
 	SpellID             SpellID   `json:"spell_id"`
 	OrderIndex          int32     `json:"order_index"`
@@ -84,8 +85,13 @@ type ModernSpellPower struct {
 	RequiredAuraSpellID int32     `json:"required_aura_spell_id"`
 }
 
-// ModernSpellVariant contains the optional normalized components for one spell difficulty.
-type ModernSpellVariant struct {
+// ModernSpellPower is kept as a source-compatible alias for callers that use
+// the old normalized-row name.
+// Deprecated: use SpellPower.
+type ModernSpellPower = SpellPower
+
+// SpellVariant contains the optional normalized components for one spell difficulty.
+type SpellVariant struct {
 	DatasetID          uuid.UUID                      `json:"dataset_id"`
 	SpellID            SpellID                        `json:"spell_id"`
 	DifficultyID       int32                          `json:"difficulty_id"`
@@ -99,6 +105,11 @@ type ModernSpellVariant struct {
 	Levels             *ModernSpellLevels             `json:"levels,omitempty"`
 	TargetRestrictions *ModernSpellTargetRestrictions `json:"target_restrictions,omitempty"`
 }
+
+// ModernSpellVariant is kept as a source-compatible alias for callers that use
+// the old normalized-row name.
+// Deprecated: use SpellVariant.
+type ModernSpellVariant = SpellVariant
 
 type ModernSpellMisc struct {
 	ID                               int32   `json:"id"`

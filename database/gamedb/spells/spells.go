@@ -229,8 +229,10 @@ func (f *Fetcher) populateModernComponents(ctx context.Context, datasetID uuid.U
 	if len(effects) > 0 {
 		spell.Effects = effects
 	}
-	spell.ModernPowers = powers
-	spell.ModernVariants = variants
+	if len(powers) > 0 {
+		spell.Powers = powers
+	}
+	spell.Variants = variants
 	return nil
 }
 

@@ -212,6 +212,18 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		ManaPerSecondPerLevel:  def.ManaPerSecondPerLevel,
 	}
 
+	// Legacy Spell.dbc stores one scalar resource cost. Normalize it into the
+	// same ordered collection used by modern SpellPower rows.
+	s.Powers = []SpellPower{{
+		SpellID:          s.ID,
+		OrderIndex:       0,
+		ManaCost:         s.ManaCost,
+		ManaCostPerLevel: s.ManaCostPerLevel,
+		ManaPerSecond:    s.ManaPerSecond,
+		PowerCostPct:     float32(s.ManaCostPct),
+		PowerType:        int32(s.PowerType),
+	}}
+
 	// AuraInterruptFlags - use first element if available
 	if len(def.AuraInterruptFlags) > 0 {
 		s.AuraInterruptFlags = AuraInterruptFlags(def.AuraInterruptFlags[0])
