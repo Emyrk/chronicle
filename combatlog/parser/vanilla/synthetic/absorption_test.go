@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
+	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -435,6 +436,54 @@ func TestAbsorption_WotlkDBCFallback(t *testing.T) {
 	assert.Equal(t, "Power Word: Shield", absorbed.AbsorbSpell.Name())
 	assert.Equal(t, types.School(127), absorbed.AbsorbSchool,
 		"school mask should be backfilled from DBC EffectMiscValue")
+}
+
+func TestAbsorption_WotlkDBCFallbackUsesDefaultDifficultyEffect(t *testing.T) {
+	t.Parallel()
+
+	a := NewAbsorption(slog.Default())
+	now := time.UnixMilli(1000)
+	priestGUID := mustGUID("0x0000000000000001")
+	tankGUID := mustGUID("0x0000000000000002")
+	bossGUID := mustGUID("0x0030000000000003")
+
+	spell := &chrondbc.Spell{
+		Effects: []chrondbc.SpellEffect{
+			{
+				DifficultyID:      198,
+				EffectIndex:       4,
+				EffectAura:        chrondbc.AuraEffectSchoolAbsorb,
+				EffectBasePointsF: ptr.Ref(float32(500)),
+				EffectMiscValue:   []int32{int32(types.FireSchool)},
+			},
+			{
+				DifficultyID:      0,
+				EffectIndex:       4,
+				EffectAura:        chrondbc.AuraEffectSchoolAbsorb,
+				EffectBasePointsF: ptr.Ref(float32(75)),
+				EffectMiscValue:   []int32{int32(types.FrostSchool), int32(types.FireSchool)},
+			},
+		},
+	}
+
+	result := a.ProcessMessages([]messages.Message{
+		auraCastWotlk(now, spell, priestGUID, tankGUID),
+		&messages.Damage{
+			MessageBase: messages.Base(now.Add(time.Second)),
+			Caster:      &bossGUID,
+			Target:      tankGUID,
+			Amount:      100,
+			HitType:     types.HitTypeHit | types.HitTypePartialAbsorb,
+			School:      types.FrostSchool,
+			Trailer:     trailAbsorbed(50),
+		},
+	})
+
+	require.Len(t, result, 3)
+	absorbed, ok := result[2].(*messages.Absorbed)
+	require.True(t, ok)
+	assert.Equal(t, types.FrostSchool, absorbed.AbsorbSchool)
+	require.Len(t, spell.Effects, 2, "synthesis must preserve canonical effect rows")
 }
 
 func TestAbsorption_WotlkDBCFallbackDuration(t *testing.T) {

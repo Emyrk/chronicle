@@ -106,10 +106,9 @@ func (a *Absorption) processAuraCast(ac *messages.AuraCast) {
 	// absorbEffect is the effect carrying AuraEffectSchoolAbsorb.
 	var absorbEffect *chrondbc.SpellEffect
 	if ac.Spell != nil {
-		for i := range ac.Spell.Effects {
-			effect := &ac.Spell.Effects[i]
+		for _, effect := range ac.Spell.DefaultEffects() {
 			if effect.EffectAura == chrondbc.AuraEffectSchoolAbsorb {
-				absorbEffect = effect
+				absorbEffect = &effect
 				break
 			}
 		}
@@ -147,8 +146,8 @@ func (a *Absorption) processAuraCast(ac *messages.AuraCast) {
 		shield.estRemaining = (base + dice) * 2
 
 		if shield.schoolMask == 0 {
-			if len(absorbEffect.EffectMiscValue) > 0 {
-				shield.schoolMask = types.School(absorbEffect.EffectMiscValue[0])
+			if schoolMask, ok := absorbEffect.AbsorbSchoolMask(); ok {
+				shield.schoolMask = types.School(schoolMask)
 			}
 		}
 	}

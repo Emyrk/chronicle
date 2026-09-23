@@ -99,8 +99,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 			if effect.Effect != chrondbc.EffectApplyAura {
 				continue
 			}
-			// EffectMiscValue == 1 means the modifier targets duration.
-			if len(effect.EffectMiscValue) == 0 || effect.EffectMiscValue[0] != 1 {
+			if !effect.ModifiesDuration() {
 				continue
 			}
 

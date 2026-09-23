@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
@@ -193,6 +193,30 @@ func TestClassDetectionReEmitOnDetection(t *testing.T) {
 	// Should have a re-emitted combatant with ROGUE class
 	require.Len(t, combatants, 1, "expected re-emitted combatant with detected class")
 	assert.Equal(t, types.HeroClassesROGUE, combatants[0].HeroClass)
+}
+
+func TestClassDetectionIgnoresNondefaultCreateItemEffect(t *testing.T) {
+	t.Parallel()
+
+	playerG := playerGUID(0x00000000000019CC)
+	ui := newUnitInfo(
+		context.Background(),
+		slog.Default(),
+		nil,
+		&mockNameResolver{names: map[guid.GUID]string{playerG: "Mage"}},
+		&mockSpellFetcher{},
+	)
+	spell := &chrondbc.Spell{
+		SpellClassSet: chrondbc.SpellClassSetMage,
+		Effects: []chrondbc.SpellEffect{
+			{DifficultyID: 0, EffectIndex: 0, Effect: chrondbc.EffectSchoolDMG},
+			{DifficultyID: 198, EffectIndex: 0, Effect: chrondbc.EffectCreateItem},
+		},
+	}
+
+	require.True(t, ui.detectClassFromSpell(playerG, spell))
+	require.Equal(t, types.HeroClassesMAGE, ui.detectedClass[playerG])
+	require.Len(t, spell.Effects, 2, "detection must preserve canonical effect rows")
 }
 
 func TestGenericSpellDoesNotDetectClass(t *testing.T) {
