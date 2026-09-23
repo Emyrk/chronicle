@@ -5,6 +5,7 @@ import {
   getPeriodicTotal,
   getScaledValue,
 } from "./effects.js";
+import { getTooltipEffect, hasExactBasePoints } from "./components.js";
 
 /**
  * Resolve a single template variable (e.g. "$s1", "$d", "$n") against a spell's
@@ -26,8 +27,8 @@ export function resolveVariable(
     return formatDurationMs(spell.duration.Duration);
   }
 
-  // Indexed variables: $X# where X is a letter and # is 1, 2, or 3
-  const indexedMatch = variable.match(/^\$([a-zA-Z])(\d)$/);
+  // Indexed variables: $X# where X is a letter and # is a 1-based effect index.
+  const indexedMatch = variable.match(/^\$([a-zA-Z])(\d+)$/);
   if (indexedMatch) {
     const type = indexedMatch[1].toLowerCase();
     const index = parseInt(indexedMatch[2], 10) - 1; // 1-indexed -> 0-indexed
@@ -35,31 +36,41 @@ export function resolveVariable(
     switch (type) {
       case "s": // Effect value (base + die range)
       case "m": // Modified effect value (same as $s for our purposes)
-        return formatValue(getScaledValue(spell, index, lvl));
+        return formatValue(
+          getScaledValue(spell, index, lvl),
+          hasExactBasePoints(spell, index),
+        );
 
       case "o": // Total over duration
-        return formatValue(getPeriodicTotal(spell, index, lvl));
+        return formatValue(
+          getPeriodicTotal(spell, index, lvl),
+          hasExactBasePoints(spell, index),
+        );
 
       case "t": {
         // Tick interval in seconds
-        const period = spell.effect_aura_period[index] ?? 0;
+        const period = getTooltipEffect(spell, index)?.effect_aura_period ?? 0;
         return period > 0 ? String(Math.round(period / 1000)) : "0";
       }
 
       case "a": {
         // AOE radius
-        const radius = spell.effect_radius[index];
+        const radius = getTooltipEffect(spell, index)?.effect_radius;
         return radius ? String(radius.Radius) : "0";
       }
 
       case "e": // Effect amplitude/proc value
-        return String(spell.effect_amplitude[index] ?? 0);
+        return String(getTooltipEffect(spell, index)?.effect_amplitude ?? 0);
 
       case "x": // Chain targets
-        return String(spell.effect_chain_targets[index] ?? 0);
+        return String(
+          getTooltipEffect(spell, index)?.effect_chain_targets ?? 0,
+        );
 
       case "b": // Points per combo point
-        return String(spell.effect_points_per_combo[index] ?? 0);
+        return String(
+          getTooltipEffect(spell, index)?.effect_points_per_combo ?? 0,
+        );
 
       case "d": // Duration (spell-level, index ignored)
         return formatDurationMs(spell.duration.Duration);
@@ -79,10 +90,16 @@ export function resolveVariable(
   switch (variable) {
     case "$s": // Effect value (base + die range)
     case "$m": // Modified effect value (same as $s for our purposes)
-      return formatValue(getScaledValue(spell, 0, lvl));
+      return formatValue(
+        getScaledValue(spell, 0, lvl),
+        hasExactBasePoints(spell, 0),
+      );
 
     case "$o": // Total over duration
-      return formatValue(getPeriodicTotal(spell, 0, lvl));
+      return formatValue(
+        getPeriodicTotal(spell, 0, lvl),
+        hasExactBasePoints(spell, 0),
+      );
 
     case "$n": // Proc charges / stacks
       return String(spell.proc_charges || 1);
@@ -101,7 +118,7 @@ export function resolveVariable(
 
     case "$t": {
       // Tick interval without index defaults to effect 1
-      const period = spell.effect_aura_period[0] ?? 0;
+      const period = getTooltipEffect(spell, 0)?.effect_aura_period ?? 0;
       return period > 0 ? String(Math.round(period / 1000)) : "0";
     }
 

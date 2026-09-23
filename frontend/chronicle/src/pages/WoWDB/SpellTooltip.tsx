@@ -10,6 +10,7 @@ import {
   formatDuration,
   resolveSpellDescription,
   extractReferencedSpellIds,
+  getDefaultPower,
 } from "@/api/wowdb";
 import { SpellSchoolText } from "@/components/SpellSchoolBadge";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -70,11 +71,16 @@ export function SpellTooltip({ spell, locale = "0", detailed = false, footer }: 
   const description = resolveSpellDescription(spell, descriptionTemplate, referencedSpells);
   const auraDesc = resolveSpellDescription(spell, auraDescTemplate, referencedSpells);
 
-  // Determine resource cost display
-  const hasCost = spell.mana_cost > 0 || spell.mana_cost_pct > 0;
-  const costDisplay = spell.mana_cost_pct > 0 
-    ? `${spell.mana_cost_pct}% of base ${spell.power_type.string}`
-    : `${spell.mana_cost} ${spell.power_type.string}`;
+  // Select the canonical default power. Older payloads use the renderer's
+  // explicit scalar compatibility projection.
+  const defaultPower = getDefaultPower(spell);
+  const manaCost = defaultPower?.mana_cost ?? 0;
+  const manaCostPct = defaultPower?.power_cost_pct ?? 0;
+  const hasCost = manaCost > 0 || manaCostPct > 0;
+  const costDisplay =
+    manaCostPct > 0
+      ? `${manaCostPct}% of base ${spell.power_type.string}`
+      : `${manaCost} ${spell.power_type.string}`;
 
   return (
     <div className="bg-[#1a1a2e] border-2 border-[#4a4a6a] rounded-lg px-3 py-3 max-w-md shadow-lg font-wow">

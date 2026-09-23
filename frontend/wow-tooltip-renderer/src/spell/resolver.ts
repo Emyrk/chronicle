@@ -1,11 +1,8 @@
 import type { WoWSpell } from "../types.js";
 import { getEnglishText } from "../shared/localization.js";
-import {
-  formatValue,
-  getPeriodicTotal,
-  getScaledValue,
-} from "./effects.js";
+import { formatValue, getPeriodicTotal, getScaledValue } from "./effects.js";
 import { resolveVariable } from "./variables.js";
+import { hasExactBasePoints } from "./components.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 
 // === WoW Spell Description Template Parser ===
@@ -24,8 +21,8 @@ import { evaluateArithmetic } from "./arithmetic.js";
 //   crossRef = DIGITS varRef                           -- $23455s1  (optionally -$...)
 //   plural   = 'l' TEXT ':' TEXT ';'                   -- $lpoint:points;  (lowercase l only)
 //   gender   = ('g'|'G') TEXT ':' TEXT ';'             -- $ghe:she;
-//   localVar = LETTER DIGIT?                            -- $s1, $d, $n  (optionally -$...)
-//   varRef   = LETTER DIGIT?
+//   localVar = LETTER DIGITS?                           -- $s1, $s10, $d, $n
+//   varRef   = LETTER DIGITS?
 //
 // Notes on fidelity to the historical resolver:
 //   - Pluralization picks singular when the most recently emitted number is 1,
@@ -42,14 +39,14 @@ import { evaluateArithmetic } from "./arithmetic.js";
 //     has no character spellbook context.
 
 // Arithmetic modifiers: $*N;var or $/N;var, with optional cross-spell ref: $/10;23690s1
-const RE_ARITH_MUL = /^\$\*(\d+);(\d+)?([a-zA-Z])(\d)?/;
-const RE_ARITH_DIV = /^\$\/(\d+);(\d+)?([a-zA-Z])(\d)?/;
+const RE_ARITH_MUL = /^\$\*(\d+);(\d+)?([a-zA-Z])(\d+)?/;
+const RE_ARITH_DIV = /^\$\/(\d+);(\d+)?([a-zA-Z])(\d+)?/;
 const RE_CONDITIONAL = /^\$\?s\d+/;
-const RE_CROSSREF = /^\$(\d+)([a-zA-Z])(\d)?/;
+const RE_CROSSREF = /^\$(\d+)([a-zA-Z])(\d+)?/;
 const RE_PLURAL = /^\$l([^:]+):([^;]+);/; // lowercase $l only
 const RE_GENDER = /^\$g([^:]+):([^;]+);/i; // $g / $G
 const RE_DESCVAR = /^\$<([a-zA-Z_][a-zA-Z0-9_]*)>/; // $<total>, $<bonus>, etc.
-const RE_LOCALVAR = /^\$([a-zA-Z])(\d)?/;
+const RE_LOCALVAR = /^\$([a-zA-Z])(\d+)?/;
 
 // Last run of digits in a string, used to update the pluralization anchor.
 const RE_LAST_NUMBER = /(\d+)(?![\s\S]*\d)/;
@@ -115,11 +112,15 @@ function applyArith(
 ): string {
   const t = type.toLowerCase();
   const idx = index ? parseInt(index, 10) - 1 : 0;
+  const preserveExactBase = floating || hasExactBasePoints(spell, idx);
   if (t === "s" || t === "m") {
-    return formatValue(getScaledValue(spell, idx, lvl, op), floating);
+    return formatValue(getScaledValue(spell, idx, lvl, op), preserveExactBase);
   }
   if (t === "o") {
-    return formatValue(getPeriodicTotal(spell, idx, lvl, op), floating);
+    return formatValue(
+      getPeriodicTotal(spell, idx, lvl, op),
+      preserveExactBase,
+    );
   }
   // Fallback: resolve the bare variable as a string, then apply the scalar.
   const variable = `$${type}${index || ""}`;
@@ -195,9 +196,19 @@ export function resolveSpellDescription(
     // $*N;[spellId]var — multiply (optional cross-spell reference)
     if ((m = RE_ARITH_MUL.exec(rest))) {
       const mult = parseInt(m[1], 10);
-      const refSpell = m[2] ? referencedSpells?.get(parseInt(m[2], 10)) : undefined;
+      const refSpell = m[2]
+        ? referencedSpells?.get(parseInt(m[2], 10))
+        : undefined;
       append(
-        applyArith(refSpell ?? spell, m[3], m[4], lvl, (x) => x * mult, false, m[0]),
+        applyArith(
+          refSpell ?? spell,
+          m[3],
+          m[4],
+          lvl,
+          (x) => x * mult,
+          false,
+          m[0],
+        ),
       );
       i += m[0].length;
       continue;
@@ -209,9 +220,19 @@ export function resolveSpellDescription(
       if (div === 0) {
         append(m[0]); // avoid divide-by-zero; keep placeholder
       } else {
-        const refSpell = m[2] ? referencedSpells?.get(parseInt(m[2], 10)) : undefined;
+        const refSpell = m[2]
+          ? referencedSpells?.get(parseInt(m[2], 10))
+          : undefined;
         append(
-          applyArith(refSpell ?? spell, m[3], m[4], lvl, (x) => x / div, true, m[0]),
+          applyArith(
+            refSpell ?? spell,
+            m[3],
+            m[4],
+            lvl,
+            (x) => x / div,
+            true,
+            m[0],
+          ),
         );
       }
       i += m[0].length;
@@ -283,7 +304,12 @@ export function resolveSpellDescription(
       const expr = descVarMap.get(varName);
       if (expr !== undefined) {
         // Resolve inner variables in the expression, then evaluate arithmetic.
-        const resolved = resolveSpellDescription(spell, expr, referencedSpells, forLevel);
+        const resolved = resolveSpellDescription(
+          spell,
+          expr,
+          referencedSpells,
+          forLevel,
+        );
         const evaluated = evaluateArithmetic(resolved);
         append(evaluated !== null ? String(evaluated) : resolved);
       } else {
@@ -318,13 +344,13 @@ export function extractReferencedSpellIds(template: string): number[] {
   if (!template) return [];
   const ids = new Set<number>();
   // Direct cross-ref: $3137s1
-  const directRef = /\$(\d+)([a-zA-Z])(\d)?/g;
+  const directRef = /\$(\d+)([a-zA-Z])(\d+)?/g;
   let match: RegExpExecArray | null;
   while ((match = directRef.exec(template)) !== null) {
     ids.add(parseInt(match[1], 10));
   }
   // Arithmetic cross-ref: $/10;23690s1  or  $*8;23690s1
-  const arithRef = /\$[*/](\d+);(\d+)([a-zA-Z])(\d)?/g;
+  const arithRef = /\$[*/](\d+);(\d+)([a-zA-Z])(\d+)?/g;
   while ((match = arithRef.exec(template)) !== null) {
     ids.add(parseInt(match[2], 10));
   }
@@ -337,7 +363,9 @@ export function extractReferencedSpellIds(template: string): number[] {
  * Variables can reference other variables via $<name> syntax.
  * Returns a Map from variable name (without $) to its expression string.
  */
-function parseDescriptionVariables(raw: string | undefined): Map<string, string> {
+function parseDescriptionVariables(
+  raw: string | undefined,
+): Map<string, string> {
   const map = new Map<string, string>();
   if (!raw) return map;
 

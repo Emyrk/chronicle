@@ -1,4 +1,5 @@
 import type { WoWSpell } from "../types.js";
+import { getTooltipEffect } from "./components.js";
 
 /**
  * Format a duration in milliseconds to a human-readable string. Used for $d.
@@ -52,14 +53,17 @@ export function getScaledValue(
   forLevel: number,
   op?: (n: number) => number,
 ): number[] {
-  if (index < 0 || index >= 3) return [0];
-  const modernBase = spell.effect_base_points_f?.[index];
+  if (index < 0) return [0];
+  const effect = getTooltipEffect(spell, index);
+  if (!effect) return [0];
+
+  const modernBase = effect.effect_base_points_f;
   const hasModernBase = modernBase !== undefined;
-  const base = modernBase ?? spell.effect_base_points[index] ?? 0;
-  const baseDice = hasModernBase ? 0 : spell.effect_base_dice[index] ?? 0;
-  const dieSides = hasModernBase ? 0 : spell.effect_die_sides[index] ?? 0;
-  const dicePerLevel = hasModernBase ? 0 : spell.effect_dice_per_level[index] ?? 0;
-  const realPPL = spell.effect_real_points_per_level[index] ?? 0;
+  const base = modernBase ?? effect.effect_base_points;
+  const baseDice = hasModernBase ? 0 : (effect.effect_base_dice ?? 0);
+  const dieSides = hasModernBase ? 0 : (effect.effect_die_sides ?? 0);
+  const dicePerLevel = hasModernBase ? 0 : (effect.effect_dice_per_level ?? 0);
+  const realPPL = effect.effect_real_points_per_level ?? 0;
 
   const lvl = getEffectiveLevel(spell, forLevel);
   const diceCount = baseDice + dicePerLevel * lvl;
@@ -87,9 +91,12 @@ export function getPeriodicTotal(
   forLevel: number,
   op?: (n: number) => number,
 ): number[] {
-  if (index < 0 || index >= 3) return [0];
+  if (index < 0) return [0];
+  const effect = getTooltipEffect(spell, index);
+  if (!effect) return [0];
+
   const values = getScaledValue(spell, index, forLevel, op);
-  const amplitude = spell.effect_aura_period[index] ?? 0;
+  const amplitude = effect.effect_aura_period ?? 0;
   const duration = spell.duration.Duration ?? 0;
   if (amplitude <= 0 || duration <= 0) return values;
   const ticks = duration / amplitude;
