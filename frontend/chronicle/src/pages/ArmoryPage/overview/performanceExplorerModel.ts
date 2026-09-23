@@ -1,5 +1,9 @@
 import type { CharacterEncounterStats, CharacterPerformanceRun } from "@/api/typesGenerated";
-import { defaultRankingBossNames } from "@/pages/Rankings/rankingsEncounterSelection";
+import {
+  defaultRankingBossNames,
+  rankingEncounterSections,
+  type RankingEncounterSection,
+} from "@/pages/Rankings/rankingsEncounterSelection";
 
 export interface PerformanceInstanceVariant {
   key: string;
@@ -42,6 +46,16 @@ export function buildPerformanceVariants(
   return [...variants.values()]
     .map((variant) => ({ ...variant, encounters: [...variant.encounters].sort() }))
     .sort((a, b) => b.lastKilledAt.localeCompare(a.lastKilledAt));
+}
+
+export function performanceEncounterSections(
+  variant: PerformanceInstanceVariant | undefined,
+  progressionBosses: Map<string, Set<string>> | undefined,
+): RankingEncounterSection[] {
+  if (!variant) return [];
+  const progressionBossNames = progressionBosses?.get(variant.instanceName)
+    ?? new Set(variant.encounters);
+  return rankingEncounterSections(variant.encounters, progressionBossNames);
 }
 
 export function selectPerformanceEncounterNames(

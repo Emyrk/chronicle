@@ -10,6 +10,7 @@ import {
   filterPerformanceRuns,
   filterPerformanceRunsByDate,
   filterPerformanceRunSeries,
+  performanceEncounterSections,
   performanceValue,
   selectPerformanceEncounterNames,
 } from "./performanceExplorerModel";
@@ -62,6 +63,42 @@ describe("buildPerformanceVariants", () => {
     expect(result).toHaveLength(2);
     expect(result[0].instanceName).toBe("Blackwing Lair");
     expect(result[1].encounters).toEqual(["Garr", "Magmadar"]);
+  });
+});
+
+describe("performanceEncounterSections", () => {
+  const variant = buildPerformanceVariants([
+    encounter({ instance_name: "Zul'Gurub", encounter_name: "High Priestess Jeklik" }),
+    encounter({ instance_name: "Zul'Gurub", encounter_name: "Hakkar" }),
+    encounter({ instance_name: "Zul'Gurub", encounter_name: "Gahz'ranka" }),
+    encounter({ instance_name: "Zul'Gurub", encounter_name: "Hazza'rah" }),
+  ])[0];
+
+  it("puts optional Zul'Gurub bosses in their own section", () => {
+    expect(performanceEncounterSections(variant, new Map([
+      ["Zul'Gurub", new Set(["High Priestess Jeklik", "Hakkar"])],
+    ]))).toEqual([
+      {
+        label: "Bosses",
+        kind: "boss",
+        names: ["Hakkar", "High Priestess Jeklik"],
+      },
+      {
+        label: "Optional",
+        kind: "optional",
+        names: ["Gahz'ranka", "Hazza'rah"],
+      },
+    ]);
+  });
+
+  it("shows one Bosses section when progression metadata is unavailable", () => {
+    expect(performanceEncounterSections(variant, undefined)).toEqual([
+      {
+        label: "Bosses",
+        kind: "boss",
+        names: variant.encounters,
+      },
+    ]);
   });
 });
 

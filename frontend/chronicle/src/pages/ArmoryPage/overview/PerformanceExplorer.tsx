@@ -36,10 +36,10 @@ import {
   buildPerformanceVariants,
   calculatePerformanceWaterlineMarkers,
   filterPerformanceRunSeries,
+  performanceEncounterSections,
   performanceValue,
   selectPerformanceEncounterNames,
   type PerformanceDateRange,
-  type PerformanceInstanceVariant,
   type PerformancePointShape,
 } from "./performanceExplorerModel";
 
@@ -109,6 +109,9 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
     && item.difficultyName === state.difficultyName
     && item.maxPlayers === state.maxPlayers
   )) ?? variants[0];
+  const encounterSections = progressionBossesQuery.isLoading
+    ? []
+    : performanceEncounterSections(variant, progressionBossesQuery.data);
   const effectiveEncounters = state.encounters.length === 0 && progressionBossesQuery.isLoading
     ? []
     : selectPerformanceEncounterNames(variant, state.encounters, progressionBossesQuery.data);
@@ -259,7 +262,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
             <div className="flex flex-col lg:flex-row">
               <aside className="hidden shrink-0 lg:block lg:w-64 lg:border-r lg:border-border/60 lg:pr-5">
                 <EncounterSelectorControls
-                  variant={variant}
+                  encounterSections={encounterSections}
                   dateRange={dateRange}
                   effectiveEncounters={effectiveEncounters}
                   onDateRangeChange={(nextDateRange) => onStateChange({ ...state, dateRange: nextDateRange })}
@@ -425,7 +428,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto p-4 styled-scrollbar">
             <EncounterSelectorControls
-              variant={variant}
+              encounterSections={encounterSections}
               dateRange={dateRange}
               effectiveEncounters={effectiveEncounters}
               onDateRangeChange={(nextDateRange) => onStateChange({ ...state, dateRange: nextDateRange })}
@@ -649,14 +652,14 @@ function ShortcutRow({
 }
 
 function EncounterSelectorControls({
-  variant,
+  encounterSections,
   dateRange,
   effectiveEncounters,
   onDateRangeChange,
   onSelectAll,
   onSelectEncounter,
 }: {
-  variant?: PerformanceInstanceVariant;
+  encounterSections: ReturnType<typeof performanceEncounterSections>;
   dateRange: PerformanceDateRange;
   effectiveEncounters: readonly string[];
   onDateRangeChange: (dateRange: PerformanceDateRange) => void;
@@ -702,39 +705,45 @@ function EncounterSelectorControls({
             All
           </Button>
         </div>
-        <div className="mt-3">
-          <h4 className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-            Bosses
-          </h4>
-          <div className="space-y-1">
-            {variant?.encounters.map((encounter) => {
-              const selected = effectiveEncounters.includes(encounter);
-              return (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  key={encounter}
-                  onClick={(event) => onSelectEncounter(encounter, event.ctrlKey || event.metaKey)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onSelectEncounter(encounter, event.ctrlKey || event.metaKey);
-                    }
-                  }}
-                  className={cn(
-                    "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-all duration-150",
-                    selected
-                      ? "border-l-3 border-l-primary-foreground/70 bg-primary-darker text-primary-foreground shadow-sm"
-                      : "hover:translate-x-0.5 hover:bg-accent/50",
-                  )}
-                  title={`${encounter}. Click to select, Ctrl+Click to toggle`}
-                >
-                  <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
-                  <span className="min-w-0 flex-1 truncate">{encounter}</span>
-                </div>
-              );
-            })}
-          </div>
+        <div className="mt-3 space-y-4">
+          {encounterSections.map((section) => (
+            <div key={section.kind}>
+              <h4 className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                {section.label}
+              </h4>
+              <div className="space-y-1">
+                {section.names.map((encounter) => {
+                  const selected = effectiveEncounters.includes(encounter);
+                  const optional = section.kind === "optional";
+                  return (
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      key={encounter}
+                      onClick={(event) => onSelectEncounter(encounter, event.ctrlKey || event.metaKey)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onSelectEncounter(encounter, event.ctrlKey || event.metaKey);
+                        }
+                      }}
+                      className={cn(
+                        "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-all duration-150",
+                        selected
+                          ? "border-l-3 border-l-primary-foreground/70 bg-primary-darker text-primary-foreground shadow-sm"
+                          : "hover:translate-x-0.5 hover:bg-accent/50",
+                        !selected && optional && "text-muted-foreground",
+                      )}
+                      title={`${encounter}. Click to select, Ctrl+Click to toggle`}
+                    >
+                      <CheckCircle className={cn("h-4 w-4 shrink-0 text-green-500", optional && "opacity-60")} />
+                      <span className="min-w-0 flex-1 truncate">{encounter}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
         <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
           Click to select one boss. Ctrl+Click or Cmd+Click to compare multiple bosses.
