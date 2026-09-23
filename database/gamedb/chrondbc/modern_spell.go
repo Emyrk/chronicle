@@ -59,6 +59,16 @@ func (e SpellEffect) EffectiveBasePoints() float32 {
 	return float32(e.EffectBasePoints + 1)
 }
 
+// DamageTakenSchoolMask returns the legacy scalar school mask used by
+// AuraEffectModDamagePercentTaken. Modern rows preserve every source value, but
+// this compatibility consumer has always classified against one mask.
+func (e SpellEffect) DamageTakenSchoolMask() (School, bool) {
+	if len(e.EffectMiscValue) == 0 {
+		return 0, false
+	}
+	return School(e.EffectMiscValue[0]), true
+}
+
 // ModernSpellEffect is kept as a source-compatible alias for callers that
 // still use the old normalized-row name.
 // Deprecated: use SpellEffect.

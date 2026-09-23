@@ -14,6 +14,47 @@ func TestSpellEffectEffectiveBasePoints(t *testing.T) {
 	assert.Equal(t, float32(0), (SpellEffect{EffectBasePoints: 13, EffectBasePointsF: &exact}).EffectiveBasePoints())
 }
 
+func TestSpellEffectDamageTakenSchoolMask(t *testing.T) {
+	t.Parallel()
+
+	mask, ok := (SpellEffect{EffectMiscValue: []int32{int32(SchoolFire), int32(SchoolFrost)}}).DamageTakenSchoolMask()
+	assert.True(t, ok)
+	assert.Equal(t, SchoolFire, mask)
+
+	_, ok = (SpellEffect{}).DamageTakenSchoolMask()
+	assert.False(t, ok)
+}
+
+func TestSpellDefaultClassificationIgnoresNonzeroDifficulty(t *testing.T) {
+	t.Parallel()
+
+	spell := Spell{
+		Effects: []SpellEffect{
+			{DifficultyID: 0, EffectIndex: 0, Effect: EffectDistract},
+			{DifficultyID: 2, EffectIndex: 0, Effect: EffectSchoolDMG},
+			{
+				DifficultyID:    0,
+				EffectIndex:     4,
+				Effect:          EffectApplyAura,
+				EffectAura:      AuraEffectModDamagePercentTaken,
+				EffectMiscValue: []int32{int32(SchoolFrost), int32(SchoolFire)},
+			},
+			{
+				DifficultyID:    2,
+				EffectIndex:     4,
+				Effect:          EffectApplyAura,
+				EffectAura:      AuraEffectModDamagePercentTaken,
+				EffectMiscValue: []int32{int32(SchoolFire)},
+			},
+		},
+	}
+
+	assert.Equal(t, SpellDamageNoEngageCombat, spell.SpellDamageType())
+	assert.True(t, spell.Affects(Spell{School: SchoolFrost}))
+	assert.False(t, spell.Affects(Spell{School: SchoolFire}))
+	assert.Len(t, spell.Effects, 4, "classification must not mutate canonical effects")
+}
+
 func TestSpell_AttackOutcome(t *testing.T) {
 	t.Parallel()
 
