@@ -46,4 +46,38 @@ describe("SpellTooltip", () => {
     expect(markup).toContain("Applied by Brannor");
     expect(markup.indexOf("Applied by Brannor")).toBeGreaterThan(markup.indexOf("Test Aura"));
   });
+
+  it("renders the canonical default power instead of scalar compatibility fields", () => {
+    const canonicalSpell = {
+      ...spell,
+      mana_cost: 999,
+      powers: [
+        {
+          order_index: 1,
+          source_id: 1,
+          mana_cost: 200,
+          mana_cost_per_level: 0,
+          mana_per_second: 0,
+          power_cost_pct: 0,
+          power_type: 0,
+        },
+        {
+          order_index: 0,
+          source_id: 2,
+          mana_cost: 45,
+          mana_cost_per_level: 0,
+          mana_per_second: 0,
+          power_cost_pct: 0,
+          power_type: 0,
+        },
+      ],
+    } as WoWSpell;
+
+    const markup = renderToStaticMarkup(
+      <SpellTooltip spell={canonicalSpell} />,
+    );
+
+    expect(markup).toContain("45 Mana");
+    expect(markup).not.toContain("999 Mana");
+  });
 });

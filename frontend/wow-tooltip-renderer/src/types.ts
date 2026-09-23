@@ -69,6 +69,37 @@ export interface SpellAttributes {
   string: string; // Human-readable: "Passive | Channeled1 | ..."
 }
 
+/** Canonical spell effect row. Effect indexes are explicit and may be sparse. */
+export interface SpellEffect {
+  difficulty_id?: number;
+  effect_index: number;
+  source_id?: number;
+  effect: EnumValue;
+  effect_die_sides?: number;
+  effect_real_points_per_level?: number;
+  effect_base_points: number;
+  /** Exact modern DB2 value. Legacy DBC rows omit this stored-minus-one override. */
+  effect_base_points_f?: number;
+  effect_radius?: SpellRadius;
+  effect_aura_period?: number;
+  effect_amplitude?: number;
+  effect_chain_targets?: number;
+  effect_points_per_combo?: number;
+  effect_base_dice?: number;
+  effect_dice_per_level?: number;
+}
+
+/** Canonical resource-cost row. */
+export interface SpellPower {
+  order_index: number;
+  source_id: number;
+  mana_cost: number;
+  mana_cost_per_level: number;
+  mana_per_second: number;
+  power_cost_pct: number;
+  power_type: number;
+}
+
 export interface WoWSpell {
   id: number;
   name: I18nText;
@@ -121,7 +152,12 @@ export interface WoWSpell {
   interrupt_flags: MaskValue;
   aura_interrupt_flags: MaskValue;
 
-  // Effects (3 slots)
+  // Canonical normalized components. API payloads always include effects;
+  // optionality keeps the renderer compatible with older serialized clients.
+  effects?: SpellEffect[];
+  powers?: SpellPower[];
+
+  // Legacy compatibility projections (indexes 0 through 2 only)
   effect: EnumValue[];
   effect_aura: EnumValue[];
   effect_base_points: number[];

@@ -23,12 +23,20 @@ export type {
   SpellRadius,
   SpellCategory,
   SpellAttributes,
+  SpellEffect,
+  SpellPower,
   WoWSpell,
   LocaleIndex,
 } from "@emyrk/wow-tooltip-renderer";
 
 // --- Re-exported resolver / formatters / constants ---
 export {
+  // Canonical component selection
+  getDefaultEffect,
+  getLegacyEffectProjection,
+  getTooltipEffect,
+  hasExactBasePoints,
+  getDefaultPower,
   // Resolver
   resolveSpellDescription,
   extractReferencedSpellIds,

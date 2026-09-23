@@ -39,13 +39,27 @@ describe("resolveSpellDescription — variable types", () => {
   it("$d duration formatting", () => {
     expect(
       resolveSpellDescription(
-        makeSpell({ duration: { ID: 0, Duration: 30000, DurationPerLevel: 0, MaxDuration: 0 } }),
+        makeSpell({
+          duration: {
+            ID: 0,
+            Duration: 30000,
+            DurationPerLevel: 0,
+            MaxDuration: 0,
+          },
+        }),
         "Lasts $d.",
       ),
     ).toBe("Lasts 30 sec.");
     expect(
       resolveSpellDescription(
-        makeSpell({ duration: { ID: 0, Duration: 120000, DurationPerLevel: 0, MaxDuration: 0 } }),
+        makeSpell({
+          duration: {
+            ID: 0,
+            Duration: 120000,
+            DurationPerLevel: 0,
+            MaxDuration: 0,
+          },
+        }),
         "Lasts $d.",
       ),
     ).toBe("Lasts 2 min.");
@@ -94,13 +108,13 @@ describe("resolveSpellDescription — variable types", () => {
 
   it("$lsingular:plural; pluralization based on preceding number", () => {
     const one = makeSpell({ effect_base_points: [1, 0, 0] });
-    expect(resolveSpellDescription(one, "Gives $s1 extra $lattack:attacks;.")).toBe(
-      "Gives 1 extra attack.",
-    );
+    expect(
+      resolveSpellDescription(one, "Gives $s1 extra $lattack:attacks;."),
+    ).toBe("Gives 1 extra attack.");
     const two = makeSpell({ effect_base_points: [2, 0, 0] });
-    expect(resolveSpellDescription(two, "Gives $s1 extra $lattack:attacks;.")).toBe(
-      "Gives 2 extra attacks.",
-    );
+    expect(
+      resolveSpellDescription(two, "Gives $s1 extra $lattack:attacks;."),
+    ).toBe("Gives 2 extra attacks.");
     // No preceding number defaults to plural
     expect(resolveSpellDescription(one, "$lpoint:points;")).toBe("points");
   });
@@ -110,7 +124,9 @@ describe("resolveSpellDescription — variable types", () => {
     expect(resolveSpellDescription(spell, "freezes $Ghis:her; blood")).toBe(
       "freezes his blood",
     );
-    expect(resolveSpellDescription(spell, "$ghe:she; strikes")).toBe("he strikes");
+    expect(resolveSpellDescription(spell, "$ghe:she; strikes")).toBe(
+      "he strikes",
+    );
   });
 
   it("$n proc charges and $t tick interval", () => {
@@ -124,12 +140,84 @@ describe("resolveSpellDescription — variable types", () => {
   });
 });
 
+describe("resolveSpellDescription — canonical effects", () => {
+  it("preserves legacy tooltip parity through canonical difficulty-zero effects", () => {
+    const spell = makeSpell({
+      effects: [
+        {
+          difficulty_id: 0,
+          effect_index: 0,
+          effect: { value: 2, string: "SchoolDamage" },
+          effect_base_points: 13,
+          effect_base_dice: 1,
+          effect_die_sides: 9,
+        },
+      ],
+      effect_base_points: [999, 0, 0],
+    });
+
+    expect(resolveSpellDescription(spell, "Deals $s1 Fire damage.")).toBe(
+      "Deals 14 to 22 Fire damage.",
+    );
+  });
+
+  it("uses exact modern base points from a sparse unbounded effect", () => {
+    const spell = makeSpell({
+      effects: [
+        {
+          difficulty_id: 3,
+          effect_index: 9,
+          effect: { value: 10, string: "Heal" },
+          effect_base_points: 998,
+          effect_base_points_f: 999,
+        },
+        {
+          difficulty_id: 0,
+          effect_index: 9,
+          effect: { value: 10, string: "Heal" },
+          effect_base_points: 40,
+          effect_base_points_f: 41.5,
+        },
+      ],
+      effect_base_points: [777, 0, 0],
+    });
+
+    expect(resolveSpellDescription(spell, "Heals for $s10.")).toBe(
+      "Heals for 41.5.",
+    );
+  });
+
+  it("does not merge difficulty-specific effects into the default view", () => {
+    const spell = makeSpell({
+      effects: [
+        {
+          difficulty_id: 2,
+          effect_index: 0,
+          effect: { value: 2, string: "SchoolDamage" },
+          effect_base_points: 499,
+          effect_base_points_f: 500,
+        },
+      ],
+      effect_base_points: [25, 0, 0],
+    });
+
+    expect(resolveSpellDescription(spell, "Deals $s1 damage.")).toBe(
+      "Deals 0 damage.",
+    );
+  });
+});
+
 describe("resolveSpellDescription — description variables", () => {
   it("resolves Lifebloom's nested Genesis talent multiplier", () => {
     const lifebloom = makeSpell({
       id: 48451,
       effect_base_points: [52, 775, 0],
-      duration: { ID: 165, Duration: 7000, DurationPerLevel: 0, MaxDuration: 7000 },
+      duration: {
+        ID: 165,
+        Duration: 7000,
+        DurationPerLevel: 0,
+        MaxDuration: 7000,
+      },
       cumulative_aura: 3,
       description_variables: [
         "$genesis1=$?s57810[${1+0.01*$57810m1}][${1}]",
@@ -157,9 +245,9 @@ describe("resolveSpellDescription — cross-spell references", () => {
     const target = makeSpell({ id: 100, effect_base_points: [0, 0, 0] });
     const ref = makeSpell({ id: 23455, effect_base_points: [52, 0, 0] });
     const map = new Map<number, WoWSpell>([[23455, ref]]);
-    expect(
-      resolveSpellDescription(target, "heals for $23455s1.", map),
-    ).toBe("heals for 52.");
+    expect(resolveSpellDescription(target, "heals for $23455s1.", map)).toBe(
+      "heals for 52.",
+    );
   });
 
   it("resolves $/N;SPELLIDvar from the referenced spell with division", () => {
@@ -187,7 +275,12 @@ describe("resolveSpellDescription — cross-spell references", () => {
       effect_base_dice: [1, 0, 0],
       effect_die_sides: [1, 0, 0],
       effect_aura_period: [0, 0, 0],
-      duration: { ID: 205, Duration: 27000, DurationPerLevel: 0, MaxDuration: 27000 },
+      duration: {
+        ID: 205,
+        Duration: 27000,
+        DurationPerLevel: 0,
+        MaxDuration: 27000,
+      },
     });
     const staminaBuff = makeSpell({
       id: 18191,
@@ -222,7 +315,9 @@ describe("resolveSpellDescription — cross-spell references", () => {
 
 describe("extractReferencedSpellIds", () => {
   it("extracts cross-spell references", () => {
-    expect(extractReferencedSpellIds("$3137s1 and $1234d")).toEqual([3137, 1234]);
+    expect(extractReferencedSpellIds("$3137s1 and $1234d")).toEqual([
+      3137, 1234,
+    ]);
   });
   it("returns empty for no references", () => {
     expect(extractReferencedSpellIds("$s1 damage over $d")).toEqual([]);

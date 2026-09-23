@@ -16,6 +16,8 @@ export type {
   SpellRadius,
   SpellCategory,
   SpellAttributes,
+  SpellEffect,
+  SpellPower,
   WoWSpell,
   ItemStat,
   ItemDamage,
@@ -24,6 +26,15 @@ export type {
   ItemSocket,
   SocketBonus,
 } from "./types.js";
+
+// Canonical component selection and explicit legacy compatibility fallbacks
+export {
+  getDefaultEffect,
+  getLegacyEffectProjection,
+  getTooltipEffect,
+  hasExactBasePoints,
+  getDefaultPower,
+} from "./spell/components.js";
 
 // Spell template resolver
 export {
