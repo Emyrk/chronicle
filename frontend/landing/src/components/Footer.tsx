@@ -7,6 +7,7 @@ import { CryptoTipModal } from "./CryptoTipModal";
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
 const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/chronicleclassic";
+const SUPPORT_URL = "https://chronicleclassic.com/support/";
 const PATREON_TOOLTIP =
   "Financial contributions are greatly appreciated, but never required. Visit the patreon link to learn more!";
 
@@ -53,7 +54,14 @@ export function Footer() {
                 </a>
               </li>
               <li className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
-                Contribute Support
+                <a
+                  href={SUPPORT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Contribute Support
+                </a>
               </li>
               <li>
                 <a

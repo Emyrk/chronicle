@@ -12,6 +12,7 @@ const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
 const GITHUB_SPONSORS_URL = "https://github.com/sponsors/Emyrk/";
 const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/chronicleclassic";
+const SUPPORT_URL = "https://chronicleclassic.com/support/";
 const BUY_ME_A_COFFEE_ICON_URL =
   "https://cdn.brandfetch.io/idiZkYjDE2/w/192/h/192/theme/dark/logo.png?c=1bxid64Mup7aczewSAYMX&t=1708787601888";
 const PATREON_ICON_URL =
@@ -103,7 +104,16 @@ export function Footer() {
 
           {/* Contribute Support */}
           <div>
-            <h4 className="font-semibold mb-3">Contribute Support</h4>
+            <h4 className="font-semibold mb-3">
+              <a
+                href={SUPPORT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-foreground transition-colors"
+              >
+                Contribute Support
+              </a>
+            </h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
                 <a
