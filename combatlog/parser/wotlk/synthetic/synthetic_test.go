@@ -23,10 +23,12 @@ func TestNewWithOptionsConfiguresOptionalAttribution(t *testing.T) {
 	require.NotNil(t, s.earthShield)
 	require.Nil(t, s.absorption)
 	require.Nil(t, s.zoneDetector)
+	require.Nil(t, s.feignDeath)
 
 	legacy := New(context.Background(), slog.Default(), nil, nil, nil, false)
 	require.Nil(t, legacy.earthShield)
 	require.NotNil(t, legacy.absorption)
+	require.NotNil(t, legacy.feignDeath)
 }
 
 func TestEarthShieldCreditsOriginalCaster(t *testing.T) {

@@ -25,6 +25,7 @@ type Options struct {
 	CreditEarthShield bool
 	GenerateAbsorbs   bool
 	DetectZone        bool
+	DetectFeignDeath  bool
 }
 
 type Synthetic struct {
@@ -33,6 +34,7 @@ type Synthetic struct {
 	unitInfo     *unitInfo
 	petOwnership *petOwnership
 	zoneDetector *zonedetector.ZoneDetector
+	feignDeath   *feignDeath
 	slain        *synthetic.SlainDetective
 	absorption   *synthetic.Absorption
 	possession   *synthetic.Possession
@@ -51,6 +53,7 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *reg
 		CreditEarthShield: creditEarthShield,
 		GenerateAbsorbs:   true,
 		DetectZone:        true,
+		DetectFeignDeath:  true,
 	})
 }
 
@@ -60,14 +63,18 @@ func NewWithOptions(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameD
 		zd = zonedetector.New(logger, reg)
 	}
 
+	unitInfo := newUnitInfo(ctx, logger, wowDB, names, wowDB)
 	s := &Synthetic{
 		slain:        synthetic.NewSlainDetective(),
 		logger:       logger,
 		wowDB:        wowDB,
-		unitInfo:     newUnitInfo(ctx, logger, wowDB, names, wowDB),
+		unitInfo:     unitInfo,
 		petOwnership: newPetOwnership(logger, names),
 		possession:   synthetic.NewPossession(ctx, logger),
 		zoneDetector: zd,
+	}
+	if options.DetectFeignDeath {
+		s.feignDeath = newFeignDeath(ctx, wowDB, unitInfo.classForPlayer)
 	}
 	if options.GenerateAbsorbs {
 		s.absorption = synthetic.NewAbsorption(logger)
@@ -100,6 +107,14 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 		now = time.Now()
 		msgs = s.zoneDetector.ProcessMessages(msgs)
 		s.zoneDetectorDur += time.Since(now)
+	}
+
+	if s.feignDeath != nil {
+		var err error
+		msgs, err = s.feignDeath.ProcessMessages(msgs)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	s.slain.ProcessMessages(msgs)

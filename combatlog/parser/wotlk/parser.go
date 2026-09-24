@@ -81,9 +81,14 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 		scanner:      bufio.NewScanner(r),
 		clientFormat: format,
 		guidNames:    gn,
-		synthetics:   synthetic.New(ctx, logger, wowDB, reg, gn, format == clientFormatTBC),
-		itemFetcher:  gear,
-		baseYear:     time.Now().Year(),
+		synthetics: synthetic.NewWithOptions(ctx, logger, wowDB, reg, gn, synthetic.Options{
+			CreditEarthShield: format == clientFormatTBC,
+			GenerateAbsorbs:   true,
+			DetectZone:        true,
+			DetectFeignDeath:  format == clientFormatWotLK,
+		}),
+		itemFetcher: gear,
+		baseYear:    time.Now().Year(),
 		metrics: parservanilla.Metrics{
 			MatchingTime:   make(map[string]time.Duration),
 			UnmatchingTime: make(map[string]time.Duration),
