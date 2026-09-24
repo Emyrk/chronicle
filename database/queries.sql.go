@@ -16094,6 +16094,141 @@ func (q *sqlQuerier) SpeedrunRealmNames(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const listSpellEffectsForCheck = `-- name: ListSpellEffectsForCheck :many
+SELECT spell_id, difficulty_id, effect_index, source_id, effect_base_points_f
+FROM dbc_spell_effects
+WHERE dataset_id = $1
+ORDER BY spell_id, difficulty_id, effect_index, source_id
+`
+
+type ListSpellEffectsForCheckRow struct {
+	SpellID           int32   `db:"spell_id" json:"spell_id"`
+	DifficultyID      int32   `db:"difficulty_id" json:"difficulty_id"`
+	EffectIndex       int32   `db:"effect_index" json:"effect_index"`
+	SourceID          int32   `db:"source_id" json:"source_id"`
+	EffectBasePointsF float32 `db:"effect_base_points_f" json:"effect_base_points_f"`
+}
+
+func (q *sqlQuerier) ListSpellEffectsForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellEffectsForCheckRow, error) {
+	rows, err := q.db.Query(ctx, listSpellEffectsForCheck, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSpellEffectsForCheckRow
+	for rows.Next() {
+		var i ListSpellEffectsForCheckRow
+		if err := rows.Scan(
+			&i.SpellID,
+			&i.DifficultyID,
+			&i.EffectIndex,
+			&i.SourceID,
+			&i.EffectBasePointsF,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellIDsForCheck = `-- name: ListSpellIDsForCheck :many
+
+SELECT spell_id
+FROM dbc_spells
+WHERE dataset_id = $1
+ORDER BY spell_id
+`
+
+// Read-only source rows used by the spell dataset integrity checker.
+func (q *sqlQuerier) ListSpellIDsForCheck(ctx context.Context, datasetID uuid.UUID) ([]int32, error) {
+	rows, err := q.db.Query(ctx, listSpellIDsForCheck, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int32
+	for rows.Next() {
+		var spell_id int32
+		if err := rows.Scan(&spell_id); err != nil {
+			return nil, err
+		}
+		items = append(items, spell_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellPowersForCheck = `-- name: ListSpellPowersForCheck :many
+SELECT spell_id, order_index, source_id
+FROM dbc_spell_powers
+WHERE dataset_id = $1
+ORDER BY spell_id, order_index, source_id
+`
+
+type ListSpellPowersForCheckRow struct {
+	SpellID    int32 `db:"spell_id" json:"spell_id"`
+	OrderIndex int32 `db:"order_index" json:"order_index"`
+	SourceID   int32 `db:"source_id" json:"source_id"`
+}
+
+func (q *sqlQuerier) ListSpellPowersForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellPowersForCheckRow, error) {
+	rows, err := q.db.Query(ctx, listSpellPowersForCheck, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSpellPowersForCheckRow
+	for rows.Next() {
+		var i ListSpellPowersForCheckRow
+		if err := rows.Scan(&i.SpellID, &i.OrderIndex, &i.SourceID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellVariantsForCheck = `-- name: ListSpellVariantsForCheck :many
+SELECT spell_id, difficulty_id
+FROM dbc_spell_variants
+WHERE dataset_id = $1
+ORDER BY spell_id, difficulty_id
+`
+
+type ListSpellVariantsForCheckRow struct {
+	SpellID      int32 `db:"spell_id" json:"spell_id"`
+	DifficultyID int32 `db:"difficulty_id" json:"difficulty_id"`
+}
+
+func (q *sqlQuerier) ListSpellVariantsForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellVariantsForCheckRow, error) {
+	rows, err := q.db.Query(ctx, listSpellVariantsForCheck, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSpellVariantsForCheckRow
+	for rows.Next() {
+		var i ListSpellVariantsForCheckRow
+		if err := rows.Scan(&i.SpellID, &i.DifficultyID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDeploymentInfo = `-- name: GetDeploymentInfo :one
 SELECT id, created_at, last_telemetry_heartbeat FROM deployment_info LIMIT 1
 `

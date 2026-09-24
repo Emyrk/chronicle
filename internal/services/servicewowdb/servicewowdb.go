@@ -125,6 +125,15 @@ type SpellResponse struct {
 	AttackOutcome chrondbc.AttackOutcome   `json:"attack_outcome"`
 }
 
+// NewSpellResponse builds the production JSON response for a spell.
+func NewSpellResponse(spell *chrondbc.Spell) SpellResponse {
+	return SpellResponse{
+		Spell:         spell,
+		DamageType:    spell.SpellDamageType(),
+		AttackOutcome: spell.AttackOutcome(),
+	}
+}
+
 // resolveDatasetID resolves the dataset for a request using the same
 // precedence as the talent-trees endpoint:
 //  1. Explicit ?dataset_id= query param
@@ -165,11 +174,7 @@ func (s *Service) handleGetSpell(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(httpapi.DatasetHeader, datasetID.String())
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(SpellResponse{
-		Spell:         spell,
-		DamageType:    spell.SpellDamageType(),
-		AttackOutcome: spell.AttackOutcome(),
-	})
+	_ = json.NewEncoder(w).Encode(NewSpellResponse(spell))
 }
 
 func (s *Service) handleGetSpellByName(w http.ResponseWriter, r *http.Request) {

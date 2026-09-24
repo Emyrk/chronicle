@@ -631,6 +631,11 @@ type sqlcQuerier interface {
 	ListSnapshotMembersForInstance(ctx context.Context, arg ListSnapshotMembersForInstanceParams) ([]RankingSnapshotMember, error)
 	// List snapshot members for an instance, joining to encounter_dps_rankings for player name/role.
 	ListSnapshotMembersForInstanceWithNames(ctx context.Context, arg ListSnapshotMembersForInstanceWithNamesParams) ([]ListSnapshotMembersForInstanceWithNamesRow, error)
+	ListSpellEffectsForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellEffectsForCheckRow, error)
+	// Read-only source rows used by the spell dataset integrity checker.
+	ListSpellIDsForCheck(ctx context.Context, datasetID uuid.UUID) ([]int32, error)
+	ListSpellPowersForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellPowersForCheckRow, error)
+	ListSpellVariantsForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellVariantsForCheckRow, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
