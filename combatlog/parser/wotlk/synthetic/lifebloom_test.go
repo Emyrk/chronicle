@@ -37,7 +37,7 @@ func TestLifebloomCreditsRecentPeriodicCaster(t *testing.T) {
 	require.Equal(t, druid, bloom.Caster)
 }
 
-func TestLifebloomCreditsConcurrentCastersInApplicationOrder(t *testing.T) {
+func TestLifebloomMatchesOverlappingCastsToDelayedBlooms(t *testing.T) {
 	t.Parallel()
 
 	firstDruid := guid.GUID(1)
