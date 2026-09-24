@@ -4286,6 +4286,7 @@ export interface WoWLogFile {
 export interface WoWLogGroup {
     readonly id: string;
     readonly owner: string;
+    readonly owner_name?: string;
     readonly created_at: string;
     readonly updated_at: string;
     readonly log_type: string;

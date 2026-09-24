@@ -1444,8 +1444,8 @@ export function LogDetailView({
                 <dd className="font-mono text-xs mt-1 break-all">{log.id}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Owner ID</dt>
-                <dd className="font-mono text-xs mt-1 break-all">{log.owner}</dd>
+                <dt className="text-muted-foreground">Uploaded by</dt>
+                <dd className="mt-1">{log.owner_name || "Unknown"}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Created</dt>

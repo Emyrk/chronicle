@@ -509,6 +509,7 @@ WHERE id = @id;
 -- name: GetWoWLogGroupByID :one
 SELECT
   sqlc.embed(wow_log_groups),
+  u.username AS owner_name,
   COALESCE(
       jsonb_agg(
       jsonb_build_object(
@@ -530,12 +531,15 @@ SELECT
   )::wow_log_group_files AS files
 FROM
   wow_log_groups
+JOIN users u
+  ON u.id = wow_log_groups.owner
 LEFT JOIN log_file json_file
-    ON json_file.wow_log_id = wow_log_groups.id
+  ON json_file.wow_log_id = wow_log_groups.id
 WHERE
   wow_log_groups.id = $1
 GROUP BY
-  wow_log_groups.id
+  wow_log_groups.id,
+  u.username
 ;
 
 -- name: GetExpiredRawLogGroups :many

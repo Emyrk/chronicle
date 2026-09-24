@@ -64,6 +64,7 @@ const mockParsedOutput: WoWParsedLogJobOutput = {
 const mockLog: WoWLogGroupState = {
   id: "296c74e3-310b-4137-987d-f711471f68e6",
   owner: "15d4cade-e036-4608-bcd2-d957df76d20e",
+  owner_name: "LogUploader",
   created_at: "2026-01-14T14:22:09.612412-06:00",
   updated_at: "2026-01-14T14:22:09.612412-06:00",
   files: [
