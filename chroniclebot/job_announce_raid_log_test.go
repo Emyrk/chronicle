@@ -260,28 +260,29 @@ func TestHasDiscordAnnouncementPermissions(t *testing.T) {
 
 	required := int64(discordgo.PermissionViewChannel |
 		discordgo.PermissionSendMessages |
-		discordgo.PermissionEmbedLinks |
-		discordgo.PermissionCreatePublicThreads |
-		discordgo.PermissionSendMessagesInThreads)
+		discordgo.PermissionEmbedLinks)
 	require.True(t, hasDiscordAnnouncementPermissions(required))
 	for _, permission := range []int64{
+		discordgo.PermissionViewChannel,
+		discordgo.PermissionSendMessages,
 		discordgo.PermissionEmbedLinks,
-		discordgo.PermissionCreatePublicThreads,
-		discordgo.PermissionSendMessagesInThreads,
 	} {
 		require.False(t, hasDiscordAnnouncementPermissions(required&^permission))
 	}
+	require.True(t, hasDiscordAnnouncementPermissions(required|
+		discordgo.PermissionCreatePublicThreads|
+		discordgo.PermissionSendMessagesInThreads))
 }
 
 func TestMissingDiscordAnnouncementPermissions(t *testing.T) {
 	t.Parallel()
 
 	permissions := int64(discordgo.PermissionViewChannel |
-		discordgo.PermissionSendMessages |
-		discordgo.PermissionCreatePublicThreads)
+		discordgo.PermissionCreatePublicThreads |
+		discordgo.PermissionSendMessagesInThreads)
 	require.Equal(t, []string{
+		"Missing Send Messages permission",
 		"Missing Embed Links permission",
-		"Missing Send Messages in Threads permission",
 	}, missingDiscordAnnouncementPermissions(permissions))
 }
 
