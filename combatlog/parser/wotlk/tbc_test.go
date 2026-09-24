@@ -142,6 +142,70 @@ func TestWotLKEarthShieldKeepsLoggedCaster(t *testing.T) {
 	assert.Equal(t, guid.GUID(2), heal.Caster)
 }
 
+func TestTBCLifebloomCreditsDruid(t *testing.T) {
+	t.Parallel()
+
+	const (
+		druid  = "0x0000000000000001"
+		target = "0x0000000000000002"
+	)
+	lines := strings.Join([]string{
+		`5/20 15:52:10.073  SPELL_CAST_SUCCESS,` + druid + `,"Druid",0x10511,` + target + `,"Priest",0x10511,33763,"Lifebloom",0x8`,
+		`5/20 15:52:10.174  SPELL_AURA_APPLIED,0x0000000000000000,nil,0x80000000,` + target + `,"Priest",0x10511,33763,"Lifebloom",0x8,BUFF`,
+		`5/20 15:52:17.073  SPELL_HEAL,` + target + `,"Priest",0x10511,` + target + `,"Priest",0x10511,33778,"Lifebloom",0x8,2193,nil`,
+	}, "\n")
+	parser, err := NewTBC(context.Background(), slog.Default(), strings.NewReader(lines), auraTestDB{}, auraTestDB{}, nil)
+	require.NoError(t, err)
+
+	_, err = parser.Advance(context.Background())
+	require.NoError(t, err)
+	_, err = parser.Advance(context.Background())
+	require.NoError(t, err)
+	parsed, err := parser.Advance(context.Background())
+	require.NoError(t, err)
+
+	var heal *messages.Heal
+	for _, msg := range parsed {
+		if typed, ok := msg.(*messages.Heal); ok {
+			heal = typed
+			break
+		}
+	}
+	require.NotNil(t, heal)
+	assert.Equal(t, guid.GUID(1), heal.Caster)
+	assert.Equal(t, guid.GUID(2), heal.Target)
+}
+
+func TestWotLKLifebloomKeepsLoggedCaster(t *testing.T) {
+	t.Parallel()
+
+	const (
+		druid  = "0x0000000000000001"
+		target = "0x0000000000000002"
+	)
+	lines := strings.Join([]string{
+		`5/20 15:52:10.073  SPELL_CAST_SUCCESS,` + druid + `,"Druid",0x10511,` + target + `,"Priest",0x10511,33763,"Lifebloom",0x8`,
+		`5/20 15:52:17.073  SPELL_HEAL,` + target + `,"Priest",0x10511,` + target + `,"Priest",0x10511,33778,"Lifebloom",0x8,2193,0,0,nil`,
+	}, "\n")
+	parser, err := New(context.Background(), slog.Default(), strings.NewReader(lines), auraTestDB{}, auraTestDB{}, nil)
+	require.NoError(t, err)
+
+	_, err = parser.Advance(context.Background())
+	require.NoError(t, err)
+	parsed, err := parser.Advance(context.Background())
+	require.NoError(t, err)
+
+	var heal *messages.Heal
+	for _, msg := range parsed {
+		if typed, ok := msg.(*messages.Heal); ok {
+			heal = typed
+			break
+		}
+	}
+	require.NotNil(t, heal)
+	assert.Equal(t, guid.GUID(2), heal.Caster)
+}
+
 func TestTBCJudgementOfLightCreditsTarget(t *testing.T) {
 	t.Parallel()
 

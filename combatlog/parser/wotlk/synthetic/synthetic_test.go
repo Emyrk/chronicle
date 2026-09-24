@@ -19,10 +19,12 @@ func TestNewWithOptionsConfiguresOptionalAttribution(t *testing.T) {
 
 	s := NewWithOptions(context.Background(), slog.Default(), nil, nil, nil, Options{
 		CreditEarthShield: true,
+		CreditLifebloom:   true,
 		GenerateAbsorbs:   false,
 		DetectZone:        false,
 	})
 	require.NotNil(t, s.earthShield)
+	require.NotNil(t, s.lifebloom)
 	require.Nil(t, s.absorption)
 	require.Nil(t, s.zoneDetector)
 	require.Nil(t, s.feignDeath)
@@ -30,6 +32,7 @@ func TestNewWithOptionsConfiguresOptionalAttribution(t *testing.T) {
 	wotlkCtx := parsectx.With(context.Background(), parsectx.Context{Format: database.LogFormat335aCcAddon})
 	wotlk := New(wotlkCtx, slog.Default(), nil, nil, nil, false)
 	require.Nil(t, wotlk.earthShield)
+	require.Nil(t, wotlk.lifebloom)
 	require.NotNil(t, wotlk.absorption)
 	require.NotNil(t, wotlk.feignDeath)
 

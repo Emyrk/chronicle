@@ -25,6 +25,7 @@ type NameResolver interface {
 // or mutate synthetic events to help downstream consumers.
 type Options struct {
 	CreditEarthShield bool
+	CreditLifebloom   bool
 	GenerateAbsorbs   bool
 	DetectZone        bool
 }
@@ -40,6 +41,7 @@ type Synthetic struct {
 	absorption   *synthetic.Absorption
 	possession   *synthetic.Possession
 	earthShield  *earthShieldAttribution
+	lifebloom    *lifebloomAttribution
 
 	wowDB gamedb.GameDB
 
@@ -49,9 +51,10 @@ type Synthetic struct {
 	absorptionDur   time.Duration
 }
 
-func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *registry.Registry, names NameResolver, creditEarthShield bool) *Synthetic {
+func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *registry.Registry, names NameResolver, creditTBCTriggeredHeals bool) *Synthetic {
 	return NewWithOptions(ctx, logger, wowDB, reg, names, Options{
-		CreditEarthShield: creditEarthShield,
+		CreditEarthShield: creditTBCTriggeredHeals,
+		CreditLifebloom:   creditTBCTriggeredHeals,
 		GenerateAbsorbs:   true,
 		DetectZone:        true,
 	})
@@ -82,6 +85,9 @@ func NewWithOptions(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameD
 	}
 	if options.CreditEarthShield {
 		s.earthShield = newEarthShieldAttribution()
+	}
+	if options.CreditLifebloom {
+		s.lifebloom = newLifebloomAttribution()
 	}
 	return s
 }
@@ -129,6 +135,9 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 
 	if s.earthShield != nil {
 		msgs = s.earthShield.ProcessMessages(msgs)
+	}
+	if s.lifebloom != nil {
+		msgs = s.lifebloom.ProcessMessages(msgs)
 	}
 	msgs = synthetic.CreditJudgementOfLightToTarget(msgs)
 
