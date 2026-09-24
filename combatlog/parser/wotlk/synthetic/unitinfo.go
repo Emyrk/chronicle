@@ -81,7 +81,7 @@ func (z *unitInfo) detectClassFromSpell(sourceGUID guid.GUID, spell *chrondbc.Sp
 	if spell == nil {
 		return false
 	}
-	for _, effect := range spell.Effects {
+	for _, effect := range spell.DefaultEffects() {
 		// Skip effects that make items. Heathstone and other clickable creates confuse
 		// class detection.
 		if effect.Effect == chrondbc.EffectCreateItem {

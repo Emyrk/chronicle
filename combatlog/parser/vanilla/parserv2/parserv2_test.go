@@ -635,6 +635,46 @@ func (s *stubGameDB) PeriodicSpells(context.Context) (map[int32]dbcmem.PeriodicS
 	return nil, nil
 }
 
+func TestPowerBurnResourceChangeUsesDefaultDifficultyEffect(t *testing.T) {
+	t.Parallel()
+
+	spell := &chrondbc.Spell{
+		Effects: []chrondbc.SpellEffect{
+			{
+				DifficultyID:    198,
+				EffectIndex:     0,
+				Effect:          chrondbc.EffectPowerBurn,
+				EffectAmplitude: 2,
+				EffectMiscValue: []int32{3},
+			},
+			{
+				DifficultyID:    0,
+				EffectIndex:     0,
+				Effect:          chrondbc.EffectPowerBurn,
+				EffectAmplitude: 1,
+				EffectMiscValue: []int32{0, 3},
+			},
+		},
+	}
+
+	msg := powerBurnResourceChange(
+		time.UnixMilli(1000),
+		spell,
+		guid.GUID(1),
+		guid.GUID(2),
+		100,
+		[]int32{0, 0, 0},
+		[]int32{int32(chrondbc.EffectPowerBurn), 0, 0, 0},
+		false,
+	)
+
+	change, ok := msg.(*messages.ResourceChange)
+	require.True(t, ok)
+	require.Equal(t, types.ResourceMana, change.Resource)
+	require.Equal(t, int32(100), change.Amount)
+	require.Len(t, spell.Effects, 2, "synthesis must preserve canonical effect rows")
+}
+
 // manaBurnSpell returns a hand-crafted Mana Burn Rank 5 (ID 10876) with the
 // fields required by powerBurnResourceChange: EffectPowerBurn in effect slot 0,
 // EffectAmplitude 0.5, and EffectMiscValue 0 (mana).

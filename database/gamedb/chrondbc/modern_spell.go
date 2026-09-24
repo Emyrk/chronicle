@@ -59,6 +59,33 @@ func (e SpellEffect) EffectiveBasePoints() float32 {
 	return float32(e.EffectBasePoints + 1)
 }
 
+// AbsorbSchoolMask returns the legacy scalar school mask used by
+// AuraEffectSchoolAbsorb. Modern rows preserve every source value, but shield
+// attribution has always classified against one mask.
+func (e SpellEffect) AbsorbSchoolMask() (School, bool) {
+	if len(e.EffectMiscValue) == 0 {
+		return 0, false
+	}
+	return School(e.EffectMiscValue[0]), true
+}
+
+// PowerBurnPowerType returns the legacy scalar power type used by power-burn
+// effects. Modern rows preserve every source value, but resource-change
+// synthesis can emit only one resource type.
+func (e SpellEffect) PowerBurnPowerType() (int32, bool) {
+	if len(e.EffectMiscValue) == 0 {
+		return 0, false
+	}
+	return e.EffectMiscValue[0], true
+}
+
+// ModifiesDuration reports whether this modifier aura targets spell duration.
+// Modern rows preserve every misc value, but legacy modifier metadata supports
+// one operation selector and defines value 1 as duration.
+func (e SpellEffect) ModifiesDuration() bool {
+	return len(e.EffectMiscValue) > 0 && e.EffectMiscValue[0] == 1
+}
+
 // DamageTakenSchoolMask returns the legacy scalar school mask used by
 // AuraEffectModDamagePercentTaken. Modern rows preserve every source value, but
 // this compatibility consumer has always classified against one mask.

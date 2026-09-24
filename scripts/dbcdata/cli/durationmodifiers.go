@@ -56,8 +56,7 @@ func collectDurationModifiers(wc *dbcdb.WoWClient) (*durationModifierTemplateDat
 				continue
 			}
 
-			// EffectMiscValue == 1 means the modifier targets duration.
-			if len(effect.EffectMiscValue) == 0 || effect.EffectMiscValue[0] != 1 {
+			if !effect.ModifiesDuration() {
 				continue
 			}
 

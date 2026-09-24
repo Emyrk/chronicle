@@ -70,6 +70,20 @@ func TestDetectResurrections(t *testing.T) {
 	})
 }
 
+func TestResurrectionEffectsUseDefaultDifficulty(t *testing.T) {
+	t.Parallel()
+
+	spell := &chrondbc.Spell{Effects: []chrondbc.SpellEffect{
+		{DifficultyID: 0, EffectIndex: 0, Effect: chrondbc.EffectHeal},
+		{DifficultyID: 198, EffectIndex: 0, Effect: chrondbc.EffectSelfResurrect},
+	}}
+
+	selfResurrection, resurrection := resurrectionEffects(spell)
+	require.False(t, selfResurrection)
+	require.False(t, resurrection)
+	require.Len(t, spell.Effects, 2, "detection must preserve canonical effect rows")
+}
+
 func resurrectionSpell(name string, effect chrondbc.Effect) *chrondbc.Spell {
 	return &chrondbc.Spell{
 		Name_lang: i18n.Text{i18n.English: name},

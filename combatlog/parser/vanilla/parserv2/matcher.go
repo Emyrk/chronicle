@@ -978,14 +978,17 @@ func powerBurnResourceChange(
 	}
 
 	var burnEffect *chrondbc.SpellEffect
-	for i := range spell.Effects {
-		effect := &spell.Effects[i]
+	for _, effect := range spell.DefaultEffects() {
 		if effect.Effect == chrondbc.EffectPowerBurn || effect.EffectAura == chrondbc.AuraEffectPowerBurn {
-			burnEffect = effect
+			burnEffect = &effect
 			break
 		}
 	}
-	if burnEffect == nil || len(burnEffect.EffectMiscValue) == 0 {
+	if burnEffect == nil {
+		return nil
+	}
+	powerType, ok := burnEffect.PowerBurnPowerType()
+	if !ok {
 		return nil
 	}
 
@@ -1007,7 +1010,7 @@ func powerBurnResourceChange(
 		MessageBase: messages.Base(ts, messages.WithSynthetic()),
 		Target:      target,
 		Amount:      burned,
-		Resource:    PowerTypeResource(burnEffect.EffectMiscValue[0]),
+		Resource:    PowerTypeResource(powerType),
 		Caster:      ptr.Ref(caster),
 		SpellName:   ptr.Ref(spell.Name()),
 		SpellData:   spell,

@@ -14,6 +14,36 @@ func TestSpellEffectEffectiveBasePoints(t *testing.T) {
 	assert.Equal(t, float32(0), (SpellEffect{EffectBasePoints: 13, EffectBasePointsF: &exact}).EffectiveBasePoints())
 }
 
+func TestSpellEffectAbsorbSchoolMask(t *testing.T) {
+	t.Parallel()
+
+	mask, ok := (SpellEffect{EffectMiscValue: []int32{int32(SchoolFrost), int32(SchoolFire)}}).AbsorbSchoolMask()
+	assert.True(t, ok)
+	assert.Equal(t, SchoolFrost, mask)
+
+	_, ok = (SpellEffect{}).AbsorbSchoolMask()
+	assert.False(t, ok)
+}
+
+func TestSpellEffectPowerBurnPowerType(t *testing.T) {
+	t.Parallel()
+
+	powerType, ok := (SpellEffect{EffectMiscValue: []int32{0, 3}}).PowerBurnPowerType()
+	assert.True(t, ok)
+	assert.Equal(t, int32(0), powerType)
+
+	_, ok = (SpellEffect{}).PowerBurnPowerType()
+	assert.False(t, ok)
+}
+
+func TestSpellEffectModifiesDuration(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, (SpellEffect{EffectMiscValue: []int32{1, 2}}).ModifiesDuration())
+	assert.False(t, (SpellEffect{EffectMiscValue: []int32{2, 1}}).ModifiesDuration())
+	assert.False(t, (SpellEffect{}).ModifiesDuration())
+}
+
 func TestSpellEffectDamageTakenSchoolMask(t *testing.T) {
 	t.Parallel()
 
