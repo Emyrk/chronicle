@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/synthetic"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic/zonedetector"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 )
 
@@ -25,7 +27,6 @@ type Options struct {
 	CreditEarthShield bool
 	GenerateAbsorbs   bool
 	DetectZone        bool
-	DetectFeignDeath  bool
 }
 
 type Synthetic struct {
@@ -34,7 +35,7 @@ type Synthetic struct {
 	unitInfo     *unitInfo
 	petOwnership *petOwnership
 	zoneDetector *zonedetector.ZoneDetector
-	feignDeath   *FeignDeath
+	feignDeath   *feignDeath
 	slain        *synthetic.SlainDetective
 	absorption   *synthetic.Absorption
 	possession   *synthetic.Possession
@@ -53,7 +54,6 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *reg
 		CreditEarthShield: creditEarthShield,
 		GenerateAbsorbs:   true,
 		DetectZone:        true,
-		DetectFeignDeath:  true,
 	})
 }
 
@@ -73,8 +73,9 @@ func NewWithOptions(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameD
 		possession:   synthetic.NewPossession(ctx, logger),
 		zoneDetector: zd,
 	}
-	if options.DetectFeignDeath {
-		s.feignDeath = NewFeignDeath(ctx, wowDB, unitInfo.classForPlayer)
+	format, _ := parsectx.Format(ctx)
+	if format == database.LogFormat335aCcAddon {
+		s.feignDeath = newFeignDeath(ctx, wowDB, unitInfo.classForPlayer)
 	}
 	if options.GenerateAbsorbs {
 		s.absorption = synthetic.NewAbsorption(logger)
