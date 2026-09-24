@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	feignDeathSpellID      chrondbc.SpellID = 28728
-	feignDeathDamageWindow                  = time.Second
+	feignDeathSpellID     chrondbc.SpellID = 28728
+	realDeathDamageWindow                  = 500 * time.Millisecond
 )
 
 type feignDeath struct {
@@ -40,13 +40,15 @@ func newFeignDeath(
 
 // ProcessMessages replaces hunter death events that look like Feign Death
 // with a synthetic spell completion. ChromieCraft does not emit the Feign Death
-// cast. A zero-overkill hit within the previous second distinguishes the false
-// death without requiring lookahead.
+// cast. Overkill or damage during the preceding 500 milliseconds identifies a
+// real death; other killerless hunter deaths are treated as Feign Death.
 func (f *feignDeath) ProcessMessages(msgs []messages.Message) ([]messages.Message, error) {
 	for i, msg := range msgs {
 		switch m := msg.(type) {
 		case *messages.Damage:
-			f.lastDamage[m.Target] = m
+			if m.Amount > 0 {
+				f.lastDamage[m.Target] = m
+			}
 		case *messages.Slain:
 			isFeignDeath := f.isFeignDeath(m)
 			delete(f.lastDamage, m.Victim)
@@ -78,12 +80,15 @@ func (f *feignDeath) isFeignDeath(slain *messages.Slain) bool {
 	}
 
 	damage, ok := f.lastDamage[slain.Victim]
-	if !ok || damage.Overkill != 0 {
+	if !ok {
+		return true
+	}
+	if damage.Overkill > 0 {
 		return false
 	}
 
 	elapsed := slain.Date().Sub(damage.Date())
-	return elapsed >= 0 && elapsed <= feignDeathDamageWindow
+	return elapsed < 0 || elapsed > realDeathDamageWindow
 }
 
 func (f *feignDeath) feignDeathSpell() (*chrondbc.Spell, error) {
