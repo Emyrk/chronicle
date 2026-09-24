@@ -454,8 +454,8 @@ export function ClassDetailsPage() {
               <p className="leading-relaxed text-muted-foreground">
                 Some 3.3.5a combat logs report Feign Death as a real hunter death without
                 recording the spell cast. Chronicle looks for a zero-overkill hit during the
-                previous three seconds and, when the player is a hunter, replaces that death with
-                a synthetic Feign Death event.
+                previous second and, when the player is a hunter, replaces that death with a
+                synthetic Feign Death event.
               </p>
             </div>
 
@@ -490,9 +490,9 @@ export function ClassDetailsPage() {
               </div>
               <p className="text-sm leading-relaxed text-muted-foreground">
                 Chronicle only applies this correction to hunters using the 3.3.5a client log
-                format. The final zero-overkill damage must be no more than three seconds before
-                the reported death. Feign Death reports with a longer delay remain visible as
-                deaths rather than risk hiding a genuine death.
+                format. The final zero-overkill damage must be no more than one second before the
+                reported death. Feign Death reports with a longer delay remain visible as deaths
+                rather than risk hiding a genuine death.
               </p>
             </div>
           </div>

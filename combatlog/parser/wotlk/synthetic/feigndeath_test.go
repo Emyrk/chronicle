@@ -28,7 +28,7 @@ func (f *feignDeathSpellFetcher) SpellsByName(_ context.Context, _ string) ([]*c
 	return nil, nil
 }
 
-func TestFeignDeathReplacesAuriayaDelayedZeroOverkillHunterDeath(t *testing.T) {
+func TestFeignDeathReplacesRecentZeroOverkillHunterDeath(t *testing.T) {
 	t.Parallel()
 
 	hunter := guid.GUID(1)
@@ -52,7 +52,7 @@ func TestFeignDeathReplacesAuriayaDelayedZeroOverkillHunterDeath(t *testing.T) {
 	require.IsType(t, &messages.Damage{}, first[0])
 
 	second, err := detector.ProcessMessages([]messages.Message{&messages.Slain{
-		MessageBase: messages.Base(at.Add(2419 * time.Millisecond)),
+		MessageBase: messages.Base(at.Add(time.Second)),
 		Victim:      hunter,
 	}})
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestFeignDeathLeavesRealDeaths(t *testing.T) {
 	}{
 		{name: "non-hunter", victim: warrior, damageAt: at, deathAt: at.Add(time.Second), damageFirst: true},
 		{name: "positive overkill", victim: hunter, damageAt: at, deathAt: at.Add(time.Second), overkill: 1, damageFirst: true},
-		{name: "damage older than window", victim: hunter, damageAt: at, deathAt: at.Add(3*time.Second + time.Millisecond), damageFirst: true},
+		{name: "damage older than window", victim: hunter, damageAt: at, deathAt: at.Add(time.Second + time.Millisecond), damageFirst: true},
 		{name: "damage after death", victim: hunter, damageAt: at.Add(time.Millisecond), deathAt: at, damageFirst: false},
 		{name: "party kill or instakill", victim: hunter, damageAt: at, deathAt: at.Add(time.Second), killer: &killer, damageFirst: true},
 	}
