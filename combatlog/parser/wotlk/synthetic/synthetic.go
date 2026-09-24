@@ -51,10 +51,11 @@ type Synthetic struct {
 	absorptionDur   time.Duration
 }
 
-func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *registry.Registry, names NameResolver, creditTBCTriggeredHeals bool) *Synthetic {
+func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *registry.Registry, names NameResolver) *Synthetic {
+	format, _ := parsectx.Format(ctx)
 	return NewWithOptions(ctx, logger, wowDB, reg, names, Options{
-		CreditEarthShield: creditTBCTriggeredHeals,
-		CreditLifebloom:   creditTBCTriggeredHeals,
+		CreditEarthShield: format == database.LogFormat243CcAddon,
+		CreditLifebloom:   format == database.LogFormat243CcAddon,
 		GenerateAbsorbs:   true,
 		DetectZone:        true,
 	})

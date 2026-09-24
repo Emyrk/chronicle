@@ -30,19 +30,26 @@ func TestNewWithOptionsConfiguresOptionalAttribution(t *testing.T) {
 	require.Nil(t, s.feignDeath)
 
 	wotlkCtx := parsectx.With(context.Background(), parsectx.Context{Format: database.LogFormat335aCcAddon})
-	wotlk := New(wotlkCtx, slog.Default(), nil, nil, nil, false)
+	wotlk := New(wotlkCtx, slog.Default(), nil, nil, nil)
 	require.Nil(t, wotlk.earthShield)
 	require.Nil(t, wotlk.lifebloom)
 	require.NotNil(t, wotlk.absorption)
 	require.NotNil(t, wotlk.feignDeath)
 
+	tbcCtx := parsectx.With(context.Background(), parsectx.Context{Format: database.LogFormat243CcAddon})
+	tbc := New(tbcCtx, slog.Default(), nil, nil, nil)
+	require.NotNil(t, tbc.earthShield)
+	require.NotNil(t, tbc.lifebloom)
+	require.Nil(t, tbc.feignDeath)
+
 	for _, format := range []database.LogFormat{
-		database.LogFormat243CcAddon,
 		database.LogFormatAzerothcoreMod,
 		database.LogFormatV9Cleu,
 	} {
 		ctx := parsectx.With(context.Background(), parsectx.Context{Format: format})
-		s := New(ctx, slog.Default(), nil, nil, nil, false)
+		s := New(ctx, slog.Default(), nil, nil, nil)
+		require.Nil(t, s.earthShield, "format %s", format)
+		require.Nil(t, s.lifebloom, "format %s", format)
 		require.Nil(t, s.feignDeath, "format %s", format)
 	}
 }
