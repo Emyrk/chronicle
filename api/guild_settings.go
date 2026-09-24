@@ -99,13 +99,18 @@ func (api *API) guildDiscordInstallationToSDK(ctx context.Context, guildID uuid.
 		Scope:     installation.AnnounceRaidLogsScope,
 		ChannelID: installation.AnnounceRaidLogsChannelID.String,
 	}
-	channels, err := api.Opts.Bot.WritableTextChannels(installation.DiscordGuildID)
+	channels, err := api.Opts.Bot.TextChannelEligibility(installation.DiscordGuildID)
 	if err != nil {
 		return chroniclesdk.GuildDiscordIntegrationSettings{}, err
 	}
 	out.Channels = make([]chroniclesdk.DiscordChannel, 0, len(channels))
 	for _, channel := range channels {
-		out.Channels = append(out.Channels, chroniclesdk.DiscordChannel{ID: channel.ID, Name: channel.Name})
+		out.Channels = append(out.Channels, chroniclesdk.DiscordChannel{
+			ID:                   channel.Channel.ID,
+			Name:                 channel.Channel.Name,
+			Eligible:             len(channel.Reasons) == 0,
+			IneligibilityReasons: channel.Reasons,
+		})
 	}
 	return out, nil
 }

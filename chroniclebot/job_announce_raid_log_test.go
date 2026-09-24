@@ -273,6 +273,42 @@ func TestHasDiscordAnnouncementPermissions(t *testing.T) {
 	}
 }
 
+func TestMissingDiscordAnnouncementPermissions(t *testing.T) {
+	t.Parallel()
+
+	permissions := int64(discordgo.PermissionViewChannel |
+		discordgo.PermissionSendMessages |
+		discordgo.PermissionCreatePublicThreads)
+	require.Equal(t, []string{
+		"Missing Embed Links permission",
+		"Missing Send Messages in Threads permission",
+	}, missingDiscordAnnouncementPermissions(permissions))
+}
+
+func TestDiscordAnnouncementChannelTypeReason(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		channelType discordgo.ChannelType
+		wantReason  string
+		wantInclude bool
+	}{
+		{name: "text", channelType: discordgo.ChannelTypeGuildText, wantInclude: true},
+		{name: "announcement", channelType: discordgo.ChannelTypeGuildNews, wantReason: "Announcement channels are not supported", wantInclude: true},
+		{name: "forum", channelType: discordgo.ChannelTypeGuildForum, wantReason: "Forum channels are not supported", wantInclude: true},
+		{name: "voice", channelType: discordgo.ChannelTypeGuildVoice},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			reason, include := discordAnnouncementChannelTypeReason(test.channelType)
+			require.Equal(t, test.wantReason, reason)
+			require.Equal(t, test.wantInclude, include)
+		})
+	}
+}
+
 func TestArgsAnnounceRaidLogInsertOpts(t *testing.T) {
 	t.Parallel()
 

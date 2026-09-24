@@ -970,6 +970,8 @@ export const DeviceVisibilitys: DeviceVisibility[] = ["all", "desktop", "mobile"
 export interface DiscordChannel {
     readonly id: string;
     readonly name: string;
+    readonly eligible: boolean;
+    readonly ineligibility_reasons?: readonly string[];
 }
 
 // From chroniclesdk/discovery.go

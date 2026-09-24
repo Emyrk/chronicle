@@ -11,7 +11,7 @@ import {
   type GuildDiscordIntegrationSettings,
   type RequestError,
 } from "@/api/queries";
-import { ArrowLeft, BellRing, Bot, UserPlus, Menu, X } from "lucide-react";
+import { ArrowLeft, BellRing, Bot, CircleAlert, UserPlus, Menu, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { DiscordAnnouncementHistory } from "./DiscordAnnouncementHistory";
 import { GuildPageHeader, GuildActionsMenu } from "./components";
@@ -41,6 +41,32 @@ const TABS: Tab[] = [
   { id: "discord-integration", label: "Discord Integration", icon: Bot },
 ];
 
+type DiscordChannel = NonNullable<GuildDiscordIntegrationSettings["channels"]>[number];
+
+export function DiscordChannelEligibilityNotice({ channels }: { channels: readonly DiscordChannel[] }) {
+  if (channels.length === 0) return null;
+
+  return (
+    <details className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 text-sm">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-medium text-amber-700 dark:text-amber-400">
+        <CircleAlert className="h-4 w-4 shrink-0" />
+        Why {channels.length} Discord {channels.length === 1 ? "channel is" : "channels are"} unavailable
+      </summary>
+      <ul className="space-y-2 border-t border-amber-500/20 px-3 py-2.5">
+        {channels.map((channel) => (
+          <li key={channel.id}>
+            <span className="font-medium">#{channel.name}</span>
+            <span className="text-muted-foreground">
+              {" — "}
+              {(channel.ineligibility_reasons || []).join(", ") || "Not eligible for announcements"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function DiscordRaidLogAnnouncementSettings({
   guildId,
   settings,
@@ -53,6 +79,10 @@ function DiscordRaidLogAnnouncementSettings({
   const [scope, setScope] = useState(announcements.scope || "raids_only");
   const [channelId, setChannelId] = useState(announcements.channel_id || "");
   const updateAnnouncements = useUpdateGuildDiscordRaidLogAnnouncements(guildId);
+  const channels = settings.channels || [];
+  const eligibleChannels = channels.filter((channel) => channel.eligible);
+  const ineligibleChannels = channels.filter((channel) => !channel.eligible);
+  const selectedIneligibleChannel = ineligibleChannels.find((channel) => channel.id === channelId);
 
   return (
     <div className="rounded-md border border-border bg-background p-4">
@@ -107,18 +137,26 @@ function DiscordRaidLogAnnouncementSettings({
               {enabled && !channelId && (
                 <span className="ml-1 text-xs font-normal text-destructive">Required</span>
               )}
+              {enabled && selectedIneligibleChannel && (
+                <span className="ml-1 text-xs font-normal text-destructive">Unavailable</span>
+              )}
               <select
                 value={channelId}
                 onChange={(event) => setChannelId(event.target.value)}
-                aria-invalid={enabled && !channelId}
+                aria-invalid={enabled && (!channelId || Boolean(selectedIneligibleChannel))}
                 className={`block h-9 w-full rounded-md border bg-background px-3 text-sm font-normal disabled:cursor-not-allowed ${
-                  enabled && !channelId
+                  enabled && (!channelId || selectedIneligibleChannel)
                     ? "border-destructive ring-1 ring-destructive/50 focus:ring-destructive"
                     : "border-input"
                 }`}
               >
                 <option value="">Select a channel</option>
-                {(settings.channels || []).map((channel) => (
+                {selectedIneligibleChannel && (
+                  <option value={selectedIneligibleChannel.id} disabled>
+                    #{selectedIneligibleChannel.name} (currently unavailable)
+                  </option>
+                )}
+                {eligibleChannels.map((channel) => (
                   <option key={channel.id} value={channel.id}>
                     #{channel.name}
                   </option>
@@ -127,16 +165,18 @@ function DiscordRaidLogAnnouncementSettings({
             </label>
           </fieldset>
 
-          {enabled && settings.channels?.length === 0 && (
+          {enabled && eligibleChannels.length === 0 && (
             <p className="mt-3 text-sm text-amber-600">
               Chronicle cannot find a text channel where it can post messages.
             </p>
           )}
 
+          <DiscordChannelEligibilityNotice channels={ineligibleChannels} />
+
           <div className="mt-4 flex items-center gap-3">
             <Button
               size="sm"
-              disabled={updateAnnouncements.isPending || (enabled && !channelId)}
+              disabled={updateAnnouncements.isPending || (enabled && (!channelId || Boolean(selectedIneligibleChannel)))}
               onClick={() =>
                 updateAnnouncements.mutate({
                   enabled,

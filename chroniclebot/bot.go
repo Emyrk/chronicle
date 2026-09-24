@@ -249,17 +249,51 @@ func (b *Bot) LeaveGuild(guildID string) error {
 	return nil
 }
 
-func hasDiscordAnnouncementPermissions(permissions int64) bool {
-	const required = discordgo.PermissionViewChannel |
-		discordgo.PermissionSendMessages |
-		discordgo.PermissionEmbedLinks |
-		discordgo.PermissionCreatePublicThreads |
-		discordgo.PermissionSendMessagesInThreads
-	return permissions&required == required
+type DiscordChannelEligibility struct {
+	Channel *discordgo.Channel
+	Reasons []string
 }
 
-// WritableTextChannels returns text channels where the bot can send announcements and create public threads.
-func (b *Bot) WritableTextChannels(guildID string) ([]*discordgo.Channel, error) {
+var discordAnnouncementPermissions = []struct {
+	permission int64
+	label      string
+}{
+	{permission: discordgo.PermissionViewChannel, label: "View Channel"},
+	{permission: discordgo.PermissionSendMessages, label: "Send Messages"},
+	{permission: discordgo.PermissionEmbedLinks, label: "Embed Links"},
+	{permission: discordgo.PermissionCreatePublicThreads, label: "Create Public Threads"},
+	{permission: discordgo.PermissionSendMessagesInThreads, label: "Send Messages in Threads"},
+}
+
+func missingDiscordAnnouncementPermissions(permissions int64) []string {
+	missing := make([]string, 0, len(discordAnnouncementPermissions))
+	for _, required := range discordAnnouncementPermissions {
+		if permissions&required.permission == 0 {
+			missing = append(missing, "Missing "+required.label+" permission")
+		}
+	}
+	return missing
+}
+
+func hasDiscordAnnouncementPermissions(permissions int64) bool {
+	return len(missingDiscordAnnouncementPermissions(permissions)) == 0
+}
+
+func discordAnnouncementChannelTypeReason(channelType discordgo.ChannelType) (string, bool) {
+	switch channelType {
+	case discordgo.ChannelTypeGuildText:
+		return "", true
+	case discordgo.ChannelTypeGuildNews:
+		return "Announcement channels are not supported", true
+	case discordgo.ChannelTypeGuildForum:
+		return "Forum channels are not supported", true
+	default:
+		return "", false
+	}
+}
+
+// TextChannelEligibility returns text-like channels and explains why each channel can or cannot be used for announcements.
+func (b *Bot) TextChannelEligibility(guildID string) ([]DiscordChannelEligibility, error) {
 	if !b.Available() || b.session == nil || b.session.State == nil || b.session.State.User == nil {
 		return nil, fmt.Errorf("discord bot is unavailable")
 	}
@@ -267,17 +301,38 @@ func (b *Bot) WritableTextChannels(guildID string) ([]*discordgo.Channel, error)
 	if err != nil {
 		return nil, fmt.Errorf("get Discord guild channels: %w", err)
 	}
-	writable := make([]*discordgo.Channel, 0, len(channels))
+	eligibility := make([]DiscordChannelEligibility, 0, len(channels))
 	for _, channel := range channels {
-		if channel.Type != discordgo.ChannelTypeGuildText {
+		typeReason, include := discordAnnouncementChannelTypeReason(channel.Type)
+		if !include {
+			continue
+		}
+		result := DiscordChannelEligibility{Channel: channel}
+		if typeReason != "" {
+			result.Reasons = []string{typeReason}
+			eligibility = append(eligibility, result)
 			continue
 		}
 		permissions, err := b.session.UserChannelPermissions(b.session.State.User.ID, channel.ID)
 		if err != nil {
 			return nil, fmt.Errorf("get Discord channel %s permissions: %w", channel.ID, err)
 		}
-		if hasDiscordAnnouncementPermissions(permissions) {
-			writable = append(writable, channel)
+		result.Reasons = missingDiscordAnnouncementPermissions(permissions)
+		eligibility = append(eligibility, result)
+	}
+	return eligibility, nil
+}
+
+// WritableTextChannels returns text channels where the bot can send announcements and create public threads.
+func (b *Bot) WritableTextChannels(guildID string) ([]*discordgo.Channel, error) {
+	eligibility, err := b.TextChannelEligibility(guildID)
+	if err != nil {
+		return nil, err
+	}
+	writable := make([]*discordgo.Channel, 0, len(eligibility))
+	for _, channel := range eligibility {
+		if len(channel.Reasons) == 0 {
+			writable = append(writable, channel.Channel)
 		}
 	}
 	return writable, nil
