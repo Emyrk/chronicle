@@ -32,10 +32,11 @@ func TestFeignDeathReplacesRecentZeroOverkillHunterDeath(t *testing.T) {
 	t.Parallel()
 
 	hunter := guid.GUID(1)
+	killer := guid.GUID(2)
 	at := time.Date(2026, time.September, 24, 12, 0, 0, 0, time.UTC)
 	spell := &chrondbc.Spell{ID: feignDeathSpellID}
 	fetcher := &feignDeathSpellFetcher{spell: spell}
-	detector := newFeignDeath(context.Background(), fetcher, func(g guid.GUID) types.HeroClasses {
+	detector := NewFeignDeath(context.Background(), fetcher, func(g guid.GUID) types.HeroClasses {
 		if g == hunter {
 			return types.HeroClassesHUNTER
 		}
@@ -54,6 +55,7 @@ func TestFeignDeathReplacesRecentZeroOverkillHunterDeath(t *testing.T) {
 	second, err := detector.ProcessMessages([]messages.Message{&messages.Slain{
 		MessageBase: messages.Base(at.Add(time.Second)),
 		Victim:      hunter,
+		Killer:      &killer,
 	}})
 	require.NoError(t, err)
 	require.Len(t, second, 1)
@@ -74,7 +76,6 @@ func TestFeignDeathLeavesRealDeaths(t *testing.T) {
 
 	hunter := guid.GUID(1)
 	warrior := guid.GUID(2)
-	killer := guid.GUID(3)
 	at := time.Date(2026, time.September, 24, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
@@ -90,14 +91,13 @@ func TestFeignDeathLeavesRealDeaths(t *testing.T) {
 		{name: "positive overkill", victim: hunter, damageAt: at, deathAt: at.Add(time.Second), overkill: 1, damageFirst: true},
 		{name: "damage older than window", victim: hunter, damageAt: at, deathAt: at.Add(time.Second + time.Millisecond), damageFirst: true},
 		{name: "damage after death", victim: hunter, damageAt: at.Add(time.Millisecond), deathAt: at, damageFirst: false},
-		{name: "party kill or instakill", victim: hunter, damageAt: at, deathAt: at.Add(time.Second), killer: &killer, damageFirst: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			detector := newFeignDeath(context.Background(), nil, func(g guid.GUID) types.HeroClasses {
+			detector := NewFeignDeath(context.Background(), nil, func(g guid.GUID) types.HeroClasses {
 				if g == hunter {
 					return types.HeroClassesHUNTER
 				}

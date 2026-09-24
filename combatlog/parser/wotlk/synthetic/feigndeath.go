@@ -17,7 +17,8 @@ const (
 	feignDeathDamageWindow                  = time.Second
 )
 
-type feignDeath struct {
+// FeignDeath replaces likely hunter Feign Death reports with synthetic casts.
+type FeignDeath struct {
 	ctx            context.Context
 	spells         gamedb.SpellFetcher
 	classForPlayer func(guid.GUID) types.HeroClasses
@@ -25,12 +26,13 @@ type feignDeath struct {
 	spell          *chrondbc.Spell
 }
 
-func newFeignDeath(
+// NewFeignDeath creates a stateful WotLK Feign Death detector.
+func NewFeignDeath(
 	ctx context.Context,
 	spells gamedb.SpellFetcher,
 	classForPlayer func(guid.GUID) types.HeroClasses,
-) *feignDeath {
-	return &feignDeath{
+) *FeignDeath {
+	return &FeignDeath{
 		ctx:            ctx,
 		spells:         spells,
 		classForPlayer: classForPlayer,
@@ -38,11 +40,11 @@ func newFeignDeath(
 	}
 }
 
-// ProcessMessages replaces hunter UNIT_DIED events that look like Feign Death
+// ProcessMessages replaces hunter death events that look like Feign Death
 // with a synthetic spell completion. ChromieCraft does not emit the Feign Death
-// cast, and reports it as UNIT_DIED instead. A zero-overkill hit within the
-// previous second distinguishes the false death without requiring lookahead.
-func (f *feignDeath) ProcessMessages(msgs []messages.Message) ([]messages.Message, error) {
+// cast. A zero-overkill hit within the previous second distinguishes the false
+// death without requiring lookahead.
+func (f *FeignDeath) ProcessMessages(msgs []messages.Message) ([]messages.Message, error) {
 	for i, msg := range msgs {
 		switch m := msg.(type) {
 		case *messages.Damage:
@@ -70,10 +72,8 @@ func (f *feignDeath) ProcessMessages(msgs []messages.Message) ([]messages.Messag
 	return msgs, nil
 }
 
-func (f *feignDeath) isFeignDeath(slain *messages.Slain) bool {
-	// UNIT_DIED and UNIT_DESTROYED are the WotLK slain forms without a killer.
-	// PARTY_KILL and *_INSTAKILL provide one and must remain real deaths.
-	if slain.Killer != nil || f.classForPlayer(slain.Victim) != types.HeroClassesHUNTER {
+func (f *FeignDeath) isFeignDeath(slain *messages.Slain) bool {
+	if f.classForPlayer(slain.Victim) != types.HeroClassesHUNTER {
 		return false
 	}
 
@@ -86,7 +86,7 @@ func (f *feignDeath) isFeignDeath(slain *messages.Slain) bool {
 	return elapsed >= 0 && elapsed <= feignDeathDamageWindow
 }
 
-func (f *feignDeath) feignDeathSpell() (*chrondbc.Spell, error) {
+func (f *FeignDeath) feignDeathSpell() (*chrondbc.Spell, error) {
 	if f.spell != nil {
 		return f.spell, nil
 	}

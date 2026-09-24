@@ -34,7 +34,7 @@ type Synthetic struct {
 	unitInfo     *unitInfo
 	petOwnership *petOwnership
 	zoneDetector *zonedetector.ZoneDetector
-	feignDeath   *feignDeath
+	feignDeath   *FeignDeath
 	slain        *synthetic.SlainDetective
 	absorption   *synthetic.Absorption
 	possession   *synthetic.Possession
@@ -74,7 +74,7 @@ func NewWithOptions(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameD
 		zoneDetector: zd,
 	}
 	if options.DetectFeignDeath {
-		s.feignDeath = newFeignDeath(ctx, wowDB, unitInfo.classForPlayer)
+		s.feignDeath = NewFeignDeath(ctx, wowDB, unitInfo.classForPlayer)
 	}
 	if options.GenerateAbsorbs {
 		s.absorption = synthetic.NewAbsorption(logger)
