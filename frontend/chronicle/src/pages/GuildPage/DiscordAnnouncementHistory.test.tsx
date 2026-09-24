@@ -21,7 +21,7 @@ describe("DiscordAnnouncementHistoryList", () => {
               updated_at: "2026-09-02T12:00:00Z",
             },
           ]}
-          channels={[{ id: "channel-1", name: "raid-logs" }]}
+          channels={[{ id: "channel-1", name: "raid-logs", eligible: true }]}
           page={1}
           hasMore
           onPrevious={vi.fn()}

@@ -154,8 +154,10 @@ type GuildDiscordIntegrationSettings struct {
 }
 
 type DiscordChannel struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID                   string   `json:"id"`
+	Name                 string   `json:"name"`
+	Eligible             bool     `json:"eligible"`
+	IneligibilityReasons []string `json:"ineligibility_reasons,omitempty"`
 }
 
 type GuildDiscordRaidLogAnnouncements struct {
