@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/synthetic"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic/zonedetector"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 )
 
@@ -33,6 +35,7 @@ type Synthetic struct {
 	unitInfo     *unitInfo
 	petOwnership *petOwnership
 	zoneDetector *zonedetector.ZoneDetector
+	feignDeath   *feignDeath
 	slain        *synthetic.SlainDetective
 	absorption   *synthetic.Absorption
 	possession   *synthetic.Possession
@@ -60,14 +63,19 @@ func NewWithOptions(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameD
 		zd = zonedetector.New(logger, reg)
 	}
 
+	unitInfo := newUnitInfo(ctx, logger, wowDB, names, wowDB)
 	s := &Synthetic{
 		slain:        synthetic.NewSlainDetective(),
 		logger:       logger,
 		wowDB:        wowDB,
-		unitInfo:     newUnitInfo(ctx, logger, wowDB, names, wowDB),
+		unitInfo:     unitInfo,
 		petOwnership: newPetOwnership(logger, names),
 		possession:   synthetic.NewPossession(ctx, logger),
 		zoneDetector: zd,
+	}
+	format, _ := parsectx.Format(ctx)
+	if format == database.LogFormat335aCcAddon {
+		s.feignDeath = newFeignDeath(ctx, wowDB, unitInfo.classForPlayer)
 	}
 	if options.GenerateAbsorbs {
 		s.absorption = synthetic.NewAbsorption(logger)
@@ -100,6 +108,14 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 		now = time.Now()
 		msgs = s.zoneDetector.ProcessMessages(msgs)
 		s.zoneDetectorDur += time.Since(now)
+	}
+
+	if s.feignDeath != nil {
+		var err error
+		msgs, err = s.feignDeath.ProcessMessages(msgs)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	s.slain.ProcessMessages(msgs)

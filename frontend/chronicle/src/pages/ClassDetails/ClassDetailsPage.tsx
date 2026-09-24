@@ -1,11 +1,14 @@
 import { useState } from "react"
-import { ArrowLeft, ChevronRight, CircleHelp, Eye, Shield, Sparkles } from "lucide-react"
+import { ArrowLeft, ChevronRight, CircleHelp, Eye, Ghost, Shield, Sparkles } from "lucide-react"
 import { Link } from "react-router-dom"
+import { useSiteConfig } from "@/api/queries"
+import { hasWrathFlavor } from "./classDetails"
 import { specializationIconUrl } from "@/config/specializationIcon"
 
 const PALADIN_COLOR = "var(--color-class-paladin)"
 const PRIEST_COLOR = "var(--color-class-priest)"
 const SHAMAN_COLOR = "var(--color-class-shaman)"
+const HUNTER_COLOR = "var(--color-class-hunter)"
 
 type CreditedClass = "PALADIN" | "ROGUE"
 
@@ -62,10 +65,13 @@ function AttributionBars({ creditedClass }: { creditedClass: CreditedClass }) {
 }
 
 export function ClassDetailsPage() {
+  const { data: siteConfig } = useSiteConfig()
+  const showWrathDetails = hasWrathFlavor(siteConfig?.dataset_flavor ?? [])
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
   const paladinSelected = selectedClass === "PALADIN"
   const priestSelected = selectedClass === "PRIEST"
   const shamanSelected = selectedClass === "SHAMAN"
+  const hunterSelected = selectedClass === "HUNTER"
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
@@ -189,6 +195,40 @@ export function ClassDetailsPage() {
               className={`h-5 w-5 text-muted-foreground transition-transform ${shamanSelected ? "rotate-90 text-blue-200" : ""}`}
             />
           </button>
+          {showWrathDetails && (
+            <button
+              type="button"
+              aria-expanded={hunterSelected}
+              aria-controls="hunter-details"
+              onClick={() => setSelectedClass(hunterSelected ? null : "HUNTER")}
+              className={`group flex w-full max-w-sm cursor-pointer items-center gap-4 rounded-xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70 ${
+                hunterSelected
+                  ? "border-emerald-300/50 bg-emerald-300/10 shadow-lg shadow-emerald-950/20"
+                  : "bg-card hover:border-emerald-300/30 hover:bg-emerald-300/5"
+              }`}
+            >
+              <img
+                src="/c/icons/class_hunter.png"
+                alt=""
+                aria-hidden="true"
+                className="h-16 w-16 rounded-lg border border-white/15 object-cover shadow-md transition-transform group-hover:scale-105"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Wrath combat logs
+                </span>
+                <span className="block text-lg font-bold" style={{ color: HUNTER_COLOR }}>
+                  Hunter
+                </span>
+                <span className="mt-0.5 block text-sm text-muted-foreground">
+                  Feign Death detection
+                </span>
+              </span>
+              <ChevronRight
+                className={`h-5 w-5 text-muted-foreground transition-transform ${hunterSelected ? "rotate-90 text-emerald-200" : ""}`}
+              />
+            </button>
+          )}
         </div>
       </section>
 
@@ -379,6 +419,81 @@ export function ClassDetailsPage() {
                 while the effect is active.
               </p>
             </section>
+          </div>
+        </section>
+      )}
+
+      {showWrathDetails && hunterSelected && (
+        <section
+          id="hunter-details"
+          aria-labelledby="hunter-details-heading"
+          className="mb-6 overflow-hidden rounded-2xl border border-emerald-300/20 bg-[radial-gradient(circle_at_100%_0%,rgba(52,211,153,0.12),transparent_38%)] shadow-xl shadow-black/10"
+        >
+          <div className="flex items-center gap-4 border-b border-border/70 bg-card/70 p-5 sm:p-6">
+            <img
+              src="/c/icons/class_hunter.png"
+              alt="Hunter class icon"
+              className="h-14 w-14 rounded-lg border border-emerald-200/20 object-cover shadow-md"
+            />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300/80">
+                Wrath combat log correction
+              </p>
+              <h2 id="hunter-details-heading" className="text-2xl font-bold" style={{ color: HUNTER_COLOR }}>
+                Hunter
+              </h2>
+            </div>
+          </div>
+
+          <div className="space-y-5 p-5 sm:p-6">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <Ghost className="h-5 w-5 text-emerald-300" />
+                <h3 className="text-lg font-semibold">Feign Death</h3>
+              </div>
+              <p className="leading-relaxed text-muted-foreground">
+                Some 3.3.5a combat logs report Feign Death as a real hunter death without
+                recording the cast. Chronicle uses the timing and overkill value of the hunter's
+                last damaging hit to distinguish real deaths from Feign Death.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-red-400/15 bg-red-500/5 p-4">
+                <p className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-red-300/80">
+                  Raw combat log
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  The hunter appears in the death log and can be attributed to the most recent
+                  attacker.
+                </p>
+              </div>
+              <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-4">
+                <p className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-emerald-300/80">
+                  Chronicle correction
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  The false death is removed and replaced with a synthetic{" "}
+                  <Link to="/wowdb/spell/28728" className="font-medium text-link hover:underline">
+                    Feign Death
+                  </Link>{" "}
+                  cast.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-300/20 bg-amber-400/5 p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <CircleHelp className="h-5 w-5 text-amber-300" />
+                <h3 className="font-semibold">How deaths are classified</h3>
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                For hunters using the 3.3.5a client log format, a killerless death remains real if
+                the final damaging hit reports positive overkill or occurs no more than 500
+                milliseconds before the death event. Otherwise, Chronicle treats the event as
+                Feign Death.
+              </p>
+            </div>
           </div>
         </section>
       )}
