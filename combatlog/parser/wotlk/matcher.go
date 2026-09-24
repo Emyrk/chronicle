@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/companion"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/ptr"
 )
@@ -168,7 +169,7 @@ func (p *Parser) dispatch(ts time.Time, event string, m *Matched, raw string) ([
 func (p *Parser) suffixDamage(ts time.Time, base baseParams, spell *spellInfo, envType *types.EnvironmentType, isPeriodic bool, prefix string, m *Matched) ([]messages.Message, error) {
 	amount := m.Int32()
 	var overkill int32
-	if p.clientFormat == clientFormatWotLK {
+	if p.format != database.LogFormat243CcAddon {
 		overkill = m.Int32()
 	}
 	school := m.School()
@@ -290,7 +291,7 @@ func (p *Parser) suffixMissed(ts time.Time, base baseParams, spell *spellInfo, i
 func (p *Parser) suffixHeal(ts time.Time, base baseParams, spell *spellInfo, isPeriodic bool, m *Matched) ([]messages.Message, error) {
 	amount := m.Int32()
 	var overheal int32
-	if p.clientFormat == clientFormatWotLK {
+	if p.format != database.LogFormat243CcAddon {
 		overheal = m.Int32()
 		_ = m.Int32() // Absorbed healing, not absorbed damage incoming.
 	}
