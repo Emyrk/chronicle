@@ -16229,6 +16229,35 @@ func (q *sqlQuerier) ListSpellVariantsForCheck(ctx context.Context, datasetID uu
 	return items, nil
 }
 
+const clearSpellEffectsForDataset = `-- name: ClearSpellEffectsForDataset :exec
+
+DELETE FROM dbc_spell_effects WHERE dataset_id = $1
+`
+
+// Canonical normalized rows produced by legacy Spell.dbc imports.
+func (q *sqlQuerier) ClearSpellEffectsForDataset(ctx context.Context, datasetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearSpellEffectsForDataset, datasetID)
+	return err
+}
+
+const clearSpellPowersForDataset = `-- name: ClearSpellPowersForDataset :exec
+DELETE FROM dbc_spell_powers WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) ClearSpellPowersForDataset(ctx context.Context, datasetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearSpellPowersForDataset, datasetID)
+	return err
+}
+
+const clearSpellVariantsForDataset = `-- name: ClearSpellVariantsForDataset :exec
+DELETE FROM dbc_spell_variants WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) ClearSpellVariantsForDataset(ctx context.Context, datasetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearSpellVariantsForDataset, datasetID)
+	return err
+}
+
 const getDeploymentInfo = `-- name: GetDeploymentInfo :one
 SELECT id, created_at, last_telemetry_heartbeat FROM deployment_info LIMIT 1
 `
