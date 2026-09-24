@@ -453,9 +453,8 @@ export function ClassDetailsPage() {
               </div>
               <p className="leading-relaxed text-muted-foreground">
                 Some 3.3.5a combat logs report Feign Death as a real hunter death without
-                recording the spell cast. Chronicle keeps deaths with overkill or damage during
-                the preceding 500 milliseconds, and replaces other killerless hunter deaths with
-                a synthetic Feign Death event.
+                recording the cast. Chronicle uses the timing and overkill value of the hunter's
+                last damaging hit to distinguish real deaths from Feign Death.
               </p>
             </div>
 
@@ -486,13 +485,13 @@ export function ClassDetailsPage() {
             <div className="rounded-xl border border-amber-300/20 bg-amber-400/5 p-4">
               <div className="mb-2 flex items-center gap-2">
                 <CircleHelp className="h-5 w-5 text-amber-300" />
-                <h3 className="font-semibold">This is a conservative estimate</h3>
+                <h3 className="font-semibold">How deaths are classified</h3>
               </div>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                Chronicle only applies this correction to hunters using the 3.3.5a client log
-                format. A death remains real when its final damage has positive overkill or arrives
-                within 500 milliseconds of the death event. Other killerless hunter deaths are
-                treated as Feign Death.
+                For hunters using the 3.3.5a client log format, a killerless death remains real if
+                the final damaging hit reports positive overkill or occurs no more than 500
+                milliseconds before the death event. Otherwise, Chronicle treats the event as
+                Feign Death.
               </p>
             </div>
           </div>
