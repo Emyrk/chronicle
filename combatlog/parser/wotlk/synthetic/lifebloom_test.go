@@ -37,6 +37,55 @@ func TestLifebloomCreditsRecentPeriodicCaster(t *testing.T) {
 	require.Equal(t, druid, bloom.Caster)
 }
 
+func TestLifebloomCreditsConcurrentCastersInApplicationOrder(t *testing.T) {
+	t.Parallel()
+
+	firstDruid := guid.GUID(1)
+	secondDruid := guid.GUID(2)
+	target := guid.GUID(3)
+	at := time.Date(2026, time.September, 24, 12, 0, 0, 0, time.UTC)
+	attribution := newLifebloomAttribution()
+
+	attribution.ProcessMessages([]messages.Message{
+		&messages.SpellGo{
+			MessageBase: messages.Base(at),
+			SpellData:   &chrondbc.Spell{ID: lifebloomAuraSpellID},
+			Caster:      firstDruid,
+			Target:      &target,
+		},
+		&messages.SpellGo{
+			MessageBase: messages.Base(at.Add(time.Second)),
+			SpellData:   &chrondbc.Spell{ID: lifebloomAuraSpellID},
+			Caster:      secondDruid,
+			Target:      &target,
+		},
+	})
+
+	firstBloom := &messages.Heal{
+		MessageBase: messages.Base(at.Add(7 * time.Second)),
+		SpellData:   &chrondbc.Spell{ID: lifebloomHealSpellID},
+		Caster:      secondDruid,
+		Target:      target,
+	}
+	attribution.ProcessMessages([]messages.Message{firstBloom})
+	attribution.ProcessMessages([]messages.Message{&messages.Aura{
+		MessageBase: messages.Base(at.Add(7*time.Second + time.Millisecond)),
+		SpellData:   &chrondbc.Spell{ID: lifebloomAuraSpellID},
+		Target:      target,
+		State:       types.AuraStateRemoved,
+	}})
+	secondBloom := &messages.Heal{
+		MessageBase: messages.Base(at.Add(8 * time.Second)),
+		SpellData:   &chrondbc.Spell{ID: lifebloomHealSpellID},
+		Caster:      target,
+		Target:      target,
+	}
+	attribution.ProcessMessages([]messages.Message{secondBloom})
+
+	require.Equal(t, secondDruid, firstBloom.Caster)
+	require.Equal(t, firstDruid, secondBloom.Caster)
+}
+
 func TestLifebloomDoesNotUseStaleCaster(t *testing.T) {
 	t.Parallel()
 

@@ -21,11 +21,69 @@ type lifebloomOwner struct {
 }
 
 type lifebloomAttribution struct {
-	owners map[guid.GUID]lifebloomOwner
+	owners map[guid.GUID][]lifebloomOwner
 }
 
 func newLifebloomAttribution() *lifebloomAttribution {
-	return &lifebloomAttribution{owners: make(map[guid.GUID]lifebloomOwner)}
+	return &lifebloomAttribution{owners: make(map[guid.GUID][]lifebloomOwner)}
+}
+
+func (l *lifebloomAttribution) remember(target, caster guid.GUID, seenAt time.Time, refresh bool) {
+	owners := l.owners[target]
+	for i := range owners {
+		if owners[i].caster != caster {
+			continue
+		}
+		if refresh {
+			owners[i].seenAt = seenAt
+		}
+		l.owners[target] = owners
+		return
+	}
+	l.owners[target] = append(owners, lifebloomOwner{caster: caster, seenAt: seenAt})
+}
+
+func (l *lifebloomAttribution) remove(target, caster guid.GUID) {
+	owners := l.owners[target]
+	for i := range owners {
+		if owners[i].caster != caster {
+			continue
+		}
+		owners = append(owners[:i], owners[i+1:]...)
+		if len(owners) == 0 {
+			delete(l.owners, target)
+		} else {
+			l.owners[target] = owners
+		}
+		return
+	}
+}
+
+func (l *lifebloomAttribution) popOldest(target guid.GUID, at time.Time) (guid.GUID, bool) {
+	owners := l.owners[target]
+	oldest := -1
+	for i := range owners {
+		age := at.Sub(owners[i].seenAt)
+		if age < 0 || age > lifebloomMaxAge {
+			continue
+		}
+		if oldest == -1 || owners[i].seenAt.Before(owners[oldest].seenAt) {
+			oldest = i
+		}
+	}
+	if oldest == -1 {
+		delete(l.owners, target)
+		return 0, false
+	}
+
+	caster := owners[oldest].caster
+	owners = append(owners[:oldest], owners[oldest+1:]...)
+	if len(owners) == 0 {
+		delete(l.owners, target)
+	} else {
+		l.owners[target] = owners
+	}
+	return caster, true
 }
 
 // ProcessMessages corrects native 2.4.3 Lifebloom bloom events. Those logs
@@ -38,20 +96,22 @@ func (l *lifebloomAttribution) ProcessMessages(msgs []messages.Message) []messag
 			if typed.SpellData == nil || typed.SpellData.ID != lifebloomAuraSpellID || typed.Target == nil || typed.Caster.IsZero() {
 				continue
 			}
-			l.owners[*typed.Target] = lifebloomOwner{caster: typed.Caster, seenAt: typed.Date()}
+			l.remember(*typed.Target, typed.Caster, typed.Date(), true)
 		case *messages.Aura:
 			if typed.SpellData == nil || typed.SpellData.ID != lifebloomAuraSpellID {
 				continue
 			}
 			if typed.State == types.AuraStateRemoved {
-				owner, ok := l.owners[typed.Target]
-				if ok && (typed.Source == nil || owner.caster == *typed.Source) {
-					delete(l.owners, typed.Target)
+				// Native 2.4.3 aura removals commonly omit the source. The bloom
+				// consumes the matching owner immediately before that removal, so an
+				// unattributed removal must not discard another druid's Lifebloom.
+				if typed.Source != nil {
+					l.remove(typed.Target, *typed.Source)
 				}
 				continue
 			}
 			if typed.Source != nil && !typed.Source.IsZero() {
-				l.owners[typed.Target] = lifebloomOwner{caster: *typed.Source, seenAt: typed.Date()}
+				l.remember(typed.Target, *typed.Source, typed.Date(), true)
 			}
 		case *messages.Heal:
 			if typed.SpellData == nil {
@@ -62,19 +122,18 @@ func (l *lifebloomAttribution) ProcessMessages(msgs []messages.Message) []messag
 				// Periodic ticks provide a fallback when the aura event omitted its
 				// source, as some 2.4.3 loggers do.
 				if !typed.Caster.IsZero() && typed.Caster != typed.Target {
-					l.owners[typed.Target] = lifebloomOwner{caster: typed.Caster, seenAt: typed.Date()}
+					l.remember(typed.Target, typed.Caster, typed.Date(), false)
 				}
 			case lifebloomHealSpellID:
-				// Do not overwrite formats or servers that already report the
-				// original caster correctly.
+				// Some 2.4.3 blooms already report the original caster. Consume
+				// that caster's tracked application so a concurrent self-sourced
+				// bloom can be matched to the remaining druid.
 				if typed.Caster != typed.Target {
+					l.remove(typed.Target, typed.Caster)
 					continue
 				}
-				if owner, ok := l.owners[typed.Target]; ok {
-					age := typed.Date().Sub(owner.seenAt)
-					if age >= 0 && age <= lifebloomMaxAge {
-						typed.Caster = owner.caster
-					}
+				if owner, ok := l.popOldest(typed.Target, typed.Date()); ok {
+					typed.Caster = owner
 				}
 			}
 		}
