@@ -91,6 +91,7 @@ func WoWLogGroupRow[T database.GetWoWLogGroupsByOwnerRow | database.GetWoWLogGro
 		out := chroniclesdk.WoWLogGroup{
 			ID:        g.WoWLogGroup.ID,
 			Owner:     g.WoWLogGroup.Owner,
+			OwnerName: g.OwnerName,
 			CreatedAt: g.WoWLogGroup.CreatedAt,
 			UpdatedAt: g.WoWLogGroup.UpdatedAt,
 			LogType:   string(g.WoWLogGroup.LogType),

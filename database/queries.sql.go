@@ -3659,6 +3659,7 @@ func (q *sqlQuerier) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.
 const getWoWLogGroupByID = `-- name: GetWoWLogGroupByID :one
 SELECT
   wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor,
+  u.username AS owner_name,
   COALESCE(
       jsonb_agg(
       jsonb_build_object(
@@ -3680,16 +3681,20 @@ SELECT
   )::wow_log_group_files AS files
 FROM
   wow_log_groups
+JOIN users u
+  ON u.id = wow_log_groups.owner
 LEFT JOIN log_file json_file
-    ON json_file.wow_log_id = wow_log_groups.id
+  ON json_file.wow_log_id = wow_log_groups.id
 WHERE
   wow_log_groups.id = $1
 GROUP BY
-  wow_log_groups.id
+  wow_log_groups.id,
+  u.username
 `
 
 type GetWoWLogGroupByIDRow struct {
 	WoWLogGroup WoWLogGroup `db:"wo_wlog_group" json:"wo_wlog_group"`
+	OwnerName   string      `db:"owner_name" json:"owner_name"`
 	Files       []LogFile   `db:"files" json:"files"`
 }
 
@@ -3704,6 +3709,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 		&i.WoWLogGroup.LogType,
 		&i.WoWLogGroup.Format,
 		&i.WoWLogGroup.Flavor,
+		&i.OwnerName,
 		&i.Files,
 	)
 	return i, err

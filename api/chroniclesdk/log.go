@@ -38,6 +38,7 @@ type GUIDString = guid.GUID
 type WoWLogGroup struct {
 	ID        uuid.UUID          `json:"id"`
 	Owner     uuid.UUID          `json:"owner"`
+	OwnerName string             `json:"owner_name,omitempty"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	LogType   string             `json:"log_type"`

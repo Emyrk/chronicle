@@ -35,6 +35,16 @@ func TestUser(t *testing.T) {
 	})
 }
 
+func TestWoWLogGroupRowIncludesOwnerName(t *testing.T) {
+	t.Parallel()
+
+	converted := WoWLogGroupRow(database.GetWoWLogGroupByIDRow{
+		OwnerName: "LogUploader",
+	})
+
+	require.Equal(t, "LogUploader", converted.OwnerName)
+}
+
 func TestVehicleControlMetadata(t *testing.T) {
 	t.Parallel()
 
