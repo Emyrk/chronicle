@@ -14,7 +14,7 @@ import (
 
 const (
 	feignDeathSpellID      chrondbc.SpellID = 28728
-	feignDeathDamageWindow                  = time.Second
+	feignDeathDamageWindow                  = 3 * time.Second
 )
 
 type feignDeath struct {
@@ -40,8 +40,8 @@ func newFeignDeath(
 
 // ProcessMessages replaces hunter death events that look like Feign Death
 // with a synthetic spell completion. ChromieCraft does not emit the Feign Death
-// cast. A zero-overkill hit within the previous second distinguishes the false
-// death without requiring lookahead.
+// cast. A zero-overkill hit within the previous three seconds distinguishes the
+// false death without requiring lookahead.
 func (f *feignDeath) ProcessMessages(msgs []messages.Message) ([]messages.Message, error) {
 	for i, msg := range msgs {
 		switch m := msg.(type) {
