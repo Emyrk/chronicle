@@ -10,7 +10,7 @@ import (
 )
 
 // GetModernSpellComponents loads the normalized modern rows attached to a spell.
-func GetModernSpellComponents(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.ModernSpellEffect, []chrondbc.ModernSpellPower, []chrondbc.ModernSpellVariant, error) {
+func GetModernSpellComponents(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.SpellEffect, []chrondbc.SpellPower, []chrondbc.SpellVariant, error) {
 	effects, err := getModernSpellEffects(ctx, pool, datasetID, spellID)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("get modern spell effects: %w", err)
@@ -26,7 +26,7 @@ func GetModernSpellComponents(ctx context.Context, pool *pgxpool.Pool, datasetID
 	return effects, powers, variants, nil
 }
 
-func getModernSpellEffects(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.ModernSpellEffect, error) {
+func getModernSpellEffects(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.SpellEffect, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT dataset_id, spell_id, difficulty_id, effect_index, source_id,
 			bonus_coefficient_from_ap, coefficient, effect, effect_amplitude,
@@ -47,9 +47,9 @@ func getModernSpellEffects(ctx context.Context, pool *pgxpool.Pool, datasetID uu
 	}
 	defer rows.Close()
 
-	var result []chrondbc.ModernSpellEffect
+	var result []chrondbc.SpellEffect
 	for rows.Next() {
-		var effect chrondbc.ModernSpellEffect
+		var effect chrondbc.SpellEffect
 		if err := rows.Scan(
 			&effect.DatasetID, &effect.SpellID,
 			&effect.DifficultyID, &effect.EffectIndex, &effect.SourceID,
@@ -73,7 +73,7 @@ func getModernSpellEffects(ctx context.Context, pool *pgxpool.Pool, datasetID uu
 	return result, rows.Err()
 }
 
-func getModernSpellPowers(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.ModernSpellPower, error) {
+func getModernSpellPowers(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.SpellPower, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT dataset_id, spell_id, order_index, source_id, alt_power_bar_id, mana_cost,
 			mana_cost_per_level, mana_per_second, optional_cost,
@@ -89,9 +89,9 @@ func getModernSpellPowers(ctx context.Context, pool *pgxpool.Pool, datasetID uui
 	}
 	defer rows.Close()
 
-	var result []chrondbc.ModernSpellPower
+	var result []chrondbc.SpellPower
 	for rows.Next() {
-		var power chrondbc.ModernSpellPower
+		var power chrondbc.SpellPower
 		if err := rows.Scan(
 			&power.DatasetID, &power.SpellID,
 			&power.OrderIndex, &power.SourceID, &power.AltPowerBarID,
@@ -192,7 +192,7 @@ type modernSpellVariantRow struct {
 	Width                *float32
 }
 
-func getModernSpellVariants(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.ModernSpellVariant, error) {
+func getModernSpellVariants(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.SpellVariant, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT dataset_id, spell_id, difficulty_id,
 			misc_id, active_icon_file_data_id, active_spell_visual_script,
@@ -227,7 +227,7 @@ func getModernSpellVariants(ctx context.Context, pool *pgxpool.Pool, datasetID u
 	}
 	defer rows.Close()
 
-	var result []chrondbc.ModernSpellVariant
+	var result []chrondbc.SpellVariant
 	for rows.Next() {
 		var row modernSpellVariantRow
 		if err := rows.Scan(
@@ -268,8 +268,8 @@ func getModernSpellVariants(ctx context.Context, pool *pgxpool.Pool, datasetID u
 	return result, rows.Err()
 }
 
-func (r modernSpellVariantRow) toModernSpellVariant() chrondbc.ModernSpellVariant {
-	variant := chrondbc.ModernSpellVariant{
+func (r modernSpellVariantRow) toModernSpellVariant() chrondbc.SpellVariant {
+	variant := chrondbc.SpellVariant{
 		DatasetID:    r.DatasetID,
 		SpellID:      chrondbc.SpellID(r.SpellID),
 		DifficultyID: r.DifficultyID,
