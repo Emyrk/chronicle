@@ -47,10 +47,14 @@ func TestDiscordInstallPermissions(t *testing.T) {
 		discordgo.PermissionEmbedLinks,
 		discordgo.PermissionAttachFiles,
 		discordgo.PermissionReadMessageHistory,
+	} {
+		require.Equal(t, permission, discordInstallPermissions&permission)
+	}
+	for _, permission := range []int64{
 		discordgo.PermissionCreatePublicThreads,
 		discordgo.PermissionSendMessagesInThreads,
 	} {
-		require.Equal(t, permission, discordInstallPermissions&permission)
+		require.Zero(t, discordInstallPermissions&permission)
 	}
 }
 

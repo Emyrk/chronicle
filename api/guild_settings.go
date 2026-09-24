@@ -310,9 +310,7 @@ const (
 		discordgo.PermissionSendMessages |
 		discordgo.PermissionEmbedLinks |
 		discordgo.PermissionAttachFiles |
-		discordgo.PermissionReadMessageHistory |
-		discordgo.PermissionCreatePublicThreads |
-		discordgo.PermissionSendMessagesInThreads
+		discordgo.PermissionReadMessageHistory
 )
 
 func (api *API) discordInstallCallbackURL() string {

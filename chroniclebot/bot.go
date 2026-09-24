@@ -261,8 +261,6 @@ var discordAnnouncementPermissions = []struct {
 	{permission: discordgo.PermissionViewChannel, label: "View Channel"},
 	{permission: discordgo.PermissionSendMessages, label: "Send Messages"},
 	{permission: discordgo.PermissionEmbedLinks, label: "Embed Links"},
-	{permission: discordgo.PermissionCreatePublicThreads, label: "Create Public Threads"},
-	{permission: discordgo.PermissionSendMessagesInThreads, label: "Send Messages in Threads"},
 }
 
 func missingDiscordAnnouncementPermissions(permissions int64) []string {
@@ -323,7 +321,7 @@ func (b *Bot) TextChannelEligibility(guildID string) ([]DiscordChannelEligibilit
 	return eligibility, nil
 }
 
-// WritableTextChannels returns text channels where the bot can send announcements and create public threads.
+// WritableTextChannels returns text channels where the bot can send announcements.
 func (b *Bot) WritableTextChannels(guildID string) ([]*discordgo.Channel, error) {
 	eligibility, err := b.TextChannelEligibility(guildID)
 	if err != nil {
