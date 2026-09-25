@@ -19,6 +19,288 @@ var (
 	ErrBatchAlreadyClosed = errors.New("batch already closed")
 )
 
+const copyLegacySpellEffects = `-- name: CopyLegacySpellEffects :batchexec
+INSERT INTO dbc_spell_effects (
+  dataset_id, spell_id, difficulty_id, effect_index, source_id,
+  bonus_coefficient_from_ap, coefficient, effect, effect_amplitude,
+  effect_attributes, effect_aura, effect_aura_period, effect_base_points_f,
+  effect_die_sides, effect_base_points, effect_points_per_combo,
+  effect_base_dice, effect_dice_per_level, effect_bonus_coefficient,
+  effect_chain_amplitude, effect_chain_targets, effect_item_type,
+  effect_mechanic, effect_misc_value, effect_points_per_resource,
+  effect_pos_facing, effect_radius_index, effect_real_points_per_level,
+  effect_spell_class_mask, effect_trigger_spell,
+  group_size_base_points_coefficient, node_field_12_0_0_63534_001,
+  pvp_multiplier, resource_coefficient, scaling_class, implicit_target, variance
+) VALUES (
+  $1, $2, $3, $4, $5,
+  $6, $7, $8, $9,
+  $10, $11, $12, $13,
+  $14, $15, $16,
+  $17, $18, $19,
+  $20, $21, $22,
+  $23, $24, $25,
+  $26, $27, $28,
+  $29, $30,
+  $31, $32,
+  $33, $34, $35, $36, $37
+)
+`
+
+type CopyLegacySpellEffectsBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type CopyLegacySpellEffectsParams struct {
+	DatasetID                      uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellID                        int32     `db:"spell_id" json:"spell_id"`
+	DifficultyID                   int32     `db:"difficulty_id" json:"difficulty_id"`
+	EffectIndex                    int32     `db:"effect_index" json:"effect_index"`
+	SourceID                       int32     `db:"source_id" json:"source_id"`
+	BonusCoefficientFromAp         float32   `db:"bonus_coefficient_from_ap" json:"bonus_coefficient_from_ap"`
+	Coefficient                    float32   `db:"coefficient" json:"coefficient"`
+	Effect                         int32     `db:"effect" json:"effect"`
+	EffectAmplitude                float32   `db:"effect_amplitude" json:"effect_amplitude"`
+	EffectAttributes               int32     `db:"effect_attributes" json:"effect_attributes"`
+	EffectAura                     int32     `db:"effect_aura" json:"effect_aura"`
+	EffectAuraPeriod               int32     `db:"effect_aura_period" json:"effect_aura_period"`
+	EffectBasePointsF              float32   `db:"effect_base_points_f" json:"effect_base_points_f"`
+	EffectDieSides                 int32     `db:"effect_die_sides" json:"effect_die_sides"`
+	EffectBasePoints               int32     `db:"effect_base_points" json:"effect_base_points"`
+	EffectPointsPerCombo           float32   `db:"effect_points_per_combo" json:"effect_points_per_combo"`
+	EffectBaseDice                 int32     `db:"effect_base_dice" json:"effect_base_dice"`
+	EffectDicePerLevel             int32     `db:"effect_dice_per_level" json:"effect_dice_per_level"`
+	EffectBonusCoefficient         float32   `db:"effect_bonus_coefficient" json:"effect_bonus_coefficient"`
+	EffectChainAmplitude           float32   `db:"effect_chain_amplitude" json:"effect_chain_amplitude"`
+	EffectChainTargets             int32     `db:"effect_chain_targets" json:"effect_chain_targets"`
+	EffectItemType                 int32     `db:"effect_item_type" json:"effect_item_type"`
+	EffectMechanic                 int32     `db:"effect_mechanic" json:"effect_mechanic"`
+	EffectMiscValue                []int32   `db:"effect_misc_value" json:"effect_misc_value"`
+	EffectPointsPerResource        float32   `db:"effect_points_per_resource" json:"effect_points_per_resource"`
+	EffectPosFacing                float32   `db:"effect_pos_facing" json:"effect_pos_facing"`
+	EffectRadiusIndex              []int32   `db:"effect_radius_index" json:"effect_radius_index"`
+	EffectRealPointsPerLevel       float32   `db:"effect_real_points_per_level" json:"effect_real_points_per_level"`
+	EffectSpellClassMask           []int32   `db:"effect_spell_class_mask" json:"effect_spell_class_mask"`
+	EffectTriggerSpell             int32     `db:"effect_trigger_spell" json:"effect_trigger_spell"`
+	GroupSizeBasePointsCoefficient float32   `db:"group_size_base_points_coefficient" json:"group_size_base_points_coefficient"`
+	NodeField120063534001          int32     `db:"node_field_12_0_0_63534_001" json:"node_field_12_0_0_63534_001"`
+	PvpMultiplier                  float32   `db:"pvp_multiplier" json:"pvp_multiplier"`
+	ResourceCoefficient            float32   `db:"resource_coefficient" json:"resource_coefficient"`
+	ScalingClass                   int32     `db:"scaling_class" json:"scaling_class"`
+	ImplicitTarget                 []int32   `db:"implicit_target" json:"implicit_target"`
+	Variance                       float32   `db:"variance" json:"variance"`
+}
+
+func (q *sqlQuerier) CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.DatasetID,
+			a.SpellID,
+			a.DifficultyID,
+			a.EffectIndex,
+			a.SourceID,
+			a.BonusCoefficientFromAp,
+			a.Coefficient,
+			a.Effect,
+			a.EffectAmplitude,
+			a.EffectAttributes,
+			a.EffectAura,
+			a.EffectAuraPeriod,
+			a.EffectBasePointsF,
+			a.EffectDieSides,
+			a.EffectBasePoints,
+			a.EffectPointsPerCombo,
+			a.EffectBaseDice,
+			a.EffectDicePerLevel,
+			a.EffectBonusCoefficient,
+			a.EffectChainAmplitude,
+			a.EffectChainTargets,
+			a.EffectItemType,
+			a.EffectMechanic,
+			a.EffectMiscValue,
+			a.EffectPointsPerResource,
+			a.EffectPosFacing,
+			a.EffectRadiusIndex,
+			a.EffectRealPointsPerLevel,
+			a.EffectSpellClassMask,
+			a.EffectTriggerSpell,
+			a.GroupSizeBasePointsCoefficient,
+			a.NodeField120063534001,
+			a.PvpMultiplier,
+			a.ResourceCoefficient,
+			a.ScalingClass,
+			a.ImplicitTarget,
+			a.Variance,
+		}
+		batch.Queue(copyLegacySpellEffects, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &CopyLegacySpellEffectsBatchResults{br, len(arg), false}
+}
+
+func (b *CopyLegacySpellEffectsBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *CopyLegacySpellEffectsBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const copyLegacySpellPowers = `-- name: CopyLegacySpellPowers :batchexec
+INSERT INTO dbc_spell_powers (
+  dataset_id, spell_id, order_index, source_id, alt_power_bar_id, mana_cost,
+  mana_cost_per_level, mana_per_second, optional_cost, optional_cost_pct,
+  power_cost_max_pct, power_cost_pct, power_display_id, power_pct_per_second,
+  power_type, required_aura_spell_id
+) VALUES (
+  $1, $2, $3, $4, $5, $6,
+  $7, $8, $9, $10,
+  $11, $12, $13, $14,
+  $15, $16
+)
+`
+
+type CopyLegacySpellPowersBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type CopyLegacySpellPowersParams struct {
+	DatasetID           uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellID             int32     `db:"spell_id" json:"spell_id"`
+	OrderIndex          int32     `db:"order_index" json:"order_index"`
+	SourceID            int32     `db:"source_id" json:"source_id"`
+	AltPowerBarID       int32     `db:"alt_power_bar_id" json:"alt_power_bar_id"`
+	ManaCost            int32     `db:"mana_cost" json:"mana_cost"`
+	ManaCostPerLevel    int32     `db:"mana_cost_per_level" json:"mana_cost_per_level"`
+	ManaPerSecond       int32     `db:"mana_per_second" json:"mana_per_second"`
+	OptionalCost        int32     `db:"optional_cost" json:"optional_cost"`
+	OptionalCostPct     float32   `db:"optional_cost_pct" json:"optional_cost_pct"`
+	PowerCostMaxPct     float32   `db:"power_cost_max_pct" json:"power_cost_max_pct"`
+	PowerCostPct        float32   `db:"power_cost_pct" json:"power_cost_pct"`
+	PowerDisplayID      int32     `db:"power_display_id" json:"power_display_id"`
+	PowerPctPerSecond   float32   `db:"power_pct_per_second" json:"power_pct_per_second"`
+	PowerType           int32     `db:"power_type" json:"power_type"`
+	RequiredAuraSpellID int32     `db:"required_aura_spell_id" json:"required_aura_spell_id"`
+}
+
+func (q *sqlQuerier) CopyLegacySpellPowers(ctx context.Context, arg []CopyLegacySpellPowersParams) *CopyLegacySpellPowersBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.DatasetID,
+			a.SpellID,
+			a.OrderIndex,
+			a.SourceID,
+			a.AltPowerBarID,
+			a.ManaCost,
+			a.ManaCostPerLevel,
+			a.ManaPerSecond,
+			a.OptionalCost,
+			a.OptionalCostPct,
+			a.PowerCostMaxPct,
+			a.PowerCostPct,
+			a.PowerDisplayID,
+			a.PowerPctPerSecond,
+			a.PowerType,
+			a.RequiredAuraSpellID,
+		}
+		batch.Queue(copyLegacySpellPowers, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &CopyLegacySpellPowersBatchResults{br, len(arg), false}
+}
+
+func (b *CopyLegacySpellPowersBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *CopyLegacySpellPowersBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const copyLegacySpellVariants = `-- name: CopyLegacySpellVariants :batchexec
+INSERT INTO dbc_spell_variants (dataset_id, spell_id, difficulty_id)
+VALUES ($1, $2, $3)
+`
+
+type CopyLegacySpellVariantsBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type CopyLegacySpellVariantsParams struct {
+	DatasetID    uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellID      int32     `db:"spell_id" json:"spell_id"`
+	DifficultyID int32     `db:"difficulty_id" json:"difficulty_id"`
+}
+
+func (q *sqlQuerier) CopyLegacySpellVariants(ctx context.Context, arg []CopyLegacySpellVariantsParams) *CopyLegacySpellVariantsBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.DatasetID,
+			a.SpellID,
+			a.DifficultyID,
+		}
+		batch.Queue(copyLegacySpellVariants, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &CopyLegacySpellVariantsBatchResults{br, len(arg), false}
+}
+
+func (b *CopyLegacySpellVariantsBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *CopyLegacySpellVariantsBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const insertAffectedAuraDurationModifiers = `-- name: InsertAffectedAuraDurationModifiers :batchexec
 INSERT INTO dbc_affected_aura_duration_modifiers (
     dataset_id,

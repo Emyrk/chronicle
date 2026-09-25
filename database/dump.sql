@@ -507,7 +507,12 @@ CREATE TABLE dbc_spell_effects (
     resource_coefficient real NOT NULL,
     scaling_class integer NOT NULL,
     implicit_target integer[] NOT NULL,
-    variance real NOT NULL
+    variance real NOT NULL,
+    effect_die_sides integer DEFAULT 0 NOT NULL,
+    effect_base_points integer DEFAULT 0 NOT NULL,
+    effect_points_per_combo real DEFAULT 0 NOT NULL,
+    effect_base_dice integer DEFAULT 0 NOT NULL,
+    effect_dice_per_level integer DEFAULT 0 NOT NULL
 );
 
 CREATE TABLE dbc_spell_focus_objects (

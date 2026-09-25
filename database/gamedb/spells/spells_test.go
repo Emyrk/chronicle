@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/spells"
 	"github.com/Emyrk/chronicle/database/spelldb"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
@@ -64,12 +65,25 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 	pool, _ := dbtestutil.NewPGXPool(t)
 	datasetID := servicedataset.DefaultDatasetID
 
-	modern := chrondbc.Spell{ID: 900001, Name_lang: i18n.Text{i18n.English: "Modern Test Spell"}}
+	modern := chrondbc.Spell{
+		ID:        900001,
+		Name_lang: i18n.Text{i18n.English: "Modern Test Spell"},
+		Effects: []chrondbc.SpellEffect{{
+			EffectIndex:  0,
+			EffectRadius: dbcmem.SpellRadius{ID: 14},
+		}},
+	}
 	legacy := chrondbc.Spell{ID: 900002, Name_lang: i18n.Text{i18n.English: "Legacy Test Spell"}}
 	require.NoError(t, spelldb.UpsertBatch(ctx, pool, []spelldb.SpellRow{
 		spelldb.FromSpell(datasetID, &modern),
 		spelldb.FromSpell(datasetID, &legacy),
 	}))
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO dbc_spell_radii(dataset_id, id, radius, radius_per_level, radius_min, radius_max)
+		VALUES($1, 14, 8.5, 0.5, 2.0, 12.0)
+	`, datasetID)
+	require.NoError(t, err)
 
 	insertEffect := func(effectIndex, sourceID, effect int32, classMask []int32) {
 		t.Helper()
@@ -120,7 +134,7 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 	insertPower(1, 201, 2000)
 	insertPower(0, 200, 1000)
 
-	_, err := pool.Exec(ctx, `
+	_, err = pool.Exec(ctx, `
 		INSERT INTO dbc_spell_variants (
 			dataset_id, spell_id, difficulty_id,
 			misc_id, attributes, speed,
@@ -158,6 +172,7 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 	require.Equal(t, []int32{12, 13}, effect.EffectMiscValue)
 	require.Equal(t, float32(0.5), effect.EffectPointsPerResource)
 	require.Equal(t, float32(0.6), effect.EffectPosFacing)
+	require.Equal(t, dbcmem.SpellRadius{ID: 14, Radius: 8.5, RadiusPerLevel: 0.5, RadiusMin: 2, RadiusMax: 12}, effect.EffectRadius)
 	require.Equal(t, []int32{14, 15}, effect.EffectRadiusIndex)
 	require.Equal(t, float32(0.7), effect.EffectRealPointsPerLevel)
 	require.Equal(t, chrondbc.SpellID(16), effect.EffectTriggerSpell)

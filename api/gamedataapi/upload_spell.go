@@ -2,7 +2,6 @@ package gamedataapi
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -17,11 +16,13 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 	spellDBC := chrondbc.NewSpells(table)
 
 	var spells []spelldb.SpellRow
+	var canonicalSpells []*chrondbc.Spell
 	err := spellDBC.Range(func(cursor *chrondbc.Spell) bool {
 		if cursor == nil {
 			return true
 		}
 		spells = append(spells, spelldb.FromSpell(datasetID, cursor))
+		canonicalSpells = append(canonicalSpells, cursor)
 		return true
 	})
 	if err != nil {
@@ -44,25 +45,16 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 
-	// Batch upsert spells.
-	const batchSize = 500
-	for i := 0; i < len(spells); i += batchSize {
-		end := i + batchSize
-		if end > len(spells) {
-			end = len(spells)
-		}
-		if err := spelldb.UpsertBatch(ctx, h.pool, spells[i:end]); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: fmt.Sprintf("Failed to upsert spells (batch starting at %d)", i),
-				Detail:  err.Error(),
-			})
-			return
-		}
+	if err := h.persistLegacySpells(ctx, datasetID, spells, canonicalSpells); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Failed to persist spells",
+			Detail:  err.Error(),
+		})
+		return
 	}
 
 	// Derive extra_attacks, duration_modifiers, periodic_spells from the
-	// imported spell data. This runs before metadata update so a failure
-	// doesn't leave the dataset in an inconsistent state.
+	// imported spell data after the canonical and compatibility rows commit.
 	if err := h.deriveSpellMetadata(ctx, datasetID, spellDBC); err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Spells imported but derived table generation failed",
@@ -80,19 +72,6 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 	if err := h.deriveConsumables(ctx, datasetID); err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Spells imported but consumable generation failed",
-			Detail:  err.Error(),
-		})
-		return
-	}
-
-	// Update dataset import metadata.
-	_, err = h.pool.Exec(ctx,
-		`UPDATE datasets SET spells_imported_at = now(), spells_count = $2, updated_at = now() WHERE id = $1`,
-		datasetID, len(spells),
-	)
-	if err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Spells imported but failed to update dataset metadata",
 			Detail:  err.Error(),
 		})
 		return

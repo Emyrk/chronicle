@@ -12,6 +12,8 @@ Read this document before changing spell parsing, storage, conversion, or API be
 | AzerothCore and Ascension | Both fixtures have 239 fields and 956-byte records. `spell_layout_extended.go` documents the extra effect dice columns and removed `Difficulty` column. | Chronicle's extended WotLK layout, not stock 3.3.5a. | Parsed with pseudo-build `12341` through `SpellBuildOverride`. |
 | WoW Forever | The extractor and converter read split modern DB2 tables such as `Spell`, `SpellName`, `SpellMisc`, `SpellEffect`, and `SpellPower`. | Base spell data plus normalized effects, powers, and difficulty-aware component variants. | A legacy-compatible `dbc_spells` projection is stored alongside lossless normalized tables. |
 
+All legacy `Spell.dbc` imports persist the converted effects, power, and difficulty-zero variant in normalized storage while retaining the wide `dbc_spells` compatibility row.
+
 The field counts above come from the checked-in DBC headers. The legacy effect-parity test covers Ascension, AzerothCore, Epoch, TBC 2.4.3, Kronos, OctoWoW, Turtle, and VanillaPlus.
 
 ## Effects and indexing
