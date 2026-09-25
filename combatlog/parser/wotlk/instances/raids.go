@@ -627,6 +627,8 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33190: "Ignis the Furnace Master",
 		33271: "General Vezax",
 		33293: "XT-002 Deconstructor",
+		33995: "Heart of the Deconstructor",
+		33329: "Heart of the Deconstructor",
 		33350: "Mimiron",
 		33360: "Freya",
 		33391: "Elder Brightleaf",
