@@ -54,6 +54,31 @@ func TestDPSTracker_BasicDamage(t *testing.T) {
 	assert.Nil(t, results[encID].Units[player].OwnerGUID)
 }
 
+func TestDPSTracker_IncludesInjectedHostileVehicleDamage(t *testing.T) {
+	t.Parallel()
+
+	tracker, units := setupDPSTracker()
+	player := makePlayerGUID(1)
+	boss, err := guid.FromString("0xF15000820D000300")
+	require.NoError(t, err)
+	encID := uuid.New()
+
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Warrior", IsPlayer: true, CanCooperate: true}
+	units.InjectAffiliation(boss, unitdb.AffiliationHostile)
+
+	tracker.FightStarted(encID, nil)
+	caster := player
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster:  &caster,
+		Target:  boss,
+		Amount:  6_000,
+		HitType: types.HitTypeHit,
+	}))
+	tracker.FightEnded(encID, nil)
+
+	require.Equal(t, int64(6_000), tracker.Result()[encID].Units[player].DamageDone)
+}
+
 func TestDPSTracker_IncludesAbsorbedDamage(t *testing.T) {
 	t.Parallel()
 	tracker, units := setupDPSTracker()

@@ -4,11 +4,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +21,66 @@ func mustGUID(t *testing.T, s string) guid.GUID {
 	g, err := guid.FromString(s)
 	require.NoError(t, err)
 	return g
+}
+
+func TestClassificationEmitter_InjectsKnownHostileVehicleOnFirstSeen(t *testing.T) {
+	t.Parallel()
+
+	units := unitdb.New()
+	const entry uint32 = 33293
+	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{
+		entry: {
+			Affiliation: types.AffiliationHostile,
+			Name:        "XT-002 Deconstructor",
+			Boss:        true,
+		},
+	})
+	chars := characters.NewCharacters(units, nil, idf)
+	vehicleGUID := mustGUID(t, "0xF15000820D000300")
+	char, added := chars.Add(vehicleGUID, time.Now())
+	require.True(t, added)
+	require.Equal(t, types.AffiliationUnknown, units.Classify(vehicleGUID).Affiliation)
+
+	ce := &ClassificationEmitter{
+		units:      units,
+		characters: chars,
+		identifier: idf,
+	}
+	ce.CharacterAdded(&messages.Damage{}, char)
+
+	classification := units.Classify(vehicleGUID)
+	require.Equal(t, types.UnitTypeVehicle, classification.Type)
+	require.Equal(t, types.AffiliationHostile, classification.Affiliation)
+}
+
+func TestClassificationEmitter_DoesNotInjectKnownHostileCreatureOnFirstSeen(t *testing.T) {
+	t.Parallel()
+
+	units := unitdb.New()
+	const entry uint32 = 33293
+	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{
+		entry: {
+			Affiliation: types.AffiliationHostile,
+			Name:        "XT-002 Deconstructor",
+			Boss:        true,
+		},
+	})
+	chars := characters.NewCharacters(units, nil, idf)
+	creatureGUID := guid.GUID(0xF130000000000001 | uint64(entry)<<24)
+	char, added := chars.Add(creatureGUID, time.Now())
+	require.True(t, added)
+	require.Equal(t, types.AffiliationUnknown, units.Classify(creatureGUID).Affiliation)
+
+	ce := &ClassificationEmitter{
+		units:      units,
+		characters: chars,
+		identifier: idf,
+	}
+	ce.CharacterAdded(&messages.Damage{}, char)
+
+	classification := units.Classify(creatureGUID)
+	require.Equal(t, types.UnitTypeCreature, classification.Type)
+	require.Equal(t, types.AffiliationUnknown, classification.Affiliation)
 }
 
 func TestClassificationEmitter_PossessionChange(t *testing.T) {
