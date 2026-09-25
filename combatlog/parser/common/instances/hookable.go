@@ -168,6 +168,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	ce := &ClassificationEmitter{
 		units:      db,
 		characters: chrs,
+		identifier: ip.Idf,
 	}
 	chrs.RegisterHook(ce)
 

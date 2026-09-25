@@ -17,6 +17,10 @@ type Units struct {
 	PlayerByName map[string]guid.GUID
 	Possessed    map[guid.GUID]PossessionState
 
+	// injectedAffiliations stores authoritative instance-registry classifications
+	// for units whose runtime metadata cannot express affiliation, such as vehicles.
+	injectedAffiliations map[guid.GUID]Affiliation
+
 	// directOwners preserves the observed ownership graph while Info stores the
 	// flattened root owner used by downstream attribution.
 	directOwners map[guid.GUID]guid.GUID
@@ -24,11 +28,12 @@ type Units struct {
 
 func New() *Units {
 	return &Units{
-		Info:         make(map[guid.GUID]unitinfo.Info),
-		Players:      make(map[guid.GUID]combatant.Combatant),
-		PlayerByName: make(map[string]guid.GUID),
-		Possessed:    make(map[guid.GUID]PossessionState),
-		directOwners: make(map[guid.GUID]guid.GUID),
+		Info:                 make(map[guid.GUID]unitinfo.Info),
+		Players:              make(map[guid.GUID]combatant.Combatant),
+		PlayerByName:         make(map[string]guid.GUID),
+		Possessed:            make(map[guid.GUID]PossessionState),
+		injectedAffiliations: make(map[guid.GUID]Affiliation),
+		directOwners:         make(map[guid.GUID]guid.GUID),
 	}
 }
 
@@ -53,6 +58,10 @@ func (us *Units) Classify(g guid.GUID) UnitClassification {
 		}
 	}
 
+	if affiliation, ok := us.injectedAffiliations[g]; ok {
+		c.Affiliation = affiliation
+	}
+
 	if ps, ok := us.Possessed[g]; ok {
 		c.Possession = &ps
 		// A possessed hostile uses their controller's affiliation.
@@ -67,6 +76,15 @@ func (us *Units) Classify(g guid.GUID) UnitClassification {
 	}
 
 	return c
+}
+
+// InjectAffiliation records an authoritative classification supplied by the
+// instance registry. Dynamic possession still overrides it while active.
+func (us *Units) InjectAffiliation(target guid.GUID, affiliation Affiliation) {
+	if us.injectedAffiliations == nil {
+		us.injectedAffiliations = make(map[guid.GUID]Affiliation)
+	}
+	us.injectedAffiliations[target] = affiliation
 }
 
 // ProcessMessage handles messages that affect unit state.

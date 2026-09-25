@@ -4,10 +4,11 @@ import (
 	"context"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/google/uuid"
 )
 
@@ -22,6 +23,7 @@ type ClassificationEmitter struct {
 
 	units      *unitdb.Units
 	characters *characters.Characters
+	identifier *identifier.Identifier
 	emit       func(*messages.UnitClassificationEvent)
 }
 
@@ -32,8 +34,24 @@ func (ce *ClassificationEmitter) ActivityChange(m messages.Message, chars ...cha
 	}
 }
 
-// characters.SetHook — no-op.
-func (ce *ClassificationEmitter) CharacterAdded(_ messages.Message, _ ...characters.Character) {}
+// characters.SetHook — inject static classifications for known instance
+// vehicles as soon as they are observed. Vehicle runtime affiliation is
+// otherwise unknown until delayed control metadata is reconstructed.
+func (ce *ClassificationEmitter) CharacterAdded(_ messages.Message, chars ...characters.Character) {
+	if ce.identifier == nil {
+		return
+	}
+	for _, char := range chars {
+		classification := ce.units.Classify(char.ID())
+		if classification.Type != unitdb.UnitTypeVehicle || classification.Affiliation != unitdb.AffiliationUnknown {
+			continue
+		}
+		identity := ce.identifier.IdentifyUnit(char.ID())
+		if identity.CanBattle() {
+			ce.units.InjectAffiliation(char.ID(), identity.Affiliation)
+		}
+	}
+}
 
 // instancehook.Hook — detect possession changes.
 func (ce *ClassificationEmitter) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
