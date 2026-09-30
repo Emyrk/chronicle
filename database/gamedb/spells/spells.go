@@ -12,6 +12,7 @@ package spells
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync/atomic"
 
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -227,19 +228,17 @@ func (f *Fetcher) populateModernComponents(ctx context.Context, datasetID uuid.U
 		return fmt.Errorf("load modern spell components for spell %d: %w", spell.ID, err)
 	}
 	if len(effects) > 0 {
-		for i := range effects {
-			if effects[i].DifficultyID != 0 || len(effects[i].EffectRadiusIndex) == 0 {
-				continue
-			}
-			legacy := spell.EffectByIndex(effects[i].EffectIndex)
-			if legacy != nil && legacy.EffectRadius.ID == effects[i].EffectRadiusIndex[0] {
-				effects[i].EffectRadius = legacy.EffectRadius
-			}
-		}
 		spell.Effects = effects
 	}
 	if len(powers) > 0 {
 		spell.Powers = powers
+		if power := spell.DefaultPower(); power != nil {
+			spell.PowerType = chrondbc.Power(power.PowerType)
+			spell.ManaCost = power.ManaCost
+			spell.ManaCostPct = int32(math.Round(float64(power.PowerCostPct)))
+			spell.ManaCostPerLevel = power.ManaCostPerLevel
+			spell.ManaPerSecond = power.ManaPerSecond
+		}
 	}
 	spell.Variants = variants
 	return nil

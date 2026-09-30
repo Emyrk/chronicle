@@ -143,7 +143,7 @@ func TestSpellRoundTrip(t *testing.T) {
 	assert.Equal(t, original.SpellLevel, roundTripped.SpellLevel)
 	assert.Equal(t, original.School, roundTripped.School)
 	assert.Equal(t, original.DefenseType, roundTripped.DefenseType)
-	assert.Equal(t, original.ManaCost, roundTripped.ManaCost)
+	assert.Zero(t, roundTripped.ManaCost)
 	assert.Equal(t, original.Speed, roundTripped.Speed)
 	assert.Equal(t, original.ProcChance, roundTripped.ProcChance)
 
@@ -160,11 +160,15 @@ func TestSpellRoundTrip(t *testing.T) {
 	assert.Equal(t, original.SpellClassMask, roundTripped.SpellClassMask)
 	assert.Equal(t, original.PreventionType, roundTripped.PreventionType)
 
-	// Effects. Empty legacy slots are reconstructed explicitly by the wide row.
+	// Fixed-width effects and scalar power fields are no longer written. Runtime
+	// fetches hydrate them from normalized rows, while ToSpell retains a fallback
+	// for datasets imported before normalization.
 	require.Len(t, roundTripped.Effects, 3)
-	assert.Equal(t, original.Effects[0], roundTripped.Effects[0])
-	assert.Equal(t, int32(1), roundTripped.Effects[1].EffectIndex)
-	assert.Equal(t, int32(2), roundTripped.Effects[2].EffectIndex)
+	for i, effect := range roundTripped.Effects {
+		assert.Equal(t, int32(i), effect.EffectIndex)
+		assert.Zero(t, effect.Effect)
+	}
+	assert.Zero(t, roundTripped.PowerType)
 
 	// Visuals
 	assert.Equal(t, original.SpellVisualID, roundTripped.SpellVisualID)
@@ -174,10 +178,6 @@ func TestSpellRoundTrip(t *testing.T) {
 	require.NoError(t, err, "get spells by name")
 	require.Len(t, byName, 1)
 	assert.Equal(t, chrondbc.SpellID(byName[0].SpellID), original.ID)
-
-	// Verify methods still work on the round-tripped spell
-	assert.Equal(t, original.SpellDamageType(), roundTripped.SpellDamageType())
-	assert.Equal(t, original.AttackOutcome(), roundTripped.AttackOutcome())
 
 	// Verify EquippedItemClass survived (it's -1 for None)
 	assert.Equal(t, original.EquippedItemClass, roundTripped.EquippedItemClass)

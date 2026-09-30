@@ -68,6 +68,45 @@ var columns = []string{
 	"mana_per_second_per_level",
 }
 
+// compatibilityOnlyColumns are retained for reading pre-normalization datasets,
+// but new imports no longer write these lossy fixed-width projections.
+var compatibilityOnlyColumns = map[string]struct{}{
+	"power_type": {}, "mana_cost": {}, "mana_cost_pct": {},
+	"mana_cost_per_level": {}, "mana_per_second": {},
+	"effect_0": {}, "effect_die_sides_0": {}, "effect_real_pts_per_level_0": {},
+	"effect_base_points_0": {}, "effect_mechanic_0": {}, "effect_radius_index_0": {},
+	"effect_aura_0": {}, "effect_aura_period_0": {}, "effect_amplitude_0": {},
+	"effect_chain_targets_0": {}, "effect_item_type_0": {}, "effect_misc_value_0": {},
+	"effect_trigger_spell_0": {}, "effect_pts_per_combo_0": {}, "effect_base_dice_0": {},
+	"effect_dice_per_level_0": {}, "effect_chain_amplitude_0": {},
+	"implicit_target_a_0": {}, "implicit_target_b_0": {},
+	"effect_1": {}, "effect_die_sides_1": {}, "effect_real_pts_per_level_1": {},
+	"effect_base_points_1": {}, "effect_mechanic_1": {}, "effect_radius_index_1": {},
+	"effect_aura_1": {}, "effect_aura_period_1": {}, "effect_amplitude_1": {},
+	"effect_chain_targets_1": {}, "effect_item_type_1": {}, "effect_misc_value_1": {},
+	"effect_trigger_spell_1": {}, "effect_pts_per_combo_1": {}, "effect_base_dice_1": {},
+	"effect_dice_per_level_1": {}, "effect_chain_amplitude_1": {},
+	"implicit_target_a_1": {}, "implicit_target_b_1": {},
+	"effect_2": {}, "effect_die_sides_2": {}, "effect_real_pts_per_level_2": {},
+	"effect_base_points_2": {}, "effect_mechanic_2": {}, "effect_radius_index_2": {},
+	"effect_aura_2": {}, "effect_aura_period_2": {}, "effect_amplitude_2": {},
+	"effect_chain_targets_2": {}, "effect_item_type_2": {}, "effect_misc_value_2": {},
+	"effect_trigger_spell_2": {}, "effect_pts_per_combo_2": {}, "effect_base_dice_2": {},
+	"effect_dice_per_level_2": {}, "effect_chain_amplitude_2": {},
+	"implicit_target_a_2": {}, "implicit_target_b_2": {},
+	"effect_base_points_f": {},
+}
+
+var writeColumns = func() []string {
+	result := make([]string, 0, len(columns)-len(compatibilityOnlyColumns))
+	for _, column := range columns {
+		if _, compatibilityOnly := compatibilityOnlyColumns[column]; !compatibilityOnly {
+			result = append(result, column)
+		}
+	}
+	return result
+}()
+
 // values returns the SpellRow fields as a flat slice matching the columns order.
 func (r *SpellRow) values() []any {
 	return []any{
@@ -126,6 +165,17 @@ func (r *SpellRow) values() []any {
 		r.ExcludeCasterAuraState, r.ExcludeTargetAuraState,
 		r.ManaPerSecondPerLevel,
 	}
+}
+
+func (r *SpellRow) writeValues() []any {
+	allValues := r.values()
+	result := make([]any, 0, len(writeColumns))
+	for i, column := range columns {
+		if _, compatibilityOnly := compatibilityOnlyColumns[column]; !compatibilityOnly {
+			result = append(result, allValues[i])
+		}
+	}
+	return result
 }
 
 func nonNilInt32s(values []int32) []int32 {
@@ -222,9 +272,9 @@ func (r *SpellRow) scanDestsWithJoins() []any {
 }
 
 // columnsSQL builds a comma-separated column list.
-func columnsSQL() string {
+func columnsSQL(selectedColumns []string) string {
 	s := ""
-	for i, c := range columns {
+	for i, c := range selectedColumns {
 		if i > 0 {
 			s += ", "
 		}
@@ -272,9 +322,9 @@ var joinColumnsSQL = `,
     sdv.variables AS desc_variables`
 
 // placeholdersSQL builds $1, $2, ... $N for the column count.
-func placeholdersSQL() string {
+func placeholdersSQL(selectedColumns []string) string {
 	s := ""
-	for i := range columns {
+	for i := range selectedColumns {
 		if i > 0 {
 			s += ", "
 		}
@@ -289,9 +339,9 @@ func InsertSpell(ctx context.Context, pool *pgxpool.Pool, row *SpellRow) error {
 	sql := fmt.Sprintf(
 		`INSERT INTO dbc_spells (%s) VALUES (%s)
 		 ON CONFLICT (dataset_id, spell_id) DO UPDATE SET %s`,
-		columnsSQL(), placeholdersSQL(), updateSetSQL(),
+		columnsSQL(writeColumns), placeholdersSQL(writeColumns), updateSetSQL(),
 	)
-	_, err := pool.Exec(ctx, sql, row.values()...)
+	_, err := pool.Exec(ctx, sql, row.writeValues()...)
 	return err
 }
 
@@ -344,11 +394,11 @@ func UpsertBatch(ctx context.Context, pool interface {
 	sql := fmt.Sprintf(
 		`INSERT INTO dbc_spells (%s) VALUES (%s)
 		 ON CONFLICT (dataset_id, spell_id) DO UPDATE SET %s`,
-		columnsSQL(), placeholdersSQL(), updateSetSQL(),
+		columnsSQL(writeColumns), placeholdersSQL(writeColumns), updateSetSQL(),
 	)
 	batch := &pgx.Batch{}
 	for i := range rows {
-		batch.Queue(sql, rows[i].values()...)
+		batch.Queue(sql, rows[i].writeValues()...)
 	}
 	br := pool.SendBatch(ctx, batch)
 	defer func() { _ = br.Close() }()
@@ -364,7 +414,7 @@ func UpsertBatch(ctx context.Context, pool interface {
 // the PK columns (dataset_id, spell_id).
 func updateSetSQL() string {
 	s := ""
-	for _, c := range columns[2:] { // skip dataset_id, spell_id
+	for _, c := range writeColumns[2:] { // skip dataset_id, spell_id
 		if s != "" {
 			s += ", "
 		}

@@ -79,6 +79,15 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 		spelldb.FromSpell(datasetID, &legacy),
 	}))
 
+	var wideEffect, wideManaCost int32
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT effect_0, mana_cost
+		FROM dbc_spells
+		WHERE dataset_id = $1 AND spell_id = $2
+	`, datasetID, int32(modern.ID)).Scan(&wideEffect, &wideManaCost))
+	require.Zero(t, wideEffect)
+	require.Zero(t, wideManaCost)
+
 	_, err := pool.Exec(ctx, `
 		INSERT INTO dbc_spell_radii(dataset_id, id, radius, radius_per_level, radius_min, radius_max)
 		VALUES($1, 14, 8.5, 0.5, 2.0, 12.0)
@@ -185,6 +194,11 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 	require.Equal(t, float32(1.2), effect.Variance)
 	require.Equal(t, []int32{0, 1}, []int32{got.Powers[0].OrderIndex, got.Powers[1].OrderIndex})
 	require.Equal(t, []int32{1000, 2000}, []int32{got.Powers[0].ManaCost, got.Powers[1].ManaCost})
+	require.Equal(t, chrondbc.Power(10), got.PowerType)
+	require.Equal(t, int32(1000), got.ManaCost)
+	require.Equal(t, int32(1), got.ManaCostPct)
+	require.Equal(t, int32(6), got.ManaCostPerLevel)
+	require.Equal(t, int32(7), got.ManaPerSecond)
 	require.Equal(t, []int32{0, 2}, []int32{got.Variants[0].DifficultyID, got.Variants[1].DifficultyID})
 	require.Equal(t, []int32{1, 2, 3, 4}, got.Variants[0].ClassOptions.SpellClassMask)
 	require.NotNil(t, got.Variants[0].Levels)

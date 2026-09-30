@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -28,7 +29,7 @@ func GetModernSpellComponents(ctx context.Context, pool *pgxpool.Pool, datasetID
 
 func getModernSpellEffects(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.SpellEffect, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT dataset_id, spell_id, difficulty_id, effect_index, source_id,
+		SELECT se.dataset_id, spell_id, difficulty_id, effect_index, source_id,
 			bonus_coefficient_from_ap, coefficient, effect, effect_amplitude,
 			effect_attributes, effect_aura, effect_aura_period, effect_base_points_f,
 			effect_die_sides, effect_base_points, effect_points_per_combo,
@@ -39,10 +40,13 @@ func getModernSpellEffects(ctx context.Context, pool *pgxpool.Pool, datasetID uu
 			effect_real_points_per_level, effect_spell_class_mask,
 			effect_trigger_spell, group_size_base_points_coefficient,
 			node_field_12_0_0_63534_001, pvp_multiplier, resource_coefficient,
-			scaling_class, implicit_target, variance
-		FROM dbc_spell_effects
-		WHERE dataset_id = $1 AND spell_id = $2
-		ORDER BY difficulty_id, effect_index, source_id
+			scaling_class, implicit_target, variance,
+			r.radius, r.radius_per_level, r.radius_min, r.radius_max
+		FROM dbc_spell_effects se
+		LEFT JOIN dbc_spell_radii r
+			ON r.dataset_id = se.dataset_id AND r.id = se.effect_radius_index[1]
+		WHERE se.dataset_id = $1 AND se.spell_id = $2
+		ORDER BY se.difficulty_id, se.effect_index, se.source_id
 	`, datasetID, spellID)
 	if err != nil {
 		return nil, err
@@ -52,6 +56,7 @@ func getModernSpellEffects(ctx context.Context, pool *pgxpool.Pool, datasetID uu
 	var result []chrondbc.SpellEffect
 	for rows.Next() {
 		var effect chrondbc.SpellEffect
+		var radius, radiusPerLevel, radiusMin, radiusMax *float32
 		if err := rows.Scan(
 			&effect.DatasetID, &effect.SpellID,
 			&effect.DifficultyID, &effect.EffectIndex, &effect.SourceID,
@@ -69,8 +74,18 @@ func getModernSpellEffects(ctx context.Context, pool *pgxpool.Pool, datasetID uu
 			&effect.NodeField120063534001, &effect.PVPMultiplier,
 			&effect.ResourceCoefficient, &effect.ScalingClass,
 			&effect.ImplicitTarget, &effect.Variance,
+			&radius, &radiusPerLevel, &radiusMin, &radiusMax,
 		); err != nil {
 			return nil, err
+		}
+		if radius != nil && len(effect.EffectRadiusIndex) > 0 {
+			effect.EffectRadius = dbcmem.SpellRadius{
+				ID:             effect.EffectRadiusIndex[0],
+				Radius:         *radius,
+				RadiusPerLevel: derefOrF(radiusPerLevel),
+				RadiusMin:      derefOrF(radiusMin),
+				RadiusMax:      derefOrF(radiusMax),
+			}
 		}
 		result = append(result, effect)
 	}

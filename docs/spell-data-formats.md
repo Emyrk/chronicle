@@ -10,9 +10,9 @@ Read this document before changing spell parsing, storage, conversion, or API be
 | TBC 2.4.3 | The checked-in TBC `Spell.dbc` fixture has 216 fields and 864-byte records. | One monolithic `Spell.dbc` row with three effect slots. | Parsed with the 2.4.3 build 8606 layout and covered by the legacy effect-parity test. |
 | Stock WotLK 3.3.5a | The Epoch fixture has 234 fields and 936-byte records. | One monolithic `Spell.dbc` row with three effect slots. | Parsed with the stock 3.3.5a layout. |
 | AzerothCore and Ascension | Both fixtures have 239 fields and 956-byte records. `spell_layout_extended.go` documents the extra effect dice columns and removed `Difficulty` column. | Chronicle's extended WotLK layout, not stock 3.3.5a. | Parsed with pseudo-build `12341` through `SpellBuildOverride`. |
-| WoW Forever | The extractor and converter read split modern DB2 tables such as `Spell`, `SpellName`, `SpellMisc`, `SpellEffect`, and `SpellPower`. | Base spell data plus normalized effects, powers, and difficulty-aware component variants. | A legacy-compatible `dbc_spells` projection is stored alongside lossless normalized tables. |
+| WoW Forever | The extractor and converter read split modern DB2 tables such as `Spell`, `SpellName`, `SpellMisc`, `SpellEffect`, and `SpellPower`. | Base spell data plus normalized effects, powers, and difficulty-aware component variants. | Base spell fields are stored in `dbc_spells`; effects, powers, and variants are stored losslessly in normalized tables. |
 
-All legacy `Spell.dbc` imports persist the converted effects, power, and difficulty-zero variant in normalized storage while retaining the wide `dbc_spells` compatibility row.
+All legacy `Spell.dbc` imports persist the converted effects, power, and difficulty-zero variant in normalized storage while retaining the `dbc_spells` base row. New imports no longer write its fixed effect slots or scalar power projection; those columns remain temporarily readable for datasets imported before normalization.
 
 The field counts above come from the checked-in DBC headers. The legacy effect-parity test covers Ascension, AzerothCore, Epoch, TBC 2.4.3, Kronos, OctoWoW, Turtle, and VanillaPlus.
 

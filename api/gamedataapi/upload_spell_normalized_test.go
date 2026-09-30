@@ -49,6 +49,45 @@ func TestPersistLegacyNormalizedSpells(t *testing.T) {
 	require.Zero(t, variants[0].DifficultyID)
 }
 
+func TestPersistLegacySpellsLeavesCompatibilityComponentsUnwritten(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	dataset, err := store.InsertDataset(ctx, database.InsertDatasetParams{Name: "Canonical legacy", Slug: "canonical-legacy", WowVersion: "1.12.1", BuildVersion: 5875, DefaultFlavor: []string{}, IconBaseUrl: ""})
+	require.NoError(t, err)
+
+	spell := &chrondbc.Spell{ID: 456, Effects: []chrondbc.SpellEffect{
+		{EffectIndex: 0},
+		{EffectIndex: 1},
+		{EffectIndex: 2, Effect: chrondbc.EffectApplyAura, EffectBasePoints: 11},
+	}, Powers: []chrondbc.SpellPower{{OrderIndex: 0, ManaCost: 42, PowerType: 3}}}
+	h := New(nil, nil, pool, nil)
+	require.NoError(t, h.persistLegacySpells(ctx, dataset.ID, []spelldb.SpellRow{spelldb.FromSpell(dataset.ID, spell)}, []*chrondbc.Spell{spell}))
+
+	var effect, basePoints, manaCost, powerType int32
+	var floatBasePoints []float32
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT effect_2, effect_base_points_2, mana_cost, power_type, effect_base_points_f
+		FROM dbc_spells
+		WHERE dataset_id = $1 AND spell_id = $2
+	`, dataset.ID, int32(spell.ID)).Scan(&effect, &basePoints, &manaCost, &powerType, &floatBasePoints))
+	require.Zero(t, effect)
+	require.Zero(t, basePoints)
+	require.Zero(t, manaCost)
+	require.Zero(t, powerType)
+	require.Empty(t, floatBasePoints)
+
+	effects, powers, variants, err := spelldb.GetModernSpellComponents(ctx, pool, dataset.ID, int32(spell.ID))
+	require.NoError(t, err)
+	require.Len(t, effects, 3)
+	require.Equal(t, chrondbc.EffectApplyAura, effects[2].Effect)
+	require.EqualValues(t, 12, effects[2].EffectiveBasePoints())
+	require.Len(t, powers, 1)
+	require.Equal(t, int32(42), powers[0].ManaCost)
+	require.Len(t, variants, 1)
+}
+
 func TestPersistLegacySpellsRollsBackWideRowsWhenNormalizedInsertFails(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)

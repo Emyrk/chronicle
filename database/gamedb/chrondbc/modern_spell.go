@@ -96,11 +96,6 @@ func (e SpellEffect) DamageTakenSchoolMask() (School, bool) {
 	return School(e.EffectMiscValue[0]), true
 }
 
-// ModernSpellEffect is kept as a source-compatible alias for callers that
-// still use the old normalized-row name.
-// Deprecated: use SpellEffect.
-type ModernSpellEffect = SpellEffect
-
 // SpellPower is one canonical resource-cost row for a spell. Legacy Spell.dbc
 // data produces one row, while modern DB2 data can produce multiple ordered rows.
 type SpellPower struct {
@@ -122,11 +117,6 @@ type SpellPower struct {
 	RequiredAuraSpellID int32     `json:"required_aura_spell_id"`
 }
 
-// ModernSpellPower is kept as a source-compatible alias for callers that use
-// the old normalized-row name.
-// Deprecated: use SpellPower.
-type ModernSpellPower = SpellPower
-
 // SpellVariant contains the optional normalized components for one spell difficulty.
 type SpellVariant struct {
 	DatasetID          uuid.UUID                      `json:"dataset_id"`
@@ -142,11 +132,6 @@ type SpellVariant struct {
 	Levels             *ModernSpellLevels             `json:"levels,omitempty"`
 	TargetRestrictions *ModernSpellTargetRestrictions `json:"target_restrictions,omitempty"`
 }
-
-// ModernSpellVariant is kept as a source-compatible alias for callers that use
-// the old normalized-row name.
-// Deprecated: use SpellVariant.
-type ModernSpellVariant = SpellVariant
 
 type ModernSpellMisc struct {
 	ID                               int32   `json:"id"`

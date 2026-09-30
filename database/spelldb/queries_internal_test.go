@@ -6,6 +6,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestWriteColumnsExcludeCompatibilityProjections(t *testing.T) {
+	t.Parallel()
+
+	for _, column := range writeColumns {
+		_, compatibilityOnly := compatibilityOnlyColumns[column]
+		require.False(t, compatibilityOnly, "write column %q must not be a compatibility projection", column)
+	}
+	require.Len(t, (&SpellRow{}).writeValues(), len(writeColumns))
+	require.Equal(t, len(columns)-len(compatibilityOnlyColumns), len(writeColumns))
+}
+
 func TestSpellRowValuesUseEmptyArraysForNilSlices(t *testing.T) {
 	t.Parallel()
 
