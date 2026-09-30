@@ -20629,10 +20629,12 @@ func (q *sqlQuerier) SearchItemTemplates(ctx context.Context, arg SearchItemTemp
 const searchSlotEnchantments = `-- name: SearchSlotEnchantments :many
 SELECT DISTINCT e.id, e.name_lang
 FROM dbc_spell_item_enchantment e
-JOIN dbc_spells s ON s.dataset_id = e.dataset_id
-    AND ((s.effect_0 = 53 AND s.effect_misc_value_0 = e.id)
-      OR (s.effect_1 = 53 AND s.effect_misc_value_1 = e.id)
-      OR (s.effect_2 = 53 AND s.effect_misc_value_2 = e.id))
+JOIN dbc_spell_effects se ON se.dataset_id = e.dataset_id
+    AND se.difficulty_id = 0
+    AND se.effect = 53
+    AND e.id = ANY(se.effect_misc_value)
+JOIN dbc_spells s ON s.dataset_id = se.dataset_id
+    AND s.spell_id = se.spell_id
 WHERE e.dataset_id = $1
   AND ($2::text = '' OR e.name_lang ILIKE '%' || $2::text || '%')
   AND (
