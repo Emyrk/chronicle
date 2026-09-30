@@ -72,6 +72,8 @@ export function NavBar() {
   ];
 
   const loginUrl = `/login?from=${encodeURIComponent(location.pathname + location.search)}`;
+  const isGuildPage = location.pathname.startsWith("/g/");
+  const siteName = branding?.display_name || "Chronicle";
 
   // Reusable menu item renderer for mobile menu
   const renderMenuItem = (item: NavItem, closeMobile?: () => void) => {
@@ -213,8 +215,15 @@ export function NavBar() {
         )}
       </div>
 
-      {/* Center: Logo (hidden on guild pages) */}
-      {!location.pathname.startsWith("/g/") && (
+      {/* Center: Site logo, or a compact home link on guild pages */}
+      {isGuildPage ? (
+        <Link
+          to="/"
+          className="absolute left-1/2 -translate-x-1/2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          Back to {siteName}
+        </Link>
+      ) : (
         <Link to="/" className="absolute left-1/2 -translate-x-1/2 flex items-center">
           {hasBranding ? (
             branding?.logo_wide ? (
