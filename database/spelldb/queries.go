@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	chronicleDB "github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -192,85 +193,6 @@ func nonNilFloat32s(values []float32) []float32 {
 	return values
 }
 
-// scanDests returns pointers to all SpellRow fields in column order for pgx row scanning.
-func (r *SpellRow) scanDests() []any {
-	return []any{
-		&r.DatasetID, &r.SpellID,
-		&r.Name, &r.NameSubtext, &r.Description, &r.AuraDescription,
-		&r.SpellIconID, &r.ActiveIconID,
-		&r.MaxLevel, &r.BaseLevel, &r.SpellLevel, &r.Category, &r.MaxTargetLevel,
-		&r.School, &r.SpellPriority, &r.StanceBarOrder,
-		&r.ProcTypeMask, &r.ProcFlags, &r.ProcChance, &r.ProcCharges,
-		&r.Speed, &r.DispelType, &r.AuraInterruptFlags, &r.ModalNextSpell,
-		&r.InterruptFlags, &r.CumulativeAura, &r.Mechanic, &r.DefenseType,
-		&r.CasterAuraState, &r.TargetAuraState, &r.MaxTargets,
-		&r.TargetCreatureType, &r.RequiresSpellFocus,
-		&r.PowerType, &r.ManaCost, &r.ManaCostPct, &r.ManaCostPerLevel, &r.ManaPerSecond,
-		&r.Reagent, &r.ReagentCount,
-		&r.CastingTimeIndex, &r.RecoveryTimeMs, &r.StartRecoveryCategory,
-		&r.StartRecoveryTimeMs, &r.CategoryRecoveryTimeMs,
-		&r.RangeIndex, &r.DurationIndex,
-		&r.Attributes, &r.Targets, &r.SpellClassSet, &r.SpellClassMask,
-		&r.EquippedItemInvTypes, &r.EquippedItemClass, &r.EquippedItemSubclass,
-		&r.PreventionType,
-		// Effect 0
-		&r.Effect0, &r.EffectDieSides0, &r.EffectRealPtsPerLevel0,
-		&r.EffectBasePoints0, &r.EffectMechanic0, &r.EffectRadiusIndex0,
-		&r.EffectAura0, &r.EffectAuraPeriod0, &r.EffectAmplitude0,
-		&r.EffectChainTargets0, &r.EffectItemType0, &r.EffectMiscValue0,
-		&r.EffectTriggerSpell0, &r.EffectPtsPerCombo0,
-		&r.EffectBaseDice0, &r.EffectDicePerLevel0, &r.EffectChainAmplitude0,
-		&r.ImplicitTargetA0, &r.ImplicitTargetB0,
-		// Effect 1
-		&r.Effect1, &r.EffectDieSides1, &r.EffectRealPtsPerLevel1,
-		&r.EffectBasePoints1, &r.EffectMechanic1, &r.EffectRadiusIndex1,
-		&r.EffectAura1, &r.EffectAuraPeriod1, &r.EffectAmplitude1,
-		&r.EffectChainTargets1, &r.EffectItemType1, &r.EffectMiscValue1,
-		&r.EffectTriggerSpell1, &r.EffectPtsPerCombo1,
-		&r.EffectBaseDice1, &r.EffectDicePerLevel1, &r.EffectChainAmplitude1,
-		&r.ImplicitTargetA1, &r.ImplicitTargetB1,
-		// Effect 2
-		&r.Effect2, &r.EffectDieSides2, &r.EffectRealPtsPerLevel2,
-		&r.EffectBasePoints2, &r.EffectMechanic2, &r.EffectRadiusIndex2,
-		&r.EffectAura2, &r.EffectAuraPeriod2, &r.EffectAmplitude2,
-		&r.EffectChainTargets2, &r.EffectItemType2, &r.EffectMiscValue2,
-		&r.EffectTriggerSpell2, &r.EffectPtsPerCombo2,
-		&r.EffectBaseDice2, &r.EffectDicePerLevel2, &r.EffectChainAmplitude2,
-		&r.ImplicitTargetA2, &r.ImplicitTargetB2,
-		&r.EffectBasePointsF,
-		// Totem
-		&r.TotemsID, &r.Totem,
-		// Other
-		&r.CastUI, &r.RequiredAuraVision, &r.MinFactionID, &r.MinReputation,
-		&r.SpellVisualID,
-		// 3.3.5a+
-		&r.RuneCostID, &r.SpellMissileID, &r.DescriptionVariablesID,
-		&r.CasterAuraSpell, &r.TargetAuraSpell,
-		&r.ExcludeCasterAuraSpell, &r.ExcludeTargetAuraSpell,
-		&r.ExcludeCasterAuraState, &r.ExcludeTargetAuraState,
-		&r.ManaPerSecondPerLevel,
-	}
-}
-
-// scanDestsWithJoins returns scanDests plus the JOINed nullable fields in
-// the order matching joinColumnsSQL.
-func (r *SpellRow) scanDestsWithJoins() []any {
-	dests := r.scanDests()
-	return append(dests,
-		&r.CtBase, &r.CtPerLevel, &r.CtMinimum,
-		&r.DurBase, &r.DurPerLevel, &r.DurMax,
-		&r.RangeMin, &r.RangeMax, &r.RangeFlags, &r.RangeName,
-		&r.IconTexture, &r.ActiveIconTexture,
-		&r.CatFlags, &r.CatUsesPerWeek, &r.CatName,
-		&r.CatMaxCharges, &r.CatChargeRecoveryTime, &r.CatTypeMask,
-		&r.R0Radius, &r.R0RadiusPerLevel, &r.R0RadiusMin, &r.R0RadiusMax,
-		&r.R1Radius, &r.R1RadiusPerLevel, &r.R1RadiusMin, &r.R1RadiusMax,
-		&r.R2Radius, &r.R2RadiusPerLevel, &r.R2RadiusMin, &r.R2RadiusMax,
-		&r.FocusName,
-		&r.DescVariables,
-	)
-}
-
 // columnsSQL builds a comma-separated column list.
 func columnsSQL(selectedColumns []string) string {
 	s := ""
@@ -281,88 +203,6 @@ func columnsSQL(selectedColumns []string) string {
 		s += c
 	}
 	return s
-}
-
-// columnsSQLPrefixed builds a comma-separated column list with a table prefix.
-func columnsSQLPrefixed(prefix string) string {
-	s := ""
-	for i, c := range columns {
-		if i > 0 {
-			s += ", "
-		}
-		s += prefix + "." + c
-	}
-	return s
-}
-
-var joinSQL = ` LEFT JOIN dbc_spell_cast_times ct    ON ct.dataset_id = s.dataset_id AND ct.id = s.casting_time_index
- LEFT JOIN dbc_spell_durations sd     ON sd.dataset_id = s.dataset_id AND sd.id = s.duration_index
- LEFT JOIN dbc_spell_ranges sr        ON sr.dataset_id = s.dataset_id AND sr.id = s.range_index
- LEFT JOIN dbc_spell_icons si         ON si.dataset_id = s.dataset_id AND si.id = s.spell_icon_id
- LEFT JOIN dbc_spell_icons sia        ON sia.dataset_id = s.dataset_id AND sia.id = s.active_icon_id
- LEFT JOIN dbc_spell_categories sc    ON sc.dataset_id = s.dataset_id AND sc.id = s.category
- LEFT JOIN dbc_spell_radii r0         ON r0.dataset_id = s.dataset_id AND r0.id = s.effect_radius_index_0
- LEFT JOIN dbc_spell_radii r1         ON r1.dataset_id = s.dataset_id AND r1.id = s.effect_radius_index_1
- LEFT JOIN dbc_spell_radii r2         ON r2.dataset_id = s.dataset_id AND r2.id = s.effect_radius_index_2
- LEFT JOIN dbc_spell_focus_objects sfo ON sfo.dataset_id = s.dataset_id AND sfo.id = s.requires_spell_focus
- LEFT JOIN dbc_spell_description_variables sdv ON sdv.dataset_id = s.dataset_id AND sdv.id = s.description_variables_id`
-
-var joinColumnsSQL = `,
-    ct.base AS ct_base, ct.per_level AS ct_per_level, ct.minimum AS ct_minimum,
-    sd.duration AS dur_base, sd.duration_per_level AS dur_per_level, sd.max_duration AS dur_max,
-    sr.range_min, sr.range_max, sr.flags AS range_flags, sr.name AS range_name,
-    si.texture_filename AS icon_texture,
-    sia.texture_filename AS active_icon_texture,
-    sc.flags AS cat_flags, sc.uses_per_week, sc.name AS cat_name,
-    sc.max_charges, sc.charge_recovery_time, sc.type_mask AS cat_type_mask,
-    r0.radius AS r0_radius, r0.radius_per_level AS r0_rpl, r0.radius_min AS r0_min, r0.radius_max AS r0_max,
-    r1.radius AS r1_radius, r1.radius_per_level AS r1_rpl, r1.radius_min AS r1_min, r1.radius_max AS r1_max,
-    r2.radius AS r2_radius, r2.radius_per_level AS r2_rpl, r2.radius_min AS r2_min, r2.radius_max AS r2_max,
-    sfo.name AS focus_name,
-    sdv.variables AS desc_variables`
-
-var componentJoinSQL = `
- LEFT JOIN LATERAL (
-   SELECT jsonb_agg(
-     to_jsonb(se) || jsonb_build_object(
-       'effect_radius', CASE WHEN r.id IS NULL THEN NULL ELSE jsonb_build_object(
-         'ID', r.id, 'Radius', r.radius, 'RadiusPerLevel', r.radius_per_level,
-         'RadiusMin', r.radius_min, 'RadiusMax', r.radius_max
-       ) END
-     ) ORDER BY se.difficulty_id, se.effect_index, se.source_id
-   ) AS rows
-   FROM dbc_spell_effects se
-   LEFT JOIN dbc_spell_radii r
-     ON r.dataset_id = se.dataset_id AND r.id = se.effect_radius_index[1]
-   WHERE se.dataset_id = s.dataset_id AND se.spell_id = s.spell_id
- ) effects ON true
- LEFT JOIN LATERAL (
-   SELECT jsonb_agg(to_jsonb(sp) ORDER BY sp.order_index, sp.source_id) AS rows
-   FROM dbc_spell_powers sp
-   WHERE sp.dataset_id = s.dataset_id AND sp.spell_id = s.spell_id
- ) powers ON true
- LEFT JOIN LATERAL (
-   SELECT jsonb_agg(to_jsonb(sv) ORDER BY sv.difficulty_id) AS rows
-   FROM dbc_spell_variants sv
-   WHERE sv.dataset_id = s.dataset_id AND sv.spell_id = s.spell_id
- ) variants ON true`
-
-var componentColumnsSQL = `,
-    COALESCE(effects.rows, '[]'::jsonb) AS modern_effects,
-    COALESCE(powers.rows, '[]'::jsonb) AS modern_powers,
-    COALESCE(variants.rows, '[]'::jsonb) AS modern_variants`
-
-func scanSpellRow(row pgx.Row) (*SpellRow, error) {
-	var result SpellRow
-	var effectsJSON, powersJSON, variantsJSON []byte
-	dests := append(result.scanDestsWithJoins(), &effectsJSON, &powersJSON, &variantsJSON)
-	if err := row.Scan(dests...); err != nil {
-		return nil, err
-	}
-	if err := decodeModernSpellComponents(&result, effectsJSON, powersJSON, variantsJSON); err != nil {
-		return nil, err
-	}
-	return &result, nil
 }
 
 // placeholdersSQL builds $1, $2, ... $N for the column count.
@@ -392,35 +232,35 @@ func InsertSpell(ctx context.Context, pool *pgxpool.Pool, row *SpellRow) error {
 // GetSpell retrieves a single spell by dataset + spell ID, LEFT JOINing
 // resolved metadata from companion DBC tables.
 func GetSpell(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) (*SpellRow, error) {
-	sql := fmt.Sprintf(
-		`SELECT %s%s%s FROM dbc_spells s%s%s WHERE s.dataset_id = $1 AND s.spell_id = $2`,
-		columnsSQLPrefixed("s"), joinColumnsSQL, componentColumnsSQL, joinSQL, componentJoinSQL,
-	)
-	return scanSpellRow(pool.QueryRow(ctx, sql, datasetID, spellID))
+	result, err := chronicleDB.New(pool).GetCanonicalSpellByID(ctx, chronicleDB.GetCanonicalSpellByIDParams{
+		DatasetID: datasetID,
+		SpellID:   spellID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return decodeSpellLookup(result.SpellJson, result.MetadataJson, result.EffectsJson, result.PowersJson, result.VariantsJson)
 }
 
 // GetSpellsByName retrieves all spells matching a name within a dataset,
 // LEFT JOINing resolved metadata from companion DBC tables.
 func GetSpellsByName(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, name string) ([]SpellRow, error) {
-	sql := fmt.Sprintf(
-		`SELECT %s%s%s FROM dbc_spells s%s%s WHERE s.dataset_id = $1 AND s.name = $2 ORDER BY s.spell_id`,
-		columnsSQLPrefixed("s"), joinColumnsSQL, componentColumnsSQL, joinSQL, componentJoinSQL,
-	)
-	rows, err := pool.Query(ctx, sql, datasetID, name)
+	results, err := chronicleDB.New(pool).GetCanonicalSpellsByName(ctx, chronicleDB.GetCanonicalSpellsByNameParams{
+		DatasetID: datasetID,
+		Name:      name,
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []SpellRow
-	for rows.Next() {
-		row, err := scanSpellRow(rows)
+	rows := make([]SpellRow, 0, len(results))
+	for _, result := range results {
+		row, err := decodeSpellLookup(result.SpellJson, result.MetadataJson, result.EffectsJson, result.PowersJson, result.VariantsJson)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, *row)
+		rows = append(rows, *row)
 	}
-	return result, rows.Err()
+	return rows, nil
 }
 
 // UpsertBatch inserts multiple spells in a single round-trip using pgx Batch.

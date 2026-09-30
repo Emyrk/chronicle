@@ -169,6 +169,10 @@ type sqlcQuerier interface {
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
+	// Canonical database-backed spell lookups. Each base spell row carries its
+	// independently ordered normalized components without multiplying child rows.
+	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
+	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
 	// Per-encounter kill aggregates for one character across all time.
 	// Rankings rows exist only for clean/partial kills; trash rows
 	// (encounter_id IS NULL) are excluded. Duplicate uploads of the same raid

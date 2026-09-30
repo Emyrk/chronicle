@@ -11,6 +11,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func decodeSpellLookup(spellJSON, metadataJSON, effectsJSON, powersJSON, variantsJSON string) (*SpellRow, error) {
+	var row SpellRow
+	if err := json.Unmarshal([]byte(spellJSON), &row); err != nil {
+		return nil, fmt.Errorf("decode spell row: %w", err)
+	}
+	if err := json.Unmarshal([]byte(metadataJSON), &row); err != nil {
+		return nil, fmt.Errorf("decode spell metadata: %w", err)
+	}
+	if err := decodeModernSpellComponents(
+		&row,
+		[]byte(effectsJSON),
+		[]byte(powersJSON),
+		[]byte(variantsJSON),
+	); err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func decodeModernSpellComponents(row *SpellRow, effectsJSON, powersJSON, variantsJSON []byte) error {
 	if err := json.Unmarshal(effectsJSON, &row.Effects); err != nil {
 		return fmt.Errorf("decode spell effects: %w", err)
