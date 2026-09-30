@@ -23,16 +23,17 @@ WITH eligible_item_spells AS (
       -- spell, otherwise the taught aura remains as a false consumable effect.
       AND NOT EXISTS (
           SELECT 1
-          FROM dbc_spells learn_spell
-          WHERE learn_spell.dataset_id = wit.dataset_id
-            AND learn_spell.spell_id = ANY(ARRAY[
+          FROM dbc_spell_effects learn_effect
+          WHERE learn_effect.dataset_id = wit.dataset_id
+            AND learn_effect.spell_id = ANY(ARRAY[
                 CASE WHEN wit.spelltrigger_1 = 0 THEN wit.spellid_1 ELSE 0 END,
                 CASE WHEN wit.spelltrigger_2 = 0 THEN wit.spellid_2 ELSE 0 END,
                 CASE WHEN wit.spelltrigger_3 = 0 THEN wit.spellid_3 ELSE 0 END,
                 CASE WHEN wit.spelltrigger_4 = 0 THEN wit.spellid_4 ELSE 0 END,
                 CASE WHEN wit.spelltrigger_5 = 0 THEN wit.spellid_5 ELSE 0 END
             ])
-            AND 36 IN (learn_spell.effect_0, learn_spell.effect_1, learn_spell.effect_2)
+            AND learn_effect.difficulty_id = 0
+            AND learn_effect.effect = 36
       )
     GROUP BY wit.dataset_id, wit.entry
 )
@@ -87,14 +88,11 @@ WHERE wit.dataset_id = @dataset_id
               )
               OR EXISTS (
                   SELECT 1
-                  FROM dbc_spells spell
-                  WHERE spell.dataset_id = wit.dataset_id
-                    AND spell.spell_id = ANY(eligible.item_spell_ids)
-                    AND (
-                        spell.effect_0 IN (6, 174) OR
-                        spell.effect_1 IN (6, 174) OR
-                        spell.effect_2 IN (6, 174)
-                    )
+                  FROM dbc_spell_effects effect
+                  WHERE effect.dataset_id = wit.dataset_id
+                    AND effect.spell_id = ANY(eligible.item_spell_ids)
+                    AND effect.difficulty_id = 0
+                    AND effect.effect IN (6, 174)
               )
           )
       )
@@ -104,14 +102,11 @@ WHERE wit.dataset_id = @dataset_id
   -- fallback for non-stackable consumables.
   AND NOT EXISTS (
       SELECT 1
-      FROM dbc_spells mount_spell
-      WHERE mount_spell.dataset_id = wit.dataset_id
-        AND mount_spell.spell_id = ANY(eligible.item_spell_ids)
-        AND 78 IN (
-            mount_spell.effect_aura_0,
-            mount_spell.effect_aura_1,
-            mount_spell.effect_aura_2
-        )
+      FROM dbc_spell_effects mount_effect
+      WHERE mount_effect.dataset_id = wit.dataset_id
+        AND mount_effect.spell_id = ANY(eligible.item_spell_ids)
+        AND mount_effect.difficulty_id = 0
+        AND mount_effect.effect_aura = 78
   );
 
 -- name: InsertDerivedConsumableBuffs :execrows
@@ -138,22 +133,18 @@ WITH RECURSIVE roots AS (
         graph.dataset_id,
         graph.item_id,
         graph.root_spell_id,
-        triggered.spell_id,
-        graph.path || triggered.spell_id
+        triggered.effect_trigger_spell,
+        graph.path || triggered.effect_trigger_spell
     FROM spell_graph graph
-    JOIN dbc_spells spell
-      ON spell.dataset_id = graph.dataset_id
-     AND spell.spell_id = graph.spell_id
-    CROSS JOIN LATERAL (VALUES
-        (spell.effect_0, spell.effect_trigger_spell_0),
-        (spell.effect_1, spell.effect_trigger_spell_1),
-        (spell.effect_2, spell.effect_trigger_spell_2)
-    ) AS triggered(effect, spell_id)
+    JOIN dbc_spell_effects triggered
+      ON triggered.dataset_id = graph.dataset_id
+     AND triggered.spell_id = graph.spell_id
+     AND triggered.difficulty_id = 0
     -- A learn-spell effect names the taught spell in this field; it does not
     -- execute that spell and must not create a consumable buff edge.
     WHERE triggered.effect <> 36
-      AND triggered.spell_id <> 0
-      AND NOT triggered.spell_id = ANY(graph.path)
+      AND triggered.effect_trigger_spell <> 0
+      AND NOT triggered.effect_trigger_spell = ANY(graph.path)
       AND cardinality(graph.path) < 8
 )
 INSERT INTO dbc_consumable_buffs (dataset_id, item_id, spell_id, spell_name)
@@ -166,9 +157,14 @@ FROM spell_graph graph
 JOIN dbc_spells spell
   ON spell.dataset_id = graph.dataset_id
  AND spell.spell_id = graph.spell_id
-WHERE spell.effect_0 IN (6, 174)
-   OR spell.effect_1 IN (6, 174)
-   OR spell.effect_2 IN (6, 174);
+WHERE EXISTS (
+    SELECT 1
+    FROM dbc_spell_effects effect
+    WHERE effect.dataset_id = spell.dataset_id
+      AND effect.spell_id = spell.spell_id
+      AND effect.difficulty_id = 0
+      AND effect.effect IN (6, 174)
+);
 
 -- name: ListConsumablesByDataset :many
 SELECT

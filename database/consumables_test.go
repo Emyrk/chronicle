@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Emyrk/chronicle/database"
@@ -15,6 +16,49 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func copyCanonicalSpellEffects(t *testing.T, ctx context.Context, store database.Store, datasetID uuid.UUID, spells ...*chrondbc.Spell) {
+	t.Helper()
+	var rows []database.CopyLegacySpellEffectsParams
+	for _, spell := range spells {
+		for _, effect := range spell.Effects {
+			misc := effect.EffectMiscValue
+			if misc == nil {
+				misc = []int32{}
+			}
+			radius := effect.EffectRadiusIndex
+			if radius == nil {
+				radius = []int32{}
+			}
+			classMask := effect.EffectSpellClassMask
+			if classMask == nil {
+				classMask = []int32{}
+			}
+			targets := effect.ImplicitTarget
+			if targets == nil {
+				targets = []int32{}
+			}
+			rows = append(rows, database.CopyLegacySpellEffectsParams{
+				DatasetID: datasetID, SpellID: int32(spell.ID), DifficultyID: effect.DifficultyID,
+				EffectIndex: effect.EffectIndex, SourceID: effect.SourceID,
+				Effect: int32(effect.Effect), EffectAura: int32(effect.EffectAura),
+				EffectBasePointsF: effect.EffectiveBasePoints(), EffectTriggerSpell: int32(effect.EffectTriggerSpell),
+				EffectMiscValue: misc, EffectRadiusIndex: radius,
+				EffectSpellClassMask: classMask, ImplicitTarget: targets,
+			})
+		}
+	}
+	if len(rows) == 0 {
+		return
+	}
+	var batchErr error
+	store.CopyLegacySpellEffects(ctx, rows).Exec(func(_ int, err error) {
+		if batchErr == nil && err != nil {
+			batchErr = err
+		}
+	})
+	require.NoError(t, batchErr)
+}
 
 func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	t.Parallel()
@@ -63,6 +107,7 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 			spelldb.FromSpell(uuid.MustParse(datasetID), &buff),
 		}
 		require.NoError(t, spelldb.UpsertBatch(ctx, pool, rows))
+		copyCanonicalSpellEffects(t, ctx, store, uuid.MustParse(datasetID), &root, &buff)
 	}
 
 	insertLearnSpell := func(datasetID string, rootID, taughtID int32, taughtName string) {
@@ -84,6 +129,7 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 			spelldb.FromSpell(uuid.MustParse(datasetID), &taught),
 		}
 		require.NoError(t, spelldb.UpsertBatch(ctx, pool, rows))
+		copyCanonicalSpellEffects(t, ctx, store, uuid.MustParse(datasetID), &root, &taught)
 	}
 
 	insertMountSpell := func(datasetID string, spellID int32, name string) {
@@ -96,6 +142,7 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 		require.NoError(t, spelldb.UpsertBatch(ctx, pool, []spelldb.SpellRow{
 			spelldb.FromSpell(uuid.MustParse(datasetID), &mount),
 		}))
+		copyCanonicalSpellEffects(t, ctx, store, uuid.MustParse(datasetID), &mount)
 	}
 
 	defaultID := servicedataset.DefaultDatasetID.String()
@@ -230,4 +277,71 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	otherSummary, err := store.GetDatasetImportSummary(ctx, otherDataset.ID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), otherSummary.ConsumablesCount)
+}
+
+func TestDerivedConsumablesUseCanonicalEffects(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	datasetID := servicedataset.DefaultDatasetID
+
+	direct := &chrondbc.Spell{ID: 9100, Name_lang: i18n.Text{i18n.English: "High Index Aura"}, Effects: []chrondbc.SpellEffect{{EffectIndex: 5, Effect: chrondbc.EffectApplyAura}}}
+	learn := &chrondbc.Spell{ID: 9200, Name_lang: i18n.Text{i18n.English: "High Index Learn"}, Effects: []chrondbc.SpellEffect{{EffectIndex: 5, Effect: chrondbc.EffectLearnSpell, EffectTriggerSpell: 9201}}}
+	taught := &chrondbc.Spell{ID: 9201, Name_lang: i18n.Text{i18n.English: "Taught Aura"}, Effects: []chrondbc.SpellEffect{{EffectIndex: 5, Effect: chrondbc.EffectApplyAura}}}
+	mount := &chrondbc.Spell{ID: 9300, Name_lang: i18n.Text{i18n.English: "High Index Mount"}, Effects: []chrondbc.SpellEffect{{EffectIndex: 5, Effect: chrondbc.EffectApplyAura, EffectAura: chrondbc.AuraEffectMounted}}}
+	root := &chrondbc.Spell{ID: 9400, Name_lang: i18n.Text{i18n.English: "Repeated Trigger"}, Effects: []chrondbc.SpellEffect{
+		{EffectIndex: 5, SourceID: 1, Effect: chrondbc.EffectTriggerSpell, EffectTriggerSpell: 9401},
+		{EffectIndex: 5, SourceID: 2, Effect: chrondbc.EffectTriggerSpell, EffectTriggerSpell: 9401},
+	}}
+	buff := &chrondbc.Spell{ID: 9401, Name_lang: i18n.Text{i18n.English: "High Index Buff"}, Effects: []chrondbc.SpellEffect{{EffectIndex: 6, Effect: chrondbc.EffectApplyAura}}}
+	wideOnly := &chrondbc.Spell{ID: 9500, Name_lang: i18n.Text{i18n.English: "Wide Only Aura"}, Effects: []chrondbc.SpellEffect{{EffectIndex: 0, Effect: chrondbc.EffectApplyAura}}}
+	nondefault := &chrondbc.Spell{ID: 9600, Name_lang: i18n.Text{i18n.English: "Nondefault Aura"}, Effects: []chrondbc.SpellEffect{{DifficultyID: 2, EffectIndex: 5, Effect: chrondbc.EffectApplyAura}}}
+
+	spells := []*chrondbc.Spell{direct, learn, taught, mount, root, buff, wideOnly, nondefault}
+	spellRows := make([]spelldb.SpellRow, 0, len(spells))
+	for _, spell := range spells {
+		spellRows = append(spellRows, spelldb.FromSpell(datasetID, spell))
+	}
+	require.NoError(t, spelldb.UpsertBatch(ctx, pool, spellRows))
+	copyCanonicalSpellEffects(t, ctx, store, datasetID, direct, learn, taught, mount, root, buff, nondefault)
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO world_item_template (
+			dataset_id, entry, class, name, inventory_type, stackable,
+			spellid_1, spelltrigger_1, spellid_2, spelltrigger_2
+		) VALUES
+			($1, 2001, $2, 'Canonical Direct', 0, 1, 9100, 0, 0, 0),
+			($1, 2002, $3, 'Canonical Learn', 0, 1, 9200, 0, 0, 0),
+			($1, 2003, $3, 'Canonical Mount', 0, 1, 9300, 0, 0, 0),
+			($1, 2004, $3, 'Canonical Trigger', 0, 1, 9400, 0, 9400, 0),
+			($1, 2005, $2, 'Wide Only', 0, 1, 9500, 0, 0, 0),
+			($1, 2006, $2, 'Nondefault Only', 0, 1, 9600, 0, 0, 0)
+	`, datasetID, int32(chrondbc.ItemClassArmor), int32(chrondbc.ItemClassConsumable))
+	require.NoError(t, err)
+
+	require.NoError(t, store.InTx(ctx, func(tx database.Store) error {
+		if err := tx.DeleteConsumablesByDataset(ctx, datasetID); err != nil {
+			return err
+		}
+		if _, err := tx.InsertDerivedConsumables(ctx, datasetID); err != nil {
+			return err
+		}
+		_, err := tx.InsertDerivedConsumableBuffs(ctx, datasetID)
+		return err
+	}, nil))
+
+	rows, err := store.ListConsumablesByDataset(ctx, datasetID)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	buffs := make(map[int32][]int32)
+	for _, row := range rows {
+		if row.BuffSpellID.Valid {
+			buffs[row.ItemID] = append(buffs[row.ItemID], row.BuffSpellID.Int32)
+		}
+	}
+	require.Equal(t, map[int32][]int32{
+		2001: {9100},
+		2004: {9401},
+	}, buffs)
 }
