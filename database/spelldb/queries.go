@@ -321,6 +321,50 @@ var joinColumnsSQL = `,
     sfo.name AS focus_name,
     sdv.variables AS desc_variables`
 
+var componentJoinSQL = `
+ LEFT JOIN LATERAL (
+   SELECT jsonb_agg(
+     to_jsonb(se) || jsonb_build_object(
+       'effect_radius', CASE WHEN r.id IS NULL THEN NULL ELSE jsonb_build_object(
+         'ID', r.id, 'Radius', r.radius, 'RadiusPerLevel', r.radius_per_level,
+         'RadiusMin', r.radius_min, 'RadiusMax', r.radius_max
+       ) END
+     ) ORDER BY se.difficulty_id, se.effect_index, se.source_id
+   ) AS rows
+   FROM dbc_spell_effects se
+   LEFT JOIN dbc_spell_radii r
+     ON r.dataset_id = se.dataset_id AND r.id = se.effect_radius_index[1]
+   WHERE se.dataset_id = s.dataset_id AND se.spell_id = s.spell_id
+ ) effects ON true
+ LEFT JOIN LATERAL (
+   SELECT jsonb_agg(to_jsonb(sp) ORDER BY sp.order_index, sp.source_id) AS rows
+   FROM dbc_spell_powers sp
+   WHERE sp.dataset_id = s.dataset_id AND sp.spell_id = s.spell_id
+ ) powers ON true
+ LEFT JOIN LATERAL (
+   SELECT jsonb_agg(to_jsonb(sv) ORDER BY sv.difficulty_id) AS rows
+   FROM dbc_spell_variants sv
+   WHERE sv.dataset_id = s.dataset_id AND sv.spell_id = s.spell_id
+ ) variants ON true`
+
+var componentColumnsSQL = `,
+    COALESCE(effects.rows, '[]'::jsonb) AS modern_effects,
+    COALESCE(powers.rows, '[]'::jsonb) AS modern_powers,
+    COALESCE(variants.rows, '[]'::jsonb) AS modern_variants`
+
+func scanSpellRow(row pgx.Row) (*SpellRow, error) {
+	var result SpellRow
+	var effectsJSON, powersJSON, variantsJSON []byte
+	dests := append(result.scanDestsWithJoins(), &effectsJSON, &powersJSON, &variantsJSON)
+	if err := row.Scan(dests...); err != nil {
+		return nil, err
+	}
+	if err := decodeModernSpellComponents(&result, effectsJSON, powersJSON, variantsJSON); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // placeholdersSQL builds $1, $2, ... $N for the column count.
 func placeholdersSQL(selectedColumns []string) string {
 	s := ""
@@ -349,23 +393,18 @@ func InsertSpell(ctx context.Context, pool *pgxpool.Pool, row *SpellRow) error {
 // resolved metadata from companion DBC tables.
 func GetSpell(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) (*SpellRow, error) {
 	sql := fmt.Sprintf(
-		`SELECT %s%s FROM dbc_spells s%s WHERE s.dataset_id = $1 AND s.spell_id = $2`,
-		columnsSQLPrefixed("s"), joinColumnsSQL, joinSQL,
+		`SELECT %s%s%s FROM dbc_spells s%s%s WHERE s.dataset_id = $1 AND s.spell_id = $2`,
+		columnsSQLPrefixed("s"), joinColumnsSQL, componentColumnsSQL, joinSQL, componentJoinSQL,
 	)
-	var row SpellRow
-	err := pool.QueryRow(ctx, sql, datasetID, spellID).Scan(row.scanDestsWithJoins()...)
-	if err != nil {
-		return nil, err
-	}
-	return &row, nil
+	return scanSpellRow(pool.QueryRow(ctx, sql, datasetID, spellID))
 }
 
 // GetSpellsByName retrieves all spells matching a name within a dataset,
 // LEFT JOINing resolved metadata from companion DBC tables.
 func GetSpellsByName(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, name string) ([]SpellRow, error) {
 	sql := fmt.Sprintf(
-		`SELECT %s%s FROM dbc_spells s%s WHERE s.dataset_id = $1 AND s.name = $2`,
-		columnsSQLPrefixed("s"), joinColumnsSQL, joinSQL,
+		`SELECT %s%s%s FROM dbc_spells s%s%s WHERE s.dataset_id = $1 AND s.name = $2 ORDER BY s.spell_id`,
+		columnsSQLPrefixed("s"), joinColumnsSQL, componentColumnsSQL, joinSQL, componentJoinSQL,
 	)
 	rows, err := pool.Query(ctx, sql, datasetID, name)
 	if err != nil {
@@ -375,11 +414,11 @@ func GetSpellsByName(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUI
 
 	var result []SpellRow
 	for rows.Next() {
-		var row SpellRow
-		if err := rows.Scan(row.scanDestsWithJoins()...); err != nil {
+		row, err := scanSpellRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		result = append(result, row)
+		result = append(result, *row)
 	}
 	return result, rows.Err()
 }

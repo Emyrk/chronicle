@@ -4,6 +4,7 @@
 package spelldb
 
 import (
+	"math"
 	"time"
 
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -197,6 +198,12 @@ type SpellRow struct {
 	ExcludeCasterAuraState int32 `db:"exclude_caster_aura_state"`
 	ExcludeTargetAuraState int32 `db:"exclude_target_aura_state"`
 	ManaPerSecondPerLevel  int32 `db:"mana_per_second_per_level"`
+
+	// Canonical normalized components loaded with the base row. Empty slices
+	// preserve the wide-column fallback for datasets imported before normalization.
+	Effects  []chrondbc.SpellEffect  `db:"-"`
+	Powers   []chrondbc.SpellPower   `db:"-"`
+	Variants []chrondbc.SpellVariant `db:"-"`
 
 	// Resolved metadata from LEFT JOINs (nullable — NULL when metadata tables not imported)
 	CtBase                *int32   `db:"-"` // from dbc_spell_cast_times
@@ -442,6 +449,21 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 	if r.DescVariables != nil {
 		s.DescriptionVariables = *r.DescVariables
 	}
+
+	if len(r.Effects) > 0 {
+		s.Effects = r.Effects
+	}
+	if len(r.Powers) > 0 {
+		s.Powers = r.Powers
+		if power := s.DefaultPower(); power != nil {
+			s.PowerType = chrondbc.Power(power.PowerType)
+			s.ManaCost = power.ManaCost
+			s.ManaCostPct = int32(math.Round(float64(power.PowerCostPct)))
+			s.ManaCostPerLevel = power.ManaCostPerLevel
+			s.ManaPerSecond = power.ManaPerSecond
+		}
+	}
+	s.Variants = r.Variants
 
 	return s
 }

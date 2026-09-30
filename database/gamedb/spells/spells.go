@@ -12,7 +12,6 @@ package spells
 import (
 	"context"
 	"fmt"
-	"math"
 	"sync/atomic"
 
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -131,9 +130,6 @@ func (f *Fetcher) Spell(ctx context.Context, datasetID uuid.UUID, id chrondbc.Sp
 		row, err := spelldb.GetSpell(ctx, f.pool, datasetID, int32(id))
 		if err == nil {
 			sp := row.ToSpell()
-			if err := f.populateModernComponents(ctx, datasetID, &sp); err != nil {
-				return nil, err
-			}
 			f.cache.Add(key, entry{Spell: &sp})
 			return &sp, nil
 		}
@@ -194,9 +190,7 @@ func (f *Fetcher) SpellsByName(ctx context.Context, datasetID uuid.UUID, name st
 		result := make([]*chrondbc.Spell, 0, len(rows))
 		for i := range rows {
 			sp := rows[i].ToSpell()
-			if err := f.populateModernComponents(ctx, datasetID, &sp); err != nil {
-				return nil, err
-			}
+			f.cache.Add(spellKey{DatasetID: datasetID, SpellID: sp.ID}, entry{Spell: &sp})
 			result = append(result, &sp)
 		}
 		return result, nil
@@ -220,28 +214,6 @@ func (f *Fetcher) SpellsByName(ctx context.Context, datasetID uuid.UUID, name st
 		result = append(result, sp)
 	}
 	return result, nil
-}
-
-func (f *Fetcher) populateModernComponents(ctx context.Context, datasetID uuid.UUID, spell *chrondbc.Spell) error {
-	effects, powers, variants, err := spelldb.GetModernSpellComponents(ctx, f.pool, datasetID, int32(spell.ID))
-	if err != nil {
-		return fmt.Errorf("load modern spell components for spell %d: %w", spell.ID, err)
-	}
-	if len(effects) > 0 {
-		spell.Effects = effects
-	}
-	if len(powers) > 0 {
-		spell.Powers = powers
-		if power := spell.DefaultPower(); power != nil {
-			spell.PowerType = chrondbc.Power(power.PowerType)
-			spell.ManaCost = power.ManaCost
-			spell.ManaCostPct = int32(math.Round(float64(power.PowerCostPct)))
-			spell.ManaCostPerLevel = power.ManaCostPerLevel
-			spell.ManaPerSecond = power.ManaPerSecond
-		}
-	}
-	spell.Variants = variants
-	return nil
 }
 
 // InvalidateDataset evicts all cached entries for a dataset (including the

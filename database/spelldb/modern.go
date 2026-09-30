@@ -2,6 +2,7 @@ package spelldb
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -9,6 +10,24 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func decodeModernSpellComponents(row *SpellRow, effectsJSON, powersJSON, variantsJSON []byte) error {
+	if err := json.Unmarshal(effectsJSON, &row.Effects); err != nil {
+		return fmt.Errorf("decode spell effects: %w", err)
+	}
+	if err := json.Unmarshal(powersJSON, &row.Powers); err != nil {
+		return fmt.Errorf("decode spell powers: %w", err)
+	}
+	var variantRows []modernSpellVariantRow
+	if err := json.Unmarshal(variantsJSON, &variantRows); err != nil {
+		return fmt.Errorf("decode spell variants: %w", err)
+	}
+	row.Variants = make([]chrondbc.SpellVariant, 0, len(variantRows))
+	for _, variantRow := range variantRows {
+		row.Variants = append(row.Variants, variantRow.toModernSpellVariant())
+	}
+	return nil
+}
 
 // GetModernSpellComponents loads the normalized modern rows attached to a spell.
 func GetModernSpellComponents(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.SpellEffect, []chrondbc.SpellPower, []chrondbc.SpellVariant, error) {
@@ -127,88 +146,88 @@ func getModernSpellPowers(ctx context.Context, pool *pgxpool.Pool, datasetID uui
 }
 
 type modernSpellVariantRow struct {
-	DatasetID    uuid.UUID
-	SpellID      int32
-	DifficultyID int32
+	DatasetID    uuid.UUID `json:"dataset_id"`
+	SpellID      int32     `json:"spell_id"`
+	DifficultyID int32     `json:"difficulty_id"`
 
-	MiscID                           *int32
-	ActiveIconFileDataID             *int32
-	ActiveSpellVisualScript          *int32
-	Attributes                       []int32
-	CastingTimeIndex                 *int32
-	ContentTuningID                  *int32
-	DurationIndex                    *int32
-	LaunchDelay                      *float32
-	MinDuration                      *float32
-	PVPDurationIndex                 *int32
-	RangeIndex                       *int32
-	SchoolMask                       *int32
-	ShowFutureSpellPlayerConditionID *int32
-	Speed                            *float32
-	SpellIconFileDataID              *int32
-	SpellVisualScript                *int32
+	MiscID                           *int32   `json:"misc_id"`
+	ActiveIconFileDataID             *int32   `json:"active_icon_file_data_id"`
+	ActiveSpellVisualScript          *int32   `json:"active_spell_visual_script"`
+	Attributes                       []int32  `json:"attributes"`
+	CastingTimeIndex                 *int32   `json:"casting_time_index"`
+	ContentTuningID                  *int32   `json:"content_tuning_id"`
+	DurationIndex                    *int32   `json:"duration_index"`
+	LaunchDelay                      *float32 `json:"launch_delay"`
+	MinDuration                      *float32 `json:"min_duration"`
+	PVPDurationIndex                 *int32   `json:"pvp_duration_index"`
+	RangeIndex                       *int32   `json:"range_index"`
+	SchoolMask                       *int32   `json:"school_mask"`
+	ShowFutureSpellPlayerConditionID *int32   `json:"show_future_spell_player_condition_id"`
+	Speed                            *float32 `json:"speed"`
+	SpellIconFileDataID              *int32   `json:"spell_icon_file_data_id"`
+	SpellVisualScript                *int32   `json:"spell_visual_script"`
 
-	AuraOptionsID         *int32
-	CumulativeAura        *int32
-	ProcCategoryRecovery  *int32
-	ProcChance            *int32
-	ProcCharges           *int32
-	ProcTypeMask          []int32
-	SpellProcsPerMinuteID *int32
+	AuraOptionsID         *int32  `json:"aura_options_id"`
+	CumulativeAura        *int32  `json:"cumulative_aura"`
+	ProcCategoryRecovery  *int32  `json:"proc_category_recovery"`
+	ProcChance            *int32  `json:"proc_chance"`
+	ProcCharges           *int32  `json:"proc_charges"`
+	ProcTypeMask          []int32 `json:"proc_type_mask"`
+	SpellProcsPerMinuteID *int32  `json:"spell_procs_per_minute_id"`
 
-	AuraRestrictionsID     *int32
-	CasterAuraSpell        *int32
-	CasterAuraState        *int32
-	CasterAuraType         *int32
-	ExcludeCasterAuraSpell *int32
-	ExcludeCasterAuraState *int32
-	ExcludeCasterAuraType  *int32
-	ExcludeTargetAuraSpell *int32
-	ExcludeTargetAuraState *int32
-	ExcludeTargetAuraType  *int32
-	TargetAuraSpell        *int32
-	TargetAuraState        *int32
-	TargetAuraType         *int32
+	AuraRestrictionsID     *int32 `json:"aura_restrictions_id"`
+	CasterAuraSpell        *int32 `json:"caster_aura_spell"`
+	CasterAuraState        *int32 `json:"caster_aura_state"`
+	CasterAuraType         *int32 `json:"caster_aura_type"`
+	ExcludeCasterAuraSpell *int32 `json:"exclude_caster_aura_spell"`
+	ExcludeCasterAuraState *int32 `json:"exclude_caster_aura_state"`
+	ExcludeCasterAuraType  *int32 `json:"exclude_caster_aura_type"`
+	ExcludeTargetAuraSpell *int32 `json:"exclude_target_aura_spell"`
+	ExcludeTargetAuraState *int32 `json:"exclude_target_aura_state"`
+	ExcludeTargetAuraType  *int32 `json:"exclude_target_aura_type"`
+	TargetAuraSpell        *int32 `json:"target_aura_spell"`
+	TargetAuraState        *int32 `json:"target_aura_state"`
+	TargetAuraType         *int32 `json:"target_aura_type"`
 
-	ClassOptionsID *int32
-	ModalNextSpell *int32
-	SpellClassSet  *int32
-	SpellClassMask []int32
+	ClassOptionsID *int32  `json:"class_options_id"`
+	ModalNextSpell *int32  `json:"modal_next_spell"`
+	SpellClassSet  *int32  `json:"spell_class_set"`
+	SpellClassMask []int32 `json:"spell_class_mask"`
 
-	InterruptsID          *int32
-	AuraInterruptFlags    []int32
-	ChannelInterruptFlags []int32
-	InterruptFlags        *int32
+	InterruptsID          *int32  `json:"interrupts_id"`
+	AuraInterruptFlags    []int32 `json:"aura_interrupt_flags"`
+	ChannelInterruptFlags []int32 `json:"channel_interrupt_flags"`
+	InterruptFlags        *int32  `json:"interrupt_flags"`
 
-	CategoriesID          *int32
-	Category              *int32
-	ChargeCategory        *int32
-	DefenseType           *int32
-	DiminishType          *int32
-	DispelType            *int32
-	Mechanic              *int32
-	PreventionType        *int32
-	StartRecoveryCategory *int32
+	CategoriesID          *int32 `json:"categories_id"`
+	Category              *int32 `json:"category"`
+	ChargeCategory        *int32 `json:"charge_category"`
+	DefenseType           *int32 `json:"defense_type"`
+	DiminishType          *int32 `json:"diminish_type"`
+	DispelType            *int32 `json:"dispel_type"`
+	Mechanic              *int32 `json:"mechanic"`
+	PreventionType        *int32 `json:"prevention_type"`
+	StartRecoveryCategory *int32 `json:"start_recovery_category"`
 
-	CooldownsID          *int32
-	AuraSpellID          *int32
-	CategoryRecoveryTime *int32
-	RecoveryTime         *int32
-	StartRecoveryTime    *int32
+	CooldownsID          *int32 `json:"cooldowns_id"`
+	AuraSpellID          *int32 `json:"aura_spell_id"`
+	CategoryRecoveryTime *int32 `json:"category_recovery_time"`
+	RecoveryTime         *int32 `json:"recovery_time"`
+	StartRecoveryTime    *int32 `json:"start_recovery_time"`
 
-	LevelsID            *int32
-	BaseLevel           *int32
-	MaxLevel            *int32
-	MaxPassiveAuraLevel *int32
-	SpellLevel          *int32
+	LevelsID            *int32 `json:"levels_id"`
+	BaseLevel           *int32 `json:"base_level"`
+	MaxLevel            *int32 `json:"max_level"`
+	MaxPassiveAuraLevel *int32 `json:"max_passive_aura_level"`
+	SpellLevel          *int32 `json:"spell_level"`
 
-	TargetRestrictionsID *int32
-	ConeDegrees          *float32
-	MaxTargetLevel       *int32
-	MaxTargets           *int32
-	TargetCreatureType   *int32
-	Targets              *int32
-	Width                *float32
+	TargetRestrictionsID *int32   `json:"target_restrictions_id"`
+	ConeDegrees          *float32 `json:"cone_degrees"`
+	MaxTargetLevel       *int32   `json:"max_target_level"`
+	MaxTargets           *int32   `json:"max_targets"`
+	TargetCreatureType   *int32   `json:"target_creature_type"`
+	Targets              *int32   `json:"targets"`
+	Width                *float32 `json:"width"`
 }
 
 func getModernSpellVariants(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) ([]chrondbc.SpellVariant, error) {

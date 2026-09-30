@@ -3,6 +3,7 @@ package spells_test
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Emyrk/chronicle/database/dbtestutil"
@@ -14,8 +15,20 @@ import (
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
+
+type queryCounter struct {
+	count atomic.Int64
+}
+
+func (c *queryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
+	c.count.Add(1)
+	return ctx
+}
+
+func (*queryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
 func TestNewFetcherDBOnly_NoDBC(t *testing.T) {
 	t.Parallel()
@@ -62,7 +75,8 @@ func TestFetcherDBOnly_CustomSpellsStillWork(t *testing.T) {
 func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
-	pool, _ := dbtestutil.NewPGXPool(t)
+	queries := &queryCounter{}
+	pool, _ := dbtestutil.NewPGXPool(t, dbtestutil.WithTracer(queries))
 	datasetID := servicedataset.DefaultDatasetID
 
 	modern := chrondbc.Spell{
@@ -73,7 +87,7 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 			EffectRadius: dbcmem.SpellRadius{ID: 14},
 		}},
 	}
-	legacy := chrondbc.Spell{ID: 900002, Name_lang: i18n.Text{i18n.English: "Legacy Test Spell"}}
+	legacy := chrondbc.Spell{ID: 900002, Name_lang: i18n.Text{i18n.English: modern.Name()}}
 	require.NoError(t, spelldb.UpsertBatch(ctx, pool, []spelldb.SpellRow{
 		spelldb.FromSpell(datasetID, &modern),
 		spelldb.FromSpell(datasetID, &legacy),
@@ -157,8 +171,10 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 	require.NoError(t, err)
 
 	fetcher := spells.NewFetcherDBOnly(ctx, pool, nil, nil, 100)
+	queries.count.Store(0)
 	got, err := fetcher.Spell(ctx, datasetID, modern.ID)
 	require.NoError(t, err)
+	require.EqualValues(t, 1, queries.count.Load(), "a database-backed spell lookup must use one SQL statement")
 	require.Equal(t, []int32{0, 2, 5}, []int32{got.Effects[0].EffectIndex, got.Effects[1].EffectIndex, got.Effects[2].EffectIndex})
 	require.Equal(t, []chrondbc.Effect{20, 22, 25}, []chrondbc.Effect{got.Effects[0].Effect, got.Effects[1].Effect, got.Effects[2].Effect})
 	require.Equal(t, []int32{101, 102, 103, 104}, got.Effects[0].EffectSpellClassMask)
@@ -220,14 +236,17 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 	require.Contains(t, string(payload["modern_variants"]), `"class_options"`)
 	require.Contains(t, string(payload["modern_variants"]), `"spell_class_mask":[1,2,3,4]`)
 
+	queries.count.Store(0)
 	byName, err := fetcher.SpellsByName(ctx, datasetID, modern.Name())
 	require.NoError(t, err)
-	require.Len(t, byName, 1)
+	require.EqualValues(t, 1, queries.count.Load(), "a multi-result name lookup must use one SQL statement")
+	require.Len(t, byName, 2)
 	require.Len(t, byName[0].Effects, 3)
 	require.Len(t, byName[0].Powers, 2)
 	require.Len(t, byName[0].Variants, 2)
 
 	legacyGot, err := fetcher.Spell(ctx, datasetID, legacy.ID)
+	require.EqualValues(t, 1, queries.count.Load(), "name lookup results must populate the assembled-spell cache")
 	require.NoError(t, err)
 	require.Len(t, legacyGot.Effects, 3)
 	require.Len(t, legacyGot.Powers, 1)

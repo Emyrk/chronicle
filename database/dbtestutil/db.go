@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/pubsub"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
@@ -28,6 +29,7 @@ type options struct {
 	dumpOnFailure bool
 	logger        *slog.Logger
 	url           string
+	tracer        pgx.QueryTracer
 }
 
 type Option func(*options)
@@ -49,6 +51,12 @@ func WithDumpOnFailure() Option {
 func WithLogger(logger *slog.Logger) Option {
 	return func(o *options) {
 		o.logger = logger
+	}
+}
+
+func WithTracer(tracer pgx.QueryTracer) Option {
+	return func(o *options) {
+		o.tracer = tracer
 	}
 }
 
@@ -111,7 +119,11 @@ func NewPGXPool(t testing.TB, opts ...Option) (*pgxpool.Pool, pubsub.Pubsub) {
 	}
 
 	connectionURL := NewConnectionURL(t, opts...)
-	pool, err := database.NewPostgresDB(t.Context(), o.logger, connectionURL)
+	var poolOptions []database.PoolOption
+	if o.tracer != nil {
+		poolOptions = append(poolOptions, database.WithTracer(o.tracer))
+	}
+	pool, err := database.NewPostgresDB(t.Context(), o.logger, connectionURL, poolOptions...)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
