@@ -41,7 +41,7 @@ export function Footer() {
                   href={FORK_REQUIREMENTS_URL}
                   className="hover:text-foreground transition-colors"
                 >
-                  Fork Requirements
+                  Self Hosted Requirements
                 </a>
               </li>
             </ul>

@@ -63,7 +63,7 @@ export function ForkRequirementsPage() {
             </span>
           </div>
           <h1 className="font-wow text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
-            Fork and Deployment Requirements
+            Self Hosted Requirements
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
             Chronicle is source-available software. These requirements apply to any deployment of the

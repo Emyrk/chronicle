@@ -54,7 +54,7 @@ function GetInTouchModal({ onClose }: { onClose: () => void }) {
             rel="noreferrer noopener"
             className="text-primary hover:underline"
           >
-            fork and deployment requirements
+            Self Hosted Requirements
           </a>
           {" "}before getting in touch.
         </p>
