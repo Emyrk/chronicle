@@ -34,7 +34,7 @@ const CHRONICLE_TENETS = [
   },
   {
     title: "Community Collaboration",
-    body: "Chronicle works with Classic WoW communities while retaining control of how the software is hosted and deployed.",
+    body: "Chronicle works with Classic WoW communities and permits non-commercial hosting under the project license and Self Hosted Requirements.",
   },
   {
     title: "Support Is Voluntary",

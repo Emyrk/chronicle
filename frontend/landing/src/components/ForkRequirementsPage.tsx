@@ -65,10 +65,6 @@ export function ForkRequirementsPage() {
           <h1 className="font-wow text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
             Self Hosted Requirements
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-            Chronicle is source-available software. These requirements apply to any deployment of the
-            Chronicle application and do not grant permission to create or operate one.
-          </p>
         </header>
 
         <section className="mt-10 overflow-hidden rounded-xl border border-amber-400/30 bg-amber-400/8 shadow-2xl shadow-black/20">
@@ -77,9 +73,9 @@ export function ForkRequirementsPage() {
             <div>
               <h2 className="font-wow text-lg font-bold text-amber-100">These requirements do not grant permission</h2>
               <p className="mt-2 leading-7 text-amber-50/75">
-                The Chronicle license does not permit hosting, deployment, redistribution, or derivative works.
-                Following the requirements on this page does not create an exception or grant a license. They are
-                minimum attribution and support requirements for any copy that is nevertheless operated or displayed.
+                The Chronicle license permits non-commercial hosting, subject to these requirements. It does not
+                permit commercial use, redistribution, derivative works, or competing products. These requirements
+                do not grant any additional permission beyond the license.
               </p>
               <a
                 href="https://github.com/Emyrk/chronicle/blob/main/LICENSE"

@@ -47,7 +47,7 @@ function GetInTouchModal({ onClose }: { onClose: () => void }) {
           and we'll get you set up.
         </p>
         <p className="mt-3 text-sm text-muted-foreground">
-          Chronicle is source-available, but its license does not permit independent hosting or deployment. Review the{" "}
+          Chronicle is source-available and its license permits non-commercial hosting. Review the{" "}
           <a
             href="https://chronicleclassic.com/fork-requirements/"
             target="_blank"

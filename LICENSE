@@ -3,11 +3,13 @@ Copyright (c) 2026 Emyrk
 This software is source-available, not open source.
 
 Permission is granted to view, study, and run this software
-for personal, non-commercial purposes only.
+for personal, non-commercial purposes. Permission is also granted
+to host this software as a non-commercial service, provided the
+hosted deployment complies with the Self Hosted Requirements at
+https://chronicleclassic.com/fork-requirements/.
 
 You may NOT:
 - Use this software for commercial purposes
-- Host or deploy this software as a service
 - Redistribute this software or modified versions
 - Create derivative works for public or private deployment
 - Use this software to build or operate a competing product
