@@ -20,8 +20,8 @@ import (
 // rows, and imports them without routing through Chronicle's legacy DBC parsers.
 func ImportWowdataCmd() *serpent.Command {
 	var snapshot, client, wowdataBin, extractor, snapshotOut string
-	var apiURL, datasetID, token, cookie, product, build, region, locale, cache, out string
-	var dryRun bool
+	var apiURL, datasetID, token, cookie, product, build, region, locale, cache, dbcache, out string
+	var dryRun, noHotfix bool
 	return &serpent.Command{
 		Use:   "import-wowdata",
 		Short: "Extract, convert, and import WoW Forever game data.",
@@ -34,6 +34,8 @@ func ImportWowdataCmd() *serpent.Command {
 			{Name: "region", Description: "Blizzard region used with --client.", Flag: "region", Env: "WOW_REGION", Default: "us", Value: serpent.StringOf(&region)},
 			{Name: "locale", Description: "Data locale used with --client.", Flag: "locale", Env: "WOW_LOCALE", Default: "enUS", Value: serpent.StringOf(&locale)},
 			{Name: "cache", Description: "Optional wowdata cache directory used with --client.", Flag: "cache", Env: "WOWDATA_CACHE", Value: serpent.StringOf(&cache)},
+			{Name: "dbcache", Description: "Explicit locale DBCache.bin used with --client; default discovers it below the client.", Flag: "dbcache", Env: "WOW_DBCACHE", Value: serpent.StringOf(&dbcache)},
+			{Name: "no-hotfix", Description: "Explicitly disable DBCache overlay application when extracting from --client.", Flag: "no-hotfix", Value: serpent.BoolOf(&noHotfix)},
 			{Name: "api-url", Description: "Chronicle API base URL.", Flag: "api-url", Value: serpent.StringOf(&apiURL)},
 			{Name: "dataset-id", Description: "Dataset UUID to update.", Flag: "dataset-id", Env: "CHRONICLE_DATASET_ID", Value: serpent.StringOf(&datasetID)},
 			{Name: "token", Description: "Bearer token.", Flag: "token", Env: "CHRONICLE_TOKEN", Value: serpent.StringOf(&token)},
@@ -44,6 +46,9 @@ func ImportWowdataCmd() *serpent.Command {
 			{Name: "out", Description: "Optional path for the converted gzip JSON payload.", Flag: "out", Value: serpent.StringOf(&out)},
 		},
 		Handler: func(inv *serpent.Invocation) error {
+			if noHotfix && dbcache != "" {
+				return fmt.Errorf("--dbcache and --no-hotfix cannot be used together")
+			}
 			if err := validateWowdataSource(snapshot, client); err != nil {
 				return err
 			}
@@ -63,6 +68,8 @@ func ImportWowdataCmd() *serpent.Command {
 					Region:      region,
 					Locale:      locale,
 					Cache:       cache,
+					DBCache:     dbcache,
+					NoHotfix:    noHotfix,
 				})
 				if err != nil {
 					return err
@@ -193,6 +200,8 @@ type wowdataExtractOptions struct {
 	Region      string
 	Locale      string
 	Cache       string
+	DBCache     string
+	NoHotfix    bool
 }
 
 func validateWowdataSource(snapshot, client string) error {
@@ -219,6 +228,12 @@ func wowdataExtractArgs(opts wowdataExtractOptions, out string) []string {
 	}
 	if opts.Cache != "" {
 		args = append(args, "--cache", opts.Cache)
+	}
+	if opts.DBCache != "" {
+		args = append(args, "--dbcache", opts.DBCache)
+	}
+	if opts.NoHotfix {
+		args = append(args, "--no-hotfix")
 	}
 	return args
 }

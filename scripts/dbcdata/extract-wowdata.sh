@@ -6,6 +6,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+
 WOWDATA_BIN="${WOWDATA_BIN:-wowdata}"
 CLIENT_PATH="${WOW_CLIENT_PATH:-}"
 PRODUCT="${WOW_PRODUCT:-wow_classic_beta}"
@@ -13,6 +16,8 @@ BUILD="${WOW_BUILD:-1.60.1.69913}"
 REGION="${WOW_REGION:-us}"
 LOCALE="${WOW_LOCALE:-enUS}"
 CACHE_DIR="${WOWDATA_CACHE:-}"
+DBCACHE_PATH="${WOW_DBCACHE:-}"
+NO_HOTFIX=0
 OUT_DIR=""
 LIMIT=0
 
@@ -32,13 +37,15 @@ Options:
   --region REGION     Blizzard region (default: us)
   --locale LOCALE     Data locale (default: enUS)
   --cache DIR         wowdata cache directory
+  --dbcache PATH      Explicit locale DBCache.bin (default: discover under client)
+  --no-hotfix         Do not apply DBCache overlays; manifest records applied=false
   --out DIR           Output directory (default: ./export/wowdata-PRODUCT-BUILD)
   --limit N           Extract at most N rows per table; useful for smoke tests
   -h, --help          Show this help
 
 Environment equivalents:
   WOWDATA_BIN, WOW_CLIENT_PATH, WOW_PRODUCT, WOW_BUILD, WOW_REGION,
-  WOW_LOCALE, WOWDATA_CACHE
+  WOW_LOCALE, WOWDATA_CACHE, WOW_DBCACHE
 
 The output is an intermediate snapshot, not an upload artifact. Chronicle still
 needs version-aware transforms that join the split modern Spell and Item tables.
@@ -54,6 +61,8 @@ while (($# > 0)); do
     --region) REGION="$2"; shift 2 ;;
     --locale) LOCALE="$2"; shift 2 ;;
     --cache) CACHE_DIR="$2"; shift 2 ;;
+    --dbcache) DBCACHE_PATH="$2"; shift 2 ;;
+    --no-hotfix) NO_HOTFIX=1; shift ;;
     --out) OUT_DIR="$2"; shift 2 ;;
     --limit) LIMIT="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -61,6 +70,10 @@ while (($# > 0)); do
   esac
 done
 
+if ((NO_HOTFIX == 1)) && [[ -n "$DBCACHE_PATH" ]]; then
+  echo "--dbcache and --no-hotfix cannot be used together" >&2
+  exit 2
+fi
 if [[ -z "$CLIENT_PATH" ]]; then
   echo "--client is required" >&2
   usage >&2
@@ -74,7 +87,11 @@ if ! [[ "$LIMIT" =~ ^[0-9]+$ ]]; then
   echo "--limit must be a non-negative integer" >&2
   exit 2
 fi
-for command in "$WOWDATA_BIN" python3; do
+required_commands=("$WOWDATA_BIN" python3)
+if ((NO_HOTFIX == 0)); then
+  required_commands+=(go)
+fi
+for command in "${required_commands[@]}"; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Required command not found: $command" >&2
     exit 2
@@ -85,7 +102,7 @@ if [[ -z "$OUT_DIR" ]]; then
   OUT_DIR="./export/wowdata-${PRODUCT}-${BUILD}"
 fi
 # Only remove files owned by this script so reruns cannot retain stale tables.
-rm -rf "$OUT_DIR/schemas" "$OUT_DIR/tables" "$OUT_DIR/logs"
+rm -rf "$OUT_DIR/schemas" "$OUT_DIR/tables" "$OUT_DIR/logs" "$OUT_DIR/hotfix"
 rm -f "$OUT_DIR/manifest.json" "$OUT_DIR/target.json" "$OUT_DIR/icons.jsonl" \
   "$OUT_DIR/skipped-optional-tables.txt"
 mkdir -p "$OUT_DIR/schemas" "$OUT_DIR/tables" "$OUT_DIR/logs"
@@ -310,17 +327,65 @@ manifest = {
     "rowLimit": int(os.environ["EXTRACT_LIMIT"]),
     "tables": tables,
     "icons": icons,
+    "hotfix": {"applied": False},
     "skippedOptionalTables": skipped,
     "notes": [
         "Rows are extracted modern DB2 records, not Chronicle upload artifacts.",
         "Modern Spell and Item data must be joined and normalized before dataset upload.",
-        "DBCache.bin hotfixes are not applied by this extraction script.",
     ],
 }
 (out / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 PY
 
 echo
+if ((NO_HOTFIX == 0)); then
+  if [[ -z "$DBCACHE_PATH" ]]; then
+    mapfile -t discovered_caches < <(find "$CLIENT_PATH" -maxdepth 5 -type f \
+      -path "*/Cache/ADB/$LOCALE/DBCache.bin" -print | sort)
+    if ((${#discovered_caches[@]} != 1)); then
+      echo "Expected exactly one $LOCALE DBCache.bin under $CLIENT_PATH, found ${#discovered_caches[@]}. Use --dbcache or --no-hotfix." >&2
+      exit 2
+    fi
+    DBCACHE_PATH="${discovered_caches[0]}"
+  fi
+  if [[ ! -f "$DBCACHE_PATH" ]]; then
+    echo "DBCache not found: $DBCACHE_PATH" >&2
+    exit 2
+  fi
+
+  wowdata_cache_root="${CACHE_DIR:-${HOME}/.wowdata/cache}"
+  revision_file="$wowdata_cache_root/dbd/revision.json"
+  if [[ ! -f "$revision_file" ]]; then
+    echo "wowdata DBD revision metadata not found: $revision_file" >&2
+    exit 2
+  fi
+  dbd_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha"])' "$revision_file")"
+  dbd_dir="$wowdata_cache_root/dbd/$dbd_revision"
+  if [[ ! -d "$dbd_dir" ]]; then
+    echo "wowdata build-specific DBD directory not found: $dbd_dir" >&2
+    exit 2
+  fi
+
+  echo "==> DBCache hotfix overlay"
+  snapshot_abs="$(realpath "$OUT_DIR")"
+  dbcache_abs="$(realpath "$DBCACHE_PATH")"
+  dbd_dir_abs="$(realpath "$dbd_dir")"
+  (
+    cd "$REPO_ROOT"
+    go run ./scripts/dbcdata apply-wowdata-hotfixes \
+      --snapshot "$snapshot_abs" \
+      --dbcache "$dbcache_abs" \
+      --dbd-dir "$dbd_dir_abs" \
+      --product "$PRODUCT" \
+      --build "$BUILD" \
+      --region "$REGION" \
+      --locale "$LOCALE"
+  )
+  echo "    applied $(basename "$DBCACHE_PATH")"
+else
+  echo "==> DBCache hotfix overlay explicitly disabled"
+fi
+
 echo "Extracted ${#REQUIRED_TABLES[@]} required table(s) to $OUT_DIR"
 if [[ -s "$OUT_DIR/skipped-optional-tables.txt" ]]; then
   echo "Skipped optional table(s): $(paste -sd, "$OUT_DIR/skipped-optional-tables.txt")"

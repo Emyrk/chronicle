@@ -26,7 +26,9 @@ go run ./scripts/dbcdata import-wowdata \
   --token <bearer-token>
 ```
 
-The client path is the directory containing `.build.info` and `Data/`, not the `_classic_beta_` executable directory. The command extracts a temporary normalized snapshot, converts the split modern tables, uploads a gzip JSON payload, and removes the temporary snapshot. Use `--snapshot-out PATH` to retain the extracted data for inspection or reuse.
+The client path is the directory containing `.build.info` and `Data/`, not the `_classic_beta_` executable directory. The command extracts a temporary normalized snapshot, applies the matching locale `DBCache.bin` overlay, converts the split modern tables, uploads a gzip JSON payload, and removes the temporary snapshot. Use `--snapshot-out PATH` to retain the extracted data for inspection or reuse.
+
+By default, extraction discovers exactly one `<client>/*/Cache/ADB/<locale>/DBCache.bin`. Use `--dbcache PATH` to select one explicitly. Extraction fails if no unambiguous cache exists, if its V9 header build differs from `--build`, or if its records have an empty or mixed numeric region. Use `--no-hotfix` only for an intentional base-data snapshot; the manifest then records `hotfix.applied=false` rather than implying that a cache was applied.
 
 ## Reuse an existing snapshot
 
@@ -46,6 +48,10 @@ go run ./scripts/dbcdata import-wowdata \
 ```
 
 Use `--limit` on the extraction script only for smoke tests; limited snapshots are intentionally rejected by the importer. Snapshot extraction also records the modern listfile mapping from icon FileDataIDs to `Interface/Icons/*.blp` names. If listfile preparation is unavailable, table extraction still succeeds and prints a warning, but icon paths remain unresolved.
+
+Each applied snapshot keeps the existing `chronicle-wowdata-snapshot-v1` format and adds a `hotfix` provenance object plus `hotfix/receipt.json`. The manifest records the cache SHA-256, size, V9 version, header build, Blizzard region string, numeric cache region, locale, status counts, affected table/row counts, and receipt SHA-256. The converter verifies the receipt and matching build/region/locale before using an applied snapshot. Older v1 snapshots without a `hotfix` object remain readable.
+
+Overlay records are ordered deterministically by push ID, unique ID, and cache order for each table and record. Status 1 replaces or creates a complete row, status 2 deletes it, and statuses 3 and 4 are recorded but do not modify base rows. Any affected imported table that lacks a known table hash, build DBD, or decodable payload fails extraction instead of being silently skipped.
 
 ## Extract and publish icons
 
@@ -97,7 +103,7 @@ The importer does not guess identifiers or silently treat modern fields as legac
 - Icon FileDataIDs without a community-listfile entry remain unresolved.
 - Item display IDs, item-icon database wiring, combat stats, damage/armor curves, item effects, random properties, and item-set bonuses are not yet reconstructed.
 - The legacy `dbc_spells` projection exposes only effects 0 through 2, the first nine attributes, the first ordered power, and `DifficultyID=0`. Consumers that need the complete modern data must use the normalized spell effects, powers, and variants.
-- `DBCache.bin` hotfix overlays are not applied by the extraction script.
+- The current Forever cache has no records for the verified Talent (`4188284511`) or TalentTab (`1113426120`) table hashes, so hotfix support does not resolve talent-data mismatches.
 - Existing derived extra-attack, periodic-spell, and duration-modifier generation is not yet run from the modern representation.
 
 These gaps are tracked as GitHub issues rather than filled with inferred values.

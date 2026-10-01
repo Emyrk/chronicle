@@ -43,6 +43,9 @@ func Convert(dir, expectedProduct, expectedBuild string) (*Import, error) {
 	if expectedBuild != "" && manifest.Target.BuildName != expectedBuild {
 		return nil, fmt.Errorf("manifest build %q, want %q", manifest.Target.BuildName, expectedBuild)
 	}
+	if err := validateHotfixProvenance(dir, manifest); err != nil {
+		return nil, err
+	}
 	present := make(map[string]bool, len(manifest.Tables))
 	for _, table := range manifest.Tables {
 		present[table.Name] = true

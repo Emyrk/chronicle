@@ -31,6 +31,7 @@ func TestWowdataExtractArgs(t *testing.T) {
 		Region:     "us",
 		Locale:     "enUS",
 		Cache:      "/cache",
+		DBCache:    "/game/_classic_beta_/Cache/ADB/enUS/DBCache.bin",
 	}, "/snapshot")
 	require.Equal(t, []string{
 		"--client", "/game",
@@ -41,6 +42,7 @@ func TestWowdataExtractArgs(t *testing.T) {
 		"--out", "/snapshot",
 		"--build", "1.60.1.69913",
 		"--cache", "/cache",
+		"--dbcache", "/game/_classic_beta_/Cache/ADB/enUS/DBCache.bin",
 	}, got)
 }
 
@@ -53,9 +55,11 @@ func TestWowdataExtractArgsOmitsOptionalValues(t *testing.T) {
 		Product:    "wow_classic_beta",
 		Region:     "eu",
 		Locale:     "deDE",
+		NoHotfix:   true,
 	}, "/snapshot")
 	require.NotContains(t, got, "--build")
 	require.NotContains(t, got, "--cache")
+	require.Contains(t, got, "--no-hotfix")
 }
 
 func TestResolveWowdataBinaryUsesRequestedExecutable(t *testing.T) {

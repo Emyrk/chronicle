@@ -11,11 +11,42 @@ import (
 const SnapshotFormat = "chronicle-wowdata-snapshot-v1"
 
 type Manifest struct {
-	Format   string          `json:"format"`
-	RowLimit int             `json:"rowLimit"`
-	Target   Target          `json:"target"`
-	Tables   []ManifestTable `json:"tables"`
-	Icons    *ManifestIcons  `json:"icons,omitempty"`
+	Format                string          `json:"format"`
+	RowLimit              int             `json:"rowLimit"`
+	Target                Target          `json:"target"`
+	WowdataVersion        string          `json:"wowdataVersion,omitempty"`
+	Tables                []ManifestTable `json:"tables"`
+	Icons                 *ManifestIcons  `json:"icons,omitempty"`
+	Hotfix                *ManifestHotfix `json:"hotfix,omitempty"`
+	SkippedOptionalTables []string        `json:"skippedOptionalTables,omitempty"`
+	Notes                 []string        `json:"notes,omitempty"`
+}
+
+type ManifestHotfix struct {
+	Applied        bool                  `json:"applied"`
+	CacheSHA256    string                `json:"cacheSha256,omitempty"`
+	CacheVersion   uint32                `json:"cacheVersion,omitempty"`
+	CacheBuild     int32                 `json:"cacheBuild,omitempty"`
+	CacheSize      int64                 `json:"cacheSize,omitempty"`
+	Region         string                `json:"region,omitempty"`
+	NumericRegion  uint32                `json:"numericRegion,omitempty"`
+	Locale         string                `json:"locale,omitempty"`
+	RecordCount    int                   `json:"recordCount,omitempty"`
+	StatusCounts   map[string]int        `json:"statusCounts,omitempty"`
+	AffectedTables []HotfixAffectedTable `json:"affectedTables,omitempty"`
+	Receipt        string                `json:"receipt,omitempty"`
+	ReceiptSHA256  string                `json:"receiptSha256,omitempty"`
+}
+
+type HotfixAffectedTable struct {
+	Name       string `json:"name"`
+	TableHash  uint32 `json:"tableHash"`
+	Records    int    `json:"records"`
+	Upserts    int    `json:"upserts"`
+	Deletes    int    `json:"deletes"`
+	Ignored    int    `json:"ignored"`
+	RowsBefore int    `json:"rowsBefore"`
+	RowsAfter  int    `json:"rowsAfter"`
 }
 
 type ManifestIcons struct {
@@ -24,16 +55,21 @@ type ManifestIcons struct {
 }
 
 type Target struct {
+	Source    string `json:"source,omitempty"`
 	Region    string `json:"region"`
 	Product   string `json:"product"`
 	BuildName string `json:"buildName"`
+	BuildKey  string `json:"buildKey,omitempty"`
 	Locale    string `json:"locale"`
+	CachePath string `json:"cachePath,omitempty"`
 }
 
 type ManifestTable struct {
 	Name          string `json:"name"`
-	Rows          string `json:"rows"`
+	AvailableRows int    `json:"availableRows,omitempty"`
 	ExtractedRows int    `json:"extractedRows"`
+	Schema        string `json:"schema,omitempty"`
+	Rows          string `json:"rows"`
 }
 
 type Import struct {
