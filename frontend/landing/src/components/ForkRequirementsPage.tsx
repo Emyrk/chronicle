@@ -78,6 +78,21 @@ export function SelfHostedRequirementsPage() {
         </section>
 
         <section
+          className="mt-10 rounded-xl border border-emerald-500/30 bg-emerald-500/8 p-6 sm:p-8"
+          aria-labelledby="small-servers-heading"
+        >
+          <p className="font-wow text-sm uppercase tracking-[0.18em] text-emerald-300">No contact necessary</p>
+          <h2 id="small-servers-heading" className="mt-2 font-wow text-2xl font-bold text-foreground">
+            Solo and small servers
+          </h2>
+          <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
+            If you are self hosting Chronicle for yourself or for a server with fewer than 10 players, you do not
+            need to contact Chronicle before getting started. The attribution, footer, and support banner requirements
+            below still apply.
+          </p>
+        </section>
+
+        <section
           className="mt-10 rounded-xl border border-[#5f8fa6]/35 bg-[#5f8fa6]/8 p-6 sm:p-8"
           aria-labelledby="larger-servers-heading"
         >
