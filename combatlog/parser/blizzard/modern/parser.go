@@ -55,9 +55,10 @@ func readBaseYear(r io.Reader) (io.Reader, int, error) {
 // Parser adapts modern Blizzard combat-log records to Chronicle's CLEU parser
 // while retaining version-specific metadata such as gear and talent summaries.
 type Parser struct {
-	inner *wotlk.Parser
-	wowDB gamedb.SpellFetcher
-	guids *guidNormalizer
+	inner   *wotlk.Parser
+	wowDB   gamedb.SpellFetcher
+	guids   *guidNormalizer
+	version int
 }
 
 func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
@@ -85,6 +86,7 @@ func NewHermesProxy(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB
 		return nil, err
 	}
 	p.guids = transformer.guids
+	p.version = 9
 	return p, nil
 }
 
@@ -139,16 +141,24 @@ func (p *Parser) DetailedTimes() map[string]time.Duration {
 }
 
 func (p *Parser) combatLogVersion(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
-	version := m.String()
-	values := map[string]string{"combat_log": version}
+	versionRaw := m.String()
+	values := map[string]string{"combat_log": versionRaw}
 	for m.Remain() >= 2 {
 		key, value := strings.ToLower(m.String()), m.String()
 		values[key] = value
 	}
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+	version, err := strconv.Atoi(versionRaw)
+	if err != nil {
+		return nil, fmt.Errorf("parse Blizzard combat log version %q: %w", versionRaw, err)
+	}
+	p.version = version
 	return []messages.Message{&messages.Versions{
 		MessageBase: messages.Base(ts),
 		Versions:    values,
-	}}, m.Error()
+	}}, nil
 }
 
 func (p *Parser) zoneChange(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
@@ -266,11 +276,26 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 		return nil, fmt.Errorf("blizzard COMBATANT_INFO has %d fields, need at least 27", len(fields))
 	}
 
-	talents, err := parseTalentSummary(fields[24])
-	if err != nil {
-		return nil, err
+	var talents *combatant.Talents
+	var gear []combatant.GearItem
+	switch p.version {
+	case 9:
+		talents, err = parseTalentSummary(fields[24])
+		if err != nil {
+			return nil, err
+		}
+		gear = parseGear(fields[26])
+	case 22:
+		if len(fields) < 28 {
+			return nil, fmt.Errorf("Blizzard V22 COMBATANT_INFO has %d fields, need at least 28", len(fields))
+		}
+		// V22 reports selected talent entries rather than the V9 three-tree point
+		// summary. Preserve gear parsing while leaving talents unset until those
+		// entries can be resolved through the dataset's talent tables.
+		gear = parseGear(fields[27])
+	default:
+		return nil, fmt.Errorf("Blizzard COMBATANT_INFO has unsupported combat log version %d", p.version)
 	}
-	gear := parseGear(fields[26])
 	return []messages.Message{&messages.Combatant{
 		MessageBase: messages.Base(ts),
 		Combatant: combatant.Combatant{

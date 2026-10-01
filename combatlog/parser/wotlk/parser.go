@@ -183,6 +183,9 @@ func (p *Parser) Advance(ctx context.Context) ([]messages.Message, error) {
 func (p *Parser) advance(_ context.Context) (_ []messages.Message, final error) {
 	ok := p.scanner.Scan()
 	if !ok {
+		if err := p.scanner.Err(); err != nil {
+			return nil, err
+		}
 		return nil, io.EOF
 	}
 	next := p.scanner.Text()

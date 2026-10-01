@@ -152,6 +152,18 @@ func TestGUIDNormalizerPlayerGUIDsAreLossless(t *testing.T) {
 	assert.NotEqual(t, first, third)
 }
 
+func TestCombatLogVersionSetsParserVersion(t *testing.T) {
+	t.Parallel()
+
+	ts, _, matched, err := wotlk.ParseLine(`9/20 20:02:05.988  BLIZZARD_COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1`)
+	require.NoError(t, err)
+
+	p := &Parser{}
+	_, err = p.combatLogVersion(ts, matched, "")
+	require.NoError(t, err)
+	assert.Equal(t, 22, p.version)
+}
+
 func TestTransformV22Damage(t *testing.T) {
 	t.Parallel()
 
@@ -203,14 +215,22 @@ func TestTransformDamageShield(t *testing.T) {
 func TestTransformAbsorbedVariants(t *testing.T) {
 	t.Parallel()
 
-	for _, line := range []string{
-		`9/3/2026 18:58:00.398-6  SPELL_ABSORBED,Creature-0-6263-564-204635-22878-00019A0E65,"Aqueous Lord",0x10a48,0x80000080,Player-6065-03CAC527,"Rewben-Nightslayer-US",0x40511,0x80000000,Player-6065-0432F380,"Robzumbie-Nightslayer-US",0x514,0x80000000,25218,"Power Word: Shield",0x2,2140,6661`,
-		`9/3/2026 18:58:06.299-6  SPELL_ABSORBED,Creature-0-6263-564-204635-22875-00021A0E65,"Coilskar Sea-Caller",0xa48,0x80000040,Player-6065-048F48CE,"Bradleyzeal-Nightslayer-US",0x514,0x80000000,40090,"Hurricane",0x8,Player-6065-0432F380,"Robzumbie-Nightslayer-US",0x514,0x80000000,25218,"Power Word: Shield",0x2,1852,1852`,
+	for _, tc := range []struct {
+		version  int
+		line     string
+		expected string
+	}{
+		{9, `9/3/2026 18:58:00.398-6  SPELL_ABSORBED,Creature-0-6263-564-204635-22878-00019A0E65,"Aqueous Lord",0x10a48,0x80000080,Player-6065-03CAC527,"Rewben-Nightslayer-US",0x40511,0x80000000,Player-6065-0432F380,"Robzumbie-Nightslayer-US",0x514,0x80000000,25218,"Power Word: Shield",0x2,2140,6661`, `25218,"Power Word: Shield",0x2,2140`},
+		{9, `9/3/2026 18:58:06.299-6  SPELL_ABSORBED,Creature-0-6263-564-204635-22875-00021A0E65,"Coilskar Sea-Caller",0xa48,0x80000040,Player-6065-048F48CE,"Bradleyzeal-Nightslayer-US",0x514,0x80000000,40090,"Hurricane",0x8,Player-6065-0432F380,"Robzumbie-Nightslayer-US",0x514,0x80000000,25218,"Power Word: Shield",0x2,1852,1852`, `25218,"Power Word: Shield",0x2,1852`},
+		{22, `9/23/2026 11:12:20.602-4  SPELL_ABSORBED,Creature-0-4615-0-10340-267006-0000B3EC43,"Dark Neophyte",0xa28,0x80000000,Player-4620-00D5496D,"Brother-ClassicBetaPvE2-",0x518,0x80000000,9613,"Shadow Bolt",0x20,Player-4620-00D5496D,"Brother-ClassicBetaPvE2-",0x518,0x80000000,1310927,"Light's Fury",0x2,4,38,nil`, `1310927,"Light's Fury",0x2,4`},
+		{22, `9/23/2026 11:12:27.557-4  SPELL_ABSORBED,Creature-0-4615-0-10340-267006-0000B3EC43,"Dark Neophyte",0xa28,0x80000000,Player-4620-00D5496D,"Brother-ClassicBetaPvE2-",0x518,0x80000000,Player-4620-00D5496D,"Brother-ClassicBetaPvE2-",0x518,0x80000000,1310927,"Light's Fury",0x2,4,16,nil`, `1310927,"Light's Fury",0x2,4`},
 	} {
-		converted, err := newTransformReader(strings.NewReader(line)).transform(line)
+		r := newTransformReader(strings.NewReader(tc.line))
+		r.combatLogVersion = tc.version
+		converted, err := r.transform(tc.line)
 		require.NoError(t, err)
 		assert.Contains(t, converted, "BLIZZARD_SPELL_ABSORBED")
-		assert.Contains(t, converted, `25218,"Power Word: Shield",0x2`)
+		assert.Contains(t, converted, tc.expected)
 	}
 }
 
@@ -254,6 +274,29 @@ func TestParseCombatantMetadata(t *testing.T) {
 	assert.Zero(t, gear[1].ItemID)
 }
 
+func TestCombatantInfoV22ParsesGearWithoutLegacyTalentSummary(t *testing.T) {
+	t.Parallel()
+
+	fields := make([]string, 33)
+	fields[25] = "[(105888,130618,5),(105922,130652,1)]"
+	fields[26] = "(0,0,0,0)"
+	fields[27] = "[(253955,25,(),(),()),(251534,24,(2623,0,0),(),())]"
+	encoded := base64.RawStdEncoding.EncodeToString([]byte(strings.Join(fields, ",")))
+	ts, _, matched, err := wotlk.ParseLine(`9/23 15:26:53.574  BLIZZARD_COMBATANT_INFO,0x0000120C00D5496D,"Brother-ClassicBetaPvE2",` + encoded)
+	require.NoError(t, err)
+
+	parsed, err := (&Parser{version: 22}).combatantInfo(ts, matched, "")
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+	combatantInfo := parsed[0].(*messages.Combatant)
+	require.Nil(t, combatantInfo.Talents)
+	require.Len(t, combatantInfo.GearSetups, 2)
+	assert.Equal(t, 253955, combatantInfo.GearSetups[0].ItemID)
+	assert.Equal(t, 25, combatantInfo.GearSetups[0].ItemLevel)
+	require.NotNil(t, combatantInfo.GearSetups[1].EnchantID)
+	assert.Equal(t, 2623, *combatantInfo.GearSetups[1].EnchantID)
+}
+
 func TestCombatantInfoLeavesUnknownLevelUnset(t *testing.T) {
 	t.Parallel()
 
@@ -264,7 +307,7 @@ func TestCombatantInfoLeavesUnknownLevelUnset(t *testing.T) {
 	ts, _, matched, err := wotlk.ParseLine(`9/8 12:00:00.000  BLIZZARD_COMBATANT_INFO,0x000017B1037BA400,"Player-Nightslayer-US",` + encoded)
 	require.NoError(t, err)
 
-	parsed, err := (&Parser{}).combatantInfo(ts, matched, "")
+	parsed, err := (&Parser{version: 9}).combatantInfo(ts, matched, "")
 	require.NoError(t, err)
 	require.Len(t, parsed, 1)
 	combatant, ok := parsed[0].(*messages.Combatant)

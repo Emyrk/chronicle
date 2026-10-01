@@ -241,8 +241,13 @@ func (r *transformReader) normalizeCompanionGUIDs(field string) (string, error) 
 }
 
 func (r *transformReader) transformAbsorbed(prefix string, args []string) (string, error) {
-	if len(args) != 17 && len(args) != 20 {
-		return "", fmt.Errorf("v9 SPELL_ABSORBED has %d fields", len(args))
+	validLength := len(args) == 17 || len(args) == 20
+	if r.combatLogVersion == 22 {
+		// V22 appends an additional field after the absorbed amount.
+		validLength = len(args) == 18 || len(args) == 21
+	}
+	if !validLength {
+		return "", fmt.Errorf("modern SPELL_ABSORBED has %d fields for version %d", len(args), r.combatLogVersion)
 	}
 	attacker, err := r.guids.normalize(args[0])
 	if err != nil {
@@ -254,7 +259,7 @@ func (r *transformReader) transformAbsorbed(prefix string, args []string) (strin
 	}
 	index := 8
 	damageSpellID := "0"
-	if len(args) == 20 {
+	if len(args) == 20 || len(args) == 21 {
 		damageSpellID = args[index]
 		index += 3
 	}
