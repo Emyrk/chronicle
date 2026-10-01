@@ -53,9 +53,9 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 
-	// Derive extra_attacks, duration_modifiers, periodic_spells from the
-	// imported spell data after the canonical and compatibility rows commit.
-	if err := h.deriveSpellMetadata(ctx, datasetID, spellDBC); err != nil {
+	// Derive parser and technical-page spell metadata after the canonical and
+	// compatibility rows commit.
+	if err := h.deriveSpellMetadata(ctx, datasetID, canonicalSpells); err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Spells imported but derived table generation failed",
 			Detail:  err.Error(),

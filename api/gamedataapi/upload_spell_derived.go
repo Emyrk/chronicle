@@ -20,9 +20,9 @@ func spellForDerivedMetadata(spell *chrondbc.Spell) *chrondbc.Spell {
 	return spell.Resolve(0)
 }
 
-// deriveSpellMetadata analyses imported spells and populates the derived spell
-// metadata tables used by the parser and technical pages.
-func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, spellDBC *chrondbc.SpellsDBC) error {
+// deriveSpellMetadata analyses canonical imported spells and populates the
+// derived spell metadata tables used by the parser and technical pages.
+func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, spells []*chrondbc.Spell) error {
 	type extraAttackRow struct {
 		SpellID         int32
 		Name            string
@@ -49,10 +49,10 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 	var vulnerabilities []vulnerabilitySpellRow
 	var cooldowns []cooldownSpellRow
 
-	err := spellDBC.Range(func(spell *chrondbc.Spell) bool {
+	for _, spell := range spells {
 		spell = spellForDerivedMetadata(spell)
 		if spell == nil {
-			return true
+			continue
 		}
 
 		// --- Major player cooldowns ---
@@ -93,7 +93,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		// --- Duration modifiers ---
 		// Mirrors scripts/dbcdata/cli/durationmodifiers.go: collectDurationModifiers
 		if !spell.Attrs.Has(chrondbc.Attr_Passive) {
-			return true
+			continue
 		}
 		for _, effect := range spell.Effects {
 			if effect.Effect != chrondbc.EffectApplyAura {
@@ -133,10 +133,6 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 			})
 			break
 		}
-		return true
-	})
-	if err != nil {
-		return fmt.Errorf("iterate spells for derivation: %w", err)
 	}
 
 	// Wipe existing derived data for this dataset.

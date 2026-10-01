@@ -74,6 +74,7 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 	for i := range p.Items {
 		p.Items[i].DatasetID = datasetID
 	}
+	canonicalSpells := p.CanonicalSpells()
 	store := database.New(h.pool)
 	if err := store.InTx(ctx, func(tx database.Store) error {
 		const batchSize = 500
@@ -114,6 +115,9 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 		return nil
 	}, nil); err != nil {
 		return err
+	}
+	if err := h.deriveSpellMetadata(ctx, datasetID, canonicalSpells); err != nil {
+		return fmt.Errorf("derive spell metadata: %w", err)
 	}
 	if err := h.deriveAffectedAuraDurations(ctx, datasetID); err != nil {
 		return fmt.Errorf("derive affected aura durations: %w", err)

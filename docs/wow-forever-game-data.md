@@ -88,6 +88,7 @@ The first importer persists:
 
 - legacy-compatible `dbc_spells` rows and resolved spell-icon texture mappings;
 - normalized spell effects, powers, full attribute arrays, difficulty-aware variants, and component-only spell IDs;
+- derived extra-attack, periodic-spell, duration-modifier, vulnerability, cooldown, and affected-aura-duration metadata at difficulty zero;
 - cast-time, duration, range, category, radius, focus-object, and description-variable metadata;
 - item rows having both `Item` and `ItemSparse` records;
 - talent trees;
@@ -104,6 +105,5 @@ The importer does not guess identifiers or silently treat modern fields as legac
 - Item display IDs, item-icon database wiring, combat stats, damage/armor curves, item effects, random properties, and item-set bonuses are not yet reconstructed.
 - The legacy `dbc_spells` projection exposes only effects 0 through 2, the first nine attributes, the first ordered power, and `DifficultyID=0`. Consumers that need the complete modern data must use the normalized spell effects, powers, and variants.
 - The current Forever cache has no records for the verified Talent (`4188284511`) or TalentTab (`1113426120`) table hashes, so hotfix support does not resolve talent-data mismatches.
-- Existing derived extra-attack, periodic-spell, and duration-modifier generation is not yet run from the modern representation.
 
 These gaps are tracked as GitHub issues rather than filled with inferred values.
