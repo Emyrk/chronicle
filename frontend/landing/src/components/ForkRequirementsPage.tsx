@@ -75,19 +75,65 @@ export function ForkRequirementsPage() {
               <p className="mt-2 leading-7 text-amber-50/75">
                 The Chronicle license permits non-commercial hosting, subject to these requirements. It does not
                 permit commercial use, redistribution, derivative works, or competing products. These requirements
-                do not grant any additional permission beyond the license.
+                do not grant any additional permission beyond the license. If you want to support a larger server,
+                contact Chronicle on Discord to discuss it first.
               </p>
-              <a
-                href="https://github.com/Emyrk/chronicle/blob/main/LICENSE"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-200 underline decoration-amber-300/40 underline-offset-4 transition-colors hover:text-amber-100"
-              >
-                Read the Chronicle license
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-              </a>
+              <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold">
+                <a
+                  href="https://github.com/Emyrk/chronicle/blob/main/LICENSE"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-amber-200 underline decoration-amber-300/40 underline-offset-4 transition-colors hover:text-amber-100"
+                >
+                  Read the Chronicle license
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+                <a
+                  href="https://discord.gg/gz97ABFVAj"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-amber-200 underline decoration-amber-300/40 underline-offset-4 transition-colors hover:text-amber-100"
+                >
+                  Contact Chronicle on Discord
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+              </div>
             </div>
           </div>
+        </section>
+
+        <section
+          className="mt-10 rounded-xl border border-[#5f8fa6]/35 bg-[#5f8fa6]/8 p-6 sm:p-8"
+          aria-labelledby="larger-servers-heading"
+        >
+          <p className="font-wow text-sm uppercase tracking-[0.18em] text-[#9fc5d6]">Working together</p>
+          <h2 id="larger-servers-heading" className="mt-2 font-wow text-2xl font-bold text-foreground">
+            Self hosting larger servers
+          </h2>
+          <div className="mt-4 max-w-3xl space-y-4 leading-7 text-muted-foreground">
+            <p>
+              Chronicle does not demand payment from communities that self host. Chronicle does expect clear
+              attribution and credit for the work that makes the service possible.
+            </p>
+            <p>
+              Chronicle also intends to solicit voluntary support from your user base to help sustain ongoing
+              development. The Chronicle branding, footer attribution, and support banner ensure users can identify
+              the project and choose to support its continued work.
+            </p>
+            <p>
+              If you want to support a larger server, contact Chronicle on Discord so expectations can be discussed
+              before launch.
+            </p>
+          </div>
+          <a
+            href="https://discord.gg/gz97ABFVAj"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-5 inline-flex items-center gap-1.5 font-semibold text-[#9fc5d6] transition-colors hover:text-white"
+          >
+            Contact Chronicle on Discord
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+          </a>
         </section>
 
         <section className="mt-14" aria-labelledby="requirements-heading">
