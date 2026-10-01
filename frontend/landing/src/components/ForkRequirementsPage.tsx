@@ -37,6 +37,10 @@ export function SelfHostedRequirementsPage() {
           <h1 className="font-wow text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
             Self Hosted Requirements
           </h1>
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
+            Chronicle is happy to support your community. We are glad to help communities get started and succeed;
+            we ask that Chronicle receives clear attribution and credit for the work that makes the service possible.
+          </p>
         </header>
 
         <section className="mt-10 overflow-hidden rounded-xl border border-amber-400/30 bg-amber-400/8 shadow-2xl shadow-black/20">
