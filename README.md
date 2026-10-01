@@ -15,7 +15,7 @@
 ---
 
 > [!IMPORTANT]
-> **The Chronicle license permits non-commercial hosting, subject to the Self Hosted Requirements.** Every hosted deployment must retain the required Chronicle branding, the linked **Powered by Chronicle** footer mark, and the support banner. Read the [Self Hosted Requirements](https://chronicleclassic.com/fork-requirements/) before operating a copy.
+> **The Chronicle license permits non-commercial hosting, subject to the Self Hosted Requirements.** Every hosted deployment must retain the required Chronicle branding, the linked **Powered by Chronicle** footer mark, and the support banner. Read the [Self Hosted Requirements](https://chronicleclassic.com/self-hosting/) before operating a copy.
 
 Chronicle transforms raid logs into a live, interactive breakdown of everything that happened in your raid.
 

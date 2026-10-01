@@ -8,7 +8,7 @@ const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
 const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/chronicleclassic";
 const SUPPORT_URL = "https://chronicleclassic.com/support/";
-const FORK_REQUIREMENTS_URL = "https://chronicleclassic.com/fork-requirements/";
+const SELF_HOSTING_URL = "https://chronicleclassic.com/self-hosting/";
 const PATREON_TOOLTIP =
   "Financial contributions are greatly appreciated, but never required. Visit the patreon link to learn more!";
 
@@ -38,7 +38,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href={FORK_REQUIREMENTS_URL}
+                  href={SELF_HOSTING_URL}
                   className="hover:text-foreground transition-colors"
                 >
                   Self Hosted Requirements

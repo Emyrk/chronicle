@@ -15,18 +15,18 @@ function HomePage() {
 export function App() {
   const pathname = window.location.pathname.replace(/\/$/, "");
   const isSupportPage = pathname.endsWith("/support");
-  const isForkRequirementsPage = pathname.endsWith("/fork-requirements");
+  const isSelfHostingPage = pathname.endsWith("/self-hosting");
 
   let page = <HomePage />;
   if (isSupportPage) {
     page = <SupportPage />;
-  } else if (isForkRequirementsPage) {
+  } else if (isSelfHostingPage) {
     page = <SelfHostedRequirementsPage />;
   }
 
   return (
     <div className="flex min-h-dvh flex-col">
-      {!isSupportPage && !isForkRequirementsPage && <SupportRibbon />}
+      {!isSupportPage && !isSelfHostingPage && <SupportRibbon />}
       <main className="flex-1">{page}</main>
       <Footer />
     </div>

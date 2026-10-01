@@ -1,77 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { ServerEntry } from "../types";
 import { ServerCard } from "./ServerCard";
-import { DiscordIcon } from "./DiscordIcon";
-
-const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
-
-function GetInTouchModal({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="relative w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute right-3 top-3 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Close"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-
-        <h2 className="text-xl font-semibold text-foreground">
-          Get in Touch via Discord
-        </h2>
-        <p className="mt-3 text-sm text-muted-foreground">
-          We'd love to help bring Chronicle to you. Reach out on our Discord
-          and we'll get you set up.
-        </p>
-        <p className="mt-3 text-sm text-muted-foreground">
-          Chronicle is source-available and its license permits non-commercial hosting. Review the{" "}
-          <a
-            href="https://chronicleclassic.com/fork-requirements/"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="text-primary hover:underline"
-          >
-            Self Hosted Requirements
-          </a>
-          {" "}before getting in touch.
-        </p>
-
-        <a
-          href={DISCORD_URL}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="mt-5 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          <DiscordIcon className="h-4 w-4" />
-          Join the Chronicle Discord
-        </a>
-      </div>
-    </div>
-  );
-}
 
 /** Sort servers: sponsored first, then by unique player count (14d) descending. */
 function sortServers(servers: ServerEntry[]): ServerEntry[] {
@@ -175,7 +105,6 @@ function serverSearchScore(server: ServerEntry, query: string): number | null {
 
 export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loading?: boolean }) {
   const [query, setQuery] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
 
   const searchResults = useMemo(() => {
     const sorted = sortServers(servers);
@@ -229,13 +158,12 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
             GitHub
           </a>
           <span className="text-border">·</span>
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className="transition-colors hover:text-foreground cursor-pointer"
+          <a
+            href="/self-hosting/"
+            className="transition-colors hover:text-foreground"
           >
-            Ask about Chronicle for your server →
-          </button>
+            Ask Chronicle about your server →
+          </a>
         </div>
       </div>
 
@@ -303,7 +231,6 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
         })}
       </div>
 
-      {modalOpen && <GetInTouchModal onClose={() => setModalOpen(false)} />}
     </section>
   );
 }
