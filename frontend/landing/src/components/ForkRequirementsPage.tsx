@@ -128,13 +128,13 @@ export function SelfHostedRequirementsPage() {
                     Keep Chronicle visible in the navbar
                   </h3>
                   <p className="mt-3 max-w-xl leading-7 text-muted-foreground">
-                    The Chronicle logo must appear somewhere in the navigation bar at the top of the Chronicle
-                    application. It must remain recognizable alongside any server-specific branding.
+                    The square Chronicle “C” logo must appear somewhere in the navigation bar at the top of the
+                    Chronicle application. It must remain recognizable alongside any server-specific branding.
                   </p>
                 </div>
 
                 <div className="flex min-w-64 items-center rounded-lg border border-white/10 bg-[#171717] px-5 py-4 shadow-lg shadow-black/20">
-                  <img src="../chronicle-logo.svg" alt="Chronicle" className="h-10 w-32 object-contain object-left" />
+                  <img src="../chronicle-logo.png" alt="Chronicle" className="h-10 w-10 shrink-0 object-contain" />
                   <div className="ml-auto flex gap-2" aria-hidden="true">
                     <span className="h-2 w-8 rounded-full bg-white/10" />
                     <span className="h-2 w-8 rounded-full bg-white/10" />
