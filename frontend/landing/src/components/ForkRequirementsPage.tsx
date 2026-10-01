@@ -2,37 +2,9 @@ import {
   ArrowLeft,
   ExternalLink,
   HeartHandshake,
-  Link as LinkIcon,
   PanelTop,
   ShieldAlert,
 } from "lucide-react";
-
-const REQUIREMENTS = [
-  {
-    icon: PanelTop,
-    number: "01",
-    title: "Keep Chronicle in the navbar",
-    body: "The Chronicle logo must appear somewhere in the navigation bar at the top of the Chronicle application.",
-  },
-  {
-    icon: LinkIcon,
-    number: "02",
-    title: "Keep the footer attribution",
-    body: "The Chronicle application footer must display “Powered by Chronicle” together with the Chronicle logo, as shown below.",
-  },
-  {
-    icon: ExternalLink,
-    number: "03",
-    title: "Link the footer logo",
-    body: "The Chronicle logo in the footer attribution must link to https://chronicleclassic.com/.",
-  },
-  {
-    icon: HeartHandshake,
-    number: "04",
-    title: "Keep the support banner",
-    body: "The Chronicle application's support banner and its support link must not be removed, hidden, or disabled.",
-  },
-];
 
 export function ForkRequirementsPage() {
   return (
@@ -137,60 +109,96 @@ export function ForkRequirementsPage() {
         </section>
 
         <section className="mt-14" aria-labelledby="requirements-heading">
-          <div className="mb-6 flex items-end justify-between gap-4">
-            <div>
-              <p className="font-wow text-sm uppercase tracking-[0.18em] text-[#d9b46b]">Required on every deployment</p>
-              <h2 id="requirements-heading" className="mt-2 font-wow text-2xl font-bold sm:text-3xl">
-                Four elements must remain intact
-              </h2>
-            </div>
-            <span className="hidden font-wow text-6xl font-bold text-white/5 sm:block" aria-hidden="true">
-              01–04
-            </span>
+          <div className="mb-6">
+            <p className="font-wow text-sm uppercase tracking-[0.18em] text-[#d9b46b]">Required on every deployment</p>
+            <h2 id="requirements-heading" className="mt-2 font-wow text-2xl font-bold sm:text-3xl">
+              Keep these Chronicle elements intact
+            </h2>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            {REQUIREMENTS.map(({ icon: Icon, number, title, body }) => (
-              <article
-                key={number}
-                className="group relative overflow-hidden rounded-xl border border-border bg-card/90 p-6 shadow-lg shadow-black/10 transition-colors hover:border-[#5f8fa6]/60"
-              >
-                <span className="absolute right-4 top-2 font-wow text-5xl font-bold text-white/[0.035] transition-colors group-hover:text-[#5f8fa6]/10">
-                  {number}
-                </span>
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#5f8fa6]/30 bg-[#5f8fa6]/10 text-[#9fc5d6]">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
+          <div className="space-y-5">
+            <section className="rounded-xl border border-border bg-[#211d18] p-6 sm:p-8" aria-labelledby="navbar-example-heading">
+              <div className="grid items-center gap-8 md:grid-cols-[1fr_auto]">
+                <div>
+                  <div className="flex items-center gap-2 text-[#d9b46b]">
+                    <PanelTop className="h-4 w-4" aria-hidden="true" />
+                    <p className="font-wow text-sm uppercase tracking-[0.18em]">Required navbar treatment</p>
+                  </div>
+                  <h3 id="navbar-example-heading" className="mt-2 font-wow text-2xl font-bold text-foreground">
+                    Keep Chronicle visible in the navbar
+                  </h3>
+                  <p className="mt-3 max-w-xl leading-7 text-muted-foreground">
+                    The Chronicle logo must appear somewhere in the navigation bar at the top of the Chronicle
+                    application. It must remain recognizable alongside any server-specific branding.
+                  </p>
                 </div>
-                <h3 className="mt-5 font-wow text-xl font-bold text-foreground">{title}</h3>
-                <p className="mt-2 leading-7 text-muted-foreground">{body}</p>
-              </article>
-            ))}
-          </div>
-        </section>
 
-        <section className="mt-14 rounded-xl border border-border bg-[#211d18] p-6 sm:p-8" aria-labelledby="footer-example-heading">
-          <div className="grid items-center gap-8 md:grid-cols-[1fr_auto]">
-            <div>
-              <p className="font-wow text-sm uppercase tracking-[0.18em] text-[#d9b46b]">Required footer treatment</p>
-              <h2 id="footer-example-heading" className="mt-2 font-wow text-2xl font-bold text-foreground">
-                Use the complete linked attribution
-              </h2>
-              <p className="mt-3 max-w-xl leading-7 text-muted-foreground">
-                “Powered by” and the Chronicle logo must appear together. The logo must remain recognizable and
-                must link to Chronicle’s official site.
-              </p>
-            </div>
+                <div className="flex min-w-64 items-center rounded-lg border border-white/10 bg-[#171717] px-5 py-4 shadow-lg shadow-black/20">
+                  <img src="../chronicle-logo.svg" alt="Chronicle" className="h-10 w-32 object-contain object-left" />
+                  <div className="ml-auto flex gap-2" aria-hidden="true">
+                    <span className="h-2 w-8 rounded-full bg-white/10" />
+                    <span className="h-2 w-8 rounded-full bg-white/10" />
+                  </div>
+                </div>
+              </div>
+            </section>
 
-            <a
-              href="https://chronicleclassic.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-w-64 items-center justify-center gap-3 rounded-lg border border-[#8a6a2a]/60 bg-black/20 px-6 py-5 transition-colors hover:border-[#d9b46b]"
-              aria-label="Powered by Chronicle"
-            >
-              <span className="text-sm text-[#b7aa99]">Powered by</span>
-              <img src="../chronicle-logo.svg" alt="Chronicle" className="h-10 w-32 object-contain" />
-            </a>
+            <section className="rounded-xl border border-border bg-[#211d18] p-6 sm:p-8" aria-labelledby="footer-example-heading">
+              <div className="grid items-center gap-8 md:grid-cols-[1fr_auto]">
+                <div>
+                  <p className="font-wow text-sm uppercase tracking-[0.18em] text-[#d9b46b]">Required footer treatment</p>
+                  <h3 id="footer-example-heading" className="mt-2 font-wow text-2xl font-bold text-foreground">
+                    Use the complete linked attribution
+                  </h3>
+                  <p className="mt-3 max-w-xl leading-7 text-muted-foreground">
+                    “Powered by” and the Chronicle logo must appear together. The logo must remain recognizable and
+                    must link to Chronicle’s official site.
+                  </p>
+                </div>
+
+                <a
+                  href="https://chronicleclassic.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-w-64 items-center justify-center gap-3 rounded-lg border border-[#8a6a2a]/60 bg-black/20 px-6 py-5 transition-colors hover:border-[#d9b46b]"
+                  aria-label="Powered by Chronicle"
+                >
+                  <span className="text-sm text-[#b7aa99]">Powered by</span>
+                  <img src="../chronicle-logo.svg" alt="Chronicle" className="h-10 w-32 object-contain" />
+                </a>
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-border bg-[#211d18] p-6 sm:p-8" aria-labelledby="support-banner-example-heading">
+              <div className="grid items-center gap-8 md:grid-cols-[1fr_auto]">
+                <div>
+                  <div className="flex items-center gap-2 text-[#d9b46b]">
+                    <HeartHandshake className="h-4 w-4" aria-hidden="true" />
+                    <p className="font-wow text-sm uppercase tracking-[0.18em]">Required support treatment</p>
+                  </div>
+                  <h3 id="support-banner-example-heading" className="mt-2 font-wow text-2xl font-bold text-foreground">
+                    Keep the support banner available
+                  </h3>
+                  <p className="mt-3 max-w-xl leading-7 text-muted-foreground">
+                    The Chronicle support banner and its link must not be removed, hidden, or disabled. It gives users
+                    a direct way to support the continued development of Chronicle.
+                  </p>
+                </div>
+
+                <div className="min-w-64 rounded-lg border border-rose-500/30 bg-rose-500/10 p-4">
+                  <div className="flex items-center gap-3">
+                    <img src="../chronicle-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
+                    <div>
+                      <p className="font-wow text-sm font-bold text-foreground">Chronicle runs on donations, not ads.</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Help keep Chronicle development going.</p>
+                    </div>
+                  </div>
+                  <span className="mt-3 block rounded-md bg-rose-500 px-3 py-2 text-center text-xs font-bold text-white">
+                    Support Chronicle
+                  </span>
+                </div>
+              </div>
+            </section>
           </div>
         </section>
 
