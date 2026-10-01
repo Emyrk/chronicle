@@ -287,14 +287,14 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 		gear = parseGear(fields[26])
 	case 22:
 		if len(fields) < 28 {
-			return nil, fmt.Errorf("Blizzard V22 COMBATANT_INFO has %d fields, need at least 28", len(fields))
+			return nil, fmt.Errorf("blizzard V22 COMBATANT_INFO has %d fields, need at least 28", len(fields))
 		}
 		// V22 reports selected talent entries rather than the V9 three-tree point
 		// summary. Preserve gear parsing while leaving talents unset until those
 		// entries can be resolved through the dataset's talent tables.
 		gear = parseGear(fields[27])
 	default:
-		return nil, fmt.Errorf("Blizzard COMBATANT_INFO has unsupported combat log version %d", p.version)
+		return nil, fmt.Errorf("blizzard COMBATANT_INFO has unsupported combat log version %d", p.version)
 	}
 	return []messages.Message{&messages.Combatant{
 		MessageBase: messages.Base(ts),
