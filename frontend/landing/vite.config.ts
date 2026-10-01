@@ -36,6 +36,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: "index.html",
+        forkRequirements: "fork-requirements/index.html",
         support: "support/index.html",
       },
     },

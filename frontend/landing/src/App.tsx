@@ -1,5 +1,6 @@
 import { ServerGrid } from "./components/ServerGrid";
 import { Footer } from "./components/Footer";
+import { ForkRequirementsPage } from "./components/ForkRequirementsPage";
 import { SupportPage } from "./components/SupportPage";
 import { SupportRibbon } from "./components/SupportRibbon";
 import { useDiscovery } from "./hooks/useDiscovery";
@@ -12,14 +13,21 @@ function HomePage() {
 }
 
 export function App() {
-  const isSupportPage = window.location.pathname.replace(/\/$/, "").endsWith("/support");
+  const pathname = window.location.pathname.replace(/\/$/, "");
+  const isSupportPage = pathname.endsWith("/support");
+  const isForkRequirementsPage = pathname.endsWith("/fork-requirements");
+
+  let page = <HomePage />;
+  if (isSupportPage) {
+    page = <SupportPage />;
+  } else if (isForkRequirementsPage) {
+    page = <ForkRequirementsPage />;
+  }
 
   return (
     <div className="flex min-h-dvh flex-col">
-      {!isSupportPage && <SupportRibbon />}
-      <main className="flex-1">
-        {isSupportPage ? <SupportPage /> : <HomePage />}
-      </main>
+      {!isSupportPage && !isForkRequirementsPage && <SupportRibbon />}
+      <main className="flex-1">{page}</main>
       <Footer />
     </div>
   );

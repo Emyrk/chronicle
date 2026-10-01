@@ -29,12 +29,12 @@ const CHRONICLE_TENETS = [
     body: "Chronicle does not seek to reserve useful features for paying users. Contributions support the same experience for everyone.",
   },
   {
-    title: "Open Source",
-    body: "Chronicle aims to continue to be open source, so the community can inspect, improve, and preserve the project.",
+    title: "Source Available",
+    body: "Chronicle keeps its source visible so the community can inspect the project and contribute improvements under the project license.",
   },
   {
-    title: "Community-Hostable",
-    body: "Chronicle aims to remain available for independent communities to operate on their own infrastructure.",
+    title: "Community Collaboration",
+    body: "Chronicle works with Classic WoW communities while retaining control of how the software is hosted and deployed.",
   },
   {
     title: "Support Is Voluntary",
@@ -125,7 +125,7 @@ const HOSTING_QUESTS = [
   {
     title: "Community Hosted",
     badge: false,
-    body: "Independent communities run Chronicle on their own infrastructure. Same open-source project, their own hosting — the isles across the strait.",
+    body: "Some community deployments operate with Chronicle's involvement. They remain subject to the project license and deployment requirements. These are the isles across the strait.",
     objective: "Sail your own shores",
     status: "Complete",
   },

@@ -47,16 +47,16 @@ function GetInTouchModal({ onClose }: { onClose: () => void }) {
           and we'll get you set up.
         </p>
         <p className="mt-3 text-sm text-muted-foreground">
-          Chronicle is open source and{" "}
+          Chronicle is source-available, but its license does not permit independent hosting or deployment. Review the{" "}
           <a
-            href="https://github.com/Emyrk/chronicle/blob/main/DEPLOYING.md"
+            href="https://chronicleclassic.com/fork-requirements/"
             target="_blank"
             rel="noreferrer noopener"
             className="text-primary hover:underline"
           >
-            self-hosting is fully supported
+            fork and deployment requirements
           </a>
-          {" "}— run it on your own infrastructure if you prefer.
+          {" "}before getting in touch.
         </p>
 
         <a
@@ -234,7 +234,7 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
             onClick={() => setModalOpen(true)}
             className="transition-colors hover:text-foreground cursor-pointer"
           >
-            Run Chronicle for your server →
+            Ask about Chronicle for your server →
           </button>
         </div>
       </div>
