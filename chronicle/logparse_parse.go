@@ -232,7 +232,7 @@ func (w *WorkerLogParse) parseCombatLog(
 			logCapabilities = append(logCapabilities, "raidgroup")
 		}
 
-	case database.LogFormatV9Cleu, database.LogFormatHermesproxy1142Cc:
+	case database.LogFormatV9Cleu, database.LogFormatV22Cleu, database.LogFormatHermesproxy1142Cc:
 		logCapabilities = append(logCapabilities, "interrupt")
 		loadStart := time.Now()
 		data := preloadedFirst

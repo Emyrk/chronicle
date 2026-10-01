@@ -129,6 +129,7 @@ func TestExpectedRawLogFiles(t *testing.T) {
 	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormat243CcAddon))
 	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormat335aCcAddon))
 	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormatHermesproxy1142Cc))
+	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormatV22Cleu))
 	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormatV9Cleu))
 }
 

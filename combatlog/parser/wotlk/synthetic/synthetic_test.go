@@ -45,6 +45,7 @@ func TestNewWithOptionsConfiguresOptionalAttribution(t *testing.T) {
 	for _, format := range []database.LogFormat{
 		database.LogFormatAzerothcoreMod,
 		database.LogFormatV9Cleu,
+		database.LogFormatV22Cleu,
 	} {
 		ctx := parsectx.With(context.Background(), parsectx.Context{Format: format})
 		s := New(ctx, slog.Default(), nil, nil, nil)

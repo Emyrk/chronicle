@@ -99,7 +99,7 @@ func resolveRealmByName(
 // found. Scans the entire file — realm info can appear at any point depending
 // on format.
 func scanRealmName(logFormat database.LogFormat, data []byte) string {
-	if logFormat == database.LogFormatV9Cleu {
+	if logFormat == database.LogFormatV9Cleu || logFormat == database.LogFormatV22Cleu {
 		return blizzardmodern.DominantEngagedRealm(data)
 	}
 

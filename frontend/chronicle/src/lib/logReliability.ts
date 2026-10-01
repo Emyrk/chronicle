@@ -8,6 +8,7 @@ export function shouldShowChronicleCompanionWarning(log: LogReliabilityMetadata)
   const hasAddon = !!log.versions?.["addon"] || !!log.versions?.["chronicle_companion"];
   const isReliableWithoutAddon =
     log.format === "v9-cleu" ||
+    log.format === "v22-cleu" ||
     log.format === "hermesproxy_1_14_2_cc" ||
     log.capabilities?.includes("server-side");
 

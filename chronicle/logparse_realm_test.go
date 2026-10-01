@@ -184,6 +184,17 @@ continuation line that doesn't have framing`,
 			expected: "Nightslayer-US",
 		},
 
+		// ── WoW Forever Blizzard combat log v22 ──────────────────────
+		{
+			name:      "v22/dominant_engaged_realm",
+			logFormat: database.LogFormatV22Cleu,
+			input: `9/29/2026 09:29:17.000-4  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18
+9/29/2026 09:29:18.000-4  ENCOUNTER_START,601,"Boss",1,5,43,0
+9/29/2026 09:29:19.000-4  SPELL_DAMAGE,Player-4620-006422B6,"Thaddeus-ClassicBetaPvE2-",0x511,0x80000001,Creature-0-4621-43-147523-3640-00013BBCF1,"Boss",0x10a48,0x80000000,1280345,"Consecration",0x2,11,10,-1,2,0,0,0,nil,nil,nil,AOE
+9/29/2026 09:29:20.000-4  ENCOUNTER_END,601,"Boss",1,5,1`,
+			expected: "ClassicBetaPvE2",
+		},
+
 		// ── AzerothCore server-side ──────────────────────────────────
 		{
 			name:      "azerothcore/chronicle_header_with_realm",

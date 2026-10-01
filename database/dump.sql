@@ -24,7 +24,8 @@ CREATE TYPE log_format AS ENUM (
     'azerothcore-mod',
     '2.4.3-cc-addon',
     'v9-cleu',
-    'hermesproxy_1_14_2_cc'
+    'hermesproxy_1_14_2_cc',
+    'v22-cleu'
 );
 
 CREATE TYPE log_instance_event_type AS ENUM (
