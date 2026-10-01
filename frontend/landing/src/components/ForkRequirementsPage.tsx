@@ -6,7 +6,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 
-export function ForkRequirementsPage() {
+export function SelfHostedRequirementsPage() {
   return (
     <div className="relative isolate overflow-hidden">
       <div

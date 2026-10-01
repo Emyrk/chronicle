@@ -1,6 +1,6 @@
 import { ServerGrid } from "./components/ServerGrid";
 import { Footer } from "./components/Footer";
-import { ForkRequirementsPage } from "./components/ForkRequirementsPage";
+import { SelfHostedRequirementsPage } from "./components/ForkRequirementsPage";
 import { SupportPage } from "./components/SupportPage";
 import { SupportRibbon } from "./components/SupportRibbon";
 import { useDiscovery } from "./hooks/useDiscovery";
@@ -21,7 +21,7 @@ export function App() {
   if (isSupportPage) {
     page = <SupportPage />;
   } else if (isForkRequirementsPage) {
-    page = <ForkRequirementsPage />;
+    page = <SelfHostedRequirementsPage />;
   }
 
   return (
