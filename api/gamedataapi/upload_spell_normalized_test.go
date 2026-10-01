@@ -49,7 +49,7 @@ func TestPersistLegacyNormalizedSpells(t *testing.T) {
 	require.Zero(t, variants[0].DifficultyID)
 }
 
-func TestPersistLegacySpellsLeavesCompatibilityComponentsUnwritten(t *testing.T) {
+func TestPersistLegacySpellsUsesNormalizedComponents(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	pool, _ := dbtestutil.NewPGXPool(t)
@@ -65,18 +65,21 @@ func TestPersistLegacySpellsLeavesCompatibilityComponentsUnwritten(t *testing.T)
 	h := New(nil, nil, pool, nil)
 	require.NoError(t, h.persistLegacySpells(ctx, dataset.ID, []spelldb.SpellRow{spelldb.FromSpell(dataset.ID, spell)}, []*chrondbc.Spell{spell}))
 
-	var effect, basePoints, manaCost, powerType int32
-	var floatBasePoints []float32
+	var baseRows int
 	require.NoError(t, pool.QueryRow(ctx, `
-		SELECT effect_2, effect_base_points_2, mana_cost, power_type, effect_base_points_f
-		FROM dbc_spells
-		WHERE dataset_id = $1 AND spell_id = $2
-	`, dataset.ID, int32(spell.ID)).Scan(&effect, &basePoints, &manaCost, &powerType, &floatBasePoints))
-	require.Zero(t, effect)
-	require.Zero(t, basePoints)
-	require.Zero(t, manaCost)
-	require.Zero(t, powerType)
-	require.Empty(t, floatBasePoints)
+		SELECT count(*) FROM dbc_spells WHERE dataset_id = $1 AND spell_id = $2
+	`, dataset.ID, int32(spell.ID)).Scan(&baseRows))
+	require.Equal(t, 1, baseRows)
+
+	var compatibilityColumns int
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'dbc_spells'
+		  AND (column_name IN ('power_type', 'mana_cost', 'mana_cost_pct', 'mana_cost_per_level', 'mana_per_second', 'effect_base_points_f')
+		       OR column_name ~ '^(effect_.*|implicit_target_[ab])_[0-2]$')
+	`).Scan(&compatibilityColumns))
+	require.Zero(t, compatibilityColumns)
 
 	effects, powers, variants, err := spelldb.GetModernSpellComponents(ctx, pool, dataset.ID, int32(spell.ID))
 	require.NoError(t, err)

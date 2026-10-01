@@ -180,22 +180,20 @@ func applyEquipSpellStats(
 }
 
 func applyEquipSpellRowStats(spell *spelldb.SpellRow, sim *chroniclesdk.SimItem) {
-	effects := [3]int32{spell.Effect0, spell.Effect1, spell.Effect2}
-	auras := [3]int32{spell.EffectAura0, spell.EffectAura1, spell.EffectAura2}
-	basePoints := [3]int32{spell.EffectBasePoints0, spell.EffectBasePoints1, spell.EffectBasePoints2}
-	miscValues := [3]int32{spell.EffectMiscValue0, spell.EffectMiscValue1, spell.EffectMiscValue2}
-
 	var attackCastingSpeed int32
-	for i, auraValue := range auras {
-		if chrondbc.Effect(effects[i]) != chrondbc.EffectApplyAura {
+	for _, effect := range spell.Effects {
+		if effect.DifficultyID != 0 || effect.Effect != chrondbc.EffectApplyAura {
 			continue
 		}
-		value := basePoints[i] + 1
+		value := int32(effect.EffectiveBasePoints())
 		if value == 0 {
 			continue
 		}
-		misc := miscValues[i]
-		switch chrondbc.AuraEffect(auraValue) {
+		misc := int32(0)
+		if len(effect.EffectMiscValue) > 0 {
+			misc = effect.EffectMiscValue[0]
+		}
+		switch effect.EffectAura {
 		case chrondbc.AuraEffectModStat:
 			if misc == -1 {
 				for _, itemMod := range []int32{

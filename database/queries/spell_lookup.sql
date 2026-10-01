@@ -23,18 +23,6 @@ SELECT
     'cat_max_charges', sc.max_charges,
     'cat_charge_recovery_time', sc.charge_recovery_time,
     'cat_type_mask', sc.type_mask,
-    'r0_radius', r0.radius,
-    'r0_radius_per_level', r0.radius_per_level,
-    'r0_radius_min', r0.radius_min,
-    'r0_radius_max', r0.radius_max,
-    'r1_radius', r1.radius,
-    'r1_radius_per_level', r1.radius_per_level,
-    'r1_radius_min', r1.radius_min,
-    'r1_radius_max', r1.radius_max,
-    'r2_radius', r2.radius,
-    'r2_radius_per_level', r2.radius_per_level,
-    'r2_radius_min', r2.radius_min,
-    'r2_radius_max', r2.radius_max,
     'focus_name', sfo.name,
     'desc_variables', sdv.variables
   )::text AS metadata_json,
@@ -48,9 +36,6 @@ LEFT JOIN dbc_spell_ranges sr ON sr.dataset_id = s.dataset_id AND sr.id = s.rang
 LEFT JOIN dbc_spell_icons si ON si.dataset_id = s.dataset_id AND si.id = s.spell_icon_id
 LEFT JOIN dbc_spell_icons sia ON sia.dataset_id = s.dataset_id AND sia.id = s.active_icon_id
 LEFT JOIN dbc_spell_categories sc ON sc.dataset_id = s.dataset_id AND sc.id = s.category
-LEFT JOIN dbc_spell_radii r0 ON r0.dataset_id = s.dataset_id AND r0.id = s.effect_radius_index_0
-LEFT JOIN dbc_spell_radii r1 ON r1.dataset_id = s.dataset_id AND r1.id = s.effect_radius_index_1
-LEFT JOIN dbc_spell_radii r2 ON r2.dataset_id = s.dataset_id AND r2.id = s.effect_radius_index_2
 LEFT JOIN dbc_spell_focus_objects sfo ON sfo.dataset_id = s.dataset_id AND sfo.id = s.requires_spell_focus
 LEFT JOIN dbc_spell_description_variables sdv ON sdv.dataset_id = s.dataset_id AND sdv.id = s.description_variables_id
 LEFT JOIN LATERAL (
@@ -103,18 +88,6 @@ SELECT
     'cat_max_charges', sc.max_charges,
     'cat_charge_recovery_time', sc.charge_recovery_time,
     'cat_type_mask', sc.type_mask,
-    'r0_radius', r0.radius,
-    'r0_radius_per_level', r0.radius_per_level,
-    'r0_radius_min', r0.radius_min,
-    'r0_radius_max', r0.radius_max,
-    'r1_radius', r1.radius,
-    'r1_radius_per_level', r1.radius_per_level,
-    'r1_radius_min', r1.radius_min,
-    'r1_radius_max', r1.radius_max,
-    'r2_radius', r2.radius,
-    'r2_radius_per_level', r2.radius_per_level,
-    'r2_radius_min', r2.radius_min,
-    'r2_radius_max', r2.radius_max,
     'focus_name', sfo.name,
     'desc_variables', sdv.variables
   )::text AS metadata_json,
@@ -128,9 +101,6 @@ LEFT JOIN dbc_spell_ranges sr ON sr.dataset_id = s.dataset_id AND sr.id = s.rang
 LEFT JOIN dbc_spell_icons si ON si.dataset_id = s.dataset_id AND si.id = s.spell_icon_id
 LEFT JOIN dbc_spell_icons sia ON sia.dataset_id = s.dataset_id AND sia.id = s.active_icon_id
 LEFT JOIN dbc_spell_categories sc ON sc.dataset_id = s.dataset_id AND sc.id = s.category
-LEFT JOIN dbc_spell_radii r0 ON r0.dataset_id = s.dataset_id AND r0.id = s.effect_radius_index_0
-LEFT JOIN dbc_spell_radii r1 ON r1.dataset_id = s.dataset_id AND r1.id = s.effect_radius_index_1
-LEFT JOIN dbc_spell_radii r2 ON r2.dataset_id = s.dataset_id AND r2.id = s.effect_radius_index_2
 LEFT JOIN dbc_spell_focus_objects sfo ON sfo.dataset_id = s.dataset_id AND sfo.id = s.requires_spell_focus
 LEFT JOIN dbc_spell_description_variables sdv ON sdv.dataset_id = s.dataset_id AND sdv.id = s.description_variables_id
 LEFT JOIN LATERAL (

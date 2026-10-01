@@ -93,15 +93,6 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 		spelldb.FromSpell(datasetID, &legacy),
 	}))
 
-	var wideEffect, wideManaCost int32
-	require.NoError(t, pool.QueryRow(ctx, `
-		SELECT effect_0, mana_cost
-		FROM dbc_spells
-		WHERE dataset_id = $1 AND spell_id = $2
-	`, datasetID, int32(modern.ID)).Scan(&wideEffect, &wideManaCost))
-	require.Zero(t, wideEffect)
-	require.Zero(t, wideManaCost)
-
 	_, err := pool.Exec(ctx, `
 		INSERT INTO dbc_spell_radii(dataset_id, id, radius, radius_per_level, radius_min, radius_max)
 		VALUES($1, 14, 8.5, 0.5, 2.0, 12.0)
@@ -248,8 +239,8 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 	legacyGot, err := fetcher.Spell(ctx, datasetID, legacy.ID)
 	require.EqualValues(t, 1, queries.count.Load(), "name lookup results must populate the assembled-spell cache")
 	require.NoError(t, err)
-	require.Len(t, legacyGot.Effects, 3)
-	require.Len(t, legacyGot.Powers, 1)
+	require.Empty(t, legacyGot.Effects)
+	require.Empty(t, legacyGot.Powers)
 	require.Empty(t, legacyGot.Variants)
 	legacyJSON, err := json.Marshal(legacyGot)
 	require.NoError(t, err)

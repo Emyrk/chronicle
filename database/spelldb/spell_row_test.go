@@ -160,14 +160,10 @@ func TestSpellRoundTrip(t *testing.T) {
 	assert.Equal(t, original.SpellClassMask, roundTripped.SpellClassMask)
 	assert.Equal(t, original.PreventionType, roundTripped.PreventionType)
 
-	// Fixed-width effects and scalar power fields are no longer written. Runtime
-	// fetches hydrate them from normalized rows, while ToSpell retains a fallback
-	// for datasets imported before normalization.
-	require.Len(t, roundTripped.Effects, 3)
-	for i, effect := range roundTripped.Effects {
-		assert.Equal(t, int32(i), effect.EffectIndex)
-		assert.Zero(t, effect.Effect)
-	}
+	// Effects and powers live only in normalized component tables, so inserting
+	// the base row alone does not preserve them.
+	require.Empty(t, roundTripped.Effects)
+	require.Empty(t, roundTripped.Powers)
 	assert.Zero(t, roundTripped.PowerType)
 
 	// Visuals
@@ -181,36 +177,6 @@ func TestSpellRoundTrip(t *testing.T) {
 
 	// Verify EquippedItemClass survived (it's -1 for None)
 	assert.Equal(t, original.EquippedItemClass, roundTripped.EquippedItemClass)
-}
-
-func TestSpellRowEffectProjection(t *testing.T) {
-	t.Parallel()
-
-	spell := chrondbc.Spell{Effects: []chrondbc.SpellEffect{
-		{EffectIndex: 4, Effect: chrondbc.EffectHeal, EffectBasePoints: 400},
-		{EffectIndex: 2, Effect: chrondbc.EffectApplyAura, EffectBasePoints: 200},
-		{EffectIndex: 0, Effect: chrondbc.EffectSchoolDMG, EffectBasePoints: 100},
-	}}
-
-	row := spelldb.FromSpell(servicedataset.DefaultDatasetID, &spell)
-	assert.Equal(t, int32(chrondbc.EffectSchoolDMG), row.Effect0)
-	assert.Equal(t, int32(100), row.EffectBasePoints0)
-	assert.Zero(t, row.Effect1)
-	assert.Equal(t, int32(chrondbc.EffectApplyAura), row.Effect2)
-	assert.Equal(t, int32(200), row.EffectBasePoints2)
-
-	// The >3 effect remains on the in-memory Spell but is intentionally not
-	// representable by the wide SQL compatibility row.
-	require.Len(t, spell.Effects, 3)
-	assert.Equal(t, int32(4), spell.Effects[0].EffectIndex)
-
-	reconstructed := row.ToSpell()
-	require.Len(t, reconstructed.Effects, 3)
-	assert.Equal(t, []int32{0, 1, 2}, []int32{
-		reconstructed.Effects[0].EffectIndex,
-		reconstructed.Effects[1].EffectIndex,
-		reconstructed.Effects[2].EffectIndex,
-	})
 }
 
 // TestSpellUpsertBatch verifies batch insert + update.

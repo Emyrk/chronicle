@@ -164,10 +164,7 @@ type LossReport struct {
 	MissingItemSparseIDs   []int32  `json:"missingItemSparseIds,omitempty"`
 	MissingItemBaseCount   int      `json:"missingItemBaseCount,omitempty"`
 	MissingItemBaseIDs     []int32  `json:"missingItemBaseIds,omitempty"`
-	DroppedSpellEffects    int      `json:"droppedSpellEffects,omitempty"`
-	DroppedSpellPowers     int      `json:"droppedSpellPowers,omitempty"`
 	DroppedSpellAttributes int      `json:"droppedSpellAttributes,omitempty"`
-	RoundedBasePoints      int      `json:"roundedBasePoints,omitempty"`
 	DroppedOrphanSpellRows int      `json:"droppedOrphanSpellRows,omitempty"`
 	Policies               []string `json:"policies"`
 }

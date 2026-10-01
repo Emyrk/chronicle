@@ -9,24 +9,29 @@ import (
 	"github.com/Emyrk/chronicle/database/spelldb"
 )
 
+func spellRow(effects ...chrondbc.SpellEffect) *spelldb.SpellRow {
+	return &spelldb.SpellRow{Effects: effects}
+}
+
+func equipAura(aura chrondbc.AuraEffect, basePoints, misc int32) chrondbc.SpellEffect {
+	return chrondbc.SpellEffect{
+		DifficultyID:     0,
+		Effect:           chrondbc.EffectApplyAura,
+		EffectAura:       aura,
+		EffectBasePoints: basePoints,
+		EffectMiscValue:  []int32{misc},
+	}
+}
+
 func TestApplyEquipSpellRowStats(t *testing.T) {
 	t.Parallel()
 
 	sim := chroniclesdk.SimItem{}
-	applyEquipSpellRowStats(&spelldb.SpellRow{
-		Effect0:           int32(chrondbc.EffectApplyAura),
-		Effect1:           int32(chrondbc.EffectApplyAura),
-		Effect2:           int32(chrondbc.EffectApplyAura),
-		EffectAura0:       int32(chrondbc.AuraEffectModStat),
-		EffectBasePoints0: 17, // DBC stores amount minus one.
-		EffectMiscValue0:  0,  // Strength in SPELL_AURA_MOD_STAT order.
-		EffectAura1:       int32(chrondbc.AuraEffectModDamageDone),
-		EffectBasePoints1: 42,
-		EffectMiscValue1:  0x7e, // All magical schools.
-		EffectAura2:       int32(chrondbc.AuraEffectModResistance),
-		EffectBasePoints2: 4,
-		EffectMiscValue2:  (1 << 2) | (1 << 6), // Fire and arcane.
-	}, &sim)
+	applyEquipSpellRowStats(spellRow(
+		equipAura(chrondbc.AuraEffectModStat, 17, 0),
+		equipAura(chrondbc.AuraEffectModDamageDone, 42, 0x7e),
+		equipAura(chrondbc.AuraEffectModResistance, 4, (1<<2)|(1<<6)),
+	), &sim)
 
 	if len(sim.Stats) != 2 {
 		t.Fatalf("stats = %+v, want 2 entries", sim.Stats)
@@ -46,12 +51,7 @@ func TestApplyEquipSpellRowStatsAllStats(t *testing.T) {
 	t.Parallel()
 
 	sim := chroniclesdk.SimItem{}
-	applyEquipSpellRowStats(&spelldb.SpellRow{
-		Effect0:           int32(chrondbc.EffectApplyAura),
-		EffectAura0:       int32(chrondbc.AuraEffectModStat),
-		EffectBasePoints0: 3,
-		EffectMiscValue0:  -1,
-	}, &sim)
+	applyEquipSpellRowStats(spellRow(equipAura(chrondbc.AuraEffectModStat, 3, -1)), &sim)
 
 	wantTypes := []int32{
 		itemModStrength,
@@ -74,17 +74,11 @@ func TestApplyEquipSpellRowStatsCollapsesSpeedAuras(t *testing.T) {
 	t.Parallel()
 
 	sim := chroniclesdk.SimItem{}
-	applyEquipSpellRowStats(&spelldb.SpellRow{
-		Effect0:           int32(chrondbc.EffectApplyAura),
-		Effect1:           int32(chrondbc.EffectApplyAura),
-		Effect2:           int32(chrondbc.EffectApplyAura),
-		EffectAura0:       int32(chrondbc.AuraEffectModMeleeHaste),
-		EffectAura1:       int32(chrondbc.AuraEffectModRangedHaste),
-		EffectAura2:       int32(chrondbc.AuraEffectModCastingSpeed_NOT_STACK),
-		EffectBasePoints0: 4,
-		EffectBasePoints1: 4,
-		EffectBasePoints2: 2,
-	}, &sim)
+	applyEquipSpellRowStats(spellRow(
+		equipAura(chrondbc.AuraEffectModMeleeHaste, 4, 0),
+		equipAura(chrondbc.AuraEffectModRangedHaste, 4, 0),
+		equipAura(chrondbc.AuraEffectModCastingSpeed_NOT_STACK, 2, 0),
+	), &sim)
 
 	want := []chroniclesdk.ItemStat{{Type: itemModAttackCastingSpeed, Value: 5}}
 	if !slices.Equal(sim.Stats, want) {
@@ -96,11 +90,7 @@ func TestApplyEquipSpellRowStatsIgnoresMovementSpeed(t *testing.T) {
 	t.Parallel()
 
 	sim := chroniclesdk.SimItem{}
-	applyEquipSpellRowStats(&spelldb.SpellRow{
-		Effect0:           int32(chrondbc.EffectApplyAura),
-		EffectAura0:       int32(chrondbc.AuraEffectModIncreaseSpeed),
-		EffectBasePoints0: 9,
-	}, &sim)
+	applyEquipSpellRowStats(spellRow(equipAura(chrondbc.AuraEffectModIncreaseSpeed, 9, 0)), &sim)
 
 	if len(sim.Stats) != 0 {
 		t.Errorf("stats = %+v, want none", sim.Stats)
@@ -139,12 +129,7 @@ func TestApplyEquipSpellRowStatsCombatBonuses(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			sim := chroniclesdk.SimItem{}
-			applyEquipSpellRowStats(&spelldb.SpellRow{
-				Effect0:           int32(chrondbc.EffectApplyAura),
-				EffectAura0:       int32(tt.aura),
-				EffectBasePoints0: 6,
-				EffectMiscValue0:  tt.misc,
-			}, &sim)
+			applyEquipSpellRowStats(spellRow(equipAura(tt.aura, 6, tt.misc)), &sim)
 			if len(sim.Stats) != 1 || sim.Stats[0] != (chroniclesdk.ItemStat{Type: tt.wantMod, Value: 7}) {
 				t.Errorf("stats = %+v, want type %d value 7", sim.Stats, tt.wantMod)
 			}

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -63,9 +62,8 @@ func Convert(dir, expectedProduct, expectedBuild string) (*Import, error) {
 	out := &Import{Format: SnapshotFormat, Product: manifest.Target.Product, Build: manifest.Target.BuildName}
 	out.Losses.Policies = []string{
 		"All modern spell effects, powers, attributes, and difficulty-aware component rows are preserved in normalized storage.",
-		"Legacy dbc_spells rows project DifficultyID=0, EffectIndex 0..2, and the first ordered power only.",
 		"Component-only spell IDs are preserved in normalized storage even when the base Spell table has no matching row.",
-		"Modern EffectBasePointsF is preserved directly and also converted to the legacy representation as round(value)-1 for consumers that still require it.",
+		"Modern EffectBasePointsF is preserved directly in normalized storage.",
 		"Modern icon FileDataIDs are preserved as numeric spell icon IDs; listfile-backed icon paths are imported when present, while item display IDs are not guessed.",
 		"Items without ItemSparse are reported and skipped; modern percentage stats, damage curves, armor curves, and unjoinable ItemEffect rows are not imported.",
 	}
@@ -353,19 +351,6 @@ func convertSpells(dir string, out *Import) error {
 			PvpMultiplier: x.PvpMultiplier, ResourceCoefficient: x.ResourceCoefficient, ScalingClass: x.ScalingClass,
 			ImplicitTarget: append([]int32(nil), x.ImplicitTarget...), Variance: x.Variance,
 		})
-		if x.DifficultyID != 0 {
-			continue
-		}
-		if x.EffectIndex < 0 || x.EffectIndex > 2 {
-			out.Losses.DroppedSpellEffects++
-			continue
-		}
-		s := ensureSpell(byID, x.SpellID)
-		base := int32(math.Round(float64(x.EffectBasePointsF))) - 1
-		if math.Abs(float64(x.EffectBasePointsF)-math.Round(float64(x.EffectBasePointsF))) > 0.0001 {
-			out.Losses.RoundedBasePoints++
-		}
-		setEffect(s, int(x.EffectIndex), x, base)
 	}
 	aura, err := readRows[auraOptionsRow](dir, "SpellAuraOptions")
 	if err != nil {
@@ -516,7 +501,6 @@ func convertSpells(dir string, out *Import) error {
 		}
 		return powers[i].ID < powers[j].ID
 	})
-	seenPower := map[int32]bool{}
 	for _, x := range powers {
 		out.SpellPowers = append(out.SpellPowers, SpellPower{
 			SourceID: x.ID, SpellID: x.SpellID, OrderIndex: x.OrderIndex, AltPowerBarID: x.AltPowerBarID,
@@ -525,17 +509,6 @@ func convertSpells(dir string, out *Import) error {
 			PowerCostPct: x.PowerCostPct, PowerDisplayID: x.PowerDisplayID, PowerPctPerSecond: x.PowerPctPerSecond,
 			PowerType: x.PowerType, RequiredAuraSpellID: x.RequiredAuraSpellID,
 		})
-		if seenPower[x.SpellID] {
-			out.Losses.DroppedSpellPowers++
-			continue
-		}
-		seenPower[x.SpellID] = true
-		s := ensureSpell(byID, x.SpellID)
-		s.PowerType = x.PowerType
-		s.ManaCost = x.ManaCost
-		s.ManaCostPerLevel = x.ManaCostPerLevel
-		s.ManaPerSecond = x.ManaPerSecond
-		s.ManaCostPct = int32(math.Round(float64(x.PowerCostPct)))
 	}
 	reagents, err := readRows[reagentsRow](dir, "SpellReagents")
 	if err != nil {
@@ -653,65 +626,6 @@ func take(s []int32, n int) []int32 {
 	return append([]int32(nil), s...)
 }
 func mask64(s []int32) int64 { return int64(uint64(uint32(at(s, 0))) | uint64(uint32(at(s, 1)))<<32) }
-func setEffect(s *spelldb.SpellRow, i int, x spellEffectRow, base int32) {
-	if len(s.EffectBasePointsF) < 3 {
-		s.EffectBasePointsF = make([]float32, 3)
-	}
-	s.EffectBasePointsF[i] = x.EffectBasePointsF
-	switch i {
-	case 0:
-		s.Effect0 = x.Effect
-		s.EffectRealPtsPerLevel0 = x.EffectRealPointsPerLevel
-		s.EffectBasePoints0 = base
-		s.EffectMechanic0 = x.EffectMechanic
-		s.EffectRadiusIndex0 = at(x.EffectRadiusIndex, 0)
-		s.EffectAura0 = x.EffectAura
-		s.EffectAuraPeriod0 = x.EffectAuraPeriod
-		s.EffectAmplitude0 = x.EffectAmplitude
-		s.EffectChainTargets0 = x.EffectChainTargets
-		s.EffectItemType0 = x.EffectItemType
-		s.EffectMiscValue0 = at(x.EffectMiscValue, 0)
-		s.EffectTriggerSpell0 = x.EffectTriggerSpell
-		s.EffectPtsPerCombo0 = x.EffectPointsPerResource
-		s.EffectChainAmplitude0 = x.EffectChainAmplitude
-		s.ImplicitTargetA0 = at(x.ImplicitTarget, 0)
-		s.ImplicitTargetB0 = at(x.ImplicitTarget, 1)
-	case 1:
-		s.Effect1 = x.Effect
-		s.EffectRealPtsPerLevel1 = x.EffectRealPointsPerLevel
-		s.EffectBasePoints1 = base
-		s.EffectMechanic1 = x.EffectMechanic
-		s.EffectRadiusIndex1 = at(x.EffectRadiusIndex, 0)
-		s.EffectAura1 = x.EffectAura
-		s.EffectAuraPeriod1 = x.EffectAuraPeriod
-		s.EffectAmplitude1 = x.EffectAmplitude
-		s.EffectChainTargets1 = x.EffectChainTargets
-		s.EffectItemType1 = x.EffectItemType
-		s.EffectMiscValue1 = at(x.EffectMiscValue, 0)
-		s.EffectTriggerSpell1 = x.EffectTriggerSpell
-		s.EffectPtsPerCombo1 = x.EffectPointsPerResource
-		s.EffectChainAmplitude1 = x.EffectChainAmplitude
-		s.ImplicitTargetA1 = at(x.ImplicitTarget, 0)
-		s.ImplicitTargetB1 = at(x.ImplicitTarget, 1)
-	case 2:
-		s.Effect2 = x.Effect
-		s.EffectRealPtsPerLevel2 = x.EffectRealPointsPerLevel
-		s.EffectBasePoints2 = base
-		s.EffectMechanic2 = x.EffectMechanic
-		s.EffectRadiusIndex2 = at(x.EffectRadiusIndex, 0)
-		s.EffectAura2 = x.EffectAura
-		s.EffectAuraPeriod2 = x.EffectAuraPeriod
-		s.EffectAmplitude2 = x.EffectAmplitude
-		s.EffectChainTargets2 = x.EffectChainTargets
-		s.EffectItemType2 = x.EffectItemType
-		s.EffectMiscValue2 = at(x.EffectMiscValue, 0)
-		s.EffectTriggerSpell2 = x.EffectTriggerSpell
-		s.EffectPtsPerCombo2 = x.EffectPointsPerResource
-		s.EffectChainAmplitude2 = x.EffectChainAmplitude
-		s.ImplicitTargetA2 = at(x.ImplicitTarget, 0)
-		s.ImplicitTargetB2 = at(x.ImplicitTarget, 1)
-	}
-}
 
 type itemBaseRow struct{ ID, ClassID, SubclassID, InventoryType, Material, SheatheType, AmmunitionType int32 }
 type itemSparseRow struct {

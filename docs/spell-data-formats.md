@@ -12,7 +12,7 @@ Read this document before changing spell parsing, storage, conversion, or API be
 | AzerothCore and Ascension | Both fixtures have 239 fields and 956-byte records. `spell_layout_extended.go` documents the extra effect dice columns and removed `Difficulty` column. | Chronicle's extended WotLK layout, not stock 3.3.5a. | Parsed with pseudo-build `12341` through `SpellBuildOverride`. |
 | WoW Forever | The extractor and converter read split modern DB2 tables such as `Spell`, `SpellName`, `SpellMisc`, `SpellEffect`, and `SpellPower`. | Base spell data plus normalized effects, powers, and difficulty-aware component variants. | Base spell fields are stored in `dbc_spells`; effects, powers, and variants are stored losslessly in normalized tables. |
 
-All legacy `Spell.dbc` imports persist the converted effects, power, and difficulty-zero variant in normalized storage while retaining the `dbc_spells` base row. New imports no longer write its fixed effect slots or scalar power projection; those columns remain temporarily readable for datasets imported before normalization.
+All legacy `Spell.dbc` imports persist the converted effects, power, and difficulty-zero variant in normalized storage while retaining only non-component base fields in `dbc_spells`. The fixed effect slots and scalar power projection were removed in the next major schema version; existing installations must reimport every spell dataset before upgrading.
 
 The field counts above come from the checked-in DBC headers. The legacy effect-parity test covers Ascension, AzerothCore, Epoch, TBC 2.4.3, Kronos, OctoWoW, Turtle, and VanillaPlus.
 
@@ -23,7 +23,7 @@ The field counts above come from the checked-in DBC headers. The legacy effect-p
 - `EffectIndex` is explicit. Consumers must not assume a slice position is the effect index.
 - Legacy DBC conversion always creates exactly three entries with indexes 0, 1, and 2. Empty legacy slots remain present.
 - Modern DB2 effects can be sparse and can use indexes greater than 2. Normalized storage preserves all such rows.
-- The `dbc_spells` table and legacy JSON arrays expose only indexes 0 through 2. They are compatibility projections, not the canonical cardinality.
+- Legacy JSON arrays expose only indexes 0 through 2 as a compatibility projection. The `dbc_spells` table no longer stores fixed effect slots.
 - Use `Spell.EffectByIndex` for a default effect, or `EffectByIndexForDifficulty` when the difficulty is explicit.
 - `DefaultEffects` selects difficulty zero. `EffectsForDifficulty` selects the complete exact-difficulty set when present and otherwise falls back to difficulty zero. It does not merge or deduplicate rows by effect index.
 
@@ -34,8 +34,7 @@ JSON exposes `effects` as the canonical representation. For compatibility, `Spel
 Legacy DBC and modern DB2 use different conventions:
 
 - Legacy `EffectBasePoints` stores the effective value minus one. `SpellEffect.EffectiveBasePoints()` therefore returns `EffectBasePoints + 1` when no modern float is present.
-- Modern `EffectBasePointsF` stores the exact float value. It takes precedence in `EffectiveBasePoints()`.
-- The WoW Forever compatibility projection rounds the modern value and stores `round(value) - 1` in the legacy integer column, while preserving the exact float in normalized storage and `effect_base_points_f`.
+- Modern `EffectBasePointsF` stores the exact float value in normalized effect storage. It takes precedence in `EffectiveBasePoints()`.
 
 Code that needs the actual value should call `EffectiveBasePoints()` instead of interpreting either backing field directly.
 
@@ -44,7 +43,7 @@ Code that needs the actual value should call `EffectiveBasePoints()` instead of 
 Modern spell data is relational rather than one row per spell:
 
 - `Spell.Powers` is the canonical resource-cost collection. Every modern `SpellPower` row is preserved in `dbc_spell_powers`, ordered by `OrderIndex` and source ID. Legacy spells normalize their scalar cost into one order-zero row.
-- `DefaultPower` selects the lowest `(OrderIndex, SourceID)`. Callers with stronger semantics must use `PowerByOrderIndex` or `PowerByType` rather than reading an arbitrary row. The scalar fields and legacy `dbc_spells` columns remain compatibility projections of the default power.
+- `DefaultPower` selects the lowest `(OrderIndex, SourceID)`. Callers with stronger semantics must use `PowerByOrderIndex` or `PowerByType` rather than reading an arbitrary row. The in-memory scalar fields remain compatibility projections of the default power; `dbc_spells` no longer stores them.
 - Difficulty-aware components are grouped by `(SpellID, DifficultyID)` in `dbc_spell_variants` and exposed in `Spell.Variants`. This includes misc data and attributes, aura options and restrictions, class options, interrupts, categories, cooldowns, levels, and target restrictions.
 - Normalized effects retain both `DifficultyID` and `EffectIndex`.
 - A component can reference a spell ID that has no row in the base `Spell` table. These component-only spell IDs remain in normalized storage even though no `dbc_spells` row can be projected for them.
@@ -65,7 +64,7 @@ Top-level spell fields represent difficulty zero. `Resolve(difficultyID)` return
 
 ## Compatibility policy
 
-Preserve modern source data losslessly in the normalized tables. Keep the three-slot SQL and legacy JSON forms only for existing consumers that still require them.
+Preserve modern source data losslessly in the normalized tables. The three-slot SQL form has been removed; legacy JSON arrays remain only for external consumers that still require them.
 
 Do not reduce normalized data to fit the legacy model. Update consumers to use `Spell.Effects`, `Spell.Powers`, and `Spell.Variants` incrementally as concrete semantic gaps arise. A consumer fix should define its intended difficulty, power, and effect-index behavior rather than applying a repository-wide lossy rule.
 
