@@ -152,7 +152,7 @@ export function SelfHostedRequirementsPage() {
                   </h3>
                   <p className="mt-3 max-w-xl leading-7 text-muted-foreground">
                     “Powered by” and the Chronicle logo must appear together. The logo must remain recognizable and
-                    must link to Chronicle’s official site.
+                    must link to Chronicle’s official site at http://chronicleclassic.com/.
                   </p>
                 </div>
 
