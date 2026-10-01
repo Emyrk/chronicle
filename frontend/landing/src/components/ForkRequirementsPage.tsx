@@ -38,8 +38,7 @@ export function SelfHostedRequirementsPage() {
             Self Hosted Requirements
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-            Chronicle is happy to support your community. We are glad to help communities get started and succeed;
-            we ask that Chronicle receives clear attribution and credit for the work that makes the service possible.
+            Chronicle is happy to support your community.
           </p>
         </header>
 
