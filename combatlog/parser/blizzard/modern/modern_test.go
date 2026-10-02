@@ -174,7 +174,7 @@ func TestTransformV22Damage(t *testing.T) {
 	line := `9/20/2026 15:02:08.135-5  SPELL_DAMAGE,Player-4618-00C7EC79,"Tester-ClassicBetaPvE-",0x518,0x80000000,Creature-0-6783-0-16021-1512-0000B03B52,"Duskbat",0xa28,0x80000000,686,"Shadow Bolt",0x20,Creature-0-6783-0-16021-1512-0000B03B52,0000000000000000,18,42,3,0,20,0,0,0,1,0,0,0,1751.67,1697.84,1420,4.4674,1,15,15,-1,32,0,0,0,nil,nil,nil,ST`
 	converted, err := r.transform(line)
 	require.NoError(t, err)
-	assert.Contains(t, converted, `"Tester-ClassicBetaPvE"`)
+	assert.Contains(t, converted, `"Tester"`)
 	assert.Contains(t, converted, `686,"Shadow Bolt",0x20,15,-1,32,0,0,0,nil,nil,nil`)
 }
 
@@ -289,6 +289,7 @@ func TestCombatantInfoV22ParsesGearWithoutLegacyTalentSummary(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, parsed, 1)
 	combatantInfo := parsed[0].(*messages.Combatant)
+	assert.Equal(t, "Brother", combatantInfo.Name)
 	require.Nil(t, combatantInfo.Talents)
 	require.Len(t, combatantInfo.GearSetups, 2)
 	assert.Equal(t, 253955, combatantInfo.GearSetups[0].ItemID)
@@ -312,6 +313,7 @@ func TestCombatantInfoLeavesUnknownLevelUnset(t *testing.T) {
 	require.Len(t, parsed, 1)
 	combatant, ok := parsed[0].(*messages.Combatant)
 	require.True(t, ok)
+	assert.Equal(t, "Player", combatant.Name)
 	require.Nil(t, combatant.Level)
 }
 
