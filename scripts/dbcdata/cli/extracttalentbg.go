@@ -2,10 +2,14 @@ package cli
 
 import (
 	"fmt"
+	"image"
+	"image/draw"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
+	"github.com/HugoSmits86/nativewebp"
 
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 
@@ -102,24 +106,20 @@ func extractTalentBackgrounds(wc *dbcdb.WoWClient, outDir string, stdout io.Writ
 			}
 		}
 
-		// Try quadrant layout (vanilla client standard).
-		quadrants := []string{"-TopLeft", "-TopRight", "-BottomLeft", "-BottomRight"}
-		foundAny := false
+		// Try quadrant layout (vanilla client standard). The frontend requests
+		// one image per talent tree, so combine the four client textures into
+		// that image instead of publishing four unusable quadrant files.
+		found := false
 		for _, dir := range []string{`Interface\TalentFrame\`, `Interface\TALENTFRAME\`} {
-			for _, q := range quadrants {
-				qPath := dir + baseName + q + `.blp`
-				if extractBLPToWebP(readFile, qPath, outDir, stdout) {
-					extracted++
-					foundAny = true
-				}
-			}
-			if foundAny {
+			if extractTalentBackgroundQuadrants(readFile, dir, baseName, outDir, stdout) {
+				extracted++
+				found = true
 				break // found in this case variant, skip the other
 			}
 		}
 
-		if foundAny {
-			_, _ = fmt.Fprintf(stdout, "OK (quadrants)\n")
+		if found {
+			_, _ = fmt.Fprintf(stdout, "OK (quadrants combined)\n")
 		} else {
 			_, _ = fmt.Fprintf(stdout, "SKIP (not found)\n")
 			skipped++
@@ -133,4 +133,93 @@ func extractTalentBackgrounds(wc *dbcdb.WoWClient, outDir string, stdout io.Writ
 	_, _ = fmt.Fprintf(stdout, "Extracted %d talent background files (%d skipped) to %s\n",
 		extracted, skipped, outDir)
 	return nil
+}
+
+var talentBackgroundQuadrants = []struct {
+	suffix string
+	x      int
+	y      int
+}{
+	{suffix: "-TopLeft", x: 0, y: 0},
+	{suffix: "-TopRight", x: 1, y: 0},
+	{suffix: "-BottomLeft", x: 0, y: 1},
+	{suffix: "-BottomRight", x: 1, y: 1},
+}
+
+func extractTalentBackgroundQuadrants(
+	readFile func(string) ([]byte, error),
+	dir string,
+	baseName string,
+	outDir string,
+	stdout io.Writer,
+) bool {
+	images := make([]image.Image, 0, len(talentBackgroundQuadrants))
+	for _, quadrant := range talentBackgroundQuadrants {
+		path := dir + baseName + quadrant.suffix + `.blp`
+		data, err := readFile(path)
+		if err != nil {
+			return false
+		}
+		img, err := decodeBLP2(data)
+		if err != nil {
+			_, _ = fmt.Fprintf(stdout, "  SKIP %s (decode): %v\n", path, err)
+			return false
+		}
+		images = append(images, img)
+	}
+
+	combined, err := combineTalentBackgroundQuadrants(images)
+	if err != nil {
+		_, _ = fmt.Fprintf(stdout, "  SKIP %s (combine): %v\n", baseName, err)
+		return false
+	}
+
+	outPath := filepath.Join(outDir, webpOutputName(baseName+`.blp`))
+	out, err := os.Create(outPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(stdout, "  SKIP %s (create): %v\n", outPath, err)
+		return false
+	}
+	if err := nativewebp.Encode(out, combined, nil); err != nil {
+		_ = out.Close()
+		_ = os.Remove(outPath)
+		_, _ = fmt.Fprintf(stdout, "  SKIP %s (encode): %v\n", outPath, err)
+		return false
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(outPath)
+		_, _ = fmt.Fprintf(stdout, "  SKIP %s (close): %v\n", outPath, err)
+		return false
+	}
+	return true
+}
+
+func combineTalentBackgroundQuadrants(quadrants []image.Image) (*image.NRGBA, error) {
+	if len(quadrants) != len(talentBackgroundQuadrants) {
+		return nil, fmt.Errorf("got %d quadrants, want %d", len(quadrants), len(talentBackgroundQuadrants))
+	}
+
+	topLeft := quadrants[0].Bounds()
+	topRight := quadrants[1].Bounds()
+	bottomLeft := quadrants[2].Bounds()
+	bottomRight := quadrants[3].Bounds()
+	if topLeft.Dx() != bottomLeft.Dx() || topRight.Dx() != bottomRight.Dx() ||
+		topLeft.Dy() != topRight.Dy() || bottomLeft.Dy() != bottomRight.Dy() {
+		return nil, fmt.Errorf(
+			"misaligned quadrants: top-left=%s top-right=%s bottom-left=%s bottom-right=%s",
+			topLeft, topRight, bottomLeft, bottomRight,
+		)
+	}
+
+	columnWidths := []int{topLeft.Dx(), topRight.Dx()}
+	rowHeights := []int{topLeft.Dy(), bottomLeft.Dy()}
+	combined := image.NewNRGBA(image.Rect(0, 0, columnWidths[0]+columnWidths[1], rowHeights[0]+rowHeights[1]))
+	for i, quadrant := range quadrants {
+		placement := talentBackgroundQuadrants[i]
+		x := placement.x * columnWidths[0]
+		y := placement.y * rowHeights[0]
+		destination := image.Rect(x, y, x+quadrant.Bounds().Dx(), y+quadrant.Bounds().Dy())
+		draw.Draw(combined, destination, quadrant, quadrant.Bounds().Min, draw.Src)
+	}
+	return combined, nil
 }
