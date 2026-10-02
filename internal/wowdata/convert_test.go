@@ -252,6 +252,38 @@ func TestConvertTraitsBuildsForeverTalentTrees(t *testing.T) {
 	require.Equal(t, []int32{110290}, legacy.Talents[1].PrereqAnyTalent)
 }
 
+func TestFilterTraitTalentGridMembers(t *testing.T) {
+	t.Parallel()
+
+	nodes := map[int32]traitNodeRow{
+		1: {ID: 1, PosX: 0, PosY: 0},
+		2: {ID: 2, PosX: 100, PosY: 100},
+		3: {ID: 3, PosX: 200, PosY: 200},
+		4: {ID: 4, PosX: 300, PosY: 300},
+		5: {ID: 5, PosX: 400, PosY: 400}, // fifth column
+		8: {ID: 8, PosX: 0, PosY: 500},
+		6: {ID: 6, PosX: 0, PosY: 600},
+		7: {ID: 7, PosX: 0, PosY: 700}, // eighth row
+	}
+	members := []traitNodeGroupXNodeRow{
+		{TraitNodeID: 1},
+		{TraitNodeID: 2},
+		{TraitNodeID: 3},
+		{TraitNodeID: 4},
+		{TraitNodeID: 5},
+		{TraitNodeID: 8},
+		{TraitNodeID: 6},
+		{TraitNodeID: 7},
+	}
+
+	filtered := filterTraitTalentGridMembers(members, nodes)
+	filteredIDs := make([]int32, 0, len(filtered))
+	for _, member := range filtered {
+		filteredIDs = append(filteredIDs, member.TraitNodeID)
+	}
+	require.Equal(t, []int32{1, 2, 3, 4, 8, 6}, filteredIDs)
+}
+
 func TestModernRequiredTablesUseTraits(t *testing.T) {
 	t.Parallel()
 	require.NotContains(t, requiredTables, "Talent")

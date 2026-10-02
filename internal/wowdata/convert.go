@@ -962,6 +962,14 @@ func convertTalents(dir string, out *Import) error {
 			xs = append(xs, node.PosX)
 			ys = append(ys, node.PosY)
 		}
+		members = filterTraitTalentGridMembers(members, nodeByID)
+		xs = xs[:0]
+		ys = ys[:0]
+		for _, member := range members {
+			node := nodeByID[member.TraitNodeID]
+			xs = append(xs, node.PosX)
+			ys = append(ys, node.PosY)
+		}
 		columns := compactTraitCoordinates(xs)
 		tiers := compactTraitCoordinates(ys)
 		tab := talentTab{
@@ -1190,6 +1198,42 @@ func appendUniqueInt32(values []int32, value int32) []int32 {
 		}
 	}
 	return append(values, value)
+}
+
+const (
+	traitTalentGridColumns int32 = 4
+	traitTalentGridRows    int32 = 7
+)
+
+// filterTraitTalentGridMembers removes legacy nodes that remain in modern
+// Trait groups outside the class talent grid. These nodes otherwise
+// create invisible fifth columns or eighth rows after coordinate compaction.
+func filterTraitTalentGridMembers(members []traitNodeGroupXNodeRow, nodes map[int32]traitNodeRow) []traitNodeGroupXNodeRow {
+	xs := make([]int32, 0, len(members))
+	ys := make([]int32, 0, len(members))
+	for _, member := range members {
+		node, ok := nodes[member.TraitNodeID]
+		if !ok {
+			continue
+		}
+		xs = append(xs, node.PosX)
+		ys = append(ys, node.PosY)
+	}
+	columns := compactTraitCoordinates(xs)
+	tiers := compactTraitCoordinates(ys)
+
+	filtered := make([]traitNodeGroupXNodeRow, 0, len(members))
+	for _, member := range members {
+		node, ok := nodes[member.TraitNodeID]
+		if !ok {
+			continue
+		}
+		if columns[node.PosX] >= traitTalentGridColumns || tiers[node.PosY] >= traitTalentGridRows {
+			continue
+		}
+		filtered = append(filtered, member)
+	}
+	return filtered
 }
 
 func compactTraitCoordinates(values []int32) map[int32]int32 {
