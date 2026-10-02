@@ -1,7 +1,10 @@
 package identifier
 
 import (
+	"github.com/Emyrk/chronicle/combatlog/parser/common/critters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 )
@@ -33,7 +36,7 @@ func (id Identity) CanBattle() bool {
 
 type Identifier struct {
 	byEntryId    map[uint32]Identity
-	unknownUnits map[uint32]int // creature entry IDs not in hostiles map, with hit count
+	unknownUnits map[uint32]int // unclassified creature entry IDs, with hit count
 }
 
 func NewIdentifier(byEntryId map[uint32]Identity) *Identifier {
@@ -64,14 +67,18 @@ func (i *Identifier) IdentifyUnit(id guid.GUID) Identity {
 
 	identity, exists := i.byEntryId[entryID]
 	if !exists {
-		i.unknownUnits[entryID]++
+		_, isTotem := totems.IsTotem(id)
+		_, isWarlockDemon := warlockdemon.IsWarlockDemon(id)
+		if !critters.IsCritter(id) && !isTotem && !isWarlockDemon {
+			i.unknownUnits[entryID]++
+		}
 		return Identity{Affiliation: types.AffiliationUnknown}
 	}
 	return identity
 }
 
-// UnknownUnits returns creature entry IDs that were looked up but not found in the
-// hostiles map, with the number of times each was seen.
+// UnknownUnits returns unclassified creature entry IDs that were looked up but not
+// found in the hostiles map, with the number of times each was seen.
 func (i *Identifier) UnknownUnits() map[uint32]int {
 	return i.unknownUnits
 }
