@@ -13,6 +13,8 @@ export interface TalentEntry {
   spellRanks: number[];
   iconTexture: string;
   prereqTalent?: number[];
+  prereqAnyTalent?: number[];
+  visualPrereqTalent?: number[];
   prereqRank?: number[];
   description?: string;
   effect?: string;
@@ -102,13 +104,22 @@ export function talentGridHeight(rows: number) {
 
 export function prerequisiteArrows(talents: TalentEntry[]): TalentPrereqArrow[] {
   const byId = new Map(talents.map((talent) => [talent.id, talent]));
-  return talents.flatMap((talent) =>
-    (talent.prereqTalent ?? []).flatMap((prereqId) => {
+  return talents.flatMap((talent) => {
+    const requiredIds = new Set([
+      ...(talent.prereqTalent ?? []),
+      ...(talent.prereqAnyTalent ?? []),
+    ]);
+    const visualIds = new Set(talent.visualPrereqTalent ?? []);
+    return [...new Set([...requiredIds, ...visualIds])].flatMap((prereqId) => {
       const from = byId.get(prereqId);
       if (!from) return [];
-      return [{ from, to: talent, requiredRank: from.maxRank }];
-    }),
-  );
+      return [{
+        from,
+        to: talent,
+        requiredRank: requiredIds.has(prereqId) ? from.maxRank : 0,
+      }];
+    });
+  });
 }
 
 // ─── Talent point requirements ────────────────────────────────────
@@ -126,11 +137,19 @@ function pointsSpentBeforeRow(talents: TalentEntry[], ranks: TalentRanks, tierID
 
 function prerequisitesMet(talent: TalentEntry, talents: TalentEntry[], ranks: TalentRanks) {
   const byId = new Map(talents.map((candidate) => [candidate.id, candidate]));
-  return (talent.prereqTalent ?? []).every((prereqId) => {
+  const allRequired = (talent.prereqTalent ?? []).every((prereqId) => {
     const prereq = byId.get(prereqId);
     if (!prereq) return true;
     return (ranks[prereq.id] ?? 0) >= prereq.maxRank;
   });
+  if (!allRequired) return false;
+
+  const anyPrereqs = (talent.prereqAnyTalent ?? [])
+    .map((prereqId) => byId.get(prereqId))
+    .filter((prereq): prereq is TalentEntry => Boolean(prereq));
+  return anyPrereqs.length === 0 || anyPrereqs.some(
+    (prereq) => (ranks[prereq.id] ?? 0) >= prereq.maxRank,
+  );
 }
 
 export function canUseTalent(talent: TalentEntry, talents: TalentEntry[], ranks: TalentRanks, pointsPerRow = 5) {
@@ -769,6 +788,15 @@ export function lockedTalentReasons(
     if ((ranks[prereq.id] ?? 0) < prereq.maxRank) {
       reasons.push(`Requires ${prereq.name} at rank ${prereq.maxRank}/${prereq.maxRank}.`);
     }
+  }
+
+  const anyPrereqs = (talent.prereqAnyTalent ?? [])
+    .map((prereqId) => byId.get(prereqId))
+    .filter((prereq): prereq is TalentEntry => Boolean(prereq));
+  if (anyPrereqs.length > 0 && !anyPrereqs.some(
+    (prereq) => (ranks[prereq.id] ?? 0) >= prereq.maxRank,
+  )) {
+    reasons.push(`Requires one of: ${anyPrereqs.map((prereq) => prereq.name).join(", ")}.`);
   }
 
   return reasons.length > 0 ? reasons : ["Complete prerequisite requirements to unlock this talent."];

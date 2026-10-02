@@ -27,15 +27,17 @@ type TalentTabData struct {
 
 // TalentEntry represents a single talent within a tab.
 type TalentEntry struct {
-	ID                int32   `json:"id"`
-	TraitNodeEntryIDs []int32 `json:"traitNodeEntryIDs,omitempty"`
-	Name              string  `json:"name"`
-	TierID            int32   `json:"tierID"`
-	ColumnIndex       int32   `json:"columnIndex"`
-	MaxRank           int32   `json:"maxRank"`
-	TabIndex          int32   `json:"tabIndex"` // 0-based index within tab (sorted by tier, then column)
-	SpellRanks        []int32 `json:"spellRanks"`
-	PrereqTalent      []int32 `json:"prereqTalent,omitempty"`
-	PrereqRank        []int32 `json:"prereqRank,omitempty"`
-	IconTexture       string  `json:"iconTexture"`
+	ID                 int32   `json:"id"`
+	TraitNodeEntryIDs  []int32 `json:"traitNodeEntryIDs,omitempty"`
+	Name               string  `json:"name"`
+	TierID             int32   `json:"tierID"`
+	ColumnIndex        int32   `json:"columnIndex"`
+	MaxRank            int32   `json:"maxRank"`
+	TabIndex           int32   `json:"tabIndex"` // 0-based index within tab (sorted by tier, then column)
+	SpellRanks         []int32 `json:"spellRanks"`
+	PrereqTalent       []int32 `json:"prereqTalent,omitempty"`
+	PrereqAnyTalent    []int32 `json:"prereqAnyTalent,omitempty"`
+	VisualPrereqTalent []int32 `json:"visualPrereqTalent,omitempty"`
+	PrereqRank         []int32 `json:"prereqRank,omitempty"`
+	IconTexture        string  `json:"iconTexture"`
 }

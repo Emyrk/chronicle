@@ -113,6 +113,18 @@ describe("TalentTreeViewer talent locking", () => {
     expect(canUseTalent(target, tabTalents, { 10: 3, 12: 5 })).toBe(true);
   });
 
+  it("allows any sufficient prerequisite to unlock a target", () => {
+    const first = talent({ id: 13, tierID: 0, columnIndex: 0, maxRank: 2 });
+    const second = talent({ id: 14, tierID: 0, columnIndex: 1, maxRank: 3 });
+    const filler = talent({ id: 15, tierID: 0, columnIndex: 2, maxRank: 5 });
+    const target = talent({ id: 16, tierID: 1, columnIndex: 1, prereqAnyTalent: [13, 14] });
+    const tabTalents = [first, second, filler, target];
+
+    expect(canUseTalent(target, tabTalents, { 13: 1, 14: 2, 15: 5 })).toBe(false);
+    expect(canUseTalent(target, tabTalents, { 13: 2, 15: 5 })).toBe(true);
+    expect(canUseTalent(target, tabTalents, { 14: 3, 15: 5 })).toBe(true);
+  });
+
   it("does not add points to locked talents", () => {
     const source = talent({ id: 20, tierID: 0, columnIndex: 1, maxRank: 2 });
     const filler = talent({ id: 22, tierID: 0, columnIndex: 2, maxRank: 5 });
@@ -584,6 +596,23 @@ describe("TalentTreeViewer prerequisite arrows", () => {
 
     expect(prerequisiteArrows([source, target])).toEqual([
       { from: source, to: target, requiredRank: 2 },
+    ]);
+  });
+
+  it("maps sufficient and visual-only Trait edges into arrows", () => {
+    const sufficient = talent({ id: 3, tierID: 0, columnIndex: 0, maxRank: 2 });
+    const visual = talent({ id: 4, tierID: 0, columnIndex: 2, maxRank: 3 });
+    const target = talent({
+      id: 5,
+      tierID: 1,
+      columnIndex: 1,
+      prereqAnyTalent: [3],
+      visualPrereqTalent: [4],
+    });
+
+    expect(prerequisiteArrows([sufficient, visual, target])).toEqual([
+      { from: sufficient, to: target, requiredRank: 2 },
+      { from: visual, to: target, requiredRank: 0 },
     ]);
   });
 

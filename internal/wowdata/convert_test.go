@@ -172,7 +172,10 @@ func TestConvertTraitsBuildsForeverTalentTrees(t *testing.T) {
 		map[string]any{"ID": 13, "TraitNodeID": 105890, "TraitNodeEntryID": 130620},
 		map[string]any{"ID": 14, "TraitNodeID": 105891, "TraitNodeEntryID": 130621},
 		map[string]any{"ID": 15, "TraitNodeID": 105892, "TraitNodeEntryID": 130622})
-	writeRows(t, dir, "TraitEdge", map[string]any{"ID": 1, "LeftTraitNodeID": 105889, "RightTraitNodeID": 105890, "Type": 2})
+	writeRows(t, dir, "TraitEdge",
+		map[string]any{"ID": 1, "LeftTraitNodeID": 105889, "RightTraitNodeID": 105890, "Type": 2},
+		map[string]any{"ID": 2, "LeftTraitNodeID": 105888, "RightTraitNodeID": 105890, "Type": 3},
+		map[string]any{"ID": 3, "LeftTraitNodeID": 105890, "RightTraitNodeID": 105888, "Type": 0})
 
 	got, err := Convert(dir, "wow_classic_beta", "1.60.1.69913")
 	require.NoError(t, err)
@@ -207,7 +210,12 @@ func TestConvertTraitsBuildsForeverTalentTrees(t *testing.T) {
 	require.Equal(t, []int32{100, 100, 100, 100, 100}, logged.SpellRanks)
 	require.Equal(t, "First Talent", logged.Name)
 	require.Equal(t, "talent_first", logged.IconTexture)
-	require.Empty(t, logged.PrereqTalent, "TraitEdge direction and OR semantics are not projected into legacy prerequisites")
+	require.Equal(t, []int32{105890}, logged.VisualPrereqTalent)
+
+	dependent := warrior.Tabs[0].Talents[2]
+	require.Equal(t, int32(105890), dependent.ID)
+	require.Equal(t, []int32{105888}, dependent.PrereqTalent)
+	require.Equal(t, []int32{105889}, dependent.PrereqAnyTalent)
 }
 
 func TestModernRequiredTablesUseTraits(t *testing.T) {

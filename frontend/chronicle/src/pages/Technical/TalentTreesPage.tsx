@@ -3,7 +3,8 @@ import { ArrowLeft, TreePine } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TalentTreeViewerLegacy as TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
-import { useDatasets, useSiteConfig } from "@/api/queries";
+import { useDatasets } from "@/api/queries";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { parseTalentString } from "./talentParse";
 
 const CLASSES = [
@@ -37,13 +38,12 @@ const EXAMPLE_WOTLK =
 export function TalentTreesPage() {
   const [input, setInput] = useState("");
 
-  // Dataset selection. Defaults to the current tenant's default dataset
-  // (resolved by the context handler); the user can override via the selector.
-  const { data: siteConfig } = useSiteConfig();
+  // Dataset selection. Defaults to the dataset resolved by TenantDatasetLayout;
+  // the user can override it via the selector.
+  const tenantDatasetId = useDatasetId();
   const { data: datasets } = useDatasets();
   const [datasetOverride, setDatasetOverride] = useState<string>("");
-  const datasetId =
-    datasetOverride || siteConfig?.tenant?.default_dataset_id || "";
+  const datasetId = datasetOverride || tenantDatasetId || "";
 
   // Fetch talent tree data to resolve tab names → class ID
   const { data: treeData } = useQuery<TalentTreeJSON | null>({

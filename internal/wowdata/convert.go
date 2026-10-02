@@ -738,17 +738,19 @@ type talentTab struct {
 	Talents        []talentEntry `json:"talents"`
 }
 type talentEntry struct {
-	ID                int32   `json:"id"`
-	TraitNodeEntryIDs []int32 `json:"traitNodeEntryIDs,omitempty"`
-	Name              string  `json:"name"`
-	TierID            int32   `json:"tierID"`
-	ColumnIndex       int32   `json:"columnIndex"`
-	MaxRank           int32   `json:"maxRank"`
-	TabIndex          int32   `json:"tabIndex"`
-	SpellRanks        []int32 `json:"spellRanks"`
-	PrereqTalent      []int32 `json:"prereqTalent,omitempty"`
-	PrereqRank        []int32 `json:"prereqRank,omitempty"`
-	IconTexture       string  `json:"iconTexture"`
+	ID                 int32   `json:"id"`
+	TraitNodeEntryIDs  []int32 `json:"traitNodeEntryIDs,omitempty"`
+	Name               string  `json:"name"`
+	TierID             int32   `json:"tierID"`
+	ColumnIndex        int32   `json:"columnIndex"`
+	MaxRank            int32   `json:"maxRank"`
+	TabIndex           int32   `json:"tabIndex"`
+	SpellRanks         []int32 `json:"spellRanks"`
+	PrereqTalent       []int32 `json:"prereqTalent,omitempty"`
+	PrereqAnyTalent    []int32 `json:"prereqAnyTalent,omitempty"`
+	VisualPrereqTalent []int32 `json:"visualPrereqTalent,omitempty"`
+	PrereqRank         []int32 `json:"prereqRank,omitempty"`
+	IconTexture        string  `json:"iconTexture"`
 }
 
 var foreverClassBySkillLine = map[int32]int32{
@@ -882,10 +884,9 @@ func convertTalents(dir string, out *Import) error {
 		iconTextures[icon.ID] = icon.TextureFilename
 	}
 
-	// Type 2 TraitEdge rows describe availability, but the legacy prerequisite
-	// shape cannot represent their direction or OR semantics safely. Require and
-	// decode the table without projecting guessed prerequisite arrows.
-	_ = edges
+	// TraitEdge direction is LeftTraitNodeID (parent) to RightTraitNodeID
+	// (child). Type 0 is visual-only, type 2 means any incoming sufficient edge
+	// unlocks the child, and type 3 requires every incoming edge.
 
 	tree := talentTrees{Classes: map[int32]talentClass{}, Pets: map[int32]talentClass{}}
 	sort.Slice(displays, func(i, j int) bool {
@@ -962,6 +963,36 @@ func convertTalents(dir string, out *Import) error {
 				SpellRanks: spellRanks, IconTexture: iconTextures[spellIconIDs[definition.SpellID]],
 			})
 		}
+
+		talentIndex := make(map[int32]int, len(tab.Talents))
+		for i := range tab.Talents {
+			talentIndex[tab.Talents[i].ID] = i
+		}
+		for _, edge := range edges {
+			if _, ok := talentIndex[edge.LeftTraitNodeID]; !ok {
+				continue
+			}
+			targetIndex, ok := talentIndex[edge.RightTraitNodeID]
+			if !ok {
+				continue
+			}
+			target := &tab.Talents[targetIndex]
+			switch edge.Type {
+			case 0:
+				target.VisualPrereqTalent = appendUniqueInt32(target.VisualPrereqTalent, edge.LeftTraitNodeID)
+			case 2:
+				target.PrereqAnyTalent = appendUniqueInt32(target.PrereqAnyTalent, edge.LeftTraitNodeID)
+			case 3:
+				target.PrereqTalent = appendUniqueInt32(target.PrereqTalent, edge.LeftTraitNodeID)
+			}
+		}
+		for i := range tab.Talents {
+			sort.Slice(tab.Talents[i].PrereqTalent, func(a, b int) bool { return tab.Talents[i].PrereqTalent[a] < tab.Talents[i].PrereqTalent[b] })
+			sort.Slice(tab.Talents[i].PrereqAnyTalent, func(a, b int) bool { return tab.Talents[i].PrereqAnyTalent[a] < tab.Talents[i].PrereqAnyTalent[b] })
+			sort.Slice(tab.Talents[i].VisualPrereqTalent, func(a, b int) bool {
+				return tab.Talents[i].VisualPrereqTalent[a] < tab.Talents[i].VisualPrereqTalent[b]
+			})
+		}
 		sort.Slice(tab.Talents, func(i, j int) bool {
 			a, b := tab.Talents[i], tab.Talents[j]
 			if a.TierID != b.TierID {
@@ -981,6 +1012,15 @@ func convertTalents(dir string, out *Import) error {
 	}
 	out.TalentTrees, err = json.Marshal(tree)
 	return err
+}
+
+func appendUniqueInt32(values []int32, value int32) []int32 {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
 }
 
 func compactTraitCoordinates(values []int32) map[int32]int32 {

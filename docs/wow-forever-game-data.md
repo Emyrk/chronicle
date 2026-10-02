@@ -105,7 +105,7 @@ Forever build `1.60.1.69913` uses the active Trait tables rather than the obsole
 
 Each exported talent keeps `TraitNode.ID` as its `id`. The optional `traitNodeEntryIDs` array preserves the linked `TraitNodeEntry.ID` values needed to resolve V22 tuples such as `(105888,130618,5)`. `TraitDefinition.SpellID` supplies the spell, while the converted spell and icon data supply its display name and texture. Multi-rank Trait entries repeat that spell ID in `spellRanks` so existing rank-indexed consumers retain their expected shape.
 
-`TraitEdge` is required and decoded, but it is not projected into the legacy `prereqTalent` fields yet. Type 2 edges express availability with direction and combination semantics that the legacy prerequisite arrays cannot represent safely.
+`TraitEdge` supplies the dependency lines between talents. The converter preserves type 0 edges as visual-only connections, type 2 edges as sufficient prerequisites where any incoming parent can unlock the child, and type 3 edges as required prerequisites where every incoming parent must be complete.
 
 ## Known limitations
 
