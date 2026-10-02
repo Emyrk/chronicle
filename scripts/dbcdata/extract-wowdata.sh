@@ -111,8 +111,17 @@ mkdir -p "$OUT_DIR/schemas" "$OUT_DIR/tables" "$OUT_DIR/logs"
 # component tables required because modern clients split Spell.dbc and item
 # cache records across many DB2 tables.
 REQUIRED_TABLES=(
-  Talent
-  TalentTab
+  TraitTree
+  TraitNode
+  TraitNodeEntry
+  TraitDefinition
+  TraitEdge
+  TraitNodeXTraitNodeEntry
+  TraitNodeGroup
+  TraitNodeGroupXTraitNode
+  TraitNodeGroupDisplayInfo
+  SkillLineXTraitTree
+  SkillLine
 
   Spell
   SpellName

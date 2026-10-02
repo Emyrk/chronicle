@@ -14,7 +14,10 @@ import (
 )
 
 var requiredTables = []string{
-	"Talent", "TalentTab", "Spell", "SpellName", "SpellMisc", "SpellEffect",
+	"TraitTree", "TraitNode", "TraitNodeEntry", "TraitDefinition", "TraitEdge",
+	"TraitNodeXTraitNodeEntry", "TraitNodeGroup", "TraitNodeGroupXTraitNode",
+	"TraitNodeGroupDisplayInfo", "SkillLineXTraitTree", "SkillLine",
+	"Spell", "SpellName", "SpellMisc", "SpellEffect",
 	"SpellAuraOptions", "SpellAuraRestrictions", "SpellCastingRequirements", "SpellCategories",
 	"SpellClassOptions", "SpellCooldowns", "SpellEquippedItems", "SpellInterrupts", "SpellLevels",
 	"SpellPower", "SpellReagents", "SpellShapeshift", "SpellTargetRestrictions", "SpellTotems",
@@ -683,15 +686,40 @@ func convertItems(dir string, out *Import) error {
 	return nil
 }
 
-type talentRow struct {
-	ID, TabID, TierID, ColumnIndex      int32
-	SpellRank, PrereqTalent, PrereqRank []int32
+type traitTreeRow struct {
+	ID int32
 }
-type talentTabRow struct {
-	ID                                 int32
-	Name                               string `json:"Name_lang"`
-	BackgroundFile                     string
-	OrderIndex, ClassMask, SpellIconID int32
+type traitNodeRow struct {
+	ID, TraitTreeID, PosX, PosY int32
+}
+type traitNodeEntryRow struct {
+	ID, TraitDefinitionID, MaxRanks int32
+}
+type traitDefinitionRow struct {
+	ID, SpellID int32
+}
+type traitEdgeRow struct {
+	ID, LeftTraitNodeID, RightTraitNodeID, Type int32
+}
+type traitNodeXEntryRow struct {
+	ID, TraitNodeID, TraitNodeEntryID, Index int32
+}
+type traitNodeGroupRow struct {
+	ID, TraitTreeID int32
+}
+type traitNodeGroupXNodeRow struct {
+	ID, TraitNodeGroupID, TraitNodeID, Index int32
+}
+type traitNodeGroupDisplayInfoRow struct {
+	ID, TraitNodeGroupID, SkillLineID, OrderIndex, TraitTreeID int32
+}
+type skillLineXTraitTreeRow struct {
+	ID, SkillLineID, TraitTreeID, Variant int32
+}
+type skillLineRow struct {
+	ID              int32
+	DisplayName     string `json:"DisplayName_lang"`
+	SpellIconFileID int32
 }
 type talentTrees struct {
 	Classes map[int32]talentClass `json:"classes"`
@@ -710,27 +738,139 @@ type talentTab struct {
 	Talents        []talentEntry `json:"talents"`
 }
 type talentEntry struct {
-	ID           int32   `json:"id"`
-	Name         string  `json:"name"`
-	TierID       int32   `json:"tierID"`
-	ColumnIndex  int32   `json:"columnIndex"`
-	MaxRank      int32   `json:"maxRank"`
-	TabIndex     int32   `json:"tabIndex"`
-	SpellRanks   []int32 `json:"spellRanks"`
-	PrereqTalent []int32 `json:"prereqTalent,omitempty"`
-	PrereqRank   []int32 `json:"prereqRank,omitempty"`
-	IconTexture  string  `json:"iconTexture"`
+	ID                int32   `json:"id"`
+	TraitNodeEntryIDs []int32 `json:"traitNodeEntryIDs,omitempty"`
+	Name              string  `json:"name"`
+	TierID            int32   `json:"tierID"`
+	ColumnIndex       int32   `json:"columnIndex"`
+	MaxRank           int32   `json:"maxRank"`
+	TabIndex          int32   `json:"tabIndex"`
+	SpellRanks        []int32 `json:"spellRanks"`
+	PrereqTalent      []int32 `json:"prereqTalent,omitempty"`
+	PrereqRank        []int32 `json:"prereqRank,omitempty"`
+	IconTexture       string  `json:"iconTexture"`
+}
+
+var foreverClassBySkillLine = map[int32]int32{
+	26: 1, 184: 2, 50: 3, 38: 4, 613: 5,
+	373: 7, 237: 8, 354: 9, 574: 11,
 }
 
 func convertTalents(dir string, out *Import) error {
-	rows, err := readRows[talentRow](dir, "Talent")
+	trees, err := readRows[traitTreeRow](dir, "TraitTree")
 	if err != nil {
 		return err
 	}
-	tabs, err := readRows[talentTabRow](dir, "TalentTab")
+	nodes, err := readRows[traitNodeRow](dir, "TraitNode")
 	if err != nil {
 		return err
 	}
+	entries, err := readRows[traitNodeEntryRow](dir, "TraitNodeEntry")
+	if err != nil {
+		return err
+	}
+	definitions, err := readRows[traitDefinitionRow](dir, "TraitDefinition")
+	if err != nil {
+		return err
+	}
+	edges, err := readRows[traitEdgeRow](dir, "TraitEdge")
+	if err != nil {
+		return err
+	}
+	nodeEntries, err := readRows[traitNodeXEntryRow](dir, "TraitNodeXTraitNodeEntry")
+	if err != nil {
+		return err
+	}
+	groups, err := readRows[traitNodeGroupRow](dir, "TraitNodeGroup")
+	if err != nil {
+		return err
+	}
+	groupNodes, err := readRows[traitNodeGroupXNodeRow](dir, "TraitNodeGroupXTraitNode")
+	if err != nil {
+		return err
+	}
+	displays, err := readRows[traitNodeGroupDisplayInfoRow](dir, "TraitNodeGroupDisplayInfo")
+	if err != nil {
+		return err
+	}
+	skillTrees, err := readRows[skillLineXTraitTreeRow](dir, "SkillLineXTraitTree")
+	if err != nil {
+		return err
+	}
+	skillLines, err := readRows[skillLineRow](dir, "SkillLine")
+	if err != nil {
+		return err
+	}
+
+	treeIDs := make(map[int32]bool, len(trees))
+	for _, row := range trees {
+		treeIDs[row.ID] = true
+	}
+	classByTree := map[int32]int32{}
+	treeByClass := map[int32]int32{}
+	for _, row := range skillTrees {
+		classID, ok := foreverClassBySkillLine[row.SkillLineID]
+		if !ok || !treeIDs[row.TraitTreeID] {
+			continue
+		}
+		if existing := classByTree[row.TraitTreeID]; existing != 0 && existing != classID {
+			return fmt.Errorf("trait tree %d maps to classes %d and %d", row.TraitTreeID, existing, classID)
+		}
+		if existing := treeByClass[classID]; existing != 0 && existing != row.TraitTreeID {
+			return fmt.Errorf("class %d maps to trait trees %d and %d", classID, existing, row.TraitTreeID)
+		}
+		classByTree[row.TraitTreeID] = classID
+		treeByClass[classID] = row.TraitTreeID
+	}
+
+	nodeByID := make(map[int32]traitNodeRow, len(nodes))
+	for _, row := range nodes {
+		nodeByID[row.ID] = row
+	}
+	entryByID := make(map[int32]traitNodeEntryRow, len(entries))
+	for _, row := range entries {
+		entryByID[row.ID] = row
+	}
+	definitionByID := make(map[int32]traitDefinitionRow, len(definitions))
+	for _, row := range definitions {
+		definitionByID[row.ID] = row
+	}
+	groupByID := make(map[int32]traitNodeGroupRow, len(groups))
+	for _, row := range groups {
+		groupByID[row.ID] = row
+	}
+	skillLineByID := make(map[int32]skillLineRow, len(skillLines))
+	for _, row := range skillLines {
+		skillLineByID[row.ID] = row
+	}
+
+	nodeEntriesByNode := map[int32][]traitNodeXEntryRow{}
+	for _, row := range nodeEntries {
+		nodeEntriesByNode[row.TraitNodeID] = append(nodeEntriesByNode[row.TraitNodeID], row)
+	}
+	for nodeID := range nodeEntriesByNode {
+		sort.Slice(nodeEntriesByNode[nodeID], func(i, j int) bool {
+			a, b := nodeEntriesByNode[nodeID][i], nodeEntriesByNode[nodeID][j]
+			if a.Index != b.Index {
+				return a.Index < b.Index
+			}
+			return a.ID < b.ID
+		})
+	}
+	nodesByGroup := map[int32][]traitNodeGroupXNodeRow{}
+	for _, row := range groupNodes {
+		nodesByGroup[row.TraitNodeGroupID] = append(nodesByGroup[row.TraitNodeGroupID], row)
+	}
+	for groupID := range nodesByGroup {
+		sort.Slice(nodesByGroup[groupID], func(i, j int) bool {
+			a, b := nodesByGroup[groupID][i], nodesByGroup[groupID][j]
+			if a.Index != b.Index {
+				return a.Index < b.Index
+			}
+			return a.ID < b.ID
+		})
+	}
+
 	names := map[int32]string{}
 	spellIconIDs := map[int32]int32{}
 	iconTextures := map[int32]string{}
@@ -741,49 +881,124 @@ func convertTalents(dir string, out *Import) error {
 	for _, icon := range out.SpellIcons {
 		iconTextures[icon.ID] = icon.TextureFilename
 	}
-	byTab := map[int32][]talentRow{}
-	for _, x := range rows {
-		byTab[x.TabID] = append(byTab[x.TabID], x)
-	}
+
+	// Type 2 TraitEdge rows describe availability, but the legacy prerequisite
+	// shape cannot represent their direction or OR semantics safely. Require and
+	// decode the table without projecting guessed prerequisite arrows.
+	_ = edges
+
 	tree := talentTrees{Classes: map[int32]talentClass{}, Pets: map[int32]talentClass{}}
-	sort.Slice(tabs, func(i, j int) bool {
-		if tabs[i].OrderIndex != tabs[j].OrderIndex {
-			return tabs[i].OrderIndex < tabs[j].OrderIndex
+	sort.Slice(displays, func(i, j int) bool {
+		a, b := displays[i], displays[j]
+		if classByTree[a.TraitTreeID] != classByTree[b.TraitTreeID] {
+			return classByTree[a.TraitTreeID] < classByTree[b.TraitTreeID]
 		}
-		return tabs[i].ID < tabs[j].ID
+		if a.OrderIndex != b.OrderIndex {
+			return a.OrderIndex < b.OrderIndex
+		}
+		return a.ID < b.ID
 	})
-	for _, tab := range tabs {
-		ts := byTab[tab.ID]
-		sort.Slice(ts, func(i, j int) bool {
-			if ts[i].TierID != ts[j].TierID {
-				return ts[i].TierID < ts[j].TierID
+	for _, display := range displays {
+		classID := classByTree[display.TraitTreeID]
+		if classID == 0 {
+			continue
+		}
+		group, ok := groupByID[display.TraitNodeGroupID]
+		if !ok || group.TraitTreeID != display.TraitTreeID {
+			return fmt.Errorf("trait display %d has invalid group %d for tree %d", display.ID, display.TraitNodeGroupID, display.TraitTreeID)
+		}
+		skillLine, ok := skillLineByID[display.SkillLineID]
+		if !ok {
+			return fmt.Errorf("trait display %d references missing skill line %d", display.ID, display.SkillLineID)
+		}
+
+		members := nodesByGroup[group.ID]
+		xs := make([]int32, 0, len(members))
+		ys := make([]int32, 0, len(members))
+		for _, member := range members {
+			node, ok := nodeByID[member.TraitNodeID]
+			if !ok || node.TraitTreeID != display.TraitTreeID {
+				return fmt.Errorf("trait group %d references invalid node %d for tree %d", group.ID, member.TraitNodeID, display.TraitTreeID)
 			}
-			if ts[i].ColumnIndex != ts[j].ColumnIndex {
-				return ts[i].ColumnIndex < ts[j].ColumnIndex
+			xs = append(xs, node.PosX)
+			ys = append(ys, node.PosY)
+		}
+		columns := compactTraitCoordinates(xs)
+		tiers := compactTraitCoordinates(ys)
+		tab := talentTab{
+			ID: display.ID, Name: skillLine.DisplayName, OrderIndex: display.OrderIndex,
+			SpellIconID: skillLine.SpellIconFileID, IconTexture: iconTextures[skillLine.SpellIconFileID],
+			Talents: []talentEntry{},
+		}
+		for _, member := range members {
+			node := nodeByID[member.TraitNodeID]
+			links := nodeEntriesByNode[node.ID]
+			if len(links) == 0 {
+				continue
 			}
-			return ts[i].ID < ts[j].ID
+			entryIDs := make([]int32, 0, len(links))
+			var primary traitNodeEntryRow
+			for _, link := range links {
+				entry, ok := entryByID[link.TraitNodeEntryID]
+				if !ok {
+					return fmt.Errorf("trait node %d references missing entry %d", node.ID, link.TraitNodeEntryID)
+				}
+				if len(entryIDs) == 0 {
+					primary = entry
+				}
+				entryIDs = append(entryIDs, entry.ID)
+			}
+			definition, ok := definitionByID[primary.TraitDefinitionID]
+			if !ok || definition.SpellID == 0 || primary.MaxRanks <= 0 {
+				continue
+			}
+			spellRanks := make([]int32, primary.MaxRanks)
+			for i := range spellRanks {
+				spellRanks[i] = definition.SpellID
+			}
+			tab.Talents = append(tab.Talents, talentEntry{
+				ID: node.ID, TraitNodeEntryIDs: entryIDs, Name: names[definition.SpellID],
+				TierID: tiers[node.PosY], ColumnIndex: columns[node.PosX], MaxRank: primary.MaxRanks,
+				SpellRanks: spellRanks, IconTexture: iconTextures[spellIconIDs[definition.SpellID]],
+			})
+		}
+		sort.Slice(tab.Talents, func(i, j int) bool {
+			a, b := tab.Talents[i], tab.Talents[j]
+			if a.TierID != b.TierID {
+				return a.TierID < b.TierID
+			}
+			if a.ColumnIndex != b.ColumnIndex {
+				return a.ColumnIndex < b.ColumnIndex
+			}
+			return a.ID < b.ID
 		})
-		td := talentTab{ID: tab.ID, Name: tab.Name, BackgroundFile: tab.BackgroundFile, OrderIndex: tab.OrderIndex, SpellIconID: tab.SpellIconID, IconTexture: iconTextures[tab.SpellIconID]}
-		for i, t := range ts {
-			ranks := nonzero(t.SpellRank)
-			if len(ranks) == 0 {
-				continue
-			}
-			td.Talents = append(td.Talents, talentEntry{ID: t.ID, Name: names[ranks[0]], TierID: t.TierID, ColumnIndex: t.ColumnIndex, MaxRank: int32(len(ranks)), TabIndex: int32(i), SpellRanks: ranks, PrereqTalent: nonzero(t.PrereqTalent), PrereqRank: t.PrereqRank, IconTexture: iconTextures[spellIconIDs[ranks[0]]]})
+		for i := range tab.Talents {
+			tab.Talents[i].TabIndex = int32(i)
 		}
-		for bit := int32(0); bit < 12; bit++ {
-			if tab.ClassMask&(1<<bit) == 0 {
-				continue
-			}
-			id := bit + 1
-			c := tree.Classes[id]
-			c.Tabs = append(c.Tabs, td)
-			tree.Classes[id] = c
-		}
+		class := tree.Classes[classID]
+		class.Tabs = append(class.Tabs, tab)
+		tree.Classes[classID] = class
 	}
 	out.TalentTrees, err = json.Marshal(tree)
 	return err
 }
+
+func compactTraitCoordinates(values []int32) map[int32]int32 {
+	sorted := append([]int32(nil), values...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	out := make(map[int32]int32, len(sorted))
+	var cluster int32 = -1
+	var previous int32
+	for i, value := range sorted {
+		if i == 0 || value-previous > 50 {
+			cluster++
+		}
+		out[value] = cluster
+		previous = value
+	}
+	return out
+}
+
 func nonzero(s []int32) []int32 {
 	out := make([]int32, 0, len(s))
 	for _, v := range s {

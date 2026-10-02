@@ -274,7 +274,7 @@ func TestParseCombatantMetadata(t *testing.T) {
 	assert.Zero(t, gear[1].ItemID)
 }
 
-func TestCombatantInfoV22ParsesGearWithoutLegacyTalentSummary(t *testing.T) {
+func TestCombatantInfoV22ResolvesTalentsAndGear(t *testing.T) {
 	t.Parallel()
 
 	fields := make([]string, 33)
@@ -285,12 +285,27 @@ func TestCombatantInfoV22ParsesGearWithoutLegacyTalentSummary(t *testing.T) {
 	ts, _, matched, err := wotlk.ParseLine(`9/23 15:26:53.574  BLIZZARD_COMBATANT_INFO,0x0000120C00D5496D,"Brother-ClassicBetaPvE2",` + encoded)
 	require.NoError(t, err)
 
-	parsed, err := (&Parser{version: 22}).combatantInfo(ts, matched, "")
+	treeData := &talents.TalentTreeData{Classes: map[int32]talents.ClassTalentData{
+		9: {Tabs: []talents.TalentTabData{
+			{OrderIndex: 0, Name: "Affliction", Talents: []talents.TalentEntry{
+				{ID: 105922, TraitNodeEntryIDs: []int32{130652}, MaxRank: 2, TabIndex: 1},
+			}},
+			{OrderIndex: 1, Name: "Demonology"},
+			{OrderIndex: 2, Name: "Destruction", Talents: []talents.TalentEntry{
+				{ID: 105888, TraitNodeEntryIDs: []int32{130618}, MaxRank: 5, TabIndex: 2},
+			}},
+		}},
+	}}
+	parsed, err := (&Parser{version: 22, talentTrees: treeData}).combatantInfo(ts, matched, "")
 	require.NoError(t, err)
 	require.Len(t, parsed, 1)
 	combatantInfo := parsed[0].(*messages.Combatant)
 	assert.Equal(t, "Brother", combatantInfo.Name)
-	require.Nil(t, combatantInfo.Talents)
+	require.NotNil(t, combatantInfo.Talents)
+	assert.Equal(t, [3]uint8{1, 0, 5}, combatantInfo.Talents.Summary)
+	assert.Equal(t, []uint8{0, 1}, combatantInfo.Talents.Trees[0])
+	assert.Equal(t, []uint8{0, 0, 5}, combatantInfo.Talents.Trees[2])
+	assert.Equal(t, [3]string{"Affliction", "Demonology", "Destruction"}, combatantInfo.Talents.TabNames)
 	require.Len(t, combatantInfo.GearSetups, 2)
 	assert.Equal(t, 253955, combatantInfo.GearSetups[0].ItemID)
 	assert.Equal(t, 25, combatantInfo.GearSetups[0].ItemLevel)

@@ -91,11 +91,21 @@ The first importer persists:
 - derived extra-attack, periodic-spell, duration-modifier, vulnerability, cooldown, and affected-aura-duration metadata at difficulty zero;
 - cast-time, duration, range, category, radius, focus-object, and description-variable metadata;
 - item rows having both `Item` and `ItemSparse` records;
-- talent trees;
+- active class talent trees reconstructed from the modern Trait DB2 graph;
 - spell-item enchantments;
 - item-set metadata and membership.
 
 The legacy `dbc_spells` projection is deterministic: it uses `DifficultyID=0`, effects 0 through 2, the first nine attributes, and the lowest ordered spell power. The normalized spell tables preserve all imported effects, powers, attributes, and difficulty-aware component rows. The CLI loss report distinguishes compatibility-projection omissions from unsupported source data, such as missing `ItemSparse` records.
+
+## Modern talent conversion
+
+Forever build `1.60.1.69913` uses the active Trait tables rather than the obsolete `Talent` and `TalentTab` tables. The snapshot therefore requires `TraitTree`, `TraitNode`, `TraitNodeEntry`, `TraitDefinition`, `TraitEdge`, `TraitNodeXTraitNodeEntry`, `TraitNodeGroup`, `TraitNodeGroupXTraitNode`, `TraitNodeGroupDisplayInfo`, `SkillLineXTraitTree`, and `SkillLine`.
+
+`SkillLineXTraitTree` identifies each class tree through its representative classic specialization skill line. `TraitNodeGroupDisplayInfo` supplies the three displayed tabs, their names through `SkillLine`, and their order. Group membership selects the nodes for each tab. The converter clusters the roughly 600-unit node coordinates, tolerating the small coordinate jitter in the client data, then assigns compact tier, column, and deterministic tab indexes.
+
+Each exported talent keeps `TraitNode.ID` as its `id`. The optional `traitNodeEntryIDs` array preserves the linked `TraitNodeEntry.ID` values needed to resolve V22 tuples such as `(105888,130618,5)`. `TraitDefinition.SpellID` supplies the spell, while the converted spell and icon data supply its display name and texture. Multi-rank Trait entries repeat that spell ID in `spellRanks` so existing rank-indexed consumers retain their expected shape.
+
+`TraitEdge` is required and decoded, but it is not projected into the legacy `prereqTalent` fields yet. Type 2 edges express availability with direction and combination semantics that the legacy prerequisite arrays cannot represent safely.
 
 ## Known limitations
 
@@ -104,6 +114,5 @@ The importer does not guess identifiers or silently treat modern fields as legac
 - Icon FileDataIDs without a community-listfile entry remain unresolved.
 - Item display IDs, item-icon database wiring, combat stats, damage/armor curves, item effects, random properties, and item-set bonuses are not yet reconstructed.
 - The legacy `dbc_spells` projection exposes only effects 0 through 2, the first nine attributes, the first ordered power, and `DifficultyID=0`. Consumers that need the complete modern data must use the normalized spell effects, powers, and variants.
-- The current Forever cache has no records for the verified Talent (`4188284511`) or TalentTab (`1113426120`) table hashes, so hotfix support does not resolve talent-data mismatches.
 
 These gaps are tracked as GitHub issues rather than filled with inferred values.

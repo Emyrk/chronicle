@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
@@ -22,6 +23,7 @@ import (
 	wotlksynthetic "github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Gophercraft/core/i18n"
 )
 
@@ -55,10 +57,11 @@ func readBaseYear(r io.Reader) (io.Reader, int, error) {
 // Parser adapts modern Blizzard combat-log records to Chronicle's CLEU parser
 // while retaining version-specific metadata such as gear and talent summaries.
 type Parser struct {
-	inner   *wotlk.Parser
-	wowDB   gamedb.SpellFetcher
-	guids   *guidNormalizer
-	version int
+	inner       *wotlk.Parser
+	wowDB       gamedb.SpellFetcher
+	talentTrees *talents.TalentTreeData
+	guids       *guidNormalizer
+	version     int
 }
 
 func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
@@ -100,7 +103,8 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 		GenerateAbsorbs:   false,
 		DetectZone:        false,
 	})
-	p := &Parser{inner: inner, wowDB: wowDB}
+	_, talentTrees := parsectx.DatasetTalents(ctx)
+	p := &Parser{inner: inner, wowDB: wowDB, talentTrees: talentTrees}
 	inner.WithEventHook("BLIZZARD_COMBAT_LOG_VERSION", p.combatLogVersion)
 	inner.WithEventHook("BLIZZARD_ZONE_CHANGE", p.zoneChange)
 	inner.WithEventHook("BLIZZARD_COMBATANT_INFO", p.combatantInfo)
@@ -289,9 +293,10 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 		if len(fields) < 28 {
 			return nil, fmt.Errorf("blizzard V22 COMBATANT_INFO has %d fields, need at least 28", len(fields))
 		}
-		// V22 reports selected talent entries rather than the V9 three-tree point
-		// summary. Preserve gear parsing while leaving talents unset until those
-		// entries can be resolved through the dataset's talent tables.
+		talents, err = resolveV22Talents(fields[25], p.talentTrees)
+		if err != nil {
+			return nil, err
+		}
 		gear = parseGear(fields[27])
 	default:
 		return nil, fmt.Errorf("blizzard COMBATANT_INFO has unsupported combat log version %d", p.version)
@@ -309,6 +314,117 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 			Talents:    talents,
 		},
 	}}, nil
+}
+
+type v22TalentSelection struct {
+	nodeID      int32
+	nodeEntryID int32
+	rank        uint8
+}
+
+func resolveV22Talents(raw string, treeData *talents.TalentTreeData) (*combatant.Talents, error) {
+	selected, err := parseV22TalentSelections(raw)
+	if err != nil || len(selected) == 0 || treeData == nil {
+		return nil, err
+	}
+
+	var resolved *combatant.Talents
+	for _, classData := range treeData.Classes {
+		candidate, ok := resolveV22ClassTalents(selected, classData)
+		if !ok {
+			continue
+		}
+		if resolved != nil {
+			// Talent node IDs should identify one class. Treat ambiguous dataset
+			// data as unavailable rather than attaching the wrong build.
+			return nil, nil
+		}
+		resolved = candidate
+	}
+	return resolved, nil
+}
+
+func parseV22TalentSelections(raw string) ([]v22TalentSelection, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "[]" || raw == "nil" {
+		return nil, nil
+	}
+
+	entries := splitTopLevel(strings.Trim(raw, "[]"))
+	selected := make([]v22TalentSelection, 0, len(entries))
+	for _, entry := range entries {
+		parts := splitTopLevel(strings.Trim(entry, "()"))
+		if len(parts) != 3 {
+			return nil, fmt.Errorf("invalid V22 talent selection %q", entry)
+		}
+		nodeID, err := strconv.ParseInt(parts[0], 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("parse V22 talent node ID %q: %w", parts[0], err)
+		}
+		nodeEntryID, err := strconv.ParseInt(parts[1], 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("parse V22 talent node entry ID %q: %w", parts[1], err)
+		}
+		rank, err := strconv.ParseUint(parts[2], 10, 8)
+		if err != nil {
+			return nil, fmt.Errorf("parse V22 talent rank %q: %w", parts[2], err)
+		}
+		selected = append(selected, v22TalentSelection{
+			nodeID:      int32(nodeID),
+			nodeEntryID: int32(nodeEntryID),
+			rank:        uint8(rank),
+		})
+	}
+	return selected, nil
+}
+
+func resolveV22ClassTalents(selected []v22TalentSelection, classData talents.ClassTalentData) (*combatant.Talents, bool) {
+	type location struct {
+		tree  int
+		entry talents.TalentEntry
+	}
+	byNode := make(map[int32]location)
+	result := &combatant.Talents{}
+	for _, tab := range classData.Tabs {
+		tree := int(tab.OrderIndex)
+		if tree < 0 || tree >= len(result.Trees) {
+			continue
+		}
+		result.TabNames[tree] = tab.Name
+		for _, entry := range tab.Talents {
+			if entry.TabIndex < 0 {
+				continue
+			}
+			needed := int(entry.TabIndex) + 1
+			if len(result.Trees[tree]) < needed {
+				result.Trees[tree] = append(result.Trees[tree], make([]uint8, needed-len(result.Trees[tree]))...)
+			}
+			byNode[entry.ID] = location{tree: tree, entry: entry}
+		}
+	}
+
+	for _, selection := range selected {
+		loc, ok := byNode[selection.nodeID]
+		if !ok || !containsInt32(loc.entry.TraitNodeEntryIDs, selection.nodeEntryID) ||
+			selection.rank == 0 || int32(selection.rank) > loc.entry.MaxRank {
+			return nil, false
+		}
+		index := int(loc.entry.TabIndex)
+		previous := result.Trees[loc.tree][index]
+		result.Trees[loc.tree][index] = selection.rank
+		result.Summary[loc.tree] -= previous
+		result.Summary[loc.tree] += selection.rank
+	}
+	return result, true
+}
+
+func containsInt32(values []int32, want int32) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func parseTalentSummary(raw string) (*combatant.Talents, error) {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,8 +37,17 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 		map[string]any{"ID": 1, "SpellID": 100, "OrderIndex": 0, "ManaCost": 10})
 	writeRows(t, dir, "Item", map[string]any{"ID": 1, "ClassID": 2, "SubclassID": 3}, map[string]any{"ID": 2})
 	writeRows(t, dir, "ItemSparse", map[string]any{"ID": 1, "Display_lang": "Safe Item", "OverallQualityID": 2, "Flags": []int{7}, "AllowableRace": []int{-1, -1}}, map[string]any{"ID": 3, "Display_lang": "orphan"})
-	writeRows(t, dir, "Talent", map[string]any{"ID": 9, "TabID": 7, "TierID": 0, "ColumnIndex": 0, "SpellRank": []int{100, 0}})
-	writeRows(t, dir, "TalentTab", map[string]any{"ID": 7, "Name_lang": "Tree", "ClassMask": 1, "SpellIconID": 999})
+	writeRows(t, dir, "TraitTree", map[string]any{"ID": 900})
+	writeRows(t, dir, "TraitNode", map[string]any{"ID": 9, "TraitTreeID": 900, "PosX": 0, "PosY": 0})
+	writeRows(t, dir, "TraitNodeEntry", map[string]any{"ID": 19, "TraitDefinitionID": 29, "MaxRanks": 1})
+	writeRows(t, dir, "TraitDefinition", map[string]any{"ID": 29, "SpellID": 100})
+	writeRows(t, dir, "TraitEdge")
+	writeRows(t, dir, "TraitNodeXTraitNodeEntry", map[string]any{"ID": 39, "TraitNodeID": 9, "TraitNodeEntryID": 19})
+	writeRows(t, dir, "TraitNodeGroup", map[string]any{"ID": 49, "TraitTreeID": 900})
+	writeRows(t, dir, "TraitNodeGroupXTraitNode", map[string]any{"ID": 59, "TraitNodeGroupID": 49, "TraitNodeID": 9})
+	writeRows(t, dir, "TraitNodeGroupDisplayInfo", map[string]any{"ID": 69, "TraitNodeGroupID": 49, "SkillLineID": 1001, "OrderIndex": 0, "TraitTreeID": 900})
+	writeRows(t, dir, "SkillLineXTraitTree", map[string]any{"ID": 79, "SkillLineID": 26, "TraitTreeID": 900})
+	writeRows(t, dir, "SkillLine", map[string]any{"ID": 1001, "DisplayName_lang": "Tree"})
 	writeRows(t, dir, "SpellCastTimes", map[string]any{"ID": 1, "Base": 1500, "Minimum": 500})
 	writeRows(t, dir, "SpellItemEnchantment", map[string]any{"ID": 5, "Effect": []int{1, 2, 3}, "EffectArg": []int{4, 5, 6}, "Name_lang": "Enchant"})
 	writeRows(t, dir, "ItemSet",
@@ -97,6 +107,121 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	require.Empty(t, got.ItemSets[1].ItemIDs)
 	require.Contains(t, string(got.TalentTrees), `"name":"Test Spell"`)
 	require.Contains(t, string(got.TalentTrees), `"iconTexture":"spell_test"`)
+}
+
+func TestConvertTraitsBuildsForeverTalentTrees(t *testing.T) {
+	t.Parallel()
+	dir := newSnapshotFixture(t)
+	writeRows(t, dir, "Spell",
+		map[string]any{"ID": 100},
+		map[string]any{"ID": 101},
+		map[string]any{"ID": 102})
+	writeRows(t, dir, "SpellName",
+		map[string]any{"ID": 100, "Name_lang": "First Talent"},
+		map[string]any{"ID": 101, "Name_lang": "Second Talent"},
+		map[string]any{"ID": 102, "Name_lang": "Third Talent"})
+	writeRows(t, dir, "SpellMisc",
+		map[string]any{"ID": 1, "SpellID": 100, "SpellIconFileDataID": 5001},
+		map[string]any{"ID": 2, "SpellID": 101, "SpellIconFileDataID": 5002},
+		map[string]any{"ID": 3, "SpellID": 102, "SpellIconFileDataID": 5003})
+	writeIconRows(t, dir,
+		map[string]any{"fileDataID": 5001, "fileName": `Interface\Icons\Talent_First.BLP`},
+		map[string]any{"fileDataID": 5002, "fileName": `Interface\Icons\Talent_Second.BLP`},
+		map[string]any{"fileDataID": 5003, "fileName": `Interface\Icons\Talent_Third.BLP`},
+		map[string]any{"fileDataID": 6001, "fileName": `Interface\Icons\Tab_Arms.BLP`})
+
+	writeRows(t, dir, "TraitTree", map[string]any{"ID": 900})
+	writeRows(t, dir, "SkillLineXTraitTree", map[string]any{"ID": 1, "SkillLineID": 26, "TraitTreeID": 900})
+	writeRows(t, dir, "SkillLine",
+		map[string]any{"ID": 1001, "DisplayName_lang": "Arms", "SpellIconFileID": 6001},
+		map[string]any{"ID": 1002, "DisplayName_lang": "Fury"},
+		map[string]any{"ID": 1003, "DisplayName_lang": "Protection"})
+	writeRows(t, dir, "TraitNodeGroup",
+		map[string]any{"ID": 2001, "TraitTreeID": 900},
+		map[string]any{"ID": 2002, "TraitTreeID": 900},
+		map[string]any{"ID": 2003, "TraitTreeID": 900})
+	writeRows(t, dir, "TraitNodeGroupDisplayInfo",
+		map[string]any{"ID": 3003, "TraitNodeGroupID": 2003, "SkillLineID": 1003, "OrderIndex": 2, "TraitTreeID": 900},
+		map[string]any{"ID": 3001, "TraitNodeGroupID": 2001, "SkillLineID": 1001, "OrderIndex": 0, "TraitTreeID": 900},
+		map[string]any{"ID": 3002, "TraitNodeGroupID": 2002, "SkillLineID": 1002, "OrderIndex": 1, "TraitTreeID": 900})
+	writeRows(t, dir, "TraitNode",
+		map[string]any{"ID": 105888, "TraitTreeID": 900, "PosX": 610, "PosY": -5},
+		map[string]any{"ID": 105889, "TraitTreeID": 900, "PosX": -10, "PosY": 5},
+		map[string]any{"ID": 105890, "TraitTreeID": 900, "PosX": 0, "PosY": 605},
+		map[string]any{"ID": 105891, "TraitTreeID": 900, "PosX": 0, "PosY": 0},
+		map[string]any{"ID": 105892, "TraitTreeID": 900, "PosX": 0, "PosY": 0})
+	writeRows(t, dir, "TraitNodeGroupXTraitNode",
+		map[string]any{"ID": 3, "TraitNodeGroupID": 2001, "TraitNodeID": 105890, "Index": 2},
+		map[string]any{"ID": 1, "TraitNodeGroupID": 2001, "TraitNodeID": 105888, "Index": 0},
+		map[string]any{"ID": 2, "TraitNodeGroupID": 2001, "TraitNodeID": 105889, "Index": 1},
+		map[string]any{"ID": 4, "TraitNodeGroupID": 2002, "TraitNodeID": 105891},
+		map[string]any{"ID": 5, "TraitNodeGroupID": 2003, "TraitNodeID": 105892})
+	writeRows(t, dir, "TraitNodeEntry",
+		map[string]any{"ID": 130618, "TraitDefinitionID": 4001, "MaxRanks": 5},
+		map[string]any{"ID": 130619, "TraitDefinitionID": 4002, "MaxRanks": 1},
+		map[string]any{"ID": 130620, "TraitDefinitionID": 4003, "MaxRanks": 2},
+		map[string]any{"ID": 130621, "TraitDefinitionID": 4002, "MaxRanks": 1},
+		map[string]any{"ID": 130622, "TraitDefinitionID": 4003, "MaxRanks": 1})
+	writeRows(t, dir, "TraitDefinition",
+		map[string]any{"ID": 4001, "SpellID": 100},
+		map[string]any{"ID": 4002, "SpellID": 101},
+		map[string]any{"ID": 4003, "SpellID": 102})
+	writeRows(t, dir, "TraitNodeXTraitNodeEntry",
+		map[string]any{"ID": 11, "TraitNodeID": 105888, "TraitNodeEntryID": 130618},
+		map[string]any{"ID": 12, "TraitNodeID": 105889, "TraitNodeEntryID": 130619},
+		map[string]any{"ID": 13, "TraitNodeID": 105890, "TraitNodeEntryID": 130620},
+		map[string]any{"ID": 14, "TraitNodeID": 105891, "TraitNodeEntryID": 130621},
+		map[string]any{"ID": 15, "TraitNodeID": 105892, "TraitNodeEntryID": 130622})
+	writeRows(t, dir, "TraitEdge", map[string]any{"ID": 1, "LeftTraitNodeID": 105889, "RightTraitNodeID": 105890, "Type": 2})
+
+	got, err := Convert(dir, "wow_classic_beta", "1.60.1.69913")
+	require.NoError(t, err)
+	gotAgain, err := Convert(dir, "wow_classic_beta", "1.60.1.69913")
+	require.NoError(t, err)
+	require.Equal(t, got.TalentTrees, gotAgain.TalentTrees)
+
+	var trees talents.TalentTreeData
+	require.NoError(t, json.Unmarshal(got.TalentTrees, &trees))
+	require.Len(t, trees.Classes, 1)
+	warrior := trees.Classes[1]
+	require.Equal(t, []string{"Arms", "Fury", "Protection"}, []string{
+		warrior.Tabs[0].Name, warrior.Tabs[1].Name, warrior.Tabs[2].Name,
+	})
+	require.Equal(t, []int32{0, 1, 2}, []int32{
+		warrior.Tabs[0].OrderIndex, warrior.Tabs[1].OrderIndex, warrior.Tabs[2].OrderIndex,
+	})
+	require.Equal(t, "tab_arms", warrior.Tabs[0].IconTexture)
+	require.Len(t, warrior.Tabs[0].Talents, 3)
+	require.Equal(t, []int32{105889, 105888, 105890}, []int32{
+		warrior.Tabs[0].Talents[0].ID, warrior.Tabs[0].Talents[1].ID, warrior.Tabs[0].Talents[2].ID,
+	})
+	require.Equal(t, []int32{0, 1, 2}, []int32{
+		warrior.Tabs[0].Talents[0].TabIndex, warrior.Tabs[0].Talents[1].TabIndex, warrior.Tabs[0].Talents[2].TabIndex,
+	})
+	logged := warrior.Tabs[0].Talents[1]
+	require.Equal(t, int32(105888), logged.ID)
+	require.Equal(t, []int32{130618}, logged.TraitNodeEntryIDs)
+	require.Equal(t, int32(0), logged.TierID)
+	require.Equal(t, int32(1), logged.ColumnIndex)
+	require.Equal(t, int32(5), logged.MaxRank)
+	require.Equal(t, []int32{100, 100, 100, 100, 100}, logged.SpellRanks)
+	require.Equal(t, "First Talent", logged.Name)
+	require.Equal(t, "talent_first", logged.IconTexture)
+	require.Empty(t, logged.PrereqTalent, "TraitEdge direction and OR semantics are not projected into legacy prerequisites")
+}
+
+func TestModernRequiredTablesUseTraits(t *testing.T) {
+	t.Parallel()
+	require.NotContains(t, requiredTables, "Talent")
+	require.NotContains(t, requiredTables, "TalentTab")
+	for _, table := range []string{
+		"TraitTree", "TraitNode", "TraitNodeEntry", "TraitDefinition", "TraitEdge",
+		"TraitNodeXTraitNodeEntry", "TraitNodeGroup", "TraitNodeGroupXTraitNode",
+		"TraitNodeGroupDisplayInfo", "SkillLineXTraitTree", "SkillLine",
+	} {
+		require.Contains(t, requiredTables, table)
+		require.NotZero(t, wowdataTableHashes[table], "required table %s must support deterministic hotfix overlays", table)
+	}
 }
 
 func TestConvertRejectsIncompleteManifest(t *testing.T) {

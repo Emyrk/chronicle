@@ -42,7 +42,11 @@ var wowdataTableHashes = map[string]uint32{
 	"SpellRadius": 2877179969, "SpellRange": 3763447452, "SpellReagents": 2875640223,
 	"SpellShapeshift": 3163679255, "SpellTargetRestrictions": 3764692828,
 	"SpellTotems": 2769259057, "SpellXDescriptionVariables": 4091125549,
-	"Talent": 4188284511, "TalentTab": 1113426120,
+	"SkillLine": 3040725462, "SkillLineXTraitTree": 2800111168,
+	"TraitDefinition": 2995956864, "TraitEdge": 2496704385, "TraitNode": 3779276131,
+	"TraitNodeEntry": 2196297174, "TraitNodeGroup": 1612421313,
+	"TraitNodeGroupDisplayInfo": 884257668, "TraitNodeGroupXTraitNode": 447132635,
+	"TraitNodeXTraitNodeEntry": 2755108430, "TraitTree": 2521502169,
 }
 
 type HotfixOptions struct {

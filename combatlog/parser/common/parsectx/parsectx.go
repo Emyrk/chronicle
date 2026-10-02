@@ -4,17 +4,19 @@ import (
 	"context"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/talents"
+	"github.com/google/uuid"
 )
 
 type logTypeKey struct{}
 
-// Context carries the resolved parse metadata for a log group: the parse
-// format, the server flavor (mechanics), and the legacy log type. Dataset will
-// join these once dataset resolution is wired into the parse path.
+// Context carries the resolved parse metadata and dataset talent data for a log group.
 type Context struct {
-	Type   database.LogType
-	Format database.LogFormat
-	Flavor database.WoWFlavor
+	Type        database.LogType
+	Format      database.LogFormat
+	Flavor      database.WoWFlavor
+	DatasetID   uuid.UUID
+	TalentTrees *talents.TalentTreeData
 }
 
 // With stamps the full resolved metadata onto ctx, replacing any existing
@@ -60,6 +62,14 @@ func Flavor(ctx context.Context) (database.WoWFlavor, bool) {
 		return c.Flavor, true
 	}
 	return nil, false
+}
+
+// DatasetTalents returns the resolved dataset and its imported talent trees.
+func DatasetTalents(ctx context.Context) (uuid.UUID, *talents.TalentTreeData) {
+	if c, ok := FromContext(ctx); ok {
+		return c.DatasetID, c.TalentTrees
+	}
+	return uuid.Nil, nil
 }
 
 func FromContext(ctx context.Context) (*Context, bool) {

@@ -324,10 +324,20 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		})
 	}
 
+	talentTreeData, talentTreeErr := gameDB.TalentTrees(ctx, resolved.DatasetID)
+	if talentTreeErr != nil {
+		slog.WarnContext(ctx, "load talent trees for parsing and ranking sub-spec inference",
+			slog.String("dataset_id", resolved.DatasetID.String()),
+			slog.String("err", talentTreeErr.Error()),
+		)
+	}
+
 	ctx = parsectx.With(ctx, parsectx.Context{
-		Type:   lg.LogType,
-		Format: logFormat,
-		Flavor: flavor,
+		Type:        lg.LogType,
+		Format:      logFormat,
+		Flavor:      flavor,
+		DatasetID:   resolved.DatasetID,
+		TalentTrees: talentTreeData,
 	})
 
 	// ── Parse ────────────────────────────────────────────────────────────
@@ -336,14 +346,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	if err != nil {
 		jobResult = "failure"
 		return err
-	}
-
-	talentTreeData, talentTreeErr := gameDB.TalentTrees(ctx, resolved.DatasetID)
-	if talentTreeErr != nil {
-		slog.WarnContext(ctx, "load talent trees for ranking sub-spec inference",
-			slog.String("dataset_id", resolved.DatasetID.String()),
-			slog.String("err", talentTreeErr.Error()),
-		)
 	}
 
 	logCapabilities := parsed.logCapabilities

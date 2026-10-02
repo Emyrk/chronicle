@@ -21,7 +21,7 @@ import {
   talentPopularitySlug,
 } from "@/components/ui/TalentTreeViewer/talentLogic";
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
-import { DatasetProvider } from "@/hooks/useDatasetId";
+import { DatasetProvider, useDatasetId } from "@/hooks/useDatasetId";
 import { SPEC_BY_CLASS } from "@/pages/Rankings/classDisplay";
 import { subspecRulesForFlavor } from "@/pages/Subspecs/subspecs";
 import { MyBuildsDrawer } from "./MyBuildsDrawer";
@@ -71,7 +71,8 @@ function talentConfigFromFlavor(flavor: readonly string[]): {
 export function TalentCalculatorPage() {
   const { classSlug } = useParams<{ classSlug?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data: talentData, isLoading, isError } = useTalentTrees();
+  const datasetId = useDatasetId();
+  const { data: talentData, isLoading, isError } = useTalentTrees(datasetId);
   const { data: siteConfig } = useSiteConfig();
 
   const tc = useMemo(
