@@ -50,7 +50,7 @@ function talent(partial: Partial<TalentEntry> & Pick<TalentEntry, "id" | "tierID
 }
 
 describe("Forever Legacy talent trees", () => {
-  it("uses the standard viewer with horizontal progression transposed into tiers", () => {
+  it("uses the standard viewer while preserving left-to-right progression", () => {
     const data = legacyTreesToTalentData([
       {
         id: 1187,
@@ -84,8 +84,8 @@ describe("Forever Legacy talent trees", () => {
 
     expect(data.name).toBe("Legacy");
     expect(data.tabs).toHaveLength(1);
-    expect(data.tabs[0].talents[0]).toMatchObject({ tierID: 0, columnIndex: 1 });
-    expect(data.tabs[0].talents[1]).toMatchObject({ tierID: 1, columnIndex: 1, prereqAnyTalent: [100] });
+    expect(data.tabs[0].talents[0]).toMatchObject({ tierID: 1, columnIndex: 0, progressionIndex: 0 });
+    expect(data.tabs[0].talents[1]).toMatchObject({ tierID: 1, columnIndex: 1, progressionIndex: 1, prereqAnyTalent: [100] });
     expect(canUseTalent(data.tabs[0].talents[1], data.tabs[0].talents, { 100: 4 }, 5)).toBe(false);
     expect(canUseTalent(data.tabs[0].talents[1], data.tabs[0].talents, { 100: 5 }, 5)).toBe(true);
   });

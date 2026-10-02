@@ -8,6 +8,8 @@ export interface TalentEntry {
   name: string;
   tierID: number;
   columnIndex: number;
+  /** Progression axis override for trees that unlock left-to-right. */
+  progressionIndex?: number;
   maxRank: number;
   tabIndex: number;
   spellRanks: number[];
@@ -86,11 +88,10 @@ export function legacyTreesToTalentData(trees: LegacyTalentTreeData[]): ClassTal
         talents: tree.talents.map((talent) => ({
           id: talent.id,
           name: talent.name,
-          // Forever stores Legacy progression left-to-right. Transpose it into
-          // the standard talent viewer's top-to-bottom tiers so Legacy trees
-          // look and behave like class talent trees.
-          tierID: talent.columnIndex,
-          columnIndex: talent.rowIndex,
+          // Legacy trees keep their client layout and unlock left-to-right.
+          tierID: talent.rowIndex,
+          columnIndex: talent.columnIndex,
+          progressionIndex: talent.columnIndex,
           maxRank: talent.maxRank,
           tabIndex: talent.tabIndex,
           spellRanks: talent.spellRanks,
@@ -180,13 +181,17 @@ export function prerequisiteArrows(talents: TalentEntry[]): TalentPrereqArrow[] 
 
 // ─── Talent point requirements ────────────────────────────────────
 
-export function rowPointRequirement(talent: Pick<TalentEntry, "tierID">, pointsPerRow = 5) {
-  return talent.tierID * pointsPerRow;
+function talentProgressionIndex(talent: Pick<TalentEntry, "tierID" | "progressionIndex">) {
+  return talent.progressionIndex ?? talent.tierID;
 }
 
-function pointsSpentBeforeRow(talents: TalentEntry[], ranks: TalentRanks, tierID: number) {
+export function rowPointRequirement(talent: Pick<TalentEntry, "tierID" | "progressionIndex">, pointsPerRow = 5) {
+  return talentProgressionIndex(talent) * pointsPerRow;
+}
+
+function pointsSpentBeforeRow(talents: TalentEntry[], ranks: TalentRanks, progressionIndex: number) {
   return talents.reduce((sum, talent) => {
-    if (talent.tierID >= tierID) return sum;
+    if (talentProgressionIndex(talent) >= progressionIndex) return sum;
     return sum + (ranks[talent.id] ?? 0);
   }, 0);
 }
@@ -209,7 +214,7 @@ function prerequisitesMet(talent: TalentEntry, talents: TalentEntry[], ranks: Ta
 }
 
 export function canUseTalent(talent: TalentEntry, talents: TalentEntry[], ranks: TalentRanks, pointsPerRow = 5) {
-  return pointsSpentBeforeRow(talents, ranks, talent.tierID) >= rowPointRequirement(talent, pointsPerRow) && prerequisitesMet(talent, talents, ranks);
+  return pointsSpentBeforeRow(talents, ranks, talentProgressionIndex(talent)) >= rowPointRequirement(talent, pointsPerRow) && prerequisitesMet(talent, talents, ranks);
 }
 
 function spentTalentsStillValid(talents: TalentEntry[], ranks: TalentRanks, pointsPerRow: number) {
