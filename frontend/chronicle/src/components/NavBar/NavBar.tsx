@@ -157,14 +157,6 @@ export function NavBar() {
                 Performance
               </Link>
               <Link
-                to="/census"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <Users className="h-4 w-4" />
-                Census
-              </Link>
-              <Link
                 to="/talents"
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
@@ -179,6 +171,14 @@ export function NavBar() {
               >
                 <Shirt className="h-4 w-4" />
                 Gear Builder
+              </Link>
+              <Link
+                to="/census"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+              >
+                <Users className="h-4 w-4" />
+                Census
               </Link>
               {isAuthenticated && (
                 <>
@@ -282,12 +282,6 @@ export function NavBar() {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to="/census" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Census
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
               <Link to="/talents" className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
                 Talent Builder
@@ -297,6 +291,12 @@ export function NavBar() {
               <Link to="/gear/progression" className="flex items-center gap-2">
                 <Shirt className="h-4 w-4" />
                 Gear Builder
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/census" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Census
               </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
