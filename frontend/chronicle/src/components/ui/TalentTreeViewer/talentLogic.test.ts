@@ -13,6 +13,7 @@ import {
   encodeTalentBuild,
   isTalentBackgroundVisible,
   isTalentBuildLocked,
+  legacyTreesToTalentData,
   lockedTalentReasons,
   mergeTalentRankDescriptions,
   normalizeTalentRanks,
@@ -47,6 +48,48 @@ function talent(partial: Partial<TalentEntry> & Pick<TalentEntry, "id" | "tierID
     ...partial,
   };
 }
+
+describe("Forever Legacy talent trees", () => {
+  it("uses the standard viewer with horizontal progression transposed into tiers", () => {
+    const data = legacyTreesToTalentData([
+      {
+        id: 1187,
+        name: "Professions",
+        orderIndex: 0,
+        talents: [
+          {
+            id: 100,
+            name: "Working Overtime",
+            columnIndex: 0,
+            rowIndex: 1,
+            maxRank: 5,
+            tabIndex: 0,
+            spellRanks: [100, 100, 100, 100, 100],
+            iconTexture: "trade_engineering",
+          },
+          {
+            id: 101,
+            name: "Bartering",
+            columnIndex: 1,
+            rowIndex: 1,
+            maxRank: 2,
+            tabIndex: 1,
+            spellRanks: [101, 101],
+            iconTexture: "trade_engineering",
+            prereqAnyTalent: [100],
+          },
+        ],
+      },
+    ]);
+
+    expect(data.name).toBe("Legacy");
+    expect(data.tabs).toHaveLength(1);
+    expect(data.tabs[0].talents[0]).toMatchObject({ tierID: 0, columnIndex: 1 });
+    expect(data.tabs[0].talents[1]).toMatchObject({ tierID: 1, columnIndex: 1, prereqAnyTalent: [100] });
+    expect(canUseTalent(data.tabs[0].talents[1], data.tabs[0].talents, { 100: 4 }, 5)).toBe(false);
+    expect(canUseTalent(data.tabs[0].talents[1], data.tabs[0].talents, { 100: 5 }, 5)).toBe(true);
+  });
+});
 
 describe("TalentTreeViewer required player level", () => {
   it("derives level from max level, max talent points, and current spend", () => {

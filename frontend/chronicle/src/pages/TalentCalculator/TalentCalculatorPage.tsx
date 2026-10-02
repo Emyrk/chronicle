@@ -16,6 +16,7 @@ import {
   decodeTalentBuild,
   normalizeTalentRanks,
   rankingsLayoutToBuild,
+  legacyTreesToTalentData,
   searchParamsWithTalentPopularity,
   talentPopularitySelection,
   talentPopularitySlug,
@@ -41,6 +42,7 @@ const CLASS_INFO: { id: number; name: string; slug: string }[] = [
 ];
 
 const PET_INFO = { id: 0, name: "Pet", slug: "pet" };
+const LEGACY_INFO = { id: -1, name: "Legacy", slug: "legacy" };
 const PET_TREE_IDS = [1, 2, 4];
 const PET_MAX_TALENT_POINTS = 20;
 
@@ -89,31 +91,43 @@ export function TalentCalculatorPage() {
     return tabs.length > 0 ? { id: PET_INFO.id, name: "Hunter Pet", tabs } : undefined;
   }, [talentData?.pets]);
 
+  const legacyTrees = talentData?.legacyTrees;
+  const legacyTreeData = useMemo(
+    () => (legacyTrees?.length ? legacyTreesToTalentData(legacyTrees) : undefined),
+    [legacyTrees],
+  );
   const selectedClass = availableClasses.find((c) => c.slug === classSlug);
   const selectedPet = classSlug === PET_INFO.slug;
-  const selectedOption = selectedClass ?? (selectedPet ? PET_INFO : undefined);
+  const selectedLegacy = classSlug === LEGACY_INFO.slug;
+  const selectedOption = selectedClass ?? (selectedPet ? PET_INFO : selectedLegacy ? LEGACY_INFO : undefined);
   const selectedClassId = selectedClass?.id;
-  const pointsPerRow = selectedPet ? 3 : 5;
-  const maxTalentPoints = selectedPet ? PET_MAX_TALENT_POINTS : tc.maxTalentPoints;
+  const pointsPerRow = selectedPet ? 3 : selectedLegacy ? (talentData?.legacyPointsPerColumn ?? 5) : 5;
+  const maxTalentPoints = selectedPet
+    ? PET_MAX_TALENT_POINTS
+    : selectedLegacy
+      ? (talentData?.legacyMaxPoints ?? 16)
+      : tc.maxTalentPoints;
 
   // Top Builds relies on per-spec rankings. Hide it when this tenant's parse
   // scoring is disabled or aggregates by class instead of spec.
   const cohortMode = siteConfig?.tenant?.parse_config?.cohort_mode ?? "spec";
-  const topBuildsAvailable = !selectedPet && cohortMode === "spec";
+  const topBuildsAvailable = !selectedPet && !selectedLegacy && cohortMode === "spec";
 
-  const classTreeData = selectedPet
-    ? petTreeData
-    : selectedClassId
-      ? talentData?.classes?.[String(selectedClassId)]
-      : undefined;
+  const classTreeData = selectedLegacy
+    ? legacyTreeData
+    : selectedPet
+      ? petTreeData
+      : selectedClassId
+        ? talentData?.classes?.[String(selectedClassId)]
+        : undefined;
 
   const isMobile = useIsMobile();
 
   // Top Builds "Show all" overlay: store the ranking cohort in a compact URL
   // value, then reload its current top-15 builds when the page is opened.
   const popularitySource = useMemo(
-    () => selectedPet ? null : talentPopularitySelection(searchParams),
-    [searchParams, selectedPet],
+    () => selectedPet || selectedLegacy ? null : talentPopularitySelection(searchParams),
+    [searchParams, selectedLegacy, selectedPet],
   );
   const apiClass = selectedClass ? toApiClass(selectedClass.name) : "";
   const popularitySpec = (SPEC_BY_CLASS[apiClass] ?? []).find(
@@ -348,7 +362,12 @@ export function TalentCalculatorPage() {
           {(talentData?.legacyTrees?.length ?? 0) > 0 && (
             <Link
               to="/talents/legacy"
-              className="inline-flex items-center gap-2 rounded-lg border border-zinc-700/60 bg-zinc-900/40 px-3 py-2 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-white"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
+                selectedLegacy
+                  ? "border-primary/70 bg-primary/15 text-white"
+                  : "border-zinc-700/60 bg-zinc-900/40 text-zinc-400 hover:border-zinc-500 hover:text-white",
+              )}
             >
               <span className="text-base">✦</span>
               <span>Legacy</span>
@@ -373,12 +392,12 @@ export function TalentCalculatorPage() {
           maxLevel={maxLevel}
           pointsPerRow={pointsPerRow}
           exclusiveTabs={selectedPet}
-          showRequiredLevel={!selectedPet}
+          showRequiredLevel={!selectedPet && !selectedLegacy}
           mobileHeader={isMobile ? mobileHeader : undefined}
           popularity={popularity}
           diff={diff}
           extraActions={
-            !isMobile && !selectedPet ? (
+            !isMobile && !selectedPet && !selectedLegacy ? (
               <>
                 {diff && (
                   <button
@@ -416,12 +435,14 @@ export function TalentCalculatorPage() {
           }
         />
         </DatasetProvider>
+      ) : selectedLegacy ? (
+        <div className="text-zinc-500">This dataset does not include Forever Legacy talents.</div>
       ) : (
         <div className="text-zinc-500">Select a class, pet type, or Legacy above to get started.</div>
       )}
 
       {/* Mobile: floating My Builds button (like the instance page encounter FAB) */}
-      {isMobile && classTreeData && !selectedPet && (
+      {isMobile && classTreeData && !selectedPet && !selectedLegacy && (
         <MyBuildsDrawer classes={availableClasses} selectedClassId={selectedClassId} floating />
       )}
     </div>

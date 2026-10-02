@@ -71,6 +71,38 @@ export interface TalentTreeJSON {
   icon_base_url?: string;
 }
 
+export function legacyTreesToTalentData(trees: LegacyTalentTreeData[]): ClassTalentData {
+  return {
+    id: 0,
+    name: "Legacy",
+    tabs: [...trees]
+      .sort((a, b) => a.orderIndex - b.orderIndex)
+      .map((tree) => ({
+        id: tree.id,
+        name: tree.name,
+        backgroundFile: "",
+        orderIndex: tree.orderIndex,
+        iconTexture: tree.talents[0]?.iconTexture ?? "inv_misc_questionmark",
+        talents: tree.talents.map((talent) => ({
+          id: talent.id,
+          name: talent.name,
+          // Forever stores Legacy progression left-to-right. Transpose it into
+          // the standard talent viewer's top-to-bottom tiers so Legacy trees
+          // look and behave like class talent trees.
+          tierID: talent.columnIndex,
+          columnIndex: talent.rowIndex,
+          maxRank: talent.maxRank,
+          tabIndex: talent.tabIndex,
+          spellRanks: talent.spellRanks,
+          iconTexture: talent.iconTexture,
+          prereqTalent: talent.prereqTalent,
+          prereqAnyTalent: talent.prereqAnyTalent,
+          visualPrereqTalent: talent.visualPrereqTalent,
+        })),
+      })),
+  };
+}
+
 export type TalentRanks = Record<number, number>;
 
 export type TalentPrereqArrow = {
