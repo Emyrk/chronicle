@@ -206,6 +206,9 @@ func (r *transformReader) normalizeUnitName(rawGUID, quotedName string) string {
 	if err != nil {
 		return quotedName
 	}
+	if r.combatLogVersion == 22 {
+		return strconv.Quote(stripRealm(name))
+	}
 	return strconv.Quote(strings.TrimSuffix(name, "-"))
 }
 

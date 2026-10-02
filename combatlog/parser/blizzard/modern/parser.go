@@ -356,9 +356,10 @@ func parseGear(raw string) []combatant.GearItem {
 }
 
 func stripRealm(name string) string {
-	parts := strings.Split(name, "-")
-	if len(parts) >= 3 {
-		return strings.Join(parts[:len(parts)-2], "-")
+	name = strings.TrimSuffix(name, "-")
+	characterName, _, found := strings.Cut(name, "-")
+	if found {
+		return characterName
 	}
 	return name
 }
