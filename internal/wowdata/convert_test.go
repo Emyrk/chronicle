@@ -115,22 +115,33 @@ func TestConvertTraitsBuildsForeverTalentTrees(t *testing.T) {
 	writeRows(t, dir, "Spell",
 		map[string]any{"ID": 100},
 		map[string]any{"ID": 101},
-		map[string]any{"ID": 102})
+		map[string]any{"ID": 102},
+		map[string]any{"ID": 103},
+		map[string]any{"ID": 104},
+		map[string]any{"ID": 105})
 	writeRows(t, dir, "SpellName",
 		map[string]any{"ID": 100, "Name_lang": "First Talent"},
 		map[string]any{"ID": 101, "Name_lang": "Second Talent"},
-		map[string]any{"ID": 102, "Name_lang": "Third Talent"})
+		map[string]any{"ID": 102, "Name_lang": "Third Talent"},
+		map[string]any{"ID": 103, "Name_lang": "Working Overtime"},
+		map[string]any{"ID": 104, "Name_lang": "Performance Bonus"},
+		map[string]any{"ID": 105, "Name_lang": "Unknown"})
 	writeRows(t, dir, "SpellMisc",
 		map[string]any{"ID": 1, "SpellID": 100, "SpellIconFileDataID": 5001},
 		map[string]any{"ID": 2, "SpellID": 101, "SpellIconFileDataID": 5002},
-		map[string]any{"ID": 3, "SpellID": 102, "SpellIconFileDataID": 5003})
+		map[string]any{"ID": 3, "SpellID": 102, "SpellIconFileDataID": 5003},
+		map[string]any{"ID": 4, "SpellID": 103, "SpellIconFileDataID": 5001},
+		map[string]any{"ID": 5, "SpellID": 104, "SpellIconFileDataID": 5002},
+		map[string]any{"ID": 6, "SpellID": 105, "SpellIconFileDataID": 5003})
 	writeIconRows(t, dir,
 		map[string]any{"fileDataID": 5001, "fileName": `Interface\Icons\Talent_First.BLP`},
 		map[string]any{"fileDataID": 5002, "fileName": `Interface\Icons\Talent_Second.BLP`},
 		map[string]any{"fileDataID": 5003, "fileName": `Interface\Icons\Talent_Third.BLP`},
 		map[string]any{"fileDataID": 6001, "fileName": `Interface\Icons\Tab_Arms.BLP`})
 
-	writeRows(t, dir, "TraitTree", map[string]any{"ID": 900})
+	writeRows(t, dir, "TraitTree",
+		map[string]any{"ID": 900},
+		map[string]any{"ID": 1187, "TraitSystemID": 45})
 	writeRows(t, dir, "SkillLineXTraitTree", map[string]any{"ID": 1, "SkillLineID": 26, "TraitTreeID": 900})
 	writeRows(t, dir, "SkillLine",
 		map[string]any{"ID": 1001, "DisplayName_lang": "Arms", "SpellIconFileID": 6001},
@@ -149,7 +160,10 @@ func TestConvertTraitsBuildsForeverTalentTrees(t *testing.T) {
 		map[string]any{"ID": 105889, "TraitTreeID": 900, "PosX": -10, "PosY": 5},
 		map[string]any{"ID": 105890, "TraitTreeID": 900, "PosX": 0, "PosY": 605},
 		map[string]any{"ID": 105891, "TraitTreeID": 900, "PosX": 0, "PosY": 0},
-		map[string]any{"ID": 105892, "TraitTreeID": 900, "PosX": 0, "PosY": 0})
+		map[string]any{"ID": 105892, "TraitTreeID": 900, "PosX": 0, "PosY": 0},
+		map[string]any{"ID": 110290, "TraitTreeID": 1187, "PosX": 2400, "PosY": 1800},
+		map[string]any{"ID": 110292, "TraitTreeID": 1187, "PosX": 3150, "PosY": 2550},
+		map[string]any{"ID": 113506, "TraitTreeID": 1187, "PosX": 4650, "PosY": 2550})
 	writeRows(t, dir, "TraitNodeGroupXTraitNode",
 		map[string]any{"ID": 3, "TraitNodeGroupID": 2001, "TraitNodeID": 105890, "Index": 2},
 		map[string]any{"ID": 1, "TraitNodeGroupID": 2001, "TraitNodeID": 105888, "Index": 0},
@@ -161,21 +175,31 @@ func TestConvertTraitsBuildsForeverTalentTrees(t *testing.T) {
 		map[string]any{"ID": 130619, "TraitDefinitionID": 4002, "MaxRanks": 1},
 		map[string]any{"ID": 130620, "TraitDefinitionID": 4003, "MaxRanks": 2},
 		map[string]any{"ID": 130621, "TraitDefinitionID": 4002, "MaxRanks": 1},
-		map[string]any{"ID": 130622, "TraitDefinitionID": 4003, "MaxRanks": 1})
+		map[string]any{"ID": 130622, "TraitDefinitionID": 4003, "MaxRanks": 1},
+		map[string]any{"ID": 136841, "TraitDefinitionID": 4004, "MaxRanks": 5},
+		map[string]any{"ID": 136842, "TraitDefinitionID": 4005, "MaxRanks": 3},
+		map[string]any{"ID": 140812, "TraitDefinitionID": 4006, "MaxRanks": 1})
 	writeRows(t, dir, "TraitDefinition",
 		map[string]any{"ID": 4001, "SpellID": 100},
 		map[string]any{"ID": 4002, "SpellID": 101},
-		map[string]any{"ID": 4003, "SpellID": 102})
+		map[string]any{"ID": 4003, "SpellID": 102},
+		map[string]any{"ID": 4004, "SpellID": 103},
+		map[string]any{"ID": 4005, "SpellID": 104},
+		map[string]any{"ID": 4006, "SpellID": 105})
 	writeRows(t, dir, "TraitNodeXTraitNodeEntry",
 		map[string]any{"ID": 11, "TraitNodeID": 105888, "TraitNodeEntryID": 130618},
 		map[string]any{"ID": 12, "TraitNodeID": 105889, "TraitNodeEntryID": 130619},
 		map[string]any{"ID": 13, "TraitNodeID": 105890, "TraitNodeEntryID": 130620},
 		map[string]any{"ID": 14, "TraitNodeID": 105891, "TraitNodeEntryID": 130621},
-		map[string]any{"ID": 15, "TraitNodeID": 105892, "TraitNodeEntryID": 130622})
+		map[string]any{"ID": 15, "TraitNodeID": 105892, "TraitNodeEntryID": 130622},
+		map[string]any{"ID": 16, "TraitNodeID": 110290, "TraitNodeEntryID": 136841},
+		map[string]any{"ID": 17, "TraitNodeID": 110292, "TraitNodeEntryID": 136842},
+		map[string]any{"ID": 18, "TraitNodeID": 113506, "TraitNodeEntryID": 140812})
 	writeRows(t, dir, "TraitEdge",
 		map[string]any{"ID": 1, "LeftTraitNodeID": 105889, "RightTraitNodeID": 105890, "Type": 2},
 		map[string]any{"ID": 2, "LeftTraitNodeID": 105888, "RightTraitNodeID": 105890, "Type": 3},
-		map[string]any{"ID": 3, "LeftTraitNodeID": 105890, "RightTraitNodeID": 105888, "Type": 0})
+		map[string]any{"ID": 3, "LeftTraitNodeID": 105890, "RightTraitNodeID": 105888, "Type": 0},
+		map[string]any{"ID": 4, "LeftTraitNodeID": 110290, "RightTraitNodeID": 110292, "Type": 2})
 
 	got, err := Convert(dir, "wow_classic_beta", "1.60.1.69913")
 	require.NoError(t, err)
@@ -216,6 +240,16 @@ func TestConvertTraitsBuildsForeverTalentTrees(t *testing.T) {
 	require.Equal(t, int32(105890), dependent.ID)
 	require.Equal(t, []int32{105888}, dependent.PrereqTalent)
 	require.Equal(t, []int32{105889}, dependent.PrereqAnyTalent)
+
+	require.Equal(t, int32(16), trees.LegacyMaxPoints)
+	require.Equal(t, int32(5), trees.LegacyPointsPerColumn)
+	require.Len(t, trees.LegacyTrees, 1)
+	legacy := trees.LegacyTrees[0]
+	require.Equal(t, int32(1187), legacy.ID)
+	require.Equal(t, "Professions", legacy.Name)
+	require.Len(t, legacy.Talents, 2, "placeholder Unknown nodes are omitted")
+	require.Equal(t, []int32{110290, 110292}, []int32{legacy.Talents[0].ID, legacy.Talents[1].ID})
+	require.Equal(t, []int32{110290}, legacy.Talents[1].PrereqAnyTalent)
 }
 
 func TestModernRequiredTablesUseTraits(t *testing.T) {

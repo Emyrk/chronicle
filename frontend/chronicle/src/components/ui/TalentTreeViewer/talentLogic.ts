@@ -38,9 +38,33 @@ export interface ClassTalentData {
   tabs: TalentTabData[];
 }
 
+export interface LegacyTalentEntry {
+  id: number;
+  name: string;
+  columnIndex: number;
+  rowIndex: number;
+  maxRank: number;
+  tabIndex: number;
+  spellRanks: number[];
+  iconTexture: string;
+  prereqTalent?: number[];
+  prereqAnyTalent?: number[];
+  visualPrereqTalent?: number[];
+}
+
+export interface LegacyTalentTreeData {
+  id: number;
+  name: string;
+  orderIndex: number;
+  talents: LegacyTalentEntry[];
+}
+
 export interface TalentTreeJSON {
   classes: Record<string, ClassTalentData>;
   pets?: Record<string, ClassTalentData>;
+  legacyTrees?: LegacyTalentTreeData[];
+  legacyMaxPoints?: number;
+  legacyPointsPerColumn?: number;
   /** Resolved dataset for this data (tenant-aware). */
   dataset_id?: string;
   /** Icon CDN base for the resolved dataset. */

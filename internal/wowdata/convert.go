@@ -687,7 +687,7 @@ func convertItems(dir string, out *Import) error {
 }
 
 type traitTreeRow struct {
-	ID int32
+	ID, TraitSystemID int32
 }
 type traitNodeRow struct {
 	ID, TraitTreeID, PosX, PosY int32
@@ -722,8 +722,31 @@ type skillLineRow struct {
 	SpellIconFileID int32
 }
 type talentTrees struct {
-	Classes map[int32]talentClass `json:"classes"`
-	Pets    map[int32]talentClass `json:"pets,omitempty"`
+	Classes               map[int32]talentClass `json:"classes"`
+	Pets                  map[int32]talentClass `json:"pets,omitempty"`
+	LegacyTrees           []legacyTalentTree    `json:"legacyTrees,omitempty"`
+	LegacyMaxPoints       int32                 `json:"legacyMaxPoints,omitempty"`
+	LegacyPointsPerColumn int32                 `json:"legacyPointsPerColumn,omitempty"`
+}
+type legacyTalentTree struct {
+	ID         int32               `json:"id"`
+	Name       string              `json:"name"`
+	OrderIndex int32               `json:"orderIndex"`
+	Talents    []legacyTalentEntry `json:"talents"`
+}
+type legacyTalentEntry struct {
+	ID                 int32   `json:"id"`
+	TraitNodeEntryIDs  []int32 `json:"traitNodeEntryIDs,omitempty"`
+	Name               string  `json:"name"`
+	ColumnIndex        int32   `json:"columnIndex"`
+	RowIndex           int32   `json:"rowIndex"`
+	MaxRank            int32   `json:"maxRank"`
+	TabIndex           int32   `json:"tabIndex"`
+	SpellRanks         []int32 `json:"spellRanks"`
+	PrereqTalent       []int32 `json:"prereqTalent,omitempty"`
+	PrereqAnyTalent    []int32 `json:"prereqAnyTalent,omitempty"`
+	VisualPrereqTalent []int32 `json:"visualPrereqTalent,omitempty"`
+	IconTexture        string  `json:"iconTexture"`
 }
 type talentClass struct {
 	Tabs []talentTab `json:"tabs"`
@@ -752,6 +775,21 @@ type talentEntry struct {
 	PrereqRank         []int32 `json:"prereqRank,omitempty"`
 	IconTexture        string  `json:"iconTexture"`
 }
+
+var foreverLegacyTreeInfo = map[int32]struct {
+	Name       string
+	OrderIndex int32
+}{
+	1187: {Name: "Professions", OrderIndex: 0},
+	1188: {Name: "Adventure", OrderIndex: 1},
+	1189: {Name: "Resourcefulness", OrderIndex: 2},
+}
+
+const (
+	foreverLegacyTraitSystemID   = 45
+	foreverLegacyMaxPoints       = 16
+	foreverLegacyPointsPerColumn = 5
+)
 
 var foreverClassBySkillLine = map[int32]int32{
 	26: 1, 184: 2, 50: 3, 38: 4, 613: 5,
@@ -1010,8 +1048,139 @@ func convertTalents(dir string, out *Import) error {
 		class.Tabs = append(class.Tabs, tab)
 		tree.Classes[classID] = class
 	}
+
+	for _, treeRow := range trees {
+		info, ok := foreverLegacyTreeInfo[treeRow.ID]
+		if !ok || treeRow.TraitSystemID != foreverLegacyTraitSystemID {
+			continue
+		}
+		legacy, err := convertLegacyTalentTree(
+			treeRow.ID, info.Name, info.OrderIndex, nodes, nodeEntriesByNode,
+			entryByID, definitionByID, edges, names, spellIconIDs, iconTextures,
+		)
+		if err != nil {
+			return err
+		}
+		if len(legacy.Talents) > 0 {
+			tree.LegacyTrees = append(tree.LegacyTrees, legacy)
+		}
+	}
+	if len(tree.LegacyTrees) > 0 {
+		sort.Slice(tree.LegacyTrees, func(i, j int) bool { return tree.LegacyTrees[i].OrderIndex < tree.LegacyTrees[j].OrderIndex })
+		tree.LegacyMaxPoints = foreverLegacyMaxPoints
+		tree.LegacyPointsPerColumn = foreverLegacyPointsPerColumn
+	}
+
 	out.TalentTrees, err = json.Marshal(tree)
 	return err
+}
+
+func convertLegacyTalentTree(
+	treeID int32,
+	name string,
+	orderIndex int32,
+	nodes []traitNodeRow,
+	nodeEntriesByNode map[int32][]traitNodeXEntryRow,
+	entryByID map[int32]traitNodeEntryRow,
+	definitionByID map[int32]traitDefinitionRow,
+	edges []traitEdgeRow,
+	names map[int32]string,
+	spellIconIDs map[int32]int32,
+	iconTextures map[int32]string,
+) (legacyTalentTree, error) {
+	members := make([]traitNodeRow, 0)
+	xs := make([]int32, 0)
+	ys := make([]int32, 0)
+	for _, node := range nodes {
+		if node.TraitTreeID != treeID {
+			continue
+		}
+		members = append(members, node)
+		xs = append(xs, node.PosX)
+		ys = append(ys, node.PosY)
+	}
+	columns := compactTraitCoordinates(xs)
+	rows := compactTraitCoordinates(ys)
+	legacy := legacyTalentTree{ID: treeID, Name: name, OrderIndex: orderIndex, Talents: []legacyTalentEntry{}}
+	for _, node := range members {
+		links := nodeEntriesByNode[node.ID]
+		if len(links) == 0 {
+			continue
+		}
+		entryIDs := make([]int32, 0, len(links))
+		var primary traitNodeEntryRow
+		for _, link := range links {
+			entry, ok := entryByID[link.TraitNodeEntryID]
+			if !ok {
+				return legacyTalentTree{}, fmt.Errorf("legacy trait node %d references missing entry %d", node.ID, link.TraitNodeEntryID)
+			}
+			if len(entryIDs) == 0 {
+				primary = entry
+			}
+			entryIDs = append(entryIDs, entry.ID)
+		}
+		definition, ok := definitionByID[primary.TraitDefinitionID]
+		if !ok || definition.SpellID == 0 || primary.MaxRanks <= 0 {
+			continue
+		}
+		talentName := names[definition.SpellID]
+		if talentName == "" || strings.EqualFold(talentName, "Unknown") {
+			continue
+		}
+		spellRanks := make([]int32, primary.MaxRanks)
+		for i := range spellRanks {
+			spellRanks[i] = definition.SpellID
+		}
+		legacy.Talents = append(legacy.Talents, legacyTalentEntry{
+			ID: node.ID, TraitNodeEntryIDs: entryIDs, Name: talentName,
+			ColumnIndex: columns[node.PosX], RowIndex: rows[node.PosY], MaxRank: primary.MaxRanks,
+			SpellRanks: spellRanks, IconTexture: iconTextures[spellIconIDs[definition.SpellID]],
+		})
+	}
+
+	talentIndex := make(map[int32]int, len(legacy.Talents))
+	for i := range legacy.Talents {
+		talentIndex[legacy.Talents[i].ID] = i
+	}
+	for _, edge := range edges {
+		if _, ok := talentIndex[edge.LeftTraitNodeID]; !ok {
+			continue
+		}
+		targetIndex, ok := talentIndex[edge.RightTraitNodeID]
+		if !ok {
+			continue
+		}
+		target := &legacy.Talents[targetIndex]
+		switch edge.Type {
+		case 0:
+			target.VisualPrereqTalent = appendUniqueInt32(target.VisualPrereqTalent, edge.LeftTraitNodeID)
+		case 2:
+			target.PrereqAnyTalent = appendUniqueInt32(target.PrereqAnyTalent, edge.LeftTraitNodeID)
+		case 3:
+			target.PrereqTalent = appendUniqueInt32(target.PrereqTalent, edge.LeftTraitNodeID)
+		}
+	}
+	sort.Slice(legacy.Talents, func(i, j int) bool {
+		a, b := legacy.Talents[i], legacy.Talents[j]
+		if a.ColumnIndex != b.ColumnIndex {
+			return a.ColumnIndex < b.ColumnIndex
+		}
+		if a.RowIndex != b.RowIndex {
+			return a.RowIndex < b.RowIndex
+		}
+		return a.ID < b.ID
+	})
+	for i := range legacy.Talents {
+		legacy.Talents[i].TabIndex = int32(i)
+		sort.Slice(legacy.Talents[i].PrereqTalent, func(a, b int) bool { return legacy.Talents[i].PrereqTalent[a] < legacy.Talents[i].PrereqTalent[b] })
+		sort.Slice(legacy.Talents[i].PrereqAnyTalent, func(a, b int) bool {
+			return legacy.Talents[i].PrereqAnyTalent[a] < legacy.Talents[i].PrereqAnyTalent[b]
+		})
+		sort.Slice(legacy.Talents[i].VisualPrereqTalent, func(a, b int) bool {
+			return legacy.Talents[i].VisualPrereqTalent[a] < legacy.Talents[i].VisualPrereqTalent[b]
+		})
+	}
+	return legacy, nil
 }
 
 func appendUniqueInt32(values []int32, value int32) []int32 {

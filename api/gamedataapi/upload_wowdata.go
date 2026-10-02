@@ -126,6 +126,7 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 		return fmt.Errorf("derive consumables: %w", err)
 	}
 	if h.wowDB != nil {
+		h.wowDB.InvalidateTalentCache(datasetID)
 		h.wowDB.InvalidateSpellCache(datasetID)
 		h.wowDB.InvalidateExtraAttacks(datasetID)
 		h.wowDB.InvalidateDurationModifiers(datasetID)

@@ -232,6 +232,15 @@ export function TalentCalculatorPage() {
               <span className="font-semibold">{cls.name}</span>
             </Link>
           ))}
+          {(talentData?.legacyTrees?.length ?? 0) > 0 && (
+            <Link
+              to="/talents/legacy"
+              className="flex items-center gap-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-amber-100 transition hover:border-amber-300/60 hover:text-white"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded bg-amber-950 text-lg">✦</span>
+              <span className="font-semibold">Legacy</span>
+            </Link>
+          )}
           {petTreeData && (
             <Link
               to={`/talents/${PET_INFO.slug}`}
@@ -322,6 +331,15 @@ export function TalentCalculatorPage() {
               <span>{cls.name}</span>
             </Link>
           ))}
+          {(talentData?.legacyTrees?.length ?? 0) > 0 && (
+            <Link
+              to="/talents/legacy"
+              className="inline-flex items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/5 px-3 py-2 text-sm text-amber-100/70 transition hover:border-amber-300/60 hover:text-white"
+            >
+              <span className="text-base">✦</span>
+              <span>Legacy</span>
+            </Link>
+          )}
           {petTreeData && (
             <Link
               to={`/talents/${PET_INFO.slug}`}

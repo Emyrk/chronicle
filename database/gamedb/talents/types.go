@@ -5,8 +5,35 @@ package talents
 // TalentTreeData is the top-level JSON structure keyed by class ID.
 // This matches the frontend's TalentTreeJSON type exactly.
 type TalentTreeData struct {
-	Classes map[int32]ClassTalentData `json:"classes"`
-	Pets    map[int32]ClassTalentData `json:"pets,omitempty"`
+	Classes               map[int32]ClassTalentData `json:"classes"`
+	Pets                  map[int32]ClassTalentData `json:"pets,omitempty"`
+	LegacyTrees           []LegacyTalentTreeData    `json:"legacyTrees,omitempty"`
+	LegacyMaxPoints       int32                     `json:"legacyMaxPoints,omitempty"`
+	LegacyPointsPerColumn int32                     `json:"legacyPointsPerColumn,omitempty"`
+}
+
+// LegacyTalentTreeData is one horizontal tree in Forever's account-wide Legacy system.
+type LegacyTalentTreeData struct {
+	ID         int32               `json:"id"`
+	Name       string              `json:"name"`
+	OrderIndex int32               `json:"orderIndex"`
+	Talents    []LegacyTalentEntry `json:"talents"`
+}
+
+// LegacyTalentEntry is a node in a left-to-right Forever Legacy tree.
+type LegacyTalentEntry struct {
+	ID                 int32   `json:"id"`
+	TraitNodeEntryIDs  []int32 `json:"traitNodeEntryIDs,omitempty"`
+	Name               string  `json:"name"`
+	ColumnIndex        int32   `json:"columnIndex"`
+	RowIndex           int32   `json:"rowIndex"`
+	MaxRank            int32   `json:"maxRank"`
+	TabIndex           int32   `json:"tabIndex"`
+	SpellRanks         []int32 `json:"spellRanks"`
+	PrereqTalent       []int32 `json:"prereqTalent,omitempty"`
+	PrereqAnyTalent    []int32 `json:"prereqAnyTalent,omitempty"`
+	VisualPrereqTalent []int32 `json:"visualPrereqTalent,omitempty"`
+	IconTexture        string  `json:"iconTexture"`
 }
 
 // ClassTalentData holds the talent tabs (specs) for a single class.

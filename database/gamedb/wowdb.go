@@ -418,6 +418,13 @@ func (w *WoWDB) InvalidateSpellCache(datasetID uuid.UUID) {
 	w.spells.InvalidateDataset(datasetID)
 }
 
+// InvalidateTalentCache evicts cached talent trees for a dataset.
+func (w *WoWDB) InvalidateTalentCache(datasetID uuid.UUID) {
+	if w.talents != nil {
+		w.talents.InvalidateDataset(datasetID)
+	}
+}
+
 // InvalidateExtraAttacks evicts cached extra-attack data for a dataset.
 func (w *WoWDB) InvalidateExtraAttacks(datasetID uuid.UUID) {
 	w.extraAttacks.Remove(datasetID)

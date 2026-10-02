@@ -107,6 +107,8 @@ Each exported talent keeps `TraitNode.ID` as its `id`. The optional `traitNodeEn
 
 `TraitEdge` supplies the dependency lines between talents. The converter preserves type 0 edges as visual-only connections, type 2 edges as sufficient prerequisites where any incoming parent can unlock the child, and type 3 edges as required prerequisites where every incoming parent must be complete.
 
+Forever's separate Legacy progression system is exported from TraitSystem 45 as `legacyTrees`. Trees 1187, 1188, and 1189 represent Professions, Adventure, and Resourcefulness. They share a 16-point budget, progress left to right, and unlock later columns after 5 and 10 points spent in the same tree. Placeholder nodes whose spell name is `Unknown` are omitted until the client exposes their final definitions.
+
 ## Known limitations
 
 The importer does not guess identifiers or silently treat modern fields as legacy equivalents. In particular:

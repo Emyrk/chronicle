@@ -48,5 +48,9 @@ func (h *Handler) UploadTalentTrees(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.wowDB != nil {
+		h.wowDB.InvalidateTalentCache(datasetID)
+	}
+
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "talent trees updated"})
 }

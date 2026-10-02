@@ -81,6 +81,7 @@ import { ApplicationPage } from "./pages/Apply/ApplicationPage"
 import { SimPage } from "./pages/Sim"
 import { RaidPlannerPage } from "./pages/RaidPlanner"
 import { TalentCalculatorPage } from "./pages/TalentCalculator/TalentCalculatorPage"
+import { LegacyTalentCalculatorPage } from "./pages/TalentCalculator/LegacyTalentCalculatorPage"
 import { GameDataLayout } from "./pages/GameData/GameDataPage"
 import { WDBTab } from "./pages/GameData/WDBTab"
 import { ImportSQLTab } from "./pages/GameData/ImportSQLTab"
@@ -168,6 +169,7 @@ function App() {
         </Route>
         <Route element={<TenantDatasetLayout />}>
           <Route path="/talents" element={<TalentCalculatorPage />} />
+          <Route path="/talents/legacy" element={<LegacyTalentCalculatorPage />} />
           <Route path="/talents/:classSlug" element={<TalentCalculatorPage />} />
           <Route path="/wowdb" element={<WoWDBLayout />}>
             <Route index element={<ItemExplorerPage />} />
