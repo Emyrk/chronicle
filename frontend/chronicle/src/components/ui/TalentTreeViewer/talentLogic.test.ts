@@ -103,6 +103,9 @@ describe("modern Trait rank spell scaling", () => {
       spellRanks: [17003, 17003, 17003, 17003, 17003],
     });
     const spell = {
+      spell_level: 0,
+      base_level: 0,
+      max_level: 0,
       effects: [
         { effect_index: 0, effect_base_points: 0, effect_base_points_f: 10, effect_real_points_per_level: 5 },
         { effect_index: 1, effect_base_points: 0, effect_base_points_f: 20 },
