@@ -60,6 +60,7 @@ import {
   restrictTalentRanksToFirstPopulatedTab,
   searchParamsWithTalentBuild,
   searchParamsWithTalentLock,
+  spellForTalentRank,
   talentBuildExportName,
   talentDescription,
   talentGridHeight,
@@ -370,20 +371,25 @@ function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, poi
   // Wait until all referenced spells are loaded so templates like ${57518}s1
   // fully resolve — otherwise partially-resolved text breaks the rank ladder merge.
   const refsReady = referencedIds.length === 0 || refQueries.every((q) => !q.isPending);
-  const fetchedRankTexts = rankSpellQueries.map((q) => {
+  const fetchedRankTexts = rankSpellQueries.map((q, rankIndex) => {
     if (!q.data || !refsReady) return "";
-    const desc = resolveSpellDescription(q.data, getEnglishText(q.data.description), referencedSpells);
+    const rankSpell = spellForTalentRank(talent, q.data, rankIndex + 1);
+    const desc = resolveSpellDescription(rankSpell, getEnglishText(rankSpell.description), referencedSpells);
     if (desc) return desc;
-    return resolveSpellDescription(q.data, getEnglishText(q.data.aura_description), referencedSpells) ?? "";
+    return resolveSpellDescription(rankSpell, getEnglishText(rankSpell.aura_description), referencedSpells) ?? "";
   });
 
   // Determine which spell IDs to query
   const currentSpellId = rank > 0 ? talent.spellRanks[rank - 1] : undefined;
 
   // Use fetched description for primary spell too
-  const primarySpell = currentSpellId
+  const primarySpellData = currentSpellId
     ? rankSpellQueries[rank - 1]?.data
     : rankSpellQueries[rank]?.data ?? rankSpellQueries[0]?.data;
+  const primarySpellRank = rank > 0 ? rank : 1;
+  const primarySpell = primarySpellData
+    ? spellForTalentRank(talent, primarySpellData, primarySpellRank)
+    : undefined;
   const description = (primarySpell
     ? resolveSpellDescription(primarySpell, getEnglishText(primarySpell.description), referencedSpells)
       || resolveSpellDescription(primarySpell, getEnglishText(primarySpell.aura_description), referencedSpells)

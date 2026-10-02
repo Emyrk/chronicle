@@ -1,6 +1,8 @@
 // Pure talent tree logic and types, ported from chronicle-wiki.
 // No React imports — safe for use in tests, workers, and components.
 
+import type { WoWSpell } from "@emyrk/wow-tooltip-renderer";
+
 // ─── Types ────────────────────────────────────────────────────────
 
 export interface TalentEntry {
@@ -724,6 +726,35 @@ export function talentTooltipPosition(rect: Pick<DOMRect, "left" | "top" | "righ
     : belowTop;
   const top = Math.min(Math.max(preferredTop, TALENT_TOOLTIP_MARGIN), maxTop);
   return { left, top };
+}
+
+function talentUsesSharedRankSpell(talent: TalentEntry) {
+  return talent.maxRank > 1
+    && talent.spellRanks.length >= talent.maxRank
+    && talent.spellRanks.every((spellID) => spellID === talent.spellRanks[0]);
+}
+
+/**
+ * Modern Trait talents store one max-rank spell for every rank. Scale its exact
+ * effect values for the requested rank so the standard spell resolver produces
+ * the same rank-specific tooltip ladder as classic per-rank spell chains.
+ */
+export function spellForTalentRank(talent: TalentEntry, spell: WoWSpell, rank: number): WoWSpell {
+  if (!talentUsesSharedRankSpell(talent) || rank <= 0 || rank >= talent.maxRank) return spell;
+  const scale = rank / talent.maxRank;
+  const scaleValue = (value: number | undefined) => value === undefined ? undefined : value * scale;
+  return {
+    ...spell,
+    effects: spell.effects?.map((effect) => ({
+      ...effect,
+      effect_base_points: scaleValue(effect.effect_base_points) ?? effect.effect_base_points,
+      effect_base_points_f: scaleValue(effect.effect_base_points_f),
+      effect_real_points_per_level: scaleValue(effect.effect_real_points_per_level),
+    })),
+    effect_base_points: spell.effect_base_points.map((value) => scaleValue(value) ?? value),
+    effect_base_points_f: spell.effect_base_points_f?.map((value) => scaleValue(value) ?? value),
+    effect_real_points_per_level: spell.effect_real_points_per_level.map((value) => scaleValue(value) ?? value),
+  };
 }
 
 // ─── Tooltip text helpers ─────────────────────────────────────────

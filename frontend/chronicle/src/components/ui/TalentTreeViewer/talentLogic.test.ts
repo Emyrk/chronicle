@@ -1,3 +1,4 @@
+import { resolveSpellDescription } from "@emyrk/wow-tooltip-renderer";
 import { describe, expect, it } from "vitest";
 import type { TalentEntry } from "./talentLogic";
 import {
@@ -29,6 +30,7 @@ import {
   searchParamsWithTalentBuild,
   searchParamsWithTalentLock,
   searchParamsWithTalentPopularity,
+  spellForTalentRank,
   talentBuildExportName,
   talentPopularitySelection,
   talentTabPoints,
@@ -88,6 +90,52 @@ describe("Forever Legacy talent trees", () => {
     expect(data.tabs[0].talents[1]).toMatchObject({ tierID: 1, columnIndex: 1, progressionIndex: 1, prereqAnyTalent: [100] });
     expect(canUseTalent(data.tabs[0].talents[1], data.tabs[0].talents, { 100: 4 }, 5)).toBe(false);
     expect(canUseTalent(data.tabs[0].talents[1], data.tabs[0].talents, { 100: 5 }, 5)).toBe(true);
+  });
+});
+
+describe("modern Trait rank spell scaling", () => {
+  it("scales a shared max-rank spell for each talent rank", () => {
+    const sharedSpellTalent = talent({
+      id: 17003,
+      tierID: 0,
+      columnIndex: 0,
+      maxRank: 5,
+      spellRanks: [17003, 17003, 17003, 17003, 17003],
+    });
+    const spell = {
+      effects: [
+        { effect_index: 0, effect_base_points: 0, effect_base_points_f: 10, effect_real_points_per_level: 5 },
+        { effect_index: 1, effect_base_points: 0, effect_base_points_f: 20 },
+        { effect_index: 2, effect_base_points: 0, effect_base_points_f: 10 },
+      ],
+      effect_base_points: [10, 20, 10],
+      effect_base_points_f: [10, 20, 10],
+      effect_real_points_per_level: [5, 0, 0],
+    } as Parameters<typeof spellForTalentRank>[1];
+
+    const rankOne = spellForTalentRank(sharedSpellTalent, spell, 1);
+    const rankFive = spellForTalentRank(sharedSpellTalent, spell, 5);
+
+    expect(rankOne.effects?.map((effect) => effect.effect_base_points_f)).toEqual([2, 4, 2]);
+    expect(rankOne.effects?.[0].effect_real_points_per_level).toBe(1);
+    expect(rankOne.effect_base_points_f).toEqual([2, 4, 2]);
+    expect(resolveSpellDescription(rankOne, "Intellect $s1%, Stamina $s2%, Strength $s3%.")).toBe(
+      "Intellect 2%, Stamina 4%, Strength 2%.",
+    );
+    expect(rankFive).toBe(spell);
+    expect(spell.effects?.map((effect) => effect.effect_base_points_f)).toEqual([10, 20, 10]);
+  });
+
+  it("does not scale classic talents with distinct rank spell IDs", () => {
+    const classicTalent = talent({
+      id: 1,
+      tierID: 0,
+      columnIndex: 0,
+      maxRank: 2,
+      spellRanks: [100, 101],
+    });
+    const spell = { effects: [], effect_base_points: [], effect_real_points_per_level: [] } as unknown as Parameters<typeof spellForTalentRank>[1];
+    expect(spellForTalentRank(classicTalent, spell, 1)).toBe(spell);
   });
 });
 
