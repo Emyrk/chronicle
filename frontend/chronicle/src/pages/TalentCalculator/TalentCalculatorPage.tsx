@@ -232,15 +232,6 @@ export function TalentCalculatorPage() {
               <span className="font-semibold">{cls.name}</span>
             </Link>
           ))}
-          {(talentData?.legacyTrees?.length ?? 0) > 0 && (
-            <Link
-              to="/talents/legacy"
-              className="flex items-center gap-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-amber-100 transition hover:border-amber-300/60 hover:text-white"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded bg-amber-950 text-lg">✦</span>
-              <span className="font-semibold">Legacy</span>
-            </Link>
-          )}
           {petTreeData && (
             <Link
               to={`/talents/${PET_INFO.slug}`}
@@ -248,6 +239,15 @@ export function TalentCalculatorPage() {
             >
               <img src="/c/icons/class_hunter.png" alt="" className="h-9 w-9 rounded" />
               <span className="font-semibold">{PET_INFO.name}</span>
+            </Link>
+          )}
+          {(talentData?.legacyTrees?.length ?? 0) > 0 && (
+            <Link
+              to="/talents/legacy"
+              className="flex items-center gap-3 rounded-lg border border-zinc-700/60 bg-zinc-900/40 p-3 text-zinc-200 transition hover:border-zinc-500 hover:text-white"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded bg-zinc-800 text-lg">✦</span>
+              <span className="font-semibold">Legacy</span>
             </Link>
           )}
         </div>
@@ -331,15 +331,6 @@ export function TalentCalculatorPage() {
               <span>{cls.name}</span>
             </Link>
           ))}
-          {(talentData?.legacyTrees?.length ?? 0) > 0 && (
-            <Link
-              to="/talents/legacy"
-              className="inline-flex items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/5 px-3 py-2 text-sm text-amber-100/70 transition hover:border-amber-300/60 hover:text-white"
-            >
-              <span className="text-base">✦</span>
-              <span>Legacy</span>
-            </Link>
-          )}
           {petTreeData && (
             <Link
               to={`/talents/${PET_INFO.slug}`}
@@ -352,6 +343,15 @@ export function TalentCalculatorPage() {
             >
               <img src="/c/icons/class_hunter.png" alt="" className="h-6 w-6 rounded" />
               <span>{PET_INFO.name}</span>
+            </Link>
+          )}
+          {(talentData?.legacyTrees?.length ?? 0) > 0 && (
+            <Link
+              to="/talents/legacy"
+              className="inline-flex items-center gap-2 rounded-lg border border-zinc-700/60 bg-zinc-900/40 px-3 py-2 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-white"
+            >
+              <span className="text-base">✦</span>
+              <span>Legacy</span>
             </Link>
           )}
         </div>
@@ -417,7 +417,7 @@ export function TalentCalculatorPage() {
         />
         </DatasetProvider>
       ) : (
-        <div className="text-zinc-500">Select a class or pet type above to get started.</div>
+        <div className="text-zinc-500">Select a class, pet type, or Legacy above to get started.</div>
       )}
 
       {/* Mobile: floating My Builds button (like the instance page encounter FAB) */}
