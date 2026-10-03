@@ -91,6 +91,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		return nil, fmt.Errorf("load aura duration modifiers: %w", err)
 	}
 	encountersState.Auras.SetDurationModifiers(durationModifiers)
+	encountersState.SetSpellFetcher(gameDB)
 
 	type consumableCatalogFetcher interface {
 		Consumables(context.Context) (*chrondbc.ConsumableCatalog, error)

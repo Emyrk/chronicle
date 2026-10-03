@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/zoner"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
+	"github.com/Emyrk/chronicle/database/gamedb"
 )
 
 type timingAccumulator struct {
@@ -46,7 +47,9 @@ func (t *timingAccumulator) Snapshot() map[string]time.Duration {
 type InstanceResolver func(verbose bool, z zone.Zone, db *unitdb.Units) *instances.Hookable
 
 type State struct {
+	ctx    context.Context
 	logger *slog.Logger
+	spells gamedb.SpellFetcher
 
 	// CurrentZone is the zone the player is currently in.
 	CurrentZone     *zoner.Location
@@ -81,6 +84,7 @@ type State struct {
 
 func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res InstanceResolver) *State {
 	s := &State{
+		ctx:              ctx,
 		logger:           logger,
 		Units:            unitdb.New(),
 		Vehicles:         vehicles.New(),
@@ -108,6 +112,12 @@ func New(ctx context.Context, logger *slog.Logger, reg *registry.Registry) *Stat
 	})
 }
 
+// SetSpellFetcher configures dataset-scoped spell resolution for UNIT_INFO aura
+// snapshot reconciliation.
+func (s *State) SetSpellFetcher(spells gamedb.SpellFetcher) {
+	s.spells = spells
+}
+
 // nolint: staticcheck
 func (s *State) Process(m messages.Message) error {
 	totalStart := time.Now()
@@ -132,6 +142,7 @@ func (s *State) Process(m messages.Message) error {
 	// it, since processing may start or end the fight.
 	consumeActive := s.CurrentInstance != nil && s.CurrentInstance.FightActive()
 	forwardToInstance := true
+	var snapshotAuras []*messages.Aura
 	switch typed := m.(type) {
 	case *messages.Realm:
 		s.CurrentRealm = &typed.Info
@@ -166,6 +177,12 @@ func (s *State) Process(m messages.Message) error {
 				}
 			}
 		}
+	case *messages.Unit:
+		var err error
+		snapshotAuras, err = s.Auras.ReconcileUnitSnapshot(s.ctx, typed, s.spells)
+		if err != nil {
+			return fmt.Errorf("reconcile unit aura snapshot: %w", err)
+		}
 	case *messages.Damage:
 		//s.Damage(typed)
 	case *messages.Cast:
@@ -183,6 +200,18 @@ func (s *State) Process(m messages.Message) error {
 			if err := s.CurrentInstance.ProcessRaidGroupMetadata(typed); err != nil {
 				return fmt.Errorf("processing raid group metadata: %w", err)
 			}
+		}
+	}
+
+	// UNIT_INFO reconciliation already updated canonical state. When the
+	// snapshot arrives during a fight, forward its synthetic differences into
+	// the active encounter before the metadata carrier itself.
+	if consumeActive {
+		for _, aura := range snapshotAuras {
+			if err := s.CurrentInstance.Process(aura); err != nil {
+				return fmt.Errorf("instance process snapshot aura: %w", err)
+			}
+			s.ConsumeTracker.Process(aura, true)
 		}
 	}
 

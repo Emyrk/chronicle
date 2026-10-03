@@ -1,12 +1,14 @@
 package auras
 
 import (
+	"context"
 	"slices"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
@@ -296,6 +298,153 @@ func (t *Tracking) ClearOnDeath(unit guid.GUID, deathTime time.Time) {
 	if len(spells) == 0 {
 		delete(t.units, unit)
 	}
+}
+
+// ReconcileUnitSnapshot compares an authoritative non-empty UNIT_INFO buff
+// snapshot with the canonical aura state. It mutates the tracker directly and
+// returns synthetic aura messages describing each discovered difference.
+// Empty snapshots are ignored because older addon versions may report them
+// when buff data is unavailable.
+func (t *Tracking) ReconcileUnitSnapshot(ctx context.Context, unit *messages.Unit, spells gamedb.SpellFetcher) ([]*messages.Aura, error) {
+	if unit == nil || len(unit.Buffs) == 0 || spells == nil {
+		return nil, nil
+	}
+
+	snapshot := make(map[chrondbc.SpellID]int32, len(unit.Buffs))
+	for _, buff := range unit.Buffs {
+		id := chrondbc.SpellID(buff.ID)
+		if id <= 0 {
+			continue
+		}
+		snapshot[id] = int32(buff.Applications)
+	}
+	if len(snapshot) == 0 {
+		return nil, nil
+	}
+
+	var emitted []*messages.Aura
+	tracked := t.units[unit.Guid]
+
+	for _, spellID := range sortedSnapshotSpellIDs(snapshot) {
+		applications := snapshot[spellID]
+		state, exists := tracked[spellID]
+		if exists && state.Buff {
+			stacks := snapshotStacks(state.Spell, applications)
+			state.LastUpdatedAt = unit.Seen
+			state.MaxExistsUntil = maximumExpiry(unit.Seen, state.Spell, t.mods)
+			if state.Stacks == stacks {
+				continue
+			}
+			state.Stacks = stacks
+			t.notify(Notification{
+				Type:      NotifyStackChanged,
+				Unit:      unit.Guid,
+				SpellID:   state.SpellID,
+				SpellName: state.SpellName,
+				Spell:     state.Spell,
+				Stacks:    stacks,
+				Timestamp: unit.Seen,
+			})
+			emitted = append(emitted, snapshotAuraMessage(unit.Seen, unit.Guid, state, types.AuraStateModified, messages.AuraTransitionStackChanged))
+			continue
+		}
+
+		spell, err := spells.Spell(ctx, spellID)
+		if err != nil {
+			if chrondbc.IsSpellNotFound(err) {
+				continue
+			}
+			return nil, err
+		}
+
+		if tracked == nil {
+			tracked = make(map[chrondbc.SpellID]*AuraState)
+			t.units[unit.Guid] = tracked
+		}
+		stacks := snapshotStacks(spell, applications)
+		state = &AuraState{
+			Buff:           true,
+			Stacks:         stacks,
+			AppliedAt:      unit.Seen,
+			LastUpdatedAt:  unit.Seen,
+			MaxExistsUntil: maximumExpiry(unit.Seen, spell, t.mods),
+			SpellID:        spell.ID,
+			SpellName:      spell.Name(),
+			Spell:          spell,
+		}
+		tracked[spellID] = state
+		t.notify(Notification{
+			Type:      NotifyAdded,
+			Unit:      unit.Guid,
+			SpellID:   state.SpellID,
+			SpellName: state.SpellName,
+			Spell:     state.Spell,
+			Stacks:    stacks,
+			Timestamp: unit.Seen,
+		})
+		emitted = append(emitted, snapshotAuraMessage(unit.Seen, unit.Guid, state, types.AuraStateAdded, messages.AuraTransitionApplied))
+	}
+
+	for _, spellID := range sortedSpellIDs(tracked) {
+		state := tracked[spellID]
+		if !state.Buff {
+			continue
+		}
+		if _, present := snapshot[spellID]; present {
+			continue
+		}
+
+		delete(tracked, spellID)
+		t.notify(Notification{
+			Type:      NotifyRemoved,
+			Unit:      unit.Guid,
+			SpellID:   state.SpellID,
+			SpellName: state.SpellName,
+			Spell:     state.Spell,
+			Stacks:    0,
+			Timestamp: unit.Seen,
+		})
+		emitted = append(emitted, snapshotAuraMessage(unit.Seen, unit.Guid, state, types.AuraStateRemoved, messages.AuraTransitionRemoved))
+	}
+	if len(tracked) == 0 {
+		delete(t.units, unit.Guid)
+	}
+
+	return emitted, nil
+}
+
+func snapshotAuraMessage(ts time.Time, target guid.GUID, state *AuraState, auraState types.AuraState, transition messages.AuraTransition) *messages.Aura {
+	amount := state.Stacks
+	if auraState == types.AuraStateRemoved {
+		amount = 0
+	}
+	return &messages.Aura{
+		MessageBase: messages.Base(ts, messages.WithSynthetic()),
+		IsBuff:      true,
+		Source:      cloneGUID(state.Source),
+		Target:      target,
+		SpellName:   state.SpellName,
+		SpellData:   state.Spell,
+		Amount:      amount,
+		Transition:  transition,
+		State:       auraState,
+	}
+}
+
+func snapshotStacks(spell *chrondbc.Spell, applications int32) int32 {
+	if applications < 1 || spell == nil || spell.CumulativeAura <= 1 {
+		return 1
+	}
+	return min(applications, spell.CumulativeAura)
+}
+
+func sortedSnapshotSpellIDs(snapshot map[chrondbc.SpellID]int32) []chrondbc.SpellID {
+	ids := make([]chrondbc.SpellID, 0, len(snapshot))
+	for id := range snapshot {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 // Finalize clears all tracked state. Call once at the end of a parse.

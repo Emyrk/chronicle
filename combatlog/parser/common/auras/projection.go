@@ -93,6 +93,7 @@ func (p *Projection) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	// before checking timestamps so a late refresh/removal never receives a
 	// synthetic fade immediately ahead of its real event.
 	p.cancelOnRealEvidence(m)
+	p.cancelAbsentCanonicalAuras()
 
 	// Emit synthetic expiry only for projected auras that remain untouched by
 	// real in-combat aura evidence.
@@ -280,6 +281,17 @@ func (p *Projection) cancelOnRealEvidence(m messages.Message) {
 	}
 	key := projectedAuraKey{Unit: auraMsg.Target, SpellID: auraMsg.SpellData.ID}
 	delete(p.projectedAuras, key)
+}
+
+// cancelAbsentCanonicalAuras drops synthetic-expiry ownership when another
+// authoritative source, such as UNIT_INFO reconciliation, already removed the
+// aura from the parse-wide tracker.
+func (p *Projection) cancelAbsentCanonicalAuras() {
+	for key := range p.projectedAuras {
+		if !p.tracker.HasAura(key.Unit, key.SpellID) {
+			delete(p.projectedAuras, key)
+		}
+	}
 }
 
 // clearEncounterState resets all per-encounter projection state.

@@ -1,6 +1,7 @@
 package auras_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/google/uuid"
@@ -573,6 +575,33 @@ func TestProjection_InCombatAuraNoSyntheticExpiry(t *testing.T) {
 	assert.Empty(t, emitted, "in-combat auras should never get synthetic expiry")
 }
 
+func TestProjection_CancelsExpiryAfterSnapshotRemoval(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	var emitted []*messages.Aura
+	projection := auras.NewProjection(tr)
+	projection.SetEmit(func(msg *messages.Aura) { emitted = append(emitted, msg) })
+	projection.FightStarted(uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(5 * time.Second))})
+	require.NoError(t, projection.ProcessMessage(true, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(6 * time.Second))}))
+	require.Len(t, emitted, 1)
+
+	snapshotAt := t0.Add(10 * time.Second)
+	_, err := tr.ReconcileUnitSnapshot(context.Background(), &messages.Unit{
+		MessageBase: messages.Base(snapshotAt),
+		Info: unitinfo.Info{
+			Seen:  snapshotAt,
+			Guid:  testUnit,
+			Buffs: []unitinfo.Buff{{ID: int(testSpell2.ID), Applications: 1}},
+		},
+	}, snapshotSpellFetcher{testSpell2.ID: testSpell2})
+	require.NoError(t, err)
+
+	require.NoError(t, projection.ProcessMessage(true, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(35 * time.Second))}))
+	assert.Len(t, emitted, 1, "snapshot removal should cancel the projected aura's later synthetic expiry")
+}
+
 func TestProjection_ClearsStateOnFightEnd(t *testing.T) {
 	t.Parallel()
 	tr := auras.New(nil)
@@ -593,6 +622,132 @@ func TestProjection_ClearsStateOnFightEnd(t *testing.T) {
 	err = projection.ProcessMessage(false, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(35 * time.Second))})
 	require.NoError(t, err)
 	assert.Len(t, emitted, 1, "no synthetic expiry after fight end")
+}
+
+type snapshotSpellFetcher map[chrondbc.SpellID]*chrondbc.Spell
+
+func (f snapshotSpellFetcher) Spell(_ context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	spell, ok := f[id]
+	if !ok {
+		return nil, chrondbc.SpellNotFound(id)
+	}
+	return spell, nil
+}
+
+func (f snapshotSpellFetcher) SpellsByName(_ context.Context, _ string) ([]*chrondbc.Spell, error) {
+	return nil, nil
+}
+
+func TestTracking_ReconcileUnitSnapshotAddsAndRemovesBuffs(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	snapshotAt := t0.Add(5 * time.Second)
+	emitted, err := tr.ReconcileUnitSnapshot(context.Background(), &messages.Unit{
+		MessageBase: messages.Base(snapshotAt),
+		Info: unitinfo.Info{
+			Seen:  snapshotAt,
+			Guid:  testUnit,
+			Buffs: []unitinfo.Buff{{ID: int(testSpell2.ID), Applications: 1}},
+		},
+	}, snapshotSpellFetcher{testSpell2.ID: testSpell2})
+	require.NoError(t, err)
+	require.Len(t, emitted, 2)
+
+	added := emitted[0]
+	assert.True(t, added.IsSynthetic())
+	assert.Equal(t, testSpell2.ID, added.SpellData.ID)
+	assert.Equal(t, types.AuraStateAdded, added.State)
+	assert.Equal(t, messages.AuraTransitionApplied, added.Transition)
+	assert.Equal(t, int32(1), added.Amount)
+
+	removed := emitted[1]
+	assert.True(t, removed.IsSynthetic())
+	assert.Equal(t, testSpell.ID, removed.SpellData.ID)
+	assert.Equal(t, types.AuraStateRemoved, removed.State)
+	assert.Equal(t, messages.AuraTransitionRemoved, removed.Transition)
+	assert.Zero(t, removed.Amount)
+
+	assert.False(t, tr.HasAura(testUnit, testSpell.ID))
+	assert.True(t, tr.HasAura(testUnit, testSpell2.ID))
+}
+
+func TestTracking_ReconcileUnitSnapshotIgnoresEmptyBuffs(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	for _, buffs := range [][]unitinfo.Buff{nil, {}} {
+		emitted, err := tr.ReconcileUnitSnapshot(context.Background(), &messages.Unit{
+			MessageBase: messages.Base(t0.Add(time.Second)),
+			Info: unitinfo.Info{
+				Seen:  t0.Add(time.Second),
+				Guid:  testUnit,
+				Buffs: buffs,
+			},
+		}, snapshotSpellFetcher{})
+		require.NoError(t, err)
+		assert.Empty(t, emitted)
+		assert.True(t, tr.HasAura(testUnit, testSpell.ID))
+	}
+}
+
+func TestTracking_ReconcileUnitSnapshotRefreshesKnownPresenceWithoutEmission(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	snapshotAt := t0.Add(20 * time.Second)
+	emitted, err := tr.ReconcileUnitSnapshot(context.Background(), &messages.Unit{
+		MessageBase: messages.Base(snapshotAt),
+		Info: unitinfo.Info{
+			Seen:  snapshotAt,
+			Guid:  testUnit,
+			Buffs: []unitinfo.Buff{{ID: int(testSpell.ID), Applications: 160}},
+		},
+	}, snapshotSpellFetcher{})
+	require.NoError(t, err)
+	assert.Empty(t, emitted)
+
+	state := tr.ActiveAuras(testUnit)[testSpell.ID]
+	require.NotNil(t, state)
+	assert.Equal(t, int32(1), state.Stacks, "non-stacking spells normalize UNIT_INFO applications to one")
+	assert.Equal(t, snapshotAt.Add(30*time.Second), state.MaxExistsUntil)
+}
+
+func TestTracking_ReconcileUnitSnapshotEmitsStackChange(t *testing.T) {
+	t.Parallel()
+	stackingSpell := *testSpell
+	stackingSpell.ID = 300
+	stackingSpell.CumulativeAura = 5
+	tr := auras.New(nil)
+
+	emitted, err := tr.ReconcileUnitSnapshot(context.Background(), &messages.Unit{
+		MessageBase: messages.Base(t0),
+		Info: unitinfo.Info{
+			Seen:  t0,
+			Guid:  testUnit,
+			Buffs: []unitinfo.Buff{{ID: int(stackingSpell.ID), Applications: 3}},
+		},
+	}, snapshotSpellFetcher{stackingSpell.ID: &stackingSpell})
+	require.NoError(t, err)
+	require.Len(t, emitted, 1)
+	assert.Equal(t, int32(3), emitted[0].Amount)
+
+	emitted, err = tr.ReconcileUnitSnapshot(context.Background(), &messages.Unit{
+		MessageBase: messages.Base(t0.Add(time.Second)),
+		Info: unitinfo.Info{
+			Seen:  t0.Add(time.Second),
+			Guid:  testUnit,
+			Buffs: []unitinfo.Buff{{ID: int(stackingSpell.ID), Applications: 4}},
+		},
+	}, snapshotSpellFetcher{})
+	require.NoError(t, err)
+	require.Len(t, emitted, 1)
+	assert.Equal(t, types.AuraStateModified, emitted[0].State)
+	assert.Equal(t, messages.AuraTransitionStackChanged, emitted[0].Transition)
+	assert.Equal(t, int32(4), emitted[0].Amount)
 }
 
 func TestTracking_NonAuraMessageIgnored(t *testing.T) {
