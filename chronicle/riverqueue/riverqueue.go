@@ -147,12 +147,13 @@ func webUI(ctx context.Context, parentLogger *slog.Logger, client *river.Client[
 		return nil, fmt.Errorf("start riverui server: %w", err)
 	}
 
+	riverHandler := withLogLinks(srv)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		uc := chronauth.MustAuthenticatedClaims(r.Context())
 		// TODO: Check if administrator
 		var _ = uc
 
-		srv.ServeHTTP(w, r)
+		riverHandler.ServeHTTP(w, r)
 	}), nil
 }
 
