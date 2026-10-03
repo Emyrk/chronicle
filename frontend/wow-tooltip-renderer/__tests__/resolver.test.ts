@@ -208,6 +208,30 @@ describe("resolveSpellDescription — canonical effects", () => {
 });
 
 describe("resolveSpellDescription — description variables", () => {
+  it("renders Prayer of Mending's base heal without character bonus healing", () => {
+    const prayerOfMending = makeSpell({
+      id: 401859,
+      effects: [
+        {
+          difficulty_id: 0,
+          effect_index: 0,
+          effect: { value: 3, string: "Dummy" },
+          effect_base_points: 0,
+          effect_base_points_f: 172,
+          effect_bonus_coefficient: 0.429,
+        },
+      ],
+      description_variables: "$mult=${1}",
+    });
+
+    expect(
+      resolveSpellDescription(
+        prayerOfMending,
+        "Heals them for ${($m1+($bh*$bc))*$<mult>}.",
+      ),
+    ).toBe("Heals them for 172.");
+  });
+
   it("resolves Lifebloom's nested Genesis talent multiplier", () => {
     const lifebloom = makeSpell({
       id: 48451,

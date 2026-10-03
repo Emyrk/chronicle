@@ -21,6 +21,16 @@ export function resolveVariable(
   forLevel?: number,
 ): string {
   const lvl = forLevel ?? spell.spell_level;
+  const normalizedVariable = variable.toLowerCase();
+
+  // Static tooltips have no character healing-power context. Treat bonus healing
+  // as zero, while preserving the spell's coefficient for expressions such as
+  // `${$m1+($bh*$bc)}`. This renders the base heal instead of leaking the raw
+  // runtime formula.
+  if (normalizedVariable === "$bh") return "0";
+  if (normalizedVariable === "$bc") {
+    return String(getTooltipEffect(spell, 0)?.effect_bonus_coefficient ?? 0);
+  }
 
   // Duration: $d
   if (variable === "$d") {

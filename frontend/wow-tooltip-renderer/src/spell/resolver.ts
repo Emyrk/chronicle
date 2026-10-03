@@ -21,7 +21,7 @@ import { evaluateArithmetic } from "./arithmetic.js";
 //   crossRef = DIGITS varRef                           -- $23455s1  (optionally -$...)
 //   plural   = 'l' TEXT ':' TEXT ';'                   -- $lpoint:points;  (lowercase l only)
 //   gender   = ('g'|'G') TEXT ':' TEXT ';'             -- $ghe:she;
-//   localVar = LETTER DIGITS?                           -- $s1, $s10, $d, $n
+//   localVar = ('bh' | 'bc' | LETTER) DIGITS?           -- $bh, $bc, $s1, $d
 //   varRef   = LETTER DIGITS?
 //
 // Notes on fidelity to the historical resolver:
@@ -46,7 +46,7 @@ const RE_CROSSREF = /^\$(\d+)([a-zA-Z])(\d+)?/;
 const RE_PLURAL = /^\$l([^:]+):([^;]+);/; // lowercase $l only
 const RE_GENDER = /^\$g([^:]+):([^;]+);/i; // $g / $G
 const RE_DESCVAR = /^\$<([a-zA-Z_][a-zA-Z0-9_]*)>/; // $<total>, $<bonus>, etc.
-const RE_LOCALVAR = /^\$([a-zA-Z])(\d+)?/;
+const RE_LOCALVAR = /^\$(bh|bc|[a-zA-Z])(\d+)?/i;
 
 // Last run of digits in a string, used to update the pluralization anchor.
 const RE_LAST_NUMBER = /(\d+)(?![\s\S]*\d)/;

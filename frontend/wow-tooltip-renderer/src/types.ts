@@ -87,6 +87,8 @@ export interface SpellEffect {
   effect_points_per_combo?: number;
   effect_base_dice?: number;
   effect_dice_per_level?: number;
+  /** Healing/spell-power scaling coefficient from modern SpellEffect data. */
+  effect_bonus_coefficient?: number;
 }
 
 /** Canonical resource-cost row. */
