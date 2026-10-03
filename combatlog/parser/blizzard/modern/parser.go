@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
@@ -281,6 +282,7 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 	}
 
 	var talents *combatant.Talents
+	heroClass := types.HeroClassesUNKNOWN
 	var gear []combatant.GearItem
 	switch p.version {
 	case 9:
@@ -293,7 +295,7 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 		if len(fields) < 28 {
 			return nil, fmt.Errorf("blizzard V22 COMBATANT_INFO has %d fields, need at least 28", len(fields))
 		}
-		talents, err = resolveV22Talents(fields[25], p.talentTrees)
+		talents, heroClass, err = resolveV22Talents(fields[25], p.talentTrees)
 		if err != nil {
 			return nil, err
 		}
@@ -307,7 +309,7 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 			Name:       stripRealm(name),
 			Guid:       playerGUID,
 			Seen:       ts,
-			HeroClass:  "UNKNOWN",
+			HeroClass:  heroClass,
 			Gender:     -1,
 			Race:       "Unknown",
 			GearSetups: gear,
@@ -322,26 +324,55 @@ type v22TalentSelection struct {
 	rank        uint8
 }
 
-func resolveV22Talents(raw string, treeData *talents.TalentTreeData) (*combatant.Talents, error) {
+func resolveV22Talents(raw string, treeData *talents.TalentTreeData) (*combatant.Talents, types.HeroClasses, error) {
 	selected, err := parseV22TalentSelections(raw)
 	if err != nil || len(selected) == 0 || treeData == nil {
-		return nil, err
+		return nil, types.HeroClassesUNKNOWN, err
 	}
 
 	var resolved *combatant.Talents
-	for _, classData := range treeData.Classes {
+	resolvedClass := types.HeroClassesUNKNOWN
+	for classID, classData := range treeData.Classes {
 		candidate, ok := resolveV22ClassTalents(selected, classData)
 		if !ok {
 			continue
 		}
 		if resolved != nil {
 			// Talent node IDs should identify one class. Treat ambiguous dataset
-			// data as unavailable rather than attaching the wrong build.
-			return nil, nil
+			// data as unavailable rather than attaching the wrong build or class.
+			return nil, types.HeroClassesUNKNOWN, nil
 		}
 		resolved = candidate
+		resolvedClass = heroClassFromID(classID)
 	}
-	return resolved, nil
+	return resolved, resolvedClass, nil
+}
+
+func heroClassFromID(classID int32) types.HeroClasses {
+	switch classID {
+	case 1:
+		return types.HeroClassesWARRIOR
+	case 2:
+		return types.HeroClassesPALADIN
+	case 3:
+		return types.HeroClassesHUNTER
+	case 4:
+		return types.HeroClassesROGUE
+	case 5:
+		return types.HeroClassesPRIEST
+	case 6:
+		return types.HeroClassesDEATHKNIGHT
+	case 7:
+		return types.HeroClassesSHAMAN
+	case 8:
+		return types.HeroClassesMAGE
+	case 9:
+		return types.HeroClassesWARLOCK
+	case 11:
+		return types.HeroClassesDRUID
+	default:
+		return types.HeroClassesUNKNOWN
+	}
 }
 
 func parseV22TalentSelections(raw string) ([]v22TalentSelection, error) {

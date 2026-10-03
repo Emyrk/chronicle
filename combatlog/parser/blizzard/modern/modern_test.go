@@ -11,6 +11,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	"github.com/Emyrk/chronicle/database"
@@ -274,37 +275,37 @@ func TestParseCombatantMetadata(t *testing.T) {
 	assert.Zero(t, gear[1].ItemID)
 }
 
-func TestCombatantInfoV22ResolvesTalentsAndGear(t *testing.T) {
+func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	t.Parallel()
 
 	fields := make([]string, 33)
-	fields[25] = "[(105888,130618,5),(105922,130652,1)]"
+	// Real selections from Bootie's WoW Forever Wailing Caverns log.
+	fields[25] = "[(105924,130654,5),(105923,130653,5)]"
 	fields[26] = "(0,0,0,0)"
 	fields[27] = "[(253955,25,(),(),()),(251534,24,(2623,0,0),(),())]"
 	encoded := base64.RawStdEncoding.EncodeToString([]byte(strings.Join(fields, ",")))
-	ts, _, matched, err := wotlk.ParseLine(`9/23 15:26:53.574  BLIZZARD_COMBATANT_INFO,0x0000120C00D5496D,"Brother-ClassicBetaPvE2",` + encoded)
+	ts, _, matched, err := wotlk.ParseLine(`9/23 15:26:53.574  BLIZZARD_COMBATANT_INFO,0x0000120A0062CD4D,"Bootie-ClassicBetaPvE",` + encoded)
 	require.NoError(t, err)
 
 	treeData := &talents.TalentTreeData{Classes: map[int32]talents.ClassTalentData{
 		9: {Tabs: []talents.TalentTabData{
 			{OrderIndex: 0, Name: "Affliction", Talents: []talents.TalentEntry{
-				{ID: 105922, TraitNodeEntryIDs: []int32{130652}, MaxRank: 2, TabIndex: 1},
+				{ID: 105924, TraitNodeEntryIDs: []int32{130654}, MaxRank: 5, TabIndex: 0},
+				{ID: 105923, TraitNodeEntryIDs: []int32{130653}, MaxRank: 5, TabIndex: 1},
 			}},
 			{OrderIndex: 1, Name: "Demonology"},
-			{OrderIndex: 2, Name: "Destruction", Talents: []talents.TalentEntry{
-				{ID: 105888, TraitNodeEntryIDs: []int32{130618}, MaxRank: 5, TabIndex: 2},
-			}},
+			{OrderIndex: 2, Name: "Destruction"},
 		}},
 	}}
 	parsed, err := (&Parser{version: 22, talentTrees: treeData}).combatantInfo(ts, matched, "")
 	require.NoError(t, err)
 	require.Len(t, parsed, 1)
 	combatantInfo := parsed[0].(*messages.Combatant)
-	assert.Equal(t, "Brother", combatantInfo.Name)
+	assert.Equal(t, "Bootie", combatantInfo.Name)
+	assert.Equal(t, types.HeroClassesWARLOCK, combatantInfo.HeroClass)
 	require.NotNil(t, combatantInfo.Talents)
-	assert.Equal(t, [3]uint8{1, 0, 5}, combatantInfo.Talents.Summary)
-	assert.Equal(t, []uint8{0, 1}, combatantInfo.Talents.Trees[0])
-	assert.Equal(t, []uint8{0, 0, 5}, combatantInfo.Talents.Trees[2])
+	assert.Equal(t, [3]uint8{10, 0, 0}, combatantInfo.Talents.Summary)
+	assert.Equal(t, []uint8{5, 5}, combatantInfo.Talents.Trees[0])
 	assert.Equal(t, [3]string{"Affliction", "Demonology", "Destruction"}, combatantInfo.Talents.TabNames)
 	require.Len(t, combatantInfo.GearSetups, 2)
 	assert.Equal(t, 253955, combatantInfo.GearSetups[0].ItemID)
