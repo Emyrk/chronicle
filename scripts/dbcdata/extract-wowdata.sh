@@ -13,6 +13,7 @@ WOWDATA_BIN="${WOWDATA_BIN:-wowdata}"
 CLIENT_PATH="${WOW_CLIENT_PATH:-}"
 PRODUCT="${WOW_PRODUCT:-wow_classic_beta}"
 BUILD="${WOW_BUILD:-1.60.1.69913}"
+SOURCE="${WOW_SOURCE:-local}"
 REGION="${WOW_REGION:-us}"
 LOCALE="${WOW_LOCALE:-enUS}"
 CACHE_DIR="${WOWDATA_CACHE:-}"
@@ -34,6 +35,7 @@ Options:
   --wowdata PATH      wowdata executable (default: $WOWDATA_BIN or wowdata)
   --product PRODUCT   CASC product (default: wow_classic_beta)
   --build BUILD       Build version/key (default: 1.60.1.69913)
+  --source SOURCE     Base CASC source: local or remote (default: local)
   --region REGION     Blizzard region (default: us)
   --locale LOCALE     Data locale (default: enUS)
   --cache DIR         wowdata cache directory
@@ -44,8 +46,8 @@ Options:
   -h, --help          Show this help
 
 Environment equivalents:
-  WOWDATA_BIN, WOW_CLIENT_PATH, WOW_PRODUCT, WOW_BUILD, WOW_REGION,
-  WOW_LOCALE, WOWDATA_CACHE, WOW_DBCACHE
+  WOWDATA_BIN, WOW_CLIENT_PATH, WOW_PRODUCT, WOW_BUILD, WOW_SOURCE,
+  WOW_REGION, WOW_LOCALE, WOWDATA_CACHE, WOW_DBCACHE
 
 The output is an intermediate snapshot, not an upload artifact. Chronicle still
 needs version-aware transforms that join the split modern Spell and Item tables.
@@ -58,6 +60,7 @@ while (($# > 0)); do
     --wowdata) WOWDATA_BIN="$2"; shift 2 ;;
     --product) PRODUCT="$2"; shift 2 ;;
     --build) BUILD="$2"; shift 2 ;;
+    --source) SOURCE="$2"; shift 2 ;;
     --region) REGION="$2"; shift 2 ;;
     --locale) LOCALE="$2"; shift 2 ;;
     --cache) CACHE_DIR="$2"; shift 2 ;;
@@ -70,6 +73,10 @@ while (($# > 0)); do
   esac
 done
 
+if [[ "$SOURCE" != "local" && "$SOURCE" != "remote" ]]; then
+  echo "--source must be local or remote, got: $SOURCE" >&2
+  exit 2
+fi
 if ((NO_HOTFIX == 1)) && [[ -n "$DBCACHE_PATH" ]]; then
   echo "--dbcache and --no-hotfix cannot be used together" >&2
   exit 2
@@ -168,13 +175,15 @@ OPTIONAL_TABLES=(
 )
 
 COMMON_ARGS=(
-  --source local
+  --source "$SOURCE"
   --region "$REGION"
   --product "$PRODUCT"
   --build "$BUILD"
   --locale "$LOCALE"
-  --path "$CLIENT_PATH"
 )
+if [[ "$SOURCE" == "local" ]]; then
+  COMMON_ARGS+=(--path "$CLIENT_PATH")
+fi
 if [[ -n "$CACHE_DIR" ]]; then
   COMMON_ARGS+=(--cache "$CACHE_DIR")
 fi

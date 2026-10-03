@@ -44,7 +44,7 @@ func ExtractWowdataIconsCmd() *serpent.Command {
 			}
 			snapshot, cleanup, err := extractWowdata(inv, wowdataExtractOptions{
 				Client: client, WowdataBin: resolvedWowdata, Extractor: extractor,
-				Product: product, Build: build, Region: region, Locale: locale, Cache: cache,
+				Product: product, Build: build, Source: "local", Region: region, Locale: locale, Cache: cache,
 			})
 			if err != nil {
 				return err

@@ -20,7 +20,7 @@ import (
 // rows, and imports them without routing through Chronicle's legacy DBC parsers.
 func ImportWowdataCmd() *serpent.Command {
 	var snapshot, client, wowdataBin, extractor, snapshotOut string
-	var apiURL, datasetID, token, cookie, product, build, region, locale, cache, dbcache, out string
+	var apiURL, datasetID, token, cookie, product, build, source, region, locale, cache, dbcache, out string
 	var dryRun, noHotfix bool
 	return &serpent.Command{
 		Use:   "import-wowdata",
@@ -31,6 +31,7 @@ func ImportWowdataCmd() *serpent.Command {
 			{Name: "wowdata", Description: "Wowdata executable used with --client.", Flag: "wowdata", Env: "WOWDATA_BIN", Default: "wowdata", Value: serpent.StringOf(&wowdataBin)},
 			{Name: "extractor", Description: "Path to Chronicle's wowdata extraction script.", Flag: "extractor", Default: "scripts/dbcdata/extract-wowdata.sh", Value: serpent.StringOf(&extractor)},
 			{Name: "snapshot-out", Description: "Keep the normalized snapshot at this path when extracting from --client; otherwise a temporary directory is used.", Flag: "snapshot-out", Value: serpent.StringOf(&snapshotOut)},
+			{Name: "source", Description: "Base CASC data source used with --client: local or remote.", Flag: "source", Env: "WOW_SOURCE", Default: "local", Value: serpent.StringOf(&source)},
 			{Name: "region", Description: "Blizzard region used with --client.", Flag: "region", Env: "WOW_REGION", Default: "us", Value: serpent.StringOf(&region)},
 			{Name: "locale", Description: "Data locale used with --client.", Flag: "locale", Env: "WOW_LOCALE", Default: "enUS", Value: serpent.StringOf(&locale)},
 			{Name: "cache", Description: "Optional wowdata cache directory used with --client.", Flag: "cache", Env: "WOWDATA_CACHE", Value: serpent.StringOf(&cache)},
@@ -52,6 +53,9 @@ func ImportWowdataCmd() *serpent.Command {
 			if err := validateWowdataSource(snapshot, client); err != nil {
 				return err
 			}
+			if err := validateWowdataExtractionSource(source); err != nil {
+				return err
+			}
 			if client != "" {
 				resolvedWowdata, err := resolveWowdataBinary(inv, wowdataBin)
 				if err != nil {
@@ -65,6 +69,7 @@ func ImportWowdataCmd() *serpent.Command {
 					SnapshotOut: snapshotOut,
 					Product:     product,
 					Build:       build,
+					Source:      source,
 					Region:      region,
 					Locale:      locale,
 					Cache:       cache,
@@ -197,6 +202,7 @@ type wowdataExtractOptions struct {
 	SnapshotOut string
 	Product     string
 	Build       string
+	Source      string
 	Region      string
 	Locale      string
 	Cache       string
@@ -214,11 +220,21 @@ func validateWowdataSource(snapshot, client string) error {
 	return nil
 }
 
+func validateWowdataExtractionSource(source string) error {
+	switch source {
+	case "local", "remote":
+		return nil
+	default:
+		return fmt.Errorf("--source must be local or remote, got %q", source)
+	}
+}
+
 func wowdataExtractArgs(opts wowdataExtractOptions, out string) []string {
 	args := []string{
 		"--client", opts.Client,
 		"--wowdata", opts.WowdataBin,
 		"--product", opts.Product,
+		"--source", opts.Source,
 		"--region", opts.Region,
 		"--locale", opts.Locale,
 		"--out", out,
@@ -252,7 +268,11 @@ func extractWowdata(inv *serpent.Invocation, opts wowdataExtractOptions) (string
 		}
 	}
 
-	_, _ = fmt.Fprintf(inv.Stdout, "Extracting %s %s from %s...\n", opts.Product, opts.Build, opts.Client)
+	if opts.Source == "remote" {
+		_, _ = fmt.Fprintf(inv.Stdout, "Extracting %s %s from Blizzard CDN with local hotfixes from %s...\n", opts.Product, opts.Build, opts.Client)
+	} else {
+		_, _ = fmt.Fprintf(inv.Stdout, "Extracting %s %s from %s...\n", opts.Product, opts.Build, opts.Client)
+	}
 	cmd := exec.CommandContext(inv.Context(), opts.Extractor, wowdataExtractArgs(opts, out)...)
 	cmd.Stdout = inv.Stdout
 	cmd.Stderr = inv.Stderr

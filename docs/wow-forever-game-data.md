@@ -30,6 +30,26 @@ The client path is the directory containing `.build.info` and `Data/`, not the `
 
 By default, extraction discovers exactly one `<client>/*/Cache/ADB/<locale>/DBCache.bin`. Use `--dbcache PATH` to select one explicitly. Extraction fails if no unambiguous cache exists, if its V9 header build differs from `--build`, or if its records have an empty or mixed numeric region. Use `--no-hotfix` only for an intentional base-data snapshot; the manifest then records `hotfix.applied=false` rather than implying that a cache was applied.
 
+### Use Blizzard's remote base data with the local hotfix cache
+
+If the installed CASC indexes resolve a required table to an unreadable local
+archive entry, use `--source remote`. The importer downloads the exact requested
+base build from Blizzard, then still discovers and applies the client's local
+`DBCache.bin` overlay:
+
+```bash
+go run ./scripts/dbcdata import-wowdata \
+  --client "/path/to/World of Warcraft" \
+  --source remote \
+  --product wow_classic_beta \
+  --build 1.60.1.70205 \
+  --dry-run
+```
+
+The dedicated `scripts/upload-dbc/forever.sh` upload uses this mode because the
+current Forever installation can resolve `TraitTree` to an invalid local BLTE
+entry.
+
 ## Reuse an existing snapshot
 
 Extraction remains available as a separate debugging and archival step:

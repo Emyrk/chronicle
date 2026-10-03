@@ -20,6 +20,14 @@ func TestValidateWowdataSource(t *testing.T) {
 	require.NoError(t, validateWowdataSource("", "client"))
 }
 
+func TestValidateWowdataExtractionSource(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, validateWowdataExtractionSource("local"))
+	require.NoError(t, validateWowdataExtractionSource("remote"))
+	require.ErrorContains(t, validateWowdataExtractionSource("invalid"), "local or remote")
+}
+
 func TestWowdataExtractArgs(t *testing.T) {
 	t.Parallel()
 
@@ -28,6 +36,7 @@ func TestWowdataExtractArgs(t *testing.T) {
 		WowdataBin: "/bin/wowdata",
 		Product:    "wow_classic_beta",
 		Build:      "1.60.1.69913",
+		Source:     "remote",
 		Region:     "us",
 		Locale:     "enUS",
 		Cache:      "/cache",
@@ -37,6 +46,7 @@ func TestWowdataExtractArgs(t *testing.T) {
 		"--client", "/game",
 		"--wowdata", "/bin/wowdata",
 		"--product", "wow_classic_beta",
+		"--source", "remote",
 		"--region", "us",
 		"--locale", "enUS",
 		"--out", "/snapshot",
@@ -53,6 +63,7 @@ func TestWowdataExtractArgsOmitsOptionalValues(t *testing.T) {
 		Client:     "/game",
 		WowdataBin: "wowdata",
 		Product:    "wow_classic_beta",
+		Source:     "local",
 		Region:     "eu",
 		Locale:     "deDE",
 		NoHotfix:   true,
@@ -117,12 +128,13 @@ touch "$out/extracted"
 		Extractor:  extractor,
 		Product:    "wow_classic_beta",
 		Build:      "1.60.1.69913",
+		Source:     "local",
 		Region:     "us",
 		Locale:     "enUS",
 	})
 	require.NoError(t, err)
 	require.FileExists(t, filepath.Join(snapshot, "extracted"))
-	require.Contains(t, output.String(), "Extracting wow_classic_beta 1.60.1.69913")
+	require.Contains(t, output.String(), "Extracting wow_classic_beta 1.60.1.69913 from /game")
 
 	cleanup()
 	require.NoDirExists(t, snapshot)
