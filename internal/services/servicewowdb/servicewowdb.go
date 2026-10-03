@@ -355,6 +355,8 @@ func (s *Service) handleGetVulnerabilitySpells(w http.ResponseWriter, r *http.Re
 	httpapi.Write(ctx, w, http.StatusOK, spells)
 }
 
+const talentTreesCacheControl = "public, max-age=7200"
+
 func (s *Service) handleGetTalentTrees(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -390,7 +392,7 @@ func (s *Service) handleGetTalentTrees(w http.ResponseWriter, r *http.Request) {
 		iconBaseURL = ds.IconBaseUrl
 	}
 
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", talentTreesCacheControl)
 	httpapi.Write(ctx, w, http.StatusOK, talentTreesResponse{
 		TalentTreeData: data,
 		DatasetID:      datasetID,

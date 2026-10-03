@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import type { TalentTreeJSON } from "./talentLogic";
 
+export const TALENT_TREES_STALE_TIME_MS = 2 * 60 * 60 * 1000;
+
 /**
  * Fetches talent trees for a dataset. A 404 means the dataset has no talent
  * data imported yet; that resolves to `null` (handled as a graceful empty
@@ -18,6 +20,6 @@ export function useTalentTrees(datasetId?: string) {
       if (!res.ok) throw new Error("Failed to fetch talent trees");
       return res.json();
     },
-    staleTime: Infinity,
+    staleTime: TALENT_TREES_STALE_TIME_MS,
   });
 }

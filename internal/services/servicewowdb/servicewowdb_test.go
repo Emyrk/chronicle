@@ -7,6 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTalentTreesCacheControl(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "public, max-age=7200", talentTreesCacheControl)
+}
+
 func TestParseVulnerabilitySpellIDs(t *testing.T) {
 	t.Parallel()
 

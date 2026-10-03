@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft, TreePine } from "lucide-react";
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { TalentTreeViewerLegacy as TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
+import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
 import { useDatasets } from "@/api/queries";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { parseTalentString } from "./talentParse";
@@ -19,15 +19,6 @@ const CLASSES = [
   { id: 9, name: "Warlock" },
   { id: 11, name: "Druid" },
 ];
-
-// Minimal type for the /wowdb/talent-trees response – includes talent count per tab
-// so we can match WotLK companion rank strings (which lack tab names) by length.
-interface TalentTreeJSON {
-  classes: Record<
-    string,
-    { tabs: { name: string; orderIndex: number; talents: { id: number }[] }[] }
-  >;
-}
 
 const EXAMPLE =
   "1713312000000|COMBATANT_TALENTS|0x00000000001A2B3C|Priests|Discipline;14;00503001500001|Holy;21;05230010500501|Shadow;0;00000000000000000";
@@ -46,19 +37,7 @@ export function TalentTreesPage() {
   const datasetId = datasetOverride || tenantDatasetId || "";
 
   // Fetch talent tree data to resolve tab names → class ID
-  const { data: treeData } = useQuery<TalentTreeJSON | null>({
-    queryKey: ["talent-trees", datasetId || "default"],
-    queryFn: async () => {
-      const url = datasetId
-        ? `/api/v1/wowdb/talent-trees?dataset_id=${encodeURIComponent(datasetId)}`
-        : "/api/v1/wowdb/talent-trees";
-      const res = await fetch(url);
-      if (res.status === 404) return null;
-      if (!res.ok) throw new Error("Failed to fetch talent trees");
-      return res.json();
-    },
-    staleTime: Infinity,
-  });
+  const { data: treeData } = useTalentTrees(datasetId || undefined);
 
   // Build a reverse lookup: lowercase tab name → class ID
   const tabToClass = useMemo(() => {
