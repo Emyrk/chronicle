@@ -344,6 +344,7 @@ type dbdField struct {
 	Signed   bool
 	Inline   bool
 	ID       bool
+	Relation bool
 }
 
 var (
@@ -404,6 +405,8 @@ func parseDBD(path, build string) ([]dbdField, error) {
 					field.ID = true
 				case "noninline":
 					field.Inline = false
+				case "relation":
+					field.Relation = true
 				}
 			}
 			if match[3] == "u" {
@@ -474,10 +477,17 @@ func decodeHotfixRow(payload []byte, fields []dbdField, recordID uint32) (map[st
 	offset := 0
 	for _, field := range fields {
 		if !field.Inline {
-			if field.ID {
+			switch {
+			case field.ID:
 				row[field.Name] = recordID
+				continue
+			case field.Relation:
+				if field.Type != "int" || field.ArrayLen != 1 {
+					return nil, fmt.Errorf("unsupported noninline relation field %s", field.Name)
+				}
+			default:
+				return nil, fmt.Errorf("unsupported noninline field %s", field.Name)
 			}
-			continue
 		}
 		values := make([]any, field.ArrayLen)
 		for i := range values {

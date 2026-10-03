@@ -93,6 +93,62 @@ Name_lang
 	require.ErrorContains(t, validateHotfixProvenance(dir, manifest), "SHA256")
 }
 
+func TestDecodeHotfixRowIncludesNoninlineRelation(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dbdPath := filepath.Join(dir, "SpellAuraOptions.dbd")
+	require.NoError(t, os.WriteFile(dbdPath, []byte(`COLUMNS
+int ID
+int DifficultyID
+int CumulativeAura
+int ProcCategoryRecovery
+int ProcChance
+int ProcCharges
+int SpellProcsPerMinuteID
+int ProcTypeMask
+int SpellID
+
+BUILD 1.60.1.70170
+$noninline,id$ID<32>
+DifficultyID<16>
+CumulativeAura<u16>
+ProcCategoryRecovery<32>
+ProcChance<u8>
+ProcCharges<32>
+SpellProcsPerMinuteID<u16>
+ProcTypeMask<32>[2]
+$noninline,relation$SpellID<32>
+`), 0o644))
+
+	fields, err := parseDBD(dbdPath, "1.60.1.70170")
+	require.NoError(t, err)
+	require.Len(t, fields, 9)
+	require.True(t, fields[0].ID)
+	require.False(t, fields[0].Inline)
+	require.True(t, fields[8].Relation)
+	require.False(t, fields[8].Inline)
+
+	// SpellAuraOptions record 127917 from the 1.60.1.70170 DBCache. The
+	// inline fields consume 23 bytes and the trailing relation consumes 4.
+	payload := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa8,
+		0x22, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x67,
+		0x40, 0x00, 0x00,
+	}
+	row, err := decodeHotfixRow(payload, fields, 127917)
+	require.NoError(t, err)
+	require.Equal(t, uint32(127917), row["ID"])
+	require.Equal(t, int64(16487), row["SpellID"])
+
+	_, err = decodeHotfixRow(payload[:26], fields, 127917)
+	require.ErrorContains(t, err, "SpellID: truncated 32-bit integer")
+
+	_, err = decodeHotfixRow(append(payload, 0), fields, 127917)
+	require.ErrorContains(t, err, "schema consumed 27 of 28 payload bytes")
+}
+
 func TestApplyHotfixesRejectsBuildMismatch(t *testing.T) {
 	t.Parallel()
 
