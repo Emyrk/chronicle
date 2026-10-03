@@ -69,12 +69,35 @@ func TestResolveRealmByNamePrefersExplicitRealmID(t *testing.T) {
 	assert.Equal(t, original.Name, resolved.Name)
 }
 
+func TestNormalizeRealmNameForFlavor(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		flavor   database.WoWFlavor
+		realm    string
+		expected string
+	}{
+		{name: "forever single digit", flavor: database.WoWFlavor{database.FlavorWoWForever}, realm: "ClassicBetaPvE2", expected: "ClassicBetaPvE"},
+		{name: "forever multiple digits", flavor: database.WoWFlavor{database.FlavorWoWForever}, realm: "Realm27", expected: "Realm"},
+		{name: "forever no digits", flavor: database.WoWFlavor{database.FlavorWoWForever}, realm: "Nightslayer-US", expected: "Nightslayer-US"},
+		{name: "other flavor", flavor: database.WoWFlavor{database.FlavorVanilla}, realm: "Realm27", expected: "Realm27"},
+		{name: "no flavor", realm: "Realm27", expected: "Realm27"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.expected, normalizeRealmNameForFlavor(tc.flavor, tc.realm))
+		})
+	}
+}
+
 func TestScanRealmName(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name      string
 		logFormat database.LogFormat
+		flavor    database.WoWFlavor
 		input     string
 		expected  string
 	}{
@@ -188,11 +211,12 @@ continuation line that doesn't have framing`,
 		{
 			name:      "v22/dominant_engaged_realm",
 			logFormat: database.LogFormatV22Cleu,
+			flavor:    database.WoWFlavor{database.FlavorWoWForever},
 			input: `9/29/2026 09:29:17.000-4  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18
 9/29/2026 09:29:18.000-4  ENCOUNTER_START,601,"Boss",1,5,43,0
 9/29/2026 09:29:19.000-4  SPELL_DAMAGE,Player-4620-006422B6,"Thaddeus-ClassicBetaPvE2-",0x511,0x80000001,Creature-0-4621-43-147523-3640-00013BBCF1,"Boss",0x10a48,0x80000000,1280345,"Consecration",0x2,11,10,-1,2,0,0,0,nil,nil,nil,AOE
 9/29/2026 09:29:20.000-4  ENCOUNTER_END,601,"Boss",1,5,1`,
-			expected: "ClassicBetaPvE2",
+			expected: "ClassicBetaPvE",
 		},
 
 		// ── AzerothCore server-side ──────────────────────────────────
@@ -227,7 +251,7 @@ continuation line that doesn't have framing`,
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			result := scanRealmName(tc.logFormat, []byte(tc.input))
+			result := scanRealmName(tc.logFormat, tc.flavor, []byte(tc.input))
 			assert.Equal(t, tc.expected, result)
 		})
 	}

@@ -98,7 +98,22 @@ func resolveRealmByName(
 // from the combatlog packages where possible. Returns "" if no realm info is
 // found. Scans the entire file — realm info can appear at any point depending
 // on format.
-func scanRealmName(logFormat database.LogFormat, data []byte) string {
+func scanRealmName(logFormat database.LogFormat, flavor database.WoWFlavor, data []byte) string {
+	return normalizeRealmNameForFlavor(flavor, scanRawRealmName(logFormat, data))
+}
+
+func normalizeRealmNameForFlavor(flavor database.WoWFlavor, name string) string {
+	if !flavor.Has(database.FlavorWoWForever) {
+		return name
+	}
+	trimmed := strings.TrimRight(name, "0123456789")
+	if trimmed == "" {
+		return name
+	}
+	return trimmed
+}
+
+func scanRawRealmName(logFormat database.LogFormat, data []byte) string {
 	if logFormat == database.LogFormatV9Cleu || logFormat == database.LogFormatV22Cleu {
 		return blizzardmodern.DominantEngagedRealm(data)
 	}

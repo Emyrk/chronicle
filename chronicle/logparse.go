@@ -276,7 +276,13 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			jobResult = "failure"
 			return fmt.Errorf("load file for realm scan: %w", scanErr)
 		}
-		realmName := scanRealmName(logFormat, preloadedFirst)
+		scanFlavor := flavor
+		if len(scanFlavor) == 0 && logFormat == database.LogFormatV22Cleu {
+			// V22 is currently the dedicated WoW Forever format. Uploads do not
+			// persist their default flavor until after realm-based dataset resolution.
+			scanFlavor = database.WoWFlavor{database.FlavorWoWForever}
+		}
+		realmName := scanRealmName(logFormat, scanFlavor, preloadedFirst)
 		preRealmName = realmName
 		if realmName == "" {
 			jobResult = "cancelled"
