@@ -71,12 +71,12 @@ SELECT entry, name, inventory_type FROM world_item_template WHERE dataset_id = @
 -- falls back to name lookup but only if the name is unique in the table.
 -- Pass paired arrays where item_ids[i] corresponds to item_names[i].
 WITH by_id AS (
-  SELECT wit.entry, wit.name, wit.quality, wit.display_id, wit.item_level
+  SELECT wit.entry, wit.name, wit.quality, wit.display_id, wit.item_level, wit.icon
   FROM world_item_template wit
   WHERE wit.dataset_id = @dataset_id AND wit.entry = ANY(@item_ids::int[])
 ),
 by_name AS (
-  SELECT wit.entry, wit.name, wit.quality, wit.display_id, wit.item_level
+  SELECT wit.entry, wit.name, wit.quality, wit.display_id, wit.item_level, wit.icon
   FROM world_item_template wit
   WHERE wit.dataset_id = @dataset_id
     AND wit.name = ANY(@item_names::text[])
@@ -91,7 +91,7 @@ SELECT
   c.name,
   c.quality,
   c.item_level,
-  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
+  COALESCE(NULLIF(c.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM combined c
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = @dataset_id AND wdi.id = c.display_id
   LEFT JOIN dbc_item_display_info dbi ON dbi.dataset_id = @dataset_id AND dbi.id = c.display_id;

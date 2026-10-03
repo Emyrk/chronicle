@@ -20230,12 +20230,12 @@ func (q *sqlQuerier) GetItemTemplateByEntry(ctx context.Context, arg GetItemTemp
 
 const getItemTemplateMetadataBatch = `-- name: GetItemTemplateMetadataBatch :many
 WITH by_id AS (
-  SELECT wit.entry, wit.name, wit.quality, wit.display_id, wit.item_level
+  SELECT wit.entry, wit.name, wit.quality, wit.display_id, wit.item_level, wit.icon
   FROM world_item_template wit
   WHERE wit.dataset_id = $1 AND wit.entry = ANY($2::int[])
 ),
 by_name AS (
-  SELECT wit.entry, wit.name, wit.quality, wit.display_id, wit.item_level
+  SELECT wit.entry, wit.name, wit.quality, wit.display_id, wit.item_level, wit.icon
   FROM world_item_template wit
   WHERE wit.dataset_id = $1
     AND wit.name = ANY($3::text[])
@@ -20243,14 +20243,14 @@ by_name AS (
     AND (SELECT COUNT(*) FROM world_item_template t2 WHERE t2.dataset_id = $1 AND t2.name = wit.name) = 1
 ),
 combined AS (
-  SELECT entry, name, quality, display_id, item_level FROM by_id UNION ALL SELECT entry, name, quality, display_id, item_level FROM by_name
+  SELECT entry, name, quality, display_id, item_level, icon FROM by_id UNION ALL SELECT entry, name, quality, display_id, item_level, icon FROM by_name
 )
 SELECT
   c.entry,
   c.name,
   c.quality,
   c.item_level,
-  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
+  COALESCE(NULLIF(c.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM combined c
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = $1 AND wdi.id = c.display_id
   LEFT JOIN dbc_item_display_info dbi ON dbi.dataset_id = $1 AND dbi.id = c.display_id

@@ -75,6 +75,20 @@ func TestSearchSlotEnchantmentsUsesCanonicalEffects(t *testing.T) {
 	}}, rows)
 }
 
+func TestGetItemTemplateMetadataBatchExecutes(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	db, _ := dbtestutil.NewDB(t)
+
+	rows, err := db.GetItemTemplateMetadataBatch(ctx, database.GetItemTemplateMetadataBatchParams{
+		DatasetID: servicedataset.DefaultDatasetID,
+		ItemIds:   []int32{-1},
+		ItemNames: []string{"missing test item"},
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
 func spellEffectRow(datasetID [16]byte, spellID, difficultyID, effectIndex, sourceID, effect int32, misc []int32) database.CopyLegacySpellEffectsParams {
 	return database.CopyLegacySpellEffectsParams{
 		DatasetID:            datasetID,
