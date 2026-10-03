@@ -77,6 +77,7 @@ type hotfixReceipt struct {
 	CacheSHA256    string                `json:"cacheSha256"`
 	CacheVersion   uint32                `json:"cacheVersion"`
 	CacheBuild     int32                 `json:"cacheBuild"`
+	CacheBuildName string                `json:"cacheBuildName"`
 	CacheSize      int64                 `json:"cacheSize"`
 	RecordCount    int                   `json:"recordCount"`
 	StatusCounts   map[string]int        `json:"statusCounts"`
@@ -96,12 +97,20 @@ func validateHotfixProvenance(dir string, manifest Manifest) error {
 	if hotfix.Region != manifest.Target.Region || hotfix.Locale != manifest.Target.Locale {
 		return fmt.Errorf("hotfix provenance %s/%s does not match snapshot %s/%s", hotfix.Region, hotfix.Locale, manifest.Target.Region, manifest.Target.Locale)
 	}
-	build, err := buildRevision(manifest.Target.BuildName)
+	snapshotFamily, snapshotRevision, err := buildFamilyRevision(manifest.Target.BuildName)
 	if err != nil {
 		return err
 	}
-	if hotfix.CacheBuild != build {
-		return fmt.Errorf("hotfix cache build %d does not match snapshot build %s", hotfix.CacheBuild, manifest.Target.BuildName)
+	if hotfix.CacheBuildName != "" {
+		cacheFamily, cacheRevision, err := buildFamilyRevision(hotfix.CacheBuildName)
+		if err != nil {
+			return fmt.Errorf("invalid hotfix cache build name: %w", err)
+		}
+		if cacheRevision != hotfix.CacheBuild || cacheFamily != snapshotFamily {
+			return fmt.Errorf("hotfix cache build %s does not match snapshot version family %s", hotfix.CacheBuildName, snapshotFamily)
+		}
+	} else if hotfix.CacheBuild != snapshotRevision {
+		return fmt.Errorf("mismatched hotfix cache build %d has no full build provenance", hotfix.CacheBuild)
 	}
 	receiptRelative := filepath.Clean(filepath.FromSlash(hotfix.Receipt))
 	if filepath.IsAbs(receiptRelative) || receiptRelative == ".." || strings.HasPrefix(receiptRelative, ".."+string(filepath.Separator)) {
@@ -126,7 +135,7 @@ func validateHotfixProvenance(dir string, manifest Manifest) error {
 	if receipt.Format != "chronicle-wowdata-hotfix-receipt-v1" || receipt.Product != manifest.Target.Product ||
 		receipt.Build != manifest.Target.BuildName || receipt.Region != hotfix.Region || receipt.NumericRegion != hotfix.NumericRegion ||
 		receipt.Locale != hotfix.Locale || receipt.CacheSHA256 != hotfix.CacheSHA256 || receipt.CacheVersion != hotfix.CacheVersion ||
-		receipt.CacheBuild != hotfix.CacheBuild || receipt.CacheSize != hotfix.CacheSize {
+		receipt.CacheBuild != hotfix.CacheBuild || receipt.CacheBuildName != hotfix.CacheBuildName || receipt.CacheSize != hotfix.CacheSize {
 		return fmt.Errorf("applied hotfix receipt provenance does not match manifest")
 	}
 	return nil
@@ -154,12 +163,9 @@ func ApplyHotfixes(opts HotfixOptions) error {
 	if err != nil {
 		return err
 	}
-	buildNumber, err := buildRevision(opts.Build)
+	cacheBuildName, err := compatibleCacheBuildName(opts.DBDDir, opts.Build, cacheBuild)
 	if err != nil {
 		return err
-	}
-	if cacheBuild != buildNumber {
-		return fmt.Errorf("DBCache build %d does not match requested build %s", cacheBuild, opts.Build)
 	}
 
 	byHash := make(map[uint32]string, len(wowdataTableHashes))
@@ -209,7 +215,7 @@ func ApplyHotfixes(opts HotfixOptions) error {
 	receipt := hotfixReceipt{
 		Format: "chronicle-wowdata-hotfix-receipt-v1", Product: opts.Product, Build: opts.Build,
 		Region: opts.Region, NumericRegion: numericRegion, Locale: opts.Locale,
-		CacheSHA256: hex.EncodeToString(cacheSum[:]), CacheVersion: version, CacheBuild: cacheBuild,
+		CacheSHA256: hex.EncodeToString(cacheSum[:]), CacheVersion: version, CacheBuild: cacheBuild, CacheBuildName: cacheBuildName,
 		CacheSize: int64(len(cacheBytes)), RecordCount: len(records), StatusCounts: statusCounts,
 		AffectedTables: affected,
 	}
@@ -227,7 +233,7 @@ func ApplyHotfixes(opts HotfixOptions) error {
 	}
 	receiptSum := sha256.Sum256(receiptData)
 	manifest.Hotfix = &ManifestHotfix{
-		Applied: true, CacheSHA256: receipt.CacheSHA256, CacheVersion: version, CacheBuild: cacheBuild,
+		Applied: true, CacheSHA256: receipt.CacheSHA256, CacheVersion: version, CacheBuild: cacheBuild, CacheBuildName: cacheBuildName,
 		CacheSize: int64(len(cacheBytes)), Region: opts.Region, NumericRegion: numericRegion, Locale: opts.Locale,
 		RecordCount: len(records), StatusCounts: statusCounts, AffectedTables: affected,
 		Receipt: "hotfix/receipt.json", ReceiptSHA256: hex.EncodeToString(receiptSum[:]),
@@ -628,14 +634,50 @@ func validSHA256(value string) bool {
 	return err == nil && len(decoded) == sha256.Size
 }
 
-func buildRevision(build string) (int32, error) {
-	parts := strings.Split(build, ".")
-	value := parts[len(parts)-1]
-	revision, err := strconv.ParseInt(value, 10, 32)
+func compatibleCacheBuildName(dbdDir, snapshotBuild string, cacheBuild int32) (string, error) {
+	snapshotFamily, snapshotRevision, err := buildFamilyRevision(snapshotBuild)
 	if err != nil {
-		return 0, fmt.Errorf("invalid build %q: %w", build, err)
+		return "", err
 	}
-	return int32(revision), nil
+	if cacheBuild == snapshotRevision {
+		return snapshotBuild, nil
+	}
+
+	paths, err := filepath.Glob(filepath.Join(dbdDir, "*.dbd"))
+	if err != nil {
+		return "", fmt.Errorf("find DBD files: %w", err)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read DBD build metadata %s: %w", path, err)
+		}
+		for _, line := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+			if !strings.HasPrefix(line, "BUILD ") {
+				continue
+			}
+			for _, build := range strings.Split(strings.TrimPrefix(line, "BUILD "), ",") {
+				build = strings.TrimSpace(build)
+				family, revision, err := buildFamilyRevision(build)
+				if err == nil && revision == cacheBuild && family == snapshotFamily {
+					return build, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("DBCache build %d is not declared for snapshot version family %s", cacheBuild, snapshotFamily)
+}
+
+func buildFamilyRevision(build string) (string, int32, error) {
+	parts := strings.Split(build, ".")
+	if len(parts) < 2 {
+		return "", 0, fmt.Errorf("invalid build %q", build)
+	}
+	revision, err := strconv.ParseInt(parts[len(parts)-1], 10, 32)
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid build %q: %w", build, err)
+	}
+	return strings.Join(parts[:len(parts)-1], "."), int32(revision), nil
 }
 
 func writeFileAtomic(path string, data []byte) error {

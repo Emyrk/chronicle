@@ -149,7 +149,7 @@ $noninline,relation$SpellID<32>
 	require.ErrorContains(t, err, "schema consumed 27 of 28 payload bytes")
 }
 
-func TestApplyHotfixesRejectsBuildMismatch(t *testing.T) {
+func TestApplyHotfixesAllowsCacheRevisionMismatch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -158,15 +158,29 @@ func TestApplyHotfixesRejectsBuildMismatch(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "enUS"), 0o755))
 	writeTestManifest(t, dir, "SpellName")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tables", "SpellName.jsonl"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "dbd", "SpellName.dbd"), []byte(`COLUMNS
+int ID
+string Name_lang
+
+BUILD 1.60.1.69912, 1.60.1.69913
+$noninline,id$ID<32>
+Name_lang
+`), 0o644))
 	cachePath := filepath.Join(dir, "enUS", "DBCache.bin")
 	require.NoError(t, os.WriteFile(cachePath, makeDBCache(t, 69912,
-		hotfixCacheRecord{Region: 70, TableHash: wowdataTableHashes["SpellName"], Status: 3}), 0o644))
+		hotfixCacheRecord{Region: 70, TableHash: wowdataTableHashes["SpellName"], RecordID: 1, Status: 1, Payload: cString("hotfixed")}), 0o644))
 
 	err := ApplyHotfixes(HotfixOptions{
 		SnapshotDir: dir, CachePath: cachePath, DBDDir: filepath.Join(dir, "dbd"),
 		Product: "wow_classic_beta", Build: "1.60.1.69913", Region: "us", Locale: "enUS",
 	})
-	require.ErrorContains(t, err, "does not match requested build")
+	require.NoError(t, err)
+
+	manifest, err := readManifest(dir)
+	require.NoError(t, err)
+	require.Equal(t, int32(69912), manifest.Hotfix.CacheBuild)
+	require.Equal(t, "1.60.1.69912", manifest.Hotfix.CacheBuildName)
+	require.NoError(t, validateHotfixProvenance(dir, manifest))
 }
 
 func writeTestManifest(t *testing.T, dir, table string) {

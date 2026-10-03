@@ -97,6 +97,16 @@ The first importer persists:
 
 The legacy `dbc_spells` projection is deterministic: it uses `DifficultyID=0`, effects 0 through 2, the first nine attributes, and the lowest ordered spell power. The normalized spell tables preserve all imported effects, powers, attributes, and difficulty-aware component rows. The CLI loss report distinguishes compatibility-projection omissions from unsupported source data, such as missing `ItemSparse` records.
 
+## DBCache hotfix revisions
+
+The client can retain a `DBCache.bin` from the preceding build revision after a
+Forever client update. The importer resolves the cache's full build through the
+DBD metadata and accepts a different final revision within the same version
+family, such as `1.60.1.70170` for a `1.60.1.70205` snapshot. It records both
+builds in the snapshot provenance. Different version families are rejected, and
+hotfix payloads are decoded with the target build's DBD schema so incompatible
+record layouts still fail rather than being silently applied.
+
 ## Modern talent conversion
 
 Forever build `1.60.1.69913` uses the active Trait tables rather than the obsolete `Talent` and `TalentTab` tables. The snapshot therefore requires `TraitTree`, `TraitNode`, `TraitNodeEntry`, `TraitDefinition`, `TraitEdge`, `TraitNodeXTraitNodeEntry`, `TraitNodeGroup`, `TraitNodeGroupXTraitNode`, `TraitNodeGroupDisplayInfo`, `SkillLineXTraitTree`, and `SkillLine`.

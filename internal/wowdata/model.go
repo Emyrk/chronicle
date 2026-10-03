@@ -27,6 +27,7 @@ type ManifestHotfix struct {
 	CacheSHA256    string                `json:"cacheSha256,omitempty"`
 	CacheVersion   uint32                `json:"cacheVersion,omitempty"`
 	CacheBuild     int32                 `json:"cacheBuild,omitempty"`
+	CacheBuildName string                `json:"cacheBuildName,omitempty"`
 	CacheSize      int64                 `json:"cacheSize,omitempty"`
 	Region         string                `json:"region,omitempty"`
 	NumericRegion  uint32                `json:"numericRegion,omitempty"`
