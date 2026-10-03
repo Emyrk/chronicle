@@ -91,7 +91,7 @@ SELECT
   c.name,
   c.quality,
   c.item_level,
-  COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
+  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM combined c
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = @dataset_id AND wdi.id = c.display_id
   LEFT JOIN dbc_item_display_info dbi ON dbi.dataset_id = @dataset_id AND dbi.id = c.display_id;
@@ -117,7 +117,7 @@ SELECT
     ORDER BY enchant.id
     LIMIT 1
   ), 0)::int AS gem_enchant_id,
-  COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
+  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM world_item_template wit
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = @dataset_id AND wdi.id = wit.display_id
   LEFT JOIN dbc_item_display_info dbi ON dbi.dataset_id = @dataset_id AND dbi.id = wit.display_id
@@ -179,7 +179,7 @@ LIMIT 25;
 -- Returns set pieces with item details for a specific set.
 SELECT
   wit.entry, wit.name, wit.quality, wit.inventory_type,
-  COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
+  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM dbc_item_set_item isi
   JOIN world_item_template wit ON wit.dataset_id = @dataset_id AND wit.entry = isi.item_entry
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = @dataset_id AND wdi.id = wit.display_id

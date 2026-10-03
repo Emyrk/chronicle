@@ -70,7 +70,7 @@ func Convert(dir, expectedProduct, expectedBuild string) (*Import, error) {
 		"All modern spell effects, powers, attributes, and difficulty-aware component rows are preserved in normalized storage.",
 		"Component-only spell IDs are preserved in normalized storage even when the base Spell table has no matching row.",
 		"Modern EffectBasePointsF is preserved directly in normalized storage.",
-		"Modern icon FileDataIDs are preserved as numeric spell icon IDs; listfile-backed icon paths are imported when present, while item display IDs are not guessed.",
+		"Modern icon FileDataIDs are resolved through the client listfile for spells and items when present; item display IDs are not guessed.",
 		"Items without ItemSparse are reported and skipped; modern percentage stats, damage curves, armor curves, and unjoinable ItemEffect rows are not imported.",
 	}
 	if err := convertSpells(dir, out); err != nil {
@@ -633,7 +633,10 @@ func take(s []int32, n int) []int32 {
 }
 func mask64(s []int32) int64 { return int64(uint64(uint32(at(s, 0))) | uint64(uint32(at(s, 1)))<<32) }
 
-type itemBaseRow struct{ ID, ClassID, SubclassID, InventoryType, Material, SheatheType, AmmunitionType int32 }
+type itemBaseRow struct {
+	ID, ClassID, SubclassID, InventoryType, Material, SheatheType, AmmunitionType int32
+	IconFileDataID                                                                int32
+}
 type itemSparseRow struct {
 	ID                                                                                                                                                                        int32
 	Display                                                                                                                                                                   string `json:"Display_lang"`
@@ -662,6 +665,10 @@ func convertItems(dir string, out *Import) error {
 	for _, x := range bases {
 		bm[x.ID] = x
 	}
+	iconTextures := make(map[int32]string, len(out.SpellIcons))
+	for _, icon := range out.SpellIcons {
+		iconTextures[icon.ID] = icon.TextureFilename
+	}
 	sm := map[int32]itemSparseRow{}
 	for _, x := range sparse {
 		sm[x.ID] = x
@@ -675,7 +682,7 @@ func convertItems(dir string, out *Import) error {
 			out.Losses.MissingItemSparseIDs = append(out.Losses.MissingItemSparseIDs, b.ID)
 			continue
 		}
-		r := database.WorldItemTemplate{Entry: b.ID, Class: b.ClassID, Subclass: b.SubclassID, Name: x.Display, Description: x.Description, Quality: x.OverallQualityID, Flags: at(x.Flags, 0), BuyPrice: x.BuyPrice, SellPrice: x.SellPrice, InventoryType: x.InventoryType, AllowableClass: x.AllowableClass, AllowableRace: at(x.AllowableRace, 0), ItemLevel: x.ItemLevel, RequiredLevel: x.RequiredLevel, RequiredSkill: x.RequiredSkill, RequiredSkillRank: x.RequiredSkillRank, RequiredSpell: x.RequiredAbility, RequiredHonorRank: x.RequiredPVPRank, RequiredReputationFaction: x.MinFactionID, RequiredReputationRank: x.MinReputation, MaxCount: x.MaxCount, Stackable: x.Stackable, ContainerSlots: x.ContainerSlots, Delay: x.ItemDelay, AmmoType: x.AmmunitionType, Bonding: x.Bonding, PageText: x.PageID, PageLanguage: x.LanguageID, PageMaterial: x.PageMaterialID, StartQuest: x.StartQuestID, LockID: x.LockID, Material: x.Material, Sheath: x.SheatheType, SetID: x.ItemSet, Duration: x.DurationInInventory, BagFamily: x.BagFamily, TotemCategory: x.TotemCategoryID, SocketColor1: at(x.SocketType, 0), SocketColor2: at(x.SocketType, 1), SocketColor3: at(x.SocketType, 2), SocketBonus: x.Socket_match_enchantment_ID, GemProperties: x.Gem_properties, ItemLimitCategory: x.LimitCategory, HolidayID: x.RequiredHoliday, AreaBound: at(x.ZoneBound, 0), MapBound: at(x.ZoneBound, 1)}
+		r := database.WorldItemTemplate{Entry: b.ID, Class: b.ClassID, Subclass: b.SubclassID, Name: x.Display, Description: x.Description, Icon: iconTextures[b.IconFileDataID], Quality: x.OverallQualityID, Flags: at(x.Flags, 0), BuyPrice: x.BuyPrice, SellPrice: x.SellPrice, InventoryType: x.InventoryType, AllowableClass: x.AllowableClass, AllowableRace: at(x.AllowableRace, 0), ItemLevel: x.ItemLevel, RequiredLevel: x.RequiredLevel, RequiredSkill: x.RequiredSkill, RequiredSkillRank: x.RequiredSkillRank, RequiredSpell: x.RequiredAbility, RequiredHonorRank: x.RequiredPVPRank, RequiredReputationFaction: x.MinFactionID, RequiredReputationRank: x.MinReputation, MaxCount: x.MaxCount, Stackable: x.Stackable, ContainerSlots: x.ContainerSlots, Delay: x.ItemDelay, AmmoType: x.AmmunitionType, Bonding: x.Bonding, PageText: x.PageID, PageLanguage: x.LanguageID, PageMaterial: x.PageMaterialID, StartQuest: x.StartQuestID, LockID: x.LockID, Material: x.Material, Sheath: x.SheatheType, SetID: x.ItemSet, Duration: x.DurationInInventory, BagFamily: x.BagFamily, TotemCategory: x.TotemCategoryID, SocketColor1: at(x.SocketType, 0), SocketColor2: at(x.SocketType, 1), SocketColor3: at(x.SocketType, 2), SocketBonus: x.Socket_match_enchantment_ID, GemProperties: x.Gem_properties, ItemLimitCategory: x.LimitCategory, HolidayID: x.RequiredHoliday, AreaBound: at(x.ZoneBound, 0), MapBound: at(x.ZoneBound, 1)}
 		out.Items = append(out.Items, r)
 	}
 	sort.Slice(out.Items, func(i, j int) bool { return out.Items[i].Entry < out.Items[j].Entry })

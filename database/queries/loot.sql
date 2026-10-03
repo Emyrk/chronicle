@@ -42,7 +42,7 @@ deduped AS (
 SELECT
   d.*,
   COALESCE(wit.quality, 0)::INT as quality,
-  COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::TEXT as icon
+  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::TEXT as icon
 FROM deduped d
   LEFT JOIN world_item_template wit ON wit.dataset_id = @dataset_id AND wit.entry = d.item_id
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = @dataset_id AND wdi.id = wit.display_id
@@ -55,7 +55,7 @@ LIMIT @result_limit;
 SELECT
   il.*,
   COALESCE(wit.quality, 0)::INT as quality,
-  COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::TEXT as icon
+  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::TEXT as icon
 FROM instance_loot il
   LEFT JOIN world_item_template wit ON wit.dataset_id = @dataset_id AND wit.entry = il.item_id
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = @dataset_id AND wdi.id = wit.display_id

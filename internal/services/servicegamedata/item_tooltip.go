@@ -128,10 +128,12 @@ func buildBaseTooltip(ctx context.Context, db database.Store, item database.Worl
 		Delay:         item.Delay,
 		RequiredLevel: item.RequiredLevel,
 		Description:   item.Description,
+		Icon:          item.Icon,
 	}
 
-	// Resolve icon from display_info
-	if item.DisplayID != 0 {
+	// Legacy imports resolve icons through display_info. Modern imports store the
+	// listfile-resolved icon directly on the item.
+	if tooltip.Icon == "" && item.DisplayID != 0 {
 		di, err := db.GetDisplayInfoByID(ctx, database.GetDisplayInfoByIDParams{DatasetID: dsID, ID: item.DisplayID})
 		if err == nil {
 			tooltip.Icon = di.Icon

@@ -1964,7 +1964,8 @@ CREATE TABLE world_item_template (
     scaling_stat_value integer DEFAULT 0 NOT NULL,
     item_limit_category integer DEFAULT 0 NOT NULL,
     holiday_id integer DEFAULT 0 NOT NULL,
-    dataset_id uuid NOT NULL
+    dataset_id uuid NOT NULL,
+    icon text DEFAULT ''::text NOT NULL
 );
 
 CREATE TABLE world_server (

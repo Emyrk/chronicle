@@ -50,7 +50,7 @@ SELECT
     wit.entry,
     wit.name,
     wit.quality,
-    COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::text,
+    COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::text,
     eligible.item_spell_ids
 FROM world_item_template wit
 JOIN eligible_item_spells eligible

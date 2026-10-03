@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE world_item_template
+    ADD COLUMN icon TEXT NOT NULL DEFAULT '';
+
+COMMIT;

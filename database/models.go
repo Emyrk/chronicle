@@ -2422,6 +2422,7 @@ type WorldItemTemplate struct {
 	ItemLimitCategory         int32       `db:"item_limit_category" json:"item_limit_category"`
 	HolidayID                 int32       `db:"holiday_id" json:"holiday_id"`
 	DatasetID                 uuid.UUID   `db:"dataset_id" json:"dataset_id"`
+	Icon                      string      `db:"icon" json:"icon"`
 }
 
 type WorldServer struct {

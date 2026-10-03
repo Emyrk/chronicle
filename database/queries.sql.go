@@ -1283,7 +1283,7 @@ SELECT
     wit.entry,
     wit.name,
     wit.quality,
-    COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::text,
+    COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::text,
     eligible.item_spell_ids
 FROM world_item_template wit
 JOIN eligible_item_spells eligible
@@ -7260,7 +7260,7 @@ deduped AS (
 SELECT
   d.instance_id, d.received_ts, d.item_id, d.item_name, d.loot_suffix, d.quantity, d.instance_name, d.instance_slug,
   COALESCE(wit.quality, 0)::INT as quality,
-  COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::TEXT as icon
+  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::TEXT as icon
 FROM deduped d
   LEFT JOIN world_item_template wit ON wit.dataset_id = $1 AND wit.entry = d.item_id
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = $1 AND wdi.id = wit.display_id
@@ -7335,7 +7335,7 @@ const getInstanceLoot = `-- name: GetInstanceLoot :many
 SELECT
   il.id, il.instance_id, il.realm_id, il.source_guid, il.source_ts, il.received_guid, il.received_ts, il.item_id, il.item_name, il.loot_suffix, il.quantity,
   COALESCE(wit.quality, 0)::INT as quality,
-  COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::TEXT as icon
+  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::TEXT as icon
 FROM instance_loot il
   LEFT JOIN world_item_template wit ON wit.dataset_id = $1 AND wit.entry = il.item_id
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = $1 AND wdi.id = wit.display_id
@@ -20012,7 +20012,7 @@ func (q *sqlQuerier) GetItemSetItems(ctx context.Context, arg GetItemSetItemsPar
 const getItemSetWithPieces = `-- name: GetItemSetWithPieces :many
 SELECT
   wit.entry, wit.name, wit.quality, wit.inventory_type,
-  COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
+  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM dbc_item_set_item isi
   JOIN world_item_template wit ON wit.dataset_id = $1 AND wit.entry = isi.item_entry
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = $1 AND wdi.id = wit.display_id
@@ -20062,7 +20062,7 @@ func (q *sqlQuerier) GetItemSetWithPieces(ctx context.Context, arg GetItemSetWit
 }
 
 const getItemTemplateByEntry = `-- name: GetItemTemplateByEntry :one
-SELECT entry, class, subclass, name, description, display_id, quality, flags, buy_count, buy_price, sell_price, inventory_type, allowable_class, allowable_race, item_level, required_level, required_skill, required_skill_rank, required_spell, required_honor_rank, required_city_rank, required_reputation_faction, required_reputation_rank, max_count, stackable, container_slots, stat_type1, stat_value1, stat_type2, stat_value2, stat_type3, stat_value3, stat_type4, stat_value4, stat_type5, stat_value5, stat_type6, stat_value6, stat_type7, stat_value7, stat_type8, stat_value8, stat_type9, stat_value9, stat_type10, stat_value10, delay, range_mod, ammo_type, dmg_min1, dmg_max1, dmg_type1, dmg_min2, dmg_max2, dmg_type2, dmg_min3, dmg_max3, dmg_type3, dmg_min4, dmg_max4, dmg_type4, dmg_min5, dmg_max5, dmg_type5, block, armor, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, spellid_1, spelltrigger_1, spellcharges_1, spellppmrate_1, spellcooldown_1, spellcategory_1, spellcategorycooldown_1, spellid_2, spelltrigger_2, spellcharges_2, spellppmrate_2, spellcooldown_2, spellcategory_2, spellcategorycooldown_2, spellid_3, spelltrigger_3, spellcharges_3, spellppmrate_3, spellcooldown_3, spellcategory_3, spellcategorycooldown_3, spellid_4, spelltrigger_4, spellcharges_4, spellppmrate_4, spellcooldown_4, spellcategory_4, spellcategorycooldown_4, spellid_5, spelltrigger_5, spellcharges_5, spellppmrate_5, spellcooldown_5, spellcategory_5, spellcategorycooldown_5, bonding, page_text, page_language, page_material, start_quest, lock_id, material, sheath, random_property, set_id, max_durability, area_bound, map_bound, duration, bag_family, disenchant_id, food_type, min_money_loot, max_money_loot, wrapped_gift, extra_flags, other_team_entry, script_name, patch, tooltip_set_id, random_suffix, totem_category, socket_color_1, socket_content_1, socket_color_2, socket_content_2, socket_color_3, socket_content_3, socket_bonus, gem_properties, required_disenchant_skill, armor_damage_modifier, scaling_stat_distribution, scaling_stat_value, item_limit_category, holiday_id, dataset_id FROM world_item_template WHERE dataset_id = $1 AND entry = $2
+SELECT entry, class, subclass, name, description, display_id, quality, flags, buy_count, buy_price, sell_price, inventory_type, allowable_class, allowable_race, item_level, required_level, required_skill, required_skill_rank, required_spell, required_honor_rank, required_city_rank, required_reputation_faction, required_reputation_rank, max_count, stackable, container_slots, stat_type1, stat_value1, stat_type2, stat_value2, stat_type3, stat_value3, stat_type4, stat_value4, stat_type5, stat_value5, stat_type6, stat_value6, stat_type7, stat_value7, stat_type8, stat_value8, stat_type9, stat_value9, stat_type10, stat_value10, delay, range_mod, ammo_type, dmg_min1, dmg_max1, dmg_type1, dmg_min2, dmg_max2, dmg_type2, dmg_min3, dmg_max3, dmg_type3, dmg_min4, dmg_max4, dmg_type4, dmg_min5, dmg_max5, dmg_type5, block, armor, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, spellid_1, spelltrigger_1, spellcharges_1, spellppmrate_1, spellcooldown_1, spellcategory_1, spellcategorycooldown_1, spellid_2, spelltrigger_2, spellcharges_2, spellppmrate_2, spellcooldown_2, spellcategory_2, spellcategorycooldown_2, spellid_3, spelltrigger_3, spellcharges_3, spellppmrate_3, spellcooldown_3, spellcategory_3, spellcategorycooldown_3, spellid_4, spelltrigger_4, spellcharges_4, spellppmrate_4, spellcooldown_4, spellcategory_4, spellcategorycooldown_4, spellid_5, spelltrigger_5, spellcharges_5, spellppmrate_5, spellcooldown_5, spellcategory_5, spellcategorycooldown_5, bonding, page_text, page_language, page_material, start_quest, lock_id, material, sheath, random_property, set_id, max_durability, area_bound, map_bound, duration, bag_family, disenchant_id, food_type, min_money_loot, max_money_loot, wrapped_gift, extra_flags, other_team_entry, script_name, patch, tooltip_set_id, random_suffix, totem_category, socket_color_1, socket_content_1, socket_color_2, socket_content_2, socket_color_3, socket_content_3, socket_bonus, gem_properties, required_disenchant_skill, armor_damage_modifier, scaling_stat_distribution, scaling_stat_value, item_limit_category, holiday_id, dataset_id, icon FROM world_item_template WHERE dataset_id = $1 AND entry = $2
 `
 
 type GetItemTemplateByEntryParams struct {
@@ -20223,6 +20223,7 @@ func (q *sqlQuerier) GetItemTemplateByEntry(ctx context.Context, arg GetItemTemp
 		&i.ItemLimitCategory,
 		&i.HolidayID,
 		&i.DatasetID,
+		&i.Icon,
 	)
 	return i, err
 }
@@ -20249,7 +20250,7 @@ SELECT
   c.name,
   c.quality,
   c.item_level,
-  COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
+  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM combined c
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = $1 AND wdi.id = c.display_id
   LEFT JOIN dbc_item_display_info dbi ON dbi.dataset_id = $1 AND dbi.id = c.display_id
@@ -20299,7 +20300,7 @@ func (q *sqlQuerier) GetItemTemplateMetadataBatch(ctx context.Context, arg GetIt
 }
 
 const getItemTemplatesByEntries = `-- name: GetItemTemplatesByEntries :many
-SELECT entry, class, subclass, name, description, display_id, quality, flags, buy_count, buy_price, sell_price, inventory_type, allowable_class, allowable_race, item_level, required_level, required_skill, required_skill_rank, required_spell, required_honor_rank, required_city_rank, required_reputation_faction, required_reputation_rank, max_count, stackable, container_slots, stat_type1, stat_value1, stat_type2, stat_value2, stat_type3, stat_value3, stat_type4, stat_value4, stat_type5, stat_value5, stat_type6, stat_value6, stat_type7, stat_value7, stat_type8, stat_value8, stat_type9, stat_value9, stat_type10, stat_value10, delay, range_mod, ammo_type, dmg_min1, dmg_max1, dmg_type1, dmg_min2, dmg_max2, dmg_type2, dmg_min3, dmg_max3, dmg_type3, dmg_min4, dmg_max4, dmg_type4, dmg_min5, dmg_max5, dmg_type5, block, armor, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, spellid_1, spelltrigger_1, spellcharges_1, spellppmrate_1, spellcooldown_1, spellcategory_1, spellcategorycooldown_1, spellid_2, spelltrigger_2, spellcharges_2, spellppmrate_2, spellcooldown_2, spellcategory_2, spellcategorycooldown_2, spellid_3, spelltrigger_3, spellcharges_3, spellppmrate_3, spellcooldown_3, spellcategory_3, spellcategorycooldown_3, spellid_4, spelltrigger_4, spellcharges_4, spellppmrate_4, spellcooldown_4, spellcategory_4, spellcategorycooldown_4, spellid_5, spelltrigger_5, spellcharges_5, spellppmrate_5, spellcooldown_5, spellcategory_5, spellcategorycooldown_5, bonding, page_text, page_language, page_material, start_quest, lock_id, material, sheath, random_property, set_id, max_durability, area_bound, map_bound, duration, bag_family, disenchant_id, food_type, min_money_loot, max_money_loot, wrapped_gift, extra_flags, other_team_entry, script_name, patch, tooltip_set_id, random_suffix, totem_category, socket_color_1, socket_content_1, socket_color_2, socket_content_2, socket_color_3, socket_content_3, socket_bonus, gem_properties, required_disenchant_skill, armor_damage_modifier, scaling_stat_distribution, scaling_stat_value, item_limit_category, holiday_id, dataset_id FROM world_item_template WHERE dataset_id = $1 AND entry = ANY($2::int[])
+SELECT entry, class, subclass, name, description, display_id, quality, flags, buy_count, buy_price, sell_price, inventory_type, allowable_class, allowable_race, item_level, required_level, required_skill, required_skill_rank, required_spell, required_honor_rank, required_city_rank, required_reputation_faction, required_reputation_rank, max_count, stackable, container_slots, stat_type1, stat_value1, stat_type2, stat_value2, stat_type3, stat_value3, stat_type4, stat_value4, stat_type5, stat_value5, stat_type6, stat_value6, stat_type7, stat_value7, stat_type8, stat_value8, stat_type9, stat_value9, stat_type10, stat_value10, delay, range_mod, ammo_type, dmg_min1, dmg_max1, dmg_type1, dmg_min2, dmg_max2, dmg_type2, dmg_min3, dmg_max3, dmg_type3, dmg_min4, dmg_max4, dmg_type4, dmg_min5, dmg_max5, dmg_type5, block, armor, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, spellid_1, spelltrigger_1, spellcharges_1, spellppmrate_1, spellcooldown_1, spellcategory_1, spellcategorycooldown_1, spellid_2, spelltrigger_2, spellcharges_2, spellppmrate_2, spellcooldown_2, spellcategory_2, spellcategorycooldown_2, spellid_3, spelltrigger_3, spellcharges_3, spellppmrate_3, spellcooldown_3, spellcategory_3, spellcategorycooldown_3, spellid_4, spelltrigger_4, spellcharges_4, spellppmrate_4, spellcooldown_4, spellcategory_4, spellcategorycooldown_4, spellid_5, spelltrigger_5, spellcharges_5, spellppmrate_5, spellcooldown_5, spellcategory_5, spellcategorycooldown_5, bonding, page_text, page_language, page_material, start_quest, lock_id, material, sheath, random_property, set_id, max_durability, area_bound, map_bound, duration, bag_family, disenchant_id, food_type, min_money_loot, max_money_loot, wrapped_gift, extra_flags, other_team_entry, script_name, patch, tooltip_set_id, random_suffix, totem_category, socket_color_1, socket_content_1, socket_color_2, socket_content_2, socket_color_3, socket_content_3, socket_bonus, gem_properties, required_disenchant_skill, armor_damage_modifier, scaling_stat_distribution, scaling_stat_value, item_limit_category, holiday_id, dataset_id, icon FROM world_item_template WHERE dataset_id = $1 AND entry = ANY($2::int[])
 `
 
 type GetItemTemplatesByEntriesParams struct {
@@ -20466,6 +20467,7 @@ func (q *sqlQuerier) GetItemTemplatesByEntries(ctx context.Context, arg GetItemT
 			&i.ItemLimitCategory,
 			&i.HolidayID,
 			&i.DatasetID,
+			&i.Icon,
 		); err != nil {
 			return nil, err
 		}
@@ -20714,7 +20716,7 @@ SELECT
     ORDER BY enchant.id
     LIMIT 1
   ), 0)::int AS gem_enchant_id,
-  COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
+  COALESCE(NULLIF(wit.icon, ''), NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM world_item_template wit
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = $1 AND wdi.id = wit.display_id
   LEFT JOIN dbc_item_display_info dbi ON dbi.dataset_id = $1 AND dbi.id = wit.display_id

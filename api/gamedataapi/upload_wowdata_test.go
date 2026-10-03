@@ -67,6 +67,27 @@ func TestPersistNormalizedSpellsReplacesDatasetRows(t *testing.T) {
 	require.Zero(t, variants)
 }
 
+func TestPersistWowdataStoresItemIcon(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	dataset, err := store.InsertDataset(ctx, database.InsertDatasetParams{
+		Name: "Modern item icons", Slug: "modern-item-icons", WowVersion: "1.60.1", BuildVersion: 70170,
+		DefaultFlavor: []string{}, IconBaseUrl: "",
+	})
+	require.NoError(t, err)
+
+	payload := &wowdata.Import{Items: []database.WorldItemTemplate{{
+		Entry: 8190, Name: "Hanzo Sword", Icon: "inv_sword_10",
+	}}}
+	require.NoError(t, New(authz.NewDatabaseOnly(testutil.Logger(t), store), nil, pool, nil).persistWowdata(ctx, dataset.ID, payload))
+
+	item, err := store.GetItemTemplateByEntry(ctx, database.GetItemTemplateByEntryParams{DatasetID: dataset.ID, Entry: 8190})
+	require.NoError(t, err)
+	require.Equal(t, "inv_sword_10", item.Icon)
+}
+
 func TestPersistWowdataRollsBackLegacyRowsWhenNormalizedInsertFails(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)

@@ -35,7 +35,7 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	writeRows(t, dir, "SpellPower",
 		map[string]any{"ID": 2, "SpellID": 100, "OrderIndex": 1, "AltPowerBarID": 3, "ManaCost": 20, "ManaCostPerLevel": 4, "ManaPerSecond": 5, "OptionalCost": 6, "OptionalCostPct": 0.7, "PowerCostMaxPct": 0.8, "PowerCostPct": 0.9, "PowerDisplayID": 10, "PowerPctPerSecond": 1.1, "PowerType": 12, "RequiredAuraSpellID": 13},
 		map[string]any{"ID": 1, "SpellID": 100, "OrderIndex": 0, "ManaCost": 10})
-	writeRows(t, dir, "Item", map[string]any{"ID": 1, "ClassID": 2, "SubclassID": 3}, map[string]any{"ID": 2})
+	writeRows(t, dir, "Item", map[string]any{"ID": 1, "ClassID": 2, "SubclassID": 3, "IconFileDataID": 23456}, map[string]any{"ID": 2})
 	writeRows(t, dir, "ItemSparse", map[string]any{"ID": 1, "Display_lang": "Safe Item", "OverallQualityID": 2, "Flags": []int{7}, "AllowableRace": []int{-1, -1}}, map[string]any{"ID": 3, "Display_lang": "orphan"})
 	writeRows(t, dir, "TraitTree", map[string]any{"ID": 900})
 	writeRows(t, dir, "TraitNode", map[string]any{"ID": 9, "TraitTreeID": 900, "PosX": 0, "PosY": 0})
@@ -56,6 +56,7 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 
 	writeIconRows(t, dir,
 		map[string]any{"fileDataID": 12345, "fileName": `Interface\Icons\Spell_Test.BLP`},
+		map[string]any{"fileDataID": 23456, "fileName": `Interface\Icons\INV_Sword_10.BLP`},
 		map[string]any{"fileDataID": 54321, "fileName": "interface/not-icons/ignored.blp"})
 
 	got, err := Convert(dir, "wow_classic_beta", "1.60.1.69913")
@@ -73,7 +74,10 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	require.Len(t, spell.Attributes, 9)
 	require.Equal(t, 1, got.Losses.DroppedSpellAttributes)
 	require.Equal(t, 1, got.Losses.DroppedOrphanSpellRows)
-	require.Equal(t, []SpellIcon{{ID: 12345, TextureFilename: "spell_test"}}, got.SpellIcons)
+	require.Equal(t, []SpellIcon{
+		{ID: 12345, TextureFilename: "spell_test"},
+		{ID: 23456, TextureFilename: "inv_sword_10"},
+	}, got.SpellIcons)
 	require.Len(t, got.SpellEffects, 2)
 	require.Equal(t, int32(3), got.SpellEffects[1].EffectIndex, "all normalized effects must be preserved")
 	require.Len(t, got.SpellPowers, 2)
@@ -97,6 +101,7 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	require.Equal(t, float32(47.5), variant.TargetRestrictions.Width)
 	require.Len(t, got.Items, 1)
 	require.Equal(t, int32(0), got.Items[0].DisplayID, "display IDs must not be guessed")
+	require.Equal(t, "inv_sword_10", got.Items[0].Icon)
 	require.Equal(t, []int32{2}, got.Losses.MissingItemSparseIDs)
 	require.Equal(t, []int32{3}, got.Losses.MissingItemBaseIDs)
 	require.Len(t, got.SpellCastTimes, 1)

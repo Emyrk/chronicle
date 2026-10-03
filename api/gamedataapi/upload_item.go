@@ -154,7 +154,7 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 // min/max_money_loot, wrapped_gift, extra_flags, other_team_entry,
 // script_name, patch) are intentionally excluded to avoid clobbering.
 var wdbUpsertColumns = []string{
-	"dataset_id", "entry", "class", "subclass", "name", "description", "display_id",
+	"dataset_id", "entry", "class", "subclass", "name", "description", "display_id", "icon",
 	"quality", "flags", "buy_price", "sell_price",
 	"inventory_type", "allowable_class", "allowable_race", "item_level",
 	"required_level", "required_skill", "required_skill_rank",
@@ -211,7 +211,7 @@ func init() {
 func itemRowArgs(datasetID uuid.UUID, r database.WorldItemTemplate) []any {
 	return []any{
 		datasetID,
-		r.Entry, r.Class, r.Subclass, r.Name, r.Description, r.DisplayID,
+		r.Entry, r.Class, r.Subclass, r.Name, r.Description, r.DisplayID, r.Icon,
 		r.Quality, r.Flags, r.BuyPrice, r.SellPrice,
 		r.InventoryType, r.AllowableClass, r.AllowableRace, r.ItemLevel,
 		r.RequiredLevel, r.RequiredSkill, r.RequiredSkillRank,

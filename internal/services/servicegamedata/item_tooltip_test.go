@@ -20,6 +20,43 @@ func (s socketBonusStore) GetSpellItemEnchantmentByID(context.Context, database.
 	return s.enchantment, s.err
 }
 
+type itemTooltipStore struct {
+	database.Store
+	display database.WorldDisplayInfo
+}
+
+func (s itemTooltipStore) GetDisplayInfoByID(context.Context, database.GetDisplayInfoByIDParams) (database.WorldDisplayInfo, error) {
+	return s.display, nil
+}
+
+func TestBuildBaseTooltipItemIcon(t *testing.T) {
+	t.Parallel()
+
+	t.Run("prefers item icon", func(t *testing.T) {
+		t.Parallel()
+
+		tooltip := buildBaseTooltip(context.Background(), itemTooltipStore{
+			display: database.WorldDisplayInfo{Icon: "legacy_icon"},
+		}, database.WorldItemTemplate{Icon: "modern_icon", DisplayID: 42}, uuid.Nil)
+
+		if tooltip.Icon != "modern_icon" {
+			t.Errorf("icon = %q, want modern_icon", tooltip.Icon)
+		}
+	})
+
+	t.Run("falls back to legacy display info", func(t *testing.T) {
+		t.Parallel()
+
+		tooltip := buildBaseTooltip(context.Background(), itemTooltipStore{
+			display: database.WorldDisplayInfo{Icon: "legacy_icon"},
+		}, database.WorldItemTemplate{DisplayID: 42}, uuid.Nil)
+
+		if tooltip.Icon != "legacy_icon" {
+			t.Errorf("icon = %q, want legacy_icon", tooltip.Icon)
+		}
+	})
+}
+
 func TestApplySocketBonus(t *testing.T) {
 	t.Parallel()
 
