@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, Images, PawPrint, ShieldAlert, Sparkles, Swords, TimerReset } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, Images, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 
 interface TechnicalLink {
@@ -33,6 +33,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     description: "All spells grouped by player class (SpellClassSet from DBC)",
     href: "/technical/class-spells",
     icon: <BookOpen className="h-4 w-4" />,
+  },
+  {
+    title: "Friendly Class Buffs",
+    description: "Castable class spells that apply an aura to friendly players, grouped by class",
+    href: "/technical/class-buffs",
+    icon: <ShieldCheck className="h-4 w-4" />,
   },
   {
     title: "Pet Targeting Abilities",

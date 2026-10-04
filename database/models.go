@@ -840,6 +840,12 @@ type Dataset struct {
 	IconBaseUrl      string             `db:"icon_base_url" json:"icon_base_url"`
 }
 
+type DatasetClassBuff struct {
+	DatasetID uuid.UUID          `db:"dataset_id" json:"dataset_id"`
+	Data      []byte             `db:"data" json:"data"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type DatasetConsumableDisambiguation struct {
 	DatasetID  uuid.UUID          `db:"dataset_id" json:"dataset_id"`
 	EffectKind string             `db:"effect_kind" json:"effect_kind"`

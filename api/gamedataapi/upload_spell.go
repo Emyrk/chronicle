@@ -62,6 +62,13 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 		})
 		return
 	}
+	if err := h.deriveClassBuffs(ctx, datasetID, canonicalSpells); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Spells imported but class buff generation failed",
+			Detail:  err.Error(),
+		})
+		return
+	}
 	if err := h.deriveAffectedAuraDurations(ctx, datasetID); err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Spells imported but affected aura duration generation failed",
