@@ -63,7 +63,7 @@ export interface DeliveredNotice {
 }
 
 export interface NoticeInput {
-  deployment_id: string | null;
+  deployment_id: string;
   audience: NoticeAudience;
   category: NoticeCategory;
   severity: NoticeSeverity;

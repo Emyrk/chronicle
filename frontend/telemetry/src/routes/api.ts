@@ -162,14 +162,12 @@ api.post("/internal/api/v1/notices", async (c) => {
   const input = await readNoticeInput(c);
   if (input instanceof Response) return input;
 
-  if (input.deployment_id) {
-    const deployment = await c.env.DB.prepare(
-      "SELECT 1 FROM deployment_latest WHERE deployment_id = ? AND last_report_id IS NOT NULL"
-    )
-      .bind(input.deployment_id)
-      .first();
-    if (!deployment) return c.json({ error: "Deployment not found" }, 400);
-  }
+  const deployment = await c.env.DB.prepare(
+    "SELECT 1 FROM deployment_latest WHERE deployment_id = ? AND last_report_id IS NOT NULL"
+  )
+    .bind(input.deployment_id)
+    .first();
+  if (!deployment) return c.json({ error: "Deployment not found" }, 400);
 
   const result = await c.env.DB.prepare(
     `INSERT INTO notices
@@ -207,14 +205,12 @@ api.put("/internal/api/v1/notices/:id", async (c) => {
   const input = await readNoticeInput(c);
   if (input instanceof Response) return input;
 
-  if (input.deployment_id) {
-    const deployment = await c.env.DB.prepare(
-      "SELECT 1 FROM deployment_latest WHERE deployment_id = ? AND last_report_id IS NOT NULL"
-    )
-      .bind(input.deployment_id)
-      .first();
-    if (!deployment) return c.json({ error: "Deployment not found" }, 400);
-  }
+  const deployment = await c.env.DB.prepare(
+    "SELECT 1 FROM deployment_latest WHERE deployment_id = ? AND last_report_id IS NOT NULL"
+  )
+    .bind(input.deployment_id)
+    .first();
+  if (!deployment) return c.json({ error: "Deployment not found" }, 400);
 
   const result = await c.env.DB.prepare(
     `UPDATE notices SET
