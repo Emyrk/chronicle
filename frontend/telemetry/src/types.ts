@@ -23,14 +23,54 @@ export interface Env {
   DB: D1Database;
 }
 
+export type NoticeAudience = "public" | "admin";
+export type NoticeCategory =
+  | "compliance"
+  | "release"
+  | "maintenance"
+  | "announcement";
+export type NoticeSeverity = "info" | "warning" | "critical";
+
+export interface Notice {
+  id: number;
+  deployment_id: string | null;
+  audience: NoticeAudience;
+  category: NoticeCategory;
+  severity: NoticeSeverity;
+  title: string;
+  message: string;
+  action_label: string | null;
+  action_url: string | null;
+  enabled: number;
+  starts_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NoticeInput {
+  deployment_id: string | null;
+  audience: NoticeAudience;
+  category: NoticeCategory;
+  severity: NoticeSeverity;
+  title: string;
+  message: string;
+  action_label?: string | null;
+  action_url?: string | null;
+  enabled: boolean;
+  starts_at?: string | null;
+  expires_at?: string | null;
+}
+
 export interface DeploymentLatest {
   deployment_id: string;
-  last_report_id: number;
+  last_report_id: number | null;
   last_reported_at: string;
   version: string;
   server_type: string;
   access_url: string;
   is_dev: number;
+  token_hash: string;
 }
 
 /**

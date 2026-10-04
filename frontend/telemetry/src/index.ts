@@ -5,6 +5,7 @@ import { LOGO_SVG_BASE64 } from "./logo";
 import ingest from "./routes/ingest";
 import api from "./routes/api";
 import dashboard from "./dashboard/index";
+import noticesDashboard from "./dashboard/notices";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -26,6 +27,7 @@ app.route("/", ingest);
 // Protected: dashboard + read API (behind Cloudflare Access on /internal/*).
 app.route("/", api);
 app.route("/", dashboard);
+app.route("/", noticesDashboard);
 
 // Public root — friendly landing page matching Chronicle's brand.
 app.get("/", (c) => {

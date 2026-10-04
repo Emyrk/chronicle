@@ -1,36 +1,51 @@
 import { Hono } from "hono";
+import { authenticateDeployment } from "../auth";
+import { activeNotices } from "../notices";
 import type { Env, TelemetryReport } from "../types";
 
-const MAX_BODY_SIZE = 64 * 1024; // 64KB
-
+const MAX_BODY_SIZE = 64 * 1024;
 const ingest = new Hono<{ Bindings: Env }>();
 
+function payloadTooLarge(contentLength: string | undefined): boolean {
+  return Boolean(contentLength && Number(contentLength) > MAX_BODY_SIZE);
+}
+
 ingest.post("/api/v1/telemetry/report", async (c) => {
-  const contentLength = c.req.header("content-length");
-  if (contentLength && parseInt(contentLength) > MAX_BODY_SIZE) {
-    return c.text("Payload too large", 413);
+  if (payloadTooLarge(c.req.header("content-length"))) {
+    return c.json({ error: "Payload too large" }, 413);
   }
 
   let report: TelemetryReport;
   try {
     report = await c.req.json<TelemetryReport>();
   } catch {
-    return c.text("Invalid JSON", 400);
+    return c.json({ error: "Invalid JSON" }, 400);
   }
 
   if (!report.deployment_id || !report.version) {
-    return c.text("Missing required fields: deployment_id, version", 400);
+    return c.json(
+      { error: "Missing required fields: deployment_id, version" },
+      400
+    );
   }
+
+  // Validate and bind credentials before writing the report. Conditional writes in
+  // authenticateDeployment ensure only one token can win first registration.
+  const auth = await authenticateDeployment(
+    c.env,
+    c.req.raw,
+    report.deployment_id,
+    true
+  );
+  if (!auth.ok) return auth.response;
 
   const remoteIP = c.req.header("cf-connecting-ip") ?? "";
   const instancesByZone =
     typeof report.instances_by_zone === "object"
       ? JSON.stringify(report.instances_by_zone)
       : "{}";
-
   const db = c.env.DB;
 
-  // Insert the full report.
   const result = await db
     .prepare(
       `INSERT INTO telemetry_reports
@@ -62,31 +77,52 @@ ingest.post("/api/v1/telemetry/report", async (c) => {
     )
     .run();
 
-  const reportId = result.meta.last_row_id;
-
-  // Upsert deployment_latest for O(1) latest-per-deployment lookups.
   await db
     .prepare(
-      `INSERT INTO deployment_latest
-        (deployment_id, last_report_id, last_reported_at, version, server_type, access_url)
-       VALUES (?, ?, datetime('now'), ?, ?, ?)
-       ON CONFLICT(deployment_id) DO UPDATE SET
-        last_report_id = excluded.last_report_id,
-        last_reported_at = excluded.last_reported_at,
-        version = excluded.version,
-        server_type = excluded.server_type,
-        access_url = excluded.access_url`
+      `UPDATE deployment_latest SET
+        last_report_id = ?,
+        last_reported_at = datetime('now'),
+        version = ?,
+        server_type = ?,
+        access_url = ?
+       WHERE deployment_id = ?`
     )
     .bind(
-      report.deployment_id,
-      reportId,
+      result.meta.last_row_id,
       report.version,
       report.server_type ?? "",
-      report.access_url ?? ""
+      report.access_url ?? "",
+      report.deployment_id
     )
     .run();
 
-  return c.body(null, 204);
+  return c.json({ notices: await activeNotices(c.env, report.deployment_id) });
+});
+
+ingest.post("/api/v1/telemetry/check-notices", async (c) => {
+  if (payloadTooLarge(c.req.header("content-length"))) {
+    return c.json({ error: "Payload too large" }, 413);
+  }
+
+  let body: { deployment_id?: unknown };
+  try {
+    body = await c.req.json<{ deployment_id?: unknown }>();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  if (typeof body.deployment_id !== "string" || !body.deployment_id) {
+    return c.json({ error: "Missing required field: deployment_id" }, 400);
+  }
+
+  const auth = await authenticateDeployment(
+    c.env,
+    c.req.raw,
+    body.deployment_id,
+    false
+  );
+  if (!auth.ok) return auth.response;
+
+  return c.json({ notices: await activeNotices(c.env, body.deployment_id) });
 });
 
 export default ingest;
