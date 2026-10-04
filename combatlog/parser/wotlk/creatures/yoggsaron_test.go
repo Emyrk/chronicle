@@ -133,12 +133,20 @@ func TestGuardianActivityDoesNotRestartOldSaraSpawn(t *testing.T) {
 	newSara := oldSara + 1
 	guardian := creatureGUID(yoggSaronGuardianEntry)
 	firstPull := time.Date(2026, time.September, 27, 7, 0, 0, 0, time.UTC)
-	secondPull := firstPull.Add(20 * time.Hour)
+	secondPull := firstPull.Add(5 * time.Minute)
+	thirdPull := firstPull.Add(20 * time.Hour)
 
 	_, err := all.Process(testDamage(firstPull, player, oldSara))
 	require.NoError(t, err)
-	_, _ = all.Add(newSara, secondPull.Add(-time.Second))
-	_, err = all.Process(testDamage(secondPull, player, guardian))
+	_, err = all.Process(messages.TimedOut(firstPull.Add(2 * time.Minute)))
+	require.NoError(t, err)
+
+	_, err = all.Process(testDamage(secondPull, player, newSara))
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(secondPull.Add(2 * time.Minute)))
+	require.NoError(t, err)
+
+	_, err = all.Process(testDamage(thirdPull, player, guardian))
 	require.NoError(t, err)
 
 	oldSaraCharacter, ok := all.Get(oldSara)
@@ -149,8 +157,8 @@ func TestGuardianActivityDoesNotRestartOldSaraSpawn(t *testing.T) {
 	newSaraCharacter, ok := all.Get(newSara)
 	require.True(t, ok)
 	require.True(t, newSaraCharacter.IsActive())
-	require.Len(t, newSaraCharacter.Periods(), 1)
-	require.Equal(t, secondPull, newSaraCharacter.Periods()[0].Start.Timestamp.Date())
+	require.Len(t, newSaraCharacter.Periods(), 2)
+	require.Equal(t, thirdPull, newSaraCharacter.Periods()[1].Start.Timestamp.Date())
 }
 
 func TestSaraBridgesPhaseOneTransformation(t *testing.T) {
