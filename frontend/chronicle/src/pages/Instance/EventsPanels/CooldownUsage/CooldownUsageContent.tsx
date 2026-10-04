@@ -6,6 +6,7 @@ import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { useDatasetId } from "@/hooks/useDatasetId";
+import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 import { cn } from "@/lib/utils";
 import { classColor } from "../Consumables/consumablesLedgerLogic";
 import { GenericPanel } from "../GenericPanel";
@@ -146,7 +147,7 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
   return (
     <GenericPanel {...props}>
       <div className="flex h-full min-h-0 flex-col text-xs">
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-border/40 pb-2">
+        <div className="flex flex-wrap items-center gap-1 border-b border-border/40 pb-2">
           {classCounts.map(([cls, count]) => {
             const active = cls === selectedClass;
             return (
@@ -154,19 +155,18 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
                 key={cls}
                 type="button"
                 onClick={() => setPanelOption?.(serializeOptions(panelOption, cls, minSeconds))}
+                title={`${classLabel(cls)} · ${count} ${count === 1 ? "player" : "players"}`}
+                aria-label={classLabel(cls)}
+                aria-pressed={active}
                 className={cn(
-                  "flex items-center gap-1.5 rounded border px-2 py-1 text-[11px]",
+                  "flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[11px]",
                   active
-                    ? "border-foreground/25 bg-muted text-foreground"
-                    : "border-border/50 text-muted-foreground hover:text-foreground",
+                    ? "border-foreground/30 bg-muted text-foreground"
+                    : "border-transparent text-muted-foreground opacity-60 hover:opacity-100",
                 )}
               >
-                <span
-                  className="h-1.5 w-1.5 rounded-sm"
-                  style={{ background: classColor(cls) }}
-                />
-                {classLabel(cls)}
-                <span className="font-mono text-muted-foreground/70">{count}</span>
+                {count}
+                <ClassIcon cls={cls} className="size-4 rounded-sm" />
               </button>
             );
           })}
