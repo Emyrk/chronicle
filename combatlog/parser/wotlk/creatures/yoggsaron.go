@@ -60,6 +60,7 @@ const yoggSaronStateKey = "wotlk_yogg_saron"
 type yoggSaronState struct {
 	phase       int
 	phaseSource guid.GUID
+	currentSara *yoggSaronCharacter
 	characters  map[guid.GUID]*yoggSaronCharacter
 }
 
@@ -77,7 +78,7 @@ func loadYoggSaronState(all *characters.Characters) *yoggSaronState {
 
 type yoggSaronGuardian struct {
 	*characters.Common
-	all *characters.Characters
+	state *yoggSaronState
 }
 
 func NewYoggSaronGuardian(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
@@ -86,7 +87,7 @@ func NewYoggSaronGuardian(id guid.GUID, all *characters.Characters) (characters.
 	}
 	return &yoggSaronGuardian{
 		Common: characters.NewCommonCharacter(id, all),
-		all:    all,
+		state:  loadYoggSaronState(all),
 	}, true
 }
 
@@ -108,18 +109,14 @@ func (c *yoggSaronGuardian) Bump(reason string, m messages.Message) {
 }
 
 func (c *yoggSaronGuardian) bumpSara(m messages.Message) {
-	for _, entry := range []uint32{yoggSaronSaraEntry, yoggSaronSaraAltEntry} {
-		for _, sara := range c.all.ByEntry[entry] {
-			boss, ok := sara.(characters.CharacterBase)
-			if !ok {
-				continue
-			}
-			if boss.IsActive() {
-				boss.Bump("guardian_of_yogg_saron_activity", m)
-			} else {
-				boss.Start("guardian_of_yogg_saron_activity", m)
-			}
-		}
+	sara := c.state.currentSara
+	if sara == nil {
+		return
+	}
+	if sara.IsActive() {
+		sara.Bump("guardian_of_yogg_saron_activity", m)
+	} else {
+		sara.Start("guardian_of_yogg_saron_activity", m)
 	}
 }
 
@@ -152,6 +149,11 @@ func NewYoggSaronEncounterCharacter(id guid.GUID, all *characters.Characters) (c
 		state:  state,
 	}
 	state.characters[id] = c
+	if c.isSara() {
+		// Sara respawns with a new GUID for later pulls. Guardians must only
+		// activate the most recently observed spawn, not every historical Sara.
+		state.currentSara = c
+	}
 	return c, true
 }
 

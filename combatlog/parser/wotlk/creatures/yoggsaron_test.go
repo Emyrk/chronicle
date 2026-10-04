@@ -124,6 +124,35 @@ func TestGuardianActivityStartsAndBumpsSara(t *testing.T) {
 	}
 }
 
+func TestGuardianActivityDoesNotRestartOldSaraSpawn(t *testing.T) {
+	t.Parallel()
+
+	all := newYoggSaronTestCharacters()
+	player := guid.GUID(1)
+	oldSara := creatureGUID(yoggSaronSaraEntry)
+	newSara := oldSara + 1
+	guardian := creatureGUID(yoggSaronGuardianEntry)
+	firstPull := time.Date(2026, time.September, 27, 7, 0, 0, 0, time.UTC)
+	secondPull := firstPull.Add(20 * time.Hour)
+
+	_, err := all.Process(testDamage(firstPull, player, oldSara))
+	require.NoError(t, err)
+	_, _ = all.Add(newSara, secondPull.Add(-time.Second))
+	_, err = all.Process(testDamage(secondPull, player, guardian))
+	require.NoError(t, err)
+
+	oldSaraCharacter, ok := all.Get(oldSara)
+	require.True(t, ok)
+	require.False(t, oldSaraCharacter.IsActive(), "a Guardian must not restart a Sara spawn from an earlier pull")
+	require.Len(t, oldSaraCharacter.Periods(), 1)
+
+	newSaraCharacter, ok := all.Get(newSara)
+	require.True(t, ok)
+	require.True(t, newSaraCharacter.IsActive())
+	require.Len(t, newSaraCharacter.Periods(), 1)
+	require.Equal(t, secondPull, newSaraCharacter.Periods()[0].Start.Timestamp.Date())
+}
+
 func TestSaraBridgesPhaseOneTransformation(t *testing.T) {
 	t.Parallel()
 
