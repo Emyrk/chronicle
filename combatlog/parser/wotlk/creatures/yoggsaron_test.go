@@ -141,24 +141,28 @@ func TestGuardianActivityDoesNotRestartOldSaraSpawn(t *testing.T) {
 	_, err = all.Process(messages.TimedOut(firstPull.Add(2 * time.Minute)))
 	require.NoError(t, err)
 
-	_, err = all.Process(testDamage(secondPull, player, newSara))
+	_, err = all.Process(testDamage(secondPull, player, oldSara))
 	require.NoError(t, err)
 	_, err = all.Process(messages.TimedOut(secondPull.Add(2 * time.Minute)))
 	require.NoError(t, err)
 
 	_, err = all.Process(testDamage(thirdPull, player, guardian))
 	require.NoError(t, err)
+	_, err = all.Process(testDamage(thirdPull.Add(time.Second), player, newSara))
+	require.NoError(t, err)
 
 	oldSaraCharacter, ok := all.Get(oldSara)
 	require.True(t, ok)
-	require.False(t, oldSaraCharacter.IsActive(), "a Guardian must not restart a Sara spawn from an earlier pull")
-	require.Len(t, oldSaraCharacter.Periods(), 1)
+	require.False(t, oldSaraCharacter.IsActive(), "observing a replacement Sara must close the stale spawn")
+	require.Len(t, oldSaraCharacter.Periods(), 3)
+	require.Equal(t, thirdPull.Add(time.Second), oldSaraCharacter.Periods()[2].End.Timestamp.Date())
+	require.Equal(t, period.EndStateReset, oldSaraCharacter.Periods()[2].EndState)
 
 	newSaraCharacter, ok := all.Get(newSara)
 	require.True(t, ok)
 	require.True(t, newSaraCharacter.IsActive())
-	require.Len(t, newSaraCharacter.Periods(), 2)
-	require.Equal(t, thirdPull, newSaraCharacter.Periods()[1].Start.Timestamp.Date())
+	require.Len(t, newSaraCharacter.Periods(), 1)
+	require.Equal(t, thirdPull.Add(time.Second), newSaraCharacter.Periods()[0].Start.Timestamp.Date())
 }
 
 func TestSaraBridgesPhaseOneTransformation(t *testing.T) {

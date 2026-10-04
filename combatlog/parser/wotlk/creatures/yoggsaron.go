@@ -149,9 +149,7 @@ func NewYoggSaronEncounterCharacter(id guid.GUID, all *characters.Characters) (c
 		state:  state,
 	}
 	state.characters[id] = c
-	if c.isSara() {
-		// Sara respawns with a new GUID for later pulls. Guardians must only
-		// activate the most recently observed spawn, not every historical Sara.
+	if c.isSara() && state.currentSara == nil {
 		state.currentSara = c
 	}
 	return c, true
@@ -195,6 +193,10 @@ func (c *yoggSaronCharacter) Process(m messages.Message) error {
 }
 
 func (c *yoggSaronCharacter) Start(reason string, m messages.Message) {
+	if c.isSara() {
+		c.replaceCurrentSara(m)
+	}
+
 	if !c.anyEncounterUnitActive() {
 		c.state.phase = 1
 		c.state.phaseSource = 0
@@ -223,6 +225,18 @@ func (c *yoggSaronCharacter) Died(reason string, m messages.Message) {
 
 func (c *yoggSaronCharacter) isSara() bool {
 	return c.entry == yoggSaronSaraEntry || c.entry == yoggSaronSaraAltEntry
+}
+
+func (c *yoggSaronCharacter) replaceCurrentSara(m messages.Message) {
+	previous := c.state.currentSara
+	c.state.currentSara = c
+	if previous == nil || previous == c || !previous.IsActive() {
+		return
+	}
+
+	// A new Sara GUID means the instance reset between pulls. A Guardian may
+	// have briefly restarted the stale spawn before the new GUID was observed.
+	previous.End("yogg_saron_sara_replaced", m, period.EndStateReset)
 }
 
 func (c *yoggSaronCharacter) emitTransition(toPhase string, m messages.Message) {
