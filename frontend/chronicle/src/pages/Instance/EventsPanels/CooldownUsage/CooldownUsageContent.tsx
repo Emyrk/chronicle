@@ -25,6 +25,8 @@ const MIN_CD_OPTIONS = [
 ];
 const DEFAULT_MIN_CD_SECONDS = 30;
 const READY_CLASS = "bg-emerald-500/60";
+const CASTS_COL = "w-10 shrink-0 text-right";
+const READY_COL = "w-12 shrink-0 text-right";
 const ON_COOLDOWN_CLASS = "bg-red-500/55";
 
 function parseOptions(panelOption: string | null | undefined) {
@@ -176,6 +178,13 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
           </span>
         </div>
 
+        <div className="flex items-center gap-2 pl-3 pt-2 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+          <span className="w-36 shrink-0">Cooldown</span>
+          <span className={CASTS_COL}>Casts</span>
+          <span className={READY_COL} title="Share of fight time the cooldown was ready but unused">Ready</span>
+          <span className="flex-1 pl-1">Timeline</span>
+        </div>
+
         <div className="min-h-0 flex-1 overflow-auto styled-scrollbar">
           {cooldownsError ? (
             <div className="p-4 text-center text-destructive">Failed to load cooldown data.</div>
@@ -232,7 +241,6 @@ function PlayerGroup({ rows, ...timeline }: TimelineProps & { rows: CooldownUsag
           <span className="h-3 w-[3px] rounded-sm" style={{ background: color }} />
           {player.playerName}
         </span>
-        <span className="flex-1" />
         <span className="font-mono text-[10px] text-muted-foreground">
           {totalCasts} {totalCasts === 1 ? "cast" : "casts"}
         </span>
@@ -258,14 +266,11 @@ function CooldownRow({
 
   return (
     <div className="flex items-center gap-2">
-      <div className="flex w-36 shrink-0 flex-col leading-tight">
-        <span className="truncate text-muted-foreground">
-          <SpellIdTooltip spellId={row.cooldown.spellId} name={row.cooldown.name} size={14} />
-        </span>
-        <span className="text-[10px] text-muted-foreground/60">
-          {formatDuration(row.cooldown.cooldownMs)} CD · ready {formatDuration(row.readyMs)} ({readyPct}%)
-        </span>
-      </div>
+      <span className="w-36 shrink-0 truncate text-muted-foreground">
+        <SpellIdTooltip spellId={row.cooldown.spellId} name={row.cooldown.name} size={14} />
+      </span>
+      <span className={cn(CASTS_COL, "font-mono text-foreground")}>{row.casts.length}</span>
+      <span className={cn(READY_COL, "font-mono text-muted-foreground")}>{readyPct}%</span>
       <div className="flex min-w-0 flex-1">
         <TemporalTimelineTrack rangeStartMs={rangeStart} rangeEndMs={rangeEnd} encounters={encounters}>
           {row.segments.map((segment) =>
@@ -313,7 +318,6 @@ function CooldownRow({
           )}
         </TemporalTimelineTrack>
       </div>
-      <span className="w-6 shrink-0 text-right font-mono text-muted-foreground">{row.casts.length}</span>
     </div>
   );
 }
