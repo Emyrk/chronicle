@@ -217,6 +217,7 @@ All configuration is set via environment variables (prefixed `CHRONICLE_`) or eq
 | `CHRONICLE_ASSETS_GENERATED_DIR` | `--assets-generated-dir` | `./assets/<server>/generated` | Directory for generated JSON asset files |
 | `CHRONICLE_JSON_LOGS` | _(env only)_ | `false` | Output structured JSON logs |
 | `CHRONICLE_EMIT_PARSE_LOGS` | `--emit-parse-logs` | `false` | Emit verbose combat log parsing logs |
+| `CHRONICLE_ADS_TXT_URL` | `--ads-txt-url` | | Canonical ads.txt URL. When set, `/ads.txt` redirects to it. When unset, `/ads.txt` returns 404. |
 | `CHRONICLE_SHORT_LINK_DOMAIN` | `--short-link-domain` | | Custom domain for short share links (e.g. `chrn.link`) |
 | `CHRONICLE_SAFFRON_URL` | `--saffron-url` | | URL to Saffron admin dashboard (internal proxy) |
 | `CHRONICLE_OCR_URL` | `--ocr-url` | | URL to OCR service for item parsing |

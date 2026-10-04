@@ -60,6 +60,7 @@ type Service struct {
 	devAuth               bool
 	saffronURL            *url.URL
 	ocrURL                *url.URL
+	adsTxtURL             *url.URL
 	shortLinkDomain       string
 	clientUploadsDisabled bool
 	zugzugURL             string
@@ -79,6 +80,7 @@ func New(broker *services.Services) *Service {
 		broker:     broker,
 		saffronURL: new(url.URL),
 		ocrURL:     new(url.URL),
+		adsTxtURL:  new(url.URL),
 	}
 }
 
@@ -175,6 +177,10 @@ func (s *Service) Start(ctx context.Context) error {
 	if s.ocrURL.Scheme == "" {
 		ocrURL = nil
 	}
+	adsTxtURL := s.adsTxtURL
+	if s.adsTxtURL.Scheme == "" {
+		adsTxtURL = nil
+	}
 	wowDBSvc := servicewowdb.WoWDB(s.broker)
 	wowdb := wowDBSvc
 	assets := serviceassets.Assets(s.broker)
@@ -204,6 +210,7 @@ func (s *Service) Start(ctx context.Context) error {
 		ItemPricing:      itempricing.New(zed, s.itemPricingAPIKey, s.itemPricingBaseURL),
 
 		AccessURL:             au,
+		AdsTxtURL:             adsTxtURL,
 		ShortLinkDomain:       s.shortLinkDomain,
 		ClientUploadsDisabled: s.clientUploadsDisabled,
 		ExternalVerification:  s.externalVerification(),
@@ -302,6 +309,15 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_SAFFRON_URL",
 			Default:     "",
 			Value:       serpent.URLOf(s.saffronURL),
+		},
+		{
+			Name:        "Ads.txt URL",
+			Description: "Optional canonical ads.txt URL. Requests to /ads.txt redirect here when configured; otherwise /ads.txt returns 404.",
+			Required:    false,
+			Flag:        "ads-txt-url",
+			Env:         "CHRONICLE_ADS_TXT_URL",
+			Default:     "",
+			Value:       serpent.URLOf(s.adsTxtURL),
 		},
 		{
 			Name:        "Short Link Domain",

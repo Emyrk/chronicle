@@ -30,6 +30,18 @@ make landing
 
 Deployed to GitHub Pages via `.github/workflows/deploy-landing.yml` on push to `main`.
 
+### ads.txt
+
+The deployment workflow writes `dist/ads.txt` from the repository variable `ADS_TXT` when that variable is non-empty. This keeps the advertising authorization out of the open source build while making `https://chronicleclassic.com/ads.txt` the canonical copy.
+
+Official Chronicle instances can share that copy by setting:
+
+```bash
+CHRONICLE_ADS_TXT_URL=https://chronicleclassic.com/ads.txt
+```
+
+Chronicle returns `404 Not Found` for `/ads.txt` when the option is unset, so self-hosted deployments do not advertise Chronicle's seller account by default.
+
 ### DNS setup
 
 The apex `chronicleclassic.com` points to GitHub Pages (A records to GitHub's IPs):
