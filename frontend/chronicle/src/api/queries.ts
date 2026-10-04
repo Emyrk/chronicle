@@ -1,5 +1,9 @@
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
 import type { WoWSpell } from "./wowdb";
+import {
+  recordPublicNoticeResult,
+  shouldFetchPublicNotices,
+} from "@/components/NoticeBanner/publicNoticeCache";
 import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse } from "./typesGenerated";
 import type { 
   WoWLogGroup as WoWLogGroupGenerated, 
@@ -173,14 +177,21 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
 export function usePublicTelemetryNotices(
   options?: Omit<UseQueryOptions<TelemetryNoticesResponse>, "queryKey" | "queryFn">,
 ) {
+  const cacheAllowsFetch =
+    typeof window === "undefined" || shouldFetchPublicNotices();
+
   return useQuery({
     queryKey: ["telemetry-notices", "public"],
     queryFn: async () => {
       const response = await fetch("/api/v1/notices/public");
       if (!response.ok) throw new Error("Failed to fetch public notices");
-      return response.json() as Promise<TelemetryNoticesResponse>;
+      const result = (await response.json()) as TelemetryNoticesResponse;
+      recordPublicNoticeResult(result.notices.length > 0);
+      return result;
     },
     ...options,
+    enabled: cacheAllowsFetch && (options?.enabled ?? true),
+    refetchOnWindowFocus: false,
   });
 }
 
