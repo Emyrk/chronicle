@@ -178,7 +178,7 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
                   Compact
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-xs">
+              <TooltipContent side="bottom" hideArrow className="max-w-xs bg-popover text-popover-foreground">
                 Detailed timelines are only shown for up to {MAX_DETAILED_ENCOUNTERS} encounters ({windows.length}{" "}
                 selected); beyond that the bars get too thin to read. Select {MAX_DETAILED_ENCOUNTERS} or fewer
                 encounters to see them.
