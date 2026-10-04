@@ -30,15 +30,15 @@ const READY_STYLE = {
 
 function parseOptions(panelOption: string | null | undefined) {
   const parts = panelOption?.split(",").filter(Boolean) ?? [];
-  const cls = parts.find((part) => part.startsWith(CLASS_PREFIX))?.slice(CLASS_PREFIX.length) ?? "ALL";
+  const cls = parts.find((part) => part.startsWith(CLASS_PREFIX))?.slice(CLASS_PREFIX.length) ?? null;
   const minRaw = parts.find((part) => part.startsWith(MIN_CD_PREFIX))?.slice(MIN_CD_PREFIX.length);
   const minSeconds = minRaw != null && !Number.isNaN(Number(minRaw)) ? Number(minRaw) : DEFAULT_MIN_CD_SECONDS;
   return { cls, minSeconds };
 }
 
-function serializeOptions(cls: string, minSeconds: number): string | null {
+function serializeOptions(cls: string | null, minSeconds: number): string | null {
   const parts: string[] = [];
-  if (cls !== "ALL") parts.push(`${CLASS_PREFIX}${cls}`);
+  if (cls) parts.push(`${CLASS_PREFIX}${cls}`);
   if (minSeconds !== DEFAULT_MIN_CD_SECONDS) parts.push(`${MIN_CD_PREFIX}${minSeconds}`);
   return parts.length > 0 ? parts.join(",") : null;
 }
@@ -71,7 +71,7 @@ function formatAt(ms: number, windows: readonly TimeWindow[]): string {
 export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult>) {
   const { result, context, panelOption, setPanelOption } = props;
   const { data: cooldownData, isLoading: cooldownsLoading, error: cooldownsError } = useCooldownSpells();
-  const { cls: selectedClass, minSeconds } = parseOptions(panelOption);
+  const { cls: requestedClass, minSeconds } = parseOptions(panelOption);
 
   const windows = useMemo<TimeWindow[]>(
     () =>
@@ -97,17 +97,22 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
   }, [cooldownData, minSeconds, result, windows]);
 
   const classCounts = useMemo(() => {
-    const counts = new Map<string, number>();
+    const players = new Map<string, Set<string>>();
     for (const row of allRows) {
       const cls = normalizeClassName(row.className);
-      counts.set(cls, (counts.get(cls) ?? 0) + 1);
+      const set = players.get(cls) ?? new Set<string>();
+      set.add(row.playerID);
+      players.set(cls, set);
     }
-    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    return [...players.entries()]
+      .map(([cls, set]) => [cls, set.size] as const)
+      .sort((a, b) => a[0].localeCompare(b[0]));
   }, [allRows]);
 
-  const rows = selectedClass === "ALL"
-    ? allRows
-    : allRows.filter((row) => normalizeClassName(row.className) === selectedClass);
+  const selectedClass = classCounts.some(([cls]) => cls === requestedClass)
+    ? requestedClass
+    : (classCounts[0]?.[0] ?? null);
+  const rows = allRows.filter((row) => normalizeClassName(row.className) === selectedClass);
 
   const rangeStart = windows[0]?.start ?? 0;
   const rangeEnd = windows[windows.length - 1]?.end ?? 0;
@@ -116,7 +121,7 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
     <GenericPanel {...props}>
       <div className="flex h-full min-h-0 flex-col text-xs">
         <div className="flex flex-wrap items-center gap-1.5 border-b border-border/40 pb-2">
-          {[["ALL", allRows.length] as const, ...classCounts].map(([cls, count]) => {
+          {classCounts.map(([cls, count]) => {
             const active = cls === selectedClass;
             return (
               <button
@@ -132,9 +137,9 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
               >
                 <span
                   className="h-1.5 w-1.5 rounded-sm"
-                  style={{ background: cls === "ALL" ? "currentColor" : classColor(cls) }}
+                  style={{ background: classColor(cls) }}
                 />
-                {cls === "ALL" ? "All" : classLabel(cls)}
+                {classLabel(cls)}
                 <span className="font-mono text-muted-foreground/70">{count}</span>
               </button>
             );
