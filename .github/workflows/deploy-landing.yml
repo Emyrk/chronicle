@@ -39,12 +39,6 @@ jobs:
       - name: Build
         run: pnpm -C frontend/landing build
 
-      - name: Add ads.txt
-        if: ${{ vars.ADS_TXT != '' }}
-        env:
-          ADS_TXT: ${{ vars.ADS_TXT }}
-        run: printf '%s\n' "$ADS_TXT" > frontend/landing/dist/ads.txt
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -32,7 +32,7 @@ Deployed to GitHub Pages via `.github/workflows/deploy-landing.yml` on push to `
 
 ### ads.txt
 
-The deployment workflow writes `dist/ads.txt` from the repository variable `ADS_TXT` when that variable is non-empty. This keeps the advertising authorization out of the open source build while making `https://chronicleclassic.com/ads.txt` the canonical copy.
+The landing build publishes `public/ads.txt` as `https://chronicleclassic.com/ads.txt`. Advertising authorization stays scoped to the landing site and is not embedded in Chronicle application deployments.
 
 Official Chronicle instances can share that copy by setting:
 
