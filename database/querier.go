@@ -206,6 +206,7 @@ type sqlcQuerier interface {
 	// itself is not behind RLS.
 	GetDataset(ctx context.Context, id uuid.UUID) (Dataset, error)
 	GetDatasetBySlug(ctx context.Context, slug string) (Dataset, error)
+	GetDatasetClassBuffs(ctx context.Context, datasetID uuid.UUID) ([]byte, error)
 	// Returns row counts for each per-dataset data table, plus whether talent
 	// trees have been imported. Used by the dataset management UI.
 	GetDatasetImportSummary(ctx context.Context, datasetID uuid.UUID) (GetDatasetImportSummaryRow, error)
@@ -878,6 +879,7 @@ type sqlcQuerier interface {
 	// NULL ignored/hide_duration leaves that flag unchanged.
 	UpsertCooldownOverrides(ctx context.Context, arg UpsertCooldownOverridesParams) error
 	UpsertDataGrant(ctx context.Context, arg UpsertDataGrantParams) (DataGrant, error)
+	UpsertDatasetClassBuffs(ctx context.Context, arg UpsertDatasetClassBuffsParams) error
 	UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDatasetTalentTreesParams) error
 	UpsertDiscordAnnouncement(ctx context.Context, arg UpsertDiscordAnnouncementParams) (GuildDiscordLogAnnouncement, error)
 	UpsertDiscordAnnouncementSource(ctx context.Context, arg UpsertDiscordAnnouncementSourceParams) (GuildDiscordLogAnnouncementSource, error)

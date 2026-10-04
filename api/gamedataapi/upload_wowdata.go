@@ -119,6 +119,9 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 	if err := h.deriveSpellMetadata(ctx, datasetID, canonicalSpells); err != nil {
 		return fmt.Errorf("derive spell metadata: %w", err)
 	}
+	if err := h.deriveClassBuffs(ctx, datasetID, canonicalSpells); err != nil {
+		return fmt.Errorf("derive class buffs: %w", err)
+	}
 	if err := h.deriveAffectedAuraDurations(ctx, datasetID); err != nil {
 		return fmt.Errorf("derive affected aura durations: %w", err)
 	}

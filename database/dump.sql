@@ -279,6 +279,12 @@ CREATE VIEW chronicle_users AS
           WHERE (log_file.storage_deleted_at IS NULL)
           GROUP BY log_file.owner) lf ON ((lf.owner = u.id)));
 
+CREATE TABLE dataset_class_buffs (
+    dataset_id uuid NOT NULL,
+    data jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE dataset_consumable_disambiguations (
     dataset_id uuid NOT NULL,
     effect_kind text NOT NULL,
@@ -2063,6 +2069,9 @@ ALTER TABLE ONLY data_grants
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_user_id_source_key UNIQUE (user_id, source);
 
+ALTER TABLE ONLY dataset_class_buffs
+    ADD CONSTRAINT dataset_class_buffs_pkey PRIMARY KEY (dataset_id);
+
 ALTER TABLE ONLY dataset_consumable_disambiguations
     ADD CONSTRAINT dataset_consumable_disambiguations_pkey PRIMARY KEY (dataset_id, effect_kind, spell_id);
 
@@ -2747,6 +2756,9 @@ ALTER TABLE ONLY application_modification_requests
 
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dataset_class_buffs
+    ADD CONSTRAINT dataset_class_buffs_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY dataset_consumable_disambiguations
     ADD CONSTRAINT dataset_consumable_disambiguations_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;

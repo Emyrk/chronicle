@@ -113,6 +113,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/extra-attack-spells", s.handleGetExtraAttackSpells)
 	s.router.Get("/vulnerability-spells", s.handleGetVulnerabilitySpells)
 	s.router.Get("/cooldown-spells", s.handleGetCooldownSpells)
+	s.router.Get("/class-buffs", s.handleGetClassBuffs)
 	s.router.Get("/aura-duration-modifiers", s.handleGetAffectedAuraDurations)
 	s.router.Get("/consumables", s.handleGetConsumables)
 	s.router.Get("/consumable-disambiguations", s.handleGetConsumableDisambiguations)

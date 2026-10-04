@@ -1729,6 +1729,33 @@ func (q *sqlQuerier) UpsertDataGrant(ctx context.Context, arg UpsertDataGrantPar
 	return i, err
 }
 
+const getDatasetClassBuffs = `-- name: GetDatasetClassBuffs :one
+SELECT data FROM dataset_class_buffs WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) GetDatasetClassBuffs(ctx context.Context, datasetID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getDatasetClassBuffs, datasetID)
+	var data []byte
+	err := row.Scan(&data)
+	return data, err
+}
+
+const upsertDatasetClassBuffs = `-- name: UpsertDatasetClassBuffs :exec
+INSERT INTO dataset_class_buffs (dataset_id, data, updated_at)
+VALUES ($1, $2, now())
+ON CONFLICT (dataset_id) DO UPDATE SET data = $2, updated_at = now()
+`
+
+type UpsertDatasetClassBuffsParams struct {
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	Data      []byte    `db:"data" json:"data"`
+}
+
+func (q *sqlQuerier) UpsertDatasetClassBuffs(ctx context.Context, arg UpsertDatasetClassBuffsParams) error {
+	_, err := q.db.Exec(ctx, upsertDatasetClassBuffs, arg.DatasetID, arg.Data)
+	return err
+}
+
 const deleteDataset = `-- name: DeleteDataset :exec
 DELETE FROM datasets WHERE id = $1
 `
