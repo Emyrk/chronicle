@@ -16,6 +16,7 @@ type CooldownSpellEntry struct {
 	RecoveryTimeMS         int64  `json:"recovery_time_ms"`
 	CategoryRecoveryTimeMS int64  `json:"category_recovery_time_ms"`
 	Ignored                bool   `json:"ignored"`
+	DurationMS             int64  `json:"duration_ms"`
 }
 
 func (s *Service) handleGetCooldownSpells(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +47,7 @@ func (s *Service) handleGetCooldownSpells(w http.ResponseWriter, r *http.Request
 			RecoveryTimeMS:         row.RecoveryTimeMs,
 			CategoryRecoveryTimeMS: row.CategoryRecoveryTimeMs,
 			Ignored:                row.Ignored,
+			DurationMS:             row.DurationMs,
 		})
 	}
 

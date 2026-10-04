@@ -11,6 +11,8 @@ export interface CooldownSpellEntry {
   category_recovery_time_ms: number;
   /** Hidden from the Cooldown Usage panel by an admin. */
   ignored: boolean;
+  /** Aura/effect duration; 0 when instant or unknown. */
+  duration_ms: number;
 }
 
 /** Cooldown spells keyed by class name (e.g. "Druid", "DeathKnight"). */

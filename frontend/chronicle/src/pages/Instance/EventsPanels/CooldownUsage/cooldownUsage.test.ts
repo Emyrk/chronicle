@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCooldownIndex, buildCooldownRows, buildSegments, normalizeClassName } from "./cooldownUsage";
+import { buildCooldownIndex, buildCooldownRows, buildEffects, buildSegments, normalizeClassName } from "./cooldownUsage";
 import type { CooldownUsageResult } from "./cooldownUsage.processor";
 
 const window = (start: number, end: number, id = "e1") => ({ id, name: id, start, end });
@@ -43,9 +43,9 @@ describe("buildCooldownRows", () => {
   it("folds ranks, adds classmates who never cast it, and drops short cooldowns", () => {
     const index = buildCooldownIndex({
       Druid: [
-        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false },
-        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: false },
-        { id: 16979, name: "Feral Charge", name_subtext: "", cooldown_ms: 15_000, recovery_time_ms: 15_000, category_recovery_time_ms: 0, ignored: false },
+        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0 },
+        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0 },
+        { id: 16979, name: "Feral Charge", name_subtext: "", cooldown_ms: 15_000, recovery_time_ms: 15_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0 },
       ],
     });
     const result: CooldownUsageResult = {
@@ -65,7 +65,7 @@ describe("buildCooldownRows", () => {
 
 describe("buildCooldownRows across the whole log", () => {
   const index = buildCooldownIndex({
-    Druid: [{ id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false }],
+    Druid: [{ id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0 }],
   });
 
   it("carries a cooldown used before the selected fight without counting the cast", () => {
@@ -98,8 +98,8 @@ describe("ignored cooldowns", () => {
   it("are left out of the panel", () => {
     const index = buildCooldownIndex({
       Druid: [
-        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false },
-        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: true },
+        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0 },
+        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: true, duration_ms: 0 },
       ],
     });
     const result: CooldownUsageResult = {
@@ -109,6 +109,24 @@ describe("ignored cooldowns", () => {
     };
     const rows = buildCooldownRows(result, index, [window(0, 400_000)], 30_000);
     expect(rows.map((r) => r.cooldown.name)).toEqual(["Innervate"]);
+  });
+});
+
+describe("buildEffects", () => {
+  it("clips each cast's duration to the windows and skips instant spells", () => {
+    const effects = buildEffects(
+      [
+        { at: 90_000, durationMs: 20_000 },
+        { at: 150_000, durationMs: 0 },
+        { at: 160_000, durationMs: 10_000 },
+      ],
+      [window(0, 100_000, "a"), window(105_000, 200_000, "b")],
+    );
+    expect(effects.map((e) => [e.start, e.end, e.castAt])).toEqual([
+      [90_000, 100_000, 90_000],
+      [105_000, 110_000, 90_000],
+      [160_000, 170_000, 160_000],
+    ]);
   });
 });
 

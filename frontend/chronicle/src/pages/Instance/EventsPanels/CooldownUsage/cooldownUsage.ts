@@ -9,8 +9,14 @@ export interface CooldownDef {
   cooldownMs: number;
 }
 
+interface RankInfo {
+  def: CooldownDef;
+  cooldownMs: number;
+  durationMs: number;
+}
+
 interface ClassCooldowns {
-  bySpellId: Map<number, { def: CooldownDef; cooldownMs: number }>;
+  bySpellId: Map<number, RankInfo>;
 }
 
 export interface TimeWindow {
@@ -28,6 +34,30 @@ export interface CooldownSegment {
   castAt?: number;
 }
 
+export interface EffectSpan {
+  start: number;
+  end: number;
+  castAt: number;
+  durationMs: number;
+}
+
+/** Clips each cast's [cast, cast + duration] effect to the windows. */
+export function buildEffects(
+  casts: { at: number; durationMs: number }[],
+  windows: readonly TimeWindow[],
+): EffectSpan[] {
+  const effects: EffectSpan[] = [];
+  for (const cast of casts) {
+    if (cast.durationMs <= 0) continue;
+    for (const window of windows) {
+      const start = Math.max(cast.at, window.start);
+      const end = Math.min(cast.at + cast.durationMs, window.end);
+      if (end > start) effects.push({ start, end, castAt: cast.at, durationMs: cast.durationMs });
+    }
+  }
+  return effects;
+}
+
 export interface CooldownUsageRow {
   playerID: string;
   playerName: string;
@@ -36,6 +66,8 @@ export interface CooldownUsageRow {
   /** Casts inside the windows; earlier casts only shape the segments. */
   casts: number[];
   segments: CooldownSegment[];
+  /** Spans where the spell's effect was active, clipped to the windows. */
+  effects: EffectSpan[];
   readyMs: number;
   windowMs: number;
 }
@@ -49,7 +81,7 @@ export function buildCooldownIndex(data: CooldownSpellsByClass): Map<string, Cla
   const index = new Map<string, ClassCooldowns>();
   for (const [className, spells] of Object.entries(data)) {
     const defs = new Map<string, CooldownDef>();
-    const bySpellId = new Map<number, { def: CooldownDef; cooldownMs: number }>();
+    const bySpellId = new Map<number, RankInfo>();
     for (const spell of spells) {
       if (spell.ignored) continue;
       const key = spell.name.toLowerCase();
@@ -61,7 +93,7 @@ export function buildCooldownIndex(data: CooldownSpellsByClass): Map<string, Cla
         def.spellId = Math.max(def.spellId, spell.id);
         def.cooldownMs = Math.max(def.cooldownMs, spell.cooldown_ms);
       }
-      bySpellId.set(spell.id, { def, cooldownMs: spell.cooldown_ms });
+      bySpellId.set(spell.id, { def, cooldownMs: spell.cooldown_ms, durationMs: spell.duration_ms });
     }
     index.set(normalizeClassName(className), { bySpellId });
   }
@@ -170,11 +202,11 @@ export function buildCooldownRows(
 
     for (const def of defs) {
       for (const player of players) {
-        const casts: { at: number; cooldownMs: number }[] = [];
+        const casts: { at: number; cooldownMs: number; durationMs: number }[] = [];
         for (const [spellId, times] of player.casts) {
           const match = classCooldowns.bySpellId.get(spellId);
           if (match?.def !== def) continue;
-          for (const at of times) casts.push({ at, cooldownMs: match.cooldownMs });
+          for (const at of times) casts.push({ at, cooldownMs: match.cooldownMs, durationMs: match.durationMs });
         }
         casts.sort((a, b) => a.at - b.at);
         const { segments, readyMs } = buildSegments(casts, windows);
@@ -185,6 +217,7 @@ export function buildCooldownRows(
           cooldown: def,
           casts: casts.map((cast) => cast.at).filter(inWindows),
           segments,
+          effects: buildEffects(casts, windows),
           readyMs,
           windowMs,
         });

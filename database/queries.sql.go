@@ -1557,10 +1557,16 @@ SELECT
     c.recovery_time_ms,
     c.category_recovery_time_ms,
     c.spell_class_set,
-    (i.spell_id IS NOT NULL)::BOOLEAN AS ignored
+    (i.spell_id IS NOT NULL)::BOOLEAN AS ignored,
+    -- Aura/effect duration; 0 when instant, unknown, or infinite (-1).
+    GREATEST(COALESCE(d.max_duration, 0), 0)::BIGINT AS duration_ms
 FROM dbc_cooldown_spells c
 LEFT JOIN dataset_cooldown_ignores i
     ON i.dataset_id = c.dataset_id AND i.spell_id = c.spell_id
+LEFT JOIN dbc_spells s
+    ON s.dataset_id = c.dataset_id AND s.spell_id = c.spell_id
+LEFT JOIN dbc_spell_durations d
+    ON d.dataset_id = c.dataset_id AND d.id = s.duration_index
 WHERE c.dataset_id = $1
 ORDER BY c.spell_class_set, c.name, c.spell_id
 `
@@ -1573,6 +1579,7 @@ type ListCooldownSpellsByDatasetRow struct {
 	CategoryRecoveryTimeMs int64  `db:"category_recovery_time_ms" json:"category_recovery_time_ms"`
 	SpellClassSet          int32  `db:"spell_class_set" json:"spell_class_set"`
 	Ignored                bool   `db:"ignored" json:"ignored"`
+	DurationMs             int64  `db:"duration_ms" json:"duration_ms"`
 }
 
 func (q *sqlQuerier) ListCooldownSpellsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListCooldownSpellsByDatasetRow, error) {
@@ -1592,6 +1599,7 @@ func (q *sqlQuerier) ListCooldownSpellsByDataset(ctx context.Context, datasetID 
 			&i.CategoryRecoveryTimeMs,
 			&i.SpellClassSet,
 			&i.Ignored,
+			&i.DurationMs,
 		); err != nil {
 			return nil, err
 		}

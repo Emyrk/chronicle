@@ -29,6 +29,7 @@ const MIN_CD_OPTIONS = [
 ];
 const DEFAULT_MIN_CD_SECONDS = 30;
 const READY_CLASS = "bg-emerald-500/60";
+const ACTIVE_CLASS = "bg-sky-400";
 const CASTS_COL = "w-10 shrink-0 text-right";
 const READY_COL = "w-12 shrink-0 text-right";
 const ON_COOLDOWN_CLASS = "bg-red-500/55";
@@ -184,6 +185,10 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
               <span className="flex items-center gap-1.5">
                 <span className={cn("h-2 w-2 rounded-sm", READY_CLASS)} />
                 Ready
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className={cn("h-1 w-2 rounded-sm", ACTIVE_CLASS)} />
+                Active (spell duration)
               </span>
             </div>
 
@@ -398,6 +403,25 @@ function CooldownRow({
               />
             ),
           )}
+          {row.effects.map((effect) => (
+            <TemporalTimelineInterval
+              key={`e${effect.start}`}
+              startMs={effect.start}
+              endMs={effect.end}
+              rangeStartMs={rangeStart}
+              rangeEndMs={rangeEnd}
+              className={cn("top-1/4 h-1/2 rounded-sm", ACTIVE_CLASS)}
+              style={{ opacity: 1 }}
+              tooltip={(
+                <div className="space-y-0.5 text-xs">
+                  <div className="font-medium">{row.cooldown.name} active</div>
+                  <div>
+                    {formatAt(effect.castAt, windows, allWindows)} – {formatAt(effect.castAt + effect.durationMs, windows, allWindows)} ({formatDuration(effect.durationMs)})
+                  </div>
+                </div>
+              )}
+            />
+          ))}
         </TemporalTimelineTrack>
       </div>
     </div>
