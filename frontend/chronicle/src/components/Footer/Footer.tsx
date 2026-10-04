@@ -5,9 +5,6 @@ import { CryptoTipModal } from "./CryptoTipModal";
 import { useSiteConfig } from "@/api/queries";
 import type { Branding, SiteConfig } from "@/api/typesGenerated";
 
-const SERVER_NAME = import.meta.env.VITE_SERVER_NAME ?? "turtle";
-
-
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
 const GITHUB_SPONSORS_URL = "https://github.com/sponsors/Emyrk/";
@@ -201,7 +198,7 @@ export function Footer() {
               </Link>
             </div>
             <p className="text-xs mt-2">
-              {gitTag} ({gitCommit}) • Built {buildTime} • Server: {SERVER_NAME}
+              {gitTag} ({gitCommit}) • Built {buildTime}
             </p>
           </div>
         </div>
