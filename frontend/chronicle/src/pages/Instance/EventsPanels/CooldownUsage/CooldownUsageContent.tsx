@@ -24,9 +24,8 @@ const MIN_CD_OPTIONS = [
   { seconds: 180, label: "≥ 3m" },
 ];
 const DEFAULT_MIN_CD_SECONDS = 30;
-const READY_STYLE = {
-  background: "repeating-linear-gradient(45deg, rgba(255,255,255,.2) 0 3px, rgba(255,255,255,.06) 3px 6px)",
-};
+const READY_CLASS = "bg-emerald-500/60";
+const ON_COOLDOWN_CLASS = "bg-red-500/55";
 
 function parseOptions(panelOption: string | null | undefined) {
   const parts = panelOption?.split(",").filter(Boolean) ?? [];
@@ -158,12 +157,12 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
 
         <div className="flex flex-wrap gap-3 border-b border-border/40 py-2 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-sm border-l-2 border-foreground bg-muted-foreground/60" />
+            <span className={cn("h-2 w-2 rounded-sm border-l-2 border-foreground", ON_COOLDOWN_CLASS)} />
             Cast → on cooldown
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-sm" style={READY_STYLE} />
-            Ready, not used
+            <span className={cn("h-2 w-2 rounded-sm", READY_CLASS)} />
+            Ready
           </span>
         </div>
 
@@ -228,7 +227,7 @@ function PlayerGroup({ rows, ...timeline }: TimelineProps & { rows: CooldownUsag
       </div>
       <div className="flex flex-col gap-1 pl-3">
         {rows.map((row) => (
-          <CooldownRow key={row.cooldown.key} row={row} color={color} {...timeline} />
+          <CooldownRow key={row.cooldown.key} row={row} {...timeline} />
         ))}
       </div>
     </div>
@@ -237,13 +236,11 @@ function PlayerGroup({ rows, ...timeline }: TimelineProps & { rows: CooldownUsag
 
 function CooldownRow({
   row,
-  color,
   windows,
   encounters,
   rangeStart,
   rangeEnd,
-}: TimelineProps & { row: CooldownUsageRow; color: string }) {
-  const neverUsed = row.casts.length === 0;
+}: TimelineProps & { row: CooldownUsageRow }) {
   const readyPct = row.windowMs > 0 ? Math.round((row.readyMs / row.windowMs) * 100) : 0;
 
   return (
@@ -252,10 +249,8 @@ function CooldownRow({
         <span className="truncate text-muted-foreground">
           <SpellIdTooltip spellId={row.cooldown.spellId} name={row.cooldown.name} size={14} />
         </span>
-        <span className={cn("text-[10px]", neverUsed ? "text-red-400" : "text-muted-foreground/60")}>
-          {neverUsed
-            ? `Never used · ${formatDuration(row.cooldown.cooldownMs)} CD`
-            : `${formatDuration(row.cooldown.cooldownMs)} CD · ready ${formatDuration(row.readyMs)} (${readyPct}%)`}
+        <span className="text-[10px] text-muted-foreground/60">
+          {formatDuration(row.cooldown.cooldownMs)} CD · ready {formatDuration(row.readyMs)} ({readyPct}%)
         </span>
       </div>
       <div className="flex min-w-0 flex-1">
@@ -268,8 +263,7 @@ function CooldownRow({
                 endMs={segment.end}
                 rangeStartMs={rangeStart}
                 rangeEndMs={rangeEnd}
-                className="rounded-none border-l-2 border-foreground"
-                style={{ background: `color-mix(in srgb, ${color} 55%, transparent)` }}
+                className={cn("rounded-none border-l-2 border-foreground", ON_COOLDOWN_CLASS)}
                 tooltip={(
                   <div className="space-y-0.5 text-xs">
                     <div className="font-medium">{row.cooldown.name}</div>
@@ -292,8 +286,7 @@ function CooldownRow({
                 endMs={segment.end}
                 rangeStartMs={rangeStart}
                 rangeEndMs={rangeEnd}
-                className="rounded-none"
-                style={READY_STYLE}
+                className={cn("rounded-none", READY_CLASS)}
                 tooltip={(
                   <div className="space-y-0.5 text-xs">
                     <div className="font-medium">{row.cooldown.name} ready</div>
