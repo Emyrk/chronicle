@@ -7,5 +7,6 @@ describe("Unit Auras panel", () => {
 
     expect(panel.supportsPerSecond).toBe(true);
     expect(panel.checkboxLabel).toBe("Detailed");
+    expect(panel.renderOnlyOptionTokens).toEqual(["u:", "q:"]);
   });
 });
