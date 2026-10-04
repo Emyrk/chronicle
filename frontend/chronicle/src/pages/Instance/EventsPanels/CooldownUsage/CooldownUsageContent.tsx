@@ -170,10 +170,10 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
           ) : rows.length === 0 ? (
             <div className="p-4 text-center text-muted-foreground">No cooldown casts in the selected encounters.</div>
           ) : (
-            rows.map((row) => (
-              <CooldownRow
-                key={`${row.playerID}:${row.cooldown.key}`}
-                row={row}
+            groupByPlayer(rows).map((group) => (
+              <PlayerGroup
+                key={group[0].playerID}
+                rows={group}
                 windows={windows}
                 encounters={encounters}
                 rangeStart={rangeStart}
@@ -187,39 +187,73 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
   );
 }
 
-function CooldownRow({
-  row,
-  windows,
-  encounters,
-  rangeStart,
-  rangeEnd,
-}: {
-  row: CooldownUsageRow;
+function groupByPlayer(rows: readonly CooldownUsageRow[]): CooldownUsageRow[][] {
+  const groups: CooldownUsageRow[][] = [];
+  for (const row of rows) {
+    const last = groups[groups.length - 1];
+    if (last && last[0].playerID === row.playerID) last.push(row);
+    else groups.push([row]);
+  }
+  return groups;
+}
+
+type TimelineProps = {
   windows: readonly TimeWindow[];
   encounters: Parameters<typeof TemporalTimelineTrack>[0]["encounters"];
   rangeStart: number;
   rangeEnd: number;
-}) {
-  const color = classColor(normalizeClassName(row.className));
+};
+
+function PlayerGroup({ rows, ...timeline }: TimelineProps & { rows: CooldownUsageRow[] }) {
+  const player = rows[0];
+  const color = classColor(normalizeClassName(player.className));
+  const totalCasts = rows.reduce((total, row) => total + row.casts.length, 0);
+
+  return (
+    <div className="border-b border-border/40 py-2">
+      <div className="mb-1 flex items-baseline gap-2">
+        <span className="flex items-center gap-1.5 font-medium text-foreground">
+          <span className="h-3 w-[3px] rounded-sm" style={{ background: color }} />
+          {player.playerName}
+        </span>
+        <span className="flex-1" />
+        <span className="font-mono text-[10px] text-muted-foreground">
+          {totalCasts} {totalCasts === 1 ? "cast" : "casts"}
+        </span>
+      </div>
+      <div className="flex flex-col gap-1 pl-3">
+        {rows.map((row) => (
+          <CooldownRow key={row.cooldown.key} row={row} color={color} {...timeline} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CooldownRow({
+  row,
+  color,
+  windows,
+  encounters,
+  rangeStart,
+  rangeEnd,
+}: TimelineProps & { row: CooldownUsageRow; color: string }) {
   const neverUsed = row.casts.length === 0;
   const readyPct = row.windowMs > 0 ? Math.round((row.readyMs / row.windowMs) * 100) : 0;
 
   return (
-    <div className="flex flex-col gap-1.5 border-b border-border/30 py-2">
-      <div className="flex items-baseline gap-2">
-        <span className="flex items-center gap-1.5 text-foreground">
-          <span className="h-3 w-[3px] rounded-sm" style={{ background: color }} />
-          {row.playerName}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-muted-foreground">
+    <div className="flex items-center gap-2">
+      <div className="flex w-36 shrink-0 flex-col leading-tight">
+        <span className="truncate text-muted-foreground">
           <SpellIdTooltip spellId={row.cooldown.spellId} name={row.cooldown.name} size={14} />
-          <span className="ml-1 text-[10px] text-muted-foreground/60">{formatDuration(row.cooldown.cooldownMs)} CD</span>
         </span>
-        <span className="font-mono text-muted-foreground">
-          {row.casts.length} {row.casts.length === 1 ? "cast" : "casts"}
+        <span className={cn("text-[10px]", neverUsed ? "text-red-400" : "text-muted-foreground/60")}>
+          {neverUsed
+            ? `Never used · ${formatDuration(row.cooldown.cooldownMs)} CD`
+            : `${formatDuration(row.cooldown.cooldownMs)} CD · ready ${formatDuration(row.readyMs)} (${readyPct}%)`}
         </span>
       </div>
-      <div className="flex">
+      <div className="flex min-w-0 flex-1">
         <TemporalTimelineTrack rangeStartMs={rangeStart} rangeEndMs={rangeEnd} encounters={encounters}>
           {row.segments.map((segment) =>
             segment.kind === "cooldown" ? (
@@ -268,11 +302,7 @@ function CooldownRow({
           )}
         </TemporalTimelineTrack>
       </div>
-      <span className={cn("text-[10px]", neverUsed ? "text-red-400" : "text-muted-foreground")}>
-        {neverUsed
-          ? "Never used"
-          : `Ready but unused ${formatDuration(row.readyMs)} (${readyPct}% of fight time)`}
-      </span>
+      <span className="w-6 shrink-0 text-right font-mono text-muted-foreground">{row.casts.length}</span>
     </div>
   );
 }

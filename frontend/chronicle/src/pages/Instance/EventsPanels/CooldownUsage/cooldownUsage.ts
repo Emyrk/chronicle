@@ -126,6 +126,7 @@ export function buildSegments(
 /**
  * One row per (player, cooldown) for every cooldown at least one player of
  * that class cast, so classmates who never pressed it still show up.
+ * Sorted by player so rows can be grouped per player.
  */
 export function buildCooldownRows(
   result: CooldownUsageResult,
@@ -159,9 +160,7 @@ export function buildCooldownRows(
   for (const [className, used] of usedByClass) {
     const classCooldowns = index.get(className)!;
     const defs = [...used.values()].sort((a, b) => a.name.localeCompare(b.name));
-    const players = (playersByClass.get(className) ?? [])
-      .slice()
-      .sort((a, b) => a.playerName.localeCompare(b.playerName));
+    const players = playersByClass.get(className) ?? [];
 
     for (const def of defs) {
       for (const player of players) {
@@ -186,5 +185,10 @@ export function buildCooldownRows(
       }
     }
   }
-  return rows;
+  return rows.sort(
+    (a, b) =>
+      a.playerName.localeCompare(b.playerName)
+      || a.playerID.localeCompare(b.playerID)
+      || a.cooldown.name.localeCompare(b.cooldown.name),
+  );
 }
