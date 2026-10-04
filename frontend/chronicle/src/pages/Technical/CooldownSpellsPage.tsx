@@ -414,15 +414,15 @@ export function CooldownSpellsPage() {
         )}
       </div>
 
-      <Card className="max-h-[75vh] divide-y divide-border/30 overflow-auto styled-scrollbar">
+      <Card className="max-h-[75vh] gap-0 py-0 divide-y divide-border/30 overflow-auto styled-scrollbar">
         {multiDatasetMode ? (
-          <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_80px] bg-muted/80 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+          <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_80px] bg-muted px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
             <span>Ability</span>
             <span>Datasets</span>
             <span className="text-right">Cooldown</span>
           </div>
         ) : (
-          <div className="sticky top-0 z-10 grid grid-cols-[72px_minmax(0,1fr)_110px] bg-muted/80 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+          <div className="sticky top-0 z-10 grid grid-cols-[72px_minmax(0,1fr)_110px] bg-muted px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
             <span>Spell ID</span>
             <span>Ability</span>
             <span className="text-right">Cooldown</span>
