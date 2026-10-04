@@ -10,6 +10,7 @@ export function createCooldownUsagePanel(): PanelDefinition<CooldownUsageResult,
     label: "Cooldown Usage",
     icon: <TimerReset className="h-4 w-4" />,
     syncDataMode: "full",
+    underConstruction: true,
     renderOnlyOptionTokens: ["c:", "m:"],
     render: (props: PanelRenderProps<CooldownUsageResult>) => <CooldownUsageContent {...props} />,
   };
