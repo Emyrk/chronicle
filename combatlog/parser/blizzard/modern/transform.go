@@ -18,15 +18,16 @@ const (
 )
 
 type transformReader struct {
-	scanner              *bufio.Scanner
-	guids                *guidNormalizer
-	names                map[string]string
-	preserveTimestamp    bool
-	trimPlayerNameSuffix bool
-	combatLogVersion     int
-	advancedCombatFields int
-	buf                  bytes.Buffer
-	err                  error
+	scanner                     *bufio.Scanner
+	guids                       *guidNormalizer
+	names                       map[string]string
+	preserveTimestamp           bool
+	trimPlayerNameSuffix        bool
+	combatLogVersion            int
+	advancedCombatFields        int
+	preserveAdvancedFieldLayout bool
+	buf                         bytes.Buffer
+	err                         error
 }
 
 func newTransformReader(r io.Reader) *transformReader {
@@ -34,7 +35,10 @@ func newTransformReader(r io.Reader) *transformReader {
 }
 
 func newHermesProxyTransformReader(r io.Reader) *transformReader {
-	return newTransformReaderWithOptions(r, true, true, 16)
+	reader := newTransformReaderWithOptions(r, true, true, 16)
+	// HermesProxy emits 16 advanced fields even when the client records version 9.
+	reader.preserveAdvancedFieldLayout = true
+	return reader
 }
 
 func newTransformReaderWithOptions(r io.Reader, preserveTimestamp, trimPlayerNameSuffix bool, advancedFields int) *transformReader {
@@ -189,9 +193,13 @@ func (r *transformReader) configureCombatLogVersion(args []string) error {
 	r.combatLogVersion = version
 	switch version {
 	case 9:
-		r.advancedCombatFields = v9AdvancedCombatFields
+		if !r.preserveAdvancedFieldLayout {
+			r.advancedCombatFields = v9AdvancedCombatFields
+		}
 	case 22:
-		r.advancedCombatFields = v22AdvancedCombatFields
+		if !r.preserveAdvancedFieldLayout {
+			r.advancedCombatFields = v22AdvancedCombatFields
+		}
 	default:
 		return fmt.Errorf("unsupported Blizzard combat log version %d", version)
 	}

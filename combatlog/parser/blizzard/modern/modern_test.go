@@ -370,6 +370,32 @@ func TestTransformHermesProxyCastFailed(t *testing.T) {
 	assert.Equal(t, `9/9 22:45:28.337  SPELL_CAST_FAILED,0x0000000100004AAF,"Brainfever",0x511,0x0000000000000000,nil,0x80000000,23246,"Purple Skeletal Warhorse",0x1,"[1H:0.8,Kronos V,enUS,1.14.2,42597,da29,1788986746,120][2P0x0000000100004AAF;T1,1,230255]"`, converted)
 }
 
+func TestHermesProxyDamageAfterVersionLine(t *testing.T) {
+	t.Parallel()
+
+	input := strings.Join([]string{
+		`10/3 16:47:41.712  COMBAT_LOG_VERSION,9,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.14.2,PROJECT_ID,2`,
+		`10/3 16:54:40.317  SPELL_DAMAGE,Player-1-00001ECE,"Veljanov-",0x512,0x0,Creature-0-1-0-0-10412-0000018B06,"Crypt Crawler",0xa48,0x0,23894,"Bloodthirst",0x1,0000000000000000,0000000000000000,0,0,0,0,0,-1,0,0,0,0.00,0.00,0,0.0000,0,775,775,-1,1,0,0,0,1,nil,nil`,
+	}, "\n")
+	p, err := NewHermesProxy(context.Background(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil)
+	require.NoError(t, err)
+
+	var amount int32 = -1
+	for {
+		batch, advanceErr := p.Advance(context.Background())
+		for _, msg := range batch {
+			if damage, ok := msg.(*messages.Damage); ok {
+				amount = damage.Amount
+			}
+		}
+		if advanceErr == io.EOF {
+			break
+		}
+		require.NoError(t, advanceErr)
+	}
+	assert.Equal(t, int32(775), amount)
+}
+
 func TestHermesProxyParserDecodesCompanionHeader(t *testing.T) {
 	t.Parallel()
 
