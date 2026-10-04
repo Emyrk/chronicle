@@ -90,6 +90,11 @@ export function filterPerformanceRuns(
   });
 }
 
+export function formatDeathsAlive(run: Pick<CharacterPerformanceRun, "player_deaths" | "alive_percentage">): string {
+  if (run.player_deaths == null || run.alive_percentage == null) return "—";
+  return `${run.player_deaths.toLocaleString()} / ${Math.round(run.alive_percentage)}%`;
+}
+
 export type PerformanceDateRange = "180d" | "60d" | "30d";
 
 export function filterPerformanceRunsByDate(

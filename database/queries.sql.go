@@ -12223,6 +12223,8 @@ raw_rows AS MATERIALIZED (
         edr.damage_done,
         edr.healing_done,
         edr.absorbed_done,
+        edr.player_deaths,
+        edr.alive_percentage,
         edr.duration_secs,
         edr.log_hashed_slug,
         edr.killed_at
@@ -12272,6 +12274,15 @@ per_run AS (
         SUM(raw.damage_done)::bigint AS damage_done,
         SUM(raw.healing_done)::bigint AS healing_done,
         SUM(raw.absorbed_done)::bigint AS absorbed_done,
+        COALESCE((CASE
+            WHEN COUNT(raw.player_deaths) = COUNT(*) THEN SUM(raw.player_deaths)
+            ELSE NULL
+        END), -1)::integer AS player_deaths,
+        COALESCE((CASE
+            WHEN COUNT(raw.alive_percentage) = COUNT(*) THEN
+                SUM(raw.duration_secs * raw.alive_percentage) / NULLIF(SUM(raw.duration_secs), 0)
+            ELSE NULL
+        END), -1)::double precision AS alive_percentage,
         SUM(raw.duration_secs)::double precision AS duration_secs,
         (SUM(raw.damage_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS dps,
         (SUM(raw.healing_done + raw.absorbed_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS hps,
@@ -12284,7 +12295,7 @@ per_run AS (
      AND parse.encounter_name = raw.encounter_name
     GROUP BY raw.run_id, raw.representative_instance_id
 )
-SELECT run_id, representative_instance_id, started_at, killed_at, player_name, player_class, player_spec, player_sub_spec, encounter_count, damage_done, healing_done, absorbed_done, duration_secs, dps, hps, log_hashed_slug, parse_count, average_parse
+SELECT run_id, representative_instance_id, started_at, killed_at, player_name, player_class, player_spec, player_sub_spec, encounter_count, damage_done, healing_done, absorbed_done, player_deaths, alive_percentage, duration_secs, dps, hps, log_hashed_slug, parse_count, average_parse
 FROM per_run
 WHERE encounter_count = (SELECT COUNT(*) FROM selected_encounters)
   AND (CASE WHEN $1::text = 'hps' THEN hps ELSE dps END) > 0
@@ -12314,6 +12325,8 @@ type GetCharacterPerformanceRunsRow struct {
 	DamageDone               int64              `db:"damage_done" json:"damage_done"`
 	HealingDone              int64              `db:"healing_done" json:"healing_done"`
 	AbsorbedDone             int64              `db:"absorbed_done" json:"absorbed_done"`
+	PlayerDeaths             int32              `db:"player_deaths" json:"player_deaths"`
+	AlivePercentage          float64            `db:"alive_percentage" json:"alive_percentage"`
 	DurationSecs             float64            `db:"duration_secs" json:"duration_secs"`
 	Dps                      float64            `db:"dps" json:"dps"`
 	Hps                      float64            `db:"hps" json:"hps"`
@@ -12356,6 +12369,8 @@ func (q *sqlQuerier) GetCharacterPerformanceRuns(ctx context.Context, arg GetCha
 			&i.DamageDone,
 			&i.HealingDone,
 			&i.AbsorbedDone,
+			&i.PlayerDeaths,
+			&i.AlivePercentage,
 			&i.DurationSecs,
 			&i.Dps,
 			&i.Hps,

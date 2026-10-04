@@ -64,7 +64,7 @@ func (s *Service) handleCharacterPerformance(w http.ResponseWriter, r *http.Requ
 			averageParse = &value
 		}
 
-		runs = append(runs, chroniclesdk.CharacterPerformanceRun{
+		run := chroniclesdk.CharacterPerformanceRun{
 			RunID:                    row.RunID,
 			RepresentativeInstanceID: row.RepresentativeInstanceID,
 			StartedAt:                row.StartedAt.Time,
@@ -82,7 +82,16 @@ func (s *Service) handleCharacterPerformance(w http.ResponseWriter, r *http.Requ
 			HPS:                      row.Hps,
 			LogHashedSlug:            row.LogHashedSlug,
 			AverageParse:             averageParse,
-		})
+		}
+		if row.PlayerDeaths >= 0 {
+			value := row.PlayerDeaths
+			run.PlayerDeaths = &value
+		}
+		if row.AlivePercentage >= 0 {
+			value := row.AlivePercentage
+			run.AlivePercentage = &value
+		}
+		runs = append(runs, run)
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.CharacterPerformanceResponse{
