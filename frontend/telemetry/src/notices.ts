@@ -1,6 +1,6 @@
 import type {
+  DeliveredNotice,
   Env,
-  Notice,
   NoticeAudience,
   NoticeCategory,
   NoticeInput,
@@ -164,9 +164,21 @@ export function validateNoticeInput(value: unknown): NoticeInput {
 export async function activeNotices(
   env: Env,
   deploymentId: string
-): Promise<Notice[]> {
+): Promise<DeliveredNotice[]> {
   const { results } = await env.DB.prepare(
-    `SELECT * FROM notices
+    `SELECT
+       CAST(id AS TEXT) AS id,
+       audience,
+       category,
+       severity,
+       title,
+       message,
+       action_label,
+       action_url,
+       CASE WHEN starts_at IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', starts_at) END AS starts_at,
+       CASE WHEN expires_at IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', expires_at) END AS expires_at,
+       strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) AS updated_at
+     FROM notices
      WHERE enabled = 1
        AND (deployment_id IS NULL OR deployment_id = ?)
        AND (starts_at IS NULL OR datetime(starts_at) <= datetime('now'))
@@ -176,6 +188,6 @@ export async function activeNotices(
        created_at DESC`
   )
     .bind(deploymentId)
-    .all<Notice>();
+    .all<DeliveredNotice>();
   return results ?? [];
 }

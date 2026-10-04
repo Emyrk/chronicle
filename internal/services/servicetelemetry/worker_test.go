@@ -28,6 +28,7 @@ func TestWorkerPollsNoticesDuringReportDebounce(t *testing.T) {
 	require.NoError(t, store.UpdateTelemetryHeartbeat(ctx))
 
 	startsAt := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	expiresAt := startsAt.Add(24 * time.Hour)
 	notice := Notice{
 		ID:        "maintenance-1",
 		Audience:  "admin",
@@ -35,8 +36,8 @@ func TestWorkerPollsNoticesDuringReportDebounce(t *testing.T) {
 		Severity:  "warning",
 		Title:     "Planned maintenance",
 		Message:   "Upgrade before the maintenance window.",
-		StartsAt:  startsAt,
-		ExpiresAt: startsAt.Add(24 * time.Hour),
+		StartsAt:  &startsAt,
+		ExpiresAt: &expiresAt,
 		UpdatedAt: startsAt,
 	}
 
@@ -108,8 +109,8 @@ func TestWorkerPollsNoticesDuringReportDebounce(t *testing.T) {
 	require.Equal(t, notice.Severity, storedNotices[0].Severity)
 	require.Equal(t, notice.Title, storedNotices[0].Title)
 	require.Equal(t, notice.Message, storedNotices[0].Message)
-	require.WithinDuration(t, notice.StartsAt, storedNotices[0].StartsAt.Time, time.Microsecond)
-	require.WithinDuration(t, notice.ExpiresAt, storedNotices[0].ExpiresAt.Time, time.Microsecond)
+	require.WithinDuration(t, *notice.StartsAt, storedNotices[0].StartsAt.Time, time.Microsecond)
+	require.WithinDuration(t, *notice.ExpiresAt, storedNotices[0].ExpiresAt.Time, time.Microsecond)
 	require.WithinDuration(t, notice.UpdatedAt, storedNotices[0].UpdatedAt.Time, time.Microsecond)
 
 	// A malformed response must not replace the last known snapshot.
@@ -142,13 +143,15 @@ func TestWorkerSendReportUsesBearerTokenAndInjectedURL(t *testing.T) {
 	requests := make(chan *http.Request, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests <- r.Clone(context.Background())
-		w.WriteHeader(http.StatusNoContent)
+		_ = json.NewEncoder(w).Encode(checkNoticesResponse{Notices: &[]Notice{}})
 	}))
 	t.Cleanup(server.Close)
 
 	worker := &Worker{ReportURL: server.URL}
 	worker.setDefaults()
-	require.NoError(t, worker.sendReport(ctx, TelemetryReport{DeploymentID: "deployment-id"}, token))
+	notices, err := worker.sendReport(ctx, TelemetryReport{DeploymentID: "deployment-id"}, token)
+	require.NoError(t, err)
+	require.Empty(t, notices)
 
 	request := <-requests
 	require.Equal(t, http.MethodPost, request.Method)
@@ -158,6 +161,8 @@ func TestWorkerSendReportUsesBearerTokenAndInjectedURL(t *testing.T) {
 
 func TestValidateNotice(t *testing.T) {
 	t.Parallel()
+	now := time.Now()
+	expiresAt := now.Add(time.Hour)
 	valid := Notice{
 		ID:        "notice-id",
 		Audience:  "public",
@@ -165,9 +170,9 @@ func TestValidateNotice(t *testing.T) {
 		Severity:  "info",
 		Title:     "Title",
 		Message:   "Message",
-		StartsAt:  time.Now(),
-		ExpiresAt: time.Now().Add(time.Hour),
-		UpdatedAt: time.Now(),
+		StartsAt:  &now,
+		ExpiresAt: &expiresAt,
+		UpdatedAt: now,
 	}
 	require.NoError(t, validateNotice(valid))
 
@@ -178,11 +183,9 @@ func TestValidateNotice(t *testing.T) {
 		"invalid audience": func(n *Notice) { n.Audience = "everyone" },
 		"invalid category": func(n *Notice) { n.Category = "other" },
 		"invalid severity": func(n *Notice) { n.Severity = "urgent" },
-		"missing starts at": func(n *Notice) {
-			n.StartsAt = time.Time{}
-		},
-		"missing expires at": func(n *Notice) {
-			n.ExpiresAt = time.Time{}
+		"invalid time range": func(n *Notice) {
+			beforeStart := n.StartsAt.Add(-time.Hour)
+			n.ExpiresAt = &beforeStart
 		},
 		"missing updated at": func(n *Notice) {
 			n.UpdatedAt = time.Time{}

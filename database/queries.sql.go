@@ -16609,10 +16609,98 @@ func (q *sqlQuerier) InsertTelemetryNotice(ctx context.Context, arg InsertTeleme
 	return err
 }
 
+const listActiveAdminTelemetryNotices = `-- name: ListActiveAdminTelemetryNotices :many
+SELECT id, audience, category, severity, title, message, action_label, action_url, starts_at, expires_at, updated_at
+FROM telemetry_notices
+WHERE audience = 'admin'
+  AND (starts_at IS NULL OR starts_at <= now())
+  AND (expires_at IS NULL OR expires_at > now())
+ORDER BY
+  CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+  updated_at DESC,
+  id
+`
+
+func (q *sqlQuerier) ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error) {
+	rows, err := q.db.Query(ctx, listActiveAdminTelemetryNotices)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TelemetryNotice
+	for rows.Next() {
+		var i TelemetryNotice
+		if err := rows.Scan(
+			&i.ID,
+			&i.Audience,
+			&i.Category,
+			&i.Severity,
+			&i.Title,
+			&i.Message,
+			&i.ActionLabel,
+			&i.ActionUrl,
+			&i.StartsAt,
+			&i.ExpiresAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActivePublicTelemetryNotices = `-- name: ListActivePublicTelemetryNotices :many
+SELECT id, audience, category, severity, title, message, action_label, action_url, starts_at, expires_at, updated_at
+FROM telemetry_notices
+WHERE audience = 'public'
+  AND (starts_at IS NULL OR starts_at <= now())
+  AND (expires_at IS NULL OR expires_at > now())
+ORDER BY
+  CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+  updated_at DESC,
+  id
+`
+
+func (q *sqlQuerier) ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error) {
+	rows, err := q.db.Query(ctx, listActivePublicTelemetryNotices)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TelemetryNotice
+	for rows.Next() {
+		var i TelemetryNotice
+		if err := rows.Scan(
+			&i.ID,
+			&i.Audience,
+			&i.Category,
+			&i.Severity,
+			&i.Title,
+			&i.Message,
+			&i.ActionLabel,
+			&i.ActionUrl,
+			&i.StartsAt,
+			&i.ExpiresAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTelemetryNotices = `-- name: ListTelemetryNotices :many
 SELECT id, audience, category, severity, title, message, action_label, action_url, starts_at, expires_at, updated_at
 FROM telemetry_notices
-ORDER BY starts_at DESC, id
+ORDER BY starts_at DESC NULLS LAST, id
 `
 
 func (q *sqlQuerier) ListTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error) {

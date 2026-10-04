@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { authenticateDeployment } from "../auth";
 import { activeNotices } from "../notices";
 import type { Env, TelemetryReport } from "../types";
@@ -6,15 +7,15 @@ import type { Env, TelemetryReport } from "../types";
 const MAX_BODY_SIZE = 64 * 1024;
 const ingest = new Hono<{ Bindings: Env }>();
 
-function payloadTooLarge(contentLength: string | undefined): boolean {
-  return Boolean(contentLength && Number(contentLength) > MAX_BODY_SIZE);
-}
+ingest.use(
+  "/api/v1/telemetry/*",
+  bodyLimit({
+    maxSize: MAX_BODY_SIZE,
+    onError: (c) => c.json({ error: "Payload too large" }, 413),
+  })
+);
 
 ingest.post("/api/v1/telemetry/report", async (c) => {
-  if (payloadTooLarge(c.req.header("content-length"))) {
-    return c.json({ error: "Payload too large" }, 413);
-  }
-
   let report: TelemetryReport;
   try {
     report = await c.req.json<TelemetryReport>();
@@ -100,10 +101,6 @@ ingest.post("/api/v1/telemetry/report", async (c) => {
 });
 
 ingest.post("/api/v1/telemetry/check-notices", async (c) => {
-  if (payloadTooLarge(c.req.header("content-length"))) {
-    return c.json({ error: "Payload too large" }, 413);
-  }
-
   let body: { deployment_id?: unknown };
   try {
     body = await c.req.json<{ deployment_id?: unknown }>();

@@ -12,8 +12,8 @@ CREATE TABLE telemetry_notices (
     message TEXT NOT NULL,
     action_label TEXT,
     action_url TEXT,
-    starts_at TIMESTAMPTZ NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL,
+    starts_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL
 );
 

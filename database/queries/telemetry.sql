@@ -56,4 +56,26 @@ INSERT INTO telemetry_notices (
 -- name: ListTelemetryNotices :many
 SELECT *
 FROM telemetry_notices
-ORDER BY starts_at DESC, id;
+ORDER BY starts_at DESC NULLS LAST, id;
+
+-- name: ListActivePublicTelemetryNotices :many
+SELECT *
+FROM telemetry_notices
+WHERE audience = 'public'
+  AND (starts_at IS NULL OR starts_at <= now())
+  AND (expires_at IS NULL OR expires_at > now())
+ORDER BY
+  CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+  updated_at DESC,
+  id;
+
+-- name: ListActiveAdminTelemetryNotices :many
+SELECT *
+FROM telemetry_notices
+WHERE audience = 'admin'
+  AND (starts_at IS NULL OR starts_at <= now())
+  AND (expires_at IS NULL OR expires_at > now())
+ORDER BY
+  CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+  updated_at DESC,
+  id;

@@ -48,6 +48,20 @@ export interface Notice {
   updated_at: string;
 }
 
+export interface DeliveredNotice {
+  id: string;
+  audience: NoticeAudience;
+  category: NoticeCategory;
+  severity: NoticeSeverity;
+  title: string;
+  message: string;
+  action_label: string | null;
+  action_url: string | null;
+  starts_at: string | null;
+  expires_at: string | null;
+  updated_at: string;
+}
+
 export interface NoticeInput {
   deployment_id: string | null;
   audience: NoticeAudience;

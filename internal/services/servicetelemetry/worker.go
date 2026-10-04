@@ -51,17 +51,17 @@ func (ArgsTelemetryReport) InsertOpts() river.InsertOpts {
 
 // Notice is a telemetry notice returned for this deployment.
 type Notice struct {
-	ID          string    `json:"id"`
-	Audience    string    `json:"audience"`
-	Category    string    `json:"category"`
-	Severity    string    `json:"severity"`
-	Title       string    `json:"title"`
-	Message     string    `json:"message"`
-	ActionLabel *string   `json:"action_label,omitempty"`
-	ActionURL   *string   `json:"action_url,omitempty"`
-	StartsAt    time.Time `json:"starts_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string     `json:"id"`
+	Audience    string     `json:"audience"`
+	Category    string     `json:"category"`
+	Severity    string     `json:"severity"`
+	Title       string     `json:"title"`
+	Message     string     `json:"message"`
+	ActionLabel *string    `json:"action_label,omitempty"`
+	ActionURL   *string    `json:"action_url,omitempty"`
+	StartsAt    *time.Time `json:"starts_at"`
+	ExpiresAt   *time.Time `json:"expires_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 type checkNoticesRequest struct {
@@ -148,10 +148,13 @@ func (w *Worker) Work(ctx context.Context, _ *river.Job[ArgsTelemetryReport]) er
 		w.Logger.WarnContext(ctx, "failed to update telemetry heartbeat", slog.String("error", err.Error()))
 	}
 
-	err = w.sendReport(ctx, report, token)
+	notices, err := w.sendReport(ctx, report, token)
 	if err != nil {
 		w.Logger.WarnContext(ctx, "telemetry report failed", slog.String("error", err.Error()))
 		return nil
+	}
+	if err := w.replaceNotices(ctx, notices); err != nil {
+		w.Logger.WarnContext(ctx, "failed to persist notices from telemetry report", slog.String("error", err.Error()))
 	}
 
 	w.Logger.InfoContext(ctx, "telemetry report sent",
@@ -260,28 +263,28 @@ func (w *Worker) collectReport(ctx context.Context, deploymentInfo database.Depl
 	}, nil
 }
 
-func (w *Worker) sendReport(ctx context.Context, report TelemetryReport, token string) error {
+func (w *Worker) sendReport(ctx context.Context, report TelemetryReport, token string) ([]Notice, error) {
 	body, err := json.Marshal(report)
 	if err != nil {
-		return fmt.Errorf("marshal report: %w", err)
+		return nil, fmt.Errorf("marshal report: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.ReportURL, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("create request: %w", err)
 	}
 	setTelemetryHeaders(req, token)
 
 	resp, err := w.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("http post: %w", err)
+		return nil, fmt.Errorf("http post: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("telemetry receiver returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("telemetry receiver returned status %d", resp.StatusCode)
 	}
-	return nil
+	return decodeNoticesResponse(resp.Body)
 }
 
 func (w *Worker) checkNotices(ctx context.Context, deploymentID, token string) error {
@@ -306,27 +309,35 @@ func (w *Worker) checkNotices(ctx context.Context, deploymentID, token string) e
 		return fmt.Errorf("notice receiver returned status %d", resp.StatusCode)
 	}
 
-	var response checkNoticesResponse
-	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1<<20))
-	if err := decoder.Decode(&response); err != nil {
-		return fmt.Errorf("decode notice response: %w", err)
-	}
-	if err := ensureJSONEOF(decoder); err != nil {
-		return fmt.Errorf("decode notice response: %w", err)
-	}
-	if response.Notices == nil {
-		return fmt.Errorf("decode notice response: notices must be an array")
-	}
-	for i, notice := range *response.Notices {
-		if err := validateNotice(notice); err != nil {
-			return fmt.Errorf("validate notice %d: %w", i, err)
-		}
+	notices, err := decodeNoticesResponse(resp.Body)
+	if err != nil {
+		return err
 	}
 
-	if err := w.replaceNotices(ctx, *response.Notices); err != nil {
+	if err := w.replaceNotices(ctx, notices); err != nil {
 		return fmt.Errorf("replace notice snapshot: %w", err)
 	}
 	return nil
+}
+
+func decodeNoticesResponse(reader io.Reader) ([]Notice, error) {
+	var response checkNoticesResponse
+	decoder := json.NewDecoder(io.LimitReader(reader, 1<<20))
+	if err := decoder.Decode(&response); err != nil {
+		return nil, fmt.Errorf("decode notice response: %w", err)
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return nil, fmt.Errorf("decode notice response: %w", err)
+	}
+	if response.Notices == nil {
+		return nil, fmt.Errorf("decode notice response: notices must be an array")
+	}
+	for i, notice := range *response.Notices {
+		if err := validateNotice(notice); err != nil {
+			return nil, fmt.Errorf("validate notice %d: %w", i, err)
+		}
+	}
+	return *response.Notices, nil
 }
 
 func (w *Worker) replaceNotices(ctx context.Context, notices []Notice) error {
@@ -344,8 +355,8 @@ func (w *Worker) replaceNotices(ctx context.Context, notices []Notice) error {
 				Message:     notice.Message,
 				ActionLabel: optionalText(notice.ActionLabel),
 				ActionUrl:   optionalText(notice.ActionURL),
-				StartsAt:    pgtype.Timestamptz{Time: notice.StartsAt, Valid: true},
-				ExpiresAt:   pgtype.Timestamptz{Time: notice.ExpiresAt, Valid: true},
+				StartsAt:    optionalTimestamptz(notice.StartsAt),
+				ExpiresAt:   optionalTimestamptz(notice.ExpiresAt),
 				UpdatedAt:   pgtype.Timestamptz{Time: notice.UpdatedAt, Valid: true},
 			}); err != nil {
 				return fmt.Errorf("insert notice %q: %w", notice.ID, err)
@@ -353,6 +364,13 @@ func (w *Worker) replaceNotices(ctx context.Context, notices []Notice) error {
 		}
 		return nil
 	}, nil)
+}
+
+func optionalTimestamptz(value *time.Time) pgtype.Timestamptz {
+	if value == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *value, Valid: true}
 }
 
 func optionalText(value *string) pgtype.Text {
@@ -398,11 +416,8 @@ func validateNotice(notice Notice) error {
 	if !oneOf(notice.Severity, "info", "warning", "critical") {
 		return fmt.Errorf("invalid severity %q", notice.Severity)
 	}
-	if notice.StartsAt.IsZero() {
-		return fmt.Errorf("starts_at is required")
-	}
-	if notice.ExpiresAt.IsZero() {
-		return fmt.Errorf("expires_at is required")
+	if notice.StartsAt != nil && notice.ExpiresAt != nil && !notice.ExpiresAt.After(*notice.StartsAt) {
+		return fmt.Errorf("expires_at must be after starts_at")
 	}
 	if notice.UpdatedAt.IsZero() {
 		return fmt.Errorf("updated_at is required")

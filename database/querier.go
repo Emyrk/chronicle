@@ -551,6 +551,8 @@ type sqlcQuerier interface {
 	InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error)
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
+	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
+	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
 	ListAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationsByDatasetRow, error)
 	ListAllRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error)
