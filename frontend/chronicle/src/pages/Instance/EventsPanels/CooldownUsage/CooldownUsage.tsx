@@ -11,7 +11,8 @@ export function createCooldownUsagePanel(): PanelDefinition<CooldownUsageResult,
     icon: <TimerReset className="h-4 w-4" />,
     syncDataMode: "full",
     underConstruction: true,
-    renderOnlyOptionTokens: ["c:", "m:"],
+    checkboxLabel: "Compact",
+    renderOnlyOptionTokens: ["c:", "m:", "cb"],
     render: (props: PanelRenderProps<CooldownUsageResult>) => <CooldownUsageContent {...props} />,
   };
 }

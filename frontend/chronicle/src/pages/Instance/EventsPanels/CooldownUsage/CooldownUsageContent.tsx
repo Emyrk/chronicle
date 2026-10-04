@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import { useCooldownSpells } from "@/api/cooldownSpells";
+import { useSpell } from "@/api/queries";
+import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { cn } from "@/lib/utils";
 import { classColor } from "../Consumables/consumablesLedgerLogic";
 import { GenericPanel } from "../GenericPanel";
@@ -10,6 +13,7 @@ import {
   buildCooldownIndex,
   buildCooldownRows,
   normalizeClassName,
+  type CooldownDef,
   type CooldownUsageRow,
   type TimeWindow,
 } from "./cooldownUsage";
@@ -37,8 +41,11 @@ function parseOptions(panelOption: string | null | undefined) {
   return { cls, minSeconds };
 }
 
-function serializeOptions(cls: string | null, minSeconds: number): string | null {
-  const parts: string[] = [];
+/** Rewrites this panel's tokens, keeping others (e.g. the "cb" compact toggle). */
+function serializeOptions(panelOption: string | null | undefined, cls: string | null, minSeconds: number): string | null {
+  const parts = (panelOption?.split(",").filter(Boolean) ?? []).filter(
+    (part) => !part.startsWith(CLASS_PREFIX) && !part.startsWith(MIN_CD_PREFIX),
+  );
   if (cls) parts.push(`${CLASS_PREFIX}${cls}`);
   if (minSeconds !== DEFAULT_MIN_CD_SECONDS) parts.push(`${MIN_CD_PREFIX}${minSeconds}`);
   return parts.length > 0 ? parts.join(",") : null;
@@ -77,7 +84,7 @@ function formatAt(ms: number, windows: readonly TimeWindow[], allWindows: readon
 }
 
 export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult>) {
-  const { result, context, panelOption, setPanelOption } = props;
+  const { result, context, panelOption, setPanelOption, checkboxChecked: compact } = props;
   const { data: cooldownData, isLoading: cooldownsLoading, error: cooldownsError } = useCooldownSpells();
   const { cls: requestedClass, minSeconds } = parseOptions(panelOption);
 
@@ -138,7 +145,7 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
               <button
                 key={cls}
                 type="button"
-                onClick={() => setPanelOption?.(serializeOptions(cls, minSeconds))}
+                onClick={() => setPanelOption?.(serializeOptions(panelOption, cls, minSeconds))}
                 className={cn(
                   "flex items-center gap-1.5 rounded border px-2 py-1 text-[11px]",
                   active
@@ -157,7 +164,7 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
           })}
           <select
             value={minSeconds}
-            onChange={(event) => setPanelOption?.(serializeOptions(selectedClass, Number(event.target.value)))}
+            onChange={(event) => setPanelOption?.(serializeOptions(panelOption, selectedClass, Number(event.target.value)))}
             className="ml-auto rounded border bg-background px-2 py-1 text-[11px]"
             aria-label="Minimum cooldown"
           >
@@ -167,23 +174,27 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
           </select>
         </div>
 
-        <div className="flex flex-wrap gap-3 border-b border-border/40 py-2 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className={cn("h-2 w-2 rounded-sm border-l-2 border-foreground", ON_COOLDOWN_CLASS)} />
-            Cast → on cooldown
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className={cn("h-2 w-2 rounded-sm", READY_CLASS)} />
-            Ready
-          </span>
-        </div>
+        {!compact && (
+          <>
+            <div className="flex flex-wrap gap-3 border-b border-border/40 py-2 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className={cn("h-2 w-2 rounded-sm border-l-2 border-foreground", ON_COOLDOWN_CLASS)} />
+                Cast → on cooldown
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className={cn("h-2 w-2 rounded-sm", READY_CLASS)} />
+                Ready
+              </span>
+            </div>
 
-        <div className="flex items-center gap-2 pl-3 pt-2 text-[10px] uppercase tracking-wide text-muted-foreground/70">
-          <span className="w-36 shrink-0">Cooldown</span>
-          <span className={CASTS_COL}>Casts</span>
-          <span className={READY_COL} title="Share of fight time the cooldown was ready but unused">Ready</span>
-          <span className="flex-1 pl-1">Timeline</span>
-        </div>
+            <div className="flex items-center gap-2 pl-3 pt-2 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+              <span className="w-36 shrink-0">Cooldown</span>
+              <span className={CASTS_COL}>Casts</span>
+              <span className={READY_COL} title="Share of fight time the cooldown was ready but unused">Ready</span>
+              <span className="flex-1 pl-1">Timeline</span>
+            </div>
+          </>
+        )}
 
         <div className="min-h-0 flex-1 overflow-auto styled-scrollbar">
           {cooldownsError ? (
@@ -192,6 +203,8 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
             <div className="p-4 text-center text-muted-foreground">Loading cooldowns…</div>
           ) : rows.length === 0 ? (
             <div className="p-4 text-center text-muted-foreground">No cooldown casts in the selected encounters.</div>
+          ) : compact ? (
+            <CompactTable rows={rows} />
           ) : (
             groupByPlayer(rows).map((group) => (
               <PlayerGroup
@@ -208,6 +221,75 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
         </div>
       </div>
     </GenericPanel>
+  );
+}
+
+function CooldownIcon({ cooldown }: { cooldown: CooldownDef }) {
+  const datasetId = useDatasetId();
+  const { data: spell } = useSpell(String(cooldown.spellId), datasetId);
+  return spell ? (
+    <SpellIconWithTooltip spell={spell} size={20} className="size-5" />
+  ) : (
+    <span className="block size-5 rounded-sm border border-white/10 bg-black/25" title={cooldown.name} />
+  );
+}
+
+/** Players × cooldowns grid of cast counts. */
+function CompactTable({ rows }: { rows: readonly CooldownUsageRow[] }) {
+  const cooldowns = [...new Map(rows.map((row) => [row.cooldown.key, row.cooldown])).values()].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const players = groupByPlayer(rows);
+
+  return (
+    <table className="w-max border-separate border-spacing-0 text-xs">
+      <thead>
+        <tr>
+          <th className="sticky left-0 top-0 z-20 bg-card px-2 py-1.5" />
+          {cooldowns.map((cooldown) => (
+            <th key={cooldown.key} className="sticky top-0 z-10 bg-card px-1.5 py-1.5" title={cooldown.name}>
+              <span className="flex justify-center">
+                <CooldownIcon cooldown={cooldown} />
+              </span>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {players.map((group) => {
+          const player = group[0];
+          const casts = new Map(group.map((row) => [row.cooldown.key, row.casts.length]));
+          return (
+            <tr key={player.playerID} className="hover:bg-muted/30">
+              <td className="sticky left-0 z-10 whitespace-nowrap border-t border-border/30 bg-card py-1 pl-1 pr-3">
+                <span className="flex items-center gap-1.5 text-foreground">
+                  <span
+                    className="h-3 w-[3px] rounded-sm"
+                    style={{ background: classColor(normalizeClassName(player.className)) }}
+                  />
+                  {player.playerName}
+                </span>
+              </td>
+              {cooldowns.map((cooldown) => {
+                const count = casts.get(cooldown.key) ?? 0;
+                return (
+                  <td
+                    key={cooldown.key}
+                    className={cn(
+                      "border-t border-border/30 px-1.5 py-1 text-center font-mono",
+                      count === 0 ? "text-muted-foreground/40" : "text-foreground",
+                    )}
+                    title={`${player.playerName} · ${cooldown.name}: ${count}`}
+                  >
+                    {count}
+                  </td>
+                );
+              })}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 
