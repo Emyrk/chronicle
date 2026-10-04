@@ -72,6 +72,10 @@ export interface CooldownUsageRow {
   windowMs: number;
 }
 
+export function usedCooldownRows(rows: readonly CooldownUsageRow[]): CooldownUsageRow[] {
+  return rows.filter((row) => row.casts.length > 0);
+}
+
 /** "Druid" / "DeathKnight" / "DRUID" -> "DRUID" / "DEATHKNIGHT" */
 export function normalizeClassName(className: string): string {
   return className.toUpperCase().replace(/[^A-Z]/g, "");

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildCooldownIndex, buildCooldownRows, buildEffects, buildSegments, normalizeClassName } from "./cooldownUsage";
+import {
+  buildCooldownIndex,
+  buildCooldownRows,
+  buildEffects,
+  buildSegments,
+  normalizeClassName,
+  usedCooldownRows,
+} from "./cooldownUsage";
 import type { CooldownUsageResult } from "./cooldownUsage.processor";
 
 const window = (start: number, end: number, id = "e1") => ({ id, name: id, start, end });
@@ -58,6 +65,9 @@ describe("buildCooldownRows", () => {
     const rows = buildCooldownRows(result, index, [window(0, 400_000)], 30_000);
     expect(rows.map((r) => [r.cooldown.name, r.playerName, r.casts.length])).toEqual([
       ["Innervate", "Oakhart", 0],
+      ["Innervate", "Sylas", 1],
+    ]);
+    expect(usedCooldownRows(rows).map((r) => [r.cooldown.name, r.playerName, r.casts.length])).toEqual([
       ["Innervate", "Sylas", 1],
     ]);
   });
