@@ -3113,6 +3113,23 @@ export interface SetConsumableDisambiguationRequest {
     readonly item_id: number;
 }
 
+// From chroniclesdk/cooldowns.go
+/**
+ * SetCooldownOverridesRequest updates per-spell Cooldown Usage overrides for
+ * the given spells. A nil field leaves that override unchanged.
+ */
+export interface SetCooldownOverridesRequest {
+    readonly spell_ids: readonly number[];
+    /**
+     * Ignored hides the cooldown from the Cooldown Usage panel.
+     */
+    readonly ignored?: boolean;
+    /**
+     * HideDuration hides the spell-duration bar while keeping the cooldown.
+     */
+    readonly hide_duration?: boolean;
+}
+
 // From chroniclesdk/tenant.go
 /**
  * SetDatasetRequest assigns or removes a default dataset from a server or

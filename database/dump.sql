@@ -291,6 +291,14 @@ CREATE TABLE dataset_consumable_disambiguations (
     CONSTRAINT dataset_consumable_disambiguations_effect_kind_check CHECK ((effect_kind = ANY (ARRAY['buff'::text, 'direct'::text])))
 );
 
+CREATE TABLE dataset_cooldown_overrides (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    ignored boolean DEFAULT false NOT NULL,
+    hide_duration boolean DEFAULT false NOT NULL
+);
+
 CREATE TABLE dataset_talent_trees (
     dataset_id uuid NOT NULL,
     data jsonb NOT NULL,
@@ -2040,6 +2048,9 @@ ALTER TABLE ONLY data_grants
 ALTER TABLE ONLY dataset_consumable_disambiguations
     ADD CONSTRAINT dataset_consumable_disambiguations_pkey PRIMARY KEY (dataset_id, effect_kind, spell_id);
 
+ALTER TABLE ONLY dataset_cooldown_overrides
+    ADD CONSTRAINT dataset_cooldown_overrides_pkey PRIMARY KEY (dataset_id, spell_id);
+
 ALTER TABLE ONLY dataset_talent_trees
     ADD CONSTRAINT dataset_talent_trees_pkey PRIMARY KEY (dataset_id);
 
@@ -2716,6 +2727,9 @@ ALTER TABLE ONLY data_grants
 
 ALTER TABLE ONLY dataset_consumable_disambiguations
     ADD CONSTRAINT dataset_consumable_disambiguations_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dataset_cooldown_overrides
+    ADD CONSTRAINT dataset_cooldown_overrides_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY dataset_talent_trees
     ADD CONSTRAINT dataset_talent_trees_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
