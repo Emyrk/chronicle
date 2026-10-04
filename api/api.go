@@ -65,6 +65,10 @@ type Options struct {
 
 	Registry  *prometheus.Registry
 	AccessURL *url.URL
+	// AdsTxtURL is the canonical ads.txt URL. When set, /ads.txt redirects to it.
+	// When empty, /ads.txt returns 404 so self-hosted deployments do not publish
+	// another operator's advertising authorization.
+	AdsTxtURL *url.URL
 	// ShortLinkDomain is the domain used for short share links (e.g. "chrn.link").
 	// If empty, short links use same-origin paths instead.
 	ShortLinkDomain string
@@ -169,6 +173,8 @@ func (api *API) Routes() chi.Router {
 		api.shortLinkRedirectMiddleware,
 		api.tenantMiddleware,
 	)
+
+	r.Get("/ads.txt", adsTxtHandler(api.Opts.AdsTxtURL))
 
 	if api.Opts.ExternalAPI != nil {
 		r.Mount(ExternalAPIPath, api.Opts.ExternalAPI)
