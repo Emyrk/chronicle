@@ -110,6 +110,8 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 	inner.WithEventHook("BLIZZARD_ZONE_CHANGE", p.zoneChange)
 	inner.WithEventHook("BLIZZARD_COMBATANT_INFO", p.combatantInfo)
 	inner.WithEventHook("BLIZZARD_SPELL_ABSORBED", p.spellAbsorbed)
+	inner.WithEventHook("BLIZZARD_UNIT_POSITION", p.unitPosition)
+	inner.WithEventHook("BLIZZARD_UNIT_RESOURCES", p.unitResources)
 	inner.WithEventHook("BLIZZARD_ENCOUNTER_START", p.encounterStart)
 	inner.WithEventHook("BLIZZARD_ENCOUNTER_END", p.encounterEnd)
 	return p, nil
@@ -183,6 +185,62 @@ func (p *Parser) zoneChange(ts time.Time, m *wotlk.Matched, _ string) ([]message
 			InstanceType: instanceType,
 			IsInstance:   instanceType != "0",
 		},
+	}}, nil
+}
+
+func (p *Parser) unitPosition(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
+	unit := m.Guid()
+	parseFloat := func(name string) float64 {
+		raw := m.String()
+		value, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			m.SetError(fmt.Errorf("parse unit position %s %q: %w", name, raw, err))
+		}
+		return value
+	}
+	x := parseFloat("x")
+	y := parseFloat("y")
+	mapID := m.Int32()
+	facing := parseFloat("facing")
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+	return []messages.Message{&messages.UnitPosition{
+		MessageBase: messages.Base(ts),
+		Unit:        unit,
+		X:           x,
+		Y:           y,
+		MapID:       mapID,
+		Facing:      facing,
+	}}, nil
+}
+
+func (p *Parser) unitResources(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
+	unit := m.Guid()
+	currentHealth := m.Int64()
+	maximumHealth := m.Int64()
+	absorb := m.Int32()
+	powerType := wotlk.PowerTypeToResource(m.Int32())
+	currentPower := m.Int32()
+	maximumPower := m.Int32()
+	attackPower := m.Int32()
+	spellPower := m.Int32()
+	armor := m.Int32()
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+	return []messages.Message{&messages.UnitResources{
+		MessageBase:   messages.Base(ts),
+		Unit:          unit,
+		CurrentHealth: currentHealth,
+		MaximumHealth: maximumHealth,
+		Absorb:        absorb,
+		PowerType:     powerType,
+		CurrentPower:  currentPower,
+		MaximumPower:  maximumPower,
+		AttackPower:   attackPower,
+		SpellPower:    spellPower,
+		Armor:         armor,
 	}}, nil
 }
 

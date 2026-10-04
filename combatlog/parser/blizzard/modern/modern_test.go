@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 
@@ -177,6 +178,131 @@ func TestTransformV22Damage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, converted, `"Tester"`)
 	assert.Contains(t, converted, `686,"Shadow Bolt",0x20,15,-1,32,0,0,0,nil,nil,nil`)
+}
+
+func TestTransformV22EmitsUnitTelemetry(t *testing.T) {
+	t.Parallel()
+
+	r := newTransformReader(strings.NewReader(""))
+	_, err := r.transform(`9/20/2026 15:02:05.988-5  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18`)
+	require.NoError(t, err)
+
+	line := `9/20/2026 15:02:08.135-5  SPELL_DAMAGE,Player-4618-00C7EC79,"Tester-ClassicBetaPvE-",0x518,0x80000000,Creature-0-6783-0-16021-1512-0000B03B52,"Duskbat",0xa28,0x80000000,686,"Shadow Bolt",0x20,Creature-0-6783-0-16021-1512-0000B03B52,0000000000000000,18,42,3,4,20,5,0,0,0,20,40,0,1751.67,1697.84,1420,4.4674,1,15,15,-1,32,0,0,0,nil,nil,nil,ST`
+	converted, err := r.transform(line)
+	require.NoError(t, err)
+	lines := strings.Split(converted, "\n")
+	require.Len(t, lines, 3)
+	timestamp := strings.SplitN(lines[0], "  ", 2)[0]
+	assert.Equal(t, timestamp, strings.SplitN(lines[1], "  ", 2)[0])
+	assert.Equal(t, timestamp, strings.SplitN(lines[2], "  ", 2)[0])
+	assert.Contains(t, lines[0], `SPELL_DAMAGE`)
+	assert.Contains(t, lines[1], `BLIZZARD_UNIT_POSITION,`)
+	assert.Contains(t, lines[1], `,1751.67,1697.84,1420,4.4674`)
+	assert.Contains(t, lines[2], `BLIZZARD_UNIT_RESOURCES,`)
+	assert.Contains(t, lines[2], `,18,42,5,0,20,40,3,4,20`)
+}
+
+func TestTransformV22SwingDamageLandedKeepsUnitTelemetry(t *testing.T) {
+	t.Parallel()
+
+	r := newTransformReader(strings.NewReader(""))
+	_, err := r.transform(`9/20/2026 15:02:05.988-5  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18`)
+	require.NoError(t, err)
+
+	line := `9/20/2026 15:02:08.135-5  SWING_DAMAGE_LANDED,Player-4618-00C7EC79,"Tester-ClassicBetaPvE-",0x518,0x80000000,Creature-0-6783-0-16021-1512-0000B03B52,"Duskbat",0xa28,0x80000000,Creature-0-6783-0-16021-1512-0000B03B52,0000000000000000,18,42,3,4,20,5,0,0,0,20,40,0,1751.67,1697.84,1420,4.4674,1,15,15,-1,32,0,0,0,nil,nil,nil,ST`
+	converted, err := r.transform(line)
+	require.NoError(t, err)
+	lines := strings.Split(converted, "\n")
+	require.Len(t, lines, 2)
+	assert.Contains(t, lines[0], `BLIZZARD_UNIT_POSITION,`)
+	assert.Contains(t, lines[1], `BLIZZARD_UNIT_RESOURCES,`)
+}
+
+func TestParseV22UnitTelemetry(t *testing.T) {
+	t.Parallel()
+
+	input, err := os.ReadFile("testdata/wow_forever_v22_advanced.log")
+	require.NoError(t, err)
+	p, err := New(context.Background(), slog.Default(), strings.NewReader(string(input)), hermesProxyTestDB{}, hermesProxyTestDB{}, nil)
+	require.NoError(t, err)
+
+	var position *messages.UnitPosition
+	var resources *messages.UnitResources
+	positionUnits := make(map[guid.GUID]int)
+	resourceUnits := make(map[guid.GUID]int)
+	for {
+		batch, advanceErr := p.Advance(context.Background())
+		for _, msg := range batch {
+			switch typed := msg.(type) {
+			case *messages.UnitPosition:
+				position = typed
+				positionUnits[typed.Unit]++
+			case *messages.UnitResources:
+				resources = typed
+				resourceUnits[typed.Unit]++
+			}
+		}
+		if advanceErr == io.EOF {
+			break
+		}
+		require.NoError(t, advanceErr)
+	}
+
+	require.Len(t, positionUnits, 2, "source-side cast and target-side landed events must use infoGUID")
+	require.Len(t, resourceUnits, 2, "source-side cast and target-side landed events must use infoGUID")
+	var positionCount, resourceCount int
+	for _, count := range positionUnits {
+		positionCount += count
+	}
+	for _, count := range resourceUnits {
+		resourceCount += count
+	}
+	require.Equal(t, 3, positionCount, "repeated snapshots must not be deduplicated")
+	require.Equal(t, 3, resourceCount, "repeated snapshots must not be deduplicated")
+	require.NotNil(t, position)
+	assert.Equal(t, 1751.67, position.X)
+	assert.Equal(t, 1697.84, position.Y)
+	assert.Equal(t, int32(1420), position.MapID)
+	assert.Equal(t, 4.4674, position.Facing)
+	require.NotNil(t, resources)
+	assert.Equal(t, int64(18), resources.CurrentHealth)
+	assert.Equal(t, int64(42), resources.MaximumHealth)
+	assert.Equal(t, int32(5), resources.Absorb)
+	assert.Equal(t, types.ResourceMana, resources.PowerType)
+	assert.Equal(t, int32(20), resources.CurrentPower)
+	assert.Equal(t, int32(40), resources.MaximumPower)
+	assert.Equal(t, int32(3), resources.AttackPower)
+	assert.Equal(t, int32(4), resources.SpellPower)
+	assert.Equal(t, int32(20), resources.Armor)
+	assert.Equal(t, position.Unit, resources.Unit)
+}
+
+func TestParseV22CompoundResourceSnapshotUsesPrimaryResource(t *testing.T) {
+	t.Parallel()
+
+	input, err := os.ReadFile("testdata/wow_forever_v22_compound_resources.log")
+	require.NoError(t, err)
+	p, err := New(context.Background(), slog.Default(), strings.NewReader(string(input)), hermesProxyTestDB{}, hermesProxyTestDB{}, nil)
+	require.NoError(t, err)
+
+	var resources *messages.UnitResources
+	for {
+		batch, advanceErr := p.Advance(context.Background())
+		for _, msg := range batch {
+			if typed, ok := msg.(*messages.UnitResources); ok {
+				resources = typed
+			}
+		}
+		if advanceErr == io.EOF {
+			break
+		}
+		require.NoError(t, advanceErr)
+	}
+
+	require.NotNil(t, resources)
+	assert.Equal(t, types.ResourceRage, resources.PowerType)
+	assert.Equal(t, int32(345), resources.CurrentPower)
+	assert.Equal(t, int32(1000), resources.MaximumPower)
 }
 
 func TestTransformV22HealUsesTotalAmount(t *testing.T) {

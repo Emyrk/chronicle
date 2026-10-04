@@ -1,4 +1,5 @@
 import { type MessageShape, type DescMessage, fromBinary } from "@bufbuild/protobuf";
+import { UnitPositionSchema, UnitResourcesSchema } from "@/api/proto/chronicle_pb";
 
 // Shared TextDecoder instance - TextDecoder is stateless and thread-safe
 const sharedTextDecoder = new TextDecoder();
@@ -5614,6 +5615,116 @@ export function createStreamCursor<T extends DescMessage>(
   data: Uint8Array
 ): StreamCursor<T> {
   return new StreamCursor(schema, data);
+}
+
+export interface ReusableUnitPosition {
+  type: "unit_position";
+  index: number;
+  offsetMilli: number;
+  unit: string;
+  x: number;
+  y: number;
+  mapId: number;
+  facing: number;
+  activity: ReusableActivityEntry[];
+  activityCount: number;
+  isSynthetic: boolean;
+}
+
+export interface ReusableUnitResources {
+  type: "unit_resources";
+  index: number;
+  offsetMilli: number;
+  unit: string;
+  currentHealth: number;
+  maximumHealth: number;
+  absorb: number;
+  powerType: string;
+  currentPower: number;
+  maximumPower: number;
+  attackPower: number;
+  spellPower: number;
+  armor: number;
+  activity: ReusableActivityEntry[];
+  activityCount: number;
+  isSynthetic: boolean;
+}
+
+class MappedStreamCursor<T extends DescMessage, E> {
+  private readonly cursor: StreamCursor<T>;
+  private readonly map: (message: MessageShape<T>) => E;
+
+  constructor(schema: T, data: Uint8Array, map: (message: MessageShape<T>) => E) {
+    this.cursor = new StreamCursor(schema, data);
+    this.map = map;
+  }
+
+  get currentHeader(): PayloadHeader | null { return this.cursor.currentHeader; }
+  get hasMoreInEncounter(): boolean { return this.cursor.hasMoreInEncounter; }
+  get bytesProcessed(): number { return this.cursor.bytesProcessed; }
+  get bytesTotal(): number { return this.cursor.bytesTotal; }
+
+  next(): E | null {
+    const next = this.cursor.peek();
+    if (!next) return null;
+    const event = this.map(next.message);
+    this.cursor.advance();
+    return event;
+  }
+
+  nextEncounter(): boolean { return this.cursor.nextEncounter(); }
+  skipEncounter(): boolean { return this.cursor.nextEncounter(); }
+}
+
+function activityFromMeta(meta: { activity: { guid: string; eventType: string }[] } | undefined): ReusableActivityEntry[] {
+  return meta?.activity.map((entry) => ({ guid: entry.guid, eventType: entry.eventType })) ?? [];
+}
+
+export class FastUnitPositionCursor extends MappedStreamCursor<typeof UnitPositionSchema, ReusableUnitPosition> {
+  constructor(data: Uint8Array) {
+    super(UnitPositionSchema, data, (message) => {
+      const activity = activityFromMeta(message.meta);
+      return {
+        type: "unit_position",
+        index: message.meta?.index ?? 0,
+        offsetMilli: Number(message.meta?.offsetMilli ?? 0n),
+        unit: message.unit,
+        x: message.x,
+        y: message.y,
+        mapId: message.mapId,
+        facing: message.facing,
+        activity,
+        activityCount: activity.length,
+        isSynthetic: message.meta?.isSynthetic ?? false,
+      };
+    });
+  }
+}
+
+export class FastUnitResourcesCursor extends MappedStreamCursor<typeof UnitResourcesSchema, ReusableUnitResources> {
+  constructor(data: Uint8Array) {
+    super(UnitResourcesSchema, data, (message) => {
+      const activity = activityFromMeta(message.meta);
+      return {
+        type: "unit_resources",
+        index: message.meta?.index ?? 0,
+        offsetMilli: Number(message.meta?.offsetMilli ?? 0n),
+        unit: message.unit,
+        currentHealth: Number(message.currentHealth),
+        maximumHealth: Number(message.maximumHealth),
+        absorb: message.absorb,
+        powerType: message.powerType,
+        currentPower: message.currentPower,
+        maximumPower: message.maximumPower,
+        attackPower: message.attackPower,
+        spellPower: message.spellPower,
+        armor: message.armor,
+        activity,
+        activityCount: activity.length,
+        isSynthetic: message.meta?.isSynthetic ?? false,
+      };
+    });
+  }
 }
 
 // ============================================================================

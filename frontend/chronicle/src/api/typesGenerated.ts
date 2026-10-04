@@ -4249,9 +4249,9 @@ export type WoWEnvironmentType = "drowning" | "fall" | "fatigue" | "fire" | "lav
 export const WoWEnvironmentTypes: WoWEnvironmentType[] = ["drowning", "fall", "fatigue", "fire", "lava", "slime"];
 
 // From chroniclesdk/constants.go
-export type WoWEventType = "absorbed" | "aura" | "aura_cast" | "cast" | "combatant_info" | "companion_stats" | "consume" | "damage" | "dispel" | "extra_attack" | "heal" | "interrupt" | "raid_group" | "resource_change" | "ressurection" | "slain" | "spell_fail" | "spell_go" | "spell_start" | "unit_classification";
+export type WoWEventType = "absorbed" | "aura" | "aura_cast" | "cast" | "combatant_info" | "companion_stats" | "consume" | "damage" | "dispel" | "extra_attack" | "heal" | "interrupt" | "raid_group" | "resource_change" | "ressurection" | "slain" | "spell_fail" | "spell_go" | "spell_start" | "unit_classification" | "unit_position" | "unit_resources";
 
-export const WoWEventTypes: WoWEventType[] = ["absorbed", "aura", "aura_cast", "cast", "combatant_info", "companion_stats", "consume", "damage", "dispel", "extra_attack", "heal", "interrupt", "raid_group", "resource_change", "ressurection", "slain", "spell_fail", "spell_go", "spell_start", "unit_classification"];
+export const WoWEventTypes: WoWEventType[] = ["absorbed", "aura", "aura_cast", "cast", "combatant_info", "companion_stats", "consume", "damage", "dispel", "extra_attack", "heal", "interrupt", "raid_group", "resource_change", "ressurection", "slain", "spell_fail", "spell_go", "spell_start", "unit_classification", "unit_position", "unit_resources"];
 
 // From types/constants.go
 export type WoWHeroClasses = "DEATHKNIGHT" | "DRUID" | "HUNTER" | "MAGE" | "PALADIN" | "PRIEST" | "ROGUE" | "SHAMAN" | "UNKNOWN" | "WARLOCK" | "WARRIOR";

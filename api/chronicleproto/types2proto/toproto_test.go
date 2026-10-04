@@ -49,6 +49,52 @@ func TestResurrection(t *testing.T) {
 	require.Equal(t, int32(3), got.Meta.Index)
 }
 
+func TestUnitTelemetry(t *testing.T) {
+	t.Parallel()
+
+	ts := time.UnixMilli(1000)
+	unit := guid.GUID(1)
+	position := UnitPosition(ts, 3, &messages.UnitPosition{
+		MessageBase: messages.Base(ts),
+		Unit:        unit,
+		X:           1.25,
+		Y:           -2.5,
+		MapID:       1420,
+		Facing:      3.14,
+	})
+	require.Equal(t, unit.String(), position.Unit)
+	require.Equal(t, 1.25, position.X)
+	require.Equal(t, -2.5, position.Y)
+	require.Equal(t, int32(1420), position.MapId)
+	require.Equal(t, 3.14, position.Facing)
+	require.Equal(t, int32(3), position.Meta.Index)
+
+	resources := UnitResources(ts, 4, &messages.UnitResources{
+		MessageBase:   messages.Base(ts),
+		Unit:          unit,
+		CurrentHealth: 100,
+		MaximumHealth: 120,
+		Absorb:        5,
+		PowerType:     types.ResourceMana,
+		CurrentPower:  40,
+		MaximumPower:  80,
+		AttackPower:   10,
+		SpellPower:    20,
+		Armor:         30,
+	})
+	require.Equal(t, unit.String(), resources.Unit)
+	require.Equal(t, int64(100), resources.CurrentHealth)
+	require.Equal(t, int64(120), resources.MaximumHealth)
+	require.Equal(t, int32(5), resources.Absorb)
+	require.Equal(t, "Mana", resources.PowerType)
+	require.Equal(t, int32(40), resources.CurrentPower)
+	require.Equal(t, int32(80), resources.MaximumPower)
+	require.Equal(t, int32(10), resources.AttackPower)
+	require.Equal(t, int32(20), resources.SpellPower)
+	require.Equal(t, int32(30), resources.Armor)
+	require.Equal(t, int32(4), resources.Meta.Index)
+}
+
 func TestConsume(t *testing.T) {
 	t.Parallel()
 

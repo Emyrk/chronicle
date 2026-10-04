@@ -17,6 +17,8 @@ type EncounterEvents struct {
 	verbose        bool
 	Damage         *Builder[*messages.Damage, *chronicleproto.Damage]
 	Heal           *Builder[*messages.Heal, *chronicleproto.Heal]
+	UnitPosition   *Builder[*messages.UnitPosition, *chronicleproto.UnitPosition]
+	UnitResources  *Builder[*messages.UnitResources, *chronicleproto.UnitResources]
 	ResourceChange *Builder[*messages.ResourceChange, *chronicleproto.ResourceChange]
 	ExtraAttack    *Builder[*messages.ExtraAttack, *chronicleproto.ExtraAttack]
 	Slain          *Builder[*messages.Slain, *chronicleproto.Slain]
@@ -45,6 +47,8 @@ func New(verbose bool) *EncounterEventsInProgress {
 		verbose:        verbose,
 		Damage:         NewBuilder[*messages.Damage, *chronicleproto.Damage](),
 		Heal:           NewBuilder[*messages.Heal, *chronicleproto.Heal](),
+		UnitPosition:   NewBuilder[*messages.UnitPosition, *chronicleproto.UnitPosition](),
+		UnitResources:  NewBuilder[*messages.UnitResources, *chronicleproto.UnitResources](),
 		ResourceChange: NewBuilder[*messages.ResourceChange, *chronicleproto.ResourceChange](),
 		ExtraAttack:    NewBuilder[*messages.ExtraAttack, *chronicleproto.ExtraAttack](),
 		Slain:          NewBuilder[*messages.Slain, *chronicleproto.Slain](),
@@ -76,6 +80,16 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 	healPayload, err := e.Heal.Finalize(encounterID)
 	if err != nil {
 		return fmt.Errorf("finalizing heal events: %w", err)
+	}
+
+	unitPosition, err := e.UnitPosition.Finalize(encounterID)
+	if err != nil {
+		return fmt.Errorf("finalizing unit position events: %w", err)
+	}
+
+	unitResources, err := e.UnitResources.Finalize(encounterID)
+	if err != nil {
+		return fmt.Errorf("finalizing unit resources events: %w", err)
 	}
 
 	rcPayload, err := e.ResourceChange.Finalize(encounterID)
@@ -170,6 +184,8 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 
 	merge.Damage = append(merge.Damage, damagePayload...)
 	merge.Healing = append(merge.Healing, healPayload...)
+	merge.UnitPosition = append(merge.UnitPosition, unitPosition...)
+	merge.UnitResources = append(merge.UnitResources, unitResources...)
 	merge.ResourceChange = append(merge.ResourceChange, rcPayload...)
 	merge.ExtraAttack = append(merge.ExtraAttack, extraAttack...)
 	merge.Slain = append(merge.Slain, slain...)
@@ -208,6 +224,16 @@ func (e *EncounterEventsInProgress) Process(m messages.Message) error {
 		err := AddToBuilder(e.Heal, ty, e.nextIndex(), types2proto.Heal)
 		if err != nil {
 			return fmt.Errorf("heal proto: %w", err)
+		}
+	case *messages.UnitPosition:
+		err := AddToBuilder(e.UnitPosition, ty, e.nextIndex(), types2proto.UnitPosition)
+		if err != nil {
+			return fmt.Errorf("unit position proto: %w", err)
+		}
+	case *messages.UnitResources:
+		err := AddToBuilder(e.UnitResources, ty, e.nextIndex(), types2proto.UnitResources)
+		if err != nil {
+			return fmt.Errorf("unit resources proto: %w", err)
 		}
 	case *messages.ResourceChange:
 		err := AddToBuilder(e.ResourceChange, ty, e.nextIndex(), types2proto.ResourceChange)
@@ -310,6 +336,8 @@ func (e *EncounterEventsInProgress) setFirsts(t time.Time) {
 	e.first = t
 	e.Damage.SetZero(e.first)
 	e.Heal.SetZero(e.first)
+	e.UnitPosition.SetZero(e.first)
+	e.UnitResources.SetZero(e.first)
 	e.ResourceChange.SetZero(e.first)
 	e.ExtraAttack.SetZero(e.first)
 	e.Slain.SetZero(e.first)

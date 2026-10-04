@@ -15,6 +15,19 @@ import (
 	"testing"
 )
 
+func TestInitialLogCapabilities(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t,
+		[]string{"overheal", "absorb", "unit-resources", "unit-position"},
+		initialLogCapabilities(database.LogFormatV22Cleu),
+	)
+	require.Equal(t,
+		[]string{"overheal", "absorb"},
+		initialLogCapabilities(database.LogFormatV9Cleu),
+	)
+}
+
 func TestRankingRunRefreshPlanSuccessfulReplacement(t *testing.T) {
 	t.Parallel()
 

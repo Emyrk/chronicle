@@ -4,7 +4,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Play, CircleX, Bubbles, WandSparkles, CircleFadingPlus, UserCheck, Ban, Shield, HeartPulse, FlaskConical, Download, LoaderCircle, Users } from "lucide-react";
+import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Play, CircleX, Bubbles, WandSparkles, CircleFadingPlus, UserCheck, Ban, Shield, HeartPulse, FlaskConical, Download, LoaderCircle, Users, MapPin, Gauge } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
@@ -32,6 +32,8 @@ const RESOURCE_COLORS: Record<ResourceType, string> = {
 const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string; label: string; description: string }> = {
   damage: { icon: Swords, color: "text-red-500", label: "Damage", description: "Damage dealt, including hit outcomes, schools, and mitigation." },
   heal: { icon: Heart, color: "text-green-500", label: "Healing", description: "Healing received, including critical heals and overhealing." },
+  unit_position: { icon: MapPin, color: "text-cyan-400", label: "Unit Position", description: "Sampled world position and facing for a unit." },
+  unit_resources: { icon: Gauge, color: "text-blue-400", label: "Unit Resources", description: "Sampled health, absorbs, primary power, and combat stats for a unit." },
   resource_change: { icon: Zap, color: "text-yellow-500", label: "Resource", description: "Health, mana, rage, energy, and other resource gains or losses." },
   extra_attack: { icon: CircleFadingPlus, color: "text-orange-500", label: "Extra Attack", description: "Additional attacks granted by effects such as Windfury." },
   ressurection: { icon: HeartPulse, color: "text-emerald-400", label: "Resurrection", description: "Players or units restored to life by a resurrection spell." },
@@ -57,7 +59,7 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
 const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "slain", "ressurection"]);
 
 const STREAM_CODES: Record<StreamType, string> = {
-  damage: "d", heal: "h", resource_change: "r", cast: "c",
+  damage: "d", heal: "h", unit_position: "up", unit_resources: "ur", resource_change: "r", cast: "c",
   ressurection: "z",
   aura: "a", slain: "x", spell_go: "g", aura_cast: "u", spell_start: "ss", spell_fail: "sf",
   extra_attack: "e",
@@ -710,12 +712,12 @@ function AllActivityContent({
 }: AllActivityContentProps) {
   
   // Default state during loading
-  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], ressurection: [], cast: [], aura: [], spell_go: [], aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [], interrupt: [], absorbed: [], companion_stats: [], consume: [], raid_group: [] };
+  const emptyByStream = { damage: [], heal: [], unit_position: [], unit_resources: [], resource_change: [], extra_attack: [], slain: [], ressurection: [], cast: [], aura: [], spell_go: [], aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [], interrupt: [], absorbed: [], companion_stats: [], consume: [], raid_group: [] };
   const emptyEncounters = new Map<string, EncounterMeta>();
   const safeResult = result ?? {
     counts: new Map<string, number>(),
     rawEventsByStream: emptyByStream,
-    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, ressurection: 0, cast: 0, aura: 0, spell_go: 0, aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0, consume: 0, raid_group: 0 },
+    streamCounts: { damage: 0, heal: 0, unit_position: 0, unit_resources: 0, resource_change: 0, extra_attack: 0, slain: 0, ressurection: 0, cast: 0, aura: 0, spell_go: 0, aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0, consume: 0, raid_group: 0 },
     encounters: emptyEncounters,
     totalProcessed: 0,
     eventsSkipped: 0,
@@ -741,83 +743,82 @@ function AllActivityContent({
 
   return (
     <div className="h-full min-h-0 flex flex-col">
-      {/* Stream toggles and ability filter */}
-      <div className="flex items-center gap-2 mb-2 flex-wrap" data-lesson-target="streams">
-        <span className="text-xs text-muted-foreground">Streams:</span>
-        <TooltipProvider delayDuration={200} skipDelayDuration={100}>
-          {ALL_ACTIVITY_STREAMS.map((stream) => (
-            <StreamToggle
-              key={stream}
-              streamType={stream}
-              enabled={enabledStreams.has(stream)}
-              count={safeResult.streamCounts[stream]}
-              onToggle={() => onToggleStream(stream)}
-            />
-          ))}
-        </TooltipProvider>
-        
-        {/* Source filter input */}
-        <div className="flex items-center gap-1 ml-2" data-lesson-target="quick-filters">
+      {/* Stream toggles and quick filters */}
+      <div className="mb-2 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-lesson-target="streams">
+          <span className="text-xs text-muted-foreground">Streams:</span>
+          <TooltipProvider delayDuration={200} skipDelayDuration={100}>
+            {ALL_ACTIVITY_STREAMS.map((stream) => (
+              <StreamToggle
+                key={stream}
+                streamType={stream}
+                enabled={enabledStreams.has(stream)}
+                count={safeResult.streamCounts[stream]}
+                onToggle={() => onToggleStream(stream)}
+              />
+            ))}
+          </TooltipProvider>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2" data-lesson-target="quick-filters">
           <Search className="h-3.5 w-3.5 text-muted-foreground" />
+
+          {/* Source filter input */}
           <div className="relative">
             <input
               type="text"
               value={sourceFilter}
               onChange={(e) => onSourceFilterChange(e.target.value)}
               placeholder="Filter by source..."
-              className="h-6 w-32 px-2 text-xs bg-muted border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary"
+              className="h-6 w-32 rounded border border-border bg-muted px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
             />
             {sourceFilter && (
               <button
                 type="button"
                 onClick={() => onSourceFilterChange("")}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 hover:bg-muted-foreground/20 rounded"
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-muted-foreground/20"
                 title="Clear filter"
               >
                 <X className="h-3 w-3 text-muted-foreground" />
               </button>
             )}
           </div>
-        </div>
-        
-        {/* Ability filter input */}
-        <div className="flex items-center gap-1">
+
+          {/* Ability filter input */}
           <div className="relative">
             <input
               type="text"
               value={abilityFilter}
               onChange={(e) => onAbilityFilterChange(e.target.value)}
               placeholder="Filter by ability..."
-              className="h-6 w-32 px-2 text-xs bg-muted border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary"
+              className="h-6 w-32 rounded border border-border bg-muted px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
             />
             {abilityFilter && (
               <button
                 type="button"
                 onClick={() => onAbilityFilterChange("")}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 hover:bg-muted-foreground/20 rounded"
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-muted-foreground/20"
                 title="Clear filter"
               >
                 <X className="h-3 w-3 text-muted-foreground" />
               </button>
             )}
           </div>
-        </div>
-        
-        {/* Target filter input */}
-        <div className="flex items-center gap-1">
+
+          {/* Target filter input */}
           <div className="relative">
             <input
               type="text"
               value={targetFilter}
               onChange={(e) => onTargetFilterChange(e.target.value)}
               placeholder="Filter by target..."
-              className="h-6 w-32 px-2 text-xs bg-muted border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary"
+              className="h-6 w-32 rounded border border-border bg-muted px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
             />
             {targetFilter && (
               <button
                 type="button"
                 onClick={() => onTargetFilterChange("")}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 hover:bg-muted-foreground/20 rounded"
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-muted-foreground/20"
                 title="Clear filter"
               >
                 <X className="h-3 w-3 text-muted-foreground" />

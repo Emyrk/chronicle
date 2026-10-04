@@ -13,6 +13,8 @@ import (
 type Events struct {
 	Damage             []byte
 	Healing            []byte
+	UnitPosition       []byte
+	UnitResources      []byte
 	ResourceChange     []byte
 	ExtraAttack        []byte
 	Slain              []byte
@@ -37,6 +39,8 @@ func NewEvents() *Events {
 	return &Events{
 		Damage:             make([]byte, 0),
 		Healing:            make([]byte, 0),
+		UnitPosition:       make([]byte, 0),
+		UnitResources:      make([]byte, 0),
 		ResourceChange:     make([]byte, 0),
 		ExtraAttack:        make([]byte, 0),
 		Slain:              make([]byte, 0),
@@ -69,6 +73,18 @@ func (e *Events) Insert(ctx context.Context, db database.Store, instanceID uuid.
 		return fmt.Errorf("gzip healing events: %w", err)
 	}
 	e.Healing = nil
+
+	unitPositionPayload, err := gzipData(e.UnitPosition)
+	if err != nil {
+		return fmt.Errorf("gzip unit position events: %w", err)
+	}
+	e.UnitPosition = nil
+
+	unitResourcesPayload, err := gzipData(e.UnitResources)
+	if err != nil {
+		return fmt.Errorf("gzip unit resources events: %w", err)
+	}
+	e.UnitResources = nil
 
 	resourceChangePayload, err := gzipData(e.ResourceChange)
 	if err != nil {
@@ -185,6 +201,16 @@ func (e *Events) Insert(ctx context.Context, db database.Store, instanceID uuid.
 			InstanceID: instanceID,
 			Type:       database.LogInstanceEventTypeHeal,
 			Events:     healingPayload,
+		},
+		{
+			InstanceID: instanceID,
+			Type:       database.LogInstanceEventTypeUnitPosition,
+			Events:     unitPositionPayload,
+		},
+		{
+			InstanceID: instanceID,
+			Type:       database.LogInstanceEventTypeUnitResources,
+			Events:     unitResourcesPayload,
 		},
 		{
 			InstanceID: instanceID,

@@ -5,11 +5,14 @@ export const ALL_ACTIVITY_STREAMS: StreamType[] = [
   "damage", "heal", "resource_change", "extra_attack", "slain", "ressurection",
   "aura", "spell_go", "aura_cast", "spell_start", "spell_fail",
   "unit_classification", "combatant_info", "dispel", "interrupt", "absorbed", "consume", "raid_group",
+  "unit_position", "unit_resources",
 ];
 
 export const STREAM_TYPE_CODES: Record<StreamType, string> = {
   damage: "DMG",
   heal: "HEAL",
+  unit_position: "POS",
+  unit_resources: "SNAP",
   resource_change: "RES",
   extra_attack: "XATK",
   slain: "DEAD",

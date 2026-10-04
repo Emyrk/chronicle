@@ -973,6 +973,214 @@ func (x *Damage) GetSchools() []School {
 	return nil
 }
 
+type UnitPosition struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Unit          string                 `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
+	X             float64                `protobuf:"fixed64,3,opt,name=x,proto3" json:"x,omitempty"`
+	Y             float64                `protobuf:"fixed64,4,opt,name=y,proto3" json:"y,omitempty"`
+	MapId         int32                  `protobuf:"varint,5,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	Facing        float64                `protobuf:"fixed64,6,opt,name=facing,proto3" json:"facing,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnitPosition) Reset() {
+	*x = UnitPosition{}
+	mi := &file_chronicle_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnitPosition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnitPosition) ProtoMessage() {}
+
+func (x *UnitPosition) ProtoReflect() protoreflect.Message {
+	mi := &file_chronicle_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnitPosition.ProtoReflect.Descriptor instead.
+func (*UnitPosition) Descriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *UnitPosition) GetMeta() *EventMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *UnitPosition) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+func (x *UnitPosition) GetX() float64 {
+	if x != nil {
+		return x.X
+	}
+	return 0
+}
+
+func (x *UnitPosition) GetY() float64 {
+	if x != nil {
+		return x.Y
+	}
+	return 0
+}
+
+func (x *UnitPosition) GetMapId() int32 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *UnitPosition) GetFacing() float64 {
+	if x != nil {
+		return x.Facing
+	}
+	return 0
+}
+
+type UnitResources struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Unit          string                 `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
+	CurrentHealth int64                  `protobuf:"varint,3,opt,name=current_health,json=currentHealth,proto3" json:"current_health,omitempty"`
+	MaximumHealth int64                  `protobuf:"varint,4,opt,name=maximum_health,json=maximumHealth,proto3" json:"maximum_health,omitempty"`
+	Absorb        int32                  `protobuf:"varint,5,opt,name=absorb,proto3" json:"absorb,omitempty"`
+	PowerType     string                 `protobuf:"bytes,6,opt,name=power_type,json=powerType,proto3" json:"power_type,omitempty"`
+	CurrentPower  int32                  `protobuf:"varint,7,opt,name=current_power,json=currentPower,proto3" json:"current_power,omitempty"`
+	MaximumPower  int32                  `protobuf:"varint,8,opt,name=maximum_power,json=maximumPower,proto3" json:"maximum_power,omitempty"`
+	AttackPower   int32                  `protobuf:"varint,9,opt,name=attack_power,json=attackPower,proto3" json:"attack_power,omitempty"`
+	SpellPower    int32                  `protobuf:"varint,10,opt,name=spell_power,json=spellPower,proto3" json:"spell_power,omitempty"`
+	Armor         int32                  `protobuf:"varint,11,opt,name=armor,proto3" json:"armor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnitResources) Reset() {
+	*x = UnitResources{}
+	mi := &file_chronicle_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnitResources) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnitResources) ProtoMessage() {}
+
+func (x *UnitResources) ProtoReflect() protoreflect.Message {
+	mi := &file_chronicle_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnitResources.ProtoReflect.Descriptor instead.
+func (*UnitResources) Descriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *UnitResources) GetMeta() *EventMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *UnitResources) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+func (x *UnitResources) GetCurrentHealth() int64 {
+	if x != nil {
+		return x.CurrentHealth
+	}
+	return 0
+}
+
+func (x *UnitResources) GetMaximumHealth() int64 {
+	if x != nil {
+		return x.MaximumHealth
+	}
+	return 0
+}
+
+func (x *UnitResources) GetAbsorb() int32 {
+	if x != nil {
+		return x.Absorb
+	}
+	return 0
+}
+
+func (x *UnitResources) GetPowerType() string {
+	if x != nil {
+		return x.PowerType
+	}
+	return ""
+}
+
+func (x *UnitResources) GetCurrentPower() int32 {
+	if x != nil {
+		return x.CurrentPower
+	}
+	return 0
+}
+
+func (x *UnitResources) GetMaximumPower() int32 {
+	if x != nil {
+		return x.MaximumPower
+	}
+	return 0
+}
+
+func (x *UnitResources) GetAttackPower() int32 {
+	if x != nil {
+		return x.AttackPower
+	}
+	return 0
+}
+
+func (x *UnitResources) GetSpellPower() int32 {
+	if x != nil {
+		return x.SpellPower
+	}
+	return 0
+}
+
+func (x *UnitResources) GetArmor() int32 {
+	if x != nil {
+		return x.Armor
+	}
+	return 0
+}
+
 type ResourceChange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -990,7 +1198,7 @@ type ResourceChange struct {
 
 func (x *ResourceChange) Reset() {
 	*x = ResourceChange{}
-	mi := &file_chronicle_proto_msgTypes[6]
+	mi := &file_chronicle_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1002,7 +1210,7 @@ func (x *ResourceChange) String() string {
 func (*ResourceChange) ProtoMessage() {}
 
 func (x *ResourceChange) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[6]
+	mi := &file_chronicle_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1015,7 +1223,7 @@ func (x *ResourceChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceChange.ProtoReflect.Descriptor instead.
 func (*ResourceChange) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{6}
+	return file_chronicle_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ResourceChange) GetMeta() *EventMeta {
@@ -1094,7 +1302,7 @@ type ExtraAttack struct {
 
 func (x *ExtraAttack) Reset() {
 	*x = ExtraAttack{}
-	mi := &file_chronicle_proto_msgTypes[7]
+	mi := &file_chronicle_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1106,7 +1314,7 @@ func (x *ExtraAttack) String() string {
 func (*ExtraAttack) ProtoMessage() {}
 
 func (x *ExtraAttack) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[7]
+	mi := &file_chronicle_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1119,7 +1327,7 @@ func (x *ExtraAttack) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExtraAttack.ProtoReflect.Descriptor instead.
 func (*ExtraAttack) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{7}
+	return file_chronicle_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ExtraAttack) GetMeta() *EventMeta {
@@ -1169,7 +1377,7 @@ type Slain struct {
 
 func (x *Slain) Reset() {
 	*x = Slain{}
-	mi := &file_chronicle_proto_msgTypes[8]
+	mi := &file_chronicle_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1181,7 +1389,7 @@ func (x *Slain) String() string {
 func (*Slain) ProtoMessage() {}
 
 func (x *Slain) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[8]
+	mi := &file_chronicle_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1194,7 +1402,7 @@ func (x *Slain) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Slain.ProtoReflect.Descriptor instead.
 func (*Slain) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{8}
+	return file_chronicle_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Slain) GetMeta() *EventMeta {
@@ -1237,7 +1445,7 @@ type Resurrection struct {
 
 func (x *Resurrection) Reset() {
 	*x = Resurrection{}
-	mi := &file_chronicle_proto_msgTypes[9]
+	mi := &file_chronicle_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1249,7 +1457,7 @@ func (x *Resurrection) String() string {
 func (*Resurrection) ProtoMessage() {}
 
 func (x *Resurrection) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[9]
+	mi := &file_chronicle_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1262,7 +1470,7 @@ func (x *Resurrection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resurrection.ProtoReflect.Descriptor instead.
 func (*Resurrection) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{9}
+	return file_chronicle_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Resurrection) GetMeta() *EventMeta {
@@ -1304,7 +1512,7 @@ type Spell struct {
 
 func (x *Spell) Reset() {
 	*x = Spell{}
-	mi := &file_chronicle_proto_msgTypes[10]
+	mi := &file_chronicle_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1316,7 +1524,7 @@ func (x *Spell) String() string {
 func (*Spell) ProtoMessage() {}
 
 func (x *Spell) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[10]
+	mi := &file_chronicle_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1329,7 +1537,7 @@ func (x *Spell) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Spell.ProtoReflect.Descriptor instead.
 func (*Spell) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{10}
+	return file_chronicle_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Spell) GetName() string {
@@ -1366,7 +1574,7 @@ type Cast struct {
 
 func (x *Cast) Reset() {
 	*x = Cast{}
-	mi := &file_chronicle_proto_msgTypes[11]
+	mi := &file_chronicle_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1378,7 +1586,7 @@ func (x *Cast) String() string {
 func (*Cast) ProtoMessage() {}
 
 func (x *Cast) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[11]
+	mi := &file_chronicle_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1391,7 +1599,7 @@ func (x *Cast) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cast.ProtoReflect.Descriptor instead.
 func (*Cast) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{11}
+	return file_chronicle_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Cast) GetMeta() *EventMeta {
@@ -1447,7 +1655,7 @@ type Aura struct {
 
 func (x *Aura) Reset() {
 	*x = Aura{}
-	mi := &file_chronicle_proto_msgTypes[12]
+	mi := &file_chronicle_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1459,7 +1667,7 @@ func (x *Aura) String() string {
 func (*Aura) ProtoMessage() {}
 
 func (x *Aura) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[12]
+	mi := &file_chronicle_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1472,7 +1680,7 @@ func (x *Aura) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Aura.ProtoReflect.Descriptor instead.
 func (*Aura) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{12}
+	return file_chronicle_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Aura) GetMeta() *EventMeta {
@@ -1563,7 +1771,7 @@ type AuraCast struct {
 
 func (x *AuraCast) Reset() {
 	*x = AuraCast{}
-	mi := &file_chronicle_proto_msgTypes[13]
+	mi := &file_chronicle_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1575,7 +1783,7 @@ func (x *AuraCast) String() string {
 func (*AuraCast) ProtoMessage() {}
 
 func (x *AuraCast) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[13]
+	mi := &file_chronicle_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1588,7 +1796,7 @@ func (x *AuraCast) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuraCast.ProtoReflect.Descriptor instead.
 func (*AuraCast) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{13}
+	return file_chronicle_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AuraCast) GetMeta() *EventMeta {
@@ -1677,7 +1885,7 @@ type SpellGo struct {
 
 func (x *SpellGo) Reset() {
 	*x = SpellGo{}
-	mi := &file_chronicle_proto_msgTypes[14]
+	mi := &file_chronicle_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1689,7 +1897,7 @@ func (x *SpellGo) String() string {
 func (*SpellGo) ProtoMessage() {}
 
 func (x *SpellGo) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[14]
+	mi := &file_chronicle_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1702,7 +1910,7 @@ func (x *SpellGo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpellGo.ProtoReflect.Descriptor instead.
 func (*SpellGo) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{14}
+	return file_chronicle_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SpellGo) GetMeta() *EventMeta {
@@ -1778,7 +1986,7 @@ type SpellStart struct {
 
 func (x *SpellStart) Reset() {
 	*x = SpellStart{}
-	mi := &file_chronicle_proto_msgTypes[15]
+	mi := &file_chronicle_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1790,7 +1998,7 @@ func (x *SpellStart) String() string {
 func (*SpellStart) ProtoMessage() {}
 
 func (x *SpellStart) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[15]
+	mi := &file_chronicle_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1803,7 +2011,7 @@ func (x *SpellStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpellStart.ProtoReflect.Descriptor instead.
 func (*SpellStart) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{15}
+	return file_chronicle_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SpellStart) GetMeta() *EventMeta {
@@ -1881,7 +2089,7 @@ type SpellFail struct {
 
 func (x *SpellFail) Reset() {
 	*x = SpellFail{}
-	mi := &file_chronicle_proto_msgTypes[16]
+	mi := &file_chronicle_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1893,7 +2101,7 @@ func (x *SpellFail) String() string {
 func (*SpellFail) ProtoMessage() {}
 
 func (x *SpellFail) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[16]
+	mi := &file_chronicle_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1906,7 +2114,7 @@ func (x *SpellFail) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpellFail.ProtoReflect.Descriptor instead.
 func (*SpellFail) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{16}
+	return file_chronicle_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SpellFail) GetMeta() *EventMeta {
@@ -1952,7 +2160,7 @@ type UnitClassification struct {
 
 func (x *UnitClassification) Reset() {
 	*x = UnitClassification{}
-	mi := &file_chronicle_proto_msgTypes[17]
+	mi := &file_chronicle_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1964,7 +2172,7 @@ func (x *UnitClassification) String() string {
 func (*UnitClassification) ProtoMessage() {}
 
 func (x *UnitClassification) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[17]
+	mi := &file_chronicle_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1977,7 +2185,7 @@ func (x *UnitClassification) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnitClassification.ProtoReflect.Descriptor instead.
 func (*UnitClassification) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{17}
+	return file_chronicle_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *UnitClassification) GetMeta() *EventMeta {
@@ -2042,7 +2250,7 @@ type Dispel struct {
 
 func (x *Dispel) Reset() {
 	*x = Dispel{}
-	mi := &file_chronicle_proto_msgTypes[18]
+	mi := &file_chronicle_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2054,7 +2262,7 @@ func (x *Dispel) String() string {
 func (*Dispel) ProtoMessage() {}
 
 func (x *Dispel) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[18]
+	mi := &file_chronicle_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2067,7 +2275,7 @@ func (x *Dispel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Dispel.ProtoReflect.Descriptor instead.
 func (*Dispel) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{18}
+	return file_chronicle_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *Dispel) GetMeta() *EventMeta {
@@ -2122,7 +2330,7 @@ type CombatantInfo struct {
 
 func (x *CombatantInfo) Reset() {
 	*x = CombatantInfo{}
-	mi := &file_chronicle_proto_msgTypes[19]
+	mi := &file_chronicle_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2134,7 +2342,7 @@ func (x *CombatantInfo) String() string {
 func (*CombatantInfo) ProtoMessage() {}
 
 func (x *CombatantInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[19]
+	mi := &file_chronicle_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2147,7 +2355,7 @@ func (x *CombatantInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CombatantInfo.ProtoReflect.Descriptor instead.
 func (*CombatantInfo) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{19}
+	return file_chronicle_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CombatantInfo) GetMeta() *EventMeta {
@@ -2228,7 +2436,7 @@ type Interrupt struct {
 
 func (x *Interrupt) Reset() {
 	*x = Interrupt{}
-	mi := &file_chronicle_proto_msgTypes[20]
+	mi := &file_chronicle_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2240,7 +2448,7 @@ func (x *Interrupt) String() string {
 func (*Interrupt) ProtoMessage() {}
 
 func (x *Interrupt) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[20]
+	mi := &file_chronicle_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2253,7 +2461,7 @@ func (x *Interrupt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Interrupt.ProtoReflect.Descriptor instead.
 func (*Interrupt) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{20}
+	return file_chronicle_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *Interrupt) GetMeta() *EventMeta {
@@ -2326,7 +2534,7 @@ type Absorbed struct {
 
 func (x *Absorbed) Reset() {
 	*x = Absorbed{}
-	mi := &file_chronicle_proto_msgTypes[21]
+	mi := &file_chronicle_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2338,7 +2546,7 @@ func (x *Absorbed) String() string {
 func (*Absorbed) ProtoMessage() {}
 
 func (x *Absorbed) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[21]
+	mi := &file_chronicle_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2351,7 +2559,7 @@ func (x *Absorbed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Absorbed.ProtoReflect.Descriptor instead.
 func (*Absorbed) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{21}
+	return file_chronicle_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *Absorbed) GetMeta() *EventMeta {
@@ -2450,7 +2658,7 @@ type Consume struct {
 
 func (x *Consume) Reset() {
 	*x = Consume{}
-	mi := &file_chronicle_proto_msgTypes[22]
+	mi := &file_chronicle_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2462,7 +2670,7 @@ func (x *Consume) String() string {
 func (*Consume) ProtoMessage() {}
 
 func (x *Consume) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[22]
+	mi := &file_chronicle_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2475,7 +2683,7 @@ func (x *Consume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Consume.ProtoReflect.Descriptor instead.
 func (*Consume) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{22}
+	return file_chronicle_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *Consume) GetMeta() *EventMeta {
@@ -2595,7 +2803,7 @@ type CombatantGearSlot struct {
 
 func (x *CombatantGearSlot) Reset() {
 	*x = CombatantGearSlot{}
-	mi := &file_chronicle_proto_msgTypes[23]
+	mi := &file_chronicle_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2607,7 +2815,7 @@ func (x *CombatantGearSlot) String() string {
 func (*CombatantGearSlot) ProtoMessage() {}
 
 func (x *CombatantGearSlot) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[23]
+	mi := &file_chronicle_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2620,7 +2828,7 @@ func (x *CombatantGearSlot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CombatantGearSlot.ProtoReflect.Descriptor instead.
 func (*CombatantGearSlot) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{23}
+	return file_chronicle_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CombatantGearSlot) GetItemId() int32 {
@@ -2661,7 +2869,7 @@ type CombatantTalents struct {
 
 func (x *CombatantTalents) Reset() {
 	*x = CombatantTalents{}
-	mi := &file_chronicle_proto_msgTypes[24]
+	mi := &file_chronicle_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2673,7 +2881,7 @@ func (x *CombatantTalents) String() string {
 func (*CombatantTalents) ProtoMessage() {}
 
 func (x *CombatantTalents) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[24]
+	mi := &file_chronicle_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2686,7 +2894,7 @@ func (x *CombatantTalents) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CombatantTalents.ProtoReflect.Descriptor instead.
 func (*CombatantTalents) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{24}
+	return file_chronicle_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CombatantTalents) GetSummary() []int32 {
@@ -2717,7 +2925,7 @@ type CompanionStats struct {
 
 func (x *CompanionStats) Reset() {
 	*x = CompanionStats{}
-	mi := &file_chronicle_proto_msgTypes[25]
+	mi := &file_chronicle_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2729,7 +2937,7 @@ func (x *CompanionStats) String() string {
 func (*CompanionStats) ProtoMessage() {}
 
 func (x *CompanionStats) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[25]
+	mi := &file_chronicle_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2742,7 +2950,7 @@ func (x *CompanionStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompanionStats.ProtoReflect.Descriptor instead.
 func (*CompanionStats) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{25}
+	return file_chronicle_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CompanionStats) GetMeta() *EventMeta {
@@ -2778,7 +2986,7 @@ type RaidGroup struct {
 
 func (x *RaidGroup) Reset() {
 	*x = RaidGroup{}
-	mi := &file_chronicle_proto_msgTypes[26]
+	mi := &file_chronicle_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2790,7 +2998,7 @@ func (x *RaidGroup) String() string {
 func (*RaidGroup) ProtoMessage() {}
 
 func (x *RaidGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[26]
+	mi := &file_chronicle_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2803,7 +3011,7 @@ func (x *RaidGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RaidGroup.ProtoReflect.Descriptor instead.
 func (*RaidGroup) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{26}
+	return file_chronicle_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *RaidGroup) GetMeta() *EventMeta {
@@ -2875,7 +3083,29 @@ const file_chronicle_proto_rawDesc = "" +
 	"\aschools\x18\f \x03(\x0e2\x16.chronicleproto.SchoolR\aschoolsB\t\n" +
 	"\a_casterB\f\n" +
 	"\n" +
-	"_spellData\"\xfd\x02\n" +
+	"_spellData\"\x9c\x01\n" +
+	"\fUnitPosition\x12-\n" +
+	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x12\n" +
+	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\f\n" +
+	"\x01x\x18\x03 \x01(\x01R\x01x\x12\f\n" +
+	"\x01y\x18\x04 \x01(\x01R\x01y\x12\x15\n" +
+	"\x06map_id\x18\x05 \x01(\x05R\x05mapId\x12\x16\n" +
+	"\x06facing\x18\x06 \x01(\x01R\x06facing\"\xfb\x02\n" +
+	"\rUnitResources\x12-\n" +
+	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x12\n" +
+	"\x04unit\x18\x02 \x01(\tR\x04unit\x12%\n" +
+	"\x0ecurrent_health\x18\x03 \x01(\x03R\rcurrentHealth\x12%\n" +
+	"\x0emaximum_health\x18\x04 \x01(\x03R\rmaximumHealth\x12\x16\n" +
+	"\x06absorb\x18\x05 \x01(\x05R\x06absorb\x12\x1d\n" +
+	"\n" +
+	"power_type\x18\x06 \x01(\tR\tpowerType\x12#\n" +
+	"\rcurrent_power\x18\a \x01(\x05R\fcurrentPower\x12#\n" +
+	"\rmaximum_power\x18\b \x01(\x05R\fmaximumPower\x12!\n" +
+	"\fattack_power\x18\t \x01(\x05R\vattackPower\x12\x1f\n" +
+	"\vspell_power\x18\n" +
+	" \x01(\x05R\n" +
+	"spellPower\x12\x14\n" +
+	"\x05armor\x18\v \x01(\x05R\x05armor\"\xfd\x02\n" +
 	"\x0eResourceChange\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06target\x18\x03 \x01(\tR\x06target\x12\x16\n" +
@@ -3178,7 +3408,7 @@ func file_chronicle_proto_rawDescGZIP() []byte {
 }
 
 var file_chronicle_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_chronicle_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_chronicle_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_chronicle_proto_goTypes = []any{
 	(School)(0),                // 0: chronicleproto.School
 	(CastAction)(0),            // 1: chronicleproto.CastAction
@@ -3194,27 +3424,29 @@ var file_chronicle_proto_goTypes = []any{
 	(*EventMeta)(nil),          // 11: chronicleproto.EventMeta
 	(*Heal)(nil),               // 12: chronicleproto.Heal
 	(*Damage)(nil),             // 13: chronicleproto.Damage
-	(*ResourceChange)(nil),     // 14: chronicleproto.ResourceChange
-	(*ExtraAttack)(nil),        // 15: chronicleproto.ExtraAttack
-	(*Slain)(nil),              // 16: chronicleproto.Slain
-	(*Resurrection)(nil),       // 17: chronicleproto.Resurrection
-	(*Spell)(nil),              // 18: chronicleproto.Spell
-	(*Cast)(nil),               // 19: chronicleproto.Cast
-	(*Aura)(nil),               // 20: chronicleproto.Aura
-	(*AuraCast)(nil),           // 21: chronicleproto.AuraCast
-	(*SpellGo)(nil),            // 22: chronicleproto.SpellGo
-	(*SpellStart)(nil),         // 23: chronicleproto.SpellStart
-	(*SpellFail)(nil),          // 24: chronicleproto.SpellFail
-	(*UnitClassification)(nil), // 25: chronicleproto.UnitClassification
-	(*Dispel)(nil),             // 26: chronicleproto.Dispel
-	(*CombatantInfo)(nil),      // 27: chronicleproto.CombatantInfo
-	(*Interrupt)(nil),          // 28: chronicleproto.Interrupt
-	(*Absorbed)(nil),           // 29: chronicleproto.Absorbed
-	(*Consume)(nil),            // 30: chronicleproto.Consume
-	(*CombatantGearSlot)(nil),  // 31: chronicleproto.CombatantGearSlot
-	(*CombatantTalents)(nil),   // 32: chronicleproto.CombatantTalents
-	(*CompanionStats)(nil),     // 33: chronicleproto.CompanionStats
-	(*RaidGroup)(nil),          // 34: chronicleproto.RaidGroup
+	(*UnitPosition)(nil),       // 14: chronicleproto.UnitPosition
+	(*UnitResources)(nil),      // 15: chronicleproto.UnitResources
+	(*ResourceChange)(nil),     // 16: chronicleproto.ResourceChange
+	(*ExtraAttack)(nil),        // 17: chronicleproto.ExtraAttack
+	(*Slain)(nil),              // 18: chronicleproto.Slain
+	(*Resurrection)(nil),       // 19: chronicleproto.Resurrection
+	(*Spell)(nil),              // 20: chronicleproto.Spell
+	(*Cast)(nil),               // 21: chronicleproto.Cast
+	(*Aura)(nil),               // 22: chronicleproto.Aura
+	(*AuraCast)(nil),           // 23: chronicleproto.AuraCast
+	(*SpellGo)(nil),            // 24: chronicleproto.SpellGo
+	(*SpellStart)(nil),         // 25: chronicleproto.SpellStart
+	(*SpellFail)(nil),          // 26: chronicleproto.SpellFail
+	(*UnitClassification)(nil), // 27: chronicleproto.UnitClassification
+	(*Dispel)(nil),             // 28: chronicleproto.Dispel
+	(*CombatantInfo)(nil),      // 29: chronicleproto.CombatantInfo
+	(*Interrupt)(nil),          // 30: chronicleproto.Interrupt
+	(*Absorbed)(nil),           // 31: chronicleproto.Absorbed
+	(*Consume)(nil),            // 32: chronicleproto.Consume
+	(*CombatantGearSlot)(nil),  // 33: chronicleproto.CombatantGearSlot
+	(*CombatantTalents)(nil),   // 34: chronicleproto.CombatantTalents
+	(*CompanionStats)(nil),     // 35: chronicleproto.CompanionStats
+	(*RaidGroup)(nil),          // 36: chronicleproto.RaidGroup
 }
 var file_chronicle_proto_depIdxs = []int32{
 	10, // 0: chronicleproto.EventMeta.activity:type_name -> chronicleproto.ActivityEntry
@@ -3227,56 +3459,58 @@ var file_chronicle_proto_depIdxs = []int32{
 	9,  // 7: chronicleproto.Damage.tailers:type_name -> chronicleproto.Tailer
 	8,  // 8: chronicleproto.Damage.spellData:type_name -> chronicleproto.SpellData
 	0,  // 9: chronicleproto.Damage.schools:type_name -> chronicleproto.School
-	11, // 10: chronicleproto.ResourceChange.meta:type_name -> chronicleproto.EventMeta
-	8,  // 11: chronicleproto.ResourceChange.spellData:type_name -> chronicleproto.SpellData
-	11, // 12: chronicleproto.ExtraAttack.meta:type_name -> chronicleproto.EventMeta
-	8,  // 13: chronicleproto.ExtraAttack.spellData:type_name -> chronicleproto.SpellData
-	11, // 14: chronicleproto.Slain.meta:type_name -> chronicleproto.EventMeta
-	13, // 15: chronicleproto.Slain.attribution:type_name -> chronicleproto.Damage
-	11, // 16: chronicleproto.Resurrection.meta:type_name -> chronicleproto.EventMeta
-	8,  // 17: chronicleproto.Resurrection.spell:type_name -> chronicleproto.SpellData
-	11, // 18: chronicleproto.Cast.meta:type_name -> chronicleproto.EventMeta
-	1,  // 19: chronicleproto.Cast.action:type_name -> chronicleproto.CastAction
-	18, // 20: chronicleproto.Cast.spell:type_name -> chronicleproto.Spell
-	11, // 21: chronicleproto.Aura.meta:type_name -> chronicleproto.EventMeta
-	2,  // 22: chronicleproto.Aura.application:type_name -> chronicleproto.AuraApplication
-	3,  // 23: chronicleproto.Aura.state:type_name -> chronicleproto.AuraState
-	8,  // 24: chronicleproto.Aura.spellData:type_name -> chronicleproto.SpellData
-	4,  // 25: chronicleproto.Aura.transition:type_name -> chronicleproto.AuraTransition
-	11, // 26: chronicleproto.AuraCast.meta:type_name -> chronicleproto.EventMeta
-	8,  // 27: chronicleproto.AuraCast.spell:type_name -> chronicleproto.SpellData
-	11, // 28: chronicleproto.SpellGo.meta:type_name -> chronicleproto.EventMeta
-	8,  // 29: chronicleproto.SpellGo.spellData:type_name -> chronicleproto.SpellData
-	11, // 30: chronicleproto.SpellStart.meta:type_name -> chronicleproto.EventMeta
-	8,  // 31: chronicleproto.SpellStart.spellData:type_name -> chronicleproto.SpellData
-	11, // 32: chronicleproto.SpellFail.meta:type_name -> chronicleproto.EventMeta
-	8,  // 33: chronicleproto.SpellFail.spellData:type_name -> chronicleproto.SpellData
-	11, // 34: chronicleproto.UnitClassification.meta:type_name -> chronicleproto.EventMeta
-	11, // 35: chronicleproto.Dispel.meta:type_name -> chronicleproto.EventMeta
-	8,  // 36: chronicleproto.Dispel.spellData:type_name -> chronicleproto.SpellData
-	5,  // 37: chronicleproto.Dispel.dispelType:type_name -> chronicleproto.DispelType
-	11, // 38: chronicleproto.CombatantInfo.meta:type_name -> chronicleproto.EventMeta
-	31, // 39: chronicleproto.CombatantInfo.gear:type_name -> chronicleproto.CombatantGearSlot
-	32, // 40: chronicleproto.CombatantInfo.talents:type_name -> chronicleproto.CombatantTalents
-	11, // 41: chronicleproto.Interrupt.meta:type_name -> chronicleproto.EventMeta
-	0,  // 42: chronicleproto.Interrupt.extra_school:type_name -> chronicleproto.School
-	0,  // 43: chronicleproto.Interrupt.extra_schools:type_name -> chronicleproto.School
-	11, // 44: chronicleproto.Absorbed.meta:type_name -> chronicleproto.EventMeta
-	8,  // 45: chronicleproto.Absorbed.damageSpellData:type_name -> chronicleproto.SpellData
-	8,  // 46: chronicleproto.Absorbed.absorbSpellData:type_name -> chronicleproto.SpellData
-	0,  // 47: chronicleproto.Absorbed.absorbSchool:type_name -> chronicleproto.School
-	0,  // 48: chronicleproto.Absorbed.absorb_schools:type_name -> chronicleproto.School
-	11, // 49: chronicleproto.Consume.meta:type_name -> chronicleproto.EventMeta
-	8,  // 50: chronicleproto.Consume.spellData:type_name -> chronicleproto.SpellData
-	6,  // 51: chronicleproto.Consume.kind:type_name -> chronicleproto.EvidenceKind
-	7,  // 52: chronicleproto.Consume.confidence:type_name -> chronicleproto.EvidenceConfidence
-	11, // 53: chronicleproto.CompanionStats.meta:type_name -> chronicleproto.EventMeta
-	11, // 54: chronicleproto.RaidGroup.meta:type_name -> chronicleproto.EventMeta
-	55, // [55:55] is the sub-list for method output_type
-	55, // [55:55] is the sub-list for method input_type
-	55, // [55:55] is the sub-list for extension type_name
-	55, // [55:55] is the sub-list for extension extendee
-	0,  // [0:55] is the sub-list for field type_name
+	11, // 10: chronicleproto.UnitPosition.meta:type_name -> chronicleproto.EventMeta
+	11, // 11: chronicleproto.UnitResources.meta:type_name -> chronicleproto.EventMeta
+	11, // 12: chronicleproto.ResourceChange.meta:type_name -> chronicleproto.EventMeta
+	8,  // 13: chronicleproto.ResourceChange.spellData:type_name -> chronicleproto.SpellData
+	11, // 14: chronicleproto.ExtraAttack.meta:type_name -> chronicleproto.EventMeta
+	8,  // 15: chronicleproto.ExtraAttack.spellData:type_name -> chronicleproto.SpellData
+	11, // 16: chronicleproto.Slain.meta:type_name -> chronicleproto.EventMeta
+	13, // 17: chronicleproto.Slain.attribution:type_name -> chronicleproto.Damage
+	11, // 18: chronicleproto.Resurrection.meta:type_name -> chronicleproto.EventMeta
+	8,  // 19: chronicleproto.Resurrection.spell:type_name -> chronicleproto.SpellData
+	11, // 20: chronicleproto.Cast.meta:type_name -> chronicleproto.EventMeta
+	1,  // 21: chronicleproto.Cast.action:type_name -> chronicleproto.CastAction
+	20, // 22: chronicleproto.Cast.spell:type_name -> chronicleproto.Spell
+	11, // 23: chronicleproto.Aura.meta:type_name -> chronicleproto.EventMeta
+	2,  // 24: chronicleproto.Aura.application:type_name -> chronicleproto.AuraApplication
+	3,  // 25: chronicleproto.Aura.state:type_name -> chronicleproto.AuraState
+	8,  // 26: chronicleproto.Aura.spellData:type_name -> chronicleproto.SpellData
+	4,  // 27: chronicleproto.Aura.transition:type_name -> chronicleproto.AuraTransition
+	11, // 28: chronicleproto.AuraCast.meta:type_name -> chronicleproto.EventMeta
+	8,  // 29: chronicleproto.AuraCast.spell:type_name -> chronicleproto.SpellData
+	11, // 30: chronicleproto.SpellGo.meta:type_name -> chronicleproto.EventMeta
+	8,  // 31: chronicleproto.SpellGo.spellData:type_name -> chronicleproto.SpellData
+	11, // 32: chronicleproto.SpellStart.meta:type_name -> chronicleproto.EventMeta
+	8,  // 33: chronicleproto.SpellStart.spellData:type_name -> chronicleproto.SpellData
+	11, // 34: chronicleproto.SpellFail.meta:type_name -> chronicleproto.EventMeta
+	8,  // 35: chronicleproto.SpellFail.spellData:type_name -> chronicleproto.SpellData
+	11, // 36: chronicleproto.UnitClassification.meta:type_name -> chronicleproto.EventMeta
+	11, // 37: chronicleproto.Dispel.meta:type_name -> chronicleproto.EventMeta
+	8,  // 38: chronicleproto.Dispel.spellData:type_name -> chronicleproto.SpellData
+	5,  // 39: chronicleproto.Dispel.dispelType:type_name -> chronicleproto.DispelType
+	11, // 40: chronicleproto.CombatantInfo.meta:type_name -> chronicleproto.EventMeta
+	33, // 41: chronicleproto.CombatantInfo.gear:type_name -> chronicleproto.CombatantGearSlot
+	34, // 42: chronicleproto.CombatantInfo.talents:type_name -> chronicleproto.CombatantTalents
+	11, // 43: chronicleproto.Interrupt.meta:type_name -> chronicleproto.EventMeta
+	0,  // 44: chronicleproto.Interrupt.extra_school:type_name -> chronicleproto.School
+	0,  // 45: chronicleproto.Interrupt.extra_schools:type_name -> chronicleproto.School
+	11, // 46: chronicleproto.Absorbed.meta:type_name -> chronicleproto.EventMeta
+	8,  // 47: chronicleproto.Absorbed.damageSpellData:type_name -> chronicleproto.SpellData
+	8,  // 48: chronicleproto.Absorbed.absorbSpellData:type_name -> chronicleproto.SpellData
+	0,  // 49: chronicleproto.Absorbed.absorbSchool:type_name -> chronicleproto.School
+	0,  // 50: chronicleproto.Absorbed.absorb_schools:type_name -> chronicleproto.School
+	11, // 51: chronicleproto.Consume.meta:type_name -> chronicleproto.EventMeta
+	8,  // 52: chronicleproto.Consume.spellData:type_name -> chronicleproto.SpellData
+	6,  // 53: chronicleproto.Consume.kind:type_name -> chronicleproto.EvidenceKind
+	7,  // 54: chronicleproto.Consume.confidence:type_name -> chronicleproto.EvidenceConfidence
+	11, // 55: chronicleproto.CompanionStats.meta:type_name -> chronicleproto.EventMeta
+	11, // 56: chronicleproto.RaidGroup.meta:type_name -> chronicleproto.EventMeta
+	57, // [57:57] is the sub-list for method output_type
+	57, // [57:57] is the sub-list for method input_type
+	57, // [57:57] is the sub-list for extension type_name
+	57, // [57:57] is the sub-list for extension extendee
+	0,  // [0:57] is the sub-list for field type_name
 }
 
 func init() { file_chronicle_proto_init() }
@@ -3287,11 +3521,9 @@ func file_chronicle_proto_init() {
 	file_chronicle_proto_msgTypes[1].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[4].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[5].OneofWrappers = []any{}
-	file_chronicle_proto_msgTypes[6].OneofWrappers = []any{}
-	file_chronicle_proto_msgTypes[7].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[8].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[9].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[10].OneofWrappers = []any{}
-	file_chronicle_proto_msgTypes[11].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[12].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[13].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[14].OneofWrappers = []any{}
@@ -3300,16 +3532,18 @@ func file_chronicle_proto_init() {
 	file_chronicle_proto_msgTypes[17].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[18].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[19].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[20].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[21].OneofWrappers = []any{}
-	file_chronicle_proto_msgTypes[22].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[23].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[24].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[25].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chronicle_proto_rawDesc), len(file_chronicle_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   27,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

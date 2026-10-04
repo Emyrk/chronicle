@@ -289,6 +289,35 @@ type Clock struct {
 func (c Clock) Affects() []guid.GUID { return []guid.GUID{} }
 func (*Clock) isMessage()            {}
 
+type UnitPosition struct {
+	MessageBase
+	Unit   guid.GUID
+	X      float64
+	Y      float64
+	MapID  int32
+	Facing float64
+}
+
+func (u UnitPosition) Affects() []guid.GUID { return []guid.GUID{u.Unit} }
+func (*UnitPosition) isMessage()            {}
+
+type UnitResources struct {
+	MessageBase
+	Unit          guid.GUID
+	CurrentHealth int64
+	MaximumHealth int64
+	Absorb        int32
+	PowerType     types.Resource
+	CurrentPower  int32
+	MaximumPower  int32
+	AttackPower   int32
+	SpellPower    int32
+	Armor         int32
+}
+
+func (u UnitResources) Affects() []guid.GUID { return []guid.GUID{u.Unit} }
+func (*UnitResources) isMessage()            {}
+
 type ResourceChange struct {
 	MessageBase
 	Target       guid.GUID

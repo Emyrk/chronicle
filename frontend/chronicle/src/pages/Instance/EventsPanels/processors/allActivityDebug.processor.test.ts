@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import { AuraApplication, AuraState, AuraTransition, type AbsorbedProcessorEvent, type AuraProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent } from "../processorTypes";
+import { AuraApplication, AuraState, AuraTransition, type AbsorbedProcessorEvent, type AuraProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent, type UnitPositionProcessorEvent, type UnitResourcesProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -80,6 +80,67 @@ describe("allActivityProcessor", () => {
       { guid: "unknown", name: "unknown", className: undefined },
     ]);
     expect(event.raidGroups?.[1]).toEqual([]);
+  });
+
+  it("captures unit position snapshots", () => {
+    const state = allActivityProcessor.createState();
+    const event: UnitPositionProcessorEvent = {
+      type: "unit_position",
+      index: 1,
+      offsetMilli: 500,
+      unit: "player",
+      x: 1751.67,
+      y: 1697.84,
+      mapId: 1420,
+      facing: 4.4674,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(state, event, "encounter", new Date("2026-07-14T17:41:42.709Z"), "unit_position", createContext());
+
+    expect(state.rawEventsByStream.unit_position[0]).toMatchObject({
+      caster: "player",
+      casterName: "Sathite",
+      sourceName: "Unit Position",
+      amount: 0,
+      extra: "map 1420 · (1751.67, 1697.84) · facing 4.467",
+    });
+  });
+
+  it("captures unit resource snapshots", () => {
+    const state = allActivityProcessor.createState();
+    const event: UnitResourcesProcessorEvent = {
+      type: "unit_resources",
+      index: 2,
+      offsetMilli: 500,
+      unit: "player",
+      currentHealth: 5000,
+      maximumHealth: 6000,
+      absorb: 1200,
+      powerType: "Mana",
+      currentPower: 3000,
+      maximumPower: 4000,
+      attackPower: 100,
+      spellPower: 250,
+      armor: 900,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(state, event, "encounter", new Date("2026-07-14T17:41:42.709Z"), "unit_resources", createContext());
+
+    expect(state.rawEventsByStream.unit_resources[0]).toMatchObject({
+      caster: "player",
+      casterName: "Sathite",
+      sourceName: "Unit Resources",
+      amount: 5000,
+      resourceType: "Mana",
+      extra: "5,000/6,000 health · 3,000/4,000 Mana",
+      flags: ["MANA"],
+    });
   });
 
   it("preserves damage trailer amounts and readable outcome labels", () => {
