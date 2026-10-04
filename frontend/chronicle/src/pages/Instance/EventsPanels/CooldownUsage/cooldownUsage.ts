@@ -33,6 +33,7 @@ export interface CooldownUsageRow {
   playerName: string;
   className: string;
   cooldown: CooldownDef;
+  /** Casts inside the windows; earlier casts only shape the segments. */
   casts: number[];
   segments: CooldownSegment[];
   readyMs: number;
@@ -135,6 +136,7 @@ export function buildCooldownRows(
   minCooldownMs: number,
 ): CooldownUsageRow[] {
   const windowMs = windows.reduce((total, window) => total + (window.end - window.start), 0);
+  const inWindows = (at: number) => windows.some((w) => at >= w.start && at < w.end);
   const playersByClass = new Map<string, CooldownUsageCaster[]>();
   const usedByClass = new Map<string, Map<string, CooldownDef>>();
 
@@ -142,6 +144,9 @@ export function buildCooldownRows(
     const className = normalizeClassName(caster.className);
     const classCooldowns = index.get(className);
     if (!classCooldowns) continue;
+    // Casters come from the whole log; only list players present in the windows.
+    const present = [...caster.casts.values()].some((times) => times.some(inWindows));
+    if (!present) continue;
 
     const players = playersByClass.get(className) ?? [];
     players.push(caster);
@@ -177,7 +182,7 @@ export function buildCooldownRows(
           playerName: player.playerName,
           className: player.className,
           cooldown: def,
-          casts: casts.map((cast) => cast.at),
+          casts: casts.map((cast) => cast.at).filter(inWindows),
           segments,
           readyMs,
           windowMs,

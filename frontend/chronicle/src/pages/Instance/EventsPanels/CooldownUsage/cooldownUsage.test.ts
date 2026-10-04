@@ -63,6 +63,37 @@ describe("buildCooldownRows", () => {
   });
 });
 
+describe("buildCooldownRows across the whole log", () => {
+  const index = buildCooldownIndex({
+    Druid: [{ id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0 }],
+  });
+
+  it("carries a cooldown used before the selected fight without counting the cast", () => {
+    const result: CooldownUsageResult = {
+      Casters: new Map([
+        ["p1", { playerID: "p1", playerName: "Sylas", className: "DRUID", casts: new Map([[29166, [100_000]], [5176, [400_000]]]) }],
+      ]),
+    };
+    const [row] = buildCooldownRows(result, index, [window(300_000, 600_000)], 30_000);
+    expect(row.casts).toEqual([]);
+    expect(row.segments.map((s) => [s.kind, s.start, s.end, s.castAt])).toEqual([
+      ["cooldown", 300_000, 460_000, 100_000],
+      ["ready", 460_000, 600_000, undefined],
+    ]);
+  });
+
+  it("skips players who did nothing in the selected fights", () => {
+    const result: CooldownUsageResult = {
+      Casters: new Map([
+        ["p1", { playerID: "p1", playerName: "Sylas", className: "DRUID", casts: new Map([[29166, [350_000]]]) }],
+        ["p2", { playerID: "p2", playerName: "Benched", className: "DRUID", casts: new Map([[29166, [10_000]]]) }],
+      ]),
+    };
+    const rows = buildCooldownRows(result, index, [window(300_000, 600_000)], 30_000);
+    expect(rows.map((r) => r.playerName)).toEqual(["Sylas"]);
+  });
+});
+
 describe("normalizeClassName", () => {
   it("matches API and player class spellings", () => {
     expect(normalizeClassName("DeathKnight")).toBe("DEATHKNIGHT");

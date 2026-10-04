@@ -60,11 +60,18 @@ function classLabel(cls: string): string {
   return cls.charAt(0) + cls.slice(1).toLowerCase();
 }
 
-function formatAt(ms: number, windows: readonly TimeWindow[]): string {
-  const window = [...windows].reverse().find((w) => w.start <= ms) ?? windows[0];
-  if (!window) return formatClock(ms);
-  const clock = formatClock(ms - window.start);
-  return windows.length > 1 ? `${window.name} ${clock}` : clock;
+function formatAt(ms: number, windows: readonly TimeWindow[], allWindows: readonly TimeWindow[]): string {
+  const inside = windows.find((w) => ms >= w.start && ms <= w.end);
+  if (inside) {
+    const clock = formatClock(ms - inside.start);
+    return windows.length > 1 ? `${inside.name} ${clock}` : clock;
+  }
+  const other = allWindows.find((w) => ms >= w.start && ms <= w.end);
+  if (other) return `${other.name} ${formatClock(ms - other.start)}`;
+  const next = windows.find((w) => w.start > ms);
+  if (next) return `${formatDuration(next.start - ms)} before ${next.name}`;
+  const prev = [...windows].reverse().find((w) => w.end < ms);
+  return prev ? `${formatDuration(ms - prev.end)} after ${prev.name}` : formatClock(ms);
 }
 
 export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult>) {
@@ -72,10 +79,9 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
   const { data: cooldownData, isLoading: cooldownsLoading, error: cooldownsError } = useCooldownSpells();
   const { cls: requestedClass, minSeconds } = parseOptions(panelOption);
 
-  const windows = useMemo<TimeWindow[]>(
+  const allWindows = useMemo<TimeWindow[]>(
     () =>
       context.instance.encounters
-        .filter((encounter) => context.selectedEncounterIds.includes(encounter.id))
         .map((encounter) => ({
           id: encounter.id,
           name: encounter.name,
@@ -83,7 +89,11 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
           end: new Date(encounter.end_time).getTime(),
         }))
         .sort((a, b) => a.start - b.start),
-    [context.instance.encounters, context.selectedEncounterIds],
+    [context.instance.encounters],
+  );
+  const windows = useMemo(
+    () => allWindows.filter((window) => context.selectedEncounterIds.includes(window.id)),
+    [allWindows, context.selectedEncounterIds],
   );
   const encounters = useMemo(
     () => context.instance.encounters.filter((encounter) => context.selectedEncounterIds.includes(encounter.id)),
@@ -179,6 +189,7 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
                 key={group[0].playerID}
                 rows={group}
                 windows={windows}
+                allWindows={allWindows}
                 encounters={encounters}
                 rangeStart={rangeStart}
                 rangeEnd={rangeEnd}
@@ -203,6 +214,7 @@ function groupByPlayer(rows: readonly CooldownUsageRow[]): CooldownUsageRow[][] 
 
 type TimelineProps = {
   windows: readonly TimeWindow[];
+  allWindows: readonly TimeWindow[];
   encounters: Parameters<typeof TemporalTimelineTrack>[0]["encounters"];
   rangeStart: number;
   rangeEnd: number;
@@ -237,6 +249,7 @@ function PlayerGroup({ rows, ...timeline }: TimelineProps & { rows: CooldownUsag
 function CooldownRow({
   row,
   windows,
+  allWindows,
   encounters,
   rangeStart,
   rangeEnd,
@@ -268,13 +281,13 @@ function CooldownRow({
                   <div className="space-y-0.5 text-xs">
                     <div className="font-medium">{row.cooldown.name}</div>
                     {segment.castAt != null && segment.castAt >= segment.start && (
-                      <div>Cast at {formatAt(segment.castAt, windows)}</div>
+                      <div>Cast at {formatAt(segment.castAt, windows, allWindows)}</div>
                     )}
                     {segment.castAt != null && segment.castAt < segment.start && (
-                      <div className="text-muted-foreground">Still on cooldown from {formatAt(segment.castAt, windows)}</div>
+                      <div className="text-muted-foreground">Still on cooldown from {formatAt(segment.castAt, windows, allWindows)}</div>
                     )}
                     {segment.castAt != null && (
-                      <div>Ready again at {formatAt(segment.castAt + row.cooldown.cooldownMs, windows)}</div>
+                      <div>Ready again at {formatAt(segment.castAt + row.cooldown.cooldownMs, windows, allWindows)}</div>
                     )}
                   </div>
                 )}
@@ -291,7 +304,7 @@ function CooldownRow({
                   <div className="space-y-0.5 text-xs">
                     <div className="font-medium">{row.cooldown.name} ready</div>
                     <div>
-                      {formatAt(segment.start, windows)} – {formatAt(segment.end, windows)} ({formatDuration(segment.end - segment.start)} unused)
+                      {formatAt(segment.start, windows, allWindows)} – {formatAt(segment.end, windows, allWindows)} ({formatDuration(segment.end - segment.start)} unused)
                     </div>
                   </div>
                 )}
