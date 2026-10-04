@@ -1,8 +1,10 @@
 import { useMemo } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useCooldownSpells } from "@/api/cooldownSpells";
 import { useSpell } from "@/api/queries";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { cn } from "@/lib/utils";
 import { classColor } from "../Consumables/consumablesLedgerLogic";
@@ -28,6 +30,8 @@ const MIN_CD_OPTIONS = [
   { seconds: 180, label: "≥ 3m" },
 ];
 const DEFAULT_MIN_CD_SECONDS = 30;
+/** Timelines get unreadable past this many encounters, so compact is forced. */
+const MAX_DETAILED_ENCOUNTERS = 4;
 const READY_CLASS = "bg-emerald-500/60";
 const ACTIVE_CLASS = "bg-sky-400";
 const CASTS_COL = "w-10 shrink-0 text-right";
@@ -85,7 +89,7 @@ function formatAt(ms: number, windows: readonly TimeWindow[], allWindows: readon
 }
 
 export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult>) {
-  const { result, context, panelOption, setPanelOption, checkboxChecked: compact } = props;
+  const { result, context, panelOption, setPanelOption, checkboxChecked } = props;
   const { data: cooldownData, isLoading: cooldownsLoading, error: cooldownsError } = useCooldownSpells();
   const { cls: requestedClass, minSeconds } = parseOptions(panelOption);
 
@@ -133,6 +137,9 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
     : (classCounts[0]?.[0] ?? null);
   const rows = allRows.filter((row) => normalizeClassName(row.className) === selectedClass);
 
+  const forcedCompact = !checkboxChecked && windows.length > MAX_DETAILED_ENCOUNTERS;
+  const compact = checkboxChecked || forcedCompact;
+
   const rangeStart = windows[0]?.start ?? 0;
   const rangeEnd = windows[windows.length - 1]?.end ?? 0;
 
@@ -163,10 +170,25 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
               </button>
             );
           })}
+          {forcedCompact && (
+            <HintTooltip>
+              <TooltipTrigger asChild>
+                <span className="ml-auto flex cursor-help items-center gap-1 text-[11px] text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Compact
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                Detailed timelines are only shown for up to {MAX_DETAILED_ENCOUNTERS} encounters ({windows.length}{" "}
+                selected); beyond that the bars get too thin to read. Select {MAX_DETAILED_ENCOUNTERS} or fewer
+                encounters to see them.
+              </TooltipContent>
+            </HintTooltip>
+          )}
           <select
             value={minSeconds}
             onChange={(event) => setPanelOption?.(serializeOptions(panelOption, selectedClass, Number(event.target.value)))}
-            className="ml-auto rounded border bg-background px-2 py-1 text-[11px]"
+            className={cn("rounded border bg-background px-2 py-1 text-[11px]", !forcedCompact && "ml-auto")}
             aria-label="Minimum cooldown"
           >
             {MIN_CD_OPTIONS.map((option) => (
