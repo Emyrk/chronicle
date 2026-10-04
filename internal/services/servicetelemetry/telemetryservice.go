@@ -37,7 +37,7 @@ type Service struct {
 func New(broker *services.Services) *Service {
 	return &Service{
 		broker:   broker,
-		Schedule: 12 * time.Hour,
+		Schedule: time.Hour,
 	}
 }
 

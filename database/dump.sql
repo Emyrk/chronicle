@@ -755,7 +755,8 @@ CREATE TABLE dbc_vulnerability_spells (
 CREATE TABLE deployment_info (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    last_telemetry_heartbeat timestamp with time zone
+    last_telemetry_heartbeat timestamp with time zone,
+    deployment_token text
 );
 
 CREATE TABLE encounter_dps_rankings (
@@ -1607,6 +1608,23 @@ CREATE TABLE talent_builds (
     dataset_id uuid NOT NULL
 );
 
+CREATE TABLE telemetry_notices (
+    id text NOT NULL,
+    audience text NOT NULL,
+    category text NOT NULL,
+    severity text NOT NULL,
+    title text NOT NULL,
+    message text NOT NULL,
+    action_label text,
+    action_url text,
+    starts_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT telemetry_notices_audience_check CHECK ((audience = ANY (ARRAY['public'::text, 'admin'::text]))),
+    CONSTRAINT telemetry_notices_category_check CHECK ((category = ANY (ARRAY['compliance'::text, 'release'::text, 'maintenance'::text, 'announcement'::text]))),
+    CONSTRAINT telemetry_notices_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
+);
+
 CREATE TABLE time_parse_boss_kill_members (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     snapshot_id uuid NOT NULL,
@@ -2360,6 +2378,9 @@ ALTER TABLE ONLY talent_builds
 ALTER TABLE ONLY talent_builds
     ADD CONSTRAINT talent_builds_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY telemetry_notices
+    ADD CONSTRAINT telemetry_notices_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_pkey PRIMARY KEY (id);
 
@@ -2690,6 +2711,8 @@ CREATE UNIQUE INDEX river_job_unique_idx ON river_job USING btree (unique_key) W
 CREATE INDEX river_notification_created_at_idx ON river_notification USING btree (created_at);
 
 CREATE INDEX river_notification_topic_id_idx ON river_notification USING btree (topic, id);
+
+CREATE INDEX telemetry_notices_audience_idx ON telemetry_notices USING btree (audience);
 
 CREATE UNIQUE INDEX time_parse_snapshots_published_key_idx ON time_parse_snapshots USING btree (tenant_id, cutoff, lookback_days, policy_version, query_version) WHERE (status = 'published'::text);
 

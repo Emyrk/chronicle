@@ -16522,15 +16522,129 @@ func (q *sqlQuerier) GetCanonicalSpellsByName(ctx context.Context, arg GetCanoni
 	return items, nil
 }
 
+const deleteAllTelemetryNotices = `-- name: DeleteAllTelemetryNotices :exec
+DELETE FROM telemetry_notices
+`
+
+func (q *sqlQuerier) DeleteAllTelemetryNotices(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteAllTelemetryNotices)
+	return err
+}
+
+const ensureDeploymentToken = `-- name: EnsureDeploymentToken :one
+UPDATE deployment_info
+SET deployment_token = COALESCE(deployment_token, $1)
+RETURNING deployment_token
+`
+
+func (q *sqlQuerier) EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, ensureDeploymentToken, deploymentToken)
+	var deployment_token pgtype.Text
+	err := row.Scan(&deployment_token)
+	return deployment_token, err
+}
+
 const getDeploymentInfo = `-- name: GetDeploymentInfo :one
-SELECT id, created_at, last_telemetry_heartbeat FROM deployment_info LIMIT 1
+SELECT id, created_at, last_telemetry_heartbeat, deployment_token FROM deployment_info LIMIT 1
 `
 
 func (q *sqlQuerier) GetDeploymentInfo(ctx context.Context) (DeploymentInfo, error) {
 	row := q.db.QueryRow(ctx, getDeploymentInfo)
 	var i DeploymentInfo
-	err := row.Scan(&i.ID, &i.CreatedAt, &i.LastTelemetryHeartbeat)
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.LastTelemetryHeartbeat,
+		&i.DeploymentToken,
+	)
 	return i, err
+}
+
+const insertTelemetryNotice = `-- name: InsertTelemetryNotice :exec
+INSERT INTO telemetry_notices (
+    id,
+    audience,
+    category,
+    severity,
+    title,
+    message,
+    action_label,
+    action_url,
+    starts_at,
+    expires_at,
+    updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+)
+`
+
+type InsertTelemetryNoticeParams struct {
+	ID          string             `db:"id" json:"id"`
+	Audience    string             `db:"audience" json:"audience"`
+	Category    string             `db:"category" json:"category"`
+	Severity    string             `db:"severity" json:"severity"`
+	Title       string             `db:"title" json:"title"`
+	Message     string             `db:"message" json:"message"`
+	ActionLabel pgtype.Text        `db:"action_label" json:"action_label"`
+	ActionUrl   pgtype.Text        `db:"action_url" json:"action_url"`
+	StartsAt    pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
+	ExpiresAt   pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+func (q *sqlQuerier) InsertTelemetryNotice(ctx context.Context, arg InsertTelemetryNoticeParams) error {
+	_, err := q.db.Exec(ctx, insertTelemetryNotice,
+		arg.ID,
+		arg.Audience,
+		arg.Category,
+		arg.Severity,
+		arg.Title,
+		arg.Message,
+		arg.ActionLabel,
+		arg.ActionUrl,
+		arg.StartsAt,
+		arg.ExpiresAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const listTelemetryNotices = `-- name: ListTelemetryNotices :many
+SELECT id, audience, category, severity, title, message, action_label, action_url, starts_at, expires_at, updated_at
+FROM telemetry_notices
+ORDER BY starts_at DESC, id
+`
+
+func (q *sqlQuerier) ListTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error) {
+	rows, err := q.db.Query(ctx, listTelemetryNotices)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TelemetryNotice
+	for rows.Next() {
+		var i TelemetryNotice
+		if err := rows.Scan(
+			&i.ID,
+			&i.Audience,
+			&i.Category,
+			&i.Severity,
+			&i.Title,
+			&i.Message,
+			&i.ActionLabel,
+			&i.ActionUrl,
+			&i.StartsAt,
+			&i.ExpiresAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const telemetryGetActiveFileBytes = `-- name: TelemetryGetActiveFileBytes :one
