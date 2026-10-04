@@ -87,9 +87,16 @@ export function CooldownSpellsPage() {
   const [menu, setMenu] = useState<CooldownMenuState | null>(null);
   const setIgnored = useSetCooldownIgnored();
   const { isAuthenticated } = useAuth();
-  const authzCheck = useMemo(() => ({ adminWorldData: "chronicle:chronicle#admin_world_data" }), []);
+  // Same rule as consumable ignores: consumables admins or world-data admins.
+  const authzCheck = useMemo(
+    () => ({
+      manageConsumables: "chronicle:chronicle#admin_consumables",
+      adminWorldData: "chronicle:chronicle#admin_world_data",
+    }),
+    [],
+  );
   const { data: authorization } = useAuthorizationCheck(authzCheck, { enabled: isAuthenticated });
-  const canManage = authorization?.adminWorldData ?? false;
+  const canManage = (authorization?.manageConsumables ?? false) || (authorization?.adminWorldData ?? false);
 
   const classNames = useMemo(() => Object.keys(data ?? {}).sort(), [data]);
   const activeClass = selectedClass || classNames[0] || "";
