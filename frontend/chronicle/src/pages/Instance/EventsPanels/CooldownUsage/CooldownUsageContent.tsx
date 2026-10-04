@@ -16,6 +16,7 @@ import {
   buildCooldownIndex,
   buildCooldownRows,
   normalizeClassName,
+  usedCooldownRows,
   type CooldownDef,
   type CooldownUsageRow,
   type TimeWindow,
@@ -137,6 +138,7 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
     ? requestedClass
     : (classCounts[0]?.[0] ?? null);
   const rows = allRows.filter((row) => normalizeClassName(row.className) === selectedClass);
+  const detailedRows = usedCooldownRows(rows);
 
   const forcedCompact = !checkboxChecked && windows.length > MAX_DETAILED_ENCOUNTERS;
   const compact = checkboxChecked || forcedCompact;
@@ -228,12 +230,12 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
             <div className="p-4 text-center text-destructive">Failed to load cooldown data.</div>
           ) : cooldownsLoading ? (
             <div className="p-4 text-center text-muted-foreground">Loading cooldowns…</div>
-          ) : rows.length === 0 ? (
+          ) : (compact ? rows : detailedRows).length === 0 ? (
             <div className="p-4 text-center text-muted-foreground">No cooldown casts in the selected encounters.</div>
           ) : compact ? (
             <CompactTable rows={rows} />
           ) : (
-            groupByPlayer(rows).map((group) => (
+            groupByPlayer(detailedRows).map((group) => (
               <PlayerGroup
                 key={group[0].playerID}
                 rows={group}
