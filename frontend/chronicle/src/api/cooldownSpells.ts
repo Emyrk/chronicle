@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import type { SetCooldownIgnoredRequest } from "./typesGenerated";
 
@@ -24,20 +24,32 @@ export interface CooldownSpellsData {
 
 const COOLDOWN_SPELLS_KEY = ["wowdb", "cooldown-spells"] as const;
 
+async function fetchCooldownSpells(datasetId: string | undefined): Promise<CooldownSpellsData> {
+  const params = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : "";
+  const response = await fetch(`/api/v1/wowdb/cooldown-spells${params}`);
+  if (!response.ok) throw new Error("Failed to fetch cooldown spells");
+  return {
+    byClass: (await response.json()) as CooldownSpellsByClass,
+    datasetId: response.headers.get("X-Chronicle-Dataset") ?? datasetId ?? null,
+  };
+}
+
 export function useCooldownSpells() {
   const datasetId = useDatasetId();
   return useQuery({
     queryKey: [...COOLDOWN_SPELLS_KEY, datasetId ?? "default"],
-    queryFn: async (): Promise<CooldownSpellsData> => {
-      const params = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : "";
-      const response = await fetch(`/api/v1/wowdb/cooldown-spells${params}`);
-      if (!response.ok) throw new Error("Failed to fetch cooldown spells");
-      return {
-        byClass: (await response.json()) as CooldownSpellsByClass,
-        datasetId: response.headers.get("X-Chronicle-Dataset") ?? datasetId ?? null,
-      };
-    },
+    queryFn: () => fetchCooldownSpells(datasetId),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useCooldownSpellsForDatasets(datasetIds: readonly string[]) {
+  return useQueries({
+    queries: datasetIds.map((datasetId) => ({
+      queryKey: [...COOLDOWN_SPELLS_KEY, datasetId],
+      queryFn: () => fetchCooldownSpells(datasetId),
+      staleTime: 5 * 60 * 1000,
+    })),
   });
 }
 
