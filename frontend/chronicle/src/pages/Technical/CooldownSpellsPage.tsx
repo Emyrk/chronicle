@@ -34,6 +34,7 @@ interface MultiDatasetCooldown {
   name: string;
   spellId: number;
   cooldownMs: number;
+  durationMs: number;
   byDataset: Map<string, CooldownSpellEntry[]>;
 }
 
@@ -48,6 +49,14 @@ function formatCooldown(milliseconds: number): string {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
+}
+
+function DurationCell({ ms }: { ms: number }) {
+  return (
+    <div className="text-right font-mono text-sm text-muted-foreground">
+      {ms > 0 ? formatCooldown(ms) : <span className="text-muted-foreground/40">—</span>}
+    </div>
+  );
 }
 
 function IgnoredBadge({ label = "Ignored" }: { label?: string }) {
@@ -253,10 +262,11 @@ export function CooldownSpellsPage() {
         const key = spell.name.toLowerCase();
         let cooldown = byKey.get(key);
         if (!cooldown) {
-          cooldown = { key, name: spell.name, spellId: spell.id, cooldownMs: 0, byDataset: new Map() };
+          cooldown = { key, name: spell.name, spellId: spell.id, cooldownMs: 0, durationMs: 0, byDataset: new Map() };
           byKey.set(key, cooldown);
         }
         cooldown.cooldownMs = Math.max(cooldown.cooldownMs, spell.cooldown_ms);
+        cooldown.durationMs = Math.max(cooldown.durationMs, spell.duration_ms);
         const ranks = cooldown.byDataset.get(datasetId) ?? [];
         ranks.push(spell);
         cooldown.byDataset.set(datasetId, ranks);
@@ -416,15 +426,17 @@ export function CooldownSpellsPage() {
 
       <Card className="max-h-[75vh] gap-0 py-0 divide-y divide-border/30 overflow-auto styled-scrollbar">
         {multiDatasetMode ? (
-          <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_80px] bg-muted px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+          <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_80px_80px] bg-muted px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
             <span>Ability</span>
             <span>Datasets</span>
+            <span className="text-right">Duration</span>
             <span className="text-right">Cooldown</span>
           </div>
         ) : (
-          <div className="sticky top-0 z-10 grid grid-cols-[72px_minmax(0,1fr)_110px] bg-muted px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+          <div className="sticky top-0 z-10 grid grid-cols-[72px_minmax(0,1fr)_90px_110px] bg-muted px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
             <span>Spell ID</span>
             <span>Ability</span>
+            <span className="text-right">Duration</span>
             <span className="text-right">Cooldown</span>
           </div>
         )}
@@ -450,7 +462,7 @@ export function CooldownSpellsPage() {
               <div
                 key={cooldown.key}
                 onContextMenu={(event) => openMultiMenu(event, cooldown)}
-                className={`grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_80px] items-center gap-2 px-3 py-2 hover:bg-muted/50 ${allIgnored ? "opacity-60" : ""}`}
+                className={`grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_80px_80px] items-center gap-2 px-3 py-2 hover:bg-muted/50 ${allIgnored ? "opacity-60" : ""}`}
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <SpellIdTooltip spellId={cooldown.spellId} name={cooldown.name} size={16} className="truncate text-sm" />
@@ -475,6 +487,7 @@ export function CooldownSpellsPage() {
                     );
                   })}
                 </div>
+                <DurationCell ms={cooldown.durationMs} />
                 <div className="text-right font-mono text-sm font-medium">{formatCooldown(cooldown.cooldownMs)}</div>
               </div>
             );
@@ -485,7 +498,7 @@ export function CooldownSpellsPage() {
               key={spell.id}
               to={`/wowdb/spell/${spell.id}`}
               onContextMenu={(event) => openSingleMenu(event, spell)}
-              className={`group grid grid-cols-[72px_minmax(0,1fr)_110px] items-center px-3 py-2 hover:bg-muted/50 ${spell.ignored ? "opacity-60" : ""}`}
+              className={`group grid grid-cols-[72px_minmax(0,1fr)_90px_110px] items-center px-3 py-2 hover:bg-muted/50 ${spell.ignored ? "opacity-60" : ""}`}
             >
               <span className="font-mono text-xs text-muted-foreground">{spell.id}</span>
               <div className="flex min-w-0 items-center gap-2">
@@ -503,6 +516,7 @@ export function CooldownSpellsPage() {
                 {spell.ignored && <IgnoredBadge />}
                 <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
               </div>
+              <DurationCell ms={spell.duration_ms} />
               <div className="text-right">
                 <div className="font-mono text-sm font-medium">
                   {formatCooldown(spell.cooldown_ms)}
