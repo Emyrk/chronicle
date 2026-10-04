@@ -110,7 +110,8 @@ export function validateNoticeInput(value: unknown): NoticeInput {
   }
   const input = value as Record<string, unknown>;
 
-  const deploymentId = optionalPlainText(
+  // Notices are always deployment-specific. Do not add a global "All" target.
+  const deploymentId = requiredPlainText(
     input.deployment_id,
     "deployment_id",
     LIMITS.deploymentId
@@ -180,7 +181,7 @@ export async function activeNotices(
        strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) AS updated_at
      FROM notices
      WHERE enabled = 1
-       AND (deployment_id IS NULL OR deployment_id = ?)
+       AND deployment_id = ?
        AND (starts_at IS NULL OR datetime(starts_at) <= datetime('now'))
        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
      ORDER BY

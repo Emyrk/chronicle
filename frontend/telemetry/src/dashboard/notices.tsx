@@ -43,6 +43,15 @@ noticesDashboard.get("/internal/notices", async (c) => {
           input,select,textarea { width:100%; margin-top:6px; padding:10px 11px; color:var(--text); background:#111617; border:1px solid var(--line); border-radius:5px; font:13px 'Manrope',sans-serif; outline:none; }
           input:focus,select:focus,textarea:focus { border-color:var(--accent); box-shadow:0 0 0 2px #79b6c722; }
           textarea { min-height:112px; resize:vertical; line-height:1.5; }
+          .combobox { position:relative; margin-top:6px; }
+          .combobox input { margin-top:0; padding-right:34px; }
+          .combobox::after { content:'⌕'; position:absolute; right:11px; top:9px; color:var(--accent); font:18px 'IBM Plex Mono',monospace; pointer-events:none; }
+          .combo-options { position:absolute; z-index:80; top:calc(100% + 5px); left:0; right:0; max-height:260px; overflow-y:auto; padding:5px; background:#111617; border:1px solid #4b5c5f; border-radius:6px; box-shadow:0 16px 38px #000a; }
+          .combo-option { display:block; width:100%; padding:10px; color:var(--text); background:transparent; border:0; border-radius:4px; text-align:left; }
+          .combo-option:hover,.combo-option.active { background:#243033; }
+          .combo-option strong { display:block; overflow:hidden; color:#dce7e8; font:600 12px 'IBM Plex Mono',monospace; text-overflow:ellipsis; white-space:nowrap; }
+          .combo-option span { display:block; margin-top:4px; overflow:hidden; color:var(--muted); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+          .combo-empty { padding:14px 10px; color:var(--muted); font-size:12px; text-align:center; }
           .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
           .switch { display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:0; font-size:13px; }
           .switch input { width:auto; margin:0; accent-color:var(--accent); }
@@ -103,16 +112,39 @@ noticesDashboard.get("/internal/notices", async (c) => {
                     <option value="breaking">Breaking update</option>
                   </select>
                 </label>
-                <label>Target
-                  <select id="deployment-id">
-                    <option value="">All deployments</option>
-                    {deployments.map((deployment) => (
-                      <option value={deployment.deployment_id}>
-                        {deployment.deployment_id.substring(0, 12)} · {deployment.version || "unknown"} · {deployment.access_url || "no URL"}
-                      </option>
-                    ))}
-                  </select>
+                <label>Target deployment
+                  <div class="combobox" id="deployment-combobox">
+                    <input
+                      id="deployment-search"
+                      type="search"
+                      placeholder="Search deployment ID or access URL"
+                      autocomplete="off"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-controls="deployment-options"
+                      aria-expanded="false"
+                      required
+                    />
+                    <input type="hidden" id="deployment-id" />
+                    <div class="combo-options" id="deployment-options" role="listbox" hidden>
+                      {deployments.map((deployment) => (
+                        <button
+                          type="button"
+                          class="combo-option"
+                          role="option"
+                          data-deployment-id={deployment.deployment_id}
+                          data-label={deployment.access_url || deployment.deployment_id}
+                          data-search={`${deployment.deployment_id} ${deployment.access_url}`.toLowerCase()}
+                        >
+                          <strong>{deployment.access_url || deployment.deployment_id}</strong>
+                          <span>{deployment.deployment_id} · {deployment.version || "unknown version"}</span>
+                        </button>
+                      ))}
+                      <div class="combo-empty" id="deployment-empty" hidden>No matching deployments</div>
+                    </div>
+                  </div>
                 </label>
+                <div class="hint">A notice must target one deployment. Search by its full deployment ID or access URL.</div>
                 <div class="grid">
                   <label>Audience
                     <select id="audience"><option value="public">Public</option><option value="admin">Admin</option></select>
@@ -163,7 +195,8 @@ noticesDashboard.get("/internal/notices", async (c) => {
             const form = $('notice-form');
             const fields = {
               id: $('notice-id'), template: $('template'), deployment: $('deployment-id'),
-              audience: $('audience'), severity: $('severity'), category: $('category'),
+              deploymentSearch: $('deployment-search'), audience: $('audience'),
+              severity: $('severity'), category: $('category'),
               title: $('title'), message: $('message'), actionLabel: $('action-label'),
               actionUrl: $('action-url'), startsAt: $('starts-at'), expiresAt: $('expires-at'),
               enabled: $('enabled')
@@ -175,6 +208,50 @@ noticesDashboard.get("/internal/notices", async (c) => {
               breaking: { audience:'admin', category:'release', severity:'critical', title:'Breaking update required', message:'A breaking Chronicle update is available. Review the release notes and update this deployment before the stated deadline.', action_label:'View releases', action_url:'https://github.com/Emyrk/chronicle/releases' }
             };
 
+            const deploymentList = $('deployment-options');
+            const deploymentOptions = Array.from(document.querySelectorAll('.combo-option'));
+            let activeDeploymentIndex = -1;
+
+            function visibleDeploymentOptions() {
+              return deploymentOptions.filter((option) => !option.hidden);
+            }
+            function setDeploymentListOpen(open) {
+              deploymentList.hidden = !open;
+              fields.deploymentSearch.setAttribute('aria-expanded', String(open));
+              if (!open) {
+                activeDeploymentIndex = -1;
+                deploymentOptions.forEach((option) => option.classList.remove('active'));
+              }
+            }
+            function filterDeployments() {
+              const query = fields.deploymentSearch.value.trim().toLowerCase();
+              let matches = 0;
+              deploymentOptions.forEach((option) => {
+                option.hidden = !option.dataset.search.includes(query);
+                if (!option.hidden) matches++;
+              });
+              $('deployment-empty').hidden = matches !== 0;
+              activeDeploymentIndex = -1;
+              deploymentOptions.forEach((option) => option.classList.remove('active'));
+              setDeploymentListOpen(true);
+            }
+            function selectDeployment(option) {
+              fields.deployment.value = option.dataset.deploymentId;
+              fields.deploymentSearch.value = option.dataset.label;
+              fields.deploymentSearch.setCustomValidity('');
+              setDeploymentListOpen(false);
+            }
+            function moveDeploymentSelection(direction) {
+              const visible = visibleDeploymentOptions();
+              if (!visible.length) return;
+              activeDeploymentIndex = activeDeploymentIndex === -1
+                ? (direction > 0 ? 0 : visible.length - 1)
+                : (activeDeploymentIndex + direction + visible.length) % visible.length;
+              deploymentOptions.forEach((option) => option.classList.remove('active'));
+              visible[activeDeploymentIndex].classList.add('active');
+              visible[activeDeploymentIndex].scrollIntoView({ block:'nearest' });
+            }
+
             function localDate(iso) {
               if (!iso) return '';
               const date = new Date(iso);
@@ -183,7 +260,7 @@ noticesDashboard.get("/internal/notices", async (c) => {
             }
             function payload() {
               return {
-                deployment_id: fields.deployment.value || null,
+                deployment_id: fields.deployment.value,
                 audience: fields.audience.value, category: fields.category.value,
                 severity: fields.severity.value, title: fields.title.value,
                 message: fields.message.value, action_label: fields.actionLabel.value || null,
@@ -204,12 +281,19 @@ noticesDashboard.get("/internal/notices", async (c) => {
               $('preview-action').hidden = !fields.actionLabel.value;
             }
             function resetForm() {
-              form.reset(); fields.id.value=''; fields.enabled.checked=true;
+              form.reset(); fields.id.value=''; fields.deployment.value='';
+              fields.deploymentSearch.value=''; fields.enabled.checked=true;
+              deploymentOptions.forEach((option) => { option.hidden=false; });
+              $('deployment-empty').hidden = deploymentOptions.length !== 0;
+              setDeploymentListOpen(false);
               $('form-heading').textContent='Compose notice'; $('save').textContent='Publish notice';
               showError(''); updatePreview();
             }
             function editNotice(notice) {
-              fields.id.value=notice.id; fields.template.value=''; fields.deployment.value=notice.deployment_id || '';
+              fields.id.value=notice.id; fields.template.value='';
+              const target = deploymentOptions.find((option) => option.dataset.deploymentId===notice.deployment_id);
+              if (target) selectDeployment(target);
+              else { fields.deployment.value=notice.deployment_id || ''; fields.deploymentSearch.value=notice.deployment_id || ''; }
               fields.audience.value=notice.audience; fields.severity.value=notice.severity; fields.category.value=notice.category;
               fields.title.value=notice.title; fields.message.value=notice.message;
               fields.actionLabel.value=notice.action_label || ''; fields.actionUrl.value=notice.action_url || '';
@@ -226,7 +310,7 @@ noticesDashboard.get("/internal/notices", async (c) => {
                 const title=document.createElement('div'); title.className='row-title'; title.textContent=notice.title; body.appendChild(title);
                 const message=document.createElement('div'); message.className='row-message'; message.textContent=notice.message; body.appendChild(message);
                 const meta=document.createElement('div'); meta.className='row-meta';
-                [notice.deployment_id ? notice.deployment_id.slice(0,12) : 'all deployments', notice.audience, notice.category, notice.severity, notice.enabled===1?'enabled':'disabled'].forEach((text)=>{ const tag=document.createElement('span'); tag.className='tag'; tag.textContent=text; meta.appendChild(tag); });
+                [notice.deployment_id ? notice.deployment_id.slice(0,12) : 'untargeted legacy', notice.audience, notice.category, notice.severity, notice.enabled===1?'enabled':'disabled'].forEach((text)=>{ const tag=document.createElement('span'); tag.className='tag'; tag.textContent=text; meta.appendChild(tag); });
                 body.appendChild(meta); row.appendChild(body);
                 const actions=document.createElement('div'); actions.className='row-actions';
                 const edit=document.createElement('button'); edit.textContent='Edit'; edit.addEventListener('click',()=>editNotice(notice)); actions.appendChild(edit);
@@ -249,9 +333,29 @@ noticesDashboard.get("/internal/notices", async (c) => {
               try { const response=await fetch('/internal/api/v1/notices/'+notice.id,{method:'DELETE'}); const data=await response.json(); if(!response.ok) throw new Error(data.error||'Delete failed'); if(fields.id.value==notice.id) resetForm(); await load(); } catch(error) { showError(error.message); }
             }
             fields.template.addEventListener('change',()=>{ const template=templates[fields.template.value]; if(!template)return; fields.audience.value=template.audience; fields.category.value=template.category; fields.severity.value=template.severity; fields.title.value=template.title; fields.message.value=template.message; fields.actionLabel.value=template.action_label; fields.actionUrl.value=template.action_url; updatePreview(); });
+            deploymentOptions.forEach((option)=>option.addEventListener('click',()=>selectDeployment(option)));
+            fields.deploymentSearch.addEventListener('focus',filterDeployments);
+            fields.deploymentSearch.addEventListener('input',()=>{
+              fields.deployment.value='';
+              fields.deploymentSearch.setCustomValidity('Select a deployment from the results.');
+              filterDeployments();
+            });
+            fields.deploymentSearch.addEventListener('keydown',(event)=>{
+              if(event.key==='ArrowDown'){ event.preventDefault(); setDeploymentListOpen(true); moveDeploymentSelection(1); }
+              else if(event.key==='ArrowUp'){ event.preventDefault(); setDeploymentListOpen(true); moveDeploymentSelection(-1); }
+              else if(event.key==='Enter' && !deploymentList.hidden){
+                const option=visibleDeploymentOptions()[activeDeploymentIndex];
+                if(option){ event.preventDefault(); selectDeployment(option); }
+              } else if(event.key==='Escape'){ setDeploymentListOpen(false); }
+            });
+            document.addEventListener('click',(event)=>{ if(!$('deployment-combobox').contains(event.target)) setDeploymentListOpen(false); });
             Object.values(fields).forEach((field)=>field.addEventListener('input',updatePreview));
             $('reset').addEventListener('click',resetForm);
-            form.addEventListener('submit',async(event)=>{ event.preventDefault(); try { await saveNotice(fields.id.value,payload()); resetForm(); } catch(error) { showError(error.message); } });
+            form.addEventListener('submit',async(event)=>{
+              event.preventDefault();
+              if(!fields.deployment.value){ fields.deploymentSearch.setCustomValidity('Select a deployment from the results.'); fields.deploymentSearch.reportValidity(); return; }
+              try { await saveNotice(fields.id.value,payload()); resetForm(); } catch(error) { showError(error.message); }
+            });
             load().catch((error)=>showError(error.message)); updatePreview();
           })();
         </script>`}
