@@ -7,10 +7,11 @@ import (
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCooldownIgnores(t *testing.T) {
+func TestCooldownOverrides(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	pool, _ := dbtestutil.NewPGXPool(t)
@@ -25,37 +26,56 @@ func TestCooldownIgnores(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	ignored := func() map[int32]bool {
+	type flags struct{ ignored, durationHidden bool }
+	overrides := func() map[int32]flags {
 		t.Helper()
 		rows, err := store.ListCooldownSpellsByDataset(ctx, datasetID)
 		require.NoError(t, err)
-		out := map[int32]bool{}
+		out := map[int32]flags{}
 		for _, row := range rows {
 			if row.SpellID >= 900001 && row.SpellID <= 900003 {
-				out[row.SpellID] = row.Ignored
+				out[row.SpellID] = flags{row.Ignored, row.DurationHidden}
 			}
 		}
 		return out
 	}
-
-	require.Equal(t, map[int32]bool{900001: false, 900002: false, 900003: false}, ignored())
-
-	// Unknown spell IDs are skipped; repeating an ignore is a no-op.
-	for range 2 {
-		require.NoError(t, store.IgnoreCooldownSpells(ctx, database.IgnoreCooldownSpellsParams{
-			DatasetID: datasetID, SpellIds: []int32{900001, 900002, 123},
+	set := func(ids []int32, ignored, hideDuration pgtype.Bool) {
+		t.Helper()
+		require.NoError(t, store.UpsertCooldownOverrides(ctx, database.UpsertCooldownOverridesParams{
+			DatasetID: datasetID, SpellIds: ids, Ignored: ignored, HideDuration: hideDuration,
 		}))
+		require.NoError(t, store.DeleteEmptyCooldownOverrides(ctx, datasetID))
 	}
-	require.Equal(t, map[int32]bool{900001: true, 900002: true, 900003: false}, ignored())
+	yes := pgtype.Bool{Bool: true, Valid: true}
+	no := pgtype.Bool{Bool: false, Valid: true}
+	unset := pgtype.Bool{}
+
+	// Unknown spell IDs are skipped; repeating is a no-op.
+	set([]int32{900001, 900002, 123}, yes, unset)
+	set([]int32{900001, 900002, 123}, yes, unset)
+	set([]int32{900002, 900003}, unset, yes)
+	require.Equal(t, map[int32]flags{
+		900001: {true, false},
+		900002: {true, true},
+		900003: {false, true},
+	}, overrides())
 
 	var unknown int
-	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM dataset_cooldown_ignores WHERE spell_id = 123`).Scan(&unknown))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM dataset_cooldown_overrides WHERE spell_id = 123`).Scan(&unknown))
 	require.Zero(t, unknown)
 
-	require.NoError(t, store.UnignoreCooldownSpells(ctx, database.UnignoreCooldownSpellsParams{
-		DatasetID: datasetID, SpellIds: []int32{900002},
-	}))
-	require.Equal(t, map[int32]bool{900001: true, 900002: false, 900003: false}, ignored())
+	// Clearing one flag keeps the other; clearing both removes the row.
+	set([]int32{900002}, no, unset)
+	set([]int32{900003}, unset, no)
+	require.Equal(t, map[int32]flags{
+		900001: {true, false},
+		900002: {false, true},
+		900003: {false, false},
+	}, overrides())
+
+	var rows int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM dataset_cooldown_overrides WHERE spell_id = 900003`).Scan(&rows))
+	require.Zero(t, rows)
 }
 
 func TestCooldownSpellDurations(t *testing.T) {

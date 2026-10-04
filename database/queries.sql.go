@@ -1530,22 +1530,15 @@ func (q *sqlQuerier) UpsertConsumableDisambiguationIfCandidate(ctx context.Conte
 	return i, err
 }
 
-const ignoreCooldownSpells = `-- name: IgnoreCooldownSpells :exec
-INSERT INTO dataset_cooldown_ignores (dataset_id, spell_id)
-SELECT c.dataset_id, c.spell_id
-FROM dbc_cooldown_spells c
-WHERE c.dataset_id = $1
-  AND c.spell_id = ANY($2::INT[])
-ON CONFLICT DO NOTHING
+const deleteEmptyCooldownOverrides = `-- name: DeleteEmptyCooldownOverrides :exec
+DELETE FROM dataset_cooldown_overrides
+WHERE dataset_id = $1
+  AND NOT ignored
+  AND NOT hide_duration
 `
 
-type IgnoreCooldownSpellsParams struct {
-	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
-	SpellIds  []int32   `db:"spell_ids" json:"spell_ids"`
-}
-
-func (q *sqlQuerier) IgnoreCooldownSpells(ctx context.Context, arg IgnoreCooldownSpellsParams) error {
-	_, err := q.db.Exec(ctx, ignoreCooldownSpells, arg.DatasetID, arg.SpellIds)
+func (q *sqlQuerier) DeleteEmptyCooldownOverrides(ctx context.Context, datasetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteEmptyCooldownOverrides, datasetID)
 	return err
 }
 
@@ -1557,12 +1550,13 @@ SELECT
     c.recovery_time_ms,
     c.category_recovery_time_ms,
     c.spell_class_set,
-    (i.spell_id IS NOT NULL)::BOOLEAN AS ignored,
+    COALESCE(o.ignored, FALSE)::BOOLEAN AS ignored,
+    COALESCE(o.hide_duration, FALSE)::BOOLEAN AS duration_hidden,
     -- Aura/effect duration; 0 when instant, unknown, or infinite (-1).
     GREATEST(COALESCE(d.max_duration, 0), 0)::BIGINT AS duration_ms
 FROM dbc_cooldown_spells c
-LEFT JOIN dataset_cooldown_ignores i
-    ON i.dataset_id = c.dataset_id AND i.spell_id = c.spell_id
+LEFT JOIN dataset_cooldown_overrides o
+    ON o.dataset_id = c.dataset_id AND o.spell_id = c.spell_id
 LEFT JOIN dbc_spells s
     ON s.dataset_id = c.dataset_id AND s.spell_id = c.spell_id
 LEFT JOIN dbc_spell_durations d
@@ -1579,6 +1573,7 @@ type ListCooldownSpellsByDatasetRow struct {
 	CategoryRecoveryTimeMs int64  `db:"category_recovery_time_ms" json:"category_recovery_time_ms"`
 	SpellClassSet          int32  `db:"spell_class_set" json:"spell_class_set"`
 	Ignored                bool   `db:"ignored" json:"ignored"`
+	DurationHidden         bool   `db:"duration_hidden" json:"duration_hidden"`
 	DurationMs             int64  `db:"duration_ms" json:"duration_ms"`
 }
 
@@ -1599,6 +1594,7 @@ func (q *sqlQuerier) ListCooldownSpellsByDataset(ctx context.Context, datasetID 
 			&i.CategoryRecoveryTimeMs,
 			&i.SpellClassSet,
 			&i.Ignored,
+			&i.DurationHidden,
 			&i.DurationMs,
 		); err != nil {
 			return nil, err
@@ -1611,19 +1607,36 @@ func (q *sqlQuerier) ListCooldownSpellsByDataset(ctx context.Context, datasetID 
 	return items, nil
 }
 
-const unignoreCooldownSpells = `-- name: UnignoreCooldownSpells :exec
-DELETE FROM dataset_cooldown_ignores
-WHERE dataset_id = $1
-  AND spell_id = ANY($2::INT[])
+const upsertCooldownOverrides = `-- name: UpsertCooldownOverrides :exec
+INSERT INTO dataset_cooldown_overrides (dataset_id, spell_id, ignored, hide_duration)
+SELECT
+    c.dataset_id,
+    c.spell_id,
+    COALESCE($1::BOOLEAN, FALSE),
+    COALESCE($2::BOOLEAN, FALSE)
+FROM dbc_cooldown_spells c
+WHERE c.dataset_id = $3
+  AND c.spell_id = ANY($4::INT[])
+ON CONFLICT (dataset_id, spell_id) DO UPDATE SET
+    ignored = COALESCE($1::BOOLEAN, dataset_cooldown_overrides.ignored),
+    hide_duration = COALESCE($2::BOOLEAN, dataset_cooldown_overrides.hide_duration)
 `
 
-type UnignoreCooldownSpellsParams struct {
-	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
-	SpellIds  []int32   `db:"spell_ids" json:"spell_ids"`
+type UpsertCooldownOverridesParams struct {
+	Ignored      pgtype.Bool `db:"ignored" json:"ignored"`
+	HideDuration pgtype.Bool `db:"hide_duration" json:"hide_duration"`
+	DatasetID    uuid.UUID   `db:"dataset_id" json:"dataset_id"`
+	SpellIds     []int32     `db:"spell_ids" json:"spell_ids"`
 }
 
-func (q *sqlQuerier) UnignoreCooldownSpells(ctx context.Context, arg UnignoreCooldownSpellsParams) error {
-	_, err := q.db.Exec(ctx, unignoreCooldownSpells, arg.DatasetID, arg.SpellIds)
+// NULL ignored/hide_duration leaves that flag unchanged.
+func (q *sqlQuerier) UpsertCooldownOverrides(ctx context.Context, arg UpsertCooldownOverridesParams) error {
+	_, err := q.db.Exec(ctx, upsertCooldownOverrides,
+		arg.Ignored,
+		arg.HideDuration,
+		arg.DatasetID,
+		arg.SpellIds,
+	)
 	return err
 }
 

@@ -3115,12 +3115,19 @@ export interface SetConsumableDisambiguationRequest {
 
 // From chroniclesdk/cooldowns.go
 /**
- * SetCooldownIgnoredRequest marks cooldown spells as ignored (hidden from the
- * Cooldown Usage panel) or clears the ignore.
+ * SetCooldownOverridesRequest updates per-spell Cooldown Usage overrides for
+ * the given spells. A nil field leaves that override unchanged.
  */
-export interface SetCooldownIgnoredRequest {
+export interface SetCooldownOverridesRequest {
     readonly spell_ids: readonly number[];
-    readonly ignored: boolean;
+    /**
+     * Ignored hides the cooldown from the Cooldown Usage panel.
+     */
+    readonly ignored?: boolean;
+    /**
+     * HideDuration hides the spell-duration bar while keeping the cooldown.
+     */
+    readonly hide_duration?: boolean;
 }
 
 // From chroniclesdk/tenant.go

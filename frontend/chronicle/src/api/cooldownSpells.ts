@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDatasetId } from "@/hooks/useDatasetId";
-import type { SetCooldownIgnoredRequest } from "./typesGenerated";
+import type { SetCooldownOverridesRequest } from "./typesGenerated";
 
 export interface CooldownSpellEntry {
   id: number;
@@ -13,6 +13,8 @@ export interface CooldownSpellEntry {
   ignored: boolean;
   /** Aura/effect duration; 0 when instant or unknown. */
   duration_ms: number;
+  /** Admin opted out of drawing the duration bar for this spell. */
+  duration_hidden: boolean;
 }
 
 /** Cooldown spells keyed by class name (e.g. "Druid", "DeathKnight"). */
@@ -55,11 +57,11 @@ export function useCooldownSpellsForDatasets(datasetIds: readonly string[]) {
   });
 }
 
-export function useSetCooldownIgnored() {
+export function useSetCooldownOverrides() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ datasetId, ...request }: SetCooldownIgnoredRequest & { datasetId: string }) => {
-      const response = await fetch(`/api/v1/game-data/datasets/${datasetId}/cooldown-ignores`, {
+    mutationFn: async ({ datasetId, ...request }: SetCooldownOverridesRequest & { datasetId: string }) => {
+      const response = await fetch(`/api/v1/game-data/datasets/${datasetId}/cooldown-overrides`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),

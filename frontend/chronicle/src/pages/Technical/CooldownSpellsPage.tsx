@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff, ExternalLink, Layers3, Search, TimerReset } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ExternalLink, Layers3, Search, TimerOff, TimerReset } from "lucide-react";
 import { toast } from "sonner";
 import {
   useCooldownSpells,
   useCooldownSpellsForDatasets,
-  useSetCooldownIgnored,
+  useSetCooldownOverrides,
   type CooldownSpellEntry,
 } from "@/api/cooldownSpells";
 import { DEFAULT_DATASET_ID, useAuthorizationCheck, useDatasets, useSiteConfig } from "@/api/queries";
@@ -14,10 +14,24 @@ import { Card } from "@/components/ui/Card/Card";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { useAuth } from "@/hooks/useAuth";
 
-interface IgnoreTarget {
+type OverrideKey = "ignored" | "durationHidden";
+
+interface OverrideTarget {
   datasetId: string;
   spellIds: number[];
   ignored: boolean;
+  durationHidden: boolean;
+  hasDuration: boolean;
+}
+
+function overrideTarget(datasetId: string, ranks: CooldownSpellEntry[]): OverrideTarget {
+  return {
+    datasetId,
+    spellIds: ranks.map((rank) => rank.id),
+    ignored: ranks.some((rank) => rank.ignored),
+    durationHidden: ranks.some((rank) => rank.duration_hidden),
+    hasDuration: ranks.some((rank) => rank.duration_ms > 0),
+  };
 }
 
 interface CooldownMenuState {
@@ -25,7 +39,7 @@ interface CooldownMenuState {
   y: number;
   name: string;
   subtitle: string;
-  targets: IgnoreTarget[];
+  targets: OverrideTarget[];
 }
 
 /** One cooldown (all ranks) across the selected datasets. */
@@ -35,6 +49,7 @@ interface MultiDatasetCooldown {
   spellId: number;
   cooldownMs: number;
   durationMs: number;
+  durationHidden: boolean;
   byDataset: Map<string, CooldownSpellEntry[]>;
 }
 
@@ -51,10 +66,17 @@ function formatCooldown(milliseconds: number): string {
   return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
 }
 
-function DurationCell({ ms }: { ms: number }) {
+function DurationCell({ ms, hidden }: { ms: number; hidden: boolean }) {
+  if (ms <= 0) {
+    return <div className="text-right font-mono text-sm text-muted-foreground/40">—</div>;
+  }
   return (
-    <div className="text-right font-mono text-sm text-muted-foreground">
-      {ms > 0 ? formatCooldown(ms) : <span className="text-muted-foreground/40">—</span>}
+    <div
+      className="text-right font-mono text-sm text-muted-foreground"
+      title={hidden ? "Duration bar hidden in Cooldown Usage" : undefined}
+    >
+      <span className={hidden ? "line-through opacity-50" : ""}>{formatCooldown(ms)}</span>
+      {hidden && <div className="text-[10px] text-zinc-400">bar hidden</div>}
     </div>
   );
 }
@@ -75,7 +97,7 @@ function CooldownMenu({
 }: {
   menu: CooldownMenuState;
   pending: boolean;
-  onApply: (ignored: boolean) => void;
+  onApply: (key: OverrideKey, value: boolean) => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -91,6 +113,8 @@ function CooldownMenu({
   const scope = menu.targets.length > 1 ? ` in ${menu.targets.length} datasets` : "";
   const canIgnore = menu.targets.some((target) => !target.ignored);
   const canUnignore = menu.targets.some((target) => target.ignored);
+  const canHideDuration = menu.targets.some((target) => target.hasDuration && !target.durationHidden);
+  const canShowDuration = menu.targets.some((target) => target.durationHidden);
 
   return (
     <div
@@ -107,7 +131,7 @@ function CooldownMenu({
           <button
             type="button"
             disabled={pending}
-            onClick={() => onApply(true)}
+            onClick={() => onApply("ignored", true)}
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-40"
           >
             <EyeOff className="h-3.5 w-3.5" />
@@ -118,11 +142,34 @@ function CooldownMenu({
           <button
             type="button"
             disabled={pending}
-            onClick={() => onApply(false)}
+            onClick={() => onApply("ignored", false)}
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-40"
           >
             <Eye className="h-3.5 w-3.5" />
             Stop ignoring{scope}
+          </button>
+        )}
+        {(canHideDuration || canShowDuration) && <div className="my-1.5 border-t border-border" />}
+        {canHideDuration && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onApply("durationHidden", true)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-40"
+          >
+            <TimerOff className="h-3.5 w-3.5" />
+            Hide duration bar{scope}
+          </button>
+        )}
+        {canShowDuration && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onApply("durationHidden", false)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-40"
+          >
+            <TimerReset className="h-3.5 w-3.5" />
+            Show duration bar{scope}
           </button>
         )}
       </div>
@@ -207,7 +254,7 @@ export function CooldownSpellsPage() {
   const [ignoredOnly, setIgnoredOnly] = useState(false);
   const [menu, setMenu] = useState<CooldownMenuState | null>(null);
   const [selectedDatasetIds, setSelectedDatasetIds] = useState<string[]>([DEFAULT_DATASET_ID]);
-  const setIgnored = useSetCooldownIgnored();
+  const setOverrides = useSetCooldownOverrides();
   const [applying, setApplying] = useState(false);
   const { isAuthenticated } = useAuth();
   // Same rule as consumable ignores: consumables admins or world-data admins.
@@ -262,11 +309,12 @@ export function CooldownSpellsPage() {
         const key = spell.name.toLowerCase();
         let cooldown = byKey.get(key);
         if (!cooldown) {
-          cooldown = { key, name: spell.name, spellId: spell.id, cooldownMs: 0, durationMs: 0, byDataset: new Map() };
+          cooldown = { key, name: spell.name, spellId: spell.id, cooldownMs: 0, durationMs: 0, durationHidden: false, byDataset: new Map() };
           byKey.set(key, cooldown);
         }
         cooldown.cooldownMs = Math.max(cooldown.cooldownMs, spell.cooldown_ms);
         cooldown.durationMs = Math.max(cooldown.durationMs, spell.duration_ms);
+        cooldown.durationHidden ||= spell.duration_hidden;
         const ranks = cooldown.byDataset.get(datasetId) ?? [];
         ranks.push(spell);
         cooldown.byDataset.set(datasetId, ranks);
@@ -304,13 +352,7 @@ export function CooldownSpellsPage() {
       y: event.clientY,
       name: spell.name,
       subtitle: `${activeClass} · ${ranks.length} ${ranks.length === 1 ? "rank" : "ranks"}`,
-      targets: [
-        {
-          datasetId: single.data.datasetId,
-          spellIds: ranks.map((entry) => entry.id),
-          ignored: ranks.some((entry) => entry.ignored),
-        },
-      ],
+      targets: [overrideTarget(single.data.datasetId, ranks)],
     });
   };
 
@@ -321,27 +363,32 @@ export function CooldownSpellsPage() {
       y: event.clientY,
       name: cooldown.name,
       subtitle: `${activeClass} · in ${cooldown.byDataset.size} of ${selectedDatasetIds.length} selected datasets`,
-      targets: [...cooldown.byDataset.entries()].map(([datasetId, ranks]) => ({
-        datasetId,
-        spellIds: ranks.map((rank) => rank.id),
-        ignored: ranks.some((rank) => rank.ignored),
-      })),
+      targets: [...cooldown.byDataset.entries()].map(([datasetId, ranks]) => overrideTarget(datasetId, ranks)),
     });
   };
 
-  const applyIgnored = async (ignored: boolean) => {
+  const applyOverride = async (key: OverrideKey, value: boolean) => {
     if (!menu) return;
-    const targets = menu.targets.filter((target) => target.ignored !== ignored);
+    const targets = menu.targets.filter(
+      (target) => target[key] !== value && (key !== "durationHidden" || !value || target.hasDuration),
+    );
     setApplying(true);
     const results = await Promise.allSettled(
       targets.map((target) =>
-        setIgnored.mutateAsync({ datasetId: target.datasetId, spell_ids: target.spellIds, ignored }),
+        setOverrides.mutateAsync({
+          datasetId: target.datasetId,
+          spell_ids: target.spellIds,
+          ...(key === "ignored" ? { ignored: value } : { hide_duration: value }),
+        }),
       ),
     );
     setApplying(false);
     const failed = results.filter((result) => result.status === "rejected").length;
     const succeeded = results.length - failed;
-    const verb = ignored ? "ignored" : "no longer ignored";
+    const verb =
+      key === "ignored"
+        ? value ? "ignored" : "no longer ignored"
+        : value ? "duration bar hidden" : "duration bar shown";
     if (succeeded > 0) {
       toast.success(
         targets.length > 1
@@ -487,7 +534,7 @@ export function CooldownSpellsPage() {
                     );
                   })}
                 </div>
-                <DurationCell ms={cooldown.durationMs} />
+                <DurationCell ms={cooldown.durationMs} hidden={cooldown.durationHidden} />
                 <div className="text-right font-mono text-sm font-medium">{formatCooldown(cooldown.cooldownMs)}</div>
               </div>
             );
@@ -516,7 +563,7 @@ export function CooldownSpellsPage() {
                 {spell.ignored && <IgnoredBadge />}
                 <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
               </div>
-              <DurationCell ms={spell.duration_ms} />
+              <DurationCell ms={spell.duration_ms} hidden={spell.duration_hidden} />
               <div className="text-right">
                 <div className="font-mono text-sm font-medium">
                   {formatCooldown(spell.cooldown_ms)}
@@ -533,7 +580,7 @@ export function CooldownSpellsPage() {
         <CooldownMenu
           menu={menu}
           pending={applying}
-          onApply={(ignored) => void applyIgnored(ignored)}
+          onApply={(key, value) => void applyOverride(key, value)}
           onClose={() => setMenu(null)}
         />
       )}

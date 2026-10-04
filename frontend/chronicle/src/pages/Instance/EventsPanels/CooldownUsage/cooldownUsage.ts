@@ -93,7 +93,7 @@ export function buildCooldownIndex(data: CooldownSpellsByClass): Map<string, Cla
         def.spellId = Math.max(def.spellId, spell.id);
         def.cooldownMs = Math.max(def.cooldownMs, spell.cooldown_ms);
       }
-      bySpellId.set(spell.id, { def, cooldownMs: spell.cooldown_ms, durationMs: spell.duration_ms });
+      bySpellId.set(spell.id, { def, cooldownMs: spell.cooldown_ms, durationMs: spell.duration_hidden ? 0 : spell.duration_ms });
     }
     index.set(normalizeClassName(className), { bySpellId });
   }

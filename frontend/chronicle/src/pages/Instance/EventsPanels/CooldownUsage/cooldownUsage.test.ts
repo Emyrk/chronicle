@@ -43,9 +43,9 @@ describe("buildCooldownRows", () => {
   it("folds ranks, adds classmates who never cast it, and drops short cooldowns", () => {
     const index = buildCooldownIndex({
       Druid: [
-        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0 },
-        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0 },
-        { id: 16979, name: "Feral Charge", name_subtext: "", cooldown_ms: 15_000, recovery_time_ms: 15_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0 },
+        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0, duration_hidden: false },
+        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0, duration_hidden: false },
+        { id: 16979, name: "Feral Charge", name_subtext: "", cooldown_ms: 15_000, recovery_time_ms: 15_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0, duration_hidden: false },
       ],
     });
     const result: CooldownUsageResult = {
@@ -65,7 +65,7 @@ describe("buildCooldownRows", () => {
 
 describe("buildCooldownRows across the whole log", () => {
   const index = buildCooldownIndex({
-    Druid: [{ id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0 }],
+    Druid: [{ id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0, duration_hidden: false }],
   });
 
   it("carries a cooldown used before the selected fight without counting the cast", () => {
@@ -98,8 +98,8 @@ describe("ignored cooldowns", () => {
   it("are left out of the panel", () => {
     const index = buildCooldownIndex({
       Druid: [
-        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0 },
-        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: true, duration_ms: 0 },
+        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 0, duration_hidden: false },
+        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: true, duration_ms: 0, duration_hidden: false },
       ],
     });
     const result: CooldownUsageResult = {
@@ -126,6 +126,27 @@ describe("buildEffects", () => {
       [90_000, 100_000, 90_000],
       [105_000, 110_000, 90_000],
       [160_000, 170_000, 160_000],
+    ]);
+  });
+});
+
+describe("hidden durations", () => {
+  it("draw no active bar but keep the cooldown", () => {
+    const index = buildCooldownIndex({
+      Druid: [
+        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 12_000, duration_hidden: true },
+        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false, duration_ms: 10_000, duration_hidden: false },
+      ],
+    });
+    const result: CooldownUsageResult = {
+      Casters: new Map([
+        ["p1", { playerID: "p1", playerName: "Sylas", className: "DRUID", casts: new Map([[22812, [5_000]], [29166, [6_000]]]) }],
+      ]),
+    };
+    const rows = buildCooldownRows(result, index, [window(0, 400_000)], 30_000);
+    expect(rows.map((r) => [r.cooldown.name, r.effects.length, r.casts.length])).toEqual([
+      ["Barkskin", 0, 1],
+      ["Innervate", 1, 1],
     ]);
   });
 });

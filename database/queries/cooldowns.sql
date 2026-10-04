@@ -6,12 +6,13 @@ SELECT
     c.recovery_time_ms,
     c.category_recovery_time_ms,
     c.spell_class_set,
-    (i.spell_id IS NOT NULL)::BOOLEAN AS ignored,
+    COALESCE(o.ignored, FALSE)::BOOLEAN AS ignored,
+    COALESCE(o.hide_duration, FALSE)::BOOLEAN AS duration_hidden,
     -- Aura/effect duration; 0 when instant, unknown, or infinite (-1).
     GREATEST(COALESCE(d.max_duration, 0), 0)::BIGINT AS duration_ms
 FROM dbc_cooldown_spells c
-LEFT JOIN dataset_cooldown_ignores i
-    ON i.dataset_id = c.dataset_id AND i.spell_id = c.spell_id
+LEFT JOIN dataset_cooldown_overrides o
+    ON o.dataset_id = c.dataset_id AND o.spell_id = c.spell_id
 LEFT JOIN dbc_spells s
     ON s.dataset_id = c.dataset_id AND s.spell_id = c.spell_id
 LEFT JOIN dbc_spell_durations d
@@ -19,15 +20,23 @@ LEFT JOIN dbc_spell_durations d
 WHERE c.dataset_id = @dataset_id
 ORDER BY c.spell_class_set, c.name, c.spell_id;
 
--- name: IgnoreCooldownSpells :exec
-INSERT INTO dataset_cooldown_ignores (dataset_id, spell_id)
-SELECT c.dataset_id, c.spell_id
+-- name: UpsertCooldownOverrides :exec
+-- NULL ignored/hide_duration leaves that flag unchanged.
+INSERT INTO dataset_cooldown_overrides (dataset_id, spell_id, ignored, hide_duration)
+SELECT
+    c.dataset_id,
+    c.spell_id,
+    COALESCE(sqlc.narg(ignored)::BOOLEAN, FALSE),
+    COALESCE(sqlc.narg(hide_duration)::BOOLEAN, FALSE)
 FROM dbc_cooldown_spells c
 WHERE c.dataset_id = @dataset_id
   AND c.spell_id = ANY(@spell_ids::INT[])
-ON CONFLICT DO NOTHING;
+ON CONFLICT (dataset_id, spell_id) DO UPDATE SET
+    ignored = COALESCE(sqlc.narg(ignored)::BOOLEAN, dataset_cooldown_overrides.ignored),
+    hide_duration = COALESCE(sqlc.narg(hide_duration)::BOOLEAN, dataset_cooldown_overrides.hide_duration);
 
--- name: UnignoreCooldownSpells :exec
-DELETE FROM dataset_cooldown_ignores
+-- name: DeleteEmptyCooldownOverrides :exec
+DELETE FROM dataset_cooldown_overrides
 WHERE dataset_id = @dataset_id
-  AND spell_id = ANY(@spell_ids::INT[]);
+  AND NOT ignored
+  AND NOT hide_duration;

@@ -1,0 +1,10 @@
+BEGIN;
+
+DELETE FROM dataset_cooldown_overrides WHERE NOT ignored;
+ALTER TABLE dataset_cooldown_overrides DROP COLUMN hide_duration;
+ALTER TABLE dataset_cooldown_overrides DROP COLUMN ignored;
+ALTER TABLE dataset_cooldown_overrides RENAME CONSTRAINT dataset_cooldown_overrides_dataset_id_fkey TO dataset_cooldown_ignores_dataset_id_fkey;
+ALTER TABLE dataset_cooldown_overrides RENAME CONSTRAINT dataset_cooldown_overrides_pkey TO dataset_cooldown_ignores_pkey;
+ALTER TABLE dataset_cooldown_overrides RENAME TO dataset_cooldown_ignores;
+
+COMMIT;
