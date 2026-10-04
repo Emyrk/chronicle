@@ -49,6 +49,7 @@ import ConsumablesUnresolvedVideo from "../../../frontend/chronicle/src/pages/In
 import EncounterPhasesDiscordVideo from "../../../frontend/chronicle/src/pages/Instance/videos/EncounterPhasesDiscord.video";
 import RankedSpeedrunTimingVideo from "../../../frontend/chronicle/src/pages/Instance/videos/RankedSpeedrunTiming.video";
 import FavoritesPromo from "./FavoritesPromo";
+import CooldownUsagePromo from "./CooldownUsagePromo";
 
 /**
  * Studio registration for Chronicle's feature demos and in-app explainer
@@ -62,6 +63,7 @@ export const RemotionRoot: React.FC = () => {
     <>
       <Folder name="FeatureDemos">
         <Composition id="FavoritesPromo" component={FavoritesPromo} durationInFrames={620} fps={30} width={1280} height={720} />
+        <Composition id="CooldownUsagePromo" component={CooldownUsagePromo} durationInFrames={800} fps={30} width={1280} height={720} />
         <Composition id="EncounterPhasesDiscord" component={EncounterPhasesDiscordVideo} durationInFrames={650} fps={30} width={1280} height={720} />
         <Composition id="RankedSpeedrunTiming" component={RankedSpeedrunTimingVideo} durationInFrames={710} fps={30} width={1280} height={720} />
       </Folder>
