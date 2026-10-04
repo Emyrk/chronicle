@@ -821,6 +821,12 @@ type ChronicleUser struct {
 	ConsumedStorageBytes   int64              `db:"consumed_storage_bytes" json:"consumed_storage_bytes"`
 }
 
+type ClassBuffIgnore struct {
+	NormalizedName string             `db:"normalized_name" json:"normalized_name"`
+	SpellName      string             `db:"spell_name" json:"spell_name"`
+	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type DataGrant struct {
 	ID           uuid.UUID          `db:"id" json:"id"`
 	UserID       uuid.UUID          `db:"user_id" json:"user_id"`

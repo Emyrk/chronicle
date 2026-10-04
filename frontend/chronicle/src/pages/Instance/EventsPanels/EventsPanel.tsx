@@ -76,6 +76,7 @@ import { createLootPanel } from "./LootPanel/LootPanel";
 import { createRankingRecordsPanel } from "./RankingRecords/RankingRecords";
 import { createLoggingMetadataPanel } from "./LoggingMetadata/LoggingMetadata";
 import { createRaidCompositionPanel } from "./RaidComposition/RaidComposition";
+import { createFriendlyClassBuffsPanel } from "./FriendlyClassBuffs/FriendlyClassBuffs";
 
 import { createDispelsDonePanel, createDispelsReceivedPanel } from "./Dispel/Dispel";
 import { createInterruptsPanel } from "./Interrupt/Interrupt";
@@ -126,6 +127,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   // Aura tracking
   aura_uptime: createAuraUptimePanel(),
   unit_auras: createUnitAurasPanel(),
+  friendly_class_buffs: createFriendlyClassBuffsPanel(),
   // Debug/Analysis
   metrics: createMetricsPanel(),
   periods: PeriodsPanel,

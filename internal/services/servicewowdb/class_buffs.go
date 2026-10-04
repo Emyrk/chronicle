@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -23,6 +24,20 @@ type classBuffSpell struct {
 	NameSubtext string            `json:"name_subtext"`
 	Targeting   string            `json:"targeting"`
 	Effects     []classBuffEffect `json:"effects"`
+	Ignored     bool              `json:"ignored"`
+}
+
+func applyClassBuffIgnores(byClass map[string][]classBuffSpell, ignoredNames []string) {
+	ignored := make(map[string]struct{}, len(ignoredNames))
+	for _, name := range ignoredNames {
+		ignored[name] = struct{}{}
+	}
+	for className, spells := range byClass {
+		for i := range spells {
+			_, spells[i].Ignored = ignored[strings.ToLower(strings.TrimSpace(spells[i].Name))]
+		}
+		byClass[className] = spells
+	}
 }
 
 func (s *Service) handleGetClassBuffs(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +65,14 @@ func (s *Service) handleGetClassBuffs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	ignoredNames, err := s.store.ListClassBuffIgnores(ctx)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	applyClassBuffIgnores(byClass, ignoredNames)
+
+	// Ignores are global and can be toggled by admins at any time.
+	w.Header().Set("Cache-Control", "no-cache")
 	httpapi.Write(ctx, w, http.StatusOK, byClass)
 }

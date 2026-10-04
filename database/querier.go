@@ -85,6 +85,7 @@ type sqlcQuerier interface {
 	DeleteAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
 	DeleteAllTelemetryNotices(ctx context.Context) error
+	DeleteClassBuffIgnore(ctx context.Context, spellName string) error
 	// Release representative IDs that moved to a different logical run before the
 	// state-based refresh upserts all desired rows in arbitrary UUID order.
 	DeleteConflictingRankingRunRepresentatives(ctx context.Context, arg DeleteConflictingRankingRunRepresentativesParams) ([]uuid.UUID, error)
@@ -569,6 +570,7 @@ type sqlcQuerier interface {
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
 	ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error)
 	ListAuraDurationModifiersForDerivation(ctx context.Context, datasetID uuid.UUID) ([]ListAuraDurationModifiersForDerivationRow, error)
+	ListClassBuffIgnores(ctx context.Context) ([]string, error)
 	ListConsumableDisambiguationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableDisambiguationsByDatasetRow, error)
 	ListConsumableEffectPoliciesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableEffectPoliciesByDatasetRow, error)
 	ListConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumablesByDatasetRow, error)
@@ -875,6 +877,7 @@ type sqlcQuerier interface {
 	UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error
 	UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error)
 	UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error)
+	UpsertClassBuffIgnore(ctx context.Context, spellName string) error
 	UpsertConsumableDisambiguationIfCandidate(ctx context.Context, arg UpsertConsumableDisambiguationIfCandidateParams) (UpsertConsumableDisambiguationIfCandidateRow, error)
 	// NULL ignored/hide_duration leaves that flag unchanged.
 	UpsertCooldownOverrides(ctx context.Context, arg UpsertCooldownOverridesParams) error

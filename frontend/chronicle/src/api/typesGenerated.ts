@@ -3110,6 +3110,16 @@ export interface Session {
     readonly created_at: string;
 }
 
+// From chroniclesdk/class_buffs.go
+/**
+ * SetClassBuffIgnoreRequest globally hides or restores every friendly class
+ * buff whose spell name matches SpellName, regardless of dataset or rank.
+ */
+export interface SetClassBuffIgnoreRequest {
+    readonly spell_name: string;
+    readonly ignored: boolean;
+}
+
 // From chroniclesdk/consumables.go
 export interface SetConsumableDisambiguationRequest {
     readonly item_id: number;

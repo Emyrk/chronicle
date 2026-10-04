@@ -46,6 +46,7 @@ import { companionStatsProcessor } from "../CompanionStats/companionStats.proces
 import { playerLifeStateProcessor } from "./playerLifeState.processor";
 import { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
 import { raidCompositionProcessor } from "../RaidComposition/raidComposition.processor";
+import { friendlyClassBuffsProcessor } from "../FriendlyClassBuffs/friendlyClassBuffs.processor";
 
 // Export individual processors
 export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
@@ -90,7 +91,9 @@ export { resistsProcessor } from "../ResistsPanel/resists.processor";
 export { guildsProcessor } from "../Guilds/guilds.processor";
 export { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
 export { raidCompositionProcessor } from "../RaidComposition/raidComposition.processor";
+export { friendlyClassBuffsProcessor } from "../FriendlyClassBuffs/friendlyClassBuffs.processor";
 export type { RaidCompositionResult } from "../RaidComposition/raidComposition.processor";
+export type { FriendlyClassBuffsResult } from "../FriendlyClassBuffs/friendlyClassBuffs.processor";
 
 // Export state types
 export type { DamageDoneResult as DamageDoneState, DamageDoneData, DamageSourceType } from "../DamageDone/damageDone.processor";
@@ -149,6 +152,7 @@ export { isResourceChangeEvent, isHealingEvent, isDamageEvent } from "./events";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   player_life_state: playerLifeStateProcessor,
+  friendly_class_buffs: friendlyClassBuffsProcessor,
   damage_done: damageDoneProcessor,
   vulnerability_effect: vulnerabilityEffectProcessor,
   damage_done_enemies: enemyDamageDoneProcessor,

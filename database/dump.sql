@@ -281,6 +281,13 @@ CREATE VIEW chronicle_users AS
           WHERE (log_file.storage_deleted_at IS NULL)
           GROUP BY log_file.owner) lf ON ((lf.owner = u.id)));
 
+CREATE TABLE class_buff_ignores (
+    normalized_name text NOT NULL,
+    spell_name text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT class_buff_ignores_normalized_name_check CHECK (((normalized_name = lower(btrim(spell_name))) AND (normalized_name <> ''::text)))
+);
+
 CREATE TABLE dataset_class_buffs (
     dataset_id uuid NOT NULL,
     data jsonb NOT NULL,
@@ -2065,6 +2072,9 @@ ALTER TABLE ONLY application_modification_requests
 
 ALTER TABLE ONLY authz_schema_migrations
     ADD CONSTRAINT authz_schema_migrations_pkey PRIMARY KEY (version);
+
+ALTER TABLE ONLY class_buff_ignores
+    ADD CONSTRAINT class_buff_ignores_pkey PRIMARY KEY (normalized_name);
 
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_pkey PRIMARY KEY (id);
