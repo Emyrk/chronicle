@@ -1,35 +1,9 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ExternalLink, Search, TimerReset } from "lucide-react";
+import { useCooldownSpells } from "@/api/cooldownSpells";
 import { Card } from "@/components/ui/Card/Card";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
-import { useDatasetId } from "@/hooks/useDatasetId";
-
-interface CooldownSpellEntry {
-  id: number;
-  name: string;
-  name_subtext: string;
-  cooldown_ms: number;
-  recovery_time_ms: number;
-  category_recovery_time_ms: number;
-}
-
-type CooldownSpellsData = Record<string, CooldownSpellEntry[]>;
-
-function useCooldownSpells() {
-  const datasetId = useDatasetId();
-  return useQuery({
-    queryKey: ["wowdb", "cooldown-spells", datasetId ?? "default"],
-    queryFn: async () => {
-      const params = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : "";
-      const response = await fetch(`/api/v1/wowdb/cooldown-spells${params}`);
-      if (!response.ok) throw new Error("Failed to fetch cooldown spells");
-      return response.json() as Promise<CooldownSpellsData>;
-    },
-    staleTime: 24 * 60 * 60 * 1000,
-  });
-}
 
 function formatCooldown(milliseconds: number): string {
   const totalSeconds = Math.round(milliseconds / 1000);

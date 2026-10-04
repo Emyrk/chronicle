@@ -651,6 +651,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   status: 'st',
   healer_casts: 'hc',
   spell_count: 'sc',
+  cooldown_usage: 'cdu',
   possession: 'pos',
   vehicle: 'veh',
   unit_lookup: 'ul',
