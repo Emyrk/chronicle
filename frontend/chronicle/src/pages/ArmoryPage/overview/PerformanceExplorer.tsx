@@ -36,6 +36,7 @@ import {
   buildPerformanceVariants,
   calculatePerformanceWaterlineMarkers,
   filterPerformanceRunSeries,
+  formatDeathsAlive,
   performanceEncounterSections,
   performanceValue,
   selectPerformanceEncounterNames,
@@ -1215,6 +1216,7 @@ function PerformanceTable({
               <th className="pb-2 pr-4 font-medium">Player</th>
               <th className="pb-2 pr-4 font-medium">Spec</th>
               <th className="pb-2 pr-4 text-right font-medium">Duration</th>
+              <th className="pb-2 pr-4 text-right font-medium">Deaths/Alive%</th>
               <th className="pb-2 pr-4 text-right font-medium">Total</th>
               <th className="pb-2 pr-4 text-right font-medium">{metric.toUpperCase()}</th>
               <th className="pb-2 pr-4 text-right font-medium">Parse</th>
@@ -1260,6 +1262,7 @@ function PerformanceTable({
                   </div>
                 </td>
                 <td className="py-2 pr-4 text-right font-mono tabular-nums">{formatDuration(run.duration_secs)}</td>
+                <td className="py-2 pr-4 text-right font-mono tabular-nums">{formatDeathsAlive(run)}</td>
                 <td className="py-2 pr-4 text-right font-mono tabular-nums">{formatCompact(metric === "hps" ? run.healing_done + run.absorbed_done : run.damage_done)}</td>
                 <td className="py-2 pr-4 text-right font-mono font-semibold tabular-nums">{Math.round(metric === "hps" ? run.hps : run.dps).toLocaleString()}</td>
                 <td className="py-2 pr-4 text-right font-mono tabular-nums" style={{ color: run.average_parse == null ? undefined : parseColor(run.average_parse) }}>

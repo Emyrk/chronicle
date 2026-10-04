@@ -694,6 +694,8 @@ raw_rows AS MATERIALIZED (
         edr.damage_done,
         edr.healing_done,
         edr.absorbed_done,
+        edr.player_deaths,
+        edr.alive_percentage,
         edr.duration_secs,
         edr.log_hashed_slug,
         edr.killed_at
@@ -743,6 +745,15 @@ per_run AS (
         SUM(raw.damage_done)::bigint AS damage_done,
         SUM(raw.healing_done)::bigint AS healing_done,
         SUM(raw.absorbed_done)::bigint AS absorbed_done,
+        COALESCE((CASE
+            WHEN COUNT(raw.player_deaths) = COUNT(*) THEN SUM(raw.player_deaths)
+            ELSE NULL
+        END), -1)::integer AS player_deaths,
+        COALESCE((CASE
+            WHEN COUNT(raw.alive_percentage) = COUNT(*) THEN
+                SUM(raw.duration_secs * raw.alive_percentage) / NULLIF(SUM(raw.duration_secs), 0)
+            ELSE NULL
+        END), -1)::double precision AS alive_percentage,
         SUM(raw.duration_secs)::double precision AS duration_secs,
         (SUM(raw.damage_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS dps,
         (SUM(raw.healing_done + raw.absorbed_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS hps,

@@ -71,6 +71,8 @@ type CharacterPerformanceRun struct {
 	DamageDone               int64     `json:"damage_done"`
 	HealingDone              int64     `json:"healing_done"`
 	AbsorbedDone             int64     `json:"absorbed_done"`
+	PlayerDeaths             *int32    `json:"player_deaths,omitempty"`
+	AlivePercentage          *float64  `json:"alive_percentage,omitempty"`
 	DurationSecs             float64   `json:"duration_secs"`
 	DPS                      float64   `json:"dps"`
 	HPS                      float64   `json:"hps"`

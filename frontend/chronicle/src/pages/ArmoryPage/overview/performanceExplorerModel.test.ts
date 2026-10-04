@@ -10,6 +10,7 @@ import {
   filterPerformanceRuns,
   filterPerformanceRunsByDate,
   filterPerformanceRunSeries,
+  formatDeathsAlive,
   performanceEncounterSections,
   performanceValue,
   selectPerformanceEncounterNames,
@@ -50,6 +51,17 @@ function run(overrides: Partial<CharacterPerformanceRun> = {}): CharacterPerform
     ...overrides,
   };
 }
+
+describe("formatDeathsAlive", () => {
+  it("combines deaths with a rounded alive percentage", () => {
+    expect(formatDeathsAlive(run({ player_deaths: 5, alive_percentage: 74.6 }))).toBe("5 / 75%");
+  });
+
+  it("uses a placeholder when either metric is unavailable", () => {
+    expect(formatDeathsAlive(run({ player_deaths: undefined, alive_percentage: 75 }))).toBe("—");
+    expect(formatDeathsAlive(run({ player_deaths: 5, alive_percentage: undefined }))).toBe("—");
+  });
+});
 
 describe("buildPerformanceVariants", () => {
   it("groups instance variants and excludes trash", () => {

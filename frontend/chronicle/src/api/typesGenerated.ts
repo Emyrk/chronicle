@@ -593,6 +593,8 @@ export interface CharacterPerformanceRun {
     readonly damage_done: number;
     readonly healing_done: number;
     readonly absorbed_done: number;
+    readonly player_deaths?: number;
+    readonly alive_percentage?: number;
     readonly duration_secs: number;
     readonly dps: number;
     readonly hps: number;
