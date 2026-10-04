@@ -78,6 +78,7 @@ import type {
   Dataset,
   UpsertDatasetRequest,
   UserFavoritesResponse,
+  TelemetryNoticesResponse,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -163,6 +164,35 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
       const response = await fetch("/api/v1/whoami");
       if (!response.ok) return null;
       return response.json() as Promise<Session>;
+    },
+    retry: false,
+    ...options,
+  });
+}
+
+export function usePublicTelemetryNotices(
+  options?: Omit<UseQueryOptions<TelemetryNoticesResponse>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: ["telemetry-notices", "public"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/notices/public");
+      if (!response.ok) throw new Error("Failed to fetch public notices");
+      return response.json() as Promise<TelemetryNoticesResponse>;
+    },
+    ...options,
+  });
+}
+
+export function useAdminTelemetryNotices(
+  options?: Omit<UseQueryOptions<TelemetryNoticesResponse>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: ["telemetry-notices", "admin"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/admin/notices");
+      if (!response.ok) throw new Error("Failed to fetch admin notices");
+      return response.json() as Promise<TelemetryNoticesResponse>;
     },
     retry: false,
     ...options,

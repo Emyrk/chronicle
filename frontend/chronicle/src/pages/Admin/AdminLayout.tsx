@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthorizationCheck } from "@/api/queries";
+import { useAdminTelemetryNotices, useAuthorizationCheck } from "@/api/queries";
+import { NoticeBanner } from "@/components/NoticeBanner/NoticeBanner";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +61,7 @@ export function AdminLayout() {
     enabled: isAuthenticated,
   });
   const isAdmin = authz?.admin ?? false;
+  const { data: noticeResponse } = useAdminTelemetryNotices({ enabled: isAdmin });
 
   const sessionLoading = authLoading || authzLoading;
 
@@ -117,67 +119,73 @@ export function AdminLayout() {
 
   if (isMobile) {
     return (
-      <div className="relative min-h-[calc(100vh-8rem)]">
-        {mobileSidebarOpen ? (
-          <button
-            type="button"
-            className="fixed inset-0 z-40 bg-black/50"
-            onClick={() => setMobileSidebarOpen(false)}
-            aria-label="Close admin menu"
-          />
-        ) : null}
-
-        <nav
-          className={`fixed left-0 top-0 z-50 h-full w-72 border-r bg-background p-4 shadow-xl transition-transform duration-200 ${
-            mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <div className="mb-4 flex items-center justify-between">
-            <h1 className="text-lg font-semibold flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5" />
-              Administration
-            </h1>
-            <Button
-              variant="ghost"
-              size="icon"
+      <>
+        <NoticeBanner notices={noticeResponse?.notices ?? []} />
+        <div className="relative min-h-[calc(100vh-8rem)]">
+          {mobileSidebarOpen ? (
+            <button
+              type="button"
+              className="fixed inset-0 z-40 bg-black/50"
               onClick={() => setMobileSidebarOpen(false)}
-              aria-label="Collapse admin menu"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-          {renderNavLinks(true)}
-        </nav>
+              aria-label="Close admin menu"
+            />
+          ) : null}
 
-        <main className="p-4">
-          <Button
-            variant="outline"
-            size="sm"
-            className="mb-4 gap-2"
-            onClick={() => setMobileSidebarOpen(true)}
+          <nav
+            className={`fixed left-0 top-0 z-50 h-full w-72 border-r bg-background p-4 shadow-xl transition-transform duration-200 ${
+              mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+            }`}
           >
-            <Menu className="h-4 w-4" />
-            Open admin menu
-          </Button>
-          <Outlet />
-        </main>
-      </div>
+            <div className="mb-4 flex items-center justify-between">
+              <h1 className="text-lg font-semibold flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5" />
+                Administration
+              </h1>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMobileSidebarOpen(false)}
+                aria-label="Collapse admin menu"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {renderNavLinks(true)}
+          </nav>
+
+          <main className="p-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="mb-4 gap-2"
+              onClick={() => setMobileSidebarOpen(true)}
+            >
+              <Menu className="h-4 w-4" />
+              Open admin menu
+            </Button>
+            <Outlet />
+          </main>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)]">
-      <nav className="w-64 border-r p-4">
-        <h1 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5" />
-          Administration
-        </h1>
-        {renderNavLinks(false)}
-      </nav>
+    <>
+      <NoticeBanner notices={noticeResponse?.notices ?? []} />
+      <div className="flex min-h-[calc(100vh-8rem)]">
+        <nav className="w-64 border-r p-4">
+          <h1 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5" />
+            Administration
+          </h1>
+          {renderNavLinks(false)}
+        </nav>
 
-      <main className="flex-1 p-8">
-        <Outlet />
-      </main>
-    </div>
+        <main className="flex-1 p-8">
+          <Outlet />
+        </main>
+      </div>
+    </>
   );
 }
