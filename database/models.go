@@ -1299,6 +1299,7 @@ type DeploymentInfo struct {
 	ID                     uuid.UUID          `db:"id" json:"id"`
 	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	LastTelemetryHeartbeat pgtype.Timestamptz `db:"last_telemetry_heartbeat" json:"last_telemetry_heartbeat"`
+	DeploymentToken        pgtype.Text        `db:"deployment_token" json:"deployment_token"`
 }
 
 type EncounterDpsRanking struct {
@@ -2024,6 +2025,20 @@ type TalentBuild struct {
 	SubSpec       pgtype.Text        `db:"sub_spec" json:"sub_spec"`
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	DatasetID     uuid.UUID          `db:"dataset_id" json:"dataset_id"`
+}
+
+type TelemetryNotice struct {
+	ID          string             `db:"id" json:"id"`
+	Audience    string             `db:"audience" json:"audience"`
+	Category    string             `db:"category" json:"category"`
+	Severity    string             `db:"severity" json:"severity"`
+	Title       string             `db:"title" json:"title"`
+	Message     string             `db:"message" json:"message"`
+	ActionLabel pgtype.Text        `db:"action_label" json:"action_label"`
+	ActionUrl   pgtype.Text        `db:"action_url" json:"action_url"`
+	StartsAt    pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
+	ExpiresAt   pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type Tenant struct {

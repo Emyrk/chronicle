@@ -1,5 +1,9 @@
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
 import type { WoWSpell } from "./wowdb";
+import {
+  recordPublicNoticeResult,
+  shouldFetchPublicNotices,
+} from "@/components/NoticeBanner/publicNoticeCache";
 import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse } from "./typesGenerated";
 import type { 
   WoWLogGroup as WoWLogGroupGenerated, 
@@ -78,6 +82,7 @@ import type {
   Dataset,
   UpsertDatasetRequest,
   UserFavoritesResponse,
+  TelemetryNoticesResponse,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -163,6 +168,42 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
       const response = await fetch("/api/v1/whoami");
       if (!response.ok) return null;
       return response.json() as Promise<Session>;
+    },
+    retry: false,
+    ...options,
+  });
+}
+
+export function usePublicTelemetryNotices(
+  options?: Omit<UseQueryOptions<TelemetryNoticesResponse>, "queryKey" | "queryFn">,
+) {
+  const cacheAllowsFetch =
+    typeof window === "undefined" || shouldFetchPublicNotices();
+
+  return useQuery({
+    queryKey: ["telemetry-notices", "public"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/notices/public");
+      if (!response.ok) throw new Error("Failed to fetch public notices");
+      const result = (await response.json()) as TelemetryNoticesResponse;
+      recordPublicNoticeResult(result.notices.length > 0);
+      return result;
+    },
+    ...options,
+    enabled: cacheAllowsFetch && (options?.enabled ?? true),
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useAdminTelemetryNotices(
+  options?: Omit<UseQueryOptions<TelemetryNoticesResponse>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: ["telemetry-notices", "admin"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/admin/notices");
+      if (!response.ok) throw new Error("Failed to fetch admin notices");
+      return response.json() as Promise<TelemetryNoticesResponse>;
     },
     retry: false,
     ...options,

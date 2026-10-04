@@ -3620,6 +3620,31 @@ export interface TalentBuild {
     readonly talent_layout: string;
 }
 
+// From chroniclesdk/telemetry_notice.go
+export interface TelemetryNotice {
+    readonly id: string;
+    readonly audience: string;
+    readonly category: string;
+    readonly severity: TelemetryNoticeSeverity;
+    readonly title: string;
+    readonly message: string;
+    readonly action_label?: string;
+    readonly action_url?: string;
+    readonly starts_at?: string;
+    readonly expires_at?: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/telemetry_notice.go
+export type TelemetryNoticeSeverity = "critical" | "info" | "warning";
+
+export const TelemetryNoticeSeveritys: TelemetryNoticeSeverity[] = ["critical", "info", "warning"];
+
+// From chroniclesdk/telemetry_notice.go
+export interface TelemetryNoticesResponse {
+    readonly notices: readonly TelemetryNotice[];
+}
+
 // From chroniclesdk/tenant.go
 /**
  * Tenant is the SDK type exposed to the frontend.

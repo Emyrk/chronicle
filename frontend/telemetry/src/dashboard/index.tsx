@@ -33,7 +33,9 @@ dashboard.get("/internal", async (c) => {
     [
       db
         .prepare(
-          `SELECT dl.*, r.total_log_files, r.total_users as report_users, r.instances_by_zone,
+          `SELECT dl.deployment_id, dl.last_report_id, dl.last_reported_at,
+                  dl.version, dl.server_type, dl.access_url, dl.is_dev,
+                  r.total_log_files, r.total_users as report_users, r.instances_by_zone,
                   r.remote_ip, r.hostname, r.os, r.arch
            FROM deployment_latest dl
            JOIN telemetry_reports r ON r.id = dl.last_report_id
@@ -43,8 +45,8 @@ dashboard.get("/internal", async (c) => {
       db
         .prepare(
           `SELECT
-           COUNT(*) as total,
-           SUM(CASE WHEN last_reported_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END) as active_7d,
+           COUNT(last_report_id) as total,
+           SUM(CASE WHEN last_report_id IS NOT NULL AND last_reported_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END) as active_7d,
            COALESCE((SELECT SUM(r.total_users) FROM deployment_latest dl2 JOIN telemetry_reports r ON r.id = dl2.last_report_id), 0) as total_users,
            COALESCE((SELECT SUM(r.total_log_files) FROM deployment_latest dl3 JOIN telemetry_reports r ON r.id = dl3.last_report_id), 0) as total_log_files
          FROM deployment_latest`
@@ -57,12 +59,12 @@ dashboard.get("/internal", async (c) => {
         }>(),
       db
         .prepare(
-          `SELECT version, COUNT(*) as count FROM deployment_latest GROUP BY version ORDER BY count DESC LIMIT 10`
+          `SELECT version, COUNT(*) as count FROM deployment_latest WHERE last_report_id IS NOT NULL GROUP BY version ORDER BY count DESC LIMIT 10`
         )
         .all<{ version: string; count: number }>(),
       db
         .prepare(
-          `SELECT server_type, COUNT(*) as count FROM deployment_latest GROUP BY server_type ORDER BY count DESC LIMIT 10`
+          `SELECT server_type, COUNT(*) as count FROM deployment_latest WHERE last_report_id IS NOT NULL GROUP BY server_type ORDER BY count DESC LIMIT 10`
         )
         .all<{ server_type: string; count: number }>(),
     ]
@@ -152,6 +154,9 @@ dashboard.get("/internal", async (c) => {
       </head>
       <body>
         <h1>Chronicle <span>Telemetry</span></h1>
+        <div style="display:flex;justify-content:flex-end;margin-top:-52px;margin-bottom:28px;">
+          <a href="/internal/notices" style="border:1px solid #3b4c54;border-radius:6px;padding:8px 12px;background:#20282c;font-size:12px;font-weight:600;">Manage notices</a>
+        </div>
 
         <div class="cards">
           <div class="card">

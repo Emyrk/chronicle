@@ -179,6 +179,7 @@ func (api *API) Routes() chi.Router {
 			// Not browser-only
 			r.Get("/discovery", api.Discovery)
 			r.Get("/parser-version", api.ParserVersion)
+			r.Get("/notices/public", api.ListPublicTelemetryNotices)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -245,6 +246,9 @@ func (api *API) Routes() chi.Router {
 			// Admin routes - require admin or technical_admin role
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(api.Auth.Authenticated(false))
+				r.With(
+					httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
+				).Get("/notices", api.AdminListTelemetryNotices)
 				r.Route("/users", func(r chi.Router) {
 					r.Use(
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),

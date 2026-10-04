@@ -27,3 +27,55 @@ SELECT
     COUNT(*)::bigint AS log_count
 FROM log_instances li
 GROUP BY li.name;
+
+-- name: EnsureDeploymentToken :one
+UPDATE deployment_info
+SET deployment_token = COALESCE(deployment_token, $1)
+RETURNING deployment_token;
+
+-- name: DeleteAllTelemetryNotices :exec
+DELETE FROM telemetry_notices;
+
+-- name: InsertTelemetryNotice :exec
+INSERT INTO telemetry_notices (
+    id,
+    audience,
+    category,
+    severity,
+    title,
+    message,
+    action_label,
+    action_url,
+    starts_at,
+    expires_at,
+    updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+);
+
+-- name: ListTelemetryNotices :many
+SELECT *
+FROM telemetry_notices
+ORDER BY starts_at DESC NULLS LAST, id;
+
+-- name: ListActivePublicTelemetryNotices :many
+SELECT *
+FROM telemetry_notices
+WHERE audience = 'public'
+  AND (starts_at IS NULL OR starts_at <= now())
+  AND (expires_at IS NULL OR expires_at > now())
+ORDER BY
+  CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+  updated_at DESC,
+  id;
+
+-- name: ListActiveAdminTelemetryNotices :many
+SELECT *
+FROM telemetry_notices
+WHERE audience = 'admin'
+  AND (starts_at IS NULL OR starts_at <= now())
+  AND (expires_at IS NULL OR expires_at > now())
+ORDER BY
+  CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+  updated_at DESC,
+  id;
