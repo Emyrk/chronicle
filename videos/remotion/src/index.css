@@ -12,3 +12,10 @@ body {
   margin: 0;
   overflow: hidden;
 }
+
+/* The app reserves a scrollbar gutter on <html>; in rendered frames that shows
+   up as a dark strip down the right edge. */
+html {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
