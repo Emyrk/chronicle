@@ -476,6 +476,7 @@ type sqlcQuerier interface {
 	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
+	IgnoreCooldownSpells(ctx context.Context, arg IgnoreCooldownSpellsParams) error
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
@@ -826,6 +827,7 @@ type sqlcQuerier interface {
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
 	UnassignWorldFromServer(ctx context.Context, arg UnassignWorldFromServerParams) error
+	UnignoreCooldownSpells(ctx context.Context, arg UnignoreCooldownSpellsParams) error
 	UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (UnlinkDuplicateGroupRow, error)
 	UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error
 	UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error)

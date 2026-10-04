@@ -850,6 +850,12 @@ type DatasetConsumableDisambiguation struct {
 	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type DatasetCooldownIgnore struct {
+	DatasetID uuid.UUID          `db:"dataset_id" json:"dataset_id"`
+	SpellID   int32              `db:"spell_id" json:"spell_id"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type DatasetTalentTree struct {
 	DatasetID uuid.UUID          `db:"dataset_id" json:"dataset_id"`
 	Data      []byte             `db:"data" json:"data"`

@@ -1,4 +1,4 @@
-import type { CooldownSpellsData } from "@/api/cooldownSpells";
+import type { CooldownSpellsByClass } from "@/api/cooldownSpells";
 import type { CooldownUsageCaster, CooldownUsageResult } from "./cooldownUsage.processor";
 
 export interface CooldownDef {
@@ -45,12 +45,13 @@ export function normalizeClassName(className: string): string {
   return className.toUpperCase().replace(/[^A-Z]/g, "");
 }
 
-export function buildCooldownIndex(data: CooldownSpellsData): Map<string, ClassCooldowns> {
+export function buildCooldownIndex(data: CooldownSpellsByClass): Map<string, ClassCooldowns> {
   const index = new Map<string, ClassCooldowns>();
   for (const [className, spells] of Object.entries(data)) {
     const defs = new Map<string, CooldownDef>();
     const bySpellId = new Map<number, { def: CooldownDef; cooldownMs: number }>();
     for (const spell of spells) {
+      if (spell.ignored) continue;
       const key = spell.name.toLowerCase();
       let def = defs.get(key);
       if (!def) {

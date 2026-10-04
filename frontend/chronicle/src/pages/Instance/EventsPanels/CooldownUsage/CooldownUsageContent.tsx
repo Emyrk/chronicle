@@ -104,7 +104,7 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
 
   const allRows = useMemo(() => {
     if (!cooldownData || !result?.Casters) return [];
-    return buildCooldownRows(result, buildCooldownIndex(cooldownData), windows, minSeconds * 1000);
+    return buildCooldownRows(result, buildCooldownIndex(cooldownData.byClass), windows, minSeconds * 1000);
   }, [cooldownData, minSeconds, result, windows]);
 
   const classCounts = useMemo(() => {

@@ -103,6 +103,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Post("/dbc/upload", h.UploadDBC)
 		r.Put("/datasets/{datasetID}/talent-trees", h.UploadTalentTrees)
 		r.Put("/datasets/{datasetID}/wowdata-snapshot", h.UploadWowdataSnapshot)
+		r.Put("/datasets/{datasetID}/cooldown-ignores", h.SetCooldownIgnored)
 
 		// World <-> Server assignment
 		r.Post("/worlds/{worldID}/servers/{serverID}", h.AssignWorldToServer)

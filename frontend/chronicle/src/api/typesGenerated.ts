@@ -3113,6 +3113,16 @@ export interface SetConsumableDisambiguationRequest {
     readonly item_id: number;
 }
 
+// From chroniclesdk/cooldowns.go
+/**
+ * SetCooldownIgnoredRequest marks cooldown spells as ignored (hidden from the
+ * Cooldown Usage panel) or clears the ignore.
+ */
+export interface SetCooldownIgnoredRequest {
+    readonly spell_ids: readonly number[];
+    readonly ignored: boolean;
+}
+
 // From chroniclesdk/tenant.go
 /**
  * SetDatasetRequest assigns or removes a default dataset from a server or

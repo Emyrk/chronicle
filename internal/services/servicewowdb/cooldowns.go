@@ -15,6 +15,7 @@ type CooldownSpellEntry struct {
 	CooldownMS             int64  `json:"cooldown_ms"`
 	RecoveryTimeMS         int64  `json:"recovery_time_ms"`
 	CategoryRecoveryTimeMS int64  `json:"category_recovery_time_ms"`
+	Ignored                bool   `json:"ignored"`
 }
 
 func (s *Service) handleGetCooldownSpells(w http.ResponseWriter, r *http.Request) {
@@ -44,11 +45,13 @@ func (s *Service) handleGetCooldownSpells(w http.ResponseWriter, r *http.Request
 			CooldownMS:             max(row.RecoveryTimeMs, row.CategoryRecoveryTimeMs),
 			RecoveryTimeMS:         row.RecoveryTimeMs,
 			CategoryRecoveryTimeMS: row.CategoryRecoveryTimeMs,
+			Ignored:                row.Ignored,
 		})
 	}
 
 	w.Header().Set(httpapi.DatasetHeader, datasetID.String())
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	// Ignores can be toggled by admins at any time, so always revalidate.
+	w.Header().Set("Cache-Control", "no-cache")
 	httpapi.Write(ctx, w, http.StatusOK, byClass)
 }
 

@@ -1,11 +1,27 @@
 -- name: ListCooldownSpellsByDataset :many
 SELECT
-    spell_id,
-    name,
-    name_subtext,
-    recovery_time_ms,
-    category_recovery_time_ms,
-    spell_class_set
-FROM dbc_cooldown_spells
+    c.spell_id,
+    c.name,
+    c.name_subtext,
+    c.recovery_time_ms,
+    c.category_recovery_time_ms,
+    c.spell_class_set,
+    (i.spell_id IS NOT NULL)::BOOLEAN AS ignored
+FROM dbc_cooldown_spells c
+LEFT JOIN dataset_cooldown_ignores i
+    ON i.dataset_id = c.dataset_id AND i.spell_id = c.spell_id
+WHERE c.dataset_id = @dataset_id
+ORDER BY c.spell_class_set, c.name, c.spell_id;
+
+-- name: IgnoreCooldownSpells :exec
+INSERT INTO dataset_cooldown_ignores (dataset_id, spell_id)
+SELECT c.dataset_id, c.spell_id
+FROM dbc_cooldown_spells c
+WHERE c.dataset_id = @dataset_id
+  AND c.spell_id = ANY(@spell_ids::INT[])
+ON CONFLICT DO NOTHING;
+
+-- name: UnignoreCooldownSpells :exec
+DELETE FROM dataset_cooldown_ignores
 WHERE dataset_id = @dataset_id
-ORDER BY spell_class_set, name, spell_id;
+  AND spell_id = ANY(@spell_ids::INT[]);

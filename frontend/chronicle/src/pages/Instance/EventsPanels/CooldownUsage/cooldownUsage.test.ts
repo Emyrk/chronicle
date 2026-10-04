@@ -43,9 +43,9 @@ describe("buildCooldownRows", () => {
   it("folds ranks, adds classmates who never cast it, and drops short cooldowns", () => {
     const index = buildCooldownIndex({
       Druid: [
-        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0 },
-        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0 },
-        { id: 16979, name: "Feral Charge", name_subtext: "", cooldown_ms: 15_000, recovery_time_ms: 15_000, category_recovery_time_ms: 0 },
+        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false },
+        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: false },
+        { id: 16979, name: "Feral Charge", name_subtext: "", cooldown_ms: 15_000, recovery_time_ms: 15_000, category_recovery_time_ms: 0, ignored: false },
       ],
     });
     const result: CooldownUsageResult = {
@@ -65,7 +65,7 @@ describe("buildCooldownRows", () => {
 
 describe("buildCooldownRows across the whole log", () => {
   const index = buildCooldownIndex({
-    Druid: [{ id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0 }],
+    Druid: [{ id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false }],
   });
 
   it("carries a cooldown used before the selected fight without counting the cast", () => {
@@ -91,6 +91,24 @@ describe("buildCooldownRows across the whole log", () => {
     };
     const rows = buildCooldownRows(result, index, [window(300_000, 600_000)], 30_000);
     expect(rows.map((r) => r.playerName)).toEqual(["Sylas"]);
+  });
+});
+
+describe("ignored cooldowns", () => {
+  it("are left out of the panel", () => {
+    const index = buildCooldownIndex({
+      Druid: [
+        { id: 29166, name: "Innervate", name_subtext: "", cooldown_ms: 360_000, recovery_time_ms: 360_000, category_recovery_time_ms: 0, ignored: false },
+        { id: 22812, name: "Barkskin", name_subtext: "", cooldown_ms: 60_000, recovery_time_ms: 60_000, category_recovery_time_ms: 0, ignored: true },
+      ],
+    });
+    const result: CooldownUsageResult = {
+      Casters: new Map([
+        ["p1", { playerID: "p1", playerName: "Sylas", className: "DRUID", casts: new Map([[29166, [5_000]], [22812, [6_000]]]) }],
+      ]),
+    };
+    const rows = buildCooldownRows(result, index, [window(0, 400_000)], 30_000);
+    expect(rows.map((r) => r.cooldown.name)).toEqual(["Innervate"]);
   });
 });
 
