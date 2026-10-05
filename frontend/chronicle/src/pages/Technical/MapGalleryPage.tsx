@@ -1,9 +1,16 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Map, Search } from "lucide-react";
+import { ArrowLeft, Map, Maximize2, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useDatasets } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import {
   mapAssetUrl,
@@ -75,18 +82,35 @@ function MapArtwork({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: 
   );
 }
 
-function MapCard({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: string }) {
+function MapCard({
+  item,
+  iconBaseUrl,
+  onSelect,
+}: {
+  item: MapGalleryItem;
+  iconBaseUrl: string;
+  onSelect: (item: MapGalleryItem) => void;
+}) {
   const assignment = item.kind === "zone" ? item.map.assignments?.[0] : undefined;
   const name = item.kind === "zone" ? (item.map.name || `Map ${item.map.id}`) : item.instance.name;
   const canvas = item.kind === "zone" ? item.layer : item.floor;
 
   return (
-    <Card className="group gap-0 overflow-hidden border-amber-950/40 bg-[#171611] py-0 shadow-[0_18px_45px_-30px_rgba(0,0,0,0.9)] transition-transform duration-200 hover:-translate-y-0.5 hover:border-amber-800/50">
+    <Card className="group relative gap-0 overflow-hidden border-amber-950/40 bg-[#171611] py-0 shadow-[0_18px_45px_-30px_rgba(0,0,0,0.9)] transition-transform duration-200 hover:-translate-y-0.5 hover:border-amber-800/50">
+      <button
+        type="button"
+        onClick={() => onSelect(item)}
+        className="absolute inset-0 z-10 cursor-zoom-in rounded-xl outline-none ring-amber-500/70 transition-shadow focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#11100d]"
+        aria-label={`Open ${name} map`}
+      />
       <div className="relative border-b border-amber-950/40 bg-black/30 p-2">
         <div className="overflow-hidden rounded-md border border-white/5 bg-black shadow-inner">
           <MapArtwork item={item} iconBaseUrl={iconBaseUrl} />
         </div>
         <div className="pointer-events-none absolute inset-2 rounded-md bg-[linear-gradient(115deg,transparent_45%,rgba(255,235,180,0.08)_50%,transparent_55%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+        <div className="pointer-events-none absolute right-4 top-4 rounded-md border border-amber-100/15 bg-black/65 p-1.5 text-amber-50/80 opacity-0 shadow-lg backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <Maximize2 className="h-3.5 w-3.5" />
+        </div>
       </div>
 
       <div className="flex items-start justify-between gap-3 p-3">
@@ -111,11 +135,48 @@ function MapCard({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: str
   );
 }
 
+function MapModal({
+  item,
+  iconBaseUrl,
+  onOpenChange,
+}: {
+  item: MapGalleryItem | null;
+  iconBaseUrl: string | undefined;
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (!item || !iconBaseUrl) return null;
+
+  const name = item.kind === "zone" ? (item.map.name || `Map ${item.map.id}`) : item.instance.name;
+  const canvas = item.kind === "zone" ? item.layer : item.floor;
+  const description = item.kind === "zone"
+    ? `UI map ${item.map.id}${item.art.phaseID !== 0 || item.layer.index !== 0 ? `, phase ${item.art.phaseID}, layer ${item.layer.index}` : ""}`
+    : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, floor ${item.floor.floor}`;
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[94vh] max-w-[min(96vw,1600px)] gap-0 overflow-hidden border-amber-900/50 bg-[#11100d] p-0 shadow-2xl">
+        <DialogHeader className="border-b border-amber-950/50 bg-[#171611] px-5 py-4 pr-12">
+          <DialogTitle className="font-serif text-xl tracking-wide text-amber-50">{name}</DialogTitle>
+          <DialogDescription className="font-mono text-[10px] uppercase tracking-[0.14em] text-amber-200/50">
+            {description} · {canvas.width}×{canvas.height}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="styled-scrollbar max-h-[calc(94vh-5rem)] overflow-auto bg-black/70 p-2 sm:p-4">
+          <div className="mx-auto overflow-hidden rounded-md border border-white/10 bg-black shadow-2xl">
+            <MapArtwork item={item} iconBaseUrl={iconBaseUrl} />
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function MapGalleryPage() {
   const tenantIconBaseUrl = useIconBaseUrl();
   const { data: datasets } = useDatasets();
   const [datasetOverride, setDatasetOverride] = useState("");
   const [search, setSearch] = useState("");
+  const [selectedMap, setSelectedMap] = useState<MapGalleryItem | null>(null);
   const selectedDataset = datasets?.find((dataset) => dataset.id === datasetOverride);
   const iconBaseUrl = datasetOverride ? selectedDataset?.icon_base_url : tenantIconBaseUrl;
   const manifestQuery = useMapManifest(iconBaseUrl);
@@ -175,7 +236,10 @@ export function MapGalleryPage() {
                     Dataset
                     <select
                       value={datasetOverride}
-                      onChange={(event) => setDatasetOverride(event.target.value)}
+                      onChange={(event) => {
+                        setDatasetOverride(event.target.value);
+                        setSelectedMap(null);
+                      }}
                       className="rounded-md border border-amber-950/60 bg-[#11100d] px-3 py-2 font-sans text-sm normal-case tracking-normal text-amber-50 outline-none [color-scheme:dark] transition-colors focus:border-amber-700/70"
                     >
                       <option value="" className="bg-[#11100d] text-amber-50">Tenant default</option>
@@ -242,12 +306,25 @@ export function MapGalleryPage() {
             </p>
             <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
               {filteredItems.map((item) => (
-                <MapCard key={item.key} item={item} iconBaseUrl={iconBaseUrl} />
+                <MapCard
+                  key={item.key}
+                  item={item}
+                  iconBaseUrl={iconBaseUrl}
+                  onSelect={setSelectedMap}
+                />
               ))}
             </div>
           </>
         )}
       </div>
+
+      <MapModal
+        item={selectedMap}
+        iconBaseUrl={iconBaseUrl}
+        onOpenChange={(open) => {
+          if (!open) setSelectedMap(null);
+        }}
+      />
     </div>
   );
 }
