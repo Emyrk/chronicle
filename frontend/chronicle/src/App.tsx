@@ -61,6 +61,7 @@ import {
   PetTargetingAbilitiesPage,
   ConsumablesPage,
   CooldownSpellsPage,
+  MapGalleryPage,
 } from "./pages/Technical"
 import {
   AccountLayout,
@@ -205,6 +206,7 @@ function App() {
           <Route path="talent-trees" element={<TalentTreesPage />} />
           <Route path="consumables" element={<ConsumablesPage />} />
           <Route path="cooldowns" element={<CooldownSpellsPage />} />
+          <Route path="maps" element={<MapGalleryPage />} />
         </Route>
         <Route path="/contact" element={<Contact />} />
         <Route path="/privacy" element={<Privacy />} />

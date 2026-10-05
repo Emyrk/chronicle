@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, Images, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, Images, Map, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 
 interface TechnicalLink {
@@ -69,6 +69,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     description: "Reference sheet for every class and specialization icon",
     href: "/technical/spec-class-icons",
     icon: <Images className="h-4 w-4" />,
+  },
+  {
+    title: "Map Atlas",
+    description: "UI map artwork and coordinate metadata published for the active dataset",
+    href: "/technical/maps",
+    icon: <Map className="h-4 w-4" />,
   },
   {
     title: "Talent Trees",
