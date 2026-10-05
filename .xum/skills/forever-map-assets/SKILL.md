@@ -56,6 +56,8 @@ Do not run the publishing target merely to inspect a change. Use the checks belo
 - `scripts/dbcdata/main.go`: command registration.
 - `frontend/imagecache/upload-maps-r2.sh`: R2 paths, content types, and cache headers.
 - `Makefile`: `maps`, `maps/forever`, extract, and upload entry points.
+- `frontend/chronicle/src/pages/Technical/MapGalleryPage.tsx`: `/technical/maps` consumer using the selected dataset's icon base URL.
+- `frontend/chronicle/src/pages/Technical/mapGallery.ts`: frontend manifest contract, asset URLs, ordering, and tile positioning.
 - `docs/wow-forever-game-data.md`: operator documentation and public URL layout.
 
 ## Data model

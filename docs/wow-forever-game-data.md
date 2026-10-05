@@ -123,7 +123,7 @@ To extract and upload the tiles and manifest to Cloudflare R2:
 make maps
 ```
 
-This publishes the manifest at `https://icons.chronicleclassic.com/forever/maps/manifest.json` and tiles under `https://icons.chronicleclassic.com/forever/maps/tiles/`. Tile responses are immutable for one year; the manifest uses a one-hour cache so a newly published build can become visible without renaming the base URL. Set `WOWDATA_BUILD`, `WOWDATA_BIN`, or `WOWDATA_CACHE` to override their defaults. `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH` override the upload destination.
+This publishes the manifest at `https://icons.chronicleclassic.com/forever/maps/manifest.json` and tiles under `https://icons.chronicleclassic.com/forever/maps/tiles/`. The `/technical/maps` page discovers those paths from the selected dataset's configured icon base URL. Tile responses are immutable for one year; the manifest uses a one-hour cache so a newly published build can become visible without renaming the base URL. Set `WOWDATA_BUILD`, `WOWDATA_BIN`, or `WOWDATA_CACHE` to override their defaults. `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH` override the upload destination.
 
 The importer sends the converted payload to:
 
