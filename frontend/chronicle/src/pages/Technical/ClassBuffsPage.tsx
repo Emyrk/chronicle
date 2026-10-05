@@ -34,7 +34,7 @@ interface ClassBuffMenuState {
 }
 
 function classDisplayName(className: string): string {
-  return className === "Generic" ? "All classes" : className;
+  return className;
 }
 
 function IgnoredBadge({ label = "Ignored" }: { label?: string }) {
@@ -273,7 +273,7 @@ export function ClassBuffsPage() {
       <p className="mb-4 text-xs text-muted-foreground">
         Generated from the current spell dataset during spell import. Includes
         non-passive player-class and generic spells with an aura effect targeting a friendly player,
-        party, or raid. Generic spells appear under All classes, are ignored by default, and must be opted in.
+        party, or raid. Generic spells appear in their own Generic view, are ignored by default, and must be opted in.
         Every rank remains listed for combat-log matching.
         {canManage && " Select datasets below, then right-click a rank or use its actions button to update every rank with that exact spell name."}
       </p>
