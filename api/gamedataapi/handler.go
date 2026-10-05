@@ -117,7 +117,12 @@ func (h *Handler) Routes() http.Handler {
 		r.Put("/datasets/{datasetID}/consumable-disambiguations/{effectKind}/{spellID}/ignore", h.IgnoreConsumableEffect)
 		r.Delete("/datasets/{datasetID}/consumable-disambiguations/{effectKind}/{spellID}", h.DeleteConsumableDisambiguation)
 		r.Put("/datasets/{datasetID}/cooldown-overrides", h.SetCooldownOverrides)
-		r.Put("/class-buff-ignore", h.SetClassBuffIgnore)
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(httpmw.Can(h.zed, policy.New().GlobalChronicle().CanAdmin_tenants_User))
+		r.Get("/class-buff-ignores", h.ListClassBuffIgnorePolicies)
+		r.Put("/class-buff-ignores", h.SetClassBuffIgnores)
 	})
 
 	return r

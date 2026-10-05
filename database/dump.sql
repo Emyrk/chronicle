@@ -285,7 +285,10 @@ CREATE TABLE class_buff_ignores (
     normalized_name text NOT NULL,
     spell_name text NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT class_buff_ignores_normalized_name_check CHECK (((normalized_name = lower(btrim(spell_name))) AND (normalized_name <> ''::text)))
+    scope_id uuid NOT NULL,
+    tenant_id uuid,
+    CONSTRAINT class_buff_ignores_normalized_name_check CHECK (((normalized_name = lower(btrim(spell_name))) AND (normalized_name <> ''::text))),
+    CONSTRAINT class_buff_ignores_scope_check CHECK ((scope_id = COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)))
 );
 
 CREATE TABLE dataset_class_buffs (
@@ -2074,7 +2077,7 @@ ALTER TABLE ONLY authz_schema_migrations
     ADD CONSTRAINT authz_schema_migrations_pkey PRIMARY KEY (version);
 
 ALTER TABLE ONLY class_buff_ignores
-    ADD CONSTRAINT class_buff_ignores_pkey PRIMARY KEY (normalized_name);
+    ADD CONSTRAINT class_buff_ignores_pkey PRIMARY KEY (scope_id, normalized_name);
 
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_pkey PRIMARY KEY (id);
@@ -2514,6 +2517,8 @@ ALTER TABLE ONLY wow_server_upload_keys
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_pkey PRIMARY KEY (id);
 
+CREATE INDEX class_buff_ignores_tenant_id_idx ON class_buff_ignores USING btree (tenant_id);
+
 CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_aura_duration_modifiers USING btree (dataset_id, modifier_spell_id);
 
 CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree (dataset_id, spell_id);
@@ -2766,6 +2771,9 @@ ALTER TABLE ONLY application_modification_requests
 
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES users(id);
+
+ALTER TABLE ONLY class_buff_ignores
+    ADD CONSTRAINT class_buff_ignores_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

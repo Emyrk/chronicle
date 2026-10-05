@@ -632,6 +632,12 @@ export interface ChronicleEncounterEvents {
     readonly start_time: string;
 }
 
+// From chroniclesdk/class_buffs.go
+export interface ClassBuffIgnorePolicy {
+    readonly tenant_id: string | null;
+    readonly spell_name: string;
+}
+
 // From chroniclesdk/rankings.go
 /**
  * CohortBucket describes one available (encounter, class, spec, difficulty, max_players) combination.
@@ -3112,11 +3118,13 @@ export interface Session {
 
 // From chroniclesdk/class_buffs.go
 /**
- * SetClassBuffIgnoreRequest globally hides or restores every friendly class
- * buff whose spell name matches SpellName, regardless of dataset or rank.
+ * SetClassBuffIgnoresRequest updates one exact-name policy in every selected
+ * tenant scope. IncludeRoot targets the root domain's own analysis scope.
  */
-export interface SetClassBuffIgnoreRequest {
+export interface SetClassBuffIgnoresRequest {
     readonly spell_name: string;
+    readonly tenant_ids: readonly string[];
+    readonly include_root: boolean;
     readonly ignored: boolean;
 }
 

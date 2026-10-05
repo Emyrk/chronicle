@@ -8,6 +8,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -65,14 +66,14 @@ func (s *Service) handleGetClassBuffs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ignoredNames, err := s.store.ListClassBuffIgnores(ctx)
+	ignoredNames, err := s.store.ListClassBuffIgnoresForScope(ctx, servicetenant.TenantIDFromContext(ctx))
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	applyClassBuffIgnores(byClass, ignoredNames)
 
-	// Ignores are global and can be toggled by admins at any time.
+	// Root and tenant-scoped ignores can be toggled by admins at any time.
 	w.Header().Set("Cache-Control", "no-cache")
 	httpapi.Write(ctx, w, http.StatusOK, byClass)
 }

@@ -1101,20 +1101,61 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 
 const deleteClassBuffIgnore = `-- name: DeleteClassBuffIgnore :exec
 DELETE FROM class_buff_ignores
-WHERE normalized_name = lower(btrim($1::TEXT))
+WHERE scope_id = $1
+  AND normalized_name = lower(btrim($2::TEXT))
 `
 
-func (q *sqlQuerier) DeleteClassBuffIgnore(ctx context.Context, spellName string) error {
-	_, err := q.db.Exec(ctx, deleteClassBuffIgnore, spellName)
+type DeleteClassBuffIgnoreParams struct {
+	ScopeID   uuid.UUID `db:"scope_id" json:"scope_id"`
+	SpellName string    `db:"spell_name" json:"spell_name"`
+}
+
+func (q *sqlQuerier) DeleteClassBuffIgnore(ctx context.Context, arg DeleteClassBuffIgnoreParams) error {
+	_, err := q.db.Exec(ctx, deleteClassBuffIgnore, arg.ScopeID, arg.SpellName)
 	return err
 }
 
-const listClassBuffIgnores = `-- name: ListClassBuffIgnores :many
-SELECT normalized_name FROM class_buff_ignores ORDER BY normalized_name
+const listClassBuffIgnorePolicies = `-- name: ListClassBuffIgnorePolicies :many
+SELECT tenant_id, normalized_name, spell_name
+FROM class_buff_ignores
+ORDER BY normalized_name, scope_id
 `
 
-func (q *sqlQuerier) ListClassBuffIgnores(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, listClassBuffIgnores)
+type ListClassBuffIgnorePoliciesRow struct {
+	TenantID       uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	NormalizedName string        `db:"normalized_name" json:"normalized_name"`
+	SpellName      string        `db:"spell_name" json:"spell_name"`
+}
+
+func (q *sqlQuerier) ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error) {
+	rows, err := q.db.Query(ctx, listClassBuffIgnorePolicies)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClassBuffIgnorePoliciesRow
+	for rows.Next() {
+		var i ListClassBuffIgnorePoliciesRow
+		if err := rows.Scan(&i.TenantID, &i.NormalizedName, &i.SpellName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClassBuffIgnoresForScope = `-- name: ListClassBuffIgnoresForScope :many
+SELECT normalized_name
+FROM class_buff_ignores
+WHERE scope_id = $1
+ORDER BY normalized_name
+`
+
+func (q *sqlQuerier) ListClassBuffIgnoresForScope(ctx context.Context, scopeID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listClassBuffIgnoresForScope, scopeID)
 	if err != nil {
 		return nil, err
 	}
@@ -1134,15 +1175,21 @@ func (q *sqlQuerier) ListClassBuffIgnores(ctx context.Context) ([]string, error)
 }
 
 const upsertClassBuffIgnore = `-- name: UpsertClassBuffIgnore :exec
-INSERT INTO class_buff_ignores (normalized_name, spell_name, updated_at)
-VALUES (lower(btrim($1::TEXT)), btrim($1::TEXT), now())
-ON CONFLICT (normalized_name) DO UPDATE SET
+INSERT INTO class_buff_ignores (scope_id, tenant_id, normalized_name, spell_name, updated_at)
+VALUES ($1, $2::UUID, lower(btrim($3::TEXT)), btrim($3::TEXT), now())
+ON CONFLICT (scope_id, normalized_name) DO UPDATE SET
     spell_name = EXCLUDED.spell_name,
     updated_at = now()
 `
 
-func (q *sqlQuerier) UpsertClassBuffIgnore(ctx context.Context, spellName string) error {
-	_, err := q.db.Exec(ctx, upsertClassBuffIgnore, spellName)
+type UpsertClassBuffIgnoreParams struct {
+	ScopeID   uuid.UUID     `db:"scope_id" json:"scope_id"`
+	TenantID  uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	SpellName string        `db:"spell_name" json:"spell_name"`
+}
+
+func (q *sqlQuerier) UpsertClassBuffIgnore(ctx context.Context, arg UpsertClassBuffIgnoreParams) error {
+	_, err := q.db.Exec(ctx, upsertClassBuffIgnore, arg.ScopeID, arg.TenantID, arg.SpellName)
 	return err
 }
 
