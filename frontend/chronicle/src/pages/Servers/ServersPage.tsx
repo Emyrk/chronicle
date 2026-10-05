@@ -194,6 +194,7 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
   const [includeInAll, setIncludeInAll] = useState(tenant?.include_in_all ?? true);
   const [disableUpload, setDisableUpload] = useState(tenant?.disable_client_upload ?? false);
   const [discoverable, setDiscoverable] = useState(tenant?.discoverable ?? false);
+  const [adsEnabled, setAdsEnabled] = useState(tenant?.ads_enabled ?? false);
 
   // Parse mode (spec / class / disabled)
   const [parseMode, setParseMode] = useState(tenant?.parse_config?.cohort_mode || "spec");
@@ -231,6 +232,7 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
         include_in_all: includeInAll,
         disable_client_upload: disableUpload,
         discoverable,
+        ads_enabled: adsEnabled,
         branding: hasBranding
           ? {
               square_logo: squareLogo || undefined,
@@ -279,6 +281,11 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={discoverable} onChange={(e) => setDiscoverable(e.target.checked)} />
         Discoverable (appear on chronicleclassic.com)
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={adsEnabled} onChange={(e) => setAdsEnabled(e.target.checked)} />
+        Enable ads
+        <span className="text-xs text-muted-foreground">(requires deployment configuration)</span>
       </label>
       <div className="pt-2 border-t space-y-2">
         <p className="text-xs font-medium text-muted-foreground">Parses</p>
@@ -500,6 +507,7 @@ function TenantSection() {
                 <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
                   {tenant.include_in_all && <span>✓ Included in root</span>}
                   {tenant.disable_client_upload && <span>⊘ Uploads disabled</span>}
+                  {tenant.ads_enabled && <span>Ads enabled</span>}
                 </div>
                 {tenant.default_format && (
                   <span className="mt-1 inline-block rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-mono font-medium">
