@@ -3,3 +3,6 @@
 */icons/
 */icon-list.json
 */failed_conversions.log
+
+# Generated map manifests and tiles are published to object storage.
+forever/maps/

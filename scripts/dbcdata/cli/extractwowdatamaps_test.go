@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -182,6 +184,85 @@ func TestWowdataTargetArgs(t *testing.T) {
 	})
 	require.Contains(t, local, "--path")
 	require.Contains(t, local, "/game")
+}
+
+func TestReadReusableWowMapTileIDs(t *testing.T) {
+	t.Parallel()
+
+	target := wowMapTarget{Product: "wow_classic_beta", Build: "1.60.1.70205", Region: "us", Locale: "enUS"}
+	data, err := json.Marshal(wowMapManifest{
+		Format: wowMapManifestFormat,
+		Target: target,
+		Maps: []wowMapRecord{{Art: []wowMapArtAssociation{{
+			Layers: []wowMapArtLayer{{Tiles: []wowMapTile{{FileDataID: 10}}}},
+		}}}},
+		Instances: []wowMapInstance{{Floors: []wowMapInstanceFloor{{Tiles: []wowMapTile{{FileDataID: 20}}}}}},
+	})
+	require.NoError(t, err)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(data)
+	}))
+	defer server.Close()
+
+	ids, err := readReusableWowMapTileIDs(context.Background(), server.URL, target)
+	require.NoError(t, err)
+	require.Equal(t, map[int32]struct{}{10: {}, 20: {}}, ids)
+}
+
+func TestReadReusableWowMapTileIDsRejectsDifferentBuild(t *testing.T) {
+	t.Parallel()
+
+	data, err := json.Marshal(wowMapManifest{
+		Format: wowMapManifestFormat,
+		Target: wowMapTarget{Product: "wow_classic_beta", Build: "1.60.1.69913", Region: "us", Locale: "enUS"},
+	})
+	require.NoError(t, err)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(data)
+	}))
+	defer server.Close()
+
+	_, err = readReusableWowMapTileIDs(context.Background(), server.URL, wowMapTarget{
+		Product: "wow_classic_beta", Build: "1.60.1.70205", Region: "us", Locale: "enUS",
+	})
+	require.ErrorContains(t, err, "does not match")
+}
+
+func TestWowMapInstanceFloorTilesByFileDataID(t *testing.T) {
+	t.Parallel()
+
+	floors := wowMapInstanceFloorTilesByFileDataID(wowMapManifest{Instances: []wowMapInstance{{
+		Floors: []wowMapInstanceFloor{{Tiles: []wowMapTile{{FileDataID: 769212}, {FileDataID: 769213}}}},
+	}}})
+	require.Equal(t, []int32{769212, 769213}, floors[769212])
+	require.Equal(t, []int32{769212, 769213}, floors[769213])
+}
+
+func TestExportWowdataTexturesSkipsUnavailableFloorSiblings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "tiles"), 0o755))
+	calls := filepath.Join(dir, "calls")
+	binary := filepath.Join(dir, "wowdata")
+	require.NoError(t, os.WriteFile(binary, []byte(fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+printf '%%s\n' "$4" >> %q
+printf '%%s\n' '{"ok":false,"error":{"code":"not_found","message":"missing"}}'
+exit 1
+`, calls)), 0o755))
+
+	unavailable, err := exportWowdataTextures(
+		context.Background(), &bytes.Buffer{}, &bytes.Buffer{},
+		wowMapExtractOptions{WowdataBin: binary, OutDir: dir, Workers: 1},
+		[]int32{769212, 769213},
+		map[int32][]int32{769212: {769212, 769213}, 769213: {769212, 769213}},
+	)
+	require.NoError(t, err)
+	require.Equal(t, map[int32]struct{}{769212: {}, 769213: {}}, unavailable)
+	data, err := os.ReadFile(calls)
+	require.NoError(t, err)
+	require.Equal(t, "769212\n", string(data))
 }
 
 func TestExportWowdataTextureReportsUnavailableFile(t *testing.T) {

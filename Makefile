@@ -229,6 +229,9 @@ icons/talents-extract:
 icons/talents-upload:
 	$(call run-imagecache,./upload-talent-bg-r2.sh)
 
+WOWDATA_MAP_REUSE_MANIFEST ?= https://icons.chronicleclassic.com/forever/maps/manifest.json
+WOWDATA_MAP_WORKERS ?= 4
+
 # WoW Forever UI map pipeline: extract DB2 metadata and WebP tiles, then upload
 # under https://icons.chronicleclassic.com/forever/maps/.
 .PHONY: maps/forever-extract
@@ -237,7 +240,9 @@ maps/forever-extract:
 		--out=frontend/imagecache/forever/maps \
 		$(if $(WOWDATA_BIN),--wowdata="$(WOWDATA_BIN)") \
 		$(if $(WOWDATA_CACHE),--cache="$(WOWDATA_CACHE)") \
-		$(if $(WOWDATA_BUILD),--build="$(WOWDATA_BUILD)")
+		$(if $(WOWDATA_BUILD),--build="$(WOWDATA_BUILD)") \
+		$(if $(WOWDATA_MAP_REUSE_MANIFEST),--reuse-manifest-url="$(WOWDATA_MAP_REUSE_MANIFEST)") \
+		--workers="$(WOWDATA_MAP_WORKERS)"
 
 .PHONY: maps/forever-upload
 maps/forever-upload: maps/forever-extract

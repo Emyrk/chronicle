@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/coder/serpent"
 )
@@ -218,16 +221,18 @@ type wowMapSource struct {
 }
 
 type wowMapExtractOptions struct {
-	WowdataBin   string
-	OutDir       string
-	Client       string
-	Source       string
-	Product      string
-	Build        string
-	Region       string
-	Locale       string
-	Cache        string
-	MetadataOnly bool
+	WowdataBin       string
+	OutDir           string
+	Client           string
+	Source           string
+	Product          string
+	Build            string
+	Region           string
+	Locale           string
+	Cache            string
+	ReuseManifestURL string
+	Workers          int64
+	MetadataOnly     bool
 }
 
 // ExtractWowdataMapsCmd exports WoW Forever UI map artwork and a manifest that
@@ -250,6 +255,8 @@ func ExtractWowdataMapsCmd() *serpent.Command {
 			{Name: "region", Description: "Blizzard region.", Flag: "region", Env: "WOW_REGION", Default: "us", Value: serpent.StringOf(&opts.Region)},
 			{Name: "locale", Description: "Data locale.", Flag: "locale", Env: "WOW_LOCALE", Default: "enUS", Value: serpent.StringOf(&opts.Locale)},
 			{Name: "cache", Description: "Optional wowdata cache directory.", Flag: "cache", Env: "WOWDATA_CACHE", Value: serpent.StringOf(&opts.Cache)},
+			{Name: "reuse-manifest-url", Description: "Published manifest whose immutable tiles can be reused without downloading them again.", Flag: "reuse-manifest-url", Value: serpent.StringOf(&opts.ReuseManifestURL)},
+			{Name: "workers", Description: "Concurrent wowdata tile export processes.", Flag: "workers", Default: "4", Value: serpent.Int64Of(&opts.Workers)},
 			{Name: "metadata-only", Description: "Write manifest.json without downloading map tiles.", Flag: "metadata-only", Value: serpent.BoolOf(&opts.MetadataOnly)},
 		},
 		Handler: func(inv *serpent.Invocation) error {
@@ -258,6 +265,9 @@ func ExtractWowdataMapsCmd() *serpent.Command {
 			}
 			if opts.Build == "" {
 				return fmt.Errorf("--build is required")
+			}
+			if opts.Workers < 1 || opts.Workers > 32 {
+				return fmt.Errorf("--workers must be between 1 and 32")
 			}
 			if err := validateWowdataExtractionSource(opts.Source); err != nil {
 				return err
@@ -334,22 +344,35 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 		return fmt.Errorf("create map output directory: %w", err)
 	}
 	if !opts.MetadataOnly {
-		unavailable := make(map[int32]struct{})
-		for i, fileDataID := range fileDataIDs {
+		reusable := make(map[int32]struct{})
+		if opts.ReuseManifestURL != "" {
+			reusable, err = readReusableWowMapTileIDs(ctx, opts.ReuseManifestURL, manifest.Target)
+			if err != nil {
+				_, _ = fmt.Fprintf(stderr, "Warning: cannot reuse published map tiles: %v\n", err)
+				reusable = make(map[int32]struct{})
+			} else {
+				_, _ = fmt.Fprintf(stdout, "Found %d reusable published map tiles\n", len(reusable))
+			}
+		}
+		var exportIDs []int32
+		reused := 0
+		for _, fileDataID := range fileDataIDs {
 			output := filepath.Join(opts.OutDir, "tiles", fmt.Sprintf("%d.webp", fileDataID))
 			if info, statErr := os.Stat(output); statErr == nil && info.Size() > 0 {
 				continue
 			}
-			if err := exportWowdataTexture(ctx, stderr, opts, fileDataID, output); err != nil {
-				if errors.Is(err, errWowdataFileUnavailable) {
-					unavailable[fileDataID] = struct{}{}
-					continue
-				}
-				return err
+			if _, ok := reusable[fileDataID]; ok {
+				reused++
+				continue
 			}
-			if (i+1)%100 == 0 || i+1 == len(fileDataIDs) {
-				_, _ = fmt.Fprintf(stdout, "Exported %d/%d map tiles\n", i+1, len(fileDataIDs))
-			}
+			exportIDs = append(exportIDs, fileDataID)
+		}
+		if reused > 0 {
+			_, _ = fmt.Fprintf(stdout, "Reused %d published map tiles\n", reused)
+		}
+		unavailable, err := exportWowdataTextures(ctx, stdout, stderr, opts, exportIDs, wowMapInstanceFloorTilesByFileDataID(manifest))
+		if err != nil {
+			return err
 		}
 		skippedFloors, err := pruneUnavailableWowMapTiles(&manifest, unavailable)
 		if err != nil {
@@ -477,6 +500,92 @@ func readWowMapFiles(ctx context.Context, stdout, stderr io.Writer, opts wowMapE
 	}
 	*files = response.Data.Files
 	return nil
+}
+
+func exportWowdataTextures(
+	ctx context.Context,
+	stdout, stderr io.Writer,
+	opts wowMapExtractOptions,
+	fileDataIDs []int32,
+	instanceFloorTiles map[int32][]int32,
+) (map[int32]struct{}, error) {
+	unavailable := make(map[int32]struct{})
+	if len(fileDataIDs) == 0 {
+		return unavailable, nil
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	jobs := make(chan int32)
+	var workers sync.WaitGroup
+	var stateMu sync.Mutex
+	var outputMu sync.Mutex
+	var firstErr error
+	completed := 0
+
+	worker := func() {
+		defer workers.Done()
+		for fileDataID := range jobs {
+			stateMu.Lock()
+			_, skip := unavailable[fileDataID]
+			failed := firstErr != nil
+			stateMu.Unlock()
+			if skip || failed {
+				continue
+			}
+
+			output := filepath.Join(opts.OutDir, "tiles", fmt.Sprintf("%d.webp", fileDataID))
+			var commandStderr bytes.Buffer
+			err := exportWowdataTexture(ctx, &commandStderr, opts, fileDataID, output)
+			if commandStderr.Len() > 0 {
+				outputMu.Lock()
+				_, _ = stderr.Write(commandStderr.Bytes())
+				outputMu.Unlock()
+			}
+
+			stateMu.Lock()
+			switch {
+			case err == nil:
+				completed++
+				if completed%100 == 0 || completed == len(fileDataIDs) {
+					outputMu.Lock()
+					_, _ = fmt.Fprintf(stdout, "Exported %d/%d new map tiles\n", completed, len(fileDataIDs))
+					outputMu.Unlock()
+				}
+			case errors.Is(err, errWowdataFileUnavailable):
+				unavailable[fileDataID] = struct{}{}
+				for _, floorTileID := range instanceFloorTiles[fileDataID] {
+					unavailable[floorTileID] = struct{}{}
+				}
+			case firstErr == nil:
+				firstErr = err
+				cancel()
+			}
+			stateMu.Unlock()
+		}
+	}
+
+	for range int(opts.Workers) {
+		workers.Add(1)
+		go worker()
+	}
+feed:
+	for _, fileDataID := range fileDataIDs {
+		select {
+		case jobs <- fileDataID:
+		case <-ctx.Done():
+			break feed
+		}
+	}
+	close(jobs)
+	workers.Wait()
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return unavailable, nil
 }
 
 var errWowdataFileUnavailable = errors.New("wowdata file unavailable for locale")
@@ -668,6 +777,58 @@ func wowMapManifestFileDataIDs(manifest wowMapManifest) []int32 {
 	}
 	sort.Slice(fileDataIDs, func(i, j int) bool { return fileDataIDs[i] < fileDataIDs[j] })
 	return fileDataIDs
+}
+
+func readReusableWowMapTileIDs(ctx context.Context, manifestURL string, target wowMapTarget) (map[int32]struct{}, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create reusable map manifest request: %w", err)
+	}
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch reusable map manifest: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch reusable map manifest: %s", resp.Status)
+	}
+
+	var manifest wowMapManifest
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<20)).Decode(&manifest); err != nil {
+		return nil, fmt.Errorf("decode reusable map manifest: %w", err)
+	}
+	if manifest.Format != wowMapManifestFormat {
+		return nil, fmt.Errorf("reuse manifest format %q is not %q", manifest.Format, wowMapManifestFormat)
+	}
+	if manifest.Target != target {
+		return nil, fmt.Errorf("reuse manifest target %s/%s/%s/%s does not match %s/%s/%s/%s",
+			manifest.Target.Product, manifest.Target.Build, manifest.Target.Region, manifest.Target.Locale,
+			target.Product, target.Build, target.Region, target.Locale)
+	}
+
+	ids := make(map[int32]struct{})
+	for _, id := range wowMapManifestFileDataIDs(manifest) {
+		ids[id] = struct{}{}
+	}
+	return ids, nil
+}
+
+func wowMapInstanceFloorTilesByFileDataID(manifest wowMapManifest) map[int32][]int32 {
+	floorsByFileDataID := make(map[int32][]int32)
+	for _, instance := range manifest.Instances {
+		for _, floor := range instance.Floors {
+			ids := make([]int32, 0, len(floor.Tiles))
+			for _, tile := range floor.Tiles {
+				ids = append(ids, tile.FileDataID)
+			}
+			for _, id := range ids {
+				floorsByFileDataID[id] = ids
+			}
+		}
+	}
+	return floorsByFileDataID
 }
 
 func pruneUnavailableWowMapTiles(manifest *wowMapManifest, unavailable map[int32]struct{}) ([]string, error) {
