@@ -44,6 +44,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
+import { UploadSyncDialog } from "./components/UploadSyncDialog";
 import { 
   useLogGroup,
   useLogGroupByFileHash,
@@ -671,6 +672,7 @@ function InstanceCard({
   isDeletingInstance: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showUploadSyncDialog, setShowUploadSyncDialog] = useState(false);
   const uploadMutation = useUploadInstanceYoutube();
   
   const bossFights = instance.encounters.filter(e => e.boss);
@@ -691,6 +693,7 @@ function InstanceCard({
         throw new Error("Invalid JSON format: missing 'url' or 'results' field");
       }
       await uploadMutation.mutateAsync({ instanceId: instance.id, data });
+      setShowUploadSyncDialog(false);
       toast.success("YouTube sync data uploaded successfully");
     } catch (err) {
       toast.error("Failed to upload sync data", {
@@ -727,7 +730,7 @@ function InstanceCard({
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => setShowUploadSyncDialog(true)}
                   disabled={uploadMutation.isPending}
                 >
                   <Youtube className="h-3.5 w-3.5 mr-1" />
@@ -817,6 +820,17 @@ function InstanceCard({
           )}
         </div>
       </div>
+
+      {canUploadYoutube && (
+        <UploadSyncDialog
+          open={showUploadSyncDialog}
+          onOpenChange={setShowUploadSyncDialog}
+          instanceId={instance.id}
+          instanceName={instance.name}
+          uploading={uploadMutation.isPending}
+          onManualUpload={() => fileInputRef.current?.click()}
+        />
+      )}
     </div>
   );
 }
