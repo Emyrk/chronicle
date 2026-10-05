@@ -623,6 +623,68 @@ func TestAbsorption_AuraFadeRemovesShield(t *testing.T) {
 	require.Len(t, result, 3, "should not emit absorbed after aura fade removed the shield")
 }
 
+func TestAbsorption_AuraFadeAllowsSameTimestampDamage(t *testing.T) {
+	t.Parallel()
+
+	a := NewAbsorption(slog.Default())
+	now := time.UnixMilli(1000)
+
+	paladinGUID := mustGUID("0x0000000000000001")
+	tankGUID := mustGUID("0x0000000000000002")
+	bossGUID := mustGUID("0x0030000000000003")
+
+	sacredShield := makeAbsorbSpell("Sacred Shield", 500, 127)
+	fadeAt := now.Add(5 * time.Second)
+
+	a.ProcessMessages([]messages.Message{
+		auraCastAbsorb(now, sacredShield, paladinGUID, tankGUID, 127),
+	})
+	a.ProcessMessages([]messages.Message{
+		// WotLK can report the consumed aura before the damage that consumed it,
+		// with both events sharing the same millisecond timestamp.
+		&messages.Aura{
+			MessageBase: messages.Base(fadeAt),
+			IsBuff:      true,
+			Target:      tankGUID,
+			SpellName:   "Sacred Shield",
+			SpellData:   sacredShield,
+			State:       types.AuraStateRemoved,
+		},
+	})
+
+	result := a.ProcessMessages([]messages.Message{
+		&messages.Damage{
+			MessageBase: messages.Base(fadeAt),
+			Caster:      &bossGUID,
+			Target:      tankGUID,
+			Amount:      100,
+			HitType:     types.HitTypeHit | types.HitTypePartialAbsorb,
+			School:      types.PhysicalSchool,
+			Trailer:     trailAbsorbed(150),
+		},
+	})
+	require.Len(t, result, 2, "same-timestamp damage should still be attributed to the consumed shield")
+	absorbed, ok := result[1].(*messages.Absorbed)
+	require.True(t, ok)
+	assert.Equal(t, paladinGUID, absorbed.Caster)
+	require.NotNil(t, absorbed.AbsorbSpell)
+	assert.Equal(t, "Sacred Shield", absorbed.AbsorbSpell.Name())
+	assert.Equal(t, int32(150), absorbed.Amount)
+
+	result = a.ProcessMessages([]messages.Message{
+		&messages.Damage{
+			MessageBase: messages.Base(fadeAt.Add(time.Millisecond)),
+			Caster:      &bossGUID,
+			Target:      tankGUID,
+			Amount:      100,
+			HitType:     types.HitTypeHit | types.HitTypePartialAbsorb,
+			School:      types.PhysicalSchool,
+			Trailer:     trailAbsorbed(50),
+		},
+	})
+	require.Len(t, result, 1, "damage after the fade timestamp must not use the removed shield")
+}
+
 func TestAbsorption_NonAbsorbAuraCastIgnored(t *testing.T) {
 	t.Parallel()
 
