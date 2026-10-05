@@ -13,6 +13,7 @@ TARGETS=(
   "octowow|https://legacy.chronicleclassic.com/|2e080ee0-ca21-47d3-a7f9-8c3ba638e1c4"
   "vanillaplus|https://legacy.chronicleclassic.com/|d77b88b5-97e9-4f6b-acc9-c291f546e475"
   "lunatic|https://legacy.chronicleclassic.com/|53f9c96d-2b9a-43d9-8244-ffc6c0bf4ce6"
+  "azerothcore|https://legacy.chronicleclassic.com/|00000000-0000-0000-0000-000000000001"
 )
 
 WOWDATA_TARGETS=(
