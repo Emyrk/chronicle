@@ -697,6 +697,10 @@ func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.R
 	httpapi.Write(ctx, w, http.StatusAccepted, resp)
 }
 
+func tenantAdsEnabled(deploymentEnabled bool, tenant *database.Tenant) bool {
+	return deploymentEnabled && tenant != nil && tenant.AdsEnabled
+}
+
 func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	config, err := a.Opts.Zed.GetSiteConfig(ctx)
@@ -710,6 +714,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
 		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+		AdsEnabled:            tenantAdsEnabled(a.Opts.AdsTxtURL != nil, t),
 	}
 	if t != nil {
 		tenant := chroniclesdk.TenantFromDB(*t)

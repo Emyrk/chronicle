@@ -17,6 +17,7 @@ type Tenant struct {
 	DisableClientUpload bool         `json:"disable_client_upload"`
 	IncludeInAll        bool         `json:"include_in_all"`
 	Discoverable        bool         `json:"discoverable"`
+	AdsEnabled          bool         `json:"ads_enabled"`
 	Branding            *Branding    `json:"branding"`
 	ParseConfig         *ParseConfig `json:"parse_config"`
 	DefaultDatasetID    *uuid.UUID   `json:"default_dataset_id"`
@@ -72,6 +73,7 @@ func TenantFromDB(t database.Tenant) Tenant {
 		DisableClientUpload: t.DisableClientUpload,
 		IncludeInAll:        t.IncludeInAll,
 		Discoverable:        t.Discoverable,
+		AdsEnabled:          t.AdsEnabled,
 		AdditionalFlavor:    t.AdditionalFlavor,
 		CreatedAt:           t.CreatedAt.Time,
 		UpdatedAt:           t.UpdatedAt.Time,
@@ -190,6 +192,7 @@ type UpsertTenantRequest struct {
 	DisableClientUpload *bool         `json:"disable_client_upload"`
 	IncludeInAll        *bool         `json:"include_in_all"`
 	Discoverable        *bool         `json:"discoverable"`
+	AdsEnabled          *bool         `json:"ads_enabled,omitempty"`
 	Branding            *Branding     `json:"branding"`
 	ParseConfig         *ParseConfig  `json:"parse_config"`
 	DefaultFormat       *string       `json:"default_format"`
@@ -256,6 +259,11 @@ func (r UpsertTenantRequest) ToInsertParams() database.InsertTenantParams {
 		discoverable = *r.Discoverable
 	}
 
+	adsEnabled := false
+	if r.AdsEnabled != nil {
+		adsEnabled = *r.AdsEnabled
+	}
+
 	var defaultFormat database.NullLogFormat
 	if r.DefaultFormat != nil {
 		defaultFormat = database.NullLogFormat{LogFormat: database.LogFormat(*r.DefaultFormat), Valid: true}
@@ -268,6 +276,7 @@ func (r UpsertTenantRequest) ToInsertParams() database.InsertTenantParams {
 		DisableClientUpload: disableUpload,
 		IncludeInAll:        includeInAll,
 		Discoverable:        discoverable,
+		AdsEnabled:          adsEnabled,
 		Branding:            r.marshalBranding(),
 		ParseConfig:         r.marshalParseConfig(),
 		ExternalLinking:     r.marshalExternalLinking(),
@@ -305,6 +314,11 @@ func (r UpsertTenantRequest) ToUpdateParams() database.UpdateTenantParams {
 		discoverable = pgtype.Bool{Bool: *r.Discoverable, Valid: true}
 	}
 
+	var adsEnabled pgtype.Bool
+	if r.AdsEnabled != nil {
+		adsEnabled = pgtype.Bool{Bool: *r.AdsEnabled, Valid: true}
+	}
+
 	var defaultFormat database.NullLogFormat
 	if r.DefaultFormat != nil {
 		defaultFormat = database.NullLogFormat{LogFormat: database.LogFormat(*r.DefaultFormat), Valid: true}
@@ -317,6 +331,7 @@ func (r UpsertTenantRequest) ToUpdateParams() database.UpdateTenantParams {
 		DisableClientUpload: disableUpload,
 		IncludeInAll:        includeInAll,
 		Discoverable:        discoverable,
+		AdsEnabled:          adsEnabled,
 		Branding:            r.marshalBranding(),
 		ParseConfig:         r.marshalParseConfig(),
 		ExternalLinking:     r.marshalExternalLinking(),

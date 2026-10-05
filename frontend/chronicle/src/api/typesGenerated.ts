@@ -3250,6 +3250,11 @@ export interface SiteConfig {
      */
     readonly client_uploads_disabled: boolean;
     /**
+     * AdsEnabled is true only when the resolved tenant opted into ads and the
+     * deployment configured CHRONICLE_ADS_TXT_URL.
+     */
+    readonly ads_enabled: boolean;
+    /**
      * Tenant is the resolved tenant for the current request (based on subdomain).
      * Nil when accessed from the root domain.
      */
@@ -3658,6 +3663,7 @@ export interface Tenant {
     readonly disable_client_upload: boolean;
     readonly include_in_all: boolean;
     readonly discoverable: boolean;
+    readonly ads_enabled: boolean;
     readonly branding: Branding | null;
     readonly parse_config: ParseConfig | null;
     readonly default_dataset_id: string | null;
@@ -3967,6 +3973,7 @@ export interface UpsertTenantRequest {
     readonly disable_client_upload: boolean | null;
     readonly include_in_all: boolean | null;
     readonly discoverable: boolean | null;
+    readonly ads_enabled?: boolean;
     readonly branding: Branding | null;
     readonly parse_config: ParseConfig | null;
     readonly default_format: string | null;

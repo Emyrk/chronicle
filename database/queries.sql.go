@@ -16886,7 +16886,7 @@ func (q *sqlQuerier) DeleteTenant(ctx context.Context, id uuid.UUID) error {
 }
 
 const getTenantByID = `-- name: GetTenantByID :one
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor FROM tenants WHERE id = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled FROM tenants WHERE id = $1
 `
 
 func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error) {
@@ -16908,13 +16908,14 @@ func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, e
 		&i.ParseConfig,
 		&i.ExternalLinking,
 		&i.AdditionalFlavor,
+		&i.AdsEnabled,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
 
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor FROM tenants WHERE slug = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled FROM tenants WHERE slug = $1
 `
 
 // Tenant queries. These run with AdminBypass context since the tenants table
@@ -16938,14 +16939,15 @@ func (q *sqlQuerier) GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Ten
 		&i.ParseConfig,
 		&i.ExternalLinking,
 		&i.AdditionalFlavor,
+		&i.AdsEnabled,
 	)
 	return i, err
 }
 
 const insertTenant = `-- name: InsertTenant :one
-INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, additional_flavor, parse_config, external_linking)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10::text[], '{}'::text[]), $11, $12)
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor
+INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, ads_enabled, default_format, available_formats, additional_flavor, parse_config, external_linking)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::text[], '{}'::text[]), $12, $13)
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled
 `
 
 type InsertTenantParams struct {
@@ -16956,6 +16958,7 @@ type InsertTenantParams struct {
 	IncludeInAll        bool          `db:"include_in_all" json:"include_in_all"`
 	Branding            []byte        `db:"branding" json:"branding"`
 	Discoverable        bool          `db:"discoverable" json:"discoverable"`
+	AdsEnabled          bool          `db:"ads_enabled" json:"ads_enabled"`
 	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
 	AdditionalFlavor    []string      `db:"additional_flavor" json:"additional_flavor"`
@@ -16972,6 +16975,7 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		arg.IncludeInAll,
 		arg.Branding,
 		arg.Discoverable,
+		arg.AdsEnabled,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.AdditionalFlavor,
@@ -16995,12 +16999,13 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		&i.ParseConfig,
 		&i.ExternalLinking,
 		&i.AdditionalFlavor,
+		&i.AdsEnabled,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor FROM tenants ORDER BY name
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled FROM tenants ORDER BY name
 `
 
 func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
@@ -17028,6 +17033,7 @@ func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
 			&i.ParseConfig,
 			&i.ExternalLinking,
 			&i.AdditionalFlavor,
+			&i.AdsEnabled,
 		); err != nil {
 			return nil, err
 		}
@@ -17122,14 +17128,15 @@ UPDATE tenants SET
     include_in_all = COALESCE($4, include_in_all),
     branding = COALESCE($5, branding),
     discoverable = COALESCE($6, discoverable),
-    default_format = COALESCE($7, default_format),
-    available_formats = COALESCE($8, available_formats),
-    additional_flavor = COALESCE($9, additional_flavor),
-    parse_config = COALESCE($10, parse_config),
-    external_linking = COALESCE($11, external_linking),
+    ads_enabled = COALESCE($7, ads_enabled),
+    default_format = COALESCE($8, default_format),
+    available_formats = COALESCE($9, available_formats),
+    additional_flavor = COALESCE($10, additional_flavor),
+    parse_config = COALESCE($11, parse_config),
+    external_linking = COALESCE($12, external_linking),
     updated_at = now()
-WHERE id = $12
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor
+WHERE id = $13
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled
 `
 
 type UpdateTenantParams struct {
@@ -17139,6 +17146,7 @@ type UpdateTenantParams struct {
 	IncludeInAll        pgtype.Bool   `db:"include_in_all" json:"include_in_all"`
 	Branding            []byte        `db:"branding" json:"branding"`
 	Discoverable        pgtype.Bool   `db:"discoverable" json:"discoverable"`
+	AdsEnabled          pgtype.Bool   `db:"ads_enabled" json:"ads_enabled"`
 	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
 	AdditionalFlavor    []string      `db:"additional_flavor" json:"additional_flavor"`
@@ -17156,6 +17164,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		arg.IncludeInAll,
 		arg.Branding,
 		arg.Discoverable,
+		arg.AdsEnabled,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.AdditionalFlavor,
@@ -17180,6 +17189,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		&i.ParseConfig,
 		&i.ExternalLinking,
 		&i.AdditionalFlavor,
+		&i.AdsEnabled,
 	)
 	return i, err
 }

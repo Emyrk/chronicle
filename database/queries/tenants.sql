@@ -11,8 +11,8 @@ SELECT * FROM tenants WHERE id = $1;
 SELECT * FROM tenants ORDER BY name;
 
 -- name: InsertTenant :one
-INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, additional_flavor, parse_config, external_linking)
-VALUES (@id, @slug, @name, @disable_client_upload, @include_in_all, @branding, @discoverable, @default_format, @available_formats, COALESCE(@additional_flavor::text[], '{}'::text[]), @parse_config, @external_linking)
+INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, ads_enabled, default_format, available_formats, additional_flavor, parse_config, external_linking)
+VALUES (@id, @slug, @name, @disable_client_upload, @include_in_all, @branding, @discoverable, @ads_enabled, @default_format, @available_formats, COALESCE(@additional_flavor::text[], '{}'::text[]), @parse_config, @external_linking)
 RETURNING *;
 
 -- name: UpdateTenant :one
@@ -24,6 +24,7 @@ UPDATE tenants SET
     include_in_all = COALESCE(sqlc.narg('include_in_all'), include_in_all),
     branding = COALESCE(sqlc.narg('branding'), branding),
     discoverable = COALESCE(sqlc.narg('discoverable'), discoverable),
+    ads_enabled = COALESCE(sqlc.narg('ads_enabled'), ads_enabled),
     default_format = COALESCE(sqlc.narg('default_format'), default_format),
     available_formats = COALESCE(sqlc.narg('available_formats'), available_formats),
     additional_flavor = COALESCE(sqlc.narg('additional_flavor'), additional_flavor),

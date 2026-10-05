@@ -1,0 +1,2 @@
+ALTER TABLE tenants
+    ADD COLUMN ads_enabled BOOLEAN NOT NULL DEFAULT false;

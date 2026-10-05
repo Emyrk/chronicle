@@ -2063,6 +2063,7 @@ type Tenant struct {
 	ParseConfig         []byte             `db:"parse_config" json:"parse_config"`
 	ExternalLinking     []byte             `db:"external_linking" json:"external_linking"`
 	AdditionalFlavor    []string           `db:"additional_flavor" json:"additional_flavor"`
+	AdsEnabled          bool               `db:"ads_enabled" json:"ads_enabled"`
 }
 
 type TimeParseBossKillMember struct {
