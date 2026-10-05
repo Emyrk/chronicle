@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, Images, Map, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset } from "lucide-react";
+import { ArrowLeft, BookOpen, Braces, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Map, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset } from "lucide-react";
+import { useDatasets, useSiteConfig } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
+import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 
 interface TechnicalLink {
   title: string;
@@ -84,7 +86,37 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
   },
 ];
 
+function ConfigValue({ values, emptyLabel }: { values: readonly string[]; emptyLabel: string }) {
+  if (values.length === 0) {
+    return <span className="text-sm text-muted-foreground">{emptyLabel}</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {values.map((value) => (
+        <code
+          key={value}
+          className="rounded-md border border-border/70 bg-background/60 px-2 py-1 text-xs text-foreground"
+        >
+          {value}
+        </code>
+      ))}
+    </div>
+  );
+}
+
 export function TechnicalDetailsPage() {
+  const { data: siteConfig } = useSiteConfig();
+  const { data: datasets } = useDatasets();
+  const datasetId = useDatasetId();
+  const scopedIconBaseUrl = useIconBaseUrl();
+  const dataset = datasets?.find((candidate) => candidate.id === datasetId);
+  const formats = siteConfig?.tenant?.available_formats?.length
+    ? siteConfig.tenant.available_formats
+    : siteConfig?.available_formats ?? [];
+  const defaultFormat = siteConfig?.tenant?.default_format ?? siteConfig?.default_format;
+  const iconBaseUrl = scopedIconBaseUrl ?? dataset?.icon_base_url;
+
   return (
     <div className="container mx-auto px-4 py-4 max-w-3xl">
       <Link
@@ -103,6 +135,62 @@ export function TechnicalDetailsPage() {
       <p className="text-sm text-muted-foreground mb-4">
         Data dumps from Chronicle's game database.
       </p>
+
+      <Card className="mb-5 gap-0 overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5 p-0">
+        <div className="border-b border-border/70 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Braces className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold">Public configuration</h2>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Game-data settings currently advertised by this Chronicle installation.
+          </p>
+        </div>
+
+        <div className="divide-y divide-border/70">
+          <div className="grid gap-2 px-4 py-3 sm:grid-cols-[8rem_1fr] sm:items-start">
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5" />
+              Flavors
+            </div>
+            <ConfigValue values={siteConfig?.dataset_flavor ?? []} emptyLabel="No flavor tags advertised" />
+          </div>
+
+          <div className="grid gap-2 px-4 py-3 sm:grid-cols-[8rem_1fr] sm:items-start">
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <FileType2 className="h-3.5 w-3.5" />
+              Formats
+            </div>
+            <div className="space-y-2">
+              <ConfigValue values={formats} emptyLabel="All server-supported formats" />
+              {defaultFormat && (
+                <p className="text-xs text-muted-foreground">
+                  Default: <code className="text-foreground">{defaultFormat}</code>
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-2 px-4 py-3 sm:grid-cols-[8rem_1fr] sm:items-start">
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <Globe2 className="h-3.5 w-3.5" />
+              Icon CDN
+            </div>
+            {iconBaseUrl ? (
+              <a
+                href={iconBaseUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all font-mono text-xs text-primary hover:underline"
+              >
+                {iconBaseUrl}
+              </a>
+            ) : (
+              <span className="text-sm text-muted-foreground">No external icon CDN configured</span>
+            )}
+          </div>
+        </div>
+      </Card>
 
       <div className="space-y-1">
         {TECHNICAL_LINKS.map((link) => (

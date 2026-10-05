@@ -122,13 +122,25 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set Docker tags
+        id: docker-tags
+        uses: docker/metadata-action@v5
+        with:
+          images: emyrk/chronicled
+          tags: |
+            type=raw,value=${{ matrix.server }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+            type=ref,event=tag
+            type=raw,value=${{ matrix.server }}-unstable,enable=${{ github.ref_type != 'tag' }}
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: services/chronicled/Dockerfile
           push: true
-          tags: emyrk/chronicled:${{ github.ref_type == 'tag' && matrix.server || format('{0}-unstable', matrix.server) }}
+          tags: ${{ steps.docker-tags.outputs.tags }}
+          labels: ${{ steps.docker-tags.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.server }}
           cache-to: type=gha,mode=max,scope=${{ matrix.server }}
           build-args: |
