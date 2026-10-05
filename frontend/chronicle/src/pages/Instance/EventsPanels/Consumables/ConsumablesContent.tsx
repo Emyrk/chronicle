@@ -175,11 +175,13 @@ export function ItemCell({
   itemId,
   link,
   compact = false,
+  iconOnly = false,
   newTab = false,
 }: {
   itemId: number;
   link?: boolean;
   compact?: boolean;
+  iconOnly?: boolean;
   /** Open the wowdb item page in a new tab instead of navigating in place. */
   newTab?: boolean;
 }) {
@@ -208,9 +210,11 @@ export function ItemCell({
           <HelpCircle className="w-3 h-3 text-zinc-500" />
         )}
       </span>
-      <span className={cn("truncate", getQualityTextClass(quality), link && "hover:underline")}>
-        {name}
-      </span>
+      {!iconOnly && (
+        <span className={cn("truncate", getQualityTextClass(quality), link && "hover:underline")}>
+          {name}
+        </span>
+      )}
       {anchor && tooltip.data && createPortal(
         <AnchoredHoverTooltip anchor={anchor}>
           <ItemTooltip item={tooltip.data} />
@@ -231,6 +235,7 @@ export function ItemCell({
         target={newTab ? "_blank" : undefined}
         rel={newTab ? "noopener noreferrer" : undefined}
         className={className}
+        aria-label={iconOnly ? name : undefined}
         onClick={(e) => e.stopPropagation()}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
@@ -240,7 +245,12 @@ export function ItemCell({
     );
   }
   return (
-    <span className={className} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+    <span
+      className={className}
+      title={iconOnly ? name : undefined}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       {body}
     </span>
   );

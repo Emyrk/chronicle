@@ -11,6 +11,7 @@ import { useTimeRangeContextOptional } from "../TimeRangeContext";
 
 const FILTER_TYPES: { value: PanelFilterType; label: string }[] = [
   { value: "ability_name", label: "Ability Name" },
+  { value: "consume_effect", label: "Consume Effect" },
   { value: "ability_id", label: "Ability ID" },
   { value: "ability_school", label: "Ability School" },
   { value: "ability_hittype", label: "Hit Type" },
@@ -97,7 +98,7 @@ const APPLY_TO_OPTIONS = [
 /** Filter types that show the "applies to" event type selector */
 const TYPES_WITH_APPLY_TO = new Set<PanelFilterType>([
   "source_type", "target_type", "shield_caster",
-  "ability_name", "ability_id", "ability_school", "ability_hittype",
+  "ability_name", "consume_effect", "ability_id", "ability_school", "ability_hittype",
   "time_range",
   "event_value",
 ]);
@@ -377,7 +378,9 @@ function AbilityNameEditor({ filter, onChange }: { filter: PanelFilter; onChange
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
-        placeholder={arrayValues.length === 0 ? "ability name, press Enter" : "add more…"}
+        placeholder={arrayValues.length === 0
+          ? `${filter.type === "consume_effect" ? "effect" : "ability"} name, press Enter`
+          : "add more…"}
       />
     </div>
   );
@@ -687,6 +690,7 @@ function ValueEditor({ filter, onChange }: { filter: PanelFilter; onChange: (nex
     case "ability_id":
       return <AbilityIdEditor filter={filter} onChange={onChange} />;
     case "ability_name":
+    case "consume_effect":
       return <AbilityNameEditor filter={filter} onChange={onChange} />;
     case "time_range":
       return <TimeRangeEditor filter={filter} onChange={onChange} />;

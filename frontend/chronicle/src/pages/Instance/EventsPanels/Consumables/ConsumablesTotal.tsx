@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { HelpCircle, Search, X } from "lucide-react";
+import { HelpCircle, List, Search, Table2, X } from "lucide-react";
 import { fetchItemTooltip } from "@/api/gamedata";
-import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
+import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { useConsumableDisambiguations } from "@/api/queries";
 import type { ConsumableDisambiguation } from "@/api/typesGenerated";
+import { cn } from "@/lib/utils";
 import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consumableDisambiguation";
 import { GenericPanel } from "../GenericPanel";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
@@ -17,11 +18,18 @@ import {
   EVIDENCE_KIND_LABELS,
   type ConsumablesResult,
 } from "./consumables.processor";
+import {
+  COMPARISON_TABLE_TOKEN,
+  panelOptionTokens,
+  togglePanelOptionFlag,
+} from "./LedgerShared";
 import { ItemCell } from "./ConsumablesContent";
 import {
   aggregateConsumablesTotal,
+  buildConsumableComparisonColumns,
   filterConsumablesTotal,
   type ConsumableCount,
+  type PlayerConsumablesTotal,
 } from "./consumablesTotalLogic.ts";
 
 interface PossibleBreakoutState {
@@ -148,6 +156,113 @@ function PossibleItemsBreakout({ consume, onClose }: { consume: ConsumableCount;
   );
 }
 
+function consumeDescription(consume: ConsumableCount): string {
+  if (consume.itemId !== null) return `Item ${consume.itemId}`;
+  const effectName = consume.sources.find((source) => source.spellName)?.spellName;
+  if (effectName) return effectName;
+  return consume.candidateItemIds.length > 0 ? "Possible consumable" : "Unknown consumable";
+}
+
+function ComparisonHeader({
+  consume,
+  onOpenPossible,
+}: {
+  consume: ConsumableCount;
+  onOpenPossible: (consume: ConsumableCount, target: HTMLElement) => void;
+}) {
+  if (consume.itemId !== null) {
+    return <ItemCell itemId={consume.itemId} link iconOnly newTab />;
+  }
+
+  const description = consumeDescription(consume);
+  if (consume.candidateItemIds.length > 0) {
+    return (
+      <button
+        type="button"
+        onClick={(event) => onOpenPossible(consume, event.currentTarget)}
+        className="rounded border border-amber-500/25 bg-amber-500/10 p-1 text-amber-300 hover:border-amber-400/50"
+        title={`${description}: show possible items`}
+        aria-label={`${description}: show possible items`}
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+      </button>
+    );
+  }
+
+  return <HelpCircle className="h-4 w-4 text-muted-foreground" aria-label={description} />;
+}
+
+function ConsumablesComparisonTable({
+  rows,
+  players,
+  onOpenPossible,
+}: {
+  rows: readonly PlayerConsumablesTotal[];
+  players: Record<string, { name?: string; class?: string }> | undefined;
+  onOpenPossible: (consume: ConsumableCount, target: HTMLElement) => void;
+}) {
+  const columns = buildConsumableComparisonColumns(rows);
+
+  return (
+    <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
+      <thead>
+        <tr>
+          <th className="sticky left-0 top-0 z-30 bg-card px-2 py-1.5 text-left font-medium text-muted-foreground">
+            Player
+          </th>
+          <th className="sticky top-0 z-20 w-14 bg-card px-2 py-1.5 text-right font-medium text-muted-foreground">
+            Total
+          </th>
+          {columns.map((consume) => (
+            <th
+              key={consume.key}
+              className="sticky top-0 z-20 bg-card px-1.5 py-1.5"
+              title={consumeDescription(consume)}
+            >
+              <span className="flex justify-center">
+                <ComparisonHeader consume={consume} onOpenPossible={onOpenPossible} />
+              </span>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => {
+          const player = players?.[row.playerId];
+          const counts = new Map(row.consumes.map((consume) => [consume.key, consume.count]));
+          return (
+            <tr key={row.playerId} className="hover:bg-muted/30" data-demo-consumables-all-row>
+              <td className="sticky left-0 z-10 whitespace-nowrap border-t border-border/30 bg-card px-2 py-1.5 font-medium">
+                <span style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}>
+                  {player?.name ?? row.playerId}
+                </span>
+              </td>
+              <td className="border-t border-border/30 px-2 py-1.5 text-right font-semibold tabular-nums">
+                {row.total}
+              </td>
+              {columns.map((consume) => {
+                const count = counts.get(consume.key) ?? 0;
+                return (
+                  <td
+                    key={consume.key}
+                    className={cn(
+                      "border-t border-border/30 px-1.5 py-1.5 text-center font-mono",
+                      count === 0 ? "text-muted-foreground/35" : "text-foreground",
+                    )}
+                    title={`${player?.name ?? row.playerId} · ${consumeDescription(consume)}: ${count}`}
+                  >
+                    {count}
+                  </td>
+                );
+              })}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 type ConsumablesTotalContentProps = PanelRenderProps<ConsumablesResult> & {
   /** Rendered beside the search input (e.g. a view-toggle button). */
   headerExtra?: React.ReactNode;
@@ -163,6 +278,7 @@ export function ConsumablesTotalContent({ headerExtra, ...props }: ConsumablesTo
 
   const [possibleBreakout, setPossibleBreakout] = useState<PossibleBreakoutState | null>(null);
   const [filter, setFilter] = useState("");
+  const comparisonTable = panelOptionTokens(props.panelOption).includes(COMPARISON_TABLE_TOKEN);
 
   const openPossibleBreakout = (consume: ConsumableCount, target: HTMLElement) => {
     const rect = target.getBoundingClientRect();
@@ -223,28 +339,60 @@ export function ConsumablesTotalContent({ headerExtra, ...props }: ConsumablesTo
           data-demo-consumables-all-view
         >
           <div className="flex shrink-0 items-center gap-2">
-          <label className="relative block min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="search"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              placeholder="Filter items or effects..."
-              aria-label="Filter consumables by item or effect"
-              className="h-8 w-full rounded border border-border bg-background/70 pl-8 pr-8 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
-            />
-            {filter && (
+            <label className="relative block min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="search"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                placeholder="Filter items or effects..."
+                aria-label="Filter consumables by item or effect"
+                className="h-8 w-full rounded border border-border bg-background/70 pl-8 pr-8 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+              />
+              {filter && (
+                <button
+                  type="button"
+                  onClick={() => setFilter("")}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Clear consumables filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </label>
+            <div className="flex h-8 shrink-0 items-center rounded border border-border bg-background/70 p-0.5">
               <button
                 type="button"
-                onClick={() => setFilter("")}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label="Clear consumables filter"
+                onClick={() => props.setPanelOption?.(
+                  togglePanelOptionFlag(props.panelOption, COMPARISON_TABLE_TOKEN, true),
+                )}
+                aria-label="Comparison table view"
+                aria-pressed={comparisonTable}
+                title="Comparison table"
+                className={cn(
+                  "rounded p-1.5 transition-colors",
+                  comparisonTable ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
               >
-                <X className="h-3 w-3" />
+                <Table2 className="h-3.5 w-3.5" />
               </button>
-            )}
-          </label>
-          {headerExtra}
+              <button
+                type="button"
+                onClick={() => props.setPanelOption?.(
+                  togglePanelOptionFlag(props.panelOption, COMPARISON_TABLE_TOKEN, false),
+                )}
+                aria-label="Detailed list view"
+                aria-pressed={!comparisonTable}
+                title="Detailed list"
+                className={cn(
+                  "rounded p-1.5 transition-colors",
+                  !comparisonTable ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <List className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {headerExtra}
           </div>
 
           {rows.length === 0 ? (
@@ -257,47 +405,56 @@ export function ConsumablesTotalContent({ headerExtra, ...props }: ConsumablesTo
             </div>
           ) : (
             <ScrollArea className="min-h-0 flex-1">
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 z-10 bg-card">
-                  <tr className="border-b border-border text-muted-foreground">
-                    <th className="w-40 px-2 py-1.5 text-left font-medium">Player</th>
-                    <th className="w-14 px-2 py-1.5 text-right font-medium">Total</th>
-                    <th className="px-2 py-1.5 text-left font-medium">Consumes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.map((row, rowIndex) => {
-                    const player = context.instance.players?.[row.playerId];
-                    return (
-                      <tr
-                        key={row.playerId}
-                        data-demo-consumables-all-row
-                        className={rowIndex % 2 === 0
-                          ? "border-b border-border/20 align-top bg-muted/10 hover:bg-muted/30"
-                          : "border-b border-border/20 align-top bg-muted/25 hover:bg-muted/40"}
-                      >
-                        <td className="px-2 py-2 font-medium">
-                          <span style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}>
-                            {player?.name ?? row.playerId}
-                          </span>
-                        </td>
-                        <td className="px-2 py-2 text-right font-semibold tabular-nums">{row.total}</td>
-                        <td className="px-2 py-1.5">
-                          <div className="flex flex-wrap gap-1.5">
-                            {row.consumes.map((consume) => (
-                              <ConsumeCount
-                                key={consume.key}
-                                consume={consume}
-                                onOpenPossible={openPossibleBreakout}
-                              />
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              {comparisonTable ? (
+                <ConsumablesComparisonTable
+                  rows={filteredRows}
+                  players={context.instance.players}
+                  onOpenPossible={openPossibleBreakout}
+                />
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10 bg-card">
+                    <tr className="border-b border-border text-muted-foreground">
+                      <th className="w-40 px-2 py-1.5 text-left font-medium">Player</th>
+                      <th className="w-14 px-2 py-1.5 text-right font-medium">Total</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Consumes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRows.map((row, rowIndex) => {
+                      const player = context.instance.players?.[row.playerId];
+                      return (
+                        <tr
+                          key={row.playerId}
+                          data-demo-consumables-all-row
+                          className={rowIndex % 2 === 0
+                            ? "border-b border-border/20 align-top bg-muted/10 hover:bg-muted/30"
+                            : "border-b border-border/20 align-top bg-muted/25 hover:bg-muted/40"}
+                        >
+                          <td className="px-2 py-2 font-medium">
+                            <span style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}>
+                              {player?.name ?? row.playerId}
+                            </span>
+                          </td>
+                          <td className="px-2 py-2 text-right font-semibold tabular-nums">{row.total}</td>
+                          <td className="px-2 py-1.5">
+                            <div className="flex flex-wrap gap-1.5">
+                              {row.consumes.map((consume) => (
+                                <ConsumeCount
+                                  key={consume.key}
+                                  consume={consume}
+                                  onOpenPossible={openPossibleBreakout}
+                                />
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+              {comparisonTable && <ScrollBar orientation="horizontal" />}
             </ScrollArea>
           )}
         </div>
