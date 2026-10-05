@@ -21,8 +21,8 @@ const CHRONICLE_TENETS = [
     body: "Chronicle does not seek profit. The financial goal is simply to break even on hosting and infrastructure costs.",
   },
   {
-    title: "No Ads",
-    body: "Chronicle does not seek to add banner ads, pop-ups, sponsored placements, or tracking-based advertising.",
+    title: "Responsible Advertising",
+    body: "Chronicle may use limited advertising to help cover hosting and infrastructure costs. Donations will be used to offset costs and remove ads for everyone.",
   },
   {
     title: "No Feature Paywalls",
@@ -153,13 +153,13 @@ const WHY_DONATE_ITEMS = [
     flavor: "The real gold sink was infrastructure all along.",
   },
   {
-    title: "Keep Chronicle Ad-Free",
+    title: "Keep Chronicle Sustainable",
     quality: QUALITY.epic,
     icon: "spell_holy_silence",
     slot: "Community Perk",
     subtype: "Aura",
     equip: [
-      "Equip: Grants immunity to banner ads, pop-ups, and tracking effects.",
+      "Equip: Reduces reliance on advertising and helps cover Chronicle’s hosting costs.",
       "Use: Dispels one attempted monetization scheme."
     ],
     flavor: "The only things tracking you should be threat meters.",

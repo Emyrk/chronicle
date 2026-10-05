@@ -207,7 +207,7 @@ export function SelfHostedRequirementsPage() {
                   <div className="flex items-center gap-3">
                     <img src="../chronicle-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
                     <div>
-                      <p className="font-wow text-sm font-bold text-foreground">Chronicle runs on donations, not ads.</p>
+                      <p className="font-wow text-sm font-bold text-foreground">Community support helps keep Chronicle running.</p>
                       <p className="mt-1 text-xs text-muted-foreground">Help keep Chronicle development going.</p>
                     </div>
                   </div>

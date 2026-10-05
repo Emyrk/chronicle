@@ -168,7 +168,7 @@ export function SupportBanner() {
           <div className="min-w-0 flex-1">
             <div className={DONATE_HEADING_CLASSES}>
               <span className="sm:hidden">Keep Chronicle Alive</span>
-              <span className="hidden sm:inline">Chronicle runs on donations, not ads.</span>
+              <span className="hidden sm:inline">Community support helps keep Chronicle running.</span>
             </div>
             <div className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
               Every server here is hosted for free. Help keep it that way.
