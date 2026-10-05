@@ -257,8 +257,8 @@ func TestParseV22UnitTelemetry(t *testing.T) {
 	for _, count := range resourceUnits {
 		resourceCount += count
 	}
-	require.Equal(t, 3, positionCount, "repeated snapshots must not be deduplicated")
-	require.Equal(t, 3, resourceCount, "repeated snapshots must not be deduplicated")
+	require.Equal(t, 3, positionCount, "parser must preserve snapshots for encounter-scoped deduplication")
+	require.Equal(t, 3, resourceCount, "parser must preserve snapshots for encounter-scoped deduplication")
 	require.NotNil(t, position)
 	assert.Equal(t, 1751.67, position.X)
 	assert.Equal(t, 1697.84, position.Y)
