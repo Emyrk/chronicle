@@ -207,14 +207,18 @@ func resolveShieldDuration(explicitMS int32, spell *chrondbc.Spell) int32 {
 	}
 }
 
+// shieldRemovalGrace covers WotLK log ordering where the damage that consumes
+// a shield can be timestamped one millisecond after SPELL_AURA_REMOVED.
+const shieldRemovalGrace = time.Millisecond
+
 // processAuraFade marks a tracked shield for removal when its aura fades.
 // In WotLK CLEU this is SPELL_AURA_REMOVED and is reliable; in vanilla it is
 // the client-side BUFF_REM and only fires for buffs visible to the recording
 // player — duration expiry covers the rest.
 //
 // A shield consumed by damage can produce SPELL_AURA_REMOVED immediately before
-// the damage event at the same millisecond. Keep it eligible through that exact
-// timestamp so the triggering absorbed amount can still be attributed.
+// the damage event at the same or next millisecond. Keep it eligible through
+// that narrow window so the triggering absorbed amount can still be attributed.
 func (a *Absorption) processAuraFade(aura *messages.Aura) {
 	if !aura.IsBuff || aura.State != types.AuraStateRemoved {
 		return
@@ -239,8 +243,8 @@ func (a *Absorption) expireShields(target guid.GUID, now time.Time) {
 
 	n := 0
 	for _, s := range shields {
-		if !s.removedAt.IsZero() && now.After(s.removedAt) {
-			continue // faded before this damage event, drop it
+		if !s.removedAt.IsZero() && now.After(s.removedAt.Add(shieldRemovalGrace)) {
+			continue // faded before the removal grace window, drop it
 		}
 		if s.durationMS > 0 {
 			expiry := s.appliedAt.Add(time.Duration(s.durationMS) * time.Millisecond)
@@ -274,7 +278,7 @@ func (a *Absorption) processDamage(dmg *messages.Damage) *messages.Absorbed {
 		return nil
 	}
 
-	best := pickShield(shields, dmg.School)
+	best := pickShield(shields, dmg.School, dmg.Date())
 	if best == nil {
 		return nil
 	}
@@ -298,19 +302,47 @@ func (a *Absorption) processDamage(dmg *messages.Damage) *messages.Absorbed {
 		Amount:       absorbAmount,
 	}
 
+	if !best.removedAt.IsZero() {
+		a.removeShield(dmg.Target, best)
+	}
+
 	return absorbed
+}
+
+func (a *Absorption) removeShield(target guid.GUID, remove *activeShield) {
+	shields := a.activeShields[target]
+	for i, shield := range shields {
+		if shield != remove {
+			continue
+		}
+		copy(shields[i:], shields[i+1:])
+		shields[len(shields)-1] = nil
+		a.activeShields[target] = shields[:len(shields)-1]
+		return
+	}
 }
 
 // pickShield selects the best shield to credit for absorbing damage of the
 // given school. Preference order:
-//  1. Non-exhausted school-specific shields matching damage school (most recent first)
-//  2. Non-exhausted all-school shields (most recent first)
-//  3. Exhausted shields (same ordering) — they may have had more capacity than estimated
-func pickShield(shields []*activeShield, damageSchool types.School) *activeShield {
-	var bestSpecific, bestGeneral, bestExhausted *activeShield
+//  1. A matching shield removed immediately before this damage. The fade is
+//     stronger attribution evidence than school specificity or capacity estimates.
+//  2. Non-exhausted school-specific shields matching damage school (most recent first)
+//  3. Non-exhausted all-school shields (most recent first)
+//  4. Exhausted shields (same ordering) — they may have had more capacity than estimated
+func pickShield(shields []*activeShield, damageSchool types.School, damageAt time.Time) *activeShield {
+	var bestRemoved, bestSpecific, bestGeneral, bestExhausted *activeShield
 
 	for _, s := range shields {
 		if !schoolMatches(s.schoolMask, damageSchool) {
+			continue
+		}
+
+		if !s.removedAt.IsZero() && !damageAt.Before(s.removedAt) &&
+			!damageAt.After(s.removedAt.Add(shieldRemovalGrace)) {
+			if bestRemoved == nil || s.removedAt.After(bestRemoved.removedAt) ||
+				(s.removedAt.Equal(bestRemoved.removedAt) && s.appliedAt.After(bestRemoved.appliedAt)) {
+				bestRemoved = s
+			}
 			continue
 		}
 
@@ -334,6 +366,9 @@ func pickShield(shields []*activeShield, damageSchool types.School) *activeShiel
 		}
 	}
 
+	if bestRemoved != nil {
+		return bestRemoved
+	}
 	if bestSpecific != nil {
 		return bestSpecific
 	}
