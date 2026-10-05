@@ -286,6 +286,7 @@ CREATE TABLE class_buff_ignores (
     normalized_name text NOT NULL,
     spell_name text NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    ignored boolean DEFAULT true NOT NULL,
     CONSTRAINT class_buff_ignores_normalized_name_check CHECK (((normalized_name = lower(btrim(spell_name))) AND (normalized_name <> ''::text)))
 );
 

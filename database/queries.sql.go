@@ -1116,7 +1116,7 @@ func (q *sqlQuerier) DeleteClassBuffIgnore(ctx context.Context, arg DeleteClassB
 }
 
 const listClassBuffIgnorePolicies = `-- name: ListClassBuffIgnorePolicies :many
-SELECT dataset_id, normalized_name, spell_name
+SELECT dataset_id, normalized_name, spell_name, ignored
 FROM class_buff_ignores
 ORDER BY normalized_name, dataset_id
 `
@@ -1125,6 +1125,7 @@ type ListClassBuffIgnorePoliciesRow struct {
 	DatasetID      uuid.UUID `db:"dataset_id" json:"dataset_id"`
 	NormalizedName string    `db:"normalized_name" json:"normalized_name"`
 	SpellName      string    `db:"spell_name" json:"spell_name"`
+	Ignored        bool      `db:"ignored" json:"ignored"`
 }
 
 func (q *sqlQuerier) ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error) {
@@ -1136,7 +1137,12 @@ func (q *sqlQuerier) ListClassBuffIgnorePolicies(ctx context.Context) ([]ListCla
 	var items []ListClassBuffIgnorePoliciesRow
 	for rows.Next() {
 		var i ListClassBuffIgnorePoliciesRow
-		if err := rows.Scan(&i.DatasetID, &i.NormalizedName, &i.SpellName); err != nil {
+		if err := rows.Scan(
+			&i.DatasetID,
+			&i.NormalizedName,
+			&i.SpellName,
+			&i.Ignored,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1147,26 +1153,31 @@ func (q *sqlQuerier) ListClassBuffIgnorePolicies(ctx context.Context) ([]ListCla
 	return items, nil
 }
 
-const listClassBuffIgnoresForDataset = `-- name: ListClassBuffIgnoresForDataset :many
-SELECT normalized_name
+const listClassBuffPoliciesForDataset = `-- name: ListClassBuffPoliciesForDataset :many
+SELECT normalized_name, ignored
 FROM class_buff_ignores
 WHERE dataset_id = $1
 ORDER BY normalized_name
 `
 
-func (q *sqlQuerier) ListClassBuffIgnoresForDataset(ctx context.Context, datasetID uuid.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, listClassBuffIgnoresForDataset, datasetID)
+type ListClassBuffPoliciesForDatasetRow struct {
+	NormalizedName string `db:"normalized_name" json:"normalized_name"`
+	Ignored        bool   `db:"ignored" json:"ignored"`
+}
+
+func (q *sqlQuerier) ListClassBuffPoliciesForDataset(ctx context.Context, datasetID uuid.UUID) ([]ListClassBuffPoliciesForDatasetRow, error) {
+	rows, err := q.db.Query(ctx, listClassBuffPoliciesForDataset, datasetID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListClassBuffPoliciesForDatasetRow
 	for rows.Next() {
-		var normalized_name string
-		if err := rows.Scan(&normalized_name); err != nil {
+		var i ListClassBuffPoliciesForDatasetRow
+		if err := rows.Scan(&i.NormalizedName, &i.Ignored); err != nil {
 			return nil, err
 		}
-		items = append(items, normalized_name)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1175,20 +1186,22 @@ func (q *sqlQuerier) ListClassBuffIgnoresForDataset(ctx context.Context, dataset
 }
 
 const upsertClassBuffIgnore = `-- name: UpsertClassBuffIgnore :exec
-INSERT INTO class_buff_ignores (dataset_id, normalized_name, spell_name, updated_at)
-VALUES ($1, lower(btrim($2::TEXT)), btrim($2::TEXT), now())
+INSERT INTO class_buff_ignores (dataset_id, normalized_name, spell_name, ignored, updated_at)
+VALUES ($1, lower(btrim($2::TEXT)), btrim($2::TEXT), $3, now())
 ON CONFLICT (dataset_id, normalized_name) DO UPDATE SET
     spell_name = EXCLUDED.spell_name,
+    ignored = EXCLUDED.ignored,
     updated_at = now()
 `
 
 type UpsertClassBuffIgnoreParams struct {
 	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
 	SpellName string    `db:"spell_name" json:"spell_name"`
+	Ignored   bool      `db:"ignored" json:"ignored"`
 }
 
 func (q *sqlQuerier) UpsertClassBuffIgnore(ctx context.Context, arg UpsertClassBuffIgnoreParams) error {
-	_, err := q.db.Exec(ctx, upsertClassBuffIgnore, arg.DatasetID, arg.SpellName)
+	_, err := q.db.Exec(ctx, upsertClassBuffIgnore, arg.DatasetID, arg.SpellName, arg.Ignored)
 	return err
 }
 

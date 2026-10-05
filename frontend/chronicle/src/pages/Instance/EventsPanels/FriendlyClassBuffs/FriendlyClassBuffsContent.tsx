@@ -11,6 +11,7 @@ import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import { UNKNOWN_CASTER_ID, type FriendlyClassBuffsResult } from "./friendlyClassBuffs.processor";
 import {
+  buildAllowedFriendlyClassBuffs,
   buildFriendlyBuffMatrix,
   type FriendlyBuffMatrix,
   type FriendlyBuffMatrixCell,
@@ -158,7 +159,7 @@ export function FriendlyClassBuffsContent(props: PanelRenderProps<FriendlyClassB
   }, [context.instance.players]);
 
   const classNames = useMemo(() => {
-    const available = Object.keys(data ?? {}).sort();
+    const available = Object.keys(data ?? {}).filter((className) => className !== "Generic").sort();
     const inRaid = available.filter((className) => raidClassCounts.has(normalizeClassName(className)));
     return inRaid.length > 0 ? inRaid : available;
   }, [data, raidClassCounts]);
@@ -167,11 +168,7 @@ export function FriendlyClassBuffsContent(props: PanelRenderProps<FriendlyClassB
     ? options.className
     : (classNames[0] ?? null);
   const allowedSpells = useMemo(
-    () => new Map(
-      (selectedClass ? data?.[selectedClass] ?? [] : [])
-        .filter((spell) => !spell.ignored)
-        .map((spell) => [spell.id, spell]),
-    ),
+    () => buildAllowedFriendlyClassBuffs(data, selectedClass),
     [data, selectedClass],
   );
   const matrix = useMemo(

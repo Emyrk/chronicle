@@ -826,6 +826,7 @@ type ClassBuffIgnore struct {
 	NormalizedName string             `db:"normalized_name" json:"normalized_name"`
 	SpellName      string             `db:"spell_name" json:"spell_name"`
 	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Ignored        bool               `db:"ignored" json:"ignored"`
 }
 
 type DataGrant struct {

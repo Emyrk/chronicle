@@ -36,12 +36,32 @@ func TestSetClassBuffIgnoresUpdatesSelectedDatasets(t *testing.T) {
 	handler.SetClassBuffIgnores(recorder, req)
 	require.Equal(t, http.StatusNoContent, recorder.Code)
 
-	defaultNames, err := store.ListClassBuffIgnoresForDataset(ctx, servicedataset.DefaultDatasetID)
+	defaultPolicies, err := store.ListClassBuffPoliciesForDataset(ctx, servicedataset.DefaultDatasetID)
 	require.NoError(t, err)
-	require.Equal(t, []string{"power word: fortitude"}, defaultNames)
-	datasetNames, err := store.ListClassBuffIgnoresForDataset(ctx, dataset.ID)
+	require.Equal(t, []database.ListClassBuffPoliciesForDatasetRow{{
+		NormalizedName: "power word: fortitude", Ignored: true,
+	}}, defaultPolicies)
+	datasetPolicies, err := store.ListClassBuffPoliciesForDataset(ctx, dataset.ID)
 	require.NoError(t, err)
-	require.Equal(t, []string{"power word: fortitude"}, datasetNames)
+	require.Equal(t, []database.ListClassBuffPoliciesForDatasetRow{{
+		NormalizedName: "power word: fortitude", Ignored: true,
+	}}, datasetPolicies)
+
+	req = httptest.NewRequest(http.MethodPut, "/class-buff-ignores", strings.NewReader(`{
+			"spell_name":"Unending Breath",
+			"dataset_ids":["`+dataset.ID.String()+`"],
+			"ignored":false
+		}`)).WithContext(ctx)
+	recorder = httptest.NewRecorder()
+	handler.SetClassBuffIgnores(recorder, req)
+	require.Equal(t, http.StatusNoContent, recorder.Code)
+
+	datasetPolicies, err = store.ListClassBuffPoliciesForDataset(ctx, dataset.ID)
+	require.NoError(t, err)
+	require.Equal(t, []database.ListClassBuffPoliciesForDatasetRow{
+		{NormalizedName: "power word: fortitude", Ignored: true},
+		{NormalizedName: "unending breath", Ignored: false},
+	}, datasetPolicies)
 }
 
 func TestSetClassBuffIgnoresRejectsUnknownDataset(t *testing.T) {

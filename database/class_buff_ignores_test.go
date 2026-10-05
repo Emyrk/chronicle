@@ -23,22 +23,27 @@ func TestClassBuffIgnores(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	upsert := func(datasetID uuid.UUID, name string) {
+	upsert := func(datasetID uuid.UUID, name string, ignored bool) {
 		t.Helper()
 		require.NoError(t, store.UpsertClassBuffIgnore(ctx, database.UpsertClassBuffIgnoreParams{
-			DatasetID: datasetID, SpellName: name,
+			DatasetID: datasetID, SpellName: name, Ignored: ignored,
 		}))
 	}
-	upsert(servicedataset.DefaultDatasetID, "  Power Word: Fortitude  ")
-	upsert(dataset.ID, "power word: fortitude")
-	upsert(dataset.ID, "Arcane Intellect")
+	upsert(servicedataset.DefaultDatasetID, "  Power Word: Fortitude  ", true)
+	upsert(dataset.ID, "power word: fortitude", true)
+	upsert(dataset.ID, "Arcane Intellect", false)
 
-	defaultNames, err := store.ListClassBuffIgnoresForDataset(ctx, servicedataset.DefaultDatasetID)
+	defaultPolicies, err := store.ListClassBuffPoliciesForDataset(ctx, servicedataset.DefaultDatasetID)
 	require.NoError(t, err)
-	require.Equal(t, []string{"power word: fortitude"}, defaultNames)
-	datasetNames, err := store.ListClassBuffIgnoresForDataset(ctx, dataset.ID)
+	require.Equal(t, []database.ListClassBuffPoliciesForDatasetRow{{
+		NormalizedName: "power word: fortitude", Ignored: true,
+	}}, defaultPolicies)
+	datasetPolicies, err := store.ListClassBuffPoliciesForDataset(ctx, dataset.ID)
 	require.NoError(t, err)
-	require.Equal(t, []string{"arcane intellect", "power word: fortitude"}, datasetNames)
+	require.Equal(t, []database.ListClassBuffPoliciesForDatasetRow{
+		{NormalizedName: "arcane intellect", Ignored: false},
+		{NormalizedName: "power word: fortitude", Ignored: true},
+	}, datasetPolicies)
 
 	policies, err := store.ListClassBuffIgnorePolicies(ctx)
 	require.NoError(t, err)
@@ -47,12 +52,16 @@ func TestClassBuffIgnores(t *testing.T) {
 	require.NoError(t, store.DeleteClassBuffIgnore(ctx, database.DeleteClassBuffIgnoreParams{
 		DatasetID: dataset.ID, SpellName: "POWER WORD: FORTITUDE",
 	}))
-	datasetNames, err = store.ListClassBuffIgnoresForDataset(ctx, dataset.ID)
+	datasetPolicies, err = store.ListClassBuffPoliciesForDataset(ctx, dataset.ID)
 	require.NoError(t, err)
-	require.Equal(t, []string{"arcane intellect"}, datasetNames)
-	defaultNames, err = store.ListClassBuffIgnoresForDataset(ctx, servicedataset.DefaultDatasetID)
+	require.Equal(t, []database.ListClassBuffPoliciesForDatasetRow{{
+		NormalizedName: "arcane intellect", Ignored: false,
+	}}, datasetPolicies)
+	defaultPolicies, err = store.ListClassBuffPoliciesForDataset(ctx, servicedataset.DefaultDatasetID)
 	require.NoError(t, err)
-	require.Equal(t, []string{"power word: fortitude"}, defaultNames)
+	require.Equal(t, []database.ListClassBuffPoliciesForDatasetRow{{
+		NormalizedName: "power word: fortitude", Ignored: true,
+	}}, defaultPolicies)
 
 	require.NoError(t, store.DeleteDataset(ctx, dataset.ID))
 	policies, err = store.ListClassBuffIgnorePolicies(ctx)

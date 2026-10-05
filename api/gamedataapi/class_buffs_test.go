@@ -90,10 +90,18 @@ func TestClassBuffSpellFromSpell(t *testing.T) {
 		assert.False(t, ok)
 	})
 
-	t.Run("generic spell", func(t *testing.T) {
-		generic := spell(chrondbc.ImplicitTargetUnitCaster)
+	t.Run("generic friendly aura", func(t *testing.T) {
+		generic := spell(chrondbc.ImplicitTargetUnitTargetAlly)
 		generic.SpellClassSet = chrondbc.SpellClassSetGeneric
-		_, ok := classBuffSpellFromSpell(generic)
+		buff, ok := classBuffSpellFromSpell(generic)
+		require.True(t, ok)
+		assert.Equal(t, "friendly", buff.Targeting)
+	})
+
+	t.Run("unsupported class set", func(t *testing.T) {
+		unsupported := spell(chrondbc.ImplicitTargetUnitTargetAlly)
+		unsupported.SpellClassSet = chrondbc.SpellClassSet(13)
+		_, ok := classBuffSpellFromSpell(unsupported)
 		assert.False(t, ok)
 	})
 
@@ -151,6 +159,17 @@ func TestDeriveClassBuffsStoresDatasetDocument(t *testing.T) {
 				ImplicitTarget: []int32{int32(chrondbc.ImplicitTargetUnitTargetEnemy)},
 			}},
 		},
+		{
+			ID:            5697,
+			Name_lang:     i18n.Text{i18n.English: "Unending Breath"},
+			SpellClassSet: chrondbc.SpellClassSetGeneric,
+			Effects: []chrondbc.SpellEffect{{
+				EffectIndex:    0,
+				Effect:         chrondbc.EffectApplyAura,
+				EffectAura:     chrondbc.AuraEffectWaterBreathing,
+				ImplicitTarget: []int32{int32(chrondbc.ImplicitTargetUnitTargetAlly)},
+			}},
+		},
 	}
 
 	handler := &Handler{pool: pool}
@@ -162,4 +181,6 @@ func TestDeriveClassBuffsStoresDatasetDocument(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &byClass))
 	require.Len(t, byClass[chrondbc.SpellClassSetPriest.String()], 1)
 	assert.Equal(t, int32(1243), byClass[chrondbc.SpellClassSetPriest.String()][0].ID)
+	require.Len(t, byClass[chrondbc.SpellClassSetGeneric.String()], 1)
+	assert.Equal(t, int32(5697), byClass[chrondbc.SpellClassSetGeneric.String()][0].ID)
 }

@@ -12,4 +12,5 @@ type SetClassBuffIgnoresRequest struct {
 type ClassBuffIgnorePolicy struct {
 	DatasetID uuid.UUID `json:"dataset_id"`
 	SpellName string    `json:"spell_name"`
+	Ignored   bool      `json:"ignored"`
 }

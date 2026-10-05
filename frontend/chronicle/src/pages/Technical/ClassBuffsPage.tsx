@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Database, Eye, EyeOff, ExternalLink, MoreHorizontal, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -30,6 +30,11 @@ interface ClassBuffMenuState {
   rankCount: number;
   ignoredDatasetCount: number;
   datasetCount: number;
+  generic: boolean;
+}
+
+function classDisplayName(className: string): string {
+  return className;
 }
 
 function IgnoredBadge({ label = "Ignored" }: { label?: string }) {
@@ -86,7 +91,7 @@ function ClassBuffMenu({
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-40"
           >
             <EyeOff className="h-3.5 w-3.5" />
-            Ignore all ranks in selected datasets
+            {menu.generic ? "Remove from all classes in selected datasets" : "Ignore all ranks in selected datasets"}
           </button>
         )}
         {canRestore && (
@@ -97,7 +102,7 @@ function ClassBuffMenu({
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-40"
           >
             <Eye className="h-3.5 w-3.5" />
-            Stop ignoring in selected datasets
+            {menu.generic ? "Include for all classes in selected datasets" : "Stop ignoring in selected datasets"}
           </button>
         )}
       </div>
@@ -129,30 +134,43 @@ export function ClassBuffsPage() {
   const selectedDatasetKeys = useMemo(() => new Set(selectedDatasetIds), [selectedDatasetIds]);
   const selectedDatasetCount = selectedDatasetKeys.size;
 
-  const ignoredDatasetsByName = useMemo(() => {
-    const byName = new Map<string, Set<string>>();
+  const classNames = useMemo(
+    () => Object.keys(data ?? {}).sort((left, right) => (
+      left === "Generic" ? -1 : right === "Generic" ? 1 : left.localeCompare(right)
+    )),
+    [data],
+  );
+  const activeClass = classNames.includes(selectedClass) ? selectedClass : classNames[0] || "";
+  const spells = useMemo(() => data?.[activeClass] ?? [], [activeClass, data]);
+
+  const policiesByName = useMemo(() => {
+    const byName = new Map<string, Map<string, boolean>>();
     for (const policy of policies ?? []) {
       const key = normalizeBuffName(policy.spell_name);
-      const datasetIDs = byName.get(key) ?? new Set<string>();
-      datasetIDs.add(policy.dataset_id);
-      byName.set(key, datasetIDs);
+      const byDataset = byName.get(key) ?? new Map<string, boolean>();
+      byDataset.set(policy.dataset_id, policy.ignored);
+      byName.set(key, byDataset);
     }
     return byName;
   }, [policies]);
 
+  const ignoredCountFor = useCallback((name: string, className: string) => {
+    const byDataset = policiesByName.get(normalizeBuffName(name));
+    let count = 0;
+    for (const datasetID of selectedDatasetKeys) {
+      if ((byDataset?.get(datasetID) ?? className === "Generic")) count++;
+    }
+    return count;
+  }, [policiesByName, selectedDatasetKeys]);
+
   const ignoredCountsByName = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const [name, ignoredDatasetIDs] of ignoredDatasetsByName) {
-      let count = 0;
-      for (const datasetID of selectedDatasetKeys) if (ignoredDatasetIDs.has(datasetID)) count++;
-      counts.set(name, count);
+    for (const spell of spells) {
+      const name = normalizeBuffName(spell.name);
+      if (!counts.has(name)) counts.set(name, ignoredCountFor(spell.name, activeClass));
     }
     return counts;
-  }, [ignoredDatasetsByName, selectedDatasetKeys]);
-
-  const classNames = useMemo(() => Object.keys(data ?? {}).sort(), [data]);
-  const activeClass = classNames.includes(selectedClass) ? selectedClass : classNames[0] || "";
-  const spells = useMemo(() => data?.[activeClass] ?? [], [activeClass, data]);
+  }, [activeClass, ignoredCountFor, spells]);
   const filteredSpells = useMemo(() => {
     const query = search.trim().toLowerCase();
     return spells.filter((spell) => {
@@ -172,13 +190,13 @@ export function ClassBuffsPage() {
     [data],
   );
   const ignoredCount = useMemo(
-    () => Object.values(data ?? {}).reduce(
-      (total, entries) => total + entries.filter((spell) => (
-        canManage ? (ignoredCountsByName.get(normalizeBuffName(spell.name)) ?? 0) > 0 : spell.ignored
+    () => Object.entries(data ?? {}).reduce(
+      (total, [className, entries]) => total + entries.filter((spell) => (
+        canManage ? ignoredCountFor(spell.name, className) > 0 : spell.ignored
       )).length,
       0,
     ),
-    [canManage, data, ignoredCountsByName],
+    [canManage, data, ignoredCountFor],
   );
 
   const toggleDataset = (datasetID: string) => {
@@ -197,6 +215,7 @@ export function ClassBuffsPage() {
       rankCount: ranks.length,
       ignoredDatasetCount: ignoredCountsByName.get(normalizeBuffName(spell.name)) ?? 0,
       datasetCount: selectedDatasetCount,
+      generic: activeClass === "Generic",
     });
   };
 
@@ -216,8 +235,11 @@ export function ClassBuffsPage() {
       },
       {
         onSuccess: () => {
+          const action = menu.generic
+            ? (ignored ? "removed from all classes" : "included for all classes")
+            : (ignored ? "ignored" : "restored");
           toast.success(
-            `${menu.name} ${ignored ? "ignored" : "restored"} in ${selectedDatasetCount} ${selectedDatasetCount === 1 ? "dataset" : "datasets"}`,
+            `${menu.name} ${action} in ${selectedDatasetCount} ${selectedDatasetCount === 1 ? "dataset" : "datasets"}`,
           );
           setMenu(null);
         },
@@ -250,8 +272,9 @@ export function ClassBuffsPage() {
       </div>
       <p className="mb-4 text-xs text-muted-foreground">
         Generated from the current spell dataset during spell import. Includes
-        non-passive player-class spells with an aura effect targeting a friendly player,
-        party, or raid. Every rank remains listed for combat-log matching.
+        non-passive player-class and generic spells with an aura effect targeting a friendly player,
+        party, or raid. Generic spells appear in their own Generic view, are ignored by default, and must be opted in.
+        Every rank remains listed for combat-log matching.
         {canManage && " Select datasets below, then right-click a rank or use its actions button to update every rank with that exact spell name."}
       </p>
 
@@ -331,7 +354,7 @@ export function ClassBuffsPage() {
         >
           {classNames.map((className) => (
             <option key={className} value={className}>
-              {className} ({data?.[className]?.length ?? 0})
+              {classDisplayName(className)} ({data?.[className]?.length ?? 0})
             </option>
           ))}
         </select>

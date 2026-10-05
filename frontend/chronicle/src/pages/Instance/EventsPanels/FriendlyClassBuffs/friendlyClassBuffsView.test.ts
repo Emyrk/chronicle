@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FriendlyClassBuffSpell } from "@/api/classBuffs";
 import type { FriendlyBuffEntityUsage } from "./friendlyClassBuffs.processor";
-import { buildFriendlyBuffMatrix } from "./friendlyClassBuffsView";
+import { buildAllowedFriendlyClassBuffs, buildFriendlyBuffMatrix } from "./friendlyClassBuffsView";
 
 const FORTITUDE: FriendlyClassBuffSpell = {
   id: 1243,
@@ -45,6 +45,29 @@ function entity(
 }
 
 describe("friendly class buff matrix", () => {
+  it("inherits opted-in generic buffs for every class", () => {
+    const unendingBreath: FriendlyClassBuffSpell = {
+      ...FORTITUDE,
+      id: 5697,
+      name: "Unending Breath",
+      name_subtext: "",
+    };
+    const ignoredGeneric: FriendlyClassBuffSpell = {
+      ...FORTITUDE,
+      id: 11743,
+      name: "Detect Greater Invisibility",
+      name_subtext: "",
+      ignored: true,
+    };
+
+    const allowed = buildAllowedFriendlyClassBuffs({
+      Generic: [unendingBreath, ignoredGeneric],
+      Priest: [FORTITUDE],
+    }, "Priest");
+
+    expect([...allowed.keys()]).toEqual([5697, 1243]);
+  });
+
   it("builds player rows and spell columns", () => {
     const matrix = buildFriendlyBuffMatrix(
       new Map([
