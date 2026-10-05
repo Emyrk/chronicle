@@ -11,15 +11,22 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/Gophercraft/core/vsn"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const defaultMinParserVersion = "v0.0.437"
+func adminMinParserVersion(requested string) (string, int64) {
+	if requested == "" {
+		requested = version.ExactParserVersion()
+	}
+	return requested, semverenc.Encode(requested)
+}
 
 // AdminListUsers returns all users in the system.
 // @Summary List all users
@@ -523,10 +530,7 @@ func (a *API) AdminListInstanceNames(w http.ResponseWriter, r *http.Request) {
 func (a *API) AdminListOutdatedInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	minParserVersion := r.URL.Query().Get("parser_version")
-	if minParserVersion == "" {
-		minParserVersion = defaultMinParserVersion
-	}
+	minParserVersion, minParserVersionNum := adminMinParserVersion(r.URL.Query().Get("parser_version"))
 
 	nameFilter := r.URL.Query().Get("instance_name")
 	var instanceName pgtype.Text
@@ -535,8 +539,8 @@ func (a *API) AdminListOutdatedInstances(w http.ResponseWriter, r *http.Request)
 	}
 
 	rows, err := a.Opts.Zed.AdminListOutdatedParserVersionInstances(ctx, database.AdminListOutdatedParserVersionInstancesParams{
-		MinParserVersion: minParserVersion,
-		InstanceName:     instanceName,
+		MinParserVersionNum: minParserVersionNum,
+		InstanceName:        instanceName,
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -654,10 +658,7 @@ func (a *API) AdminBulkReparseLogs(w http.ResponseWriter, r *http.Request) {
 func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	minParserVersion := r.URL.Query().Get("parser_version")
-	if minParserVersion == "" {
-		minParserVersion = defaultMinParserVersion
-	}
+	minParserVersion, minParserVersionNum := adminMinParserVersion(r.URL.Query().Get("parser_version"))
 
 	nameFilter := r.URL.Query().Get("instance_name")
 	var instanceName pgtype.Text
@@ -666,8 +667,8 @@ func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.R
 	}
 
 	rows, err := a.Opts.Zed.AdminListOutdatedParserVersionInstances(ctx, database.AdminListOutdatedParserVersionInstancesParams{
-		MinParserVersion: minParserVersion,
-		InstanceName:     instanceName,
+		MinParserVersionNum: minParserVersionNum,
+		InstanceName:        instanceName,
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
