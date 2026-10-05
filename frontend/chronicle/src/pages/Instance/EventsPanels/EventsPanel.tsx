@@ -199,6 +199,7 @@ const PANEL_CLIPBOARD_KEY = "panel-clipboard";
 
 const FILTER_TYPE_LABELS: Record<PanelFilterType, string> = {
   ability_name: "Ability Name",
+  consume_effect: "Consume Effect",
   ability_id: "Ability ID",
   ability_school: "School",
   ability_hittype: "Hit Type",

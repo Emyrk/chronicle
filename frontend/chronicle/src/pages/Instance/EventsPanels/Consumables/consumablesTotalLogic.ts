@@ -61,6 +61,27 @@ export function filterConsumablesTotal(
   });
 }
 
+export function buildConsumableComparisonColumns(
+  rows: readonly PlayerConsumablesTotal[],
+): ConsumableCount[] {
+  const columns = new Map<string, { consume: ConsumableCount; total: number }>();
+
+  for (const row of rows) {
+    for (const consume of row.consumes) {
+      const existing = columns.get(consume.key);
+      if (existing) {
+        existing.total += consume.count;
+      } else {
+        columns.set(consume.key, { consume, total: consume.count });
+      }
+    }
+  }
+
+  return [...columns.values()]
+    .sort((a, b) => b.total - a.total || a.consume.key.localeCompare(b.consume.key))
+    .map(({ consume }) => consume);
+}
+
 export function itemIdentity(use: ConsumableUse): { key: string; itemId: number | null; candidateItemIds: number[] } {
   if (use.itemId !== null) {
     return { key: `item:${use.itemId}`, itemId: use.itemId, candidateItemIds: [] };

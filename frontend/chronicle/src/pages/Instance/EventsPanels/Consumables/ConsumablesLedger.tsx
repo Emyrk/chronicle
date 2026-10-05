@@ -23,6 +23,7 @@ import { useConsumablePrices } from "./useConsumablePrices";
 import { LedgerItemBreakout, type LedgerItemBreakoutData } from "./LedgerItemBreakout";
 import {
   AmbiguousSection,
+  COMPARISON_TABLE_TOKEN,
   ConsumableTimingFilter,
   CoverageLine,
   LedgerFilterInput,
@@ -297,9 +298,10 @@ export function createConsumablesLedgerPanel(): PanelDefinition<ConsumablesResul
     // Scope toggle, player selection, view flags, and card chrome never
     // change what the worker computes — switching views must not re-process
     // the stream.
-    renderOnlyOptionTokens: ["cb", "pl:", "va", "bc:", "t:"],
+    renderOnlyOptionTokens: ["cb", "pl:", "va", COMPARISON_TABLE_TOKEN, "bc:", "t:"],
     defaultFilters: [
       { type: "source_type" as const, value: ["player"], applyTo: ["consume"] },
+      { type: "consume_effect" as const, value: ["Drink", "Food", "Strong Alcohol"], negate: true, applyTo: ["consume"] },
     ],
     render: (props) => {
       if (props.checkboxChecked) return <ConsumablesLedgerContent {...props} />;

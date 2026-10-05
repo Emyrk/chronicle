@@ -9,6 +9,7 @@ export type PanelFilterType =
   | "players"
   | "enemies"
   | "ability_name"
+  | "consume_effect"
   | "ability_id"
   | "ability_school"
   | "ability_hittype"
@@ -320,6 +321,17 @@ const FILTER_COMPILERS: Record<PanelFilterType, FilterCompiler> = {
       const name = (getEventAbilityName(event) ?? "").toLowerCase();
       return nameSet.has(name);
     };
+  },
+
+  consume_effect: (value) => {
+    const names = toValues(value).map((name) => name.toLowerCase());
+    if (names.length === 0) return () => true;
+    if (names.length === 1) {
+      const single = names[0];
+      return (event) => event.type === "consume" && event.spell.name.toLowerCase() === single;
+    }
+    const nameSet = new Set(names);
+    return (event) => event.type === "consume" && nameSet.has(event.spell.name.toLowerCase());
   },
 
   ability_id: (value) => {

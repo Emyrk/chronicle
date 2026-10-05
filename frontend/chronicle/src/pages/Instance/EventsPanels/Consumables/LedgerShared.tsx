@@ -26,6 +26,9 @@ import {
 import { CoinAmount } from "./CoinAmount";
 import { fuzzyConsumableMatch, itemIdentity } from "./consumablesTotalLogic";
 
+/** Flag token: use the player-by-consumable comparison table in View All. */
+export const COMPARISON_TABLE_TOKEN = "ct";
+
 /** Flag token: show every player at once (the merged Consumes Total view). */
 export const VIEW_ALL_TOKEN = "va";
 

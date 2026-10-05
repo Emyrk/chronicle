@@ -173,6 +173,32 @@ describe("evaluateFilters", () => {
     expect(evaluateFilters([{ type: "ability_name", value: "haste" }], event, createContext())).toBe(false);
   });
 
+  it("matches consume effects independently of item names", () => {
+    const food = createConsumeEvent({
+      itemName: "Enriched Manna Biscuit",
+      spell: { id: 25695, name: "Food" },
+    });
+
+    expect(evaluateFilters([{ type: "consume_effect", value: "food" }], food, createContext())).toBe(true);
+    expect(evaluateFilters([{ type: "consume_effect", value: "drink" }], food, createContext())).toBe(false);
+    expect(evaluateFilters([{ type: "consume_effect", value: "Enriched Manna Biscuit" }], food, createContext())).toBe(false);
+  });
+
+  it("can omit common consume effects while leaving other consumes visible", () => {
+    const filters: PanelFilter[] = [{
+      type: "consume_effect",
+      value: ["Drink", "Food", "Strong Alcohol"],
+      negate: true,
+      applyTo: ["consume"],
+    }];
+
+    expect(evaluateFilters(filters, createConsumeEvent({ spell: { id: 430, name: "Drink" } }), createContext())).toBe(false);
+    expect(evaluateFilters(filters, createConsumeEvent({ spell: { id: 25695, name: "Food" } }), createContext())).toBe(false);
+    expect(evaluateFilters(filters, createConsumeEvent({ spell: { id: 8553, name: "Strong Alcohol" } }), createContext())).toBe(false);
+    expect(evaluateFilters(filters, createConsumeEvent({ spell: { id: 17531, name: "Restore Mana" } }), createContext())).toBe(true);
+    expect(evaluateFilters(filters, createDamageEvent(), createContext())).toBe(true);
+  });
+
   it("matches consume item IDs instead of consume spell IDs", () => {
     const event = createConsumeEvent({
       itemId: 13461,
