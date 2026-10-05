@@ -53,6 +53,7 @@ type activeShield struct {
 	spell        *chrondbc.Spell
 	spellName    string
 	appliedAt    time.Time
+	removedAt    time.Time // kept through this timestamp so same-timestamp damage can consume it
 	durationMS   int32     // from AuraCast; 0 means no expiry known
 	caster       guid.GUID // zero if unknown
 	estRemaining int32     // estimated remaining capacity (soft bound)
@@ -206,19 +207,24 @@ func resolveShieldDuration(explicitMS int32, spell *chrondbc.Spell) int32 {
 	}
 }
 
-// processAuraFade removes a tracked shield when its aura fades.
+// processAuraFade marks a tracked shield for removal when its aura fades.
 // In WotLK CLEU this is SPELL_AURA_REMOVED and is reliable; in vanilla it is
 // the client-side BUFF_REM and only fires for buffs visible to the recording
 // player — duration expiry covers the rest.
+//
+// A shield consumed by damage can produce SPELL_AURA_REMOVED immediately before
+// the damage event at the same millisecond. Keep it eligible through that exact
+// timestamp so the triggering absorbed amount can still be attributed.
 func (a *Absorption) processAuraFade(aura *messages.Aura) {
 	if !aura.IsBuff || aura.State != types.AuraStateRemoved {
 		return
 	}
 
 	shields := a.activeShields[aura.Target]
-	for i, s := range shields {
-		if s.spellName == aura.SpellName {
-			a.activeShields[aura.Target] = append(shields[:i], shields[i+1:]...)
+	for i := len(shields) - 1; i >= 0; i-- {
+		s := shields[i]
+		if s.spellName == aura.SpellName && s.removedAt.IsZero() {
+			s.removedAt = aura.Date()
 			return
 		}
 	}
@@ -233,6 +239,9 @@ func (a *Absorption) expireShields(target guid.GUID, now time.Time) {
 
 	n := 0
 	for _, s := range shields {
+		if !s.removedAt.IsZero() && now.After(s.removedAt) {
+			continue // faded before this damage event, drop it
+		}
 		if s.durationMS > 0 {
 			expiry := s.appliedAt.Add(time.Duration(s.durationMS) * time.Millisecond)
 			if now.After(expiry) {
