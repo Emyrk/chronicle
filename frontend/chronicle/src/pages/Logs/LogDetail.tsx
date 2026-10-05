@@ -734,7 +734,7 @@ function InstanceCard({
                   disabled={uploadMutation.isPending}
                 >
                   <Youtube className="h-3.5 w-3.5 mr-1" />
-                  {uploadMutation.isPending ? "Uploading..." : "Upload Sync"}
+                  {uploadMutation.isPending ? "Uploading..." : "Upload VOD"}
                 </Button>
               </>
             )}
