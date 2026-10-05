@@ -9,6 +9,7 @@ const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
 const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/chronicleclassic";
 const SUPPORT_URL = "https://chronicleclassic.com/support/";
 const SELF_HOSTING_URL = "https://chronicleclassic.com/self-hosting/";
+const PRIVACY_URL = "https://chronicleclassic.com/privacy/";
 const PATREON_TOOLTIP =
   "Financial contributions are greatly appreciated, but never required. Visit the patreon link to learn more!";
 
@@ -121,9 +122,15 @@ export function Footer() {
           {/* Legal */}
           <div className="text-sm text-muted-foreground">
             <p>© {new Date().getFullYear()} Chronicle</p>
+            <a
+              href={PRIVACY_URL}
+              className="mt-2 inline-block text-xs hover:text-foreground transition-colors"
+            >
+              Privacy Policy
+            </a>
             <p className="text-xs mt-2">
               Source-available raid log analysis for Classic World of Warcraft.
-              Per-server privacy and terms are on each server's Chronicle.
+              Per-server terms are on each server's Chronicle.
             </p>
           </div>
         </div>
