@@ -246,6 +246,9 @@ maps/forever-upload: maps/forever-extract
 .PHONY: maps/forever
 maps/forever: maps/forever-upload
 
+.PHONY: maps
+maps: maps/forever
+
 # Full talent-background pipeline: extract from client → upload to R2
 .PHONY: icons/talents
 icons/talents: icons/talents-extract icons/talents-upload

@@ -96,7 +96,7 @@ The Forever dataset should use its own icon base URL, for example `https://icons
 
 ## Extract and publish UI maps
 
-Chronicle can export WoW Forever's `UiMap` artwork for position visualizations. The extractor reads `UiMap`, `UiMapAssignment`, `UiMapXMapArt`, `UiMapArt`, `UiMapArtStyleLayer`, and `UiMapArtTile` from the pinned Forever build, then exports the referenced BLP FileDataIDs directly as WebP:
+Chronicle can export WoW Forever's `UiMap` artwork for position visualizations. The extractor reads `UiMap`, `UiMapAssignment`, `UiMapXMapArt`, `UiMapArt`, `UiMapArtStyleLayer`, and `UiMapArtTile` from one resolved Forever build, then exports the referenced BLP FileDataIDs directly as WebP:
 
 ```bash
 go run ./scripts/dbcdata extract-wowdata-maps \
@@ -120,7 +120,7 @@ frontend/imagecache/forever/maps/
 To extract and upload the tiles and manifest to Cloudflare R2:
 
 ```bash
-make maps/forever
+make maps
 ```
 
 This publishes the manifest at `https://icons.chronicleclassic.com/forever/maps/manifest.json` and tiles under `https://icons.chronicleclassic.com/forever/maps/tiles/`. Tile responses are immutable for one year; the manifest uses a one-hour cache so a newly published build can become visible without renaming the base URL. Set `WOWDATA_BUILD`, `WOWDATA_BIN`, or `WOWDATA_CACHE` to override their defaults. `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH` override the upload destination.
