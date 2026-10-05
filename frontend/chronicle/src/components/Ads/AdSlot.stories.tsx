@@ -1,17 +1,18 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import { LeaderboardAdSlot } from "./LeaderboardAdSlot"
+import { AdSlot } from "./AdSlot"
 
 const meta = {
-  title: "Ads/LeaderboardAdSlot",
-  component: LeaderboardAdSlot,
+  title: "Ads/AdSlot",
+  component: AdSlot,
   parameters: {
     layout: "fullscreen",
   },
   args: {
     hostname: "localhost",
-    variant: "rail",
+    placement: "leaderboards-right-rail",
+    format: "rail",
   },
-} satisfies Meta<typeof LeaderboardAdSlot>
+} satisfies Meta<typeof AdSlot>
 
 export default meta
 
@@ -29,15 +30,16 @@ export const Rail: Story = {
             ))}
           </div>
         </main>
-        <LeaderboardAdSlot {...args} />
+        <AdSlot {...args} />
       </div>
     </div>
   ),
 }
 
-export const Compact: Story = {
+export const Responsive: Story = {
   args: {
-    variant: "compact",
+    placement: "statistics-encounter-sidebar",
+    format: "responsive",
   },
   render: (args) => (
     <div className="min-h-screen bg-background px-6 py-8 text-foreground">
@@ -50,7 +52,7 @@ export const Compact: Story = {
             </div>
           ))}
         </div>
-        <LeaderboardAdSlot {...args} className="mt-5" />
+        <AdSlot {...args} className="mt-5" />
       </aside>
     </div>
   ),

@@ -21,7 +21,7 @@ import {
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
-import { LeaderboardAdSlot } from "@/components/Ads/LeaderboardAdSlot"
+import { AdSlot } from "@/components/Ads/AdSlot"
 import { shouldShowCompactEncounterAd } from "@/components/Ads/adPreview"
 import type { RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
 import { useSiteConfig, useSupportedInstanceProgressionBosses } from "@/api/queries"
@@ -784,7 +784,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       </p>
 
       {!isMobile && shouldShowCompactEncounterAd(encounterNames.length) && (
-        <LeaderboardAdSlot variant="compact" className="mt-5" />
+        <AdSlot placement="statistics-encounter-sidebar" className="mt-5" />
       )}
     </>
   )

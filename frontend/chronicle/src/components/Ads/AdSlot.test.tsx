@@ -1,28 +1,38 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
-import { LeaderboardAdSlot } from "./LeaderboardAdSlot"
+import { AdSlot } from "./AdSlot"
 import { isLocalAdPreviewHost, shouldShowCompactEncounterAd } from "./adPreview"
 
-describe("LeaderboardAdSlot", () => {
+describe("AdSlot", () => {
   it("renders the vertical rail preview on localhost", () => {
-    const markup = renderToStaticMarkup(<LeaderboardAdSlot variant="rail" hostname="localhost" />)
+    const markup = renderToStaticMarkup(
+      <AdSlot placement="leaderboards-right-rail" format="rail" hostname="localhost" />,
+    )
 
     expect(markup).toContain("Advertisement")
     expect(markup).toContain("160 × 600")
     expect(markup).toContain("2xl:block")
     expect(markup).toContain('aria-label="Advertisement preview"')
+    expect(markup).toContain('data-ad-placement="leaderboards-right-rail"')
   })
 
-  it("renders the compact desktop fallback", () => {
-    const markup = renderToStaticMarkup(<LeaderboardAdSlot variant="compact" hostname="127.0.0.1" />)
+  it("renders the responsive desktop format by default", () => {
+    const markup = renderToStaticMarkup(
+      <AdSlot placement="statistics-encounter-sidebar" hostname="127.0.0.1" />,
+    )
 
     expect(markup).toContain("responsive")
     expect(markup).toContain("lg:block")
     expect(markup).not.toContain("2xl:hidden")
+    expect(markup).toContain('data-ad-placement="statistics-encounter-sidebar"')
   })
 
   it("does not render outside local development", () => {
-    expect(renderToStaticMarkup(<LeaderboardAdSlot variant="rail" hostname="turtle.chronicleclassic.com" />)).toBe("")
+    expect(
+      renderToStaticMarkup(
+        <AdSlot placement="leaderboards-right-rail" format="rail" hostname="turtle.chronicleclassic.com" />,
+      ),
+    ).toBe("")
   })
 
   it("recognizes supported local hosts", () => {

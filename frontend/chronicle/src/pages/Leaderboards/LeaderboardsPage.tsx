@@ -3,7 +3,7 @@ import { RankingsLanding } from "../Rankings/RankingsLanding"
 import { InstanceView } from "../Rankings/InstanceView"
 import { SpeedrunLeaderboard } from "../Leaderboard/SpeedrunLeaderboard"
 import { Swords, Timer } from "lucide-react"
-import { LeaderboardAdSlot } from "../../components/Ads/LeaderboardAdSlot"
+import { AdSlot } from "../../components/Ads/AdSlot"
 import {
   leaderboardsModeTarget,
   legacyLeaderboardsTarget,
@@ -58,7 +58,7 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
               <SpeedrunLeaderboard overrideInstance={instance} />
             )}
           </div>
-          <LeaderboardAdSlot variant="rail" />
+          <AdSlot placement="leaderboards-right-rail" format="rail" />
         </div>
       </div>
     )
@@ -91,7 +91,7 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
             <SpeedrunLeaderboard />
           )}
         </div>
-        <LeaderboardAdSlot variant="rail" />
+        <AdSlot placement="leaderboards-right-rail" format="rail" />
       </div>
     </div>
   )
