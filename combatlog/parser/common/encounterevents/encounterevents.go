@@ -13,6 +13,7 @@ import (
 type EncounterEventsInProgress EncounterEvents
 
 type EncounterEvents struct {
+	unitTelemetry  *unitTelemetryDeduplicator
 	first          time.Time
 	verbose        bool
 	Damage         *Builder[*messages.Damage, *chronicleproto.Damage]
@@ -44,6 +45,7 @@ type EncounterEvents struct {
 
 func New(verbose bool) *EncounterEventsInProgress {
 	return &EncounterEventsInProgress{
+		unitTelemetry:  newUnitTelemetryDeduplicator(),
 		verbose:        verbose,
 		Damage:         NewBuilder[*messages.Damage, *chronicleproto.Damage](),
 		Heal:           NewBuilder[*messages.Heal, *chronicleproto.Heal](),
@@ -226,11 +228,17 @@ func (e *EncounterEventsInProgress) Process(m messages.Message) error {
 			return fmt.Errorf("heal proto: %w", err)
 		}
 	case *messages.UnitPosition:
+		if e.unitTelemetry.duplicate(ty) {
+			return nil
+		}
 		err := AddToBuilder(e.UnitPosition, ty, e.nextIndex(), types2proto.UnitPosition)
 		if err != nil {
 			return fmt.Errorf("unit position proto: %w", err)
 		}
 	case *messages.UnitResources:
+		if e.unitTelemetry.duplicate(ty) {
+			return nil
+		}
 		err := AddToBuilder(e.UnitResources, ty, e.nextIndex(), types2proto.UnitResources)
 		if err != nil {
 			return fmt.Errorf("unit resources proto: %w", err)
