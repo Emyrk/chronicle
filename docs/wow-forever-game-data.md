@@ -96,7 +96,7 @@ The Forever dataset should use its own icon base URL, for example `https://icons
 
 ## Extract and publish UI maps
 
-Chronicle can export WoW Forever's `UiMap` artwork for position visualizations. The extractor reads `UiMap`, `UiMapAssignment`, `UiMapXMapArt`, `UiMapArt`, `UiMapArtStyleLayer`, and `UiMapArtTile` from one resolved Forever build, then exports the referenced BLP FileDataIDs directly as WebP:
+Chronicle can export WoW Forever's `UiMap` artwork for position visualizations. The extractor reads the UI map art and assignment tables, `WorldMapOverlay` and `WorldMapOverlayTile` for fully explored zone artwork, plus `Map` and the client listfile for available dungeon and raid floors. It then exports every referenced BLP FileDataID directly as WebP:
 
 ```bash
 go run ./scripts/dbcdata extract-wowdata-maps \
@@ -115,7 +115,7 @@ frontend/imagecache/forever/maps/
     └── <FileDataID>.webp
 ```
 
-`manifest.json` uses the `chronicle-wow-map-art-v1` format. It records the product and build, map hierarchy, phase-specific artwork, layer and tile dimensions, and the raw `UiMapAssignment` `Region`, `UiMin`, and `UiMax` arrays needed to convert world coordinates into UI coordinates. The arrays are intentionally preserved in DB2 order rather than assigning inferred axis names.
+`manifest.json` uses the `chronicle-wow-map-art-v1` format. It records the product and build, map hierarchy, phase-specific artwork, explored-area overlays, available dungeon and raid floors, layer and tile dimensions, and the raw `UiMapAssignment` `Region`, `UiMin`, and `UiMax` arrays needed to convert world coordinates into UI coordinates. The arrays are intentionally preserved in DB2 order rather than assigning inferred axis names. Instance floors are included only when the client listfile contains a complete 12-tile map canvas, so instances without published artwork remain absent rather than receiving guessed geometry.
 
 To extract and upload the tiles and manifest to Cloudflare R2:
 

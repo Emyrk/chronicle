@@ -29,7 +29,7 @@ Do not run the publishing target merely to inspect a change. Use the checks belo
    ```bash
    out="$(mktemp -d)"
    go run ./scripts/dbcdata extract-wowdata-maps --metadata-only --out="$out"
-   jq '{format, target, maps: (.maps | length)}' "$out/manifest.json"
+   jq '{format, target, maps: (.maps | length), overlays: ([.maps[].art[].overlays[]?] | length), instances: (.instances | length)}' "$out/manifest.json"
    ```
 
 2. Run the focused automated checks after changing extraction or manifest behavior:
@@ -62,18 +62,23 @@ Do not run the publishing target merely to inspect a change. Use the checks belo
 
 ## Data model
 
-The manifest joins these DB2 tables:
+The manifest joins the base UI map art, explored overlays, and available instance floors:
 
 ```text
 UiMap.ID
   -> UiMapAssignment.UiMapID
   -> UiMapXMapArt.UiMapID
   -> UiMapArt.ID
-  -> UiMapArtStyleLayer.UiMapArtStyleID
-  -> UiMapArtTile.UiMapArtID + LayerIndex
+     -> UiMapArtStyleLayer.UiMapArtStyleID
+     -> UiMapArtTile.UiMapArtID + LayerIndex
+     -> WorldMapOverlay.UiMapArtID
+        -> WorldMapOverlayTile.WorldMapOverlayID
+
+Map.ID + MapName_lang
+  -> normalized interface/worldmap/<directory>/ listfile artwork
 ```
 
-Keep `UiMapAssignment.Region`, `UiMin`, and `UiMax` in source DB2 order. Do not assign inferred axis names or bake a coordinate transform into extraction until it is verified against known in-game positions.
+Explored zones are the base `UiMapArtTile` canvas plus every linked `WorldMapOverlayTile`, positioned from the overlay offsets. Instance floors are exported only when the listfile provides all twelve tiles for a 4-by-3 canvas. Keep `UiMapAssignment.Region`, `UiMin`, and `UiMax` in source DB2 order. Do not assign inferred axis names or bake a coordinate transform into extraction until it is verified against known in-game positions.
 
 Keep output deterministic:
 
@@ -81,6 +86,8 @@ Keep output deterministic:
 - assignments sorted by assignment ID;
 - art sorted by phase then art ID;
 - layers sorted by layer index;
+- overlays sorted by overlay ID;
+- instances sorted by name then world map ID, with floors sorted numerically;
 - tiles sorted by row, column, then FileDataID;
 - tile paths based on FileDataID so duplicate textures share one object.
 
@@ -113,6 +120,6 @@ Before changing paths, cache headers, or the manifest format, check all consumer
 
 - `make maps` expands to the complete Forever extract-and-upload pipeline.
 - `--build latest` resolves to an exact build in command output and `manifest.json`.
-- Metadata extraction returns at least one map and one referenced tile.
+- Metadata extraction returns at least one map, one explored overlay, one complete instance floor, and their referenced tiles.
 - A sampled exported tile starts with RIFF bytes and contains `WEBP` at bytes 8 through 11.
 - No credentials, generated tiles, temporary manifests, or R2 configuration are committed.

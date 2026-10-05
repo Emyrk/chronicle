@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -47,12 +48,19 @@ func TestBuildWowMapManifest(t *testing.T) {
 			{ID: 4, UiMapArtID: 2169, LayerIndex: 1, RowIndex: 0, ColIndex: 0, FileDataID: 40},
 			{ID: 5, UiMapArtID: 9999, LayerIndex: 0, RowIndex: 0, ColIndex: 0, FileDataID: 99},
 		},
+		Overlays: []wowdataWorldMapOverlay{
+			{ID: 100, UiMapArtID: 2168, OffsetX: 64, OffsetY: 96, TextureWidth: 300, TextureHeight: 200},
+		},
+		OverlayTiles: []wowdataWorldMapOverlayTile{
+			{ID: 2, WorldMapOverlayID: 100, LayerIndex: 0, RowIndex: 0, ColIndex: 1, FileDataID: 51},
+			{ID: 1, WorldMapOverlayID: 100, LayerIndex: 0, RowIndex: 0, ColIndex: 0, FileDataID: 50},
+		},
 	}
 	target := wowMapTarget{Product: "wow_classic_beta", Build: "1.60.1.70205", Region: "us", Locale: "enUS"}
 
 	manifest, fileDataIDs, err := buildWowMapManifest(source, target)
 	require.NoError(t, err)
-	require.Equal(t, []int32{10, 20, 30, 40}, fileDataIDs, "unlinked artwork must not be exported")
+	require.Equal(t, []int32{10, 20, 30, 40, 50, 51}, fileDataIDs, "unlinked artwork must not be exported")
 	require.Equal(t, wowMapManifestFormat, manifest.Format)
 	require.Equal(t, target, manifest.Target)
 	require.Len(t, manifest.Maps, 2)
@@ -66,7 +74,60 @@ func TestBuildWowMapManifest(t *testing.T) {
 		manifest.Maps[0].Art[0].Layers[0].Tiles[1].FileDataID,
 		manifest.Maps[0].Art[0].Layers[0].Tiles[2].FileDataID,
 	})
+	require.Equal(t, int32(100), manifest.Maps[0].Art[0].Overlays[0].ID)
+	require.Equal(t, []int32{50, 51}, []int32{
+		manifest.Maps[0].Art[0].Overlays[0].Tiles[0].FileDataID,
+		manifest.Maps[0].Art[0].Overlays[0].Tiles[1].FileDataID,
+	})
 	require.Equal(t, "tiles/10.webp", manifest.Maps[0].Art[0].Layers[0].Tiles[0].Path)
+}
+
+func TestBuildWowMapInstances(t *testing.T) {
+	t.Parallel()
+
+	var files []wowdataFile
+	for tile := 1; tile <= 12; tile++ {
+		files = append(files,
+			wowdataFile{FileDataID: int32(100 + tile), FileName: fmt.Sprintf("interface/worldmap/shadowfangkeep/shadowfangkeep1_%d.blp", tile)},
+			wowdataFile{FileDataID: int32(200 + tile), FileName: fmt.Sprintf("interface/worldmap/zulfarrak/zulfarrak%d.blp", tile)},
+		)
+	}
+	files = append(files, wowdataFile{FileDataID: 999, FileName: "interface/worldmap/incomplete/incomplete1_1.blp"})
+
+	instances := buildWowMapInstances([]wowdataMap{
+		{ID: 209, Name: "Zul'Farrak", Directory: "TanarisInstance", InstanceType: 1, ExpansionID: 0},
+		{ID: 33, Name: "Shadowfang Keep", Directory: "Shadowfang", InstanceType: 1, ExpansionID: 0},
+		{ID: 999, Name: "Incomplete", Directory: "Incomplete", InstanceType: 1, ExpansionID: 0},
+		{ID: 1000, Name: "Future Dungeon", Directory: "ShadowfangKeep", InstanceType: 1, ExpansionID: 1},
+	}, files)
+
+	require.Len(t, instances, 2)
+	require.Equal(t, int32(33), instances[0].MapID)
+	require.Equal(t, int32(1), instances[0].Floors[0].Floor)
+	require.Equal(t, int32(101), instances[0].Floors[0].Tiles[0].FileDataID)
+	require.Equal(t, int32(2), instances[0].Floors[0].Tiles[11].Row)
+	require.Equal(t, int32(3), instances[0].Floors[0].Tiles[11].Column)
+	require.Equal(t, int32(209), instances[1].MapID)
+	require.Equal(t, int32(201), instances[1].Floors[0].Tiles[0].FileDataID)
+}
+
+func TestParseWowMapInstanceTile(t *testing.T) {
+	t.Parallel()
+
+	directory, floor, tile, ok := parseWowMapInstanceTile("interface/worldmap/naxxramas/naxxramas6_12.blp")
+	require.True(t, ok)
+	require.Equal(t, "naxxramas", directory)
+	require.Equal(t, int32(6), floor)
+	require.Equal(t, int32(12), tile)
+
+	directory, floor, tile, ok = parseWowMapInstanceTile("interface/worldmap/zulgurub/zulgurub9.blp")
+	require.True(t, ok)
+	require.Equal(t, "zulgurub", directory)
+	require.Equal(t, int32(1), floor)
+	require.Equal(t, int32(9), tile)
+
+	_, _, _, ok = parseWowMapInstanceTile("interface/worldmap/ashenvale/ashenvalehighlight.blp")
+	require.False(t, ok)
 }
 
 func TestBuildWowMapManifestRejectsMissingArt(t *testing.T) {

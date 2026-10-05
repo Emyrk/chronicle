@@ -3,6 +3,7 @@ import {
   mapAssetUrl,
   mapGalleryItems,
   mapManifestUrl,
+  overlayTilePlacement,
   tilePlacement,
   type WowMapLayer,
   type WowMapManifest,
@@ -41,6 +42,22 @@ describe("map gallery rendering model", () => {
     });
   });
 
+  it("positions exploration overlays on the base map canvas", () => {
+    expect(overlayTilePlacement(layer, {
+      id: 1,
+      offsetX: 0,
+      offsetY: 0,
+      textureWidth: 300,
+      textureHeight: 200,
+      tiles: [],
+    }, { row: 0, column: 1, fileDataID: 31, path: "tiles/31.webp" })).toEqual({
+      left: "25.6%",
+      top: "0%",
+      width: "25.6%",
+      height: "51.2%",
+    });
+  });
+
   it("flattens renderable art layers in map-name order", () => {
     const manifest: WowMapManifest = {
       format: "chronicle-wow-map-art-v1",
@@ -74,14 +91,29 @@ describe("map gallery rendering model", () => {
           art: [{ phaseID: 0, artID: 9999, styleID: 1, layers: [{ ...layer, tiles: [] }] }],
         },
       ],
+      instances: [{
+        mapID: 230,
+        name: "Blackrock Depths",
+        instanceType: 1,
+        directory: "blackrockdepths",
+        floors: [{
+          floor: 1,
+          width: 1002,
+          height: 668,
+          tileWidth: 256,
+          tileHeight: 256,
+          tiles: [{ row: 0, column: 0, fileDataID: 40, path: "tiles/40.webp" }],
+        }],
+      }],
     };
 
     const items = mapGalleryItems(manifest);
 
     expect(items.map((item) => item.key)).toEqual([
-      "1411-0-2169-0",
-      "1411-1-2170-1",
-      "1412-0-1200-0",
+      "instance-230-1",
+      "zone-1411-0-2169-0",
+      "zone-1411-1-2170-1",
+      "zone-1412-0-1200-0",
     ]);
   });
 });
