@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDatasetId } from "@/hooks/useDatasetId";
-import type { SetClassBuffIgnoreRequest } from "./typesGenerated";
+import type { ClassBuffIgnorePolicy, SetClassBuffIgnoresRequest } from "./typesGenerated";
 
 export interface FriendlyClassBuffEffect {
   effect_index: number;
@@ -21,6 +21,7 @@ export interface FriendlyClassBuffSpell {
 export type FriendlyClassBuffsByClass = Record<string, FriendlyClassBuffSpell[]>;
 
 const CLASS_BUFFS_KEY = ["wowdb", "class-buffs"] as const;
+const CLASS_BUFF_IGNORE_POLICIES_KEY = ["game-data", "class-buff-ignores"] as const;
 
 export function useFriendlyClassBuffs() {
   const datasetId = useDatasetId();
@@ -37,11 +38,23 @@ export function useFriendlyClassBuffs() {
   });
 }
 
-export function useSetClassBuffIgnore() {
+export function useClassBuffIgnorePolicies(enabled: boolean) {
+  return useQuery({
+    queryKey: CLASS_BUFF_IGNORE_POLICIES_KEY,
+    queryFn: async () => {
+      const response = await fetch("/api/v1/game-data/class-buff-ignores");
+      if (!response.ok) throw new Error("Failed to fetch class buff ignore policies");
+      return response.json() as Promise<ClassBuffIgnorePolicy[]>;
+    },
+    enabled,
+  });
+}
+
+export function useSetClassBuffIgnores() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (request: SetClassBuffIgnoreRequest) => {
-      const response = await fetch("/api/v1/game-data/class-buff-ignore", {
+    mutationFn: async (request: SetClassBuffIgnoresRequest) => {
+      const response = await fetch("/api/v1/game-data/class-buff-ignores", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
@@ -51,6 +64,11 @@ export function useSetClassBuffIgnore() {
         throw new Error(body?.message ?? `Failed to update class buff (${response.status})`);
       }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: CLASS_BUFFS_KEY }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CLASS_BUFFS_KEY }),
+        queryClient.invalidateQueries({ queryKey: CLASS_BUFF_IGNORE_POLICIES_KEY }),
+      ]);
+    },
   });
 }
