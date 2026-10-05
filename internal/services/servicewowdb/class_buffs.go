@@ -27,14 +27,15 @@ type classBuffSpell struct {
 	Ignored     bool              `json:"ignored"`
 }
 
-func applyClassBuffIgnores(byClass map[string][]classBuffSpell, ignoredNames []string) {
-	ignored := make(map[string]struct{}, len(ignoredNames))
-	for _, name := range ignoredNames {
-		ignored[name] = struct{}{}
-	}
+func applyClassBuffPolicies(byClass map[string][]classBuffSpell, policies map[string]bool) {
 	for className, spells := range byClass {
+		defaultIgnored := className == "Generic"
 		for i := range spells {
-			_, spells[i].Ignored = ignored[strings.ToLower(strings.TrimSpace(spells[i].Name))]
+			ignored, ok := policies[strings.ToLower(strings.TrimSpace(spells[i].Name))]
+			if !ok {
+				ignored = defaultIgnored
+			}
+			spells[i].Ignored = ignored
 		}
 		byClass[className] = spells
 	}
@@ -65,14 +66,18 @@ func (s *Service) handleGetClassBuffs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ignoredNames, err := s.store.ListClassBuffIgnoresForDataset(ctx, datasetID)
+	rows, err := s.store.ListClassBuffPoliciesForDataset(ctx, datasetID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	applyClassBuffIgnores(byClass, ignoredNames)
+	policies := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		policies[row.NormalizedName] = row.Ignored
+	}
+	applyClassBuffPolicies(byClass, policies)
 
-	// Dataset-scoped ignores can be toggled by admins at any time.
+	// Dataset-scoped policies can be toggled by admins at any time.
 	w.Header().Set("Cache-Control", "no-cache")
 	httpapi.Write(ctx, w, http.StatusOK, byClass)
 }

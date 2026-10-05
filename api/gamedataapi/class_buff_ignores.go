@@ -39,6 +39,7 @@ func (h *Handler) ListClassBuffIgnorePolicies(w http.ResponseWriter, r *http.Req
 		policies = append(policies, chroniclesdk.ClassBuffIgnorePolicy{
 			DatasetID: row.DatasetID,
 			SpellName: row.SpellName,
+			Ignored:   row.Ignored,
 		})
 	}
 	httpapi.Write(ctx, w, http.StatusOK, policies)
@@ -86,16 +87,10 @@ func (h *Handler) SetClassBuffIgnores(w http.ResponseWriter, r *http.Request) {
 
 	if err := store.InTx(ctx, func(tx database.Store) error {
 		for datasetID := range datasetIDs {
-			if req.Ignored {
-				if err := tx.UpsertClassBuffIgnore(ctx, database.UpsertClassBuffIgnoreParams{
-					DatasetID: datasetID, SpellName: req.SpellName,
-				}); err != nil {
-					return err
-				}
-				continue
-			}
-			if err := tx.DeleteClassBuffIgnore(ctx, database.DeleteClassBuffIgnoreParams{
-				DatasetID: datasetID, SpellName: req.SpellName,
+			if err := tx.UpsertClassBuffIgnore(ctx, database.UpsertClassBuffIgnoreParams{
+				DatasetID: datasetID,
+				SpellName: req.SpellName,
+				Ignored:   req.Ignored,
 			}); err != nil {
 				return err
 			}

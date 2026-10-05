@@ -1,4 +1,4 @@
-import type { FriendlyClassBuffSpell } from "@/api/classBuffs";
+import type { FriendlyClassBuffSpell, FriendlyClassBuffsByClass } from "@/api/classBuffs";
 import type { FriendlyBuffEntityUsage, FriendlyBuffPlayer } from "./friendlyClassBuffs.processor";
 
 export interface FriendlyBuffMatrixColumn {
@@ -23,6 +23,19 @@ export interface FriendlyBuffMatrixRow {
 export interface FriendlyBuffMatrix {
   columns: FriendlyBuffMatrixColumn[];
   rows: FriendlyBuffMatrixRow[];
+}
+
+export function buildAllowedFriendlyClassBuffs(
+  data: FriendlyClassBuffsByClass | undefined,
+  className: string | null,
+): Map<number, FriendlyClassBuffSpell> {
+  const inherited = data?.Generic ?? [];
+  const classSpells = className ? data?.[className] ?? [] : [];
+  return new Map(
+    [...inherited, ...classSpells]
+      .filter((spell) => !spell.ignored)
+      .map((spell) => [spell.id, spell]),
+  );
 }
 
 export function buildFriendlyBuffMatrix(

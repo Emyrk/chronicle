@@ -636,6 +636,7 @@ export interface ChronicleEncounterEvents {
 export interface ClassBuffIgnorePolicy {
     readonly dataset_id: string;
     readonly spell_name: string;
+    readonly ignored: boolean;
 }
 
 // From chroniclesdk/rankings.go

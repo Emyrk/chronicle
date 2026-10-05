@@ -30,8 +30,10 @@ func classBuffSpellFromSpell(spell *chrondbc.Spell) (classBuffSpell, bool) {
 	if spell == nil || spell.Attrs.Has(chrondbc.Attr_Passive) || spell.IsDeprecated() {
 		return classBuffSpell{}, false
 	}
-	if _, ok := playerClassName(spell.SpellClassSet); !ok {
-		return classBuffSpell{}, false
+	if spell.SpellClassSet != chrondbc.SpellClassSetGeneric {
+		if _, ok := playerClassName(spell.SpellClassSet); !ok {
+			return classBuffSpell{}, false
+		}
 	}
 
 	var effects []classBuffEffect
@@ -137,7 +139,10 @@ func (h *Handler) deriveClassBuffs(ctx context.Context, datasetID uuid.UUID, spe
 		if !ok {
 			continue
 		}
-		className, _ := playerClassName(spell.SpellClassSet)
+		className := spell.SpellClassSet.String()
+		if spell.SpellClassSet != chrondbc.SpellClassSetGeneric {
+			className, _ = playerClassName(spell.SpellClassSet)
+		}
 		byClass[className] = append(byClass[className], buff)
 	}
 
