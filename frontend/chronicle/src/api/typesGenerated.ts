@@ -634,7 +634,7 @@ export interface ChronicleEncounterEvents {
 
 // From chroniclesdk/class_buffs.go
 export interface ClassBuffIgnorePolicy {
-    readonly tenant_id: string | null;
+    readonly dataset_id: string;
     readonly spell_name: string;
 }
 
@@ -3118,13 +3118,11 @@ export interface Session {
 
 // From chroniclesdk/class_buffs.go
 /**
- * SetClassBuffIgnoresRequest updates one exact-name policy in every selected
- * tenant scope. IncludeRoot targets the root domain's own analysis scope.
+ * SetClassBuffIgnoresRequest updates one exact-name policy in every selected dataset.
  */
 export interface SetClassBuffIgnoresRequest {
     readonly spell_name: string;
-    readonly tenant_ids: readonly string[];
-    readonly include_root: boolean;
+    readonly dataset_ids: readonly string[];
     readonly ignored: boolean;
 }
 

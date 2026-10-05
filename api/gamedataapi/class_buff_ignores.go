@@ -1,6 +1,7 @@
 package gamedataapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 func requireRootScope(w http.ResponseWriter, r *http.Request) bool {
@@ -16,7 +18,7 @@ func requireRootScope(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{
-		Message: "tenant bulk management is only available from the root domain",
+		Message: "dataset class buff management is only available from the root domain",
 	})
 	return false
 }
@@ -34,11 +36,10 @@ func (h *Handler) ListClassBuffIgnorePolicies(w http.ResponseWriter, r *http.Req
 
 	policies := make([]chroniclesdk.ClassBuffIgnorePolicy, 0, len(rows))
 	for _, row := range rows {
-		policy := chroniclesdk.ClassBuffIgnorePolicy{SpellName: row.SpellName}
-		if row.TenantID.Valid {
-			policy.TenantID = &row.TenantID.UUID
-		}
-		policies = append(policies, policy)
+		policies = append(policies, chroniclesdk.ClassBuffIgnorePolicy{
+			DatasetID: row.DatasetID,
+			SpellName: row.SpellName,
+		})
 	}
 	httpapi.Write(ctx, w, http.StatusOK, policies)
 }
@@ -57,36 +58,44 @@ func (h *Handler) SetClassBuffIgnores(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "spell_name is required"})
 		return
 	}
-	if !req.IncludeRoot && len(req.TenantIDs) == 0 {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "select at least one tenant or root"})
+	if len(req.DatasetIDs) == 0 {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "select at least one dataset"})
 		return
 	}
 
-	scopes := make(map[uuid.UUID]uuid.NullUUID, len(req.TenantIDs)+1)
-	if req.IncludeRoot {
-		scopes[uuid.Nil] = uuid.NullUUID{}
-	}
-	for _, tenantID := range req.TenantIDs {
-		if tenantID == uuid.Nil {
-			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "tenant_ids cannot contain the nil UUID"})
+	datasetIDs := make(map[uuid.UUID]struct{}, len(req.DatasetIDs))
+	for _, datasetID := range req.DatasetIDs {
+		if datasetID == uuid.Nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "dataset_ids cannot contain the nil UUID"})
 			return
 		}
-		scopes[tenantID] = uuid.NullUUID{UUID: tenantID, Valid: true}
+		datasetIDs[datasetID] = struct{}{}
 	}
 
 	store := database.New(h.pool)
+	for datasetID := range datasetIDs {
+		if _, err := store.GetDataset(ctx, datasetID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "unknown dataset_id"})
+				return
+			}
+			httpapi.InternalServerError(w, err)
+			return
+		}
+	}
+
 	if err := store.InTx(ctx, func(tx database.Store) error {
-		for scopeID, tenantID := range scopes {
+		for datasetID := range datasetIDs {
 			if req.Ignored {
 				if err := tx.UpsertClassBuffIgnore(ctx, database.UpsertClassBuffIgnoreParams{
-					ScopeID: scopeID, TenantID: tenantID, SpellName: req.SpellName,
+					DatasetID: datasetID, SpellName: req.SpellName,
 				}); err != nil {
 					return err
 				}
 				continue
 			}
 			if err := tx.DeleteClassBuffIgnore(ctx, database.DeleteClassBuffIgnoreParams{
-				ScopeID: scopeID, SpellName: req.SpellName,
+				DatasetID: datasetID, SpellName: req.SpellName,
 			}); err != nil {
 				return err
 			}
