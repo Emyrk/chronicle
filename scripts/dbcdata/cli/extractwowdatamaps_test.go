@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -181,6 +182,75 @@ func TestWowdataTargetArgs(t *testing.T) {
 	})
 	require.Contains(t, local, "--path")
 	require.Contains(t, local, "/game")
+}
+
+func TestExportWowdataTextureReportsUnavailableFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "wowdata")
+	require.NoError(t, os.WriteFile(binary, []byte(`#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"ok":false,"error":{"code":"not_found","message":"no root entry found for locale: 2"}}'
+exit 1
+`), 0o755))
+
+	output := filepath.Join(dir, "tile.webp")
+	err := exportWowdataTexture(context.Background(), &bytes.Buffer{}, wowMapExtractOptions{
+		WowdataBin: binary,
+		Source:     "remote",
+		Product:    "wow_classic_beta",
+		Build:      "1.60.1.70205",
+		Region:     "us",
+		Locale:     "enUS",
+	}, 769212, output)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errWowdataFileUnavailable))
+	require.ErrorContains(t, err, "FileDataID 769212")
+	require.NoFileExists(t, output)
+}
+
+func TestPruneUnavailableWowMapTiles(t *testing.T) {
+	t.Parallel()
+
+	manifest := wowMapManifest{
+		Maps: []wowMapRecord{{
+			ID: 1411,
+			Art: []wowMapArtAssociation{{
+				ArtID:  2168,
+				Layers: []wowMapArtLayer{{Tiles: []wowMapTile{{FileDataID: 10}}}},
+			}},
+		}},
+		Instances: []wowMapInstance{{
+			Name: "Gnomeregan",
+			Floors: []wowMapInstanceFloor{
+				{Floor: 1, Tiles: []wowMapTile{{FileDataID: 20}}},
+				{Floor: 10, Tiles: []wowMapTile{{FileDataID: 769212}, {FileDataID: 769213}}},
+			},
+		}},
+	}
+
+	skipped, err := pruneUnavailableWowMapTiles(&manifest, map[int32]struct{}{769212: {}})
+	require.NoError(t, err)
+	require.Equal(t, []string{`"Gnomeregan" floor 10`}, skipped)
+	require.Len(t, manifest.Instances, 1)
+	require.Equal(t, int32(1), manifest.Instances[0].Floors[0].Floor)
+	require.Equal(t, []int32{10, 20}, wowMapManifestFileDataIDs(manifest))
+}
+
+func TestPruneUnavailableWowMapTilesRejectsUiMapTile(t *testing.T) {
+	t.Parallel()
+
+	manifest := wowMapManifest{Maps: []wowMapRecord{{
+		ID: 1411,
+		Art: []wowMapArtAssociation{{
+			ArtID:  2168,
+			Layers: []wowMapArtLayer{{Tiles: []wowMapTile{{FileDataID: 10}}}},
+		}},
+	}}}
+
+	_, err := pruneUnavailableWowMapTiles(&manifest, map[int32]struct{}{10: {}})
+	require.ErrorContains(t, err, "UI map 1411 art 2168 references unavailable FileDataID 10")
 }
 
 func TestWriteWowMapManifest(t *testing.T) {

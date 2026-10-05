@@ -2,8 +2,10 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -332,18 +334,31 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 		return fmt.Errorf("create map output directory: %w", err)
 	}
 	if !opts.MetadataOnly {
+		unavailable := make(map[int32]struct{})
 		for i, fileDataID := range fileDataIDs {
 			output := filepath.Join(opts.OutDir, "tiles", fmt.Sprintf("%d.webp", fileDataID))
 			if info, statErr := os.Stat(output); statErr == nil && info.Size() > 0 {
 				continue
 			}
 			if err := exportWowdataTexture(ctx, stderr, opts, fileDataID, output); err != nil {
+				if errors.Is(err, errWowdataFileUnavailable) {
+					unavailable[fileDataID] = struct{}{}
+					continue
+				}
 				return err
 			}
 			if (i+1)%100 == 0 || i+1 == len(fileDataIDs) {
 				_, _ = fmt.Fprintf(stdout, "Exported %d/%d map tiles\n", i+1, len(fileDataIDs))
 			}
 		}
+		skippedFloors, err := pruneUnavailableWowMapTiles(&manifest, unavailable)
+		if err != nil {
+			return err
+		}
+		for _, floor := range skippedFloors {
+			_, _ = fmt.Fprintf(stdout, "Skipped unavailable instance map floor %s\n", floor)
+		}
+		fileDataIDs = wowMapManifestFileDataIDs(manifest)
 	}
 	if err := writeWowMapManifest(filepath.Join(opts.OutDir, "manifest.json"), manifest); err != nil {
 		return err
@@ -464,15 +479,33 @@ func readWowMapFiles(ctx context.Context, stdout, stderr io.Writer, opts wowMapE
 	return nil
 }
 
+var errWowdataFileUnavailable = errors.New("wowdata file unavailable for locale")
+
+type wowdataErrorResponse struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
 func exportWowdataTexture(ctx context.Context, stderr io.Writer, opts wowMapExtractOptions, fileDataID int32, output string) error {
 	tmp := output + ".tmp"
 	_ = os.Remove(tmp)
 	args := []string{"icon", "export", "--file-data-id", fmt.Sprint(fileDataID), "--format", "webp", "--output", tmp}
 	args = append(args, wowdataTargetArgs(opts)...)
 	cmd := exec.CommandContext(ctx, opts.WowdataBin, args...)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
 		_ = os.Remove(tmp)
+		var response wowdataErrorResponse
+		if json.Unmarshal(stdout.Bytes(), &response) == nil && response.Error.Code == "not_found" {
+			return fmt.Errorf("%w: FileDataID %d: %s", errWowdataFileUnavailable, fileDataID, response.Error.Message)
+		}
+		if stdout.Len() > 0 {
+			_, _ = stderr.Write(stdout.Bytes())
+		}
 		return fmt.Errorf("export map tile FileDataID %d: %w", fileDataID, err)
 	}
 	if err := os.Rename(tmp, output); err != nil {
@@ -565,7 +598,6 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 		linksByMap[link.UiMapID] = append(linksByMap[link.UiMapID], link)
 	}
 	manifest := wowMapManifest{Format: wowMapManifestFormat, Target: target}
-	fileDataIDSet := make(map[int32]struct{})
 	for _, mapRow := range source.Maps {
 		record := wowMapRecord{
 			ID: mapRow.ID, Name: mapRow.Name, ParentID: mapRow.ParentUiMapID,
@@ -584,9 +616,6 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 			sort.Slice(layers, func(i, j int) bool { return layers[i].LayerIndex < layers[j].LayerIndex })
 			for _, layer := range layers {
 				tiles := tilesByArtAndLayer[[2]int32{art.ID, layer.LayerIndex}]
-				for _, tile := range tiles {
-					fileDataIDSet[tile.FileDataID] = struct{}{}
-				}
 				association.Layers = append(association.Layers, wowMapArtLayer{
 					Index: layer.LayerIndex, Width: layer.LayerWidth, Height: layer.LayerHeight,
 					TileWidth: layer.TileWidth, TileHeight: layer.TileHeight,
@@ -594,11 +623,6 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 					AdditionalZoomSteps: layer.AdditionalZoomSteps,
 					Tiles:               tiles,
 				})
-			}
-			for _, overlay := range association.Overlays {
-				for _, tile := range overlay.Tiles {
-					fileDataIDSet[tile.FileDataID] = struct{}{}
-				}
 			}
 			record.Art = append(record.Art, association)
 		}
@@ -612,6 +636,25 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 	}
 	sort.Slice(manifest.Maps, func(i, j int) bool { return manifest.Maps[i].ID < manifest.Maps[j].ID })
 	manifest.Instances = buildWowMapInstances(source.WorldMaps, source.Files)
+	return manifest, wowMapManifestFileDataIDs(manifest), nil
+}
+
+func wowMapManifestFileDataIDs(manifest wowMapManifest) []int32 {
+	fileDataIDSet := make(map[int32]struct{})
+	for _, mapRecord := range manifest.Maps {
+		for _, art := range mapRecord.Art {
+			for _, layer := range art.Layers {
+				for _, tile := range layer.Tiles {
+					fileDataIDSet[tile.FileDataID] = struct{}{}
+				}
+			}
+			for _, overlay := range art.Overlays {
+				for _, tile := range overlay.Tiles {
+					fileDataIDSet[tile.FileDataID] = struct{}{}
+				}
+			}
+		}
+	}
 	for _, instance := range manifest.Instances {
 		for _, floor := range instance.Floors {
 			for _, tile := range floor.Tiles {
@@ -624,7 +667,57 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 		fileDataIDs = append(fileDataIDs, id)
 	}
 	sort.Slice(fileDataIDs, func(i, j int) bool { return fileDataIDs[i] < fileDataIDs[j] })
-	return manifest, fileDataIDs, nil
+	return fileDataIDs
+}
+
+func pruneUnavailableWowMapTiles(manifest *wowMapManifest, unavailable map[int32]struct{}) ([]string, error) {
+	if len(unavailable) == 0 {
+		return nil, nil
+	}
+	for _, mapRecord := range manifest.Maps {
+		for _, art := range mapRecord.Art {
+			for _, layer := range art.Layers {
+				for _, tile := range layer.Tiles {
+					if _, missing := unavailable[tile.FileDataID]; missing {
+						return nil, fmt.Errorf("UI map %d art %d references unavailable FileDataID %d", mapRecord.ID, art.ArtID, tile.FileDataID)
+					}
+				}
+			}
+			for _, overlay := range art.Overlays {
+				for _, tile := range overlay.Tiles {
+					if _, missing := unavailable[tile.FileDataID]; missing {
+						return nil, fmt.Errorf("UI map %d overlay %d references unavailable FileDataID %d", mapRecord.ID, overlay.ID, tile.FileDataID)
+					}
+				}
+			}
+		}
+	}
+
+	var skipped []string
+	instances := manifest.Instances[:0]
+	for _, instance := range manifest.Instances {
+		floors := instance.Floors[:0]
+		for _, floor := range instance.Floors {
+			missing := false
+			for _, tile := range floor.Tiles {
+				if _, unavailable := unavailable[tile.FileDataID]; unavailable {
+					missing = true
+					break
+				}
+			}
+			if missing {
+				skipped = append(skipped, fmt.Sprintf("%q floor %d", instance.Name, floor.Floor))
+				continue
+			}
+			floors = append(floors, floor)
+		}
+		instance.Floors = floors
+		if len(instance.Floors) > 0 {
+			instances = append(instances, instance)
+		}
+	}
+	manifest.Instances = instances
+	return skipped, nil
 }
 
 var nonAlphaNumeric = regexp.MustCompile(`[^a-z0-9]+`)
