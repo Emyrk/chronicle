@@ -2,6 +2,7 @@ package creatures
 
 import (
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -11,11 +12,12 @@ import (
 )
 
 const (
-	mimironLeviathanMkIIEntry    = 33432
-	mimironLeviathanMkIIAltEntry = 34106
-	mimironVX001Entry            = 33651
-	mimironAerialCommandEntry    = 33670
-	mimironSelfRepairSpellID     = 64383
+	mimironLeviathanMkIIEntry       = 33432
+	mimironLeviathanMkIIAltEntry    = 34106
+	mimironVX001Entry               = 33651
+	mimironAerialCommandEntry       = 33670
+	mimironSelfRepairSpellID        = 64383
+	mimironRecentlySlainSuppression = 10 * time.Second
 )
 
 const (
@@ -82,8 +84,13 @@ func NewMimironEncounterCharacter(id guid.GUID, all *characters.Characters) (cha
 	}
 
 	state := loadMimironState(all)
+	common := characters.NewCommonCharacter(id, all)
+	// ChromieCraft emits delayed swings against completed Mimiron components
+	// after the normal recently-slain window. Ignore them so they do not start
+	// a duplicate encounter after the clean kill.
+	common.SetRecentlySlainDuration(mimironRecentlySlainSuppression)
 	character := &mimironCharacter{
-		Common: characters.NewCommonCharacter(id, all),
+		Common: common,
 		all:    all,
 		entry:  entry,
 		role:   role,

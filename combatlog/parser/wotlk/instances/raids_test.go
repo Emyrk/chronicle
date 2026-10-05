@@ -516,6 +516,10 @@ func TestUlduarMimironEncounterPhases(t *testing.T) {
 	processSlain(70*time.Second, leviathan)
 	processSlain(71*time.Second, vx001)
 	processSlain(72*time.Second, aerial)
+	// ChromieCraft emits delayed swings against Leviathan Mk II after the
+	// encounter completes. They must not open a second Mimiron encounter.
+	processDamage(75*time.Second+317*time.Millisecond, leviathan)
+	processDamage(76*time.Second+632*time.Millisecond, leviathan)
 
 	result, err := instance.Finalize(t.Context())
 	require.NoError(t, err)
@@ -525,6 +529,7 @@ func TestUlduarMimironEncounterPhases(t *testing.T) {
 	require.Equal(t, "Mimiron", got.Name)
 	require.True(t, got.Boss)
 	require.Equal(t, encounter.KillTypeClean, got.KillType)
+	require.Equal(t, start.Add(72*time.Second), got.Combat.End)
 	require.Len(t, got.Combat.Hostiles, 3)
 	require.Len(t, got.Phases, 4)
 	require.Equal(t, "mimiron_p1", got.Phases[0].Key)
