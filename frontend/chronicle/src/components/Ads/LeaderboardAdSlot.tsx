@@ -1,29 +1,48 @@
-import { Megaphone } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { isLocalAdPreviewHost } from "./adPreview"
 
+type LeaderboardAdVariant = "rail" | "compact"
+
+const variantClasses: Record<LeaderboardAdVariant, string> = {
+  rail: "hidden w-40 shrink-0 2xl:block",
+  compact: "hidden w-full lg:block 2xl:hidden",
+}
+
+const frameClasses: Record<LeaderboardAdVariant, string> = {
+  rail: "min-h-[600px]",
+  compact: "min-h-28",
+}
+
 export function LeaderboardAdSlot({
+  variant,
   hostname = window.location.hostname,
+  className,
 }: {
+  variant: LeaderboardAdVariant
   hostname?: string
+  className?: string
 }) {
   if (!isLocalAdPreviewHost(hostname)) {
     return null
   }
 
   return (
-    <aside className="my-5" aria-label="Advertisement preview">
-      <div className="mb-1.5 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
-        Advertisement
-      </div>
-      <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-border/80 bg-muted/20 px-5 py-4">
-        <div className="flex max-w-xl items-center gap-3 text-muted-foreground">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-background/70">
-            <Megaphone className="h-4 w-4" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-foreground/80">Leaderboard ad preview</p>
-            <p className="mt-0.5 text-xs leading-relaxed">
-              A responsive ad will use this reserved space without shifting the leaderboard content.
+    <aside className={cn(variantClasses[variant], className)} aria-label="Advertisement preview">
+      <div className={cn("sticky top-20", variant === "compact" && "static")}>
+        <div className="mb-1.5 text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
+          Advertisement
+        </div>
+        <div
+          className={cn(
+            "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10",
+            frameClasses[variant],
+          )}
+        >
+          <div className="absolute inset-0 opacity-[0.025] [background-image:linear-gradient(135deg,currentColor_12.5%,transparent_12.5%,transparent_50%,currentColor_50%,currentColor_62.5%,transparent_62.5%,transparent)] [background-size:12px_12px]" />
+          <div className="relative text-center text-muted-foreground/55">
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em]">Ad preview</p>
+            <p className="mt-1 font-mono text-[10px]">
+              {variant === "rail" ? "160 × 600" : "responsive"}
             </p>
           </div>
         </div>

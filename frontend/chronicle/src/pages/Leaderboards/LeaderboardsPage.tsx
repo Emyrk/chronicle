@@ -65,24 +65,23 @@ export function LeaderboardsPage() {
           </div>
         </div>
 
-        <div className="container mx-auto px-3 sm:px-4">
-          <LeaderboardAdSlot />
-        </div>
-
-        {tab === "dps" ? (
-          <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-8">
-            <InstanceView instanceName={instance} />
+        <div className="mx-auto flex w-full max-w-[1800px] gap-6 px-3 py-4 sm:px-4 sm:py-8">
+          <div className="min-w-0 flex-1">
+            {tab === "dps" ? (
+              <InstanceView instanceName={instance} />
+            ) : (
+              <SpeedrunLeaderboard overrideInstance={instance} />
+            )}
           </div>
-        ) : (
-          <SpeedrunLeaderboard overrideInstance={instance} />
-        )}
+          <LeaderboardAdSlot variant="rail" />
+        </div>
       </div>
     )
   }
 
   // No instance selected — show the landing page
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="mx-auto w-full max-w-[1800px] px-4 py-8">
       {/* Tab bar for landing */}
       <div className="flex items-center gap-1 border-b mb-6">
         <TabButton
@@ -99,13 +98,16 @@ export function LeaderboardsPage() {
         />
       </div>
 
-      <LeaderboardAdSlot />
-
-      {tab === "dps" ? (
-        <RankingsLanding />
-      ) : (
-        <SpeedrunLeaderboard />
-      )}
+      <div className="flex gap-6">
+        <div className="min-w-0 flex-1">
+          {tab === "dps" ? (
+            <RankingsLanding />
+          ) : (
+            <SpeedrunLeaderboard />
+          )}
+        </div>
+        <LeaderboardAdSlot variant="rail" />
+      </div>
     </div>
   )
 }
