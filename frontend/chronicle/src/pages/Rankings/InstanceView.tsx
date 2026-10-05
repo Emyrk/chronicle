@@ -778,14 +778,14 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         ))}
       </div>
 
-      {!isMobile && shouldShowCompactEncounterAd(encounterNames.length) && (
-        <LeaderboardAdSlot variant="compact" className="mt-5" />
-      )}
-
       {/* Info hint */}
       <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
         Metrics reflect the selected encounters. Ctrl+Click to toggle individual encounters.
       </p>
+
+      {!isMobile && shouldShowCompactEncounterAd(encounterNames.length) && (
+        <LeaderboardAdSlot variant="compact" className="mt-5" />
+      )}
     </>
   )
 
