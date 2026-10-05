@@ -18,7 +18,7 @@ describe("LeaderboardAdSlot", () => {
 
     expect(markup).toContain("responsive")
     expect(markup).toContain("lg:block")
-    expect(markup).toContain("2xl:hidden")
+    expect(markup).not.toContain("2xl:hidden")
   })
 
   it("does not render outside local development", () => {

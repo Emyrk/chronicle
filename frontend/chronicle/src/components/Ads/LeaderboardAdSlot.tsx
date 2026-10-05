@@ -5,7 +5,7 @@ type LeaderboardAdVariant = "rail" | "compact"
 
 const variantClasses: Record<LeaderboardAdVariant, string> = {
   rail: "hidden w-40 shrink-0 2xl:block",
-  compact: "hidden w-full lg:block 2xl:hidden",
+  compact: "hidden w-full lg:block",
 }
 
 const frameClasses: Record<LeaderboardAdVariant, string> = {
