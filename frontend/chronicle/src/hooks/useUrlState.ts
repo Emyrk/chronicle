@@ -640,6 +640,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   // Aura tracking
   aura_uptime: 'au',
   unit_auras: 'ua',
+  friendly_class_buffs: 'fcb',
   // Debug/Analysis
   metrics: 'met',
   periods: 'per',

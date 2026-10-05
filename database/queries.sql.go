@@ -1099,6 +1099,53 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 	return i, err
 }
 
+const deleteClassBuffIgnore = `-- name: DeleteClassBuffIgnore :exec
+DELETE FROM class_buff_ignores
+WHERE normalized_name = lower(btrim($1::TEXT))
+`
+
+func (q *sqlQuerier) DeleteClassBuffIgnore(ctx context.Context, spellName string) error {
+	_, err := q.db.Exec(ctx, deleteClassBuffIgnore, spellName)
+	return err
+}
+
+const listClassBuffIgnores = `-- name: ListClassBuffIgnores :many
+SELECT normalized_name FROM class_buff_ignores ORDER BY normalized_name
+`
+
+func (q *sqlQuerier) ListClassBuffIgnores(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listClassBuffIgnores)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var normalized_name string
+		if err := rows.Scan(&normalized_name); err != nil {
+			return nil, err
+		}
+		items = append(items, normalized_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertClassBuffIgnore = `-- name: UpsertClassBuffIgnore :exec
+INSERT INTO class_buff_ignores (normalized_name, spell_name, updated_at)
+VALUES (lower(btrim($1::TEXT)), btrim($1::TEXT), now())
+ON CONFLICT (normalized_name) DO UPDATE SET
+    spell_name = EXCLUDED.spell_name,
+    updated_at = now()
+`
+
+func (q *sqlQuerier) UpsertClassBuffIgnore(ctx context.Context, spellName string) error {
+	_, err := q.db.Exec(ctx, upsertClassBuffIgnore, spellName)
+	return err
+}
+
 const deleteConsumableDisambiguation = `-- name: DeleteConsumableDisambiguation :exec
 DELETE FROM dataset_consumable_disambiguations
 WHERE dataset_id = $1

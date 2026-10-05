@@ -1,0 +1,110 @@
+import { describe, expect, it } from "vitest";
+import type { FriendlyClassBuffSpell } from "@/api/classBuffs";
+import type { FriendlyBuffEntityUsage } from "./friendlyClassBuffs.processor";
+import { buildFriendlyBuffMatrix } from "./friendlyClassBuffsView";
+
+const FORTITUDE: FriendlyClassBuffSpell = {
+  id: 1243,
+  name: "Power Word: Fortitude",
+  name_subtext: "Rank 1",
+  targeting: "friendly",
+  ignored: false,
+  effects: [],
+};
+
+const FORTITUDE_RANK_2: FriendlyClassBuffSpell = {
+  ...FORTITUDE,
+  id: 1244,
+  name_subtext: "Rank 2",
+};
+
+function entity(
+  id: string,
+  name: string,
+  otherID: string,
+  otherName: string,
+  applications: number,
+): FriendlyBuffEntityUsage {
+  return {
+    entityID: id,
+    entityName: name,
+    className: "Priest",
+    applications,
+    bySpell: new Map([[1243, {
+      spellId: 1243,
+      spellName: "Power Word: Fortitude",
+      applications,
+      otherPlayers: new Map([[otherID, {
+        playerID: otherID,
+        playerName: otherName,
+        className: "Warrior",
+        applications,
+      }]]),
+    }]]),
+  };
+}
+
+describe("friendly class buff matrix", () => {
+  it("builds player rows and spell columns", () => {
+    const matrix = buildFriendlyBuffMatrix(
+      new Map([
+        ["alice", entity("alice", "Alice", "tank", "Tank", 2)],
+        ["bob", entity("bob", "Bob", "tank", "Tank", 1)],
+      ]),
+      new Map([[FORTITUDE.id, FORTITUDE]]),
+    );
+
+    expect(matrix.columns).toEqual([
+      expect.objectContaining({ key: "Power Word: Fortitude", spellId: 1243 }),
+    ]);
+    expect(matrix.rows.map((row) => [row.playerName, row.applications])).toEqual([
+      ["Alice", 2],
+      ["Bob", 1],
+    ]);
+    expect(matrix.rows[0].cells.get("Power Word: Fortitude")).toMatchObject({ applications: 2 });
+  });
+
+  it("groups spell ranks into one family column", () => {
+    const caster = entity("alice", "Alice", "tank", "Tank", 2);
+    caster.bySpell.set(1244, {
+      spellId: 1244,
+      spellName: "Power Word: Fortitude",
+      applications: 1,
+      otherPlayers: new Map([["healer", {
+        playerID: "healer",
+        playerName: "Healer",
+        className: "Priest",
+        applications: 1,
+      }]]),
+    });
+
+    const matrix = buildFriendlyBuffMatrix(
+      new Map([[caster.entityID, caster]]),
+      new Map([
+        [FORTITUDE.id, FORTITUDE],
+        [FORTITUDE_RANK_2.id, FORTITUDE_RANK_2],
+      ]),
+    );
+
+    expect(matrix.columns).toHaveLength(1);
+    expect(matrix.rows[0].cells.get("Power Word: Fortitude")).toMatchObject({
+      applications: 3,
+      otherPlayers: [
+        expect.objectContaining({ playerName: "Tank", applications: 2 }),
+        expect.objectContaining({ playerName: "Healer", applications: 1 }),
+      ],
+    });
+  });
+
+  it("filters rows by selected players", () => {
+    const tank = entity("tank", "Tank", "alice", "Alice", 2);
+    const healer = entity("healer", "Healer", "alice", "Alice", 1);
+    const matrix = buildFriendlyBuffMatrix(
+      new Map([[tank.entityID, tank], [healer.entityID, healer]]),
+      new Map([[FORTITUDE.id, FORTITUDE]]),
+      new Set(["tank"]),
+    );
+
+    expect(matrix.rows.map((row) => row.playerName)).toEqual(["Tank"]);
+  });
+});

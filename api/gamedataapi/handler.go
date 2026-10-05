@@ -117,6 +117,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Put("/datasets/{datasetID}/consumable-disambiguations/{effectKind}/{spellID}/ignore", h.IgnoreConsumableEffect)
 		r.Delete("/datasets/{datasetID}/consumable-disambiguations/{effectKind}/{spellID}", h.DeleteConsumableDisambiguation)
 		r.Put("/datasets/{datasetID}/cooldown-overrides", h.SetCooldownOverrides)
+		r.Put("/class-buff-ignore", h.SetClassBuffIgnore)
 	})
 
 	return r
