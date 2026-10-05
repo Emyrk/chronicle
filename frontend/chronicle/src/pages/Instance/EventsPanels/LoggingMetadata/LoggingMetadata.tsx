@@ -1,8 +1,8 @@
 /**
  * Logging Metadata panel - Displays combat log recording metadata
  *
- * Shows addon versions, dependency versions, and the recording player
- * information extracted from the combat log header.
+ * Shows capabilities, addon versions, dependency versions, and the recording
+ * player information extracted from the combat log header.
  */
 
 import { FileText } from "lucide-react";
@@ -43,17 +43,14 @@ function LoggingMetadataContent({ context }: PanelRenderProps<LoggingMetadataRes
   const hasRecorder = !!instance.recorderName || !!instance.recorderGuid;
   const flavor = instance.flavor ?? [];
   const hasSource = !!instance.format || flavor.length > 0;
-
-  if (!hasVersions && !hasRecorder && !hasSource) {
-    return (
-      <div className="text-center py-4 text-muted-foreground text-sm">
-        No logging metadata available for this instance.
-      </div>
-    );
-  }
+  const capabilities = instance.capabilities ?? [];
 
   return (
     <div className="space-y-3 px-2 py-2 text-sm">
+      <div>
+        <h4 className="font-medium text-muted-foreground mb-1.5">Capabilities</h4>
+        <CapabilitiesList capabilities={capabilities} />
+      </div>
       {hasSource && (
         <div>
           <h4 className="font-medium text-muted-foreground mb-1.5">Source</h4>
@@ -116,6 +113,25 @@ function LoggingMetadataContent({ context }: PanelRenderProps<LoggingMetadataRes
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+export function CapabilitiesList({ capabilities }: { capabilities: readonly string[] }) {
+  if (capabilities.length === 0) {
+    return <span className="text-muted-foreground text-xs">None reported</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {[...capabilities].sort().map((capability) => (
+        <span
+          key={capability}
+          className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+        >
+          {capability}
+        </span>
+      ))}
     </div>
   );
 }

@@ -74,6 +74,33 @@ func Heal(from time.Time, idx int32, heal *messages.Heal) *chronicleproto.Heal {
 	}
 }
 
+func UnitPosition(from time.Time, idx int32, position *messages.UnitPosition) *chronicleproto.UnitPosition {
+	return &chronicleproto.UnitPosition{
+		Meta:   EventMeta(from, idx, position),
+		Unit:   position.Unit.String(),
+		X:      position.X,
+		Y:      position.Y,
+		MapId:  position.MapID,
+		Facing: position.Facing,
+	}
+}
+
+func UnitResources(from time.Time, idx int32, resources *messages.UnitResources) *chronicleproto.UnitResources {
+	return &chronicleproto.UnitResources{
+		Meta:          EventMeta(from, idx, resources),
+		Unit:          resources.Unit.String(),
+		CurrentHealth: resources.CurrentHealth,
+		MaximumHealth: resources.MaximumHealth,
+		Absorb:        resources.Absorb,
+		PowerType:     resources.PowerType.String(),
+		CurrentPower:  resources.CurrentPower,
+		MaximumPower:  resources.MaximumPower,
+		AttackPower:   resources.AttackPower,
+		SpellPower:    resources.SpellPower,
+		Armor:         resources.Armor,
+	}
+}
+
 func ResourceChange(from time.Time, idx int32, rc *messages.ResourceChange) *chronicleproto.ResourceChange {
 	return &chronicleproto.ResourceChange{
 		Meta:         EventMeta(from, idx, rc),

@@ -101,6 +101,29 @@ message Damage {
   repeated School schools = 12;
 }
 
+message UnitPosition {
+  EventMeta meta = 1;
+  string unit = 2;
+  double x = 3;
+  double y = 4;
+  int32 map_id = 5;
+  double facing = 6;
+}
+
+message UnitResources {
+  EventMeta meta = 1;
+  string unit = 2;
+  int64 current_health = 3;
+  int64 maximum_health = 4;
+  int32 absorb = 5;
+  string power_type = 6;
+  int32 current_power = 7;
+  int32 maximum_power = 8;
+  int32 attack_power = 9;
+  int32 spell_power = 10;
+  int32 armor = 11;
+}
+
 message ResourceChange {
   EventMeta meta = 1;
   string target = 3;

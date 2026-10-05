@@ -4,7 +4,7 @@ import type { PayloadHeader } from "@/api/protodecode/decode";
  * Supported event stream types.
  * Each corresponds to a different protobuf message type.
  */
-export type StreamType = "damage" | "extra_attack" | "heal" | "resource_change" | "slain" | "ressurection" | "cast" | "aura" | "spell_go" | "aura_cast" | "spell_start" | "spell_fail" | "unit_classification" | "combatant_info" | "dispel" | "interrupt" | "absorbed" | "companion_stats" | "consume" | "raid_group";
+export type StreamType = "damage" | "extra_attack" | "heal" | "unit_position" | "unit_resources" | "resource_change" | "slain" | "ressurection" | "cast" | "aura" | "spell_go" | "aura_cast" | "spell_start" | "spell_fail" | "unit_classification" | "combatant_info" | "dispel" | "interrupt" | "absorbed" | "companion_stats" | "consume" | "raid_group";
 
 /**
  * Progress for the current encounter being processed

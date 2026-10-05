@@ -12,6 +12,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestUnitTelemetryRoutesToDedicatedStreams(t *testing.T) {
+	t.Parallel()
+
+	ts := time.Date(2026, time.September, 20, 12, 0, 0, 0, time.UTC)
+	events := encounterevents.New(false)
+	require.NoError(t, events.Process(&messages.UnitPosition{
+		MessageBase: messages.Base(ts),
+		Unit:        guid.GUID(1),
+		X:           1,
+		Y:           2,
+		MapID:       3,
+		Facing:      4,
+	}))
+	require.NoError(t, events.Process(&messages.UnitResources{
+		MessageBase:   messages.Base(ts),
+		Unit:          guid.GUID(1),
+		CurrentHealth: 10,
+		MaximumHealth: 20,
+		PowerType:     types.ResourceMana,
+		CurrentPower:  30,
+		MaximumPower:  40,
+	}))
+
+	require.Equal(t, int64(1), events.UnitPosition.Count)
+	require.Equal(t, int64(1), events.UnitResources.Count)
+	require.Equal(t, ts, events.UnitPosition.First)
+	require.Equal(t, ts, events.UnitResources.First)
+}
+
 func TestFirstEventEstablishesZero(t *testing.T) {
 	t.Parallel()
 	ts := time.Date(2026, time.July, 29, 12, 0, 0, 0, time.UTC)

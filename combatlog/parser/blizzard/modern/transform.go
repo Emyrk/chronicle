@@ -17,6 +17,23 @@ const (
 	v22AdvancedCombatFields = 19
 )
 
+type advancedCombatSnapshot struct {
+	unit          string
+	currentHealth int64
+	maximumHealth int64
+	attackPower   int32
+	spellPower    int32
+	armor         int32
+	absorb        int32
+	powerType     int32
+	currentPower  int32
+	maximumPower  int32
+	x             float64
+	y             float64
+	mapID         int32
+	facing        float64
+}
+
 type transformReader struct {
 	scanner                     *bufio.Scanner
 	guids                       *guidNormalizer
@@ -125,7 +142,7 @@ func (r *transformReader) transform(line string) (string, error) {
 		return prefix + "BLIZZARD_ENCOUNTER_START," + strings.Join(args, ","), nil
 	case "ENCOUNTER_END":
 		return prefix + "BLIZZARD_ENCOUNTER_END," + strings.Join(args, ","), nil
-	case "MAP_CHANGE", "EMOTE", "SWING_DAMAGE_LANDED":
+	case "MAP_CHANGE", "EMOTE":
 		return "", nil
 	}
 
@@ -163,7 +180,14 @@ func (r *transformReader) transform(line string) (string, error) {
 		body = body[3:]
 	}
 
+	var snapshot *advancedCombatSnapshot
 	if len(body) >= r.advancedCombatFields && isModernGUID(body[0]) {
+		if r.combatLogVersion == 22 {
+			snapshot, err = r.parseAdvancedCombatSnapshot(body[:r.advancedCombatFields], args[0], args[4])
+			if err != nil {
+				return "", err
+			}
+		}
 		body = body[r.advancedCombatFields:]
 	}
 	body, err = r.normalizeSuffix(event, body)
@@ -179,7 +203,135 @@ func (r *transformReader) transform(line string) (string, error) {
 
 	out := append(base, spell...)
 	out = append(out, body...)
-	return prefix + event + "," + strings.Join(out, ","), nil
+	converted := prefix + event + "," + strings.Join(out, ",")
+	if event == "SWING_DAMAGE_LANDED" {
+		converted = ""
+	}
+	if snapshot == nil {
+		return converted, nil
+	}
+
+	telemetry := snapshot.lines(prefix)
+	if converted == "" {
+		return strings.Join(telemetry, "\n"), nil
+	}
+	return strings.Join(append([]string{converted}, telemetry...), "\n"), nil
+}
+
+// parseAdvancedCombatSnapshot uses infoGUID as the authoritative subject. WoW
+// Forever v22 cast events can describe the source, while landed damage and heal
+// events, including SWING_DAMAGE_LANDED, can describe the target. Checking both
+// event units avoids coupling the snapshot to either header position.
+func (r *transformReader) parseAdvancedCombatSnapshot(fields []string, sourceGUID, targetGUID string) (*advancedCombatSnapshot, error) {
+	if len(fields) != v22AdvancedCombatFields {
+		return nil, fmt.Errorf("modern v22 advanced combat block has %d fields", len(fields))
+	}
+	if fields[0] != sourceGUID && fields[0] != targetGUID {
+		return nil, fmt.Errorf("modern v22 advanced combat GUID %q does not match source or target", fields[0])
+	}
+
+	unit, err := r.guids.normalize(fields[0])
+	if err != nil {
+		return nil, err
+	}
+	parseInt64 := func(index int, name string) (int64, error) {
+		value, parseErr := strconv.ParseInt(fields[index], 10, 64)
+		if parseErr != nil {
+			return 0, fmt.Errorf("parse advanced combat %s %q: %w", name, fields[index], parseErr)
+		}
+		return value, nil
+	}
+	parseInt32 := func(index int, name string) (int32, error) {
+		value, parseErr := strconv.ParseInt(fields[index], 10, 32)
+		if parseErr != nil {
+			return 0, fmt.Errorf("parse advanced combat %s %q: %w", name, fields[index], parseErr)
+		}
+		return int32(value), nil
+	}
+	parsePrimaryInt32 := func(index int, name string) (int32, error) {
+		// WoW Forever can report parallel primary and secondary resource values
+		// separated by pipes, for example energy/combo points as "3|4" and
+		// "33|4". UnitResources intentionally exposes only the primary resource.
+		primary, _, _ := strings.Cut(fields[index], "|")
+		value, parseErr := strconv.ParseInt(primary, 10, 32)
+		if parseErr != nil {
+			return 0, fmt.Errorf("parse advanced combat %s %q: %w", name, fields[index], parseErr)
+		}
+		return int32(value), nil
+	}
+	parseFloat64 := func(index int, name string) (float64, error) {
+		value, parseErr := strconv.ParseFloat(fields[index], 64)
+		if parseErr != nil {
+			return 0, fmt.Errorf("parse advanced combat %s %q: %w", name, fields[index], parseErr)
+		}
+		return value, nil
+	}
+
+	snapshot := &advancedCombatSnapshot{unit: unit}
+	if snapshot.currentHealth, err = parseInt64(2, "current health"); err != nil {
+		return nil, err
+	}
+	if snapshot.maximumHealth, err = parseInt64(3, "maximum health"); err != nil {
+		return nil, err
+	}
+	if snapshot.attackPower, err = parseInt32(4, "attack power"); err != nil {
+		return nil, err
+	}
+	if snapshot.spellPower, err = parseInt32(5, "spell power"); err != nil {
+		return nil, err
+	}
+	if snapshot.armor, err = parseInt32(6, "armor"); err != nil {
+		return nil, err
+	}
+	if snapshot.absorb, err = parseInt32(7, "absorb"); err != nil {
+		return nil, err
+	}
+	if snapshot.powerType, err = parsePrimaryInt32(10, "power type"); err != nil {
+		return nil, err
+	}
+	if snapshot.currentPower, err = parsePrimaryInt32(11, "current power"); err != nil {
+		return nil, err
+	}
+	if snapshot.maximumPower, err = parsePrimaryInt32(12, "maximum power"); err != nil {
+		return nil, err
+	}
+	if snapshot.x, err = parseFloat64(14, "x position"); err != nil {
+		return nil, err
+	}
+	if snapshot.y, err = parseFloat64(15, "y position"); err != nil {
+		return nil, err
+	}
+	if snapshot.mapID, err = parseInt32(16, "map ID"); err != nil {
+		return nil, err
+	}
+	if snapshot.facing, err = parseFloat64(17, "facing"); err != nil {
+		return nil, err
+	}
+	return snapshot, nil
+}
+
+func (s advancedCombatSnapshot) lines(prefix string) []string {
+	return []string{
+		prefix + "BLIZZARD_UNIT_POSITION," + strings.Join([]string{
+			s.unit,
+			strconv.FormatFloat(s.x, 'f', -1, 64),
+			strconv.FormatFloat(s.y, 'f', -1, 64),
+			strconv.FormatInt(int64(s.mapID), 10),
+			strconv.FormatFloat(s.facing, 'f', -1, 64),
+		}, ","),
+		prefix + "BLIZZARD_UNIT_RESOURCES," + strings.Join([]string{
+			s.unit,
+			strconv.FormatInt(s.currentHealth, 10),
+			strconv.FormatInt(s.maximumHealth, 10),
+			strconv.FormatInt(int64(s.absorb), 10),
+			strconv.FormatInt(int64(s.powerType), 10),
+			strconv.FormatInt(int64(s.currentPower), 10),
+			strconv.FormatInt(int64(s.maximumPower), 10),
+			strconv.FormatInt(int64(s.attackPower), 10),
+			strconv.FormatInt(int64(s.spellPower), 10),
+			strconv.FormatInt(int64(s.armor), 10),
+		}, ","),
+	}
 }
 
 func (r *transformReader) configureCombatLogVersion(args []string) error {

@@ -1,7 +1,7 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { AuraSchema, AuraTransition, CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, School, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { AuraSchema, AuraTransition, CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, UnitPositionSchema, UnitResourcesSchema, School, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
-import { AuraDecoder, FastCombatantInfoCursor, FastConsumeCursor, FastDamageCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
+import { AuraDecoder, FastCombatantInfoCursor, FastConsumeCursor, FastDamageCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastUnitPositionCursor, FastUnitResourcesCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
 describe('readVarint', () => {
   it('reads single-byte varints', () => {
@@ -92,6 +92,68 @@ describe('FastCombatantInfoCursor', () => {
     const cursor = new FastCombatantInfoCursor(payload);
 
     expect(cursor.next()?.gear[0].gemEnchantIds).toEqual([0, 0, 3637, 0]);
+  });
+});
+
+describe('unit telemetry cursors', () => {
+  it('decodes unit position snapshots', () => {
+    const message = create(UnitPositionSchema, {
+      meta: create(EventMetaSchema, { index: 2, offsetMilli: 500n }),
+      unit: '0xUNIT',
+      x: 1751.67,
+      y: 1697.84,
+      mapId: 1420,
+      facing: 4.4674,
+    });
+    const encoded = toBinary(UnitPositionSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    expect(new FastUnitPositionCursor(payload).next()).toMatchObject({
+      type: 'unit_position',
+      index: 2,
+      offsetMilli: 500,
+      unit: '0xUNIT',
+      x: 1751.67,
+      y: 1697.84,
+      mapId: 1420,
+      facing: 4.4674,
+    });
+  });
+
+  it('decodes unit resource snapshots', () => {
+    const message = create(UnitResourcesSchema, {
+      meta: create(EventMetaSchema, { index: 3, offsetMilli: 500n }),
+      unit: '0xUNIT',
+      currentHealth: 5000n,
+      maximumHealth: 6000n,
+      absorb: 1200,
+      powerType: 'Mana',
+      currentPower: 3000,
+      maximumPower: 4000,
+      attackPower: 100,
+      spellPower: 250,
+      armor: 900,
+    });
+    const encoded = toBinary(UnitResourcesSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    expect(new FastUnitResourcesCursor(payload).next()).toMatchObject({
+      type: 'unit_resources',
+      index: 3,
+      offsetMilli: 500,
+      unit: '0xUNIT',
+      currentHealth: 5000,
+      maximumHealth: 6000,
+      absorb: 1200,
+      powerType: 'Mana',
+      currentPower: 3000,
+      maximumPower: 4000,
+      attackPower: 100,
+      spellPower: 250,
+      armor: 900,
+    });
   });
 });
 

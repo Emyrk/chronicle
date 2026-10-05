@@ -9,6 +9,8 @@
 import {
   FastDamageCursor,
   FastHealCursor,
+  FastUnitPositionCursor,
+  FastUnitResourcesCursor,
   FastResourceChangeCursor,
   FastExtraAttackCursor,
   FastSlainCursor,
@@ -26,6 +28,8 @@ import {
   FastAbsorbedCursor,
   type ReusableDamage,
   type ReusableHeal,
+  type ReusableUnitPosition,
+  type ReusableUnitResources,
   type ReusableResourceChange,
   type ReusableExtraAttack,
   type ReusableSlain,
@@ -68,14 +72,14 @@ const _filterCache = new Map<string, {
 /**
  * Union of all reusable event types
  */
-type AnyReusableEvent = ReusableDamage | ReusableHeal | ReusableResourceChange | ReusableExtraAttack | ReusableSlain | ReusableResurrection | ReusableCast | ReusableAura | ReusableSpellGo | ReusableAuraCast | ReusableSpellStart | ReusableSpellFail | ReusableUnitClassification | ReusableDispel | ReusableInterrupt | ReusableCombatantInfo | ReusableAbsorbed;
+type AnyReusableEvent = ReusableDamage | ReusableHeal | ReusableUnitPosition | ReusableUnitResources | ReusableResourceChange | ReusableExtraAttack | ReusableSlain | ReusableResurrection | ReusableCast | ReusableAura | ReusableSpellGo | ReusableAuraCast | ReusableSpellStart | ReusableSpellFail | ReusableUnitClassification | ReusableDispel | ReusableInterrupt | ReusableCombatantInfo | ReusableAbsorbed;
 
 /**
  * A cursor wrapper that supports peeking at the next event without consuming it.
  */
 interface PeekableCursor {
   streamType: StreamType;
-  cursor: FastDamageCursor | FastHealCursor | FastResourceChangeCursor | FastExtraAttackCursor | FastSlainCursor | FastResurrectionCursor | FastCastCursor | FastAuraCursor | FastSpellGoCursor | FastAuraCastCursor | FastSpellStartCursor | FastSpellFailCursor | FastUnitClassificationCursor | FastDispelCursor | FastInterruptCursor | FastCombatantInfoCursor | FastAbsorbedCursor;
+  cursor: FastDamageCursor | FastHealCursor | FastUnitPositionCursor | FastUnitResourcesCursor | FastResourceChangeCursor | FastExtraAttackCursor | FastSlainCursor | FastResurrectionCursor | FastCastCursor | FastAuraCursor | FastSpellGoCursor | FastAuraCastCursor | FastSpellStartCursor | FastSpellFailCursor | FastUnitClassificationCursor | FastDispelCursor | FastInterruptCursor | FastCombatantInfoCursor | FastAbsorbedCursor;
   peeked: { event: AnyReusableEvent; encounterID: string; firstTimestamp: Date } | null;
 }
 
@@ -172,6 +176,10 @@ function createCursor(type: StreamType, data: Uint8Array): PeekableCursor | null
     ? new FastDamageCursor(data)
     : type === "heal"
     ? new FastHealCursor(data)
+    : type === "unit_position"
+    ? new FastUnitPositionCursor(data)
+    : type === "unit_resources"
+    ? new FastUnitResourcesCursor(data)
     : type === "resource_change"
     ? new FastResourceChangeCursor(data)
     : type === "extra_attack"

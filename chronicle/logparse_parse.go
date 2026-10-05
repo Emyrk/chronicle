@@ -73,7 +73,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		logLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
-	logCapabilities := []string{"overheal", "absorb"}
+	logCapabilities := initialLogCapabilities(logFormat)
 
 	// Server-side logs still use the flavor registry for known instances so
 	// rankings and speedrun rules are attached. The AzerothCore resolver adds
@@ -341,6 +341,14 @@ func (w *WorkerLogParse) parseCombatLog(
 		logCapabilities: logCapabilities,
 		report:          timing,
 	}, nil
+}
+
+func initialLogCapabilities(logFormat database.LogFormat) []string {
+	capabilities := []string{"overheal", "absorb"}
+	if logFormat == database.LogFormatV22Cleu {
+		capabilities = append(capabilities, "unit-resources", "unit-position")
+	}
+	return capabilities
 }
 
 // loadFileBytes downloads and decompresses a log file, returning the raw bytes.

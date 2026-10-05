@@ -19,6 +19,8 @@ import extraAttackFixture from "./extra_attack.bin?url";
 const FIXTURE_URLS: Record<StreamType, string> = {
   damage: damageFixture,
   heal: healFixture,
+  unit_position: "", // No fixture for unit_position yet
+  unit_resources: "", // No fixture for unit_resources yet
   resource_change: resourceChangeFixture,
   slain: slainFixture,
   ressurection: "", // No fixture for ressurection yet

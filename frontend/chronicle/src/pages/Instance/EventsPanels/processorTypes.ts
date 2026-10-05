@@ -86,6 +86,29 @@ export interface HealProcessorEvent extends EventMeta {
   spellAttackOutcome: number | null;
 }
 
+export interface UnitPositionProcessorEvent extends EventMeta {
+  type: "unit_position";
+  unit: string;
+  x: number;
+  y: number;
+  mapId: number;
+  facing: number;
+}
+
+export interface UnitResourcesProcessorEvent extends EventMeta {
+  type: "unit_resources";
+  unit: string;
+  currentHealth: number;
+  maximumHealth: number;
+  absorb: number;
+  powerType: string;
+  currentPower: number;
+  maximumPower: number;
+  attackPower: number;
+  spellPower: number;
+  armor: number;
+}
+
 /**
  * Resource change event from the "resource_change" stream.
  */
@@ -418,7 +441,7 @@ export interface RaidGroupProcessorEvent extends EventMeta {
   groupMemberGuids: string[];
 }
 
-export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | CompanionStatsProcessorEvent | ConsumeProcessorEvent | RaidGroupProcessorEvent;
+export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | UnitPositionProcessorEvent | UnitResourcesProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | CompanionStatsProcessorEvent | ConsumeProcessorEvent | RaidGroupProcessorEvent;
 
 /**
  * Selection state for filtering entities (serializable for worker transport).

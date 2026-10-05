@@ -202,6 +202,10 @@ const (
 	WoWEventTypeDamage WoWEventType = "damage"
 	// WoWEventTypeHeal is a WoWEventType of type heal.
 	WoWEventTypeHeal WoWEventType = "heal"
+	// WoWEventTypeUnitPosition is a WoWEventType of type unit_position.
+	WoWEventTypeUnitPosition WoWEventType = "unit_position"
+	// WoWEventTypeUnitResources is a WoWEventType of type unit_resources.
+	WoWEventTypeUnitResources WoWEventType = "unit_resources"
 	// WoWEventTypeResourceChange is a WoWEventType of type resource_change.
 	WoWEventTypeResourceChange WoWEventType = "resource_change"
 	// WoWEventTypeExtraAttack is a WoWEventType of type extra_attack.
@@ -247,6 +251,8 @@ func WoWEventTypeValues() []WoWEventType {
 	return []WoWEventType{
 		WoWEventTypeDamage,
 		WoWEventTypeHeal,
+		WoWEventTypeUnitPosition,
+		WoWEventTypeUnitResources,
 		WoWEventTypeResourceChange,
 		WoWEventTypeExtraAttack,
 		WoWEventTypeSlain,
@@ -283,6 +289,8 @@ func (x WoWEventType) IsValid() bool {
 var _WoWEventTypeValue = map[string]WoWEventType{
 	"damage":              WoWEventTypeDamage,
 	"heal":                WoWEventTypeHeal,
+	"unit_position":       WoWEventTypeUnitPosition,
+	"unit_resources":      WoWEventTypeUnitResources,
 	"resource_change":     WoWEventTypeResourceChange,
 	"extra_attack":        WoWEventTypeExtraAttack,
 	"slain":               WoWEventTypeSlain,

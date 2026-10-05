@@ -2,7 +2,7 @@
  * All Activity Debug processor - stores raw events for debugging stream interleaving
  */
 
-import type { AbsorbedProcessorEvent, AuraApplication, AuraCastProcessorEvent, AuraProcessorEvent, CastAction, CastProcessorEvent, CombatantInfoProcessorEvent, ConsumeProcessorEvent, RaidGroupProcessorEvent, DamageProcessorEvent, DispelProcessorEvent, ExtraAttackProcessorEvent, HealProcessorEvent, InterruptProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SlainProcessorEvent, SpellFailProcessorEvent, SpellGoProcessorEvent, SpellStartProcessorEvent, UnitClassificationProcessorEvent } from "../processorTypes";
+import type { AbsorbedProcessorEvent, AuraApplication, AuraCastProcessorEvent, AuraProcessorEvent, CastAction, CastProcessorEvent, CombatantInfoProcessorEvent, ConsumeProcessorEvent, RaidGroupProcessorEvent, DamageProcessorEvent, DispelProcessorEvent, ExtraAttackProcessorEvent, HealProcessorEvent, InterruptProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SlainProcessorEvent, SpellFailProcessorEvent, SpellGoProcessorEvent, SpellStartProcessorEvent, UnitClassificationProcessorEvent, UnitPositionProcessorEvent, UnitResourcesProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { hitTypeNames } from "@/lib/hittype/hittype";
 
@@ -110,7 +110,7 @@ export interface AllActivityDebugState {
 }
 
 // This processor handles every stream exposed by the debug panel.
-type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | ConsumeProcessorEvent | RaidGroupProcessorEvent;
+type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | UnitPositionProcessorEvent | UnitResourcesProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | ConsumeProcessorEvent | RaidGroupProcessorEvent;
 
 const SCHOOL_NAMES = ["Unknown", "None", "Physical", "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane"];
 
@@ -138,13 +138,15 @@ const DEFAULT_PAGE_SIZE = 100;
 
 export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActivityEvent> = {
   id: "all_activity",
-  streams: ["damage", "heal", "resource_change", "aura", "slain", "ressurection", "spell_go", "spell_start", "spell_fail", "aura_cast", "extra_attack", "unit_classification", "combatant_info", "dispel", "interrupt", "absorbed", "consume", "raid_group"],
+  streams: ["damage", "heal", "unit_position", "unit_resources", "resource_change", "aura", "slain", "ressurection", "spell_go", "spell_start", "spell_fail", "aura_cast", "extra_attack", "unit_classification", "combatant_info", "dispel", "interrupt", "absorbed", "consume", "raid_group"],
   
   createState: () => ({
     counts: new Map<string, number>(),
     rawEventsByStream: {
       damage: [],
       heal: [],
+      unit_position: [],
+      unit_resources: [],
       resource_change: [],
       extra_attack: [],
       slain: [],
@@ -157,6 +159,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     streamCounts: {
       damage: 0,
       heal: 0,
+      unit_position: 0,
+      unit_resources: 0,
       resource_change: 0,
       extra_attack: 0,
       slain: 0,
@@ -196,7 +200,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     const { entitySelection } = context;
     // Aura caster attribution is nullable because some combat log formats only identify the target.
     // Combatant info events use "guid" instead of caster/target.
-    const eventCaster = ("attacker" in event ? event.attacker : ("caster" in event ? event.caster : ("source" in event ? event.source : ("guid" in event ? event.guid : ("player" in event ? event.player : ""))))) ?? "";
+    const eventCaster = ("attacker" in event ? event.attacker : ("caster" in event ? event.caster : ("source" in event ? event.source : ("guid" in event ? event.guid : ("player" in event ? event.player : ("unit" in event ? event.unit : "")))))) ?? "";
     const eventTarget = "target" in event ? event.target : ("guid" in event ? event.guid : "");
     if (entitySelection.playerIds.size > 0) {
       const raidGroupMatch = streamType === "raid_group"
@@ -259,6 +263,10 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       } else if (streamType === "extra_attack") {
         const extraEvent = event as ExtraAttackProcessorEvent;
         abilityName = extraEvent.sourceName;
+      } else if (streamType === "unit_position") {
+        abilityName = "Unit Position";
+      } else if (streamType === "unit_resources") {
+        abilityName = "Unit Resources";
       } else if (streamType === "unit_classification") {
         abilityName = "Classification";
       } else if (streamType === "combatant_info") {
@@ -398,6 +406,13 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const extraEvent = event as ExtraAttackProcessorEvent;
       sourceName = extraEvent.sourceName;
       amount = extraEvent.amount;
+    } else if (streamType === "unit_position") {
+      sourceName = "Unit Position";
+      amount = 0;
+    } else if (streamType === "unit_resources") {
+      const resourcesEvent = event as UnitResourcesProcessorEvent;
+      sourceName = "Unit Resources";
+      amount = resourcesEvent.currentHealth;
     } else if (streamType === "unit_classification") {
       sourceName = "Classification";
       amount = 0;
@@ -479,6 +494,26 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
           })),
       );
       rawEvent.extra = `${amount} populated players`;
+    } else if (streamType === "unit_position") {
+      const positionEvent = event as UnitPositionProcessorEvent;
+      rawEvent.extra = `map ${positionEvent.mapId} · (${positionEvent.x.toFixed(2)}, ${positionEvent.y.toFixed(2)}) · facing ${positionEvent.facing.toFixed(3)}`;
+      rawEvent.details = [
+        { label: "Map", value: positionEvent.mapId.toString() },
+        { label: "X", value: positionEvent.x.toString() },
+        { label: "Y", value: positionEvent.y.toString() },
+        { label: "Facing", value: positionEvent.facing.toString() },
+      ];
+    } else if (streamType === "unit_resources") {
+      const resourcesEvent = event as UnitResourcesProcessorEvent;
+      rawEvent.resourceType = resourcesEvent.powerType as ResourceType;
+      rawEvent.extra = `${resourcesEvent.currentHealth.toLocaleString()}/${resourcesEvent.maximumHealth.toLocaleString()} health · ${resourcesEvent.currentPower.toLocaleString()}/${resourcesEvent.maximumPower.toLocaleString()} ${resourcesEvent.powerType}`;
+      rawEvent.details = [
+        { label: "Absorb", value: resourcesEvent.absorb.toLocaleString() },
+        { label: "Attack Power", value: resourcesEvent.attackPower.toLocaleString() },
+        { label: "Spell Power", value: resourcesEvent.spellPower.toLocaleString() },
+        { label: "Armor", value: resourcesEvent.armor.toLocaleString() },
+      ];
+      rawEvent.flags?.push(resourcesEvent.powerType.toUpperCase());
     } else if (streamType === "resource_change") {
       const rcEvent = event as ResourceChangeProcessorEvent;
       rawEvent.resourceType = rcEvent.resourceType as ResourceType;
