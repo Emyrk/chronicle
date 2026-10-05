@@ -2,6 +2,9 @@ export function Privacy() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
       <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
+      <p className="text-sm text-muted-foreground mb-6">
+        Last updated: October 5, 2026
+      </p>
 
       {/* Short Version */}
       <section className="mb-8 p-4 bg-muted/30 rounded-lg">
@@ -13,7 +16,8 @@ export function Privacy() {
           <li>Guild pages are public by design.</li>
           <li>Guild leadership controls uploads.</li>
           <li>We don't sell your data.</li>
-          <li>We don't use raid data for ads.</li>
+          <li>We may display advertising to help support the service.</li>
+          <li>We don't use raid data to target ads.</li>
           <li>We collect only what we need to run the service.</li>
         </ul>
         <p className="text-muted-foreground">
@@ -120,10 +124,31 @@ export function Privacy() {
           <li>Maintain accounts</li>
           <li>Improve Chronicle</li>
           <li>Keep the system secure</li>
+          <li>Display and measure advertising that helps support the service</li>
         </ul>
         <p className="text-muted-foreground">
           We do <strong>not</strong> sell your data. We do <strong>not</strong>{" "}
-          use raid data for advertising.
+          use raid data to target advertising.
+        </p>
+      </section>
+
+      {/* Advertising */}
+      <section className="mb-8">
+        <h2 className="text-xl font-semibold mb-3">Advertising</h2>
+        <p className="text-muted-foreground mb-2">
+          Chronicle may display ads directly or through third-party advertising
+          partners to help fund development, hosting, and operation of the service.
+        </p>
+        <p className="text-muted-foreground mb-2">
+          Advertising partners may use cookies or similar technologies and process
+          technical information, such as your IP address, browser or device type,
+          and pages visited, to deliver and measure ads, limit repeated ads, and
+          prevent fraud. Their use of information is governed by their own privacy
+          policies.
+        </p>
+        <p className="text-muted-foreground">
+          We do not provide raid log data, character performance, or private
+          account content to advertisers for ad targeting.
         </p>
       </section>
 
@@ -181,11 +206,12 @@ export function Privacy() {
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-3">Third-Party Services</h2>
         <p className="text-muted-foreground mb-2">
-          We use hosting and infrastructure providers to run Chronicle. They
-          only process data as needed to operate the service.
+          We use hosting, infrastructure, analytics, and advertising providers to
+          run and support Chronicle. They may process data as needed to provide
+          their services.
         </p>
         <p className="text-muted-foreground">
-          We do not share raid data for marketing purposes.
+          We do not share raid data for marketing or ad-targeting purposes.
         </p>
       </section>
 
