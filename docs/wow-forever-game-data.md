@@ -94,6 +94,37 @@ This uses the configured default Forever client path, provisions the pinned `wow
 
 The Forever dataset should use its own icon base URL, for example `https://icons.chronicleclassic.com/forever`, in the dataset settings.
 
+## Extract and publish UI maps
+
+Chronicle can export WoW Forever's `UiMap` artwork for position visualizations. The extractor reads `UiMap`, `UiMapAssignment`, `UiMapXMapArt`, `UiMapArt`, `UiMapArtStyleLayer`, and `UiMapArtTile` from one resolved Forever build, then exports the referenced BLP FileDataIDs directly as WebP:
+
+```bash
+go run ./scripts/dbcdata extract-wowdata-maps \
+  --build latest \
+  --out frontend/imagecache/forever/maps
+```
+
+The command defaults to `--build latest` against Blizzard's remote `wow_classic_beta` data because the current local Forever CASC index contains an unreadable BLTE entry. At startup, `latest` is resolved once to an exact build; that build is then used for every table and texture request and recorded in the manifest. This prevents a release during extraction from mixing assets across builds. Use `--source local --server forever` when the installed client data is healthy. Existing non-empty tiles are retained, so interrupted exports can be resumed. Pass `--metadata-only` to refresh and inspect the manifest without downloading tiles.
+
+The output layout is:
+
+```text
+frontend/imagecache/forever/maps/
+├── manifest.json
+└── tiles/
+    └── <FileDataID>.webp
+```
+
+`manifest.json` uses the `chronicle-wow-map-art-v1` format. It records the product and build, map hierarchy, phase-specific artwork, layer and tile dimensions, and the raw `UiMapAssignment` `Region`, `UiMin`, and `UiMax` arrays needed to convert world coordinates into UI coordinates. The arrays are intentionally preserved in DB2 order rather than assigning inferred axis names.
+
+To extract and upload the tiles and manifest to Cloudflare R2:
+
+```bash
+make maps
+```
+
+This publishes the manifest at `https://icons.chronicleclassic.com/forever/maps/manifest.json` and tiles under `https://icons.chronicleclassic.com/forever/maps/tiles/`. Tile responses are immutable for one year; the manifest uses a one-hour cache so a newly published build can become visible without renaming the base URL. Set `WOWDATA_BUILD`, `WOWDATA_BIN`, or `WOWDATA_CACHE` to override their defaults. `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH` override the upload destination.
+
 The importer sends the converted payload to:
 
 ```text
