@@ -4,6 +4,7 @@ import { RankingsLanding } from "../Rankings/RankingsLanding"
 import { InstanceView } from "../Rankings/InstanceView"
 import { SpeedrunLeaderboard } from "../Leaderboard/SpeedrunLeaderboard"
 import { Swords, Timer } from "lucide-react"
+import { LeaderboardAdSlot } from "../../components/Ads/LeaderboardAdSlot"
 import {
   resolveLeaderboardsTab,
   supportsSpeedruns,
@@ -64,6 +65,10 @@ export function LeaderboardsPage() {
           </div>
         </div>
 
+        <div className="container mx-auto px-3 sm:px-4">
+          <LeaderboardAdSlot />
+        </div>
+
         {tab === "dps" ? (
           <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-8">
             <InstanceView instanceName={instance} />
@@ -93,6 +98,8 @@ export function LeaderboardsPage() {
           label="Speedruns"
         />
       </div>
+
+      <LeaderboardAdSlot />
 
       {tab === "dps" ? (
         <RankingsLanding />
