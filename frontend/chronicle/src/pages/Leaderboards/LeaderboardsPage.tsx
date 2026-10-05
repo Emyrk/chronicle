@@ -1,42 +1,28 @@
-import { useEffect } from "react"
-import { useSearchParams, Navigate } from "react-router-dom"
+import { Link, Navigate, useSearchParams } from "react-router-dom"
 import { RankingsLanding } from "../Rankings/RankingsLanding"
 import { InstanceView } from "../Rankings/InstanceView"
 import { SpeedrunLeaderboard } from "../Leaderboard/SpeedrunLeaderboard"
 import { Swords, Timer } from "lucide-react"
+import { AdSlot } from "../../components/Ads/AdSlot"
 import {
-  resolveLeaderboardsTab,
+  leaderboardsModeTarget,
+  legacyLeaderboardsTarget,
   supportsSpeedruns,
-  type LeaderboardsTab,
+  type LeaderboardsMode,
 } from "./leaderboardsState"
 
-export function LeaderboardsPage() {
-  const [params, setParams] = useSearchParams()
+export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
+  const [params] = useSearchParams()
   const instance = params.get("instance")
-  const rawTab = params.get("tab")
   const speedrunsVisible = supportsSpeedruns(instance)
-  const tab = resolveLeaderboardsTab(rawTab, instance)
+  const statisticsActive = mode === "statistics"
 
-  useEffect(() => {
-    if (rawTab !== "speedrun" || speedrunsVisible) return
-    setParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.delete("tab")
-      return next
-    }, { replace: true })
-  }, [rawTab, setParams, speedrunsVisible])
-
-  const setTab = (t: LeaderboardsTab) => {
-    setParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (t === "dps") {
-        next.delete("tab")
-      } else {
-        next.set("tab", t)
-      }
-      return next
-    })
+  if (!statisticsActive && !speedrunsVisible) {
+    return <Navigate to={leaderboardsModeTarget("statistics", params)} replace />
   }
+
+  const statisticsTarget = leaderboardsModeTarget("statistics", params)
+  const speedrunsTarget = leaderboardsModeTarget("speedruns", params)
 
   // If an instance is selected, show the tabbed detail view
   if (instance) {
@@ -47,15 +33,15 @@ export function LeaderboardsPage() {
           <div className="container mx-auto px-2 sm:px-4">
             <div className="flex w-full items-center gap-1 sm:w-auto">
               <TabButton
-                active={tab === "dps"}
-                onClick={() => setTab("dps")}
+                active={statisticsActive}
+                to={statisticsTarget}
                 icon={<Swords className="h-4 w-4" />}
                 label="Statistics"
               />
               {speedrunsVisible && (
                 <TabButton
-                  active={tab === "speedrun"}
-                  onClick={() => setTab("speedrun")}
+                  active={!statisticsActive}
+                  to={speedrunsTarget}
                   icon={<Timer className="h-4 w-4" />}
                   label="Speedruns"
                 />
@@ -64,59 +50,67 @@ export function LeaderboardsPage() {
           </div>
         </div>
 
-        {tab === "dps" ? (
-          <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-8">
-            <InstanceView instanceName={instance} />
+        <div className="mx-auto flex w-full max-w-[1800px] gap-6 px-3 py-4 sm:px-4 sm:py-8">
+          <div className="min-w-0 flex-1">
+            {statisticsActive ? (
+              <InstanceView instanceName={instance} />
+            ) : (
+              <SpeedrunLeaderboard overrideInstance={instance} />
+            )}
           </div>
-        ) : (
-          <SpeedrunLeaderboard overrideInstance={instance} />
-        )}
+          <AdSlot placement="leaderboards-right-rail" format="rail" />
+        </div>
       </div>
     )
   }
 
   // No instance selected — show the landing page
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="mx-auto w-full max-w-[1800px] px-4 py-8">
       {/* Tab bar for landing */}
       <div className="flex items-center gap-1 border-b mb-6">
         <TabButton
-          active={tab === "dps"}
-          onClick={() => setTab("dps")}
+          active={statisticsActive}
+          to={statisticsTarget}
           icon={<Swords className="h-4 w-4" />}
           label="Statistics"
         />
         <TabButton
-          active={tab === "speedrun"}
-          onClick={() => setTab("speedrun")}
+          active={!statisticsActive}
+          to={speedrunsTarget}
           icon={<Timer className="h-4 w-4" />}
           label="Speedruns"
         />
       </div>
 
-      {tab === "dps" ? (
-        <RankingsLanding />
-      ) : (
-        <SpeedrunLeaderboard />
-      )}
+      <div className="flex gap-6">
+        <div className="min-w-0 flex-1">
+          {statisticsActive ? (
+            <RankingsLanding />
+          ) : (
+            <SpeedrunLeaderboard />
+          )}
+        </div>
+        <AdSlot placement="leaderboards-right-rail" format="rail" />
+      </div>
     </div>
   )
 }
 
 function TabButton({
   active,
-  onClick,
+  to,
   icon,
   label,
 }: {
   active: boolean
-  onClick: () => void
+  to: string
   icon: React.ReactNode
   label: string
 }) {
   return (
-    <button
-      onClick={onClick}
+    <Link
+      to={to}
       className={`flex flex-1 items-center justify-center gap-2 px-3 py-3 text-sm font-medium border-b-2 transition-colors sm:flex-none sm:px-4 ${
         active
           ? "border-[#5F8FA6] text-foreground"
@@ -125,34 +119,12 @@ function TabButton({
     >
       {icon}
       {label}
-    </button>
+    </Link>
   )
 }
 
-/** Redirect from old /leaderboard and /rankings routes */
-export function LeaderboardRedirect() {
+/** Redirects query-driven and singular legacy leaderboard URLs. */
+export function LegacyLeaderboardsRedirect() {
   const [params] = useSearchParams()
-  const instance = params.get("instance")
-  const target = instance
-    ? `/leaderboards?instance=${encodeURIComponent(instance)}`
-    : "/leaderboards"
-  return <Navigate to={target} replace />
-}
-
-export function RankingsRedirect() {
-  const [params] = useSearchParams()
-  const instance = params.get("instance")
-  const target = instance
-    ? `/leaderboards?instance=${encodeURIComponent(instance)}`
-    : "/leaderboards"
-  return <Navigate to={target} replace />
-}
-
-export function SpeedrunRedirect() {
-  const [params] = useSearchParams()
-  const instance = params.get("instance")
-  const target = instance
-    ? `/leaderboards?instance=${encodeURIComponent(instance)}&tab=speedrun`
-    : "/leaderboards?tab=speedrun"
-  return <Navigate to={target} replace />
+  return <Navigate to={legacyLeaderboardsTarget(params)} replace />
 }

@@ -309,9 +309,9 @@ function MobileSpotlight({
 
   const footerLink =
     tab === "speed"
-      ? `/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}&timing=full${diffQS}`
+      ? `/leaderboards/speedruns?instance=${encodeURIComponent(spot.name)}&timing=full${diffQS}`
       : tab === "dps"
-        ? `/leaderboards?instance=${encodeURIComponent(spot.name)}&tab=leaderboard${diffQS}`
+        ? `/leaderboards/statistics?instance=${encodeURIComponent(spot.name)}&tab=leaderboard${diffQS}`
         : null;
 
   const rowClass =
@@ -806,7 +806,7 @@ function RaidSpotlight() {
             Full raid
           </span>
           <Link
-            to={`/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}&timing=full${diffQS}`}
+            to={`/leaderboards/speedruns?instance=${encodeURIComponent(spot.name)}&timing=full${diffQS}`}
             className="absolute top-3 right-4 z-10 text-xs text-primary hover:underline"
           >
             Full board →
@@ -829,7 +829,7 @@ function RaidSpotlight() {
             <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
               <span className="text-sm font-semibold">Top DPS · {spot.abbrev}</span>
               <Link
-                to={`/leaderboards?instance=${encodeURIComponent(spot.name)}&tab=leaderboard${diffQS}`}
+                to={`/leaderboards/statistics?instance=${encodeURIComponent(spot.name)}&tab=leaderboard${diffQS}`}
                 className="text-xs text-primary hover:underline"
               >
                 Full board →
@@ -919,7 +919,7 @@ function RaidSpotlight() {
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
                   <span className="text-sm font-semibold">Toughest Bosses</span>
                   <Link
-                    to={`/leaderboards?instance=${encodeURIComponent(spot.name)}&metric=success`}
+                    to={`/leaderboards/statistics?instance=${encodeURIComponent(spot.name)}&metric=success`}
                     className="text-xs text-primary hover:underline"
                   >
                     Full board →
@@ -957,7 +957,7 @@ function RaidSpotlight() {
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
                 <span className="text-sm font-semibold">Best typical parse by spec</span>
                 <Link
-                  to={`/leaderboards?instance=${encodeURIComponent(spot.name)}${diffQS}`}
+                  to={`/leaderboards/statistics?instance=${encodeURIComponent(spot.name)}${diffQS}`}
                   className="text-xs text-primary hover:underline"
                 >
                   Box plot →

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Rankings page (`/rankings`) provides cross-instance DPS performance analysis for Classic World of Warcraft (Turtle WoW). It lets raid leaders scan class DPS distributions across all recorded boss encounters and drill into specific instances or bosses.
+The Rankings page (`/leaderboards/statistics`) provides cross-instance DPS performance analysis for Classic World of Warcraft (Turtle WoW). It lets raid leaders scan class DPS distributions across all recorded boss encounters and drill into specific instances or bosses.
 
 All data is currently **mocked** with a seeded PRNG. The frontend UX is being nailed down before any backend plumbing is built.
 
