@@ -137,16 +137,21 @@ function CompactDropdownToggle({ options, values, onToggle, multiSelect = true }
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   if (!multiSelect) {
+    const selectedValue = options.find((option) => values.includes(option.value))?.value ?? "";
     return (
       <select
         className="h-7 rounded-md border border-input bg-background text-foreground px-1.5 text-xs min-w-0"
-        value={values[0] ?? ""}
+        value={selectedValue}
         onChange={(e) => {
           const val = e.target.value;
-          if (val) onToggle(val);
+          if (val) {
+            onToggle(val);
+          } else if (selectedValue) {
+            onToggle(selectedValue);
+          }
         }}
       >
-        <option value="">None</option>
+        <option value="">-</option>
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
