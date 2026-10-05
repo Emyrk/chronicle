@@ -152,11 +152,11 @@ export function MapGalleryPage() {
                     <select
                       value={datasetOverride}
                       onChange={(event) => setDatasetOverride(event.target.value)}
-                      className="rounded-md border border-amber-950/60 bg-black/25 px-3 py-2 font-sans text-sm normal-case tracking-normal text-foreground outline-none transition-colors focus:border-amber-700/70"
+                      className="rounded-md border border-amber-950/60 bg-[#11100d] px-3 py-2 font-sans text-sm normal-case tracking-normal text-amber-50 outline-none [color-scheme:dark] transition-colors focus:border-amber-700/70"
                     >
-                      <option value="">Tenant default</option>
+                      <option value="" className="bg-[#11100d] text-amber-50">Tenant default</option>
                       {datasets.map((dataset) => (
-                        <option key={dataset.id} value={dataset.id}>
+                        <option key={dataset.id} value={dataset.id} className="bg-[#11100d] text-amber-50">
                           {dataset.name} ({dataset.wow_version})
                         </option>
                       ))}
