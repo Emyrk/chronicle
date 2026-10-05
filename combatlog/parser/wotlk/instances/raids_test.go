@@ -901,6 +901,84 @@ func TestUlduarAssemblyRespawnStartsNewEncounter(t *testing.T) {
 	require.Empty(t, second.Remaining)
 }
 
+func TestObsidianSanctumSartharionKillFinalizesDrakes(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name       string
+		killDrakes bool
+	}{
+		{name: "drakes killed individually", killDrakes: true},
+		{name: "Sartharion burned before drakes", killDrakes: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			flavor := database.WoWFlavor{database.FlavorWrath}
+			ctx := parsectx.With(context.Background(), parsectx.Context{Flavor: flavor})
+			instance := ObsidianSanctumFactory.New(
+				ctx,
+				slog.Default(),
+				unitdb.New(),
+				zone.Zone{Name: "the obsidian sanctum", MapID: 615},
+				flavor,
+			)
+			player := guid.GUID(1)
+			sartharion := creatureGUID(28860)
+			drakes := []guid.GUID{
+				creatureGUID(30449),
+				creatureGUID(30451),
+				creatureGUID(30452),
+			}
+			start := time.Date(2026, time.October, 3, 20, 0, 0, 0, time.UTC)
+
+			// Let a lieutenant act first to prove the encounter name still comes from
+			// the primary drake rather than activity ordering.
+			participants := append([]guid.GUID{drakes[0], sartharion}, drakes[1:]...)
+			for i, participant := range participants {
+				require.NoError(t, instance.Process(&messages.Damage{
+					MessageBase: messages.Base(start.Add(time.Duration(i) * time.Millisecond)),
+					Caster:      &player,
+					Target:      participant,
+					Amount:      1,
+					HitType:     types.HitTypeHit,
+				}))
+			}
+
+			if test.killDrakes {
+				for i, drake := range drakes {
+					require.NoError(t, instance.Process(&messages.Slain{
+						MessageBase: messages.Base(start.Add(20*time.Second + time.Duration(i)*time.Second)),
+						Victim:      drake,
+						Killer:      &player,
+					}))
+				}
+			}
+			require.NoError(t, instance.Process(&messages.Slain{
+				MessageBase: messages.Base(start.Add(30 * time.Second)),
+				Victim:      sartharion,
+				Killer:      &player,
+			}))
+
+			result, err := instance.Finalize(context.Background())
+			require.NoError(t, err)
+			require.Len(t, result.Encounters, 1)
+
+			got := result.Encounters[0]
+			require.Equal(t, "Sartharion", got.Name)
+			require.True(t, got.Boss)
+			require.Equal(t, encounter.KillTypeClean, got.KillType)
+			require.Empty(t, got.Remaining)
+			require.Len(t, got.Combat.Hostiles, 4)
+			for _, drake := range drakes {
+				activity := got.Combat.Hostiles[drake].Activity
+				require.NotEmpty(t, activity)
+				require.Equal(t, period.EndStateSlain, activity[len(activity)-1].EndState)
+			}
+		})
+	}
+}
+
 func creatureGUIDWithSeed(entry uint32, seed uint32) guid.GUID {
 	return guid.GUID(0xF130000000000000 | uint64(entry)<<24 | uint64(seed))
 }
