@@ -14019,8 +14019,12 @@ JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
-WHERE COALESCE(NULLIF(split_part(split_part(li.parser_version, '+', 1), '.', 3), ''), '0')::int
-      < COALESCE(NULLIF(split_part(split_part($1::text, '+', 1), '.', 3), ''), '0')::int
+WHERE (
+    -- Keep these multipliers in sync with internal/semverenc.
+    COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 1), '[^0-9].*$', ''), ''), '0')::bigint * 1000000000
+    + COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 2), '[^0-9].*$', ''), ''), '0')::bigint * 10000000
+    + COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 3), '[^0-9].*$', ''), ''), '0')::bigint * 10000
+  ) < $1::bigint
   AND ($2::text IS NULL OR li.name ILIKE '%' || $2::text || '%')
   AND EXISTS(
     SELECT 1 FROM log_file lf
@@ -14032,8 +14036,8 @@ LIMIT 50
 `
 
 type AdminListOutdatedParserVersionInstancesParams struct {
-	MinParserVersion string      `db:"min_parser_version" json:"min_parser_version"`
-	InstanceName     pgtype.Text `db:"instance_name" json:"instance_name"`
+	MinParserVersionNum int64       `db:"min_parser_version_num" json:"min_parser_version_num"`
+	InstanceName        pgtype.Text `db:"instance_name" json:"instance_name"`
 }
 
 type AdminListOutdatedParserVersionInstancesRow struct {
@@ -14050,7 +14054,7 @@ type AdminListOutdatedParserVersionInstancesRow struct {
 }
 
 func (q *sqlQuerier) AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error) {
-	rows, err := q.db.Query(ctx, adminListOutdatedParserVersionInstances, arg.MinParserVersion, arg.InstanceName)
+	rows, err := q.db.Query(ctx, adminListOutdatedParserVersionInstances, arg.MinParserVersionNum, arg.InstanceName)
 	if err != nil {
 		return nil, err
 	}
