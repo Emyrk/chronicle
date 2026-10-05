@@ -378,9 +378,13 @@ export function AbilityTable({
   // Check if any ability has absorbed data
   const hasAbsorbedData = showAbsorbed && sorted.some(a => a.absorbed !== undefined && a.absorbed > 0)
   
-  // Get visible columns based on view mode
-  const visibleHitTypeColumns = isExpanded && viewMode !== 'minmax' ? getVisibleHitTypeColumns(sorted) : []
-  const visibleMinMaxColumns = isExpanded && viewMode === 'minmax' ? getVisibleMinMaxColumns(sorted) : []
+  // Only offer expanded hit details when the data contains something beyond
+  // the always-visible count column.
+  const availableHitTypeColumns = getVisibleHitTypeColumns(sorted)
+  const availableMinMaxColumns = getVisibleMinMaxColumns(sorted)
+  const hasDetailedData = availableHitTypeColumns.length > 0 || availableMinMaxColumns.length > 0
+  const visibleHitTypeColumns = isExpanded && viewMode !== 'minmax' ? availableHitTypeColumns : []
+  const visibleMinMaxColumns = isExpanded && viewMode === 'minmax' ? availableMinMaxColumns : []
   
   // Selection state from context
   const hasSelection = selectedAbilities.size > 0
@@ -410,66 +414,70 @@ export function AbilityTable({
   return (
     <div>
       {/* Controls above the table */}
-      <div className="flex items-center justify-end gap-1 px-2 py-1 text-xs">
-        {hasSelection && (
-          <button
-            onClick={clearSelection}
-            className="px-1.5 py-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted mr-auto"
-            title="Clear selection"
-          >
-            ✕ Clear ({selectedAbilities.size})
-          </button>
-        )}
-        {isExpanded && (
-          <>
-            <span className="text-muted-foreground mr-1">Show:</span>
-            <CssTooltip content="Show counts">
-              <button
-                onClick={() => setViewMode('count')}
-                className={cn(
-                  "px-1.5 py-0.5 rounded",
-                  viewMode === 'count' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                #
-              </button>
-            </CssTooltip>
-            <CssTooltip content="Show percentages">
-              <button
-                onClick={() => setViewMode('percent')}
-                className={cn(
-                  "px-1.5 py-0.5 rounded",
-                  viewMode === 'percent' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                %
-              </button>
-            </CssTooltip>
-            <CssTooltip content="Show min/avg/max">
-              <button
-                onClick={() => setViewMode('minmax')}
-                className={cn(
-                  "px-1.5 py-0.5 rounded mr-2",
-                  viewMode === 'minmax' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
-                )}
-                data-minmax-toggle={viewMode !== 'minmax' ? true : undefined}
-              >
-                ↕
-              </button>
-            </CssTooltip>
-          </>
-        )}
-        <button
-          onClick={() => setInternalExpanded(!isExpanded)}
-          className="text-muted-foreground hover:text-foreground p-0.5"
-          title={isExpanded ? "Collapse hit breakdown" : "Expand hit breakdown"}
-          data-more-detail={!isExpanded ? true : undefined}
-        >
-          {isExpanded ? 
-          <span className="inline-flex items-center gap-0.5"><ChevronLeft className="w-3 h-3" /> Less detail</span> : 
-          <span className="inline-flex items-center gap-0.5">More detail <ChevronRight className="w-3 h-3" /></span>}
-        </button>
-      </div>
+      {(hasSelection || hasDetailedData) && (
+        <div className="flex items-center justify-end gap-1 px-2 py-1 text-xs">
+          {hasSelection && (
+            <button
+              onClick={clearSelection}
+              className="px-1.5 py-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted mr-auto"
+              title="Clear selection"
+            >
+              ✕ Clear ({selectedAbilities.size})
+            </button>
+          )}
+          {hasDetailedData && isExpanded && (
+            <>
+              <span className="text-muted-foreground mr-1">Show:</span>
+              <CssTooltip content="Show counts">
+                <button
+                  onClick={() => setViewMode('count')}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded",
+                    viewMode === 'count' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  #
+                </button>
+              </CssTooltip>
+              <CssTooltip content="Show percentages">
+                <button
+                  onClick={() => setViewMode('percent')}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded",
+                    viewMode === 'percent' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  %
+                </button>
+              </CssTooltip>
+              <CssTooltip content="Show min/avg/max">
+                <button
+                  onClick={() => setViewMode('minmax')}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded mr-2",
+                    viewMode === 'minmax' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  data-minmax-toggle={viewMode !== 'minmax' ? true : undefined}
+                >
+                  ↕
+                </button>
+              </CssTooltip>
+            </>
+          )}
+          {hasDetailedData && (
+            <button
+              onClick={() => setInternalExpanded(!isExpanded)}
+              className="text-muted-foreground hover:text-foreground p-0.5"
+              title={isExpanded ? "Collapse hit breakdown" : "Expand hit breakdown"}
+              data-more-detail={!isExpanded ? true : undefined}
+            >
+              {isExpanded ?
+              <span className="inline-flex items-center gap-0.5"><ChevronLeft className="w-3 h-3" /> Less detail</span> :
+              <span className="inline-flex items-center gap-0.5">More detail <ChevronRight className="w-3 h-3" /></span>}
+            </button>
+          )}
+        </div>
+      )}
       <div className="max-h-64 overflow-auto styled-scrollbar">
         <table className="w-full text-xs text-foreground whitespace-nowrap">
           <thead className="sticky top-0 bg-popover z-10">
