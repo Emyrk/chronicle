@@ -822,11 +822,10 @@ type ChronicleUser struct {
 }
 
 type ClassBuffIgnore struct {
+	DatasetID      uuid.UUID          `db:"dataset_id" json:"dataset_id"`
 	NormalizedName string             `db:"normalized_name" json:"normalized_name"`
 	SpellName      string             `db:"spell_name" json:"spell_name"`
 	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	ScopeID        uuid.UUID          `db:"scope_id" json:"scope_id"`
-	TenantID       uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
 }
 
 type DataGrant struct {

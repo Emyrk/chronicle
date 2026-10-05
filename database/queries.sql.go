@@ -1101,30 +1101,30 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 
 const deleteClassBuffIgnore = `-- name: DeleteClassBuffIgnore :exec
 DELETE FROM class_buff_ignores
-WHERE scope_id = $1
+WHERE dataset_id = $1
   AND normalized_name = lower(btrim($2::TEXT))
 `
 
 type DeleteClassBuffIgnoreParams struct {
-	ScopeID   uuid.UUID `db:"scope_id" json:"scope_id"`
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
 	SpellName string    `db:"spell_name" json:"spell_name"`
 }
 
 func (q *sqlQuerier) DeleteClassBuffIgnore(ctx context.Context, arg DeleteClassBuffIgnoreParams) error {
-	_, err := q.db.Exec(ctx, deleteClassBuffIgnore, arg.ScopeID, arg.SpellName)
+	_, err := q.db.Exec(ctx, deleteClassBuffIgnore, arg.DatasetID, arg.SpellName)
 	return err
 }
 
 const listClassBuffIgnorePolicies = `-- name: ListClassBuffIgnorePolicies :many
-SELECT tenant_id, normalized_name, spell_name
+SELECT dataset_id, normalized_name, spell_name
 FROM class_buff_ignores
-ORDER BY normalized_name, scope_id
+ORDER BY normalized_name, dataset_id
 `
 
 type ListClassBuffIgnorePoliciesRow struct {
-	TenantID       uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
-	NormalizedName string        `db:"normalized_name" json:"normalized_name"`
-	SpellName      string        `db:"spell_name" json:"spell_name"`
+	DatasetID      uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	NormalizedName string    `db:"normalized_name" json:"normalized_name"`
+	SpellName      string    `db:"spell_name" json:"spell_name"`
 }
 
 func (q *sqlQuerier) ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error) {
@@ -1136,7 +1136,7 @@ func (q *sqlQuerier) ListClassBuffIgnorePolicies(ctx context.Context) ([]ListCla
 	var items []ListClassBuffIgnorePoliciesRow
 	for rows.Next() {
 		var i ListClassBuffIgnorePoliciesRow
-		if err := rows.Scan(&i.TenantID, &i.NormalizedName, &i.SpellName); err != nil {
+		if err := rows.Scan(&i.DatasetID, &i.NormalizedName, &i.SpellName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1147,15 +1147,15 @@ func (q *sqlQuerier) ListClassBuffIgnorePolicies(ctx context.Context) ([]ListCla
 	return items, nil
 }
 
-const listClassBuffIgnoresForScope = `-- name: ListClassBuffIgnoresForScope :many
+const listClassBuffIgnoresForDataset = `-- name: ListClassBuffIgnoresForDataset :many
 SELECT normalized_name
 FROM class_buff_ignores
-WHERE scope_id = $1
+WHERE dataset_id = $1
 ORDER BY normalized_name
 `
 
-func (q *sqlQuerier) ListClassBuffIgnoresForScope(ctx context.Context, scopeID uuid.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, listClassBuffIgnoresForScope, scopeID)
+func (q *sqlQuerier) ListClassBuffIgnoresForDataset(ctx context.Context, datasetID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listClassBuffIgnoresForDataset, datasetID)
 	if err != nil {
 		return nil, err
 	}
@@ -1175,21 +1175,20 @@ func (q *sqlQuerier) ListClassBuffIgnoresForScope(ctx context.Context, scopeID u
 }
 
 const upsertClassBuffIgnore = `-- name: UpsertClassBuffIgnore :exec
-INSERT INTO class_buff_ignores (scope_id, tenant_id, normalized_name, spell_name, updated_at)
-VALUES ($1, $2::UUID, lower(btrim($3::TEXT)), btrim($3::TEXT), now())
-ON CONFLICT (scope_id, normalized_name) DO UPDATE SET
+INSERT INTO class_buff_ignores (dataset_id, normalized_name, spell_name, updated_at)
+VALUES ($1, lower(btrim($2::TEXT)), btrim($2::TEXT), now())
+ON CONFLICT (dataset_id, normalized_name) DO UPDATE SET
     spell_name = EXCLUDED.spell_name,
     updated_at = now()
 `
 
 type UpsertClassBuffIgnoreParams struct {
-	ScopeID   uuid.UUID     `db:"scope_id" json:"scope_id"`
-	TenantID  uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
-	SpellName string        `db:"spell_name" json:"spell_name"`
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellName string    `db:"spell_name" json:"spell_name"`
 }
 
 func (q *sqlQuerier) UpsertClassBuffIgnore(ctx context.Context, arg UpsertClassBuffIgnoreParams) error {
-	_, err := q.db.Exec(ctx, upsertClassBuffIgnore, arg.ScopeID, arg.TenantID, arg.SpellName)
+	_, err := q.db.Exec(ctx, upsertClassBuffIgnore, arg.DatasetID, arg.SpellName)
 	return err
 }
 

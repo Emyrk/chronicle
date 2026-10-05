@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff, ExternalLink, Layers3, Search, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Database, Eye, EyeOff, ExternalLink, MoreHorizontal, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import {
   useClassBuffIgnorePolicies,
@@ -8,12 +8,11 @@ import {
   useSetClassBuffIgnores,
   type FriendlyClassBuffSpell,
 } from "@/api/classBuffs";
-import { useAdminTenants, useAuthorizationCheck, useSiteConfig } from "@/api/queries";
+import { DEFAULT_DATASET_ID, useAuthorizationCheck, useDatasets, useSiteConfig } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { useAuth } from "@/hooks/useAuth";
-
-const ROOT_SCOPE = "root";
+import { useDatasetId } from "@/hooks/useDatasetId";
 
 function normalizeBuffName(name: string): string {
   return name.trim().toLowerCase();
@@ -29,8 +28,8 @@ interface ClassBuffMenuState {
   y: number;
   name: string;
   rankCount: number;
-  ignoredScopeCount: number;
-  scopeCount: number;
+  ignoredDatasetCount: number;
+  datasetCount: number;
 }
 
 function IgnoredBadge({ label = "Ignored" }: { label?: string }) {
@@ -62,8 +61,8 @@ function ClassBuffMenu({
     };
   }, [onClose]);
 
-  const canIgnore = menu.ignoredScopeCount < menu.scopeCount;
-  const canRestore = menu.ignoredScopeCount > 0;
+  const canIgnore = menu.ignoredDatasetCount < menu.datasetCount;
+  const canRestore = menu.ignoredDatasetCount > 0;
 
   return (
     <div
@@ -74,8 +73,8 @@ function ClassBuffMenu({
       <div className="border-b border-border bg-muted/35 px-3 py-2.5">
         <div className="text-xs font-semibold">{menu.name}</div>
         <div className="mt-0.5 text-[10px] text-muted-foreground">
-          {menu.rankCount} {menu.rankCount === 1 ? "rank" : "ranks"} · {menu.scopeCount}{" "}
-          {menu.scopeCount === 1 ? "scope" : "scopes"} selected
+          {menu.rankCount} {menu.rankCount === 1 ? "rank" : "ranks"} · {menu.datasetCount}{" "}
+          {menu.datasetCount === 1 ? "dataset" : "datasets"} selected
         </div>
       </div>
       <div className="p-1.5">
@@ -87,7 +86,7 @@ function ClassBuffMenu({
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-40"
           >
             <EyeOff className="h-3.5 w-3.5" />
-            Ignore all ranks in selected scopes
+            Ignore all ranks in selected datasets
           </button>
         )}
         {canRestore && (
@@ -98,7 +97,7 @@ function ClassBuffMenu({
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-40"
           >
             <Eye className="h-3.5 w-3.5" />
-            Stop ignoring in selected scopes
+            Stop ignoring in selected datasets
           </button>
         )}
       </div>
@@ -108,13 +107,13 @@ function ClassBuffMenu({
 
 export function ClassBuffsPage() {
   const { data, isLoading, error } = useFriendlyClassBuffs();
+  const currentDatasetId = useDatasetId() ?? DEFAULT_DATASET_ID;
   const [selectedClass, setSelectedClass] = useState("");
   const [search, setSearch] = useState("");
   const [targeting, setTargeting] = useState<"all" | FriendlyClassBuffSpell["targeting"]>("all");
   const [ignoredOnly, setIgnoredOnly] = useState(false);
   const [menu, setMenu] = useState<ClassBuffMenuState | null>(null);
-  const [includeRoot, setIncludeRoot] = useState(true);
-  const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
+  const [selectedDatasetIds, setSelectedDatasetIds] = useState<string[]>([currentDatasetId]);
   const setIgnores = useSetClassBuffIgnores();
   const { isAuthenticated } = useAuth();
   const { data: siteConfig } = useSiteConfig();
@@ -125,36 +124,31 @@ export function ClassBuffsPage() {
   );
   const { data: authorization } = useAuthorizationCheck(authzCheck, { enabled: isAuthenticated });
   const canManage = isRoot && (authorization?.adminTenants ?? false);
-  const { data: tenants } = useAdminTenants({ enabled: canManage });
+  const { data: datasets } = useDatasets();
   const { data: policies } = useClassBuffIgnorePolicies(canManage);
+  const selectedDatasetKeys = useMemo(() => new Set(selectedDatasetIds), [selectedDatasetIds]);
+  const selectedDatasetCount = selectedDatasetKeys.size;
 
-  const selectedScopeKeys = useMemo(() => {
-    const scopes = new Set(selectedTenantIds);
-    if (includeRoot) scopes.add(ROOT_SCOPE);
-    return scopes;
-  }, [includeRoot, selectedTenantIds]);
-  const selectedScopeCount = selectedScopeKeys.size;
-
-  const ignoredScopesByName = useMemo(() => {
+  const ignoredDatasetsByName = useMemo(() => {
     const byName = new Map<string, Set<string>>();
     for (const policy of policies ?? []) {
       const key = normalizeBuffName(policy.spell_name);
-      const scopes = byName.get(key) ?? new Set<string>();
-      scopes.add(policy.tenant_id ?? ROOT_SCOPE);
-      byName.set(key, scopes);
+      const datasetIDs = byName.get(key) ?? new Set<string>();
+      datasetIDs.add(policy.dataset_id);
+      byName.set(key, datasetIDs);
     }
     return byName;
   }, [policies]);
 
   const ignoredCountsByName = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const [name, ignoredScopes] of ignoredScopesByName) {
+    for (const [name, ignoredDatasetIDs] of ignoredDatasetsByName) {
       let count = 0;
-      for (const scope of selectedScopeKeys) if (ignoredScopes.has(scope)) count++;
+      for (const datasetID of selectedDatasetKeys) if (ignoredDatasetIDs.has(datasetID)) count++;
       counts.set(name, count);
     }
     return counts;
-  }, [ignoredScopesByName, selectedScopeKeys]);
+  }, [ignoredDatasetsByName, selectedDatasetKeys]);
 
   const classNames = useMemo(() => Object.keys(data ?? {}).sort(), [data]);
   const activeClass = classNames.includes(selectedClass) ? selectedClass : classNames[0] || "";
@@ -187,24 +181,29 @@ export function ClassBuffsPage() {
     [canManage, data, ignoredCountsByName],
   );
 
-  const toggleTenant = (tenantID: string) => {
-    setSelectedTenantIds((current) => current.includes(tenantID)
-      ? current.filter((id) => id !== tenantID)
-      : [...current, tenantID]);
+  const toggleDataset = (datasetID: string) => {
+    setSelectedDatasetIds((current) => current.includes(datasetID)
+      ? current.filter((id) => id !== datasetID)
+      : [...current, datasetID]);
   };
 
-  const openMenu = (event: React.MouseEvent, spell: FriendlyClassBuffSpell) => {
-    if (!canManage || selectedScopeCount === 0) return;
-    event.preventDefault();
-    const ranks = spells.filter((entry) => entry.name.toLowerCase() === spell.name.toLowerCase());
+  const openMenuAt = (x: number, y: number, spell: FriendlyClassBuffSpell) => {
+    if (!canManage || selectedDatasetCount === 0) return;
+    const ranks = spells.filter((entry) => normalizeBuffName(entry.name) === normalizeBuffName(spell.name));
     setMenu({
-      x: event.clientX,
-      y: event.clientY,
+      x,
+      y,
       name: spell.name,
       rankCount: ranks.length,
-      ignoredScopeCount: ignoredCountsByName.get(normalizeBuffName(spell.name)) ?? 0,
-      scopeCount: selectedScopeCount,
+      ignoredDatasetCount: ignoredCountsByName.get(normalizeBuffName(spell.name)) ?? 0,
+      datasetCount: selectedDatasetCount,
     });
+  };
+
+  const openContextMenu = (event: React.MouseEvent, spell: FriendlyClassBuffSpell) => {
+    if (!canManage || selectedDatasetCount === 0) return;
+    event.preventDefault();
+    openMenuAt(event.clientX, event.clientY, spell);
   };
 
   const applyIgnore = (ignored: boolean) => {
@@ -212,14 +211,13 @@ export function ClassBuffsPage() {
     setIgnores.mutate(
       {
         spell_name: menu.name,
-        tenant_ids: selectedTenantIds,
-        include_root: includeRoot,
+        dataset_ids: selectedDatasetIds,
         ignored,
       },
       {
         onSuccess: () => {
           toast.success(
-            `${menu.name} ${ignored ? "ignored" : "restored"} in ${selectedScopeCount} ${selectedScopeCount === 1 ? "scope" : "scopes"}`,
+            `${menu.name} ${ignored ? "ignored" : "restored"} in ${selectedDatasetCount} ${selectedDatasetCount === 1 ? "dataset" : "datasets"}`,
           );
           setMenu(null);
         },
@@ -251,39 +249,45 @@ export function ClassBuffsPage() {
         )}
       </div>
       <p className="mb-4 text-xs text-muted-foreground">
-        Generated from the current tenant&apos;s spell dataset during spell import. Includes
+        Generated from the current spell dataset during spell import. Includes
         non-passive player-class spells with an aura effect targeting a friendly player,
         party, or raid. Every rank remains listed for combat-log matching.
-        {canManage && " Select scopes below, then right-click any rank to update every rank with that exact spell name."}
+        {canManage && " Select datasets below, then right-click a rank or use its actions button to update every rank with that exact spell name."}
       </p>
 
-      {canManage && tenants && (
+      {siteConfig?.tenant && (
+        <p className="mb-4 text-xs text-amber-400">
+          Ignored buffs can only be managed from the root domain&apos;s technical page.
+        </p>
+      )}
+
+      {isRoot && isAuthenticated && authorization && !canManage && (
+        <p className="mb-4 text-xs text-amber-400">
+          The technical_admin role is required to manage ignored class buffs.
+        </p>
+      )}
+
+      {canManage && datasets && (
         <Card className="mb-4 border-sky-500/20 bg-sky-500/[0.04] p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <Layers3 className="h-4 w-4 text-sky-400" />
-              Ignore scopes
+              <Database className="h-4 w-4 text-sky-400" />
+              Ignore datasets
               <span className="text-xs font-normal text-muted-foreground">
-                {selectedScopeCount} {selectedScopeCount === 1 ? "scope" : "scopes"} selected
+                {selectedDatasetCount} {selectedDatasetCount === 1 ? "dataset" : "datasets"} selected
               </span>
             </div>
             <div className="flex gap-1.5 text-xs">
               <button
                 type="button"
-                onClick={() => {
-                  setIncludeRoot(true);
-                  setSelectedTenantIds([]);
-                }}
+                onClick={() => setSelectedDatasetIds([currentDatasetId])}
                 className="rounded border border-border px-2 py-1 hover:bg-muted"
               >
-                Root only
+                Current dataset
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setIncludeRoot(true);
-                  setSelectedTenantIds(tenants.map((tenant) => tenant.id));
-                }}
+                onClick={() => setSelectedDatasetIds(datasets.map((dataset) => dataset.id))}
                 className="rounded border border-border px-2 py-1 hover:bg-muted"
               >
                 Select all
@@ -291,33 +295,27 @@ export function ClassBuffsPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-xs">
-              <input
-                type="checkbox"
-                checked={includeRoot}
-                onChange={(event) => setIncludeRoot(event.target.checked)}
-                className="accent-sky-500"
-              />
-              <span className="font-medium">Root</span>
-            </label>
-            {tenants.map((tenant) => (
+            {datasets.map((dataset) => (
               <label
-                key={tenant.id}
+                key={dataset.id}
                 className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-xs"
               >
                 <input
                   type="checkbox"
-                  checked={selectedTenantIds.includes(tenant.id)}
-                  onChange={() => toggleTenant(tenant.id)}
+                  checked={selectedDatasetIds.includes(dataset.id)}
+                  onChange={() => toggleDataset(dataset.id)}
                   className="accent-sky-500"
                 />
-                <span className="font-medium">{tenant.name}</span>
-                {tenant.slug && <span className="text-[10px] text-muted-foreground">{tenant.slug}</span>}
+                <span className="font-medium">{dataset.name}</span>
+                <span className="text-[10px] text-muted-foreground">{dataset.slug}</span>
+                {dataset.id === currentDatasetId && (
+                  <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-medium text-sky-400">current</span>
+                )}
               </label>
             ))}
           </div>
-          {selectedScopeCount === 0 && (
-            <p className="mt-2 text-[11px] text-amber-400">Select at least one scope before changing ignores.</p>
+          {selectedDatasetCount === 0 && (
+            <p className="mt-2 text-[11px] text-amber-400">Select at least one dataset before changing ignores.</p>
           )}
         </Card>
       )}
@@ -370,11 +368,12 @@ export function ClassBuffsPage() {
       </div>
 
       <Card className="max-h-[75vh] divide-y divide-border/30 overflow-auto styled-scrollbar">
-        <div className="sticky top-0 z-10 grid grid-cols-[72px_minmax(0,1fr)_130px_80px] bg-muted/80 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+        <div className="sticky top-0 z-10 grid grid-cols-[72px_minmax(0,1fr)_130px_80px_32px] bg-muted/80 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
           <span>Spell ID</span>
           <span>Buff</span>
           <span>Target</span>
           <span className="text-right">Auras</span>
+          <span className="sr-only">Actions</span>
         </div>
         {isLoading ? (
           <div className="p-4 text-center text-sm text-muted-foreground">Loading…</div>
@@ -391,22 +390,22 @@ export function ClassBuffsPage() {
             const ignoredIn = canManage
               ? (ignoredCountsByName.get(normalizeBuffName(spell.name)) ?? 0)
               : (spell.ignored ? 1 : 0);
-            const allIgnored = canManage && selectedScopeCount > 0 && ignoredIn === selectedScopeCount;
+            const allIgnored = canManage && selectedDatasetCount > 0 && ignoredIn === selectedDatasetCount;
             return (
-              <Link
+              <div
                 key={spell.id}
-                to={`/wowdb/spell/${spell.id}`}
-                onContextMenu={(event) => openMenu(event, spell)}
-                className={`group grid grid-cols-[72px_minmax(0,1fr)_130px_80px] items-center px-3 py-2 hover:bg-muted/50 ${ignoredIn > 0 ? "opacity-60" : ""}`}
+                onContextMenu={(event) => openContextMenu(event, spell)}
+                className={`group grid grid-cols-[72px_minmax(0,1fr)_130px_80px_32px] items-center px-3 py-2 hover:bg-muted/50 ${ignoredIn > 0 ? "opacity-60" : ""}`}
               >
-                <span className="font-mono text-xs text-muted-foreground">{spell.id}</span>
+                <Link to={`/wowdb/spell/${spell.id}`} className="contents">
+                  <span className="font-mono text-xs text-muted-foreground">{spell.id}</span>
                 <div className="flex min-w-0 items-center gap-2">
                   <SpellIdTooltip spellId={spell.id} name={spell.name} size={16} className="truncate text-sm" />
                   {spell.name_subtext && (
                     <span className="shrink-0 text-xs text-muted-foreground">{spell.name_subtext}</span>
                   )}
                   {ignoredIn > 0 && (
-                    <IgnoredBadge label={allIgnored || !canManage ? "Ignored" : `Ignored ${ignoredIn}/${selectedScopeCount}`} />
+                    <IgnoredBadge label={allIgnored || !canManage ? "Ignored" : `Ignored ${ignoredIn}/${selectedDatasetCount}`} />
                   )}
                   <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 </div>
@@ -417,7 +416,25 @@ export function ClassBuffsPage() {
                 >
                   {spell.effects.map((effect) => effect.aura_name).join(", ")}
                 </span>
-              </Link>
+                </Link>
+                {canManage ? (
+                  <button
+                    type="button"
+                    aria-label={`Manage ignored datasets for ${spell.name}`}
+                    title="Manage ignored datasets"
+                    disabled={selectedDatasetCount === 0}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      openMenuAt(rect.right, rect.bottom, spell);
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground opacity-50 hover:bg-muted hover:text-foreground hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-20"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                ) : <span />}
+              </div>
             );
           })
         )}
