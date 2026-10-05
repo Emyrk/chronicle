@@ -75,6 +75,22 @@ func ObsidianSanctumHostiles() map[uint32]instances.Identity {
 		30451: "Shadron",
 		30452: "Tenebron",
 	})
+
+	primaryDrakeEncounter := func(f encounter.Fight) *identifier.EncounterFuncResult {
+		for _, participant := range f.Hostiles {
+			entry, ok := participant.ID.GetEntry()
+			if ok && entry == 28860 {
+				return &identifier.EncounterFuncResult{EncounterName: "Sartharion"}
+			}
+		}
+		return nil
+	}
+	for _, entry := range []uint32{28860, 30449, 30451, 30452} {
+		identity := hostile[entry]
+		identity.EncounterName = ""
+		identity.EncounterNameFn = primaryDrakeEncounter
+		hostile[entry] = identity
+	}
 	return hostile
 }
 

@@ -6,5 +6,11 @@ import (
 )
 
 func NewSarthrion(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
-	return characters.NewAdsGoWithBoss(28860, 30643)(id, all)
+	return characters.NewAdsGoWithBoss(
+		28860,
+		30643, // Lava Blaze
+		30449, // Vesperon
+		30451, // Shadron
+		30452, // Tenebron
+	)(id, all)
 }
