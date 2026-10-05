@@ -229,6 +229,23 @@ icons/talents-extract:
 icons/talents-upload:
 	$(call run-imagecache,./upload-talent-bg-r2.sh)
 
+# WoW Forever UI map pipeline: extract DB2 metadata and WebP tiles, then upload
+# under https://icons.chronicleclassic.com/forever/maps/.
+.PHONY: maps/forever-extract
+maps/forever-extract:
+	go run ./scripts/dbcdata extract-wowdata-maps \
+		--out=frontend/imagecache/forever/maps \
+		$(if $(WOWDATA_BIN),--wowdata="$(WOWDATA_BIN)") \
+		$(if $(WOWDATA_CACHE),--cache="$(WOWDATA_CACHE)") \
+		$(if $(WOWDATA_BUILD),--build="$(WOWDATA_BUILD)")
+
+.PHONY: maps/forever-upload
+maps/forever-upload: maps/forever-extract
+	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps ./upload-maps-r2.sh)
+
+.PHONY: maps/forever
+maps/forever: maps/forever-upload
+
 # Full talent-background pipeline: extract from client → upload to R2
 .PHONY: icons/talents
 icons/talents: icons/talents-extract icons/talents-upload
