@@ -87,7 +87,7 @@ import { WDBTab } from "./pages/GameData/WDBTab"
 import { ImportSQLTab } from "./pages/GameData/ImportSQLTab"
 import { DBCTab } from "./pages/GameData/DBCTab"
 import { DatasetsTab } from "./pages/GameData/DatasetsTab"
-import { LeaderboardsPage, LeaderboardRedirect, RankingsRedirect } from "./pages/Leaderboards/LeaderboardsPage"
+import { LeaderboardsPage, LegacyLeaderboardsRedirect } from "./pages/Leaderboards/LeaderboardsPage"
 import { CensusPage } from "./pages/Census/CensusPage"
 import { APIExplorer } from "./pages/APIExplorer/APIExplorer"
 import { ToolsPage } from "./pages/Tools/ToolsPage"
@@ -139,9 +139,11 @@ function App() {
         <Route path="/sim" element={<SimPage />} />
         {/* Unlinked while in development — reachable by URL only. */}
         <Route path="/raidplanner" element={<RaidPlannerPage />} />
-        <Route path="/leaderboards" element={<LeaderboardsPage />} />
-        <Route path="/leaderboard" element={<LeaderboardRedirect />} />
-        <Route path="/rankings" element={<RankingsRedirect />} />
+        <Route path="/leaderboards" element={<LegacyLeaderboardsRedirect />} />
+        <Route path="/leaderboards/statistics" element={<LeaderboardsPage mode="statistics" />} />
+        <Route path="/leaderboards/speedruns" element={<LeaderboardsPage mode="speedruns" />} />
+        <Route path="/leaderboard" element={<LegacyLeaderboardsRedirect />} />
+        <Route path="/rankings" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/apply" element={<ApplyPage />} />
         <Route path="/apply/:id" element={<ApplicationPage />} />
         <Route path="/census" element={<CensusPage />} />
