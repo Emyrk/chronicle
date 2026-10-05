@@ -7,6 +7,7 @@ import type { AbsorbedDamageResult } from "./absorbedDamage.processor";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { formatNumber } from "@/lib/format";
 import type { InstanceUnit } from "@/api/typesGenerated";
+import { useAbsorbedDamageBreakout } from "./AbsorbedDamageBreakout";
 
 /**
  * Aggregate absorbed damage data across selected encounters.
@@ -69,6 +70,22 @@ export const AbsorbedDamageContent = (props: AbsorbedDamageContentProps) => {
     );
   }, [cachedResult, context.entitySelection.playerIds, context.selectedEncounterIds, context.instance.units]);
 
+  const totalsByUnit = useMemo(
+    () => new Map(absorbedData.map(data => [data.playerID, data.value])),
+    [absorbedData],
+  );
+
+  const breakout = useAbsorbedDamageBreakout({
+    result: cachedResult,
+    context,
+    selectedEncounterIds: context.selectedEncounterIds,
+    totalsByUnit,
+    perSecond: props.perSecond,
+    durationMs: props.durationMs,
+    loading: hasData ? false : props.loading,
+    processing: hasData ? false : props.processing,
+  });
+
   // Register chart data for cross-panel comparison
   const { registerChartData } = props;
   useEffect(() => {
@@ -107,6 +124,7 @@ export const AbsorbedDamageContent = (props: AbsorbedDamageContentProps) => {
         panelTitle="Absorbed Damage"
         duration_millis={props.durationMs}
         perSecond={props.perSecond}
+        breakout={breakout}
         onRowCtrlClick={handleRowCtrlClick}
         disableInteractions={props.context.renderMode === "layout_lab"}
       />
