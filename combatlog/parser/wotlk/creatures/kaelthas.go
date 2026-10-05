@@ -25,7 +25,7 @@ const (
 	warpSlicerEntry             = 21272
 	phaseshiftBulwarkEntry      = 21273
 	staffOfDisintegrationEntry  = 21274
-	kaelThasIntermissionTimeout = 2 * time.Minute
+	kaelThasIntermissionTimeout = 3 * time.Minute
 	kaelThasPendingDeathWindow  = 2 * time.Minute
 )
 

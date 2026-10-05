@@ -85,12 +85,12 @@ func TestTempestKeepKaelThasIsOneFourPhaseEncounter(t *testing.T) {
 
 	// The observed Crusader Storm log has a long loot/equip intermission after
 	// the weapons die. The encounter must remain open through that gap.
-	require.NoError(t, instance.Process(messages.TimedOut(start.Add(2*time.Minute-time.Second))))
-	processDamage(2*time.Minute, advisor)
-	processSlain(2*time.Minute+10*time.Second, advisor)
+	require.NoError(t, instance.Process(messages.TimedOut(start.Add(2*time.Minute+29*time.Second))))
+	processDamage(2*time.Minute+30*time.Second, advisor)
+	processSlain(2*time.Minute+40*time.Second, advisor)
 
-	processDamage(2*time.Minute+15*time.Second, kaelThas)
-	processSlain(3*time.Minute, kaelThas)
+	processDamage(2*time.Minute+45*time.Second, kaelThas)
+	processSlain(3*time.Minute+30*time.Second, kaelThas)
 
 	result, err := instance.Finalize(t.Context())
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestTempestKeepKaelThasIsOneFourPhaseEncounter(t *testing.T) {
 	require.True(t, got.Boss)
 	require.Equal(t, encounter.KillTypeClean, got.KillType)
 	require.Equal(t, start, got.Combat.Start)
-	require.Equal(t, start.Add(3*time.Minute), got.Combat.End)
+	require.Equal(t, start.Add(3*time.Minute+30*time.Second), got.Combat.End)
 	require.Len(t, got.Phases, 4)
 	require.Equal(t, []string{
 		"kaelthas_advisors",
@@ -110,7 +110,7 @@ func TestTempestKeepKaelThasIsOneFourPhaseEncounter(t *testing.T) {
 		"kaelthas_boss",
 	}, []string{got.Phases[0].Key, got.Phases[1].Key, got.Phases[2].Key, got.Phases[3].Key})
 	require.Equal(t, int64(30_000), got.Phases[0].EndOffsetMs)
-	require.Equal(t, int64(120_000), got.Phases[1].EndOffsetMs)
-	require.Equal(t, int64(135_000), got.Phases[2].EndOffsetMs)
-	require.Equal(t, int64(180_000), got.Phases[3].EndOffsetMs)
+	require.Equal(t, int64(150_000), got.Phases[1].EndOffsetMs)
+	require.Equal(t, int64(165_000), got.Phases[2].EndOffsetMs)
+	require.Equal(t, int64(210_000), got.Phases[3].EndOffsetMs)
 }
