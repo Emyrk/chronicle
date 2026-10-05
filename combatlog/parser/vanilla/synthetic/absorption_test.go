@@ -623,66 +623,90 @@ func TestAbsorption_AuraFadeRemovesShield(t *testing.T) {
 	require.Len(t, result, 3, "should not emit absorbed after aura fade removed the shield")
 }
 
-func TestAbsorption_AuraFadeAllowsSameTimestampDamage(t *testing.T) {
+func TestAbsorption_AuraFadePrioritizesConsumedShield(t *testing.T) {
 	t.Parallel()
 
-	a := NewAbsorption(slog.Default())
-	now := time.UnixMilli(1000)
+	cases := []struct {
+		name           string
+		damageDelay    time.Duration
+		wantShieldName string
+		wantCaster     guid.GUID
+	}{
+		{name: "same timestamp", damageDelay: 0, wantShieldName: "Sacred Shield", wantCaster: mustGUID("0x0000000000000001")},
+		{name: "one millisecond later", damageDelay: time.Millisecond, wantShieldName: "Sacred Shield", wantCaster: mustGUID("0x0000000000000001")},
+		{name: "after grace window", damageDelay: 2 * time.Millisecond, wantShieldName: "Savage Defense", wantCaster: mustGUID("0x0000000000000002")},
+	}
 
-	paladinGUID := mustGUID("0x0000000000000001")
-	tankGUID := mustGUID("0x0000000000000002")
-	bossGUID := mustGUID("0x0030000000000003")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	sacredShield := makeAbsorbSpell("Sacred Shield", 500, 127)
-	fadeAt := now.Add(5 * time.Second)
+			a := NewAbsorption(slog.Default())
+			now := time.UnixMilli(1000)
+			paladinGUID := mustGUID("0x0000000000000001")
+			tankGUID := mustGUID("0x0000000000000002")
+			bossGUID := mustGUID("0x0030000000000003")
 
-	a.ProcessMessages([]messages.Message{
-		auraCastAbsorb(now, sacredShield, paladinGUID, tankGUID, 127),
-	})
-	a.ProcessMessages([]messages.Message{
-		// WotLK can report the consumed aura before the damage that consumed it,
-		// with both events sharing the same millisecond timestamp.
-		&messages.Aura{
-			MessageBase: messages.Base(fadeAt),
-			IsBuff:      true,
-			Target:      tankGUID,
-			SpellName:   "Sacred Shield",
-			SpellData:   sacredShield,
-			State:       types.AuraStateRemoved,
-		},
-	})
+			sacredShield := makeAbsorbSpell("Sacred Shield", 500, 127)
+			savageDefense := makeAbsorbSpell("Savage Defense", 500, int32(types.PhysicalSchool))
+			fadeAt := now.Add(5 * time.Second)
 
-	result := a.ProcessMessages([]messages.Message{
-		&messages.Damage{
-			MessageBase: messages.Base(fadeAt),
-			Caster:      &bossGUID,
-			Target:      tankGUID,
-			Amount:      100,
-			HitType:     types.HitTypeHit | types.HitTypePartialAbsorb,
-			School:      types.PhysicalSchool,
-			Trailer:     trailAbsorbed(150),
-		},
-	})
-	require.Len(t, result, 2, "same-timestamp damage should still be attributed to the consumed shield")
-	absorbed, ok := result[1].(*messages.Absorbed)
-	require.True(t, ok)
-	assert.Equal(t, paladinGUID, absorbed.Caster)
-	require.NotNil(t, absorbed.AbsorbSpell)
-	assert.Equal(t, "Sacred Shield", absorbed.AbsorbSpell.Name())
-	assert.Equal(t, int32(150), absorbed.Amount)
+			a.ProcessMessages([]messages.Message{
+				auraCastAbsorb(now, sacredShield, paladinGUID, tankGUID, 127),
+				auraCastAbsorb(now.Add(time.Second), savageDefense, tankGUID, tankGUID, int32(types.PhysicalSchool)),
+			})
+			a.ProcessMessages([]messages.Message{
+				// WotLK can report the consumed aura before the damage that
+				// consumed it, with timestamps up to one millisecond apart.
+				&messages.Aura{
+					MessageBase: messages.Base(fadeAt),
+					IsBuff:      true,
+					Target:      tankGUID,
+					SpellName:   "Sacred Shield",
+					SpellData:   sacredShield,
+					State:       types.AuraStateRemoved,
+				},
+			})
 
-	result = a.ProcessMessages([]messages.Message{
-		&messages.Damage{
-			MessageBase: messages.Base(fadeAt.Add(time.Millisecond)),
-			Caster:      &bossGUID,
-			Target:      tankGUID,
-			Amount:      100,
-			HitType:     types.HitTypeHit | types.HitTypePartialAbsorb,
-			School:      types.PhysicalSchool,
-			Trailer:     trailAbsorbed(50),
-		},
-	})
-	require.Len(t, result, 1, "damage after the fade timestamp must not use the removed shield")
+			result := a.ProcessMessages([]messages.Message{
+				&messages.Damage{
+					MessageBase: messages.Base(fadeAt.Add(tc.damageDelay)),
+					Caster:      &bossGUID,
+					Target:      tankGUID,
+					Amount:      100,
+					HitType:     types.HitTypeHit | types.HitTypePartialAbsorb,
+					School:      types.PhysicalSchool,
+					Trailer:     trailAbsorbed(150),
+				},
+			})
+			require.Len(t, result, 2)
+			absorbed, ok := result[1].(*messages.Absorbed)
+			require.True(t, ok)
+			assert.Equal(t, tc.wantCaster, absorbed.Caster)
+			require.NotNil(t, absorbed.AbsorbSpell)
+			assert.Equal(t, tc.wantShieldName, absorbed.AbsorbSpell.Name())
+			assert.Equal(t, int32(150), absorbed.Amount)
+			if tc.damageDelay <= shieldRemovalGrace {
+				result = a.ProcessMessages([]messages.Message{
+					&messages.Damage{
+						MessageBase: messages.Base(fadeAt.Add(tc.damageDelay)),
+						Caster:      &bossGUID,
+						Target:      tankGUID,
+						Amount:      100,
+						HitType:     types.HitTypeHit | types.HitTypePartialAbsorb,
+						School:      types.PhysicalSchool,
+						Trailer:     trailAbsorbed(50),
+					},
+				})
+				require.Len(t, result, 2)
+				absorbed, ok = result[1].(*messages.Absorbed)
+				require.True(t, ok)
+				require.NotNil(t, absorbed.AbsorbSpell)
+				assert.Equal(t, "Savage Defense", absorbed.AbsorbSpell.Name(),
+					"the consumed shield must only be used for one damage event")
+			}
+		})
+	}
 }
 
 func TestAbsorption_NonAbsorbAuraCastIgnored(t *testing.T) {
