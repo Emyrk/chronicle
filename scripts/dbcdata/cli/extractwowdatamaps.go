@@ -9,7 +9,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/coder/serpent"
 )
@@ -24,9 +27,10 @@ type wowMapTarget struct {
 }
 
 type wowMapManifest struct {
-	Format string         `json:"format"`
-	Target wowMapTarget   `json:"target"`
-	Maps   []wowMapRecord `json:"maps"`
+	Format    string           `json:"format"`
+	Target    wowMapTarget     `json:"target"`
+	Maps      []wowMapRecord   `json:"maps"`
+	Instances []wowMapInstance `json:"instances,omitempty"`
 }
 
 type wowMapRecord struct {
@@ -52,10 +56,37 @@ type wowMapAssignment struct {
 }
 
 type wowMapArtAssociation struct {
-	PhaseID int32            `json:"phaseID"`
-	ArtID   int32            `json:"artID"`
-	StyleID int32            `json:"styleID"`
-	Layers  []wowMapArtLayer `json:"layers"`
+	PhaseID  int32              `json:"phaseID"`
+	ArtID    int32              `json:"artID"`
+	StyleID  int32              `json:"styleID"`
+	Layers   []wowMapArtLayer   `json:"layers"`
+	Overlays []wowMapArtOverlay `json:"overlays,omitempty"`
+}
+
+type wowMapArtOverlay struct {
+	ID            int32        `json:"id"`
+	OffsetX       int32        `json:"offsetX"`
+	OffsetY       int32        `json:"offsetY"`
+	TextureWidth  int32        `json:"textureWidth"`
+	TextureHeight int32        `json:"textureHeight"`
+	Tiles         []wowMapTile `json:"tiles"`
+}
+
+type wowMapInstance struct {
+	MapID        int32                 `json:"mapID"`
+	Name         string                `json:"name"`
+	InstanceType int32                 `json:"instanceType"`
+	Directory    string                `json:"directory"`
+	Floors       []wowMapInstanceFloor `json:"floors"`
+}
+
+type wowMapInstanceFloor struct {
+	Floor      int32        `json:"floor"`
+	Width      int32        `json:"width"`
+	Height     int32        `json:"height"`
+	TileWidth  int32        `json:"tileWidth"`
+	TileHeight int32        `json:"tileHeight"`
+	Tiles      []wowMapTile `json:"tiles"`
 }
 
 type wowMapArtLayer struct {
@@ -132,6 +163,37 @@ type wowdataUiMapArtTile struct {
 	UiMapArtID int32 `json:"UiMapArtID"`
 }
 
+type wowdataWorldMapOverlay struct {
+	ID            int32 `json:"ID"`
+	UiMapArtID    int32 `json:"UiMapArtID"`
+	OffsetX       int32 `json:"OffsetX"`
+	OffsetY       int32 `json:"OffsetY"`
+	TextureWidth  int32 `json:"TextureWidth"`
+	TextureHeight int32 `json:"TextureHeight"`
+}
+
+type wowdataWorldMapOverlayTile struct {
+	ID                int32 `json:"ID"`
+	WorldMapOverlayID int32 `json:"WorldMapOverlayID"`
+	LayerIndex        int32 `json:"LayerIndex"`
+	RowIndex          int32 `json:"RowIndex"`
+	ColIndex          int32 `json:"ColIndex"`
+	FileDataID        int32 `json:"FileDataID"`
+}
+
+type wowdataMap struct {
+	ID           int32  `json:"ID"`
+	Name         string `json:"MapName_lang"`
+	Directory    string `json:"Directory"`
+	InstanceType int32  `json:"InstanceType"`
+	ExpansionID  int32  `json:"ExpansionID"`
+}
+
+type wowdataFile struct {
+	FileDataID int32  `json:"fileDataID"`
+	FileName   string `json:"fileName"`
+}
+
 type wowdataStreamEnvelope struct {
 	OK      bool   `json:"ok"`
 	Command string `json:"command"`
@@ -141,12 +203,16 @@ type wowdataStreamEnvelope struct {
 }
 
 type wowMapSource struct {
-	Maps        []wowdataUiMap
-	Assignments []wowdataUiMapAssignment
-	Links       []wowdataUiMapXMapArt
-	Art         []wowdataUiMapArt
-	Layers      []wowdataUiMapArtStyleLayer
-	Tiles       []wowdataUiMapArtTile
+	Maps         []wowdataUiMap
+	Assignments  []wowdataUiMapAssignment
+	Links        []wowdataUiMapXMapArt
+	Art          []wowdataUiMapArt
+	Layers       []wowdataUiMapArtStyleLayer
+	Tiles        []wowdataUiMapArtTile
+	Overlays     []wowdataWorldMapOverlay
+	OverlayTiles []wowdataWorldMapOverlayTile
+	WorldMaps    []wowdataMap
+	Files        []wowdataFile
 }
 
 type wowMapExtractOptions struct {
@@ -240,6 +306,18 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 	if err := readWowMapTable(ctx, stdout, stderr, opts, "UiMapArtTile", &source.Tiles); err != nil {
 		return err
 	}
+	if err := readWowMapTable(ctx, stdout, stderr, opts, "WorldMapOverlay", &source.Overlays); err != nil {
+		return err
+	}
+	if err := readWowMapTable(ctx, stdout, stderr, opts, "WorldMapOverlayTile", &source.OverlayTiles); err != nil {
+		return err
+	}
+	if err := readWowMapTable(ctx, stdout, stderr, opts, "Map", &source.WorldMaps); err != nil {
+		return err
+	}
+	if err := readWowMapFiles(ctx, stdout, stderr, opts, &source.Files); err != nil {
+		return err
+	}
 
 	manifest, fileDataIDs, err := buildWowMapManifest(source, wowMapTarget{
 		Product: opts.Product,
@@ -270,7 +348,7 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 	if err := writeWowMapManifest(filepath.Join(opts.OutDir, "manifest.json"), manifest); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(stdout, "Wrote %d maps referencing %d unique tiles to %s\n", len(manifest.Maps), len(fileDataIDs), opts.OutDir)
+	_, _ = fmt.Fprintf(stdout, "Wrote %d maps and %d instances referencing %d unique tiles to %s\n", len(manifest.Maps), len(manifest.Instances), len(fileDataIDs), opts.OutDir)
 	return nil
 }
 
@@ -358,6 +436,34 @@ func readWowMapTable[T any](ctx context.Context, stdout, stderr io.Writer, opts 
 	return nil
 }
 
+func readWowMapFiles(ctx context.Context, stdout, stderr io.Writer, opts wowMapExtractOptions, files *[]wowdataFile) error {
+	if _, err := fmt.Fprintln(stdout, "Reading instance map artwork..."); err != nil {
+		return err
+	}
+	args := []string{"file", "search", "--query", "interface/worldmap/", "--limit", "100000"}
+	args = append(args, wowdataTargetArgs(opts)...)
+	cmd := exec.CommandContext(ctx, opts.WowdataBin, args...)
+	cmd.Stderr = stderr
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("search wowdata world map files: %w", err)
+	}
+	var response struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Files []wowdataFile `json:"files"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output, &response); err != nil {
+		return fmt.Errorf("decode wowdata world map files: %w", err)
+	}
+	if !response.OK {
+		return fmt.Errorf("wowdata world map file search failed")
+	}
+	*files = response.Data.Files
+	return nil
+}
+
 func exportWowdataTexture(ctx context.Context, stderr io.Writer, opts wowMapExtractOptions, fileDataID int32, output string) error {
 	tmp := output + ".tmp"
 	_ = os.Remove(tmp)
@@ -417,6 +523,42 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 			return left.FileDataID < right.FileDataID
 		})
 	}
+	overlayTilesByID := make(map[int32][]wowMapTile)
+	for _, tile := range source.OverlayTiles {
+		if tile.LayerIndex != 0 {
+			continue
+		}
+		overlayTilesByID[tile.WorldMapOverlayID] = append(overlayTilesByID[tile.WorldMapOverlayID], wowMapTile{
+			Row: tile.RowIndex, Column: tile.ColIndex, FileDataID: tile.FileDataID,
+			Path: fmt.Sprintf("tiles/%d.webp", tile.FileDataID),
+		})
+	}
+	for id := range overlayTilesByID {
+		sort.Slice(overlayTilesByID[id], func(i, j int) bool {
+			left, right := overlayTilesByID[id][i], overlayTilesByID[id][j]
+			if left.Row != right.Row {
+				return left.Row < right.Row
+			}
+			if left.Column != right.Column {
+				return left.Column < right.Column
+			}
+			return left.FileDataID < right.FileDataID
+		})
+	}
+	overlaysByArt := make(map[int32][]wowMapArtOverlay)
+	for _, overlay := range source.Overlays {
+		tiles := overlayTilesByID[overlay.ID]
+		if len(tiles) == 0 {
+			continue
+		}
+		overlaysByArt[overlay.UiMapArtID] = append(overlaysByArt[overlay.UiMapArtID], wowMapArtOverlay{
+			ID: overlay.ID, OffsetX: overlay.OffsetX, OffsetY: overlay.OffsetY,
+			TextureWidth: overlay.TextureWidth, TextureHeight: overlay.TextureHeight, Tiles: tiles,
+		})
+	}
+	for artID := range overlaysByArt {
+		sort.Slice(overlaysByArt[artID], func(i, j int) bool { return overlaysByArt[artID][i].ID < overlaysByArt[artID][j].ID })
+	}
 
 	linksByMap := make(map[int32][]wowdataUiMapXMapArt)
 	for _, link := range source.Links {
@@ -434,7 +576,10 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 			if !ok {
 				return wowMapManifest{}, nil, fmt.Errorf("UiMap %d references missing UiMapArt %d", mapRow.ID, link.UiMapArtID)
 			}
-			association := wowMapArtAssociation{PhaseID: link.PhaseID, ArtID: art.ID, StyleID: art.UiMapArtStyleID}
+			association := wowMapArtAssociation{
+				PhaseID: link.PhaseID, ArtID: art.ID, StyleID: art.UiMapArtStyleID,
+				Overlays: overlaysByArt[art.ID],
+			}
 			layers := append([]wowdataUiMapArtStyleLayer(nil), layersByStyle[art.UiMapArtStyleID]...)
 			sort.Slice(layers, func(i, j int) bool { return layers[i].LayerIndex < layers[j].LayerIndex })
 			for _, layer := range layers {
@@ -450,6 +595,11 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 					Tiles:               tiles,
 				})
 			}
+			for _, overlay := range association.Overlays {
+				for _, tile := range overlay.Tiles {
+					fileDataIDSet[tile.FileDataID] = struct{}{}
+				}
+			}
 			record.Art = append(record.Art, association)
 		}
 		sort.Slice(record.Art, func(i, j int) bool {
@@ -461,12 +611,178 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 		manifest.Maps = append(manifest.Maps, record)
 	}
 	sort.Slice(manifest.Maps, func(i, j int) bool { return manifest.Maps[i].ID < manifest.Maps[j].ID })
+	manifest.Instances = buildWowMapInstances(source.WorldMaps, source.Files)
+	for _, instance := range manifest.Instances {
+		for _, floor := range instance.Floors {
+			for _, tile := range floor.Tiles {
+				fileDataIDSet[tile.FileDataID] = struct{}{}
+			}
+		}
+	}
 	fileDataIDs := make([]int32, 0, len(fileDataIDSet))
 	for id := range fileDataIDSet {
 		fileDataIDs = append(fileDataIDs, id)
 	}
 	sort.Slice(fileDataIDs, func(i, j int) bool { return fileDataIDs[i] < fileDataIDs[j] })
 	return manifest, fileDataIDs, nil
+}
+
+var nonAlphaNumeric = regexp.MustCompile(`[^a-z0-9]+`)
+var trailingNumber = regexp.MustCompile(`([0-9]+)$`)
+
+var instanceMapAliases = map[int32][]string{
+	109: {"thetempleofatalhakkar"},
+}
+
+type wowMapInstanceAsset struct {
+	Directory string
+	Floors    map[int32]map[int32]wowMapTile
+}
+
+func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstance {
+	assets := make(map[string]*wowMapInstanceAsset)
+	for _, file := range files {
+		directory, floor, tileIndex, ok := parseWowMapInstanceTile(file.FileName)
+		if !ok {
+			continue
+		}
+		key := normalizeWowMapName(directory)
+		asset := assets[key]
+		if asset == nil {
+			asset = &wowMapInstanceAsset{Directory: directory, Floors: make(map[int32]map[int32]wowMapTile)}
+			assets[key] = asset
+		}
+		if asset.Floors[floor] == nil {
+			asset.Floors[floor] = make(map[int32]wowMapTile)
+		}
+		asset.Floors[floor][tileIndex] = wowMapTile{
+			Row: (tileIndex - 1) / 4, Column: (tileIndex - 1) % 4,
+			FileDataID: file.FileDataID, Path: fmt.Sprintf("tiles/%d.webp", file.FileDataID),
+		}
+	}
+
+	sortedMaps := append([]wowdataMap(nil), maps...)
+	sort.Slice(sortedMaps, func(i, j int) bool { return sortedMaps[i].ID < sortedMaps[j].ID })
+	claimedAssets := make(map[string]struct{})
+	instances := make([]wowMapInstance, 0)
+	for _, mapRow := range sortedMaps {
+		if mapRow.ExpansionID != 0 || (mapRow.InstanceType != 1 && mapRow.InstanceType != 2) {
+			continue
+		}
+		candidates := append([]string(nil), instanceMapAliases[mapRow.ID]...)
+		candidates = append(candidates, normalizeWowMapName(mapRow.Name), normalizeWowMapName(mapRow.Directory))
+		var asset *wowMapInstanceAsset
+		var assetKey string
+		for _, candidate := range candidates {
+			candidate = normalizeWowMapName(candidate)
+			if candidate == "" {
+				continue
+			}
+			if _, claimed := claimedAssets[candidate]; claimed {
+				continue
+			}
+			if assets[candidate] != nil {
+				asset, assetKey = assets[candidate], candidate
+				break
+			}
+		}
+		if asset == nil {
+			continue
+		}
+
+		instance := wowMapInstance{
+			MapID: mapRow.ID, Name: mapRow.Name, InstanceType: mapRow.InstanceType, Directory: asset.Directory,
+		}
+		floorNumbers := make([]int32, 0, len(asset.Floors))
+		for floor := range asset.Floors {
+			floorNumbers = append(floorNumbers, floor)
+		}
+		sort.Slice(floorNumbers, func(i, j int) bool { return floorNumbers[i] < floorNumbers[j] })
+		for _, floorNumber := range floorNumbers {
+			tilesByIndex := asset.Floors[floorNumber]
+			if len(tilesByIndex) != 12 {
+				continue
+			}
+			floor := wowMapInstanceFloor{
+				Floor: floorNumber, Width: 1002, Height: 668, TileWidth: 256, TileHeight: 256,
+			}
+			for tileIndex := int32(1); tileIndex <= 12; tileIndex++ {
+				tile, ok := tilesByIndex[tileIndex]
+				if !ok {
+					floor.Tiles = nil
+					break
+				}
+				floor.Tiles = append(floor.Tiles, tile)
+			}
+			if len(floor.Tiles) == 12 {
+				instance.Floors = append(instance.Floors, floor)
+			}
+		}
+		if len(instance.Floors) == 0 {
+			continue
+		}
+		claimedAssets[assetKey] = struct{}{}
+		instances = append(instances, instance)
+	}
+	sort.Slice(instances, func(i, j int) bool {
+		if instances[i].Name != instances[j].Name {
+			return instances[i].Name < instances[j].Name
+		}
+		return instances[i].MapID < instances[j].MapID
+	})
+	return instances
+}
+
+var legacySingleFloorInstanceDirectories = map[string]struct{}{
+	"ruinsofahnqiraj": {},
+	"zulfarrak":       {},
+	"zulgurub":        {},
+}
+
+func parseWowMapInstanceTile(fileName string) (directory string, floor, tileIndex int32, ok bool) {
+	const prefix = "interface/worldmap/"
+	fileName = strings.ToLower(fileName)
+	if !strings.HasPrefix(fileName, prefix) || !strings.HasSuffix(fileName, ".blp") {
+		return "", 0, 0, false
+	}
+	parts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(fileName, prefix), ".blp"), "/")
+	if len(parts) != 2 {
+		return "", 0, 0, false
+	}
+	directory, base := parts[0], parts[1]
+	if underscore := strings.LastIndexByte(base, '_'); underscore >= 0 {
+		floorValue, floorOK := parseTrailingWowMapNumber(base[:underscore])
+		tileValue, tileOK := parseWowMapNumber(base[underscore+1:])
+		if !floorOK || !tileOK || tileValue < 1 || tileValue > 12 {
+			return "", 0, 0, false
+		}
+		return directory, floorValue, tileValue, true
+	}
+	if _, allowed := legacySingleFloorInstanceDirectories[directory]; !allowed {
+		return "", 0, 0, false
+	}
+	tileValue, tileOK := parseTrailingWowMapNumber(base)
+	if !tileOK || tileValue < 1 || tileValue > 12 {
+		return "", 0, 0, false
+	}
+	return directory, 1, tileValue, true
+}
+
+func parseTrailingWowMapNumber(value string) (int32, bool) {
+	match := trailingNumber.FindStringSubmatch(value)
+	if len(match) != 2 {
+		return 0, false
+	}
+	return parseWowMapNumber(match[1])
+}
+
+func parseWowMapNumber(value string) (int32, bool) {
+	parsed, err := strconv.ParseInt(value, 10, 32)
+	return int32(parsed), err == nil
+}
+
+func normalizeWowMapName(value string) string {
+	return nonAlphaNumeric.ReplaceAllString(strings.ToLower(value), "")
 }
 
 func writeWowMapManifest(path string, manifest wowMapManifest) error {

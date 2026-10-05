@@ -9,6 +9,7 @@ import {
   mapAssetUrl,
   mapGalleryItems,
   mapManifestUrl,
+  overlayTilePlacement,
   tilePlacement,
   WOW_MAP_MANIFEST_FORMAT,
   type MapGalleryItem,
@@ -35,32 +36,49 @@ function useMapManifest(iconBaseUrl: string | undefined) {
 }
 
 function MapArtwork({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: string }) {
-  const { layer, map } = item;
+  const canvas = item.kind === "zone" ? item.layer : item.floor;
+  const tiles = canvas.tiles;
+  const name = item.kind === "zone" ? item.map.name : item.instance.name;
 
   return (
     <div
       className="relative w-full overflow-hidden bg-[#11100d]"
-      style={{ aspectRatio: `${layer.width} / ${layer.height}` }}
+      style={{ aspectRatio: `${canvas.width} / ${canvas.height}` }}
       role="img"
-      aria-label={`${map.name} map artwork`}
+      aria-label={`${name} map artwork`}
     >
-      {layer.tiles.map((tile) => (
+      {tiles.map((tile) => (
         <img
-          key={`${tile.row}-${tile.column}-${tile.fileDataID}`}
+          key={`base-${tile.row}-${tile.column}-${tile.fileDataID}`}
           src={mapAssetUrl(iconBaseUrl, tile.path)}
           alt=""
           loading="lazy"
           decoding="async"
           className="absolute max-w-none select-none"
-          style={tilePlacement(layer, tile)}
+          style={tilePlacement(canvas, tile)}
         />
       ))}
+      {item.kind === "zone" && item.art.overlays?.flatMap((overlay) =>
+        overlay.tiles.map((tile) => (
+          <img
+            key={`overlay-${overlay.id}-${tile.row}-${tile.column}-${tile.fileDataID}`}
+            src={mapAssetUrl(iconBaseUrl, tile.path)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="absolute max-w-none select-none"
+            style={overlayTilePlacement(item.layer, overlay, tile)}
+          />
+        )),
+      )}
     </div>
   );
 }
 
 function MapCard({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: string }) {
-  const assignment = item.map.assignments?.[0];
+  const assignment = item.kind === "zone" ? item.map.assignments?.[0] : undefined;
+  const name = item.kind === "zone" ? (item.map.name || `Map ${item.map.id}`) : item.instance.name;
+  const canvas = item.kind === "zone" ? item.layer : item.floor;
 
   return (
     <Card className="group gap-0 overflow-hidden border-amber-950/40 bg-[#171611] py-0 shadow-[0_18px_45px_-30px_rgba(0,0,0,0.9)] transition-transform duration-200 hover:-translate-y-0.5 hover:border-amber-800/50">
@@ -74,18 +92,19 @@ function MapCard({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: str
       <div className="flex items-start justify-between gap-3 p-3">
         <div className="min-w-0">
           <h2 className="truncate font-serif text-sm font-semibold tracking-wide text-amber-50">
-            {item.map.name || `Map ${item.map.id}`}
+            {name}
           </h2>
           <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-amber-200/45">
-            UI map {item.map.id}
+            {item.kind === "zone" ? `UI map ${item.map.id}` : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"} · world ${item.instance.mapID}`}
             {assignment ? ` · world ${assignment.mapID}` : ""}
           </p>
         </div>
         <div className="shrink-0 text-right font-mono text-[9px] uppercase leading-4 tracking-wider text-muted-foreground">
-          <div>{item.layer.width}×{item.layer.height}</div>
-          {(item.art.phaseID !== 0 || item.layer.index !== 0) && (
+          <div>{canvas.width}×{canvas.height}</div>
+          {item.kind === "zone" && (item.art.phaseID !== 0 || item.layer.index !== 0) && (
             <div>phase {item.art.phaseID} · layer {item.layer.index}</div>
           )}
+          {item.kind === "instance" && <div>floor {item.floor.floor}</div>}
         </div>
       </div>
     </Card>
@@ -108,11 +127,16 @@ export function MapGalleryPage() {
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return items;
-    return items.filter((item) =>
-      item.map.name.toLowerCase().includes(query)
-      || String(item.map.id).includes(query)
-      || item.map.assignments?.some((assignment) => String(assignment.mapID).includes(query)),
-    );
+    return items.filter((item) => {
+      if (item.kind === "instance") {
+        return item.instance.name.toLowerCase().includes(query)
+          || String(item.instance.mapID).includes(query)
+          || item.instance.directory.toLowerCase().includes(query);
+      }
+      return item.map.name.toLowerCase().includes(query)
+        || String(item.map.id).includes(query)
+        || item.map.assignments?.some((assignment) => String(assignment.mapID).includes(query));
+    });
   }, [items, search]);
 
   return (
