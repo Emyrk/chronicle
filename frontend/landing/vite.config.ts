@@ -38,6 +38,7 @@ export default defineConfig({
         main: "index.html",
         selfHosting: "self-hosting/index.html",
         support: "support/index.html",
+        privacy: "privacy/index.html",
       },
     },
   },
