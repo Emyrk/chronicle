@@ -54,6 +54,8 @@ const GLOBAL_FILTERS: InstanceLootFilter[] = [
   {
     label: "Currency",
     itemIds: new Set([
+      // Burning Crusade
+      29434, // Badge of Justice
       // Wrath Emblems
       40752, // Emblem of Heroism
       40753, // Emblem of Valor
