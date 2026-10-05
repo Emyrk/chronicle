@@ -977,12 +977,28 @@ func TempestKeepHostiles() map[uint32]instances.Identity {
 		18805: "High Astromancer Solarian",
 		19514: "Al'ar",
 		19516: "Void Reaver",
+	})
+	for entry, name := range map[uint32]string{
 		19622: "Kael'thas Sunstrider",
 		20060: "Lord Sanguinar",
 		20062: "Grand Astromancer Capernian",
 		20063: "Master Engineer Telonicus",
 		20064: "Thaladred the Darkener",
-	})
+		21268: "Netherstrand Longbow",
+		21269: "Devastation",
+		21270: "Cosmic Infuser",
+		21271: "Infinity Blades",
+		21272: "Warp Slicer",
+		21273: "Phaseshift Bulwark",
+		21274: "Staff of Disintegration",
+	} {
+		hostile[entry] = instances.Identity{
+			Affiliation:   types.AffiliationHostile,
+			Name:          name,
+			EncounterName: "Kael'thas Sunstrider",
+			Boss:          true,
+		}
+	}
 	return hostile
 }
 

@@ -69,10 +69,11 @@ type RoomMechanic struct {
 
 	bossEntry uint32
 
-	entry        uint32
-	pendingDeath *messages.Message
-	room         *Room
-	key          string
+	entry              uint32
+	pendingDeath       *messages.Message
+	pendingDeathWindow time.Duration
+	room               *Room
+	key                string
 }
 
 func NewRoomMechanic(id guid.GUID, bossEntry uint32, all *Characters) (*RoomMechanic, bool) {
@@ -90,17 +91,25 @@ func NewRoomMechanic(id guid.GUID, bossEntry uint32, all *Characters) (*RoomMech
 	room := shared.(*Room)
 
 	r := &RoomMechanic{
-		Common:       NewCommonCharacter(id, all),
-		all:          all,
-		bossEntry:    bossEntry,
-		entry:        entry,
-		pendingDeath: nil,
-		room:         room,
-		key:          key,
+		Common:             NewCommonCharacter(id, all),
+		all:                all,
+		bossEntry:          bossEntry,
+		entry:              entry,
+		pendingDeath:       nil,
+		pendingDeathWindow: time.Minute,
+		room:               room,
+		key:                key,
 	}
 	room.Add(r)
 
 	return r, true
+}
+
+// WithPendingDeathWindow changes how long a scripted death can remain pending
+// while the encounter waits for the next room unit to become active.
+func (c *RoomMechanic) WithPendingDeathWindow(window time.Duration) *RoomMechanic {
+	c.pendingDeathWindow = window
+	return c
 }
 
 func (c *RoomMechanic) Process(m messages.Message) error {
@@ -157,6 +166,28 @@ func (c *RoomMechanic) Died(reason string, m messages.Message) {
 	c.LastSlain = m
 }
 
+// Complete immediately finalizes a room unit's death when a later encounter
+// signal proves its scripted phase has ended.
+func (c *RoomMechanic) Complete(reason string, m messages.Message) {
+	c.finalizeDeath(reason, m)
+}
+
+// ResetRoom rebuilds room membership and clears scripted-death state after an
+// encounter reset so the same characters can participate in a later pull.
+func (c *RoomMechanic) ResetRoom(members ...*RoomMechanic) {
+	if c.room == nil {
+		return
+	}
+	c.room.done = false
+	c.room.boss = nil
+	c.room.Units = make(map[guid.GUID]*RoomMechanic, len(members))
+	for _, character := range members {
+		character.pendingDeath = nil
+		character.LastSlain = nil
+		c.room.Add(character)
+	}
+}
+
 func (c *RoomMechanic) flushAll(m messages.Message) {
 	c.room.Close()
 	for _, char := range c.room.Units {
@@ -177,7 +208,7 @@ func (c *RoomMechanic) processPendingDeath(m messages.Message, deadBoss bool) {
 	}
 
 	deathTime := (*c.pendingDeath).Date()
-	if m.Date().Sub(deathTime) >= time.Minute {
+	if m.Date().Sub(deathTime) >= c.pendingDeathWindow {
 		// Intentionally make this a slain message, as they did die. So a timeout would
 		// be incorrect.
 		c.finalizeDeath("timeout_pending_death", m)
