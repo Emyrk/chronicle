@@ -85,6 +85,8 @@ Add a new format only when neither existing format can represent the required di
 |---|---|---|
 | `leaderboards-right-rail` | `pages/Leaderboards/LeaderboardsPage.tsx` | Leaderboard landing and detail layouts; visible at `2xl` |
 | `statistics-encounter-sidebar` | `pages/Rankings/InstanceView.tsx` | Explicitly non-mobile statistics detail with 1–8 encounter rows; rendered after the keybind help text |
+| `recent-right-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible at `2xl` |
+| `recent-left-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible with the right rail at 1800px and wider |
 
 ## Enablement model
 

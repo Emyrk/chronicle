@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Loader2, Castle, Search, Check, ChevronsUpDown } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
+import { AdSlot } from "@/components/Ads/AdSlot";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
@@ -329,143 +330,151 @@ export function RecentRaids() {
   const isRefreshing = loading && instances.length > 0;
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8">
-      {/* Header */}
-      <div className="mb-6 space-y-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <Castle className="h-7 w-7" />
-            Recent
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Browse community dungeon & raid uploads from the last {RECENT_WINDOW_DAYS} days. Older uploads are not shown here.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted-foreground mr-1">Category:</span>
-          <Button size="sm" variant={category === "all" ? "default" : "outline"} onClick={() => setRawCategory("all")}>
-            All
-          </Button>
-          <Button size="sm" variant={category === "raid" ? "default" : "outline"} onClick={() => setRawCategory("raid")}>
-            Raids
-          </Button>
-          <Button size="sm" variant={category === "dungeon" ? "default" : "outline"} onClick={() => setRawCategory("dungeon")}>
-            Dungeons
-          </Button>
-
-          <span className="text-sm text-muted-foreground ml-3 mr-1">Video:</span>
-          <Button size="sm" variant={videoFilter === "all" ? "default" : "outline"} onClick={() => setRawVideoFilter("all")}>
-            All
-          </Button>
-          <Button size="sm" variant={videoFilter === "with" ? "default" : "outline"} onClick={() => setRawVideoFilter("with")}>
-            With Video
-          </Button>
-
-          <span className="text-sm text-muted-foreground ml-3 mr-1">Realm:</span>
-          <select
-            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-            value={realmID}
-            onChange={(event) => setRealmID(event.target.value)}
-          >
-            <option value="">All</option>
-            {realms?.map((realm) => (
-              <option key={realm.id} value={realm.id}>
-                {realm.name}
-              </option>
-            ))}
-          </select>
-
-          <InstanceCombobox
-            options={categoryInstanceOptions}
-            selected={selectedInstancesValid}
-            onToggle={toggleInstance}
-            onClear={() => setSelectedInstances([])}
-          />
-
-          {selectedInstancesValid.length > 0 && (
-            <Button size="sm" variant="ghost" onClick={() => setSelectedInstances([])}>
-              Clear
-            </Button>
-          )}
-        </div>
+    <div className="mx-auto flex w-full max-w-[1800px] items-start justify-center gap-6 p-4 md:p-8">
+      <div className="hidden min-[1800px]:block">
+        <AdSlot placement="recent-left-rail" format="rail" />
       </div>
 
-      {isRefreshing && (
-        <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Updating results...
-        </div>
-      )}
+      <main className="min-w-0 w-full max-w-7xl">
+        {/* Header */}
+        <div className="mb-6 space-y-3">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+              <Castle className="h-7 w-7" />
+              Recent
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Browse community dungeon & raid uploads from the last {RECENT_WINDOW_DAYS} days. Older uploads are not shown here.
+            </p>
+          </div>
 
-      <div className="min-h-[60vh]">
-        {/* Loading state */}
-        {loading && instances.length === 0 && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground mr-1">Category:</span>
+            <Button size="sm" variant={category === "all" ? "default" : "outline"} onClick={() => setRawCategory("all")}>
+              All
+            </Button>
+            <Button size="sm" variant={category === "raid" ? "default" : "outline"} onClick={() => setRawCategory("raid")}>
+              Raids
+            </Button>
+            <Button size="sm" variant={category === "dungeon" ? "default" : "outline"} onClick={() => setRawCategory("dungeon")}>
+              Dungeons
+            </Button>
+
+            <span className="text-sm text-muted-foreground ml-3 mr-1">Video:</span>
+            <Button size="sm" variant={videoFilter === "all" ? "default" : "outline"} onClick={() => setRawVideoFilter("all")}>
+              All
+            </Button>
+            <Button size="sm" variant={videoFilter === "with" ? "default" : "outline"} onClick={() => setRawVideoFilter("with")}>
+              With Video
+            </Button>
+
+            <span className="text-sm text-muted-foreground ml-3 mr-1">Realm:</span>
+            <select
+              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+              value={realmID}
+              onChange={(event) => setRealmID(event.target.value)}
+            >
+              <option value="">All</option>
+              {realms?.map((realm) => (
+                <option key={realm.id} value={realm.id}>
+                  {realm.name}
+                </option>
+              ))}
+            </select>
+
+            <InstanceCombobox
+              options={categoryInstanceOptions}
+              selected={selectedInstancesValid}
+              onToggle={toggleInstance}
+              onClear={() => setSelectedInstances([])}
+            />
+
+            {selectedInstancesValid.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => setSelectedInstances([])}>
+                Clear
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {isRefreshing && (
+          <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Updating results...
           </div>
         )}
 
-        {/* Error state */}
-        {error && !loading && (
-          <Card className="p-8 text-center">
-            <p className="text-destructive mb-4">{error}</p>
-            <Button onClick={() => fetchInstances()}>Try Again</Button>
-          </Card>
-        )}
-
-        {/* Empty state */}
-        {!loading && !error && instances.length === 0 && (
-          <Card className="p-12 text-center">
-            <Castle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">
-              No raids found
-            </h3>
-            <p className="text-muted-foreground">
-              {hasActiveFilters
-                ? "No raids match the selected filters."
-                : "No raids have been uploaded yet. Be the first!"}
-            </p>
-          </Card>
-        )}
-
-        {/* Raid grid */}
-        {instanceGroups.length > 0 && (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {instanceGroups.map((group) => {
-                const instance = group[0];
-                return (
-                  <RaidCard
-                    key={instance.id}
-                    instance={instance}
-                    instances={group}
-                    bossCount={bossCounts?.get(instance.name)}
-                  />
-                );
-              })}
+        <div className="min-h-[60vh]">
+          {/* Loading state */}
+          {loading && instances.length === 0 && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
+          )}
 
-            {/* Infinite scroll trigger */}
-            {hasMore && (
-              <div ref={loadMoreRef} className="flex justify-center py-8">
-                {loadingMore ? (
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                ) : (
-                  <span className="text-sm text-muted-foreground">Scroll for more</span>
-                )}
-              </div>
-            )}
+          {/* Error state */}
+          {error && !loading && (
+            <Card className="p-8 text-center">
+              <p className="text-destructive mb-4">{error}</p>
+              <Button onClick={() => fetchInstances()}>Try Again</Button>
+            </Card>
+          )}
 
-            {/* End of results */}
-            {!loading && !hasMore && instanceGroups.length > 0 && (
-              <p className="text-center text-sm text-muted-foreground py-8">
-                You&apos;ve reached the end! {instanceGroups.length} raids shown.
+          {/* Empty state */}
+          {!loading && !error && instances.length === 0 && (
+            <Card className="p-12 text-center">
+              <Castle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium mb-2">
+                No raids found
+              </h3>
+              <p className="text-muted-foreground">
+                {hasActiveFilters
+                  ? "No raids match the selected filters."
+                  : "No raids have been uploaded yet. Be the first!"}
               </p>
-            )}
-          </>
-        )}
-      </div>
+            </Card>
+          )}
+
+          {/* Raid grid */}
+          {instanceGroups.length > 0 && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {instanceGroups.map((group) => {
+                  const instance = group[0];
+                  return (
+                    <RaidCard
+                      key={instance.id}
+                      instance={instance}
+                      instances={group}
+                      bossCount={bossCounts?.get(instance.name)}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Infinite scroll trigger */}
+              {hasMore && (
+                <div ref={loadMoreRef} className="flex justify-center py-8">
+                  {loadingMore ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  ) : (
+                    <span className="text-sm text-muted-foreground">Scroll for more</span>
+                  )}
+                </div>
+              )}
+
+              {/* End of results */}
+              {!loading && !hasMore && instanceGroups.length > 0 && (
+                <p className="text-center text-sm text-muted-foreground py-8">
+                  You&apos;ve reached the end! {instanceGroups.length} raids shown.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </main>
+
+      <AdSlot placement="recent-right-rail" format="rail" />
     </div>
   );
 }
