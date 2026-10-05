@@ -23,7 +23,7 @@ export function createAbsorbedDamagePanel(): PanelDefinition<AbsorbedDamageResul
     petOptions: PET_MODE_OPTIONS,
     defaultFilters: [
       { type: "time_range" as const, value: "controller" },
-      { type: "target_type" as const, value: ["player"], applyTo: ["damage"] },
+      { type: "target_type" as const, value: ["player"], applyTo: ["damage", "absorbed"] },
     ],
 
     render: (props: PanelRenderProps<AbsorbedDamageResult>) => {

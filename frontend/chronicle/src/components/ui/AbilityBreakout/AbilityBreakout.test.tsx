@@ -51,3 +51,29 @@ describe("AbilityTable stacked column order", () => {
     expectColumnOrder(renderTable(false), false);
   });
 });
+
+
+describe("AbilityTable detail controls", () => {
+  it("shows More detail when hit outcome data is available", () => {
+    expect(renderTable(false)).toContain("More detail");
+  });
+
+  it("hides More detail when the rows only contain totals and counts", () => {
+    const attributionOnly: AbilityData = {
+      ...ability,
+      name: "Power Word: Shield",
+      Hits: 0,
+    };
+
+    const markup = renderToStaticMarkup(
+      <AbilityTable
+        abilities={[attributionOnly]}
+        totalValue={attributionOnly.value}
+        valueLabel="Absorbed"
+        showHits={false}
+      />,
+    );
+
+    expect(markup).not.toContain("More detail");
+  });
+});
