@@ -1,12 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import { AdSlot } from "./AdSlot"
-import { isLocalAdPreviewHost, shouldShowCompactEncounterAd } from "./adPreview"
+import {
+  isLocalAdPreviewHost,
+  shouldShowAdPreview,
+  shouldShowCompactEncounterAd,
+} from "./adPreview"
 
 describe("AdSlot", () => {
   it("renders the vertical rail preview on localhost", () => {
     const markup = renderToStaticMarkup(
-      <AdSlot placement="leaderboards-right-rail" format="rail" hostname="localhost" />,
+      <AdSlot
+        placement="leaderboards-right-rail"
+        format="rail"
+        hostname="localhost"
+        previewEnabled
+      />,
     )
 
     expect(markup).toContain("Advertisement")
@@ -18,7 +27,7 @@ describe("AdSlot", () => {
 
   it("renders the responsive desktop format by default", () => {
     const markup = renderToStaticMarkup(
-      <AdSlot placement="statistics-encounter-sidebar" hostname="127.0.0.1" />,
+      <AdSlot placement="statistics-encounter-sidebar" hostname="127.0.0.1" previewEnabled />,
     )
 
     expect(markup).toContain("responsive")
@@ -30,7 +39,25 @@ describe("AdSlot", () => {
   it("does not render outside local development", () => {
     expect(
       renderToStaticMarkup(
-        <AdSlot placement="leaderboards-right-rail" format="rail" hostname="turtle.chronicleclassic.com" />,
+        <AdSlot
+          placement="leaderboards-right-rail"
+          format="rail"
+          hostname="turtle.chronicleclassic.com"
+          previewEnabled
+        />,
+      ),
+    ).toBe("")
+  })
+
+  it("does not render on localhost unless previews are enabled", () => {
+    expect(
+      renderToStaticMarkup(
+        <AdSlot
+          placement="leaderboards-right-rail"
+          format="rail"
+          hostname="localhost"
+          previewEnabled={false}
+        />,
       ),
     ).toBe("")
   })
@@ -39,6 +66,12 @@ describe("AdSlot", () => {
     expect(isLocalAdPreviewHost("localhost")).toBe(true)
     expect(isLocalAdPreviewHost("127.0.0.1")).toBe(true)
     expect(isLocalAdPreviewHost("chronicleclassic.com")).toBe(false)
+  })
+
+  it("requires both the preview flag and a local host", () => {
+    expect(shouldShowAdPreview("localhost", true)).toBe(true)
+    expect(shouldShowAdPreview("localhost", false)).toBe(false)
+    expect(shouldShowAdPreview("chronicleclassic.com", true)).toBe(false)
   })
 
   it("uses the compact slot only for short encounter lists", () => {

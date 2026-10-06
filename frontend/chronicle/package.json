@@ -5,7 +5,7 @@
   "type": "module",
   "types": "design-sync.entry.ts",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

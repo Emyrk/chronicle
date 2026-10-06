@@ -42,6 +42,7 @@ function backendProxy(): ProxyOptions {
 export default defineConfig({
   define: {
     'import.meta.env.VITE_SERVER_NAME': JSON.stringify(process.env.SERVER || 'turtle'),
+    'import.meta.env.CHRONICLE_PREVIEW_ADS': JSON.stringify(process.env.CHRONICLE_PREVIEW_ADS === 'true'),
   },
   plugins: [react({
     babel: {
