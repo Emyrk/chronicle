@@ -92,6 +92,7 @@ import { DatasetsTab } from "./pages/GameData/DatasetsTab"
 import { LeaderboardsPage, LegacyLeaderboardsRedirect } from "./pages/Leaderboards/LeaderboardsPage"
 import { CensusPage } from "./pages/Census/CensusPage"
 import { APIExplorer } from "./pages/APIExplorer/APIExplorer"
+import { CustomPanelsPage } from "./pages/Tools/CustomPanelsPage"
 import { ToolsPage } from "./pages/Tools/ToolsPage"
 import { SpeedrunningPage } from "./pages/Speedrunning/SpeedrunningPage"
 import { ClassDetailsPage } from "./pages/ClassDetails/ClassDetailsPage"
@@ -150,6 +151,7 @@ function App() {
         <Route path="/apply/:id" element={<ApplicationPage />} />
         <Route path="/census" element={<CensusPage />} />
         <Route path="/tools" element={<ToolsPage />} />
+        <Route path="/tools/custom-panels" element={<CustomPanelsPage />} />
         <Route path="/developers/api" element={<APIExplorer />} />
         <Route path="/debug/proto" element={<ProtoDecode />} />
         <Route path="/admin" element={<AdminLayout />}>
