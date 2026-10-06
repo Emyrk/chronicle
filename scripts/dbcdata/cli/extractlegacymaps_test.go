@@ -44,15 +44,21 @@ func TestBuildLegacyMapManifest(t *testing.T) {
 	}
 
 	manifest, sourcePaths, err := buildLegacyMapManifest(
-		[]dbdefs.Ent_WorldMapArea{{
-			ID: 4, MapID: 1, AreaID: 14, AreaName: "Durotar",
-			LocLeft: -1962.5, LocRight: -7250, LocTop: 1808.33, LocBottom: -1716.67,
-		}},
+		[]dbdefs.Ent_WorldMapArea{
+			{
+				ID: 4, MapID: 1, AreaID: 14, AreaName: "Durotar",
+				LocLeft: -1962.5, LocRight: -7250, LocTop: 1808.33, LocBottom: -1716.67,
+			},
+			{ID: 619, MapID: 309, AreaID: 1977, AreaName: "ZulGurub"},
+		},
 		[]dbdefs.Ent_WorldMapOverlay{{
 			ID: 5, MapAreaID: 4, TextureName: "RazorHill", TextureWidth: 300, TextureHeight: 200, OffsetX: 445, OffsetY: 182,
 		}},
 		map[int32]string{14: "Durotar"},
-		[]wowdataMap{{ID: 33, Name: "Shadowfang Keep", Directory: "Shadowfang", InstanceType: 1}},
+		[]wowdataMap{
+			{ID: 33, Name: "Shadowfang Keep", Directory: "Shadowfang", InstanceType: 1},
+			{ID: 309, Name: "Zul'Gurub", Directory: "Zul'gurub", InstanceType: 2},
+		},
 		files,
 		resolveFile,
 		wowMapTarget{Product: "turtle", Build: "1.12.1.5875"},
