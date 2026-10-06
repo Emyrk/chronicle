@@ -3912,6 +3912,523 @@ func (q *sqlQuerier) ResolveExternalAPIServer(ctx context.Context, server string
 	return i, err
 }
 
+const getExternalReferenceContent = `-- name: GetExternalReferenceContent :one
+SELECT id, tenant_id, kind, schema_version, content_hash, payload, created_at
+FROM external_reference_contents
+WHERE tenant_id = $1
+  AND kind = $2
+  AND schema_version = $3
+  AND content_hash = $4
+  AND payload = $5
+`
+
+type GetExternalReferenceContentParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Kind          string    `db:"kind" json:"kind"`
+	SchemaVersion int32     `db:"schema_version" json:"schema_version"`
+	ContentHash   []byte    `db:"content_hash" json:"content_hash"`
+	Payload       []byte    `db:"payload" json:"payload"`
+}
+
+func (q *sqlQuerier) GetExternalReferenceContent(ctx context.Context, arg GetExternalReferenceContentParams) (ExternalReferenceContent, error) {
+	row := q.db.QueryRow(ctx, getExternalReferenceContent,
+		arg.TenantID,
+		arg.Kind,
+		arg.SchemaVersion,
+		arg.ContentHash,
+		arg.Payload,
+	)
+	var i ExternalReferenceContent
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Kind,
+		&i.SchemaVersion,
+		&i.ContentHash,
+		&i.Payload,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getExternalReferenceCurrentSnapshot = `-- name: GetExternalReferenceCurrentSnapshot :one
+SELECT
+    entity.id, entity.tenant_id, entity.realm_id, entity.kind, entity.name, entity.normalized_name, entity.current_snapshot_id, entity.first_seen_at, entity.last_seen_at, entity.created_at, entity.updated_at,
+    snapshot.id, snapshot.tenant_id, snapshot.kind, snapshot.entity_id, snapshot.content_id, snapshot.observed_on, snapshot.sequence, snapshot.observed_at, snapshot.last_observed_at, snapshot.created_at,
+    content.id, content.tenant_id, content.kind, content.schema_version, content.content_hash, content.payload, content.created_at
+FROM external_reference_entities entity
+JOIN external_reference_snapshots snapshot ON snapshot.id = entity.current_snapshot_id
+JOIN external_reference_contents content ON content.id = snapshot.content_id
+WHERE entity.id = $1
+`
+
+type GetExternalReferenceCurrentSnapshotRow struct {
+	ExternalReferenceEntity   ExternalReferenceEntity   `db:"external_reference_entity" json:"external_reference_entity"`
+	ExternalReferenceSnapshot ExternalReferenceSnapshot `db:"external_reference_snapshot" json:"external_reference_snapshot"`
+	ExternalReferenceContent  ExternalReferenceContent  `db:"external_reference_content" json:"external_reference_content"`
+}
+
+func (q *sqlQuerier) GetExternalReferenceCurrentSnapshot(ctx context.Context, entityID uuid.UUID) (GetExternalReferenceCurrentSnapshotRow, error) {
+	row := q.db.QueryRow(ctx, getExternalReferenceCurrentSnapshot, entityID)
+	var i GetExternalReferenceCurrentSnapshotRow
+	err := row.Scan(
+		&i.ExternalReferenceEntity.ID,
+		&i.ExternalReferenceEntity.TenantID,
+		&i.ExternalReferenceEntity.RealmID,
+		&i.ExternalReferenceEntity.Kind,
+		&i.ExternalReferenceEntity.Name,
+		&i.ExternalReferenceEntity.NormalizedName,
+		&i.ExternalReferenceEntity.CurrentSnapshotID,
+		&i.ExternalReferenceEntity.FirstSeenAt,
+		&i.ExternalReferenceEntity.LastSeenAt,
+		&i.ExternalReferenceEntity.CreatedAt,
+		&i.ExternalReferenceEntity.UpdatedAt,
+		&i.ExternalReferenceSnapshot.ID,
+		&i.ExternalReferenceSnapshot.TenantID,
+		&i.ExternalReferenceSnapshot.Kind,
+		&i.ExternalReferenceSnapshot.EntityID,
+		&i.ExternalReferenceSnapshot.ContentID,
+		&i.ExternalReferenceSnapshot.ObservedOn,
+		&i.ExternalReferenceSnapshot.Sequence,
+		&i.ExternalReferenceSnapshot.ObservedAt,
+		&i.ExternalReferenceSnapshot.LastObservedAt,
+		&i.ExternalReferenceSnapshot.CreatedAt,
+		&i.ExternalReferenceContent.ID,
+		&i.ExternalReferenceContent.TenantID,
+		&i.ExternalReferenceContent.Kind,
+		&i.ExternalReferenceContent.SchemaVersion,
+		&i.ExternalReferenceContent.ContentHash,
+		&i.ExternalReferenceContent.Payload,
+		&i.ExternalReferenceContent.CreatedAt,
+	)
+	return i, err
+}
+
+const getExternalReferenceEntityByName = `-- name: GetExternalReferenceEntityByName :one
+SELECT id, tenant_id, realm_id, kind, name, normalized_name, current_snapshot_id, first_seen_at, last_seen_at, created_at, updated_at
+FROM external_reference_entities
+WHERE tenant_id = $1
+  AND realm_id = $2
+  AND kind = $3
+  AND normalized_name = lower(btrim($4))
+`
+
+type GetExternalReferenceEntityByNameParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID  uuid.UUID `db:"realm_id" json:"realm_id"`
+	Kind     string    `db:"kind" json:"kind"`
+	Name     string    `db:"name" json:"name"`
+}
+
+func (q *sqlQuerier) GetExternalReferenceEntityByName(ctx context.Context, arg GetExternalReferenceEntityByNameParams) (ExternalReferenceEntity, error) {
+	row := q.db.QueryRow(ctx, getExternalReferenceEntityByName,
+		arg.TenantID,
+		arg.RealmID,
+		arg.Kind,
+		arg.Name,
+	)
+	var i ExternalReferenceEntity
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RealmID,
+		&i.Kind,
+		&i.Name,
+		&i.NormalizedName,
+		&i.CurrentSnapshotID,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getExternalReferenceSnapshotAt = `-- name: GetExternalReferenceSnapshotAt :one
+SELECT
+    entity.id, entity.tenant_id, entity.realm_id, entity.kind, entity.name, entity.normalized_name, entity.current_snapshot_id, entity.first_seen_at, entity.last_seen_at, entity.created_at, entity.updated_at,
+    snapshot.id, snapshot.tenant_id, snapshot.kind, snapshot.entity_id, snapshot.content_id, snapshot.observed_on, snapshot.sequence, snapshot.observed_at, snapshot.last_observed_at, snapshot.created_at,
+    content.id, content.tenant_id, content.kind, content.schema_version, content.content_hash, content.payload, content.created_at
+FROM external_reference_entities entity
+JOIN external_reference_snapshots snapshot ON snapshot.entity_id = entity.id
+JOIN external_reference_contents content ON content.id = snapshot.content_id
+WHERE entity.tenant_id = $1
+  AND entity.realm_id = $2
+  AND entity.kind = $3
+  AND entity.normalized_name = lower(btrim($4))
+  AND snapshot.observed_at <= $5
+ORDER BY snapshot.observed_at DESC, snapshot.last_observed_at DESC, snapshot.sequence DESC
+LIMIT 1
+`
+
+type GetExternalReferenceSnapshotAtParams struct {
+	TenantID   uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID    uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Kind       string             `db:"kind" json:"kind"`
+	Name       string             `db:"name" json:"name"`
+	ObservedAt pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
+}
+
+type GetExternalReferenceSnapshotAtRow struct {
+	ExternalReferenceEntity   ExternalReferenceEntity   `db:"external_reference_entity" json:"external_reference_entity"`
+	ExternalReferenceSnapshot ExternalReferenceSnapshot `db:"external_reference_snapshot" json:"external_reference_snapshot"`
+	ExternalReferenceContent  ExternalReferenceContent  `db:"external_reference_content" json:"external_reference_content"`
+}
+
+func (q *sqlQuerier) GetExternalReferenceSnapshotAt(ctx context.Context, arg GetExternalReferenceSnapshotAtParams) (GetExternalReferenceSnapshotAtRow, error) {
+	row := q.db.QueryRow(ctx, getExternalReferenceSnapshotAt,
+		arg.TenantID,
+		arg.RealmID,
+		arg.Kind,
+		arg.Name,
+		arg.ObservedAt,
+	)
+	var i GetExternalReferenceSnapshotAtRow
+	err := row.Scan(
+		&i.ExternalReferenceEntity.ID,
+		&i.ExternalReferenceEntity.TenantID,
+		&i.ExternalReferenceEntity.RealmID,
+		&i.ExternalReferenceEntity.Kind,
+		&i.ExternalReferenceEntity.Name,
+		&i.ExternalReferenceEntity.NormalizedName,
+		&i.ExternalReferenceEntity.CurrentSnapshotID,
+		&i.ExternalReferenceEntity.FirstSeenAt,
+		&i.ExternalReferenceEntity.LastSeenAt,
+		&i.ExternalReferenceEntity.CreatedAt,
+		&i.ExternalReferenceEntity.UpdatedAt,
+		&i.ExternalReferenceSnapshot.ID,
+		&i.ExternalReferenceSnapshot.TenantID,
+		&i.ExternalReferenceSnapshot.Kind,
+		&i.ExternalReferenceSnapshot.EntityID,
+		&i.ExternalReferenceSnapshot.ContentID,
+		&i.ExternalReferenceSnapshot.ObservedOn,
+		&i.ExternalReferenceSnapshot.Sequence,
+		&i.ExternalReferenceSnapshot.ObservedAt,
+		&i.ExternalReferenceSnapshot.LastObservedAt,
+		&i.ExternalReferenceSnapshot.CreatedAt,
+		&i.ExternalReferenceContent.ID,
+		&i.ExternalReferenceContent.TenantID,
+		&i.ExternalReferenceContent.Kind,
+		&i.ExternalReferenceContent.SchemaVersion,
+		&i.ExternalReferenceContent.ContentHash,
+		&i.ExternalReferenceContent.Payload,
+		&i.ExternalReferenceContent.CreatedAt,
+	)
+	return i, err
+}
+
+const getLatestExternalReferenceSnapshotForDay = `-- name: GetLatestExternalReferenceSnapshotForDay :one
+SELECT id, tenant_id, kind, entity_id, content_id, observed_on, sequence, observed_at, last_observed_at, created_at
+FROM external_reference_snapshots
+WHERE entity_id = $1
+  AND observed_on = $2
+ORDER BY sequence DESC
+LIMIT 1
+`
+
+type GetLatestExternalReferenceSnapshotForDayParams struct {
+	EntityID   uuid.UUID   `db:"entity_id" json:"entity_id"`
+	ObservedOn pgtype.Date `db:"observed_on" json:"observed_on"`
+}
+
+func (q *sqlQuerier) GetLatestExternalReferenceSnapshotForDay(ctx context.Context, arg GetLatestExternalReferenceSnapshotForDayParams) (ExternalReferenceSnapshot, error) {
+	row := q.db.QueryRow(ctx, getLatestExternalReferenceSnapshotForDay, arg.EntityID, arg.ObservedOn)
+	var i ExternalReferenceSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Kind,
+		&i.EntityID,
+		&i.ContentID,
+		&i.ObservedOn,
+		&i.Sequence,
+		&i.ObservedAt,
+		&i.LastObservedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertExternalReferenceContent = `-- name: InsertExternalReferenceContent :exec
+INSERT INTO external_reference_contents (
+    tenant_id,
+    kind,
+    schema_version,
+    content_hash,
+    payload
+)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (tenant_id, kind, schema_version, content_hash) DO NOTHING
+`
+
+type InsertExternalReferenceContentParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Kind          string    `db:"kind" json:"kind"`
+	SchemaVersion int32     `db:"schema_version" json:"schema_version"`
+	ContentHash   []byte    `db:"content_hash" json:"content_hash"`
+	Payload       []byte    `db:"payload" json:"payload"`
+}
+
+func (q *sqlQuerier) InsertExternalReferenceContent(ctx context.Context, arg InsertExternalReferenceContentParams) error {
+	_, err := q.db.Exec(ctx, insertExternalReferenceContent,
+		arg.TenantID,
+		arg.Kind,
+		arg.SchemaVersion,
+		arg.ContentHash,
+		arg.Payload,
+	)
+	return err
+}
+
+const insertExternalReferenceSnapshot = `-- name: InsertExternalReferenceSnapshot :one
+INSERT INTO external_reference_snapshots (
+    tenant_id,
+    kind,
+    entity_id,
+    content_id,
+    observed_on,
+    sequence,
+    observed_at,
+    last_observed_at
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $7
+)
+RETURNING id, tenant_id, kind, entity_id, content_id, observed_on, sequence, observed_at, last_observed_at, created_at
+`
+
+type InsertExternalReferenceSnapshotParams struct {
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Kind            string             `db:"kind" json:"kind"`
+	EntityID        uuid.UUID          `db:"entity_id" json:"entity_id"`
+	ContentID       uuid.UUID          `db:"content_id" json:"content_id"`
+	ObservedOn      pgtype.Date        `db:"observed_on" json:"observed_on"`
+	Sequence        int32              `db:"sequence" json:"sequence"`
+	ObservationTime pgtype.Timestamptz `db:"observation_time" json:"observation_time"`
+}
+
+func (q *sqlQuerier) InsertExternalReferenceSnapshot(ctx context.Context, arg InsertExternalReferenceSnapshotParams) (ExternalReferenceSnapshot, error) {
+	row := q.db.QueryRow(ctx, insertExternalReferenceSnapshot,
+		arg.TenantID,
+		arg.Kind,
+		arg.EntityID,
+		arg.ContentID,
+		arg.ObservedOn,
+		arg.Sequence,
+		arg.ObservationTime,
+	)
+	var i ExternalReferenceSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Kind,
+		&i.EntityID,
+		&i.ContentID,
+		&i.ObservedOn,
+		&i.Sequence,
+		&i.ObservedAt,
+		&i.LastObservedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listExternalReferenceSnapshotHistory = `-- name: ListExternalReferenceSnapshotHistory :many
+SELECT
+    snapshot.id, snapshot.tenant_id, snapshot.kind, snapshot.entity_id, snapshot.content_id, snapshot.observed_on, snapshot.sequence, snapshot.observed_at, snapshot.last_observed_at, snapshot.created_at,
+    content.id, content.tenant_id, content.kind, content.schema_version, content.content_hash, content.payload, content.created_at
+FROM external_reference_snapshots snapshot
+JOIN external_reference_contents content ON content.id = snapshot.content_id
+WHERE snapshot.entity_id = $1
+ORDER BY snapshot.observed_at DESC, snapshot.last_observed_at DESC, snapshot.sequence DESC
+`
+
+type ListExternalReferenceSnapshotHistoryRow struct {
+	ExternalReferenceSnapshot ExternalReferenceSnapshot `db:"external_reference_snapshot" json:"external_reference_snapshot"`
+	ExternalReferenceContent  ExternalReferenceContent  `db:"external_reference_content" json:"external_reference_content"`
+}
+
+func (q *sqlQuerier) ListExternalReferenceSnapshotHistory(ctx context.Context, entityID uuid.UUID) ([]ListExternalReferenceSnapshotHistoryRow, error) {
+	rows, err := q.db.Query(ctx, listExternalReferenceSnapshotHistory, entityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExternalReferenceSnapshotHistoryRow
+	for rows.Next() {
+		var i ListExternalReferenceSnapshotHistoryRow
+		if err := rows.Scan(
+			&i.ExternalReferenceSnapshot.ID,
+			&i.ExternalReferenceSnapshot.TenantID,
+			&i.ExternalReferenceSnapshot.Kind,
+			&i.ExternalReferenceSnapshot.EntityID,
+			&i.ExternalReferenceSnapshot.ContentID,
+			&i.ExternalReferenceSnapshot.ObservedOn,
+			&i.ExternalReferenceSnapshot.Sequence,
+			&i.ExternalReferenceSnapshot.ObservedAt,
+			&i.ExternalReferenceSnapshot.LastObservedAt,
+			&i.ExternalReferenceSnapshot.CreatedAt,
+			&i.ExternalReferenceContent.ID,
+			&i.ExternalReferenceContent.TenantID,
+			&i.ExternalReferenceContent.Kind,
+			&i.ExternalReferenceContent.SchemaVersion,
+			&i.ExternalReferenceContent.ContentHash,
+			&i.ExternalReferenceContent.Payload,
+			&i.ExternalReferenceContent.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockExternalReferenceEntity = `-- name: LockExternalReferenceEntity :one
+SELECT id
+FROM external_reference_entities
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *sqlQuerier) LockExternalReferenceEntity(ctx context.Context, entityID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockExternalReferenceEntity, entityID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const setExternalReferenceCurrentSnapshot = `-- name: SetExternalReferenceCurrentSnapshot :exec
+UPDATE external_reference_entities entity
+SET current_snapshot_id = $1,
+    updated_at = now()
+WHERE entity.id = $2
+  AND (
+    entity.current_snapshot_id IS NULL
+    OR EXISTS (
+        SELECT 1
+        FROM external_reference_snapshots current_snapshot
+        JOIN external_reference_snapshots candidate
+          ON candidate.id = $1
+         AND candidate.entity_id = entity.id
+        WHERE current_snapshot.id = entity.current_snapshot_id
+          AND current_snapshot.entity_id = entity.id
+          AND (
+            candidate.last_observed_at > current_snapshot.last_observed_at
+            OR (
+                candidate.last_observed_at = current_snapshot.last_observed_at
+                AND candidate.observed_at >= current_snapshot.observed_at
+            )
+          )
+    )
+  )
+`
+
+type SetExternalReferenceCurrentSnapshotParams struct {
+	SnapshotID uuid.NullUUID `db:"snapshot_id" json:"snapshot_id"`
+	EntityID   uuid.UUID     `db:"entity_id" json:"entity_id"`
+}
+
+func (q *sqlQuerier) SetExternalReferenceCurrentSnapshot(ctx context.Context, arg SetExternalReferenceCurrentSnapshotParams) error {
+	_, err := q.db.Exec(ctx, setExternalReferenceCurrentSnapshot, arg.SnapshotID, arg.EntityID)
+	return err
+}
+
+const updateExternalReferenceSnapshotObservation = `-- name: UpdateExternalReferenceSnapshotObservation :one
+UPDATE external_reference_snapshots
+SET observed_at = LEAST(observed_at, $1),
+    last_observed_at = GREATEST(last_observed_at, $1)
+WHERE id = $2
+RETURNING id, tenant_id, kind, entity_id, content_id, observed_on, sequence, observed_at, last_observed_at, created_at
+`
+
+type UpdateExternalReferenceSnapshotObservationParams struct {
+	ObservationTime pgtype.Timestamptz `db:"observation_time" json:"observation_time"`
+	SnapshotID      uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+}
+
+func (q *sqlQuerier) UpdateExternalReferenceSnapshotObservation(ctx context.Context, arg UpdateExternalReferenceSnapshotObservationParams) (ExternalReferenceSnapshot, error) {
+	row := q.db.QueryRow(ctx, updateExternalReferenceSnapshotObservation, arg.ObservationTime, arg.SnapshotID)
+	var i ExternalReferenceSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Kind,
+		&i.EntityID,
+		&i.ContentID,
+		&i.ObservedOn,
+		&i.Sequence,
+		&i.ObservedAt,
+		&i.LastObservedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const upsertExternalReferenceEntity = `-- name: UpsertExternalReferenceEntity :one
+INSERT INTO external_reference_entities (
+    tenant_id,
+    realm_id,
+    kind,
+    name,
+    first_seen_at,
+    last_seen_at
+)
+VALUES ($1, $2, $3, $4, $5, $5)
+ON CONFLICT (tenant_id, realm_id, kind, normalized_name)
+DO UPDATE SET
+    name = CASE
+        WHEN EXCLUDED.last_seen_at >= external_reference_entities.last_seen_at THEN EXCLUDED.name
+        ELSE external_reference_entities.name
+    END,
+    first_seen_at = LEAST(external_reference_entities.first_seen_at, EXCLUDED.first_seen_at),
+    last_seen_at = GREATEST(external_reference_entities.last_seen_at, EXCLUDED.last_seen_at),
+    updated_at = now()
+RETURNING id, tenant_id, realm_id, kind, name, normalized_name, current_snapshot_id, first_seen_at, last_seen_at, created_at, updated_at
+`
+
+type UpsertExternalReferenceEntityParams struct {
+	TenantID   uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID    uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Kind       string             `db:"kind" json:"kind"`
+	Name       string             `db:"name" json:"name"`
+	ObservedAt pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
+}
+
+func (q *sqlQuerier) UpsertExternalReferenceEntity(ctx context.Context, arg UpsertExternalReferenceEntityParams) (ExternalReferenceEntity, error) {
+	row := q.db.QueryRow(ctx, upsertExternalReferenceEntity,
+		arg.TenantID,
+		arg.RealmID,
+		arg.Kind,
+		arg.Name,
+		arg.ObservedAt,
+	)
+	var i ExternalReferenceEntity
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RealmID,
+		&i.Kind,
+		&i.Name,
+		&i.NormalizedName,
+		&i.CurrentSnapshotID,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const clearWoWLogGroupInvalidation = `-- name: ClearWoWLogGroupInvalidation :exec
 WITH restored_instances AS (
   UPDATE log_instances li

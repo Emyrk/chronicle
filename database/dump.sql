@@ -190,6 +190,24 @@ CREATE FUNCTION river_job_state_in_bitmask(bitmask bit, state river_job_state) R
     END = 1;
 $$;
 
+CREATE FUNCTION validate_external_reference_tenant_realm() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM wow_server_realms realm
+        JOIN wow_servers server ON server.id = realm.server_id
+        WHERE realm.id = NEW.realm_id
+          AND server.tenant_id = NEW.tenant_id
+    ) THEN
+        RAISE EXCEPTION 'realm % does not belong to tenant %', NEW.realm_id, NEW.tenant_id
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE TABLE application_modification_requests (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     application_id uuid NOT NULL,
@@ -833,6 +851,59 @@ CREATE TABLE external_character_link_syncs (
     last_synced_at timestamp with time zone DEFAULT now() NOT NULL,
     last_response jsonb
 );
+
+CREATE TABLE external_reference_contents (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    kind text NOT NULL,
+    schema_version integer NOT NULL,
+    content_hash bytea NOT NULL,
+    payload jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT external_reference_contents_content_hash_check CHECK ((octet_length(content_hash) = 32)),
+    CONSTRAINT external_reference_contents_kind_check CHECK ((kind = ANY (ARRAY['player'::text, 'guild'::text]))),
+    CONSTRAINT external_reference_contents_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
+    CONSTRAINT external_reference_contents_schema_version_check CHECK ((schema_version > 0))
+);
+
+ALTER TABLE ONLY external_reference_contents FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE external_reference_entities (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    kind text NOT NULL,
+    name text NOT NULL,
+    normalized_name text GENERATED ALWAYS AS (lower(btrim(name))) STORED,
+    current_snapshot_id uuid,
+    first_seen_at timestamp with time zone NOT NULL,
+    last_seen_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT external_reference_entities_check CHECK ((last_seen_at >= first_seen_at)),
+    CONSTRAINT external_reference_entities_kind_check CHECK ((kind = ANY (ARRAY['player'::text, 'guild'::text]))),
+    CONSTRAINT external_reference_entities_name_check CHECK ((btrim(name) <> ''::text))
+);
+
+ALTER TABLE ONLY external_reference_entities FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE external_reference_snapshots (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    kind text NOT NULL,
+    entity_id uuid NOT NULL,
+    content_id uuid NOT NULL,
+    observed_on date NOT NULL,
+    sequence integer NOT NULL,
+    observed_at timestamp with time zone NOT NULL,
+    last_observed_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT external_reference_snapshots_check CHECK ((last_observed_at >= observed_at)),
+    CONSTRAINT external_reference_snapshots_kind_check CHECK ((kind = ANY (ARRAY['player'::text, 'guild'::text]))),
+    CONSTRAINT external_reference_snapshots_sequence_check CHECK ((sequence > 0))
+);
+
+ALTER TABLE ONLY external_reference_snapshots FORCE ROW LEVEL SECURITY;
 
 CREATE TABLE game_player_gear_history (
     player_id wow_guid NOT NULL,
@@ -2241,6 +2312,33 @@ ALTER TABLE ONLY encounter_dps_rankings
 ALTER TABLE ONLY external_character_link_syncs
     ADD CONSTRAINT external_character_link_syncs_pkey PRIMARY KEY (user_id, source);
 
+ALTER TABLE ONLY external_reference_contents
+    ADD CONSTRAINT external_reference_contents_id_tenant_id_kind_key UNIQUE (id, tenant_id, kind);
+
+ALTER TABLE ONLY external_reference_contents
+    ADD CONSTRAINT external_reference_contents_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY external_reference_contents
+    ADD CONSTRAINT external_reference_contents_tenant_id_kind_schema_version_c_key UNIQUE (tenant_id, kind, schema_version, content_hash);
+
+ALTER TABLE ONLY external_reference_entities
+    ADD CONSTRAINT external_reference_entities_id_tenant_id_kind_key UNIQUE (id, tenant_id, kind);
+
+ALTER TABLE ONLY external_reference_entities
+    ADD CONSTRAINT external_reference_entities_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY external_reference_entities
+    ADD CONSTRAINT external_reference_entities_tenant_id_realm_id_kind_normali_key UNIQUE (tenant_id, realm_id, kind, normalized_name);
+
+ALTER TABLE ONLY external_reference_snapshots
+    ADD CONSTRAINT external_reference_snapshots_entity_id_observed_on_sequence_key UNIQUE (entity_id, observed_on, sequence);
+
+ALTER TABLE ONLY external_reference_snapshots
+    ADD CONSTRAINT external_reference_snapshots_id_entity_id_key UNIQUE (id, entity_id);
+
+ALTER TABLE ONLY external_reference_snapshots
+    ADD CONSTRAINT external_reference_snapshots_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY game_player_gear_history
     ADD CONSTRAINT game_player_gear_history_pkey PRIMARY KEY (player_id, realm_id, instance_id);
 
@@ -2572,6 +2670,8 @@ CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_a
 
 CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree (dataset_id, spell_id);
 
+CREATE INDEX external_reference_snapshots_entity_time_idx ON external_reference_snapshots USING btree (entity_id, observed_at DESC, sequence DESC);
+
 CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash);
 
 CREATE INDEX game_player_gear_history_player_time ON game_player_gear_history USING btree (realm_id, player_id, equipped_at DESC);
@@ -2806,6 +2906,8 @@ CREATE UNIQUE INDEX user_talent_builds_user_name_ci_uidx ON user_talent_builds U
 
 CREATE INDEX user_talent_builds_user_tenant_idx ON user_talent_builds USING btree (user_id, tenant_id);
 
+CREATE TRIGGER external_reference_entities_tenant_realm BEFORE INSERT OR UPDATE OF tenant_id, realm_id ON external_reference_entities FOR EACH ROW EXECUTE FUNCTION validate_external_reference_tenant_realm();
+
 CREATE TRIGGER trg_cleanup_after_soft_delete AFTER UPDATE OF user_id ON user_panel_layouts FOR EACH ROW WHEN ((new.user_id IS NULL)) EXECUTE FUNCTION cleanup_orphaned_layout();
 
 CREATE TRIGGER trg_cleanup_after_untrack AFTER DELETE ON user_tracked_layouts FOR EACH ROW EXECUTE FUNCTION cleanup_orphaned_layout();
@@ -2942,6 +3044,24 @@ ALTER TABLE ONLY encounter_dps_rankings
 
 ALTER TABLE ONLY external_character_link_syncs
     ADD CONSTRAINT external_character_link_syncs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY external_reference_contents
+    ADD CONSTRAINT external_reference_contents_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY external_reference_entities
+    ADD CONSTRAINT external_reference_entities_current_snapshot_fkey FOREIGN KEY (current_snapshot_id, id) REFERENCES external_reference_snapshots(id, entity_id) DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE ONLY external_reference_entities
+    ADD CONSTRAINT external_reference_entities_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY external_reference_entities
+    ADD CONSTRAINT external_reference_entities_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY external_reference_snapshots
+    ADD CONSTRAINT external_reference_snapshots_content_id_tenant_id_kind_fkey FOREIGN KEY (content_id, tenant_id, kind) REFERENCES external_reference_contents(id, tenant_id, kind) ON DELETE RESTRICT;
+
+ALTER TABLE ONLY external_reference_snapshots
+    ADD CONSTRAINT external_reference_snapshots_entity_id_tenant_id_kind_fkey FOREIGN KEY (entity_id, tenant_id, kind) REFERENCES external_reference_entities(id, tenant_id, kind) ON DELETE CASCADE;
 
 ALTER TABLE ONLY game_player_gear_history
     ADD CONSTRAINT game_player_gear_history_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
@@ -3302,9 +3422,21 @@ ALTER TABLE ONLY wow_servers
 
 ALTER TABLE encounter_dps_rankings ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE external_reference_contents ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE external_reference_entities ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE external_reference_snapshots ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE item_daily_prices ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON external_reference_contents USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON external_reference_entities USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON external_reference_snapshots USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON item_daily_prices USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -3328,6 +3460,14 @@ CREATE POLICY tenant_item_price_isolation ON item_daily_prices USING ((realm_id 
 
 CREATE POLICY tenant_realm_isolation ON wow_server_realms USING ((server_id IN ( SELECT wow_servers.id
    FROM wow_servers)));
+
+CREATE POLICY tenant_reference_content_isolation ON external_reference_contents USING ((tenant_id = (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid)) WITH CHECK ((tenant_id = (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid));
+
+CREATE POLICY tenant_reference_entity_isolation ON external_reference_entities USING (((tenant_id = (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid) AND (realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)))) WITH CHECK (((tenant_id = (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid) AND (realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms))));
+
+CREATE POLICY tenant_reference_snapshot_isolation ON external_reference_snapshots USING ((tenant_id = (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid)) WITH CHECK ((tenant_id = (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid));
 
 ALTER TABLE wow_server_realms ENABLE ROW LEVEL SECURITY;
 

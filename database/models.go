@@ -1373,6 +1373,43 @@ type ExternalCharacterLinkSync struct {
 	LastResponse []byte             `db:"last_response" json:"last_response"`
 }
 
+type ExternalReferenceContent struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Kind          string             `db:"kind" json:"kind"`
+	SchemaVersion int32              `db:"schema_version" json:"schema_version"`
+	ContentHash   []byte             `db:"content_hash" json:"content_hash"`
+	Payload       []byte             `db:"payload" json:"payload"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type ExternalReferenceEntity struct {
+	ID                uuid.UUID          `db:"id" json:"id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Kind              string             `db:"kind" json:"kind"`
+	Name              string             `db:"name" json:"name"`
+	NormalizedName    pgtype.Text        `db:"normalized_name" json:"normalized_name"`
+	CurrentSnapshotID uuid.NullUUID      `db:"current_snapshot_id" json:"current_snapshot_id"`
+	FirstSeenAt       pgtype.Timestamptz `db:"first_seen_at" json:"first_seen_at"`
+	LastSeenAt        pgtype.Timestamptz `db:"last_seen_at" json:"last_seen_at"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type ExternalReferenceSnapshot struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Kind           string             `db:"kind" json:"kind"`
+	EntityID       uuid.UUID          `db:"entity_id" json:"entity_id"`
+	ContentID      uuid.UUID          `db:"content_id" json:"content_id"`
+	ObservedOn     pgtype.Date        `db:"observed_on" json:"observed_on"`
+	Sequence       int32              `db:"sequence" json:"sequence"`
+	ObservedAt     pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
+	LastObservedAt pgtype.Timestamptz `db:"last_observed_at" json:"last_observed_at"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type GamePlayer struct {
 	ID                  guid.GUID          `db:"id" json:"id"`
 	RealmID             uuid.UUID          `db:"realm_id" json:"realm_id"`
