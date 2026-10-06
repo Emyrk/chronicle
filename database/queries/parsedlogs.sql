@@ -593,6 +593,7 @@ SELECT li.id, li.duplicate_group_id
 FROM log_instances li
 WHERE li.realm_id = @realm_id
   AND li.name = @name
+  AND li.invalidated_at IS NULL
   AND li.max_players = @max_players
   AND li.dynamic_difficulty = @dynamic_difficulty
   AND li.start_time >= @window_start

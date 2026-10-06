@@ -1217,6 +1217,8 @@ CREATE TABLE log_instances (
     vehicle_control_intervals jsonb DEFAULT '{}'::jsonb NOT NULL,
     category text,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    invalidated_at timestamp with time zone,
+    invalid_reason text DEFAULT ''::text NOT NULL,
     CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text])))
 );
 
@@ -1250,7 +1252,9 @@ CREATE TABLE wow_log_groups (
     updated_at timestamp with time zone,
     log_type log_type DEFAULT 'v1'::log_type NOT NULL,
     format log_format,
-    flavor text[]
+    flavor text[],
+    invalidated_at timestamp with time zone,
+    invalid_reason text DEFAULT ''::text NOT NULL
 );
 
 CREATE TABLE wow_server_realms (
@@ -1300,6 +1304,8 @@ CREATE VIEW log_instances_guild AS
     li.max_players,
     li.dynamic_difficulty,
     li.vehicle_control_intervals,
+    li.invalidated_at,
+    li.invalid_reason,
     COALESCE(wsr.name, 'Unknown'::text) AS realm_name,
     g.name AS guild_name,
     g.realm_id AS guild_realm_id,

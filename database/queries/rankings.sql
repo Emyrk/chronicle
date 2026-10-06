@@ -17,12 +17,14 @@ WITH fallback_representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
-    WHERE NOT EXISTS (
+    WHERE li.invalidated_at IS NULL
+      AND NOT EXISTS (
         SELECT 1
         FROM ranking_runs rr
         JOIN log_instances representative
           ON representative.id = rr.representative_instance_id
          AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+         AND representative.invalidated_at IS NULL
         WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -40,6 +42,7 @@ representative_instances AS (
     JOIN log_instances representative
       ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+     AND representative.invalidated_at IS NULL
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE rr.instance_name = @instance_name
       AND rr.difficulty_name = @difficulty_name
@@ -185,12 +188,14 @@ WITH fallback_representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
-    WHERE NOT EXISTS (
+    WHERE li.invalidated_at IS NULL
+      AND NOT EXISTS (
         SELECT 1
         FROM ranking_runs rr
         JOIN log_instances representative
           ON representative.id = rr.representative_instance_id
          AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+         AND representative.invalidated_at IS NULL
         WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -208,6 +213,7 @@ representative_instances AS (
     JOIN log_instances representative
       ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+     AND representative.invalidated_at IS NULL
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE rr.instance_name = @instance_name
     UNION ALL
@@ -260,7 +266,8 @@ fallback_representative_instances AS (
     -- Apply tenant RLS before calculating boss coverage, then avoid unrelated
     -- instances and duplicate groups that cannot contribute.
     -- When a player archetype is selected, candidate_runs narrows further.
-    WHERE (cardinality(@instance_names :: text[]) = 0
+    WHERE li.invalidated_at IS NULL
+      AND (cardinality(@instance_names :: text[]) = 0
            OR li.name = ANY(@instance_names :: text[]))
       AND ((@class :: text = '' AND @spec :: text = '' AND @sub_spec :: text = '' AND @role :: text = '')
            OR COALESCE(li.duplicate_group_id, li.id) IN (SELECT run_id FROM candidate_runs))
@@ -270,6 +277,7 @@ fallback_representative_instances AS (
           JOIN log_instances representative
             ON representative.id = rr.representative_instance_id
            AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+         AND representative.invalidated_at IS NULL
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -289,6 +297,7 @@ representative_instances AS (
     JOIN log_instances representative
       ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+     AND representative.invalidated_at IS NULL
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE (cardinality(@instance_names :: text[]) = 0
            OR rr.instance_name = ANY(@instance_names :: text[]))
@@ -497,7 +506,8 @@ WITH fallback_representative_instances AS (
     -- Scope representative selection by tenant and instance before calculating
     -- boss coverage. Without these filters, an instance-specific box plot ranks
     -- duplicate uploads that will only be discarded later.
-    WHERE (cardinality(@instance_names :: text[]) = 0
+    WHERE li.invalidated_at IS NULL
+      AND (cardinality(@instance_names :: text[]) = 0
            OR li.name = ANY(@instance_names :: text[]))
       AND NOT EXISTS (
           SELECT 1
@@ -505,6 +515,7 @@ WITH fallback_representative_instances AS (
           JOIN log_instances representative
             ON representative.id = rr.representative_instance_id
            AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+         AND representative.invalidated_at IS NULL
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -524,6 +535,7 @@ representative_instances AS (
     JOIN log_instances representative
       ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+     AND representative.invalidated_at IS NULL
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE (cardinality(@instance_names :: text[]) = 0
            OR rr.instance_name = ANY(@instance_names :: text[]))

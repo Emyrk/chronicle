@@ -3212,6 +3212,14 @@ export function InstancePageView({
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
             {instance.name}
+            {instance.invalidatedAt && (
+              <span
+                title={instance.invalidReason || "This log was excluded from parses and rankings."}
+                className="rounded bg-red-500/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-red-400"
+              >
+                Invalid
+              </span>
+            )}
             {duplicateGroupId && (
               <DuplicatesBadge instanceId={instance.id} duplicateGroupId={duplicateGroupId} />
             )}

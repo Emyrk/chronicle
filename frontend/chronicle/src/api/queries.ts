@@ -73,6 +73,7 @@ import type {
   RegressionSnapshotFull as RegressionSnapshotFullGenerated,
   CreateRegressionFixtureRequest as CreateRegressionFixtureRequestGenerated,
   RequeueVersionResponse as RequeueVersionResponseGenerated,
+  AdminInvalidateLogsResponse as AdminInvalidateLogsResponseGenerated,
   AdminBulkDeleteResponse as AdminBulkDeleteResponseGenerated,
   AdminBulkSelectedReparseResponse as AdminBulkSelectedReparseResponseGenerated,
   AdminBulkReparseResponse as AdminBulkReparseResponseGenerated,
@@ -145,6 +146,7 @@ export type UpdateGuildSettingsRequest = UpdateGuildSettingsRequestGenerated;
 export type UpdateGuildDiscordIntegrationRequest = UpdateGuildDiscordIntegrationRequestGenerated;
 export type UpdateGuildDiscordRaidLogAnnouncementsRequest = UpdateGuildDiscordRaidLogAnnouncementsRequestGenerated;
 export type CreateJoinRequestBody = CreateJoinRequestBodyGenerated;
+export type AdminInvalidateLogsResponse = AdminInvalidateLogsResponseGenerated;
 export type AdminBulkDeleteResponse = AdminBulkDeleteResponseGenerated;
 export type AdminBulkSelectedReparseResponse = AdminBulkSelectedReparseResponseGenerated;
 export type AdminBulkReparseResponse = AdminBulkReparseResponseGenerated;
@@ -1268,6 +1270,31 @@ export function useAdminInstanceNames(options?: Omit<UseQueryOptions<string[]>, 
     },
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     ...options,
+  });
+}
+
+export function useAdminInvalidateLogs() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ logIds, reason }: { logIds: string[]; reason: string }) => {
+      const response = await fetch("/api/v1/admin/logs/invalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_ids: logIds, reason }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Failed to invalidate logs" }));
+        throw new Error(error.message || "Failed to invalidate logs");
+      }
+      return response.json() as Promise<AdminInvalidateLogsResponse>;
+    },
+    onSuccess: (_data, { logIds }) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "logs"] });
+      for (const logId of logIds) {
+        queryClient.invalidateQueries({ queryKey: ["logGroup", logId] });
+      }
+    },
   });
 }
 

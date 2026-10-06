@@ -241,4 +241,5 @@ SELECT
     li.log_group_id,
     li.guild_id
 FROM log_instances li
-WHERE li.id = @id;
+WHERE li.id = @id
+  AND li.invalidated_at IS NULL;

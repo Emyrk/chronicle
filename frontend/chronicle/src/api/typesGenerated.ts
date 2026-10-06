@@ -105,6 +105,19 @@ export interface AdminCacheStatsResponse {
 }
 
 // From chroniclesdk/user.go
+export interface AdminInvalidateLogsRequest {
+    readonly log_ids: readonly string[];
+    readonly reason: string;
+}
+
+// From chroniclesdk/user.go
+export interface AdminInvalidateLogsResponse {
+    readonly requested: number;
+    readonly invalidated: number;
+    readonly failed: readonly AdminBulkLogFailure[];
+}
+
+// From chroniclesdk/user.go
 export interface AdminLog {
     readonly id: string;
     readonly owner_id: string;
@@ -113,6 +126,8 @@ export interface AdminLog {
     readonly created_at: string;
     readonly state: string;
     readonly size_bytes: number;
+    readonly invalidated_at?: string;
+    readonly invalid_reason?: string;
     readonly instance_names: readonly string[];
 }
 
@@ -4334,6 +4349,8 @@ export interface WoWInstance {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly dynamic_difficulty: number;
+    readonly invalidated_at?: string;
+    readonly invalid_reason?: string;
     readonly vehicle_control_intervals?: VehicleControlMetadata;
 }
 
@@ -4362,6 +4379,8 @@ export interface WoWLogGroup {
     readonly log_type: string;
     readonly format?: string;
     readonly flavor?: readonly string[];
+    readonly invalidated_at?: string;
+    readonly invalid_reason?: string;
     readonly files: readonly WoWLogFile[];
     readonly processing_output?: Record<string, string>;
     /**

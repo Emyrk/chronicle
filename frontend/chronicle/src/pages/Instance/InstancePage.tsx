@@ -89,6 +89,8 @@ export interface Instance {
   difficultyName?: string;
   maxPlayers?: number;
   dynamicDifficulty?: number;
+  invalidatedAt?: string;
+  invalidReason?: string;
   // Timestamped vehicle-to-controller intervals and transport diagnostics
   vehicleControlIntervals?: VehicleControlMetadata;
   // Tenant info for cross-tenant gating
@@ -140,6 +142,8 @@ function transformToInstance(
     difficulty_name?: string;
     max_players?: number;
     dynamic_difficulty?: number;
+    invalidated_at?: string;
+    invalid_reason?: string;
     vehicle_control_intervals?: VehicleControlMetadata;
     server_name?: string;
     tenant_name?: string;
@@ -221,6 +225,8 @@ function transformToInstance(
     difficultyName: apiInstance.difficulty_name,
     maxPlayers: apiInstance.max_players,
     dynamicDifficulty: apiInstance.dynamic_difficulty,
+    invalidatedAt: apiInstance.invalidated_at,
+    invalidReason: apiInstance.invalid_reason,
     vehicleControlIntervals: apiInstance.vehicle_control_intervals,
     serverName: apiInstance.server_name,
     tenantName: apiInstance.tenant_name,

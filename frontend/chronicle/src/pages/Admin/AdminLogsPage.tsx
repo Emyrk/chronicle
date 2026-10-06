@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  useAdminInvalidateLogs,
   useAdminBulkDeleteLogs,
   useAdminBulkReparseLogs,
   useAdminUsers,
@@ -9,7 +10,7 @@ import {
   type AdminLog,
   type AdminLogsSortField,
 } from "@/api/queries";
-import { FileText, Loader2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, X, Filter, RefreshCw, Trash2 } from "lucide-react";
+import { FileText, Loader2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, X, Filter, RefreshCw, Trash2, Ban } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
@@ -42,11 +43,16 @@ function LogRow({ log, selected, onToggleSelected }: LogRowProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-mono">{log.id.slice(0, 8)}...</span>
-            <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-              log.state === "processed"
-                ? "bg-green-500/15 text-green-400"
-                : "bg-yellow-500/15 text-yellow-400"
-            }`}>
+            <span
+              title={log.invalid_reason || undefined}
+              className={`px-2 py-0.5 text-xs font-medium rounded ${
+                log.state === "invalid"
+                  ? "bg-red-500/15 text-red-400"
+                  : log.state === "processed"
+                    ? "bg-green-500/15 text-green-400"
+                    : "bg-yellow-500/15 text-yellow-400"
+              }`}
+            >
               {log.state}
             </span>
           </div>
@@ -160,6 +166,7 @@ function PaginationControls({ currentPage, totalPages, hasMore, onPageChange, is
 export function AdminLogsPage() {
   const { data: usersData } = useAdminUsers();
   const users = usersData?.users ?? [];
+  const invalidateLogs = useAdminInvalidateLogs();
   const bulkDeleteLogs = useAdminBulkDeleteLogs();
   const bulkReparseLogs = useAdminBulkReparseLogs();
 
@@ -229,7 +236,7 @@ export function AdminLogsPage() {
   const selectedVisibleCount = visibleLogIds.filter((logId) => selectedLogIds.has(logId)).length;
   const allVisibleSelected = visibleLogIds.length > 0 && selectedVisibleCount === visibleLogIds.length;
   const anyVisibleSelected = selectedVisibleCount > 0;
-  const bulkActionPending = bulkDeleteLogs.isPending || bulkReparseLogs.isPending;
+  const bulkActionPending = invalidateLogs.isPending || bulkDeleteLogs.isPending || bulkReparseLogs.isPending;
 
   const handleToggleSelected = (logId: string, checked: boolean) => {
     setSelectedLogIds((prev) => {
@@ -285,6 +292,37 @@ export function AdminLogsPage() {
         toast.error("Failed to bulk reparse", {
           description: err.message,
         });
+      },
+    });
+  };
+
+  const handleInvalidate = () => {
+    const logIds = Array.from(selectedLogIds);
+    if (logIds.length === 0) {
+      return;
+    }
+
+    const reason = prompt("Why are these logs invalid?")?.trim();
+    if (!reason) {
+      return;
+    }
+
+    invalidateLogs.mutate({ logIds, reason }, {
+      onSuccess: (result) => {
+        clearSelection();
+        if (result.failed.length > 0) {
+          toast.warning("Log invalidation partially completed", {
+            description: `${result.invalidated} of ${result.requested} selected logs were invalidated. ${result.failed.length} failed.`,
+          });
+          return;
+        }
+
+        toast.success("Logs invalidated", {
+          description: `${result.invalidated} selected logs will remain visible but are excluded from parses and rankings.`,
+        });
+      },
+      onError: (err) => {
+        toast.error("Failed to invalidate logs", { description: err.message });
       },
     });
   };
@@ -408,6 +446,20 @@ export function AdminLogsPage() {
                     <RefreshCw className="h-4 w-4" />
                   )}
                   Reparse Selected
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleInvalidate}
+                  disabled={bulkActionPending}
+                  className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                >
+                  {invalidateLogs.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Ban className="h-4 w-4" />
+                  )}
+                  Invalidate Selected
                 </Button>
                 <Button
                   variant="destructive"

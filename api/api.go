@@ -276,6 +276,7 @@ func (api *API) Routes() chi.Router {
 					r.Get("/", api.AdminListLogs)
 					r.Post("/delete", api.AdminBulkDeleteLogs)
 					r.Post("/reparse", api.AdminBulkReparseLogs)
+					r.Post("/invalidate", api.AdminInvalidateLogs)
 				})
 
 				r.Group(func(r chi.Router) {

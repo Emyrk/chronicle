@@ -219,6 +219,12 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		jobResult = "failure"
 		return fmt.Errorf("fetch log group: %w", err)
 	}
+	if logGroup.WoWLogGroup.InvalidatedAt.Valid {
+		w.parent.logger.InfoContext(ctx, "skipping invalidated log group", "log_id", job.Args.LogID)
+		jobResult = "cancelled"
+		return nil
+	}
+
 	// ── Resolve format & flavor ─────────────────────────────────────────
 	//
 	// Format resolution:

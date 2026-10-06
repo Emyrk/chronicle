@@ -624,6 +624,43 @@ func TestRankingRunRepresentativePrefersBroaderDuplicate(t *testing.T) {
 	assert.Equal(t, duplicateID, run.RepresentativeInstanceID)
 }
 
+func TestInvalidatedDuplicateIsNeverRankingRunRepresentative(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	anchorID := uuid.New()
+	invalidDuplicateID := uuid.New()
+	start := time.Date(2026, 9, 2, 20, 0, 0, 0, time.UTC)
+	insertRankingRunSource(t, pool, store, realmID, anchorID, start, "Lucifron")
+	insertRankingRunSource(t, pool, store, realmID, invalidDuplicateID, start.Add(time.Second), "Lucifron", "Magmadar")
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true}, Ids: []uuid.UUID{anchorID, invalidDuplicateID},
+	}))
+
+	invalidInstance, err := store.Instance(ctx, invalidDuplicateID)
+	require.NoError(t, err)
+	require.NoError(t, store.InvalidateWoWLogGroup(ctx, database.InvalidateWoWLogGroupParams{
+		LogGroupID: invalidInstance.LogGroupID,
+		Reason:     "corrupt combat log",
+	}))
+
+	stillVisible, err := store.Instance(ctx, invalidDuplicateID)
+	require.NoError(t, err)
+	assert.True(t, stillVisible.InvalidatedAt.Valid)
+	assert.Equal(t, "corrupt combat log", stillVisible.InvalidReason)
+
+	rankings, err := store.ListRankingsForInstance(ctx, invalidDuplicateID)
+	require.NoError(t, err)
+	assert.Empty(t, rankings)
+
+	sources, err := store.RankingRunSources(ctx, []uuid.UUID{anchorID, invalidDuplicateID})
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	assert.Equal(t, anchorID, sources[0].RunID)
+	assert.Equal(t, anchorID, sources[0].RepresentativeInstanceID)
+	assert.Equal(t, int32(1), sources[0].MemberCount)
+}
+
 func TestRankingRunRepresentativeTieBreakers(t *testing.T) {
 	t.Parallel()
 	pool, store, realmID := setupParsesTest(t)

@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/maps"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river/rivertype"
 )
 
@@ -77,26 +78,32 @@ func WoWLogGroupRow[T database.GetWoWLogGroupsByOwnerRow | database.GetWoWLogGro
 	// Use type switch to handle both types
 	switch g := any(group).(type) {
 	case database.GetWoWLogGroupsByOwnerRow:
+		invalidatedAt, invalidReason := invalidation(g.WoWLogGroup.InvalidatedAt, g.WoWLogGroup.InvalidReason)
 		return chroniclesdk.WoWLogGroup{
 			ID:               g.WoWLogGroup.ID,
 			Owner:            g.WoWLogGroup.Owner,
 			CreatedAt:        g.WoWLogGroup.CreatedAt,
 			UpdatedAt:        g.WoWLogGroup.UpdatedAt,
 			LogType:          string(g.WoWLogGroup.LogType),
+			InvalidatedAt:    invalidatedAt,
+			InvalidReason:    invalidReason,
 			Files:            slice.List(g.Files, WoWLogFile),
 			ProcessingOutput: g.ProcessingOutput,
 			ParsedBytes:      g.ParsedBytes,
 		}
 	case database.GetWoWLogGroupByIDRow:
+		invalidatedAt, invalidReason := invalidation(g.WoWLogGroup.InvalidatedAt, g.WoWLogGroup.InvalidReason)
 		out := chroniclesdk.WoWLogGroup{
-			ID:        g.WoWLogGroup.ID,
-			Owner:     g.WoWLogGroup.Owner,
-			OwnerName: g.OwnerName,
-			CreatedAt: g.WoWLogGroup.CreatedAt,
-			UpdatedAt: g.WoWLogGroup.UpdatedAt,
-			LogType:   string(g.WoWLogGroup.LogType),
-			Flavor:    g.WoWLogGroup.Flavor,
-			Files:     slice.List(g.Files, WoWLogFile),
+			ID:            g.WoWLogGroup.ID,
+			Owner:         g.WoWLogGroup.Owner,
+			OwnerName:     g.OwnerName,
+			CreatedAt:     g.WoWLogGroup.CreatedAt,
+			UpdatedAt:     g.WoWLogGroup.UpdatedAt,
+			LogType:       string(g.WoWLogGroup.LogType),
+			Flavor:        g.WoWLogGroup.Flavor,
+			InvalidatedAt: invalidatedAt,
+			InvalidReason: invalidReason,
+			Files:         slice.List(g.Files, WoWLogFile),
 		}
 		if g.WoWLogGroup.Format.Valid {
 			out.Format = string(g.WoWLogGroup.Format.LogFormat)
@@ -105,6 +112,13 @@ func WoWLogGroupRow[T database.GetWoWLogGroupsByOwnerRow | database.GetWoWLogGro
 	default:
 		panic("unexpected type")
 	}
+}
+
+func invalidation(invalidatedAt pgtype.Timestamptz, reason string) (*time.Time, string) {
+	if !invalidatedAt.Valid {
+		return nil, ""
+	}
+	return &invalidatedAt.Time, reason
 }
 
 func WoWLogFile(file database.LogFile) chroniclesdk.WoWLogFile {
@@ -171,6 +185,7 @@ func VehicleControlMetadata(metadata vehicles.Metadata) *chroniclesdk.VehicleCon
 }
 
 func WoWInstanceWithGuild(instance database.LogInstance, dbG *database.Guild) chroniclesdk.WoWInstance {
+	invalidatedAt, invalidReason := invalidation(instance.InvalidatedAt, instance.InvalidReason)
 	var g *chroniclesdk.Guild
 	if dbG != nil {
 		g = &chroniclesdk.Guild{
@@ -193,6 +208,8 @@ func WoWInstanceWithGuild(instance database.LogInstance, dbG *database.Guild) ch
 		DifficultyName:          instance.DifficultyName,
 		MaxPlayers:              int(instance.MaxPlayers),
 		DynamicDifficulty:       int(instance.DynamicDifficulty),
+		InvalidatedAt:           invalidatedAt,
+		InvalidReason:           invalidReason,
 		VehicleControlIntervals: VehicleControlMetadata(instance.VehicleControlIntervals),
 	}
 	if instance.StartTime.Valid {
@@ -208,6 +225,7 @@ func WoWInstanceWithGuild(instance database.LogInstance, dbG *database.Guild) ch
 }
 
 func WoWInstance(instance database.LogInstancesGuild) chroniclesdk.WoWInstance {
+	invalidatedAt, invalidReason := invalidation(instance.InvalidatedAt, instance.InvalidReason)
 	var g *chroniclesdk.Guild
 	if instance.GuildID.Valid {
 		g = &chroniclesdk.Guild{
@@ -230,6 +248,8 @@ func WoWInstance(instance database.LogInstancesGuild) chroniclesdk.WoWInstance {
 		DifficultyName:          instance.DifficultyName,
 		MaxPlayers:              int(instance.MaxPlayers),
 		DynamicDifficulty:       int(instance.DynamicDifficulty),
+		InvalidatedAt:           invalidatedAt,
+		InvalidReason:           invalidReason,
 		VehicleControlIntervals: VehicleControlMetadata(instance.VehicleControlIntervals),
 	}
 	if instance.DuplicateGroupID.Valid {
