@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { iconListUrl } from "@/config/iconUrl";
 import { toast } from "sonner";
-import { HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star } from "lucide-react";
+import { Blocks, HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -39,6 +39,7 @@ import { DatasetProvider, useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { EventsPanel, type EventsPanelType } from "@/pages/Instance/EventsPanels";
+import { isCustomPanelRef } from "@/pages/Instance/EventsPanels/custom/pluginTypes";
 import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
 import { Strip } from "@/pages/Instance/EventsPanels/Strips/Strip";
 import { STRIPS, isStripType } from "@/pages/Instance/EventsPanels/Strips/strips";
@@ -64,6 +65,8 @@ import { getSpellIconUrl } from "@/api/wowdb";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { FavoritesList } from "@/components/Favorites";
+
+export { CustomPanelSettings } from "./Settings/CustomPanelSettings";
 
 const LAYOUT_LAB_INSTANCE_REFERENCE_STORAGE_KEY = "layout-lab.instance-reference";
 const LAYOUT_LAB_RESIZE_HINT_DISMISSED_STORAGE_KEY = "layout-lab.resize-hint-dismissed";
@@ -157,6 +160,7 @@ const allTabs: Tab[] = [
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
+  { path: "/account/custom-panels", label: "Custom panels", icon: Blocks },
   { path: "/account/layout-book", label: "Layout Book", icon: BookOpenText },
   { path: "/account/layout-lab", label: "Layout Lab", icon: LayoutTemplate },
 ];
@@ -1130,7 +1134,7 @@ function buildPanelTypesById(items: GridEditorItem[], panels: EventsPanelType[])
   const next: Record<string, EventsPanelType> = {};
   items.forEach((item, idx) => {
     const type = panels[idx] ?? "empty";
-    next[item.id] = type in PANELS ? type : "empty";
+    next[item.id] = type in PANELS || isCustomPanelRef(type) ? type : "empty";
   });
   return next;
 }

@@ -71,6 +71,7 @@ import {
   NotificationSettings,
   PrivacySettings,
   AppearanceSettings,
+  CustomPanelSettings,
   LayoutBookSettings,
   LayoutLabSettings,
 } from "./pages/Settings"
@@ -242,6 +243,7 @@ function App() {
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="privacy" element={<PrivacySettings />} />
           <Route path="appearance" element={<AppearanceSettings />} />
+          <Route path="custom-panels" element={<CustomPanelSettings />} />
           <Route path="layout-book" element={<LayoutBookSettings />} />
           <Route path="layout-lab" element={<LayoutLabSettings />} />
         </Route>

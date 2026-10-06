@@ -2,7 +2,7 @@
  * EventsPanel - Container component for event aggregation panels
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import ReactDOM from "react-dom";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { HelpCircle, Construction, Filter, EllipsisVertical, Copy, ClipboardPaste, ExternalLink, Undo2 } from "lucide-react";
@@ -35,6 +35,8 @@ import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/Pl
 import { useChartDataActions } from "./ChartDataRegistry";
 import { openPanelPopup, syncPopupAppearance, type PanelPopup } from "./panelPopup";
 import { hasRequiredPanelCapabilities } from "./panelAvailability";
+
+import { isCustomPanelRef, type CustomPanelRef } from "./custom/pluginTypes";
 
 // Import panel definitions
 import { createDamageDonePanel } from "./DamageDone/DamageDone";
@@ -166,7 +168,10 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   pulls_and_cleanup: createPullsAndCleanupPanel(),
 };
 
-export type EventsPanelType = keyof typeof PANELS;
+export type BuiltinPanelType = keyof typeof PANELS;
+export type EventsPanelType = BuiltinPanelType | CustomPanelRef;
+
+const LazyCustomEventsPanel = lazy(() => import("./custom/CustomEventsPanel"));
 
 /**
  * Get localStorage key for a panel's toggle state.
@@ -415,7 +420,7 @@ export interface EventsPanelProps {
   onFiltersChange?: (filters: PanelFilter[]) => void;
 }
 
-export function EventsPanel({
+function BuiltinEventsPanel({
   panelType,
   onPanelTypeChange,
   durationMs,
@@ -1114,4 +1119,15 @@ export function EventsPanel({
       </BreakoutHoverProvider>
     </PortalContainerProvider>
   );
+}
+
+export function EventsPanel(props: EventsPanelProps) {
+  if (isCustomPanelRef(props.panelType)) {
+    return (
+      <Suspense fallback={<Card className="h-full p-4 text-sm text-muted-foreground">Loading custom panel runtime...</Card>}>
+        <LazyCustomEventsPanel {...props} />
+      </Suspense>
+    );
+  }
+  return <BuiltinEventsPanel {...props} />;
 }

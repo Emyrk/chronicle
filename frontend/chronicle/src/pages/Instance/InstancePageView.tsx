@@ -37,6 +37,7 @@ import type { Instance, Encounter, EncounterPhase, EnemyUnit } from "./InstanceP
 import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } from "./phaseTimeRange";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
+import { isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
 import { PANELS } from "./EventsPanels/EventsPanel";
 import { Strip } from "./EventsPanels/Strips/Strip";
 import { STRIPS, isStripType } from "./EventsPanels/Strips/strips";
@@ -1140,7 +1141,7 @@ function PoppedOutLayoutContent({
       setPanelTypesById(Object.fromEntries(
         items.map((item) => {
           const candidate = parsed.panelTypesById[item.id] ?? "empty";
-          return [item.id, candidate in PANELS ? candidate : "empty"];
+          return [item.id, candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty"];
         }),
       ));
       setPanelOptionsById(Object.fromEntries(
@@ -2391,7 +2392,7 @@ export function InstancePageView({
       const urlType = viewState.panels[index];
       const defaultType = (defaultPanelTypesByID[item.id] ?? "empty") as EventsPanelType;
       const resolved = (urlType ?? defaultType) as EventsPanelType;
-      next[item.id] = resolved in PANELS ? resolved : "empty";
+      next[item.id] = resolved in PANELS || isCustomPanelRef(resolved) ? resolved : "empty";
     });
     return next;
   }, [activeLayoutItems, defaultPanelTypesByID, viewState.panels]);
@@ -2728,7 +2729,7 @@ export function InstancePageView({
     const importedTypes: Record<string, EventsPanelType> = {};
     normalizedItems.forEach((item) => {
       const candidate = panelTypesById[item.id] ?? "empty";
-      importedTypes[item.id] = candidate in PANELS ? candidate : "empty";
+      importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
     });
 
     const orderedItems = orderLayoutItems(normalizedItems);
@@ -2863,7 +2864,7 @@ export function InstancePageView({
       const importedTypes: Record<string, EventsPanelType> = {};
       normalizedItems.forEach((item) => {
         const candidate = parsed.panelTypesById?.[item.id] ?? "empty";
-        importedTypes[item.id] = candidate in PANELS ? candidate : "empty";
+        importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
       });
 
       const orderedItems = orderLayoutItems(normalizedItems);
@@ -3016,7 +3017,7 @@ export function InstancePageView({
       const castTypes: Record<string, EventsPanelType> = {};
       normalizedItems.forEach((item) => {
         const candidate = parsed.panelTypesById?.[item.id] ?? "empty";
-        castTypes[item.id] = candidate in PANELS ? candidate : "empty";
+        castTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
       });
 
       const orderedItems = orderLayoutItems(normalizedItems);

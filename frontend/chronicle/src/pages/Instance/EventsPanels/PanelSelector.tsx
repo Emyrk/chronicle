@@ -5,11 +5,14 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronRight, Leaf, Scale, Search, Sword, Toolbox, User } from "lucide-react";
+import { Blocks, ChevronDown, ChevronRight, Leaf, Scale, Search, Sword, Toolbox, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { PANELS, type EventsPanelType } from "./EventsPanel";
+
+import { listSelectableCustomPanels, resolveCustomPanel, useCustomPanelRegistry } from "./custom/pluginRegistry";
+import { isCustomPanelRef } from "./custom/pluginTypes";
 
 interface PanelOption {
   value: EventsPanelType;
@@ -285,6 +288,13 @@ export interface PanelSelectorProps {
 }
 
 export function PanelSelector({ value, onChange, className }: PanelSelectorProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const customRegistry = useCustomPanelRegistry(isOpen || isCustomPanelRef(value));
+  const customPanels = useMemo(() => listSelectableCustomPanels(customRegistry), [customRegistry]);
+  const selectedCustom = isCustomPanelRef(value) ? resolveCustomPanel(value, customRegistry) : null;
+  const selectedOption = selectedCustom
+    ? { value, label: selectedCustom.panel?.name ?? selectedCustom.panelId ?? "Unavailable custom panel", icon: <Blocks className="h-4 w-4" /> }
+    : getPanelOption(value);
   const [searchParams] = useSearchParams();
   const portalContainer = usePortalContainer();
   const portalWindow = portalContainer?.ownerDocument.defaultView;
@@ -293,7 +303,6 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
     (key: EventsPanelType) => !PANELS[key].hidden || isDebug,
     [isDebug],
   );
-  const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   // Track expanded categories by their path (e.g., "Class" or "Class/Druid")
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
@@ -414,9 +423,19 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
       }
     }
 
+    for (const item of customPanels) {
+      const haystack = `${item.panel.name} ${item.panel.description ?? ""} ${item.installation.manifest.plugin.name} ${item.installation.repository}`;
+      const { match, score } = fuzzyMatch(searchQuery, haystack);
+      if (match) results.push({
+        option: { value: item.ref, label: item.panel.name, icon: <Blocks className="h-4 w-4" /> },
+        category: `Custom › ${item.installation.manifest.plugin.name}`,
+        score,
+      });
+    }
+
     // Sort by score descending
     return results.sort((a, b) => b.score - a.score);
-  }, [searchQuery, isPanelVisible]);
+  }, [searchQuery, isPanelVisible, customPanels]);
 
   const handleSelect = (panelValue: EventsPanelType) => {
     onChange(panelValue);
@@ -454,8 +473,8 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
         className="flex items-center gap-1.5 text-sm font-medium bg-transparent cursor-pointer hover:text-muted-foreground transition-colors"
         data-help-panel-selector
       >
-        {getPanelOption(value).icon}
-        {getPanelOption(value).label}
+        {selectedOption.icon}
+        {selectedOption.label}
         <ChevronDown className={cn("size-4 transition-transform", isOpen && "rotate-180")} />
       </button>
 
@@ -518,18 +537,34 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
                 )
               ) : (
                 // Category tree (recursive)
-                PANEL_CATEGORIES.map((category) => (
-                  <CategoryNode
-                    key={category.label}
-                    category={category}
-                    path={category.label}
-                    expandedPaths={expandedPaths}
-                    onToggle={toggleExpanded}
-                    selectedValue={value}
-                    onSelect={handleSelect}
-                    isPanelVisible={isPanelVisible}
-                  />
-                ))
+                <>
+                  {PANEL_CATEGORIES.map((category) => (
+                    <CategoryNode
+                      key={category.label}
+                      category={category}
+                      path={category.label}
+                      expandedPaths={expandedPaths}
+                      onToggle={toggleExpanded}
+                      selectedValue={value}
+                      onSelect={handleSelect}
+                      isPanelVisible={isPanelVisible}
+                    />
+                  ))}
+                  {customPanels.length > 0 && (
+                    <div>
+                      <button type="button" onClick={() => toggleExpanded("Custom")} className="w-full px-2 py-1.5 text-left text-sm font-medium rounded-sm flex items-center gap-1.5 hover:bg-accent/50">
+                        <ChevronRight className={cn("size-4 transition-transform", expandedPaths.has("Custom") && "rotate-90")} />
+                        <Blocks className="h-4 w-4 text-muted-foreground" /> Custom
+                        <span className="ml-auto text-xs text-muted-foreground">{customPanels.length}</span>
+                      </button>
+                      {expandedPaths.has("Custom") && <div className="ml-2 border-l pl-1">{customPanels.map((item) => (
+                        <button key={item.ref} type="button" onClick={() => handleSelect(item.ref)} className={cn("w-full pl-6 pr-2 py-1.5 text-left text-sm rounded-sm flex items-center gap-2 hover:bg-accent", item.ref === value && "bg-accent/50")}>
+                          <Blocks className="h-4 w-4 text-muted-foreground" /><span className="min-w-0"><span className="block truncate">{item.panel.name}</span><span className="block truncate text-[10px] text-muted-foreground">{item.installation.manifest.plugin.name}</span></span>
+                        </button>
+                      ))}</div>}
+                    </div>
+                  )}
+                </>
               )}
               <div className="mt-1 border-t px-2 py-2 text-center text-[10px] text-muted-foreground">
                 Strips not supported here
