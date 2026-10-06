@@ -219,12 +219,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		jobResult = "failure"
 		return fmt.Errorf("fetch log group: %w", err)
 	}
-	if logGroup.WoWLogGroup.InvalidatedAt.Valid {
-		w.parent.logger.InfoContext(ctx, "skipping invalidated log group", "log_id", job.Args.LogID)
-		jobResult = "cancelled"
-		return nil
-	}
-
 	// ── Resolve format & flavor ─────────────────────────────────────────
 	//
 	// Format resolution:
@@ -239,6 +233,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	//      to wow_log_groups.flavor so subsequent reparses use the correct
 	//      value without re-resolving.
 	lg := logGroup.WoWLogGroup
+	invalidLog := lg.InvalidatedAt.Valid
 	logFormat := lg.LogType.Format()
 	if lg.Format.Valid {
 		logFormat = lg.Format.LogFormat
@@ -538,6 +533,8 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				DynamicDifficulty:       int32(inst.CurrentZone.DynamicDifficulty),
 				Category:                instanceCategory,
 				VehicleControlIntervals: finalized.VehicleMetadata,
+				InvalidatedAt:           lg.InvalidatedAt,
+				InvalidReason:           lg.InvalidReason,
 			}
 
 			// Handling colliding slugs. Only a missing row is safe to ignore. A
@@ -703,7 +700,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					break
 				}
 			}
-			if finalized.Rankings != nil && finalized.Rankings.Speedrun != nil && hasBossKill {
+			if !invalidLog && finalized.Rankings != nil && finalized.Rankings.Speedrun != nil && hasBossKill {
 				sr := finalized.Rankings.Speedrun
 				proofJSON, err := json.Marshal(rankings.SpeedrunProofPayload{
 					Proof:      sr.Proof,
@@ -812,7 +809,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 		// Rankings are supplementary. Persist them atomically in a separate
 		// transaction so a ranking error cannot roll back the parsed instance.
-		if finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
+		if !invalidLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
 				if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {
 					return err
@@ -846,7 +843,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	// Enqueue parse score computation for each successfully parsed instance.
 	// Fire-and-forget: scoring failure doesn't fail the parse, but log errors.
-	if w.parent.queue != nil {
+	if !invalidLog && w.parent.queue != nil {
 		for _, inst := range jobOut.Instances {
 			_, enqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
 				InstanceID: inst.ID,
