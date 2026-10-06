@@ -43,7 +43,7 @@ func DefaultClientPath(server string) string {
 func ServerOption(dst *string) serpent.Option {
 	return serpent.Option{
 		Name:        "server",
-		Description: "Server name (turtle, epoch). Determines default --dbc path.",
+		Description: "Server name (for example turtle, azerothcore, tbc, or forever). Determines default --dbc path.",
 		Flag:        "server",
 		Value:       serpent.StringOf(dst),
 		Default:     "turtle",

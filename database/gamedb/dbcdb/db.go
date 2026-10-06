@@ -323,6 +323,51 @@ func (w *WoWClient) SpellIcons() (Table[dbdefs.Ent_SpellIcon], error) {
 	return WrapTable[dbdefs.Ent_SpellIcon](table), nil
 }
 
+func (w *WoWClient) AreaTable() (Table[dbdefs.Ent_AreaTable], error) {
+	data, err := w.ReadFile("DBFilesClient\\AreaTable.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	db := dbc.NewDB(w.Build())
+	table, err := db.Open("AreaTable", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return WrapTable[dbdefs.Ent_AreaTable](table), nil
+}
+
+func (w *WoWClient) WorldMapArea() (Table[dbdefs.Ent_WorldMapArea], error) {
+	data, err := w.ReadFile("DBFilesClient\\WorldMapArea.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	db := dbc.NewDB(w.Build())
+	table, err := db.Open("WorldMapArea", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return WrapTable[dbdefs.Ent_WorldMapArea](table), nil
+}
+
+func (w *WoWClient) WorldMapOverlay() (Table[dbdefs.Ent_WorldMapOverlay], error) {
+	data, err := w.ReadFile("DBFilesClient\\WorldMapOverlay.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	db := dbc.NewDB(w.Build())
+	table, err := db.Open("WorldMapOverlay", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return WrapTable[dbdefs.Ent_WorldMapOverlay](table), nil
+}
+
 func (w *WoWClient) DungeonMap() (Table[dbdefs.Ent_DungeonMap], error) {
 	data, err := w.ReadFile("DBFilesClient\\DungeonMap.dbc")
 	if err != nil {
