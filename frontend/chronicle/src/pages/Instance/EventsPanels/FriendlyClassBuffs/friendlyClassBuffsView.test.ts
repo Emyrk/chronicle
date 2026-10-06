@@ -9,6 +9,7 @@ const FORTITUDE: FriendlyClassBuffSpell = {
   name_subtext: "Rank 1",
   targeting: "friendly",
   ignored: false,
+  default_ignored: false,
   effects: [],
 };
 

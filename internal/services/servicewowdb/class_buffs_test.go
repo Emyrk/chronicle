@@ -19,6 +19,8 @@ func TestApplyClassBuffPolicies(t *testing.T) {
 			{ID: 1243, Name: "Power Word: Fortitude"},
 			{ID: 1244, Name: " power word: fortitude "},
 			{ID: 21562, Name: "Prayer of Fortitude"},
+			{ID: 99998, Name: "Self Dummy Default", DefaultIgnored: true},
+			{ID: 99999, Name: "Self Dummy Opted In", DefaultIgnored: true},
 		},
 		"Generic": {
 			{ID: 5697, Name: "Unending Breath"},
@@ -29,11 +31,14 @@ func TestApplyClassBuffPolicies(t *testing.T) {
 	applyClassBuffPolicies(byClass, map[string]bool{
 		"power word: fortitude": true,
 		"unending breath":       false,
+		"self dummy opted in":   false,
 	})
 
 	require.True(t, byClass["Priest"][0].Ignored)
 	require.True(t, byClass["Priest"][1].Ignored)
 	require.False(t, byClass["Priest"][2].Ignored)
+	require.True(t, byClass["Priest"][3].Ignored)
+	require.False(t, byClass["Priest"][4].Ignored)
 	require.False(t, byClass["Generic"][0].Ignored)
 	require.True(t, byClass["Generic"][1].Ignored)
 }

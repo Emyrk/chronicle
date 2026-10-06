@@ -78,16 +78,31 @@ func TestClassBuffSpellFromSpell(t *testing.T) {
 		assert.False(t, ok)
 	})
 
-	t.Run("self aura", func(t *testing.T) {
-		_, ok := classBuffSpellFromSpell(spell(chrondbc.ImplicitTargetUnitCaster))
-		assert.False(t, ok)
+	t.Run("self aura defaults ignored", func(t *testing.T) {
+		buff, ok := classBuffSpellFromSpell(spell(chrondbc.ImplicitTargetUnitCaster))
+		require.True(t, ok)
+		assert.Equal(t, "self", buff.Targeting)
+		assert.True(t, buff.DefaultIgnored)
 	})
 
-	t.Run("dummy aura", func(t *testing.T) {
+	t.Run("dummy aura defaults ignored", func(t *testing.T) {
 		dummy := spell(chrondbc.ImplicitTargetUnitTargetAlly)
 		dummy.Effects[0].EffectAura = chrondbc.AuraEffectDummy
-		_, ok := classBuffSpellFromSpell(dummy)
-		assert.False(t, ok)
+		buff, ok := classBuffSpellFromSpell(dummy)
+		require.True(t, ok)
+		assert.True(t, buff.DefaultIgnored)
+	})
+
+	t.Run("dummy effect defaults ignored", func(t *testing.T) {
+		dummy := spell(chrondbc.ImplicitTargetUnitCaster)
+		dummy.Effects[0].Effect = chrondbc.EffectDummy
+		dummy.Effects[0].EffectAura = chrondbc.AuraEffectNone
+		buff, ok := classBuffSpellFromSpell(dummy)
+		require.True(t, ok)
+		assert.Equal(t, "self", buff.Targeting)
+		assert.True(t, buff.DefaultIgnored)
+		assert.Equal(t, int32(chrondbc.EffectDummy), buff.Effects[0].Effect)
+		assert.Equal(t, chrondbc.EffectDummy.String(), buff.Effects[0].EffectName)
 	})
 
 	t.Run("generic friendly aura", func(t *testing.T) {
@@ -170,6 +185,16 @@ func TestDeriveClassBuffsStoresDatasetDocument(t *testing.T) {
 				ImplicitTarget: []int32{int32(chrondbc.ImplicitTargetUnitTargetAlly)},
 			}},
 		},
+		{
+			ID:            20554,
+			Name_lang:     i18n.Text{i18n.English: "Berserking"},
+			SpellClassSet: chrondbc.SpellClassSetGeneric,
+			Effects: []chrondbc.SpellEffect{{
+				EffectIndex:    0,
+				Effect:         chrondbc.EffectDummy,
+				ImplicitTarget: []int32{int32(chrondbc.ImplicitTargetUnitCaster)},
+			}},
+		},
 	}
 
 	handler := &Handler{pool: pool}
@@ -181,6 +206,9 @@ func TestDeriveClassBuffsStoresDatasetDocument(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &byClass))
 	require.Len(t, byClass[chrondbc.SpellClassSetPriest.String()], 1)
 	assert.Equal(t, int32(1243), byClass[chrondbc.SpellClassSetPriest.String()][0].ID)
-	require.Len(t, byClass[chrondbc.SpellClassSetGeneric.String()], 1)
-	assert.Equal(t, int32(5697), byClass[chrondbc.SpellClassSetGeneric.String()][0].ID)
+	require.Len(t, byClass[chrondbc.SpellClassSetGeneric.String()], 2)
+	assert.Equal(t, int32(20554), byClass[chrondbc.SpellClassSetGeneric.String()][0].ID)
+	assert.Equal(t, "self", byClass[chrondbc.SpellClassSetGeneric.String()][0].Targeting)
+	assert.True(t, byClass[chrondbc.SpellClassSetGeneric.String()][0].DefaultIgnored)
+	assert.Equal(t, int32(5697), byClass[chrondbc.SpellClassSetGeneric.String()][1].ID)
 }

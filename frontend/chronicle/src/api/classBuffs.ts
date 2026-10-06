@@ -4,6 +4,8 @@ import type { ClassBuffIgnorePolicy, SetClassBuffIgnoresRequest } from "./typesG
 
 export interface FriendlyClassBuffEffect {
   effect_index: number;
+  effect: number;
+  effect_name: string;
   aura_effect: number;
   aura_name: string;
   implicit_targets: number[];
@@ -13,7 +15,8 @@ export interface FriendlyClassBuffSpell {
   id: number;
   name: string;
   name_subtext: string;
-  targeting: "friendly" | "group";
+  targeting: "self" | "friendly" | "group";
+  default_ignored: boolean;
   effects: FriendlyClassBuffEffect[];
   ignored: boolean;
 }
