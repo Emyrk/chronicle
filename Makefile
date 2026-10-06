@@ -251,8 +251,38 @@ maps/forever-upload: maps/forever-extract
 .PHONY: maps/forever
 maps/forever: maps/forever-upload
 
+.PHONY: maps/legacy-extract
+maps/legacy-extract:
+	go run ./scripts/dbcdata extract-legacy-maps \
+		--server="$(SERVER)" \
+		--out=frontend/imagecache/$(SERVER)/maps \
+		$(if $(WOW_CLIENT_PATH),--dbc="$(WOW_CLIENT_PATH)")
+
+.PHONY: maps/legacy-upload
+maps/legacy-upload: maps/legacy-extract
+	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps ./upload-maps-r2.sh)
+
+.PHONY: maps/legacy
+maps/legacy: maps/legacy-upload
+
+.PHONY: maps/turtle maps/azerothcore maps/tbc
+maps/turtle: SERVER=turtle
+maps/turtle: maps/legacy
+maps/azerothcore: SERVER=azerothcore
+maps/azerothcore: maps/legacy
+maps/tbc: SERVER=tbc
+maps/tbc: maps/legacy
+
 .PHONY: maps
+ifeq ($(SERVER),forever)
 maps: maps/forever
+else
+maps: maps/legacy
+endif
+
+.PHONY: clean-maps
+clean-maps:
+	find frontend/imagecache -mindepth 2 -maxdepth 2 -type d -name maps -prune -exec rm -rf {} +
 
 # Full talent-background pipeline: extract from client → upload to R2
 .PHONY: icons/talents
