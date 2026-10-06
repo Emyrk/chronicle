@@ -187,6 +187,9 @@ func TestValidateManifest(t *testing.T) {
 		{"schema version", func(m *chroniclesdk.CustomPanelManifest) { m.SchemaVersion = 2 }},
 		{"host API version", func(m *chroniclesdk.CustomPanelManifest) { m.Host.APIVersion = 2 }},
 		{"plugin identity", func(m *chroniclesdk.CustomPanelManifest) { m.Plugin.ID = "github:other/repo" }},
+		{"panel description too long", func(m *chroniclesdk.CustomPanelManifest) {
+			m.Panels[0].Description = strings.Repeat("x", maxPanelDescription+1)
+		}},
 		{"invalid panel ID", func(m *chroniclesdk.CustomPanelManifest) { m.Panels[0].ID = "Bad ID" }},
 		{"duplicate panel ID", func(m *chroniclesdk.CustomPanelManifest) { m.Panels = append(m.Panels, m.Panels[0]) }},
 		{"unknown stream", func(m *chroniclesdk.CustomPanelManifest) {
@@ -214,6 +217,9 @@ func TestValidateManifest(t *testing.T) {
 		})
 	}
 	assert.NoError(t, validateManifest("owner/repo", ptr(validManifest())))
+	withoutDescription := validManifest()
+	withoutDescription.Panels[0].Description = ""
+	assert.NoError(t, validateManifest("owner/repo", &withoutDescription))
 }
 
 func ptr[T any](value T) *T { return &value }

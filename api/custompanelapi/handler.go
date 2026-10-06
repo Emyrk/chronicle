@@ -25,14 +25,15 @@ import (
 )
 
 const (
-	manifestFilename = "chronicle-panel.json"
-	maxResolveBody   = 4 * 1024
-	maxManifestSize  = 64 * 1024
-	maxEntrySize     = 2 * 1024 * 1024
-	maxWorkerSize    = 4 * 1024 * 1024
-	maxStylesSize    = 512 * 1024
-	maxCommitBody    = 64 * 1024
-	maxPanels        = 16
+	manifestFilename    = "chronicle-panel.json"
+	maxResolveBody      = 4 * 1024
+	maxManifestSize     = 64 * 1024
+	maxEntrySize        = 2 * 1024 * 1024
+	maxWorkerSize       = 4 * 1024 * 1024
+	maxStylesSize       = 512 * 1024
+	maxCommitBody       = 64 * 1024
+	maxPanels           = 16
+	maxPanelDescription = 300
 )
 
 var (
@@ -437,8 +438,8 @@ func validateManifest(repository string, manifest *chroniclesdk.CustomPanelManif
 		if len(panel.Name) == 0 || len(panel.Name) > 100 {
 			return manifestInvalid(fmt.Sprintf("panels[%d].name must be between 1 and 100 bytes", i))
 		}
-		if len(panel.Description) > 1000 {
-			return manifestInvalid(fmt.Sprintf("panels[%d].description exceeds 1000 bytes", i))
+		if len(panel.Description) > maxPanelDescription {
+			return manifestInvalid(fmt.Sprintf("panels[%d].description exceeds %d bytes", i, maxPanelDescription))
 		}
 		if panel.Worker && manifest.Artifacts.Worker == "" {
 			return manifestInvalid(fmt.Sprintf("panels[%d] requires an undeclared worker artifact", i))

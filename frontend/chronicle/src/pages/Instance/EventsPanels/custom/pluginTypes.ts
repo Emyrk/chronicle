@@ -2,6 +2,7 @@ import type { StreamType } from "@/hooks/instanceEvents";
 
 export const CUSTOM_PANEL_HOST_API_VERSION = 1 as const;
 export const CUSTOM_PANEL_OPTION_MAX_LENGTH = 2048;
+export const CUSTOM_PANEL_DESCRIPTION_MAX_LENGTH = 300;
 
 export type CustomPanelRef = `custom:${string}`;
 export type CustomPanelRegistryState = "available" | "disabled" | "missing" | "invalid" | "incompatible";
@@ -189,6 +190,7 @@ export function isManifestV1(value: unknown, repository?: string): value is Chro
   const ids = new Set<string>();
   return manifest.panels.every((panel) => {
     if (!panel || !ID_PATTERN.test(panel.id) || ids.has(panel.id) || typeof panel.name !== "string" || !Array.isArray(panel.streams)) return false;
+    if (panel.description !== undefined && (typeof panel.description !== "string" || new TextEncoder().encode(panel.description).byteLength > CUSTOM_PANEL_DESCRIPTION_MAX_LENGTH)) return false;
     ids.add(panel.id);
     return panel.streams.every((stream) => KNOWN_STREAMS.has(stream));
   });
