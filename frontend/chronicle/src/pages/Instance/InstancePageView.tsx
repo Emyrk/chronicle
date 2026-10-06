@@ -3213,12 +3213,27 @@ export function InstancePageView({
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
             {instance.name}
             {instance.invalidatedAt && (
-              <span
-                title={instance.invalidReason || "This log was excluded from parses and rankings."}
-                className="rounded bg-red-500/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-red-400"
-              >
-                Invalid
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help rounded bg-red-500/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-red-400">
+                    Invalid
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start" sideOffset={6} className="max-w-sm p-3 normal-case tracking-normal">
+                  <div className="space-y-2">
+                    <p className="font-semibold text-foreground">Invalid log upload</p>
+                    <p className="text-sm text-muted-foreground">
+                      A Chronicle administrator marked this upload invalid. It remains viewable, but does not contribute parse scores, DPS rankings, speedrun results, or duplicate canonical selection.
+                    </p>
+                    <div className="border-t border-border/60 pt-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Reason</p>
+                      <p className="mt-1 break-words text-sm text-foreground">
+                        {instance.invalidReason || "No reason was provided."}
+                      </p>
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
             )}
             {duplicateGroupId && (
               <DuplicatesBadge instanceId={instance.id} duplicateGroupId={duplicateGroupId} />
