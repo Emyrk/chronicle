@@ -16,8 +16,11 @@ export interface ChroniclePanelSnapshotV1 {
   theme: { mode: "light" | "dark" };
 }
 
+export interface PluginItemMetadataV1 { entry: number; name: string; quality: number }
+
 export interface ChroniclePanelHostAPIV1 {
   events: { getStream(type: ChronicleStreamType): Promise<PluginEventStreamV1> };
+  gameData: { getItemMetadata(itemIds: number[]): Promise<PluginItemMetadataV1[]> };
   workers: { create(): Worker };
   panel: { setOption(option: string | null): void; selectEncounters(ids: string[]): void; togglePlayer(id: string): void; togglePlayers(ids: string[]): void };
   lifecycle: { signal: AbortSignal };

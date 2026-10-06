@@ -2158,6 +2158,23 @@ export interface ItemDisplayData {
     readonly flags: number; // Display flags
 }
 
+// From chroniclesdk/tooltip.go
+export interface ItemMetadata {
+    readonly entry: number;
+    readonly name: string;
+    readonly quality: number;
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemMetadataRequest {
+    readonly item_ids: readonly number[];
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemMetadataResponse {
+    readonly items: readonly ItemMetadata[];
+}
+
 // From chroniclesdk/azerothcore.go
 export type ItemPricingProvider = "wowauctions";
 

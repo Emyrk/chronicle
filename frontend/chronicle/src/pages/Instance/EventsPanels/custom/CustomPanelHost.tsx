@@ -3,6 +3,7 @@ import { useTheme } from "next-themes";
 import { useInstanceEventsContext, type StreamType } from "@/hooks/instanceEvents";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelContext } from "../types";
+import { createPluginItemMetadataBroker } from "./pluginGameData";
 import { copyPluginStream } from "./pluginStreamBroker";
 import { loadCustomPanelModule } from "./pluginModuleLoader";
 import { CUSTOM_PANEL_OPTION_MAX_LENGTH, type ChroniclePanelHostAPIV1, type ChroniclePanelInstanceV1, type ChroniclePanelSnapshotV1, type CustomPanelInstallationV1, type ChroniclePanelManifestPanelV1 } from "./pluginTypes";
@@ -78,8 +79,10 @@ export function CustomPanelHost({ installation, panel, context, panelId, panelOp
     host.style.setProperty("--chronicle-muted", "hsl(var(--muted))");
     host.style.setProperty("--chronicle-border", "hsl(var(--border))");
 
+    const getItemMetadata = createPluginItemMetadataBroker(abort.signal);
     const api: ChroniclePanelHostAPIV1 = {
       events: { getStream: (type: StreamType) => copyPluginStream(type, panel.streams, fetchStream, abort.signal) },
+      gameData: { getItemMetadata },
       workers: { create: () => {
         if (!installation.artifacts.worker) throw new Error("This plugin did not declare a worker artifact.");
         if (workerRef.current) throw new Error("Only one host-managed worker is allowed per custom panel.");
