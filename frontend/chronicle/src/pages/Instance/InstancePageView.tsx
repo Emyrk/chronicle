@@ -3221,13 +3221,13 @@ export function InstancePageView({
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="start" sideOffset={6} className="max-w-sm p-3 normal-case tracking-normal">
                   <div className="space-y-2">
-                    <p className="font-semibold text-foreground">Invalid log upload</p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="font-semibold text-zinc-100">Invalid log upload</p>
+                    <p className="text-sm text-zinc-300">
                       A Chronicle administrator marked this upload invalid. It remains viewable, but does not contribute parse scores, DPS rankings, speedrun results, or duplicate canonical selection.
                     </p>
-                    <div className="border-t border-border/60 pt-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Reason</p>
-                      <p className="mt-1 break-words text-sm text-foreground">
+                    <div className="border-t border-white/10 pt-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Reason</p>
+                      <p className="mt-1 break-words text-sm text-zinc-100">
                         {instance.invalidReason || "No reason was provided."}
                       </p>
                     </div>
