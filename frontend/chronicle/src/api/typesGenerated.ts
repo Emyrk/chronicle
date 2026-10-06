@@ -105,6 +105,13 @@ export interface AdminCacheStatsResponse {
 }
 
 // From chroniclesdk/user.go
+export interface AdminClearLogInvalidationResponse {
+    readonly requested: number;
+    readonly marked_valid: number;
+    readonly failed: readonly AdminBulkLogFailure[];
+}
+
+// From chroniclesdk/user.go
 export interface AdminInvalidateLogsRequest {
     readonly log_ids: readonly string[];
     readonly reason: string;

@@ -74,6 +74,7 @@ import type {
   CreateRegressionFixtureRequest as CreateRegressionFixtureRequestGenerated,
   RequeueVersionResponse as RequeueVersionResponseGenerated,
   AdminInvalidateLogsResponse as AdminInvalidateLogsResponseGenerated,
+  AdminClearLogInvalidationResponse as AdminClearLogInvalidationResponseGenerated,
   AdminBulkDeleteResponse as AdminBulkDeleteResponseGenerated,
   AdminBulkSelectedReparseResponse as AdminBulkSelectedReparseResponseGenerated,
   AdminBulkReparseResponse as AdminBulkReparseResponseGenerated,
@@ -147,6 +148,7 @@ export type UpdateGuildDiscordIntegrationRequest = UpdateGuildDiscordIntegration
 export type UpdateGuildDiscordRaidLogAnnouncementsRequest = UpdateGuildDiscordRaidLogAnnouncementsRequestGenerated;
 export type CreateJoinRequestBody = CreateJoinRequestBodyGenerated;
 export type AdminInvalidateLogsResponse = AdminInvalidateLogsResponseGenerated;
+export type AdminClearLogInvalidationResponse = AdminClearLogInvalidationResponseGenerated;
 export type AdminBulkDeleteResponse = AdminBulkDeleteResponseGenerated;
 export type AdminBulkSelectedReparseResponse = AdminBulkSelectedReparseResponseGenerated;
 export type AdminBulkReparseResponse = AdminBulkReparseResponseGenerated;
@@ -1288,6 +1290,38 @@ export function useAdminInvalidateLogs() {
         throw new Error(error.message || "Failed to invalidate logs");
       }
       return response.json() as Promise<AdminInvalidateLogsResponse>;
+    },
+    onSuccess: (_data, { logIds, instanceIds = [] }) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "logs"] });
+      for (const logId of logIds) {
+        queryClient.invalidateQueries({ queryKey: ["logGroup", logId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["instance"] });
+      for (const instanceId of instanceIds) {
+        queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+        queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
+        queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["rankings"] });
+    },
+  });
+}
+
+export function useAdminClearLogInvalidation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ logIds }: { logIds: string[]; instanceIds?: string[] }) => {
+      const response = await fetch("/api/v1/admin/logs/clear-invalidation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_ids: logIds }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Failed to mark logs valid" }));
+        throw new Error(error.message || "Failed to mark logs valid");
+      }
+      return response.json() as Promise<AdminClearLogInvalidationResponse>;
     },
     onSuccess: (_data, { logIds, instanceIds = [] }) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "logs"] });

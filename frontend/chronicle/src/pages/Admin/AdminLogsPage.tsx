@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   useAdminInvalidateLogs,
+  useAdminClearLogInvalidation,
   useAdminBulkDeleteLogs,
   useAdminBulkReparseLogs,
   useAdminUsers,
@@ -10,7 +11,7 @@ import {
   type AdminLog,
   type AdminLogsSortField,
 } from "@/api/queries";
-import { FileText, Loader2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, X, Filter, RefreshCw, Trash2, Ban } from "lucide-react";
+import { FileText, Loader2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, X, Filter, RefreshCw, Trash2, Ban, Check } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
@@ -167,6 +168,7 @@ export function AdminLogsPage() {
   const { data: usersData } = useAdminUsers();
   const users = usersData?.users ?? [];
   const invalidateLogs = useAdminInvalidateLogs();
+  const clearInvalidation = useAdminClearLogInvalidation();
   const bulkDeleteLogs = useAdminBulkDeleteLogs();
   const bulkReparseLogs = useAdminBulkReparseLogs();
 
@@ -234,9 +236,10 @@ export function AdminLogsPage() {
   const totalPages = data ? Math.ceil(data.total_count / pageSize) : 0;
   const visibleLogIds = data?.logs.map((log) => log.id) ?? [];
   const selectedVisibleCount = visibleLogIds.filter((logId) => selectedLogIds.has(logId)).length;
+  const selectedInvalidLogIds = data?.logs.filter((log) => selectedLogIds.has(log.id) && log.state === "invalid").map((log) => log.id) ?? [];
   const allVisibleSelected = visibleLogIds.length > 0 && selectedVisibleCount === visibleLogIds.length;
   const anyVisibleSelected = selectedVisibleCount > 0;
-  const bulkActionPending = invalidateLogs.isPending || bulkDeleteLogs.isPending || bulkReparseLogs.isPending;
+  const bulkActionPending = invalidateLogs.isPending || clearInvalidation.isPending || bulkDeleteLogs.isPending || bulkReparseLogs.isPending;
 
   const handleToggleSelected = (logId: string, checked: boolean) => {
     setSelectedLogIds((prev) => {
@@ -323,6 +326,35 @@ export function AdminLogsPage() {
       },
       onError: (err) => {
         toast.error("Failed to invalidate logs", { description: err.message });
+      },
+    });
+  };
+
+  const handleMarkValid = () => {
+    if (selectedInvalidLogIds.length === 0) {
+      return;
+    }
+
+    if (!confirm(`Mark ${selectedInvalidLogIds.length} selected invalid logs as valid? Removed results will not be restored until they are reparsed.`)) {
+      return;
+    }
+
+    clearInvalidation.mutate({ logIds: selectedInvalidLogIds }, {
+      onSuccess: (result) => {
+        clearSelection();
+        if (result.failed.length > 0) {
+          toast.warning("Mark valid partially completed", {
+            description: `${result.marked_valid} of ${result.requested} selected logs were marked valid. ${result.failed.length} failed.`,
+          });
+          return;
+        }
+
+        toast.success("Logs marked valid", {
+          description: `${result.marked_valid} selected logs can contribute normal results after they are reparsed.`,
+        });
+      },
+      onError: (err) => {
+        toast.error("Failed to mark logs valid", { description: err.message });
       },
     });
   };
@@ -461,6 +493,21 @@ export function AdminLogsPage() {
                   )}
                   Invalidate Selected
                 </Button>
+                {selectedInvalidLogIds.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleMarkValid}
+                    disabled={bulkActionPending}
+                  >
+                    {clearInvalidation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                    Mark Valid
+                  </Button>
+                )}
                 <Button
                   variant="destructive"
                   size="sm"

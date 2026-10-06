@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, Share2, Unlink, ExternalLink, BarChart3, Check, List, Ban, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { useAdminInvalidateLogs } from "@/api/queries";
+import { useAdminClearLogInvalidation, useAdminInvalidateLogs } from "@/api/queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -67,8 +67,10 @@ export function InstanceMenu({
   canAdminLogs,
 }: InstanceMenuProps) {
   const [showInvalidateConfirm, setShowInvalidateConfirm] = useState(false);
+  const [showMarkValidConfirm, setShowMarkValidConfirm] = useState(false);
   const [invalidReason, setInvalidReason] = useState("");
   const invalidateLogs = useAdminInvalidateLogs();
+  const clearInvalidation = useAdminClearLogInvalidation();
   const handleCopyInstanceId = async () => {
     try {
       await navigator.clipboard.writeText(instanceId);
@@ -110,6 +112,28 @@ export function InstanceMenu({
       setInvalidReason("");
     } catch (err) {
       toast.error("Failed to invalidate log", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    }
+  };
+
+  const handleMarkValid = async () => {
+    if (!logGroupId) return;
+
+    try {
+      const result = await clearInvalidation.mutateAsync({
+        logIds: [logGroupId],
+        instanceIds: [instanceId],
+      });
+      if (result.failed.length > 0) {
+        throw new Error(result.failed[0]?.detail || "Failed to mark log valid");
+      }
+      toast.success("Log marked valid", {
+        description: "Reparse the log to recreate rankings, parses, and speedrun results.",
+      });
+      setShowMarkValidConfirm(false);
+    } catch (err) {
+      toast.error("Failed to mark log valid", {
         description: err instanceof Error ? err.message : undefined,
       });
     }
@@ -226,6 +250,13 @@ export function InstanceMenu({
           </DropdownMenuItem>
         )}
 
+        {canAdminLogs && logGroupId && invalidated && (
+          <DropdownMenuItem onSelect={() => setShowMarkValidConfirm(true)}>
+            <Check className="h-4 w-4 mr-2" />
+            Mark log valid
+          </DropdownMenuItem>
+        )}
+
         {logDetailUrl && (
           <>
             <DropdownMenuSeparator />
@@ -253,10 +284,10 @@ export function InstanceMenu({
             <DialogTitle>Invalidate this log group?</DialogTitle>
           </DialogHeader>
           <p className="text-sm font-semibold text-destructive">
-            Are you sure? There is currently no undo for this action.
+            Existing parses, rankings, and speedrun results will be removed.
           </p>
           <DialogDescription>
-            The log and its instances will remain visible, but all parses, DPS rankings, and speedrun results from this upload will be removed. It can never be selected as the canonical duplicate.
+            The log and its instances will remain visible and can be marked valid again later. Marking it valid will not restore removed data; reparse it afterward to rebuild normal results.
           </DialogDescription>
           <div className="rounded-md bg-muted px-3 py-2 text-sm">
             <span className="font-medium">{instanceName}</span>
@@ -290,6 +321,43 @@ export function InstanceMenu({
             >
               {invalidateLogs.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Invalidate log
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showMarkValidConfirm}
+        onOpenChange={(open) => {
+          if (clearInvalidation.isPending) return;
+          setShowMarkValidConfirm(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark this log group valid?</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            This clears the invalid marker from the log and its instances. Previously removed parses, rankings, and speedrun results are not restored automatically.
+          </DialogDescription>
+          <div className="rounded-md bg-muted px-3 py-2 text-sm">
+            <span className="font-medium">{instanceName}</span>
+            <span className="ml-2 text-xs text-muted-foreground">{logGroupId}</span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Reparse the log afterward to rebuild its normal ranking and parse data.
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowMarkValidConfirm(false)}
+              disabled={clearInvalidation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void handleMarkValid()} disabled={clearInvalidation.isPending}>
+              {clearInvalidation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Mark valid
             </Button>
           </DialogFooter>
         </DialogContent>

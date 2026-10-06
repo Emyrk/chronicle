@@ -625,6 +625,38 @@ func (a *API) AdminInvalidateLogs(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
+func (a *API) AdminClearLogInvalidation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req chroniclesdk.AdminBulkLogRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	resp := chroniclesdk.AdminClearLogInvalidationResponse{
+		Requested: len(req.LogIDs),
+		Failed:    make([]chroniclesdk.AdminBulkLogFailure, 0),
+	}
+	for _, logID := range req.LogIDs {
+		if err := a.Chronicle.ClearWoWLogGroupInvalidation(ctx, logID); err != nil {
+			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkLogFailure{
+				LogGroupID: logID,
+				Detail:     err.Error(),
+			})
+			continue
+		}
+		resp.MarkedValid++
+	}
+
+	if resp.MarkedValid > 0 {
+		if _, err := servicerankings.EnqueueRankingsSummaryRefreshAllTenants(ctx, database.New(a.Opts.Pool), a.Queues); err != nil {
+			slog.WarnContext(ctx, "failed to enqueue rankings summary refresh after clearing log invalidation", slog.Any("error", err))
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
 func (a *API) AdminBulkDeleteLogs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

@@ -648,6 +648,24 @@ func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, 
 	return nil
 }
 
+func (c *Chronicle) ClearWoWLogGroupInvalidation(ctx context.Context, logID uuid.UUID) error {
+	if _, err := c.Zed.GetWoWLogGroupByID(ctx, logID); err != nil {
+		return fmt.Errorf("load log group: %w", err)
+	}
+	identities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logID)
+	if err != nil {
+		return fmt.Errorf("load ranking run identities: %w", err)
+	}
+	if err := c.Zed.ClearWoWLogGroupInvalidation(ctx, logID); err != nil {
+		return fmt.Errorf("clear log group invalidation: %w", err)
+	}
+
+	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
+		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after clearing log invalidation", slog.Any("error", err))
+	}
+	return nil
+}
+
 func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) error {
 	identities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logID)
 	if err != nil {

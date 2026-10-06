@@ -3616,6 +3616,25 @@ func (q *sqlQuerier) ResolveExternalAPIServer(ctx context.Context, server string
 	return i, err
 }
 
+const clearWoWLogGroupInvalidation = `-- name: ClearWoWLogGroupInvalidation :exec
+WITH restored_instances AS (
+  UPDATE log_instances li
+  SET invalidated_at = NULL,
+      invalid_reason = '',
+      updated_at = now()
+  WHERE li.log_group_id = $1
+)
+UPDATE wow_log_groups wlg
+SET invalidated_at = NULL,
+    invalid_reason = ''
+WHERE wlg.id = $1
+`
+
+func (q *sqlQuerier) ClearWoWLogGroupInvalidation(ctx context.Context, logGroupID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearWoWLogGroupInvalidation, logGroupID)
+	return err
+}
+
 const countAllWoWLogGroups = `-- name: CountAllWoWLogGroups :one
 SELECT COUNT(*)::int FROM wow_log_groups
 LEFT JOIN LATERAL (

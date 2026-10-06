@@ -102,6 +102,12 @@ type AdminInvalidateLogsResponse struct {
 	Failed      []AdminBulkLogFailure `json:"failed"`
 }
 
+type AdminClearLogInvalidationResponse struct {
+	Requested   int                   `json:"requested"`
+	MarkedValid int                   `json:"marked_valid"`
+	Failed      []AdminBulkLogFailure `json:"failed"`
+}
+
 type AdminBulkLogFailure struct {
 	LogGroupID uuid.UUID `json:"log_group_id"`
 	Detail     string    `json:"detail"`

@@ -659,6 +659,27 @@ func TestInvalidatedDuplicateIsNeverRankingRunRepresentative(t *testing.T) {
 	assert.Equal(t, anchorID, sources[0].RunID)
 	assert.Equal(t, anchorID, sources[0].RepresentativeInstanceID)
 	assert.Equal(t, int32(1), sources[0].MemberCount)
+
+	require.NoError(t, store.ClearWoWLogGroupInvalidation(ctx, invalidInstance.LogGroupID))
+
+	markedValidGroup, err := store.GetWoWLogGroupByID(ctx, invalidInstance.LogGroupID)
+	require.NoError(t, err)
+	assert.False(t, markedValidGroup.WoWLogGroup.InvalidatedAt.Valid)
+	assert.Empty(t, markedValidGroup.WoWLogGroup.InvalidReason)
+
+	markedValid, err := store.Instance(ctx, invalidDuplicateID)
+	require.NoError(t, err)
+	assert.False(t, markedValid.InvalidatedAt.Valid)
+	assert.Empty(t, markedValid.InvalidReason)
+
+	rankings, err = store.ListRankingsForInstance(ctx, invalidDuplicateID)
+	require.NoError(t, err)
+	assert.Empty(t, rankings, "clearing invalidation should not restore deleted rankings")
+
+	sources, err = store.RankingRunSources(ctx, []uuid.UUID{anchorID, invalidDuplicateID})
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	assert.Equal(t, int32(2), sources[0].MemberCount)
 }
 
 func TestRankingRunRepresentativeTieBreakers(t *testing.T) {

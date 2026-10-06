@@ -398,6 +398,19 @@ SET invalidated_at = COALESCE(wlg.invalidated_at, now()),
     invalid_reason = @reason
 WHERE wlg.id = @log_group_id;
 
+-- name: ClearWoWLogGroupInvalidation :exec
+WITH restored_instances AS (
+  UPDATE log_instances li
+  SET invalidated_at = NULL,
+      invalid_reason = '',
+      updated_at = now()
+  WHERE li.log_group_id = @log_group_id
+)
+UPDATE wow_log_groups wlg
+SET invalidated_at = NULL,
+    invalid_reason = ''
+WHERE wlg.id = @log_group_id;
+
 -- name: ListDistinctInstanceNames :many
 SELECT DISTINCT name
 FROM (
