@@ -209,6 +209,8 @@ func (api *API) Routes() chi.Router {
 				r.Get("/whoami/dump", api.DumpToken)
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Get("/me/storage", api.GetMyStorage)
+				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
+				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
 
 				r.Get("/me/favorites", api.ListMyFavorites)

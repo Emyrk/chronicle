@@ -1739,6 +1739,17 @@ CREATE TABLE user_character_links (
     link_source text DEFAULT 'manual'::text NOT NULL
 );
 
+CREATE TABLE user_custom_panel_settings (
+    user_id uuid NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    installations jsonb DEFAULT '[]'::jsonb NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_custom_panel_settings_installations_array CHECK ((jsonb_typeof(installations) = 'array'::text)),
+    CONSTRAINT user_custom_panel_settings_installations_size CHECK ((octet_length((installations)::text) <= 1048576))
+);
+
 CREATE TABLE user_favorite_guilds (
     user_id uuid NOT NULL,
     guild_id uuid NOT NULL,
@@ -2447,6 +2458,9 @@ ALTER TABLE ONLY user_character_links
 ALTER TABLE ONLY user_character_links
     ADD CONSTRAINT user_character_links_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY user_custom_panel_settings
+    ADD CONSTRAINT user_custom_panel_settings_pkey PRIMARY KEY (user_id);
+
 ALTER TABLE ONLY user_favorite_guilds
     ADD CONSTRAINT user_favorite_guilds_pkey PRIMARY KEY (user_id, guild_id);
 
@@ -3146,6 +3160,9 @@ ALTER TABLE ONLY user_character_links
 
 ALTER TABLE ONLY user_character_links
     ADD CONSTRAINT user_character_links_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_custom_panel_settings
+    ADD CONSTRAINT user_custom_panel_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_favorite_guilds
     ADD CONSTRAINT user_favorite_guilds_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;

@@ -2183,6 +2183,15 @@ type UserCharacterLink struct {
 	LinkSource    string             `db:"link_source" json:"link_source"`
 }
 
+type UserCustomPanelSetting struct {
+	UserID        uuid.UUID          `db:"user_id" json:"user_id"`
+	Enabled       bool               `db:"enabled" json:"enabled"`
+	Installations []byte             `db:"installations" json:"installations"`
+	Revision      int64              `db:"revision" json:"revision"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type UserFavoriteGuild struct {
 	UserID        uuid.UUID          `db:"user_id" json:"user_id"`
 	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`

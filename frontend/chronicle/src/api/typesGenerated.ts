@@ -926,6 +926,19 @@ export interface CustomPanelArtifactSet {
 }
 
 // From chroniclesdk/custom_panel.go
+export interface CustomPanelInstallation {
+    readonly repository: string;
+    readonly commitSha: string;
+    readonly installedRef: string;
+    readonly manifest: CustomPanelManifest;
+    readonly manifestSha256: string;
+    readonly artifacts: CustomPanelArtifactSet;
+    readonly enabled: boolean;
+    readonly installedAt: string;
+    readonly updatedAt: string;
+}
+
+// From chroniclesdk/custom_panel.go
 export interface CustomPanelManifest {
     readonly schema_version: number;
     readonly plugin: CustomPanelManifestPlugin;
@@ -984,6 +997,14 @@ export interface CustomPanelResolveResponse {
     readonly manifest: CustomPanelManifest;
     readonly manifest_sha256: string;
     readonly artifacts: CustomPanelArtifactSet;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelSettings {
+    readonly enabled: boolean;
+    readonly installations: readonly CustomPanelInstallation[];
+    readonly revision: number;
+    readonly updated_at?: string;
 }
 
 // From chroniclesdk/gamedata.go
@@ -3892,6 +3913,13 @@ export interface UpdateActionBarSlotsRequest {
     readonly slot_8: string | null;
     readonly slot_9: string | null;
     readonly slot_0: string | null;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface UpdateCustomPanelSettingsRequest {
+    readonly enabled: boolean;
+    readonly installations: readonly CustomPanelInstallation[];
+    readonly expected_revision: number;
 }
 
 // From chroniclesdk/gear_builder.go

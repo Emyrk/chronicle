@@ -413,6 +413,7 @@ type sqlcQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUser, error)
 	GetUserCharacterLink(ctx context.Context, arg GetUserCharacterLinkParams) (UserCharacterLink, error)
 	GetUserCharacterLinks(ctx context.Context, userID uuid.UUID) ([]GetUserCharacterLinksRow, error)
+	GetUserCustomPanelSettings(ctx context.Context, userID uuid.UUID) (UserCustomPanelSetting, error)
 	GetUserDataGrants(ctx context.Context, userID uuid.UUID) ([]DataGrant, error)
 	GetUserPanelLayoutDefaults(ctx context.Context, id uuid.UUID) (GetUserPanelLayoutDefaultsRow, error)
 	GetUserPasswordByAuthID(ctx context.Context, userAuthID uuid.UUID) (UserPassword, error)
@@ -918,6 +919,7 @@ type sqlcQuerier interface {
 	// return the existing row's ID.
 	UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error)
 	UpsertUserActionBarSlots(ctx context.Context, arg UpsertUserActionBarSlotsParams) (UpsertUserActionBarSlotsRow, error)
+	UpsertUserCustomPanelSettings(ctx context.Context, arg UpsertUserCustomPanelSettingsParams) (UserCustomPanelSetting, error)
 }
 
 var _ sqlcQuerier = (*sqlQuerier)(nil)

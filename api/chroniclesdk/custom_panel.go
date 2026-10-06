@@ -61,3 +61,28 @@ type CustomPanelArtifact struct {
 	SHA256 string `json:"sha256"`
 	Size   int64  `json:"size"`
 }
+
+type CustomPanelInstallation struct {
+	Repository     string                 `json:"repository"`
+	CommitSHA      string                 `json:"commitSha"`
+	InstalledRef   string                 `json:"installedRef"`
+	Manifest       CustomPanelManifest    `json:"manifest"`
+	ManifestSHA256 string                 `json:"manifestSha256"`
+	Artifacts      CustomPanelArtifactSet `json:"artifacts"`
+	Enabled        bool                   `json:"enabled"`
+	InstalledAt    string                 `json:"installedAt"`
+	UpdatedAt      string                 `json:"updatedAt"`
+}
+
+type CustomPanelSettings struct {
+	Enabled       bool                      `json:"enabled"`
+	Installations []CustomPanelInstallation `json:"installations"`
+	Revision      int64                     `json:"revision"`
+	UpdatedAt     string                    `json:"updated_at,omitempty"`
+}
+
+type UpdateCustomPanelSettingsRequest struct {
+	Enabled          bool                      `json:"enabled"`
+	Installations    []CustomPanelInstallation `json:"installations"`
+	ExpectedRevision int64                     `json:"expected_revision"`
+}

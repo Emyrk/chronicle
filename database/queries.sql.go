@@ -1746,6 +1746,64 @@ func (q *sqlQuerier) UpsertCooldownOverrides(ctx context.Context, arg UpsertCool
 	return err
 }
 
+const getUserCustomPanelSettings = `-- name: GetUserCustomPanelSettings :one
+SELECT user_id, enabled, installations, revision, created_at, updated_at
+FROM user_custom_panel_settings
+WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetUserCustomPanelSettings(ctx context.Context, userID uuid.UUID) (UserCustomPanelSetting, error) {
+	row := q.db.QueryRow(ctx, getUserCustomPanelSettings, userID)
+	var i UserCustomPanelSetting
+	err := row.Scan(
+		&i.UserID,
+		&i.Enabled,
+		&i.Installations,
+		&i.Revision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertUserCustomPanelSettings = `-- name: UpsertUserCustomPanelSettings :one
+INSERT INTO user_custom_panel_settings (user_id, enabled, installations, revision)
+VALUES ($1, $2, $3::jsonb, 1)
+ON CONFLICT (user_id) DO UPDATE
+SET enabled = EXCLUDED.enabled,
+    installations = EXCLUDED.installations,
+    revision = user_custom_panel_settings.revision + 1,
+    updated_at = NOW()
+WHERE user_custom_panel_settings.revision = $4
+RETURNING user_id, enabled, installations, revision, created_at, updated_at
+`
+
+type UpsertUserCustomPanelSettingsParams struct {
+	UserID           uuid.UUID `db:"user_id" json:"user_id"`
+	Enabled          bool      `db:"enabled" json:"enabled"`
+	Installations    []byte    `db:"installations" json:"installations"`
+	ExpectedRevision int64     `db:"expected_revision" json:"expected_revision"`
+}
+
+func (q *sqlQuerier) UpsertUserCustomPanelSettings(ctx context.Context, arg UpsertUserCustomPanelSettingsParams) (UserCustomPanelSetting, error) {
+	row := q.db.QueryRow(ctx, upsertUserCustomPanelSettings,
+		arg.UserID,
+		arg.Enabled,
+		arg.Installations,
+		arg.ExpectedRevision,
+	)
+	var i UserCustomPanelSetting
+	err := row.Scan(
+		&i.UserID,
+		&i.Enabled,
+		&i.Installations,
+		&i.Revision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteDataGrant = `-- name: DeleteDataGrant :exec
 DELETE FROM data_grants
 WHERE user_id = $1 AND source = $2

@@ -16,11 +16,11 @@ import { PanelCard } from "../PanelCard";
 import { PanelSelector } from "../PanelSelector";
 import { openPanelPopup, syncPopupAppearance, type PanelPopup } from "../panelPopup";
 import { isBuiltinPanelType, type EventsPanelProps, type EventsPanelType } from "../EventsPanel";
+import { useUpdateCustomPanelAccountSettings } from "./pluginAccountStorage";
 import { CustomPanelErrorBoundary } from "./CustomPanelErrorBoundary";
 import { CustomPanelHost } from "./CustomPanelHost";
 import { resolveCustomPanel, useCustomPanelRegistry } from "./pluginRegistry";
 import { isCustomPanelRef } from "./pluginTypes";
-import { setCustomPanelInstallationEnabled } from "./pluginStorage";
 
 const PANEL_CLIPBOARD_KEY = "panel-clipboard";
 
@@ -35,6 +35,7 @@ function Placeholder({ title, detail, repository, onRetry, onDisable, onEmpty }:
 
 export default function CustomEventsPanel(props: EventsPanelProps) {
   const registry = useCustomPanelRegistry();
+  const updateSettings = useUpdateCustomPanelAccountSettings();
   const inheritedPortalContainer = usePortalContainer();
   const isMobile = useIsMobile();
   const [retryKey, setRetryKey] = useState(0);
@@ -138,7 +139,7 @@ export default function CustomEventsPanel(props: EventsPanelProps) {
   if (!resolved || resolved.state === "invalid") content = <Placeholder title="Invalid custom panel" detail="This panel reference is malformed, but it remains preserved in the layout." onEmpty={switchToEmpty} />;
   else if (safeMode) content = <Placeholder title="Custom panels disabled by safe mode" detail="Remove ?safe=1 after fixing or disabling the plugin." repository={resolved.repository} onEmpty={switchToEmpty} />;
   else if (resolved.state !== "available" || !resolved.installation || !resolved.panel) content = <Placeholder title={`Custom panel ${resolved.state}`} detail="Install or enable this trusted plugin in Settings to recover this panel." repository={resolved.repository} onEmpty={switchToEmpty} />;
-  else if (error) content = <Placeholder title="Custom panel failed" detail={error.message} repository={`${resolved.repository}@${resolved.installation.commitSha}`} onRetry={retry} onDisable={() => setCustomPanelInstallationEnabled(resolved.repository!, false)} onEmpty={switchToEmpty} />;
+  else if (error) content = <Placeholder title="Custom panel failed" detail={error.message} repository={`${resolved.repository}@${resolved.installation.commitSha}`} onRetry={retry} onDisable={() => { void updateSettings.mutateAsync({ enabled: registry.enabled, installations: registry.installations.map((item) => item.repository === resolved.repository ? { ...item, enabled: false, updatedAt: new Date().toISOString() } : item), expectedRevision: registry.revision }).catch((nextError) => toast.error(nextError instanceof Error ? nextError.message : "Custom panel settings update failed")); }} onEmpty={switchToEmpty} />;
   else content = <CustomPanelErrorBoundary key={`${props.panelType}:${resolved.installation.commitSha}:${retryKey}`} fallback={(caught) => <Placeholder title="Custom panel failed" detail={caught.message} repository={resolved.repository} onRetry={retry} onEmpty={switchToEmpty} />}><CustomPanelHost installation={resolved.installation} panel={resolved.panel} context={props.context} panelId={effectivePanelId} panelOption={props.panelOption} onPanelOptionChange={props.onPanelOptionChange} onError={handleError} /></CustomPanelErrorBoundary>;
 
   const renderedPanel = <PanelCard flipped={false} front={<><div className="mb-1 flex items-center justify-between"><div className="flex min-w-0 items-center gap-2"><Blocks className="h-4 w-4 shrink-0 text-muted-foreground" /><PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} /><span className="truncate text-xs text-muted-foreground">{title}</span></div><DropdownMenu modal={false}><DropdownMenuTrigger asChild><span className="cursor-pointer text-muted-foreground hover:text-foreground"><EllipsisVertical className="h-3.5 w-3.5" /></span></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={copyPanel}><Copy className="mr-2 h-3.5 w-3.5" />Copy</DropdownMenuItem><DropdownMenuItem onClick={() => void pastePanel()}><ClipboardPaste className="mr-2 h-3.5 w-3.5" />Paste</DropdownMenuItem><DropdownMenuItem onClick={panelPopup ? dockPanel : popOutPanel} disabled={isMobile}>{panelPopup ? <Undo2 className="mr-2 h-3.5 w-3.5" /> : <ExternalLink className="mr-2 h-3.5 w-3.5" />}{panelPopup ? "Dock panel" : "Pop out"}</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div><div className="min-h-0 flex-1">{content}</div></>} back={null} />;

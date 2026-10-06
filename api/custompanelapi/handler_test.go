@@ -46,6 +46,36 @@ func validManifest() chroniclesdk.CustomPanelManifest {
 	}
 }
 
+func validInstallation() chroniclesdk.CustomPanelInstallation {
+	digest := strings.Repeat("a", 64)
+	worker := chroniclesdk.CustomPanelArtifact{URL: "/api/v1/custom-panels/github/owner/repo/" + testCommit + "/worker", SHA256: digest, Size: 2}
+	styles := chroniclesdk.CustomPanelArtifact{URL: "/api/v1/custom-panels/github/owner/repo/" + testCommit + "/styles", SHA256: digest, Size: 3}
+	return chroniclesdk.CustomPanelInstallation{
+		Repository:     "owner/repo",
+		CommitSHA:      testCommit,
+		InstalledRef:   "main",
+		Manifest:       validManifest(),
+		ManifestSHA256: digest,
+		Artifacts: chroniclesdk.CustomPanelArtifactSet{
+			Entry:  chroniclesdk.CustomPanelArtifact{URL: "/api/v1/custom-panels/github/owner/repo/" + testCommit + "/entry", SHA256: digest, Size: 1},
+			Worker: &worker,
+			Styles: &styles,
+		},
+		Enabled:     true,
+		InstalledAt: "2026-10-06T00:00:00Z",
+		UpdatedAt:   "2026-10-06T00:00:00Z",
+	}
+}
+
+func TestValidateStoredInstallation(t *testing.T) {
+	t.Parallel()
+	installation := validInstallation()
+	require.NoError(t, ValidateStoredInstallation(installation))
+
+	installation.Artifacts.Entry.URL = "https://evil.example/panel.js"
+	require.Error(t, ValidateStoredInstallation(installation))
+}
+
 func githubServer(t *testing.T, manifest chroniclesdk.CustomPanelManifest, mutate func(http.ResponseWriter, *http.Request) bool) *httptest.Server {
 	t.Helper()
 	manifestJSON, err := json.Marshal(manifest)

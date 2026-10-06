@@ -457,6 +457,73 @@ func validateManifest(repository string, manifest *chroniclesdk.CustomPanelManif
 	return nil
 }
 
+func ValidateStoredInstallation(installation chroniclesdk.CustomPanelInstallation) error {
+	repository, owner, repo, err := validateRepository(installation.Repository)
+	if err != nil || repository != installation.Repository {
+		return invalid("installation repository is invalid")
+	}
+	if !commitPattern.MatchString(installation.CommitSHA) {
+		return invalid("installation commit SHA is invalid")
+	}
+	if installation.InstalledRef != "" {
+		if err := validateRef(installation.InstalledRef); err != nil {
+			return err
+		}
+	}
+	if err := validateManifest(repository, &installation.Manifest); err != nil {
+		return err
+	}
+	if !isHexDigest(installation.ManifestSHA256) {
+		return invalid("installation manifest SHA-256 is invalid")
+	}
+	if _, err := time.Parse(time.RFC3339, installation.InstalledAt); err != nil {
+		return invalid("installation installedAt is invalid")
+	}
+	if _, err := time.Parse(time.RFC3339, installation.UpdatedAt); err != nil {
+		return invalid("installation updatedAt is invalid")
+	}
+
+	baseURL := fmt.Sprintf("/api/v1/custom-panels/github/%s/%s/%s/", owner, repo, installation.CommitSHA)
+	if err := validateStoredArtifact("entry", installation.Artifacts.Entry, baseURL+"entry", true); err != nil {
+		return err
+	}
+	if (installation.Artifacts.Worker != nil) != (installation.Manifest.Artifacts.Worker != "") {
+		return invalid("installation worker artifact does not match the manifest")
+	}
+	if installation.Artifacts.Worker != nil {
+		if err := validateStoredArtifact("worker", *installation.Artifacts.Worker, baseURL+"worker", true); err != nil {
+			return err
+		}
+	}
+	if (installation.Artifacts.Styles != nil) != (installation.Manifest.Artifacts.Styles != "") {
+		return invalid("installation styles artifact does not match the manifest")
+	}
+	if installation.Artifacts.Styles != nil {
+		if err := validateStoredArtifact("styles", *installation.Artifacts.Styles, baseURL+"styles", true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateStoredArtifact(name string, artifact chroniclesdk.CustomPanelArtifact, expectedURL string, required bool) error {
+	if !required && artifact.URL == "" {
+		return nil
+	}
+	if artifact.URL != expectedURL || !isHexDigest(artifact.SHA256) || artifact.Size < 0 {
+		return invalid("installation " + name + " artifact is invalid")
+	}
+	return nil
+}
+
+func isHexDigest(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
 func validateArtifactPath(name, value string, required bool) error {
 	if value == "" && !required {
 		return nil

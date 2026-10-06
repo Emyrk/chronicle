@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CUSTOM_PANEL_INSTALLATIONS_KEY, readCustomPanelStorage, setCustomPanelsEnabled, upsertCustomPanelInstallation } from "./pluginStorage";
+import { clearCustomPanelStorage, CUSTOM_PANEL_INSTALLATIONS_KEY, CUSTOM_PANELS_ENABLED_KEY, readCustomPanelStorage } from "./pluginStorage";
 import type { CustomPanelInstallationV1 } from "./pluginTypes";
 
 const installation: CustomPanelInstallationV1 = {
@@ -17,11 +17,12 @@ describe("custom panel storage", () => {
     expect(readCustomPanelStorage(storage)).toMatchObject({ installations: [installation], corruptRecords: 1 });
   });
 
-  it("stores enable state and installations without evaluating plugin code", () => {
+  it("clears legacy account settings after migration", () => {
     const storage = new MapStorage();
-    setCustomPanelsEnabled(true, storage);
-    upsertCustomPanelInstallation(installation, storage);
-    expect(readCustomPanelStorage(storage)).toMatchObject({ enabled: true, installations: [installation] });
+    storage.setItem(CUSTOM_PANELS_ENABLED_KEY, "true");
+    storage.setItem(CUSTOM_PANEL_INSTALLATIONS_KEY, JSON.stringify([installation]));
+    clearCustomPanelStorage(storage);
+    expect(readCustomPanelStorage(storage)).toMatchObject({ enabled: false, installations: [] });
   });
 });
 
