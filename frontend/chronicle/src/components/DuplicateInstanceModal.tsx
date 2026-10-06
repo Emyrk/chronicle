@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { X, Users, Clock, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -38,7 +38,6 @@ export function DuplicateInstanceModal({
   onClose,
   currentInstanceId,
 }: DuplicateInstanceModalProps) {
-  const navigate = useNavigate();
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape
@@ -89,22 +88,23 @@ export function DuplicateInstanceModal({
               : `/instances/${inst.id}`;
             const isCurrent = currentInstanceId === inst.id;
             return (
-              <button
+              <Link
                 key={inst.id}
+                to={url}
                 className={cn(
-                  "w-full text-left rounded-md overflow-hidden group transition-all",
+                  "block w-full text-left rounded-md overflow-hidden group transition-all",
                   isCurrent
                     ? "ring-2 ring-amber-400/70"
                     : "cursor-pointer hover:scale-[1.01] hover:shadow-md",
                 )}
-                onClick={() => {
-                  if (isCurrent) { onClose(); return; }
-                  navigate(url);
+                onClick={(event) => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                  if (isCurrent) event.preventDefault();
                   onClose();
                 }}
               >
                 <DuplicateInstanceRow instance={inst} isCurrent={isCurrent} />
-              </button>
+              </Link>
             );
           })}
         </div>
