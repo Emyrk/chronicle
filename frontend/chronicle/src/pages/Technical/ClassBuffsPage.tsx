@@ -19,9 +19,14 @@ function normalizeBuffName(name: string): string {
 }
 
 const TARGETING_LABELS: Record<FriendlyClassBuffSpell["targeting"], string> = {
+  self: "Self",
   friendly: "Friendly player",
   group: "Party / raid",
 };
+
+function effectLabel(effect: FriendlyClassBuffSpell["effects"][number]): string {
+  return effect.aura_name !== "None" ? effect.aura_name : effect.effect_name;
+}
 
 interface ClassBuffMenuState {
   x: number;
@@ -154,11 +159,11 @@ export function ClassBuffsPage() {
     return byName;
   }, [policies]);
 
-  const ignoredCountFor = useCallback((name: string, className: string) => {
+  const ignoredCountFor = useCallback((name: string, className: string, defaultIgnored: boolean) => {
     const byDataset = policiesByName.get(normalizeBuffName(name));
     let count = 0;
     for (const datasetID of selectedDatasetKeys) {
-      if ((byDataset?.get(datasetID) ?? className === "Generic")) count++;
+      if ((byDataset?.get(datasetID) ?? (className === "Generic" || defaultIgnored))) count++;
     }
     return count;
   }, [policiesByName, selectedDatasetKeys]);
@@ -167,7 +172,7 @@ export function ClassBuffsPage() {
     const counts = new Map<string, number>();
     for (const spell of spells) {
       const name = normalizeBuffName(spell.name);
-      if (!counts.has(name)) counts.set(name, ignoredCountFor(spell.name, activeClass));
+      if (!counts.has(name)) counts.set(name, ignoredCountFor(spell.name, activeClass, spell.default_ignored));
     }
     return counts;
   }, [activeClass, ignoredCountFor, spells]);
@@ -192,7 +197,7 @@ export function ClassBuffsPage() {
   const ignoredCount = useMemo(
     () => Object.entries(data ?? {}).reduce(
       (total, [className, entries]) => total + entries.filter((spell) => (
-        canManage ? ignoredCountFor(spell.name, className) > 0 : spell.ignored
+        canManage ? ignoredCountFor(spell.name, className, spell.default_ignored) > 0 : spell.ignored
       )).length,
       0,
     ),
@@ -272,8 +277,9 @@ export function ClassBuffsPage() {
       </div>
       <p className="mb-4 text-xs text-muted-foreground">
         Generated from the current spell dataset during spell import. Includes
-        non-passive player-class and generic spells with an aura effect targeting a friendly player,
-        party, or raid. Generic spells appear in their own Generic view, are ignored by default, and must be opted in.
+        non-passive player-class and generic spells with an aura or Dummy effect targeting
+        self, a friendly player, party, or raid. Self-targeted and Dummy spells are ignored by default.
+        Generic spells appear in their own Generic view and must be opted in.
         Every rank remains listed for combat-log matching.
         {canManage && " Select datasets below, then right-click a rank or use its actions button to update every rank with that exact spell name."}
       </p>
@@ -366,6 +372,7 @@ export function ClassBuffsPage() {
           <option value="all">All targets</option>
           <option value="group">Party / raid</option>
           <option value="friendly">Friendly player</option>
+          <option value="self">Self</option>
         </select>
         <div className="relative min-w-56 flex-1">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -395,7 +402,7 @@ export function ClassBuffsPage() {
           <span>Spell ID</span>
           <span>Buff</span>
           <span>Target</span>
-          <span className="text-right">Auras</span>
+          <span className="text-right">Effects</span>
           <span className="sr-only">Actions</span>
         </div>
         {isLoading ? (
@@ -435,9 +442,9 @@ export function ClassBuffsPage() {
                 <span className="text-xs text-muted-foreground">{TARGETING_LABELS[spell.targeting]}</span>
                 <span
                   className="truncate text-right text-xs text-muted-foreground"
-                  title={spell.effects.map((effect) => `${effect.aura_name} (${effect.aura_effect})`).join(", ")}
+                  title={spell.effects.map((effect) => `${effectLabel(effect)} (${effect.effect}/${effect.aura_effect})`).join(", ")}
                 >
-                  {spell.effects.map((effect) => effect.aura_name).join(", ")}
+                  {spell.effects.map(effectLabel).join(", ")}
                 </span>
                 </Link>
                 {canManage ? (

@@ -13,27 +13,30 @@ import (
 
 type classBuffEffect struct {
 	EffectIndex     int32   `json:"effect_index"`
+	Effect          int32   `json:"effect"`
+	EffectName      string  `json:"effect_name"`
 	AuraEffect      int32   `json:"aura_effect"`
 	AuraName        string  `json:"aura_name"`
 	ImplicitTargets []int32 `json:"implicit_targets"`
 }
 
 type classBuffSpell struct {
-	ID          int32             `json:"id"`
-	Name        string            `json:"name"`
-	NameSubtext string            `json:"name_subtext"`
-	Targeting   string            `json:"targeting"`
-	Effects     []classBuffEffect `json:"effects"`
-	Ignored     bool              `json:"ignored"`
+	ID             int32             `json:"id"`
+	Name           string            `json:"name"`
+	NameSubtext    string            `json:"name_subtext"`
+	Targeting      string            `json:"targeting"`
+	DefaultIgnored bool              `json:"default_ignored"`
+	Effects        []classBuffEffect `json:"effects"`
+	Ignored        bool              `json:"ignored"`
 }
 
 func applyClassBuffPolicies(byClass map[string][]classBuffSpell, policies map[string]bool) {
 	for className, spells := range byClass {
-		defaultIgnored := className == "Generic"
+		classDefaultIgnored := className == "Generic"
 		for i := range spells {
 			ignored, ok := policies[strings.ToLower(strings.TrimSpace(spells[i].Name))]
 			if !ok {
-				ignored = defaultIgnored
+				ignored = classDefaultIgnored || spells[i].DefaultIgnored
 			}
 			spells[i].Ignored = ignored
 		}

@@ -13,17 +13,20 @@ import (
 
 type classBuffEffect struct {
 	EffectIndex     int32   `json:"effect_index"`
+	Effect          int32   `json:"effect"`
+	EffectName      string  `json:"effect_name"`
 	AuraEffect      int32   `json:"aura_effect"`
 	AuraName        string  `json:"aura_name"`
 	ImplicitTargets []int32 `json:"implicit_targets"`
 }
 
 type classBuffSpell struct {
-	ID          int32             `json:"id"`
-	Name        string            `json:"name"`
-	NameSubtext string            `json:"name_subtext"`
-	Targeting   string            `json:"targeting"`
-	Effects     []classBuffEffect `json:"effects"`
+	ID             int32             `json:"id"`
+	Name           string            `json:"name"`
+	NameSubtext    string            `json:"name_subtext"`
+	Targeting      string            `json:"targeting"`
+	DefaultIgnored bool              `json:"default_ignored"`
+	Effects        []classBuffEffect `json:"effects"`
 }
 
 func classBuffSpellFromSpell(spell *chrondbc.Spell) (classBuffSpell, bool) {
@@ -38,6 +41,7 @@ func classBuffSpellFromSpell(spell *chrondbc.Spell) (classBuffSpell, bool) {
 
 	var effects []classBuffEffect
 	targeting := ""
+	defaultIgnored := false
 	for _, effect := range spell.Effects {
 		effectTargeting, ok := classBuffEffectTargeting(effect)
 		if !ok {
@@ -46,8 +50,13 @@ func classBuffSpellFromSpell(spell *chrondbc.Spell) (classBuffSpell, bool) {
 		if classBuffTargetingPriority(effectTargeting) > classBuffTargetingPriority(targeting) {
 			targeting = effectTargeting
 		}
+		if effectTargeting == "self" || effect.Effect == chrondbc.EffectDummy || effect.EffectAura == chrondbc.AuraEffectDummy {
+			defaultIgnored = true
+		}
 		effects = append(effects, classBuffEffect{
 			EffectIndex:     effect.EffectIndex,
+			Effect:          int32(effect.Effect),
+			EffectName:      effect.Effect.String(),
 			AuraEffect:      int32(effect.EffectAura),
 			AuraName:        effect.EffectAura.String(),
 			ImplicitTargets: append([]int32(nil), effect.ImplicitTarget...),
@@ -62,26 +71,23 @@ func classBuffSpellFromSpell(spell *chrondbc.Spell) (classBuffSpell, bool) {
 		subtext = ""
 	}
 	return classBuffSpell{
-		ID:          int32(spell.ID),
-		Name:        spell.Name(),
-		NameSubtext: subtext,
-		Targeting:   targeting,
-		Effects:     effects,
+		ID:             int32(spell.ID),
+		Name:           spell.Name(),
+		NameSubtext:    subtext,
+		Targeting:      targeting,
+		DefaultIgnored: defaultIgnored,
+		Effects:        effects,
 	}, true
 }
 
 func classBuffEffectTargeting(effect chrondbc.SpellEffect) (string, bool) {
-	if effect.EffectAura == chrondbc.AuraEffectDummy {
-		return "", false
-	}
-
 	switch effect.Effect {
 	case chrondbc.EffectApplyAreaAuraParty,
 		chrondbc.EffectApplyAreaAuraRaid,
 		chrondbc.EffectApplyAreaAuraFriend,
 		chrondbc.EffectApplyAreaAuraPartyNonRandom:
 		return "group", true
-	case chrondbc.EffectApplyAura:
+	case chrondbc.EffectApplyAura, chrondbc.EffectDummy:
 		return classBuffTargeting(effect.ImplicitTarget)
 	default:
 		return "", false
@@ -93,6 +99,8 @@ func classBuffTargeting(targets []int32) (string, bool) {
 	for _, rawTarget := range targets {
 		var candidate string
 		switch chrondbc.ImplicitTarget(rawTarget) {
+		case chrondbc.ImplicitTargetUnitCaster:
+			candidate = "self"
 		case chrondbc.ImplicitTargetUnitNearbyParty,
 			chrondbc.ImplicitTargetUnitNearbyAlly,
 			chrondbc.ImplicitTargetUnitTargetAlly:
@@ -126,6 +134,8 @@ func classBuffTargetingPriority(targeting string) int {
 		return 3
 	case "friendly":
 		return 2
+	case "self":
+		return 1
 	default:
 		return 0
 	}
