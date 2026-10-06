@@ -135,7 +135,8 @@ export function CustomPanelHost({ installation, panel, context, panelId, panelOp
       workerRef.current = null;
       const mounted = instanceRef.current;
       instanceRef.current = null;
-      Promise.resolve(mounted?.destroy?.()).catch((error) => console.error("Custom panel destroy failed", error)).finally(() => root.replaceChildren());
+      root.replaceChildren();
+      Promise.resolve().then(() => mounted?.destroy?.()).catch((error) => console.error("Custom panel destroy failed", error));
     };
   // Only lifecycle capabilities remount the plugin. Selection and sync data flow through update().
   // eslint-disable-next-line react-hooks/exhaustive-deps

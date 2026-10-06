@@ -56,7 +56,11 @@ func githubServer(t *testing.T, manifest chroniclesdk.CustomPanelManifest, mutat
 		}
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/api/repos/owner/repo/commits/"):
-			_, _ = fmt.Fprintf(w, `{"sha":%q}`, testCommit)
+			if r.Header.Get("Accept") != "application/vnd.github.sha" {
+				http.Error(w, "missing compact GitHub SHA media type", http.StatusBadRequest)
+				return
+			}
+			_, _ = w.Write([]byte(testCommit))
 		case r.URL.Path == "/raw/owner/repo/"+testCommit+"/chronicle-panel.json":
 			_, _ = w.Write(manifestJSON)
 		case r.URL.Path == "/raw/owner/repo/"+testCommit+"/dist/panel.js":
@@ -98,7 +102,7 @@ func TestResolve(t *testing.T) {
 	entryBytes := []byte("export const panel = true;")
 	entryHash := sha256.Sum256(entryBytes)
 
-	for _, ref := range []string{"main", "feature/custom-panel", "v1.0.0", testCommit} {
+	for _, ref := range []string{"", "main", "feature/custom-panel", "v1.0.0", testCommit} {
 		ref := ref
 		t.Run(ref, func(t *testing.T) {
 			body := fmt.Sprintf(`{"repository":"Owner/Repo","ref":%q}`, ref)
@@ -355,6 +359,20 @@ func TestGitHubTimeout(t *testing.T) {
 
 	rec := performRequest(newTestHandler(server, 20*time.Millisecond).Routes(), http.MethodPost, "/resolve", `{"repository":"owner/repo","ref":"main"}`)
 	assert.Equal(t, http.StatusGatewayTimeout, rec.Code, rec.Body.String())
+}
+
+func TestClientIPTrustsOnlyPrivateProxies(t *testing.T) {
+	t.Parallel()
+
+	direct := httptest.NewRequest(http.MethodGet, "/", nil)
+	direct.RemoteAddr = "192.0.2.10:1234"
+	direct.Header.Set("X-Forwarded-For", "198.51.100.99")
+	assert.Equal(t, "192.0.2.10", clientIP(direct))
+
+	proxied := httptest.NewRequest(http.MethodGet, "/", nil)
+	proxied.RemoteAddr = "10.0.0.2:1234"
+	proxied.Header.Set("X-Forwarded-For", "198.51.100.99, 203.0.113.15")
+	assert.Equal(t, "203.0.113.15", clientIP(proxied))
 }
 
 func TestResolveRateLimit(t *testing.T) {

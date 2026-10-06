@@ -141,14 +141,18 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	if err := validateRef(req.Ref); err != nil {
+	ref := strings.TrimSpace(req.Ref)
+	if ref == "" {
+		ref = "HEAD"
+	}
+	if err := validateRef(ref); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
 	defer cancel()
-	commit, err := h.resolveRef(ctx, owner, repo, req.Ref)
+	commit, err := h.resolveRef(ctx, owner, repo, ref)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -236,21 +240,15 @@ func (h *Handler) Artifact(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) resolveRef(ctx context.Context, owner, repo, ref string) (string, error) {
 	u := *h.apiBaseURL
 	u.Path = strings.TrimSuffix(u.Path, "/") + "/repos/" + owner + "/" + repo + "/commits/" + ref
-	body, err := h.get(ctx, u.String(), maxCommitBody, "repository ref")
+	body, err := h.getWithAccept(ctx, u.String(), maxCommitBody, "repository ref", "application/vnd.github.sha")
 	if err != nil {
 		return "", err
 	}
-	var result struct {
-		SHA string `json:"sha"`
-	}
-	if err := decodeJSONBytes(body, &result); err != nil {
-		return "", &apiError{status: http.StatusBadGateway, message: "GitHub returned an invalid commit response.", detail: err.Error()}
-	}
-	result.SHA = strings.ToLower(result.SHA)
-	if !commitPattern.MatchString(result.SHA) {
+	sha := strings.ToLower(strings.TrimSpace(string(body)))
+	if !commitPattern.MatchString(sha) {
 		return "", &apiError{status: http.StatusBadGateway, message: "GitHub returned an invalid commit response.", detail: "commit SHA was not full-length hexadecimal"}
 	}
-	return result.SHA, nil
+	return sha, nil
 }
 
 func (h *Handler) fetchManifest(ctx context.Context, owner, repo, commit string) (chroniclesdk.CustomPanelManifest, []byte, error) {
@@ -308,11 +306,15 @@ func (h *Handler) fetchRaw(ctx context.Context, owner, repo, commit, filePath st
 }
 
 func (h *Handler) get(ctx context.Context, rawURL string, limit int64, kind string) ([]byte, error) {
+	return h.getWithAccept(ctx, rawURL, limit, kind, "application/vnd.github+json")
+}
+
+func (h *Handler) getWithAccept(ctx context.Context, rawURL string, limit int64, kind, accept string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, &apiError{status: http.StatusInternalServerError, message: "Failed to prepare GitHub request.", detail: err.Error()}
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Accept", accept)
 	req.Header.Set("User-Agent", "Chronicle-Custom-Panels")
 	resp, err := h.client.Do(req)
 	if err != nil {
@@ -570,12 +572,23 @@ func (l *ipLimiter) middleware(next http.Handler) http.Handler {
 }
 
 func clientIP(r *http.Request) string {
-	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); forwarded != "" {
-		return forwarded
+	remote := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		remote = host
 	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
+
+	// Only trust forwarding data from a private or loopback reverse proxy. Read
+	// the last valid entry so a client-supplied leading value cannot rotate the
+	// public resolver's rate-limit key when the proxy appends the real address.
+	remoteIP := net.ParseIP(remote)
+	if remoteIP != nil && (remoteIP.IsPrivate() || remoteIP.IsLoopback()) {
+		forwarded := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+		for i := len(forwarded) - 1; i >= 0; i-- {
+			candidate := strings.TrimSpace(forwarded[i])
+			if net.ParseIP(candidate) != nil {
+				return candidate
+			}
+		}
 	}
-	return r.RemoteAddr
+	return remote
 }

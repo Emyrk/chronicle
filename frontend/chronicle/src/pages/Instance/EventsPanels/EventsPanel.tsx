@@ -734,13 +734,13 @@ function BuiltinEventsPanel({
         panelOption: string | null;
         filters: PanelFilter[];
       };
-      if (!parsed.panelType || !(parsed.panelType in PANELS)) return;
+      if (!parsed.panelType || (!(parsed.panelType in PANELS) && !isCustomPanelRef(parsed.panelType))) return;
       onPanelTypeChange(parsed.panelType);
       onPanelOptionChange?.(parsed.panelOption);
       if (parsed.filters && parsed.filters.length > 0) {
         applyFilters(parsed.filters);
       } else {
-        applyFilters(PANELS[parsed.panelType].defaultFilters ?? []);
+        applyFilters(isCustomPanelRef(parsed.panelType) ? [] : (PANELS[parsed.panelType].defaultFilters ?? []));
       }
       setPendingFilters(null);
     } catch {
