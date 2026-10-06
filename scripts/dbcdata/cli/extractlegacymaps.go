@@ -339,9 +339,19 @@ func buildLegacyMapManifest(
 		})
 	}
 
+	instanceMapIDs := make(map[int32]struct{})
+	for _, mapRow := range worldMaps {
+		if mapRow.InstanceType == 1 || mapRow.InstanceType == 2 {
+			instanceMapIDs[mapRow.ID] = struct{}{}
+		}
+	}
+
 	manifest := wowMapManifest{Format: wowMapManifestFormat, Target: target}
 	sourcePaths := make(map[int32]string)
 	for _, row := range areas {
+		if _, isInstance := instanceMapIDs[row.MapID]; isInstance {
+			continue
+		}
 		baseTiles, ok := legacyMapTiles(resolveFile, row.AreaName, row.AreaName, 4, 3, sourcePaths)
 		if !ok {
 			continue
