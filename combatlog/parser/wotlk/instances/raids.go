@@ -892,6 +892,9 @@ var UlduarFactory = &instances.CommonFactory{
 	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 		return UlduarSpeedrunRequirements()
 	},
+	ExtraHooks: func() []instancehook.Hook {
+		return []instancehook.Hook{newAssemblyRankedDamage()}
+	},
 	Preprocessors: func() []instancehook.Preprocessor {
 		return []instancehook.Preprocessor{&thorimArenaStarterCombat{}}
 	},

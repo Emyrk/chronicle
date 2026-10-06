@@ -246,9 +246,10 @@ export function createDamageDoneProcessor(
       // Damage absorbed by the target still depleted a shield, so include it in
       // effective damage while retaining the absorbed portion for breakouts.
       const rawEffectiveAmount = Math.max(0, event.amount - (event.overkill || 0));
-      const absorbedAmount = absorbedDamageFromTailers(event);
-      const effectiveAmount = rawEffectiveAmount + absorbedAmount;
-      const fullyAbsorbed = rawEffectiveAmount === 0 && absorbedAmount > 0;
+      const rawAbsorbedAmount = absorbedDamageFromTailers(event);
+      const effectiveAmount = event.rankedDamage ?? (rawEffectiveAmount + rawAbsorbedAmount);
+      const absorbedAmount = Math.min(rawAbsorbedAmount, effectiveAmount);
+      const fullyAbsorbed = effectiveAmount > 0 && rawEffectiveAmount === 0 && absorbedAmount > 0;
 
       // Vulnerability decomposition (bonus + base). Defaults to no bonus.
       let baseAmount = effectiveAmount;

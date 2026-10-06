@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
 )
@@ -795,6 +796,72 @@ func TestUlduarAssemblyOfIronIdentities(t *testing.T) {
 		require.True(t, identity.Boss)
 		require.Equal(t, "Assembly of Iron", identity.EncounterName)
 	}
+}
+
+func TestUlduarAssemblyRankedDamageUsesKillOrder(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorWrath}
+	ctx := parsectx.With(context.Background(), parsectx.Context{Flavor: flavor})
+	units := unitdb.New()
+	instance := UlduarFactory.New(
+		ctx,
+		slog.Default(),
+		units,
+		zone.Zone{Name: "Ulduar", MapID: 603},
+		flavor,
+	)
+	player := guid.GUID(1)
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Player", IsPlayer: true, CanCooperate: true}
+	start := time.Date(2026, time.October, 6, 12, 0, 0, 0, time.UTC)
+	steelbreaker := creatureGUIDWithSeed(32867, 1)
+	molgeim := creatureGUIDWithSeed(32927, 1)
+	brundir := creatureGUIDWithSeed(32857, 1)
+	for _, boss := range []guid.GUID{steelbreaker, molgeim, brundir} {
+		units.InjectAffiliation(boss, unitdb.AffiliationHostile)
+	}
+
+	at := start
+	processDamage := func(target guid.GUID, amount int32) {
+		t.Helper()
+		at = at.Add(time.Millisecond)
+		require.NoError(t, instance.Process(&messages.Damage{
+			MessageBase: messages.Base(at),
+			Caster:      &player,
+			Target:      target,
+			Amount:      amount,
+			HitType:     types.HitTypeHit,
+		}))
+	}
+	processSlain := func(target guid.GUID) {
+		t.Helper()
+		at = at.Add(time.Millisecond)
+		require.NoError(t, instance.Process(&messages.Slain{
+			MessageBase: messages.Base(at),
+			Victim:      target,
+			Killer:      &player,
+		}))
+	}
+
+	processDamage(steelbreaker, 500)
+	processDamage(molgeim, 80)
+	processDamage(brundir, 20)
+	processSlain(steelbreaker)
+	processDamage(molgeim, 300)
+	processDamage(brundir, 40)
+	processSlain(molgeim)
+	processDamage(brundir, 700)
+	processSlain(brundir)
+
+	result, err := instance.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+	require.NotNil(t, result.Rankings)
+
+	encounterID := result.Encounters[0].Combat.EncounterID
+	stats := result.Rankings.DPS[encounterID].Units[player]
+	require.NotNil(t, stats)
+	require.Equal(t, int64(1_500), stats.DamageDone)
 }
 
 func TestUlduarAssemblyRespawnStartsNewEncounter(t *testing.T) {

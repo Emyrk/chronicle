@@ -54,6 +54,42 @@ func TestDPSTracker_BasicDamage(t *testing.T) {
 	assert.Nil(t, results[encID].Units[player].OwnerGUID)
 }
 
+func TestDPSTracker_DefersRankedDamageUntilFightEnd(t *testing.T) {
+	t.Parallel()
+
+	tracker, units := setupDPSTracker()
+	player := makePlayerGUID(1)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Warrior", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+
+	tracker.FightStarted(encID, nil)
+	caster := player
+	ranked := &messages.Damage{
+		Caster:              &caster,
+		Target:              boss,
+		Amount:              500,
+		RankedDamagePending: true,
+	}
+	unranked := &messages.Damage{
+		Caster:              &caster,
+		Target:              boss,
+		Amount:              300,
+		RankedDamagePending: true,
+	}
+	require.NoError(t, tracker.ProcessMessage(true, encID, ranked))
+	require.NoError(t, tracker.ProcessMessage(true, encID, unranked))
+
+	rankedAmount := int64(500)
+	unrankedAmount := int64(0)
+	ranked.RankedDamage = &rankedAmount
+	unranked.RankedDamage = &unrankedAmount
+	tracker.FightEnded(encID, nil)
+
+	require.Equal(t, int64(500), tracker.Result()[encID].Units[player].DamageDone)
+}
+
 func TestDPSTracker_IncludesInjectedHostileVehicleDamage(t *testing.T) {
 	t.Parallel()
 

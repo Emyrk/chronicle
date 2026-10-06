@@ -218,6 +218,9 @@ func (e *EncounterEventsInProgress) Process(m messages.Message) error {
 	}
 	switch ty := m.(type) {
 	case *messages.Damage:
+		if ty.RankedDamagePending {
+			e.Damage.EnableBuffering()
+		}
 		err := AddToBuilder(e.Damage, ty, e.nextIndex(), types2proto.Damage)
 		if err != nil {
 			return fmt.Errorf("damage proto: %w", err)

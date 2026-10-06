@@ -862,6 +862,7 @@ type Damage struct {
 	SpellData     *SpellData `protobuf:"bytes,10,opt,name=spellData,proto3,oneof" json:"spellData,omitempty"`
 	Overkill      int32      `protobuf:"varint,11,opt,name=overkill,proto3" json:"overkill,omitempty"`
 	Schools       []School   `protobuf:"varint,12,rep,packed,name=schools,proto3,enum=chronicleproto.School" json:"schools,omitempty"`
+	RankedDamage  *int64     `protobuf:"varint,13,opt,name=ranked_damage,json=rankedDamage,proto3,oneof" json:"ranked_damage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -971,6 +972,13 @@ func (x *Damage) GetSchools() []School {
 		return x.Schools
 	}
 	return nil
+}
+
+func (x *Damage) GetRankedDamage() int64 {
+	if x != nil && x.RankedDamage != nil {
+		return *x.RankedDamage
+	}
+	return 0
 }
 
 type UnitPosition struct {
@@ -3412,7 +3420,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"\babsorbed\x18\v \x01(\x05R\babsorbed\x120\n" +
 	"\aschools\x18\f \x03(\x0e2\x16.chronicleproto.SchoolR\aschoolsB\f\n" +
 	"\n" +
-	"_spellData\"\xc5\x03\n" +
+	"_spellData\"\x81\x04\n" +
 	"\x06Damage\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x1b\n" +
 	"\x06caster\x18\x03 \x01(\tH\x00R\x06caster\x88\x01\x01\x12\x1e\n" +
@@ -3427,10 +3435,12 @@ const file_chronicle_proto_rawDesc = "" +
 	"\tspellData\x18\n" +
 	" \x01(\v2\x19.chronicleproto.SpellDataH\x01R\tspellData\x88\x01\x01\x12\x1a\n" +
 	"\boverkill\x18\v \x01(\x05R\boverkill\x120\n" +
-	"\aschools\x18\f \x03(\x0e2\x16.chronicleproto.SchoolR\aschoolsB\t\n" +
+	"\aschools\x18\f \x03(\x0e2\x16.chronicleproto.SchoolR\aschools\x12(\n" +
+	"\rranked_damage\x18\r \x01(\x03H\x02R\frankedDamage\x88\x01\x01B\t\n" +
 	"\a_casterB\f\n" +
 	"\n" +
-	"_spellData\"\x9c\x01\n" +
+	"_spellDataB\x10\n" +
+	"\x0e_ranked_damage\"\x9c\x01\n" +
 	"\fUnitPosition\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x12\n" +
 	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\f\n" +

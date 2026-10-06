@@ -365,8 +365,14 @@ type Damage struct {
 	HitType   types.HitType
 	Amount    int32
 	Overkill  int32
-	School    types.School
-	Trailer   types.Trailer
+	// RankedDamage is the portion of this event eligible for damage rankings.
+	// Nil preserves the legacy effective-damage calculation.
+	RankedDamage *int64
+	// RankedDamagePending keeps this message mutable until encounter finalization.
+	// It is parser-internal and is not serialized directly.
+	RankedDamagePending bool
+	School              types.School
+	Trailer             types.Trailer
 	// EnvironmentType is only set when the hit type is environmental.
 	// It adds some context, but not strictly necessary.
 	EnvironmentType *types.EnvironmentType
