@@ -69,6 +69,9 @@ type Options struct {
 	// When empty, /ads.txt returns 404 so self-hosted deployments do not publish
 	// another operator's advertising authorization.
 	AdsTxtURL *url.URL
+	// AdSenseClientID is the public publisher client ID (ca-pub-...). It is
+	// exposed only for requests whose tenant and deployment are eligible for ads.
+	AdSenseClientID string
 	// ShortLinkDomain is the domain used for short share links (e.g. "chrn.link").
 	// If empty, short links use same-origin paths instead.
 	ShortLinkDomain string
@@ -613,42 +616,42 @@ func (api *API) Routes() chi.Router {
 	return r
 }
 
-// brandingResolver returns per-request branding for the HTML template
-// (title, favicon, theme CSS) based on tenant context or site-level branding.
+// brandingResolver returns per-request HTML metadata based on tenant context
+// or site-level branding. AdSense verification is emitted only for tenants that
+// opted in on deployments with both ads.txt and a publisher client configured.
 func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
+	resolved := &frontend.HTMLBranding{}
+	t := servicetenant.TenantFromContext(r.Context())
+	if tenantAdsEnabled(api.adsDeploymentEnabled(), t) {
+		resolved.AdSenseClientID = api.Opts.AdSenseClientID
+	}
+
 	// Tenant branding takes priority.
-	if t := servicetenant.TenantFromContext(r.Context()); t != nil {
+	if t != nil {
 		branding := chroniclesdk.TenantFromDB(*t).Branding
 		if branding != nil && branding.DisplayName != "" {
-			b := &frontend.HTMLBranding{
-				Title:    branding.DisplayName + " by Chronicle",
-				ThemeCSS: buildThemeCSS(branding),
-			}
-			if branding.Favicon != "" {
-				b.Favicon = branding.Favicon
-			}
-			return b
+			resolved.Title = branding.DisplayName + " by Chronicle"
+			resolved.ThemeCSS = buildThemeCSS(branding)
+			resolved.Favicon = branding.Favicon
+			return resolved
 		}
 	}
 
 	// Fall back to site-level branding.
 	config, err := api.Opts.Zed.GetSiteConfig(r.Context())
-	if err != nil {
-		return nil
-	}
-	branding := unmarshalBranding(config.Branding)
-	if branding != nil && branding.DisplayName != "" {
-		b := &frontend.HTMLBranding{
-			Title:    branding.DisplayName + " by Chronicle",
-			ThemeCSS: buildThemeCSS(branding),
+	if err == nil {
+		branding := unmarshalBranding(config.Branding)
+		if branding != nil && branding.DisplayName != "" {
+			resolved.Title = branding.DisplayName + " by Chronicle"
+			resolved.ThemeCSS = buildThemeCSS(branding)
+			resolved.Favicon = branding.Favicon
 		}
-		if branding.Favicon != "" {
-			b.Favicon = branding.Favicon
-		}
-		return b
 	}
 
-	return nil
+	if resolved.Title == "" && resolved.AdSenseClientID == "" {
+		return nil
+	}
+	return resolved
 }
 
 var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)

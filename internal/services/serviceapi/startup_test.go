@@ -60,3 +60,11 @@ func TestSwitchableHandler(t *testing.T) {
 	require.Equal(t, "image/png", logo.Header().Get("Content-Type"))
 	require.Equal(t, startupLogo, logo.Body.Bytes())
 }
+
+func TestAdSenseClientIDPattern(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, adsenseClientIDPattern.MatchString("ca-pub-8208259743822818"))
+	require.False(t, adsenseClientIDPattern.MatchString("pub-8208259743822818"))
+	require.False(t, adsenseClientIDPattern.MatchString("ca-pub-example"))
+}

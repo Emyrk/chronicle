@@ -34,6 +34,14 @@ Deployed to GitHub Pages via `.github/workflows/deploy-landing.yml` on push to `
 
 The landing build publishes `public/ads.txt` as `https://chronicleclassic.com/ads.txt`. Advertising authorization stays scoped to the landing site and is not embedded in Chronicle application deployments.
 
+The landing build adds AdSense account verification metadata when its public publisher ID is configured:
+
+```bash
+CHRONICLE_ADSENSE_CLIENT_ID=ca-pub-8208259743822818 pnpm build
+```
+
+The deployment workflow reads this value from the GitHub Actions repository variable named `CHRONICLE_ADSENSE_CLIENT_ID`. This metadata does not load the AdSense script or request ads; live serving remains placement-controlled.
+
 Official Chronicle instances can share that copy by setting:
 
 ```bash

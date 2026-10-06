@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 
 	"github.com/Emyrk/chronicle/api"
 	"github.com/Emyrk/chronicle/api/chronauth"
@@ -43,6 +44,8 @@ import (
 
 var _ services.Servicer = (*Service)(nil)
 
+var adsenseClientIDPattern = regexp.MustCompile(`^ca-pub-[0-9]+$`)
+
 func API(broker *services.Services) *api.API {
 	srv := services.MustGet[*Service](broker)
 	return srv.app
@@ -61,6 +64,7 @@ type Service struct {
 	saffronURL            *url.URL
 	ocrURL                *url.URL
 	adsTxtURL             *url.URL
+	adsenseClientID       string
 	shortLinkDomain       string
 	clientUploadsDisabled bool
 	zugzugURL             string
@@ -114,6 +118,10 @@ func (s *Service) DependsOn() []string {
 }
 
 func (s *Service) Start(ctx context.Context) error {
+	if s.adsenseClientID != "" && !adsenseClientIDPattern.MatchString(s.adsenseClientID) {
+		return fmt.Errorf("invalid AdSense client ID %q: expected ca-pub- followed by digits", s.adsenseClientID)
+	}
+
 	logger := servicelogger.Logger(s.broker)
 	st := servicestorage.Storage(s.broker)
 	bot := servicebot.DiscordBot(s.broker)
@@ -211,6 +219,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 		AccessURL:             au,
 		AdsTxtURL:             adsTxtURL,
+		AdSenseClientID:       s.adsenseClientID,
 		ShortLinkDomain:       s.shortLinkDomain,
 		ClientUploadsDisabled: s.clientUploadsDisabled,
 		ExternalVerification:  s.externalVerification(),
@@ -318,6 +327,15 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_ADS_TXT_URL",
 			Default:     "",
 			Value:       serpent.URLOf(s.adsTxtURL),
+		},
+		{
+			Name:        "AdSense Client ID",
+			Description: "Optional public AdSense publisher client ID (ca-pub-...). Enables verification metadata and placement-controlled serving when ads.txt and the tenant opt-in are also configured.",
+			Required:    false,
+			Flag:        "adsense-client-id",
+			Env:         "CHRONICLE_ADSENSE_CLIENT_ID",
+			Default:     "",
+			Value:       serpent.StringOf(&s.adsenseClientID),
 		},
 		{
 			Name:        "Short Link Domain",
