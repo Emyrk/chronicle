@@ -65,8 +65,9 @@ If a proposed change makes a caller aware of an AdSense client ID, slot ID, `ads
 2. Insert `AdSlot` at the intended point in normal document flow.
 3. Use the default responsive format unless the surrounding layout reserves a permanent rail.
 4. Keep product eligibility outside the component only when it depends on page data.
-5. Verify the preview on `localhost` at every applicable breakpoint.
-6. Run the focused component test and lint the changed files.
+5. Start the frontend with `pnpm run dev --with-ads` or `CHRONICLE_PREVIEW_ADS=true pnpm run dev`.
+6. Verify the preview on `localhost` at every applicable breakpoint.
+7. Run the focused component test and lint the changed files.
 
 Do not create a placement-specific wrapper merely to render `AdSlot`. A wrapper is justified only when it encapsulates reusable product eligibility or layout used by more than one caller.
 
@@ -96,7 +97,7 @@ The backend already computes effective `SiteConfig.ads_enabled`. It is true only
 2. The deployment configures a valid `CHRONICLE_ADSENSE_CLIENT_ID` (`ca-pub-...`).
 3. The resolved tenant has `ads_enabled = true`.
 
-Eligible tenant HTML includes the `google-adsense-account` verification meta tag, and site config exposes the public client ID for the future shared ad runtime. Neither path loads the AdSense provider script. The current `AdSlot` remains preview-only and returns `null` outside `localhost` and `127.0.0.1`. When live serving is implemented, preserve the three-part backend gate and make `AdSlot` consume the effective result. Do not replace it with a frontend-only environment flag.
+Eligible tenant HTML includes the `google-adsense-account` verification meta tag, and site config exposes the public client ID for the future shared ad runtime. Neither path loads the AdSense provider script. The current `AdSlot` remains preview-only and returns `null` unless the frontend is running in dev mode, `CHRONICLE_PREVIEW_ADS=true`, and the hostname is `localhost` or `127.0.0.1`. `pnpm run dev --with-ads` sets that flag for convenience. When live serving is implemented, preserve the three-part backend gate and make `AdSlot` consume the effective result. Do not replace production eligibility with a frontend-only environment flag.
 
 ## Live-serving implementation order
 
@@ -117,7 +118,7 @@ At minimum, `AdSlot.test.tsx` must cover:
 - Responsive preview defaults.
 - Rail preview dimensions and breakpoint class.
 - Stable `data-ad-placement` output.
-- No rendering on a non-local hostname while live serving is unavailable.
+- No rendering without the preview flag or on a non-local hostname while live serving is unavailable.
 - Any future effective enablement and consent branches before production serving is enabled.
 
 Page tests should cover product eligibility only. They should not retest provider behavior owned by `AdSlot`.

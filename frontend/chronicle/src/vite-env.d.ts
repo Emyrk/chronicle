@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_SERVER_NAME: string;
+  readonly CHRONICLE_PREVIEW_ADS: boolean;
 }
 
 interface ImportMeta {

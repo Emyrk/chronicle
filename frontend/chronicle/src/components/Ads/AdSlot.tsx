@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils"
-import { isLocalAdPreviewHost } from "./adPreview"
+import { shouldShowAdPreview } from "./adPreview"
 
 export type AdPlacement = `${string}-${string}`
 
@@ -25,15 +25,18 @@ export function AdSlot({
   placement,
   format = "responsive",
   hostname = window.location.hostname,
+  previewEnabled = import.meta.env.DEV && import.meta.env.CHRONICLE_PREVIEW_ADS,
   className,
 }: {
   /** Stable hyphenated identifier; use kebab-case for reporting and placement-specific policy. */
   placement: AdPlacement
   format?: AdFormat
   hostname?: string
+  /** Test seam for preview eligibility. Product callers should use the environment flag. */
+  previewEnabled?: boolean
   className?: string
 }) {
-  if (!isLocalAdPreviewHost(hostname)) {
+  if (!shouldShowAdPreview(hostname, previewEnabled)) {
     return null
   }
 
