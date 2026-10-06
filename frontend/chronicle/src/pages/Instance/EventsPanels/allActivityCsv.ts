@@ -45,9 +45,17 @@ function csvCell(value: string | number | boolean): string {
 }
 
 export function sortAllActivityEvents(events: RawDebugEvent[]): RawDebugEvent[] {
+  const encounterStarts = new Map<string, number>();
+  for (const event of events) {
+    if (!encounterStarts.has(event.encounterID)) {
+      encounterStarts.set(event.encounterID, event.dateMilli - event.offsetMilli);
+    }
+  }
+
   return [...events].sort((a, b) => {
     if (a.encounterID !== b.encounterID) {
-      return a.encounterID.localeCompare(b.encounterID);
+      const startDifference = encounterStarts.get(a.encounterID)! - encounterStarts.get(b.encounterID)!;
+      return startDifference || a.encounterID.localeCompare(b.encounterID);
     }
     return a.index - b.index;
   });
