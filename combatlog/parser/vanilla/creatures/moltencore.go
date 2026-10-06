@@ -109,32 +109,20 @@ const (
 
 type sorcererThaneCharacter struct {
 	*characters.Common
-	all         *characters.Characters
-	linkedEntry uint32
-	isBoss      bool
+	all     *characters.Characters
+	isImage bool
 }
 
 func NewSorcererThaneCharacter(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	entry, ok := id.GetEntry()
-	if !ok {
-		return nil, false
-	}
-
-	var linkedEntry uint32
-	switch entry {
-	case sorcererThane:
-		linkedEntry = imageOfSorcererThane
-	case imageOfSorcererThane:
-		linkedEntry = sorcererThane
-	default:
+	if !ok || (entry != sorcererThane && entry != imageOfSorcererThane) {
 		return nil, false
 	}
 
 	return &sorcererThaneCharacter{
-		Common:      characters.NewCommonCharacter(id, all),
-		all:         all,
-		linkedEntry: linkedEntry,
-		isBoss:      entry == sorcererThane,
+		Common:  characters.NewCommonCharacter(id, all),
+		all:     all,
+		isImage: entry == imageOfSorcererThane,
 	}, true
 }
 
@@ -148,7 +136,7 @@ func (s *sorcererThaneCharacter) Process(m messages.Message) error {
 		return err
 	}
 
-	if s.isBoss && wasActive && !s.IsActive() {
+	if !s.isImage && wasActive && !s.IsActive() {
 		for _, image := range s.all.ByEntry[imageOfSorcererThane] {
 			image.Died("linked_boss_inactive", m)
 		}
@@ -158,19 +146,23 @@ func (s *sorcererThaneCharacter) Process(m messages.Message) error {
 
 func (s *sorcererThaneCharacter) Start(reason string, m messages.Message) {
 	s.Common.Start(reason, m)
-	s.bumpLinked(m)
+	s.bumpOtherSorcerers(m)
 }
 
 func (s *sorcererThaneCharacter) Bump(reason string, m messages.Message) {
 	s.Common.Bump(reason, m)
-	s.bumpLinked(m)
+	s.bumpOtherSorcerers(m)
 }
 
-func (s *sorcererThaneCharacter) bumpLinked(m messages.Message) {
-	for _, linked := range s.all.ByEntry[s.linkedEntry] {
-		linkedSorcerer, ok := linked.(*sorcererThaneCharacter)
-		if ok && linkedSorcerer.IsActive() {
-			linkedSorcerer.Common.Bump("linked_sorcerer_thane_activity", m)
+func (s *sorcererThaneCharacter) bumpOtherSorcerers(m messages.Message) {
+	others := s.all.ByEntry[imageOfSorcererThane]
+	if s.isImage {
+		others = s.all.ByEntry[sorcererThane]
+	}
+
+	for _, other := range others {
+		if sorcerer, ok := other.(*sorcererThaneCharacter); ok && sorcerer.IsActive() {
+			sorcerer.Common.Bump("sorcerer_thane_activity", m)
 		}
 	}
 }
