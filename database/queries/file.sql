@@ -368,6 +368,49 @@ WHERE
        THEN @filter_instance_name = ANY(instances_agg.instance_names)
        ELSE true END;
 
+-- name: InvalidateWoWLogGroup :exec
+WITH invalidated_instances AS (
+  UPDATE log_instances li
+  SET invalidated_at = COALESCE(li.invalidated_at, now()),
+      invalid_reason = @reason,
+      updated_at = now()
+  WHERE li.log_group_id = @log_group_id
+  RETURNING li.id
+),
+deleted_rankings AS (
+  DELETE FROM encounter_dps_rankings
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+),
+deleted_parse_results AS (
+  DELETE FROM parse_score_results
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+),
+deleted_parse_receipts AS (
+  DELETE FROM parse_score_receipts
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+),
+deleted_speedruns AS (
+  DELETE FROM instance_speedruns
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+)
+UPDATE wow_log_groups wlg
+SET invalidated_at = COALESCE(wlg.invalidated_at, now()),
+    invalid_reason = @reason
+WHERE wlg.id = @log_group_id;
+
+-- name: ClearWoWLogGroupInvalidation :exec
+WITH restored_instances AS (
+  UPDATE log_instances li
+  SET invalidated_at = NULL,
+      invalid_reason = '',
+      updated_at = now()
+  WHERE li.log_group_id = @log_group_id
+)
+UPDATE wow_log_groups wlg
+SET invalidated_at = NULL,
+    invalid_reason = ''
+WHERE wlg.id = @log_group_id;
+
 -- name: ListDistinctInstanceNames :many
 SELECT DISTINCT name
 FROM (

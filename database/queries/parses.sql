@@ -58,6 +58,7 @@ WITH representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
+    WHERE li.invalidated_at IS NULL
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -169,6 +170,11 @@ WHERE tenant_id = @tenant_id
   AND cutoff = @cutoff
   AND status = 'published'
 LIMIT 1;
+
+-- name: IsLogInstanceInvalid :one
+SELECT (invalidated_at IS NOT NULL)::boolean
+FROM log_instances
+WHERE id = @id;
 
 -- name: GetLogInstanceStartTime :one
 -- Return the start_time for a log instance. Used by the parses handler

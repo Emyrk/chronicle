@@ -1657,6 +1657,8 @@ type LogInstance struct {
 	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
 	Category                pgtype.Text        `db:"category" json:"category"`
 	UpdatedAt               pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`
 }
 
 type LogInstanceEncounter struct {
@@ -1763,6 +1765,8 @@ type LogInstancesGuild struct {
 	MaxPlayers              int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty       int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
 	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
+	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`
 	RealmName               string             `db:"realm_name" json:"realm_name"`
 	GuildName               pgtype.Text        `db:"guild_name" json:"guild_name"`
 	GuildRealmID            uuid.NullUUID      `db:"guild_realm_id" json:"guild_realm_id"`
@@ -2249,13 +2253,15 @@ type UserTrackedLayout struct {
 }
 
 type WoWLogGroup struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	Owner     uuid.UUID          `db:"owner" json:"owner"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	LogType   LogType            `db:"log_type" json:"log_type"`
-	Format    NullLogFormat      `db:"format" json:"format"`
-	Flavor    []string           `db:"flavor" json:"flavor"`
+	ID            uuid.UUID          `db:"id" json:"id"`
+	Owner         uuid.UUID          `db:"owner" json:"owner"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	LogType       LogType            `db:"log_type" json:"log_type"`
+	Format        NullLogFormat      `db:"format" json:"format"`
+	Flavor        []string           `db:"flavor" json:"flavor"`
+	InvalidatedAt pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+	InvalidReason string             `db:"invalid_reason" json:"invalid_reason"`
 }
 
 type World struct {

@@ -60,6 +60,7 @@ export interface Encounter {
 export interface Instance {
   id: string;
   slug?: string;
+  logGroupId?: string;
   name: string;
   realm?: string;
   // Resolved game-data dataset for this instance's realm. Used to fetch
@@ -89,6 +90,8 @@ export interface Instance {
   difficultyName?: string;
   maxPlayers?: number;
   dynamicDifficulty?: number;
+  invalidatedAt?: string;
+  invalidReason?: string;
   // Timestamped vehicle-to-controller intervals and transport diagnostics
   vehicleControlIntervals?: VehicleControlMetadata;
   // Tenant info for cross-tenant gating
@@ -121,6 +124,7 @@ function transformToInstance(
   apiInstance: {
     id: string;
     slug?: string;
+    log_group_id: string;
     name: string;
     start_time?: string;
     end_time?: string;
@@ -140,6 +144,8 @@ function transformToInstance(
     difficulty_name?: string;
     max_players?: number;
     dynamic_difficulty?: number;
+    invalidated_at?: string;
+    invalid_reason?: string;
     vehicle_control_intervals?: VehicleControlMetadata;
     server_name?: string;
     tenant_name?: string;
@@ -202,6 +208,7 @@ function transformToInstance(
   return {
     id: apiInstance.id,
     slug: apiInstance.slug,
+    logGroupId: apiInstance.log_group_id,
     name: apiInstance.name,
     realm: apiInstance.realm_name,
     datasetId: apiInstance.dataset_id ?? undefined,
@@ -221,6 +228,8 @@ function transformToInstance(
     difficultyName: apiInstance.difficulty_name,
     maxPlayers: apiInstance.max_players,
     dynamicDifficulty: apiInstance.dynamic_difficulty,
+    invalidatedAt: apiInstance.invalidated_at,
+    invalidReason: apiInstance.invalid_reason,
     vehicleControlIntervals: apiInstance.vehicle_control_intervals,
     serverName: apiInstance.server_name,
     tenantName: apiInstance.tenant_name,

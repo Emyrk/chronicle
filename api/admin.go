@@ -2,8 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
+
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
@@ -13,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/Gophercraft/core/vsn"
@@ -458,6 +463,10 @@ func (a *API) AdminListLogs(w http.ResponseWriter, r *http.Request) {
 			state = "processed"
 		}
 
+		if l.WoWLogGroup.InvalidatedAt.Valid {
+			state = "invalid"
+		}
+
 		ownerName := ""
 		if l.OwnerName.Valid {
 			ownerName = l.OwnerName.String
@@ -489,6 +498,11 @@ func (a *API) AdminListLogs(w http.ResponseWriter, r *http.Request) {
 			instanceNames = []string{}
 		}
 
+		var invalidatedAt *time.Time
+		if l.WoWLogGroup.InvalidatedAt.Valid {
+			invalidatedAt = &l.WoWLogGroup.InvalidatedAt.Time
+		}
+
 		resp.Logs[i] = chroniclesdk.AdminLog{
 			ID:            l.WoWLogGroup.ID,
 			OwnerID:       l.WoWLogGroup.Owner,
@@ -497,6 +511,8 @@ func (a *API) AdminListLogs(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:     l.WoWLogGroup.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
 			State:         state,
 			SizeBytes:     sizeBytes,
+			InvalidatedAt: invalidatedAt,
+			InvalidReason: l.WoWLogGroup.InvalidReason,
 			InstanceNames: instanceNames,
 		}
 	}
@@ -570,6 +586,75 @@ func (a *API) AdminListOutdatedInstances(w http.ResponseWriter, r *http.Request)
 		Instances:  instances,
 		MinVersion: minParserVersion,
 	})
+}
+
+func (a *API) AdminInvalidateLogs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req chroniclesdk.AdminInvalidateLogsRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	req.Reason = strings.TrimSpace(req.Reason)
+	if req.Reason == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalidation reason is required"})
+		return
+	}
+
+	resp := chroniclesdk.AdminInvalidateLogsResponse{
+		Requested: len(req.LogIDs),
+		Failed:    make([]chroniclesdk.AdminBulkLogFailure, 0),
+	}
+	for _, logID := range req.LogIDs {
+		if err := a.Chronicle.InvalidateWoWLogGroup(ctx, logID, req.Reason); err != nil {
+			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkLogFailure{
+				LogGroupID: logID,
+				Detail:     err.Error(),
+			})
+			continue
+		}
+		resp.Invalidated++
+	}
+
+	if resp.Invalidated > 0 {
+		if _, err := servicerankings.EnqueueRankingsSummaryRefreshAllTenants(ctx, database.New(a.Opts.Pool), a.Queues); err != nil {
+			slog.WarnContext(ctx, "failed to enqueue rankings summary refresh after log invalidation", slog.Any("error", err))
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
+func (a *API) AdminClearLogInvalidation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req chroniclesdk.AdminBulkLogRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	resp := chroniclesdk.AdminClearLogInvalidationResponse{
+		Requested: len(req.LogIDs),
+		Failed:    make([]chroniclesdk.AdminBulkLogFailure, 0),
+	}
+	for _, logID := range req.LogIDs {
+		if err := a.Chronicle.ClearWoWLogGroupInvalidation(ctx, logID); err != nil {
+			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkLogFailure{
+				LogGroupID: logID,
+				Detail:     err.Error(),
+			})
+			continue
+		}
+		resp.MarkedValid++
+	}
+
+	if resp.MarkedValid > 0 {
+		if _, err := servicerankings.EnqueueRankingsSummaryRefreshAllTenants(ctx, database.New(a.Opts.Pool), a.Queues); err != nil {
+			slog.WarnContext(ctx, "failed to enqueue rankings summary refresh after clearing log invalidation", slog.Any("error", err))
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
 func (a *API) AdminBulkDeleteLogs(w http.ResponseWriter, r *http.Request) {

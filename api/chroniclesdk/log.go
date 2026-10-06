@@ -45,6 +45,9 @@ type WoWLogGroup struct {
 	Format    string             `json:"format,omitempty"`
 	Flavor    []string           `json:"flavor,omitempty"`
 
+	InvalidatedAt *time.Time `json:"invalidated_at,omitempty"`
+	InvalidReason string     `json:"invalid_reason,omitempty"`
+
 	Files            []WoWLogFile    `json:"files"`
 	ProcessingOutput json.RawMessage `json:"processing_output,omitempty"`
 	// ParsedBytes is the total size, in bytes, of the parsed combat-log event
@@ -135,6 +138,8 @@ type WoWInstance struct {
 	DifficultyName          string                  `json:"difficulty_name"`
 	MaxPlayers              int                     `json:"max_players"`
 	DynamicDifficulty       int                     `json:"dynamic_difficulty"`
+	InvalidatedAt           *time.Time              `json:"invalidated_at,omitempty"`
+	InvalidReason           string                  `json:"invalid_reason,omitempty"`
 	VehicleControlIntervals *VehicleControlMetadata `json:"vehicle_control_intervals,omitempty"`
 }
 

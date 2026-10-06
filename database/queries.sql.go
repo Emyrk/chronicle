@@ -2479,7 +2479,7 @@ func (q *sqlQuerier) GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg Get
 }
 
 const getLogInstanceForDiscordAnnouncement = `-- name: GetLogInstanceForDiscordAnnouncement :one
-SELECT id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at FROM log_instances WHERE id = $1
+SELECT id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason FROM log_instances WHERE id = $1
 `
 
 func (q *sqlQuerier) GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error) {
@@ -2506,6 +2506,8 @@ func (q *sqlQuerier) GetLogInstanceForDiscordAnnouncement(ctx context.Context, i
 		&i.VehicleControlIntervals,
 		&i.Category,
 		&i.UpdatedAt,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
 	)
 	return i, err
 }
@@ -3614,6 +3616,25 @@ func (q *sqlQuerier) ResolveExternalAPIServer(ctx context.Context, server string
 	return i, err
 }
 
+const clearWoWLogGroupInvalidation = `-- name: ClearWoWLogGroupInvalidation :exec
+WITH restored_instances AS (
+  UPDATE log_instances li
+  SET invalidated_at = NULL,
+      invalid_reason = '',
+      updated_at = now()
+  WHERE li.log_group_id = $1
+)
+UPDATE wow_log_groups wlg
+SET invalidated_at = NULL,
+    invalid_reason = ''
+WHERE wlg.id = $1
+`
+
+func (q *sqlQuerier) ClearWoWLogGroupInvalidation(ctx context.Context, logGroupID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearWoWLogGroupInvalidation, logGroupID)
+	return err
+}
+
 const countAllWoWLogGroups = `-- name: CountAllWoWLogGroups :one
 SELECT COUNT(*)::int FROM wow_log_groups
 LEFT JOIN LATERAL (
@@ -3848,7 +3869,7 @@ func (q *sqlQuerier) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.
 
 const getWoWLogGroupByID = `-- name: GetWoWLogGroupByID :one
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason,
   u.username AS owner_name,
   COALESCE(
       jsonb_agg(
@@ -3899,6 +3920,8 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 		&i.WoWLogGroup.LogType,
 		&i.WoWLogGroup.Format,
 		&i.WoWLogGroup.Flavor,
+		&i.WoWLogGroup.InvalidatedAt,
+		&i.WoWLogGroup.InvalidReason,
 		&i.OwnerName,
 		&i.Files,
 	)
@@ -3907,7 +3930,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 
 const getWoWLogGroupsByOwner = `-- name: GetWoWLogGroupsByOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason,
   files_agg.files,
   instances_output.output AS processing_output,
   parsed_bytes_agg.parsed_bytes
@@ -4033,6 +4056,8 @@ func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGr
 			&i.WoWLogGroup.LogType,
 			&i.WoWLogGroup.Format,
 			&i.WoWLogGroup.Flavor,
+			&i.WoWLogGroup.InvalidatedAt,
+			&i.WoWLogGroup.InvalidReason,
 			&i.Files,
 			&i.ProcessingOutput,
 			&i.ParsedBytes,
@@ -4141,7 +4166,7 @@ VALUES
     $6,
     $7
   )
-RETURNING id, owner, created_at, updated_at, log_type, format, flavor
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason
 `
 
 type InsertWoWLogGroupParams struct {
@@ -4173,13 +4198,56 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		&i.LogType,
 		&i.Format,
 		&i.Flavor,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
 	)
 	return i, err
 }
 
+const invalidateWoWLogGroup = `-- name: InvalidateWoWLogGroup :exec
+WITH invalidated_instances AS (
+  UPDATE log_instances li
+  SET invalidated_at = COALESCE(li.invalidated_at, now()),
+      invalid_reason = $1,
+      updated_at = now()
+  WHERE li.log_group_id = $2
+  RETURNING li.id
+),
+deleted_rankings AS (
+  DELETE FROM encounter_dps_rankings
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+),
+deleted_parse_results AS (
+  DELETE FROM parse_score_results
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+),
+deleted_parse_receipts AS (
+  DELETE FROM parse_score_receipts
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+),
+deleted_speedruns AS (
+  DELETE FROM instance_speedruns
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+)
+UPDATE wow_log_groups wlg
+SET invalidated_at = COALESCE(wlg.invalidated_at, now()),
+    invalid_reason = $1
+WHERE wlg.id = $2
+`
+
+type InvalidateWoWLogGroupParams struct {
+	Reason     string    `db:"reason" json:"reason"`
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+}
+
+func (q *sqlQuerier) InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWoWLogGroupParams) error {
+	_, err := q.db.Exec(ctx, invalidateWoWLogGroup, arg.Reason, arg.LogGroupID)
+	return err
+}
+
 const listAllWoWLogGroupsWithOwner = `-- name: ListAllWoWLogGroupsWithOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason,
   u.username AS owner_name,
   files_agg.files,
   instances_output.output AS processing_output
@@ -4297,6 +4365,8 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 			&i.WoWLogGroup.LogType,
 			&i.WoWLogGroup.Format,
 			&i.WoWLogGroup.Flavor,
+			&i.WoWLogGroup.InvalidatedAt,
+			&i.WoWLogGroup.InvalidReason,
 			&i.OwnerName,
 			&i.Files,
 			&i.ProcessingOutput,
@@ -4313,7 +4383,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 
 const listAllWoWLogGroupsWithOwnerPaginated = `-- name: ListAllWoWLogGroupsWithOwnerPaginated :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason,
   u.username AS owner_name,
   files_agg.files,
   files_agg.total_size_bytes,
@@ -4482,6 +4552,8 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 			&i.WoWLogGroup.LogType,
 			&i.WoWLogGroup.Format,
 			&i.WoWLogGroup.Flavor,
+			&i.WoWLogGroup.InvalidatedAt,
+			&i.WoWLogGroup.InvalidReason,
 			&i.OwnerName,
 			&i.Files,
 			&i.TotalSizeBytes,
@@ -7762,6 +7834,7 @@ SELECT li.id, li.duplicate_group_id
 FROM log_instances li
 WHERE li.realm_id = $1
   AND li.name = $2
+  AND li.invalidated_at IS NULL
   AND li.max_players = $3
   AND li.dynamic_difficulty = $4
   AND li.start_time >= $5
@@ -7979,7 +8052,7 @@ func (q *sqlQuerier) GetInstanceEncounterCharacterFights(ctx context.Context, in
 
 const getInstancesByLogGroupID = `-- name: GetInstancesByLogGroupID :many
 SELECT
-  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
 FROM
   log_instances_guild
 WHERE
@@ -8013,6 +8086,8 @@ func (q *sqlQuerier) GetInstancesByLogGroupID(ctx context.Context, logGroupID uu
 			&i.MaxPlayers,
 			&i.DynamicDifficulty,
 			&i.VehicleControlIntervals,
+			&i.InvalidatedAt,
+			&i.InvalidReason,
 			&i.RealmName,
 			&i.GuildName,
 			&i.GuildRealmID,
@@ -8112,10 +8187,10 @@ func (q *sqlQuerier) InsertEncounterPhase(ctx context.Context, arg InsertEncount
 
 const insertInstance = `-- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason
 `
 
 type InsertInstanceParams struct {
@@ -8137,6 +8212,8 @@ type InsertInstanceParams struct {
 	DynamicDifficulty       int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
 	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
 	Category                pgtype.Text        `db:"category" json:"category"`
+	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`
 }
 
 func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error) {
@@ -8159,6 +8236,8 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		arg.DynamicDifficulty,
 		arg.VehicleControlIntervals,
 		arg.Category,
+		arg.InvalidatedAt,
+		arg.InvalidReason,
 	)
 	var i LogInstance
 	err := row.Scan(
@@ -8182,6 +8261,8 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		&i.VehicleControlIntervals,
 		&i.Category,
 		&i.UpdatedAt,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
 	)
 	return i, err
 }
@@ -8225,7 +8306,7 @@ func (q *sqlQuerier) InsertParsedLogGroup(ctx context.Context, id uuid.UUID) err
 
 const instance = `-- name: Instance :one
 SELECT
-  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
 FROM
   log_instances_guild
 WHERE
@@ -8253,6 +8334,8 @@ func (q *sqlQuerier) Instance(ctx context.Context, id uuid.UUID) (LogInstancesGu
 		&i.MaxPlayers,
 		&i.DynamicDifficulty,
 		&i.VehicleControlIntervals,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
 		&i.RealmName,
 		&i.GuildName,
 		&i.GuildRealmID,
@@ -8269,7 +8352,7 @@ func (q *sqlQuerier) Instance(ctx context.Context, id uuid.UUID) (LogInstancesGu
 
 const instanceBySlug = `-- name: InstanceBySlug :one
 SELECT
-  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
 FROM
   log_instances_guild
 WHERE
@@ -8297,6 +8380,8 @@ func (q *sqlQuerier) InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text)
 		&i.MaxPlayers,
 		&i.DynamicDifficulty,
 		&i.VehicleControlIntervals,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
 		&i.RealmName,
 		&i.GuildName,
 		&i.GuildRealmID,
@@ -9573,6 +9658,7 @@ SELECT
     li.guild_id
 FROM log_instances li
 WHERE li.id = $1
+  AND li.invalidated_at IS NULL
 `
 
 type GetLogInstanceForScoringRow struct {
@@ -10281,6 +10367,7 @@ WITH representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
+    WHERE li.invalidated_at IS NULL
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -10994,6 +11081,19 @@ func (q *sqlQuerier) InsertRankingSnapshotMember(ctx context.Context, arg Insert
 		arg.Hps,
 	)
 	return err
+}
+
+const isLogInstanceInvalid = `-- name: IsLogInstanceInvalid :one
+SELECT (invalidated_at IS NOT NULL)::boolean
+FROM log_instances
+WHERE id = $1
+`
+
+func (q *sqlQuerier) IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isLogInstanceInvalid, id)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const listAllSnapshots = `-- name: ListAllSnapshots :many
@@ -11899,6 +11999,7 @@ WITH members AS MATERIALIZED (
         )::integer AS boss_coverage
     FROM log_instances li
     LEFT JOIN encounter_dps_rankings coverage ON coverage.instance_id = li.id
+    WHERE li.invalidated_at IS NULL
     GROUP BY li.id
 ),
 ranked AS (
@@ -12050,9 +12151,10 @@ members AS MATERIALIZED (
         )::integer AS boss_coverage
     FROM affected_runs
     CROSS JOIN LATERAL (
-        SELECT candidate.id, candidate.realm_id, candidate.log_group_id, candidate.name, candidate.hashed_slug, candidate.guild_id, candidate.start_time, candidate.end_time, candidate.capabilities, candidate.versions, candidate.recorder_name, candidate.recorder_guid, candidate.parser_version, candidate.duplicate_group_id, candidate.difficulty_name, candidate.max_players, candidate.dynamic_difficulty, candidate.vehicle_control_intervals, candidate.category, candidate.updated_at
+        SELECT candidate.id, candidate.realm_id, candidate.log_group_id, candidate.name, candidate.hashed_slug, candidate.guild_id, candidate.start_time, candidate.end_time, candidate.capabilities, candidate.versions, candidate.recorder_name, candidate.recorder_guid, candidate.parser_version, candidate.duplicate_group_id, candidate.difficulty_name, candidate.max_players, candidate.dynamic_difficulty, candidate.vehicle_control_intervals, candidate.category, candidate.updated_at, candidate.invalidated_at, candidate.invalid_reason
         FROM log_instances candidate
         WHERE COALESCE(candidate.duplicate_group_id, candidate.id) = affected_runs.run_id
+          AND candidate.invalidated_at IS NULL
         -- Prevent flattening into a hash join that scans all log_instances.
         OFFSET 0
     ) li
@@ -12687,7 +12789,8 @@ WITH fallback_representative_instances AS (
     -- Scope representative selection by tenant and instance before calculating
     -- boss coverage. Without these filters, an instance-specific box plot ranks
     -- duplicate uploads that will only be discarded later.
-    WHERE (cardinality($2 :: text[]) = 0
+    WHERE li.invalidated_at IS NULL
+      AND (cardinality($2 :: text[]) = 0
            OR li.name = ANY($2 :: text[]))
       AND NOT EXISTS (
           SELECT 1
@@ -12695,6 +12798,7 @@ WITH fallback_representative_instances AS (
           JOIN log_instances representative
             ON representative.id = rr.representative_instance_id
            AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+         AND representative.invalidated_at IS NULL
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -12714,6 +12818,7 @@ representative_instances AS (
     JOIN log_instances representative
       ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+     AND representative.invalidated_at IS NULL
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE (cardinality($2 :: text[]) = 0
            OR rr.instance_name = ANY($2 :: text[]))
@@ -12935,12 +13040,14 @@ WITH fallback_representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
-    WHERE NOT EXISTS (
+    WHERE li.invalidated_at IS NULL
+      AND NOT EXISTS (
         SELECT 1
         FROM ranking_runs rr
         JOIN log_instances representative
           ON representative.id = rr.representative_instance_id
          AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+         AND representative.invalidated_at IS NULL
         WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -12958,6 +13065,7 @@ representative_instances AS (
     JOIN log_instances representative
       ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+     AND representative.invalidated_at IS NULL
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE rr.instance_name = $1
     UNION ALL
@@ -13309,7 +13417,8 @@ fallback_representative_instances AS (
     -- Apply tenant RLS before calculating boss coverage, then avoid unrelated
     -- instances and duplicate groups that cannot contribute.
     -- When a player archetype is selected, candidate_runs narrows further.
-    WHERE (cardinality($8 :: text[]) = 0
+    WHERE li.invalidated_at IS NULL
+      AND (cardinality($8 :: text[]) = 0
            OR li.name = ANY($8 :: text[]))
       AND (($4 :: text = '' AND $5 :: text = '' AND $6 :: text = '' AND $7 :: text = '')
            OR COALESCE(li.duplicate_group_id, li.id) IN (SELECT run_id FROM candidate_runs))
@@ -13319,6 +13428,7 @@ fallback_representative_instances AS (
           JOIN log_instances representative
             ON representative.id = rr.representative_instance_id
            AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+         AND representative.invalidated_at IS NULL
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -13338,6 +13448,7 @@ representative_instances AS (
     JOIN log_instances representative
       ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+     AND representative.invalidated_at IS NULL
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE (cardinality($8 :: text[]) = 0
            OR rr.instance_name = ANY($8 :: text[]))
@@ -13842,12 +13953,14 @@ WITH fallback_representative_instances AS (
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
-    WHERE NOT EXISTS (
+    WHERE li.invalidated_at IS NULL
+      AND NOT EXISTS (
         SELECT 1
         FROM ranking_runs rr
         JOIN log_instances representative
           ON representative.id = rr.representative_instance_id
          AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+         AND representative.invalidated_at IS NULL
         WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
@@ -13865,6 +13978,7 @@ representative_instances AS (
     JOIN log_instances representative
       ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
+     AND representative.invalidated_at IS NULL
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE rr.instance_name = $1
       AND rr.difficulty_name = $2
@@ -15243,7 +15357,7 @@ func (q *sqlQuerier) UpsertPendingModificationRequest(ctx context.Context, arg U
 }
 
 const findMatchingServerUpload = `-- name: FindMatchingServerUpload :one
-SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor
+SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason
 FROM wow_log_groups wlg
 JOIN server_upload_meta sm ON sm.log_group_id = wlg.id
 WHERE wlg.owner = $1
@@ -15285,6 +15399,8 @@ func (q *sqlQuerier) FindMatchingServerUpload(ctx context.Context, arg FindMatch
 		&i.LogType,
 		&i.Format,
 		&i.Flavor,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
 	)
 	return i, err
 }

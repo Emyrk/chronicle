@@ -44,6 +44,7 @@ type sqlcQuerier interface {
 	ClearSpellEffectsForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellPowersForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellVariantsForDataset(ctx context.Context, datasetID uuid.UUID) error
+	ClearWoWLogGroupInvalidation(ctx context.Context, logGroupID uuid.UUID) error
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
 	CopyLegacySpellPowers(ctx context.Context, arg []CopyLegacySpellPowersParams) *CopyLegacySpellPowersBatchResults
@@ -552,7 +553,9 @@ type sqlcQuerier interface {
 	// realm, or guild. Duplicate uploads are collapsed without reducing to one run per guild.
 	InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error)
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
+	InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWoWLogGroupParams) error
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
+	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)

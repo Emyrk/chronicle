@@ -55,6 +55,7 @@ members AS MATERIALIZED (
         SELECT candidate.*
         FROM log_instances candidate
         WHERE COALESCE(candidate.duplicate_group_id, candidate.id) = affected_runs.run_id
+          AND candidate.invalidated_at IS NULL
         -- Prevent flattening into a hash join that scans all log_instances.
         OFFSET 0
     ) li
@@ -200,6 +201,7 @@ WITH members AS MATERIALIZED (
         )::integer AS boss_coverage
     FROM log_instances li
     LEFT JOIN encounter_dps_rankings coverage ON coverage.instance_id = li.id
+    WHERE li.invalidated_at IS NULL
     GROUP BY li.id
 ),
 ranked AS (

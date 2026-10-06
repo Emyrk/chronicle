@@ -31,6 +31,7 @@ import (
 type parsesTestFixture struct {
 	pool       *pgxpool.Pool
 	store      database.Store
+	logGroupID uuid.UUID
 	realmID    uuid.UUID
 	instanceID uuid.UUID
 }
@@ -81,6 +82,7 @@ func setupParsesTest(t *testing.T) parsesTestFixture {
 		pool:       pool,
 		store:      store,
 		realmID:    realmID,
+		logGroupID: logGroupID,
 		instanceID: instanceID,
 	}
 }
@@ -294,6 +296,22 @@ func requestInstanceParses(
 func newTestService(t *testing.T, store database.Store) *servicerankings.TestableService {
 	t.Helper()
 	return servicerankings.NewTestableService(store, slog.Default())
+}
+
+func TestHandleInstanceParses_InvalidInstanceIsUnavailable(t *testing.T) {
+	t.Parallel()
+	f := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	require.NoError(t, f.store.InvalidateWoWLogGroup(ctx, database.InvalidateWoWLogGroupParams{
+		LogGroupID: f.logGroupID,
+		Reason:     "corrupt combat log",
+	}))
+
+	response := requestInstanceParses(t, f.store, f.instanceID, "?metric=hps")
+	assert.False(t, response.Available)
+	assert.Equal(t, "invalid", response.Reason)
+	assert.Equal(t, "hps", response.Metric)
+	assert.Empty(t, response.Players)
 }
 
 func TestHandleInstanceParses_PersistedProjection(t *testing.T) {

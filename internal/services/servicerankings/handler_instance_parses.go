@@ -29,6 +29,7 @@ type parsesQuerier interface {
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
 	GetLatestPublishedSnapshot(ctx context.Context, arg database.GetLatestPublishedSnapshotParams) (database.RankingSnapshot, error)
 	GetLatestPublishedSnapshotBefore(ctx context.Context, arg database.GetLatestPublishedSnapshotBeforeParams) (database.RankingSnapshot, error)
+	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]database.ListRankingsForInstanceRow, error)
 	GetParseScoreReceiptForContract(ctx context.Context, arg database.GetParseScoreReceiptForContractParams) (database.ParseScoreReceipt, error)
@@ -72,6 +73,27 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 	metric := parsepolicy.MetricDPS
 	if q.Get("metric") == "hps" {
 		metric = parsepolicy.MetricHPS
+	}
+
+	invalid, err := store.IsLogInstanceInvalid(ctx, instanceID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Instance not found"})
+			return
+		}
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{Message: "Failed to fetch instance", Detail: err.Error()},
+		})
+		return
+	}
+	if invalid {
+		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
+			Available: false,
+			Reason:    "invalid",
+			Metric:    string(metric),
+			Players:   []chroniclesdk.InstanceParsePlayer{},
+		})
+		return
 	}
 
 	// Parse encounter_names filter.

@@ -3212,6 +3212,29 @@ export function InstancePageView({
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
             {instance.name}
+            {instance.invalidatedAt && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help rounded bg-red-500/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-red-400">
+                    Invalid
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start" sideOffset={6} className="max-w-sm p-3 normal-case tracking-normal">
+                  <div className="space-y-2">
+                    <p className="font-semibold text-zinc-100">Invalid log upload</p>
+                    <p className="text-sm text-zinc-300">
+                      A Chronicle administrator marked this upload invalid. It remains viewable, but does not contribute parse scores, DPS rankings, speedrun results, or duplicate canonical selection.
+                    </p>
+                    <div className="border-t border-white/10 pt-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Reason</p>
+                      <p className="mt-1 break-words text-sm text-zinc-100">
+                        {instance.invalidReason || "No reason was provided."}
+                      </p>
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            )}
             {duplicateGroupId && (
               <DuplicatesBadge instanceId={instance.id} duplicateGroupId={duplicateGroupId} />
             )}
@@ -3240,6 +3263,9 @@ export function InstancePageView({
                 onResetView={isEncounterView ? resetView : undefined}
                 onOpenTimeRange={isEncounterView ? onOpenTimeRange : undefined}
                 instanceId={instance.id}
+                logGroupId={instance.logGroupId}
+                instanceName={instance.name}
+                invalidated={Boolean(instance.invalidatedAt)}
                 logDetailUrl={logDetailUrl}
                 layoutLabUrl={isEncounterView && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}
@@ -3412,6 +3438,9 @@ export function InstancePageView({
                 onResetView={isEncounterView ? resetView : undefined}
                 onOpenTimeRange={isEncounterView ? onOpenTimeRange : undefined}
                 instanceId={instance.id}
+                logGroupId={instance.logGroupId}
+                instanceName={instance.name}
+                invalidated={Boolean(instance.invalidatedAt)}
                 logDetailUrl={logDetailUrl}
                 layoutLabUrl={isEncounterView && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}

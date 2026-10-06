@@ -49,9 +49,9 @@ VALUES
 
 -- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 RETURNING *
 ;
 
@@ -593,6 +593,7 @@ SELECT li.id, li.duplicate_group_id
 FROM log_instances li
 WHERE li.realm_id = @realm_id
   AND li.name = @name
+  AND li.invalidated_at IS NULL
   AND li.max_players = @max_players
   AND li.dynamic_difficulty = @dynamic_difficulty
   AND li.start_time >= @window_start

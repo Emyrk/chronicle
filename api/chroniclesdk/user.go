@@ -75,18 +75,37 @@ type AdminLogsResponse struct {
 }
 
 type AdminLog struct {
-	ID            uuid.UUID `json:"id"`
-	OwnerID       uuid.UUID `json:"owner_id"`
-	OwnerName     string    `json:"owner_name"`
-	Description   string    `json:"description"`
-	CreatedAt     string    `json:"created_at"`
-	State         string    `json:"state"`
-	SizeBytes     int64     `json:"size_bytes"`
-	InstanceNames []string  `json:"instance_names"`
+	ID            uuid.UUID  `json:"id"`
+	OwnerID       uuid.UUID  `json:"owner_id"`
+	OwnerName     string     `json:"owner_name"`
+	Description   string     `json:"description"`
+	CreatedAt     string     `json:"created_at"`
+	State         string     `json:"state"`
+	SizeBytes     int64      `json:"size_bytes"`
+	InvalidatedAt *time.Time `json:"invalidated_at,omitempty"`
+	InvalidReason string     `json:"invalid_reason,omitempty"`
+	InstanceNames []string   `json:"instance_names"`
 }
 
 type AdminBulkLogRequest struct {
 	LogIDs []uuid.UUID `json:"log_ids"`
+}
+
+type AdminInvalidateLogsRequest struct {
+	LogIDs []uuid.UUID `json:"log_ids"`
+	Reason string      `json:"reason"`
+}
+
+type AdminInvalidateLogsResponse struct {
+	Requested   int                   `json:"requested"`
+	Invalidated int                   `json:"invalidated"`
+	Failed      []AdminBulkLogFailure `json:"failed"`
+}
+
+type AdminClearLogInvalidationResponse struct {
+	Requested   int                   `json:"requested"`
+	MarkedValid int                   `json:"marked_valid"`
+	Failed      []AdminBulkLogFailure `json:"failed"`
 }
 
 type AdminBulkLogFailure struct {
