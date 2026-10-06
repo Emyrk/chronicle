@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	ragnarosEntry = 11502
-	sonOfFlame    = 12143
+	ragnarosEntry        = 11502
+	sonOfFlame           = 12143
+	sorcererThane        = 57642
+	imageOfSorcererThane = 57643
 )
 
 // TestSonOfFlame_BumpsRagnarosDuringSubmerge verifies that damage dealt to
@@ -172,6 +174,68 @@ func TestSonOfFlame_DoesNotStartOrResurrectRagnaros(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, ragChar.IsActive(), "Ragnaros should remain dead after Son bump")
 	})
+}
+
+func TestSorcererThaneAndImageShareActivity(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	bossID := creatureGUID(sorcererThane, 0x1)
+	imageID := creatureGUID(imageOfSorcererThane, 0x2)
+	base := time.Date(2026, time.October, 6, 12, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, bossID))
+	require.NoError(t, err)
+
+	boss, ok := chars.Get(bossID)
+	require.True(t, ok)
+	require.True(t, boss.IsActive())
+
+	// Image activity keeps the real Sorcerer-Thane active past his original
+	// inactivity timeout.
+	_, err = chars.Process(damage(base.Add(50*time.Second), player, imageID))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(105*time.Second), player, imageID))
+	require.NoError(t, err)
+	require.True(t, boss.IsActive())
+	require.Len(t, boss.Periods(), 1)
+
+	image, ok := chars.Get(imageID)
+	require.True(t, ok)
+	require.True(t, image.IsActive())
+
+	// Activity also propagates in the other direction so the image cannot time
+	// out and split the same encounter while the real boss is being fought.
+	_, err = chars.Process(damage(base.Add(160*time.Second), player, bossID))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(215*time.Second), player, bossID))
+	require.NoError(t, err)
+	require.True(t, image.IsActive())
+	require.Len(t, image.Periods(), 1)
+}
+
+func TestSorcererThaneDeathEndsImageActivity(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	bossID := creatureGUID(sorcererThane, 0x1)
+	imageID := creatureGUID(imageOfSorcererThane, 0x2)
+	base := time.Date(2026, time.October, 6, 12, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, bossID))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(time.Second), player, imageID))
+	require.NoError(t, err)
+	_, err = chars.Process(slain(base.Add(5*time.Second), player, bossID))
+	require.NoError(t, err)
+
+	image, ok := chars.Get(imageID)
+	require.True(t, ok)
+	require.False(t, image.IsActive())
 }
 
 // TestSonOfFlame_FactoryMatchesCorrectEntry verifies that the

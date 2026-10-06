@@ -107,8 +107,72 @@ const (
 	imageOfSorcererThane = 57643
 )
 
+type sorcererThaneCharacter struct {
+	*characters.Common
+	all         *characters.Characters
+	linkedEntry uint32
+	isBoss      bool
+}
+
 func NewSorcererThaneCharacter(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
-	return characters.NewAdsGoWithBoss(sorcererThane, imageOfSorcererThane)(id, all)
+	entry, ok := id.GetEntry()
+	if !ok {
+		return nil, false
+	}
+
+	var linkedEntry uint32
+	switch entry {
+	case sorcererThane:
+		linkedEntry = imageOfSorcererThane
+	case imageOfSorcererThane:
+		linkedEntry = sorcererThane
+	default:
+		return nil, false
+	}
+
+	return &sorcererThaneCharacter{
+		Common:      characters.NewCommonCharacter(id, all),
+		all:         all,
+		linkedEntry: linkedEntry,
+		isBoss:      entry == sorcererThane,
+	}, true
+}
+
+func (s *sorcererThaneCharacter) Process(m messages.Message) error {
+	wasActive := s.IsActive()
+	if cur, ok := s.Activity.Current(); ok && !s.Lookup().ExplicitEncounterActive() {
+		cur.HandleTimeout(m.Date())
+	}
+
+	if err := characters.ProcessCommonActivity(s, m); err != nil {
+		return err
+	}
+
+	if s.isBoss && wasActive && !s.IsActive() {
+		for _, image := range s.all.ByEntry[imageOfSorcererThane] {
+			image.Died("linked_boss_inactive", m)
+		}
+	}
+	return nil
+}
+
+func (s *sorcererThaneCharacter) Start(reason string, m messages.Message) {
+	s.Common.Start(reason, m)
+	s.bumpLinked(m)
+}
+
+func (s *sorcererThaneCharacter) Bump(reason string, m messages.Message) {
+	s.Common.Bump(reason, m)
+	s.bumpLinked(m)
+}
+
+func (s *sorcererThaneCharacter) bumpLinked(m messages.Message) {
+	for _, linked := range s.all.ByEntry[s.linkedEntry] {
+		linkedSorcerer, ok := linked.(*sorcererThaneCharacter)
+		if ok && linkedSorcerer.IsActive() {
+			linkedSorcerer.Common.Bump("linked_sorcerer_thane_activity", m)
+		}
+	}
 }
 
 const (
