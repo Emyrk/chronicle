@@ -216,6 +216,51 @@ func TestSorcererThaneAndImageShareActivity(t *testing.T) {
 	require.Len(t, image.Periods(), 1)
 }
 
+func TestSorcererThaneAndImageResetTogether(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	bossID := creatureGUID(sorcererThane, 0x1)
+	imageID := creatureGUID(imageOfSorcererThane, 0x2)
+	dummyID := creatureGUID(99999, 0x3)
+	base := time.Date(2026, time.October, 6, 12, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, bossID))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(time.Second), player, imageID))
+	require.NoError(t, err)
+
+	boss, ok := chars.Get(bossID)
+	require.True(t, ok)
+	image, ok := chars.Get(imageID)
+	require.True(t, ok)
+
+	// A full inactivity window ends both linked units, allowing the fight to be
+	// finalized as a wipe/reset instead of keeping it alive indefinitely.
+	_, err = chars.Process(damage(base.Add(62*time.Second), player, dummyID))
+	require.NoError(t, err)
+	require.False(t, boss.IsActive())
+	require.False(t, image.IsActive())
+	require.Len(t, boss.Periods(), 1)
+	require.Len(t, image.Periods(), 1)
+
+	// New activity after the reset starts fresh periods. Image activity alone
+	// does not resurrect the boss.
+	_, err = chars.Process(damage(base.Add(66*time.Second), player, imageID))
+	require.NoError(t, err)
+	require.False(t, boss.IsActive())
+	require.True(t, image.IsActive())
+
+	_, err = chars.Process(damage(base.Add(67*time.Second), player, bossID))
+	require.NoError(t, err)
+	require.True(t, boss.IsActive())
+	require.True(t, image.IsActive())
+	require.Len(t, boss.Periods(), 2)
+	require.Len(t, image.Periods(), 2)
+}
+
 func TestSorcererThaneDeathEndsImageActivity(t *testing.T) {
 	t.Parallel()
 
