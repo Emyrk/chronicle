@@ -15,7 +15,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { PanelCard } from "../PanelCard";
 import { PanelSelector } from "../PanelSelector";
 import { openPanelPopup, syncPopupAppearance, type PanelPopup } from "../panelPopup";
-import type { EventsPanelProps, EventsPanelType } from "../EventsPanel";
+import { isBuiltinPanelType, type EventsPanelProps, type EventsPanelType } from "../EventsPanel";
 import { CustomPanelErrorBoundary } from "./CustomPanelErrorBoundary";
 import { CustomPanelHost } from "./CustomPanelHost";
 import { resolveCustomPanel, useCustomPanelRegistry } from "./pluginRegistry";
@@ -126,7 +126,7 @@ export default function CustomEventsPanel(props: EventsPanelProps) {
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw) as { panelType?: EventsPanelType; panelOption?: string | null };
-      if (!parsed.panelType) return;
+      if (!parsed.panelType || (!isBuiltinPanelType(parsed.panelType) && !isCustomPanelRef(parsed.panelType))) return;
       props.onPanelTypeChange(parsed.panelType);
       props.onPanelOptionChange?.(parsed.panelOption ?? null);
     } catch {

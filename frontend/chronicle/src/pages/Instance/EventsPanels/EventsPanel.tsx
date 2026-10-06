@@ -168,6 +168,11 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   pulls_and_cleanup: createPullsAndCleanupPanel(),
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function isBuiltinPanelType(panelType: string): panelType is BuiltinPanelType {
+  return Object.prototype.hasOwnProperty.call(PANELS, panelType);
+}
+
 export type BuiltinPanelType = keyof typeof PANELS;
 export type EventsPanelType = BuiltinPanelType | CustomPanelRef;
 

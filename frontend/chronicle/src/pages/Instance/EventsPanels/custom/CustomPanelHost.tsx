@@ -148,7 +148,9 @@ export function CustomPanelHost({ installation, panel, context, panelId, panelOp
     if (updateFrameRef.current !== null) ownerWindow.cancelAnimationFrame(updateFrameRef.current);
     updateFrameRef.current = ownerWindow.requestAnimationFrame(() => {
       updateFrameRef.current = null;
-      Promise.resolve(instanceRef.current?.update?.(latestSnapshotRef.current)).catch((error) => onError(error instanceof Error ? error : new Error(String(error))));
+      Promise.resolve()
+        .then(() => instanceRef.current?.update?.(latestSnapshotRef.current))
+        .catch((error) => onError(error instanceof Error ? error : new Error(String(error))));
     });
     return () => { if (updateFrameRef.current !== null) ownerWindow.cancelAnimationFrame(updateFrameRef.current); };
   }, [snapshot, onError]);
