@@ -46,6 +46,16 @@ WoW Forever and current Blizzard Classic products use `extract-wowdata-maps`. Se
 SERVER=forever make maps
 ```
 
+## Cleaning generated maps
+
+Map manifests and WebP tiles are generated files. They are ignored by Git and can be removed at any time:
+
+```bash
+make clean-maps
+```
+
+This removes every `frontend/imagecache/<server>/maps/` directory. Run the appropriate `make maps/<server>` target later to extract and publish it again.
+
 ## Validation
 
 After changing extraction behavior:

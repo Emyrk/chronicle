@@ -280,6 +280,10 @@ else
 maps: maps/legacy
 endif
 
+.PHONY: clean-maps
+clean-maps:
+	find frontend/imagecache -mindepth 2 -maxdepth 2 -type d -name maps -prune -exec rm -rf {} +
+
 # Full talent-background pipeline: extract from client → upload to R2
 .PHONY: icons/talents
 icons/talents: icons/talents-extract icons/talents-upload
