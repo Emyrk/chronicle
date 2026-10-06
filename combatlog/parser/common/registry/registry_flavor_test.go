@@ -248,6 +248,28 @@ func TestProgressionBossesUseCanonicalEncounterNames(t *testing.T) {
 	t.Fatal("Naxxramas not found")
 }
 
+func TestRankingEncounterSets(t *testing.T) {
+	t.Parallel()
+
+	turtle := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorNightmareOfUrsol})
+	emeraldSanctum := instanceDetailByName(t, turtle, "Emerald Sanctum")
+	require.Equal(t, []instances.RankingEncounterSet{
+		{Label: "Normal", Encounters: []string{"Erennius", "Solnius"}},
+		{ID: "hard", Label: "Hard Mode", Encounters: []string{"Solnius (Hard Mode)"}},
+	}, emeraldSanctum.RankingEncounterSets)
+
+	wrath := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorWrath})
+	ulduar := instanceDetailByName(t, wrath, "Ulduar")
+	require.Len(t, ulduar.RankingEncounterSets, 1)
+	require.Equal(t, "Normal", ulduar.RankingEncounterSets[0].Label)
+	require.NotContains(t, ulduar.RankingEncounterSets[0].Encounters, "Flame Leviathan")
+	require.Contains(t, ulduar.ProgressionBosses, "Flame Leviathan")
+
+	moltenCore := instanceDetailByName(t, turtle, "Molten Core")
+	require.Len(t, moltenCore.RankingEncounterSets, 1)
+	require.Equal(t, moltenCore.ProgressionBosses, moltenCore.RankingEncounterSets[0].Encounters)
+}
+
 func TestInstanceDetailsCategories(t *testing.T) {
 	t.Parallel()
 

@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   selectSupportedInstanceProgressionBosses,
+  selectSupportedInstanceRankingEncounterSets,
   useSiteConfig,
   useSupportedInstances,
 } from "@/api/queries";
@@ -25,6 +26,7 @@ import type {
   SpeedrunLeaderboardEntry,
 } from "@/api/typesGenerated";
 import { defaultRankingBossNames } from "@/pages/Rankings/rankingsEncounterSelection";
+import { resolveRankingEncounterSet } from "@/pages/Rankings/rankingEncounterSets";
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay";
 import {
   getInstanceAbbrev,
@@ -624,13 +626,22 @@ function RaidSpotlight() {
     [supportedInstances],
   );
 
-  // Match the rankings page default: canonical progression bosses only.
-  // Optional bosses remain selectable on the full rankings page.
+  const rankingEncounterSets = useMemo(
+    () => selectSupportedInstanceRankingEncounterSets(supportedInstances ?? []),
+    [supportedInstances],
+  );
+
+  // Match the rankings page default while leaving optional bosses available there.
   const { data: encounterSummaries } = useRankingsEncounters(spot?.name ?? "");
   const spotlightBossNames = useMemo(() => {
+    const instanceName = spot?.name ?? "";
     const names = (encounterSummaries ?? []).map((encounter) => encounter.encounter_name);
-    return defaultRankingBossNames(spot?.name ?? "", names, progressionBosses);
-  }, [encounterSummaries, progressionBosses, spot?.name]);
+    const defaultSet = resolveRankingEncounterSet(rankingEncounterSets.get(instanceName) ?? [], "");
+    return defaultRankingBossNames(
+      names,
+      defaultSet?.encounters ?? progressionBosses.get(instanceName),
+    );
+  }, [encounterSummaries, progressionBosses, rankingEncounterSets, spot?.name]);
   const spotlightRankingsReady = encounterSummaries !== undefined && supportedInstances !== undefined;
   const bossEncounterNames =
     spotlightBossNames.size > 0 ? [...spotlightBossNames].join(",") : undefined;

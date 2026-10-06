@@ -233,6 +233,12 @@ var (
 		ProgressionBosses: func(database.WoWFlavor) []string {
 			return []string{"Erennius", "Solnius", "Solnius (Hard Mode)"}
 		},
+		RankingEncounterSets: func(database.WoWFlavor) []RankingEncounterSet {
+			return []RankingEncounterSet{
+				{Encounters: []string{"Erennius", "Solnius"}},
+				{ID: "hard", Label: "Hard Mode", Encounters: []string{"Solnius (Hard Mode)"}},
+			}
+		},
 		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{}
 		},

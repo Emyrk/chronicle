@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   getRankingsQueryEnablement,
+  rankingsContentReady,
   type RankingsMetric,
   type RankingsQueryEnablement,
   type RankingsSubTab,
@@ -20,6 +21,17 @@ const cases: Array<{
   { metric: "success", subTab: "boxplot", active: "successRates" },
   { metric: "success", subTab: "leaderboard", active: "successRates" },
 ]
+
+describe("rankingsContentReady", () => {
+  it("starts content queries from a canonical encounter set before recorded encounters load", () => {
+    expect(rankingsContentReady(true, true, false)).toBe(true)
+  })
+
+  it("waits for recorded encounters when no canonical set exists", () => {
+    expect(rankingsContentReady(true, false, false)).toBe(false)
+    expect(rankingsContentReady(true, false, true)).toBe(true)
+  })
+})
 
 describe("getRankingsQueryEnablement", () => {
   it.each(cases)("enables only $active for $metric/$subTab", ({ metric, subTab, active }) => {

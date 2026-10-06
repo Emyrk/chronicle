@@ -1,8 +1,6 @@
-import { EMERALD_SANCTUM_INSTANCE } from "../Rankings/emeraldSanctumState"
-
 export type LeaderboardsMode = "statistics" | "speedruns"
 
-const INSTANCES_WITHOUT_SPEEDRUNS = new Set([EMERALD_SANCTUM_INSTANCE])
+const INSTANCES_WITHOUT_SPEEDRUNS = new Set(["Emerald Sanctum"])
 
 export function leaderboardsModePath(mode: LeaderboardsMode): string {
   return `/leaderboards/${mode}`

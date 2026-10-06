@@ -49,6 +49,14 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 		for j, t := range d.Trash {
 			trash[j] = chroniclesdk.SupportedInstanceUnit{EntryID: t.EntryID, Name: t.Name}
 		}
+		rankingEncounterSets := make([]chroniclesdk.RankingEncounterSet, len(d.RankingEncounterSets))
+		for j, set := range d.RankingEncounterSets {
+			rankingEncounterSets[j] = chroniclesdk.RankingEncounterSet{
+				ID:         set.ID,
+				Label:      set.Label,
+				Encounters: set.Encounters,
+			}
+		}
 		result[i] = chroniclesdk.SupportedInstance{
 			Name:                        d.Name,
 			Comment:                     d.Comment,
@@ -58,6 +66,7 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 			DerivedNames:                d.DerivedNames,
 			BossCount:                   d.BossCount,
 			ProgressionBosses:           d.ProgressionBosses,
+			RankingEncounterSets:        rankingEncounterSets,
 			RankedStartAfterRequirement: d.RankedStartAfterRequirement,
 			Bosses:                      bosses,
 			Trash:                       trash,

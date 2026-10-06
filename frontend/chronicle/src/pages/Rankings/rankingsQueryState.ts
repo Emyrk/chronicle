@@ -9,6 +9,14 @@ export interface RankingsQueryEnablement {
   successRates: boolean
 }
 
+export function rankingsContentReady(
+  metadataReady: boolean,
+  hasEncounterSet: boolean,
+  encountersReady: boolean,
+): boolean {
+  return metadataReady && (hasEncounterSet || encountersReady)
+}
+
 export function getRankingsQueryEnablement(
   metric: RankingsMetric,
   subTab: RankingsSubTab,
