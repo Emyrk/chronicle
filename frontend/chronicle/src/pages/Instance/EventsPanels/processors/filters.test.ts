@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AbsorbedProcessorEvent, ConsumeProcessorEvent, DamageProcessorEvent, HealProcessorEvent, ProcessorContext, ProcessorEvent } from "../processorTypes";
 import { evaluateFilters, compileFilters, type PanelFilter } from "./filters";
+import { UnitState } from "./unitState";
 
 function createContext(overrides: Partial<ProcessorContext> = {}): ProcessorContext {
   return {
@@ -292,6 +293,7 @@ describe("evaluateFilters", () => {
 
   describe("source_type with proper pet classification", () => {
     const PLAYER_GUID = "0x0000000000000001";
+    const SECOND_PLAYER_GUID = "0x0000000000000002";
     const FRIENDLY_PET_GUID = "0x0040000000000010"; // high & 0x00f0 = 0x0040 = pet
     const ENEMY_PET_GUID = "0x0040000000000020";    // also a pet GUID
     const ENEMY_BOSS_GUID = "0xF130000000000001";   // high & 0x00f0 = 0x0030 = creature
@@ -311,6 +313,99 @@ describe("evaluateFilters", () => {
     it("player matches player caster", () => {
       const filters: PanelFilter[] = [{ type: "source_type", value: "player" }];
       expect(evaluateFilters(filters, createDamageEvent({ caster: PLAYER_GUID }), ctxWithUnits())).toBe(true);
+    });
+
+    it("keeps a self-controlled player classified as a player", () => {
+      const context = ctxWithUnits();
+      const unitState = new UnitState(context.units ?? {});
+      context.unitState = unitState;
+      unitState.processClassification({
+        type: "unit_classification",
+        index: 0,
+        offsetMilli: 0,
+        target: PLAYER_GUID,
+        unitType: 1,
+        affiliation: 1,
+        owner: null,
+        controller: PLAYER_GUID,
+        spellId: 0,
+        activity: [],
+        activityCount: 0,
+        isSynthetic: false,
+      });
+      const event = createDamageEvent({ caster: PLAYER_GUID });
+
+      expect(evaluateFilters([{ type: "source_type", value: "player" }], event, context)).toBe(true);
+      expect(evaluateFilters([{ type: "source_type", value: "pet" }], event, context)).toBe(false);
+      expect(evaluateFilters([{ type: "source_type", value: "enemy_pet" }], event, context)).toBe(false);
+    });
+
+    it("allows a player to be classified as a friendly pet", () => {
+      const context = ctxWithUnits();
+      const unitState = new UnitState(context.units ?? {});
+      context.unitState = unitState;
+      unitState.processClassification({
+        type: "unit_classification",
+        index: 0,
+        offsetMilli: 0,
+        target: PLAYER_GUID,
+        unitType: 1,
+        affiliation: 1,
+        owner: null,
+        controller: SECOND_PLAYER_GUID,
+        spellId: 605,
+        activity: [],
+        activityCount: 0,
+        isSynthetic: false,
+      });
+      const event = createDamageEvent({ caster: PLAYER_GUID });
+
+      expect(evaluateFilters([{ type: "source_type", value: "player" }], event, context)).toBe(false);
+      expect(evaluateFilters([{ type: "source_type", value: "pet" }], event, context)).toBe(true);
+    });
+
+    it("classifies a mind-controlled player by its active controller", () => {
+      const context = ctxWithUnits();
+      const unitState = new UnitState(context.units ?? {});
+      context.unitState = unitState;
+      const event = createDamageEvent({ caster: PLAYER_GUID });
+
+      unitState.processClassification({
+        type: "unit_classification",
+        index: 0,
+        offsetMilli: 0,
+        target: PLAYER_GUID,
+        unitType: 1,
+        affiliation: 2,
+        owner: null,
+        controller: ENEMY_OWNER_GUID,
+        spellId: 20604,
+        activity: [],
+        activityCount: 0,
+        isSynthetic: false,
+      });
+
+      expect(evaluateFilters([{ type: "source_type", value: "player" }], event, context)).toBe(false);
+      expect(evaluateFilters([{ type: "source_type", value: "pet" }], event, context)).toBe(false);
+      expect(evaluateFilters([{ type: "source_type", value: "enemy_pet" }], event, context)).toBe(true);
+
+      unitState.processClassification({
+        type: "unit_classification",
+        index: 1,
+        offsetMilli: 15_000,
+        target: PLAYER_GUID,
+        unitType: 1,
+        affiliation: 1,
+        owner: null,
+        controller: null,
+        spellId: 0,
+        activity: [],
+        activityCount: 0,
+        isSynthetic: false,
+      });
+
+      expect(evaluateFilters([{ type: "source_type", value: "player" }], event, context)).toBe(true);
+      expect(evaluateFilters([{ type: "source_type", value: "enemy_pet" }], event, context)).toBe(false);
     });
 
     it("pet matches friendly pet (player-owned)", () => {

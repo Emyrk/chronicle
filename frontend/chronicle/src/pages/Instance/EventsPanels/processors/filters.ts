@@ -280,18 +280,18 @@ function compileEntityTypeFilter(
       if (name && customNames.some((n) => name.includes(n))) return true;
     }
 
-    // Entity type classification
-    const guidIsPlayer = checkIsPlayer(guid);
-    if (wantPlayer && guidIsPlayer) return true;
-
-    if (!guidIsPlayer) {
-      const owner = getOwner(guid);
-      const hasOwner = owner != null;
-      const ownerIsPlayer = hasOwner && checkIsPlayer(owner!);
-
-      if (wantPet && hasOwner && ownerIsPlayer) return true;
-      if (wantEnemyPet && hasOwner && !ownerIsPlayer) return true;
-      if (wantEnemy && !hasOwner) return true;
+    // Entity type classification. Effective ownership takes precedence over
+    // GUID type because players can temporarily become controlled pets.
+    const owner = getOwner(guid);
+    const hasOwner = owner != null;
+    if (hasOwner) {
+      const ownerIsPlayer = checkIsPlayer(owner!);
+      if (wantPet && ownerIsPlayer) return true;
+      if (wantEnemyPet && !ownerIsPlayer) return true;
+    } else {
+      const guidIsPlayer = checkIsPlayer(guid);
+      if (wantPlayer && guidIsPlayer) return true;
+      if (wantEnemy && !guidIsPlayer) return true;
     }
     if (wantVehicle && (us ? us.getCachedGuid(guid).isVehicle() : getCachedGuid(guidCache, guid).isVehicle())) return true;
     if (wantObject && (us ? us.getCachedGuid(guid).isObject() : getCachedGuid(guidCache, guid).isObject())) return true;
