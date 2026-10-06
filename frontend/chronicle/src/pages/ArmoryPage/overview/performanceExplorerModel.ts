@@ -1,9 +1,10 @@
-import type { CharacterEncounterStats, CharacterPerformanceRun } from "@/api/typesGenerated";
+import type { CharacterEncounterStats, CharacterPerformanceRun, RankingEncounterSet } from "@/api/typesGenerated";
 import {
   defaultRankingBossNames,
   rankingEncounterSections,
   type RankingEncounterSection,
 } from "@/pages/Rankings/rankingsEncounterSelection";
+import { resolveRankingEncounterSet } from "@/pages/Rankings/rankingEncounterSets";
 
 export interface PerformanceInstanceVariant {
   key: string;
@@ -62,16 +63,20 @@ export function selectPerformanceEncounterNames(
   variant: PerformanceInstanceVariant | undefined,
   selectedEncounterNames: readonly string[],
   progressionBosses: Map<string, Set<string>> | undefined,
+  rankingEncounterSets?: Map<string, readonly RankingEncounterSet[]>,
 ): string[] {
   if (!variant) return [];
   if (selectedEncounterNames.length > 0) {
     return selectedEncounterNames.filter((name) => variant.encounters.includes(name));
   }
 
+  const defaultSet = resolveRankingEncounterSet(
+    rankingEncounterSets?.get(variant.instanceName) ?? [],
+    "",
+  );
   const defaultBossNames = defaultRankingBossNames(
-    variant.instanceName,
     variant.encounters,
-    progressionBosses,
+    defaultSet?.encounters ?? progressionBosses?.get(variant.instanceName),
   );
   return variant.encounters.filter((name) => defaultBossNames.has(name));
 }

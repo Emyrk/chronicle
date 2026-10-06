@@ -153,6 +153,7 @@ export function useRankingsFilters(instanceName?: string) {
 export function useRankingsLeaderboard(params: {
   instance_names?: string;
   encounter_names?: string;
+  encounter_set?: string;
   difficulty_names?: string;
   realm_names?: string;
   period?: string;
@@ -169,6 +170,7 @@ export function useRankingsLeaderboard(params: {
   const searchParams = new URLSearchParams();
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
   if (params.encounter_names) searchParams.set("encounter_names", params.encounter_names);
+  if (params.encounter_set !== undefined) searchParams.set("encounter_set", params.encounter_set);
   if (params.difficulty_names) searchParams.set("difficulty_names", params.difficulty_names);
   if (params.realm_names) searchParams.set("realm_names", params.realm_names);
   if (params.period) searchParams.set("period", params.period);
@@ -195,6 +197,7 @@ export function useRankingsLeaderboard(params: {
 export function useRankingsStats(params: {
   instance_names?: string;
   encounter_names?: string;
+  encounter_set?: string;
   difficulty_names?: string;
   realm_names?: string;
   period?: string;
@@ -206,6 +209,7 @@ export function useRankingsStats(params: {
   const searchParams = new URLSearchParams();
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
   if (params.encounter_names) searchParams.set("encounter_names", params.encounter_names);
+  if (params.encounter_set !== undefined) searchParams.set("encounter_set", params.encounter_set);
   if (params.difficulty_names) searchParams.set("difficulty_names", params.difficulty_names);
   if (params.realm_names) searchParams.set("realm_names", params.realm_names);
   if (params.period) searchParams.set("period", params.period);

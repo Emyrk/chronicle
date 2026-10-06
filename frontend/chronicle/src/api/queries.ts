@@ -4,7 +4,7 @@ import {
   recordPublicNoticeResult,
   shouldFetchPublicNotices,
 } from "@/components/NoticeBanner/publicNoticeCache";
-import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse } from "./typesGenerated";
+import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, RankingEncounterSet, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse } from "./typesGenerated";
 import type { 
   WoWLogGroup as WoWLogGroupGenerated, 
   WoWLogFile as WoWLogFileGenerated,
@@ -885,6 +885,26 @@ export function useSupportedInstanceProgressionBosses() {
     staleTime: supportedInstancesCacheTime,
     gcTime: supportedInstancesCacheTime,
     select: selectSupportedInstanceProgressionBosses,
+  });
+}
+
+export function selectSupportedInstanceRankingEncounterSets(instances: SupportedInstance[]) {
+  return new Map(
+    instances.flatMap((instance) =>
+      instance.ranking_encounter_sets == null
+        ? []
+        : [[instance.name, instance.ranking_encounter_sets as readonly RankingEncounterSet[]] as const],
+    ),
+  );
+}
+
+export function useSupportedInstanceRankingEncounterSets() {
+  return useQuery({
+    queryKey: supportedInstancesQueryKey(),
+    queryFn: fetchSupportedInstances,
+    staleTime: supportedInstancesCacheTime,
+    gcTime: supportedInstancesCacheTime,
+    select: selectSupportedInstanceRankingEncounterSets,
   });
 }
 

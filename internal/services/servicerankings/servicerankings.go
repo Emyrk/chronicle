@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	types "github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
@@ -17,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -39,11 +41,13 @@ func OnRankings() string {
 
 // Service provides DPS rankings, speedrun leaderboard, and related queries.
 type Service struct {
-	broker   *services.Services
-	router   chi.Router
-	logger   *slog.Logger
-	store    *authz.Authz
-	registry *registry.Registry
+	broker    *services.Services
+	router    chi.Router
+	logger    *slog.Logger
+	store     *authz.Authz
+	chronicle *chronicle.Chronicle
+	dataset   *servicedataset.Service
+	registry  *registry.Registry
 
 	// SummaryDispatchWorker fans out per-tenant refresh jobs.
 	SummaryDispatchWorker *WorkerRefreshRankingsSummaries
@@ -89,6 +93,7 @@ func (s *Service) DependsOn() []string {
 		serviceauthz.OnAuthz(),
 		servicedbstore.OnDatabaseStore(),
 		servicechronicle.OnChronicle(),
+		servicedataset.OnDataset(),
 	}
 }
 
@@ -100,7 +105,9 @@ func (s *Service) Options() serpent.OptionSet {
 func (s *Service) Start(_ context.Context) error {
 	s.logger = servicelogger.Logger(s.broker)
 	s.store = serviceauthz.Authz(s.broker)
-	s.registry = servicechronicle.Chronicle(s.broker).Registry()
+	s.chronicle = servicechronicle.Chronicle(s.broker)
+	s.dataset = servicedataset.Dataset(s.broker)
+	s.registry = s.chronicle.Registry()
 
 	namedLogger := services.NamedLogger(s.logger, s.Name())
 	store := servicedbstore.DatabaseStore(s.broker)
@@ -300,6 +307,52 @@ func (s *Service) handleEncounters(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
+func (s *Service) registryForRequest(ctx context.Context) *registry.Registry {
+	if s.chronicle == nil || s.dataset == nil {
+		return s.registry
+	}
+	tenant := servicetenant.TenantFromContext(ctx)
+	if tenant == nil || !tenant.DefaultDatasetID.Valid {
+		return s.registry
+	}
+	dataset, err := s.dataset.GetDataset(ctx, tenant.DefaultDatasetID.UUID)
+	if err != nil {
+		return s.registry
+	}
+	flavor := database.FlavorFromStrings(dataset.DefaultFlavor)
+	if len(flavor) == 0 {
+		return s.registry
+	}
+	return s.chronicle.RegistryForFlavor(flavor)
+}
+
+func (s *Service) resolveRankingEncounterNames(w http.ResponseWriter, r *http.Request) ([]string, bool) {
+	q := r.URL.Query()
+	if explicit := splitCSV(q.Get("encounter_names")); len(explicit) > 0 {
+		return explicit, true
+	}
+	if !q.Has("encounter_set") {
+		return nil, true
+	}
+
+	instanceNames := splitCSV(q.Get("instance_names"))
+	if len(instanceNames) != 1 {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "encounter_set requires exactly one instance_name",
+		})
+		return nil, false
+	}
+
+	encounterNames, ok := s.registryForRequest(r.Context()).RankingEncounterSet(instanceNames[0], q.Get("encounter_set"))
+	if !ok {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Unknown ranking encounter set",
+		})
+		return nil, false
+	}
+	return encounterNames, true
+}
+
 // handleLeaderboard returns paginated DPS rankings with filters.
 //
 //	GET /leaderboard?instance_names=Molten+Core&encounter_names=Ragnaros&period=90d
@@ -334,9 +387,14 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		classParam = string(db2sdk.HeroClassToDB(types.HeroClasses(classParam)))
 	}
 
+	encounterNames, ok := s.resolveRankingEncounterNames(w, r)
+	if !ok {
+		return
+	}
+
 	rows, err := s.store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
 		InstanceNames:    splitCSV(q.Get("instance_names")),
-		EncounterNames:   splitCSV(q.Get("encounter_names")),
+		EncounterNames:   encounterNames,
 		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
 		RealmNames:       splitCSV(q.Get("realm_names")),
 		Class:            classParam,
@@ -465,9 +523,14 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 		sinceDays = periodToDays(v)
 	}
 
+	encounterNames, ok := s.resolveRankingEncounterNames(w, r)
+	if !ok {
+		return
+	}
+
 	rows, err := s.store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
 		InstanceNames:    splitCSV(q.Get("instance_names")),
-		EncounterNames:   splitCSV(q.Get("encounter_names")),
+		EncounterNames:   encounterNames,
 		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
 		RealmNames:       splitCSV(q.Get("realm_names")),
 		Role:             q.Get("role"),

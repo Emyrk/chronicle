@@ -61,6 +61,14 @@ func (c InstanceCategory) Valid() bool {
 	return c == InstanceCategoryDungeon || c == InstanceCategoryRaid
 }
 
+// RankingEncounterSet groups encounters that can be selected together on rankings pages.
+// The set with an empty ID is the default and is omitted from URLs.
+type RankingEncounterSet struct {
+	ID         string
+	Label      string
+	Encounters []string
+}
+
 type CommonFactory struct {
 	Name      string
 	Category  InstanceCategory
@@ -82,10 +90,14 @@ type CommonFactory struct {
 	// ProgressionBosses returns the ordered boss encounters used for progression.
 	// When nil, canonical bosses are inferred from speedrun requirements.
 	ProgressionBosses func(flavor database.WoWFlavor) []string
-	ZoneNames         []string
-	MapIDs            []uint32
-	Hostiles          func(flavor database.WoWFlavor) *identifier.Identifier
-	FlavoredRankings  func(flavor database.WoWFlavor) *rankings.Rankings
+	// RankingEncounterSets returns named encounter groups for rankings pages.
+	// The set with an empty ID is the default. When no default is configured,
+	// ProgressionBosses is used as the default set.
+	RankingEncounterSets func(flavor database.WoWFlavor) []RankingEncounterSet
+	ZoneNames            []string
+	MapIDs               []uint32
+	Hostiles             func(flavor database.WoWFlavor) *identifier.Identifier
+	FlavoredRankings     func(flavor database.WoWFlavor) *rankings.Rankings
 	// Preprocessors creates fresh message preprocessors for each parsed instance.
 	Preprocessors func() []instancehook.Preprocessor
 }

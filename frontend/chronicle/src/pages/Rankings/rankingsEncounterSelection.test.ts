@@ -6,13 +6,13 @@ import {
 } from "./rankingsEncounterSelection";
 
 describe("rankingEncounterNames", () => {
-  it("includes canonical progression bosses without recorded kills", () => {
-    const progressionBosses = new Map([
-      ["Ulduar", new Set(["Flame Leviathan", "Ignis the Furnace Master", "Razorscale", "XT-002 Deconstructor"])],
-    ]);
-
+  it("includes configured encounters without recorded kills", () => {
     expect(
-      rankingEncounterNames("Ulduar", ["Flame Leviathan", "Razorscale", "Trash"], progressionBosses),
+      rankingEncounterNames(
+        ["Flame Leviathan", "Razorscale", "Trash"],
+        ["Flame Leviathan", "Ignis the Furnace Master"],
+        ["Razorscale", "XT-002 Deconstructor"],
+      ),
     ).toEqual([
       "Flame Leviathan",
       "Ignis the Furnace Master",
@@ -23,61 +23,30 @@ describe("rankingEncounterNames", () => {
   });
 
   it("preserves recorded encounters when canonical metadata is unavailable", () => {
-    expect(rankingEncounterNames("Unknown", ["Boss", "Trash"], new Map())).toEqual(["Boss", "Trash"]);
+    expect(rankingEncounterNames(["Boss", "Trash"])).toEqual(["Boss", "Trash"]);
   });
 });
 
 describe("defaultRankingBossNames", () => {
-  it("uses canonical progression bosses while leaving optional bosses available", () => {
+  it("uses the configured default while leaving other bosses available", () => {
     const encounterNames = ["Flame Leviathan", "Elder Brightleaf", "Freya", "Trash"];
 
-    expect(
-      [...defaultRankingBossNames(
-        "Ulduar",
-        encounterNames,
-        new Map([["Ulduar", new Set(["Flame Leviathan", "Freya"])]]),
-      )],
-    ).toEqual(["Freya"]);
+    expect([...defaultRankingBossNames(encounterNames, ["Freya"])]).toEqual(["Freya"]);
     expect(encounterNames).toContain("Flame Leviathan");
     expect(encounterNames).toContain("Elder Brightleaf");
   });
 
-  it("only excludes Flame Leviathan from Ulduar defaults", () => {
-    expect(
-      [...defaultRankingBossNames(
-        "Another Raid",
-        ["Flame Leviathan"],
-        new Map([["Another Raid", new Set(["Flame Leviathan"])]]),
-      )],
-    ).toEqual(["Flame Leviathan"]);
-  });
-
   it("defaults to every boss when canonical metadata is unavailable", () => {
-    expect([...defaultRankingBossNames("Unknown", ["Boss", "Trash"], new Map())]).toEqual(["Boss"]);
-  });
-});
-
-describe("Emerald Sanctum progression", () => {
-  it("treats Erennius and both Solnius variants as progression bosses", () => {
-    const encounterNames = ["Erennius", "Solnius", "Solnius (Hard Mode)"];
-    const progressionBosses = new Set(encounterNames);
-
-    expect(rankingEncounterSections(encounterNames, progressionBosses)).toEqual([
-      {
-        label: "Bosses",
-        kind: "boss",
-        names: encounterNames,
-      },
-    ]);
+    expect([...defaultRankingBossNames(["Boss", "Trash"])]).toEqual(["Boss"]);
   });
 });
 
 describe("rankingEncounterSections", () => {
   it("places optional bosses between progression bosses and trash", () => {
     const encounterNames = ["Flame Leviathan", "Elder Brightleaf", "Freya", "Trash"];
-    const defaultBossNames = new Set(["Flame Leviathan", "Freya"]);
+    const progressionBossNames = new Set(["Flame Leviathan", "Freya"]);
 
-    expect(rankingEncounterSections(encounterNames, defaultBossNames)).toEqual([
+    expect(rankingEncounterSections(encounterNames, progressionBossNames)).toEqual([
       {
         label: "Bosses",
         kind: "boss",

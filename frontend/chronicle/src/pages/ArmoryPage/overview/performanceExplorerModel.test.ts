@@ -132,6 +132,23 @@ describe("selectPerformanceEncounterNames", () => {
     ]);
   });
 
+  it("uses an explicit default ranking encounter set before progression bosses", () => {
+    const rankingEncounterSets = new Map([
+      ["Zul'Gurub", [{
+        id: "",
+        label: "Normal",
+        encounters: ["Hakkar"],
+      }]],
+    ]);
+
+    expect(selectPerformanceEncounterNames(
+      variant,
+      [],
+      progressionBosses,
+      rankingEncounterSets,
+    )).toEqual(["Hakkar"]);
+  });
+
   it("defaults to every recorded boss when progression metadata is unavailable", () => {
     expect(selectPerformanceEncounterNames(variant, [], undefined)).toEqual(variant.encounters);
   });

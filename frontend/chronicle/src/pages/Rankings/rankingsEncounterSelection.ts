@@ -4,33 +4,30 @@ export interface RankingEncounterSection {
   names: string[];
 }
 
-const DEFAULT_EXCLUDED_BOSSES = new Map([
-  ["Ulduar", new Set(["Flame Leviathan"])],
-]);
-
 export function rankingEncounterNames(
-  instanceName: string,
   recordedEncounterNames: string[],
-  progressionBosses: Map<string, Set<string>> | undefined,
+  progressionBosses?: Iterable<string>,
+  configuredEncounterNames: Iterable<string> = [],
 ): string[] {
-  const canonicalBosses = progressionBosses?.get(instanceName);
-  if (canonicalBosses == null) return recordedEncounterNames;
+  const canonicalNames = new Set([
+    ...(progressionBosses ?? []),
+    ...configuredEncounterNames,
+  ]);
+  if (canonicalNames.size === 0) return recordedEncounterNames;
 
-  return [...canonicalBosses, ...recordedEncounterNames.filter((name) => !canonicalBosses.has(name))];
+  return [...canonicalNames, ...recordedEncounterNames.filter((name) => !canonicalNames.has(name))];
 }
 
 export function defaultRankingBossNames(
-  instanceName: string,
   encounterNames: string[],
-  progressionBosses: Map<string, Set<string>> | undefined,
+  defaultEncounterNames?: Iterable<string>,
 ): Set<string> {
-  const allBosses = encounterNames.filter((name) => name !== "Trash");
-  const canonicalBosses = progressionBosses?.get(instanceName);
-  const defaultBosses = canonicalBosses == null
-    ? allBosses
-    : allBosses.filter((name) => canonicalBosses.has(name));
-  const excludedBosses = DEFAULT_EXCLUDED_BOSSES.get(instanceName);
-  return new Set(defaultBosses.filter((name) => !excludedBosses?.has(name)));
+  const configuredNames = defaultEncounterNames == null ? null : new Set(defaultEncounterNames);
+  return new Set(
+    encounterNames.filter((name) =>
+      name !== "Trash" && (configuredNames == null || configuredNames.has(name)),
+    ),
+  );
 }
 
 export function rankingEncounterSections(

@@ -1,24 +1,17 @@
 import { Leaf, Swords } from "lucide-react"
+import type { RankingEncounterSet } from "@/api/typesGenerated"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { EmeraldSanctumMode } from "./emeraldSanctumState"
 
-const OPTIONS: Array<{
-  value: EmeraldSanctumMode
-  label: string
-  icon: typeof Leaf
-}> = [
-  { value: "normal", label: "Normal", icon: Leaf },
-  { value: "hard", label: "Hard Mode", icon: Swords },
-]
-
-export function EmeraldSanctumModeSwitch({
+export function RankingEncounterSetSwitch({
+  sets,
   value,
   onChange,
   className,
 }: {
-  value: EmeraldSanctumMode
-  onChange: (value: EmeraldSanctumMode) => void
+  sets: readonly RankingEncounterSet[]
+  value: string
+  onChange: (value: string) => void
   className?: string
 }) {
   return (
@@ -28,14 +21,14 @@ export function EmeraldSanctumModeSwitch({
         className,
       )}
       role="group"
-      aria-label="Emerald Sanctum mode"
+      aria-label="Ranking encounter set"
     >
-      {OPTIONS.map((option) => {
-        const Icon = option.icon
-        const selected = value === option.value
+      {sets.map((set, index) => {
+        const Icon = index === 0 ? Leaf : Swords
+        const selected = value === set.id
         return (
           <Button
-            key={option.value}
+            key={set.id}
             type="button"
             variant="ghost"
             size="sm"
@@ -46,11 +39,11 @@ export function EmeraldSanctumModeSwitch({
                 : "text-muted-foreground hover:text-foreground",
             )}
             aria-pressed={selected}
-            onClick={() => onChange(option.value)}
-            title={option.value === "hard" ? "Solnius (Hard Mode)" : "Erennius and Solnius"}
+            onClick={() => onChange(set.id)}
+            title={set.encounters.join(" and ")}
           >
             <Icon className="h-3 w-3" />
-            {option.label}
+            {set.label}
           </Button>
         )
       })}

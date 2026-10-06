@@ -2688,6 +2688,17 @@ export interface RaidComposition {
     readonly updated_at: string;
 }
 
+// From chroniclesdk/supported_instance.go
+/**
+ * RankingEncounterSet is a named encounter group available on rankings pages.
+ * The set with an empty ID is the default and is omitted from URLs.
+ */
+export interface RankingEncounterSet {
+    readonly id: string;
+    readonly label: string;
+    readonly encounters: readonly string[];
+}
+
 // From chroniclesdk/rankings.go
 /**
  * RankingsBoxPlotStats contains box plot statistics for a class/spec combination.
@@ -3644,6 +3655,7 @@ export interface SupportedInstance {
     readonly derived_names?: readonly string[];
     readonly boss_count?: number;
     readonly progression_bosses?: readonly string[];
+    readonly ranking_encounter_sets?: readonly RankingEncounterSet[];
     readonly ranked_start_after_requirement?: string;
     readonly bosses?: readonly SupportedInstanceUnit[];
     readonly trash?: readonly SupportedInstanceUnit[];

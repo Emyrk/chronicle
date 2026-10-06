@@ -870,13 +870,25 @@ func UlduarProgressionBosses(database.WoWFlavor) []string {
 	}
 }
 
+func UlduarRankingEncounterSets(flavor database.WoWFlavor) []instances.RankingEncounterSet {
+	progressionBosses := UlduarProgressionBosses(flavor)
+	defaultEncounters := make([]string, 0, len(progressionBosses)-1)
+	for _, encounter := range progressionBosses {
+		if encounter != "Flame Leviathan" {
+			defaultEncounters = append(defaultEncounters, encounter)
+		}
+	}
+	return []instances.RankingEncounterSet{{Encounters: defaultEncounters}}
+}
+
 var UlduarFactory = &instances.CommonFactory{
-	Name:              "Ulduar",
-	Category:          instances.InstanceCategoryRaid,
-	ZoneNames:         []string{"ulduar"},
-	MapIDs:            []uint32{603},
-	Hostiles:          instances.FromMap(UlduarHostiles()),
-	ProgressionBosses: UlduarProgressionBosses,
+	Name:                 "Ulduar",
+	Category:             instances.InstanceCategoryRaid,
+	ZoneNames:            []string{"ulduar"},
+	MapIDs:               []uint32{603},
+	Hostiles:             instances.FromMap(UlduarHostiles()),
+	ProgressionBosses:    UlduarProgressionBosses,
+	RankingEncounterSets: UlduarRankingEncounterSets,
 	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 		return UlduarSpeedrunRequirements()
 	},

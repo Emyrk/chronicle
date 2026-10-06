@@ -45,6 +45,8 @@ type Entry struct {
 	BossCount *int
 	// ProgressionBosses is the ordered boss encounter list used for progression.
 	ProgressionBosses []string
+	// RankingEncounterSets are named encounter groups available on rankings pages.
+	RankingEncounterSets []instances.RankingEncounterSet
 	// DerivedNames are instance names selected from encounter data within a shared zone.
 	DerivedNames []string
 	// DerivedSpeedrunRules holds per-sub-instance speedrun rules when
@@ -82,17 +84,23 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 		progressionBosses = f.ProgressionBosses(flavor)
 	}
 
+	var rankingEncounterSets []instances.RankingEncounterSet
+	if f.RankingEncounterSets != nil {
+		rankingEncounterSets = f.RankingEncounterSets(flavor)
+	}
+
 	entry := Entry{
-		commonFactory:     f,
-		Name:              f.Name,
-		Category:          f.Category,
-		MultiZone:         f.MultiZone,
-		Factory:           wrap(f.New),
-		ZoneNames:         f.ZoneNames,
-		HostileEntries:    hostiles,
-		SpeedrunRules:     speedrun,
-		BossCount:         bossCount,
-		ProgressionBosses: progressionBosses,
+		commonFactory:        f,
+		Name:                 f.Name,
+		Category:             f.Category,
+		MultiZone:            f.MultiZone,
+		Factory:              wrap(f.New),
+		ZoneNames:            f.ZoneNames,
+		HostileEntries:       hostiles,
+		SpeedrunRules:        speedrun,
+		BossCount:            bossCount,
+		ProgressionBosses:    progressionBosses,
+		RankingEncounterSets: rankingEncounterSets,
 	}
 
 	if f.DerivedName != nil {
@@ -247,7 +255,28 @@ func (r *Registry) Entries() map[string]*Entry {
 
 // EntryByName returns a single entry by instance name, or nil if not found.
 func (r *Registry) EntryByName(name string) *Entry {
-	return r.entries[name]
+	if entry := r.entries[name]; entry != nil {
+		return entry
+	}
+	if r.fallback != nil {
+		return r.fallback.EntryByName(name)
+	}
+	return nil
+}
+
+// RankingEncounterSet returns one effective rankings encounter set by instance
+// and set ID. An empty set ID selects the default set.
+func (r *Registry) RankingEncounterSet(instanceName, setID string) ([]string, bool) {
+	entry := r.EntryByName(instanceName)
+	if entry == nil {
+		return nil, false
+	}
+	for _, set := range rankingEncounterSets(entry) {
+		if set.ID == setID {
+			return append([]string(nil), set.Encounters...), true
+		}
+	}
+	return nil, false
 }
 
 // SpeedrunRules returns speedrun rules for every registered instance that has
@@ -308,6 +337,7 @@ type InstanceDetail struct {
 	DerivedNames                []string
 	BossCount                   *int
 	ProgressionBosses           []string
+	RankingEncounterSets        []instances.RankingEncounterSet
 	RankedStartAfterRequirement string
 	Bosses                      []InstanceDetailUnit
 	Trash                       []InstanceDetailUnit
@@ -406,6 +436,33 @@ func progressionBosses(entry *Entry) []string {
 	return bosses
 }
 
+func rankingEncounterSets(entry *Entry) []instances.RankingEncounterSet {
+	sets := make([]instances.RankingEncounterSet, 0, len(entry.RankingEncounterSets)+1)
+	hasDefault := false
+	for _, set := range entry.RankingEncounterSets {
+		if set.ID == "" {
+			hasDefault = true
+		}
+		sets = append(sets, instances.RankingEncounterSet{
+			ID:         set.ID,
+			Label:      set.Label,
+			Encounters: append([]string(nil), set.Encounters...),
+		})
+	}
+	if !hasDefault {
+		bosses := progressionBosses(entry)
+		if len(bosses) > 0 {
+			sets = append([]instances.RankingEncounterSet{{Encounters: append([]string(nil), bosses...)}}, sets...)
+		}
+	}
+	for i := range sets {
+		if sets[i].Label == "" && sets[i].ID == "" {
+			sets[i].Label = "Normal"
+		}
+	}
+	return sets
+}
+
 // AllInstanceDetails returns enriched metadata for every registered instance,
 // including zone names, boss names, and trash mob names.
 func (r *Registry) AllInstanceDetails() []InstanceDetail {
@@ -443,6 +500,7 @@ func (r *Registry) AllInstanceDetails() []InstanceDetail {
 				DerivedNames:                entry.DerivedNames,
 				BossCount:                   progressionBossCount(entry),
 				ProgressionBosses:           progressionBosses(entry),
+				RankingEncounterSets:        rankingEncounterSets(entry),
 				RankedStartAfterRequirement: rankedStartAfterRequirement(entry),
 				Bosses:                      bosses,
 				Trash:                       trash,

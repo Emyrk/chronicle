@@ -24,7 +24,11 @@ import { cn } from "@/lib/utils"
 import { AdSlot } from "@/components/Ads/AdSlot"
 import { shouldShowCompactEncounterAd } from "@/components/Ads/adPreview"
 import type { RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
-import { useSiteConfig, useSupportedInstanceProgressionBosses } from "@/api/queries"
+import {
+  useSiteConfig,
+  useSupportedInstanceProgressionBosses,
+  useSupportedInstanceRankingEncounterSets,
+} from "@/api/queries"
 import {
   useRankingsEncounters,
   useRankingsInstances,
@@ -39,20 +43,14 @@ import {
 import type { RankedEntry } from "./RankingsTable"
 import type { RankedKillTimeEntry } from "./KillTimeTable"
 import type { TimePeriod } from "./timePeriod"
-import { EmeraldSanctumModeSwitch } from "./EmeraldSanctumModeSwitch"
-import {
-  EMERALD_SANCTUM_INSTANCE,
-  emeraldSanctumModeParamForValue,
-  getEmeraldSanctumEncounterNames,
-  parseEmeraldSanctumMode,
-  type EmeraldSanctumMode,
-} from "./emeraldSanctumState"
+import { RankingEncounterSetSwitch } from "./RankingEncounterSetSwitch"
+import { resolveRankingEncounterSet } from "./rankingEncounterSets"
 import { BoxPlotChart } from "./BoxPlotChart"
 import { RankingsTable } from "./RankingsTable"
 import { KillTimeTable } from "./KillTimeTable"
 import { ClassSpecFilter } from "./ClassSpecFilter"
 import { RankingsLoadingState } from "./RankingsLoadingState"
-import { getRankingsQueryEnablement } from "./rankingsQueryState"
+import { getRankingsQueryEnablement, rankingsContentReady } from "./rankingsQueryState"
 import {
   defaultRankingBossNames,
   rankingEncounterNames,
@@ -86,11 +84,13 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const isEmeraldSanctum = instanceName === EMERALD_SANCTUM_INSTANCE
-
   // ── API queries ───────────────────────────────────────────────────────
   const { data: encounterSummaries, isLoading: encountersLoading } = useRankingsEncounters(instanceName)
   const { data: progressionBosses, isLoading: progressionBossesLoading } = useSupportedInstanceProgressionBosses()
+  const {
+    data: rankingEncounterSetsByInstance,
+    isLoading: rankingEncounterSetsLoading,
+  } = useSupportedInstanceRankingEncounterSets()
   const { data: siteConfig } = useSiteConfig()
   const configuredCohortMode = siteConfig?.tenant?.parse_config?.cohort_mode
   const cohortMode: RankingsCohortMode =
@@ -105,9 +105,23 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     () => new Set(recordedEncounterNames),
     [recordedEncounterNames],
   )
+  const rankingEncounterSets = useMemo(
+    () => rankingEncounterSetsByInstance?.get(instanceName) ?? [],
+    [instanceName, rankingEncounterSetsByInstance],
+  )
+  const requestedEncounterSetID = params.get("encounter_set") ?? params.get("es_mode") ?? ""
+  const selectedRankingEncounterSet = useMemo(
+    () => resolveRankingEncounterSet(rankingEncounterSets, requestedEncounterSetID),
+    [rankingEncounterSets, requestedEncounterSetID],
+  )
+  const progressionBossNames = progressionBosses?.get(instanceName)
+  const configuredEncounterNames = useMemo(
+    () => rankingEncounterSets.flatMap((set) => [...set.encounters]),
+    [rankingEncounterSets],
+  )
   const encounterNames = useMemo(
-    () => rankingEncounterNames(instanceName, recordedEncounterNames, progressionBosses),
-    [instanceName, progressionBosses, recordedEncounterNames],
+    () => rankingEncounterNames(recordedEncounterNames, progressionBossNames, configuredEncounterNames),
+    [configuredEncounterNames, progressionBossNames, recordedEncounterNames],
   )
   // We derive boss vs trash: "Trash" is the only trash encounter name by convention
   const bossNames = useMemo(
@@ -115,20 +129,20 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [encounterNames],
   )
   const defaultBossNames = useMemo(
-    () => defaultRankingBossNames(instanceName, recordedEncounterNames, progressionBosses),
-    [instanceName, progressionBosses, recordedEncounterNames],
+    () => defaultRankingBossNames(
+      encounterNames,
+      selectedRankingEncounterSet?.encounters ?? progressionBossNames,
+    ),
+    [encounterNames, progressionBossNames, selectedRankingEncounterSet],
   )
-  const progressionBossNames = useMemo(
-    () => progressionBosses?.get(instanceName) ?? bossNames,
-    [bossNames, instanceName, progressionBosses],
-  )
+  const sectionBossNames = progressionBossNames ?? bossNames
   const trashNames = useMemo(
     () => new Set<string>(encounterNames.filter((n) => n === "Trash")),
     [encounterNames],
   )
   const encounterSections = useMemo(
-    () => rankingEncounterSections(encounterNames, progressionBossNames),
-    [encounterNames, progressionBossNames],
+    () => rankingEncounterSections(encounterNames, sectionBossNames),
+    [encounterNames, sectionBossNames],
   )
 
   // ── URL state ────────────────────────────────────────────────────────
@@ -207,15 +221,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return new Set(raw.split(",").filter(Boolean))
   }, [params])
 
-  const emeraldSanctumMode = parseEmeraldSanctumMode(params.get("es_mode"))
-
-  // Emerald Sanctum has mutually exclusive Normal and Hard Mode Solnius encounters.
-  // Other instances default to canonical progression bosses; optional bosses and trash are opt-in.
   const defaultSelectedEncounters = useMemo(
-    () => isEmeraldSanctum
-      ? getEmeraldSanctumEncounterNames(emeraldSanctumMode, bossNames)
-      : new Set(defaultBossNames),
-    [bossNames, defaultBossNames, emeraldSanctumMode, isEmeraldSanctum],
+    () => new Set(defaultBossNames),
+    [defaultBossNames],
   )
   const selectedEncounters: Set<string> = useMemo(() => {
     const raw = params.get("encounters")
@@ -237,13 +245,13 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [setParams],
   )
 
-  const handleEmeraldSanctumModeChange = useCallback(
-    (mode: EmeraldSanctumMode) => {
+  const handleRankingEncounterSetChange = useCallback(
+    (setID: string) => {
       setParams((prev) => {
         const next = new URLSearchParams(prev)
-        const value = emeraldSanctumModeParamForValue(mode)
-        if (value === null) next.delete("es_mode")
-        else next.set("es_mode", value)
+        if (setID === "") next.delete("encounter_set")
+        else next.set("encounter_set", setID)
+        next.delete("es_mode")
         next.delete("encounters")
         next.delete("page")
         return next
@@ -262,6 +270,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       next.delete("period")
       next.delete("diff")
       next.delete("es_mode")
+      next.delete("encounter_set")
       next.delete("realms")
       next.delete("page")
       next.delete("class")
@@ -476,10 +485,15 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   // ── API query params ─────────────────────────────────────────────────
 
+  const hasExplicitEncounterSelection = params.has("encounters")
   const encounterNamesParam = useMemo(() => {
+    if (selectedRankingEncounterSet && !hasExplicitEncounterSelection) return undefined
     if (selectedEncounters.size === 0 || selectedEncounters.size === encounterNames.length) return undefined
     return [...selectedEncounters].join(",")
-  }, [selectedEncounters, encounterNames.length])
+  }, [encounterNames.length, hasExplicitEncounterSelection, selectedEncounters, selectedRankingEncounterSet])
+  const encounterSetParam = selectedRankingEncounterSet && !hasExplicitEncounterSelection
+    ? selectedRankingEncounterSet.id
+    : undefined
 
   const periodParam = timePeriod === "all" ? undefined : timePeriod
 
@@ -495,10 +509,15 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     ? [...selectedRealms].join(",")
     : undefined
 
+  const rankingMetadataReady = progressionBosses !== undefined && rankingEncounterSetsByInstance !== undefined
   const queryEnablement = getRankingsQueryEnablement(
     metric,
     dpsSubTab,
-    encounterSummaries !== undefined && progressionBosses !== undefined,
+    rankingsContentReady(
+      rankingMetadataReady,
+      selectedRankingEncounterSet !== undefined,
+      encounterSummaries !== undefined,
+    ),
   )
 
   const { data: filterOptions = [] } = useRankingsFilters(instanceName)
@@ -506,6 +525,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const { data: rawBoxPlotStats = [], isLoading: boxPlotLoading } = useRankingsStats({
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
+    encounter_set: encounterSetParam,
     difficulty_names: difficultyNamesParam,
     realm_names: realmNamesParam,
     period: periodParam,
@@ -522,6 +542,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const { data: leaderboardData, isLoading: leaderboardLoading } = useRankingsLeaderboard({
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
+    encounter_set: encounterSetParam,
     difficulty_names: difficultyNamesParam,
     realm_names: realmNamesParam,
     period: periodParam,
@@ -676,7 +697,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   // ── Loading state ──────────────────────────────────────────────────
 
-  if (encountersLoading || progressionBossesLoading) {
+  if (encountersLoading || progressionBossesLoading || rankingEncounterSetsLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -686,14 +707,15 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   const sidebarContent = (
     <>
-      {isEmeraldSanctum && (
+      {rankingEncounterSets.length > 1 && selectedRankingEncounterSet && (
         <div className="mb-4">
           <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             Mode
           </p>
-          <EmeraldSanctumModeSwitch
-            value={emeraldSanctumMode}
-            onChange={handleEmeraldSanctumModeChange}
+          <RankingEncounterSetSwitch
+            sets={rankingEncounterSets}
+            value={selectedRankingEncounterSet.id}
+            onChange={handleRankingEncounterSetChange}
           />
         </div>
       )}
@@ -716,7 +738,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       </div>
 
       {/* Quick-select buttons */}
-      {!isEmeraldSanctum && (
+      {rankingEncounterSets.length <= 1 && (
         <div className="flex gap-1 mt-1.5">
           <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("all")} title="Select all encounters">All</Button>
           <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("progression")} title="Select progression bosses">Progression</Button>
