@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RawDebugEvent } from "./processors";
-import { appendAllActivityCsvPage, createAllActivityCsv, type AllActivityCsvExportState } from "./allActivityCsv";
+import { appendAllActivityCsvPage, createAllActivityCsv, sortAllActivityEvents, type AllActivityCsvExportState } from "./allActivityCsv";
 
 function activityEvent(index: number, overrides: Partial<RawDebugEvent> = {}): RawDebugEvent {
   return {
@@ -21,6 +21,34 @@ function activityEvent(index: number, overrides: Partial<RawDebugEvent> = {}): R
 }
 
 describe("All Activity CSV export", () => {
+  it("orders encounters chronologically instead of by encounter ID", () => {
+    const earlierStart = Date.UTC(2026, 7, 10, 12, 30, 0);
+    const laterStart = Date.UTC(2026, 7, 10, 12, 35, 0);
+    const events = [
+      activityEvent(1, {
+        encounterID: "aaa-later",
+        offsetMilli: 100,
+        dateMilli: laterStart + 100,
+      }),
+      activityEvent(2, {
+        encounterID: "zzz-earlier",
+        offsetMilli: 200,
+        dateMilli: earlierStart + 200,
+      }),
+      activityEvent(1, {
+        encounterID: "zzz-earlier",
+        offsetMilli: 100,
+        dateMilli: earlierStart + 100,
+      }),
+    ];
+
+    expect(sortAllActivityEvents(events).map((event) => `${event.encounterID}:${event.index}`)).toEqual([
+      "zzz-earlier:1",
+      "zzz-earlier:2",
+      "aaa-later:1",
+    ]);
+  });
+
   it("appends every page in page order while sorting each page like the panel", () => {
     let state: AllActivityCsvExportState = { page: 1, totalPages: 3, events: [] };
 
