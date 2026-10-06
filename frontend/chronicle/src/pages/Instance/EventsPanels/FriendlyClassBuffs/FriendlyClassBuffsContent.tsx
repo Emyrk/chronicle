@@ -175,9 +175,13 @@ export function FriendlyClassBuffsContent(props: PanelRenderProps<FriendlyClassB
     () => buildFriendlyBuffMatrix(
       options.view === "done" ? result.byCaster : result.byTarget,
       allowedSpells,
-      options.view === "received" ? context.entitySelection.playerIds : new Set(),
+      {
+        selectedPlayers: options.view === "received" ? context.entitySelection.playerIds : undefined,
+        sourceClassName: selectedClass,
+        sourceIsEntity: options.view === "done",
+      },
     ),
-    [allowedSpells, context.entitySelection.playerIds, options.view, result.byCaster, result.byTarget],
+    [allowedSpells, context.entitySelection.playerIds, options.view, result.byCaster, result.byTarget, selectedClass],
   );
   const unattributedApplications = options.view === "received"
     ? matrix.rows.reduce(

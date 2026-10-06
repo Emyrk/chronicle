@@ -119,13 +119,50 @@ describe("friendly class buff matrix", () => {
     });
   });
 
+  it("filters Done rows by the selected source class", () => {
+    const priest = entity("priest", "Priest", "tank", "Tank", 2);
+    const warrior = entity("warrior", "Warrior", "tank", "Tank", 3);
+    warrior.className = "Warrior";
+
+    const matrix = buildFriendlyBuffMatrix(
+      new Map([[priest.entityID, priest], [warrior.entityID, warrior]]),
+      new Map([[FORTITUDE.id, FORTITUDE]]),
+      { sourceClassName: "Priest", sourceIsEntity: true },
+    );
+
+    expect(matrix.rows.map((row) => row.playerName)).toEqual(["Priest"]);
+  });
+
+  it("filters Received applications by the selected source class", () => {
+    const target = entity("tank", "Tank", "warrior", "Warrior", 3);
+    target.bySpell.get(FORTITUDE.id)?.otherPlayers.set("priest", {
+      playerID: "priest",
+      playerName: "Priest",
+      className: "Priest",
+      applications: 1,
+    });
+
+    const matrix = buildFriendlyBuffMatrix(
+      new Map([[target.entityID, target]]),
+      new Map([[FORTITUDE.id, FORTITUDE]]),
+      { sourceClassName: "Priest", sourceIsEntity: false },
+    );
+
+    expect(matrix.rows).toHaveLength(1);
+    expect(matrix.rows[0].applications).toBe(1);
+    expect(matrix.rows[0].cells.get(FORTITUDE.name)).toMatchObject({
+      applications: 1,
+      otherPlayers: [expect.objectContaining({ playerName: "Priest" })],
+    });
+  });
+
   it("filters rows by selected players", () => {
     const tank = entity("tank", "Tank", "alice", "Alice", 2);
     const healer = entity("healer", "Healer", "alice", "Alice", 1);
     const matrix = buildFriendlyBuffMatrix(
       new Map([[tank.entityID, tank], [healer.entityID, healer]]),
       new Map([[FORTITUDE.id, FORTITUDE]]),
-      new Set(["tank"]),
+      { selectedPlayers: new Set(["tank"]) },
     );
 
     expect(matrix.rows.map((row) => row.playerName)).toEqual(["Tank"]);

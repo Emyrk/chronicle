@@ -38,16 +38,30 @@ export function buildAllowedFriendlyClassBuffs(
   );
 }
 
+export interface FriendlyBuffMatrixOptions {
+  selectedPlayers?: ReadonlySet<string>;
+  sourceClassName?: string | null;
+  sourceIsEntity?: boolean;
+}
+
+function normalizedClassName(className: string): string {
+  return className.toUpperCase().replace(/[^A-Z]/g, "");
+}
+
 export function buildFriendlyBuffMatrix(
   entities: ReadonlyMap<string, FriendlyBuffEntityUsage>,
   allowedSpells: ReadonlyMap<number, FriendlyClassBuffSpell>,
-  selectedPlayers: ReadonlySet<string> = new Set(),
+  options: FriendlyBuffMatrixOptions = {},
 ): FriendlyBuffMatrix {
   const columns = new Map<string, FriendlyBuffMatrixColumn>();
   const rows: FriendlyBuffMatrixRow[] = [];
+  const selectedPlayers = options.selectedPlayers ?? new Set<string>();
+  const sourceClassName = options.sourceClassName ? normalizedClassName(options.sourceClassName) : null;
+  const sourceIsEntity = options.sourceIsEntity ?? true;
 
   for (const entity of entities.values()) {
     if (selectedPlayers.size > 0 && !selectedPlayers.has(entity.entityID)) continue;
+    if (sourceIsEntity && sourceClassName && normalizedClassName(entity.className) !== sourceClassName) continue;
 
     const cells = new Map<string, FriendlyBuffMatrixCell>();
     let applications = 0;
@@ -56,23 +70,31 @@ export function buildFriendlyBuffMatrix(
       const spell = allowedSpells.get(spellId);
       if (!spell) continue;
 
+      const players = [...usage.otherPlayers.values()].filter((player) => (
+        sourceIsEntity || !sourceClassName || normalizedClassName(player.className) === sourceClassName
+      ));
+      const usageApplications = sourceIsEntity
+        ? usage.applications
+        : players.reduce((total, player) => total + player.applications, 0);
+      if (usageApplications === 0) continue;
+
       const key = spell.name;
       if (!columns.has(key)) columns.set(key, { key, name: spell.name, spellId });
 
       const cell = cells.get(key) ?? { applications: 0, otherPlayers: [] };
-      const players = new Map(cell.otherPlayers.map((player) => [player.playerID, player]));
-      for (const player of usage.otherPlayers.values()) {
-        const existing = players.get(player.playerID);
+      const playersByID = new Map(cell.otherPlayers.map((player) => [player.playerID, player]));
+      for (const player of players) {
+        const existing = playersByID.get(player.playerID);
         if (existing) existing.applications += player.applications;
-        else players.set(player.playerID, { ...player });
+        else playersByID.set(player.playerID, { ...player });
       }
 
-      cell.applications += usage.applications;
-      cell.otherPlayers = [...players.values()].sort(
+      cell.applications += usageApplications;
+      cell.otherPlayers = [...playersByID.values()].sort(
         (a, b) => b.applications - a.applications || a.playerName.localeCompare(b.playerName),
       );
       cells.set(key, cell);
-      applications += usage.applications;
+      applications += usageApplications;
     }
 
     if (applications > 0) {
