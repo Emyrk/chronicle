@@ -93,9 +93,10 @@ Add a new format only when neither existing format can represent the required di
 The backend already computes effective `SiteConfig.ads_enabled`. It is true only when:
 
 1. The deployment configures `CHRONICLE_ADS_TXT_URL`.
-2. The resolved tenant has `ads_enabled = true`.
+2. The deployment configures a valid `CHRONICLE_ADSENSE_CLIENT_ID` (`ca-pub-...`).
+3. The resolved tenant has `ads_enabled = true`.
 
-The current `AdSlot` is preview-only and returns `null` outside `localhost` and `127.0.0.1`. When live serving is implemented, preserve the two-part backend gate and make `AdSlot` consume the effective result. Do not replace it with a frontend-only environment flag.
+Eligible tenant HTML includes the `google-adsense-account` verification meta tag, and site config exposes the public client ID for the future shared ad runtime. Neither path loads the AdSense provider script. The current `AdSlot` remains preview-only and returns `null` outside `localhost` and `127.0.0.1`. When live serving is implemented, preserve the three-part backend gate and make `AdSlot` consume the effective result. Do not replace it with a frontend-only environment flag.
 
 ## Live-serving implementation order
 

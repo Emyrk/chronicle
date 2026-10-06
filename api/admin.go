@@ -787,6 +787,10 @@ func tenantAdsEnabled(deploymentEnabled bool, tenant *database.Tenant) bool {
 	return deploymentEnabled && tenant != nil && tenant.AdsEnabled
 }
 
+func (a *API) adsDeploymentEnabled() bool {
+	return a.Opts.AdsTxtURL != nil && a.Opts.AdSenseClientID != ""
+}
+
 func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	config, err := a.Opts.Zed.GetSiteConfig(ctx)
@@ -796,11 +800,15 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	t := servicetenant.TenantFromContext(ctx)
+	adsEnabled := tenantAdsEnabled(a.adsDeploymentEnabled(), t)
 	resp := chroniclesdk.SiteConfig{
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
 		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
-		AdsEnabled:            tenantAdsEnabled(a.Opts.AdsTxtURL != nil, t),
+		AdsEnabled:            adsEnabled,
+	}
+	if adsEnabled {
+		resp.AdSenseClientID = a.Opts.AdSenseClientID
 	}
 	if t != nil {
 		tenant := chroniclesdk.TenantFromDB(*t)

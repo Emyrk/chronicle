@@ -37,6 +37,8 @@ jobs:
         run: pnpm -C frontend/landing install --frozen-lockfile
 
       - name: Build
+        env:
+          CHRONICLE_ADSENSE_CLIENT_ID: ${{ vars.CHRONICLE_ADSENSE_CLIENT_ID }}
         run: pnpm -C frontend/landing build
 
       - name: Upload artifact

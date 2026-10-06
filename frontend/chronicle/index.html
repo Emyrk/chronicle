@@ -14,6 +14,7 @@
     </script>
 
 
+    {{ if .AdSenseClientID }}<meta name="google-adsense-account" content="{{ .AdSenseClientID }}" />{{ end }}
     <meta charset="UTF-8" />
     <link rel="icon" type="image/x-icon" href="{{ if .Favicon }}{{ .Favicon }}{{ else }}/c/chronicle/favicon.ico{{ end }}" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

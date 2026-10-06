@@ -39,9 +39,10 @@ type ogResult struct {
 
 // HTMLBranding carries per-request branding overrides for the HTML template.
 type HTMLBranding struct {
-	Title    string // Page title. Empty = default "Chronicle".
-	Favicon  string // Favicon URL. Empty = default /c/chronicle/favicon.ico.
-	ThemeCSS string // Pre-built CSS variable overrides for tenant theming.
+	Title           string // Page title. Empty = default "Chronicle".
+	Favicon         string // Favicon URL. Empty = default /c/chronicle/favicon.ico.
+	ThemeCSS        string // Pre-built CSS variable overrides for tenant theming.
+	AdSenseClientID string // Public publisher ID for verification metadata; empty disables it.
 }
 
 // BrandingResolver is an optional callback that returns per-request branding
@@ -49,9 +50,9 @@ type HTMLBranding struct {
 type BrandingResolver func(r *http.Request) *HTMLBranding
 
 type handler struct {
-	fs            fs.FS
-	mux           *http.ServeMux
-	htmlTemplates *template.Template
+	fs               fs.FS
+	mux              *http.ServeMux
+	htmlTemplates    *template.Template
 	ogRouter         chi.Router
 	brandingResolver BrandingResolver
 }
@@ -92,13 +93,13 @@ func Handler(siteFS fs.FS, ogRoutes []OGRoute, resolvers ...BrandingResolver) ht
 }
 
 type ogResultKey struct{}
+
 // discardResponseWriter is an http.ResponseWriter that discards all output.
 type discardResponseWriter struct{}
 
-func (discardResponseWriter) Header() http.Header        { return http.Header{} }
+func (discardResponseWriter) Header() http.Header         { return http.Header{} }
 func (discardResponseWriter) Write(b []byte) (int, error) { return len(b), nil }
 func (discardResponseWriter) WriteHeader(int)             {}
-
 
 // resolveOG uses the chi OG router to match the request path and resolve
 // Open Graph metadata. Returns nil if no route matches or the resolver
@@ -136,6 +137,7 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			state.Title = b.Title
 			state.Favicon = b.Favicon
 			state.ThemeCSS = b.ThemeCSS
+			state.AdSenseClientID = b.AdSenseClientID
 		}
 	}
 
@@ -191,9 +193,10 @@ type htmlState struct {
 	OGURL         string
 
 	// Branding overrides (populated by StateEnricher from tenant context).
-	Title    string // Page title. Empty = default "Chronicle".
-	Favicon  string // Favicon URL. Empty = default /c/chronicle/favicon.ico.
-	ThemeCSS string // CSS variable overrides, e.g. "--primary: #D4A844; --tertiary: #D4A844;".
+	Title           string // Page title. Empty = default "Chronicle".
+	Favicon         string // Favicon URL. Empty = default /c/chronicle/favicon.ico.
+	ThemeCSS        string // CSS variable overrides, e.g. "--primary: #D4A844; --tertiary: #D4A844;".
+	AdSenseClientID string // Public publisher ID for verification metadata; empty disables it.
 }
 
 func (h *handler) serveHTML(resp http.ResponseWriter, request *http.Request, reqPath string, state htmlState) bool {
