@@ -3248,6 +3248,9 @@ export function InstancePageView({
                 onResetView={isEncounterView ? resetView : undefined}
                 onOpenTimeRange={isEncounterView ? onOpenTimeRange : undefined}
                 instanceId={instance.id}
+                logGroupId={instance.logGroupId}
+                instanceName={instance.name}
+                invalidated={Boolean(instance.invalidatedAt)}
                 logDetailUrl={logDetailUrl}
                 layoutLabUrl={isEncounterView && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}
@@ -3420,6 +3423,9 @@ export function InstancePageView({
                 onResetView={isEncounterView ? resetView : undefined}
                 onOpenTimeRange={isEncounterView ? onOpenTimeRange : undefined}
                 instanceId={instance.id}
+                logGroupId={instance.logGroupId}
+                instanceName={instance.name}
+                invalidated={Boolean(instance.invalidatedAt)}
                 logDetailUrl={logDetailUrl}
                 layoutLabUrl={isEncounterView && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}

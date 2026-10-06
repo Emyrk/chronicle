@@ -60,6 +60,7 @@ export interface Encounter {
 export interface Instance {
   id: string;
   slug?: string;
+  logGroupId?: string;
   name: string;
   realm?: string;
   // Resolved game-data dataset for this instance's realm. Used to fetch
@@ -123,6 +124,7 @@ function transformToInstance(
   apiInstance: {
     id: string;
     slug?: string;
+    log_group_id: string;
     name: string;
     start_time?: string;
     end_time?: string;
@@ -206,6 +208,7 @@ function transformToInstance(
   return {
     id: apiInstance.id,
     slug: apiInstance.slug,
+    logGroupId: apiInstance.log_group_id,
     name: apiInstance.name,
     realm: apiInstance.realm_name,
     datasetId: apiInstance.dataset_id ?? undefined,

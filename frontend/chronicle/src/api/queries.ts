@@ -1277,7 +1277,7 @@ export function useAdminInvalidateLogs() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ logIds, reason }: { logIds: string[]; reason: string }) => {
+    mutationFn: async ({ logIds, reason }: { logIds: string[]; reason: string; instanceIds?: string[] }) => {
       const response = await fetch("/api/v1/admin/logs/invalidate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1289,11 +1289,18 @@ export function useAdminInvalidateLogs() {
       }
       return response.json() as Promise<AdminInvalidateLogsResponse>;
     },
-    onSuccess: (_data, { logIds }) => {
+    onSuccess: (_data, { logIds, instanceIds = [] }) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "logs"] });
       for (const logId of logIds) {
         queryClient.invalidateQueries({ queryKey: ["logGroup", logId] });
       }
+      queryClient.invalidateQueries({ queryKey: ["instance"] });
+      for (const instanceId of instanceIds) {
+        queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+        queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
+        queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["rankings"] });
     },
   });
 }
