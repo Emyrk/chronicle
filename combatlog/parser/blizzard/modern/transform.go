@@ -505,15 +505,19 @@ func normalizeDamage(fields []string) []string {
 }
 
 func parseTimestamp(raw string) (time.Time, error) {
-	offsetAt := strings.LastIndexAny(raw, "+-")
-	if offsetAt < 0 {
-		return time.Time{}, fmt.Errorf("modern Blizzard CLEU timestamp %q has no UTC offset", raw)
+	wallRaw := raw
+	// Some clients omit the offset. With no timezone metadata to recover it
+	// from, preserve the wall-clock value by treating it as UTC.
+	offsetHours := 0
+	if offsetAt := strings.LastIndexAny(raw, "+-"); offsetAt >= 0 {
+		var err error
+		offsetHours, err = strconv.Atoi(raw[offsetAt:])
+		if err != nil {
+			return time.Time{}, fmt.Errorf("parse modern Blizzard CLEU UTC offset in %q: %w", raw, err)
+		}
+		wallRaw = raw[:offsetAt]
 	}
-	offsetHours, err := strconv.Atoi(raw[offsetAt:])
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parse modern Blizzard CLEU UTC offset in %q: %w", raw, err)
-	}
-	wall, err := time.Parse("1/2/2006 15:04:05.000", raw[:offsetAt])
+	wall, err := time.Parse("1/2/2006 15:04:05.999999999", wallRaw)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("parse modern Blizzard CLEU timestamp %q: %w", raw, err)
 	}

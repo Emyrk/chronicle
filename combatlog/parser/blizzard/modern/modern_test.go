@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -51,6 +52,49 @@ func (hermesProxyTestDB) DurationModifiers(context.Context) (*chrondbc.DurationM
 }
 func (hermesProxyTestDB) PeriodicSpells(context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
 	return nil, nil
+}
+
+func TestParseTimestamp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want time.Time
+	}{
+		{
+			name: "UTC offset",
+			raw:  "9/3/2025 18:57:03.000-6",
+			want: time.Date(2025, time.September, 4, 0, 57, 3, 0, time.UTC),
+		},
+		{
+			name: "no UTC offset and four fractional digits",
+			raw:  "10/7/2026 22:00:47.3491",
+			want: time.Date(2026, time.October, 7, 22, 0, 47, 349100000, time.UTC),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := parseTimestamp(tt.raw)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.UTC())
+		})
+	}
+}
+
+func TestParseV22TimestampWithoutOffset(t *testing.T) {
+	t.Parallel()
+
+	input := `10/7/2026 22:00:47.3491  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18`
+	p, err := New(context.Background(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
+	require.NoError(t, err)
+
+	batch, err := p.Advance(context.Background())
+	require.NoError(t, err)
+	require.Len(t, batch, 1)
+	assert.Equal(t, time.Date(2026, time.October, 7, 22, 0, 47, 349000000, time.UTC), batch[0].Date())
 }
 
 func TestReadBaseYearPreservesInput(t *testing.T) {
