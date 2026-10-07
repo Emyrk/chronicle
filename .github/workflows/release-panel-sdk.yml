@@ -44,9 +44,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify protobuf snapshots
-        run: |
-          cmp ../../api/chronicleproto/chronicle.proto proto/chronicle.proto
-          cmp ../chronicle/src/api/proto/chronicle_pb.ts src/v1/protobuf/chronicle_pb.ts
+        run: pnpm run check:protobuf
 
       - name: Typecheck
         run: pnpm run typecheck

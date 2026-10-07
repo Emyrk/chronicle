@@ -35,6 +35,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "check:protobuf": "node scripts/check-protobuf.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm run build"
