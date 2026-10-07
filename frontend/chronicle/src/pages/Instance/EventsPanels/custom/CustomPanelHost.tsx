@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import {
   useInstanceEventsContext,
@@ -12,6 +12,8 @@ import {
   loadVerifiedCustomPanelArtifacts,
   type VerifiedCustomPanelArtifacts,
 } from "./pluginArtifacts";
+import { PluginBreakout, type PluginBreakoutEntry } from "./PluginBreakout";
+import { createPluginBreakoutManager } from "./pluginBreakoutManager";
 import {
   loadCustomPanelModule,
   releaseCustomPanelModule,
@@ -53,6 +55,9 @@ export function CustomPanelHost({
   const mountedRef = useRef(false);
   const updateFrameRef = useRef<number | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [breakouts, setBreakouts] = useState<PluginBreakoutEntry[]>([]);
+  const closeBreakoutRef = useRef<(id: string) => void>(() => {});
+  const closeBreakout = useCallback((id: string) => closeBreakoutRef.current(id), []);
   const { fetchStream } = useInstanceEventsContext();
   const sync = useSyncModeContextOptional();
   const { resolvedTheme } = useTheme();
@@ -142,6 +147,36 @@ export function CustomPanelHost({
     host.style.setProperty("--chronicle-muted", "hsl(var(--muted))");
     host.style.setProperty("--chronicle-border", "hsl(var(--border))");
 
+    const breakoutManager = createPluginBreakoutManager({
+      panelId,
+      getViewport: () => ({
+        width: ownerWindow.innerWidth,
+        height: ownerWindow.innerHeight,
+      }),
+      createMount: () => {
+        const mount = host.ownerDocument.createElement("div");
+        mount.style.display = "block";
+        mount.style.width = "100%";
+        mount.style.height = "100%";
+        mount.style.setProperty("--chronicle-background", "hsl(var(--background))");
+        mount.style.setProperty("--chronicle-foreground", "hsl(var(--foreground))");
+        mount.style.setProperty("--chronicle-muted", "hsl(var(--muted))");
+        mount.style.setProperty("--chronicle-border", "hsl(var(--border))");
+        const breakoutRoot = mount.attachShadow({ mode: "open" });
+        const baseStyle = host.ownerDocument.createElement("style");
+        baseStyle.textContent = BASE_CSS;
+        breakoutRoot.append(baseStyle);
+        if (verifiedArtifacts?.styles !== undefined) {
+          const pluginStyle = host.ownerDocument.createElement("style");
+          pluginStyle.textContent = verifiedArtifacts.styles;
+          breakoutRoot.append(pluginStyle);
+        }
+        return { mount, root: breakoutRoot };
+      },
+      onChange: setBreakouts,
+    });
+    closeBreakoutRef.current = breakoutManager.close;
+
     const getItemMetadata = createPluginItemMetadataBroker(abort.signal);
     const api: ChroniclePanelHostAPIV1 = {
       events: {
@@ -172,6 +207,10 @@ export function CustomPanelHost({
           workerRef.current = worker;
           return worker;
         },
+      },
+      breakouts: {
+        open: breakoutManager.open,
+        closeAll: breakoutManager.closeAll,
       },
       panel: {
         setOption: (option) => {
@@ -234,6 +273,8 @@ export function CustomPanelHost({
     return () => {
       disposed = true;
       mountedRef.current = false;
+      breakoutManager.dispose();
+      closeBreakoutRef.current = () => {};
       abort.abort();
       observer.disconnect();
       if (updateFrameRef.current !== null)
@@ -254,6 +295,7 @@ export function CustomPanelHost({
     fetchStream,
     installation,
     onError,
+    panelId,
     panel.id,
     panel.streams,
     context.onSelectEncounters,
@@ -282,9 +324,18 @@ export function CustomPanelHost({
   }, [snapshot, onError]);
 
   return (
-    <div
-      ref={hostRef}
-      className="h-full w-full overflow-auto styled-scrollbar"
-    />
+    <>
+      <div
+        ref={hostRef}
+        className="h-full w-full overflow-auto styled-scrollbar"
+      />
+      {breakouts.map((breakout) => (
+        <PluginBreakout
+          key={breakout.id}
+          {...breakout}
+          onClose={closeBreakout}
+        />
+      ))}
+    </>
   );
 }

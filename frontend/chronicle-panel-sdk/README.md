@@ -33,6 +33,26 @@ Custom panel bundles must remain self-contained. Bundle this package into the
 panel's entry or worker artifact rather than leaving npm imports for Chronicle
 to resolve at runtime.
 
+## Floating breakouts
+
+Chronicle owns the floating shell, dragging, resizing, mobile presentation, and
+lifecycle. Panels render their content into an isolated ShadowRoot:
+
+```ts
+const breakout = api.breakouts.open({
+  title: "Warlock damage",
+  initialPosition: { x: 200, y: 120 },
+  initialSize: { width: 420, height: 300 },
+});
+
+breakout.root.append(content);
+// Optional; Chronicle also closes it when the panel unmounts.
+breakout.close();
+```
+
+A panel instance may open up to eight simultaneous breakouts. `closeAll()` only
+closes breakouts owned by that mounted panel instance.
+
 ## Compatibility
 
 - Host API: `1`

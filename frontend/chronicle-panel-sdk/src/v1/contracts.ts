@@ -146,12 +146,41 @@ export interface PluginItemMetadataV1 {
   quality: number;
 }
 
+export const CUSTOM_PANEL_MAX_BREAKOUTS = 8;
+export const CUSTOM_PANEL_BREAKOUT_TITLE_MAX_LENGTH = 100;
+
+export interface ChroniclePanelBreakoutPositionV1 {
+  x: number;
+  y: number;
+}
+
+export interface ChroniclePanelBreakoutSizeV1 {
+  width: number;
+  height: number;
+}
+
+export interface ChroniclePanelBreakoutOptionsV1 {
+  title: string;
+  initialPosition?: ChroniclePanelBreakoutPositionV1;
+  initialSize?: ChroniclePanelBreakoutSizeV1;
+}
+
+export interface ChroniclePanelBreakoutHandleV1 {
+  id: string;
+  root: ShadowRoot;
+  close(): void;
+}
+
 export interface ChroniclePanelHostAPIV1 {
   events: { getStream(type: ChronicleStreamType): Promise<PluginEventStreamV1> };
   gameData: {
     getItemMetadata(itemIds: number[]): Promise<PluginItemMetadataV1[]>;
   };
   workers: { create(): Worker };
+  breakouts: {
+    open(options: ChroniclePanelBreakoutOptionsV1): ChroniclePanelBreakoutHandleV1;
+    closeAll(): void;
+  };
   panel: {
     setOption(option: string | null): void;
     selectEncounters(ids: string[]): void;
