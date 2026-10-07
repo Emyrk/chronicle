@@ -142,6 +142,10 @@ func (r *transformReader) transform(line string) (string, error) {
 		return prefix + "BLIZZARD_ENCOUNTER_START," + strings.Join(args, ","), nil
 	case "ENCOUNTER_END":
 		return prefix + "BLIZZARD_ENCOUNTER_END," + strings.Join(args, ","), nil
+	case "WORLD_MARKER_PLACED":
+		return prefix + "BLIZZARD_WORLD_MARKER_PLACED," + strings.Join(args, ","), nil
+	case "WORLD_MARKER_REMOVED":
+		return prefix + "BLIZZARD_WORLD_MARKER_REMOVED," + strings.Join(args, ","), nil
 	case "MAP_CHANGE", "EMOTE":
 		return "", nil
 	}

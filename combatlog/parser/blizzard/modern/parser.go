@@ -114,6 +114,8 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 	inner.WithEventHook("BLIZZARD_UNIT_RESOURCES", p.unitResources)
 	inner.WithEventHook("BLIZZARD_ENCOUNTER_START", p.encounterStart)
 	inner.WithEventHook("BLIZZARD_ENCOUNTER_END", p.encounterEnd)
+	inner.WithEventHook("BLIZZARD_WORLD_MARKER_PLACED", p.worldMarkerPlaced)
+	inner.WithEventHook("BLIZZARD_WORLD_MARKER_REMOVED", p.worldMarkerRemoved)
 	return p, nil
 }
 
@@ -288,6 +290,38 @@ func (p *Parser) encounterEnd(ts time.Time, m *wotlk.Matched, _ string) ([]messa
 		GroupSize:   groupSize,
 		Success:     &success,
 	}}, nil
+}
+
+func (p *Parser) worldMarkerPlaced(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
+	return p.worldMarker(ts, m, true)
+}
+
+func (p *Parser) worldMarkerRemoved(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
+	return p.worldMarker(ts, m, false)
+}
+
+func (p *Parser) worldMarker(ts time.Time, m *wotlk.Matched, placed bool) ([]messages.Message, error) {
+	marker := &messages.WorldMarker{
+		MessageBase: messages.Base(ts),
+		InstanceID:  m.Uint32(),
+		Marker:      m.Int32(),
+		Placed:      placed,
+	}
+	if placed {
+		var err error
+		marker.X, err = strconv.ParseFloat(m.String(), 64)
+		if err != nil {
+			return nil, fmt.Errorf("parse world marker x position: %w", err)
+		}
+		marker.Y, err = strconv.ParseFloat(m.String(), 64)
+		if err != nil {
+			return nil, fmt.Errorf("parse world marker y position: %w", err)
+		}
+	}
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+	return []messages.Message{marker}, nil
 }
 
 func (p *Parser) spellAbsorbed(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {

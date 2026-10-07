@@ -273,6 +273,18 @@ type Zone struct {
 func (z Zone) Affects() []guid.GUID { return nil }
 func (*Zone) isMessage()            {}
 
+type WorldMarker struct {
+	MessageBase
+	InstanceID uint32
+	Marker     int32
+	Placed     bool
+	X          float64
+	Y          float64
+}
+
+func (w WorldMarker) Affects() []guid.GUID { return nil }
+func (*WorldMarker) isMessage()            {}
+
 type CombatCount struct {
 	MessageBase
 	combatcount.Count
