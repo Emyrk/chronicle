@@ -29,6 +29,7 @@ const (
 var wowdataTableHashes = map[string]uint32{
 	"Item": 1344507586, "ItemDisplayInfo": 2557447376, "ItemEffect": 1073915313,
 	"ItemRandomProperties": 79508367, "ItemSet": 2389973656, "ItemSparse": 2442913102,
+	"ItemXItemEffect": 13330255, "RandPropPoints": 1569517478,
 	"Spell": 3776013982, "SpellIcon": 14913004,
 	"SpellAuraOptions": 4096770149, "SpellAuraRestrictions": 3130494798,
 	"SpellCastingRequirements": 1627543382, "SpellCastTimes": 4256848486,

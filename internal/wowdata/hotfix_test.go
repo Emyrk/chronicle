@@ -11,6 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestRequiredTablesHaveDeterministicHotfixHashes(t *testing.T) {
+	t.Parallel()
+
+	for _, table := range requiredTables {
+		require.NotZero(t, wowdataTableHashes[table], "required table %s must support deterministic hotfix overlays", table)
+	}
+}
+
 func TestParseDBCacheRejectsHeaderAndRegionMismatch(t *testing.T) {
 	t.Parallel()
 
