@@ -1861,6 +1861,65 @@ func (q *sqlQuerier) InsertCustomPanelRelease(ctx context.Context, arg InsertCus
 	return i, err
 }
 
+const listAdminActiveCustomPanelInstallations = `-- name: ListAdminActiveCustomPanelInstallations :many
+SELECT
+    users.id AS user_id,
+    users.username,
+    user_custom_panel_installations.repository,
+    custom_panel_releases.commit_sha,
+    user_custom_panel_installations.installed_ref,
+    user_custom_panel_installations.installed_at,
+    user_custom_panel_installations.updated_at,
+    custom_panel_releases.manifest
+FROM user_custom_panel_installations
+JOIN user_custom_panel_settings ON user_custom_panel_settings.user_id = user_custom_panel_installations.user_id
+JOIN custom_panel_releases ON custom_panel_releases.id = user_custom_panel_installations.release_id
+JOIN users ON users.id = user_custom_panel_installations.user_id
+WHERE user_custom_panel_settings.enabled
+  AND user_custom_panel_installations.enabled
+ORDER BY user_custom_panel_installations.updated_at DESC, users.username, user_custom_panel_installations.repository
+`
+
+type ListAdminActiveCustomPanelInstallationsRow struct {
+	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
+	Username     string             `db:"username" json:"username"`
+	Repository   string             `db:"repository" json:"repository"`
+	CommitSha    string             `db:"commit_sha" json:"commit_sha"`
+	InstalledRef string             `db:"installed_ref" json:"installed_ref"`
+	InstalledAt  pgtype.Timestamptz `db:"installed_at" json:"installed_at"`
+	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Manifest     []byte             `db:"manifest" json:"manifest"`
+}
+
+func (q *sqlQuerier) ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error) {
+	rows, err := q.db.Query(ctx, listAdminActiveCustomPanelInstallations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAdminActiveCustomPanelInstallationsRow
+	for rows.Next() {
+		var i ListAdminActiveCustomPanelInstallationsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.Repository,
+			&i.CommitSha,
+			&i.InstalledRef,
+			&i.InstalledAt,
+			&i.UpdatedAt,
+			&i.Manifest,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserCustomPanelInstallations = `-- name: ListUserCustomPanelInstallations :many
 SELECT
     user_custom_panel_installations.user_id, user_custom_panel_installations.repository, user_custom_panel_installations.release_id, user_custom_panel_installations.installed_ref, user_custom_panel_installations.enabled, user_custom_panel_installations.installed_at, user_custom_panel_installations.updated_at,

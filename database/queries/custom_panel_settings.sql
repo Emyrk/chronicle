@@ -53,6 +53,24 @@ JOIN custom_panel_releases ON custom_panel_releases.id = user_custom_panel_insta
 WHERE user_custom_panel_installations.user_id = @user_id
 ORDER BY user_custom_panel_installations.installed_at, user_custom_panel_installations.repository;
 
+-- name: ListAdminActiveCustomPanelInstallations :many
+SELECT
+    users.id AS user_id,
+    users.username,
+    user_custom_panel_installations.repository,
+    custom_panel_releases.commit_sha,
+    user_custom_panel_installations.installed_ref,
+    user_custom_panel_installations.installed_at,
+    user_custom_panel_installations.updated_at,
+    custom_panel_releases.manifest
+FROM user_custom_panel_installations
+JOIN user_custom_panel_settings ON user_custom_panel_settings.user_id = user_custom_panel_installations.user_id
+JOIN custom_panel_releases ON custom_panel_releases.id = user_custom_panel_installations.release_id
+JOIN users ON users.id = user_custom_panel_installations.user_id
+WHERE user_custom_panel_settings.enabled
+  AND user_custom_panel_installations.enabled
+ORDER BY user_custom_panel_installations.updated_at DESC, users.username, user_custom_panel_installations.repository;
+
 -- name: DeleteOrphanCustomPanelReleases :execrows
 DELETE FROM custom_panel_releases release
 WHERE NOT EXISTS (

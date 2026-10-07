@@ -79,6 +79,7 @@ import type {
   AdminBulkSelectedReparseResponse as AdminBulkSelectedReparseResponseGenerated,
   AdminBulkReparseResponse as AdminBulkReparseResponseGenerated,
   AdminOutdatedInstancesResponse,
+  AdminActiveCustomPanelsResponse,
   SiteConfig,
   UpdateSiteConfigRequest,
   Dataset,
@@ -1229,6 +1230,21 @@ export function useAdminUsers(options?: Omit<UseQueryOptions<AdminUsersResponse>
       const response = await fetch("/api/v1/admin/users");
       if (!response.ok) throw new Error("Failed to fetch users");
       return response.json() as Promise<AdminUsersResponse>;
+    },
+    retry: false,
+    ...options,
+  });
+}
+
+export function useAdminActiveCustomPanels(
+  options?: Omit<UseQueryOptions<AdminActiveCustomPanelsResponse>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: ["admin", "custom-panels"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/admin/custom-panels");
+      if (!response.ok) throw new Error("Failed to fetch active custom panels");
+      return response.json() as Promise<AdminActiveCustomPanelsResponse>;
     },
     retry: false,
     ...options,

@@ -87,6 +87,23 @@ type CustomPanelSettings struct {
 	UpdatedAt     string                    `json:"updated_at,omitempty"`
 }
 
+type AdminActiveCustomPanelInstallation struct {
+	UserID        string   `json:"user_id"`
+	Username      string   `json:"username"`
+	Repository    string   `json:"repository"`
+	CommitSHA     string   `json:"commit_sha"`
+	InstalledRef  string   `json:"installed_ref"`
+	PluginName    string   `json:"plugin_name"`
+	PluginVersion string   `json:"plugin_version"`
+	PanelNames    []string `json:"panel_names"`
+	InstalledAt   string   `json:"installed_at"`
+	UpdatedAt     string   `json:"updated_at"`
+}
+
+type AdminActiveCustomPanelsResponse struct {
+	Installations []AdminActiveCustomPanelInstallation `json:"installations"`
+}
+
 type UpdateCustomPanelSettingsRequest struct {
 	Enabled          bool                      `json:"enabled"`
 	Installations    []CustomPanelInstallation `json:"installations"`

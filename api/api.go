@@ -339,6 +339,7 @@ func (api *API) Routes() chi.Router {
 						// TODO: Determine right authz
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 					)
+					r.Get("/custom-panels", api.AdminListActiveCustomPanels)
 					r.Get("/instance-names", api.AdminListInstanceNames)
 					r.Get("/outdated-instances", api.AdminListOutdatedInstances)
 					r.Post("/outdated-instances/reparse", api.AdminBulkReparseOutdatedInstances)
