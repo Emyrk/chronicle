@@ -122,6 +122,8 @@ message UnitResources {
   int32 attack_power = 9;
   int32 spell_power = 10;
   int32 armor = 11;
+  optional int32 unit_level = 12;
+  optional int32 average_item_level = 13;
 }
 
 message ResourceChange {
@@ -375,7 +377,15 @@ message CombatantGearSlot {
   int32 itemId = 1;
   optional int32 enchantId = 2;
   optional int32 temporaryEnchantId = 3;
-  repeated int32 gemEnchantIds = 4; // SpellItemEnchantment IDs by socket position; 0 means empty
+  repeated int32 gemEnchantIds = 4; // WotLK SpellItemEnchantment IDs by socket position; 0 means empty
+  optional int32 itemLevel = 5;
+  repeated int32 bonusIds = 6; // Modern COMBATANT_INFO item bonus IDs
+  repeated CombatantGearGem gems = 7; // Modern gem item IDs and item levels
+}
+
+message CombatantGearGem {
+  int32 itemId = 1;
+  int32 itemLevel = 2;
 }
 
 message CombatantTalents {

@@ -124,6 +124,8 @@ describe("allActivityProcessor", () => {
       maximumPower: 4000,
       attackPower: 100,
       spellPower: 250,
+      unitLevel: 22,
+      averageItemLevel: null,
       armor: 900,
       activity: [],
       activityCount: 0,

@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
@@ -237,21 +238,32 @@ func (p *Parser) unitResources(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 	attackPower := m.Int32()
 	spellPower := m.Int32()
 	armor := m.Int32()
+	var unitLevel, averageItemLevel *int32
+	if m.Remain() > 0 {
+		levelOrItemLevel := m.Int32()
+		if unit.IsPlayer() {
+			averageItemLevel = &levelOrItemLevel
+		} else {
+			unitLevel = &levelOrItemLevel
+		}
+	}
 	if err := m.Error(); err != nil {
 		return nil, err
 	}
 	return []messages.Message{&messages.UnitResources{
-		MessageBase:   messages.Base(ts),
-		Unit:          unit,
-		CurrentHealth: currentHealth,
-		MaximumHealth: maximumHealth,
-		Absorb:        absorb,
-		PowerType:     powerType,
-		CurrentPower:  currentPower,
-		MaximumPower:  maximumPower,
-		AttackPower:   attackPower,
-		SpellPower:    spellPower,
-		Armor:         armor,
+		MessageBase:      messages.Base(ts),
+		Unit:             unit,
+		CurrentHealth:    currentHealth,
+		MaximumHealth:    maximumHealth,
+		Absorb:           absorb,
+		PowerType:        powerType,
+		CurrentPower:     currentPower,
+		MaximumPower:     maximumPower,
+		AttackPower:      attackPower,
+		SpellPower:       spellPower,
+		Armor:            armor,
+		UnitLevel:        unitLevel,
+		AverageItemLevel: averageItemLevel,
 	}}, nil
 }
 
@@ -385,6 +397,8 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 	var talents *combatant.Talents
 	heroClass := types.HeroClassesUNKNOWN
 	var gear []combatant.GearItem
+	var pullAuras []*messages.Aura
+	pullAurasKnown := false
 	var v22 *combatant.CombatantInfoV22
 	switch p.version {
 	case 9:
@@ -407,23 +421,90 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 			return nil, err
 		}
 		gear = parseGear(fields[talentIndex+2])
+		if talentIndex+3 < len(fields) && strings.HasPrefix(fields[talentIndex+3], "[") {
+			pullAurasKnown = true
+			pullAuras, err = p.parsePullAuras(ts, playerGUID, fields[talentIndex+3])
+			if err != nil {
+				return nil, err
+			}
+		}
 	default:
 		return nil, fmt.Errorf("blizzard COMBATANT_INFO has unsupported combat log version %d", p.version)
 	}
-	return []messages.Message{&messages.Combatant{
+	result := make([]messages.Message, 0, 1+len(pullAuras))
+	result = append(result, &messages.Combatant{
 		MessageBase: messages.Base(ts),
 		Combatant: combatant.Combatant{
-			Name:       stripRealm(name),
-			Guid:       playerGUID,
-			Seen:       ts,
-			HeroClass:  heroClass,
-			Gender:     -1,
-			Race:       "Unknown",
-			GearSetups: gear,
-			Talents:    talents,
-			V22:        v22,
+			Name:           stripRealm(name),
+			Guid:           playerGUID,
+			Seen:           ts,
+			HeroClass:      heroClass,
+			Gender:         -1,
+			Race:           "Unknown",
+			GearSetups:     gear,
+			Talents:        talents,
+			PullAurasKnown: pullAurasKnown,
+			V22:            v22,
 		},
-	}}, nil
+	})
+	for _, aura := range pullAuras {
+		result = append(result, aura)
+	}
+	return result, nil
+}
+
+func (p *Parser) parsePullAuras(ts time.Time, target guid.GUID, raw string) ([]*messages.Aura, error) {
+	entries := splitTopLevel(strings.Trim(raw, "[]"))
+	if len(entries) == 1 && entries[0] == "" {
+		return nil, nil
+	}
+	if p.guids == nil {
+		p.guids = newGUIDNormalizer()
+	}
+
+	result := make([]*messages.Aura, 0, len(entries))
+	for _, entry := range entries {
+		parts := splitTopLevel(strings.Trim(entry, "()"))
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("invalid V22 pull aura %q", entry)
+		}
+
+		sourceRaw, err := p.guids.normalize(parts[0])
+		if err != nil {
+			return nil, fmt.Errorf("normalize V22 pull aura source %q: %w", parts[0], err)
+		}
+		source, err := guid.FromString(sourceRaw)
+		if err != nil {
+			return nil, fmt.Errorf("parse V22 pull aura source %q: %w", sourceRaw, err)
+		}
+		spellID, err := strconv.ParseInt(parts[1], 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("parse V22 pull aura spell ID %q: %w", parts[1], err)
+		}
+
+		spell := &chrondbc.Spell{ID: chrondbc.SpellID(spellID)}
+		if p.wowDB != nil {
+			if resolved, lookupErr := p.wowDB.Spell(context.Background(), spell.ID); lookupErr == nil && resolved != nil {
+				spell = resolved
+			}
+		}
+		var sourcePtr *guid.GUID
+		if !source.IsZero() {
+			sourcePtr = &source
+		}
+		result = append(result, &messages.Aura{
+			MessageBase: messages.Base(ts),
+			IsBuff:      true,
+			Source:      sourcePtr,
+			Target:      target,
+			SpellName:   spell.Name_lang.String(),
+			SpellData:   spell,
+			Amount:      1,
+			State:       types.AuraStateAdded,
+			Transition:  messages.AuraTransitionApplied,
+		})
+	}
+	return result, nil
 }
 
 func v22CombatantTalentIndex(fields []string) (int, error) {
@@ -675,16 +756,48 @@ func parseGear(raw string) []combatant.GearItem {
 		itemLevel, _ := strconv.Atoi(parts[1])
 		item := combatant.GearItem{ItemID: itemID, ItemLevel: itemLevel}
 		if len(parts) >= 3 {
-			enchants := splitTopLevel(strings.Trim(parts[2], "()"))
-			if len(enchants) > 0 {
-				if id, _ := strconv.Atoi(enchants[0]); id != 0 {
-					item.EnchantID = &id
+			enchants := parseGearTuple(parts[2])
+			if len(enchants) > 0 && enchants[0] != 0 {
+				item.EnchantID = &enchants[0]
+			}
+			if len(enchants) > 1 && enchants[1] != 0 {
+				item.TempEnchantID = &enchants[1]
+			}
+		}
+		if len(parts) >= 4 {
+			item.BonusIDs = parseGearTuple(parts[3])
+		}
+		if len(parts) >= 5 {
+			gems := parseGearTuple(parts[4])
+			if len(gems) >= 2 {
+				item.Gems = make([]combatant.GearGem, 0, len(gems)/2)
+				for index := 0; index+1 < len(gems); index += 2 {
+					item.Gems = append(item.Gems, combatant.GearGem{
+						ItemID:    gems[index],
+						ItemLevel: gems[index+1],
+					})
 				}
 			}
 		}
 		gear = append(gear, item)
 	}
 	return gear
+}
+
+func parseGearTuple(raw string) []int {
+	parts := splitTopLevel(strings.Trim(raw, "()"))
+	if len(parts) == 1 && parts[0] == "" {
+		return nil
+	}
+	values := make([]int, 0, len(parts))
+	for _, part := range parts {
+		value, err := strconv.Atoi(part)
+		if err != nil {
+			return nil
+		}
+		values = append(values, value)
+	}
+	return values
 }
 
 func stripRealm(name string) string {

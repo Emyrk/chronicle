@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
@@ -547,6 +548,27 @@ func TestProjection_LateRealEvidenceWinsOverSyntheticExpiry(t *testing.T) {
 	refresh.Transition = messages.AuraTransitionRefreshed
 	require.NoError(t, projection.ProcessMessage(true, uuid.Nil, refresh))
 	assert.Len(t, emitted, 1, "late real evidence must suppress inferred expiry")
+}
+
+func TestProjection_CombatantPullAurasReplaceProjectedSnapshot(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	var emitted []*messages.Aura
+	projection := auras.NewProjection(tr)
+	projection.SetEmit(func(msg *messages.Aura) { emitted = append(emitted, msg) })
+	projection.FightStarted(uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(5 * time.Second))})
+
+	err := projection.ProcessMessage(true, uuid.Nil, &messages.Combatant{
+		MessageBase: messages.Base(t0.Add(6 * time.Second)),
+		Combatant: combatant.Combatant{
+			Guid:           testUnit,
+			PullAurasKnown: true,
+		},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, emitted, "authoritative COMBATANT_INFO auras replace inferred projections")
 }
 
 func TestProjection_InCombatAuraNoSyntheticExpiry(t *testing.T) {

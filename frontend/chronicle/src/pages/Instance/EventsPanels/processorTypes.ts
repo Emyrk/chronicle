@@ -106,6 +106,8 @@ export interface UnitResourcesProcessorEvent extends EventMeta {
   maximumPower: number;
   attackPower: number;
   spellPower: number;
+  unitLevel: number | null;
+  averageItemLevel: number | null;
   armor: number;
 }
 
@@ -377,7 +379,15 @@ export interface CombatantInfoProcessorEvent extends EventMeta {
   race: string;              // e.g. "Human", "Orc"
   gender: number;
   guildName: string | null;
-  gear: { itemId: number; enchantId: number | null; temporaryEnchantId: number | null; gemEnchantIds: number[] }[];
+  gear: {
+    itemId: number;
+    enchantId: number | null;
+    temporaryEnchantId: number | null;
+    gemEnchantIds: number[];
+    itemLevel: number | null;
+    bonusIds: number[];
+    gems: { itemId: number; itemLevel: number }[];
+  }[];
   gearCount: number;
   talents: { summary: number[]; trees: string[] } | null;
   v22: CombatantInfoV22ProcessorData | null;

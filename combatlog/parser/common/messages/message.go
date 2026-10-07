@@ -315,16 +315,18 @@ func (*UnitPosition) isMessage()            {}
 
 type UnitResources struct {
 	MessageBase
-	Unit          guid.GUID
-	CurrentHealth int64
-	MaximumHealth int64
-	Absorb        int32
-	PowerType     types.Resource
-	CurrentPower  int32
-	MaximumPower  int32
-	AttackPower   int32
-	SpellPower    int32
-	Armor         int32
+	Unit             guid.GUID
+	CurrentHealth    int64
+	MaximumHealth    int64
+	Absorb           int32
+	PowerType        types.Resource
+	CurrentPower     int32
+	MaximumPower     int32
+	AttackPower      int32
+	SpellPower       int32
+	Armor            int32
+	UnitLevel        *int32
+	AverageItemLevel *int32
 }
 
 func (u UnitResources) Affects() []guid.GUID { return []guid.GUID{u.Unit} }

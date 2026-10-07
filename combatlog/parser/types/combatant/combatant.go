@@ -71,7 +71,10 @@ type Combatant struct {
 	Talents    *Talents
 	Glyphs     *Glyphs
 	Level      *int32
-	V22        *CombatantInfoV22
+	// PullAurasKnown marks the modern COMBATANT_INFO aura snapshot as authoritative,
+	// including when the reported list is empty.
+	PullAurasKnown bool
+	V22            *CombatantInfoV22
 }
 
 func (c *Combatant) SafeMergeExisting(existing Combatant) {
@@ -230,7 +233,13 @@ type Guild struct {
 	RankIndex int32
 }
 
-// GearItem represents an equipped item with optional enchant
+// GearGem describes a socketed gem from a modern COMBATANT_INFO gear tuple.
+type GearGem struct {
+	ItemID    int
+	ItemLevel int
+}
+
+// GearItem represents an equipped item with optional enchant.
 type GearItem struct {
 	Name          string
 	ItemID        int
@@ -239,7 +248,9 @@ type GearItem struct {
 	SuffixID      int
 	TransmogID    *int
 	GemEnchantIDs [4]int // Gem enchantment IDs from the item link (0 = empty socket)
-	ItemLevel     int    // Item level from the item link
+	ItemLevel     int    // Item level reported by modern COMBATANT_INFO gear tuples
+	BonusIDs      []int  // Item bonus IDs reported by modern COMBATANT_INFO gear tuples
+	Gems          []GearGem
 }
 
 // ParseGear parses gear slot strings into GearItem slices.
