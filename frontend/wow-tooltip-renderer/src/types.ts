@@ -89,6 +89,8 @@ export interface SpellEffect {
   effect_dice_per_level?: number;
   /** Healing/spell-power scaling coefficient from modern SpellEffect data. */
   effect_bonus_coefficient?: number;
+  /** Fractional random spread around modern base points, such as 0.4 for ±20%. */
+  variance?: number;
 }
 
 /** Canonical resource-cost row. */

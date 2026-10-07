@@ -9,12 +9,16 @@
 //
 // Matches the old behavior:
 //   - Only digits, + - * / ( ) . and whitespace are permitted.
-//   - The result is rounded to the nearest integer (Math.round).
+//   - Results round to the nearest integer by default (Math.round).
+//   - Callers can preserve precision for nested intermediate expressions.
 //   - Returns null for malformed input or non-finite results.
 
 const VALID_CHARS = /^[\d+\-*/().\s]+$/;
 
-export function evaluateArithmetic(expr: string): number | null {
+export function evaluateArithmetic(
+  expr: string,
+  roundResult = true,
+): number | null {
   if (!VALID_CHARS.test(expr)) return null;
 
   let pos = 0;
@@ -88,7 +92,7 @@ export function evaluateArithmetic(expr: string): number | null {
     skipWs();
     if (pos !== expr.length) return null; // trailing garbage
     if (typeof result !== "number" || !isFinite(result)) return null;
-    return Math.round(result);
+    return roundResult ? Math.round(result) : result;
   } catch {
     return null;
   }

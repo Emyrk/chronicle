@@ -16,6 +16,12 @@ describe("evaluateArithmetic", () => {
     expect(evaluateArithmetic("0.013+0.025")).toBe(0); // 0.038 -> 0
   });
 
+  it("can preserve precision for nested expressions", () => {
+    expect(evaluateArithmetic("5.741530-0.255683+0.032656", false)).toBeCloseTo(
+      5.518503,
+    );
+  });
+
   it("handles unary minus and decimals", () => {
     expect(evaluateArithmetic("-5")).toBe(-5);
     expect(evaluateArithmetic("2.5*2")).toBe(5);

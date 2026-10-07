@@ -1,6 +1,6 @@
 {
   "name": "@emyrk/wow-tooltip-renderer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Pure TypeScript resolver and formatters for World of Warcraft spell/item tooltips from DBC-style records. No React, no fetch, no styling.",
   "license": "MIT",
   "repository": {

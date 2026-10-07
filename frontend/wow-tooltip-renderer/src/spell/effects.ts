@@ -67,8 +67,10 @@ export function getScaledValue(
 
   const lvl = getEffectiveLevel(spell, forLevel);
   const diceCount = baseDice + dicePerLevel * lvl;
-  const min = diceCount;
-  const max = dieSides * diceCount;
+  const variance = hasModernBase ? (effect.variance ?? 0) : 0;
+  const varianceOffset = (base * variance) / 2;
+  const min = hasModernBase ? -varianceOffset : diceCount;
+  const max = hasModernBase ? varianceOffset : dieSides * diceCount;
   const scaling = realPPL * lvl;
 
   const applyOp = (n: number) => {

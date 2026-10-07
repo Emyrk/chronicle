@@ -232,6 +232,48 @@ describe("resolveSpellDescription — description variables", () => {
     ).toBe("Heals them for 172.");
   });
 
+  it("resolves Blunderbuss player-level scaling, AP, target count, and variance", () => {
+    const blunderbuss = makeSpell({
+      id: 436564,
+      spell_level: 1,
+      max_targets: 4,
+      effects: [
+        {
+          difficulty_id: 0,
+          effect_index: 0,
+          effect: { value: 2, string: "SchoolDMG" },
+          effect_base_points: 0,
+          effect_base_points_f: 240,
+          variance: 0.4,
+        },
+        {
+          difficulty_id: 0,
+          effect_index: 1,
+          effect: { value: 3, string: "Dummy" },
+          effect_base_points: 0,
+          effect_base_points_f: 48,
+        },
+      ],
+      description_variables:
+        "$base=${5.741530-0.255683*$PL+0.032656*$PL*$PL}",
+    });
+
+    expect(
+      resolveSpellDescription(blunderbuss, "$<base>", undefined, 60),
+    ).toBe("108");
+
+    expect(
+      resolveSpellDescription(
+        blunderbuss,
+        "Fire a musket blast at up to $i enemies in a cone in front of you for ${$<base>*$m1/100+$m2/100*$AP} to ${$<base>*$M1/100+$m2/100*$AP} Physical damage.",
+        undefined,
+        60,
+      ),
+    ).toBe(
+      "Fire a musket blast at up to 4 enemies in a cone in front of you for 207 to 311 Physical damage.",
+    );
+  });
+
   it("resolves Lifebloom's nested Genesis talent multiplier", () => {
     const lifebloom = makeSpell({
       id: 48451,

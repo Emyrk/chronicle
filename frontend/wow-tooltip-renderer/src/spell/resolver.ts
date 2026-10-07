@@ -21,7 +21,8 @@ import { evaluateArithmetic } from "./arithmetic.js";
 //   crossRef = DIGITS varRef                           -- $23455s1  (optionally -$...)
 //   plural   = 'l' TEXT ':' TEXT ';'                   -- $lpoint:points;  (lowercase l only)
 //   gender   = ('g'|'G') TEXT ':' TEXT ';'             -- $ghe:she;
-//   localVar = ('bh' | 'bc' | LETTER) DIGITS?           -- $bh, $bc, $s1, $d
+//   localVar = ('bh' | 'bc' | 'ap' | 'pl' | LETTER) DIGITS?
+//                                                        -- $bh, $AP, $PL, $m1, $M1, $d
 //   varRef   = LETTER DIGITS?
 //
 // Notes on fidelity to the historical resolver:
@@ -46,7 +47,7 @@ const RE_CROSSREF = /^\$(\d+)([a-zA-Z])(\d+)?/;
 const RE_PLURAL = /^\$l([^:]+):([^;]+);/; // lowercase $l only
 const RE_GENDER = /^\$g([^:]+):([^;]+);/i; // $g / $G
 const RE_DESCVAR = /^\$<([a-zA-Z_][a-zA-Z0-9_]*)>/; // $<total>, $<bonus>, etc.
-const RE_LOCALVAR = /^\$(bh|bc|[a-zA-Z])(\d+)?/i;
+const RE_LOCALVAR = /^\$(bh|bc|ap|pl|[a-zA-Z])(\d+)?/i;
 
 // Last run of digits in a string, used to update the pluralization anchor.
 const RE_LAST_NUMBER = /(\d+)(?![\s\S]*\d)/;
@@ -113,8 +114,13 @@ function applyArith(
   const t = type.toLowerCase();
   const idx = index ? parseInt(index, 10) - 1 : 0;
   const preserveExactBase = floating || hasExactBasePoints(spell, idx);
-  if (t === "s" || t === "m") {
+  if (t === "s") {
     return formatValue(getScaledValue(spell, idx, lvl, op), preserveExactBase);
+  }
+  if (t === "m") {
+    const values = getScaledValue(spell, idx, lvl, op);
+    const value = type === "M" ? values[values.length - 1] : values[0];
+    return formatValue([value], preserveExactBase);
   }
   if (t === "o") {
     return formatValue(
@@ -143,11 +149,12 @@ function applyArith(
  * @param referencedSpells Optional map of spell ID -> WoWSpell for cross-spell references.
  * @param forLevel Optional caster level for scaling (defaults to spell level).
  */
-export function resolveSpellDescription(
+function resolveSpellDescriptionInternal(
   spell: WoWSpell,
   template: string,
-  referencedSpells?: Map<number, WoWSpell>,
-  forLevel?: number,
+  referencedSpells: Map<number, WoWSpell> | undefined,
+  forLevel: number | undefined,
+  preserveIntermediatePrecision: boolean,
 ): string {
   if (!template) return "";
 
@@ -244,11 +251,12 @@ export function resolveSpellDescription(
     const conditional = parseConditional(rest);
     if (conditional) {
       append(
-        resolveSpellDescription(
+        resolveSpellDescriptionInternal(
           spell,
           conditional.whenFalse,
           referencedSpells,
           forLevel,
+          preserveIntermediatePrecision,
         ),
       );
       i += conditional.end;
@@ -259,11 +267,12 @@ export function resolveSpellDescription(
     // Expressions may contain nested ${...} description-variable expansions.
     const inline = parseInlineExpression(rest);
     if (inline) {
-      const inner = resolveSpellDescription(
+      const inner = resolveSpellDescriptionInternal(
         spell,
         inline.content,
         referencedSpells,
         forLevel,
+        true,
       );
       const evaluated = evaluateArithmetic(inner);
       append(evaluated !== null ? String(evaluated) : `\${${inner}}`);
@@ -303,14 +312,23 @@ export function resolveSpellDescription(
       const varName = m[1];
       const expr = descVarMap.get(varName);
       if (expr !== undefined) {
-        // Resolve inner variables in the expression, then evaluate arithmetic.
-        const resolved = resolveSpellDescription(
+        // Description variables are often nested inside a larger ${...}
+        // expression. Preserve their intermediate precision so only the outer,
+        // display-level expression is rounded.
+        const inlineExpr = parseInlineExpression(expr);
+        const expression =
+          inlineExpr?.end === expr.length ? inlineExpr.content : expr;
+        const resolved = resolveSpellDescriptionInternal(
           spell,
-          expr,
+          expression,
           referencedSpells,
           forLevel,
+          true,
         );
-        const evaluated = evaluateArithmetic(resolved);
+        const evaluated = evaluateArithmetic(
+          resolved,
+          !preserveIntermediatePrecision,
+        );
         append(evaluated !== null ? String(evaluated) : resolved);
       } else {
         append(m[0]); // keep placeholder if variable not found
@@ -333,6 +351,22 @@ export function resolveSpellDescription(
   }
 
   return result;
+}
+
+/** Resolve all template variables in a spell description string. */
+export function resolveSpellDescription(
+  spell: WoWSpell,
+  template: string,
+  referencedSpells?: Map<number, WoWSpell>,
+  forLevel?: number,
+): string {
+  return resolveSpellDescriptionInternal(
+    spell,
+    template,
+    referencedSpells,
+    forLevel,
+    false,
+  );
 }
 
 /**
