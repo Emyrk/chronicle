@@ -23,6 +23,10 @@ interface PluginBreakoutMount {
   root: ShadowRoot;
 }
 
+interface StoredPluginBreakoutEntry extends PluginBreakoutEntry {
+  onClose?: () => void;
+}
+
 interface PluginBreakoutManagerOptions {
   panelId: string;
   getViewport: () => PluginBreakoutViewport;
@@ -43,23 +47,39 @@ export function createPluginBreakoutManager({
   createMount,
   onChange,
 }: PluginBreakoutManagerOptions): PluginBreakoutManager {
-  const entries = new Map<string, PluginBreakoutEntry>();
+  const entries = new Map<string, StoredPluginBreakoutEntry>();
   let nextID = 1;
   let disposed = false;
 
-  const publish = () => onChange([...entries.values()]);
+  const publish = () => onChange([...entries.values()].map((entry) => ({
+    id: entry.id,
+    title: entry.title,
+    mount: entry.mount,
+    initialPosition: entry.initialPosition,
+    initialSize: entry.initialSize,
+  })));
+  const notifyClosed = (entry: StoredPluginBreakoutEntry) => {
+    try {
+      entry.onClose?.();
+    } catch (error) {
+      console.error("Custom panel breakout onClose callback failed", error);
+    }
+  };
   const close = (id: string) => {
     const entry = entries.get(id);
     if (!entry) return;
     entries.delete(id);
     entry.mount.remove();
     publish();
+    notifyClosed(entry);
   };
   const closeAllEntries = (notify: boolean) => {
     if (entries.size === 0) return;
-    for (const entry of entries.values()) entry.mount.remove();
+    const closedEntries = [...entries.values()];
     entries.clear();
+    for (const entry of closedEntries) entry.mount.remove();
     if (notify) publish();
+    for (const entry of closedEntries) notifyClosed(entry);
   };
   const closeAll = () => closeAllEntries(true);
 
@@ -76,7 +96,7 @@ export function createPluginBreakoutManager({
       );
       const id = `${panelId}:breakout:${nextID++}`;
       const { mount, root } = createMount();
-      entries.set(id, { id, mount, ...normalized });
+      entries.set(id, { id, mount, ...normalized, onClose: options.onClose });
       publish();
       return { id, root, close: () => close(id) };
     },

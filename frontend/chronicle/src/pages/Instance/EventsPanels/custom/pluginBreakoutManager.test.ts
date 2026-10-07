@@ -27,7 +27,8 @@ function createHarness() {
 describe("plugin breakout manager", () => {
   it("publishes opened breakouts and closes handles idempotently", () => {
     const { manager, mounts, published, roots } = createHarness();
-    const handle = manager.open({ title: " Details " });
+    const onClose = vi.fn();
+    const handle = manager.open({ title: " Details ", onClose });
 
     expect(handle.id).toBe("panel-1:breakout:1");
     expect(handle.root).toBe(roots[0]);
@@ -38,10 +39,11 @@ describe("plugin breakout manager", () => {
       initialSize: { width: 420, height: 320 },
     }]);
 
-    handle.close();
+    manager.close(handle.id);
     handle.close();
     expect(mounts[0].remove).toHaveBeenCalledOnce();
     expect(published.at(-1)).toEqual([]);
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("enforces the per-panel limit and allows another breakout after closing", () => {
@@ -54,22 +56,28 @@ describe("plugin breakout manager", () => {
     expect(() => manager.open({ title: "Replacement" })).not.toThrow();
   });
 
-  it("closes all breakouts and rejects opens after disposal", () => {
+  it("closes all breakouts, notifies them once, and rejects opens after disposal", () => {
     const { manager, mounts, published } = createHarness();
-    manager.open({ title: "One" });
-    manager.open({ title: "Two" });
+    const firstOnClose = vi.fn();
+    const secondOnClose = vi.fn();
+    manager.open({ title: "One", onClose: firstOnClose });
+    manager.open({ title: "Two", onClose: secondOnClose });
 
     manager.closeAll();
     manager.closeAll();
     expect(mounts.every((mount) => mount.remove.mock.calls.length === 1)).toBe(true);
     expect(published.at(-1)).toEqual([]);
+    expect(firstOnClose).toHaveBeenCalledOnce();
+    expect(secondOnClose).toHaveBeenCalledOnce();
 
-    manager.open({ title: "Three" });
+    const thirdOnClose = vi.fn();
+    manager.open({ title: "Three", onClose: thirdOnClose });
     const publicationsBeforeDispose = published.length;
     manager.dispose();
     manager.dispose();
     expect(published).toHaveLength(publicationsBeforeDispose);
     expect(mounts[2].remove).toHaveBeenCalledOnce();
+    expect(thirdOnClose).toHaveBeenCalledOnce();
     expect(() => manager.open({ title: "After dispose" })).toThrow("no longer mounted");
   });
 });

@@ -163,6 +163,7 @@ export interface ChroniclePanelBreakoutOptionsV1 {
   title: string;
   initialPosition?: ChroniclePanelBreakoutPositionV1;
   initialSize?: ChroniclePanelBreakoutSizeV1;
+  onClose?: () => void;
 }
 
 export interface ChroniclePanelBreakoutHandleV1 {

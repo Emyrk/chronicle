@@ -36,7 +36,7 @@ const authorFaq = [
   { q: "How do workers work?", a: "If the manifest declares a worker, api.workers.create() starts one module worker per mounted panel; a second call throws. The host terminates it on cleanup. There is no main-thread fallback." },
   { q: "How do I decode streams?", a: "Install @emyrk/chronicle-panel-sdk and import its versioned v1 host types, chronicle-event-stream-v1 decoder, and generated protobuf schemas. Bundle the package into your worker so the final artifact remains self-contained." },
   { q: "How should I style and render?", a: "Render into the provided Shadow Root using the documented theme CSS variables. Use root.host.ownerDocument, not window.document, so popped-out panels work." },
-  { q: "Can a panel open floating details?", a: "Yes. api.breakouts.open() creates a Chronicle-owned draggable and resizable shell and returns an isolated Shadow Root for your content. A mounted panel may open up to eight; Chronicle closes them automatically on teardown." },
+  { q: "Can a panel open floating details?", a: "Yes. api.breakouts.open() creates a Chronicle-owned draggable and resizable shell and returns an isolated Shadow Root for your content. Pass onClose to discard plugin state when Chronicle or the panel closes it. A mounted panel may open up to eight; Chronicle closes them automatically on teardown." },
   { q: "What else can the host API do?", a: "Set the panel option (opaque string, 2 KiB max), select encounters, toggle players, look up item metadata (512 IDs per call), and observe api.lifecycle.signal for teardown." },
 ]
 
