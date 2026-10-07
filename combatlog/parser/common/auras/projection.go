@@ -172,6 +172,13 @@ func (p *Projection) emitProjection(firstReal messages.Message) {
 
 	p.projectedAuras = make(map[projectedAuraKey]*projectedAura)
 
+	if combatantInfo, ok := firstReal.(*messages.Combatant); ok && combatantInfo.PullAurasKnown {
+		// Modern COMBATANT_INFO carries an authoritative pull-time aura list.
+		// Do not project the parse-wide inferred snapshot for that player; the
+		// parser emits the reported auras immediately after this message.
+		delete(p.snapshot, combatantInfo.Guid)
+	}
+
 	for _, unitGUID := range sortedGUIDs(p.snapshot) {
 		spells := p.snapshot[unitGUID]
 		for _, spellID := range sortedSpellIDsFromSnapshot(spells) {

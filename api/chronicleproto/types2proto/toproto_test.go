@@ -28,23 +28,27 @@ func TestGearSlotPreservesGemPositions(t *testing.T) {
 
 	require.Equal(t, int32(51396), got.ItemId)
 	require.Equal(t, []int32{0, 0, 3637, 0}, got.GemEnchantIds)
+	require.Nil(t, GearSlot(combatant.GearItem{ItemID: 50633}).ItemLevel)
 	require.Nil(t, GearSlot(combatant.GearItem{ItemID: 50633}).GemEnchantIds)
 }
 
 func TestGearSlotPreservesModernItemMetadata(t *testing.T) {
 	t.Parallel()
 
+	temporaryEnchantID := 2623
 	got := GearSlot(combatant.GearItem{
-		ItemID:    29028,
-		ItemLevel: 120,
-		BonusIDs:  []int{6652, 10356},
+		ItemID:        29028,
+		TempEnchantID: &temporaryEnchantID,
+		ItemLevel:     120,
+		BonusIDs:      []int{6652, 10356},
 		Gems: []combatant.GearGem{
 			{ItemID: 25897, ItemLevel: 70},
 			{ItemID: 24057, ItemLevel: 70},
 		},
 	})
 
-	require.Equal(t, int32(120), got.ItemLevel)
+	require.Equal(t, int32(2623), got.GetTemporaryEnchantId())
+	require.Equal(t, int32(120), got.GetItemLevel())
 	require.Equal(t, []int32{6652, 10356}, got.BonusIds)
 	require.Equal(t, []*chronicleproto.CombatantGearGem{
 		{ItemId: 25897, ItemLevel: 70},
@@ -179,6 +183,7 @@ func TestUnitTelemetry(t *testing.T) {
 	require.Equal(t, 3.14, position.Facing)
 	require.Equal(t, int32(3), position.Meta.Index)
 
+	unitLevel := int32(22)
 	resources := UnitResources(ts, 4, &messages.UnitResources{
 		MessageBase:   messages.Base(ts),
 		Unit:          unit,
@@ -190,6 +195,7 @@ func TestUnitTelemetry(t *testing.T) {
 		MaximumPower:  80,
 		AttackPower:   10,
 		SpellPower:    20,
+		UnitLevel:     &unitLevel,
 		Armor:         30,
 	})
 	require.Equal(t, unit.String(), resources.Unit)
@@ -202,6 +208,8 @@ func TestUnitTelemetry(t *testing.T) {
 	require.Equal(t, int32(10), resources.AttackPower)
 	require.Equal(t, int32(20), resources.SpellPower)
 	require.Equal(t, int32(30), resources.Armor)
+	require.Equal(t, int32(22), resources.GetUnitLevel())
+	require.Nil(t, resources.AverageItemLevel)
 	require.Equal(t, int32(4), resources.Meta.Index)
 }
 

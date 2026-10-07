@@ -213,7 +213,7 @@ func TestTransformV22EmitsUnitTelemetry(t *testing.T) {
 	assert.Contains(t, lines[1], `BLIZZARD_UNIT_POSITION,`)
 	assert.Contains(t, lines[1], `,1751.67,1697.84,1420,4.4674`)
 	assert.Contains(t, lines[2], `BLIZZARD_UNIT_RESOURCES,`)
-	assert.Contains(t, lines[2], `,18,42,5,0,20,40,3,4,20`)
+	assert.Contains(t, lines[2], `,18,42,5,0,20,40,3,4,20,1`)
 }
 
 func TestTransformV22SwingDamageLandedKeepsUnitTelemetry(t *testing.T) {
@@ -230,6 +230,38 @@ func TestTransformV22SwingDamageLandedKeepsUnitTelemetry(t *testing.T) {
 	require.Len(t, lines, 2)
 	assert.Contains(t, lines[0], `BLIZZARD_UNIT_POSITION,`)
 	assert.Contains(t, lines[1], `BLIZZARD_UNIT_RESOURCES,`)
+}
+
+func TestUnitResourcesDistinguishesUnitLevelFromAverageItemLevel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		unit             string
+		value            int32
+		wantUnitLevel    *int32
+		wantAverageLevel *int32
+	}{
+		{name: "player", unit: "0x0000120A00C7EC79", value: 42, wantAverageLevel: ptr.Ref(int32(42))},
+		{name: "creature", unit: "0xF1300005E8000001", value: 22, wantUnitLevel: ptr.Ref(int32(22))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ts, _, matched, err := wotlk.ParseLine(fmt.Sprintf(
+				`9/20 20:02:05.988  BLIZZARD_UNIT_RESOURCES,%s,100,120,0,0,20,40,3,4,20,%d`,
+				tt.unit, tt.value,
+			))
+			require.NoError(t, err)
+
+			parsed, err := (&Parser{}).unitResources(ts, matched, "")
+			require.NoError(t, err)
+			require.Len(t, parsed, 1)
+			resources := parsed[0].(*messages.UnitResources)
+			assert.Equal(t, tt.wantUnitLevel, resources.UnitLevel)
+			assert.Equal(t, tt.wantAverageLevel, resources.AverageItemLevel)
+		})
+	}
 }
 
 func TestParseV22UnitTelemetry(t *testing.T) {
@@ -406,12 +438,14 @@ func TestParseCombatantMetadata(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, [3]uint8{8, 0, 53}, talents.Summary)
 
-	gear := parseGear(`[(29028,120,(3009,0,0),(6652,10356),(25897,70,24057,70)),(0,0,(),(),())]`)
+	gear := parseGear(`[(29028,120,(3009,2623,0),(6652,10356),(25897,70,24057,70)),(0,0,(),(),())]`)
 	require.Len(t, gear, 2)
 	assert.Equal(t, 29028, gear[0].ItemID)
 	assert.Equal(t, 120, gear[0].ItemLevel)
 	require.NotNil(t, gear[0].EnchantID)
 	assert.Equal(t, 3009, *gear[0].EnchantID)
+	require.NotNil(t, gear[0].TempEnchantID)
+	assert.Equal(t, 2623, *gear[0].TempEnchantID)
 	assert.Equal(t, []int{6652, 10356}, gear[0].BonusIDs)
 	assert.Equal(t, []combatant.GearGem{
 		{ItemID: 25897, ItemLevel: 70},
@@ -433,6 +467,7 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	fields[26] = "[(105924,130654,5),(105923,130653,5)]"
 	fields[27] = "(0,0,0,0)"
 	fields[28] = "[(253955,25,(),(),()),(251534,24,(2623,0,0),(),())]"
+	fields[29] = "[(Player-4618-00C7EC79,1126,[])]"
 	encoded := base64.RawStdEncoding.EncodeToString([]byte(strings.Join(fields, ",")))
 	ts, _, matched, err := wotlk.ParseLine(`9/23 15:26:53.574  BLIZZARD_COMBATANT_INFO,0x0000120A0062CD4D,"Bootie-ClassicBetaPvE",` + encoded)
 	require.NoError(t, err)
@@ -449,14 +484,23 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	}}
 	parsed, err := (&Parser{
 		version:     22,
+		wowDB:       hermesProxyTestDB{},
 		talentTrees: treeData,
 		flavor:      database.WoWFlavor{database.FlavorWoWForever},
 	}).combatantInfo(ts, matched, "")
 	require.NoError(t, err)
-	require.Len(t, parsed, 1)
+	require.Len(t, parsed, 2)
 	combatantInfo := parsed[0].(*messages.Combatant)
 	assert.Equal(t, "Bootie", combatantInfo.Name)
 	assert.Equal(t, types.HeroClassesWARLOCK, combatantInfo.HeroClass)
+	assert.True(t, combatantInfo.PullAurasKnown)
+	pullAura := parsed[1].(*messages.Aura)
+	assert.Equal(t, combatantInfo.Guid, pullAura.Target)
+	require.NotNil(t, pullAura.Source)
+	assert.Equal(t, guid.GUID(0x0000120A00C7EC79), *pullAura.Source)
+	require.NotNil(t, pullAura.SpellData)
+	assert.Equal(t, chrondbc.SpellID(1126), pullAura.SpellData.ID)
+	assert.False(t, pullAura.IsSynthetic())
 	require.Equal(t, &combatant.CombatantInfoV22{
 		TeamID:                 1,
 		Strength:               2,

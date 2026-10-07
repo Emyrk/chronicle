@@ -106,6 +106,8 @@ export interface UnitResourcesProcessorEvent extends EventMeta {
   maximumPower: number;
   attackPower: number;
   spellPower: number;
+  unitLevel: number | null;
+  averageItemLevel: number | null;
   armor: number;
 }
 
@@ -382,7 +384,7 @@ export interface CombatantInfoProcessorEvent extends EventMeta {
     enchantId: number | null;
     temporaryEnchantId: number | null;
     gemEnchantIds: number[];
-    itemLevel: number;
+    itemLevel: number | null;
     bonusIds: number[];
     gems: { itemId: number; itemLevel: number }[];
   }[];

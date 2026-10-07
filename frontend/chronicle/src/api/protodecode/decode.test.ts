@@ -223,6 +223,7 @@ describe('unit telemetry cursors', () => {
       maximumPower: 4000,
       attackPower: 100,
       spellPower: 250,
+      unitLevel: 22,
       armor: 900,
     });
     const encoded = toBinary(UnitResourcesSchema, message);
@@ -242,6 +243,8 @@ describe('unit telemetry cursors', () => {
       maximumPower: 4000,
       attackPower: 100,
       spellPower: 250,
+      unitLevel: 22,
+      averageItemLevel: null,
       armor: 900,
     });
   });

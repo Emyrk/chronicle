@@ -555,6 +555,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
         { label: "Absorb", value: resourcesEvent.absorb.toLocaleString() },
         { label: "Attack Power", value: resourcesEvent.attackPower.toLocaleString() },
         { label: "Spell Power", value: resourcesEvent.spellPower.toLocaleString() },
+        ...(resourcesEvent.unitLevel == null ? [] : [{ label: "Unit Level", value: resourcesEvent.unitLevel.toString() }]),
+        ...(resourcesEvent.averageItemLevel == null ? [] : [{ label: "Average Item Level", value: resourcesEvent.averageItemLevel.toString() }]),
         { label: "Armor", value: resourcesEvent.armor.toLocaleString() },
       ];
       rawEvent.flags?.push(resourcesEvent.powerType.toUpperCase());

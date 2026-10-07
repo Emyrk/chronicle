@@ -1058,20 +1058,22 @@ func (x *UnitPosition) GetFacing() float64 {
 }
 
 type UnitResources struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	Unit          string                 `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
-	CurrentHealth int64                  `protobuf:"varint,3,opt,name=current_health,json=currentHealth,proto3" json:"current_health,omitempty"`
-	MaximumHealth int64                  `protobuf:"varint,4,opt,name=maximum_health,json=maximumHealth,proto3" json:"maximum_health,omitempty"`
-	Absorb        int32                  `protobuf:"varint,5,opt,name=absorb,proto3" json:"absorb,omitempty"`
-	PowerType     string                 `protobuf:"bytes,6,opt,name=power_type,json=powerType,proto3" json:"power_type,omitempty"`
-	CurrentPower  int32                  `protobuf:"varint,7,opt,name=current_power,json=currentPower,proto3" json:"current_power,omitempty"`
-	MaximumPower  int32                  `protobuf:"varint,8,opt,name=maximum_power,json=maximumPower,proto3" json:"maximum_power,omitempty"`
-	AttackPower   int32                  `protobuf:"varint,9,opt,name=attack_power,json=attackPower,proto3" json:"attack_power,omitempty"`
-	SpellPower    int32                  `protobuf:"varint,10,opt,name=spell_power,json=spellPower,proto3" json:"spell_power,omitempty"`
-	Armor         int32                  `protobuf:"varint,11,opt,name=armor,proto3" json:"armor,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Unit             string                 `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
+	CurrentHealth    int64                  `protobuf:"varint,3,opt,name=current_health,json=currentHealth,proto3" json:"current_health,omitempty"`
+	MaximumHealth    int64                  `protobuf:"varint,4,opt,name=maximum_health,json=maximumHealth,proto3" json:"maximum_health,omitempty"`
+	Absorb           int32                  `protobuf:"varint,5,opt,name=absorb,proto3" json:"absorb,omitempty"`
+	PowerType        string                 `protobuf:"bytes,6,opt,name=power_type,json=powerType,proto3" json:"power_type,omitempty"`
+	CurrentPower     int32                  `protobuf:"varint,7,opt,name=current_power,json=currentPower,proto3" json:"current_power,omitempty"`
+	MaximumPower     int32                  `protobuf:"varint,8,opt,name=maximum_power,json=maximumPower,proto3" json:"maximum_power,omitempty"`
+	AttackPower      int32                  `protobuf:"varint,9,opt,name=attack_power,json=attackPower,proto3" json:"attack_power,omitempty"`
+	SpellPower       int32                  `protobuf:"varint,10,opt,name=spell_power,json=spellPower,proto3" json:"spell_power,omitempty"`
+	Armor            int32                  `protobuf:"varint,11,opt,name=armor,proto3" json:"armor,omitempty"`
+	UnitLevel        *int32                 `protobuf:"varint,12,opt,name=unit_level,json=unitLevel,proto3,oneof" json:"unit_level,omitempty"`
+	AverageItemLevel *int32                 `protobuf:"varint,13,opt,name=average_item_level,json=averageItemLevel,proto3,oneof" json:"average_item_level,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *UnitResources) Reset() {
@@ -1177,6 +1179,20 @@ func (x *UnitResources) GetSpellPower() int32 {
 func (x *UnitResources) GetArmor() int32 {
 	if x != nil {
 		return x.Armor
+	}
+	return 0
+}
+
+func (x *UnitResources) GetUnitLevel() int32 {
+	if x != nil && x.UnitLevel != nil {
+		return *x.UnitLevel
+	}
+	return 0
+}
+
+func (x *UnitResources) GetAverageItemLevel() int32 {
+	if x != nil && x.AverageItemLevel != nil {
+		return *x.AverageItemLevel
 	}
 	return 0
 }
@@ -3051,10 +3067,10 @@ type CombatantGearSlot struct {
 	ItemId             int32                  `protobuf:"varint,1,opt,name=itemId,proto3" json:"itemId,omitempty"`
 	EnchantId          *int32                 `protobuf:"varint,2,opt,name=enchantId,proto3,oneof" json:"enchantId,omitempty"`
 	TemporaryEnchantId *int32                 `protobuf:"varint,3,opt,name=temporaryEnchantId,proto3,oneof" json:"temporaryEnchantId,omitempty"`
-	GemEnchantIds      []int32                `protobuf:"varint,4,rep,packed,name=gemEnchantIds,proto3" json:"gemEnchantIds,omitempty"` // SpellItemEnchantment IDs by socket position; 0 means empty
-	ItemLevel          int32                  `protobuf:"varint,5,opt,name=itemLevel,proto3" json:"itemLevel,omitempty"`
-	BonusIds           []int32                `protobuf:"varint,6,rep,packed,name=bonusIds,proto3" json:"bonusIds,omitempty"`
-	Gems               []*CombatantGearGem    `protobuf:"bytes,7,rep,name=gems,proto3" json:"gems,omitempty"`
+	GemEnchantIds      []int32                `protobuf:"varint,4,rep,packed,name=gemEnchantIds,proto3" json:"gemEnchantIds,omitempty"` // WotLK SpellItemEnchantment IDs by socket position; 0 means empty
+	ItemLevel          *int32                 `protobuf:"varint,5,opt,name=itemLevel,proto3,oneof" json:"itemLevel,omitempty"`
+	BonusIds           []int32                `protobuf:"varint,6,rep,packed,name=bonusIds,proto3" json:"bonusIds,omitempty"` // Modern COMBATANT_INFO item bonus IDs
+	Gems               []*CombatantGearGem    `protobuf:"bytes,7,rep,name=gems,proto3" json:"gems,omitempty"`                 // Modern gem item IDs and item levels
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -3118,8 +3134,8 @@ func (x *CombatantGearSlot) GetGemEnchantIds() []int32 {
 }
 
 func (x *CombatantGearSlot) GetItemLevel() int32 {
-	if x != nil {
-		return x.ItemLevel
+	if x != nil && x.ItemLevel != nil {
+		return *x.ItemLevel
 	}
 	return 0
 }
@@ -3421,7 +3437,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x01x\x18\x03 \x01(\x01R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x01R\x01y\x12\x15\n" +
 	"\x06map_id\x18\x05 \x01(\x05R\x05mapId\x12\x16\n" +
-	"\x06facing\x18\x06 \x01(\x01R\x06facing\"\xfb\x02\n" +
+	"\x06facing\x18\x06 \x01(\x01R\x06facing\"\xf8\x03\n" +
 	"\rUnitResources\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x12\n" +
 	"\x04unit\x18\x02 \x01(\tR\x04unit\x12%\n" +
@@ -3436,7 +3452,12 @@ const file_chronicle_proto_rawDesc = "" +
 	"\vspell_power\x18\n" +
 	" \x01(\x05R\n" +
 	"spellPower\x12\x14\n" +
-	"\x05armor\x18\v \x01(\x05R\x05armor\"\xfd\x02\n" +
+	"\x05armor\x18\v \x01(\x05R\x05armor\x12\"\n" +
+	"\n" +
+	"unit_level\x18\f \x01(\x05H\x00R\tunitLevel\x88\x01\x01\x121\n" +
+	"\x12average_item_level\x18\r \x01(\x05H\x01R\x10averageItemLevel\x88\x01\x01B\r\n" +
+	"\v_unit_levelB\x15\n" +
+	"\x13_average_item_level\"\xfd\x02\n" +
 	"\x0eResourceChange\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06target\x18\x03 \x01(\tR\x06target\x12\x16\n" +
@@ -3706,18 +3727,20 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x14_consumedAtUnixMilliB\t\n" +
 	"\a_amountB\x0f\n" +
 	"\r_resourceTypeB\v\n" +
-	"\t_itemName\"\xbe\x02\n" +
+	"\t_itemName\"\xd1\x02\n" +
 	"\x11CombatantGearSlot\x12\x16\n" +
 	"\x06itemId\x18\x01 \x01(\x05R\x06itemId\x12!\n" +
 	"\tenchantId\x18\x02 \x01(\x05H\x00R\tenchantId\x88\x01\x01\x123\n" +
 	"\x12temporaryEnchantId\x18\x03 \x01(\x05H\x01R\x12temporaryEnchantId\x88\x01\x01\x12$\n" +
-	"\rgemEnchantIds\x18\x04 \x03(\x05R\rgemEnchantIds\x12\x1c\n" +
-	"\titemLevel\x18\x05 \x01(\x05R\titemLevel\x12\x1a\n" +
+	"\rgemEnchantIds\x18\x04 \x03(\x05R\rgemEnchantIds\x12!\n" +
+	"\titemLevel\x18\x05 \x01(\x05H\x02R\titemLevel\x88\x01\x01\x12\x1a\n" +
 	"\bbonusIds\x18\x06 \x03(\x05R\bbonusIds\x124\n" +
 	"\x04gems\x18\a \x03(\v2 .chronicleproto.CombatantGearGemR\x04gemsB\f\n" +
 	"\n" +
 	"_enchantIdB\x15\n" +
-	"\x13_temporaryEnchantId\"H\n" +
+	"\x13_temporaryEnchantIdB\f\n" +
+	"\n" +
+	"_itemLevel\"H\n" +
 	"\x10CombatantGearGem\x12\x16\n" +
 	"\x06itemId\x18\x01 \x01(\x05R\x06itemId\x12\x1c\n" +
 	"\titemLevel\x18\x02 \x01(\x05R\titemLevel\"B\n" +
@@ -3925,6 +3948,7 @@ func file_chronicle_proto_init() {
 	file_chronicle_proto_msgTypes[1].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[4].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[5].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[7].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[8].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[9].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[10].OneofWrappers = []any{}

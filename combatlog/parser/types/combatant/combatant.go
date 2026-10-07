@@ -71,7 +71,10 @@ type Combatant struct {
 	Talents    *Talents
 	Glyphs     *Glyphs
 	Level      *int32
-	V22        *CombatantInfoV22
+	// PullAurasKnown marks the modern COMBATANT_INFO aura snapshot as authoritative,
+	// including when the reported list is empty.
+	PullAurasKnown bool
+	V22            *CombatantInfoV22
 }
 
 func (c *Combatant) SafeMergeExisting(existing Combatant) {

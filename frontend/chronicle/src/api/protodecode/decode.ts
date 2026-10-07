@@ -5031,7 +5031,7 @@ export interface ReusableCombatantGearSlot {
   enchantId: number | null;
   temporaryEnchantId: number | null;
   gemEnchantIds: number[];
-  itemLevel: number;
+  itemLevel: number | null;
   bonusIds: number[];
   gems: ReusableCombatantGearGem[];
 }
@@ -5221,7 +5221,7 @@ export class CombatantInfoDecoder {
               enchantId: null,
               temporaryEnchantId: null,
               gemEnchantIds: [],
-              itemLevel: 0,
+              itemLevel: null,
               bonusIds: [],
               gems: [],
             });
@@ -5231,7 +5231,7 @@ export class CombatantInfoDecoder {
           slot.enchantId = null;
           slot.temporaryEnchantId = null;
           slot.gemEnchantIds.length = 0;
-          slot.itemLevel = 0;
+          slot.itemLevel = null;
           slot.bonusIds.length = 0;
           slot.gems.length = 0;
 
@@ -5786,6 +5786,8 @@ export interface ReusableUnitResources {
   attackPower: number;
   spellPower: number;
   armor: number;
+  unitLevel: number | null;
+  averageItemLevel: number | null;
   activity: ReusableActivityEntry[];
   activityCount: number;
   isSynthetic: boolean;
@@ -5859,6 +5861,8 @@ export class FastUnitResourcesCursor extends MappedStreamCursor<typeof UnitResou
         maximumPower: message.maximumPower,
         attackPower: message.attackPower,
         spellPower: message.spellPower,
+        unitLevel: message.unitLevel ?? null,
+        averageItemLevel: message.averageItemLevel ?? null,
         armor: message.armor,
         activity,
         activityCount: activity.length,

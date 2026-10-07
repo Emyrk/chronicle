@@ -18,20 +18,21 @@ const (
 )
 
 type advancedCombatSnapshot struct {
-	unit          string
-	currentHealth int64
-	maximumHealth int64
-	attackPower   int32
-	spellPower    int32
-	armor         int32
-	absorb        int32
-	powerType     int32
-	currentPower  int32
-	maximumPower  int32
-	x             float64
-	y             float64
-	mapID         int32
-	facing        float64
+	unit             string
+	currentHealth    int64
+	maximumHealth    int64
+	attackPower      int32
+	spellPower       int32
+	armor            int32
+	absorb           int32
+	powerType        int32
+	currentPower     int32
+	maximumPower     int32
+	x                float64
+	y                float64
+	mapID            int32
+	facing           float64
+	levelOrItemLevel int32
 }
 
 type transformReader struct {
@@ -311,6 +312,9 @@ func (r *transformReader) parseAdvancedCombatSnapshot(fields []string, sourceGUI
 	if snapshot.facing, err = parseFloat64(17, "facing"); err != nil {
 		return nil, err
 	}
+	if snapshot.levelOrItemLevel, err = parseInt32(18, "unit level or average item level"); err != nil {
+		return nil, err
+	}
 	return snapshot, nil
 }
 
@@ -334,6 +338,7 @@ func (s advancedCombatSnapshot) lines(prefix string) []string {
 			strconv.FormatInt(int64(s.attackPower), 10),
 			strconv.FormatInt(int64(s.spellPower), 10),
 			strconv.FormatInt(int64(s.armor), 10),
+			strconv.FormatInt(int64(s.levelOrItemLevel), 10),
 		}, ","),
 	}
 }

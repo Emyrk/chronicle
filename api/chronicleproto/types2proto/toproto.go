@@ -87,17 +87,19 @@ func UnitPosition(from time.Time, idx int32, position *messages.UnitPosition) *c
 
 func UnitResources(from time.Time, idx int32, resources *messages.UnitResources) *chronicleproto.UnitResources {
 	return &chronicleproto.UnitResources{
-		Meta:          EventMeta(from, idx, resources),
-		Unit:          resources.Unit.String(),
-		CurrentHealth: resources.CurrentHealth,
-		MaximumHealth: resources.MaximumHealth,
-		Absorb:        resources.Absorb,
-		PowerType:     resources.PowerType.String(),
-		CurrentPower:  resources.CurrentPower,
-		MaximumPower:  resources.MaximumPower,
-		AttackPower:   resources.AttackPower,
-		SpellPower:    resources.SpellPower,
-		Armor:         resources.Armor,
+		Meta:             EventMeta(from, idx, resources),
+		Unit:             resources.Unit.String(),
+		CurrentHealth:    resources.CurrentHealth,
+		MaximumHealth:    resources.MaximumHealth,
+		Absorb:           resources.Absorb,
+		PowerType:        resources.PowerType.String(),
+		CurrentPower:     resources.CurrentPower,
+		MaximumPower:     resources.MaximumPower,
+		AttackPower:      resources.AttackPower,
+		SpellPower:       resources.SpellPower,
+		Armor:            resources.Armor,
+		UnitLevel:        resources.UnitLevel,
+		AverageItemLevel: resources.AverageItemLevel,
 	}
 }
 
@@ -424,12 +426,18 @@ func GearSlot(g combatant.GearItem) *chronicleproto.CombatantGearSlot {
 	slot := &chronicleproto.CombatantGearSlot{
 		//nolint:gosec
 		ItemId: int32(g.ItemID),
+	}
+	if g.ItemLevel != 0 {
 		//nolint:gosec
-		ItemLevel: int32(g.ItemLevel),
+		slot.ItemLevel = ptr.Ref(int32(g.ItemLevel))
 	}
 	if g.EnchantID != nil {
 		//nolint:gosec
 		slot.EnchantId = ptr.Ref(int32(*g.EnchantID))
+	}
+	if g.TempEnchantID != nil {
+		//nolint:gosec
+		slot.TemporaryEnchantId = ptr.Ref(int32(*g.TempEnchantID))
 	}
 	if g.GemEnchantIDs != [4]int{} {
 		slot.GemEnchantIds = make([]int32, len(g.GemEnchantIDs))

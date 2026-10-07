@@ -12,7 +12,7 @@ export interface PlayerSnapshot {
     enchantId: number | null;
     temporaryEnchantId: number | null;
     gemEnchantIds: number[];
-    itemLevel: number;
+    itemLevel: number | null;
     bonusIds: number[];
     gems: { itemId: number; itemLevel: number }[];
   }[];
