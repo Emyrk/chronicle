@@ -376,6 +376,14 @@ message CombatantGearSlot {
   optional int32 enchantId = 2;
   optional int32 temporaryEnchantId = 3;
   repeated int32 gemEnchantIds = 4; // SpellItemEnchantment IDs by socket position; 0 means empty
+  int32 itemLevel = 5;
+  repeated int32 bonusIds = 6;
+  repeated CombatantGearGem gems = 7;
+}
+
+message CombatantGearGem {
+  int32 itemId = 1;
+  int32 itemLevel = 2;
 }
 
 message CombatantTalents {

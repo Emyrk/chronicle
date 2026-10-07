@@ -1,5 +1,5 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { AuraSchema, AuraTransition, CombatantGearSlotSchema, CombatantInfoSchema, CombatantInfoV22Schema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, UnitPositionSchema, UnitResourcesSchema, School, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { AuraSchema, AuraTransition, CombatantGearGemSchema, CombatantGearSlotSchema, CombatantInfoSchema, CombatantInfoV22Schema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, UnitPositionSchema, UnitResourcesSchema, School, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
 import { AuraDecoder, FastCombatantInfoCursor, FastConsumeCursor, FastDamageCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastUnitPositionCursor, FastUnitResourcesCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
@@ -83,6 +83,12 @@ describe('FastCombatantInfoCursor', () => {
       gear: [create(CombatantGearSlotSchema, {
         itemId: 51396,
         gemEnchantIds: [0, 0, 3637, 0],
+        itemLevel: 120,
+        bonusIds: [6652, 10356],
+        gems: [
+          create(CombatantGearGemSchema, { itemId: 25897, itemLevel: 70 }),
+          create(CombatantGearGemSchema, { itemId: 24057, itemLevel: 70 }),
+        ],
       })],
     });
     const encoded = toBinary(CombatantInfoSchema, message);
@@ -91,7 +97,14 @@ describe('FastCombatantInfoCursor', () => {
 
     const cursor = new FastCombatantInfoCursor(payload);
 
-    expect(cursor.next()?.gear[0].gemEnchantIds).toEqual([0, 0, 3637, 0]);
+    const gear = cursor.next()?.gear[0];
+    expect(gear?.gemEnchantIds).toEqual([0, 0, 3637, 0]);
+    expect(gear?.itemLevel).toBe(120);
+    expect(gear?.bonusIds).toEqual([6652, 10356]);
+    expect(gear?.gems).toEqual([
+      { itemId: 25897, itemLevel: 70 },
+      { itemId: 24057, itemLevel: 70 },
+    ]);
   });
 
   it('decodes optional modern stats and resets absent values', () => {

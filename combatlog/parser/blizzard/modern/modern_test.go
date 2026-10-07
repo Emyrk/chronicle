@@ -406,13 +406,20 @@ func TestParseCombatantMetadata(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, [3]uint8{8, 0, 53}, talents.Summary)
 
-	gear := parseGear(`[(29028,120,(3009,0,0),(),(25897,70,24057,70)),(0,0,(),(),())]`)
+	gear := parseGear(`[(29028,120,(3009,0,0),(6652,10356),(25897,70,24057,70)),(0,0,(),(),())]`)
 	require.Len(t, gear, 2)
 	assert.Equal(t, 29028, gear[0].ItemID)
 	assert.Equal(t, 120, gear[0].ItemLevel)
 	require.NotNil(t, gear[0].EnchantID)
 	assert.Equal(t, 3009, *gear[0].EnchantID)
+	assert.Equal(t, []int{6652, 10356}, gear[0].BonusIDs)
+	assert.Equal(t, []combatant.GearGem{
+		{ItemID: 25897, ItemLevel: 70},
+		{ItemID: 24057, ItemLevel: 70},
+	}, gear[0].Gems)
 	assert.Zero(t, gear[1].ItemID)
+	assert.Nil(t, gear[1].BonusIDs)
+	assert.Nil(t, gear[1].Gems)
 }
 
 func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {

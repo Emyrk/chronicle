@@ -31,6 +31,27 @@ func TestGearSlotPreservesGemPositions(t *testing.T) {
 	require.Nil(t, GearSlot(combatant.GearItem{ItemID: 50633}).GemEnchantIds)
 }
 
+func TestGearSlotPreservesModernItemMetadata(t *testing.T) {
+	t.Parallel()
+
+	got := GearSlot(combatant.GearItem{
+		ItemID:    29028,
+		ItemLevel: 120,
+		BonusIDs:  []int{6652, 10356},
+		Gems: []combatant.GearGem{
+			{ItemID: 25897, ItemLevel: 70},
+			{ItemID: 24057, ItemLevel: 70},
+		},
+	})
+
+	require.Equal(t, int32(120), got.ItemLevel)
+	require.Equal(t, []int32{6652, 10356}, got.BonusIds)
+	require.Equal(t, []*chronicleproto.CombatantGearGem{
+		{ItemId: 25897, ItemLevel: 70},
+		{ItemId: 24057, ItemLevel: 70},
+	}, got.Gems)
+}
+
 func TestCombatantInfoV22(t *testing.T) {
 	t.Parallel()
 

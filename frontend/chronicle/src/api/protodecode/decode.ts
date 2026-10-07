@@ -5021,11 +5021,19 @@ export class FastAbsorbedCursor {
 // CombatantInfo - Per-encounter gear/talent snapshots
 // ============================================================================
 
+export interface ReusableCombatantGearGem {
+  itemId: number;
+  itemLevel: number;
+}
+
 export interface ReusableCombatantGearSlot {
   itemId: number;
   enchantId: number | null;
   temporaryEnchantId: number | null;
   gemEnchantIds: number[];
+  itemLevel: number;
+  bonusIds: number[];
+  gems: ReusableCombatantGearGem[];
 }
 
 export interface ReusableCombatantTalents {
@@ -5208,13 +5216,24 @@ export class CombatantInfoDecoder {
         } else if (fieldNumber === 8) {
           // CombatantGearSlot (repeated)
           if (msg.gearCount >= msg.gear.length) {
-            msg.gear.push({ itemId: 0, enchantId: null, temporaryEnchantId: null, gemEnchantIds: [] });
+            msg.gear.push({
+              itemId: 0,
+              enchantId: null,
+              temporaryEnchantId: null,
+              gemEnchantIds: [],
+              itemLevel: 0,
+              bonusIds: [],
+              gems: [],
+            });
           }
           const slot = msg.gear[msg.gearCount];
           slot.itemId = 0;
           slot.enchantId = null;
           slot.temporaryEnchantId = null;
           slot.gemEnchantIds.length = 0;
+          slot.itemLevel = 0;
+          slot.bonusIds.length = 0;
+          slot.gems.length = 0;
 
           const slotEnd = offset + len;
           while (offset < slotEnd) {
@@ -5229,15 +5248,35 @@ export class CombatantInfoDecoder {
               else if (slotField === 2) slot.enchantId = value;
               else if (slotField === 3) slot.temporaryEnchantId = value;
               else if (slotField === 4) slot.gemEnchantIds.push(value);
-            } else if (slotWire === 2 && slotField === 4) {
+              else if (slotField === 5) slot.itemLevel = value;
+              else if (slotField === 6) slot.bonusIds.push(value);
+            } else if (slotWire === 2 && (slotField === 4 || slotField === 6)) {
               const { value: packedLen, bytesRead: packedLenBytes } = readVarintFast(data, offset);
               offset += packedLenBytes;
               const packedEnd = offset + packedLen;
+              const values = slotField === 4 ? slot.gemEnchantIds : slot.bonusIds;
               while (offset < packedEnd) {
                 const { value, bytesRead } = readVarintFast(data, offset);
                 offset += bytesRead;
-                slot.gemEnchantIds.push(value);
+                values.push(value);
               }
+            } else if (slotWire === 2 && slotField === 7) {
+              const { value: gemLen, bytesRead: gemLenBytes } = readVarintFast(data, offset);
+              offset += gemLenBytes;
+              const gemEnd = offset + gemLen;
+              const gem: ReusableCombatantGearGem = { itemId: 0, itemLevel: 0 };
+              while (offset < gemEnd) {
+                const gemTag = data[offset++];
+                const gemField = gemTag >> 3;
+                const gemWire = gemTag & 0x7;
+                if (gemWire === 0) {
+                  const { value, bytesRead } = readVarintFast(data, offset);
+                  offset += bytesRead;
+                  if (gemField === 1) gem.itemId = value;
+                  else if (gemField === 2) gem.itemLevel = value;
+                }
+              }
+              slot.gems.push(gem);
             }
           }
           msg.gearCount++;

@@ -230,7 +230,13 @@ type Guild struct {
 	RankIndex int32
 }
 
-// GearItem represents an equipped item with optional enchant
+// GearGem describes a socketed gem from a modern COMBATANT_INFO gear tuple.
+type GearGem struct {
+	ItemID    int
+	ItemLevel int
+}
+
+// GearItem represents an equipped item with optional enchant.
 type GearItem struct {
 	Name          string
 	ItemID        int
@@ -239,7 +245,9 @@ type GearItem struct {
 	SuffixID      int
 	TransmogID    *int
 	GemEnchantIDs [4]int // Gem enchantment IDs from the item link (0 = empty socket)
-	ItemLevel     int    // Item level from the item link
+	ItemLevel     int    // Item level reported by modern COMBATANT_INFO gear tuples
+	BonusIDs      []int  // Item bonus IDs reported by modern COMBATANT_INFO gear tuples
+	Gems          []GearGem
 }
 
 // ParseGear parses gear slot strings into GearItem slices.

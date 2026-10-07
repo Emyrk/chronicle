@@ -424,6 +424,8 @@ func GearSlot(g combatant.GearItem) *chronicleproto.CombatantGearSlot {
 	slot := &chronicleproto.CombatantGearSlot{
 		//nolint:gosec
 		ItemId: int32(g.ItemID),
+		//nolint:gosec
+		ItemLevel: int32(g.ItemLevel),
 	}
 	if g.EnchantID != nil {
 		//nolint:gosec
@@ -434,6 +436,24 @@ func GearSlot(g combatant.GearItem) *chronicleproto.CombatantGearSlot {
 		for i, gemID := range g.GemEnchantIDs {
 			//nolint:gosec
 			slot.GemEnchantIds[i] = int32(gemID)
+		}
+	}
+	if len(g.BonusIDs) > 0 {
+		slot.BonusIds = make([]int32, len(g.BonusIDs))
+		for i, bonusID := range g.BonusIDs {
+			//nolint:gosec
+			slot.BonusIds[i] = int32(bonusID)
+		}
+	}
+	if len(g.Gems) > 0 {
+		slot.Gems = make([]*chronicleproto.CombatantGearGem, len(g.Gems))
+		for i, gem := range g.Gems {
+			slot.Gems[i] = &chronicleproto.CombatantGearGem{
+				//nolint:gosec
+				ItemId: int32(gem.ItemID),
+				//nolint:gosec
+				ItemLevel: int32(gem.ItemLevel),
+			}
 		}
 	}
 	return slot

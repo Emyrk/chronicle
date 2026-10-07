@@ -675,16 +675,45 @@ func parseGear(raw string) []combatant.GearItem {
 		itemLevel, _ := strconv.Atoi(parts[1])
 		item := combatant.GearItem{ItemID: itemID, ItemLevel: itemLevel}
 		if len(parts) >= 3 {
-			enchants := splitTopLevel(strings.Trim(parts[2], "()"))
-			if len(enchants) > 0 {
-				if id, _ := strconv.Atoi(enchants[0]); id != 0 {
-					item.EnchantID = &id
+			enchants := parseGearTuple(parts[2])
+			if len(enchants) > 0 && enchants[0] != 0 {
+				item.EnchantID = &enchants[0]
+			}
+		}
+		if len(parts) >= 4 {
+			item.BonusIDs = parseGearTuple(parts[3])
+		}
+		if len(parts) >= 5 {
+			gems := parseGearTuple(parts[4])
+			if len(gems) >= 2 {
+				item.Gems = make([]combatant.GearGem, 0, len(gems)/2)
+				for index := 0; index+1 < len(gems); index += 2 {
+					item.Gems = append(item.Gems, combatant.GearGem{
+						ItemID:    gems[index],
+						ItemLevel: gems[index+1],
+					})
 				}
 			}
 		}
 		gear = append(gear, item)
 	}
 	return gear
+}
+
+func parseGearTuple(raw string) []int {
+	parts := splitTopLevel(strings.Trim(raw, "()"))
+	if len(parts) == 1 && parts[0] == "" {
+		return nil
+	}
+	values := make([]int, 0, len(parts))
+	for _, part := range parts {
+		value, err := strconv.Atoi(part)
+		if err != nil {
+			return nil
+		}
+		values = append(values, value)
+	}
+	return values
 }
 
 func stripRealm(name string) string {
