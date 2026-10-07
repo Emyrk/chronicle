@@ -17,6 +17,10 @@ concurrency:
   group: release-panel-sdk
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   release:
     name: Test, build, and publish
@@ -27,13 +31,13 @@ jobs:
         working-directory: frontend/chronicle-panel-sdk
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: '24'
+          package-manager-cache: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -77,5 +81,3 @@ jobs:
       - name: Publish to npm
         if: steps.check.outputs.published == 'false'
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

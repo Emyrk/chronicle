@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "TypeScript SDK, event-stream decoder, and protobuf schemas for Chronicle custom panels.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Emyrk/chronicle.git",
+    "directory": "frontend/chronicle-panel-sdk"
+  },
   "type": "module",
   "exports": {
     ".": {
