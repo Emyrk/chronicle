@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import { AuraApplication, AuraState, AuraTransition, type AbsorbedProcessorEvent, type AuraProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent, type UnitPositionProcessorEvent, type UnitResourcesProcessorEvent } from "../processorTypes";
+import { AuraApplication, AuraState, AuraTransition, type AbsorbedProcessorEvent, type AuraProcessorEvent, type CombatantInfoProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent, type UnitPositionProcessorEvent, type UnitResourcesProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -141,6 +141,62 @@ describe("allActivityProcessor", () => {
       extra: "5,000/6,000 health · 3,000/4,000 Mana",
       flags: ["MANA"],
     });
+  });
+
+  it("captures present v22 combatant stats for the expanded row", () => {
+    const state = allActivityProcessor.createState();
+    const event: CombatantInfoProcessorEvent = {
+      type: "combatant_info",
+      index: 3,
+      offsetMilli: 0,
+      guid: "player",
+      name: "Sathite",
+      heroClass: "SHAMAN",
+      race: "Troll",
+      gender: 2,
+      guildName: null,
+      gear: [],
+      gearCount: 0,
+      talents: null,
+      v22: {
+        primaryStat: 123,
+        stamina: 456,
+        meleeCritRating: null,
+        rangedCritRating: null,
+        spellCritRating: null,
+        speed: null,
+        leech: null,
+        meleeHasteRating: null,
+        rangedHasteRating: null,
+        spellHasteRating: null,
+        avoidance: null,
+        mastery: null,
+        damageDoneVersatility: null,
+        healingDoneVersatility: null,
+        damageTakenVersatility: null,
+        unknownStat: 0,
+        specId: 1826,
+      },
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "combatant_info",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.combatant_info[0].combatantInfoV22).toEqual([
+      { label: "Primary stat", value: "123" },
+      { label: "Stamina", value: "456" },
+      { label: "Unknown stat", value: "0" },
+      { label: "Specialization ID", value: "1826" },
+    ]);
   });
 
   it("preserves damage trailer amounts and readable outcome labels", () => {

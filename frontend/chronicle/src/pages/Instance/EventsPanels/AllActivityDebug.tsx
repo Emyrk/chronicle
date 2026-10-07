@@ -502,6 +502,22 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
             ))}
           </div>
 
+          {event.combatantInfoV22?.length ? (
+            <div className="mt-3 max-w-4xl rounded border border-sky-400/20 bg-sky-400/5 px-3 py-2">
+              <div className="mb-1 font-mono text-[9px] font-semibold tracking-[0.08em] text-sky-300">
+                V22 COMBATANT STATS
+              </div>
+              <div className="grid grid-cols-1 gap-x-6 font-mono text-[10px] leading-5 sm:grid-cols-2">
+                {event.combatantInfoV22.map((stat) => (
+                  <div key={stat.label} className="flex min-w-0 justify-between gap-3 border-b border-border/20">
+                    <span className="truncate text-muted-foreground">{stat.label}</span>
+                    <span className="shrink-0 tabular-nums text-foreground/85">{stat.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {event.raidGroups ? (
             <div className="mt-3 grid grid-cols-2 gap-2">
               {event.raidGroups.map((group, groupIndex) => (

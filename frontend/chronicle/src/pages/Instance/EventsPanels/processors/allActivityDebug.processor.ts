@@ -37,6 +37,11 @@ export interface DebugEntityPresentation {
   isEnemy?: boolean;
 }
 
+export interface CombatantInfoStat {
+  label: string;
+  value: string;
+}
+
 export interface RawDebugEvent {
   index: number;
   offsetMilli: number;
@@ -71,8 +76,9 @@ export interface RawDebugEvent {
   // Debug annotations (when WithDebug is enabled during reparse)
   // Can have multiple activity entries per event
   activityEvents?: ActivityEventInfo[];
-  // Combatant info gear (shown in the expanded row)
+  // Combatant info gear and v22 stats (shown in the expanded row)
   gear?: { itemId: number; enchantId: number | null; temporaryEnchantId: number | null }[];
+  combatantInfoV22?: CombatantInfoStat[];
   /** Fixed raid composition grouped into eight subgroups. */
   raidGroups?: { guid: string; name: string; className?: string }[][];
   /** Diagnostic state that deserves a compact flag in the timeline. */
@@ -120,6 +126,36 @@ function schoolName(school: number): string {
 
 function outcomeLabels(hitType: number): string[] {
   return hitTypeNames(hitType).filter((label) => label !== "None");
+}
+
+export function combatantInfoV22Stats(
+  v22: CombatantInfoProcessorEvent["v22"],
+): CombatantInfoStat[] | undefined {
+  if (!v22) return undefined;
+
+  const fields: [string, number | null][] = [
+    ["Primary stat", v22.primaryStat],
+    ["Stamina", v22.stamina],
+    ["Melee crit rating", v22.meleeCritRating],
+    ["Ranged crit rating", v22.rangedCritRating],
+    ["Spell crit rating", v22.spellCritRating],
+    ["Speed", v22.speed],
+    ["Leech", v22.leech],
+    ["Melee haste rating", v22.meleeHasteRating],
+    ["Ranged haste rating", v22.rangedHasteRating],
+    ["Spell haste rating", v22.spellHasteRating],
+    ["Avoidance", v22.avoidance],
+    ["Mastery", v22.mastery],
+    ["Damage done versatility", v22.damageDoneVersatility],
+    ["Healing done versatility", v22.healingDoneVersatility],
+    ["Damage taken versatility", v22.damageTakenVersatility],
+    ["Unknown stat", v22.unknownStat],
+    ["Specialization ID", v22.specId],
+  ];
+  const stats = fields
+    .filter((field): field is [string, number] => field[1] !== null)
+    .map(([label, value]) => ({ label, value: value.toString() }));
+  return stats.length > 0 ? stats : undefined;
 }
 
 function entityPresentation(guid: string | null, context: ProcessorContext): DebugEntityPresentation {
@@ -707,6 +743,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       parts.push(`gear=${ciEvent.gearCount} slots`);
       if (ciEvent.guildName) parts.push(`guild=${ciEvent.guildName}`);
       rawEvent.extra = parts.join(" ");
+      rawEvent.combatantInfoV22 = combatantInfoV22Stats(ciEvent.v22);
       rawEvent.gear = ciEvent.gear.slice(0, ciEvent.gearCount).map(g => ({
         itemId: g.itemId,
         enchantId: g.enchantId,

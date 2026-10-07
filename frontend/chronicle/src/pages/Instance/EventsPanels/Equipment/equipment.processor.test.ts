@@ -31,6 +31,7 @@ function combatantInfo(): CombatantInfoProcessorEvent {
       gemEnchantIds: [0, 0, 3637, 0],
     }],
     gearCount: 1,
+    v22: null,
     talents: null,
   };
 }
