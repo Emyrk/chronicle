@@ -5033,19 +5033,7 @@ export interface ReusableCombatantTalents {
   trees: string[];
 }
 
-export interface ReusableCombatantInfo {
-  type: "combatant_info";
-  index: number;
-  offsetMilli: number;
-  guid: string;
-  name: string;
-  heroClass: string;
-  race: string;
-  gender: number;
-  guildName: string | null;
-  gear: ReusableCombatantGearSlot[];
-  gearCount: number;
-  talents: ReusableCombatantTalents | null;
+export interface ReusableCombatantInfoV22 {
   primaryStat: number | null;
   stamina: number | null;
   meleeCritRating: number | null;
@@ -5063,6 +5051,22 @@ export interface ReusableCombatantInfo {
   damageTakenVersatility: number | null;
   unknownStat: number | null;
   specId: number | null;
+}
+
+export interface ReusableCombatantInfo {
+  type: "combatant_info";
+  index: number;
+  offsetMilli: number;
+  guid: string;
+  name: string;
+  heroClass: string;
+  race: string;
+  gender: number;
+  guildName: string | null;
+  gear: ReusableCombatantGearSlot[];
+  gearCount: number;
+  talents: ReusableCombatantTalents | null;
+  v22: ReusableCombatantInfoV22 | null;
   activity: ReusableActivityEntry[];
   activityCount: number;
   isSynthetic: boolean;
@@ -5081,7 +5085,7 @@ export interface ReusableCombatantInfo {
  *   7: guildName (optional string)
  *   8: gear (repeated CombatantGearSlot)
  *   9: talents (optional CombatantTalents)
- *   10-26: optional modern combatant stats and specialization ID
+ *   10: v22 (optional CombatantInfoV22)
  */
 export class CombatantInfoDecoder {
   private readonly textDecoder = sharedTextDecoder;
@@ -5100,23 +5104,7 @@ export class CombatantInfoDecoder {
     gear: [],
     gearCount: 0,
     talents: null,
-    primaryStat: null,
-    stamina: null,
-    meleeCritRating: null,
-    rangedCritRating: null,
-    spellCritRating: null,
-    speed: null,
-    leech: null,
-    meleeHasteRating: null,
-    rangedHasteRating: null,
-    spellHasteRating: null,
-    avoidance: null,
-    mastery: null,
-    damageDoneVersatility: null,
-    healingDoneVersatility: null,
-    damageTakenVersatility: null,
-    unknownStat: null,
-    specId: null,
+    v22: null,
     activity: [],
     activityCount: 0,
     isSynthetic: false,
@@ -5137,23 +5125,7 @@ export class CombatantInfoDecoder {
     msg.guildName = null;
     msg.gearCount = 0;
     msg.talents = null;
-    msg.primaryStat = null;
-    msg.stamina = null;
-    msg.meleeCritRating = null;
-    msg.rangedCritRating = null;
-    msg.spellCritRating = null;
-    msg.speed = null;
-    msg.leech = null;
-    msg.meleeHasteRating = null;
-    msg.rangedHasteRating = null;
-    msg.spellHasteRating = null;
-    msg.avoidance = null;
-    msg.mastery = null;
-    msg.damageDoneVersatility = null;
-    msg.healingDoneVersatility = null;
-    msg.damageTakenVersatility = null;
-    msg.unknownStat = null;
-    msg.specId = null;
+    msg.v22 = null;
     msg.activityCount = 0;
     msg.isSynthetic = false;
 
@@ -5300,32 +5272,66 @@ export class CombatantInfoDecoder {
             }
           }
           msg.talents = { summary, trees };
+        } else if (fieldNumber === 10) {
+          const v22: ReusableCombatantInfoV22 = {
+            primaryStat: null,
+            stamina: null,
+            meleeCritRating: null,
+            rangedCritRating: null,
+            spellCritRating: null,
+            speed: null,
+            leech: null,
+            meleeHasteRating: null,
+            rangedHasteRating: null,
+            spellHasteRating: null,
+            avoidance: null,
+            mastery: null,
+            damageDoneVersatility: null,
+            healingDoneVersatility: null,
+            damageTakenVersatility: null,
+            unknownStat: null,
+            specId: null,
+          };
+          const v22End = offset + len;
+          while (offset < v22End) {
+            const { value: v22Tag, bytesRead: v22TagBytes } = readVarintFast(data, offset);
+            offset += v22TagBytes;
+            const v22Field = v22Tag >> 3;
+            const v22Wire = v22Tag & 0x7;
+            if (v22Wire !== 0) {
+              throw new Error(`Unexpected CombatantInfoV22 wire type: ${v22Wire}`);
+            }
+
+            const { value, bytesRead } = readVarintFast(data, offset);
+            offset += bytesRead;
+            switch (v22Field) {
+              case 1: v22.primaryStat = value; break;
+              case 2: v22.stamina = value; break;
+              case 3: v22.meleeCritRating = value; break;
+              case 4: v22.rangedCritRating = value; break;
+              case 5: v22.spellCritRating = value; break;
+              case 6: v22.speed = value; break;
+              case 7: v22.leech = value; break;
+              case 8: v22.meleeHasteRating = value; break;
+              case 9: v22.rangedHasteRating = value; break;
+              case 10: v22.spellHasteRating = value; break;
+              case 11: v22.avoidance = value; break;
+              case 12: v22.mastery = value; break;
+              case 13: v22.damageDoneVersatility = value; break;
+              case 14: v22.healingDoneVersatility = value; break;
+              case 15: v22.damageTakenVersatility = value; break;
+              case 16: v22.unknownStat = value; break;
+              case 17: v22.specId = value; break;
+            }
+          }
+          msg.v22 = v22;
         } else {
           offset += len;
         }
       } else if (wireType === 0) {
         const { value, bytesRead } = readVarintFast(data, offset);
         offset += bytesRead;
-        switch (fieldNumber) {
-          case 6: msg.gender = value; break;
-          case 10: msg.primaryStat = value; break;
-          case 11: msg.stamina = value; break;
-          case 12: msg.meleeCritRating = value; break;
-          case 13: msg.rangedCritRating = value; break;
-          case 14: msg.spellCritRating = value; break;
-          case 15: msg.speed = value; break;
-          case 16: msg.leech = value; break;
-          case 17: msg.meleeHasteRating = value; break;
-          case 18: msg.rangedHasteRating = value; break;
-          case 19: msg.spellHasteRating = value; break;
-          case 20: msg.avoidance = value; break;
-          case 21: msg.mastery = value; break;
-          case 22: msg.damageDoneVersatility = value; break;
-          case 23: msg.healingDoneVersatility = value; break;
-          case 24: msg.damageTakenVersatility = value; break;
-          case 25: msg.unknownStat = value; break;
-          case 26: msg.specId = value; break;
-        }
+        if (fieldNumber === 6) msg.gender = value;
       }
     }
 

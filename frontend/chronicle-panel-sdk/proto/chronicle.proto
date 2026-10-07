@@ -266,26 +266,30 @@ message CombatantInfo {
   optional string guildName = 7;
   repeated CombatantGearSlot gear = 8;
   optional CombatantTalents talents = 9;
+  optional CombatantInfoV22 v22 = 10;
+}
 
-  // Modern COMBATANT_INFO CSV stats. The melee/ranged/spell and
-  // damage/healing/taken variants preserve the triplicate source fields.
-  optional int32 primaryStat = 10;
-  optional int32 stamina = 11;
-  optional int32 meleeCritRating = 12;
-  optional int32 rangedCritRating = 13;
-  optional int32 spellCritRating = 14;
-  optional int32 speed = 15;
-  optional int32 leech = 16;
-  optional int32 meleeHasteRating = 17;
-  optional int32 rangedHasteRating = 18;
-  optional int32 spellHasteRating = 19;
-  optional int32 avoidance = 20;
-  optional int32 mastery = 21;
-  optional int32 damageDoneVersatility = 22;
-  optional int32 healingDoneVersatility = 23;
-  optional int32 damageTakenVersatility = 24;
-  optional int32 unknownStat = 25; // CSV field 24 in patch 12.0+; purpose is not yet verified.
-  optional int32 specId = 26;
+// CombatantInfoV22 contains fields only emitted by v22 combat logs. The
+// melee/ranged/spell and damage/healing/taken variants preserve the
+// triplicate source fields.
+message CombatantInfoV22 {
+  optional int32 primaryStat = 1;
+  optional int32 stamina = 2;
+  optional int32 meleeCritRating = 3;
+  optional int32 rangedCritRating = 4;
+  optional int32 spellCritRating = 5;
+  optional int32 speed = 6;
+  optional int32 leech = 7;
+  optional int32 meleeHasteRating = 8;
+  optional int32 rangedHasteRating = 9;
+  optional int32 spellHasteRating = 10;
+  optional int32 avoidance = 11;
+  optional int32 mastery = 12;
+  optional int32 damageDoneVersatility = 13;
+  optional int32 healingDoneVersatility = 14;
+  optional int32 damageTakenVersatility = 15;
+  optional int32 unknownStat = 16; // Purpose is not yet verified.
+  optional int32 specId = 17;
 }
 
 message Interrupt {

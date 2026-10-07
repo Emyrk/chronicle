@@ -1,5 +1,5 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { AuraSchema, AuraTransition, CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, UnitPositionSchema, UnitResourcesSchema, School, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { AuraSchema, AuraTransition, CombatantGearSlotSchema, CombatantInfoSchema, CombatantInfoV22Schema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, UnitPositionSchema, UnitResourcesSchema, School, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
 import { AuraDecoder, FastCombatantInfoCursor, FastConsumeCursor, FastDamageCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastUnitPositionCursor, FastUnitResourcesCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
@@ -96,23 +96,25 @@ describe('FastCombatantInfoCursor', () => {
 
   it('decodes optional modern stats and resets absent values', () => {
     const withStats = toBinary(CombatantInfoSchema, create(CombatantInfoSchema, {
-      primaryStat: 100,
-      stamina: 101,
-      meleeCritRating: 102,
-      rangedCritRating: 103,
-      spellCritRating: 104,
-      speed: 105,
-      leech: 106,
-      meleeHasteRating: 107,
-      rangedHasteRating: 108,
-      spellHasteRating: 109,
-      avoidance: 110,
-      mastery: 111,
-      damageDoneVersatility: 112,
-      healingDoneVersatility: 113,
-      damageTakenVersatility: 114,
-      unknownStat: 115,
-      specId: 116,
+      v22: create(CombatantInfoV22Schema, {
+        primaryStat: 100,
+        stamina: 101,
+        meleeCritRating: 102,
+        rangedCritRating: 103,
+        spellCritRating: 104,
+        speed: 105,
+        leech: 106,
+        meleeHasteRating: 107,
+        rangedHasteRating: 108,
+        spellHasteRating: 109,
+        avoidance: 110,
+        mastery: 111,
+        damageDoneVersatility: 112,
+        healingDoneVersatility: 113,
+        damageTakenVersatility: 114,
+        unknownStat: 115,
+        specId: 116,
+      }),
     }));
     const withoutStats = toBinary(CombatantInfoSchema, create(CombatantInfoSchema, {
       guid: '0xPLAYER',
@@ -127,30 +129,29 @@ describe('FastCombatantInfoCursor', () => {
     const cursor = new FastCombatantInfoCursor(payload);
 
     expect(cursor.next()).toMatchObject({
-      primaryStat: 100,
-      stamina: 101,
-      meleeCritRating: 102,
-      rangedCritRating: 103,
-      spellCritRating: 104,
-      speed: 105,
-      leech: 106,
-      meleeHasteRating: 107,
-      rangedHasteRating: 108,
-      spellHasteRating: 109,
-      avoidance: 110,
-      mastery: 111,
-      damageDoneVersatility: 112,
-      healingDoneVersatility: 113,
-      damageTakenVersatility: 114,
-      unknownStat: 115,
-      specId: 116,
+      v22: {
+        primaryStat: 100,
+        stamina: 101,
+        meleeCritRating: 102,
+        rangedCritRating: 103,
+        spellCritRating: 104,
+        speed: 105,
+        leech: 106,
+        meleeHasteRating: 107,
+        rangedHasteRating: 108,
+        spellHasteRating: 109,
+        avoidance: 110,
+        mastery: 111,
+        damageDoneVersatility: 112,
+        healingDoneVersatility: 113,
+        damageTakenVersatility: 114,
+        unknownStat: 115,
+        specId: 116,
+      },
     });
     expect(cursor.next()).toMatchObject({
       guid: '0xPLAYER',
-      primaryStat: null,
-      stamina: null,
-      unknownStat: null,
-      specId: null,
+      v22: null,
     });
   });
 });
