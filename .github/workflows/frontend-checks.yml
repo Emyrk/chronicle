@@ -6,7 +6,9 @@ on:
       - main
       - develop
     paths:
+      - 'api/chronicleproto/**'
       - 'frontend/chronicle/**'
+      - 'frontend/chronicle-panel-sdk/**'
       - 'frontend/wow-tooltip-renderer/**'
       - '.github/workflows/frontend-checks.yml'
   push:
@@ -47,6 +49,44 @@ jobs:
       - name: Run unit tests
         working-directory: frontend/chronicle
         run: pnpm vitest run --project unit
+
+  panel-sdk-package:
+    name: chronicle-panel-sdk (snapshots + typecheck + test + build)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        working-directory: frontend/chronicle-panel-sdk
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify protobuf snapshots
+        working-directory: frontend/chronicle-panel-sdk
+        run: pnpm run check:protobuf
+
+      - name: Typecheck
+        working-directory: frontend/chronicle-panel-sdk
+        run: pnpm run typecheck
+
+      - name: Test
+        working-directory: frontend/chronicle-panel-sdk
+        run: pnpm test
+
+      - name: Build
+        working-directory: frontend/chronicle-panel-sdk
+        run: pnpm run build
 
   renderer-package:
     name: wow-tooltip-renderer (typecheck + test + build)
