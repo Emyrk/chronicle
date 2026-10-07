@@ -2,40 +2,15 @@ import { useMemo, useState } from "react";
 import { ArrowUpDown, Loader2 } from "lucide-react";
 import type { CensusEntry } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
-import { serverCapabilities } from "@/config/serverCapabilities";
-
-const RACE_TO_FACTION: Record<string, "Horde" | "Alliance" | "Unknown"> = {
-  Orc: "Horde",
-  Troll: "Horde",
-  Tauren: "Horde",
-  Scourge: "Horde",
-  Goblin: "Horde",
-  Human: "Alliance",
-  Dwarf: "Alliance",
-  Gnome: "Alliance",
-  NightElf: "Alliance",
-  BloodElf: serverCapabilities.bloodElfFaction,
-  Draenei: "Alliance",
-  Unknown: "Unknown",
-};
-
-// Display-friendly names
-const RACE_DISPLAY: Record<string, string> = {
-  NightElf: "Night Elf",
-  BloodElf: "Blood Elf",
-  Scourge: "Undead",
-};
-
-function raceName(race: string): string {
-  return RACE_DISPLAY[race] ?? race;
-}
+import { raceFaction, raceName } from "./censusRace";
 
 interface PlayersTabProps {
   data: CensusEntry[] | undefined;
   isLoading: boolean;
+  flavor: readonly string[];
 }
 
-export function PlayersTab({ data, isLoading }: PlayersTabProps) {
+export function PlayersTab({ data, isLoading, flavor }: PlayersTabProps) {
   // null = default (by total count), string = sort by that race column or class row
   const [sortByRace, setSortByRace] = useState<string | null>(null);
   const [sortByClass, setSortByClass] = useState<string | null>(null);
@@ -52,7 +27,7 @@ export function PlayersTab({ data, isLoading }: PlayersTabProps) {
 
     for (const entry of data) {
       total += entry.count;
-      const faction = RACE_TO_FACTION[entry.race] ?? "Unknown";
+      const faction = raceFaction(entry.race, flavor);
       if (faction === "Horde") horde += entry.count;
       else if (faction === "Alliance") alliance += entry.count;
       else unknown += entry.count;
@@ -79,7 +54,7 @@ export function PlayersTab({ data, isLoading }: PlayersTabProps) {
     const raceNames = raceSorted.map(([r]) => r);
 
     return { total, horde, alliance, unknown, classSorted, raceSorted, classMax, raceMax, comboMap, comboMax, classNames, raceNames };
-  }, [data]);
+  }, [data, flavor]);
 
   if (isLoading) {
     return (
@@ -172,13 +147,13 @@ export function PlayersTab({ data, isLoading }: PlayersTabProps) {
           <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">By Race</h3>
           <div className="space-y-2">
             {stats.raceSorted.map(([race, count]) => {
-              const faction = RACE_TO_FACTION[race] ?? "Unknown";
+              const faction = raceFaction(race, flavor);
               const barColor = faction === "Horde" ? "rgb(239 68 68 / 0.6)" : faction === "Alliance" ? "rgb(96 165 250 / 0.6)" : "rgb(163 163 163 / 0.6)";
               const textColor = faction === "Horde" ? "text-red-400" : faction === "Alliance" ? "text-blue-400" : "text-muted-foreground";
               return (
                 <div key={race} className="flex items-center gap-3">
                   <div className={`w-24 text-sm font-medium truncate ${textColor}`}>
-                    {raceName(race)}
+                    {raceName(race, flavor)}
                   </div>
                   <div className="flex-1 h-6 rounded bg-muted/50 overflow-hidden">
                     <div
@@ -201,7 +176,7 @@ export function PlayersTab({ data, isLoading }: PlayersTabProps) {
 
       {/* Class + Race Combinations */}
       {stats.comboMax > 0 && (
-        <ComboMatrix stats={stats} sortByRace={sortByRace} setSortByRace={setSortByRace} sortByClass={sortByClass} setSortByClass={setSortByClass} />
+        <ComboMatrix stats={stats} flavor={flavor} sortByRace={sortByRace} setSortByRace={setSortByRace} sortByClass={sortByClass} setSortByClass={setSortByClass} />
       )}
     </div>
   );
@@ -216,12 +191,14 @@ interface ComboStats {
 
 function ComboMatrix({
   stats,
+  flavor,
   sortByRace,
   setSortByRace,
   sortByClass,
   setSortByClass,
 }: {
   stats: ComboStats;
+  flavor: readonly string[];
   sortByRace: string | null;
   setSortByRace: (v: string | null) => void;
   sortByClass: string | null;
@@ -274,7 +251,7 @@ function ComboMatrix({
             <tr className="border-b bg-muted/30">
               <th className="text-left px-3 py-2 font-medium text-muted-foreground sticky left-0 bg-muted/30">Class</th>
               {sortedRaceNames.map((race) => {
-                const faction = RACE_TO_FACTION[race] ?? "Unknown";
+                const faction = raceFaction(race, flavor);
                 const textColor = faction === "Horde" ? "text-red-400" : faction === "Alliance" ? "text-blue-400" : "text-muted-foreground";
                 const isActive = sortByRace === race;
                 return (
@@ -284,7 +261,7 @@ function ComboMatrix({
                     className={`px-3 py-2 font-medium text-center whitespace-nowrap cursor-pointer select-none transition-colors hover:bg-muted/50 ${textColor} ${isActive ? "bg-muted/60" : ""}`}
                   >
                     <span className="inline-flex items-center gap-1">
-                      {raceName(race)}
+                      {raceName(race, flavor)}
                       {isActive && <ArrowUpDown className="h-3 w-3" />}
                     </span>
                   </th>
