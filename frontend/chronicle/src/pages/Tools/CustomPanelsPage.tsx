@@ -34,7 +34,7 @@ const authorFaq = [
   { q: "What does the entry module export?", a: "A default export { apiVersion: 1, mount(request) }. mount returns an object with optional update(snapshot) and destroy(). The host checks apiVersion before calling mount." },
   { q: "How do I get event data?", a: "Call api.events.getStream(type) for a stream your panel declared. Each call returns a new copy of Chronicle's decompressed binary stream, so request once and transfer the buffer to your worker." },
   { q: "How do workers work?", a: "If the manifest declares a worker, api.workers.create() starts one module worker per mounted panel; a second call throws. The host terminates it on cleanup. There is no main-thread fallback." },
-  { q: "How do I decode streams?", a: "Use the versioned SDK (custom-panel-sdk/v1): types, chronicle-event-stream-v1 cursor and decoders. Bundle it into your worker; Chronicle does not share its internal decoder at runtime." },
+  { q: "How do I decode streams?", a: "Install @emyrk/chronicle-panel-sdk and import its versioned v1 host types, chronicle-event-stream-v1 decoder, and generated protobuf schemas. Bundle the package into your worker so the final artifact remains self-contained." },
   { q: "How should I style and render?", a: "Render into the provided Shadow Root using the documented theme CSS variables. Use root.host.ownerDocument, not window.document, so popped-out panels work." },
   { q: "What else can the host API do?", a: "Set the panel option (opaque string, 2 KiB max), select encounters, toggle players, look up item metadata (512 IDs per call), and observe api.lifecycle.signal for teardown." },
 ]

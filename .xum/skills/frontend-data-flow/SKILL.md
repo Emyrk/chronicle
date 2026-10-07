@@ -41,7 +41,7 @@ Chronicle's frontend handles two distinct data patterns:
 |------|---------|
 | `src/api/typesGenerated.ts` | Auto-generated TypeScript types from Go SDK |
 | `src/api/queries.ts` | React Query hooks for REST API |
-| `src/api/proto/chronicle_pb.ts` | Protobuf message types (auto-generated) |
+| `frontend/chronicle-panel-sdk/src/v1/protobuf/chronicle_pb.ts` | Shared protobuf message types (auto-generated and published with the panel SDK) |
 | `src/api/protodecode/decode.ts` | Binary decoding utilities |
 | `src/hooks/instanceEvents/InstanceEventsContext.tsx` | Stream caching provider |
 | `src/hooks/instanceEvents/useInstanceEvents.ts` | Event stream processing hook |

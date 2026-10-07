@@ -9,6 +9,7 @@
     "paths": {
       "@/constants/dbmem/*": ["./src/constants/dbmem/turtle/*"],
       "@testdata/spellTestVectors": ["./src/api/testdata/spellTestVectors.turtle.generated"],
+      "@emyrk/chronicle-panel-sdk/v1": ["../chronicle-panel-sdk/src/v1/index.ts"],
       "@emyrk/wow-tooltip-renderer": ["../wow-tooltip-renderer/src/index.ts"],
       "@/*": ["./src/*"]
     }

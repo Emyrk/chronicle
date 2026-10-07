@@ -79,7 +79,7 @@ Chronicle's generated bindings are:
 
 ```text
 api/chronicleproto/chronicle.pb.go
-frontend/chronicle/src/api/proto/chronicle_pb.ts
+frontend/chronicle-panel-sdk/src/v1/protobuf/chronicle_pb.ts
 ```
 
 External clients can copy `chronicle.proto` and generate bindings with their normal protobuf toolchain. For example:

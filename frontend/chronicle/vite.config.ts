@@ -66,6 +66,8 @@ export default defineConfig({
       "@/constants/dbmem": path.resolve(__dirname, `src/constants/dbmem/${process.env.SERVER || 'turtle'}`),
       // Server-specific spell test vectors
       "@testdata/spellTestVectors": path.resolve(__dirname, `src/api/testdata/spellTestVectors.${process.env.SERVER || 'turtle'}.generated`),
+      // Shared custom-panel SDK package
+      "@emyrk/chronicle-panel-sdk/v1": path.resolve(__dirname, "../chronicle-panel-sdk/src/v1/index.ts"),
       // Shared pure tooltip renderer package
       "@emyrk/wow-tooltip-renderer": path.resolve(__dirname, "../wow-tooltip-renderer/src/index.ts"),
       "@": path.resolve(__dirname, "src"),
