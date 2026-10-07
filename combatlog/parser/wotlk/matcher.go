@@ -55,7 +55,7 @@ func parseSpellPrefix(m *Matched) spellInfo {
 func (p *Parser) dispatch(ts time.Time, event string, m *Matched, raw string) ([]messages.Message, error) {
 	// Special events first — these have base params but unique structure.
 	switch event {
-	case "UNIT_DIED", "UNIT_DESTROYED":
+	case "UNIT_DIED", "UNIT_DESTROYED", "UNIT_DISSIPATES":
 		return p.unitDied(ts, m)
 	case "PARTY_KILL":
 		return p.partyKill(ts, m)
@@ -774,7 +774,7 @@ func (p *Parser) suffixInstakill(ts time.Time, base baseParams, m *Matched) ([]m
 // Special events
 // ---------------------------------------------------------------------------
 
-// unitDied handles UNIT_DIED and UNIT_DESTROYED.
+// unitDied handles unit removal events that do not identify a killer.
 func (p *Parser) unitDied(ts time.Time, m *Matched) ([]messages.Message, error) {
 	base := parseBase(m)
 	p.guidNames.Record(base.sourceGUID, base.sourceName)

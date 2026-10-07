@@ -180,6 +180,19 @@ func TestTransformV22Damage(t *testing.T) {
 	assert.Contains(t, converted, `686,"Shadow Bolt",0x20,15,-1,32,0,0,0,nil,nil,nil`)
 }
 
+func TestTransformV22UnitDissipates(t *testing.T) {
+	t.Parallel()
+
+	r := newTransformReader(strings.NewReader(""))
+	_, err := r.transform(`9/20/2026 15:02:05.988-5  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,0,BUILD_VERSION,1.60.1,PROJECT_ID,18`)
+	require.NoError(t, err)
+
+	converted, err := r.transform(`9/20/2026 15:02:08.135-5  UNIT_DISSIPATES,0000000000000000,nil,0x80000000,0x80000000,Creature-0-6783-0-16021-1512-0000B03B52,"Duskbat",0xa28,0x80000000,0,-1`)
+	require.NoError(t, err)
+	assert.Contains(t, converted, `UNIT_DISSIPATES,0x0000000000000000,nil,0x80000000,`)
+	assert.Contains(t, converted, `,"Duskbat",0xa28,0,-1`)
+}
+
 func TestTransformV22EmitsUnitTelemetry(t *testing.T) {
 	t.Parallel()
 

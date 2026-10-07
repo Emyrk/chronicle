@@ -141,6 +141,6 @@ func splitEvent(event string) (prefix, suffix string) {
 		}
 	}
 
-	// Special events: UNIT_DIED, UNIT_DESTROYED, PARTY_KILL, ENCHANT_*, etc.
+	// Special events: UNIT_DIED, UNIT_DESTROYED, UNIT_DISSIPATES, PARTY_KILL, ENCHANT_*, etc.
 	return event, ""
 }
