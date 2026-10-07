@@ -1,11 +1,16 @@
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { Loader2, ArrowLeft, Search } from "lucide-react";
 import { useState } from "react";
-import { useSpell } from "@/api/queries";
+import { useSiteConfig, useSpell } from "@/api/queries";
 import { SpellTooltip } from "./SpellTooltip";
 import { LocaleSelector } from "./LocaleSelector";
 import type { LocaleIndex } from "@/api/wowdb";
 import { getDamageTypeLabels, getAttackOutcomeLabels, AttackOutcome, SpellDamageType } from "@/api/wowdb";
+import {
+  parseSpellPlayerLevel,
+  spellLevelCapForFlavor,
+  spellUsesPlayerLevel,
+} from "./spellPlayerLevel";
 import { DamageTypeBadge } from "@/components/SpellSchoolBadge";
 
 export function SpellPage() {
@@ -13,6 +18,15 @@ export function SpellPage() {
   const [searchId, setSearchId] = useState(spellId || "");
   const [searchParams, setSearchParams] = useSearchParams();
   const locale = (searchParams.get("locale") || "0") as LocaleIndex;
+
+  const { data: siteConfig } = useSiteConfig();
+  const maxPlayerLevel = spellLevelCapForFlavor(
+    siteConfig?.dataset_flavor ?? [],
+  );
+  const playerLevel = parseSpellPlayerLevel(
+    searchParams.get("level"),
+    maxPlayerLevel,
+  );
 
   const setLocale = (newLocale: LocaleIndex) => {
     setSearchParams((prev) => {
@@ -25,10 +39,26 @@ export function SpellPage() {
       return next;
     });
   };
+
+  const setPlayerLevel = (level: number) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (level === maxPlayerLevel) {
+        next.delete("level");
+      } else {
+        next.set("level", String(level));
+      }
+      return next;
+    });
+  };
   
   const { data: spell, isLoading, error } = useSpell(spellId || "", undefined, {
     enabled: !!spellId,
   });
+
+  const usesPlayerLevel = spell
+    ? spellUsesPlayerLevel(spell, locale)
+    : false;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,7 +186,46 @@ export function SpellPage() {
             <h2 className="text-sm font-medium text-muted-foreground mb-2">
               Tooltip Preview
             </h2>
-            <SpellTooltip spell={spell} locale={locale} />
+            {usesPlayerLevel && (
+              <div className="mb-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2.5">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label
+                    htmlFor="spell-player-level"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    Player level
+                  </label>
+                  <output
+                    htmlFor="spell-player-level"
+                    className="min-w-16 rounded border border-yellow-500/20 bg-background/70 px-2 py-0.5 text-center text-sm font-semibold tabular-nums text-yellow-400"
+                  >
+                    Level {playerLevel}
+                  </output>
+                </div>
+                <input
+                  id="spell-player-level"
+                  type="range"
+                  min={1}
+                  max={maxPlayerLevel}
+                  step={1}
+                  value={playerLevel}
+                  aria-valuetext={`Level ${playerLevel}`}
+                  onChange={(event) =>
+                    setPlayerLevel(Number(event.currentTarget.value))
+                  }
+                  className="h-2 w-full cursor-pointer accent-yellow-500"
+                />
+                <div className="mt-1 flex justify-between text-[10px] tabular-nums text-muted-foreground">
+                  <span>1</span>
+                  <span>{maxPlayerLevel}</span>
+                </div>
+              </div>
+            )}
+            <SpellTooltip
+              spell={spell}
+              locale={locale}
+              playerLevel={usesPlayerLevel ? playerLevel : undefined}
+            />
           </div>
 
           {/* Raw Data */}

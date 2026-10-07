@@ -258,15 +258,19 @@ describe("resolveSpellDescription — description variables", () => {
         "$base=${5.741530-0.255683*$PL+0.032656*$PL*$PL}",
     });
 
-    expect(resolveSpellDescription(blunderbuss, "$<base>")).toBe("6");
+    expect(
+      resolveSpellDescription(blunderbuss, "$<base>", undefined, 60),
+    ).toBe("108");
 
     expect(
       resolveSpellDescription(
         blunderbuss,
         "Fire a musket blast at up to $i enemies in a cone in front of you for ${$<base>*$m1/100+$m2/100*$AP} to ${$<base>*$M1/100+$m2/100*$AP} Physical damage.",
+        undefined,
+        60,
       ),
     ).toBe(
-      "Fire a musket blast at up to 4 enemies in a cone in front of you for 11 to 16 Physical damage.",
+      "Fire a musket blast at up to 4 enemies in a cone in front of you for 207 to 311 Physical damage.",
     );
   });
 

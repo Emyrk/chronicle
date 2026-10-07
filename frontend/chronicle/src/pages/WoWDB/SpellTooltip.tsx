@@ -20,11 +20,19 @@ interface SpellTooltipProps {
   locale?: LocaleIndex;
   /** Show detailed view with duration and aura effects. Defaults to false (simple view). */
   detailed?: boolean;
+  /** Player level used by tooltip formulas such as $PL. */
+  playerLevel?: number;
   /** Optional content rendered below the spell details. */
   footer?: ReactNode;
 }
 
-export function SpellTooltip({ spell, locale = "0", detailed = false, footer }: SpellTooltipProps) {
+export function SpellTooltip({
+  spell,
+  locale = "0",
+  detailed = false,
+  playerLevel,
+  footer,
+}: SpellTooltipProps) {
   const iconBaseUrl = useIconBaseUrl();
   const name = getLocalizedText(spell.name, locale);
   const rank = getLocalizedText(spell.subtext, locale);
@@ -68,8 +76,18 @@ export function SpellTooltip({ spell, locale = "0", detailed = false, footer }: 
   }, [referencedIds, refQueries]);
 
   // Resolve descriptions with cross-spell references
-  const description = resolveSpellDescription(spell, descriptionTemplate, referencedSpells);
-  const auraDesc = resolveSpellDescription(spell, auraDescTemplate, referencedSpells);
+  const description = resolveSpellDescription(
+    spell,
+    descriptionTemplate,
+    referencedSpells,
+    playerLevel,
+  );
+  const auraDesc = resolveSpellDescription(
+    spell,
+    auraDescTemplate,
+    referencedSpells,
+    playerLevel,
+  );
 
   // Select the canonical default power. Older payloads use the renderer's
   // explicit scalar compatibility projection.

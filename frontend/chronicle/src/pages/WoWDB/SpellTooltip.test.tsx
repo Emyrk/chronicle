@@ -47,6 +47,20 @@ describe("SpellTooltip", () => {
     expect(markup.indexOf("Applied by Brannor")).toBeGreaterThan(markup.indexOf("Test Aura"));
   });
 
+  it("renders player-level formulas with the selected level", () => {
+    const levelScaledSpell = {
+      ...spell,
+      spell_level: 1,
+      description: { "0": "Deals ${2*$PL} damage." },
+    } as WoWSpell;
+
+    const markup = renderToStaticMarkup(
+      <SpellTooltip spell={levelScaledSpell} playerLevel={60} />,
+    );
+
+    expect(markup).toContain("Deals 120 damage.");
+  });
+
   it("renders the canonical default power instead of scalar compatibility fields", () => {
     const canonicalSpell = {
       ...spell,
