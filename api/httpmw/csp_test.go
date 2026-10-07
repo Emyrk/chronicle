@@ -26,7 +26,8 @@ func TestContentSecurityPolicy(t *testing.T) {
 	require.NotEmpty(t, csp)
 
 	assert.Contains(t, csp, "default-src 'self'")
-	assert.Contains(t, csp, "script-src")
+	assert.Contains(t, csp, "script-src 'self' 'unsafe-inline' blob:")
+	assert.Contains(t, csp, "connect-src 'self' https://raw.githubusercontent.com")
 	assert.Contains(t, csp, "frame-ancestors 'none'")
 	assert.Contains(t, csp, "worker-src 'self' blob:")
 }

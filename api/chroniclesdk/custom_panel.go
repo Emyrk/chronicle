@@ -37,9 +37,15 @@ type CustomPanelManifestHost struct {
 }
 
 type CustomPanelManifestArtifacts struct {
-	Entry  string `json:"entry"`
-	Worker string `json:"worker,omitempty"`
-	Styles string `json:"styles,omitempty"`
+	Entry  CustomPanelManifestArtifact  `json:"entry"`
+	Worker *CustomPanelManifestArtifact `json:"worker,omitempty"`
+	Styles *CustomPanelManifestArtifact `json:"styles,omitempty"`
+}
+
+type CustomPanelManifestArtifact struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
 }
 
 type CustomPanelManifestPanel struct {

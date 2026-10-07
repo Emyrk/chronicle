@@ -948,10 +948,17 @@ export interface CustomPanelManifest {
 }
 
 // From chroniclesdk/custom_panel.go
+export interface CustomPanelManifestArtifact {
+    readonly path: string;
+    readonly sha256: string;
+    readonly size: number;
+}
+
+// From chroniclesdk/custom_panel.go
 export interface CustomPanelManifestArtifacts {
-    readonly entry: string;
-    readonly worker?: string;
-    readonly styles?: string;
+    readonly entry: CustomPanelManifestArtifact;
+    readonly worker?: CustomPanelManifestArtifact;
+    readonly styles?: CustomPanelManifestArtifact;
 }
 
 // From chroniclesdk/custom_panel.go

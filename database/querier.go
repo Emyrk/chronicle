@@ -113,6 +113,7 @@ type sqlcQuerier interface {
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
 	DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error)
+	DeleteOrphanCustomPanelReleases(ctx context.Context) (int64, error)
 	// Remove parse score results for a tenant+instance (before re-computation).
 	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
 	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
@@ -137,6 +138,7 @@ type sqlcQuerier interface {
 	DeleteUploadKey(ctx context.Context, id uuid.UUID) error
 	DeleteUserCharacterLink(ctx context.Context, arg DeleteUserCharacterLinkParams) (UserCharacterLink, error)
 	DeleteUserCharacterLinksByUserAndSource(ctx context.Context, arg DeleteUserCharacterLinksByUserAndSourceParams) ([]UserCharacterLink, error)
+	DeleteUserCustomPanelInstallationsExcept(ctx context.Context, arg DeleteUserCustomPanelInstallationsExceptParams) error
 	DeleteUserFavoriteGuild(ctx context.Context, arg DeleteUserFavoriteGuildParams) error
 	DeleteUserFavoritePlayer(ctx context.Context, arg DeleteUserFavoritePlayerParams) error
 	DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID) (int64, error)
@@ -485,6 +487,7 @@ type sqlcQuerier interface {
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
+	InsertCustomPanelRelease(ctx context.Context, arg InsertCustomPanelReleaseParams) (CustomPanelRelease, error)
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
 	InsertDerivedConsumableBuffs(ctx context.Context, datasetID uuid.UUID) (int64, error)
 	InsertDerivedConsumables(ctx context.Context, datasetID uuid.UUID) (int64, error)
@@ -667,6 +670,7 @@ type sqlcQuerier interface {
 	// or via a server they own (wow_servers.default_dataset_id).
 	ListTenantsByDataset(ctx context.Context, defaultDatasetID uuid.NullUUID) ([]ListTenantsByDatasetRow, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
+	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
 	ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error)
 	ListUserFavoritePlayers(ctx context.Context, userID uuid.UUID) ([]ListUserFavoritePlayersRow, error)
 	ListUserPanelLayouts(ctx context.Context, userID uuid.NullUUID) ([]ListUserPanelLayoutsRow, error)
@@ -919,6 +923,7 @@ type sqlcQuerier interface {
 	// return the existing row's ID.
 	UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error)
 	UpsertUserActionBarSlots(ctx context.Context, arg UpsertUserActionBarSlotsParams) (UpsertUserActionBarSlotsRow, error)
+	UpsertUserCustomPanelInstallation(ctx context.Context, arg UpsertUserCustomPanelInstallationParams) (UserCustomPanelInstallation, error)
 	UpsertUserCustomPanelSettings(ctx context.Context, arg UpsertUserCustomPanelSettingsParams) (UserCustomPanelSetting, error)
 }
 

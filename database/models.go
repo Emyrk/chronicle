@@ -829,6 +829,16 @@ type ClassBuffIgnore struct {
 	Ignored        bool               `db:"ignored" json:"ignored"`
 }
 
+type CustomPanelRelease struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	Repository     string             `db:"repository" json:"repository"`
+	CommitSha      string             `db:"commit_sha" json:"commit_sha"`
+	Manifest       []byte             `db:"manifest" json:"manifest"`
+	ManifestSha256 string             `db:"manifest_sha256" json:"manifest_sha256"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type DataGrant struct {
 	ID           uuid.UUID          `db:"id" json:"id"`
 	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
@@ -2183,13 +2193,22 @@ type UserCharacterLink struct {
 	LinkSource    string             `db:"link_source" json:"link_source"`
 }
 
+type UserCustomPanelInstallation struct {
+	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
+	Repository   string             `db:"repository" json:"repository"`
+	ReleaseID    uuid.UUID          `db:"release_id" json:"release_id"`
+	InstalledRef string             `db:"installed_ref" json:"installed_ref"`
+	Enabled      bool               `db:"enabled" json:"enabled"`
+	InstalledAt  pgtype.Timestamptz `db:"installed_at" json:"installed_at"`
+	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type UserCustomPanelSetting struct {
-	UserID        uuid.UUID          `db:"user_id" json:"user_id"`
-	Enabled       bool               `db:"enabled" json:"enabled"`
-	Installations []byte             `db:"installations" json:"installations"`
-	Revision      int64              `db:"revision" json:"revision"`
-	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Enabled   bool               `db:"enabled" json:"enabled"`
+	Revision  int64              `db:"revision" json:"revision"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type UserFavoriteGuild struct {

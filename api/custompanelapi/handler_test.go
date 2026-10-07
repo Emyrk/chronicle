@@ -2,8 +2,6 @@ package custompanelapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -32,9 +30,9 @@ func validManifest() chroniclesdk.CustomPanelManifest {
 		},
 		Host: chroniclesdk.CustomPanelManifestHost{APIVersion: 1},
 		Artifacts: chroniclesdk.CustomPanelManifestArtifacts{
-			Entry:  "dist/panel.js",
-			Worker: "dist/worker.js",
-			Styles: "dist/panel.css",
+			Entry:  chroniclesdk.CustomPanelManifestArtifact{Path: "dist/panel.js", SHA256: strings.Repeat("a", 64), Size: 25},
+			Worker: ptr(chroniclesdk.CustomPanelManifestArtifact{Path: "dist/worker.js", SHA256: strings.Repeat("b", 64), Size: 26}),
+			Styles: ptr(chroniclesdk.CustomPanelManifestArtifact{Path: "dist/panel.css", SHA256: strings.Repeat("c", 64), Size: 21}),
 		},
 		Panels: []chroniclesdk.CustomPanelManifestPanel{{
 			ID:          "raid-cooldowns",
@@ -48,22 +46,18 @@ func validManifest() chroniclesdk.CustomPanelManifest {
 
 func validInstallation() chroniclesdk.CustomPanelInstallation {
 	digest := strings.Repeat("a", 64)
-	worker := chroniclesdk.CustomPanelArtifact{URL: "/api/v1/custom-panels/github/owner/repo/" + testCommit + "/worker", SHA256: digest, Size: 2}
-	styles := chroniclesdk.CustomPanelArtifact{URL: "/api/v1/custom-panels/github/owner/repo/" + testCommit + "/styles", SHA256: digest, Size: 3}
+	manifest := validManifest()
+	artifacts := ArtifactSet("owner/repo", testCommit, manifest.Artifacts)
 	return chroniclesdk.CustomPanelInstallation{
 		Repository:     "owner/repo",
 		CommitSHA:      testCommit,
 		InstalledRef:   "main",
-		Manifest:       validManifest(),
+		Manifest:       manifest,
 		ManifestSHA256: digest,
-		Artifacts: chroniclesdk.CustomPanelArtifactSet{
-			Entry:  chroniclesdk.CustomPanelArtifact{URL: "/api/v1/custom-panels/github/owner/repo/" + testCommit + "/entry", SHA256: digest, Size: 1},
-			Worker: &worker,
-			Styles: &styles,
-		},
-		Enabled:     true,
-		InstalledAt: "2026-10-06T00:00:00Z",
-		UpdatedAt:   "2026-10-06T00:00:00Z",
+		Artifacts:      artifacts,
+		Enabled:        true,
+		InstalledAt:    "2026-10-06T00:00:00Z",
+		UpdatedAt:      "2026-10-06T00:00:00Z",
 	}
 }
 
@@ -125,13 +119,18 @@ func performRequest(handler http.Handler, method, target, body string) *httptest
 func TestResolve(t *testing.T) {
 	t.Parallel()
 	manifest := validManifest()
-	server := githubServer(t, manifest, nil)
+	var artifactRequests atomic.Int32
+	server := githubServer(t, manifest, func(w http.ResponseWriter, r *http.Request) bool {
+		if strings.Contains(r.URL.Path, "/dist/") {
+			artifactRequests.Add(1)
+			http.Error(w, "artifacts must not be fetched", http.StatusInternalServerError)
+			return true
+		}
+		return false
+	})
 	defer server.Close()
 
 	handler := newTestHandler(server, time.Second).Routes()
-	entryBytes := []byte("export const panel = true;")
-	entryHash := sha256.Sum256(entryBytes)
-
 	for _, ref := range []string{"", "main", "feature/custom-panel", "v1.0.0", testCommit} {
 		ref := ref
 		t.Run(ref, func(t *testing.T) {
@@ -143,14 +142,15 @@ func TestResolve(t *testing.T) {
 			assert.Equal(t, "owner/repo", response.Repository)
 			assert.Equal(t, testCommit, response.CommitSHA)
 			assert.Equal(t, manifest, response.Manifest)
-			assert.Equal(t, hex.EncodeToString(entryHash[:]), response.Artifacts.Entry.SHA256)
-			assert.Equal(t, int64(len(entryBytes)), response.Artifacts.Entry.Size)
-			assert.Equal(t, "/api/v1/custom-panels/github/owner/repo/"+testCommit+"/entry", response.Artifacts.Entry.URL)
+			assert.Equal(t, manifest.Artifacts.Entry.SHA256, response.Artifacts.Entry.SHA256)
+			assert.Equal(t, manifest.Artifacts.Entry.Size, response.Artifacts.Entry.Size)
+			assert.Equal(t, "https://raw.githubusercontent.com/owner/repo/"+testCommit+"/dist/panel.js", response.Artifacts.Entry.URL)
 			require.NotNil(t, response.Artifacts.Worker)
 			require.NotNil(t, response.Artifacts.Styles)
 			assert.Len(t, response.ManifestSHA256, 64)
 		})
 	}
+	assert.Zero(t, artifactRequests.Load())
 }
 
 func TestResolveRejectsInvalidSourceBeforeGitHub(t *testing.T) {
@@ -196,10 +196,13 @@ func TestValidateManifest(t *testing.T) {
 			m.Panels[0].Streams = []chroniclesdk.WoWEventType{"unknown"}
 		}},
 		{"uppercase stream", func(m *chroniclesdk.CustomPanelManifest) { m.Panels[0].Streams = []chroniclesdk.WoWEventType{"AURA"} }},
-		{"worker missing", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Worker = "" }},
-		{"path traversal", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Entry = "dist/../panel.js" }},
-		{"absolute path", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Entry = "/panel.js" }},
-		{"path query", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Entry = "panel.js?raw=1" }},
+		{"worker missing", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Worker = nil }},
+		{"path traversal", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Entry.Path = "dist/../panel.js" }},
+		{"absolute path", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Entry.Path = "/panel.js" }},
+		{"path query", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Entry.Path = "panel.js?raw=1" }},
+		{"uppercase digest", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Entry.SHA256 = strings.Repeat("A", 64) }},
+		{"negative size", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Entry.Size = -1 }},
+		{"oversized entry declaration", func(m *chroniclesdk.CustomPanelManifest) { m.Artifacts.Entry.Size = maxEntrySize + 1 }},
 		{"bad homepage host", func(m *chroniclesdk.CustomPanelManifest) { m.Plugin.Homepage = "https://example.com/owner/repo" }},
 		{"too many panels", func(m *chroniclesdk.CustomPanelManifest) {
 			for len(m.Panels) <= maxPanels {
@@ -255,18 +258,6 @@ func TestResolveRejectsInvalidAndOversizedContent(t *testing.T) {
 			wantStatus: http.StatusRequestEntityTooLarge,
 		},
 		{
-			name: "oversized entry streamed",
-			mutate: func(w http.ResponseWriter, r *http.Request) bool {
-				if strings.HasSuffix(r.URL.Path, "/dist/panel.js") {
-					w.(http.Flusher).Flush()
-					_, _ = w.Write([]byte(strings.Repeat("x", maxEntrySize+1)))
-					return true
-				}
-				return false
-			},
-			wantStatus: http.StatusRequestEntityTooLarge,
-		},
-		{
 			name: "upstream error",
 			mutate: func(w http.ResponseWriter, r *http.Request) bool {
 				if strings.Contains(r.URL.Path, "/commits/") {
@@ -296,67 +287,6 @@ func TestResolveRejectsInvalidAndOversizedContent(t *testing.T) {
 			rec := performRequest(newTestHandler(server, time.Second).Routes(), http.MethodPost, "/resolve", `{"repository":"owner/repo","ref":"main"}`)
 			assert.Equal(t, tc.wantStatus, rec.Code, rec.Body.String())
 		})
-	}
-}
-
-func TestArtifact(t *testing.T) {
-	t.Parallel()
-	server := githubServer(t, validManifest(), nil)
-	defer server.Close()
-	handler := newTestHandler(server, time.Second).Routes()
-	base := "/github/owner/repo/" + testCommit + "/"
-
-	for _, tc := range []struct {
-		name        string
-		contentType string
-		body        string
-	}{
-		{"entry", "text/javascript; charset=utf-8", "export const panel = true;"},
-		{"worker", "text/javascript; charset=utf-8", "self.onmessage = () => {};"},
-		{"styles", "text/css; charset=utf-8", ":host { color: red; }"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			rec := performRequest(handler, http.MethodGet, base+tc.name, "")
-			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-			assert.Equal(t, tc.contentType, rec.Header().Get("Content-Type"))
-			assert.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
-			assert.Equal(t, "public, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
-			assert.Regexp(t, `^"sha256-[0-9a-f]{64}"$`, rec.Header().Get("ETag"))
-			assert.Equal(t, tc.body, rec.Body.String())
-		})
-	}
-
-	first := performRequest(handler, http.MethodGet, base+"entry", "")
-	req := httptest.NewRequest(http.MethodGet, base+"entry", nil)
-	req.Header.Set("If-None-Match", first.Header().Get("ETag"))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusNotModified, rec.Code)
-	assert.Empty(t, rec.Body.String())
-}
-
-func TestArtifactRejectsInvalidOrUndeclaredRequests(t *testing.T) {
-	t.Parallel()
-	manifest := validManifest()
-	manifest.Artifacts.Worker = ""
-	manifest.Panels[0].Worker = false
-	server := githubServer(t, manifest, nil)
-	defer server.Close()
-	handler := newTestHandler(server, time.Second).Routes()
-
-	tests := []struct {
-		path string
-		code int
-	}{
-		{"/github/owner/repo/not-a-sha/entry", http.StatusBadRequest},
-		{"/github/owner/repo/" + strings.ToUpper(testCommit) + "/entry", http.StatusBadRequest},
-		{"/github/owner/repo/" + testCommit + "/worker", http.StatusNotFound},
-		{"/github/owner/repo/" + testCommit + "/manifest", http.StatusNotFound},
-		{"/github/bad_owner/repo/" + testCommit + "/entry", http.StatusBadRequest},
-	}
-	for _, tc := range tests {
-		rec := performRequest(handler, http.MethodGet, tc.path, "")
-		assert.Equal(t, tc.code, rec.Code, tc.path+": "+rec.Body.String())
 	}
 }
 
