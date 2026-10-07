@@ -236,7 +236,7 @@ func TestParseV22UnitTelemetry(t *testing.T) {
 
 	input, err := os.ReadFile("testdata/wow_forever_v22_advanced.log")
 	require.NoError(t, err)
-	p, err := New(context.Background(), slog.Default(), strings.NewReader(string(input)), hermesProxyTestDB{}, hermesProxyTestDB{}, nil)
+	p, err := New(context.Background(), slog.Default(), strings.NewReader(string(input)), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
 	require.NoError(t, err)
 
 	var position *messages.UnitPosition
@@ -295,7 +295,7 @@ func TestParseV22CompoundResourceSnapshotUsesPrimaryResource(t *testing.T) {
 
 	input, err := os.ReadFile("testdata/wow_forever_v22_compound_resources.log")
 	require.NoError(t, err)
-	p, err := New(context.Background(), slog.Default(), strings.NewReader(string(input)), hermesProxyTestDB{}, hermesProxyTestDB{}, nil)
+	p, err := New(context.Background(), slog.Default(), strings.NewReader(string(input)), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
 	require.NoError(t, err)
 
 	var resources *messages.UnitResources
@@ -642,7 +642,7 @@ func TestParseWorldMarkers(t *testing.T) {
 		`9/8/2026 12:00:01.000-6  WORLD_MARKER_PLACED,564,8,123.45,-67.89`,
 		`9/8/2026 12:00:02.000-6  WORLD_MARKER_REMOVED,564,8`,
 	}, "\n")
-	parser, err := New(context.Background(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil)
+	parser, err := New(context.Background(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, "")
 	require.NoError(t, err)
 
 	var markers []*messages.WorldMarker
