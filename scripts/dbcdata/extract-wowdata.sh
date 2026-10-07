@@ -161,6 +161,7 @@ REQUIRED_TABLES=(
   Item
   ItemSparse
   ItemEffect
+  ItemXItemEffect
   ItemDisplayInfo
   SpellItemEnchantment
   ItemSet

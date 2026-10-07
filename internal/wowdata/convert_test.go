@@ -37,6 +37,15 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 		map[string]any{"ID": 1, "SpellID": 100, "OrderIndex": 0, "ManaCost": 10})
 	writeRows(t, dir, "Item", map[string]any{"ID": 1, "ClassID": 2, "SubclassID": 3, "IconFileDataID": 23456}, map[string]any{"ID": 2})
 	writeRows(t, dir, "ItemSparse", map[string]any{"ID": 1, "Display_lang": "Safe Item", "OverallQualityID": 2, "Flags": []int{7}, "AllowableRace": []int{-1, -1}}, map[string]any{"ID": 3, "Display_lang": "orphan"})
+	writeRows(t, dir, "ItemEffect",
+		map[string]any{"ID": 101, "LegacySlotIndex": 0, "TriggerType": 0, "Charges": -1, "CoolDownMSec": 30000, "CategoryCoolDownMSec": 60000, "SpellCategoryID": 4, "SpellID": 100},
+		map[string]any{"ID": 102, "LegacySlotIndex": 1, "TriggerType": 6, "Charges": 2, "CoolDownMSec": 1500, "CategoryCoolDownMSec": 0, "SpellCategoryID": 0, "SpellID": 200},
+		map[string]any{"ID": 103, "LegacySlotIndex": 5, "TriggerType": 0, "SpellID": 300})
+	writeRows(t, dir, "ItemXItemEffect",
+		map[string]any{"ID": 201, "ItemEffectID": 101, "ItemID": 1},
+		map[string]any{"ID": 202, "ItemEffectID": 102, "ItemID": 1},
+		map[string]any{"ID": 203, "ItemEffectID": 103, "ItemID": 1},
+		map[string]any{"ID": 204, "ItemEffectID": 999, "ItemID": 1})
 	writeRows(t, dir, "TraitTree", map[string]any{"ID": 900})
 	writeRows(t, dir, "TraitNode", map[string]any{"ID": 9, "TraitTreeID": 900, "PosX": 0, "PosY": 0})
 	writeRows(t, dir, "TraitNodeEntry", map[string]any{"ID": 19, "TraitDefinitionID": 29, "MaxRanks": 1})
@@ -102,6 +111,16 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	require.Len(t, got.Items, 1)
 	require.Equal(t, int32(0), got.Items[0].DisplayID, "display IDs must not be guessed")
 	require.Equal(t, "inv_sword_10", got.Items[0].Icon)
+	require.Equal(t, int32(100), got.Items[0].Spellid1)
+	require.Equal(t, int32(0), got.Items[0].Spelltrigger1)
+	require.Equal(t, int32(-1), got.Items[0].Spellcharges1)
+	require.Equal(t, int32(30000), got.Items[0].Spellcooldown1)
+	require.Equal(t, int32(4), got.Items[0].Spellcategory1)
+	require.Equal(t, int32(60000), got.Items[0].Spellcategorycooldown1)
+	require.Equal(t, int32(200), got.Items[0].Spellid2)
+	require.Equal(t, int32(6), got.Items[0].Spelltrigger2)
+	require.Equal(t, int32(2), got.Items[0].Spellcharges2)
+	require.Zero(t, got.Items[0].Spellid5, "effects outside the five legacy slots must be ignored")
 	require.Equal(t, []int32{2}, got.Losses.MissingItemSparseIDs)
 	require.Equal(t, []int32{3}, got.Losses.MissingItemBaseIDs)
 	require.Len(t, got.SpellCastTimes, 1)
