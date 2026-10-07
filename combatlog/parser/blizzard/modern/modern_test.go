@@ -596,3 +596,70 @@ func TestTransformEncounterBoundaries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `9/8 18:05:00.000  BLIZZARD_ENCOUNTER_END,601,"Boss",4,25,1`, end)
 }
+
+func TestTransformWorldMarkers(t *testing.T) {
+	t.Parallel()
+
+	reader := newTransformReader(strings.NewReader(""))
+	placed, err := reader.transform(`9/8/2026 12:00:00.000-6  WORLD_MARKER_PLACED,564,8,123.45,-67.89`)
+	require.NoError(t, err)
+	assert.Equal(t, `9/8 18:00:00.000  BLIZZARD_WORLD_MARKER_PLACED,564,8,123.45,-67.89`, placed)
+
+	ts, _, matched, err := wotlk.ParseLine(placed)
+	require.NoError(t, err)
+	parsed, err := (&Parser{}).worldMarkerPlaced(ts, matched, "")
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+	marker, ok := parsed[0].(*messages.WorldMarker)
+	require.True(t, ok)
+	assert.Equal(t, uint32(564), marker.InstanceID)
+	assert.Equal(t, int32(8), marker.Marker)
+	assert.True(t, marker.Placed)
+	assert.Equal(t, 123.45, marker.X)
+	assert.Equal(t, -67.89, marker.Y)
+
+	removed, err := reader.transform(`9/8/2026 12:01:00.000-6  WORLD_MARKER_REMOVED,564,8`)
+	require.NoError(t, err)
+	assert.Equal(t, `9/8 18:01:00.000  BLIZZARD_WORLD_MARKER_REMOVED,564,8`, removed)
+
+	ts, _, matched, err = wotlk.ParseLine(removed)
+	require.NoError(t, err)
+	parsed, err = (&Parser{}).worldMarkerRemoved(ts, matched, "")
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+	marker, ok = parsed[0].(*messages.WorldMarker)
+	require.True(t, ok)
+	assert.Equal(t, uint32(564), marker.InstanceID)
+	assert.Equal(t, int32(8), marker.Marker)
+	assert.False(t, marker.Placed)
+}
+
+func TestParseWorldMarkers(t *testing.T) {
+	t.Parallel()
+
+	input := strings.Join([]string{
+		`9/8/2026 12:00:00.000-6  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,0,BUILD_VERSION,1.60.1,PROJECT_ID,18`,
+		`9/8/2026 12:00:01.000-6  WORLD_MARKER_PLACED,564,8,123.45,-67.89`,
+		`9/8/2026 12:00:02.000-6  WORLD_MARKER_REMOVED,564,8`,
+	}, "\n")
+	parser, err := New(context.Background(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil)
+	require.NoError(t, err)
+
+	var markers []*messages.WorldMarker
+	for {
+		batch, advanceErr := parser.Advance(context.Background())
+		for _, msg := range batch {
+			if marker, ok := msg.(*messages.WorldMarker); ok {
+				markers = append(markers, marker)
+			}
+		}
+		if advanceErr == io.EOF {
+			break
+		}
+		require.NoError(t, advanceErr)
+	}
+
+	require.Len(t, markers, 2)
+	assert.True(t, markers[0].Placed)
+	assert.False(t, markers[1].Placed)
+}
