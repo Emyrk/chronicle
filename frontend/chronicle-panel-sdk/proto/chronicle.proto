@@ -273,23 +273,31 @@ message CombatantInfo {
 // melee/ranged/spell and damage/healing/taken variants preserve the
 // triplicate source fields.
 message CombatantInfoV22 {
-  optional int32 primaryStat = 1;
-  optional int32 stamina = 2;
-  optional int32 meleeCritRating = 3;
-  optional int32 rangedCritRating = 4;
-  optional int32 spellCritRating = 5;
-  optional int32 speed = 6;
-  optional int32 leech = 7;
-  optional int32 meleeHasteRating = 8;
-  optional int32 rangedHasteRating = 9;
-  optional int32 spellHasteRating = 10;
-  optional int32 avoidance = 11;
-  optional int32 mastery = 12;
-  optional int32 damageDoneVersatility = 13;
-  optional int32 healingDoneVersatility = 14;
-  optional int32 damageTakenVersatility = 15;
-  optional int32 unknownStat = 16; // Purpose is not yet verified.
-  optional int32 specId = 17;
+  optional int32 teamId = 1;
+  optional int32 strength = 2;
+  optional int32 agility = 3;
+  optional int32 stamina = 4;
+  optional int32 intellect = 5;
+  optional int32 dodge = 6;
+  optional int32 parry = 7;
+  optional int32 block = 8;
+  optional int32 unknownStat = 9; // Scalar after block; purpose is not yet verified.
+  optional int32 meleeCritRating = 10;
+  optional int32 rangedCritRating = 11;
+  optional int32 spellCritRating = 12;
+  optional int32 speed = 13;
+  optional int32 leech = 14;
+  optional int32 meleeHasteRating = 15;
+  optional int32 rangedHasteRating = 16;
+  optional int32 spellHasteRating = 17;
+  optional int32 avoidance = 18;
+  optional int32 mastery = 19;
+  optional int32 damageDoneVersatility = 20;
+  optional int32 healingDoneVersatility = 21;
+  optional int32 damageTakenVersatility = 22;
+  optional int32 additionalUnknownStat = 23; // Present only in the longer v22 layout.
+  optional int32 armor = 24;
+  optional int32 specId = 25;
 }
 
 message Interrupt {

@@ -419,7 +419,7 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	t.Parallel()
 
 	fields := make([]string, 34)
-	for _, index := range []int{2, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25} {
+	for index := 1; index <= 25; index++ {
 		fields[index] = fmt.Sprint(index)
 	}
 	// Real selections from Bootie's WoW Forever Wailing Caverns log.
@@ -447,22 +447,30 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	assert.Equal(t, "Bootie", combatantInfo.Name)
 	assert.Equal(t, types.HeroClassesWARLOCK, combatantInfo.HeroClass)
 	require.Equal(t, &combatant.CombatantInfoV22{
-		PrimaryStat:            2,
+		TeamID:                 1,
+		Strength:               2,
+		Agility:                3,
 		Stamina:                4,
-		MeleeCritRating:        9,
-		RangedCritRating:       10,
-		SpellCritRating:        11,
-		Speed:                  12,
-		Leech:                  13,
-		MeleeHasteRating:       14,
-		RangedHasteRating:      15,
-		SpellHasteRating:       16,
-		Avoidance:              17,
-		Mastery:                18,
-		DamageDoneVersatility:  19,
-		HealingDoneVersatility: 20,
-		DamageTakenVersatility: 21,
-		UnknownStat:            ptr.Ref[int32](24),
+		Intellect:              5,
+		Dodge:                  6,
+		Parry:                  7,
+		Block:                  8,
+		UnknownStat:            9,
+		MeleeCritRating:        10,
+		RangedCritRating:       11,
+		SpellCritRating:        12,
+		Speed:                  13,
+		Leech:                  14,
+		MeleeHasteRating:       15,
+		RangedHasteRating:      16,
+		SpellHasteRating:       17,
+		Avoidance:              18,
+		Mastery:                19,
+		DamageDoneVersatility:  20,
+		HealingDoneVersatility: 21,
+		DamageTakenVersatility: 22,
+		AdditionalUnknownStat:  ptr.Ref[int32](23),
+		Armor:                  24,
 		SpecID:                 25,
 	}, combatantInfo.V22)
 	require.NotNil(t, combatantInfo.Talents)
@@ -493,10 +501,31 @@ func TestCombatantInfoV22ParsesStatsFromModernLog(t *testing.T) {
 
 	combatantInfo := parsed[0].(*messages.Combatant)
 	require.Equal(t, &combatant.CombatantInfoV22{
-		PrimaryStat: 69,
-		Stamina:     123,
-		UnknownStat: ptr.Ref[int32](1826),
-		SpecID:      1486,
+		TeamID:                 0,
+		Strength:               69,
+		Agility:                41,
+		Stamina:                123,
+		Intellect:              41,
+		Dodge:                  49,
+		Parry:                  0,
+		Block:                  0,
+		UnknownStat:            0,
+		MeleeCritRating:        0,
+		RangedCritRating:       0,
+		SpellCritRating:        0,
+		Speed:                  0,
+		Leech:                  0,
+		MeleeHasteRating:       0,
+		RangedHasteRating:      0,
+		SpellHasteRating:       0,
+		Avoidance:              0,
+		Mastery:                0,
+		DamageDoneVersatility:  0,
+		HealingDoneVersatility: 0,
+		DamageTakenVersatility: 0,
+		AdditionalUnknownStat:  ptr.Ref[int32](0),
+		Armor:                  1826,
+		SpecID:                 1486,
 	}, combatantInfo.V22)
 	require.Len(t, combatantInfo.GearSetups, 1)
 	assert.Equal(t, 250532, combatantInfo.GearSetups[0].ItemID)
@@ -521,10 +550,31 @@ func TestCombatantInfoV22ParsesShorterLayout(t *testing.T) {
 
 	combatantInfo := parsed[0].(*messages.Combatant)
 	require.Equal(t, &combatant.CombatantInfoV22{
-		PrimaryStat: 69,
-		Stamina:     123,
-		UnknownStat: ptr.Ref[int32](0),
-		SpecID:      1486,
+		TeamID:                 0,
+		Strength:               69,
+		Agility:                41,
+		Stamina:                123,
+		Intellect:              41,
+		Dodge:                  49,
+		Parry:                  0,
+		Block:                  0,
+		UnknownStat:            0,
+		MeleeCritRating:        0,
+		RangedCritRating:       0,
+		SpellCritRating:        0,
+		Speed:                  0,
+		Leech:                  0,
+		MeleeHasteRating:       0,
+		RangedHasteRating:      0,
+		SpellHasteRating:       0,
+		Avoidance:              0,
+		Mastery:                0,
+		DamageDoneVersatility:  0,
+		HealingDoneVersatility: 0,
+		DamageTakenVersatility: 0,
+		AdditionalUnknownStat:  nil,
+		Armor:                  0,
+		SpecID:                 1486,
 	}, combatantInfo.V22)
 	require.Len(t, combatantInfo.GearSetups, 1)
 	assert.Equal(t, 250532, combatantInfo.GearSetups[0].ItemID)

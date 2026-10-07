@@ -342,8 +342,15 @@ export interface UnitClassificationProcessorEvent extends EventMeta {
 
 
 export interface CombatantInfoV22ProcessorData {
-  primaryStat: number | null;
+  teamId: number | null;
+  strength: number | null;
+  agility: number | null;
   stamina: number | null;
+  intellect: number | null;
+  dodge: number | null;
+  parry: number | null;
+  block: number | null;
+  unknownStat: number | null;
   meleeCritRating: number | null;
   rangedCritRating: number | null;
   spellCritRating: number | null;
@@ -357,7 +364,8 @@ export interface CombatantInfoV22ProcessorData {
   damageDoneVersatility: number | null;
   healingDoneVersatility: number | null;
   damageTakenVersatility: number | null;
-  unknownStat: number | null;
+  additionalUnknownStat: number | null;
+  armor: number | null;
   specId: number | null;
 }
 

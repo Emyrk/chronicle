@@ -436,7 +436,7 @@ func v22CombatantTalentIndex(fields []string) (int, error) {
 }
 
 func parseV22CombatantInfo(fields []string, talentIndex int) (*combatant.CombatantInfoV22, error) {
-	if len(fields) <= 21 || talentIndex < 24 || talentIndex >= len(fields) {
+	if len(fields) <= 22 || talentIndex < 25 || talentIndex >= len(fields) {
 		return nil, fmt.Errorf("blizzard V22 COMBATANT_INFO has invalid talent field index %d for %d fields", talentIndex, len(fields))
 	}
 
@@ -454,21 +454,29 @@ func parseV22CombatantInfo(fields []string, talentIndex int) (*combatant.Combata
 		name  string
 		dest  *int32
 	}{
-		{2, "primary stat", &info.PrimaryStat},
+		{1, "team ID", &info.TeamID},
+		{2, "strength", &info.Strength},
+		{3, "agility", &info.Agility},
 		{4, "stamina", &info.Stamina},
-		{9, "melee crit rating", &info.MeleeCritRating},
-		{10, "ranged crit rating", &info.RangedCritRating},
-		{11, "spell crit rating", &info.SpellCritRating},
-		{12, "speed", &info.Speed},
-		{13, "leech", &info.Leech},
-		{14, "melee haste rating", &info.MeleeHasteRating},
-		{15, "ranged haste rating", &info.RangedHasteRating},
-		{16, "spell haste rating", &info.SpellHasteRating},
-		{17, "avoidance", &info.Avoidance},
-		{18, "mastery", &info.Mastery},
-		{19, "damage done versatility", &info.DamageDoneVersatility},
-		{20, "healing done versatility", &info.HealingDoneVersatility},
-		{21, "damage taken versatility", &info.DamageTakenVersatility},
+		{5, "intellect", &info.Intellect},
+		{6, "dodge", &info.Dodge},
+		{7, "parry", &info.Parry},
+		{8, "block", &info.Block},
+		{9, "unknown stat", &info.UnknownStat},
+		{10, "melee crit rating", &info.MeleeCritRating},
+		{11, "ranged crit rating", &info.RangedCritRating},
+		{12, "spell crit rating", &info.SpellCritRating},
+		{13, "speed", &info.Speed},
+		{14, "leech", &info.Leech},
+		{15, "melee haste rating", &info.MeleeHasteRating},
+		{16, "ranged haste rating", &info.RangedHasteRating},
+		{17, "spell haste rating", &info.SpellHasteRating},
+		{18, "avoidance", &info.Avoidance},
+		{19, "mastery", &info.Mastery},
+		{20, "damage done versatility", &info.DamageDoneVersatility},
+		{21, "healing done versatility", &info.HealingDoneVersatility},
+		{22, "damage taken versatility", &info.DamageTakenVersatility},
+		{talentIndex - 2, "armor", &info.Armor},
 		{talentIndex - 1, "spec ID", &info.SpecID},
 	}
 	for _, value := range values {
@@ -478,12 +486,12 @@ func parseV22CombatantInfo(fields []string, talentIndex int) (*combatant.Combata
 		}
 		*value.dest = parsed
 	}
-	if talentIndex >= 25 {
-		unknown, err := parse(talentIndex-2, "unknown stat")
+	if talentIndex >= 26 {
+		unknown, err := parse(talentIndex-3, "additional unknown stat")
 		if err != nil {
 			return nil, err
 		}
-		info.UnknownStat = &unknown
+		info.AdditionalUnknownStat = &unknown
 	}
 	return info, nil
 }

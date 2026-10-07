@@ -27,8 +27,15 @@ func IsCombatant(content string) (string, bool) {
 
 // CombatantInfoV22 contains statistics emitted only by v22 combat logs.
 type CombatantInfoV22 struct {
-	PrimaryStat            int32
+	TeamID                 int32
+	Strength               int32
+	Agility                int32
 	Stamina                int32
+	Intellect              int32
+	Dodge                  int32
+	Parry                  int32
+	Block                  int32
+	UnknownStat            int32
 	MeleeCritRating        int32
 	RangedCritRating       int32
 	SpellCritRating        int32
@@ -42,7 +49,8 @@ type CombatantInfoV22 struct {
 	DamageDoneVersatility  int32
 	HealingDoneVersatility int32
 	DamageTakenVersatility int32
-	UnknownStat            *int32
+	AdditionalUnknownStat  *int32
+	Armor                  int32
 	SpecID                 int32
 }
 

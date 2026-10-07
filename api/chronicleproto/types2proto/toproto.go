@@ -384,8 +384,15 @@ func CombatantInfo(from time.Time, idx int32, msg *messages.Combatant) *chronicl
 	}
 	if msg.V22 != nil {
 		ci.V22 = &chronicleproto.CombatantInfoV22{
-			PrimaryStat:            ptr.Ref(msg.V22.PrimaryStat),
+			TeamId:                 ptr.Ref(msg.V22.TeamID),
+			Strength:               ptr.Ref(msg.V22.Strength),
+			Agility:                ptr.Ref(msg.V22.Agility),
 			Stamina:                ptr.Ref(msg.V22.Stamina),
+			Intellect:              ptr.Ref(msg.V22.Intellect),
+			Dodge:                  ptr.Ref(msg.V22.Dodge),
+			Parry:                  ptr.Ref(msg.V22.Parry),
+			Block:                  ptr.Ref(msg.V22.Block),
+			UnknownStat:            ptr.Ref(msg.V22.UnknownStat),
 			MeleeCritRating:        ptr.Ref(msg.V22.MeleeCritRating),
 			RangedCritRating:       ptr.Ref(msg.V22.RangedCritRating),
 			SpellCritRating:        ptr.Ref(msg.V22.SpellCritRating),
@@ -399,10 +406,11 @@ func CombatantInfo(from time.Time, idx int32, msg *messages.Combatant) *chronicl
 			DamageDoneVersatility:  ptr.Ref(msg.V22.DamageDoneVersatility),
 			HealingDoneVersatility: ptr.Ref(msg.V22.HealingDoneVersatility),
 			DamageTakenVersatility: ptr.Ref(msg.V22.DamageTakenVersatility),
+			Armor:                  ptr.Ref(msg.V22.Armor),
 			SpecId:                 ptr.Ref(msg.V22.SpecID),
 		}
-		if msg.V22.UnknownStat != nil {
-			ci.V22.UnknownStat = ptr.Ref(*msg.V22.UnknownStat)
+		if msg.V22.AdditionalUnknownStat != nil {
+			ci.V22.AdditionalUnknownStat = ptr.Ref(*msg.V22.AdditionalUnknownStat)
 		}
 	}
 	return ci

@@ -2434,23 +2434,31 @@ func (x *CombatantInfo) GetV22() *CombatantInfoV22 {
 // triplicate source fields.
 type CombatantInfoV22 struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
-	PrimaryStat            *int32                 `protobuf:"varint,1,opt,name=primaryStat,proto3,oneof" json:"primaryStat,omitempty"`
-	Stamina                *int32                 `protobuf:"varint,2,opt,name=stamina,proto3,oneof" json:"stamina,omitempty"`
-	MeleeCritRating        *int32                 `protobuf:"varint,3,opt,name=meleeCritRating,proto3,oneof" json:"meleeCritRating,omitempty"`
-	RangedCritRating       *int32                 `protobuf:"varint,4,opt,name=rangedCritRating,proto3,oneof" json:"rangedCritRating,omitempty"`
-	SpellCritRating        *int32                 `protobuf:"varint,5,opt,name=spellCritRating,proto3,oneof" json:"spellCritRating,omitempty"`
-	Speed                  *int32                 `protobuf:"varint,6,opt,name=speed,proto3,oneof" json:"speed,omitempty"`
-	Leech                  *int32                 `protobuf:"varint,7,opt,name=leech,proto3,oneof" json:"leech,omitempty"`
-	MeleeHasteRating       *int32                 `protobuf:"varint,8,opt,name=meleeHasteRating,proto3,oneof" json:"meleeHasteRating,omitempty"`
-	RangedHasteRating      *int32                 `protobuf:"varint,9,opt,name=rangedHasteRating,proto3,oneof" json:"rangedHasteRating,omitempty"`
-	SpellHasteRating       *int32                 `protobuf:"varint,10,opt,name=spellHasteRating,proto3,oneof" json:"spellHasteRating,omitempty"`
-	Avoidance              *int32                 `protobuf:"varint,11,opt,name=avoidance,proto3,oneof" json:"avoidance,omitempty"`
-	Mastery                *int32                 `protobuf:"varint,12,opt,name=mastery,proto3,oneof" json:"mastery,omitempty"`
-	DamageDoneVersatility  *int32                 `protobuf:"varint,13,opt,name=damageDoneVersatility,proto3,oneof" json:"damageDoneVersatility,omitempty"`
-	HealingDoneVersatility *int32                 `protobuf:"varint,14,opt,name=healingDoneVersatility,proto3,oneof" json:"healingDoneVersatility,omitempty"`
-	DamageTakenVersatility *int32                 `protobuf:"varint,15,opt,name=damageTakenVersatility,proto3,oneof" json:"damageTakenVersatility,omitempty"`
-	UnknownStat            *int32                 `protobuf:"varint,16,opt,name=unknownStat,proto3,oneof" json:"unknownStat,omitempty"` // Purpose is not yet verified.
-	SpecId                 *int32                 `protobuf:"varint,17,opt,name=specId,proto3,oneof" json:"specId,omitempty"`
+	TeamId                 *int32                 `protobuf:"varint,1,opt,name=teamId,proto3,oneof" json:"teamId,omitempty"`
+	Strength               *int32                 `protobuf:"varint,2,opt,name=strength,proto3,oneof" json:"strength,omitempty"`
+	Agility                *int32                 `protobuf:"varint,3,opt,name=agility,proto3,oneof" json:"agility,omitempty"`
+	Stamina                *int32                 `protobuf:"varint,4,opt,name=stamina,proto3,oneof" json:"stamina,omitempty"`
+	Intellect              *int32                 `protobuf:"varint,5,opt,name=intellect,proto3,oneof" json:"intellect,omitempty"`
+	Dodge                  *int32                 `protobuf:"varint,6,opt,name=dodge,proto3,oneof" json:"dodge,omitempty"`
+	Parry                  *int32                 `protobuf:"varint,7,opt,name=parry,proto3,oneof" json:"parry,omitempty"`
+	Block                  *int32                 `protobuf:"varint,8,opt,name=block,proto3,oneof" json:"block,omitempty"`
+	UnknownStat            *int32                 `protobuf:"varint,9,opt,name=unknownStat,proto3,oneof" json:"unknownStat,omitempty"` // Scalar after block; purpose is not yet verified.
+	MeleeCritRating        *int32                 `protobuf:"varint,10,opt,name=meleeCritRating,proto3,oneof" json:"meleeCritRating,omitempty"`
+	RangedCritRating       *int32                 `protobuf:"varint,11,opt,name=rangedCritRating,proto3,oneof" json:"rangedCritRating,omitempty"`
+	SpellCritRating        *int32                 `protobuf:"varint,12,opt,name=spellCritRating,proto3,oneof" json:"spellCritRating,omitempty"`
+	Speed                  *int32                 `protobuf:"varint,13,opt,name=speed,proto3,oneof" json:"speed,omitempty"`
+	Leech                  *int32                 `protobuf:"varint,14,opt,name=leech,proto3,oneof" json:"leech,omitempty"`
+	MeleeHasteRating       *int32                 `protobuf:"varint,15,opt,name=meleeHasteRating,proto3,oneof" json:"meleeHasteRating,omitempty"`
+	RangedHasteRating      *int32                 `protobuf:"varint,16,opt,name=rangedHasteRating,proto3,oneof" json:"rangedHasteRating,omitempty"`
+	SpellHasteRating       *int32                 `protobuf:"varint,17,opt,name=spellHasteRating,proto3,oneof" json:"spellHasteRating,omitempty"`
+	Avoidance              *int32                 `protobuf:"varint,18,opt,name=avoidance,proto3,oneof" json:"avoidance,omitempty"`
+	Mastery                *int32                 `protobuf:"varint,19,opt,name=mastery,proto3,oneof" json:"mastery,omitempty"`
+	DamageDoneVersatility  *int32                 `protobuf:"varint,20,opt,name=damageDoneVersatility,proto3,oneof" json:"damageDoneVersatility,omitempty"`
+	HealingDoneVersatility *int32                 `protobuf:"varint,21,opt,name=healingDoneVersatility,proto3,oneof" json:"healingDoneVersatility,omitempty"`
+	DamageTakenVersatility *int32                 `protobuf:"varint,22,opt,name=damageTakenVersatility,proto3,oneof" json:"damageTakenVersatility,omitempty"`
+	AdditionalUnknownStat  *int32                 `protobuf:"varint,23,opt,name=additionalUnknownStat,proto3,oneof" json:"additionalUnknownStat,omitempty"` // Present only in the longer v22 layout.
+	Armor                  *int32                 `protobuf:"varint,24,opt,name=armor,proto3,oneof" json:"armor,omitempty"`
+	SpecId                 *int32                 `protobuf:"varint,25,opt,name=specId,proto3,oneof" json:"specId,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -2485,9 +2493,23 @@ func (*CombatantInfoV22) Descriptor() ([]byte, []int) {
 	return file_chronicle_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *CombatantInfoV22) GetPrimaryStat() int32 {
-	if x != nil && x.PrimaryStat != nil {
-		return *x.PrimaryStat
+func (x *CombatantInfoV22) GetTeamId() int32 {
+	if x != nil && x.TeamId != nil {
+		return *x.TeamId
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetStrength() int32 {
+	if x != nil && x.Strength != nil {
+		return *x.Strength
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetAgility() int32 {
+	if x != nil && x.Agility != nil {
+		return *x.Agility
 	}
 	return 0
 }
@@ -2495,6 +2517,41 @@ func (x *CombatantInfoV22) GetPrimaryStat() int32 {
 func (x *CombatantInfoV22) GetStamina() int32 {
 	if x != nil && x.Stamina != nil {
 		return *x.Stamina
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetIntellect() int32 {
+	if x != nil && x.Intellect != nil {
+		return *x.Intellect
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetDodge() int32 {
+	if x != nil && x.Dodge != nil {
+		return *x.Dodge
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetParry() int32 {
+	if x != nil && x.Parry != nil {
+		return *x.Parry
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetBlock() int32 {
+	if x != nil && x.Block != nil {
+		return *x.Block
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetUnknownStat() int32 {
+	if x != nil && x.UnknownStat != nil {
+		return *x.UnknownStat
 	}
 	return 0
 }
@@ -2590,9 +2647,16 @@ func (x *CombatantInfoV22) GetDamageTakenVersatility() int32 {
 	return 0
 }
 
-func (x *CombatantInfoV22) GetUnknownStat() int32 {
-	if x != nil && x.UnknownStat != nil {
-		return *x.UnknownStat
+func (x *CombatantInfoV22) GetAdditionalUnknownStat() int32 {
+	if x != nil && x.AdditionalUnknownStat != nil {
+		return *x.AdditionalUnknownStat
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetArmor() int32 {
+	if x != nil && x.Armor != nil {
+		return *x.Armor
 	}
 	return 0
 }
@@ -3447,30 +3511,47 @@ const file_chronicle_proto_rawDesc = "" +
 	"_guildNameB\n" +
 	"\n" +
 	"\b_talentsB\x06\n" +
-	"\x04_v22\"\x9f\b\n" +
-	"\x10CombatantInfoV22\x12%\n" +
-	"\vprimaryStat\x18\x01 \x01(\x05H\x00R\vprimaryStat\x88\x01\x01\x12\x1d\n" +
-	"\astamina\x18\x02 \x01(\x05H\x01R\astamina\x88\x01\x01\x12-\n" +
-	"\x0fmeleeCritRating\x18\x03 \x01(\x05H\x02R\x0fmeleeCritRating\x88\x01\x01\x12/\n" +
-	"\x10rangedCritRating\x18\x04 \x01(\x05H\x03R\x10rangedCritRating\x88\x01\x01\x12-\n" +
-	"\x0fspellCritRating\x18\x05 \x01(\x05H\x04R\x0fspellCritRating\x88\x01\x01\x12\x19\n" +
-	"\x05speed\x18\x06 \x01(\x05H\x05R\x05speed\x88\x01\x01\x12\x19\n" +
-	"\x05leech\x18\a \x01(\x05H\x06R\x05leech\x88\x01\x01\x12/\n" +
-	"\x10meleeHasteRating\x18\b \x01(\x05H\aR\x10meleeHasteRating\x88\x01\x01\x121\n" +
-	"\x11rangedHasteRating\x18\t \x01(\x05H\bR\x11rangedHasteRating\x88\x01\x01\x12/\n" +
-	"\x10spellHasteRating\x18\n" +
-	" \x01(\x05H\tR\x10spellHasteRating\x88\x01\x01\x12!\n" +
-	"\tavoidance\x18\v \x01(\x05H\n" +
-	"R\tavoidance\x88\x01\x01\x12\x1d\n" +
-	"\amastery\x18\f \x01(\x05H\vR\amastery\x88\x01\x01\x129\n" +
-	"\x15damageDoneVersatility\x18\r \x01(\x05H\fR\x15damageDoneVersatility\x88\x01\x01\x12;\n" +
-	"\x16healingDoneVersatility\x18\x0e \x01(\x05H\rR\x16healingDoneVersatility\x88\x01\x01\x12;\n" +
-	"\x16damageTakenVersatility\x18\x0f \x01(\x05H\x0eR\x16damageTakenVersatility\x88\x01\x01\x12%\n" +
-	"\vunknownStat\x18\x10 \x01(\x05H\x0fR\vunknownStat\x88\x01\x01\x12\x1b\n" +
-	"\x06specId\x18\x11 \x01(\x05H\x10R\x06specId\x88\x01\x01B\x0e\n" +
-	"\f_primaryStatB\n" +
+	"\x04_v22\"\x83\v\n" +
+	"\x10CombatantInfoV22\x12\x1b\n" +
+	"\x06teamId\x18\x01 \x01(\x05H\x00R\x06teamId\x88\x01\x01\x12\x1f\n" +
+	"\bstrength\x18\x02 \x01(\x05H\x01R\bstrength\x88\x01\x01\x12\x1d\n" +
+	"\aagility\x18\x03 \x01(\x05H\x02R\aagility\x88\x01\x01\x12\x1d\n" +
+	"\astamina\x18\x04 \x01(\x05H\x03R\astamina\x88\x01\x01\x12!\n" +
+	"\tintellect\x18\x05 \x01(\x05H\x04R\tintellect\x88\x01\x01\x12\x19\n" +
+	"\x05dodge\x18\x06 \x01(\x05H\x05R\x05dodge\x88\x01\x01\x12\x19\n" +
+	"\x05parry\x18\a \x01(\x05H\x06R\x05parry\x88\x01\x01\x12\x19\n" +
+	"\x05block\x18\b \x01(\x05H\aR\x05block\x88\x01\x01\x12%\n" +
+	"\vunknownStat\x18\t \x01(\x05H\bR\vunknownStat\x88\x01\x01\x12-\n" +
+	"\x0fmeleeCritRating\x18\n" +
+	" \x01(\x05H\tR\x0fmeleeCritRating\x88\x01\x01\x12/\n" +
+	"\x10rangedCritRating\x18\v \x01(\x05H\n" +
+	"R\x10rangedCritRating\x88\x01\x01\x12-\n" +
+	"\x0fspellCritRating\x18\f \x01(\x05H\vR\x0fspellCritRating\x88\x01\x01\x12\x19\n" +
+	"\x05speed\x18\r \x01(\x05H\fR\x05speed\x88\x01\x01\x12\x19\n" +
+	"\x05leech\x18\x0e \x01(\x05H\rR\x05leech\x88\x01\x01\x12/\n" +
+	"\x10meleeHasteRating\x18\x0f \x01(\x05H\x0eR\x10meleeHasteRating\x88\x01\x01\x121\n" +
+	"\x11rangedHasteRating\x18\x10 \x01(\x05H\x0fR\x11rangedHasteRating\x88\x01\x01\x12/\n" +
+	"\x10spellHasteRating\x18\x11 \x01(\x05H\x10R\x10spellHasteRating\x88\x01\x01\x12!\n" +
+	"\tavoidance\x18\x12 \x01(\x05H\x11R\tavoidance\x88\x01\x01\x12\x1d\n" +
+	"\amastery\x18\x13 \x01(\x05H\x12R\amastery\x88\x01\x01\x129\n" +
+	"\x15damageDoneVersatility\x18\x14 \x01(\x05H\x13R\x15damageDoneVersatility\x88\x01\x01\x12;\n" +
+	"\x16healingDoneVersatility\x18\x15 \x01(\x05H\x14R\x16healingDoneVersatility\x88\x01\x01\x12;\n" +
+	"\x16damageTakenVersatility\x18\x16 \x01(\x05H\x15R\x16damageTakenVersatility\x88\x01\x01\x129\n" +
+	"\x15additionalUnknownStat\x18\x17 \x01(\x05H\x16R\x15additionalUnknownStat\x88\x01\x01\x12\x19\n" +
+	"\x05armor\x18\x18 \x01(\x05H\x17R\x05armor\x88\x01\x01\x12\x1b\n" +
+	"\x06specId\x18\x19 \x01(\x05H\x18R\x06specId\x88\x01\x01B\t\n" +
+	"\a_teamIdB\v\n" +
+	"\t_strengthB\n" +
 	"\n" +
-	"\b_staminaB\x12\n" +
+	"\b_agilityB\n" +
+	"\n" +
+	"\b_staminaB\f\n" +
+	"\n" +
+	"_intellectB\b\n" +
+	"\x06_dodgeB\b\n" +
+	"\x06_parryB\b\n" +
+	"\x06_blockB\x0e\n" +
+	"\f_unknownStatB\x12\n" +
 	"\x10_meleeCritRatingB\x13\n" +
 	"\x11_rangedCritRatingB\x12\n" +
 	"\x10_spellCritRatingB\b\n" +
@@ -3485,8 +3566,9 @@ const file_chronicle_proto_rawDesc = "" +
 	"\b_masteryB\x18\n" +
 	"\x16_damageDoneVersatilityB\x19\n" +
 	"\x17_healingDoneVersatilityB\x19\n" +
-	"\x17_damageTakenVersatilityB\x0e\n" +
-	"\f_unknownStatB\t\n" +
+	"\x17_damageTakenVersatilityB\x18\n" +
+	"\x16_additionalUnknownStatB\b\n" +
+	"\x06_armorB\t\n" +
 	"\a_specId\"\xa7\x02\n" +
 	"\tInterrupt\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +

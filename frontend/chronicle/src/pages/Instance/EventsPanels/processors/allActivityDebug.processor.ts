@@ -134,8 +134,15 @@ export function combatantInfoV22Stats(
   if (!v22) return undefined;
 
   const fields: [string, number | null][] = [
-    ["Primary stat", v22.primaryStat],
+    ["Team ID", v22.teamId],
+    ["Strength", v22.strength],
+    ["Agility", v22.agility],
     ["Stamina", v22.stamina],
+    ["Intellect", v22.intellect],
+    ["Dodge", v22.dodge],
+    ["Parry", v22.parry],
+    ["Block", v22.block],
+    ["Unknown stat", v22.unknownStat],
     ["Melee crit rating", v22.meleeCritRating],
     ["Ranged crit rating", v22.rangedCritRating],
     ["Spell crit rating", v22.spellCritRating],
@@ -149,7 +156,8 @@ export function combatantInfoV22Stats(
     ["Damage done versatility", v22.damageDoneVersatility],
     ["Healing done versatility", v22.healingDoneVersatility],
     ["Damage taken versatility", v22.damageTakenVersatility],
-    ["Unknown stat", v22.unknownStat],
+    ["Additional unknown stat", v22.additionalUnknownStat],
+    ["Armor", v22.armor],
     ["Specialization ID", v22.specId],
   ];
   const stats = fields

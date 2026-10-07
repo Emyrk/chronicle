@@ -5034,8 +5034,15 @@ export interface ReusableCombatantTalents {
 }
 
 export interface ReusableCombatantInfoV22 {
-  primaryStat: number | null;
+  teamId: number | null;
+  strength: number | null;
+  agility: number | null;
   stamina: number | null;
+  intellect: number | null;
+  dodge: number | null;
+  parry: number | null;
+  block: number | null;
+  unknownStat: number | null;
   meleeCritRating: number | null;
   rangedCritRating: number | null;
   spellCritRating: number | null;
@@ -5049,7 +5056,8 @@ export interface ReusableCombatantInfoV22 {
   damageDoneVersatility: number | null;
   healingDoneVersatility: number | null;
   damageTakenVersatility: number | null;
-  unknownStat: number | null;
+  additionalUnknownStat: number | null;
+  armor: number | null;
   specId: number | null;
 }
 
@@ -5274,8 +5282,15 @@ export class CombatantInfoDecoder {
           msg.talents = { summary, trees };
         } else if (fieldNumber === 10) {
           const v22: ReusableCombatantInfoV22 = {
-            primaryStat: null,
+            teamId: null,
+            strength: null,
+            agility: null,
             stamina: null,
+            intellect: null,
+            dodge: null,
+            parry: null,
+            block: null,
+            unknownStat: null,
             meleeCritRating: null,
             rangedCritRating: null,
             spellCritRating: null,
@@ -5289,7 +5304,8 @@ export class CombatantInfoDecoder {
             damageDoneVersatility: null,
             healingDoneVersatility: null,
             damageTakenVersatility: null,
-            unknownStat: null,
+            additionalUnknownStat: null,
+            armor: null,
             specId: null,
           };
           const v22End = offset + len;
@@ -5305,23 +5321,31 @@ export class CombatantInfoDecoder {
             const { value, bytesRead } = readVarintFast(data, offset);
             offset += bytesRead;
             switch (v22Field) {
-              case 1: v22.primaryStat = value; break;
-              case 2: v22.stamina = value; break;
-              case 3: v22.meleeCritRating = value; break;
-              case 4: v22.rangedCritRating = value; break;
-              case 5: v22.spellCritRating = value; break;
-              case 6: v22.speed = value; break;
-              case 7: v22.leech = value; break;
-              case 8: v22.meleeHasteRating = value; break;
-              case 9: v22.rangedHasteRating = value; break;
-              case 10: v22.spellHasteRating = value; break;
-              case 11: v22.avoidance = value; break;
-              case 12: v22.mastery = value; break;
-              case 13: v22.damageDoneVersatility = value; break;
-              case 14: v22.healingDoneVersatility = value; break;
-              case 15: v22.damageTakenVersatility = value; break;
-              case 16: v22.unknownStat = value; break;
-              case 17: v22.specId = value; break;
+              case 1: v22.teamId = value; break;
+              case 2: v22.strength = value; break;
+              case 3: v22.agility = value; break;
+              case 4: v22.stamina = value; break;
+              case 5: v22.intellect = value; break;
+              case 6: v22.dodge = value; break;
+              case 7: v22.parry = value; break;
+              case 8: v22.block = value; break;
+              case 9: v22.unknownStat = value; break;
+              case 10: v22.meleeCritRating = value; break;
+              case 11: v22.rangedCritRating = value; break;
+              case 12: v22.spellCritRating = value; break;
+              case 13: v22.speed = value; break;
+              case 14: v22.leech = value; break;
+              case 15: v22.meleeHasteRating = value; break;
+              case 16: v22.rangedHasteRating = value; break;
+              case 17: v22.spellHasteRating = value; break;
+              case 18: v22.avoidance = value; break;
+              case 19: v22.mastery = value; break;
+              case 20: v22.damageDoneVersatility = value; break;
+              case 21: v22.healingDoneVersatility = value; break;
+              case 22: v22.damageTakenVersatility = value; break;
+              case 23: v22.additionalUnknownStat = value; break;
+              case 24: v22.armor = value; break;
+              case 25: v22.specId = value; break;
             }
           }
           msg.v22 = v22;
