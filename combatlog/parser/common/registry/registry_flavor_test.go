@@ -265,6 +265,18 @@ func TestRankingEncounterSets(t *testing.T) {
 	require.NotContains(t, ulduar.RankingEncounterSets[0].Encounters, "Flame Leviathan")
 	require.Contains(t, ulduar.ProgressionBosses, "Flame Leviathan")
 
+	tbc := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorTBC})
+	tempestKeep := instanceDetailByName(t, tbc, "Tempest Keep")
+	require.Equal(t, []instances.RankingEncounterSet{{
+		Label: "Normal",
+		Encounters: []string{
+			"Al'ar",
+			"Void Reaver",
+			"High Astromancer Solarian",
+			"Kael'thas Sunstrider",
+		},
+	}}, tempestKeep.RankingEncounterSets)
+
 	moltenCore := instanceDetailByName(t, turtle, "Molten Core")
 	require.Len(t, moltenCore.RankingEncounterSets, 1)
 	require.Equal(t, moltenCore.ProgressionBosses, moltenCore.RankingEncounterSets[0].Encounters)

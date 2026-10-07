@@ -1008,6 +1008,11 @@ var TempestKeepFactory = &instances.CommonFactory{
 	ZoneNames: []string{"tempest keep", "the eye"},
 	MapIDs:    []uint32{550},
 	Hostiles:  instances.FromMap(TempestKeepHostiles()),
+	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+		rules := TempestKeepSpeedrunRequirements()
+		rules.Speedrun.LevelRange = instances.Level70Cap(fl)
+		return rules
+	},
 }
 
 // BlackTempleHostiles returns creature entry IDs for Black Temple (map 564).

@@ -56,6 +56,19 @@ func SerpentshrineCavernSpeedrunRequirements() *rankings.Rankings {
 	}
 }
 
+func TempestKeepSpeedrunRequirements() *rankings.Rankings {
+	return &rankings.Rankings{
+		Speedrun: &rankings.SpeedrunRules{
+			Requirements: []rankings.SpeedrunRequirement{
+				{Name: "Al'ar", EntryIDs: []uint32{19514}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Void Reaver", EntryIDs: []uint32{19516}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "High Astromancer Solarian", EntryIDs: []uint32{18805}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Kael'thas Sunstrider", EntryIDs: []uint32{19622}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			},
+		},
+	}
+}
+
 func UtgardeKeepSpeedrunRequirements() *rankings.Rankings {
 	return &rankings.Rankings{
 		Speedrun: &rankings.SpeedrunRules{

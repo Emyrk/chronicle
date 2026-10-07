@@ -93,6 +93,27 @@ func TestSerpentshrineCavernSpeedrunRequirements(t *testing.T) {
 	}, wrathRules.Speedrun.LevelRange)
 }
 
+func TestTempestKeepSpeedrunRequirements(t *testing.T) {
+	t.Parallel()
+
+	tbcRules := TempestKeepFactory.FlavoredRankings(database.WoWFlavor{database.FlavorTBC})
+	require.NotNil(t, tbcRules)
+	require.NotNil(t, tbcRules.Speedrun)
+	require.Nil(t, tbcRules.Speedrun.LevelRange)
+	require.Equal(t, []rankings.SpeedrunRequirement{
+		{Name: "Al'ar", EntryIDs: []uint32{19514}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Void Reaver", EntryIDs: []uint32{19516}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "High Astromancer Solarian", EntryIDs: []uint32{18805}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Kael'thas Sunstrider", EntryIDs: []uint32{19622}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}, tbcRules.Speedrun.Requirements)
+
+	wrathRules := TempestKeepFactory.FlavoredRankings(database.WoWFlavor{database.FlavorWrath})
+	require.Equal(t, &rankings.LevelRangeRequirement{
+		MinLevel: 0,
+		MaxLevel: 70,
+	}, wrathRules.Speedrun.LevelRange)
+}
+
 func TestGruulsLairSpeedrunRequirements(t *testing.T) {
 	t.Parallel()
 
