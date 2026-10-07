@@ -84,7 +84,7 @@ const PANEL_CATEGORIES: PanelCategory[] = [
   },
   {
     label: "Replay",
-    items: ["status", "healer_casts"],
+    items: ["map", "status", "healer_casts"],
   },
   {
     label: "Utility",
