@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronDown, Users, X } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useCensus, useRealms } from "@/api/queries";
+import { useCensus, useRealms, useSiteConfig } from "@/api/queries";
 import { PlayersTab } from "./PlayersTab";
 
 const DAY_PRESETS = [30, 60, 90, 180, 365] as const;
+const EMPTY_FLAVOR: readonly string[] = [];
 
 function RealmMultiSelect({
   options,
@@ -116,6 +117,9 @@ export function CensusPage() {
     setSearchParams(next, { replace: true });
   };
 
+  const { data: siteConfig, isLoading: isSiteConfigLoading } = useSiteConfig();
+  const tenantFlavor = siteConfig?.tenant ? siteConfig.dataset_flavor : EMPTY_FLAVOR;
+
   const { data: realms } = useRealms();
   const realmOptions = useMemo(
     () => (realms ?? []).map((r) => ({ id: r.id, name: r.name })),
@@ -172,7 +176,11 @@ export function CensusPage() {
           <TabsTrigger value="players">Players</TabsTrigger>
         </TabsList>
         <TabsContent value="players" className="mt-6">
-          <PlayersTab data={censusData} isLoading={isLoading} />
+          <PlayersTab
+            data={censusData}
+            isLoading={isLoading || isSiteConfigLoading}
+            flavor={tenantFlavor}
+          />
         </TabsContent>
       </Tabs>
     </div>
