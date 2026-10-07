@@ -3,6 +3,9 @@ package chronicle
 import (
 	"context"
 	"errors"
+
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
@@ -26,6 +29,29 @@ func TestInitialLogCapabilities(t *testing.T) {
 		[]string{"overheal", "absorb"},
 		initialLogCapabilities(database.LogFormatV9Cleu),
 	)
+}
+
+func TestShouldRecordDPSRankings(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name      string
+		rankings  *rankings.RankingsResult
+		shouldRun bool
+	}{
+		{name: "no ranking result", shouldRun: true},
+		{name: "no speedrun result", rankings: &rankings.RankingsResult{}, shouldRun: true},
+		{name: "no level requirement", rankings: &rankings.RankingsResult{Speedrun: &rankings.SpeedrunResult{}}, shouldRun: true},
+		{name: "level requirement satisfied", rankings: &rankings.RankingsResult{Speedrun: &rankings.SpeedrunResult{LevelRange: &rankings.LevelRangeResult{Satisfied: true}}}, shouldRun: true},
+		{name: "any level violation rejects all rankings", rankings: &rankings.RankingsResult{Speedrun: &rankings.SpeedrunResult{LevelRange: &rankings.LevelRangeResult{Satisfied: false}}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			finalized := &instances.FinalizedInstance{Rankings: tt.rankings}
+			require.Equal(t, tt.shouldRun, shouldRecordDPSRankings(finalized))
+		})
+	}
 }
 
 func TestRankingRunRefreshPlanSuccessfulReplacement(t *testing.T) {
