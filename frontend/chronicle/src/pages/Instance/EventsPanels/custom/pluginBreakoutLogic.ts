@@ -71,7 +71,11 @@ export function normalizePluginBreakoutOptions(
   options: ChroniclePanelBreakoutOptionsV1,
   viewport: PluginBreakoutViewport,
   index: number,
-): Required<ChroniclePanelBreakoutOptionsV1> {
+): {
+  title: string;
+  initialPosition: ChroniclePanelBreakoutPositionV1;
+  initialSize: ChroniclePanelBreakoutSizeV1;
+} {
   const initialSize = clampPluginBreakoutSize(options.initialSize, viewport);
   const fallbackPosition = {
     x: VIEWPORT_MARGIN + 24 * index,

@@ -43,6 +43,9 @@ const breakout = api.breakouts.open({
   title: "Warlock damage",
   initialPosition: { x: 200, y: 120 },
   initialSize: { width: 420, height: 300 },
+  onClose: () => {
+    // Drop any plugin state associated with this breakout.
+  },
 });
 
 breakout.root.append(content);
@@ -50,8 +53,10 @@ breakout.root.append(content);
 breakout.close();
 ```
 
-A panel instance may open up to eight simultaneous breakouts. `closeAll()` only
-closes breakouts owned by that mounted panel instance.
+A panel instance may open up to eight simultaneous breakouts. `onClose` runs
+exactly once after a breakout closes, whether it was closed by Chronicle's shell,
+the returned handle, `closeAll()`, or panel teardown. `closeAll()` only closes
+breakouts owned by that mounted panel instance.
 
 ## Compatibility
 

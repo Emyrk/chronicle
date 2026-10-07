@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ChroniclePanelBreakoutOptionsV1 } from "../src/v1";
 import {
   canonicalizeCustomPanelRef,
   createCustomPanelRef,
@@ -13,6 +14,15 @@ describe("custom panel SDK contracts", () => {
   it("publishes bounded floating-breakout limits", () => {
     expect(CUSTOM_PANEL_MAX_BREAKOUTS).toBe(8);
     expect(CUSTOM_PANEL_BREAKOUT_TITLE_MAX_LENGTH).toBe(100);
+  });
+
+  it("accepts breakout close notifications", () => {
+    const options: ChroniclePanelBreakoutOptionsV1 = {
+      title: "Details",
+      onClose: () => {},
+    };
+
+    expect(options.onClose).toBeTypeOf("function");
   });
 
   it("normalizes GitHub repository inputs", () => {
