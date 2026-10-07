@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createConsumablesLedgerPanel } from "./ConsumablesLedger";
 import {
   COMPARISON_TABLE_TOKEN,
+  PRE_COMBAT_TOKEN,
   panelOptionTokens,
   togglePanelOptionFlag,
 } from "./LedgerShared";
@@ -18,6 +19,15 @@ describe("Consumes Used filters", () => {
       applyTo: ["consume"],
     });
     expect(panel.fixedFilters).toBeUndefined();
+  });
+
+  it("persists the pre-combat choice as a render-only panel option", () => {
+    const panel = createConsumablesLedgerPanel();
+    const sharedOption = togglePanelOptionFlag("pl:player-guid", PRE_COMBAT_TOKEN, true);
+
+    expect(panel.renderOnlyOptionTokens).toContain(PRE_COMBAT_TOKEN);
+    expect(panelOptionTokens(sharedOption)).toEqual(["pl:player-guid", PRE_COMBAT_TOKEN]);
+    expect(togglePanelOptionFlag(sharedOption, PRE_COMBAT_TOKEN, false)).toBe("pl:player-guid");
   });
 
   it("persists the comparison-table choice as a render-only panel option", () => {

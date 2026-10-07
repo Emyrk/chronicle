@@ -28,6 +28,7 @@ import {
   CoverageLine,
   LedgerFilterInput,
   LedgerRow,
+  PRE_COMBAT_TOKEN,
   TimingColumnHeaders,
   panelOptionTokens,
   togglePanelOptionFlag,
@@ -89,7 +90,7 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
   // Filtering happens before aggregation so the header totals, coverage
   // line, and bar scale all react to the filter, not just the row list.
   const [filter, setFilter] = useState("");
-  const [showPreCombat, setShowPreCombat] = useState(false);
+  const showPreCombat = panelOptionTokens(props.panelOption).includes(PRE_COMBAT_TOKEN);
   const timingFilteredUses = useMemo(
     () => showPreCombat ? resolvedUses : resolvedUses.filter((use) => !isPreCombatUse(use)),
     [resolvedUses, showPreCombat],
@@ -215,7 +216,9 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
                 label="Pre-Combat"
                 description={PRE_COMBAT_DESCRIPTION}
                 enabled={showPreCombat}
-                onToggle={() => setShowPreCombat((shown) => !shown)}
+                onToggle={() => props.setPanelOption?.(
+                  togglePanelOptionFlag(props.panelOption, PRE_COMBAT_TOKEN, !showPreCombat),
+                )}
               />
             </div>
             <div
@@ -298,7 +301,7 @@ export function createConsumablesLedgerPanel(): PanelDefinition<ConsumablesResul
     // Scope toggle, player selection, view flags, and card chrome never
     // change what the worker computes — switching views must not re-process
     // the stream.
-    renderOnlyOptionTokens: ["cb", "pl:", "va", COMPARISON_TABLE_TOKEN, "bc:", "t:"],
+    renderOnlyOptionTokens: ["cb", "pl:", "va", COMPARISON_TABLE_TOKEN, PRE_COMBAT_TOKEN, "bc:", "t:"],
     defaultFilters: [
       { type: "source_type" as const, value: ["player"], applyTo: ["consume"] },
       { type: "consume_effect" as const, value: ["Drink", "Food", "Strong Alcohol"], negate: true, applyTo: ["consume"] },
