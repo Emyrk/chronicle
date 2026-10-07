@@ -25,7 +25,28 @@ func IsCombatant(content string) (string, bool) {
 	return types.Is(PrefixCombatant, content)
 }
 
-// Combatant is the raw parsing. Additional logic should be build ontop
+// CombatantInfoV22 contains statistics emitted only by v22 combat logs.
+type CombatantInfoV22 struct {
+	PrimaryStat            int32
+	Stamina                int32
+	MeleeCritRating        int32
+	RangedCritRating       int32
+	SpellCritRating        int32
+	Speed                  int32
+	Leech                  int32
+	MeleeHasteRating       int32
+	RangedHasteRating      int32
+	SpellHasteRating       int32
+	Avoidance              int32
+	Mastery                int32
+	DamageDoneVersatility  int32
+	HealingDoneVersatility int32
+	DamageTakenVersatility int32
+	UnknownStat            int32
+	SpecID                 int32
+}
+
+// Combatant is the raw parsing. Additional logic should be built on top
 // to handle things like enums.
 type Combatant struct {
 	Name      string
@@ -41,6 +62,7 @@ type Combatant struct {
 	Talents    *Talents
 	Glyphs     *Glyphs
 	Level      *int32
+	V22        *CombatantInfoV22
 }
 
 func (c *Combatant) SafeMergeExisting(existing Combatant) {
@@ -78,6 +100,9 @@ func (c *Combatant) MergeExisting(existing Combatant) {
 	}
 	if c.Glyphs == nil && existing.Glyphs != nil {
 		c.Glyphs = existing.Glyphs
+	}
+	if c.V22 == nil && existing.V22 != nil {
+		c.V22 = existing.V22
 	}
 }
 

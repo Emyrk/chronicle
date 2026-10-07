@@ -417,11 +417,14 @@ func TestParseCombatantMetadata(t *testing.T) {
 func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	t.Parallel()
 
-	fields := make([]string, 33)
+	fields := make([]string, 34)
+	for _, index := range []int{2, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24} {
+		fields[index] = fmt.Sprint(index)
+	}
 	// Real selections from Bootie's WoW Forever Wailing Caverns log.
-	fields[25] = "[(105924,130654,5),(105923,130653,5)]"
-	fields[26] = "(0,0,0,0)"
-	fields[27] = "[(253955,25,(),(),()),(251534,24,(2623,0,0),(),())]"
+	fields[26] = "[(105924,130654,5),(105923,130653,5)]"
+	fields[27] = "(0,0,0,0)"
+	fields[28] = "[(253955,25,(),(),()),(251534,24,(2623,0,0),(),())]"
 	encoded := base64.RawStdEncoding.EncodeToString([]byte(strings.Join(fields, ",")))
 	ts, _, matched, err := wotlk.ParseLine(`9/23 15:26:53.574  BLIZZARD_COMBATANT_INFO,0x0000120A0062CD4D,"Bootie-ClassicBetaPvE",` + encoded)
 	require.NoError(t, err)
@@ -442,6 +445,25 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	combatantInfo := parsed[0].(*messages.Combatant)
 	assert.Equal(t, "Bootie", combatantInfo.Name)
 	assert.Equal(t, types.HeroClassesWARLOCK, combatantInfo.HeroClass)
+	require.Equal(t, &combatant.CombatantInfoV22{
+		PrimaryStat:            2,
+		Stamina:                4,
+		MeleeCritRating:        9,
+		RangedCritRating:       10,
+		SpellCritRating:        11,
+		Speed:                  12,
+		Leech:                  13,
+		MeleeHasteRating:       14,
+		RangedHasteRating:      15,
+		SpellHasteRating:       16,
+		Avoidance:              17,
+		Mastery:                18,
+		DamageDoneVersatility:  19,
+		HealingDoneVersatility: 20,
+		DamageTakenVersatility: 21,
+		UnknownStat:            23,
+		SpecID:                 24,
+	}, combatantInfo.V22)
 	require.NotNil(t, combatantInfo.Talents)
 	assert.Equal(t, [3]uint8{10, 0, 0}, combatantInfo.Talents.Summary)
 	assert.Equal(t, []uint8{5, 5}, combatantInfo.Talents.Trees[0])
@@ -451,6 +473,31 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	assert.Equal(t, 25, combatantInfo.GearSetups[0].ItemLevel)
 	require.NotNil(t, combatantInfo.GearSetups[1].EnchantID)
 	assert.Equal(t, 2623, *combatantInfo.GearSetups[1].EnchantID)
+}
+
+func TestCombatantInfoV22ParsesStatsFromModernLog(t *testing.T) {
+	t.Parallel()
+
+	line := `9/23/2026 12:16:14.185-4  COMBATANT_INFO,Player-4620-006422B6,0,69,41,123,41,49,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1826,1486,[(105638,130362,3)],(0,0,0,0),[(250532,25,(),(),())],[],1,0,0,0`
+	reader := newTransformReader(strings.NewReader(line))
+	reader.combatLogVersion = 22
+	converted, err := reader.transform(line)
+	require.NoError(t, err)
+
+	ts, _, matched, err := wotlk.ParseLine(converted)
+	require.NoError(t, err)
+	parsed, err := (&Parser{version: 22}).combatantInfo(ts, matched, "")
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+
+	combatantInfo := parsed[0].(*messages.Combatant)
+	require.Equal(t, &combatant.CombatantInfoV22{
+		PrimaryStat: 69,
+		Stamina:     123,
+		SpecID:      1826,
+	}, combatantInfo.V22)
+	require.Len(t, combatantInfo.GearSetups, 1)
+	assert.Equal(t, 250532, combatantInfo.GearSetups[0].ItemID)
 }
 
 func TestCombatantInfoLeavesUnknownLevelUnset(t *testing.T) {

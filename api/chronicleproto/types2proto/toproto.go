@@ -382,6 +382,27 @@ func CombatantInfo(from time.Time, idx int32, msg *messages.Combatant) *chronicl
 	if msg.Talents != nil {
 		ci.Talents = TalentSummary(msg.Talents)
 	}
+	if msg.V22 != nil {
+		ci.V22 = &chronicleproto.CombatantInfoV22{
+			PrimaryStat:            ptr.Ref(msg.V22.PrimaryStat),
+			Stamina:                ptr.Ref(msg.V22.Stamina),
+			MeleeCritRating:        ptr.Ref(msg.V22.MeleeCritRating),
+			RangedCritRating:       ptr.Ref(msg.V22.RangedCritRating),
+			SpellCritRating:        ptr.Ref(msg.V22.SpellCritRating),
+			Speed:                  ptr.Ref(msg.V22.Speed),
+			Leech:                  ptr.Ref(msg.V22.Leech),
+			MeleeHasteRating:       ptr.Ref(msg.V22.MeleeHasteRating),
+			RangedHasteRating:      ptr.Ref(msg.V22.RangedHasteRating),
+			SpellHasteRating:       ptr.Ref(msg.V22.SpellHasteRating),
+			Avoidance:              ptr.Ref(msg.V22.Avoidance),
+			Mastery:                ptr.Ref(msg.V22.Mastery),
+			DamageDoneVersatility:  ptr.Ref(msg.V22.DamageDoneVersatility),
+			HealingDoneVersatility: ptr.Ref(msg.V22.HealingDoneVersatility),
+			DamageTakenVersatility: ptr.Ref(msg.V22.DamageTakenVersatility),
+			UnknownStat:            ptr.Ref(msg.V22.UnknownStat),
+			SpecId:                 ptr.Ref(msg.V22.SpecID),
+		}
+	}
 	return ci
 }
 

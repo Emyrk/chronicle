@@ -383,6 +383,7 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 	var talents *combatant.Talents
 	heroClass := types.HeroClassesUNKNOWN
 	var gear []combatant.GearItem
+	var v22 *combatant.CombatantInfoV22
 	switch p.version {
 	case 9:
 		talents, err = parseTalentSummary(fields[24])
@@ -391,14 +392,15 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 		}
 		gear = parseGear(fields[26])
 	case 22:
-		if len(fields) < 28 {
-			return nil, fmt.Errorf("blizzard V22 COMBATANT_INFO has %d fields, need at least 28", len(fields))
-		}
-		talents, heroClass, err = resolveV22Talents(fields[25], p.talentTrees)
+		v22, err = parseV22CombatantInfo(fields)
 		if err != nil {
 			return nil, err
 		}
-		gear = parseGear(fields[27])
+		talents, heroClass, err = resolveV22Talents(fields[26], p.talentTrees)
+		if err != nil {
+			return nil, err
+		}
+		gear = parseGear(fields[28])
 	default:
 		return nil, fmt.Errorf("blizzard COMBATANT_INFO has unsupported combat log version %d", p.version)
 	}
@@ -413,8 +415,56 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 			Race:       "Unknown",
 			GearSetups: gear,
 			Talents:    talents,
+			V22:        v22,
 		},
 	}}, nil
+}
+
+func parseV22CombatantInfo(fields []string) (*combatant.CombatantInfoV22, error) {
+	if len(fields) < 29 {
+		return nil, fmt.Errorf("blizzard V22 COMBATANT_INFO has %d fields, need at least 29", len(fields))
+	}
+
+	parse := func(index int, name string) (int32, error) {
+		value, err := strconv.ParseInt(fields[index], 10, 32)
+		if err != nil {
+			return 0, fmt.Errorf("parse Blizzard V22 COMBATANT_INFO %s %q: %w", name, fields[index], err)
+		}
+		return int32(value), nil
+	}
+
+	info := &combatant.CombatantInfoV22{}
+	values := []struct {
+		index int
+		name  string
+		dest  *int32
+	}{
+		{2, "primary stat", &info.PrimaryStat},
+		{4, "stamina", &info.Stamina},
+		{9, "melee crit rating", &info.MeleeCritRating},
+		{10, "ranged crit rating", &info.RangedCritRating},
+		{11, "spell crit rating", &info.SpellCritRating},
+		{12, "speed", &info.Speed},
+		{13, "leech", &info.Leech},
+		{14, "melee haste rating", &info.MeleeHasteRating},
+		{15, "ranged haste rating", &info.RangedHasteRating},
+		{16, "spell haste rating", &info.SpellHasteRating},
+		{17, "avoidance", &info.Avoidance},
+		{18, "mastery", &info.Mastery},
+		{19, "damage done versatility", &info.DamageDoneVersatility},
+		{20, "healing done versatility", &info.HealingDoneVersatility},
+		{21, "damage taken versatility", &info.DamageTakenVersatility},
+		{23, "unknown stat", &info.UnknownStat},
+		{24, "spec ID", &info.SpecID},
+	}
+	for _, value := range values {
+		parsed, err := parse(value.index, value.name)
+		if err != nil {
+			return nil, err
+		}
+		*value.dest = parsed
+	}
+	return info, nil
 }
 
 type v22TalentSelection struct {

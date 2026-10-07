@@ -31,6 +31,57 @@ func TestGearSlotPreservesGemPositions(t *testing.T) {
 	require.Nil(t, GearSlot(combatant.GearItem{ItemID: 50633}).GemEnchantIds)
 }
 
+func TestCombatantInfoV22(t *testing.T) {
+	t.Parallel()
+
+	ts := time.UnixMilli(1000)
+	got := CombatantInfo(ts, 3, &messages.Combatant{
+		MessageBase: messages.Base(ts),
+		Combatant: combatant.Combatant{
+			Guid: guid.GUID(1),
+			V22: &combatant.CombatantInfoV22{
+				PrimaryStat:            100,
+				Stamina:                101,
+				MeleeCritRating:        102,
+				RangedCritRating:       103,
+				SpellCritRating:        104,
+				Speed:                  105,
+				Leech:                  106,
+				MeleeHasteRating:       107,
+				RangedHasteRating:      108,
+				SpellHasteRating:       109,
+				Avoidance:              110,
+				Mastery:                111,
+				DamageDoneVersatility:  112,
+				HealingDoneVersatility: 113,
+				DamageTakenVersatility: 114,
+				UnknownStat:            0,
+				SpecID:                 116,
+			},
+		},
+	})
+
+	require.NotNil(t, got.V22)
+	require.Equal(t, int32(100), got.V22.GetPrimaryStat())
+	require.Equal(t, int32(101), got.V22.GetStamina())
+	require.Equal(t, int32(102), got.V22.GetMeleeCritRating())
+	require.Equal(t, int32(103), got.V22.GetRangedCritRating())
+	require.Equal(t, int32(104), got.V22.GetSpellCritRating())
+	require.Equal(t, int32(105), got.V22.GetSpeed())
+	require.Equal(t, int32(106), got.V22.GetLeech())
+	require.Equal(t, int32(107), got.V22.GetMeleeHasteRating())
+	require.Equal(t, int32(108), got.V22.GetRangedHasteRating())
+	require.Equal(t, int32(109), got.V22.GetSpellHasteRating())
+	require.Equal(t, int32(110), got.V22.GetAvoidance())
+	require.Equal(t, int32(111), got.V22.GetMastery())
+	require.Equal(t, int32(112), got.V22.GetDamageDoneVersatility())
+	require.Equal(t, int32(113), got.V22.GetHealingDoneVersatility())
+	require.Equal(t, int32(114), got.V22.GetDamageTakenVersatility())
+	require.NotNil(t, got.V22.UnknownStat)
+	require.Zero(t, got.V22.GetUnknownStat())
+	require.Equal(t, int32(116), got.V22.GetSpecId())
+}
+
 func TestResurrection(t *testing.T) {
 	t.Parallel()
 
