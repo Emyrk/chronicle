@@ -23,7 +23,7 @@ var requiredTables = []string{
 	"SpellPower", "SpellReagents", "SpellShapeshift", "SpellTargetRestrictions", "SpellTotems",
 	"SpellXDescriptionVariables", "SpellCastTimes", "SpellDuration", "SpellRange", "SpellCategory",
 	"SpellRadius", "SpellFocusObject", "SpellDescriptionVariables", "Item", "ItemSparse", "ItemEffect",
-	"ItemDisplayInfo", "SpellItemEnchantment", "ItemSet",
+	"ItemXItemEffect", "ItemDisplayInfo", "SpellItemEnchantment", "ItemSet",
 }
 
 func Convert(dir, expectedProduct, expectedBuild string) (*Import, error) {
@@ -71,7 +71,7 @@ func Convert(dir, expectedProduct, expectedBuild string) (*Import, error) {
 		"Component-only spell IDs are preserved in normalized storage even when the base Spell table has no matching row.",
 		"Modern EffectBasePointsF is preserved directly in normalized storage.",
 		"Modern icon FileDataIDs are resolved through the client listfile for spells and items when present; item display IDs are not guessed.",
-		"Items without ItemSparse are reported and skipped; modern percentage stats, damage curves, armor curves, and unjoinable ItemEffect rows are not imported.",
+		"Items without ItemSparse are reported and skipped; modern percentage stats, damage curves, and armor curves are not imported.",
 	}
 	if err := convertSpells(dir, out); err != nil {
 		return nil, err
@@ -652,6 +652,55 @@ type itemSparseRow struct {
 	ZoneBound                                                                                                                                                                 []int32
 }
 
+type itemEffectRow struct {
+	ID, LegacySlotIndex, TriggerType, Charges, CoolDownMSec int32
+	CategoryCoolDownMSec, SpellCategoryID, SpellID          int32
+}
+
+type itemXItemEffectRow struct {
+	ID, ItemEffectID, ItemID int32
+}
+
+func setItemEffect(item *database.WorldItemTemplate, effect itemEffectRow) {
+	switch effect.LegacySlotIndex {
+	case 0:
+		item.Spellid1 = effect.SpellID
+		item.Spelltrigger1 = effect.TriggerType
+		item.Spellcharges1 = effect.Charges
+		item.Spellcooldown1 = effect.CoolDownMSec
+		item.Spellcategory1 = effect.SpellCategoryID
+		item.Spellcategorycooldown1 = effect.CategoryCoolDownMSec
+	case 1:
+		item.Spellid2 = effect.SpellID
+		item.Spelltrigger2 = effect.TriggerType
+		item.Spellcharges2 = effect.Charges
+		item.Spellcooldown2 = effect.CoolDownMSec
+		item.Spellcategory2 = effect.SpellCategoryID
+		item.Spellcategorycooldown2 = effect.CategoryCoolDownMSec
+	case 2:
+		item.Spellid3 = effect.SpellID
+		item.Spelltrigger3 = effect.TriggerType
+		item.Spellcharges3 = effect.Charges
+		item.Spellcooldown3 = effect.CoolDownMSec
+		item.Spellcategory3 = effect.SpellCategoryID
+		item.Spellcategorycooldown3 = effect.CategoryCoolDownMSec
+	case 3:
+		item.Spellid4 = effect.SpellID
+		item.Spelltrigger4 = effect.TriggerType
+		item.Spellcharges4 = effect.Charges
+		item.Spellcooldown4 = effect.CoolDownMSec
+		item.Spellcategory4 = effect.SpellCategoryID
+		item.Spellcategorycooldown4 = effect.CategoryCoolDownMSec
+	case 4:
+		item.Spellid5 = effect.SpellID
+		item.Spelltrigger5 = effect.TriggerType
+		item.Spellcharges5 = effect.Charges
+		item.Spellcooldown5 = effect.CoolDownMSec
+		item.Spellcategory5 = effect.SpellCategoryID
+		item.Spellcategorycooldown5 = effect.CategoryCoolDownMSec
+	}
+}
+
 func convertItems(dir string, out *Import) error {
 	bases, err := readRows[itemBaseRow](dir, "Item")
 	if err != nil {
@@ -660,6 +709,24 @@ func convertItems(dir string, out *Import) error {
 	sparse, err := readRows[itemSparseRow](dir, "ItemSparse")
 	if err != nil {
 		return err
+	}
+	effects, err := readRows[itemEffectRow](dir, "ItemEffect")
+	if err != nil {
+		return err
+	}
+	links, err := readRows[itemXItemEffectRow](dir, "ItemXItemEffect")
+	if err != nil {
+		return err
+	}
+	effectsByID := make(map[int32]itemEffectRow, len(effects))
+	for _, effect := range effects {
+		effectsByID[effect.ID] = effect
+	}
+	effectsByItemID := make(map[int32][]itemEffectRow)
+	for _, link := range links {
+		if effect, ok := effectsByID[link.ItemEffectID]; ok {
+			effectsByItemID[link.ItemID] = append(effectsByItemID[link.ItemID], effect)
+		}
 	}
 	bm := map[int32]itemBaseRow{}
 	for _, x := range bases {
@@ -683,6 +750,9 @@ func convertItems(dir string, out *Import) error {
 			continue
 		}
 		r := database.WorldItemTemplate{Entry: b.ID, Class: b.ClassID, Subclass: b.SubclassID, Name: x.Display, Description: x.Description, Icon: iconTextures[b.IconFileDataID], Quality: x.OverallQualityID, Flags: at(x.Flags, 0), BuyPrice: x.BuyPrice, SellPrice: x.SellPrice, InventoryType: x.InventoryType, AllowableClass: x.AllowableClass, AllowableRace: at(x.AllowableRace, 0), ItemLevel: x.ItemLevel, RequiredLevel: x.RequiredLevel, RequiredSkill: x.RequiredSkill, RequiredSkillRank: x.RequiredSkillRank, RequiredSpell: x.RequiredAbility, RequiredHonorRank: x.RequiredPVPRank, RequiredReputationFaction: x.MinFactionID, RequiredReputationRank: x.MinReputation, MaxCount: x.MaxCount, Stackable: x.Stackable, ContainerSlots: x.ContainerSlots, Delay: x.ItemDelay, AmmoType: x.AmmunitionType, Bonding: x.Bonding, PageText: x.PageID, PageLanguage: x.LanguageID, PageMaterial: x.PageMaterialID, StartQuest: x.StartQuestID, LockID: x.LockID, Material: x.Material, Sheath: x.SheatheType, SetID: x.ItemSet, Duration: x.DurationInInventory, BagFamily: x.BagFamily, TotemCategory: x.TotemCategoryID, SocketColor1: at(x.SocketType, 0), SocketColor2: at(x.SocketType, 1), SocketColor3: at(x.SocketType, 2), SocketBonus: x.Socket_match_enchantment_ID, GemProperties: x.Gem_properties, ItemLimitCategory: x.LimitCategory, HolidayID: x.RequiredHoliday, AreaBound: at(x.ZoneBound, 0), MapBound: at(x.ZoneBound, 1)}
+		for _, effect := range effectsByItemID[b.ID] {
+			setItemEffect(&r, effect)
+		}
 		out.Items = append(out.Items, r)
 	}
 	sort.Slice(out.Items, func(i, j int) bool { return out.Items[i].Entry < out.Items[j].Entry })

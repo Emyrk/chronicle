@@ -143,7 +143,7 @@ The first importer persists:
 - normalized spell effects, powers, full attribute arrays, difficulty-aware variants, and component-only spell IDs;
 - derived extra-attack, periodic-spell, duration-modifier, vulnerability, cooldown, and affected-aura-duration metadata at difficulty zero;
 - cast-time, duration, range, category, radius, focus-object, and description-variable metadata;
-- item rows having both `Item` and `ItemSparse` records;
+- item rows having both `Item` and `ItemSparse` records, including their legacy spell slots reconstructed through `ItemEffect` and `ItemXItemEffect`;
 - active class talent trees reconstructed from the modern Trait DB2 graph;
 - spell-item enchantments;
 - item-set metadata and membership.
@@ -177,7 +177,7 @@ Forever's separate Legacy progression system is exported from TraitSystem 45 as 
 The importer does not guess identifiers or silently treat modern fields as legacy equivalents. In particular:
 
 - Icon FileDataIDs without a community-listfile entry remain unresolved.
-- Item display IDs, combat stats, damage/armor curves, item effects, random properties, and item-set bonuses are not yet reconstructed. Item icons are resolved directly from `Item.IconFileDataID` through the extracted client listfile.
+- Item display IDs, combat stats, damage/armor curves, random properties, and item-set bonuses are not yet reconstructed. Item icons are resolved directly from `Item.IconFileDataID` through the extracted client listfile.
 - The legacy `dbc_spells` projection exposes only effects 0 through 2, the first nine attributes, the first ordered power, and `DifficultyID=0`. Consumers that need the complete modern data must use the normalized spell effects, powers, and variants.
 
 These gaps are tracked as GitHub issues rather than filled with inferred values.
