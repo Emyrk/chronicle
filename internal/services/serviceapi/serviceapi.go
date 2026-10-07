@@ -28,6 +28,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/serviceexternalapi"
 	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
+	"github.com/Emyrk/chronicle/internal/services/servicegithub"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicemail"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
@@ -113,6 +114,7 @@ func (s *Service) DependsOn() []string {
 		servicetenant.OnTenant(),
 		serviceapplication.OnApplication(),
 		servicedataset.OnDataset(),
+		servicegithub.OnGitHub(),
 		serviceexternalapi.OnExternalAPI(),
 	}
 }
@@ -193,29 +195,31 @@ func (s *Service) Start(ctx context.Context) error {
 	wowdb := wowDBSvc
 	assets := serviceassets.Assets(s.broker)
 	gamedata := servicegamedata.InternalGameData(s.broker)
+	githubClient := servicegithub.GitHub(s.broker).Client()
 	externalAPI := serviceexternalapi.ExternalAPI(s.broker)
 	rankings := servicerankings.Rankings(s.broker)
 	mailer := servicemail.Mailer(s.broker)
 	handler, err := api.New(ctx, api.Options{
-		Logger:           logger,
-		Storage:          st,
-		Chronicle:        chron,
-		RiverQueue:       que,
-		Bot:              bot,
-		Registry:         reg,
-		Zed:              zed,
-		Pool:             pool,
-		PS:               ps,
-		SaffronURL:       saffronURL,
-		OCRURL:           ocrURL,
-		WoWDB:            wowdb,
-		GameDB:           wowDBSvc.GameDB(),
-		Assets:           assets,
-		InternalGameData: gamedata,
-		ExternalAPI:      externalAPI,
-		Rankings:         rankings,
-		Mailer:           mailer,
-		ItemPricing:      itempricing.New(zed, s.itemPricingAPIKey, s.itemPricingBaseURL),
+		Logger:                logger,
+		Storage:               st,
+		Chronicle:             chron,
+		RiverQueue:            que,
+		Bot:                   bot,
+		Registry:              reg,
+		Zed:                   zed,
+		Pool:                  pool,
+		PS:                    ps,
+		SaffronURL:            saffronURL,
+		OCRURL:                ocrURL,
+		WoWDB:                 wowdb,
+		GameDB:                wowDBSvc.GameDB(),
+		Assets:                assets,
+		InternalGameData:      gamedata,
+		ExternalAPI:           externalAPI,
+		Rankings:              rankings,
+		Mailer:                mailer,
+		CustomPanelHTTPClient: githubClient,
+		ItemPricing:           itempricing.New(zed, s.itemPricingAPIKey, s.itemPricingBaseURL),
 
 		AccessURL:             au,
 		AdsTxtURL:             adsTxtURL,

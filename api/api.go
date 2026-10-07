@@ -45,24 +45,25 @@ import (
 )
 
 type Options struct {
-	Logger           *slog.Logger
-	Storage          storage.ObjectStorage
-	Zed              *authz.Authz
-	Pool             *pgxpool.Pool
-	PS               pubsub.Pubsub
-	Chronicle        *chronicle.Chronicle
-	RiverQueue       *riverqueue.Queues
-	Bot              *chroniclebot.Bot
-	SaffronURL       *url.URL
-	OCRURL           *url.URL
-	WoWDB            http.Handler
-	GameDB           *gamedb.WoWDB // For cache invalidation on DBC import
-	Assets           http.Handler
-	InternalGameData http.Handler
-	ExternalAPI      http.Handler
-	Rankings         http.Handler
-	Mailer           *chroniclemail.Mailer
-	ItemPricing      *itempricing.Service
+	Logger                *slog.Logger
+	Storage               storage.ObjectStorage
+	Zed                   *authz.Authz
+	Pool                  *pgxpool.Pool
+	PS                    pubsub.Pubsub
+	Chronicle             *chronicle.Chronicle
+	RiverQueue            *riverqueue.Queues
+	Bot                   *chroniclebot.Bot
+	SaffronURL            *url.URL
+	OCRURL                *url.URL
+	WoWDB                 http.Handler
+	GameDB                *gamedb.WoWDB // For cache invalidation on DBC import
+	Assets                http.Handler
+	InternalGameData      http.Handler
+	ExternalAPI           http.Handler
+	Rankings              http.Handler
+	Mailer                *chroniclemail.Mailer
+	ItemPricing           *itempricing.Service
+	CustomPanelHTTPClient *http.Client
 
 	Registry  *prometheus.Registry
 	AccessURL *url.URL
@@ -158,7 +159,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		Chronicle:    opts.Chronicle,
 		Queues:       opts.RiverQueue,
 		Zed:          opts.Zed,
-		CustomPanels: custompanelapi.New(custompanelapi.Options{}),
+		CustomPanels: custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
 	}, nil
 }
 
