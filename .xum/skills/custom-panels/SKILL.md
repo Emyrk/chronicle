@@ -20,6 +20,7 @@ Read only the layer relevant to the change, then follow the matching checklist.
 | Server manifest and resolver contract | `api/chroniclesdk/custom_panel.go`, `api/custompanelapi/handler.go` |
 | Account settings API | `api/custom_panel_settings.go`, `database/queries/custom_panel_settings.sql` |
 | Browser installation/runtime | `frontend/chronicle/src/pages/Instance/EventsPanels/custom/` |
+| Floating breakout host | `PluginBreakout.tsx`, `pluginBreakoutManager.ts`, `pluginBreakoutLogic.ts` in the custom runtime directory |
 | Panel selection integration | `frontend/chronicle/src/pages/Instance/EventsPanels/EventsPanel.tsx`, `PanelSelector.tsx` |
 | User and author documentation | `frontend/chronicle/src/pages/Tools/CustomPanelsPage.tsx` |
 | SDK package/release | `frontend/chronicle-panel-sdk/package.json`, `.github/workflows/release-panel-sdk.yml` |
@@ -54,6 +55,8 @@ The server deliberately does not fetch artifact bytes. The browser deliberately 
 - Keep `@bufbuild/protobuf` as an SDK peer dependency so the package and consumer use one structurally compatible runtime; pin the SDK development runtime to Chronicle's supported version.
 - Keep entry and worker artifacts self-contained. Chronicle does not install dependencies or resolve runtime-relative imports for external repositories.
 - Allow at most one host-managed worker per mounted panel. Terminate it during every cleanup path.
+- Allow at most eight Chronicle-managed floating breakouts per mounted panel. Keep their shells, popup placement, drag/resize behavior, viewport clamping, and teardown host-owned.
+- Give each plugin breakout an isolated ShadowRoot, copy the verified plugin stylesheet into it, make `close()` idempotent, and close every remaining breakout during host cleanup.
 - Abort pending work, disconnect observers, cancel frames, call plugin `destroy()`, revoke Blob URLs at refcount zero, and remove plugin DOM on unmount.
 - Do not let shared URLs install or enable code. Missing installations remain placeholders.
 - Preserve `?safe=1` as a no-custom-code recovery path.
@@ -69,8 +72,9 @@ The server deliberately does not fetch artifact bytes. The browser deliberately 
 3. Map Chronicle's internal models explicitly into public SDK shapes; do not expose internal React contexts or generated application types.
 4. Update contract tests and runtime broker/host tests.
 5. Update `CustomPanelsPage.tsx` and the SDK README.
-6. Update and build `Emyrk/chronicle-panel` against the packed or published package.
-7. Bump the SDK version when the public package must be released.
+6. When adding host-owned UI such as floating breakouts, keep portal-document behavior, mobile presentation, bounds, resource limits, and cleanup in Chronicle rather than exposing private React components.
+7. Update and build `Emyrk/chronicle-panel` against the packed or published package.
+8. Bump the SDK version when the public package must be released.
 
 Keep these application-owned unless intentionally promoted into the public contract:
 
@@ -225,6 +229,8 @@ Confirm `dist/panel.js` and `dist/worker.js` have no unresolved external imports
 - Counting player or pet damage without excluding events targeting players or player-owned pets when implementing a normal damage-done view.
 - Making `@bufbuild/protobuf` a normal SDK dependency and creating incompatible duplicate runtime types in consumers.
 - Publishing a package version without updating the reference repository's dependency and committed build artifacts.
+- Letting plugins create unmanaged document-level floating UI instead of using `api.breakouts.open()`.
+- Rendering plugin breakout content outside the returned ShadowRoot or forgetting that each mounted panel has its own eight-breakout limit.
 - Renaming the release workflow without changing npm's trusted-publisher configuration.
 
 ## Self-check
