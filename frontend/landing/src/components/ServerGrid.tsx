@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
+import { ArrowUpRight, Search, Upload, X } from "lucide-react";
 import type { ServerEntry } from "../types";
 import { ServerCard } from "./ServerCard";
 
@@ -126,74 +126,110 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
   }, [servers, query]);
 
   return (
-    <section className="relative mx-auto w-full max-w-6xl px-4 pt-8 pb-12 sm:px-6 sm:pt-12 lg:px-8">
-      {/* Subtle radial gradient background */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--primary-darker)_0%,_transparent_60%)] opacity-40 pointer-events-none" />
+    <section id="supported-servers" className="relative mx-auto w-full max-w-6xl scroll-mt-8 px-4 pb-12 pt-14 sm:px-6 sm:pt-20 lg:px-8">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--primary-darker)_0%,_transparent_58%)] opacity-40" />
 
-      {/* Hero header */}
-      <div className="relative mb-6 text-center">
+      <header className="relative mb-10 text-center">
         <img
-          src="chronicle-logo.svg"
+          src="/chronicle-logo.svg"
           alt="Chronicle"
-          className="mx-auto mb-4 h-28 sm:h-28"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
+          className="mx-auto h-20 w-auto drop-shadow-[0_4px_12px_rgba(0,0,0,0.55)] sm:h-28"
         />
-
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-          Combat Log Analysis for{" "}
-          <span className="text-primary">Classic WoW</span>
+        <h1 className="mt-5 font-wow text-2xl font-bold tracking-tight sm:text-4xl">
+          Combat Log Analysis for <span className="text-primary">Classic WoW</span>
         </h1>
-        <div className="mt-3 flex items-center justify-center gap-4 text-sm text-muted-foreground">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-7 gap-y-2 text-sm text-muted-foreground">
           <a
             href="https://github.com/Emyrk/chronicle"
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="shrink-0">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-            </svg>
-            GitHub
-          </a>
-          <span className="text-border">·</span>
-          <a
-            href="/self-hosting/"
             className="transition-colors hover:text-foreground"
           >
+            GitHub
+          </a>
+          <a href="/self-hosting/" className="transition-colors hover:text-foreground">
             Ask Chronicle about your server →
           </a>
         </div>
-      </div>
+      </header>
 
-      {/* Separator */}
-      <div className="relative mx-auto mb-6 h-px w-full max-w-xs bg-border/60" />
+      <article className="relative mb-12 overflow-hidden rounded-xl border border-primary/60 bg-card shadow-2xl shadow-black/20">
+        <div className="absolute left-5 top-5 z-20 rounded-md bg-primary px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-primary-foreground shadow-lg">
+          New · Now supported
+        </div>
+        <div className="grid min-h-[23rem] md:grid-cols-[1.25fr_1fr]">
+          <div className="relative min-h-64 overflow-hidden border-b border-border md:min-h-full md:border-b-0 md:border-r">
+            <img
+              src="/forever/wow-forever-hero.jpg"
+              alt="WoW Forever key art"
+              className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-700 hover:scale-[1.02]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-card/75 via-transparent to-black/20 md:bg-gradient-to-r md:from-transparent md:via-transparent md:to-card/25" />
+          </div>
+          <div className="flex flex-col justify-center px-6 py-9 sm:px-10 md:px-8 lg:px-10">
+            <div className="flex items-center gap-3">
+              <img
+                src="https://icons.chronicleclassic.com/servers/forever/logo_sq.avif"
+                alt="WoW Forever logo"
+                className="h-12 w-12 rounded-lg object-contain shadow-md"
+              />
+              <div>
+                <h2 className="font-wow text-3xl font-bold text-foreground">WoW Forever</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Hosted by Chronicle</p>
+              </div>
+            </div>
+            <p className="mt-6 text-base leading-7 text-muted-foreground">
+              Upload your WoW Forever logs today. Chronicle turns every pull into detailed damage, healing, death, and raid-performance analysis.
+            </p>
+            <div className="mt-7 flex flex-col gap-3 lg:flex-row">
+              <a
+                href="https://forever.chronicleclassic.com/"
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+              >
+                View WoW Forever logs
+                <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
+              </a>
+              <a
+                href="https://forever.chronicleclassic.com/upload"
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border px-4 py-3 text-sm font-semibold text-foreground transition hover:border-foreground/30 hover:bg-muted"
+              >
+                <Upload aria-hidden="true" className="h-4 w-4" />
+                Upload a log
+              </a>
+            </div>
+          </div>
+        </div>
+      </article>
 
-      {/* Search — matches rise to the top while the full directory remains visible */}
-      <div className="relative mx-auto mb-6 max-w-xl">
-        <Search
-          aria-hidden="true"
-          className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search servers, expansions, or features…"
-          aria-label="Search servers"
-          className="w-full rounded-lg border border-border bg-card/80 py-3 pl-10 pr-10 text-sm text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground/70 focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            aria-label="Clear search"
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <X aria-hidden="true" className="h-4 w-4" />
-          </button>
-        )}
+      <div className="relative mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-wow text-2xl font-bold text-foreground">All supported servers</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Find your server or bring Chronicle to your community.</p>
+        </div>
+        <div className="relative w-full sm:max-w-md">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search servers, expansions, or features…"
+            aria-label="Search servers"
+            className="w-full rounded-lg border border-border bg-card/80 py-3 pl-10 pr-10 text-sm text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground/70 focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <X aria-hidden="true" className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Grid — non-matching cards are greyed out instead of hidden */}
@@ -218,17 +254,19 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
             ))}
           </>
         )}
-        {searchResults.map(({ server, matches }) => {
-          const dimmed = query.trim() !== "" && !matches;
-          return (
-            <div
-              key={server.id}
-              className={`flex transition-all duration-200 ${dimmed ? "opacity-30 grayscale" : "opacity-100 grayscale-0"}`}
-            >
-              <ServerCard server={server} />
-            </div>
-          );
-        })}
+        {searchResults
+          .filter(({ server }) => server.id !== "forever")
+          .map(({ server, matches }) => {
+            const dimmed = query.trim() !== "" && !matches;
+            return (
+              <div
+                key={server.id}
+                className={`flex transition-all duration-200 ${dimmed ? "opacity-30 grayscale" : "opacity-100 grayscale-0"}`}
+              >
+                <ServerCard server={server} />
+              </div>
+            );
+          })}
       </div>
 
     </section>

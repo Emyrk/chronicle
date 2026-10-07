@@ -67,6 +67,7 @@ export const SERVERS: ServerEntry[] = [
  * are appended to the list.
  */
 export const DISCOVERY_URLS: string[] = [
+  "https://forever.chronicleclassic.com",
   // Add URLs here as servers configure their branding.
   // e.g. "https://turtle.chronicleclassic.com",
   "https://legacy.chronicleclassic.com",

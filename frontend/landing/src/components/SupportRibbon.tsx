@@ -5,9 +5,9 @@ export function SupportRibbon() {
     <a
       href="/support/"
       aria-label="Support Chronicle"
-      className="support-ribbon group fixed bottom-8 right-3 z-40 flex h-[4.5rem] items-center pl-[4.25rem] pr-3 text-left shadow-2xl shadow-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:bottom-auto sm:right-5 sm:top-6 sm:h-20 sm:pl-[5.25rem] sm:pr-4"
+      className="support-ribbon group fixed bottom-3 right-3 z-40 flex h-16 w-16 items-center p-0 text-left shadow-2xl shadow-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:bottom-auto sm:right-5 sm:top-6 sm:h-20 sm:w-auto sm:pl-[5.25rem] sm:pr-4"
     >
-      <span className="support-ribbon-medallion absolute -left-3 top-1/2 z-10 h-[4.75rem] w-[4.75rem] -translate-y-1/2 rounded-full sm:-left-4 sm:h-[5.75rem] sm:w-[5.75rem]">
+      <span className="support-ribbon-medallion absolute left-1/2 top-1/2 z-10 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full sm:-left-4 sm:h-[5.75rem] sm:w-[5.75rem] sm:translate-x-0">
         <span className="support-ribbon-coin absolute inset-0">
           <span className="support-ribbon-coin-spin">
             {[-3.5, -2.6, -1.7, -0.8, 0, 0.8, 1.7, 2.6, 3.5].map((z) => (
@@ -39,7 +39,7 @@ export function SupportRibbon() {
         </span>
       </span>
 
-      <span className="relative z-10 min-w-0">
+      <span className="relative z-10 hidden min-w-0 sm:block">
         <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-amber-300/85 sm:text-[10px]">
           <Heart aria-hidden="true" className="h-3 w-3 fill-current" />
           Keep it running
