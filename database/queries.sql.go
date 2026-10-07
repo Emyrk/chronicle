@@ -1779,6 +1779,33 @@ func (q *sqlQuerier) DeleteUserCustomPanelInstallationsExcept(ctx context.Contex
 	return err
 }
 
+const getCustomPanelReleaseByRepositoryCommit = `-- name: GetCustomPanelReleaseByRepositoryCommit :one
+SELECT id, repository, commit_sha, manifest, manifest_sha256, created_at, updated_at
+FROM custom_panel_releases
+WHERE repository = $1
+  AND commit_sha = $2
+`
+
+type GetCustomPanelReleaseByRepositoryCommitParams struct {
+	Repository string `db:"repository" json:"repository"`
+	CommitSha  string `db:"commit_sha" json:"commit_sha"`
+}
+
+func (q *sqlQuerier) GetCustomPanelReleaseByRepositoryCommit(ctx context.Context, arg GetCustomPanelReleaseByRepositoryCommitParams) (CustomPanelRelease, error) {
+	row := q.db.QueryRow(ctx, getCustomPanelReleaseByRepositoryCommit, arg.Repository, arg.CommitSha)
+	var i CustomPanelRelease
+	err := row.Scan(
+		&i.ID,
+		&i.Repository,
+		&i.CommitSha,
+		&i.Manifest,
+		&i.ManifestSha256,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserCustomPanelSettings = `-- name: GetUserCustomPanelSettings :one
 SELECT user_id, enabled, revision, created_at, updated_at
 FROM user_custom_panel_settings

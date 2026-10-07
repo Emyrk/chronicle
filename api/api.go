@@ -108,6 +108,7 @@ type API struct {
 	Chronicle      *chronicle.Chronicle
 	Queues         *riverqueue.Queues
 	Zed            *authz.Authz
+	CustomPanels   *custompanelapi.Handler
 	discoveryStats discoveryStatsCache
 }
 
@@ -151,12 +152,13 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	}
 
 	return &API{
-		Opts:       &opts,
-		AppContext: ctx,
-		Auth:       service,
-		Chronicle:  opts.Chronicle,
-		Queues:     opts.RiverQueue,
-		Zed:        opts.Zed,
+		Opts:         &opts,
+		AppContext:   ctx,
+		Auth:         service,
+		Chronicle:    opts.Chronicle,
+		Queues:       opts.RiverQueue,
+		Zed:          opts.Zed,
+		CustomPanels: custompanelapi.New(custompanelapi.Options{}),
 	}, nil
 }
 
@@ -231,7 +233,7 @@ func (api *API) Routes() chi.Router {
 				r.Put("/raid-comps/{compID}/sharing", api.UpdateRaidCompositionSharing)
 				r.Post("/share", api.CreateShare)
 			})
-			r.Mount("/custom-panels", custompanelapi.New(custompanelapi.Options{}).Routes())
+			r.Mount("/custom-panels", api.CustomPanels.Routes())
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
 			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth, api.Opts.CacheSvc).Routes())
 			r.Mount("/gear-progressions", gearprogressionapi.New(api.Opts.Zed, api.Auth).Routes())

@@ -144,20 +144,42 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	manifest, manifestBytes, err := h.fetchManifest(ctx, owner, repo, commit)
+	response, err := h.resolveRelease(ctx, repository, owner, repo, commit)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
 	}
+	httpapi.Write(r.Context(), w, http.StatusOK, response)
+}
+
+// ResolveRelease fetches and validates the manifest pinned to an exact commit.
+// It never fetches artifact bytes.
+func (h *Handler) ResolveRelease(ctx context.Context, repository, commit string) (chroniclesdk.CustomPanelResolveResponse, error) {
+	normalized, owner, repo, err := validateRepository(repository)
+	if err != nil || normalized != repository {
+		return chroniclesdk.CustomPanelResolveResponse{}, invalid("repository must be normalized owner/repo")
+	}
+	if !commitPattern.MatchString(commit) {
+		return chroniclesdk.CustomPanelResolveResponse{}, invalid("commit must be a 40-character lowercase hexadecimal SHA")
+	}
+	ctx, cancel := context.WithTimeout(ctx, h.requestTimeout)
+	defer cancel()
+	return h.resolveRelease(ctx, repository, owner, repo, commit)
+}
+
+func (h *Handler) resolveRelease(ctx context.Context, repository, owner, repo, commit string) (chroniclesdk.CustomPanelResolveResponse, error) {
+	manifest, manifestBytes, err := h.fetchManifest(ctx, owner, repo, commit)
+	if err != nil {
+		return chroniclesdk.CustomPanelResolveResponse{}, err
+	}
 	if err := validateManifest(repository, &manifest); err != nil {
-		h.writeError(w, r, err)
-		return
+		return chroniclesdk.CustomPanelResolveResponse{}, err
 	}
 	manifestHash := sha256.Sum256(manifestBytes)
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.CustomPanelResolveResponse{
+	return chroniclesdk.CustomPanelResolveResponse{
 		Repository: repository, CommitSHA: commit, Manifest: manifest,
 		ManifestSHA256: hex.EncodeToString(manifestHash[:]), Artifacts: ArtifactSet(repository, commit, manifest.Artifacts),
-	})
+	}, nil
 }
 
 func (h *Handler) resolveRef(ctx context.Context, owner, repo, ref string) (string, error) {

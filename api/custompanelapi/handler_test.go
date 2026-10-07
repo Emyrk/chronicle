@@ -153,6 +153,28 @@ func TestResolve(t *testing.T) {
 	assert.Zero(t, artifactRequests.Load())
 }
 
+func TestResolveReleaseFetchesOnlyPinnedManifest(t *testing.T) {
+	t.Parallel()
+	var commitRequests atomic.Int32
+	var artifactRequests atomic.Int32
+	server := githubServer(t, validManifest(), func(w http.ResponseWriter, r *http.Request) bool {
+		if strings.Contains(r.URL.Path, "/commits/") {
+			commitRequests.Add(1)
+		}
+		if strings.Contains(r.URL.Path, "/dist/") {
+			artifactRequests.Add(1)
+		}
+		return false
+	})
+	defer server.Close()
+
+	response, err := newTestHandler(server, time.Second).ResolveRelease(context.Background(), "owner/repo", testCommit)
+	require.NoError(t, err)
+	require.Equal(t, testCommit, response.CommitSHA)
+	require.Zero(t, commitRequests.Load())
+	require.Zero(t, artifactRequests.Load())
+}
+
 func TestResolveRejectsInvalidSourceBeforeGitHub(t *testing.T) {
 	t.Parallel()
 	var requests atomic.Int32

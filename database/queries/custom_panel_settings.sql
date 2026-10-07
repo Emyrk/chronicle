@@ -15,6 +15,12 @@ SET enabled = EXCLUDED.enabled,
 WHERE user_custom_panel_settings.revision = @expected_revision
 RETURNING *;
 
+-- name: GetCustomPanelReleaseByRepositoryCommit :one
+SELECT *
+FROM custom_panel_releases
+WHERE repository = @repository
+  AND commit_sha = @commit_sha;
+
 -- name: InsertCustomPanelRelease :one
 INSERT INTO custom_panel_releases (repository, commit_sha, manifest, manifest_sha256)
 VALUES (@repository, @commit_sha, @manifest::jsonb, @manifest_sha256)

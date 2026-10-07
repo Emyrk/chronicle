@@ -205,6 +205,7 @@ type sqlcQuerier interface {
 	// score. parse_count tells the caller whether the cached average is complete.
 	GetCharacterPerformanceRuns(ctx context.Context, arg GetCharacterPerformanceRunsParams) ([]GetCharacterPerformanceRunsRow, error)
 	GetCreatureTemplatesByEntries(ctx context.Context, arg GetCreatureTemplatesByEntriesParams) ([]WorldCreatureTemplate, error)
+	GetCustomPanelReleaseByRepositoryCommit(ctx context.Context, arg GetCustomPanelReleaseByRepositoryCommitParams) (CustomPanelRelease, error)
 	GetDBCItemDisplayInfoByID(ctx context.Context, arg GetDBCItemDisplayInfoByIDParams) (DbcItemDisplayInfo, error)
 	// Dataset queries. These run with AdminBypass context since the datasets table
 	// itself is not behind RLS.
