@@ -1,5 +1,3 @@
-import { serverCapabilities } from "@/config/serverCapabilities";
-
 type Faction = "Horde" | "Alliance" | "Unknown";
 
 const NIGHTMARE_OF_URSOL_FLAVOR = "nightmare-of-ursol";
@@ -26,9 +24,7 @@ const RACE_DISPLAY: Record<string, string> = {
 
 export function raceFaction(race: string, flavor: readonly string[]): Faction {
   if (race === "BloodElf") {
-    return flavor.includes(NIGHTMARE_OF_URSOL_FLAVOR)
-      ? "Alliance"
-      : serverCapabilities.bloodElfFaction;
+    return flavor.includes(NIGHTMARE_OF_URSOL_FLAVOR) ? "Alliance" : "Horde";
   }
   return RACE_TO_FACTION[race] ?? "Unknown";
 }

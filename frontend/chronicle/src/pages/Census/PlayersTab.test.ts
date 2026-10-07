@@ -9,7 +9,10 @@ describe("census race presentation", () => {
     expect(raceFaction("BloodElf", NIGHTMARE_OF_URSOL)).toBe("Alliance");
   });
 
-  it("keeps the standard Blood Elf name for other flavors", () => {
-    expect(raceName("BloodElf", ["wrath"])).toBe("Blood Elf");
+  it("presents Blood Elves as Horde for other flavors", () => {
+    const chromieFlavor = ["wrath", "azerothcore", "chromiecraft"];
+
+    expect(raceName("BloodElf", chromieFlavor)).toBe("Blood Elf");
+    expect(raceFaction("BloodElf", chromieFlavor)).toBe("Horde");
   });
 });
