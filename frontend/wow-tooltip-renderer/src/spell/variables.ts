@@ -23,11 +23,11 @@ export function resolveVariable(
   const lvl = forLevel ?? spell.spell_level;
   const normalizedVariable = variable.toLowerCase();
 
-  // Static tooltips have no character healing-power context. Treat bonus healing
-  // as zero, while preserving the spell's coefficient for expressions such as
-  // `${$m1+($bh*$bc)}`. This renders the base heal instead of leaking the raw
-  // runtime formula.
-  if (normalizedVariable === "$bh") return "0";
+  // Static tooltips have no character stat context. Treat attack power and bonus
+  // healing as zero, while preserving coefficients and player-level scaling so
+  // expressions can still render their base values instead of leaking raw formulas.
+  if (normalizedVariable === "$ap" || normalizedVariable === "$bh") return "0";
+  if (normalizedVariable === "$pl") return String(lvl);
   if (normalizedVariable === "$bc") {
     return String(getTooltipEffect(spell, 0)?.effect_bonus_coefficient ?? 0);
   }
@@ -40,16 +40,22 @@ export function resolveVariable(
   // Indexed variables: $X# where X is a letter and # is a 1-based effect index.
   const indexedMatch = variable.match(/^\$([a-zA-Z])(\d+)$/);
   if (indexedMatch) {
-    const type = indexedMatch[1].toLowerCase();
+    const rawType = indexedMatch[1];
+    const type = rawType.toLowerCase();
     const index = parseInt(indexedMatch[2], 10) - 1; // 1-indexed -> 0-indexed
 
     switch (type) {
-      case "s": // Effect value (base + die range)
-      case "m": // Modified effect value (same as $s for our purposes)
+      case "s": // Effect value (base + die/variance range)
         return formatValue(
           getScaledValue(spell, index, lvl),
           hasExactBasePoints(spell, index),
         );
+
+      case "m": { // Minimum ($m) or maximum ($M) effect value
+        const values = getScaledValue(spell, index, lvl);
+        const value = rawType === "M" ? values[values.length - 1] : values[0];
+        return formatValue([value], hasExactBasePoints(spell, index));
+      }
 
       case "o": // Total over duration
         return formatValue(
@@ -98,12 +104,18 @@ export function resolveVariable(
 
   // Non-indexed variables. Effect variables without an explicit slot use effect 1.
   switch (variable) {
-    case "$s": // Effect value (base + die range)
-    case "$m": // Modified effect value (same as $s for our purposes)
+    case "$s": // Effect value (base + die/variance range)
       return formatValue(
         getScaledValue(spell, 0, lvl),
         hasExactBasePoints(spell, 0),
       );
+
+    case "$m":
+    case "$M": { // Minimum ($m) or maximum ($M) effect value
+      const values = getScaledValue(spell, 0, lvl);
+      const value = variable === "$M" ? values[values.length - 1] : values[0];
+      return formatValue([value], hasExactBasePoints(spell, 0));
+    }
 
     case "$o": // Total over duration
       return formatValue(
@@ -125,6 +137,9 @@ export function resolveVariable(
 
     case "$v": // Max target level
       return String(spell.max_target_level || 0);
+
+    case "$i": // Maximum number of affected targets
+      return String(spell.max_targets || 0);
 
     case "$t": {
       // Tick interval without index defaults to effect 1

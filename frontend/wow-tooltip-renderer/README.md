@@ -70,12 +70,14 @@ documented grammar). Supported escapes:
 
 | Variable | Meaning |
 | --- | --- |
-| `$s1`/`$m1`, `$s2`, `$s3` | Effect value (single or `min to max` range) |
+| `$s1`, `$s2`, `$s3` | Effect value (single or `min to max` range) |
+| `$m1` / `$M1` | Minimum / maximum effect value, including modern variance |
 | `$o1`/`$o2`/`$o3` | Periodic total over the spell duration |
 | `$d`, `$dN` | Duration |
 | `$t`, `$tN` | Tick interval (seconds) |
 | `$a1` | AOE radius |
-| `$r`, `$n`, `$h`, `$u`, `$v`, `$x1`, `$b1`, `$e1` | range / charges / proc chance / stacks / etc. |
+| `$PL`, `$AP` | Player level / attack power (`$AP` is zero without character context) |
+| `$i`, `$r`, `$n`, `$h`, `$u`, `$v`, `$x1`, `$b1`, `$e1` | targets / range / charges / proc chance / stacks / etc. |
 | `$NNNNs1` | Cross-spell reference (e.g. `$23455s1`) |
 | `$*N;s1`, `$/N;s1` | Multiply / divide a value |
 | `${expr}` | Inline arithmetic (variables resolve first, then evaluate) |
