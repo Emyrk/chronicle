@@ -1784,6 +1784,7 @@ SELECT id, repository, commit_sha, manifest, manifest_sha256, created_at, update
 FROM custom_panel_releases
 WHERE repository = $1
   AND commit_sha = $2
+FOR KEY SHARE
 `
 
 type GetCustomPanelReleaseByRepositoryCommitParams struct {

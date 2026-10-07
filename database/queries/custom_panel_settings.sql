@@ -19,7 +19,8 @@ RETURNING *;
 SELECT *
 FROM custom_panel_releases
 WHERE repository = @repository
-  AND commit_sha = @commit_sha;
+  AND commit_sha = @commit_sha
+FOR KEY SHARE;
 
 -- name: InsertCustomPanelRelease :one
 INSERT INTO custom_panel_releases (repository, commit_sha, manifest, manifest_sha256)
