@@ -112,6 +112,13 @@ export function CustomPanelHost({
     abortRef.current = abort;
     let disposed = false;
     let verifiedArtifacts: VerifiedCustomPanelArtifacts | undefined;
+    const releaseArtifacts = () => {
+      if (!verifiedArtifacts) return;
+      const entryUrl = verifiedArtifacts.entryUrl;
+      const revokedUrls = verifiedArtifacts.revoke();
+      if (revokedUrls.includes(entryUrl)) releaseCustomPanelModule(entryUrl);
+      verifiedArtifacts = undefined;
+    };
     const ownerWindow = host.ownerDocument.defaultView ?? window;
     const style = host.ownerDocument.createElement("style");
     style.textContent = BASE_CSS;
@@ -178,10 +185,11 @@ export function CustomPanelHost({
       try {
         verifiedArtifacts = await loadVerifiedCustomPanelArtifacts(
           installation.artifacts,
+          panel.worker === true,
           abort.signal,
         );
         if (disposed) {
-          verifiedArtifacts.revoke();
+          releaseArtifacts();
           return;
         }
         if (verifiedArtifacts.styles !== undefined) {
@@ -218,10 +226,7 @@ export function CustomPanelHost({
         ownerWindow.cancelAnimationFrame(updateFrameRef.current);
       workerRef.current?.terminate();
       workerRef.current = null;
-      if (verifiedArtifacts) {
-        releaseCustomPanelModule(verifiedArtifacts.entryUrl);
-        verifiedArtifacts.revoke();
-      }
+      releaseArtifacts();
       const mounted = instanceRef.current;
       instanceRef.current = null;
       root.replaceChildren();
