@@ -22,6 +22,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	wotlksynthetic "github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
@@ -65,7 +66,7 @@ type Parser struct {
 	version     int
 }
 
-func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
+func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry, format database.LogFormat) (*Parser, error) {
 	r, year, err := readBaseYear(r)
 	if err != nil {
 		return nil, err
@@ -77,6 +78,12 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	}
 	p.guids = transformer.guids
 	p.inner.SetBaseYear(year)
+	switch format {
+	case database.LogFormatV22Cleu:
+		p.version = 22
+	case database.LogFormatV9Cleu:
+		p.version = 9
+	}
 	return p, nil
 }
 

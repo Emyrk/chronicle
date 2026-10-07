@@ -257,7 +257,7 @@ func (w *WorkerLogParse) parseCombatLog(
 				p.SetRealmClockInfo(scanCompanionHeaderClock(data))
 			}
 		} else {
-			p, err = blizzardmodern.New(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+			p, err = blizzardmodern.New(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg, logFormat)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("create modern Blizzard CLEU parser: %w", err)
