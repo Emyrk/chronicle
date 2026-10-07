@@ -2,6 +2,8 @@ package custompanelapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -116,6 +118,16 @@ func performRequest(handler http.Handler, method, target, body string) *httptest
 	return rec
 }
 
+func TestCanonicalJSONFixture(t *testing.T) {
+	t.Parallel()
+
+	canonical, err := CanonicalJSON([]byte(`{"z":1,"list":[3,2,1],"a":{"d":4,"c":"text"}}`))
+	require.NoError(t, err)
+	require.Equal(t, `{"a":{"c":"text","d":4},"list":[3,2,1],"z":1}`, string(canonical))
+	digest := sha256.Sum256(canonical)
+	require.Equal(t, "75732109c1e99955de11fa9f16171719cd5d863fb6dcc7535263a9e91dfebf00", hex.EncodeToString(digest[:]))
+}
+
 func TestResolve(t *testing.T) {
 	t.Parallel()
 	manifest := validManifest()
@@ -147,7 +159,10 @@ func TestResolve(t *testing.T) {
 			assert.Equal(t, "https://raw.githubusercontent.com/owner/repo/"+testCommit+"/dist/panel.js", response.Artifacts.Entry.URL)
 			require.NotNil(t, response.Artifacts.Worker)
 			require.NotNil(t, response.Artifacts.Styles)
-			assert.Len(t, response.ManifestSHA256, 64)
+			canonical, canonicalErr := CanonicalManifest(response.Manifest)
+			require.NoError(t, canonicalErr)
+			canonicalHash := sha256.Sum256(canonical)
+			assert.Equal(t, hex.EncodeToString(canonicalHash[:]), response.ManifestSHA256)
 		})
 	}
 	assert.Zero(t, artifactRequests.Load())

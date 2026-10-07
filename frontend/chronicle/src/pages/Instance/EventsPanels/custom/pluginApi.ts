@@ -1,3 +1,4 @@
+import { verifyCustomPanelManifestSHA256 } from "./pluginManifest";
 import { isManifestV1, normalizeRepository, type ResolveCustomPanelResponse } from "./pluginTypes";
 
 export async function resolveCustomPanelInstallation(repositoryInput: string, ref: string): Promise<ResolveCustomPanelResponse> {
@@ -12,6 +13,9 @@ export async function resolveCustomPanelInstallation(repositoryInput: string, re
   const result = await response.json() as ResolveCustomPanelResponse;
   if (result.repository !== repository || !/^[0-9a-f]{40}$/.test(result.commit_sha) || !isManifestV1(result.manifest, repository) || !result.artifacts?.entry) {
     throw new Error("The server returned an invalid custom panel response.");
+  }
+  if (!await verifyCustomPanelManifestSHA256(result.manifest, result.manifest_sha256)) {
+    throw new Error("The server returned a custom panel manifest with an invalid canonical SHA-256.");
   }
   return result;
 }

@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { fetchCustomPanelSettings } from "./pluginAccountStorage";
+import { customPanelManifestSHA256 } from "./pluginManifest";
 import {
   CUSTOM_PANEL_INSTALLATIONS_KEY,
   CUSTOM_PANELS_ENABLED_KEY,
@@ -34,6 +35,10 @@ const installation: CustomPanelInstallationV1 = {
   installedAt: "2026-10-06T00:00:00Z",
   updatedAt: "2026-10-06T00:00:00Z",
 };
+
+beforeAll(async () => {
+  installation.manifestSha256 = await customPanelManifestSHA256(installation.manifest);
+});
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -78,6 +83,24 @@ describe("fetchCustomPanelSettings", () => {
     ).toMatchObject({ enabled: true, expected_revision: 0 });
     expect(storage.getItem(CUSTOM_PANELS_ENABLED_KEY)).toBeNull();
     expect(storage.getItem(CUSTOM_PANEL_INSTALLATIONS_KEY)).toBeNull();
+  });
+
+  it("rejects account installations whose canonical manifest hash does not match", async () => {
+    vi.stubGlobal("window", { localStorage: new MapStorage() });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        enabled: true,
+        installations: [{ ...installation, manifestSha256: "0".repeat(64) }],
+        revision: 2,
+      }), { status: 200 }),
+    ));
+
+    await expect(fetchCustomPanelSettings()).resolves.toMatchObject({
+      enabled: true,
+      installations: [],
+      corruptRecords: 1,
+      revision: 2,
+    });
   });
 
   it("does not overwrite existing account settings", async () => {

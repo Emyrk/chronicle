@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -37,6 +39,14 @@ func customPanelTestResponse(name, manifestSHA string) chroniclesdk.CustomPanelR
 		},
 		Panels: []chroniclesdk.CustomPanelManifestPanel{{ID: "test", Name: "Test"}},
 	}
+	if manifestSHA == "" {
+		canonical, err := custompanelapi.CanonicalManifest(manifest)
+		if err != nil {
+			panic(err)
+		}
+		digest := sha256.Sum256(canonical)
+		manifestSHA = hex.EncodeToString(digest[:])
+	}
 	return chroniclesdk.CustomPanelResolveResponse{
 		Repository: "owner/repo", CommitSHA: customPanelTestCommit, Manifest: manifest,
 		ManifestSHA256: manifestSHA,
@@ -56,8 +66,8 @@ func TestPrepareCustomPanelReleasesRejectsForgedFirstWriter(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	store, _ := dbtestutil.NewDB(t)
-	authoritative := customPanelTestResponse("Authoritative", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-	forged := customPanelTestResponse("Forged", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+	authoritative := customPanelTestResponse("Authoritative", "")
+	forged := customPanelTestResponse("Forged", "")
 	forgedInstallation := installationFromResponse(forged)
 	require.NoError(t, custompanelapi.ValidateStoredInstallation(forgedInstallation), "forged payload should pass structural client-payload validation")
 	resolver := &staticCustomPanelReleaseResolver{response: authoritative}
@@ -76,7 +86,7 @@ func TestPrepareCustomPanelReleasesReusesExistingReleaseWithoutFetch(t *testing.
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	store, _ := dbtestutil.NewDB(t)
-	response := customPanelTestResponse("Authoritative", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+	response := customPanelTestResponse("Authoritative", "")
 	manifest, err := json.Marshal(response.Manifest)
 	require.NoError(t, err)
 	_, err = store.InsertCustomPanelRelease(ctx, database.InsertCustomPanelReleaseParams{

@@ -20,6 +20,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/time/rate"
 )
@@ -168,18 +169,36 @@ func (h *Handler) ResolveRelease(ctx context.Context, repository, commit string)
 }
 
 func (h *Handler) resolveRelease(ctx context.Context, repository, owner, repo, commit string) (chroniclesdk.CustomPanelResolveResponse, error) {
-	manifest, manifestBytes, err := h.fetchManifest(ctx, owner, repo, commit)
+	manifest, _, err := h.fetchManifest(ctx, owner, repo, commit)
 	if err != nil {
 		return chroniclesdk.CustomPanelResolveResponse{}, err
 	}
 	if err := validateManifest(repository, &manifest); err != nil {
 		return chroniclesdk.CustomPanelResolveResponse{}, err
 	}
-	manifestHash := sha256.Sum256(manifestBytes)
+	canonicalManifest, err := CanonicalManifest(manifest)
+	if err != nil {
+		return chroniclesdk.CustomPanelResolveResponse{}, &apiError{status: http.StatusUnprocessableEntity, message: "Custom panel manifest cannot be canonicalized.", detail: err.Error()}
+	}
+	manifestHash := sha256.Sum256(canonicalManifest)
 	return chroniclesdk.CustomPanelResolveResponse{
 		Repository: repository, CommitSHA: commit, Manifest: manifest,
 		ManifestSHA256: hex.EncodeToString(manifestHash[:]), Artifacts: ArtifactSet(repository, commit, manifest.Artifacts),
 	}, nil
+}
+
+// CanonicalJSON returns the RFC 8785/JCS representation used for release
+// identity and cross-language SHA-256 verification.
+func CanonicalJSON(encoded []byte) ([]byte, error) {
+	return jsoncanonicalizer.Transform(encoded)
+}
+
+func CanonicalManifest(manifest chroniclesdk.CustomPanelManifest) ([]byte, error) {
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return CanonicalJSON(encoded)
 }
 
 func (h *Handler) resolveRef(ctx context.Context, owner, repo, ref string) (string, error) {

@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -164,11 +166,16 @@ func prepareCustomPanelReleases(ctx context.Context, store customPanelReleaseSto
 			Repository: installation.Repository, CommitSha: installation.CommitSHA,
 		})
 		if err == nil {
+			canonicalManifest, canonicalErr := custompanelapi.CanonicalJSON(release.Manifest)
+			if canonicalErr != nil {
+				return nil, canonicalErr
+			}
+			manifestHash := sha256.Sum256(canonicalManifest)
 			candidate := preparedCustomPanelRelease{
 				repository: release.Repository, commitSHA: release.CommitSha,
-				manifest: release.Manifest, manifestSHA256: release.ManifestSha256,
+				manifest: canonicalManifest, manifestSHA256: release.ManifestSha256,
 			}
-			if !releaseMatchesInstallation(candidate, installation) {
+			if hex.EncodeToString(manifestHash[:]) != release.ManifestSha256 || !releaseMatchesInstallation(candidate, installation) {
 				return nil, errCustomPanelReleaseMismatch
 			}
 			prepared = append(prepared, candidate)
@@ -182,7 +189,7 @@ func prepareCustomPanelReleases(ctx context.Context, store customPanelReleaseSto
 		if err != nil {
 			return nil, fmt.Errorf("resolve %s@%s: %w", installation.Repository, installation.CommitSHA, err)
 		}
-		manifest, err := json.Marshal(resolved.Manifest)
+		manifest, err := custompanelapi.CanonicalManifest(resolved.Manifest)
 		if err != nil {
 			return nil, err
 		}
@@ -199,9 +206,9 @@ func prepareCustomPanelReleases(ctx context.Context, store customPanelReleaseSto
 }
 
 func releaseMatchesInstallation(release preparedCustomPanelRelease, installation chroniclesdk.CustomPanelInstallation) bool {
-	manifest, err := json.Marshal(installation.Manifest)
+	manifest, err := custompanelapi.CanonicalManifest(installation.Manifest)
 	return err == nil && release.repository == installation.Repository && release.commitSHA == installation.CommitSHA &&
-		release.manifestSHA256 == installation.ManifestSHA256 && jsonBytesEqual(release.manifest, manifest)
+		release.manifestSHA256 == installation.ManifestSHA256 && bytes.Equal(release.manifest, manifest)
 }
 
 func artifactSetsEqual(left, right chroniclesdk.CustomPanelArtifactSet) bool {
@@ -216,8 +223,14 @@ func artifactPointersEqual(left, right *chroniclesdk.CustomPanelArtifact) bool {
 }
 
 func releaseMatchesPrepared(release database.CustomPanelRelease, prepared preparedCustomPanelRelease) bool {
+	canonicalManifest, err := custompanelapi.CanonicalJSON(release.Manifest)
+	if err != nil {
+		return false
+	}
+	manifestHash := sha256.Sum256(canonicalManifest)
 	return release.Repository == prepared.repository && release.CommitSha == prepared.commitSHA &&
-		release.ManifestSha256 == prepared.manifestSHA256 && jsonBytesEqual(release.Manifest, prepared.manifest)
+		release.ManifestSha256 == prepared.manifestSHA256 && release.ManifestSha256 == hex.EncodeToString(manifestHash[:]) &&
+		bytes.Equal(canonicalManifest, prepared.manifest)
 }
 
 func customPanelSettingsResponse(ctx context.Context, store customPanelSettingsStore, settings database.UserCustomPanelSetting) (chroniclesdk.CustomPanelSettings, error) {
@@ -247,17 +260,4 @@ func customPanelSettingsResponse(ctx context.Context, store customPanelSettingsS
 		response.UpdatedAt = settings.UpdatedAt.Time.Format("2006-01-02T15:04:05.999999999Z07:00")
 	}
 	return response, nil
-}
-
-func jsonBytesEqual(left, right []byte) bool {
-	var leftValue, rightValue any
-	if json.Unmarshal(left, &leftValue) != nil || json.Unmarshal(right, &rightValue) != nil {
-		return bytes.Equal(left, right)
-	}
-	return bytes.Equal(mustJSON(leftValue), mustJSON(rightValue))
-}
-
-func mustJSON(value any) []byte {
-	encoded, _ := json.Marshal(value)
-	return encoded
 }
