@@ -143,7 +143,7 @@ The first importer persists:
 - normalized spell effects, powers, full attribute arrays, difficulty-aware variants, and component-only spell IDs;
 - derived extra-attack, periodic-spell, duration-modifier, vulnerability, cooldown, and affected-aura-duration metadata at difficulty zero;
 - cast-time, duration, range, category, radius, focus-object, and description-variable metadata;
-- item rows having both `Item` and `ItemSparse` records, including their legacy spell slots reconstructed through `ItemEffect` and `ItemXItemEffect`;
+- item rows having both `Item` and `ItemSparse` records, including fixed stats reconstructed through `RandPropPoints` and legacy spell slots reconstructed through `ItemEffect` and `ItemXItemEffect`;
 - active class talent trees reconstructed from the modern Trait DB2 graph;
 - spell-item enchantments;
 - item-set metadata and membership.

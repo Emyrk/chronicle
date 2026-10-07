@@ -160,6 +160,7 @@ REQUIRED_TABLES=(
 
   Item
   ItemSparse
+  RandPropPoints
   ItemEffect
   ItemXItemEffect
   ItemDisplayInfo

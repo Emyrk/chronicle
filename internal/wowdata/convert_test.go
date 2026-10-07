@@ -36,7 +36,13 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 		map[string]any{"ID": 2, "SpellID": 100, "OrderIndex": 1, "AltPowerBarID": 3, "ManaCost": 20, "ManaCostPerLevel": 4, "ManaPerSecond": 5, "OptionalCost": 6, "OptionalCostPct": 0.7, "PowerCostMaxPct": 0.8, "PowerCostPct": 0.9, "PowerDisplayID": 10, "PowerPctPerSecond": 1.1, "PowerType": 12, "RequiredAuraSpellID": 13},
 		map[string]any{"ID": 1, "SpellID": 100, "OrderIndex": 0, "ManaCost": 10})
 	writeRows(t, dir, "Item", map[string]any{"ID": 1, "ClassID": 2, "SubclassID": 3, "IconFileDataID": 23456}, map[string]any{"ID": 2})
-	writeRows(t, dir, "ItemSparse", map[string]any{"ID": 1, "Display_lang": "Safe Item", "OverallQualityID": 2, "Flags": []int{7}, "AllowableRace": []int{-1, -1}}, map[string]any{"ID": 3, "Display_lang": "orphan"})
+	writeRows(t, dir, "ItemSparse", map[string]any{
+		"ID": 1, "Display_lang": "Safe Item", "OverallQualityID": 3, "Flags": []int{7}, "AllowableRace": []int{-1, -1},
+		"InventoryType": 17, "ItemLevel": 63,
+		"StatModifier_bonusStat": []int{7, 38, -1, -1, -1, -1, -1, -1, -1, -1},
+		"StatPercentEditor":      []int{3611, 17222, 0, 0, 0, 0, 0, 0, 0, 0},
+	}, map[string]any{"ID": 3, "Display_lang": "orphan"})
+	writeRows(t, dir, "RandPropPoints", map[string]any{"ID": 63, "SuperiorF": []float32{36, 27, 20, 15, 11}})
 	writeRows(t, dir, "ItemEffect",
 		map[string]any{"ID": 101, "LegacySlotIndex": 0, "TriggerType": 0, "Charges": -1, "CoolDownMSec": 30000, "CategoryCoolDownMSec": 60000, "SpellCategoryID": 4, "SpellID": 100},
 		map[string]any{"ID": 102, "LegacySlotIndex": 1, "TriggerType": 6, "Charges": 2, "CoolDownMSec": 1500, "CategoryCoolDownMSec": 0, "SpellCategoryID": 0, "SpellID": 200},
@@ -111,6 +117,10 @@ func TestConvertPoliciesAndJoins(t *testing.T) {
 	require.Len(t, got.Items, 1)
 	require.Equal(t, int32(0), got.Items[0].DisplayID, "display IDs must not be guessed")
 	require.Equal(t, "inv_sword_10", got.Items[0].Icon)
+	require.Equal(t, int32(7), got.Items[0].StatType1)
+	require.Equal(t, int32(13), got.Items[0].StatValue1)
+	require.Equal(t, int32(38), got.Items[0].StatType2)
+	require.Equal(t, int32(62), got.Items[0].StatValue2)
 	require.Equal(t, int32(100), got.Items[0].Spellid1)
 	require.Equal(t, int32(0), got.Items[0].Spelltrigger1)
 	require.Equal(t, int32(-1), got.Items[0].Spellcharges1)
