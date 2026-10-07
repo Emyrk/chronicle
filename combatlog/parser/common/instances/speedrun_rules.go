@@ -249,7 +249,8 @@ func NaxxramasSpeedrunRequirements() []rankings.SpeedrunRequirement {
 }
 
 // ZulGurubProgressionBosses returns the ordered boss encounters used for
-// progression. Summoned bosses remain available as encounters but are optional.
+// progression and the canonical ranking set. Summoned bosses remain available
+// as encounters but are optional.
 func ZulGurubProgressionBosses(flavor database.WoWFlavor) []string {
 	bosses := []string{
 		"High Priestess Jeklik",
@@ -268,22 +269,19 @@ func ZulGurubProgressionBosses(flavor database.WoWFlavor) []string {
 }
 
 // ZulGurubSpeedrunRequirements returns the boss kills required for a
-// valid Zul'Gurub speedrun.
+// valid Zul'Gurub speedrun. The High Priests that weaken Hakkar are optional.
 func ZulGurubSpeedrunRequirements(flavor database.WoWFlavor) []rankings.SpeedrunRequirement {
 	base := []rankings.SpeedrunRequirement{
-		{Name: "High Priestess Jeklik", EntryIDs: []uint32{14517}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "High Priest Venoxis", EntryIDs: []uint32{14507}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "High Priestess Mar'li", EntryIDs: []uint32{14510}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		{Name: "Bloodlord Mandokir", EntryIDs: []uint32{11382}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "High Priest Thekal", EntryIDs: []uint32{11348}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "High Priestess Arlokk", EntryIDs: []uint32{14515}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		{Name: "Jin'do the Hexxer", EntryIDs: []uint32{11380}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		{Name: "Hakkar", EntryIDs: []uint32{14834}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 	}
 
 	if flavor.Has(database.FlavorVanillaPlus) {
-		base = append(base, rankings.SpeedrunRequirement{Name: "Azus the Bloodseeker", EntryIDs: []uint32{25031}, Count: 1, Category: rankings.SpeedrunCategoryBosses})
-		base = append(base, rankings.SpeedrunRequirement{Name: "The Nameless Hermit", EntryIDs: []uint32{25030}, Count: 1, Category: rankings.SpeedrunCategoryBosses})
+		base = append(base,
+			rankings.SpeedrunRequirement{Name: "Azus the Bloodseeker", EntryIDs: []uint32{25031}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			rankings.SpeedrunRequirement{Name: "The Nameless Hermit", EntryIDs: []uint32{25030}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		)
 	}
 
 	return base

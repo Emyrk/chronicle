@@ -77,27 +77,34 @@ func TestVanillaPlusScarletMonasterySpeedrunRequirements(t *testing.T) {
 	}, rules.Speedrun.Requirements)
 }
 
-func TestZulGurubOptionalBossesAreNotRequired(t *testing.T) {
+func TestZulGurubSpeedrunDoesNotRequireHighPriests(t *testing.T) {
 	t.Parallel()
 
-	flavor := database.WoWFlavor{database.FlavorVanillaPlus}
-	rules := ZulGurubFactory.FlavoredRankings(flavor)
-	require.NotNil(t, rules)
-	require.NotNil(t, rules.Speedrun)
-	for _, required := range []rankings.SpeedrunRequirement{
-		{Name: "Azus the Bloodseeker", EntryIDs: []uint32{25031}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "The Nameless Hermit", EntryIDs: []uint32{25030}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-	} {
-		require.Contains(t, rules.Speedrun.Requirements, required)
+	base := []rankings.SpeedrunRequirement{
+		{Name: "Bloodlord Mandokir", EntryIDs: []uint32{11382}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Jin'do the Hexxer", EntryIDs: []uint32{11380}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Hakkar", EntryIDs: []uint32{14834}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 	}
+	vanillaPlus := append(append([]rankings.SpeedrunRequirement{}, base...),
+		rankings.SpeedrunRequirement{Name: "Azus the Bloodseeker", EntryIDs: []uint32{25031}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		rankings.SpeedrunRequirement{Name: "The Nameless Hermit", EntryIDs: []uint32{25030}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	)
+	for _, tc := range []struct {
+		name     string
+		flavor   database.WoWFlavor
+		expected []rankings.SpeedrunRequirement
+	}{
+		{name: "vanilla", flavor: database.WoWFlavor{database.FlavorVanilla}, expected: base},
+		{name: "vanilla plus", flavor: database.WoWFlavor{database.FlavorVanillaPlus}, expected: vanillaPlus},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	hostiles := ZulGurubHostiles(flavor).HostileEntries()
-	for _, entryID := range []uint32{15114, 15083, 15084, 15085, 15082} {
-		require.Contains(t, hostiles, entryID)
-		require.True(t, hostiles[entryID].Boss)
-		for _, requirement := range rules.Speedrun.Requirements {
-			require.NotContains(t, requirement.EntryIDs, entryID)
-		}
+			rules := ZulGurubFactory.FlavoredRankings(tc.flavor)
+			require.NotNil(t, rules)
+			require.NotNil(t, rules.Speedrun)
+			require.Equal(t, tc.expected, rules.Speedrun.Requirements)
+		})
 	}
 }
 

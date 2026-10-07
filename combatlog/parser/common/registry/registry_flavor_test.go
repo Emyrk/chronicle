@@ -193,6 +193,10 @@ func TestZulGurubProgressionBossesDependOnFlavor(t *testing.T) {
 			detail := instanceDetailByName(t, reg, "Zul'Gurub")
 			require.Equal(t, tc.expected, detail.ProgressionBosses)
 			require.Equal(t, len(tc.expected), *detail.BossCount)
+			require.Equal(t, []instances.RankingEncounterSet{{
+				Label:      "Normal",
+				Encounters: tc.expected,
+			}}, detail.RankingEncounterSets)
 			for _, optional := range []string{"Gahz'ranka", "Hazza'rah", "Renataki", "Wushoolay", "Gri'lek"} {
 				require.NotContains(t, detail.ProgressionBosses, optional)
 			}
