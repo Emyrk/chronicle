@@ -158,19 +158,25 @@ export function isCustomPanelRef(value: string): value is CustomPanelRef {
 export function createCustomPanelRef(repository: string, panelId: string): CustomPanelRef {
   const normalized = normalizeRepository(repository);
   if (!normalized || !ID_PATTERN.test(panelId)) throw new Error("Invalid custom panel reference");
-  return `custom:github:${normalized}\0${panelId}`;
+  return `custom:github:${normalized}:${panelId}`;
 }
 
 export function parseCustomPanelRef(value: string): ParsedCustomPanelRef | null {
   if (!isCustomPanelRef(value)) return null;
   const payload = value.slice("custom:".length);
   if (!payload.startsWith("github:")) return null;
-  const separator = payload.indexOf("\0");
+  const githubPayload = payload.slice("github:".length);
+  const separator = githubPayload.includes("\0") ? githubPayload.indexOf("\0") : githubPayload.indexOf(":");
   if (separator < 0) return null;
-  const repository = normalizeRepository(payload.slice("github:".length, separator));
-  const panelId = payload.slice(separator + 1);
+  const repository = normalizeRepository(githubPayload.slice(0, separator));
+  const panelId = githubPayload.slice(separator + 1);
   if (!repository || !ID_PATTERN.test(panelId)) return null;
   return { source: "github", repository, panelId };
+}
+
+export function canonicalizeCustomPanelRef(value: string): CustomPanelRef | null {
+  const parsed = parseCustomPanelRef(value);
+  return parsed ? createCustomPanelRef(parsed.repository, parsed.panelId) : null;
 }
 
 function isArtifact(value: unknown): value is ResolvedArtifact {

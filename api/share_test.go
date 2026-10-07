@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"testing"
@@ -69,6 +70,30 @@ func TestLayoutShareURL(t *testing.T) {
 			t.Parallel()
 			a := &API{Opts: &Options{ShortLinkDomain: tc.domain, AccessURL: mustParseURL("https://chronicle.example.com")}}
 			require.Equal(t, tc.want, a.LayoutShareURL(r, tc.code))
+		})
+	}
+}
+
+func TestSharedViewPayloadContainsNUL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		payload string
+		want    bool
+	}{
+		{name: "ordinary payload", payload: `{"panel":"damage"}`},
+		{name: "nul in value", payload: `{"panel":"custom:github:owner/repo\u0000damage"}`, want: true},
+		{name: "nul in key", payload: `{"panel\u0000type":"damage"}`, want: true},
+		{name: "escaped unicode text", payload: `{"panel":"\\u0000"}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := sharedViewPayloadContainsNUL(json.RawMessage(tc.payload))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
 		})
 	}
 }

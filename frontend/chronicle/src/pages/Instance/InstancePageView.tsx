@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
-import { useSession, useCreateShare, fetchSharedView, type UserPanelLayout } from "@/api/queries";
+import { useSession, useCreateShare, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
 import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
@@ -37,7 +37,7 @@ import type { Instance, Encounter, EncounterPhase, EnemyUnit } from "./InstanceP
 import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } from "./phaseTimeRange";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
-import { isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
+import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
 import { PANELS } from "./EventsPanels/EventsPanel";
 import { Strip } from "./EventsPanels/Strips/Strip";
 import { STRIPS, isStripType } from "./EventsPanels/Strips/strips";
@@ -2904,7 +2904,10 @@ export function InstancePageView({
       layoutId: activeLayoutId ?? undefined,
       layout: {
         items: activeLayoutItems,
-        panelTypesById: panelTypesByID,
+        panelTypesById: Object.fromEntries(Object.entries(panelTypesByID).map(([id, panelType]) => [
+          id,
+          canonicalizeCustomPanelRef(panelType) ?? panelType,
+        ])) as Record<string, EventsPanelType>,
       },
       view: {
         encounters: viewState.encounters.length > 0
@@ -2985,8 +2988,10 @@ export function InstancePageView({
       const url = withInstanceViewMode(result.url, viewMode);
       await navigator.clipboard.writeText(url);
       toast.success("Share link copied", { description: url });
-    } catch {
-      toast.error("Failed to create share link");
+    } catch (error) {
+      toast.error("Failed to create share link", {
+        description: error instanceof Error ? toastError(error) : "An unexpected error occurred.",
+      });
     }
   }, [buildSharedViewPayload, createShare, instance.id, viewMode]);
 

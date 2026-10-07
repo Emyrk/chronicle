@@ -31,6 +31,34 @@ func sharedViewHash(instanceID uuid.UUID, payload json.RawMessage) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func sharedViewPayloadContainsNUL(payload json.RawMessage) (bool, error) {
+	var value any
+	if err := json.Unmarshal(payload, &value); err != nil {
+		return false, err
+	}
+	return jsonValueContainsNUL(value), nil
+}
+
+func jsonValueContainsNUL(value any) bool {
+	switch value := value.(type) {
+	case string:
+		return strings.ContainsRune(value, '\x00')
+	case []any:
+		for _, item := range value {
+			if jsonValueContainsNUL(item) {
+				return true
+			}
+		}
+	case map[string]any:
+		for key, item := range value {
+			if strings.ContainsRune(key, '\x00') || jsonValueContainsNUL(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (api *API) CreateShare(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := chronauth.MustAuthenticatedClaims(ctx)
@@ -46,6 +74,18 @@ func (api *API) CreateShare(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Payload) == 0 || !json.Valid(req.Payload) {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "payload must be valid JSON"})
+		return
+	}
+	containsNUL, err := sharedViewPayloadContainsNUL(req.Payload)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "payload must be valid JSON"})
+		return
+	}
+	if containsNUL {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Share payload contains an unsupported NUL character.",
+			Detail:  "Remove or reset the affected custom panel or panel option and try again.",
+		})
 		return
 	}
 	if len(req.Payload) > 10*1024 {

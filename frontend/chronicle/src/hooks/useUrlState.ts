@@ -740,7 +740,7 @@ function hexToString(value: string): string | null {
 
 export function encodeCustomPanelToken(ref: CustomPanelRef): string {
   const parsed = parseCustomPanelRef(ref);
-  const payload = parsed ? `github:${parsed.repository}\0${parsed.panelId}` : ref.slice("custom:".length);
+  const payload = parsed ? `github:${parsed.repository}:${parsed.panelId}` : ref.slice("custom:".length);
   return `x${bytesToHex(payload)}`;
 }
 
@@ -749,7 +749,8 @@ export function decodeCustomPanelToken(token: string): CustomPanelRef | null {
   const payload = hexToString(token.slice(1));
   if (payload === null) return `custom:invalid:${token.slice(1)}`;
   const ref = `custom:${payload}` as CustomPanelRef;
-  return parseCustomPanelRef(ref) ? ref : (`custom:invalid:${token.slice(1)}` as CustomPanelRef);
+  const parsed = parseCustomPanelRef(ref);
+  return parsed ? `custom:github:${parsed.repository}:${parsed.panelId}` : (`custom:invalid:${token.slice(1)}` as CustomPanelRef);
 }
 
 /** Panel option list (aligned with panel list order) */

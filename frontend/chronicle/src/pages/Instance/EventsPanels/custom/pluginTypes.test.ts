@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCustomPanelRef, isManifestV1, normalizeRepository, parseCustomPanelRef } from "./pluginTypes";
+import { canonicalizeCustomPanelRef, createCustomPanelRef, isManifestV1, normalizeRepository, parseCustomPanelRef } from "./pluginTypes";
 import { decodeCustomPanelToken, encodeCustomPanelToken } from "@/hooks/useUrlState";
 
 describe("custom panel references", () => {
@@ -8,10 +8,19 @@ describe("custom panel references", () => {
     expect(normalizeRepository("not a repo")).toBeNull();
   });
 
-  it("round trips through the reserved URL token", () => {
+  it("uses a JSON-safe reference and round trips through the URL token", () => {
     const ref = createCustomPanelRef("Owner/Repo", "raid-cooldowns");
+    expect(ref).toBe("custom:github:owner/repo:raid-cooldowns");
+    expect(ref).not.toContain("\0");
     expect(parseCustomPanelRef(ref)).toEqual({ source: "github", repository: "owner/repo", panelId: "raid-cooldowns" });
     expect(decodeCustomPanelToken(encodeCustomPanelToken(ref))).toBe(ref);
+  });
+
+  it("reads and canonicalizes legacy NUL-delimited references", () => {
+    const legacy = "custom:github:owner/repo\0raid-cooldowns";
+    expect(parseCustomPanelRef(legacy)).toEqual({ source: "github", repository: "owner/repo", panelId: "raid-cooldowns" });
+    expect(canonicalizeCustomPanelRef(legacy)).toBe("custom:github:owner/repo:raid-cooldowns");
+    expect(decodeCustomPanelToken(encodeCustomPanelToken(legacy))).toBe("custom:github:owner/repo:raid-cooldowns");
   });
 
   it("accepts older manifests without panel descriptions", () => {
