@@ -33,6 +33,7 @@ type CombatantInfoV22 struct {
 	Stamina                int32
 	Intellect              int32
 	Dodge                  int32
+	Spirit                 *int32
 	Parry                  int32
 	Block                  int32
 	UnknownStat            int32

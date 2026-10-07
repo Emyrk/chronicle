@@ -278,7 +278,7 @@ message CombatantInfoV22 {
   optional int32 agility = 3;
   optional int32 stamina = 4;
   optional int32 intellect = 5;
-  optional int32 dodge = 6;
+  optional int32 dodge = 6; // Field 6 for non-WoW Forever flavors.
   optional int32 parry = 7;
   optional int32 block = 8;
   optional int32 unknownStat = 9; // Scalar after block; purpose is not yet verified.
@@ -298,6 +298,7 @@ message CombatantInfoV22 {
   optional int32 additionalUnknownStat = 23; // Present only in the longer v22 layout.
   optional int32 armor = 24;
   optional int32 specId = 25;
+  optional int32 spirit = 26; // Field 6 for WoW Forever flavor.
 }
 
 message Interrupt {

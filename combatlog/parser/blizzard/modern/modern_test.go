@@ -440,7 +440,11 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 			{OrderIndex: 2, Name: "Destruction"},
 		}},
 	}}
-	parsed, err := (&Parser{version: 22, talentTrees: treeData}).combatantInfo(ts, matched, "")
+	parsed, err := (&Parser{
+		version:     22,
+		talentTrees: treeData,
+		flavor:      database.WoWFlavor{database.FlavorWoWForever},
+	}).combatantInfo(ts, matched, "")
 	require.NoError(t, err)
 	require.Len(t, parsed, 1)
 	combatantInfo := parsed[0].(*messages.Combatant)
@@ -452,7 +456,7 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 		Agility:                3,
 		Stamina:                4,
 		Intellect:              5,
-		Dodge:                  6,
+		Spirit:                 ptr.Ref(int32(6)),
 		Parry:                  7,
 		Block:                  8,
 		UnknownStat:            9,

@@ -62,6 +62,7 @@ type Parser struct {
 	inner       *wotlk.Parser
 	wowDB       gamedb.SpellFetcher
 	talentTrees *talents.TalentTreeData
+	flavor      database.WoWFlavor
 	guids       *guidNormalizer
 	version     int
 }
@@ -112,7 +113,8 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 		DetectZone:        false,
 	})
 	_, talentTrees := parsectx.DatasetTalents(ctx)
-	p := &Parser{inner: inner, wowDB: wowDB, talentTrees: talentTrees}
+	flavor, _ := parsectx.Flavor(ctx)
+	p := &Parser{inner: inner, wowDB: wowDB, talentTrees: talentTrees, flavor: flavor}
 	inner.WithEventHook("BLIZZARD_COMBAT_LOG_VERSION", p.combatLogVersion)
 	inner.WithEventHook("BLIZZARD_ZONE_CHANGE", p.zoneChange)
 	inner.WithEventHook("BLIZZARD_COMBATANT_INFO", p.combatantInfo)
@@ -396,7 +398,7 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 		if layoutErr != nil {
 			return nil, layoutErr
 		}
-		v22, err = parseV22CombatantInfo(fields, talentIndex)
+		v22, err = parseV22CombatantInfo(fields, talentIndex, p.flavor)
 		if err != nil {
 			return nil, err
 		}
@@ -435,7 +437,7 @@ func v22CombatantTalentIndex(fields []string) (int, error) {
 	return 0, fmt.Errorf("blizzard V22 COMBATANT_INFO has no talent/PvP/gear field sequence")
 }
 
-func parseV22CombatantInfo(fields []string, talentIndex int) (*combatant.CombatantInfoV22, error) {
+func parseV22CombatantInfo(fields []string, talentIndex int, flavor database.WoWFlavor) (*combatant.CombatantInfoV22, error) {
 	if len(fields) <= 22 || talentIndex < 25 || talentIndex >= len(fields) {
 		return nil, fmt.Errorf("blizzard V22 COMBATANT_INFO has invalid talent field index %d for %d fields", talentIndex, len(fields))
 	}
@@ -449,6 +451,11 @@ func parseV22CombatantInfo(fields []string, talentIndex int) (*combatant.Combata
 	}
 
 	info := &combatant.CombatantInfoV22{}
+	dodgeOrSpirit := &info.Dodge
+	if flavor.Has(database.FlavorWoWForever) {
+		info.Spirit = new(int32)
+		dodgeOrSpirit = info.Spirit
+	}
 	values := []struct {
 		index int
 		name  string
@@ -459,7 +466,7 @@ func parseV22CombatantInfo(fields []string, talentIndex int) (*combatant.Combata
 		{3, "agility", &info.Agility},
 		{4, "stamina", &info.Stamina},
 		{5, "intellect", &info.Intellect},
-		{6, "dodge", &info.Dodge},
+		{6, "dodge or spirit", dodgeOrSpirit},
 		{7, "parry", &info.Parry},
 		{8, "block", &info.Block},
 		{9, "unknown stat", &info.UnknownStat},

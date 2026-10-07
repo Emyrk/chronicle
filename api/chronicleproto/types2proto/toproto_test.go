@@ -97,6 +97,19 @@ func TestCombatantInfoV22(t *testing.T) {
 	require.Equal(t, int32(123), got.V22.GetArmor())
 	require.Equal(t, int32(124), got.V22.GetSpecId())
 
+	require.Nil(t, got.V22.Spirit)
+
+	spirit := int32(105)
+	wowForever := CombatantInfo(ts, 4, &messages.Combatant{
+		MessageBase: messages.Base(ts),
+		Combatant: combatant.Combatant{
+			Guid: guid.GUID(1),
+			V22:  &combatant.CombatantInfoV22{Spirit: &spirit},
+		},
+	})
+	require.Nil(t, wowForever.V22.Dodge)
+	require.Equal(t, int32(105), wowForever.V22.GetSpirit())
+
 	withoutAdditionalUnknown := CombatantInfo(ts, 4, &messages.Combatant{
 		MessageBase: messages.Base(ts),
 		Combatant: combatant.Combatant{

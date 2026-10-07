@@ -2439,7 +2439,7 @@ type CombatantInfoV22 struct {
 	Agility                *int32                 `protobuf:"varint,3,opt,name=agility,proto3,oneof" json:"agility,omitempty"`
 	Stamina                *int32                 `protobuf:"varint,4,opt,name=stamina,proto3,oneof" json:"stamina,omitempty"`
 	Intellect              *int32                 `protobuf:"varint,5,opt,name=intellect,proto3,oneof" json:"intellect,omitempty"`
-	Dodge                  *int32                 `protobuf:"varint,6,opt,name=dodge,proto3,oneof" json:"dodge,omitempty"`
+	Dodge                  *int32                 `protobuf:"varint,6,opt,name=dodge,proto3,oneof" json:"dodge,omitempty"` // Field 6 for non-WoW Forever flavors.
 	Parry                  *int32                 `protobuf:"varint,7,opt,name=parry,proto3,oneof" json:"parry,omitempty"`
 	Block                  *int32                 `protobuf:"varint,8,opt,name=block,proto3,oneof" json:"block,omitempty"`
 	UnknownStat            *int32                 `protobuf:"varint,9,opt,name=unknownStat,proto3,oneof" json:"unknownStat,omitempty"` // Scalar after block; purpose is not yet verified.
@@ -2459,6 +2459,7 @@ type CombatantInfoV22 struct {
 	AdditionalUnknownStat  *int32                 `protobuf:"varint,23,opt,name=additionalUnknownStat,proto3,oneof" json:"additionalUnknownStat,omitempty"` // Present only in the longer v22 layout.
 	Armor                  *int32                 `protobuf:"varint,24,opt,name=armor,proto3,oneof" json:"armor,omitempty"`
 	SpecId                 *int32                 `protobuf:"varint,25,opt,name=specId,proto3,oneof" json:"specId,omitempty"`
+	Spirit                 *int32                 `protobuf:"varint,26,opt,name=spirit,proto3,oneof" json:"spirit,omitempty"` // Field 6 for WoW Forever flavor.
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -2664,6 +2665,13 @@ func (x *CombatantInfoV22) GetArmor() int32 {
 func (x *CombatantInfoV22) GetSpecId() int32 {
 	if x != nil && x.SpecId != nil {
 		return *x.SpecId
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetSpirit() int32 {
+	if x != nil && x.Spirit != nil {
+		return *x.Spirit
 	}
 	return 0
 }
@@ -3511,7 +3519,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"_guildNameB\n" +
 	"\n" +
 	"\b_talentsB\x06\n" +
-	"\x04_v22\"\x83\v\n" +
+	"\x04_v22\"\xab\v\n" +
 	"\x10CombatantInfoV22\x12\x1b\n" +
 	"\x06teamId\x18\x01 \x01(\x05H\x00R\x06teamId\x88\x01\x01\x12\x1f\n" +
 	"\bstrength\x18\x02 \x01(\x05H\x01R\bstrength\x88\x01\x01\x12\x1d\n" +
@@ -3539,7 +3547,8 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x16damageTakenVersatility\x18\x16 \x01(\x05H\x15R\x16damageTakenVersatility\x88\x01\x01\x129\n" +
 	"\x15additionalUnknownStat\x18\x17 \x01(\x05H\x16R\x15additionalUnknownStat\x88\x01\x01\x12\x19\n" +
 	"\x05armor\x18\x18 \x01(\x05H\x17R\x05armor\x88\x01\x01\x12\x1b\n" +
-	"\x06specId\x18\x19 \x01(\x05H\x18R\x06specId\x88\x01\x01B\t\n" +
+	"\x06specId\x18\x19 \x01(\x05H\x18R\x06specId\x88\x01\x01\x12\x1b\n" +
+	"\x06spirit\x18\x1a \x01(\x05H\x19R\x06spirit\x88\x01\x01B\t\n" +
 	"\a_teamIdB\v\n" +
 	"\t_strengthB\n" +
 	"\n" +
@@ -3569,7 +3578,8 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x17_damageTakenVersatilityB\x18\n" +
 	"\x16_additionalUnknownStatB\b\n" +
 	"\x06_armorB\t\n" +
-	"\a_specId\"\xa7\x02\n" +
+	"\a_specIdB\t\n" +
+	"\a_spirit\"\xa7\x02\n" +
 	"\tInterrupt\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06caster\x18\x02 \x01(\tR\x06caster\x12\x16\n" +
