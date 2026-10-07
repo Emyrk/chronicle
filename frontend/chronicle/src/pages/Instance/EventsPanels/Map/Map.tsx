@@ -157,7 +157,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
   if (manifestQuery.isLoading || props.loading) return <MapMessage title="Loading map" detail="Fetching artwork and position telemetry…" />;
   if (manifestQuery.error) return <MapMessage title="Map artwork unavailable" detail={manifestQuery.error.message} />;
   if (!encounter || visibleUnits.length === 0 || mapId === null) {
-    return <MapMessage title="No position telemetry" detail="This encounter does not contain WoW Forever unit-position samples." />;
+    return <MapMessage title="No position telemetry" detail="This encounter does not contain unit-position data." />;
   }
   if (!artwork) return <MapMessage title={`Map ${mapId} is unavailable`} detail="The active dataset does not publish artwork for this world map." />;
 
