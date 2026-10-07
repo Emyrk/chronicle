@@ -35,6 +35,7 @@ func TestCombatantInfoV22(t *testing.T) {
 	t.Parallel()
 
 	ts := time.UnixMilli(1000)
+	unknownStat := int32(0)
 	got := CombatantInfo(ts, 3, &messages.Combatant{
 		MessageBase: messages.Base(ts),
 		Combatant: combatant.Combatant{
@@ -55,7 +56,7 @@ func TestCombatantInfoV22(t *testing.T) {
 				DamageDoneVersatility:  112,
 				HealingDoneVersatility: 113,
 				DamageTakenVersatility: 114,
-				UnknownStat:            0,
+				UnknownStat:            &unknownStat,
 				SpecID:                 116,
 			},
 		},
@@ -79,6 +80,14 @@ func TestCombatantInfoV22(t *testing.T) {
 	require.Equal(t, int32(114), got.V22.GetDamageTakenVersatility())
 	require.NotNil(t, got.V22.UnknownStat)
 	require.Zero(t, got.V22.GetUnknownStat())
+	withoutUnknown := CombatantInfo(ts, 4, &messages.Combatant{
+		MessageBase: messages.Base(ts),
+		Combatant: combatant.Combatant{
+			Guid: guid.GUID(1),
+			V22:  &combatant.CombatantInfoV22{SpecID: 116},
+		},
+	})
+	require.Nil(t, withoutUnknown.V22.UnknownStat)
 	require.Equal(t, int32(116), got.V22.GetSpecId())
 }
 

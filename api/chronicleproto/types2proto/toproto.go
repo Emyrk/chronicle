@@ -399,8 +399,10 @@ func CombatantInfo(from time.Time, idx int32, msg *messages.Combatant) *chronicl
 			DamageDoneVersatility:  ptr.Ref(msg.V22.DamageDoneVersatility),
 			HealingDoneVersatility: ptr.Ref(msg.V22.HealingDoneVersatility),
 			DamageTakenVersatility: ptr.Ref(msg.V22.DamageTakenVersatility),
-			UnknownStat:            ptr.Ref(msg.V22.UnknownStat),
 			SpecId:                 ptr.Ref(msg.V22.SpecID),
+		}
+		if msg.V22.UnknownStat != nil {
+			ci.V22.UnknownStat = ptr.Ref(*msg.V22.UnknownStat)
 		}
 	}
 	return ci

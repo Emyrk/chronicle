@@ -392,15 +392,19 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 		}
 		gear = parseGear(fields[26])
 	case 22:
-		v22, err = parseV22CombatantInfo(fields)
+		talentIndex, layoutErr := v22CombatantTalentIndex(fields)
+		if layoutErr != nil {
+			return nil, layoutErr
+		}
+		v22, err = parseV22CombatantInfo(fields, talentIndex)
 		if err != nil {
 			return nil, err
 		}
-		talents, heroClass, err = resolveV22Talents(fields[26], p.talentTrees)
+		talents, heroClass, err = resolveV22Talents(fields[talentIndex], p.talentTrees)
 		if err != nil {
 			return nil, err
 		}
-		gear = parseGear(fields[28])
+		gear = parseGear(fields[talentIndex+2])
 	default:
 		return nil, fmt.Errorf("blizzard COMBATANT_INFO has unsupported combat log version %d", p.version)
 	}
@@ -420,9 +424,20 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 	}}, nil
 }
 
-func parseV22CombatantInfo(fields []string) (*combatant.CombatantInfoV22, error) {
-	if len(fields) < 29 {
-		return nil, fmt.Errorf("blizzard V22 COMBATANT_INFO has %d fields, need at least 29", len(fields))
+func v22CombatantTalentIndex(fields []string) (int, error) {
+	for index := 22; index+2 < len(fields); index++ {
+		if strings.HasPrefix(fields[index], "[") &&
+			strings.HasPrefix(fields[index+1], "(") &&
+			strings.HasPrefix(fields[index+2], "[") {
+			return index, nil
+		}
+	}
+	return 0, fmt.Errorf("blizzard V22 COMBATANT_INFO has no talent/PvP/gear field sequence")
+}
+
+func parseV22CombatantInfo(fields []string, talentIndex int) (*combatant.CombatantInfoV22, error) {
+	if len(fields) <= 21 || talentIndex < 24 || talentIndex >= len(fields) {
+		return nil, fmt.Errorf("blizzard V22 COMBATANT_INFO has invalid talent field index %d for %d fields", talentIndex, len(fields))
 	}
 
 	parse := func(index int, name string) (int32, error) {
@@ -454,8 +469,7 @@ func parseV22CombatantInfo(fields []string) (*combatant.CombatantInfoV22, error)
 		{19, "damage done versatility", &info.DamageDoneVersatility},
 		{20, "healing done versatility", &info.HealingDoneVersatility},
 		{21, "damage taken versatility", &info.DamageTakenVersatility},
-		{23, "unknown stat", &info.UnknownStat},
-		{24, "spec ID", &info.SpecID},
+		{talentIndex - 1, "spec ID", &info.SpecID},
 	}
 	for _, value := range values {
 		parsed, err := parse(value.index, value.name)
@@ -463,6 +477,13 @@ func parseV22CombatantInfo(fields []string) (*combatant.CombatantInfoV22, error)
 			return nil, err
 		}
 		*value.dest = parsed
+	}
+	if talentIndex >= 25 {
+		unknown, err := parse(talentIndex-2, "unknown stat")
+		if err != nil {
+			return nil, err
+		}
+		info.UnknownStat = &unknown
 	}
 	return info, nil
 }

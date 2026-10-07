@@ -20,6 +20,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
+	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -418,7 +419,7 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	t.Parallel()
 
 	fields := make([]string, 34)
-	for _, index := range []int{2, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24} {
+	for _, index := range []int{2, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25} {
 		fields[index] = fmt.Sprint(index)
 	}
 	// Real selections from Bootie's WoW Forever Wailing Caverns log.
@@ -461,8 +462,8 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 		DamageDoneVersatility:  19,
 		HealingDoneVersatility: 20,
 		DamageTakenVersatility: 21,
-		UnknownStat:            23,
-		SpecID:                 24,
+		UnknownStat:            ptr.Ref[int32](24),
+		SpecID:                 25,
 	}, combatantInfo.V22)
 	require.NotNil(t, combatantInfo.Talents)
 	assert.Equal(t, [3]uint8{10, 0, 0}, combatantInfo.Talents.Summary)
@@ -494,7 +495,36 @@ func TestCombatantInfoV22ParsesStatsFromModernLog(t *testing.T) {
 	require.Equal(t, &combatant.CombatantInfoV22{
 		PrimaryStat: 69,
 		Stamina:     123,
-		SpecID:      1826,
+		UnknownStat: ptr.Ref[int32](1826),
+		SpecID:      1486,
+	}, combatantInfo.V22)
+	require.Len(t, combatantInfo.GearSetups, 1)
+	assert.Equal(t, 250532, combatantInfo.GearSetups[0].ItemID)
+}
+
+func TestCombatantInfoV22ParsesShorterLayout(t *testing.T) {
+	t.Parallel()
+
+	// Some v22 builds omit the additional scalar present before the talent list
+	// in newer logs. In this layout field 26 is the PvP tuple, not talents.
+	line := `9/23/2026 12:16:14.185-4  COMBATANT_INFO,Player-4620-006422B6,0,69,41,123,41,49,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1486,[(105638,130362,3)],(0,0,0,0),[(250532,25,(),(),())],[],1,0,0,0`
+	reader := newTransformReader(strings.NewReader(line))
+	reader.combatLogVersion = 22
+	converted, err := reader.transform(line)
+	require.NoError(t, err)
+
+	ts, _, matched, err := wotlk.ParseLine(converted)
+	require.NoError(t, err)
+	parsed, err := (&Parser{version: 22}).combatantInfo(ts, matched, "")
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+
+	combatantInfo := parsed[0].(*messages.Combatant)
+	require.Equal(t, &combatant.CombatantInfoV22{
+		PrimaryStat: 69,
+		Stamina:     123,
+		UnknownStat: ptr.Ref[int32](0),
+		SpecID:      1486,
 	}, combatantInfo.V22)
 	require.Len(t, combatantInfo.GearSetups, 1)
 	assert.Equal(t, 250532, combatantInfo.GearSetups[0].ItemID)

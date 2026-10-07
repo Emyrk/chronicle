@@ -42,7 +42,7 @@ type CombatantInfoV22 struct {
 	DamageDoneVersatility  int32
 	HealingDoneVersatility int32
 	DamageTakenVersatility int32
-	UnknownStat            int32
+	UnknownStat            *int32
 	SpecID                 int32
 }
 
