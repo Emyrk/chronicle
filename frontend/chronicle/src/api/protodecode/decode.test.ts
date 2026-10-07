@@ -1,5 +1,5 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { AuraSchema, AuraTransition, CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, UnitPositionSchema, UnitResourcesSchema, School, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { AuraSchema, AuraTransition, CombatantGearSlotSchema, CombatantInfoSchema, CombatantInfoV22Schema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, UnitPositionSchema, UnitResourcesSchema, School, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
 import { AuraDecoder, FastCombatantInfoCursor, FastConsumeCursor, FastDamageCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastUnitPositionCursor, FastUnitResourcesCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
@@ -92,6 +92,83 @@ describe('FastCombatantInfoCursor', () => {
     const cursor = new FastCombatantInfoCursor(payload);
 
     expect(cursor.next()?.gear[0].gemEnchantIds).toEqual([0, 0, 3637, 0]);
+  });
+
+  it('decodes optional modern stats and resets absent values', () => {
+    const withStats = toBinary(CombatantInfoSchema, create(CombatantInfoSchema, {
+      v22: create(CombatantInfoV22Schema, {
+        teamId: 100,
+        strength: 101,
+        agility: 102,
+        stamina: 103,
+        intellect: 104,
+        dodge: 105,
+        parry: 106,
+        block: 107,
+        unknownStat: 108,
+        meleeCritRating: 109,
+        rangedCritRating: 110,
+        spellCritRating: 111,
+        speed: 112,
+        leech: 113,
+        meleeHasteRating: 114,
+        rangedHasteRating: 115,
+        spellHasteRating: 116,
+        avoidance: 117,
+        mastery: 118,
+        damageDoneVersatility: 119,
+        healingDoneVersatility: 120,
+        damageTakenVersatility: 121,
+        additionalUnknownStat: 122,
+        armor: 123,
+        specId: 124,
+      }),
+    }));
+    const withoutStats = toBinary(CombatantInfoSchema, create(CombatantInfoSchema, {
+      guid: '0xPLAYER',
+    }));
+    const messageData = new Uint8Array([
+      ...encodeVarint(withStats.length),
+      ...withStats,
+      ...encodeVarint(withoutStats.length),
+      ...withoutStats,
+    ]);
+    const payload = buildPayload('encounter', 1706000000000n, 2, messageData.length, messageData);
+    const cursor = new FastCombatantInfoCursor(payload);
+
+    expect(cursor.next()).toMatchObject({
+      v22: {
+        teamId: 100,
+        strength: 101,
+        agility: 102,
+        stamina: 103,
+        intellect: 104,
+        dodge: 105,
+        parry: 106,
+        block: 107,
+        unknownStat: 108,
+        meleeCritRating: 109,
+        rangedCritRating: 110,
+        spellCritRating: 111,
+        speed: 112,
+        leech: 113,
+        meleeHasteRating: 114,
+        rangedHasteRating: 115,
+        spellHasteRating: 116,
+        avoidance: 117,
+        mastery: 118,
+        damageDoneVersatility: 119,
+        healingDoneVersatility: 120,
+        damageTakenVersatility: 121,
+        additionalUnknownStat: 122,
+        armor: 123,
+        specId: 124,
+      },
+    });
+    expect(cursor.next()).toMatchObject({
+      guid: '0xPLAYER',
+      v22: null,
+    });
   });
 });
 

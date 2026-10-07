@@ -31,6 +31,82 @@ func TestGearSlotPreservesGemPositions(t *testing.T) {
 	require.Nil(t, GearSlot(combatant.GearItem{ItemID: 50633}).GemEnchantIds)
 }
 
+func TestCombatantInfoV22(t *testing.T) {
+	t.Parallel()
+
+	ts := time.UnixMilli(1000)
+	additionalUnknownStat := int32(122)
+	got := CombatantInfo(ts, 3, &messages.Combatant{
+		MessageBase: messages.Base(ts),
+		Combatant: combatant.Combatant{
+			Guid: guid.GUID(1),
+			V22: &combatant.CombatantInfoV22{
+				TeamID:                 100,
+				Strength:               101,
+				Agility:                102,
+				Stamina:                103,
+				Intellect:              104,
+				Dodge:                  105,
+				Parry:                  106,
+				Block:                  107,
+				UnknownStat:            108,
+				MeleeCritRating:        109,
+				RangedCritRating:       110,
+				SpellCritRating:        111,
+				Speed:                  112,
+				Leech:                  113,
+				MeleeHasteRating:       114,
+				RangedHasteRating:      115,
+				SpellHasteRating:       116,
+				Avoidance:              117,
+				Mastery:                118,
+				DamageDoneVersatility:  119,
+				HealingDoneVersatility: 120,
+				DamageTakenVersatility: 121,
+				AdditionalUnknownStat:  &additionalUnknownStat,
+				Armor:                  123,
+				SpecID:                 124,
+			},
+		},
+	})
+
+	require.NotNil(t, got.V22)
+	require.Equal(t, int32(100), got.V22.GetTeamId())
+	require.Equal(t, int32(101), got.V22.GetStrength())
+	require.Equal(t, int32(102), got.V22.GetAgility())
+	require.Equal(t, int32(103), got.V22.GetStamina())
+	require.Equal(t, int32(104), got.V22.GetIntellect())
+	require.Equal(t, int32(105), got.V22.GetDodge())
+	require.Equal(t, int32(106), got.V22.GetParry())
+	require.Equal(t, int32(107), got.V22.GetBlock())
+	require.Equal(t, int32(108), got.V22.GetUnknownStat())
+	require.Equal(t, int32(109), got.V22.GetMeleeCritRating())
+	require.Equal(t, int32(110), got.V22.GetRangedCritRating())
+	require.Equal(t, int32(111), got.V22.GetSpellCritRating())
+	require.Equal(t, int32(112), got.V22.GetSpeed())
+	require.Equal(t, int32(113), got.V22.GetLeech())
+	require.Equal(t, int32(114), got.V22.GetMeleeHasteRating())
+	require.Equal(t, int32(115), got.V22.GetRangedHasteRating())
+	require.Equal(t, int32(116), got.V22.GetSpellHasteRating())
+	require.Equal(t, int32(117), got.V22.GetAvoidance())
+	require.Equal(t, int32(118), got.V22.GetMastery())
+	require.Equal(t, int32(119), got.V22.GetDamageDoneVersatility())
+	require.Equal(t, int32(120), got.V22.GetHealingDoneVersatility())
+	require.Equal(t, int32(121), got.V22.GetDamageTakenVersatility())
+	require.Equal(t, int32(122), got.V22.GetAdditionalUnknownStat())
+	require.Equal(t, int32(123), got.V22.GetArmor())
+	require.Equal(t, int32(124), got.V22.GetSpecId())
+
+	withoutAdditionalUnknown := CombatantInfo(ts, 4, &messages.Combatant{
+		MessageBase: messages.Base(ts),
+		Combatant: combatant.Combatant{
+			Guid: guid.GUID(1),
+			V22:  &combatant.CombatantInfoV22{SpecID: 124},
+		},
+	})
+	require.Nil(t, withoutAdditionalUnknown.V22.AdditionalUnknownStat)
+}
+
 func TestResurrection(t *testing.T) {
 	t.Parallel()
 

@@ -341,6 +341,34 @@ export interface UnitClassificationProcessorEvent extends EventMeta {
 }
 
 
+export interface CombatantInfoV22ProcessorData {
+  teamId: number | null;
+  strength: number | null;
+  agility: number | null;
+  stamina: number | null;
+  intellect: number | null;
+  dodge: number | null;
+  parry: number | null;
+  block: number | null;
+  unknownStat: number | null;
+  meleeCritRating: number | null;
+  rangedCritRating: number | null;
+  spellCritRating: number | null;
+  speed: number | null;
+  leech: number | null;
+  meleeHasteRating: number | null;
+  rangedHasteRating: number | null;
+  spellHasteRating: number | null;
+  avoidance: number | null;
+  mastery: number | null;
+  damageDoneVersatility: number | null;
+  healingDoneVersatility: number | null;
+  damageTakenVersatility: number | null;
+  additionalUnknownStat: number | null;
+  armor: number | null;
+  specId: number | null;
+}
+
 export interface CombatantInfoProcessorEvent extends EventMeta {
   type: "combatant_info";
   guid: string;              // Player GUID
@@ -352,6 +380,7 @@ export interface CombatantInfoProcessorEvent extends EventMeta {
   gear: { itemId: number; enchantId: number | null; temporaryEnchantId: number | null; gemEnchantIds: number[] }[];
   gearCount: number;
   talents: { summary: number[]; trees: string[] } | null;
+  v22: CombatantInfoV22ProcessorData | null;
 }
 
 export interface DispelProcessorEvent extends EventMeta {

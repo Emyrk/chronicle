@@ -2324,6 +2324,7 @@ type CombatantInfo struct {
 	GuildName     *string                `protobuf:"bytes,7,opt,name=guildName,proto3,oneof" json:"guildName,omitempty"`
 	Gear          []*CombatantGearSlot   `protobuf:"bytes,8,rep,name=gear,proto3" json:"gear,omitempty"`
 	Talents       *CombatantTalents      `protobuf:"bytes,9,opt,name=talents,proto3,oneof" json:"talents,omitempty"`
+	V22           *CombatantInfoV22      `protobuf:"bytes,10,opt,name=v22,proto3,oneof" json:"v22,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2421,6 +2422,252 @@ func (x *CombatantInfo) GetTalents() *CombatantTalents {
 	return nil
 }
 
+func (x *CombatantInfo) GetV22() *CombatantInfoV22 {
+	if x != nil {
+		return x.V22
+	}
+	return nil
+}
+
+// CombatantInfoV22 contains fields only emitted by v22 combat logs. The
+// melee/ranged/spell and damage/healing/taken variants preserve the
+// triplicate source fields.
+type CombatantInfoV22 struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	TeamId                 *int32                 `protobuf:"varint,1,opt,name=teamId,proto3,oneof" json:"teamId,omitempty"`
+	Strength               *int32                 `protobuf:"varint,2,opt,name=strength,proto3,oneof" json:"strength,omitempty"`
+	Agility                *int32                 `protobuf:"varint,3,opt,name=agility,proto3,oneof" json:"agility,omitempty"`
+	Stamina                *int32                 `protobuf:"varint,4,opt,name=stamina,proto3,oneof" json:"stamina,omitempty"`
+	Intellect              *int32                 `protobuf:"varint,5,opt,name=intellect,proto3,oneof" json:"intellect,omitempty"`
+	Dodge                  *int32                 `protobuf:"varint,6,opt,name=dodge,proto3,oneof" json:"dodge,omitempty"`
+	Parry                  *int32                 `protobuf:"varint,7,opt,name=parry,proto3,oneof" json:"parry,omitempty"`
+	Block                  *int32                 `protobuf:"varint,8,opt,name=block,proto3,oneof" json:"block,omitempty"`
+	UnknownStat            *int32                 `protobuf:"varint,9,opt,name=unknownStat,proto3,oneof" json:"unknownStat,omitempty"` // Scalar after block; purpose is not yet verified.
+	MeleeCritRating        *int32                 `protobuf:"varint,10,opt,name=meleeCritRating,proto3,oneof" json:"meleeCritRating,omitempty"`
+	RangedCritRating       *int32                 `protobuf:"varint,11,opt,name=rangedCritRating,proto3,oneof" json:"rangedCritRating,omitempty"`
+	SpellCritRating        *int32                 `protobuf:"varint,12,opt,name=spellCritRating,proto3,oneof" json:"spellCritRating,omitempty"`
+	Speed                  *int32                 `protobuf:"varint,13,opt,name=speed,proto3,oneof" json:"speed,omitempty"`
+	Leech                  *int32                 `protobuf:"varint,14,opt,name=leech,proto3,oneof" json:"leech,omitempty"`
+	MeleeHasteRating       *int32                 `protobuf:"varint,15,opt,name=meleeHasteRating,proto3,oneof" json:"meleeHasteRating,omitempty"`
+	RangedHasteRating      *int32                 `protobuf:"varint,16,opt,name=rangedHasteRating,proto3,oneof" json:"rangedHasteRating,omitempty"`
+	SpellHasteRating       *int32                 `protobuf:"varint,17,opt,name=spellHasteRating,proto3,oneof" json:"spellHasteRating,omitempty"`
+	Avoidance              *int32                 `protobuf:"varint,18,opt,name=avoidance,proto3,oneof" json:"avoidance,omitempty"`
+	Mastery                *int32                 `protobuf:"varint,19,opt,name=mastery,proto3,oneof" json:"mastery,omitempty"`
+	DamageDoneVersatility  *int32                 `protobuf:"varint,20,opt,name=damageDoneVersatility,proto3,oneof" json:"damageDoneVersatility,omitempty"`
+	HealingDoneVersatility *int32                 `protobuf:"varint,21,opt,name=healingDoneVersatility,proto3,oneof" json:"healingDoneVersatility,omitempty"`
+	DamageTakenVersatility *int32                 `protobuf:"varint,22,opt,name=damageTakenVersatility,proto3,oneof" json:"damageTakenVersatility,omitempty"`
+	AdditionalUnknownStat  *int32                 `protobuf:"varint,23,opt,name=additionalUnknownStat,proto3,oneof" json:"additionalUnknownStat,omitempty"` // Present only in the longer v22 layout.
+	Armor                  *int32                 `protobuf:"varint,24,opt,name=armor,proto3,oneof" json:"armor,omitempty"`
+	SpecId                 *int32                 `protobuf:"varint,25,opt,name=specId,proto3,oneof" json:"specId,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *CombatantInfoV22) Reset() {
+	*x = CombatantInfoV22{}
+	mi := &file_chronicle_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CombatantInfoV22) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CombatantInfoV22) ProtoMessage() {}
+
+func (x *CombatantInfoV22) ProtoReflect() protoreflect.Message {
+	mi := &file_chronicle_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CombatantInfoV22.ProtoReflect.Descriptor instead.
+func (*CombatantInfoV22) Descriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *CombatantInfoV22) GetTeamId() int32 {
+	if x != nil && x.TeamId != nil {
+		return *x.TeamId
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetStrength() int32 {
+	if x != nil && x.Strength != nil {
+		return *x.Strength
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetAgility() int32 {
+	if x != nil && x.Agility != nil {
+		return *x.Agility
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetStamina() int32 {
+	if x != nil && x.Stamina != nil {
+		return *x.Stamina
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetIntellect() int32 {
+	if x != nil && x.Intellect != nil {
+		return *x.Intellect
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetDodge() int32 {
+	if x != nil && x.Dodge != nil {
+		return *x.Dodge
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetParry() int32 {
+	if x != nil && x.Parry != nil {
+		return *x.Parry
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetBlock() int32 {
+	if x != nil && x.Block != nil {
+		return *x.Block
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetUnknownStat() int32 {
+	if x != nil && x.UnknownStat != nil {
+		return *x.UnknownStat
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetMeleeCritRating() int32 {
+	if x != nil && x.MeleeCritRating != nil {
+		return *x.MeleeCritRating
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetRangedCritRating() int32 {
+	if x != nil && x.RangedCritRating != nil {
+		return *x.RangedCritRating
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetSpellCritRating() int32 {
+	if x != nil && x.SpellCritRating != nil {
+		return *x.SpellCritRating
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetSpeed() int32 {
+	if x != nil && x.Speed != nil {
+		return *x.Speed
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetLeech() int32 {
+	if x != nil && x.Leech != nil {
+		return *x.Leech
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetMeleeHasteRating() int32 {
+	if x != nil && x.MeleeHasteRating != nil {
+		return *x.MeleeHasteRating
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetRangedHasteRating() int32 {
+	if x != nil && x.RangedHasteRating != nil {
+		return *x.RangedHasteRating
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetSpellHasteRating() int32 {
+	if x != nil && x.SpellHasteRating != nil {
+		return *x.SpellHasteRating
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetAvoidance() int32 {
+	if x != nil && x.Avoidance != nil {
+		return *x.Avoidance
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetMastery() int32 {
+	if x != nil && x.Mastery != nil {
+		return *x.Mastery
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetDamageDoneVersatility() int32 {
+	if x != nil && x.DamageDoneVersatility != nil {
+		return *x.DamageDoneVersatility
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetHealingDoneVersatility() int32 {
+	if x != nil && x.HealingDoneVersatility != nil {
+		return *x.HealingDoneVersatility
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetDamageTakenVersatility() int32 {
+	if x != nil && x.DamageTakenVersatility != nil {
+		return *x.DamageTakenVersatility
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetAdditionalUnknownStat() int32 {
+	if x != nil && x.AdditionalUnknownStat != nil {
+		return *x.AdditionalUnknownStat
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetArmor() int32 {
+	if x != nil && x.Armor != nil {
+		return *x.Armor
+	}
+	return 0
+}
+
+func (x *CombatantInfoV22) GetSpecId() int32 {
+	if x != nil && x.SpecId != nil {
+		return *x.SpecId
+	}
+	return 0
+}
+
 type Interrupt struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -2436,7 +2683,7 @@ type Interrupt struct {
 
 func (x *Interrupt) Reset() {
 	*x = Interrupt{}
-	mi := &file_chronicle_proto_msgTypes[22]
+	mi := &file_chronicle_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2448,7 +2695,7 @@ func (x *Interrupt) String() string {
 func (*Interrupt) ProtoMessage() {}
 
 func (x *Interrupt) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[22]
+	mi := &file_chronicle_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2461,7 +2708,7 @@ func (x *Interrupt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Interrupt.ProtoReflect.Descriptor instead.
 func (*Interrupt) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{22}
+	return file_chronicle_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *Interrupt) GetMeta() *EventMeta {
@@ -2534,7 +2781,7 @@ type Absorbed struct {
 
 func (x *Absorbed) Reset() {
 	*x = Absorbed{}
-	mi := &file_chronicle_proto_msgTypes[23]
+	mi := &file_chronicle_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2546,7 +2793,7 @@ func (x *Absorbed) String() string {
 func (*Absorbed) ProtoMessage() {}
 
 func (x *Absorbed) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[23]
+	mi := &file_chronicle_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2559,7 +2806,7 @@ func (x *Absorbed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Absorbed.ProtoReflect.Descriptor instead.
 func (*Absorbed) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{23}
+	return file_chronicle_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *Absorbed) GetMeta() *EventMeta {
@@ -2658,7 +2905,7 @@ type Consume struct {
 
 func (x *Consume) Reset() {
 	*x = Consume{}
-	mi := &file_chronicle_proto_msgTypes[24]
+	mi := &file_chronicle_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2670,7 +2917,7 @@ func (x *Consume) String() string {
 func (*Consume) ProtoMessage() {}
 
 func (x *Consume) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[24]
+	mi := &file_chronicle_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2683,7 +2930,7 @@ func (x *Consume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Consume.ProtoReflect.Descriptor instead.
 func (*Consume) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{24}
+	return file_chronicle_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Consume) GetMeta() *EventMeta {
@@ -2803,7 +3050,7 @@ type CombatantGearSlot struct {
 
 func (x *CombatantGearSlot) Reset() {
 	*x = CombatantGearSlot{}
-	mi := &file_chronicle_proto_msgTypes[25]
+	mi := &file_chronicle_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2815,7 +3062,7 @@ func (x *CombatantGearSlot) String() string {
 func (*CombatantGearSlot) ProtoMessage() {}
 
 func (x *CombatantGearSlot) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[25]
+	mi := &file_chronicle_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2828,7 +3075,7 @@ func (x *CombatantGearSlot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CombatantGearSlot.ProtoReflect.Descriptor instead.
 func (*CombatantGearSlot) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{25}
+	return file_chronicle_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CombatantGearSlot) GetItemId() int32 {
@@ -2869,7 +3116,7 @@ type CombatantTalents struct {
 
 func (x *CombatantTalents) Reset() {
 	*x = CombatantTalents{}
-	mi := &file_chronicle_proto_msgTypes[26]
+	mi := &file_chronicle_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2881,7 +3128,7 @@ func (x *CombatantTalents) String() string {
 func (*CombatantTalents) ProtoMessage() {}
 
 func (x *CombatantTalents) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[26]
+	mi := &file_chronicle_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2894,7 +3141,7 @@ func (x *CombatantTalents) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CombatantTalents.ProtoReflect.Descriptor instead.
 func (*CombatantTalents) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{26}
+	return file_chronicle_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CombatantTalents) GetSummary() []int32 {
@@ -2925,7 +3172,7 @@ type CompanionStats struct {
 
 func (x *CompanionStats) Reset() {
 	*x = CompanionStats{}
-	mi := &file_chronicle_proto_msgTypes[27]
+	mi := &file_chronicle_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2937,7 +3184,7 @@ func (x *CompanionStats) String() string {
 func (*CompanionStats) ProtoMessage() {}
 
 func (x *CompanionStats) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[27]
+	mi := &file_chronicle_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2950,7 +3197,7 @@ func (x *CompanionStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompanionStats.ProtoReflect.Descriptor instead.
 func (*CompanionStats) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{27}
+	return file_chronicle_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CompanionStats) GetMeta() *EventMeta {
@@ -2986,7 +3233,7 @@ type RaidGroup struct {
 
 func (x *RaidGroup) Reset() {
 	*x = RaidGroup{}
-	mi := &file_chronicle_proto_msgTypes[28]
+	mi := &file_chronicle_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2998,7 +3245,7 @@ func (x *RaidGroup) String() string {
 func (*RaidGroup) ProtoMessage() {}
 
 func (x *RaidGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[28]
+	mi := &file_chronicle_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3011,7 +3258,7 @@ func (x *RaidGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RaidGroup.ProtoReflect.Descriptor instead.
 func (*RaidGroup) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{28}
+	return file_chronicle_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RaidGroup) GetMeta() *EventMeta {
@@ -3247,7 +3494,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"dispelType\x18\x05 \x01(\x0e2\x1a.chronicleproto.DispelTypeR\n" +
 	"dispelTypeB\f\n" +
 	"\n" +
-	"_spellData\"\xe5\x02\n" +
+	"_spellData\"\xa6\x03\n" +
 	"\rCombatantInfo\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x12\n" +
 	"\x04guid\x18\x02 \x01(\tR\x04guid\x12\x12\n" +
@@ -3257,11 +3504,72 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x06gender\x18\x06 \x01(\x05R\x06gender\x12!\n" +
 	"\tguildName\x18\a \x01(\tH\x00R\tguildName\x88\x01\x01\x125\n" +
 	"\x04gear\x18\b \x03(\v2!.chronicleproto.CombatantGearSlotR\x04gear\x12?\n" +
-	"\atalents\x18\t \x01(\v2 .chronicleproto.CombatantTalentsH\x01R\atalents\x88\x01\x01B\f\n" +
+	"\atalents\x18\t \x01(\v2 .chronicleproto.CombatantTalentsH\x01R\atalents\x88\x01\x01\x127\n" +
+	"\x03v22\x18\n" +
+	" \x01(\v2 .chronicleproto.CombatantInfoV22H\x02R\x03v22\x88\x01\x01B\f\n" +
 	"\n" +
 	"_guildNameB\n" +
 	"\n" +
-	"\b_talents\"\xa7\x02\n" +
+	"\b_talentsB\x06\n" +
+	"\x04_v22\"\x83\v\n" +
+	"\x10CombatantInfoV22\x12\x1b\n" +
+	"\x06teamId\x18\x01 \x01(\x05H\x00R\x06teamId\x88\x01\x01\x12\x1f\n" +
+	"\bstrength\x18\x02 \x01(\x05H\x01R\bstrength\x88\x01\x01\x12\x1d\n" +
+	"\aagility\x18\x03 \x01(\x05H\x02R\aagility\x88\x01\x01\x12\x1d\n" +
+	"\astamina\x18\x04 \x01(\x05H\x03R\astamina\x88\x01\x01\x12!\n" +
+	"\tintellect\x18\x05 \x01(\x05H\x04R\tintellect\x88\x01\x01\x12\x19\n" +
+	"\x05dodge\x18\x06 \x01(\x05H\x05R\x05dodge\x88\x01\x01\x12\x19\n" +
+	"\x05parry\x18\a \x01(\x05H\x06R\x05parry\x88\x01\x01\x12\x19\n" +
+	"\x05block\x18\b \x01(\x05H\aR\x05block\x88\x01\x01\x12%\n" +
+	"\vunknownStat\x18\t \x01(\x05H\bR\vunknownStat\x88\x01\x01\x12-\n" +
+	"\x0fmeleeCritRating\x18\n" +
+	" \x01(\x05H\tR\x0fmeleeCritRating\x88\x01\x01\x12/\n" +
+	"\x10rangedCritRating\x18\v \x01(\x05H\n" +
+	"R\x10rangedCritRating\x88\x01\x01\x12-\n" +
+	"\x0fspellCritRating\x18\f \x01(\x05H\vR\x0fspellCritRating\x88\x01\x01\x12\x19\n" +
+	"\x05speed\x18\r \x01(\x05H\fR\x05speed\x88\x01\x01\x12\x19\n" +
+	"\x05leech\x18\x0e \x01(\x05H\rR\x05leech\x88\x01\x01\x12/\n" +
+	"\x10meleeHasteRating\x18\x0f \x01(\x05H\x0eR\x10meleeHasteRating\x88\x01\x01\x121\n" +
+	"\x11rangedHasteRating\x18\x10 \x01(\x05H\x0fR\x11rangedHasteRating\x88\x01\x01\x12/\n" +
+	"\x10spellHasteRating\x18\x11 \x01(\x05H\x10R\x10spellHasteRating\x88\x01\x01\x12!\n" +
+	"\tavoidance\x18\x12 \x01(\x05H\x11R\tavoidance\x88\x01\x01\x12\x1d\n" +
+	"\amastery\x18\x13 \x01(\x05H\x12R\amastery\x88\x01\x01\x129\n" +
+	"\x15damageDoneVersatility\x18\x14 \x01(\x05H\x13R\x15damageDoneVersatility\x88\x01\x01\x12;\n" +
+	"\x16healingDoneVersatility\x18\x15 \x01(\x05H\x14R\x16healingDoneVersatility\x88\x01\x01\x12;\n" +
+	"\x16damageTakenVersatility\x18\x16 \x01(\x05H\x15R\x16damageTakenVersatility\x88\x01\x01\x129\n" +
+	"\x15additionalUnknownStat\x18\x17 \x01(\x05H\x16R\x15additionalUnknownStat\x88\x01\x01\x12\x19\n" +
+	"\x05armor\x18\x18 \x01(\x05H\x17R\x05armor\x88\x01\x01\x12\x1b\n" +
+	"\x06specId\x18\x19 \x01(\x05H\x18R\x06specId\x88\x01\x01B\t\n" +
+	"\a_teamIdB\v\n" +
+	"\t_strengthB\n" +
+	"\n" +
+	"\b_agilityB\n" +
+	"\n" +
+	"\b_staminaB\f\n" +
+	"\n" +
+	"_intellectB\b\n" +
+	"\x06_dodgeB\b\n" +
+	"\x06_parryB\b\n" +
+	"\x06_blockB\x0e\n" +
+	"\f_unknownStatB\x12\n" +
+	"\x10_meleeCritRatingB\x13\n" +
+	"\x11_rangedCritRatingB\x12\n" +
+	"\x10_spellCritRatingB\b\n" +
+	"\x06_speedB\b\n" +
+	"\x06_leechB\x13\n" +
+	"\x11_meleeHasteRatingB\x14\n" +
+	"\x12_rangedHasteRatingB\x13\n" +
+	"\x11_spellHasteRatingB\f\n" +
+	"\n" +
+	"_avoidanceB\n" +
+	"\n" +
+	"\b_masteryB\x18\n" +
+	"\x16_damageDoneVersatilityB\x19\n" +
+	"\x17_healingDoneVersatilityB\x19\n" +
+	"\x17_damageTakenVersatilityB\x18\n" +
+	"\x16_additionalUnknownStatB\b\n" +
+	"\x06_armorB\t\n" +
+	"\a_specId\"\xa7\x02\n" +
 	"\tInterrupt\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06caster\x18\x02 \x01(\tR\x06caster\x12\x16\n" +
@@ -3408,7 +3716,7 @@ func file_chronicle_proto_rawDescGZIP() []byte {
 }
 
 var file_chronicle_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_chronicle_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_chronicle_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_chronicle_proto_goTypes = []any{
 	(School)(0),                // 0: chronicleproto.School
 	(CastAction)(0),            // 1: chronicleproto.CastAction
@@ -3440,13 +3748,14 @@ var file_chronicle_proto_goTypes = []any{
 	(*UnitClassification)(nil), // 27: chronicleproto.UnitClassification
 	(*Dispel)(nil),             // 28: chronicleproto.Dispel
 	(*CombatantInfo)(nil),      // 29: chronicleproto.CombatantInfo
-	(*Interrupt)(nil),          // 30: chronicleproto.Interrupt
-	(*Absorbed)(nil),           // 31: chronicleproto.Absorbed
-	(*Consume)(nil),            // 32: chronicleproto.Consume
-	(*CombatantGearSlot)(nil),  // 33: chronicleproto.CombatantGearSlot
-	(*CombatantTalents)(nil),   // 34: chronicleproto.CombatantTalents
-	(*CompanionStats)(nil),     // 35: chronicleproto.CompanionStats
-	(*RaidGroup)(nil),          // 36: chronicleproto.RaidGroup
+	(*CombatantInfoV22)(nil),   // 30: chronicleproto.CombatantInfoV22
+	(*Interrupt)(nil),          // 31: chronicleproto.Interrupt
+	(*Absorbed)(nil),           // 32: chronicleproto.Absorbed
+	(*Consume)(nil),            // 33: chronicleproto.Consume
+	(*CombatantGearSlot)(nil),  // 34: chronicleproto.CombatantGearSlot
+	(*CombatantTalents)(nil),   // 35: chronicleproto.CombatantTalents
+	(*CompanionStats)(nil),     // 36: chronicleproto.CompanionStats
+	(*RaidGroup)(nil),          // 37: chronicleproto.RaidGroup
 }
 var file_chronicle_proto_depIdxs = []int32{
 	10, // 0: chronicleproto.EventMeta.activity:type_name -> chronicleproto.ActivityEntry
@@ -3490,27 +3799,28 @@ var file_chronicle_proto_depIdxs = []int32{
 	8,  // 38: chronicleproto.Dispel.spellData:type_name -> chronicleproto.SpellData
 	5,  // 39: chronicleproto.Dispel.dispelType:type_name -> chronicleproto.DispelType
 	11, // 40: chronicleproto.CombatantInfo.meta:type_name -> chronicleproto.EventMeta
-	33, // 41: chronicleproto.CombatantInfo.gear:type_name -> chronicleproto.CombatantGearSlot
-	34, // 42: chronicleproto.CombatantInfo.talents:type_name -> chronicleproto.CombatantTalents
-	11, // 43: chronicleproto.Interrupt.meta:type_name -> chronicleproto.EventMeta
-	0,  // 44: chronicleproto.Interrupt.extra_school:type_name -> chronicleproto.School
-	0,  // 45: chronicleproto.Interrupt.extra_schools:type_name -> chronicleproto.School
-	11, // 46: chronicleproto.Absorbed.meta:type_name -> chronicleproto.EventMeta
-	8,  // 47: chronicleproto.Absorbed.damageSpellData:type_name -> chronicleproto.SpellData
-	8,  // 48: chronicleproto.Absorbed.absorbSpellData:type_name -> chronicleproto.SpellData
-	0,  // 49: chronicleproto.Absorbed.absorbSchool:type_name -> chronicleproto.School
-	0,  // 50: chronicleproto.Absorbed.absorb_schools:type_name -> chronicleproto.School
-	11, // 51: chronicleproto.Consume.meta:type_name -> chronicleproto.EventMeta
-	8,  // 52: chronicleproto.Consume.spellData:type_name -> chronicleproto.SpellData
-	6,  // 53: chronicleproto.Consume.kind:type_name -> chronicleproto.EvidenceKind
-	7,  // 54: chronicleproto.Consume.confidence:type_name -> chronicleproto.EvidenceConfidence
-	11, // 55: chronicleproto.CompanionStats.meta:type_name -> chronicleproto.EventMeta
-	11, // 56: chronicleproto.RaidGroup.meta:type_name -> chronicleproto.EventMeta
-	57, // [57:57] is the sub-list for method output_type
-	57, // [57:57] is the sub-list for method input_type
-	57, // [57:57] is the sub-list for extension type_name
-	57, // [57:57] is the sub-list for extension extendee
-	0,  // [0:57] is the sub-list for field type_name
+	34, // 41: chronicleproto.CombatantInfo.gear:type_name -> chronicleproto.CombatantGearSlot
+	35, // 42: chronicleproto.CombatantInfo.talents:type_name -> chronicleproto.CombatantTalents
+	30, // 43: chronicleproto.CombatantInfo.v22:type_name -> chronicleproto.CombatantInfoV22
+	11, // 44: chronicleproto.Interrupt.meta:type_name -> chronicleproto.EventMeta
+	0,  // 45: chronicleproto.Interrupt.extra_school:type_name -> chronicleproto.School
+	0,  // 46: chronicleproto.Interrupt.extra_schools:type_name -> chronicleproto.School
+	11, // 47: chronicleproto.Absorbed.meta:type_name -> chronicleproto.EventMeta
+	8,  // 48: chronicleproto.Absorbed.damageSpellData:type_name -> chronicleproto.SpellData
+	8,  // 49: chronicleproto.Absorbed.absorbSpellData:type_name -> chronicleproto.SpellData
+	0,  // 50: chronicleproto.Absorbed.absorbSchool:type_name -> chronicleproto.School
+	0,  // 51: chronicleproto.Absorbed.absorb_schools:type_name -> chronicleproto.School
+	11, // 52: chronicleproto.Consume.meta:type_name -> chronicleproto.EventMeta
+	8,  // 53: chronicleproto.Consume.spellData:type_name -> chronicleproto.SpellData
+	6,  // 54: chronicleproto.Consume.kind:type_name -> chronicleproto.EvidenceKind
+	7,  // 55: chronicleproto.Consume.confidence:type_name -> chronicleproto.EvidenceConfidence
+	11, // 56: chronicleproto.CompanionStats.meta:type_name -> chronicleproto.EventMeta
+	11, // 57: chronicleproto.RaidGroup.meta:type_name -> chronicleproto.EventMeta
+	58, // [58:58] is the sub-list for method output_type
+	58, // [58:58] is the sub-list for method input_type
+	58, // [58:58] is the sub-list for extension type_name
+	58, // [58:58] is the sub-list for extension extendee
+	0,  // [0:58] is the sub-list for field type_name
 }
 
 func init() { file_chronicle_proto_init() }
@@ -3534,16 +3844,17 @@ func file_chronicle_proto_init() {
 	file_chronicle_proto_msgTypes[19].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[20].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[21].OneofWrappers = []any{}
-	file_chronicle_proto_msgTypes[23].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[22].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[24].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[25].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[26].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chronicle_proto_rawDesc), len(file_chronicle_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   29,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

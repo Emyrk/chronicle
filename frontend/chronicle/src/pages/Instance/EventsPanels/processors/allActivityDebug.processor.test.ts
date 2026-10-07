@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import { AuraApplication, AuraState, AuraTransition, type AbsorbedProcessorEvent, type AuraProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent, type UnitPositionProcessorEvent, type UnitResourcesProcessorEvent } from "../processorTypes";
+import { AuraApplication, AuraState, AuraTransition, type AbsorbedProcessorEvent, type AuraProcessorEvent, type CombatantInfoProcessorEvent, type ConsumeProcessorEvent, type RaidGroupProcessorEvent, type DamageProcessorEvent, type ExtraAttackProcessorEvent, type ProcessorContext, type ResourceChangeProcessorEvent, type ResurrectionProcessorEvent, type SlainProcessorEvent, type SpellStartProcessorEvent, type UnitClassificationProcessorEvent, type UnitPositionProcessorEvent, type UnitResourcesProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -141,6 +141,91 @@ describe("allActivityProcessor", () => {
       extra: "5,000/6,000 health · 3,000/4,000 Mana",
       flags: ["MANA"],
     });
+  });
+
+  it("captures present v22 combatant stats for the expanded row", () => {
+    const state = allActivityProcessor.createState();
+    const event: CombatantInfoProcessorEvent = {
+      type: "combatant_info",
+      index: 3,
+      offsetMilli: 0,
+      guid: "player",
+      name: "Sathite",
+      heroClass: "SHAMAN",
+      race: "Troll",
+      gender: 2,
+      guildName: null,
+      gear: [],
+      gearCount: 0,
+      talents: null,
+      v22: {
+        teamId: 0,
+        strength: 69,
+        agility: 41,
+        stamina: 123,
+        intellect: 41,
+        dodge: 49,
+        parry: 0,
+        block: 0,
+        unknownStat: 0,
+        meleeCritRating: 0,
+        rangedCritRating: 0,
+        spellCritRating: 0,
+        speed: 0,
+        leech: 0,
+        meleeHasteRating: 0,
+        rangedHasteRating: 0,
+        spellHasteRating: 0,
+        avoidance: 0,
+        mastery: 0,
+        damageDoneVersatility: 0,
+        healingDoneVersatility: 0,
+        damageTakenVersatility: 0,
+        additionalUnknownStat: 0,
+        armor: 1826,
+        specId: 1486,
+      },
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "combatant_info",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.combatant_info[0].combatantInfoV22).toEqual([
+      { label: "Team ID", value: "0" },
+      { label: "Strength", value: "69" },
+      { label: "Agility", value: "41" },
+      { label: "Stamina", value: "123" },
+      { label: "Intellect", value: "41" },
+      { label: "Dodge", value: "49" },
+      { label: "Parry", value: "0" },
+      { label: "Block", value: "0" },
+      { label: "Unknown stat", value: "0" },
+      { label: "Melee crit rating", value: "0" },
+      { label: "Ranged crit rating", value: "0" },
+      { label: "Spell crit rating", value: "0" },
+      { label: "Speed", value: "0" },
+      { label: "Leech", value: "0" },
+      { label: "Melee haste rating", value: "0" },
+      { label: "Ranged haste rating", value: "0" },
+      { label: "Spell haste rating", value: "0" },
+      { label: "Avoidance", value: "0" },
+      { label: "Mastery", value: "0" },
+      { label: "Damage done versatility", value: "0" },
+      { label: "Healing done versatility", value: "0" },
+      { label: "Damage taken versatility", value: "0" },
+      { label: "Additional unknown stat", value: "0" },
+      { label: "Armor", value: "1826" },
+      { label: "Specialization ID", value: "1486" },
+    ]);
   });
 
   it("preserves damage trailer amounts and readable outcome labels", () => {

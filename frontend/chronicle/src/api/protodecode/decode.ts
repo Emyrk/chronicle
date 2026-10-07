@@ -5033,6 +5033,34 @@ export interface ReusableCombatantTalents {
   trees: string[];
 }
 
+export interface ReusableCombatantInfoV22 {
+  teamId: number | null;
+  strength: number | null;
+  agility: number | null;
+  stamina: number | null;
+  intellect: number | null;
+  dodge: number | null;
+  parry: number | null;
+  block: number | null;
+  unknownStat: number | null;
+  meleeCritRating: number | null;
+  rangedCritRating: number | null;
+  spellCritRating: number | null;
+  speed: number | null;
+  leech: number | null;
+  meleeHasteRating: number | null;
+  rangedHasteRating: number | null;
+  spellHasteRating: number | null;
+  avoidance: number | null;
+  mastery: number | null;
+  damageDoneVersatility: number | null;
+  healingDoneVersatility: number | null;
+  damageTakenVersatility: number | null;
+  additionalUnknownStat: number | null;
+  armor: number | null;
+  specId: number | null;
+}
+
 export interface ReusableCombatantInfo {
   type: "combatant_info";
   index: number;
@@ -5046,6 +5074,7 @@ export interface ReusableCombatantInfo {
   gear: ReusableCombatantGearSlot[];
   gearCount: number;
   talents: ReusableCombatantTalents | null;
+  v22: ReusableCombatantInfoV22 | null;
   activity: ReusableActivityEntry[];
   activityCount: number;
   isSynthetic: boolean;
@@ -5064,6 +5093,7 @@ export interface ReusableCombatantInfo {
  *   7: guildName (optional string)
  *   8: gear (repeated CombatantGearSlot)
  *   9: talents (optional CombatantTalents)
+ *   10: v22 (optional CombatantInfoV22)
  */
 export class CombatantInfoDecoder {
   private readonly textDecoder = sharedTextDecoder;
@@ -5082,6 +5112,7 @@ export class CombatantInfoDecoder {
     gear: [],
     gearCount: 0,
     talents: null,
+    v22: null,
     activity: [],
     activityCount: 0,
     isSynthetic: false,
@@ -5102,11 +5133,13 @@ export class CombatantInfoDecoder {
     msg.guildName = null;
     msg.gearCount = 0;
     msg.talents = null;
+    msg.v22 = null;
     msg.activityCount = 0;
     msg.isSynthetic = false;
 
     while (offset < end) {
-      const tag = data[offset++];
+      const { value: tag, bytesRead: tagBytes } = readVarintFast(data, offset);
+      offset += tagBytes;
       const fieldNumber = tag >> 3;
       const wireType = tag & 0x7;
 
@@ -5247,6 +5280,75 @@ export class CombatantInfoDecoder {
             }
           }
           msg.talents = { summary, trees };
+        } else if (fieldNumber === 10) {
+          const v22: ReusableCombatantInfoV22 = {
+            teamId: null,
+            strength: null,
+            agility: null,
+            stamina: null,
+            intellect: null,
+            dodge: null,
+            parry: null,
+            block: null,
+            unknownStat: null,
+            meleeCritRating: null,
+            rangedCritRating: null,
+            spellCritRating: null,
+            speed: null,
+            leech: null,
+            meleeHasteRating: null,
+            rangedHasteRating: null,
+            spellHasteRating: null,
+            avoidance: null,
+            mastery: null,
+            damageDoneVersatility: null,
+            healingDoneVersatility: null,
+            damageTakenVersatility: null,
+            additionalUnknownStat: null,
+            armor: null,
+            specId: null,
+          };
+          const v22End = offset + len;
+          while (offset < v22End) {
+            const { value: v22Tag, bytesRead: v22TagBytes } = readVarintFast(data, offset);
+            offset += v22TagBytes;
+            const v22Field = v22Tag >> 3;
+            const v22Wire = v22Tag & 0x7;
+            if (v22Wire !== 0) {
+              throw new Error(`Unexpected CombatantInfoV22 wire type: ${v22Wire}`);
+            }
+
+            const { value, bytesRead } = readVarintFast(data, offset);
+            offset += bytesRead;
+            switch (v22Field) {
+              case 1: v22.teamId = value; break;
+              case 2: v22.strength = value; break;
+              case 3: v22.agility = value; break;
+              case 4: v22.stamina = value; break;
+              case 5: v22.intellect = value; break;
+              case 6: v22.dodge = value; break;
+              case 7: v22.parry = value; break;
+              case 8: v22.block = value; break;
+              case 9: v22.unknownStat = value; break;
+              case 10: v22.meleeCritRating = value; break;
+              case 11: v22.rangedCritRating = value; break;
+              case 12: v22.spellCritRating = value; break;
+              case 13: v22.speed = value; break;
+              case 14: v22.leech = value; break;
+              case 15: v22.meleeHasteRating = value; break;
+              case 16: v22.rangedHasteRating = value; break;
+              case 17: v22.spellHasteRating = value; break;
+              case 18: v22.avoidance = value; break;
+              case 19: v22.mastery = value; break;
+              case 20: v22.damageDoneVersatility = value; break;
+              case 21: v22.healingDoneVersatility = value; break;
+              case 22: v22.damageTakenVersatility = value; break;
+              case 23: v22.additionalUnknownStat = value; break;
+              case 24: v22.armor = value; break;
+              case 25: v22.specId = value; break;
+            }
+          }
+          msg.v22 = v22;
         } else {
           offset += len;
         }

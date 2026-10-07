@@ -20,6 +20,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
+	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -417,11 +418,14 @@ func TestParseCombatantMetadata(t *testing.T) {
 func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	t.Parallel()
 
-	fields := make([]string, 33)
+	fields := make([]string, 34)
+	for index := 1; index <= 25; index++ {
+		fields[index] = fmt.Sprint(index)
+	}
 	// Real selections from Bootie's WoW Forever Wailing Caverns log.
-	fields[25] = "[(105924,130654,5),(105923,130653,5)]"
-	fields[26] = "(0,0,0,0)"
-	fields[27] = "[(253955,25,(),(),()),(251534,24,(2623,0,0),(),())]"
+	fields[26] = "[(105924,130654,5),(105923,130653,5)]"
+	fields[27] = "(0,0,0,0)"
+	fields[28] = "[(253955,25,(),(),()),(251534,24,(2623,0,0),(),())]"
 	encoded := base64.RawStdEncoding.EncodeToString([]byte(strings.Join(fields, ",")))
 	ts, _, matched, err := wotlk.ParseLine(`9/23 15:26:53.574  BLIZZARD_COMBATANT_INFO,0x0000120A0062CD4D,"Bootie-ClassicBetaPvE",` + encoded)
 	require.NoError(t, err)
@@ -442,6 +446,33 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	combatantInfo := parsed[0].(*messages.Combatant)
 	assert.Equal(t, "Bootie", combatantInfo.Name)
 	assert.Equal(t, types.HeroClassesWARLOCK, combatantInfo.HeroClass)
+	require.Equal(t, &combatant.CombatantInfoV22{
+		TeamID:                 1,
+		Strength:               2,
+		Agility:                3,
+		Stamina:                4,
+		Intellect:              5,
+		Dodge:                  6,
+		Parry:                  7,
+		Block:                  8,
+		UnknownStat:            9,
+		MeleeCritRating:        10,
+		RangedCritRating:       11,
+		SpellCritRating:        12,
+		Speed:                  13,
+		Leech:                  14,
+		MeleeHasteRating:       15,
+		RangedHasteRating:      16,
+		SpellHasteRating:       17,
+		Avoidance:              18,
+		Mastery:                19,
+		DamageDoneVersatility:  20,
+		HealingDoneVersatility: 21,
+		DamageTakenVersatility: 22,
+		AdditionalUnknownStat:  ptr.Ref[int32](23),
+		Armor:                  24,
+		SpecID:                 25,
+	}, combatantInfo.V22)
 	require.NotNil(t, combatantInfo.Talents)
 	assert.Equal(t, [3]uint8{10, 0, 0}, combatantInfo.Talents.Summary)
 	assert.Equal(t, []uint8{5, 5}, combatantInfo.Talents.Trees[0])
@@ -451,6 +482,102 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	assert.Equal(t, 25, combatantInfo.GearSetups[0].ItemLevel)
 	require.NotNil(t, combatantInfo.GearSetups[1].EnchantID)
 	assert.Equal(t, 2623, *combatantInfo.GearSetups[1].EnchantID)
+}
+
+func TestCombatantInfoV22ParsesStatsFromModernLog(t *testing.T) {
+	t.Parallel()
+
+	line := `9/23/2026 12:16:14.185-4  COMBATANT_INFO,Player-4620-006422B6,0,69,41,123,41,49,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1826,1486,[(105638,130362,3)],(0,0,0,0),[(250532,25,(),(),())],[],1,0,0,0`
+	reader := newTransformReader(strings.NewReader(line))
+	reader.combatLogVersion = 22
+	converted, err := reader.transform(line)
+	require.NoError(t, err)
+
+	ts, _, matched, err := wotlk.ParseLine(converted)
+	require.NoError(t, err)
+	parsed, err := (&Parser{version: 22}).combatantInfo(ts, matched, "")
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+
+	combatantInfo := parsed[0].(*messages.Combatant)
+	require.Equal(t, &combatant.CombatantInfoV22{
+		TeamID:                 0,
+		Strength:               69,
+		Agility:                41,
+		Stamina:                123,
+		Intellect:              41,
+		Dodge:                  49,
+		Parry:                  0,
+		Block:                  0,
+		UnknownStat:            0,
+		MeleeCritRating:        0,
+		RangedCritRating:       0,
+		SpellCritRating:        0,
+		Speed:                  0,
+		Leech:                  0,
+		MeleeHasteRating:       0,
+		RangedHasteRating:      0,
+		SpellHasteRating:       0,
+		Avoidance:              0,
+		Mastery:                0,
+		DamageDoneVersatility:  0,
+		HealingDoneVersatility: 0,
+		DamageTakenVersatility: 0,
+		AdditionalUnknownStat:  ptr.Ref[int32](0),
+		Armor:                  1826,
+		SpecID:                 1486,
+	}, combatantInfo.V22)
+	require.Len(t, combatantInfo.GearSetups, 1)
+	assert.Equal(t, 250532, combatantInfo.GearSetups[0].ItemID)
+}
+
+func TestCombatantInfoV22ParsesShorterLayout(t *testing.T) {
+	t.Parallel()
+
+	// Some v22 builds omit the additional scalar present before the talent list
+	// in newer logs. In this layout field 26 is the PvP tuple, not talents.
+	line := `9/23/2026 12:16:14.185-4  COMBATANT_INFO,Player-4620-006422B6,0,69,41,123,41,49,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1486,[(105638,130362,3)],(0,0,0,0),[(250532,25,(),(),())],[],1,0,0,0`
+	reader := newTransformReader(strings.NewReader(line))
+	reader.combatLogVersion = 22
+	converted, err := reader.transform(line)
+	require.NoError(t, err)
+
+	ts, _, matched, err := wotlk.ParseLine(converted)
+	require.NoError(t, err)
+	parsed, err := (&Parser{version: 22}).combatantInfo(ts, matched, "")
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+
+	combatantInfo := parsed[0].(*messages.Combatant)
+	require.Equal(t, &combatant.CombatantInfoV22{
+		TeamID:                 0,
+		Strength:               69,
+		Agility:                41,
+		Stamina:                123,
+		Intellect:              41,
+		Dodge:                  49,
+		Parry:                  0,
+		Block:                  0,
+		UnknownStat:            0,
+		MeleeCritRating:        0,
+		RangedCritRating:       0,
+		SpellCritRating:        0,
+		Speed:                  0,
+		Leech:                  0,
+		MeleeHasteRating:       0,
+		RangedHasteRating:      0,
+		SpellHasteRating:       0,
+		Avoidance:              0,
+		Mastery:                0,
+		DamageDoneVersatility:  0,
+		HealingDoneVersatility: 0,
+		DamageTakenVersatility: 0,
+		AdditionalUnknownStat:  nil,
+		Armor:                  0,
+		SpecID:                 1486,
+	}, combatantInfo.V22)
+	require.Len(t, combatantInfo.GearSetups, 1)
+	assert.Equal(t, 250532, combatantInfo.GearSetups[0].ItemID)
 }
 
 func TestCombatantInfoLeavesUnknownLevelUnset(t *testing.T) {
