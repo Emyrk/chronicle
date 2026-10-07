@@ -1,0 +1,83 @@
+name: Release chronicle-panel-sdk
+
+# Publishes @emyrk/chronicle-panel-sdk to npm when a new package version lands
+# on main. Merges without a version bump validate and then skip publishing.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'api/chronicleproto/**'
+      - 'frontend/chronicle/src/api/proto/chronicle_pb.ts'
+      - 'frontend/chronicle-panel-sdk/**'
+      - '.github/workflows/release-panel-sdk.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: release-panel-sdk
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Test, build, and publish
+    runs-on: ubuntu-latest
+    if: github.repository == 'Emyrk/chronicle'
+    defaults:
+      run:
+        working-directory: frontend/chronicle-panel-sdk
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify protobuf snapshots
+        run: |
+          cmp ../../api/chronicleproto/chronicle.proto proto/chronicle.proto
+          cmp ../chronicle/src/api/proto/chronicle_pb.ts src/v1/protobuf/chronicle_pb.ts
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Check package contents
+        run: npm pack --dry-run
+
+      - name: Check whether version is already published
+        id: check
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          echo "name=$NAME"       >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          PUBLISHED=$(npm view "$NAME@$VERSION" version 2>/dev/null || true)
+          if [ "$PUBLISHED" = "$VERSION" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$NAME@$VERSION already exists on npm — skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Publishing $NAME@$VERSION."
+          fi
+
+      - name: Publish to npm
+        if: steps.check.outputs.published == 'false'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

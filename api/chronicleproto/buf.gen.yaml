@@ -11,10 +11,14 @@ plugins:
       - paths=source_relative
       - simple
   # TypeScript generation
-#  - remote: buf.build/bufbuild/es
-#    out: ../../frontend/chronicle/src/api/proto
   - remote: buf.build/bufbuild/es:v2.2.0
     out: ../../frontend/chronicle/src/api/proto
+    include_imports: true
+    opt:
+      - target=ts
+      - ts_nocheck=true
+  - remote: buf.build/bufbuild/es:v2.2.0
+    out: ../../frontend/chronicle-panel-sdk/src/v1/protobuf
     include_imports: true
     opt:
       - target=ts

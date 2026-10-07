@@ -65,9 +65,23 @@ export function CustomPanelHost({
         startTime: context.instance.startTime,
         endTime: context.instance.endTime ?? context.instance.startTime,
         capabilities: [...(context.instance.capabilities ?? [])],
-        encounters: context.instance.encounters,
-        players: context.instance.players ?? {},
-        units: context.instance.units ?? {},
+        encounters: context.instance.encounters.map((encounter) => ({
+          id: encounter.id,
+          name: encounter.name,
+          startTime: encounter.start_time,
+          endTime: encounter.end_time,
+        })),
+        players: Object.fromEntries(Object.entries(context.instance.players ?? {}).map(([id, player]) => [id, {
+          id,
+          name: player.name,
+          class: player.class,
+          class_name: player.class,
+        }])),
+        units: Object.fromEntries(Object.entries(context.instance.units ?? {}).map(([id, unit]) => [id, {
+          name: unit.name,
+          owner: unit.owner?.toString() ?? null,
+          entry: unit.entry,
+        }])),
       },
       selection: {
         encounterIds: [...context.selectedEncounterIds],

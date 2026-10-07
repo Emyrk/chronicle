@@ -1,0 +1,367 @@
+syntax = "proto3";
+
+package chronicleproto;
+
+option go_package = "github.com/Emyrk/chronicle/api/chronicleproto";
+
+enum School {
+  Unknown = 0;
+  None = 1;
+  Physical = 2;
+  Holy = 3;
+  Fire = 4;
+  Nature = 5;
+  Frost = 6;
+  Shadow = 7;
+  Arcane = 8;
+}
+
+enum CastAction {
+  ActionUnknown = 0;
+  ActionCasts = 1;
+  ActionBeginsToCast = 2;
+  ActionChannels = 3;
+  ActionFailsCasting = 4;
+}
+
+enum AuraApplication {
+  ApplicationUnknown = 0;
+  ApplicationGains = 1;
+  ApplicationFades = 2;
+  ApplicationRemoved = 3;
+}
+
+enum AuraState {
+  StateUnknown = 0;
+  StateAdded = 1;
+  StateRemoved = 2;
+  StateModified = 3;
+}
+
+enum AuraTransition {
+  TransitionUnknown = 0;
+  TransitionApplied = 1;
+  TransitionRefreshed = 2;
+  TransitionStackChanged = 3;
+  TransitionRemoved = 4;
+}
+
+message SpellData {
+  int32 id = 1;
+  string name = 2;
+  uint32 attack_outcome = 3;  // AttackOutcome bitmask of possible hit table results
+}
+
+message Tailer {
+  optional uint32 amount = 1;
+  uint32 hitType = 2;
+}
+
+message ActivityEntry {
+  string guid = 1;
+  string eventType = 2;  // "start", "end", "slain", "bump"
+}
+
+message EventMeta {
+  int32 index = 1;
+  int64 offsetMilli = 2;
+  repeated ActivityEntry activity = 3;
+  // True when this event was synthetically generated (e.g. projected pre-pull
+  // aura), not sourced from the original combat log.
+  bool is_synthetic = 4;
+}
+
+message Heal {
+  EventMeta meta = 1;
+  string caster = 3;
+  string target = 4;
+  string sourceName = 5;
+  int32 amount = 6;
+  uint32 hitType = 7;
+  optional SpellData spellData = 8;
+  School school = 9; // Legacy primary school; use schools for complete data.
+  int32 overheal = 10;
+  int32 absorbed = 11;
+  repeated School schools = 12;
+}
+
+message Damage {
+  EventMeta meta = 1;
+
+  optional string caster = 3;
+  // sourceName is the spell or ability name (or environmental source)
+  string sourceName = 4;
+  string target = 5;
+  uint32 hitType = 6;
+  int32 amount = 7;
+  School school = 8; // Legacy primary school; use schools for complete data.
+  repeated Tailer tailers = 9;
+  optional SpellData spellData = 10;
+  int32 overkill = 11;
+  repeated School schools = 12;
+}
+
+message UnitPosition {
+  EventMeta meta = 1;
+  string unit = 2;
+  double x = 3;
+  double y = 4;
+  int32 map_id = 5;
+  double facing = 6;
+}
+
+message UnitResources {
+  EventMeta meta = 1;
+  string unit = 2;
+  int64 current_health = 3;
+  int64 maximum_health = 4;
+  int32 absorb = 5;
+  string power_type = 6;
+  int32 current_power = 7;
+  int32 maximum_power = 8;
+  int32 attack_power = 9;
+  int32 spell_power = 10;
+  int32 armor = 11;
+}
+
+message ResourceChange {
+  EventMeta meta = 1;
+  string target = 3;
+  int32 amount = 4;
+  string resourceType = 5;
+  optional string caster = 6;
+  optional string sourceName = 7;
+  string direction = 8;
+  optional SpellData spellData = 9;
+  int32 overResource = 10;
+}
+
+message ExtraAttack {
+  EventMeta meta = 1;
+  string target = 2;
+  int32 amount = 3;
+  string sourceName = 5;
+  optional SpellData spellData = 6;
+}
+
+message Slain {
+  EventMeta meta = 1;
+  string target = 2;
+  optional string caster = 3;
+  optional Damage attribution = 4;
+}
+
+message Resurrection {
+  EventMeta meta = 1;
+  string source = 2;
+  string target = 3;
+  SpellData spell = 4;
+}
+
+message Spell {
+  string name = 1;
+  int32 id = 2;
+  optional int32 rank = 3;
+}
+
+message Cast {
+  EventMeta meta = 1;
+  string caster = 2;
+  CastAction action = 3;
+  optional string target = 4;
+  Spell spell = 5;
+}
+
+message Aura {
+  EventMeta meta = 1;
+  string target = 2;
+  string spellName = 3;
+  int32 currentAmount = 4;
+  AuraApplication application = 5;
+  AuraState state = 6;
+  optional SpellData spellData = 7;
+  bool isBuff = 8;
+  optional string caster = 9;
+  AuraTransition transition = 10;
+}
+
+message AuraCast {
+  EventMeta meta = 1;
+  SpellData spell = 2;
+  string caster = 3;
+  optional string target = 4;
+  int32 effect = 5;
+  int32 amplitude = 6;
+  int32 effectMiscValue = 7;
+  int32 durationMS = 8;
+  int32 capStatus = 9;
+  int32 effectAuraName = 10;
+}
+
+message SpellGo {
+  EventMeta meta = 1;
+  optional int32 itemID = 2;
+  optional SpellData spellData = 3;
+  string caster = 4;
+  optional string target = 5;
+  int32 numHits = 6;
+  int32 numMisses = 7;
+  optional string corpseOwner = 8;
+  reserved 9; // was spellname
+}
+
+message SpellStart {
+  EventMeta meta = 1;
+  optional int32 itemID = 2;
+  optional SpellData spellData = 3;
+  string caster = 4;
+  optional string target = 5;
+  int32 castFlags = 6;
+  int32 castTimeMilli = 7;
+  int32 channelTimeMilli = 8;
+  int32 spellType = 9;
+}
+
+message SpellFail {
+  EventMeta meta = 1;
+  string caster = 2;
+  optional SpellData spellData = 3;
+  bool failedBySever = 4;
+}
+message UnitClassification {
+  EventMeta meta = 1;
+  string target = 2;
+  int32 unitType = 3;
+  int32 affiliation = 4;
+  optional string owner = 5;
+  optional string controller = 6;
+  int32 spellId = 7;
+}
+
+enum DispelType {
+  DispelTypeNone = 0;
+  DispelTypeMagic = 1;
+  DispelTypeCurse = 2;
+  DispelTypeDisease = 3;
+  DispelTypePoison = 4;
+  DispelTypeStealth = 5;
+  DispelTypeInvisibility = 6;
+}
+
+message Dispel {
+  EventMeta meta = 1;
+  string caster = 2;
+  string target = 3;
+  optional SpellData spellData = 4;
+  DispelType dispelType = 5;
+}
+
+message CombatantInfo {
+  EventMeta meta = 1;
+  string guid = 2;
+  string name = 3;
+  string heroClass = 4;
+  string race = 5;
+  int32 gender = 6;
+  optional string guildName = 7;
+  repeated CombatantGearSlot gear = 8;
+  optional CombatantTalents talents = 9;
+}
+
+message Interrupt {
+  EventMeta meta = 1;
+  string caster = 2;
+  string target = 3;
+  string spell_name = 4;        // name of interrupted spell
+  int32 extra_spell_id = 5;     // ID of interrupted spell
+  School extra_school = 6;      // legacy primary school of interrupted spell
+  repeated School extra_schools = 7;
+}
+message Absorbed {
+  EventMeta meta = 1;
+  string attacker = 2;
+  string target = 3;
+  optional SpellData damageSpellData = 4;  // nil for melee (swing) damage
+  string caster = 5;
+  optional SpellData absorbSpellData = 6;
+  School absorbSchool = 7;
+  int32 amount = 8;
+  // estimated is true when the absorb attribution was synthetically inferred
+  // from aura tracking heuristics rather than reported by the server (e.g.
+  // vanilla 1.12 logs). AzerothCore events leave this false.
+  bool estimated = 9;
+  repeated School absorb_schools = 10;
+}
+
+
+// EvidenceKind describes how consume evidence was observed.
+enum EvidenceKind {
+  EvidenceUnknown = 0;
+  EvidenceDirectItem = 1;      // SpellGo with itemID
+  EvidenceCast = 2;            // spell cast matching a consumable
+  EvidenceAura = 3;            // buff/debuff gain from a consumable
+  EvidenceHeal = 4;            // heal event from a consumable
+  EvidenceResource = 5;        // resource gain (mana/rage potion)
+  EvidenceDamage = 6;          // damage event from a consumable (sapper, etc)
+  EvidenceActiveAtPull = 7;    // pre-pull aura projected into encounter
+  EvidenceCooldown = 8;        // inferred from cooldown window
+  EvidencePreCombat = 9;       // observed outside combat and assigned to the next encounter
+}
+
+// EvidenceConfidence describes how certain we are about the evidence.
+enum EvidenceConfidence {
+  ConfidenceUnknown = 0;
+  ConfidenceDirect = 1;        // authoritative (item ID present)
+  ConfidenceEffectDerived = 2; // from known spell effect
+  ConfidenceAmbiguous = 3;     // multiple possible items
+  ConfidenceInferred = 4;      // cooldown/timing heuristic
+}
+
+// Consume records a single piece of evidence that a player consumed an item.
+// Multiple evidence events with the same consume_id describe the same
+// physical use observed from different angles.
+message Consume {
+  EventMeta meta = 1;
+  string consumeId = 2;             // groups evidence for one physical use
+  string evidenceId = 3;            // unique observation identifier
+  string player = 4;                // player GUID
+  optional int32 itemId = 5;        // item ID when known
+  repeated int32 candidateItemIds = 6; // possible items when ambiguous
+  optional SpellData spellData = 7;
+  EvidenceKind kind = 8;
+  EvidenceConfidence confidence = 9;
+  optional int64 consumedAtUnixMilli = 10; // when the item was consumed
+  int64 observedAtUnixMilli = 11;          // when the observation occurred
+  optional int32 amount = 12;              // heal/resource/damage amount
+  optional string resourceType = 13;       // resource type string (matches ResourceChange.resourceType)
+  bool isProjection = 14;                  // true when projected into an encounter
+  optional string itemName = 15;           // item name when itemId is known
+}
+
+message CombatantGearSlot {
+  int32 itemId = 1;
+  optional int32 enchantId = 2;
+  optional int32 temporaryEnchantId = 3;
+  repeated int32 gemEnchantIds = 4; // SpellItemEnchantment IDs by socket position; 0 means empty
+}
+
+message CombatantTalents {
+  repeated int32 summary = 1;  // [3] points per tree
+  repeated string trees = 2;   // [3] rank digit strings, one per tree tab
+}
+// CompanionStats carries relay health diagnostics from the
+// ChronicleCompanionWoTLK addon. Each bucket is the number of message chunks
+// that landed in a one-minute window (index 0 = current minute).
+message CompanionStats {
+  EventMeta meta = 1;
+  int32 dirty = 2;             // total pending (unsent) segments across all providers
+  repeated int32 buckets = 3;  // [10] landed chunk counts per minute
+}
+
+// RaidGroup carries the fixed 8 x 5 raid layout reported by the companion.
+// Empty strings preserve unused slots and subgroup boundaries.
+message RaidGroup {
+  EventMeta meta = 1;
+  repeated string group_member_guids = 2; // exactly 40 entries
+}
+

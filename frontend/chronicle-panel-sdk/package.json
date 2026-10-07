@@ -1,0 +1,50 @@
+{
+  "name": "@emyrk/chronicle-panel-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK, event-stream decoder, and protobuf schemas for Chronicle custom panels.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./v1": {
+      "types": "./dist/v1/index.d.ts",
+      "import": "./dist/v1/index.js"
+    },
+    "./v1/events": {
+      "types": "./dist/v1/events.d.ts",
+      "import": "./dist/v1/events.js"
+    },
+    "./v1/protobuf": {
+      "types": "./dist/v1/protobuf/chronicle_pb.d.ts",
+      "import": "./dist/v1/protobuf/chronicle_pb.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "proto",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "@bufbuild/protobuf": "^2.11.0"
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "2.11.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.16"
+  }
+}
