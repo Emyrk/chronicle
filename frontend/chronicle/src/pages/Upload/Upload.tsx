@@ -17,6 +17,7 @@ import {
 import { InstructionsSuperwow } from "./InstructionsSuperwow";
 import { InstructionsWotlk } from "./InstructionsWotlk";
 import { InstructionsChronicleCompanion } from "./InstructionsChronicleCompanion";
+import { InstructionsForever } from "./InstructionsForever";
 import { MultiUpload } from "./MultiUpload";
 
 /** Reusable file drop zone — supports click-to-browse and drag-and-drop. */
@@ -473,6 +474,8 @@ export function UploadView({
           <div className="space-y-6 text-sm">
             {effectiveFormat === "1.12a-superwow-addon" ? (
               <InstructionsSuperwow />
+            ) : effectiveFormat === "v22-cleu" ? (
+              <InstructionsForever />
             ) : effectiveFormat === "2.4.3-cc-addon" || effectiveFormat === "3.3.5a-cc-addon" || effectiveFormat === "azerothcore-mod" || effectiveFormat === "hermesproxy_1_14_2_cc" ? (
               <InstructionsWotlk
                 tbc={effectiveFormat === "2.4.3-cc-addon"}
