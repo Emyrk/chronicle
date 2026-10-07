@@ -1268,9 +1268,17 @@ func detectAndLinkDuplicate(
 	return affectedIDs, nil
 }
 
+// shouldRecordDPSRankings reports whether the instance satisfies its raid-wide
+// level requirement. A single violation disqualifies every boss and trash rank.
+func shouldRecordDPSRankings(finalized *instances.FinalizedInstance) bool {
+	if finalized.Rankings == nil || finalized.Rankings.Speedrun == nil || finalized.Rankings.Speedrun.LevelRange == nil {
+		return true
+	}
+	return finalized.Rankings.Speedrun.LevelRange.Satisfied
+}
+
 // insertDPSRankings persists per-player DPS rankings for each clean-kill encounter.
 // Roles are computed statistically from damage done/taken/healing per encounter.
-// Players outside the configured level range are excluded.
 func insertDPSRankings(
 	ctx context.Context,
 	tx *authz.AuthzTX,
@@ -1282,16 +1290,8 @@ func insertDPSRankings(
 	flavor database.WoWFlavor,
 	talentTreeData *talents.TalentTreeData,
 ) error {
-	// Build a set of player GUIDs that violate the level range, reusing the
-	// speedrun proof which has already checked every engaged player.
-	var levelViolators map[guid.GUID]struct{}
-	if finalized.Rankings.Speedrun != nil {
-		if lr := finalized.Rankings.Speedrun.LevelRange; lr != nil && !lr.Satisfied {
-			levelViolators = make(map[guid.GUID]struct{}, len(lr.Violators))
-			for _, v := range lr.Violators {
-				levelViolators[v.PlayerGUID] = struct{}{}
-			}
-		}
+	if !shouldRecordDPSRankings(finalized) {
+		return nil
 	}
 
 	for _, enc := range finalized.Encounters {
@@ -1306,21 +1306,6 @@ func insertDPSRankings(
 			continue
 		}
 		durationSecs := enc.Combat.End.Sub(enc.Combat.Start).Seconds()
-
-		// If any player in this encounter violated the level range (detected
-		// by the speedrun proof), skip the entire encounter.
-		if levelViolators != nil {
-			violation := false
-			for unitGUID := range dpsResult.Units {
-				if _, bad := levelViolators[unitGUID]; bad {
-					violation = true
-					break
-				}
-			}
-			if violation {
-				continue
-			}
-		}
 
 		survivabilityResult := finalized.Rankings.Survivability[enc.Combat.EncounterID]
 
@@ -1457,7 +1442,7 @@ func insertDPSRankings(
 	}
 
 	// Aggregate trash (non-boss) encounters into per-(player, spec) ranking rows.
-	if err := insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, levelViolators, datasetID, flavor, talentTreeData); err != nil {
+	if err := insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, datasetID, flavor, talentTreeData); err != nil {
 		return err
 	}
 	return nil
@@ -1493,7 +1478,6 @@ func insertTrashRankings(
 	dbinstance database.LogInstance,
 	instanceName string,
 	realmName string,
-	levelViolators map[guid.GUID]struct{},
 	datasetID uuid.UUID,
 	flavor database.WoWFlavor,
 	talentTreeData *talents.TalentTreeData,
@@ -1514,20 +1498,6 @@ func insertTrashRankings(
 		durationSecs := enc.Combat.End.Sub(enc.Combat.Start).Seconds()
 		if durationSecs < MinimumCombatTimeForRankings {
 			continue
-		}
-
-		// If any player in this encounter violated the level range, skip it.
-		if levelViolators != nil {
-			violation := false
-			for unitGUID := range dpsResult.Units {
-				if _, bad := levelViolators[unitGUID]; bad {
-					violation = true
-					break
-				}
-			}
-			if violation {
-				continue
-			}
 		}
 
 		survivabilityResult := finalized.Rankings.Survivability[enc.Combat.EncounterID]
