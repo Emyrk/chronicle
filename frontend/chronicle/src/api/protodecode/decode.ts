@@ -5046,6 +5046,23 @@ export interface ReusableCombatantInfo {
   gear: ReusableCombatantGearSlot[];
   gearCount: number;
   talents: ReusableCombatantTalents | null;
+  primaryStat: number | null;
+  stamina: number | null;
+  meleeCritRating: number | null;
+  rangedCritRating: number | null;
+  spellCritRating: number | null;
+  speed: number | null;
+  leech: number | null;
+  meleeHasteRating: number | null;
+  rangedHasteRating: number | null;
+  spellHasteRating: number | null;
+  avoidance: number | null;
+  mastery: number | null;
+  damageDoneVersatility: number | null;
+  healingDoneVersatility: number | null;
+  damageTakenVersatility: number | null;
+  unknownStat: number | null;
+  specId: number | null;
   activity: ReusableActivityEntry[];
   activityCount: number;
   isSynthetic: boolean;
@@ -5064,6 +5081,7 @@ export interface ReusableCombatantInfo {
  *   7: guildName (optional string)
  *   8: gear (repeated CombatantGearSlot)
  *   9: talents (optional CombatantTalents)
+ *   10-26: optional modern combatant stats and specialization ID
  */
 export class CombatantInfoDecoder {
   private readonly textDecoder = sharedTextDecoder;
@@ -5082,6 +5100,23 @@ export class CombatantInfoDecoder {
     gear: [],
     gearCount: 0,
     talents: null,
+    primaryStat: null,
+    stamina: null,
+    meleeCritRating: null,
+    rangedCritRating: null,
+    spellCritRating: null,
+    speed: null,
+    leech: null,
+    meleeHasteRating: null,
+    rangedHasteRating: null,
+    spellHasteRating: null,
+    avoidance: null,
+    mastery: null,
+    damageDoneVersatility: null,
+    healingDoneVersatility: null,
+    damageTakenVersatility: null,
+    unknownStat: null,
+    specId: null,
     activity: [],
     activityCount: 0,
     isSynthetic: false,
@@ -5102,11 +5137,29 @@ export class CombatantInfoDecoder {
     msg.guildName = null;
     msg.gearCount = 0;
     msg.talents = null;
+    msg.primaryStat = null;
+    msg.stamina = null;
+    msg.meleeCritRating = null;
+    msg.rangedCritRating = null;
+    msg.spellCritRating = null;
+    msg.speed = null;
+    msg.leech = null;
+    msg.meleeHasteRating = null;
+    msg.rangedHasteRating = null;
+    msg.spellHasteRating = null;
+    msg.avoidance = null;
+    msg.mastery = null;
+    msg.damageDoneVersatility = null;
+    msg.healingDoneVersatility = null;
+    msg.damageTakenVersatility = null;
+    msg.unknownStat = null;
+    msg.specId = null;
     msg.activityCount = 0;
     msg.isSynthetic = false;
 
     while (offset < end) {
-      const tag = data[offset++];
+      const { value: tag, bytesRead: tagBytes } = readVarintFast(data, offset);
+      offset += tagBytes;
       const fieldNumber = tag >> 3;
       const wireType = tag & 0x7;
 
@@ -5253,7 +5306,26 @@ export class CombatantInfoDecoder {
       } else if (wireType === 0) {
         const { value, bytesRead } = readVarintFast(data, offset);
         offset += bytesRead;
-        if (fieldNumber === 6) msg.gender = value;
+        switch (fieldNumber) {
+          case 6: msg.gender = value; break;
+          case 10: msg.primaryStat = value; break;
+          case 11: msg.stamina = value; break;
+          case 12: msg.meleeCritRating = value; break;
+          case 13: msg.rangedCritRating = value; break;
+          case 14: msg.spellCritRating = value; break;
+          case 15: msg.speed = value; break;
+          case 16: msg.leech = value; break;
+          case 17: msg.meleeHasteRating = value; break;
+          case 18: msg.rangedHasteRating = value; break;
+          case 19: msg.spellHasteRating = value; break;
+          case 20: msg.avoidance = value; break;
+          case 21: msg.mastery = value; break;
+          case 22: msg.damageDoneVersatility = value; break;
+          case 23: msg.healingDoneVersatility = value; break;
+          case 24: msg.damageTakenVersatility = value; break;
+          case 25: msg.unknownStat = value; break;
+          case 26: msg.specId = value; break;
+        }
       }
     }
 

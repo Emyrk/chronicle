@@ -2314,18 +2314,37 @@ func (x *Dispel) GetDispelType() DispelType {
 }
 
 type CombatantInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	Guid          string                 `protobuf:"bytes,2,opt,name=guid,proto3" json:"guid,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	HeroClass     string                 `protobuf:"bytes,4,opt,name=heroClass,proto3" json:"heroClass,omitempty"`
-	Race          string                 `protobuf:"bytes,5,opt,name=race,proto3" json:"race,omitempty"`
-	Gender        int32                  `protobuf:"varint,6,opt,name=gender,proto3" json:"gender,omitempty"`
-	GuildName     *string                `protobuf:"bytes,7,opt,name=guildName,proto3,oneof" json:"guildName,omitempty"`
-	Gear          []*CombatantGearSlot   `protobuf:"bytes,8,rep,name=gear,proto3" json:"gear,omitempty"`
-	Talents       *CombatantTalents      `protobuf:"bytes,9,opt,name=talents,proto3,oneof" json:"talents,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Meta      *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Guid      string                 `protobuf:"bytes,2,opt,name=guid,proto3" json:"guid,omitempty"`
+	Name      string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	HeroClass string                 `protobuf:"bytes,4,opt,name=heroClass,proto3" json:"heroClass,omitempty"`
+	Race      string                 `protobuf:"bytes,5,opt,name=race,proto3" json:"race,omitempty"`
+	Gender    int32                  `protobuf:"varint,6,opt,name=gender,proto3" json:"gender,omitempty"`
+	GuildName *string                `protobuf:"bytes,7,opt,name=guildName,proto3,oneof" json:"guildName,omitempty"`
+	Gear      []*CombatantGearSlot   `protobuf:"bytes,8,rep,name=gear,proto3" json:"gear,omitempty"`
+	Talents   *CombatantTalents      `protobuf:"bytes,9,opt,name=talents,proto3,oneof" json:"talents,omitempty"`
+	// Modern COMBATANT_INFO CSV stats. The melee/ranged/spell and
+	// damage/healing/taken variants preserve the triplicate source fields.
+	PrimaryStat            *int32 `protobuf:"varint,10,opt,name=primaryStat,proto3,oneof" json:"primaryStat,omitempty"`
+	Stamina                *int32 `protobuf:"varint,11,opt,name=stamina,proto3,oneof" json:"stamina,omitempty"`
+	MeleeCritRating        *int32 `protobuf:"varint,12,opt,name=meleeCritRating,proto3,oneof" json:"meleeCritRating,omitempty"`
+	RangedCritRating       *int32 `protobuf:"varint,13,opt,name=rangedCritRating,proto3,oneof" json:"rangedCritRating,omitempty"`
+	SpellCritRating        *int32 `protobuf:"varint,14,opt,name=spellCritRating,proto3,oneof" json:"spellCritRating,omitempty"`
+	Speed                  *int32 `protobuf:"varint,15,opt,name=speed,proto3,oneof" json:"speed,omitempty"`
+	Leech                  *int32 `protobuf:"varint,16,opt,name=leech,proto3,oneof" json:"leech,omitempty"`
+	MeleeHasteRating       *int32 `protobuf:"varint,17,opt,name=meleeHasteRating,proto3,oneof" json:"meleeHasteRating,omitempty"`
+	RangedHasteRating      *int32 `protobuf:"varint,18,opt,name=rangedHasteRating,proto3,oneof" json:"rangedHasteRating,omitempty"`
+	SpellHasteRating       *int32 `protobuf:"varint,19,opt,name=spellHasteRating,proto3,oneof" json:"spellHasteRating,omitempty"`
+	Avoidance              *int32 `protobuf:"varint,20,opt,name=avoidance,proto3,oneof" json:"avoidance,omitempty"`
+	Mastery                *int32 `protobuf:"varint,21,opt,name=mastery,proto3,oneof" json:"mastery,omitempty"`
+	DamageDoneVersatility  *int32 `protobuf:"varint,22,opt,name=damageDoneVersatility,proto3,oneof" json:"damageDoneVersatility,omitempty"`
+	HealingDoneVersatility *int32 `protobuf:"varint,23,opt,name=healingDoneVersatility,proto3,oneof" json:"healingDoneVersatility,omitempty"`
+	DamageTakenVersatility *int32 `protobuf:"varint,24,opt,name=damageTakenVersatility,proto3,oneof" json:"damageTakenVersatility,omitempty"`
+	UnknownStat            *int32 `protobuf:"varint,25,opt,name=unknownStat,proto3,oneof" json:"unknownStat,omitempty"` // CSV field 24 in patch 12.0+; purpose is not yet verified.
+	SpecId                 *int32 `protobuf:"varint,26,opt,name=specId,proto3,oneof" json:"specId,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *CombatantInfo) Reset() {
@@ -2419,6 +2438,125 @@ func (x *CombatantInfo) GetTalents() *CombatantTalents {
 		return x.Talents
 	}
 	return nil
+}
+
+func (x *CombatantInfo) GetPrimaryStat() int32 {
+	if x != nil && x.PrimaryStat != nil {
+		return *x.PrimaryStat
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetStamina() int32 {
+	if x != nil && x.Stamina != nil {
+		return *x.Stamina
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetMeleeCritRating() int32 {
+	if x != nil && x.MeleeCritRating != nil {
+		return *x.MeleeCritRating
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetRangedCritRating() int32 {
+	if x != nil && x.RangedCritRating != nil {
+		return *x.RangedCritRating
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetSpellCritRating() int32 {
+	if x != nil && x.SpellCritRating != nil {
+		return *x.SpellCritRating
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetSpeed() int32 {
+	if x != nil && x.Speed != nil {
+		return *x.Speed
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetLeech() int32 {
+	if x != nil && x.Leech != nil {
+		return *x.Leech
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetMeleeHasteRating() int32 {
+	if x != nil && x.MeleeHasteRating != nil {
+		return *x.MeleeHasteRating
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetRangedHasteRating() int32 {
+	if x != nil && x.RangedHasteRating != nil {
+		return *x.RangedHasteRating
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetSpellHasteRating() int32 {
+	if x != nil && x.SpellHasteRating != nil {
+		return *x.SpellHasteRating
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetAvoidance() int32 {
+	if x != nil && x.Avoidance != nil {
+		return *x.Avoidance
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetMastery() int32 {
+	if x != nil && x.Mastery != nil {
+		return *x.Mastery
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetDamageDoneVersatility() int32 {
+	if x != nil && x.DamageDoneVersatility != nil {
+		return *x.DamageDoneVersatility
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetHealingDoneVersatility() int32 {
+	if x != nil && x.HealingDoneVersatility != nil {
+		return *x.HealingDoneVersatility
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetDamageTakenVersatility() int32 {
+	if x != nil && x.DamageTakenVersatility != nil {
+		return *x.DamageTakenVersatility
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetUnknownStat() int32 {
+	if x != nil && x.UnknownStat != nil {
+		return *x.UnknownStat
+	}
+	return 0
+}
+
+func (x *CombatantInfo) GetSpecId() int32 {
+	if x != nil && x.SpecId != nil {
+		return *x.SpecId
+	}
+	return 0
 }
 
 type Interrupt struct {
@@ -3247,7 +3385,8 @@ const file_chronicle_proto_rawDesc = "" +
 	"dispelType\x18\x05 \x01(\x0e2\x1a.chronicleproto.DispelTypeR\n" +
 	"dispelTypeB\f\n" +
 	"\n" +
-	"_spellData\"\xe5\x02\n" +
+	"_spellData\"\xf2\n" +
+	"\n" +
 	"\rCombatantInfo\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x12\n" +
 	"\x04guid\x18\x02 \x01(\tR\x04guid\x12\x12\n" +
@@ -3257,11 +3396,50 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x06gender\x18\x06 \x01(\x05R\x06gender\x12!\n" +
 	"\tguildName\x18\a \x01(\tH\x00R\tguildName\x88\x01\x01\x125\n" +
 	"\x04gear\x18\b \x03(\v2!.chronicleproto.CombatantGearSlotR\x04gear\x12?\n" +
-	"\atalents\x18\t \x01(\v2 .chronicleproto.CombatantTalentsH\x01R\atalents\x88\x01\x01B\f\n" +
+	"\atalents\x18\t \x01(\v2 .chronicleproto.CombatantTalentsH\x01R\atalents\x88\x01\x01\x12%\n" +
+	"\vprimaryStat\x18\n" +
+	" \x01(\x05H\x02R\vprimaryStat\x88\x01\x01\x12\x1d\n" +
+	"\astamina\x18\v \x01(\x05H\x03R\astamina\x88\x01\x01\x12-\n" +
+	"\x0fmeleeCritRating\x18\f \x01(\x05H\x04R\x0fmeleeCritRating\x88\x01\x01\x12/\n" +
+	"\x10rangedCritRating\x18\r \x01(\x05H\x05R\x10rangedCritRating\x88\x01\x01\x12-\n" +
+	"\x0fspellCritRating\x18\x0e \x01(\x05H\x06R\x0fspellCritRating\x88\x01\x01\x12\x19\n" +
+	"\x05speed\x18\x0f \x01(\x05H\aR\x05speed\x88\x01\x01\x12\x19\n" +
+	"\x05leech\x18\x10 \x01(\x05H\bR\x05leech\x88\x01\x01\x12/\n" +
+	"\x10meleeHasteRating\x18\x11 \x01(\x05H\tR\x10meleeHasteRating\x88\x01\x01\x121\n" +
+	"\x11rangedHasteRating\x18\x12 \x01(\x05H\n" +
+	"R\x11rangedHasteRating\x88\x01\x01\x12/\n" +
+	"\x10spellHasteRating\x18\x13 \x01(\x05H\vR\x10spellHasteRating\x88\x01\x01\x12!\n" +
+	"\tavoidance\x18\x14 \x01(\x05H\fR\tavoidance\x88\x01\x01\x12\x1d\n" +
+	"\amastery\x18\x15 \x01(\x05H\rR\amastery\x88\x01\x01\x129\n" +
+	"\x15damageDoneVersatility\x18\x16 \x01(\x05H\x0eR\x15damageDoneVersatility\x88\x01\x01\x12;\n" +
+	"\x16healingDoneVersatility\x18\x17 \x01(\x05H\x0fR\x16healingDoneVersatility\x88\x01\x01\x12;\n" +
+	"\x16damageTakenVersatility\x18\x18 \x01(\x05H\x10R\x16damageTakenVersatility\x88\x01\x01\x12%\n" +
+	"\vunknownStat\x18\x19 \x01(\x05H\x11R\vunknownStat\x88\x01\x01\x12\x1b\n" +
+	"\x06specId\x18\x1a \x01(\x05H\x12R\x06specId\x88\x01\x01B\f\n" +
 	"\n" +
 	"_guildNameB\n" +
 	"\n" +
-	"\b_talents\"\xa7\x02\n" +
+	"\b_talentsB\x0e\n" +
+	"\f_primaryStatB\n" +
+	"\n" +
+	"\b_staminaB\x12\n" +
+	"\x10_meleeCritRatingB\x13\n" +
+	"\x11_rangedCritRatingB\x12\n" +
+	"\x10_spellCritRatingB\b\n" +
+	"\x06_speedB\b\n" +
+	"\x06_leechB\x13\n" +
+	"\x11_meleeHasteRatingB\x14\n" +
+	"\x12_rangedHasteRatingB\x13\n" +
+	"\x11_spellHasteRatingB\f\n" +
+	"\n" +
+	"_avoidanceB\n" +
+	"\n" +
+	"\b_masteryB\x18\n" +
+	"\x16_damageDoneVersatilityB\x19\n" +
+	"\x17_healingDoneVersatilityB\x19\n" +
+	"\x17_damageTakenVersatilityB\x0e\n" +
+	"\f_unknownStatB\t\n" +
+	"\a_specId\"\xa7\x02\n" +
 	"\tInterrupt\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06caster\x18\x02 \x01(\tR\x06caster\x12\x16\n" +

@@ -93,6 +93,66 @@ describe('FastCombatantInfoCursor', () => {
 
     expect(cursor.next()?.gear[0].gemEnchantIds).toEqual([0, 0, 3637, 0]);
   });
+
+  it('decodes optional modern stats and resets absent values', () => {
+    const withStats = toBinary(CombatantInfoSchema, create(CombatantInfoSchema, {
+      primaryStat: 100,
+      stamina: 101,
+      meleeCritRating: 102,
+      rangedCritRating: 103,
+      spellCritRating: 104,
+      speed: 105,
+      leech: 106,
+      meleeHasteRating: 107,
+      rangedHasteRating: 108,
+      spellHasteRating: 109,
+      avoidance: 110,
+      mastery: 111,
+      damageDoneVersatility: 112,
+      healingDoneVersatility: 113,
+      damageTakenVersatility: 114,
+      unknownStat: 115,
+      specId: 116,
+    }));
+    const withoutStats = toBinary(CombatantInfoSchema, create(CombatantInfoSchema, {
+      guid: '0xPLAYER',
+    }));
+    const messageData = new Uint8Array([
+      ...encodeVarint(withStats.length),
+      ...withStats,
+      ...encodeVarint(withoutStats.length),
+      ...withoutStats,
+    ]);
+    const payload = buildPayload('encounter', 1706000000000n, 2, messageData.length, messageData);
+    const cursor = new FastCombatantInfoCursor(payload);
+
+    expect(cursor.next()).toMatchObject({
+      primaryStat: 100,
+      stamina: 101,
+      meleeCritRating: 102,
+      rangedCritRating: 103,
+      spellCritRating: 104,
+      speed: 105,
+      leech: 106,
+      meleeHasteRating: 107,
+      rangedHasteRating: 108,
+      spellHasteRating: 109,
+      avoidance: 110,
+      mastery: 111,
+      damageDoneVersatility: 112,
+      healingDoneVersatility: 113,
+      damageTakenVersatility: 114,
+      unknownStat: 115,
+      specId: 116,
+    });
+    expect(cursor.next()).toMatchObject({
+      guid: '0xPLAYER',
+      primaryStat: null,
+      stamina: null,
+      unknownStat: null,
+      specId: null,
+    });
+  });
 });
 
 describe('unit telemetry cursors', () => {
