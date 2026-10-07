@@ -73,8 +73,8 @@ func (f *feignDeath) ProcessMessages(msgs []messages.Message) ([]messages.Messag
 }
 
 func (f *feignDeath) isFeignDeath(slain *messages.Slain) bool {
-	// UNIT_DIED and UNIT_DESTROYED are the WotLK slain forms without a killer.
-	// PARTY_KILL and *_INSTAKILL provide one and must remain real deaths.
+	// UNIT_DIED, UNIT_DESTROYED, and UNIT_DISSIPATES are the WotLK slain forms
+	// without a killer. PARTY_KILL and *_INSTAKILL provide one and must remain real deaths.
 	if slain.Killer != nil || f.classForPlayer(slain.Victim) != types.HeroClassesHUNTER {
 		return false
 	}

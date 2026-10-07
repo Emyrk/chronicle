@@ -54,6 +54,7 @@ func TestSplitEvent(t *testing.T) {
 		// Special events
 		{"UNIT_DIED", "UNIT_DIED", ""},
 		{"UNIT_DESTROYED", "UNIT_DESTROYED", ""},
+		{"UNIT_DISSIPATES", "UNIT_DISSIPATES", ""},
 		{"PARTY_KILL", "PARTY_KILL", ""},
 		{"ENCHANT_APPLIED", "ENCHANT_APPLIED", ""},
 	}
