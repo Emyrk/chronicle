@@ -29,6 +29,25 @@ export interface AddGuildMemberRequest {
     readonly user_id: string;
 }
 
+// From chroniclesdk/custom_panel.go
+export interface AdminActiveCustomPanelInstallation {
+    readonly user_id: string;
+    readonly username: string;
+    readonly repository: string;
+    readonly commit_sha: string;
+    readonly installed_ref: string;
+    readonly plugin_name: string;
+    readonly plugin_version: string;
+    readonly panel_names: readonly string[];
+    readonly installed_at: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface AdminActiveCustomPanelsResponse {
+    readonly installations: readonly AdminActiveCustomPanelInstallation[];
+}
+
 // From chroniclesdk/user.go
 export interface AdminBulkDeleteResponse {
     readonly requested: number;

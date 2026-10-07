@@ -92,3 +92,57 @@ func TestCustomPanelReleaseInstallationLifecycle(t *testing.T) {
 	require.Equal(t, int64(2), updatedSettings.Revision)
 	require.False(t, updatedSettings.Enabled)
 }
+
+func TestListAdminActiveCustomPanelInstallations(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	store, _ := dbtestutil.NewDB(t)
+	userID := uuid.New()
+	username := "active-panels-" + userID.String()[:8]
+
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: username})
+	require.NoError(t, err)
+	settings, err := store.UpsertUserCustomPanelSettings(ctx, database.UpsertUserCustomPanelSettingsParams{
+		UserID: userID, Enabled: true, ExpectedRevision: 0,
+	})
+	require.NoError(t, err)
+
+	manifest := []byte(`{"schema_version":1,"plugin":{"id":"test","name":"Test Panels","version":"1.2.3"},"artifacts":{"entry":{"path":"dist/panel.js","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":1}},"panels":[{"id":"damage","name":"Damage Plus","streams":["damage"]}]}`)
+	release, err := store.InsertCustomPanelRelease(ctx, database.InsertCustomPanelReleaseParams{
+		Repository: "owner/active-repo", CommitSha: "1111111111111111111111111111111111111111", Manifest: manifest, ManifestSha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	})
+	require.NoError(t, err)
+	_, err = store.UpsertUserCustomPanelInstallation(ctx, database.UpsertUserCustomPanelInstallationParams{
+		UserID: userID, Repository: release.Repository, ReleaseID: release.ID, InstalledRef: "main", Enabled: true,
+	})
+	require.NoError(t, err)
+
+	rows, err := store.ListAdminActiveCustomPanelInstallations(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, userID, rows[0].UserID)
+	require.Equal(t, username, rows[0].Username)
+	require.Equal(t, release.Repository, rows[0].Repository)
+	require.Equal(t, release.CommitSha, rows[0].CommitSha)
+	require.JSONEq(t, string(manifest), string(rows[0].Manifest))
+
+	_, err = store.UpsertUserCustomPanelInstallation(ctx, database.UpsertUserCustomPanelInstallationParams{
+		UserID: userID, Repository: release.Repository, ReleaseID: release.ID, InstalledRef: "main", Enabled: false,
+	})
+	require.NoError(t, err)
+	rows, err = store.ListAdminActiveCustomPanelInstallations(ctx)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+
+	_, err = store.UpsertUserCustomPanelInstallation(ctx, database.UpsertUserCustomPanelInstallationParams{
+		UserID: userID, Repository: release.Repository, ReleaseID: release.ID, InstalledRef: "main", Enabled: true,
+	})
+	require.NoError(t, err)
+	_, err = store.UpsertUserCustomPanelSettings(ctx, database.UpsertUserCustomPanelSettingsParams{
+		UserID: userID, Enabled: false, ExpectedRevision: settings.Revision,
+	})
+	require.NoError(t, err)
+	rows, err = store.ListAdminActiveCustomPanelInstallations(ctx)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}

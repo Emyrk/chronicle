@@ -32,6 +32,7 @@ import { AdminOutdatedInstancesPage } from "./pages/Admin/AdminOutdatedInstances
 import { AdminApplicationsListPage } from "./pages/Admin/AdminApplicationsListPage"
 import { AdminCacheStatsPage } from "./pages/Admin/AdminCacheStatsPage"
 import { AdminParsingPage } from "./pages/Admin/AdminParsingPage"
+import { AdminCustomPanelsPage } from "./pages/Admin/AdminCustomPanelsPage"
 import { GearLayout } from "./pages/Gear/GearLayout"
 import { GearListPage } from "./pages/Gear/builder/GearListPage"
 import { GearTrendsPage } from "./pages/Gear/trends/GearTrendsPage"
@@ -166,6 +167,7 @@ function App() {
           <Route path="outdated-instances" element={<AdminOutdatedInstancesPage />} />
           <Route path="applications" element={<AdminApplicationsListPage />} />
           <Route path="cache-stats" element={<AdminCacheStatsPage />} />
+          <Route path="custom-panels" element={<AdminCustomPanelsPage />} />
           <Route path="parsing" element={<AdminParsingPage />} />
         </Route>
         <Route path="/servers" element={<ServersLayout />}>

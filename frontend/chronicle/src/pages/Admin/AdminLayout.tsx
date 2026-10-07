@@ -21,6 +21,7 @@ import {
   ClipboardList,
   Database,
   Camera,
+  PanelsTopLeft,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -40,6 +41,7 @@ const tabs: Tab[] = [
   { path: "/admin/regression", label: "Regression", icon: FlaskConical },
   { path: "/admin/outdated-instances", label: "Outdated Instances", icon: RefreshCw },
   { path: "/admin/applications", label: "Applications", icon: ClipboardList },
+  { path: "/admin/custom-panels", label: "Custom Panels", icon: PanelsTopLeft },
   { path: "/admin/cache-stats", label: "Cache Stats", icon: Database },
   { path: "/admin/parsing", label: "Parsing", icon: Camera },
 ];
