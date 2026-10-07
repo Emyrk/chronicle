@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { AlertTriangle, Blocks, RefreshCw, Trash2 } from "lucide-react";
+import { Navigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/Switch/Switch";
+import { useAuth } from "@/hooks/useAuth";
 import { useUpdateCustomPanelAccountSettings } from "@/pages/Instance/EventsPanels/custom/pluginAccountStorage";
 import { resolveCustomPanelInstallation } from "@/pages/Instance/EventsPanels/custom/pluginApi";
 import { useCustomPanelRegistry } from "@/pages/Instance/EventsPanels/custom/pluginRegistry";
@@ -17,13 +19,24 @@ interface PendingInstallation {
 }
 
 export function CustomPanelSettings() {
-  const registry = useCustomPanelRegistry();
+  const location = useLocation();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const registry = useCustomPanelRegistry(isAuthenticated);
   const updateSettings = useUpdateCustomPanelAccountSettings();
   const [repository, setRepository] = useState("");
   const [ref, setRef] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingInstallation, setPendingInstallation] = useState<PendingInstallation | null>(null);
   const [showEnableWarning, setShowEnableWarning] = useState(false);
+
+  if (authLoading) {
+    return <p className="text-sm text-muted-foreground">Checking your session...</p>;
+  }
+
+  if (!isAuthenticated) {
+    const returnPath = location.pathname + location.search;
+    return <Navigate to={`/login?from=${encodeURIComponent(returnPath)}`} replace />;
+  }
 
   const save = (enabled: boolean, installations = registry.installations) => updateSettings.mutateAsync({
     enabled,
