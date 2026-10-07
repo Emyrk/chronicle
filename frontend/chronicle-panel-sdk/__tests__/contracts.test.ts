@@ -2,12 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalizeCustomPanelRef,
   createCustomPanelRef,
+  CUSTOM_PANEL_BREAKOUT_TITLE_MAX_LENGTH,
+  CUSTOM_PANEL_MAX_BREAKOUTS,
   isManifestV1,
   normalizeRepository,
   parseCustomPanelRef,
 } from "../src/v1";
 
 describe("custom panel SDK contracts", () => {
+  it("publishes bounded floating-breakout limits", () => {
+    expect(CUSTOM_PANEL_MAX_BREAKOUTS).toBe(8);
+    expect(CUSTOM_PANEL_BREAKOUT_TITLE_MAX_LENGTH).toBe(100);
+  });
+
   it("normalizes GitHub repository inputs", () => {
     expect(normalizeRepository("https://github.com/Owner/Repo.git")).toBe("owner/repo");
     expect(normalizeRepository("not a repo")).toBeNull();

@@ -1,6 +1,6 @@
 {
   "name": "@emyrk/chronicle-panel-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TypeScript SDK, event-stream decoder, and protobuf schemas for Chronicle custom panels.",
   "license": "MIT",
   "repository": {
