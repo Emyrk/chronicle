@@ -12,6 +12,7 @@ type RankingsInstanceSummary struct {
 	InstanceName   string                      `json:"instance_name"`
 	DifficultyName string                      `json:"difficulty_name"`
 	MaxPlayers     int16                       `json:"max_players"`
+	Category       string                      `json:"category"`
 	TotalKills     int64                       `json:"total_kills"`
 	TopPlayers     []RankingsInstanceTopPlayer `json:"top_players"`
 }

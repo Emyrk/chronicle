@@ -9,7 +9,7 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
 import { gearClassesForFlavor } from "../classInfo";
 import { slotLabel } from "../builder/SlotEditorPanel";
-import { orderedSlots, trendsState } from "./trendsModel";
+import { orderedSlots, raidInstanceNames, trendsState } from "./trendsModel";
 import { TrendsTable } from "./TrendsTable";
 
 const DAY_OPTIONS = [30, 60, 90] as const;
@@ -33,7 +33,7 @@ export function GearTrendsPage() {
   // Raid + realm cohort filters.
   const instances = useRankingsInstances();
   const raidOptions = useMemo(
-    () => [...new Set((instances.data ?? []).map((i) => i.instance_name))],
+    () => raidInstanceNames(instances.data ?? []),
     [instances.data],
   );
   const raidParam = searchParams.get("raid") ?? "";

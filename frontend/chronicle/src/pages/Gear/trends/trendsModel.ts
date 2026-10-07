@@ -1,11 +1,20 @@
 /**
  * Pure helpers for the observed-gear-trends UI. No React imports.
  */
-import type { GearTrendsResponse, GearTrendsSlot } from "@/api/typesGenerated";
+import type {
+  GearTrendsResponse,
+  GearTrendsSlot,
+  RankingsInstanceSummary,
+} from "@/api/typesGenerated";
 
 export function formatEquipRate(percent: number): string {
   if (percent >= 10) return `${Math.round(percent)}%`;
   return `${percent.toFixed(1)}%`;
+}
+
+/** Distinct raid names for the trends instance filter. */
+export function raidInstanceNames(instances: readonly RankingsInstanceSummary[]): string[] {
+  return [...new Set(instances.filter((instance) => instance.category === "raid").map((instance) => instance.instance_name))];
 }
 
 /** Slots ordered for tab display: armory paperdoll order, weapons last. */

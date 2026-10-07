@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { GearTrendsResponse } from "@/api/typesGenerated";
-import { formatEquipRate, orderedSlots, trendsState } from "./trendsModel";
+import type { GearTrendsResponse, RankingsInstanceSummary } from "@/api/typesGenerated";
+import { formatEquipRate, orderedSlots, raidInstanceNames, trendsState } from "./trendsModel";
 
 function resp(partial: Partial<GearTrendsResponse>): GearTrendsResponse {
   return {
@@ -21,6 +21,19 @@ describe("formatEquipRate", () => {
     expect(formatEquipRate(61.4)).toBe("61%");
     expect(formatEquipRate(9.96)).toBe("10.0%");
     expect(formatEquipRate(2.5)).toBe("2.5%");
+  });
+});
+
+describe("raidInstanceNames", () => {
+  it("returns distinct raid names and excludes dungeons", () => {
+    const instances = [
+      { instance_name: "Molten Core", category: "raid" },
+      { instance_name: "Stratholme", category: "dungeon" },
+      { instance_name: "Molten Core", category: "raid" },
+      { instance_name: "Legacy Instance", category: "" },
+    ] as RankingsInstanceSummary[];
+
+    expect(raidInstanceNames(instances)).toEqual(["Molten Core"]);
   });
 });
 

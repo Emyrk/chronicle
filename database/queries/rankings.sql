@@ -1,10 +1,25 @@
 -- name: RankingsInstanceSummaries :many
 -- Reads pre-computed per-instance summaries for a specific tenant.
 -- The table has no RLS; filtering is done explicitly by tenant_id.
-SELECT instance_name, difficulty_name, max_players, total_kills, top_players
-FROM rankings_instance_summaries
-WHERE tenant_id = @tenant_id
-ORDER BY instance_name, difficulty_name, max_players;
+SELECT
+    ris.instance_name,
+    ris.difficulty_name,
+    ris.max_players,
+    COALESCE((
+        SELECT li.category
+        FROM log_instances li
+        WHERE li.name = ris.instance_name
+          AND li.difficulty_name = ris.difficulty_name
+          AND li.max_players = ris.max_players
+          AND li.category IS NOT NULL
+        ORDER BY li.start_time DESC
+        LIMIT 1
+    ), '')::text AS category,
+    ris.total_kills,
+    ris.top_players
+FROM rankings_instance_summaries ris
+WHERE ris.tenant_id = @tenant_id
+ORDER BY ris.instance_name, ris.difficulty_name, ris.max_players;
 
 -- name: UpsertRankingsInstanceSummary :exec
 -- Recompute and upsert the rankings summary for a single

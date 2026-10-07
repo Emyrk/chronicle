@@ -161,6 +161,7 @@ type sqlcQuerier interface {
 	// of a class/spec, aggregated per equipment slot.
 	//
 	// Cohort rules (shared by both queries):
+	//   * raid parses only (log_instances.category = 'raid');
 	//   * ranked parses only (encounter_dps_rankings), deduped to one
 	//     representative instance per run (duplicate uploads collapse via
 	//     COALESCE(duplicate_group_id, id) — the house convention);
