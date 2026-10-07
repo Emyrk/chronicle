@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,7 +23,7 @@ var requiredTables = []string{
 	"SpellClassOptions", "SpellCooldowns", "SpellEquippedItems", "SpellInterrupts", "SpellLevels",
 	"SpellPower", "SpellReagents", "SpellShapeshift", "SpellTargetRestrictions", "SpellTotems",
 	"SpellXDescriptionVariables", "SpellCastTimes", "SpellDuration", "SpellRange", "SpellCategory",
-	"SpellRadius", "SpellFocusObject", "SpellDescriptionVariables", "Item", "ItemSparse", "ItemEffect",
+	"SpellRadius", "SpellFocusObject", "SpellDescriptionVariables", "Item", "ItemSparse", "RandPropPoints", "ItemEffect",
 	"ItemXItemEffect", "ItemDisplayInfo", "SpellItemEnchantment", "ItemSet",
 }
 
@@ -71,7 +72,7 @@ func Convert(dir, expectedProduct, expectedBuild string) (*Import, error) {
 		"Component-only spell IDs are preserved in normalized storage even when the base Spell table has no matching row.",
 		"Modern EffectBasePointsF is preserved directly in normalized storage.",
 		"Modern icon FileDataIDs are resolved through the client listfile for spells and items when present; item display IDs are not guessed.",
-		"Items without ItemSparse are reported and skipped; modern percentage stats, damage curves, and armor curves are not imported.",
+		"Items without ItemSparse are reported and skipped; modern damage and armor curves are not imported.",
 	}
 	if err := convertSpells(dir, out); err != nil {
 		return nil, err
@@ -648,8 +649,17 @@ type itemSparseRow struct {
 	ItemLevel, RequiredLevel, RequiredSkill, RequiredSkillRank, RequiredAbility, RequiredPVPRank, MinFactionID, MinReputation, MaxCount, Stackable, ContainerSlots, ItemDelay int32
 	Bonding, PageID, LanguageID, PageMaterialID, StartQuestID, LockID, Material, SheatheType, ItemSet, DurationInInventory, BagFamily, TotemCategoryID                        int32
 	SocketType                                                                                                                                                                []int32
+	StatModifierBonusStat                                                                                                                                                     []int32 `json:"StatModifier_bonusStat"`
+	StatPercentEditor                                                                                                                                                         []int32
 	Socket_match_enchantment_ID, Gem_properties, LimitCategory, RequiredHoliday, AmmunitionType                                                                               int32
 	ZoneBound                                                                                                                                                                 []int32
+}
+
+type randPropPointsRow struct {
+	ID        int32
+	GoodF     []float32
+	SuperiorF []float32
+	EpicF     []float32
 }
 
 type itemEffectRow struct {
@@ -701,12 +711,101 @@ func setItemEffect(item *database.WorldItemTemplate, effect itemEffectRow) {
 	}
 }
 
+func itemStatPropertyIndex(inventoryType, subclass int32) (int, bool) {
+	switch inventoryType {
+	case 1, 4, 5, 7, 15, 17, 20, 25: // head, body, chest, legs, ranged, two-hand, robe, thrown
+		return 0, true
+	case 26: // ranged right; wands use the one-hand budget
+		if subclass == 19 {
+			return 3, true
+		}
+		return 0, true
+	case 13, 21, 22: // one-hand, main hand, off hand
+		return 3, true
+	case 3, 6, 8, 10, 12: // shoulder, waist, feet, hands, trinket
+		return 1, true
+	case 2, 9, 11, 14, 16, 23: // neck, wrist, finger, shield, cloak, holdable
+		return 2, true
+	case 28: // relic
+		return 4, true
+	default:
+		return 0, false
+	}
+}
+
+func itemStatBudget(points randPropPointsRow, quality int32, propertyIndex int) float32 {
+	var budgets []float32
+	switch quality {
+	case 2:
+		budgets = points.GoodF
+	case 3:
+		budgets = points.SuperiorF
+	case 4, 5, 6:
+		budgets = points.EpicF
+	default:
+		return 0
+	}
+	if propertyIndex < 0 || propertyIndex >= len(budgets) {
+		return 0
+	}
+	return budgets[propertyIndex]
+}
+
+func applyItemStats(item *database.WorldItemTemplate, base itemBaseRow, sparse itemSparseRow, points randPropPointsRow) {
+	propertyIndex, ok := itemStatPropertyIndex(sparse.InventoryType, base.SubclassID)
+	if !ok {
+		return
+	}
+	budget := itemStatBudget(points, sparse.OverallQualityID, propertyIndex)
+	if budget == 0 {
+		return
+	}
+
+	statSlot := 0
+	for i, statType := range sparse.StatModifierBonusStat {
+		if statSlot >= 10 || statType < 0 || i >= len(sparse.StatPercentEditor) {
+			continue
+		}
+		value := int32(math.Round(float64(sparse.StatPercentEditor[i]) * float64(budget) * 0.0001))
+		if value == 0 {
+			continue
+		}
+		statSlot++
+		switch statSlot {
+		case 1:
+			item.StatType1, item.StatValue1 = statType, value
+		case 2:
+			item.StatType2, item.StatValue2 = statType, value
+		case 3:
+			item.StatType3, item.StatValue3 = statType, value
+		case 4:
+			item.StatType4, item.StatValue4 = statType, value
+		case 5:
+			item.StatType5, item.StatValue5 = statType, value
+		case 6:
+			item.StatType6, item.StatValue6 = statType, value
+		case 7:
+			item.StatType7, item.StatValue7 = statType, value
+		case 8:
+			item.StatType8, item.StatValue8 = statType, value
+		case 9:
+			item.StatType9, item.StatValue9 = statType, value
+		case 10:
+			item.StatType10, item.StatValue10 = statType, value
+		}
+	}
+}
+
 func convertItems(dir string, out *Import) error {
 	bases, err := readRows[itemBaseRow](dir, "Item")
 	if err != nil {
 		return err
 	}
 	sparse, err := readRows[itemSparseRow](dir, "ItemSparse")
+	if err != nil {
+		return err
+	}
+	randPropPoints, err := readRows[randPropPointsRow](dir, "RandPropPoints")
 	if err != nil {
 		return err
 	}
@@ -736,6 +835,10 @@ func convertItems(dir string, out *Import) error {
 	for _, icon := range out.SpellIcons {
 		iconTextures[icon.ID] = icon.TextureFilename
 	}
+	pointsByItemLevel := make(map[int32]randPropPointsRow, len(randPropPoints))
+	for _, points := range randPropPoints {
+		pointsByItemLevel[points.ID] = points
+	}
 	sm := map[int32]itemSparseRow{}
 	for _, x := range sparse {
 		sm[x.ID] = x
@@ -750,6 +853,9 @@ func convertItems(dir string, out *Import) error {
 			continue
 		}
 		r := database.WorldItemTemplate{Entry: b.ID, Class: b.ClassID, Subclass: b.SubclassID, Name: x.Display, Description: x.Description, Icon: iconTextures[b.IconFileDataID], Quality: x.OverallQualityID, Flags: at(x.Flags, 0), BuyPrice: x.BuyPrice, SellPrice: x.SellPrice, InventoryType: x.InventoryType, AllowableClass: x.AllowableClass, AllowableRace: at(x.AllowableRace, 0), ItemLevel: x.ItemLevel, RequiredLevel: x.RequiredLevel, RequiredSkill: x.RequiredSkill, RequiredSkillRank: x.RequiredSkillRank, RequiredSpell: x.RequiredAbility, RequiredHonorRank: x.RequiredPVPRank, RequiredReputationFaction: x.MinFactionID, RequiredReputationRank: x.MinReputation, MaxCount: x.MaxCount, Stackable: x.Stackable, ContainerSlots: x.ContainerSlots, Delay: x.ItemDelay, AmmoType: x.AmmunitionType, Bonding: x.Bonding, PageText: x.PageID, PageLanguage: x.LanguageID, PageMaterial: x.PageMaterialID, StartQuest: x.StartQuestID, LockID: x.LockID, Material: x.Material, Sheath: x.SheatheType, SetID: x.ItemSet, Duration: x.DurationInInventory, BagFamily: x.BagFamily, TotemCategory: x.TotemCategoryID, SocketColor1: at(x.SocketType, 0), SocketColor2: at(x.SocketType, 1), SocketColor3: at(x.SocketType, 2), SocketBonus: x.Socket_match_enchantment_ID, GemProperties: x.Gem_properties, ItemLimitCategory: x.LimitCategory, HolidayID: x.RequiredHoliday, AreaBound: at(x.ZoneBound, 0), MapBound: at(x.ZoneBound, 1)}
+		if points, ok := pointsByItemLevel[x.ItemLevel]; ok {
+			applyItemStats(&r, b, x, points)
+		}
 		for _, effect := range effectsByItemID[b.ID] {
 			setItemEffect(&r, effect)
 		}
