@@ -32,6 +32,9 @@ export const COMPARISON_TABLE_TOKEN = "ct";
 /** Flag token: show every player at once (the merged Consumes Total view). */
 export const VIEW_ALL_TOKEN = "va";
 
+/** Flag token: include uses observed before combat starts. */
+export const PRE_COMBAT_TOKEN = "pc";
+
 /** panelOption is a comma-separated token list shared by the panel-level
  * checkbox ("cb"), the player selection ("pl:<guid>"), and view flags. */
 // eslint-disable-next-line react-refresh/only-export-components

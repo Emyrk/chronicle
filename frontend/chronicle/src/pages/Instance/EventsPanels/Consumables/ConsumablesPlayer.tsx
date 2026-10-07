@@ -36,7 +36,10 @@ import {
   ConsumableTimingFilter,
   LedgerFilterInput,
   LedgerRow,
+  PRE_COMBAT_TOKEN,
   TimingColumnHeaders,
+  panelOptionTokens,
+  togglePanelOptionFlag,
   useFilteredUses,
   VIEW_ALL_TOKEN,
 } from "./LedgerShared";
@@ -185,7 +188,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
   // Filtering happens before any aggregation so the roster bars, header
   // totals, and combobox counts all react to the filter, not just the rows.
   const [filter, setFilter] = useState("");
-  const [showPreCombat, setShowPreCombat] = useState(false);
+  const showPreCombat = panelOptionTokens(panelOption).includes(PRE_COMBAT_TOKEN);
   const timingFilteredUses = useMemo(
     () => showPreCombat ? resolvedUses : resolvedUses.filter((use) => !isPreCombatUse(use)),
     [resolvedUses, showPreCombat],
@@ -228,15 +231,8 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
   }, [filteredUses, usesByPlayer, roster, prices]);
 
   // panelOption is a comma-separated token list shared with the panel-level
-  // "Raid Wide" checkbox ("cb"); only the pl: token belongs to this view.
-  const optionTokens = useMemo(
-    () =>
-      (panelOption ?? "")
-        .split(",")
-        .map((part) => part.trim())
-        .filter((part) => part.length > 0),
-    [panelOption],
-  );
+  // "Raid Wide" checkbox ("cb"); this view owns player and timing tokens.
+  const optionTokens = useMemo(() => panelOptionTokens(panelOption), [panelOption]);
   const optionGuid = useMemo(() => {
     const token = optionTokens.find((part) => part.startsWith(PLAYER_TOKEN));
     return token ? token.slice(PLAYER_TOKEN.length) : null;
@@ -411,7 +407,9 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
               label="Pre-Combat"
               description={PRE_COMBAT_DESCRIPTION}
               enabled={showPreCombat}
-              onToggle={() => setShowPreCombat((shown) => !shown)}
+              onToggle={() => setPanelOption?.(
+                togglePanelOptionFlag(panelOption, PRE_COMBAT_TOKEN, !showPreCombat),
+              )}
             />
           </div>
           <div
