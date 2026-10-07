@@ -5527,6 +5527,7 @@ WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id
     FROM log_instances li
+    WHERE li.category = 'raid'
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -5645,6 +5646,7 @@ WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id
     FROM log_instances li
+    WHERE li.category = 'raid'
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -5733,6 +5735,7 @@ type GearTrendsSlotItemsRow struct {
 // of a class/spec, aggregated per equipment slot.
 //
 // Cohort rules (shared by both queries):
+//   - raid parses only (log_instances.category = 'raid');
 //   - ranked parses only (encounter_dps_rankings), deduped to one
 //     representative instance per run (duplicate uploads collapse via
 //     COALESCE(duplicate_group_id, id) — the house convention);
@@ -13394,16 +13397,32 @@ func (q *sqlQuerier) RankingsFilterOptions(ctx context.Context, instanceNames []
 }
 
 const rankingsInstanceSummaries = `-- name: RankingsInstanceSummaries :many
-SELECT instance_name, difficulty_name, max_players, total_kills, top_players
-FROM rankings_instance_summaries
-WHERE tenant_id = $1
-ORDER BY instance_name, difficulty_name, max_players
+SELECT
+    ris.instance_name,
+    ris.difficulty_name,
+    ris.max_players,
+    COALESCE((
+        SELECT li.category
+        FROM log_instances li
+        WHERE li.name = ris.instance_name
+          AND li.difficulty_name = ris.difficulty_name
+          AND li.max_players = ris.max_players
+          AND li.category IS NOT NULL
+        ORDER BY li.start_time DESC
+        LIMIT 1
+    ), '')::text AS category,
+    ris.total_kills,
+    ris.top_players
+FROM rankings_instance_summaries ris
+WHERE ris.tenant_id = $1
+ORDER BY ris.instance_name, ris.difficulty_name, ris.max_players
 `
 
 type RankingsInstanceSummariesRow struct {
 	InstanceName   string `db:"instance_name" json:"instance_name"`
 	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	Category       string `db:"category" json:"category"`
 	TotalKills     int64  `db:"total_kills" json:"total_kills"`
 	TopPlayers     []byte `db:"top_players" json:"top_players"`
 }
@@ -13423,6 +13442,7 @@ func (q *sqlQuerier) RankingsInstanceSummaries(ctx context.Context, tenantID uui
 			&i.InstanceName,
 			&i.DifficultyName,
 			&i.MaxPlayers,
+			&i.Category,
 			&i.TotalKills,
 			&i.TopPlayers,
 		); err != nil {

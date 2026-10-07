@@ -89,7 +89,7 @@ func (h *Handler) GearTrends(w http.ResponseWriter, r *http.Request) {
 		datasetID = t.DefaultDatasetID.UUID
 	}
 
-	cacheKey := fmt.Sprintf("%s|%s|%s|%s|%d|%s|%s", tenantID, datasetID, class, spec, days, instanceName, realmID)
+	cacheKey := fmt.Sprintf("raids|%s|%s|%s|%s|%d|%s|%s", tenantID, datasetID, class, spec, days, instanceName, realmID)
 	if h.trendsCache != nil {
 		if cached, ok := h.trendsCache.Get(cacheKey); ok {
 			httpapi.Write(ctx, w, http.StatusOK, cached)

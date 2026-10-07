@@ -2910,6 +2910,7 @@ export interface RankingsInstanceSummary {
     readonly instance_name: string;
     readonly difficulty_name: string;
     readonly max_players: number;
+    readonly category: string;
     readonly total_kills: number;
     readonly top_players: readonly RankingsInstanceTopPlayer[];
 }

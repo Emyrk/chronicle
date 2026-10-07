@@ -2,6 +2,7 @@
 -- of a class/spec, aggregated per equipment slot.
 --
 -- Cohort rules (shared by both queries):
+--   * raid parses only (log_instances.category = 'raid');
 --   * ranked parses only (encounter_dps_rankings), deduped to one
 --     representative instance per run (duplicate uploads collapse via
 --     COALESCE(duplicate_group_id, id) — the house convention);
@@ -21,6 +22,7 @@ WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id
     FROM log_instances li
+    WHERE li.category = 'raid'
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -89,6 +91,7 @@ WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id
     FROM log_instances li
+    WHERE li.category = 'raid'
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.

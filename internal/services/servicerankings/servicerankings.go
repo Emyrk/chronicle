@@ -250,6 +250,7 @@ func (s *Service) handleInstances(w http.ResponseWriter, r *http.Request) {
 			InstanceName:   row.InstanceName,
 			DifficultyName: row.DifficultyName,
 			MaxPlayers:     row.MaxPlayers,
+			Category:       row.Category,
 			TotalKills:     row.TotalKills,
 		}
 
