@@ -9,10 +9,9 @@ WORKDIR /chronicle/frontend/chronicle
 COPY frontend/chronicle/package.json frontend/chronicle/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
-# Sibling pure package consumed via the "@emyrk/wow-tooltip-renderer" path
-# alias (../wow-tooltip-renderer). It is plain TypeScript with no runtime deps,
-# so copying the source is enough — vite bundles it and tsc resolves it via the
-# tsconfig path mapping.
+# Sibling packages consumed through TypeScript path aliases. They have no
+# runtime dependencies, so copying their source is enough for tsc and Vite.
+COPY frontend/chronicle-panel-sdk/ /chronicle/frontend/chronicle-panel-sdk/
 COPY frontend/wow-tooltip-renderer/ /chronicle/frontend/wow-tooltip-renderer/
 
 COPY frontend/chronicle/ ./
