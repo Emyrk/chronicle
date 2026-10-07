@@ -1,5 +1,19 @@
 package chroniclesdk
 
+type ItemMetadataRequest struct {
+	ItemIDs []int32 `json:"item_ids"`
+}
+
+type ItemMetadata struct {
+	Entry   int32  `json:"entry"`
+	Name    string `json:"name"`
+	Quality int32  `json:"quality"`
+}
+
+type ItemMetadataResponse struct {
+	Items []ItemMetadata `json:"items"`
+}
+
 type ItemTooltip struct {
 	Entry         int32            `json:"entry"`
 	Name          string           `json:"name"`

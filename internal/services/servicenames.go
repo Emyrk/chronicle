@@ -24,5 +24,6 @@ const (
 	ServiceApplication = "application"
 	ServiceRankings    = "rankings"
 	ServiceDataset     = "dataset"
+	ServiceGitHub      = "github"
 	ServiceCache       = "cache"
 )

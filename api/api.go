@@ -12,6 +12,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/custompanelapi"
 	"github.com/Emyrk/chronicle/api/gamedataapi"
 	"github.com/Emyrk/chronicle/api/gearbuilderapi"
 	"github.com/Emyrk/chronicle/api/gearprogressionapi"
@@ -44,24 +45,25 @@ import (
 )
 
 type Options struct {
-	Logger           *slog.Logger
-	Storage          storage.ObjectStorage
-	Zed              *authz.Authz
-	Pool             *pgxpool.Pool
-	PS               pubsub.Pubsub
-	Chronicle        *chronicle.Chronicle
-	RiverQueue       *riverqueue.Queues
-	Bot              *chroniclebot.Bot
-	SaffronURL       *url.URL
-	OCRURL           *url.URL
-	WoWDB            http.Handler
-	GameDB           *gamedb.WoWDB // For cache invalidation on DBC import
-	Assets           http.Handler
-	InternalGameData http.Handler
-	ExternalAPI      http.Handler
-	Rankings         http.Handler
-	Mailer           *chroniclemail.Mailer
-	ItemPricing      *itempricing.Service
+	Logger                *slog.Logger
+	Storage               storage.ObjectStorage
+	Zed                   *authz.Authz
+	Pool                  *pgxpool.Pool
+	PS                    pubsub.Pubsub
+	Chronicle             *chronicle.Chronicle
+	RiverQueue            *riverqueue.Queues
+	Bot                   *chroniclebot.Bot
+	SaffronURL            *url.URL
+	OCRURL                *url.URL
+	WoWDB                 http.Handler
+	GameDB                *gamedb.WoWDB // For cache invalidation on DBC import
+	Assets                http.Handler
+	InternalGameData      http.Handler
+	ExternalAPI           http.Handler
+	Rankings              http.Handler
+	Mailer                *chroniclemail.Mailer
+	ItemPricing           *itempricing.Service
+	CustomPanelHTTPClient *http.Client
 
 	Registry  *prometheus.Registry
 	AccessURL *url.URL
@@ -107,6 +109,7 @@ type API struct {
 	Chronicle      *chronicle.Chronicle
 	Queues         *riverqueue.Queues
 	Zed            *authz.Authz
+	CustomPanels   *custompanelapi.Handler
 	discoveryStats discoveryStatsCache
 }
 
@@ -150,12 +153,13 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	}
 
 	return &API{
-		Opts:       &opts,
-		AppContext: ctx,
-		Auth:       service,
-		Chronicle:  opts.Chronicle,
-		Queues:     opts.RiverQueue,
-		Zed:        opts.Zed,
+		Opts:         &opts,
+		AppContext:   ctx,
+		Auth:         service,
+		Chronicle:    opts.Chronicle,
+		Queues:       opts.RiverQueue,
+		Zed:          opts.Zed,
+		CustomPanels: custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
 	}, nil
 }
 
@@ -208,6 +212,8 @@ func (api *API) Routes() chi.Router {
 				r.Get("/whoami/dump", api.DumpToken)
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Get("/me/storage", api.GetMyStorage)
+				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
+				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
 
 				r.Get("/me/favorites", api.ListMyFavorites)
@@ -228,6 +234,7 @@ func (api *API) Routes() chi.Router {
 				r.Put("/raid-comps/{compID}/sharing", api.UpdateRaidCompositionSharing)
 				r.Post("/share", api.CreateShare)
 			})
+			r.Mount("/custom-panels", api.CustomPanels.Routes())
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
 			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth, api.Opts.CacheSvc).Routes())
 			r.Mount("/gear-progressions", gearprogressionapi.New(api.Opts.Zed, api.Auth).Routes())

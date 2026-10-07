@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined } from "lucide-react"
+import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined, Blocks } from "lucide-react"
 
 const faq = [
   {
@@ -58,6 +58,12 @@ const tools = [
     description: "Synchronize YouTube video playback with your combat logs.",
     to: "/youtube-sync-v3",
     icon: <Youtube className="h-6 w-6" />,
+  },
+  {
+    name: "Custom panels",
+    description: "How trusted panel plugins are resolved, isolated, and fed data.",
+    to: "/tools/custom-panels",
+    icon: <Blocks className="h-6 w-6" />,
   },
   {
     name: "Developer API",

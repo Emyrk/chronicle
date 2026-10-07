@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Emyrk/chronicle/chronicle/custompanel"
 	"github.com/Emyrk/chronicle/chronicle/guildanalytics"
 	"github.com/Emyrk/chronicle/chronicle/retention"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
@@ -126,6 +127,18 @@ func (s *Service) Start(ctx context.Context) error {
 			),
 		)
 	}
+
+	customPanelCleanup := &custompanel.CleanupWorker{Store: chron.Zed}
+	riverqueue.AddWorker(q, customPanelCleanup)
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			custompanel.MidnightUTCSchedule{},
+			func() (river.JobArgs, *river.InsertOpts) {
+				return custompanel.ArgsCleanupReleases{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "custom-panel-release-cleanup-midnight-utc", RunOnStart: false},
+		),
+	)
 
 	analyticsCleanup := &guildanalytics.CleanupWorker{Store: chron.Zed}
 	riverqueue.AddWorker(q, analyticsCleanup)

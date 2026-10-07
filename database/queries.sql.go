@@ -1746,6 +1746,243 @@ func (q *sqlQuerier) UpsertCooldownOverrides(ctx context.Context, arg UpsertCool
 	return err
 }
 
+const deleteOrphanCustomPanelReleases = `-- name: DeleteOrphanCustomPanelReleases :execrows
+DELETE FROM custom_panel_releases release
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM user_custom_panel_installations installation
+    WHERE installation.release_id = release.id
+)
+`
+
+func (q *sqlQuerier) DeleteOrphanCustomPanelReleases(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOrphanCustomPanelReleases)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUserCustomPanelInstallationsExcept = `-- name: DeleteUserCustomPanelInstallationsExcept :exec
+DELETE FROM user_custom_panel_installations
+WHERE user_id = $1
+  AND NOT (repository = ANY($2::text[]))
+`
+
+type DeleteUserCustomPanelInstallationsExceptParams struct {
+	UserID       uuid.UUID `db:"user_id" json:"user_id"`
+	Repositories []string  `db:"repositories" json:"repositories"`
+}
+
+func (q *sqlQuerier) DeleteUserCustomPanelInstallationsExcept(ctx context.Context, arg DeleteUserCustomPanelInstallationsExceptParams) error {
+	_, err := q.db.Exec(ctx, deleteUserCustomPanelInstallationsExcept, arg.UserID, arg.Repositories)
+	return err
+}
+
+const getCustomPanelReleaseByRepositoryCommit = `-- name: GetCustomPanelReleaseByRepositoryCommit :one
+SELECT id, repository, commit_sha, manifest, manifest_sha256, created_at, updated_at
+FROM custom_panel_releases
+WHERE repository = $1
+  AND commit_sha = $2
+FOR KEY SHARE
+`
+
+type GetCustomPanelReleaseByRepositoryCommitParams struct {
+	Repository string `db:"repository" json:"repository"`
+	CommitSha  string `db:"commit_sha" json:"commit_sha"`
+}
+
+func (q *sqlQuerier) GetCustomPanelReleaseByRepositoryCommit(ctx context.Context, arg GetCustomPanelReleaseByRepositoryCommitParams) (CustomPanelRelease, error) {
+	row := q.db.QueryRow(ctx, getCustomPanelReleaseByRepositoryCommit, arg.Repository, arg.CommitSha)
+	var i CustomPanelRelease
+	err := row.Scan(
+		&i.ID,
+		&i.Repository,
+		&i.CommitSha,
+		&i.Manifest,
+		&i.ManifestSha256,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserCustomPanelSettings = `-- name: GetUserCustomPanelSettings :one
+SELECT user_id, enabled, revision, created_at, updated_at
+FROM user_custom_panel_settings
+WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetUserCustomPanelSettings(ctx context.Context, userID uuid.UUID) (UserCustomPanelSetting, error) {
+	row := q.db.QueryRow(ctx, getUserCustomPanelSettings, userID)
+	var i UserCustomPanelSetting
+	err := row.Scan(
+		&i.UserID,
+		&i.Enabled,
+		&i.Revision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertCustomPanelRelease = `-- name: InsertCustomPanelRelease :one
+INSERT INTO custom_panel_releases (repository, commit_sha, manifest, manifest_sha256)
+VALUES ($1, $2, $3::jsonb, $4)
+ON CONFLICT (repository, commit_sha) DO UPDATE
+SET repository = EXCLUDED.repository
+RETURNING id, repository, commit_sha, manifest, manifest_sha256, created_at, updated_at
+`
+
+type InsertCustomPanelReleaseParams struct {
+	Repository     string `db:"repository" json:"repository"`
+	CommitSha      string `db:"commit_sha" json:"commit_sha"`
+	Manifest       []byte `db:"manifest" json:"manifest"`
+	ManifestSha256 string `db:"manifest_sha256" json:"manifest_sha256"`
+}
+
+func (q *sqlQuerier) InsertCustomPanelRelease(ctx context.Context, arg InsertCustomPanelReleaseParams) (CustomPanelRelease, error) {
+	row := q.db.QueryRow(ctx, insertCustomPanelRelease,
+		arg.Repository,
+		arg.CommitSha,
+		arg.Manifest,
+		arg.ManifestSha256,
+	)
+	var i CustomPanelRelease
+	err := row.Scan(
+		&i.ID,
+		&i.Repository,
+		&i.CommitSha,
+		&i.Manifest,
+		&i.ManifestSha256,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listUserCustomPanelInstallations = `-- name: ListUserCustomPanelInstallations :many
+SELECT
+    user_custom_panel_installations.user_id, user_custom_panel_installations.repository, user_custom_panel_installations.release_id, user_custom_panel_installations.installed_ref, user_custom_panel_installations.enabled, user_custom_panel_installations.installed_at, user_custom_panel_installations.updated_at,
+    custom_panel_releases.id, custom_panel_releases.repository, custom_panel_releases.commit_sha, custom_panel_releases.manifest, custom_panel_releases.manifest_sha256, custom_panel_releases.created_at, custom_panel_releases.updated_at
+FROM user_custom_panel_installations
+JOIN custom_panel_releases ON custom_panel_releases.id = user_custom_panel_installations.release_id
+WHERE user_custom_panel_installations.user_id = $1
+ORDER BY user_custom_panel_installations.installed_at, user_custom_panel_installations.repository
+`
+
+type ListUserCustomPanelInstallationsRow struct {
+	UserCustomPanelInstallation UserCustomPanelInstallation `db:"user_custom_panel_installation" json:"user_custom_panel_installation"`
+	CustomPanelRelease          CustomPanelRelease          `db:"custom_panel_release" json:"custom_panel_release"`
+}
+
+func (q *sqlQuerier) ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error) {
+	rows, err := q.db.Query(ctx, listUserCustomPanelInstallations, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserCustomPanelInstallationsRow
+	for rows.Next() {
+		var i ListUserCustomPanelInstallationsRow
+		if err := rows.Scan(
+			&i.UserCustomPanelInstallation.UserID,
+			&i.UserCustomPanelInstallation.Repository,
+			&i.UserCustomPanelInstallation.ReleaseID,
+			&i.UserCustomPanelInstallation.InstalledRef,
+			&i.UserCustomPanelInstallation.Enabled,
+			&i.UserCustomPanelInstallation.InstalledAt,
+			&i.UserCustomPanelInstallation.UpdatedAt,
+			&i.CustomPanelRelease.ID,
+			&i.CustomPanelRelease.Repository,
+			&i.CustomPanelRelease.CommitSha,
+			&i.CustomPanelRelease.Manifest,
+			&i.CustomPanelRelease.ManifestSha256,
+			&i.CustomPanelRelease.CreatedAt,
+			&i.CustomPanelRelease.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertUserCustomPanelInstallation = `-- name: UpsertUserCustomPanelInstallation :one
+INSERT INTO user_custom_panel_installations (user_id, repository, release_id, installed_ref, enabled)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, repository) DO UPDATE
+SET release_id = EXCLUDED.release_id,
+    installed_ref = EXCLUDED.installed_ref,
+    enabled = EXCLUDED.enabled,
+    updated_at = NOW()
+RETURNING user_id, repository, release_id, installed_ref, enabled, installed_at, updated_at
+`
+
+type UpsertUserCustomPanelInstallationParams struct {
+	UserID       uuid.UUID `db:"user_id" json:"user_id"`
+	Repository   string    `db:"repository" json:"repository"`
+	ReleaseID    uuid.UUID `db:"release_id" json:"release_id"`
+	InstalledRef string    `db:"installed_ref" json:"installed_ref"`
+	Enabled      bool      `db:"enabled" json:"enabled"`
+}
+
+func (q *sqlQuerier) UpsertUserCustomPanelInstallation(ctx context.Context, arg UpsertUserCustomPanelInstallationParams) (UserCustomPanelInstallation, error) {
+	row := q.db.QueryRow(ctx, upsertUserCustomPanelInstallation,
+		arg.UserID,
+		arg.Repository,
+		arg.ReleaseID,
+		arg.InstalledRef,
+		arg.Enabled,
+	)
+	var i UserCustomPanelInstallation
+	err := row.Scan(
+		&i.UserID,
+		&i.Repository,
+		&i.ReleaseID,
+		&i.InstalledRef,
+		&i.Enabled,
+		&i.InstalledAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertUserCustomPanelSettings = `-- name: UpsertUserCustomPanelSettings :one
+INSERT INTO user_custom_panel_settings (user_id, enabled, revision)
+SELECT $1, $2, 1
+WHERE $3 = 0
+   OR EXISTS (SELECT 1 FROM user_custom_panel_settings WHERE user_id = $1)
+ON CONFLICT (user_id) DO UPDATE
+SET enabled = EXCLUDED.enabled,
+    revision = user_custom_panel_settings.revision + 1,
+    updated_at = NOW()
+WHERE user_custom_panel_settings.revision = $3
+RETURNING user_id, enabled, revision, created_at, updated_at
+`
+
+type UpsertUserCustomPanelSettingsParams struct {
+	UserID           uuid.UUID   `db:"user_id" json:"user_id"`
+	Enabled          bool        `db:"enabled" json:"enabled"`
+	ExpectedRevision interface{} `db:"expected_revision" json:"expected_revision"`
+}
+
+func (q *sqlQuerier) UpsertUserCustomPanelSettings(ctx context.Context, arg UpsertUserCustomPanelSettingsParams) (UserCustomPanelSetting, error) {
+	row := q.db.QueryRow(ctx, upsertUserCustomPanelSettings, arg.UserID, arg.Enabled, arg.ExpectedRevision)
+	var i UserCustomPanelSetting
+	err := row.Scan(
+		&i.UserID,
+		&i.Enabled,
+		&i.Revision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteDataGrant = `-- name: DeleteDataGrant :exec
 DELETE FROM data_grants
 WHERE user_id = $1 AND source = $2

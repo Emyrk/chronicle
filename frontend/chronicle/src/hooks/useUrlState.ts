@@ -5,6 +5,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
+import { isCustomPanelRef, parseCustomPanelRef, type CustomPanelRef } from "@/pages/Instance/EventsPanels/custom/pluginTypes";
 import type { EventsPanelType } from "@/pages/Instance/EventsPanels/EventsPanel";
 
 type Serializer<T> = {
@@ -724,6 +725,34 @@ function serializePanelCode(code: string, option: string | null): string {
   return option ? `${code}[${option}]` : code;
 }
 
+function bytesToHex(value: string): string {
+  return Array.from(new TextEncoder().encode(value), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function hexToString(value: string): string | null {
+  if (!/^[0-9a-f]*$/i.test(value) || value.length % 2 !== 0) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(value.match(/../g) ?? [], (pair) => parseInt(pair, 16)));
+  } catch {
+    return null;
+  }
+}
+
+export function encodeCustomPanelToken(ref: CustomPanelRef): string {
+  const parsed = parseCustomPanelRef(ref);
+  const payload = parsed ? `github:${parsed.repository}:${parsed.panelId}` : ref.slice("custom:".length);
+  return `x${bytesToHex(payload)}`;
+}
+
+export function decodeCustomPanelToken(token: string): CustomPanelRef | null {
+  if (!token.startsWith("x")) return null;
+  const payload = hexToString(token.slice(1));
+  if (payload === null) return `custom:invalid:${token.slice(1)}`;
+  const ref = `custom:${payload}` as CustomPanelRef;
+  const parsed = parseCustomPanelRef(ref);
+  return parsed ? `custom:github:${parsed.repository}:${parsed.panelId}` : (`custom:invalid:${token.slice(1)}` as CustomPanelRef);
+}
+
 /** Panel option list (aligned with panel list order) */
 export type PanelOptions = (string | null)[];
 
@@ -907,6 +936,7 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
       const minCount = Math.max(parsedPanels.length, fallbackPanels.length);
       const panels: PanelType[] = Array.from({ length: minCount }, (_, i) => {
         const parsedCode = parsedPanels[i]?.code;
+        if (parsedCode?.startsWith("x")) return decodeCustomPanelToken(parsedCode) ?? (`custom:invalid:${parsedCode.slice(1)}` as CustomPanelRef);
         return (parsedCode && CODE_TO_PANEL[parsedCode]) ?? fallbackPanels[i] ?? 'empty';
       });
 
@@ -957,7 +987,7 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
     
     // Panels (with options)
     const panelPart = newState.panels.map((p, i) => {
-      const code = PANEL_CODES[p];
+      const code = isCustomPanelRef(p) ? encodeCustomPanelToken(p) : PANEL_CODES[p];
       const option = newState.panelOptions?.[i] ?? null;
       return serializePanelCode(code, option);
     }).join('-');

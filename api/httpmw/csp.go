@@ -9,11 +9,11 @@ import (
 func ContentSecurityPolicy() func(next http.Handler) http.Handler {
 	policy := strings.Join([]string{
 		"default-src 'self'",
-		"script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://tweakcn.com https://www.youtube.com https://static.cloudflareinsights.com",
+		"script-src 'self' 'unsafe-inline' blob: https://www.googletagmanager.com https://www.google-analytics.com https://tweakcn.com https://www.youtube.com https://static.cloudflareinsights.com",
 		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 		"font-src 'self' https://fonts.gstatic.com",
 		"img-src 'self' data: blob: https://cdn.brandfetch.io https://icons.chronicleclassic.com https://cdn.discordapp.com https://i.imgur.com https://avatars.githubusercontent.com",
-		"connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://icons.chronicleclassic.com https://models.chronicleclassic.com",
+		"connect-src 'self' https://raw.githubusercontent.com https://www.google-analytics.com https://region1.google-analytics.com https://icons.chronicleclassic.com https://models.chronicleclassic.com",
 		"worker-src 'self' blob:",
 		"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
 		"frame-ancestors 'none'",

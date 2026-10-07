@@ -290,6 +290,21 @@ CREATE TABLE class_buff_ignores (
     CONSTRAINT class_buff_ignores_normalized_name_check CHECK (((normalized_name = lower(btrim(spell_name))) AND (normalized_name <> ''::text)))
 );
 
+CREATE TABLE custom_panel_releases (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    repository text NOT NULL,
+    commit_sha text NOT NULL,
+    manifest jsonb NOT NULL,
+    manifest_sha256 text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT custom_panel_releases_commit_sha_format CHECK ((commit_sha ~ '^[0-9a-f]{40}$'::text)),
+    CONSTRAINT custom_panel_releases_manifest_object CHECK ((jsonb_typeof(manifest) = 'object'::text)),
+    CONSTRAINT custom_panel_releases_manifest_sha256_format CHECK ((manifest_sha256 ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT custom_panel_releases_manifest_size CHECK ((octet_length((manifest)::text) <= 65536)),
+    CONSTRAINT custom_panel_releases_repository_format CHECK (((repository = lower(repository)) AND (repository ~ '^[a-z0-9_.-]+/[a-z0-9_.-]+$'::text)))
+);
+
 CREATE TABLE dataset_class_buffs (
     dataset_id uuid NOT NULL,
     data jsonb NOT NULL,
@@ -1739,6 +1754,25 @@ CREATE TABLE user_character_links (
     link_source text DEFAULT 'manual'::text NOT NULL
 );
 
+CREATE TABLE user_custom_panel_installations (
+    user_id uuid NOT NULL,
+    repository text NOT NULL,
+    release_id uuid NOT NULL,
+    installed_ref text NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    installed_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_custom_panel_installations_repository_format CHECK (((repository = lower(repository)) AND (repository ~ '^[a-z0-9_.-]+/[a-z0-9_.-]+$'::text)))
+);
+
+CREATE TABLE user_custom_panel_settings (
+    user_id uuid NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE user_favorite_guilds (
     user_id uuid NOT NULL,
     guild_id uuid NOT NULL,
@@ -2083,6 +2117,12 @@ ALTER TABLE ONLY authz_schema_migrations
 
 ALTER TABLE ONLY class_buff_ignores
     ADD CONSTRAINT class_buff_ignores_pkey PRIMARY KEY (dataset_id, normalized_name);
+
+ALTER TABLE ONLY custom_panel_releases
+    ADD CONSTRAINT custom_panel_releases_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY custom_panel_releases
+    ADD CONSTRAINT custom_panel_releases_repository_commit_unique UNIQUE (repository, commit_sha);
 
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_pkey PRIMARY KEY (id);
@@ -2447,6 +2487,12 @@ ALTER TABLE ONLY user_character_links
 ALTER TABLE ONLY user_character_links
     ADD CONSTRAINT user_character_links_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY user_custom_panel_installations
+    ADD CONSTRAINT user_custom_panel_installations_pkey PRIMARY KEY (user_id, repository);
+
+ALTER TABLE ONLY user_custom_panel_settings
+    ADD CONSTRAINT user_custom_panel_settings_pkey PRIMARY KEY (user_id);
+
 ALTER TABLE ONLY user_favorite_guilds
     ADD CONSTRAINT user_favorite_guilds_pkey PRIMARY KEY (user_id, guild_id);
 
@@ -2751,6 +2797,8 @@ CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (
 CREATE UNIQUE INDEX user_character_links_one_primary ON user_character_links USING btree (user_id) WHERE is_primary;
 
 CREATE INDEX user_character_links_user_id ON user_character_links USING btree (user_id);
+
+CREATE INDEX user_custom_panel_installations_release_id_idx ON user_custom_panel_installations USING btree (release_id);
 
 CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized) WHERE (user_id IS NOT NULL);
 
@@ -3146,6 +3194,15 @@ ALTER TABLE ONLY user_character_links
 
 ALTER TABLE ONLY user_character_links
     ADD CONSTRAINT user_character_links_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_custom_panel_installations
+    ADD CONSTRAINT user_custom_panel_installations_release_id_fkey FOREIGN KEY (release_id) REFERENCES custom_panel_releases(id) ON DELETE RESTRICT;
+
+ALTER TABLE ONLY user_custom_panel_installations
+    ADD CONSTRAINT user_custom_panel_installations_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_custom_panel_settings
+    ADD CONSTRAINT user_custom_panel_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_favorite_guilds
     ADD CONSTRAINT user_favorite_guilds_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;

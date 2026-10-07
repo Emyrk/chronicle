@@ -911,6 +911,109 @@ export interface CurrentItemPricesRequest {
     readonly item_ids: readonly number[];
 }
 
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelArtifact {
+    readonly url: string;
+    readonly sha256: string;
+    readonly size: number;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelArtifactSet {
+    readonly entry: CustomPanelArtifact;
+    readonly worker?: CustomPanelArtifact;
+    readonly styles?: CustomPanelArtifact;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelInstallation {
+    readonly repository: string;
+    readonly commitSha: string;
+    readonly installedRef: string;
+    readonly manifest: CustomPanelManifest;
+    readonly manifestSha256: string;
+    readonly artifacts: CustomPanelArtifactSet;
+    readonly enabled: boolean;
+    readonly installedAt: string;
+    readonly updatedAt: string;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelManifest {
+    readonly schema_version: number;
+    readonly plugin: CustomPanelManifestPlugin;
+    readonly host: CustomPanelManifestHost;
+    readonly artifacts: CustomPanelManifestArtifacts;
+    readonly panels: readonly CustomPanelManifestPanel[];
+}
+
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelManifestArtifact {
+    readonly path: string;
+    readonly sha256: string;
+    readonly size: number;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelManifestArtifacts {
+    readonly entry: CustomPanelManifestArtifact;
+    readonly worker?: CustomPanelManifestArtifact;
+    readonly styles?: CustomPanelManifestArtifact;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelManifestHost {
+    readonly api_version: number;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelManifestPanel {
+    readonly id: string;
+    readonly name: string;
+    readonly description?: string;
+    readonly streams: readonly WoWEventType[];
+    readonly worker?: boolean;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelManifestPlugin {
+    readonly id: string;
+    readonly name: string;
+    readonly version: string;
+    readonly description?: string;
+    readonly homepage?: string;
+}
+
+// From chroniclesdk/custom_panel.go
+/**
+ * CustomPanelResolveRequest identifies a public GitHub repository and a mutable
+ * ref to resolve to an immutable custom-panel installation.
+ */
+export interface CustomPanelResolveRequest {
+    readonly repository: string;
+    readonly ref: string;
+}
+
+// From chroniclesdk/custom_panel.go
+/**
+ * CustomPanelResolveResponse describes a validated custom-panel installation.
+ */
+export interface CustomPanelResolveResponse {
+    readonly repository: string;
+    readonly commit_sha: string;
+    readonly manifest: CustomPanelManifest;
+    readonly manifest_sha256: string;
+    readonly artifacts: CustomPanelArtifactSet;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface CustomPanelSettings {
+    readonly enabled: boolean;
+    readonly installations: readonly CustomPanelInstallation[];
+    readonly revision: number;
+    readonly updated_at?: string;
+}
+
 // From chroniclesdk/gamedata.go
 /**
  * DBCUploadResponse is the response from uploading a DBC file.
@@ -2081,6 +2184,23 @@ export interface ItemDisplayData {
     readonly ground_model: string; // Ground/dropped model path
     readonly item_visual: number; // Visual effect ID
     readonly flags: number; // Display flags
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemMetadata {
+    readonly entry: number;
+    readonly name: string;
+    readonly quality: number;
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemMetadataRequest {
+    readonly item_ids: readonly number[];
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemMetadataResponse {
+    readonly items: readonly ItemMetadata[];
 }
 
 // From chroniclesdk/azerothcore.go
@@ -3812,6 +3932,13 @@ export interface UpdateActionBarSlotsRequest {
     readonly slot_8: string | null;
     readonly slot_9: string | null;
     readonly slot_0: string | null;
+}
+
+// From chroniclesdk/custom_panel.go
+export interface UpdateCustomPanelSettingsRequest {
+    readonly enabled: boolean;
+    readonly installations: readonly CustomPanelInstallation[];
+    readonly expected_revision: number;
 }
 
 // From chroniclesdk/gear_builder.go
