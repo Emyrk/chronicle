@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import type { LessonVideo } from "@/pages/Instance/PanelExplainer/types";
 import {
   AbsorbAttributionPost,
   ArmoryRefreshPost,
@@ -38,8 +39,18 @@ export interface BlogPostDefinition {
   icon: string;
   /** Optional item-style flavor text shown on the featured card. */
   flavor?: string;
+  /** Optional Remotion video shown at the top of the post. Loaded lazily. */
+  video?: LessonVideo;
   flavorSets?: readonly BlogFlavorSet[];
   component: ComponentType<{ post: BlogPostDefinition }>;
+}
+
+/**
+ * A 1280x720@30fps Remotion composition. durationInFrames must match the
+ * composition's registration in videos/remotion/src/Root.tsx.
+ */
+function remotionVideo(load: LessonVideo["load"], durationInFrames: number): LessonVideo {
+  return { load, durationInFrames, fps: 30, width: 1280, height: 720 };
 }
 
 export const BLOG_POSTS: readonly BlogPostDefinition[] = [
@@ -135,6 +146,7 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
     rarity: "uncommon",
     tag: "Feature",
     icon: "spell_holy_borrowedtime",
+    video: remotionVideo(() => import("@/pages/Instance/videos/EncounterPhasesDiscord.video"), 650),
     component: PhaseSelectionsPost,
   },
   {
@@ -146,6 +158,7 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
     tag: "Panel",
     icon: "inv_potion_83",
     flavor: "Did you pot? Now we know.",
+    video: remotionVideo(() => import("@/pages/Instance/EventsPanels/Consumables/explain/videos/RaidWide.video"), 410),
     component: ConsumablesPost,
   },
   {
@@ -209,6 +222,7 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
     tag: "Feature",
     icon: "ability_hunter_snipershot",
     flavor: "Gray parse? Never heard of her.",
+    video: remotionVideo(() => import("@/pages/Instance/EventsPanels/DamageDone/explain/videos/ParseScores.video"), 350),
     component: ParsingPost,
   },
   {
