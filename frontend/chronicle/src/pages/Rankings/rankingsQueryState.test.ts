@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   getRankingsQueryEnablement,
   rankingsContentReady,
+  rankingsShellReady,
   type RankingsMetric,
   type RankingsQueryEnablement,
   type RankingsSubTab,
@@ -21,6 +22,13 @@ const cases: Array<{
   { metric: "success", subTab: "boxplot", active: "successRates" },
   { metric: "success", subTab: "leaderboard", active: "successRates" },
 ]
+
+describe("rankingsShellReady", () => {
+  it("does not wait for recorded encounters after registry metadata loads", () => {
+    expect(rankingsShellReady(false)).toBe(false)
+    expect(rankingsShellReady(true)).toBe(true)
+  })
+})
 
 describe("rankingsContentReady", () => {
   it("starts content queries from a canonical encounter set before recorded encounters load", () => {
