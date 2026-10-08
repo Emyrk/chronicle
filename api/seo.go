@@ -13,7 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
 
-const defaultSEODescription = "Chronicle transforms Classic World of Warcraft raid logs into clear, actionable insights for raid leaders."
+const defaultSEODescription = "Chronicle provides combat log analysis for Classic World of Warcraft. Upload raid logs to review damage, healing, encounters, rankings, and player performance."
 
 var indexablePrefixes = []string{
 	"/", "/recent", "/guilds", "/g", "/armory", "/instances", "/s", "/leaderboards",
@@ -53,7 +53,7 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 		if branding.DisplayName != "" {
 			resolved.Title += " by Chronicle"
 		}
-		resolved.Description = firstNonEmpty(branding.Description, branding.Tagline, defaultSEODescription)
+		resolved.Description = defaultSEODescription
 		resolved.Favicon = branding.Favicon
 		resolved.ThemeCSS = buildThemeCSS(branding)
 		resolved.ImageURL = absoluteAssetURL(api, r, firstNonEmpty(branding.BackgroundBanner, branding.LogoWide, branding.SquareLogo))
