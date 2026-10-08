@@ -204,6 +204,7 @@ WITH fallback_representative_instances AS (
     FROM log_instances li
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     WHERE li.invalidated_at IS NULL
+      AND li.name = @instance_name
       AND NOT EXISTS (
         SELECT 1
         FROM ranking_runs rr

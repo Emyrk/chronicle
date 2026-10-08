@@ -182,6 +182,8 @@ func (api *API) Routes() chi.Router {
 	)
 
 	r.Get("/ads.txt", adsTxtHandler(api.Opts.AdsTxtURL))
+	r.Get("/robots.txt", api.robotsTXT)
+	r.Get("/sitemap.xml", api.sitemapXML)
 
 	if api.Opts.ExternalAPI != nil {
 		r.Mount(ExternalAPIPath, api.Opts.ExternalAPI)
@@ -286,8 +288,12 @@ func (api *API) Routes() chi.Router {
 					r.Get("/", api.AdminListLogs)
 					r.Post("/delete", api.AdminBulkDeleteLogs)
 					r.Post("/reparse", api.AdminBulkReparseLogs)
-					r.Post("/clear-invalidation", api.AdminClearLogInvalidation)
-					r.Post("/invalidate", api.AdminInvalidateLogs)
+					r.With(
+						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanInvalidate_logs_User),
+					).Post("/clear-invalidation", api.AdminClearLogInvalidation)
+					r.With(
+						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanInvalidate_logs_User),
+					).Post("/invalidate", api.AdminInvalidateLogs)
 				})
 
 				r.Group(func(r chi.Router) {
@@ -622,44 +628,6 @@ func (api *API) Routes() chi.Router {
 	r.NotFound(frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver).ServeHTTP)
 
 	return r
-}
-
-// brandingResolver returns per-request HTML metadata based on tenant context
-// or site-level branding. AdSense verification is emitted only for tenants that
-// opted in on deployments with both ads.txt and a publisher client configured.
-func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
-	resolved := &frontend.HTMLBranding{}
-	t := servicetenant.TenantFromContext(r.Context())
-	if tenantAdsEnabled(api.adsDeploymentEnabled(), t) {
-		resolved.AdSenseClientID = api.Opts.AdSenseClientID
-	}
-
-	// Tenant branding takes priority.
-	if t != nil {
-		branding := chroniclesdk.TenantFromDB(*t).Branding
-		if branding != nil && branding.DisplayName != "" {
-			resolved.Title = branding.DisplayName + " by Chronicle"
-			resolved.ThemeCSS = buildThemeCSS(branding)
-			resolved.Favicon = branding.Favicon
-			return resolved
-		}
-	}
-
-	// Fall back to site-level branding.
-	config, err := api.Opts.Zed.GetSiteConfig(r.Context())
-	if err == nil {
-		branding := unmarshalBranding(config.Branding)
-		if branding != nil && branding.DisplayName != "" {
-			resolved.Title = branding.DisplayName + " by Chronicle"
-			resolved.ThemeCSS = buildThemeCSS(branding)
-			resolved.Favicon = branding.Favicon
-		}
-	}
-
-	if resolved.Title == "" && resolved.AdSenseClientID == "" {
-		return nil
-	}
-	return resolved
 }
 
 var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_INSTANCE_PANEL_OPTIONS } from "./viewDefaults";
-import { PRESET_LAYOUTS } from "./presetLayouts";
+import { getAvailablePresetLayouts, PRESET_LAYOUTS } from "./presetLayouts";
 import {
   deserializeTimelineConfig,
   extractTimelineToken,
@@ -31,5 +31,20 @@ describe("built-in Timeline settings", () => {
       expect(settings?.background).toBe("raid_durability");
       expect(settings?.annotations).toEqual(["player_deaths"]);
     }
+  });
+});
+
+describe("preset layout availability", () => {
+  it("hides the Interrupts quick select when the log does not support interrupts", () => {
+    const labels = getAvailablePresetLayouts([]).map((preset) => preset.label);
+
+    expect(labels).not.toContain("Interrupts");
+    expect(labels).toContain("Summary");
+  });
+
+  it("shows the Interrupts quick select when the log supports interrupts", () => {
+    const labels = getAvailablePresetLayouts(["interrupt"]).map((preset) => preset.label);
+
+    expect(labels).toContain("Interrupts");
   });
 });

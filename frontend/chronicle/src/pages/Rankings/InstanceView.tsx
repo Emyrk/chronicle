@@ -50,7 +50,7 @@ import { RankingsTable } from "./RankingsTable"
 import { KillTimeTable } from "./KillTimeTable"
 import { ClassSpecFilter } from "./ClassSpecFilter"
 import { RankingsLoadingState } from "./RankingsLoadingState"
-import { getRankingsQueryEnablement, rankingsContentReady } from "./rankingsQueryState"
+import { getRankingsQueryEnablement, rankingsContentReady, rankingsShellReady } from "./rankingsQueryState"
 import {
   defaultRankingBossNames,
   rankingEncounterNames,
@@ -85,12 +85,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // ── API queries ───────────────────────────────────────────────────────
-  const { data: encounterSummaries, isLoading: encountersLoading } = useRankingsEncounters(instanceName)
-  const { data: progressionBosses, isLoading: progressionBossesLoading } = useSupportedInstanceProgressionBosses()
-  const {
-    data: rankingEncounterSetsByInstance,
-    isLoading: rankingEncounterSetsLoading,
-  } = useSupportedInstanceRankingEncounterSets()
+  const { data: encounterSummaries } = useRankingsEncounters(instanceName)
+  const { data: progressionBosses } = useSupportedInstanceProgressionBosses()
+  const { data: rankingEncounterSetsByInstance } = useSupportedInstanceRankingEncounterSets()
   const { data: siteConfig } = useSiteConfig()
   const configuredCohortMode = siteConfig?.tenant?.parse_config?.cohort_mode
   const cohortMode: RankingsCohortMode =
@@ -697,7 +694,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   // ── Loading state ──────────────────────────────────────────────────
 
-  if (encountersLoading || progressionBossesLoading || rankingEncounterSetsLoading) {
+  if (!rankingsShellReady(rankingMetadataReady)) {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

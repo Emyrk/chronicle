@@ -8,6 +8,7 @@ import {
   useAdminUsers,
   useAdminLogs,
   useAdminInstanceNames,
+  useAuthorizationCheck,
   type AdminLog,
   type AdminLogsSortField,
 } from "@/api/queries";
@@ -167,6 +168,10 @@ function PaginationControls({ currentPage, totalPages, hasMore, onPageChange, is
 export function AdminLogsPage() {
   const { data: usersData } = useAdminUsers();
   const users = usersData?.users ?? [];
+  const { data: authz } = useAuthorizationCheck({
+    invalidateLogs: "chronicle:chronicle#invalidate_logs",
+  });
+  const canInvalidateLogs = authz?.invalidateLogs ?? false;
   const invalidateLogs = useAdminInvalidateLogs();
   const clearInvalidation = useAdminClearLogInvalidation();
   const bulkDeleteLogs = useAdminBulkDeleteLogs();
@@ -479,21 +484,23 @@ export function AdminLogsPage() {
                   )}
                   Reparse Selected
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleInvalidate}
-                  disabled={bulkActionPending}
-                  className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                >
-                  {invalidateLogs.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Ban className="h-4 w-4" />
-                  )}
-                  Invalidate Selected
-                </Button>
-                {selectedInvalidLogIds.length > 0 && (
+                {canInvalidateLogs && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleInvalidate}
+                    disabled={bulkActionPending}
+                    className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                  >
+                    {invalidateLogs.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Ban className="h-4 w-4" />
+                    )}
+                    Invalidate Selected
+                  </Button>
+                )}
+                {canInvalidateLogs && selectedInvalidLogIds.length > 0 && (
                   <Button
                     variant="outline"
                     size="sm"

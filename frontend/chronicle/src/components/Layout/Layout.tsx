@@ -7,6 +7,7 @@ import { TooltipProvider } from "../ui/Tooltip/tooltip";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { usePublicTelemetryNotices } from "@/api/queries";
 import { NoticeBanner } from "../NoticeBanner/NoticeBanner";
+import { ForeverAnnouncementBanner } from "../ForeverAnnouncementBanner";
 
 export function Layout() {
   usePageTracking();
@@ -15,6 +16,7 @@ export function Layout() {
   return (
     <TooltipProvider>
       <NoticeBanner notices={noticeResponse?.notices ?? []} />
+      <ForeverAnnouncementBanner />
       <SupportBanner />
       <NavBar />
       <main>

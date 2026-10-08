@@ -106,25 +106,11 @@ function useGuildClears(instanceName: string, difficulty?: string) {
   });
 }
 
-// Raids only: dungeons are supported but off-topic for the homepage.
-// Filters server-side by raid names from the supported instances API so a
-// dungeon-heavy recent page can't starve the homepage row.
 function useRecentUploads() {
-  const { data: supportedInstances } = useSupportedInstances();
-  const raidNames = supportedInstances?.flatMap((instance) =>
-    instance.category === "raid"
-      ? [instance.name, ...(instance.derived_names ?? [])]
-      : [],
-  );
-
   return useQuery({
-    queryKey: ["home", "recent-uploads", raidNames],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      for (const name of raidNames ?? []) params.append("instance_name", name);
-      return fetchJSON<RecentInstancesResponse>(`/api/v1/raidlogs/recent?${params}`);
-    },
-    enabled: raidNames !== undefined,
+    queryKey: ["home", "recent-uploads"],
+    queryFn: () =>
+      fetchJSON<RecentInstancesResponse>("/api/v1/raidlogs/recent?days=60&limit=12"),
     staleTime: 60 * 1000,
   });
 }
@@ -1023,16 +1009,16 @@ function RaidSpotlight() {
   );
 }
 
-/** Latest uploads as a horizontal row of raid cards, like the Recent page. */
+/** Latest logs as raid cards, like the Recent page. */
 function LatestUploads() {
   const { data } = useRecentUploads();
-  const uploads = (data?.instances ?? []).slice(0, 4);
+  const uploads = (data?.instances ?? []).slice(0, 12);
 
   return (
     <section className="px-6 py-10">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-lg font-semibold">Latest uploads</h2>
+          <h2 className="text-lg font-semibold">Recent logs</h2>
           <Link to="/recent" className="text-xs text-primary hover:underline">
             Recent →
           </Link>

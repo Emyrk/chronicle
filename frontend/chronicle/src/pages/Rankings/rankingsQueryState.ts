@@ -9,6 +9,10 @@ export interface RankingsQueryEnablement {
   successRates: boolean
 }
 
+export function rankingsShellReady(metadataReady: boolean): boolean {
+  return metadataReady
+}
+
 export function rankingsContentReady(
   metadataReady: boolean,
   hasEncounterSet: boolean,
