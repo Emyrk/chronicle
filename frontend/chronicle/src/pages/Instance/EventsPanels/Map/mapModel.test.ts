@@ -115,6 +115,10 @@ describe("map replay model", () => {
 
   it("prefers instance artwork before matching zone assignments", () => {
     expect(resolveMapArtwork(manifest, 533)).toMatchObject({ kind: "instance", instance: { name: "Naxxramas" } });
+    expect(resolveMapArtwork(manifest, 0, undefined, "Naxxramas")).toMatchObject({
+      kind: "instance",
+      instance: { mapID: 533, name: "Naxxramas" },
+    });
     expect(resolveMapArtwork(manifest, 0, {
       timestampMs: 0,
       x: 1750,

@@ -149,7 +149,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
   const mapId = dominantMapId(visibleUnits.map((unit) => unit.sample));
   const representativeSample = visibleUnits.find((unit) => unit.sample.mapId === mapId)?.sample;
   const artwork = manifestQuery.data && mapId !== null
-    ? resolveMapArtwork(manifestQuery.data, mapId, representativeSample)
+    ? resolveMapArtwork(manifestQuery.data, mapId, representativeSample, props.context.instance.name)
     : null;
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
 
@@ -176,6 +176,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
   if (!canvas) return <MapMessage title="Map artwork unavailable" detail="No renderable map layer was published." />;
 
   const mapName = artwork.kind === "zone" ? artwork.map.name : artwork.instance.name;
+  const displayedMapId = artwork.kind === "instance" ? artwork.instance.mapID : mapId;
   const markers = visibleUnits.flatMap((unit) => {
     if (unit.sample.mapId !== mapId) return [];
     const point = artwork.kind === "zone"
@@ -189,7 +190,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
       <div className="flex items-center justify-between gap-2 px-1 text-[10px] text-muted-foreground">
         <div className="min-w-0 truncate">
           <span className="font-semibold text-foreground">{mapName}</span>
-          <span className="ml-1.5 font-mono">world {mapId}</span>
+          <span className="ml-1.5 font-mono">world {displayedMapId}</span>
           {artwork.kind === "instance" && <span className="ml-1.5 text-amber-300/70">relative placement</span>}
         </div>
         <div className="flex shrink-0 items-center gap-2">

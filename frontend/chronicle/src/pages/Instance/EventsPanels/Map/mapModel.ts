@@ -87,12 +87,21 @@ function assignmentArea(assignment: WowMapAssignment): number {
   return Math.abs(maxWorldX - minWorldX) * Math.abs(maxWorldY - minWorldY);
 }
 
+function normalizedMapName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
 export function resolveMapArtwork(
   manifest: WowMapManifest,
   mapId: number,
   sample?: MapPositionSample,
+  instanceName?: string,
 ): ResolvedMapArtwork | null {
-  const instance = manifest.instances?.find((candidate) => candidate.mapID === mapId);
+  const normalizedInstanceName = instanceName ? normalizedMapName(instanceName) : "";
+  const instance = manifest.instances?.find((candidate) =>
+    candidate.mapID === mapId
+      || (normalizedInstanceName !== "" && normalizedMapName(candidate.name) === normalizedInstanceName),
+  );
   if (instance) return { kind: "instance", instance };
 
   const zoneCandidates = manifest.maps.flatMap((map) => {
