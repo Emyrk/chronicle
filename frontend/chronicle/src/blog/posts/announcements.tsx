@@ -210,7 +210,7 @@ export function CommunitySupportPost({ post }: PostProps) {
         starting to outpace what I can reasonably cover on my own.
       </p>
       <p>
-        Chronicle is <strong>free to use, ad-free, and paywall-free</strong>. It is a not-for-profit project with a goal
+        Chronicle is <strong>free to use and paywall-free</strong>. It is a not-for-profit project with a goal
         of breaking even on the costs of running it.
       </p>
       <p>

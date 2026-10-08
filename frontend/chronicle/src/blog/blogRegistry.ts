@@ -98,7 +98,7 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
   {
     id: "community-support",
     title: "Community support",
-    description: "Chronicle is free, ad-free, and paywall-free. Server costs are growing, and the support page explains how to help.",
+    description: "Chronicle is free and paywall-free. Server costs are growing, and the support page explains how to help.",
     publishedAt: "2026-08-30",
     rarity: "common",
     tag: "Announcement",
