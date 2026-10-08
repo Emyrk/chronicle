@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { parseColor, parseBgColor } from "@/pages/Instance/parseColors";
+import { ToolsBackLink } from "@/pages/Tools/ToolsBackLink";
 
 /**
  * Color tier legend data, matching WCL-standard breakpoints.
@@ -17,6 +18,8 @@ const COLOR_TIERS: { label: string; min: number; max: number; representative: nu
 export function ParsingPage() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
+      <ToolsBackLink className="mb-5" />
+
       <h1 className="text-3xl font-bold mb-2">How Parses Work</h1>
       <p className="text-muted-foreground mb-8">
         A quick guide to parse scores in Chronicle.
