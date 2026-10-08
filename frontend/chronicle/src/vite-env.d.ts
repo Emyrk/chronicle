@@ -1,5 +1,9 @@
 /// <reference types="vite/client" />
 
+interface Window {
+  __CHRONICLE_BLOG_FLAVOR__?: string[];
+}
+
 interface ImportMetaEnv {
   readonly VITE_SERVER_NAME: string;
   readonly CHRONICLE_PREVIEW_ADS: boolean;

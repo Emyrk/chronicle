@@ -6,7 +6,7 @@
   "types": "design-sync.entry.ts",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build --ssr src/blog/prerender.tsx --outDir .blog-prerender --emptyOutDir && node scripts/prerender-blog.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run --project unit",
