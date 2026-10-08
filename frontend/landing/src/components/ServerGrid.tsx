@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowUpRight, Search, Upload, X } from "lucide-react";
+import { trackedTenantUrl } from "../trackedLinks";
 import type { ServerEntry } from "../types";
 import { ServerCard } from "./ServerCard";
 
@@ -183,14 +184,20 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
             </p>
             <div className="mt-7 flex flex-col gap-3 lg:flex-row">
               <a
-                href="https://forever.chronicleclassic.com/"
+                href={trackedTenantUrl(
+                  "https://forever.chronicleclassic.com/",
+                  "featured_server_logs",
+                )}
                 className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
               >
                 View WoW Forever logs
                 <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
               </a>
               <a
-                href="https://forever.chronicleclassic.com/upload"
+                href={trackedTenantUrl(
+                  "https://forever.chronicleclassic.com/upload",
+                  "featured_server_upload",
+                )}
                 className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border px-4 py-3 text-sm font-semibold text-foreground transition hover:border-foreground/30 hover:bg-muted"
               >
                 <Upload aria-hidden="true" className="h-4 w-4" />
