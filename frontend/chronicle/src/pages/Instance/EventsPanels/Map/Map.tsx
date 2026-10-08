@@ -243,6 +243,7 @@ export function createMapPanel(): PanelDefinition<MapResult, UnitPositionProcess
     icon: <MapIcon className="h-4 w-4" />,
     requiredCapabilities: ["unit-position"],
     syncDataMode: "full",
+    underConstruction: true,
     render: (props) => <MapContent {...props} />,
   };
 }
