@@ -124,7 +124,7 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
     title: "Gear and BiS progression",
     description: "Share gear lists through Chronicle and compare an Armory character's progression against them.",
     publishedAt: "2026-08-26",
-    rarity: "epic",
+    rarity: "common",
     tag: "Feature",
     icon: "inv_helmet_03",
     flavor: "Need before greed.",
