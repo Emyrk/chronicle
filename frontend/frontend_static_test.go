@@ -19,7 +19,6 @@ func TestEmbeddedBlogPages(t *testing.T) {
 
 	for _, requestPath := range []string{
 		"/blog",
-		"/blog/welcome-to-the-chronicle-blog",
 		"/blog/custom-panels",
 	} {
 		recorder := httptest.NewRecorder()

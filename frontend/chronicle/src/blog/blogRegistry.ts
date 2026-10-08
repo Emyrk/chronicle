@@ -18,7 +18,6 @@ import {
   VehicleSupportPost,
   YoutubeSyncPost,
 } from "./posts/announcements";
-import { BlogLaunchPost } from "./posts/BlogLaunchPost";
 
 export type BlogFlavorSet = readonly string[];
 
@@ -56,16 +55,6 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 export const BLOG_POSTS: readonly BlogPostDefinition[] = [
-  {
-    id: "welcome-to-the-chronicle-blog",
-    title: "A home for what is new in Chronicle",
-    description: "Release notes, feature tours, and the stories behind improvements to Chronicle.",
-    publishedAt: "2026-10-08",
-    rarity: "rare",
-    tag: "Announcement",
-    icon: "inv_misc_book_09",
-    component: BlogLaunchPost,
-  },
   {
     id: "custom-panels",
     title: "Custom panels are now available",
