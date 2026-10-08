@@ -48,6 +48,7 @@ import ConsumablesInspectItemVideo from "../../../frontend/chronicle/src/pages/I
 import ConsumablesUnresolvedVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/Unresolved.video";
 import EncounterPhasesDiscordVideo from "../../../frontend/chronicle/src/pages/Instance/videos/EncounterPhasesDiscord.video";
 import RankedSpeedrunTimingVideo from "../../../frontend/chronicle/src/pages/Instance/videos/RankedSpeedrunTiming.video";
+import ReplayExplainerVideo from "../../../frontend/chronicle/src/pages/Instance/videos/ReplayExplainer.video";
 import FavoritesPromo from "./FavoritesPromo";
 import CooldownUsagePromo from "./CooldownUsagePromo";
 
@@ -66,6 +67,7 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="CooldownUsagePromo" component={CooldownUsagePromo} durationInFrames={800} fps={30} width={1280} height={720} />
         <Composition id="EncounterPhasesDiscord" component={EncounterPhasesDiscordVideo} durationInFrames={650} fps={30} width={1280} height={720} />
         <Composition id="RankedSpeedrunTiming" component={RankedSpeedrunTimingVideo} durationInFrames={710} fps={30} width={1280} height={720} />
+        <Composition id="ReplayExplainer" component={ReplayExplainerVideo} durationInFrames={700} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="DamageDoneLessons">
       <Composition
