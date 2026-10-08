@@ -36,10 +36,10 @@ export function BlogLaunchPost() {
 
       <div className="mt-16 flex flex-wrap items-center gap-4 border-t border-border pt-8">
         <Link
-          to="/blog/replay-map-panel"
+          to="/blog/custom-panels"
           className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
         >
-          Read the first feature story
+          Read the latest feature story
         </Link>
         <Link to="/blog" className="text-sm font-medium text-muted-foreground hover:text-foreground">
           Browse all posts

@@ -18,7 +18,6 @@ import {
   YoutubeSyncPost,
 } from "./posts/announcements";
 import { BlogLaunchPost } from "./posts/BlogLaunchPost";
-import { ReplayMapPost } from "./posts/ReplayMapPost";
 
 export type BlogFlavorSet = readonly string[];
 
@@ -53,17 +52,6 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
     tag: "Announcement",
     icon: "inv_misc_book_09",
     component: BlogLaunchPost,
-  },
-  {
-    id: "replay-map-panel",
-    title: "Follow the fight with the replay map",
-    description: "A new replay-aware panel puts movement, positioning, and encounter geography beside the combat log.",
-    publishedAt: "2026-10-08",
-    rarity: "epic",
-    tag: "Feature",
-    icon: "inv_misc_map_01",
-    flavor: "Stand in the fire, and now everyone can see it.",
-    component: ReplayMapPost,
   },
   {
     id: "custom-panels",

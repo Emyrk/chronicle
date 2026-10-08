@@ -20,7 +20,7 @@ func TestEmbeddedBlogPages(t *testing.T) {
 	for _, requestPath := range []string{
 		"/blog",
 		"/blog/welcome-to-the-chronicle-blog",
-		"/blog/replay-map-panel",
+		"/blog/custom-panels",
 	} {
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, requestPath, nil))
