@@ -70,13 +70,13 @@ function Content() {
   const cursorX = interpolate(
     frame,
     [18, 64, OPEN_FRAME, 135, EXPAND_FRAME, 230, SCRUB_FRAME, 354, STEP_FRAME, 460, SPEED_FRAME, 545, VIDEO_FRAME, 612],
-    [1130, 1070, 1070, 1090, 1090, 730, 730, 645, 645, 858, 858, 1162, 1162, 1140],
+    [1130, 1070, 1070, 1090, 1090, 707, 707, 645, 645, 858, 858, 1162, 1162, 1140],
     { ...clamp, easing: entranceEasing },
   );
   const cursorY = interpolate(
     frame,
     [18, 64, OPEN_FRAME, 135, EXPAND_FRAME, 230, SCRUB_FRAME, 354, STEP_FRAME, 460, SPEED_FRAME, 545, VIDEO_FRAME, 612],
-    [630, 150, 150, 644, 644, 542, 542, 607, 607, 629, 629, 150, 150, 620],
+    [630, 150, 150, 644, 644, 556, 556, 607, 607, 629, 629, 150, 150, 620],
     { ...clamp, easing: entranceEasing },
   );
   const click = Math.max(
