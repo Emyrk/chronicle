@@ -1963,6 +1963,8 @@ export interface InstancePageViewProps {
   onOpenTimeRange?: () => void;
   /** Whether user has admin_logs permission */
   canAdminLogs?: boolean;
+  /** Whether user has invalidate_logs permission */
+  canInvalidateLogs?: boolean;
   /** Duplicate group ID if this instance is part of a group */
   duplicateGroupId?: string;
   /** Hide the action bar (spellbook) - e.g. while the replay overlay occupies the same space */
@@ -1979,6 +1981,7 @@ export function InstancePageView({
   logDetailUrl,
   onOpenTimeRange,
   canAdminLogs,
+  canInvalidateLogs,
   duplicateGroupId,
   suppressActionBar,
   supportsOverview = false,
@@ -3278,6 +3281,7 @@ export function InstancePageView({
                 layoutLabUrl={isEncounterView && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}
                 canAdminLogs={canAdminLogs}
+                canInvalidateLogs={canInvalidateLogs}
                 isMobile={isMobile}
                 viewMode={overviewEnabled ? viewMode : undefined}
                 onViewModeChange={overviewEnabled ? setViewMode : undefined}
@@ -3453,6 +3457,7 @@ export function InstancePageView({
                 layoutLabUrl={isEncounterView && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}
                 canAdminLogs={canAdminLogs}
+                canInvalidateLogs={canInvalidateLogs}
               />
             </div>
           )}

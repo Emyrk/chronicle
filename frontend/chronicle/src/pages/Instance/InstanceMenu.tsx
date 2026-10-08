@@ -42,6 +42,8 @@ interface InstanceMenuProps {
   invalidated?: boolean;
   /** Whether user has admin_logs permission */
   canAdminLogs?: boolean;
+  /** Whether user has invalidate_logs permission */
+  canInvalidateLogs?: boolean;
 }
 
 export function InstanceMenu({
@@ -65,6 +67,7 @@ export function InstanceMenu({
   instanceName,
   invalidated = false,
   canAdminLogs,
+  canInvalidateLogs,
 }: InstanceMenuProps) {
   const [showInvalidateConfirm, setShowInvalidateConfirm] = useState(false);
   const [showMarkValidConfirm, setShowMarkValidConfirm] = useState(false);
@@ -240,7 +243,7 @@ export function InstanceMenu({
           </DropdownMenuItem>
         )}
 
-        {canAdminLogs && logGroupId && !invalidated && (
+        {canInvalidateLogs && logGroupId && !invalidated && (
           <DropdownMenuItem
             onSelect={() => setShowInvalidateConfirm(true)}
             className="text-destructive focus:text-destructive"
@@ -250,7 +253,7 @@ export function InstanceMenu({
           </DropdownMenuItem>
         )}
 
-        {canAdminLogs && logGroupId && invalidated && (
+        {canInvalidateLogs && logGroupId && invalidated && (
           <DropdownMenuItem onSelect={() => setShowMarkValidConfirm(true)}>
             <Check className="h-4 w-4 mr-2" />
             Mark log valid

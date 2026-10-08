@@ -286,8 +286,12 @@ func (api *API) Routes() chi.Router {
 					r.Get("/", api.AdminListLogs)
 					r.Post("/delete", api.AdminBulkDeleteLogs)
 					r.Post("/reparse", api.AdminBulkReparseLogs)
-					r.Post("/clear-invalidation", api.AdminClearLogInvalidation)
-					r.Post("/invalidate", api.AdminInvalidateLogs)
+					r.With(
+						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanInvalidate_logs_User),
+					).Post("/clear-invalidation", api.AdminClearLogInvalidation)
+					r.With(
+						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanInvalidate_logs_User),
+					).Post("/invalidate", api.AdminInvalidateLogs)
 				})
 
 				r.Group(func(r chi.Router) {
