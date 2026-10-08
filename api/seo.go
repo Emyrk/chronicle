@@ -13,7 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
 
-const defaultSEODescription = "Chronicle provides combat log analysis for Classic World of Warcraft. Upload raid logs to review damage, healing, encounters, rankings, and player performance."
+const defaultSEODescription = "Chronicle provides combat log analysis for World of Warcraft communities. Upload combat logs to explore encounters, rankings, and performance insights."
 
 var indexablePrefixes = []string{
 	"/", "/recent", "/guilds", "/g", "/armory", "/instances", "/s", "/leaderboards",

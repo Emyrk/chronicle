@@ -40,7 +40,7 @@ func TestBrandingResolverTenantSEO(t *testing.T) {
 	require.Equal(t, "https://everlook.chronicleclassic.com/recent", metadata.CanonicalURL)
 	require.Equal(t, "https://everlook.chronicleclassic.com/banner.png", metadata.ImageURL)
 	require.Empty(t, metadata.Robots)
-	require.JSONEq(t, `{"@context":"https://schema.org","@type":"WebSite","name":"Everlook","url":"https://everlook.chronicleclassic.com/","description":"Chronicle provides combat log analysis for Classic World of Warcraft. Upload raid logs to review damage, healing, encounters, rankings, and player performance.","image":"https://everlook.chronicleclassic.com/banner.png","publisher":{"@type":"Organization","name":"Chronicle","url":"https://chronicleclassic.com/"}}`, metadata.JSONLD)
+	require.JSONEq(t, `{"@context":"https://schema.org","@type":"WebSite","name":"Everlook","url":"https://everlook.chronicleclassic.com/","description":"Chronicle provides combat log analysis for World of Warcraft communities. Upload combat logs to explore encounters, rankings, and performance insights.","image":"https://everlook.chronicleclassic.com/banner.png","publisher":{"@type":"Organization","name":"Chronicle","url":"https://chronicleclassic.com/"}}`, metadata.JSONLD)
 }
 
 func TestBrandingResolverNoIndex(t *testing.T) {
