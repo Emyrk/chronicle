@@ -43,6 +43,17 @@ func TestBrandingResolverTenantSEO(t *testing.T) {
 	require.JSONEq(t, `{"@context":"https://schema.org","@type":"WebSite","name":"Everlook","url":"https://everlook.chronicleclassic.com/","description":"Chronicle provides combat log analysis for World of Warcraft communities. Upload combat logs to explore encounters, rankings, and performance insights.","image":"https://everlook.chronicleclassic.com/banner.png","publisher":{"@type":"Organization","name":"Chronicle","url":"https://chronicleclassic.com/"}}`, metadata.JSONLD)
 }
 
+func TestBrandingResolverGoogleAnalytics(t *testing.T) {
+	t.Parallel()
+	api := testSEOAPI(t)
+	request := tenantSEORequest(t, "/recent", true)
+
+	require.Empty(t, api.brandingResolver(request).GA4ID)
+
+	api.Opts.GA4ID = "G-G0Q1B9GRC0"
+	require.Equal(t, "G-G0Q1B9GRC0", api.brandingResolver(request).GA4ID)
+}
+
 func TestBrandingResolverNoIndex(t *testing.T) {
 	t.Parallel()
 	api := testSEOAPI(t)

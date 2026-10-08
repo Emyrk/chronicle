@@ -68,3 +68,11 @@ func TestAdSenseClientIDPattern(t *testing.T) {
 	require.False(t, adsenseClientIDPattern.MatchString("pub-8208259743822818"))
 	require.False(t, adsenseClientIDPattern.MatchString("ca-pub-example"))
 }
+
+func TestGoogleAnalyticsMeasurementIDPattern(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, ga4MeasurementIDPattern.MatchString("G-G0Q1B9GRC0"))
+	require.False(t, ga4MeasurementIDPattern.MatchString("UA-123456-1"))
+	require.False(t, ga4MeasurementIDPattern.MatchString("G-example"))
+}

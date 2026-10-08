@@ -28,6 +28,7 @@ var noIndexPrefixes = []string{
 func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 	resolved := &frontend.HTMLBranding{
 		CanonicalURL: canonicalRequestURL(api, r),
+		GA4ID:        api.Opts.GA4ID,
 	}
 	t := servicetenant.TenantFromContext(r.Context())
 	if tenantAdsEnabled(api.adsDeploymentEnabled(), t) {

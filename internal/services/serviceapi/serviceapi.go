@@ -45,7 +45,10 @@ import (
 
 var _ services.Servicer = (*Service)(nil)
 
-var adsenseClientIDPattern = regexp.MustCompile(`^ca-pub-[0-9]+$`)
+var (
+	adsenseClientIDPattern  = regexp.MustCompile(`^ca-pub-[0-9]+$`)
+	ga4MeasurementIDPattern = regexp.MustCompile(`^G-[A-Z0-9]+$`)
+)
 
 func API(broker *services.Services) *api.API {
 	srv := services.MustGet[*Service](broker)
@@ -66,6 +69,7 @@ type Service struct {
 	ocrURL                *url.URL
 	adsTxtURL             *url.URL
 	adsenseClientID       string
+	ga4MeasurementID      string
 	shortLinkDomain       string
 	clientUploadsDisabled bool
 	zugzugURL             string
@@ -122,6 +126,9 @@ func (s *Service) DependsOn() []string {
 func (s *Service) Start(ctx context.Context) error {
 	if s.adsenseClientID != "" && !adsenseClientIDPattern.MatchString(s.adsenseClientID) {
 		return fmt.Errorf("invalid AdSense client ID %q: expected ca-pub- followed by digits", s.adsenseClientID)
+	}
+	if s.ga4MeasurementID != "" && !ga4MeasurementIDPattern.MatchString(s.ga4MeasurementID) {
+		return fmt.Errorf("invalid Google Analytics measurement ID %q: expected G- followed by uppercase letters or digits", s.ga4MeasurementID)
 	}
 
 	logger := servicelogger.Logger(s.broker)
@@ -224,6 +231,7 @@ func (s *Service) Start(ctx context.Context) error {
 		AccessURL:             au,
 		AdsTxtURL:             adsTxtURL,
 		AdSenseClientID:       s.adsenseClientID,
+		GA4ID:                 s.ga4MeasurementID,
 		ShortLinkDomain:       s.shortLinkDomain,
 		ClientUploadsDisabled: s.clientUploadsDisabled,
 		ExternalVerification:  s.externalVerification(),
@@ -340,6 +348,15 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_ADSENSE_CLIENT_ID",
 			Default:     "",
 			Value:       serpent.StringOf(&s.adsenseClientID),
+		},
+		{
+			Name:        "Google Analytics Measurement ID",
+			Description: "Optional GA4 measurement ID (G-...). When empty, Google Analytics is not loaded.",
+			Required:    false,
+			Flag:        "ga-measurement-id",
+			Env:         "CHRONICLE_GA_MEASUREMENT_ID",
+			Default:     "",
+			Value:       serpent.StringOf(&s.ga4MeasurementID),
 		},
 		{
 			Name:        "Short Link Domain",

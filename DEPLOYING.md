@@ -119,6 +119,16 @@ CREATE DATABASE spicedb;
 
 Replace every example password and secret before exposing the service.
 
+## Optional Google Analytics
+
+Chronicle does not load Google Analytics by default. A deployment can opt in with its own GA4 measurement ID:
+
+```text
+CHRONICLE_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+```
+
+Official Chronicle deployments use Chronicle's measurement ID. Leave this variable unset on self-hosted instances that should not send analytics to Google.
+
 ## Generate the JWT signing key
 
 The container includes Chronicle's key generator:
