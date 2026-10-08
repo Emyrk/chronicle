@@ -1,5 +1,6 @@
 import { AbsorbAttributionDetails } from "@/pages/ClassDetails/AbsorbAttributionDetails";
 import type { BlogPostDefinition } from "../blogRegistry";
+import { blogPostLink } from "../trackedLinks";
 import { ShortPost } from "./ShortPost";
 
 // Short posts carried over from the Discord announcements channel.
@@ -99,7 +100,7 @@ export function GuildPagesPost({ post }: PostProps) {
       </p>
       <p>
         It is very early, but guilds can customize what is on their guild page.{" "}
-        <a href="https://capy.chronicleclassic.com/g/6e6d906e-b362-41ab-8e60-4579523ce4f9">Here is an example</a>.
+        <a href={blogPostLink(post.id, "https://capy.chronicleclassic.com/g/6e6d906e-b362-41ab-8e60-4579523ce4f9")}>Here is an example</a>.
       </p>
       <p>Happy to take requests to build the pages y'all want to see.</p>
     </ShortPost>
@@ -114,7 +115,7 @@ export function ConsumablesPost({ post }: PostProps) {
         options!
       </p>
       <p>
-        <a href="https://octo.chronicleclassic.com/instances/qwp9bgWbfKPbKHkF?explain=consumables_ledger">
+        <a href={blogPostLink(post.id, "https://octo.chronicleclassic.com/instances/qwp9bgWbfKPbKHkF?explain=consumables_ledger")}>
           See the explainer on an example raid
         </a>
         .
@@ -133,7 +134,7 @@ export function VehicleSupportPost({ post }: PostProps) {
         <strong>Vehicle support</strong> has been added to the addon to handle raids like Eye of Eternity and Ulduar.
       </p>
       <p>
-        A new <a href="https://chromie.chronicleclassic.com/s/qKE68sHB">Vehicles</a> panel has been added. All vehicles
+        A new <a href={blogPostLink(post.id, "https://chromie.chronicleclassic.com/s/qKE68sHB")}>Vehicles</a> panel has been added. All vehicles
         are treated as "pets" in terms of damage credit. Let me know if you see any issues!
       </p>
     </ShortPost>
@@ -148,7 +149,7 @@ export function YoutubeSyncPost({ post }: PostProps) {
         <a href="/youtube-sync-v3"><code>/youtube-sync-v3</code></a>. I will make this tool more discoverable soon.
       </p>
       <p>
-        <a href="https://chromie.chronicleclassic.com/s/WSEWPRTW">Here is a live example</a> from one of our community
+        <a href={blogPostLink(post.id, "https://chromie.chronicleclassic.com/s/WSEWPRTW")}>Here is a live example</a> from one of our community
         raiders.
       </p>
     </ShortPost>
@@ -174,7 +175,7 @@ export function GearProgressionPost({ post }: PostProps) {
         <a href="/gear">gear page</a>.
       </p>
       <p>
-        <a href="https://chromie.chronicleclassic.com/gear/progression/1842f136-7e45-4609-87b7-4d2f8ebb573b?profile=c7b747cf-e5b9-4ecb-97db-1b57e45cdb9e&char=ChromieCraft%3APeepovanish">
+        <a href={blogPostLink(post.id, "https://chromie.chronicleclassic.com/gear/progression/1842f136-7e45-4609-87b7-4d2f8ebb573b?profile=c7b747cf-e5b9-4ecb-97db-1b57e45cdb9e&char=ChromieCraft%3APeepovanish")}>
           Here is an example
         </a>{" "}
         with a player loaded from the Armory to view their progression against the list.
@@ -214,7 +215,7 @@ export function CommunitySupportPost({ post }: PostProps) {
       </p>
       <p>
         If you have found Chronicle useful, please take a minute to check out the{" "}
-        <a href="https://chronicleclassic.com/support">support page</a>. There is no expectation to contribute, but I
+        <a href={blogPostLink(post.id, "https://chronicleclassic.com/support")}>support page</a>. There is no expectation to contribute, but I
         would appreciate <strong>everyone at least giving it a look</strong>.
       </p>
       <p>
@@ -256,7 +257,7 @@ export function HistoricalPerformancePost({ post }: PostProps) {
       </p>
       <p>
         Find this at <strong>Explore &gt; Performance</strong>.{" "}
-        <a href="https://capy.chronicleclassic.com/performance-history?realm=Eversong+Wilds&player=0x000000000000D272&player=0x00000000001889C1&spec=&spec=&subspec=&subspec=&instance=Molten+Core">
+        <a href={blogPostLink(post.id, "https://capy.chronicleclassic.com/performance-history?realm=Eversong+Wilds&player=0x000000000000D272&player=0x00000000001889C1&spec=&spec=&subspec=&subspec=&instance=Molten+Core")}>
           See an example
         </a>
         .
