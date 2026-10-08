@@ -6,6 +6,7 @@ import {
   latestPositionAt,
   resolveMapArtwork,
   selectMapEncounter,
+  usableDungeonBounds,
   zoneMapPoint,
 } from "./mapModel";
 
@@ -144,6 +145,20 @@ describe("map replay model", () => {
       kind: "zone",
       map: { name: "Tirisfal Glades" },
     });
+  });
+
+  it("rejects incompatible Wailing Caverns bounds", () => {
+    const floor = {
+      floor: 1,
+      width: 1002,
+      height: 668,
+      tileWidth: 256,
+      tileHeight: 256,
+      bounds: { minX: -410.946014, maxX: 595.528992, minY: -483.479004, maxY: 187.503998 },
+      tiles: [],
+    };
+    expect(usableDungeonBounds(43, floor)).toBeNull();
+    expect(usableDungeonBounds(533, floor)).toEqual(floor.bounds);
   });
 
   it("converts dungeon world coordinates using authoritative floor bounds", () => {

@@ -24,6 +24,7 @@ import {
   latestPositionAt,
   resolveMapArtwork,
   selectMapEncounter,
+  usableDungeonBounds,
   zoneMapPoint,
 } from "./mapModel";
 
@@ -179,7 +180,9 @@ function MapContent(props: PanelRenderProps<MapResult>) {
 
   const mapName = artwork.kind === "zone" ? artwork.map.name : artwork.instance.name;
   const displayedMapId = artwork.kind === "instance" ? artwork.instance.mapID : mapId;
-  const dungeonBounds = selectedFloor?.bounds;
+  const dungeonBounds = artwork.kind === "instance"
+    ? usableDungeonBounds(artwork.instance.mapID, selectedFloor)
+    : null;
   const markers = visibleUnits.flatMap((unit) => {
     if (unit.sample.mapId !== mapId) return [];
     const point = artwork.kind === "zone"
@@ -220,7 +223,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
         </div>
       </div>
       {artwork.kind === "instance" && !dungeonBounds ? (
-        <p className="px-1 text-[9px] text-amber-300/80">This floor has no published world-coordinate bounds, so unit markers are hidden.</p>
+        <p className="px-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
       ) : !sync?.enabled ? (
         <p className="px-1 text-[9px] text-muted-foreground">Showing the final position snapshot. Enable Replay to watch units move.</p>
       ) : null}

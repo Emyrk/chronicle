@@ -998,10 +998,11 @@ func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstan
 
 // classicDungeonMapBounds comes from the 3.3.5 DungeonMap.dbc coordinate
 // records used by the classic 4x3 instance-floor artwork. WoW Forever ships
-// the artwork but not the retired DungeonMap table, so retain the compatible
-// bounds for floors present in that table.
+// the artwork but not the retired DungeonMap table, so retain bounds only for
+// floors whose Forever position telemetry is compatible with that projection.
+// Wailing Caverns is intentionally excluded: its Forever coordinates use
+// multiple incompatible frames, so the 3.3.5 bounds misplace some encounters.
 var classicDungeonMapBounds = map[[2]int32]wowMapFloorBounds{
-	{43, 1}:  {MinX: -410.946014, MaxX: 595.528992, MinY: -483.479004, MaxY: 187.503998},
 	{533, 1}: {MinX: -3734.100098, MaxX: -2640.270020, MinY: 2886.610107, MaxY: 3615.830078},
 	{533, 2}: {MinX: -4234.100098, MaxX: -3140.270020, MinY: 2886.610107, MaxY: 3615.830078},
 	{533, 3}: {MinX: -3787, MaxX: -2587, MinY: 2336, MaxY: 3136},

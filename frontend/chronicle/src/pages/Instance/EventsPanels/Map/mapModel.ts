@@ -3,6 +3,7 @@ import type {
   WowMapAssignment,
   WowMapFloorBounds,
   WowMapInstance,
+  WowMapInstanceFloor,
   WowMapManifest,
 } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
@@ -126,6 +127,13 @@ export function zoneMapPoint(sample: MapPositionSample, assignment: WowMapAssign
   const uiX = assignment.uiMin[0] + normalizedX * (assignment.uiMax[0] - assignment.uiMin[0]);
   const uiY = assignment.uiMin[1] + normalizedY * (assignment.uiMax[1] - assignment.uiMin[1]);
   return { leftPercent: clampPercent(uiX), topPercent: clampPercent(uiY) };
+}
+
+export function usableDungeonBounds(mapId: number, floor: WowMapInstanceFloor | undefined): WowMapFloorBounds | null {
+  // Forever's Wailing Caverns telemetry uses multiple coordinate frames that
+  // do not consistently project through the 3.3.5 DungeonMap bounds.
+  if (mapId === 43) return null;
+  return floor?.bounds ?? null;
 }
 
 export function dungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBounds): MapPoint | null {
