@@ -29,7 +29,7 @@ export function ShortPost({ post, children }: { post: BlogPostDefinition; childr
         </div>
       </header>
 
-      <div className="prose prose-invert mt-8 max-w-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
+      <div className="prose prose-invert mt-8 max-w-none prose-a:text-primary prose-a:no-underline [&_a:hover]:underline">
         {children}
       </div>
 
