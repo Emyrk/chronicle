@@ -4415,6 +4415,7 @@ export interface WoWEncounter {
     readonly instance_id: string;
     readonly boss: boolean;
     readonly name: string;
+    readonly map_id: number;
     readonly kill_type: KillType;
     readonly remaining?: readonly GUID[];
     readonly start_time: string;

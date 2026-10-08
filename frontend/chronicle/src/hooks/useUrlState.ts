@@ -650,6 +650,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   // Charts
   timeline: 'tl',
   rotations: 'rot',
+  map: 'map',
   status: 'st',
   healer_casts: 'hc',
   spell_count: 'sc',

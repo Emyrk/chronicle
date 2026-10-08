@@ -78,6 +78,7 @@ import { createLootPanel } from "./LootPanel/LootPanel";
 import { createRankingRecordsPanel } from "./RankingRecords/RankingRecords";
 import { createLoggingMetadataPanel } from "./LoggingMetadata/LoggingMetadata";
 import { createRaidCompositionPanel } from "./RaidComposition/RaidComposition";
+import { createMapPanel } from "./Map/Map";
 import { createFriendlyClassBuffsPanel } from "./FriendlyClassBuffs/FriendlyClassBuffs";
 
 import { createDispelsDonePanel, createDispelsReceivedPanel } from "./Dispel/Dispel";
@@ -138,6 +139,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   // Charts
   timeline: createTimelinePanel(),
   // Replay
+  map: createMapPanel(),
   status: createStatusPanel(),
   healer_casts: createHealerCastsPanel(),
   spell_count: createSpellCountPanel(),

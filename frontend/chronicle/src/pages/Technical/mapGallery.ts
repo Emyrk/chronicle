@@ -59,12 +59,20 @@ export interface WowMapInstance {
   floors: WowMapInstanceFloor[];
 }
 
+export interface WowMapFloorBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
 export interface WowMapInstanceFloor {
   floor: number;
   width: number;
   height: number;
   tileWidth: number;
   tileHeight: number;
+  bounds?: WowMapFloorBounds;
   tiles: WowMapTile[];
 }
 

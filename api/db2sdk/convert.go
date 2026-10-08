@@ -706,6 +706,7 @@ func WoWEncounter(encounter database.LogInstanceEncounter) chroniclesdk.WoWEncou
 		InstanceID: encounter.InstanceID,
 		Boss:       encounter.Boss,
 		Name:       encounter.Name,
+		MapID:      int(encounter.MapID),
 		KillType:   chroniclesdk.KillType(encounter.KillType),
 		Remaining:  encounter.Remaining,
 		StartTime:  encounter.StartTime.Time,

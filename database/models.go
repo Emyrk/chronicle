@@ -1680,6 +1680,7 @@ type LogInstanceEncounter struct {
 	StartTime  pgtype.Timestamptz `db:"start_time" json:"start_time"`
 	EndTime    pgtype.Timestamptz `db:"end_time" json:"end_time"`
 	KillType   KillType           `db:"kill_type" json:"kill_type"`
+	MapID      int32              `db:"map_id" json:"map_id"`
 }
 
 type LogInstanceEncounterDamageUnitSummary struct {

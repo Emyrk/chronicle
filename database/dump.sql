@@ -1160,7 +1160,8 @@ CREATE TABLE log_instance_encounters (
     boss boolean NOT NULL,
     start_time timestamp with time zone NOT NULL,
     end_time timestamp with time zone NOT NULL,
-    kill_type kill_type NOT NULL
+    kill_type kill_type NOT NULL,
+    map_id integer DEFAULT 0 NOT NULL
 );
 
 CREATE TABLE log_instance_events (

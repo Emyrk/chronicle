@@ -39,6 +39,7 @@ var (
 		Name:      "Wailing Caverns",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"wailing caverns", "哀嚎洞穴"},
+		MapIDs:    []uint32{43},
 		Hostiles:  FromMap(WailingCavernsHostiles()),
 	}
 

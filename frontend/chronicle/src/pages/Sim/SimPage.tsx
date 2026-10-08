@@ -180,6 +180,7 @@ export function SimPage() {
         id: SIM_ENCOUNTER_ID,
         name: "Simulation",
         boss: false,
+        mapId: 0,
         kill_type: "clean" as const,
         start_time: startTimestamp.toISOString(),
         end_time: new Date(startTimestamp.getTime() + result.durationMs).toISOString(),

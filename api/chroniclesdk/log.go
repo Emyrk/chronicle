@@ -161,6 +161,7 @@ type WoWEncounter struct {
 	InstanceID uuid.UUID   `json:"instance_id"`
 	Boss       bool        `json:"boss"`
 	Name       string      `json:"name"`
+	MapID      int         `json:"map_id"`
 	KillType   KillType    `json:"kill_type"`
 	Remaining  []guid.GUID `json:"remaining,omitempty"`
 	StartTime  time.Time   `json:"start_time"`

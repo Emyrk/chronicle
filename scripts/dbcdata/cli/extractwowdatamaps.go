@@ -85,13 +85,21 @@ type wowMapInstance struct {
 	Floors       []wowMapInstanceFloor `json:"floors"`
 }
 
+type wowMapFloorBounds struct {
+	MinX float64 `json:"minX"`
+	MaxX float64 `json:"maxX"`
+	MinY float64 `json:"minY"`
+	MaxY float64 `json:"maxY"`
+}
+
 type wowMapInstanceFloor struct {
-	Floor      int32        `json:"floor"`
-	Width      int32        `json:"width"`
-	Height     int32        `json:"height"`
-	TileWidth  int32        `json:"tileWidth"`
-	TileHeight int32        `json:"tileHeight"`
-	Tiles      []wowMapTile `json:"tiles"`
+	Floor      int32              `json:"floor"`
+	Width      int32              `json:"width"`
+	Height     int32              `json:"height"`
+	TileWidth  int32              `json:"tileWidth"`
+	TileHeight int32              `json:"tileHeight"`
+	Bounds     *wowMapFloorBounds `json:"bounds,omitempty"`
+	Tiles      []wowMapTile       `json:"tiles"`
 }
 
 type wowMapArtLayer struct {
@@ -959,6 +967,7 @@ func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstan
 			}
 			floor := wowMapInstanceFloor{
 				Floor: floorNumber, Width: 1002, Height: 668, TileWidth: 256, TileHeight: 256,
+				Bounds: classicDungeonFloorBounds(mapRow.ID, floorNumber),
 			}
 			for tileIndex := int32(1); tileIndex <= 12; tileIndex++ {
 				tile, ok := tilesByIndex[tileIndex]
@@ -985,6 +994,28 @@ func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstan
 		return instances[i].MapID < instances[j].MapID
 	})
 	return instances
+}
+
+// classicDungeonMapBounds comes from the 3.3.5 DungeonMap.dbc coordinate
+// records used by the classic 4x3 instance-floor artwork. WoW Forever ships
+// the artwork but not the retired DungeonMap table, so retain the compatible
+// bounds for floors present in that table.
+var classicDungeonMapBounds = map[[2]int32]wowMapFloorBounds{
+	{43, 1}:  {MinX: -410.946014, MaxX: 595.528992, MinY: -483.479004, MaxY: 187.503998},
+	{533, 1}: {MinX: -3734.100098, MaxX: -2640.270020, MinY: 2886.610107, MaxY: 3615.830078},
+	{533, 2}: {MinX: -4234.100098, MaxX: -3140.270020, MinY: 2886.610107, MaxY: 3615.830078},
+	{533, 3}: {MinX: -3787, MaxX: -2587, MinY: 2336, MaxY: 3136},
+	{533, 4}: {MinX: -4287.350098, MaxX: -3087.020020, MinY: 2336.610107, MaxY: 3136.830078},
+	{533, 5}: {MinX: -4400.089844, MaxX: -2330.280029, MinY: 2311.340088, MaxY: 3691.219971},
+	{533, 6}: {MinX: -5522.290039, MaxX: -4866.350098, MinY: 3379.25, MaxY: 3816.540039},
+}
+
+func classicDungeonFloorBounds(mapID, floor int32) *wowMapFloorBounds {
+	bounds, ok := classicDungeonMapBounds[[2]int32{mapID, floor}]
+	if !ok {
+		return nil
+	}
+	return &bounds
 }
 
 var legacySingleFloorInstanceDirectories = map[string]struct{}{

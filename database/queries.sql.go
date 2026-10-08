@@ -8092,7 +8092,7 @@ func (q *sqlQuerier) DeleteLogInstanceByIDAndGroup(ctx context.Context, arg Dele
 
 const encountersByInstanceID = `-- name: EncountersByInstanceID :many
 SELECT
-  id, instance_id, name, remaining, boss, start_time, end_time, kill_type
+  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id
 FROM
   log_instance_encounters
 WHERE
@@ -8117,6 +8117,7 @@ func (q *sqlQuerier) EncountersByInstanceID(ctx context.Context, instanceID uuid
 			&i.StartTime,
 			&i.EndTime,
 			&i.KillType,
+			&i.MapID,
 		); err != nil {
 			return nil, err
 		}
@@ -8410,16 +8411,17 @@ func (q *sqlQuerier) GetInstancesByLogGroupID(ctx context.Context, logGroupID uu
 
 const insertEncounter = `-- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, kill_type, remaining, boss, start_time, end_time)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id
 `
 
 type InsertEncounterParams struct {
 	ID         uuid.UUID          `db:"id" json:"id"`
 	InstanceID uuid.UUID          `db:"instance_id" json:"instance_id"`
 	Name       string             `db:"name" json:"name"`
+	MapID      int32              `db:"map_id" json:"map_id"`
 	KillType   KillType           `db:"kill_type" json:"kill_type"`
 	Remaining  guid.GUIDs         `db:"remaining" json:"remaining"`
 	Boss       bool               `db:"boss" json:"boss"`
@@ -8432,6 +8434,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		arg.ID,
 		arg.InstanceID,
 		arg.Name,
+		arg.MapID,
 		arg.KillType,
 		arg.Remaining,
 		arg.Boss,
@@ -8448,6 +8451,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		&i.StartTime,
 		&i.EndTime,
 		&i.KillType,
+		&i.MapID,
 	)
 	return i, err
 }

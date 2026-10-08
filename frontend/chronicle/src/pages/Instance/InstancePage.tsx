@@ -48,6 +48,7 @@ export interface Encounter {
   id: string;
   name: string;
   boss: boolean;
+  mapId: number;
   kill_type: KillType;
   start_time: string;
   end_time: string;
@@ -177,6 +178,7 @@ function transformToInstance(
       id: enc.id,
       name: enc.name,
       boss: enc.boss,
+      mapId: enc.map_id,
       kill_type: enc.kill_type,
       start_time: enc.start_time,
       end_time: enc.end_time,

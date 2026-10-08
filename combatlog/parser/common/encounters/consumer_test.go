@@ -67,6 +67,66 @@ func TestZoneReentryDoesNotReuseDifferentDifficulty(t *testing.T) {
 	require.Same(t, state.Instances[1], state.CurrentInstance)
 }
 
+func TestEncountersRetainMapAtFightStart(t *testing.T) {
+	t.Parallel()
+
+	const (
+		firstMapID  uint32 = 100
+		secondMapID uint32 = 101
+		firstBoss   uint32 = 900100
+		secondBoss  uint32 = 900101
+	)
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	hostiles := make(map[uint32]instances.Identity)
+	instances.LoadBosses(hostiles, map[uint32]string{
+		firstBoss:  "First Wing Boss",
+		secondBoss: "Second Wing Boss",
+	})
+	factory := &instances.CommonFactory{
+		Name:   "Multi-map Raid",
+		MapIDs: []uint32{firstMapID, secondMapID},
+		Hostiles: func(database.WoWFlavor) *identifier.Identifier {
+			return identifier.NewIdentifier(hostiles)
+		},
+	}
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+		if !factory.MatchZone(z) {
+			return nil
+		}
+		return factory.New(ctx, logger, db, z, database.WoWFlavor{})
+	})
+
+	seen := time.Date(2026, time.October, 8, 20, 0, 0, 0, time.UTC)
+	player := guid.GUID(1)
+	fight := func(mapID, bossEntry uint32, start time.Time) {
+		t.Helper()
+		state.Zone(messages.Zone{Zone: zone.Zone{
+			Seen:       start,
+			Name:       "multi-map raid",
+			MapID:      mapID,
+			InstanceID: mapID,
+		}})
+		boss := guid.GUID(0xF130000000000000 | uint64(bossEntry)<<24 | 1)
+		require.NoError(t, state.Process(&messages.Damage{
+			MessageBase: messages.Base(start.Add(time.Second)), Caster: &player, Target: boss, Amount: 1,
+		}))
+		require.NoError(t, state.Process(&messages.Slain{
+			MessageBase: messages.Base(start.Add(2 * time.Second)), Victim: boss, Killer: &player,
+		}))
+	}
+
+	fight(firstMapID, firstBoss, seen)
+	fight(secondMapID, secondBoss, seen.Add(time.Minute))
+	require.Len(t, state.Instances, 1)
+
+	finalized, err := state.Instances[0].Finalize(ctx)
+	require.NoError(t, err)
+	require.Len(t, finalized.Encounters, 2)
+	require.Equal(t, firstMapID, finalized.Encounters[0].Combat.MapID)
+	require.Equal(t, secondMapID, finalized.Encounters[1].Combat.MapID)
+}
+
 func TestDerivedInstanceFightStartsNewInstance(t *testing.T) {
 	t.Parallel()
 

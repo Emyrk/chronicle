@@ -27,6 +27,7 @@ import { unitAurasProcessor } from "../UnitAuras/unitAuras.processor";
 import { comparisonProcessor } from "../ComparisonPanel/comparison.processor";
 import { timelineProcessor } from "../Timeline/timeline.processor";
 import { rotationsProcessor } from "../Rotations/rotations.processor";
+import { mapProcessor } from "../Map/map.processor";
 import { statusProcessor } from "../Status/status.processor";
 import { healerCastsProcessor } from "../HealerCasts/healerCasts.processor";
 import { spellCountProcessor } from "../SpellCount/spellCount.processor";
@@ -73,6 +74,8 @@ export { unitAurasProcessor } from "../UnitAuras/unitAuras.processor";
 export { comparisonProcessor } from "../ComparisonPanel/comparison.processor";
 export { timelineProcessor } from "../Timeline/timeline.processor";
 export { rotationsProcessor } from "../Rotations/rotations.processor";
+export { mapProcessor } from "../Map/map.processor";
+export type { MapResult, MapEncounterPositions, MapPositionSample } from "../Map/map.processor";
 export { statusProcessor } from "../Status/status.processor";
 export { healerCastsProcessor } from "../HealerCasts/healerCasts.processor";
 export { spellCountProcessor } from "../SpellCount/spellCount.processor";
@@ -195,6 +198,7 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   // Charts
   timeline: timelineProcessor,
   // Replay
+  map: mapProcessor,
   status: statusProcessor,
   healer_casts: healerCastsProcessor,
   spell_count: spellCountProcessor,
