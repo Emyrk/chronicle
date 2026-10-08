@@ -29,8 +29,9 @@ definition chronicle {
   permission administer   = admin + technical_admin
 
 
-  permission admin_logs    = administer + moderate_logs
-  permission can_reparse  = technical_user + moderate_logs
+  permission admin_logs      = administer + moderate_logs
+  permission invalidate_logs = technical_admin
+  permission can_reparse     = technical_user + moderate_logs
   permission administer_authz = technical_admin
   permission admin_layouts = administer
   permission admin_guilds = administer + moderate_guilds
