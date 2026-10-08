@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import { iconUrl } from "@/config/iconUrl";
 import { LessonPlayer } from "@/pages/Instance/PanelExplainer/LessonPlayer";
 import { formatPublishedDate, rarityColor, RARITY_LABELS } from "../blogFormat";
@@ -11,7 +10,7 @@ export function ShortPost({ post, children }: { post: BlogPostDefinition; childr
   const color = rarityColor(post.rarity);
   const [queryClient] = useState(() => new QueryClient());
   return (
-    <article className="mx-auto w-full max-w-3xl px-4 pb-20 pt-12 sm:px-10">
+    <article className="mx-auto w-full max-w-3xl px-4 pb-12 pt-12 sm:px-10">
       <header className="flex items-start gap-5 border-b border-border pb-8">
         <img
           src={iconUrl(post.icon)}
@@ -43,12 +42,6 @@ export function ShortPost({ post, children }: { post: BlogPostDefinition; childr
 
       <div className="prose prose-invert mt-8 max-w-none prose-a:text-primary prose-a:no-underline [&_a:hover]:underline">
         {children}
-      </div>
-
-      <div className="mt-12 border-t border-border pt-6">
-        <Link to="/blog" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-          ← All posts
-        </Link>
       </div>
     </article>
   );

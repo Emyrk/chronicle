@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Link, Navigate, Outlet, Route, Routes, useMatch, useParams } from "react-router-dom";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,12 +63,17 @@ function postMatchesSearch(post: BlogPostDefinition, query: string): boolean {
     .includes(query);
 }
 
-function BlogIndex() {
-  const flavor = useSyncExternalStore(
+/** The request's flavor, hydration-safe against the prerendered default. */
+function useRequestFlavor(): readonly string[] {
+  return useSyncExternalStore(
     subscribeToRequestFlavor,
     requestFlavor,
     () => serverCapabilities.defaultFlavor,
   );
+}
+
+function BlogIndex() {
+  const flavor = useRequestFlavor();
   const [search, setSearch] = useState("");
   const [rarity, setRarity] = useState<BlogRarity | "all">("all");
 
@@ -225,7 +230,63 @@ function BlogPostRoute({ enforceFlavor }: { enforceFlavor: boolean }) {
   }
 
   const Post = post.component;
-  return <Post post={post} />;
+  return (
+    <>
+      <Post post={post} />
+      <PostNavigation post={post} />
+    </>
+  );
+}
+
+/** Previous (older) and next (newer) links, in the same order as the index. */
+function PostNavigation({ post }: { post: BlogPostDefinition }) {
+  const posts = blogPostsForFlavor(useRequestFlavor());
+  const index = posts.findIndex((candidate) => candidate.id === post.id);
+  const newer = index > 0 ? posts[index - 1] : undefined;
+  const older = index >= 0 ? posts[index + 1] : undefined;
+
+  return (
+    <nav aria-label="More posts" className="mx-auto w-full max-w-3xl px-4 pb-20 sm:px-10">
+      <div className="grid gap-3 border-t border-border pt-8 sm:grid-cols-2">
+        {older ? <PostNavigationLink post={older} direction="previous" /> : <div className="hidden sm:block" />}
+        {newer && <PostNavigationLink post={newer} direction="next" />}
+      </div>
+      <div className="mt-6 text-center">
+        <Link to="/blog" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+          All posts
+        </Link>
+      </div>
+    </nav>
+  );
+}
+
+function PostNavigationLink({ post, direction }: { post: BlogPostDefinition; direction: "previous" | "next" }) {
+  const next = direction === "next";
+  return (
+    <Link
+      to={blogPostPath(post.id)}
+      rel={next ? "next" : "prev"}
+      className={`group flex items-center gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:bg-muted/40 ${next ? "flex-row-reverse text-right" : ""}`}
+    >
+      {next ? (
+        <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+      ) : (
+        <ArrowLeft className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:-translate-x-0.5" />
+      )}
+      <img
+        src={iconUrl(post.icon)}
+        alt=""
+        width={36}
+        height={36}
+        className="h-9 w-9 shrink-0 rounded border-2"
+        style={{ borderColor: rarityColor(post.rarity) }}
+      />
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">{next ? "Next" : "Previous"}</span>
+        <span className="truncate font-wow text-base" style={{ color: rarityColor(post.rarity) }}>{post.title}</span>
+      </span>
+    </Link>
+  );
 }
 
 export function BlogApp({ enforceFlavor = true }: { enforceFlavor?: boolean }) {
