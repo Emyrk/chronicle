@@ -158,8 +158,10 @@ export function YoutubeSyncPost({ post }: PostProps) {
 export function PhaseSelectionsPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
-      <p>Chronicle now supports quick phase filters.</p>
-      <p>Right now only Nefarian and Razorgore phases are detected. More bosses will come!</p>
+      <p>
+        Bosses with multiple phases now have those phases explicitly marked, so you can jump straight to the part of
+        the fight you care about.
+      </p>
     </ShortPost>
   );
 }

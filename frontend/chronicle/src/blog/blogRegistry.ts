@@ -130,7 +130,7 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
   {
     id: "phase-selections",
     title: "Phase selections",
-    description: "Quick phase filters for encounters, starting with Nefarian and Razorgore.",
+    description: "Bosses with multiple phases now have those phases explicitly marked.",
     publishedAt: "2026-08-26",
     rarity: "uncommon",
     tag: "Feature",
