@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --test test/trackedLinks.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.17.0",
