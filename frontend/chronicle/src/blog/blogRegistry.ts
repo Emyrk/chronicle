@@ -4,11 +4,23 @@ import { ReplayMapPost } from "./posts/ReplayMapPost";
 
 export type BlogFlavorSet = readonly string[];
 
+/** Loot rarity communicates the size of an update: legendary for major releases down to common for docs. */
+export type BlogRarity = "legendary" | "epic" | "rare" | "uncommon" | "common";
+
+export const BLOG_RARITIES: readonly BlogRarity[] = ["legendary", "epic", "rare", "uncommon", "common"];
+
 export interface BlogPostDefinition {
   id: string;
   title: string;
   description: string;
   publishedAt: string;
+  rarity: BlogRarity;
+  /** Short category label, e.g. "Feature", "Fix", "Docs". */
+  tag: string;
+  /** Icon name on the icon CDN, e.g. "inv_misc_map_01". */
+  icon: string;
+  /** Optional item-style flavor text shown on the featured card. */
+  flavor?: string;
   flavorSets?: readonly BlogFlavorSet[];
   component: ComponentType;
 }
@@ -19,6 +31,9 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
     title: "A home for what is new in Chronicle",
     description: "Release notes, feature tours, and the stories behind improvements to Chronicle.",
     publishedAt: "2026-10-08",
+    rarity: "rare",
+    tag: "Announcement",
+    icon: "inv_misc_book_09",
     component: BlogLaunchPost,
   },
   {
@@ -26,6 +41,10 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
     title: "Follow the fight with the replay map",
     description: "A new replay-aware panel puts movement, positioning, and encounter geography beside the combat log.",
     publishedAt: "2026-10-08",
+    rarity: "epic",
+    tag: "Feature",
+    icon: "inv_misc_map_01",
+    flavor: "Stand in the fire, and now everyone can see it.",
     component: ReplayMapPost,
   },
 ] as const;
@@ -50,5 +69,8 @@ export function blogPostMatchesFlavor(post: BlogPostDefinition, flavor: readonly
 export function blogPostsForFlavor(flavor: readonly string[]): BlogPostDefinition[] {
   return [...BLOG_POSTS]
     .filter((post) => blogPostMatchesFlavor(post, flavor))
-    .sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+    .sort((left, right) =>
+      right.publishedAt.localeCompare(left.publishedAt)
+      // Same-day posts list the bigger drop first so it becomes the featured card.
+      || BLOG_RARITIES.indexOf(left.rarity) - BLOG_RARITIES.indexOf(right.rarity));
 }

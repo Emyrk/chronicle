@@ -6,6 +6,9 @@ const basePost: BlogPostDefinition = {
   title: "Test",
   description: "Test post",
   publishedAt: "2026-10-08",
+  rarity: "common",
+  tag: "Docs",
+  icon: "inv_misc_book_09",
   component: () => null,
 };
 
