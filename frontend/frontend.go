@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -120,7 +121,7 @@ func Handler(siteFS fs.FS, ogRoutes []OGRoute, brandingResolver BrandingResolver
 func loadBlogManifest(siteFS fs.FS) (map[string]blogManifestPost, error) {
 	data, err := fs.ReadFile(siteFS, "blog-manifest.json")
 	if err != nil {
-		if xerrors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err

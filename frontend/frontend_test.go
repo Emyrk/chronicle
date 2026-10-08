@@ -26,7 +26,7 @@ func TestHandlerRendersSEOMetadata(t *testing.T) {
 			Robots:       "noindex, nofollow",
 			JSONLD:       `{"@context":"https://schema.org","@type":"WebSite"}`,
 		}
-	})
+	}, nil)
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/recent", nil))
 
