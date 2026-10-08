@@ -48,6 +48,7 @@ func TestBrandingResolverNoIndex(t *testing.T) {
 	api := testSEOAPI(t)
 
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/admin/users", true)).Robots)
+	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/g/guild-id/edit", true)).Robots)
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/made-up-route", true)).Robots)
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/recent", false)).Robots)
 }

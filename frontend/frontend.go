@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"net/http"
@@ -162,6 +163,8 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	state.escapeHTMLAttributes()
+
 	if h.serveHTML(resp, req, reqFile, state) {
 		return
 	}
@@ -224,6 +227,19 @@ type htmlState struct {
 	Favicon         string
 	ThemeCSS        string
 	AdSenseClientID string
+}
+
+func (s *htmlState) escapeHTMLAttributes() {
+	s.Title = html.EscapeString(s.Title)
+	s.SiteName = html.EscapeString(s.SiteName)
+	s.Description = html.EscapeString(s.Description)
+	s.CanonicalURL = html.EscapeString(s.CanonicalURL)
+	s.ImageURL = html.EscapeString(s.ImageURL)
+	s.Robots = html.EscapeString(s.Robots)
+	s.Favicon = html.EscapeString(s.Favicon)
+	s.OGTitle = html.EscapeString(s.OGTitle)
+	s.OGDescription = html.EscapeString(s.OGDescription)
+	s.OGURL = html.EscapeString(s.OGURL)
 }
 
 func (h *handler) serveHTML(resp http.ResponseWriter, request *http.Request, reqPath string, state htmlState) bool {

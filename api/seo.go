@@ -62,7 +62,7 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 		resolved.Description = defaultSEODescription
 	}
 
-	if !discoverable || !pathHasPrefix(r.URL.Path, indexablePrefixes) || pathHasPrefix(r.URL.Path, noIndexPrefixes) {
+	if !discoverable || !pathHasPrefix(r.URL.Path, indexablePrefixes) || pathHasPrefix(r.URL.Path, noIndexPrefixes) || isPrivateGuildPath(r.URL.Path) {
 		resolved.Robots = "noindex, nofollow"
 	}
 	resolved.JSONLD = websiteJSONLD(resolved.SiteName, resolved.Description, resolved.CanonicalURL, resolved.ImageURL)
@@ -134,6 +134,10 @@ func websiteJSONLD(name, description, canonical, image string) string {
 		return ""
 	}
 	return string(data)
+}
+
+func isPrivateGuildPath(path string) bool {
+	return strings.HasSuffix(path, "/edit") || strings.HasSuffix(path, "/analytics") || strings.HasSuffix(path, "/settings")
 }
 
 func pathHasPrefix(path string, prefixes []string) bool {

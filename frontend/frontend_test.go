@@ -20,7 +20,7 @@ func TestHandlerRendersSEOMetadata(t *testing.T) {
 		return &HTMLBranding{
 			Title:        "Everlook by Chronicle",
 			SiteName:     "Everlook",
-			Description:  "Everlook raid analytics",
+			Description:  `Everlook "raid" <script>`,
 			CanonicalURL: "https://everlook.example/recent",
 			ImageURL:     "https://everlook.example/banner.png",
 			Robots:       "noindex, nofollow",
@@ -34,6 +34,8 @@ func TestHandlerRendersSEOMetadata(t *testing.T) {
 	require.Contains(t, body, `<link rel="canonical" href="https://everlook.example/recent"`)
 	require.Contains(t, body, `property="og:image" content="https://everlook.example/banner.png"`)
 	require.Contains(t, body, `name="robots" content="noindex, nofollow"`)
+	require.Contains(t, body, `content="Everlook &#34;raid&#34; &lt;script&gt;"`)
+	require.NotContains(t, body, `Everlook "raid" <script>`)
 	require.Equal(t, "noindex, nofollow", recorder.Header().Get("X-Robots-Tag"))
 	require.Contains(t, body, `type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite"}</script>`)
 }
