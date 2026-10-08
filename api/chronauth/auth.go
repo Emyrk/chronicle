@@ -135,7 +135,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 		Zed:              opts.Zed,
 		mailer:           opts.Mailer,
 		devMode:          opts.DevServer,
-		RelayStore:       NewRelayCodeStore(),
+		RelayStore:       NewRelayCodeStore(opts.Zed),
 		accessURL:        opts.AccessURL,
 		tenantChecker:    opts.TenantChecker,
 		registerAttempts: make(map[string]time.Time),
@@ -337,7 +337,7 @@ func (s *Service) Handler() http.Handler {
 					if relayTarget, redirectPath, tenant, relayOK := s.parseRelayTarget(from); relayOK {
 						session, err := s.Zed.GetUserAuthSessionByID(r.Context(), cl.SessionID)
 						if err == nil {
-							code := s.RelayStore.Generate(&RelayCode{
+							code, err := s.RelayStore.Generate(r.Context(), &RelayCode{
 								Session:      session,
 								Provider:     cl.Provider,
 								TenantSlug:   tenant.Slug,
@@ -345,6 +345,11 @@ func (s *Service) Handler() http.Handler {
 								RedirectPath: redirectPath,
 								ExpiresAt:    time.Now().Add(60 * time.Second),
 							})
+							if err != nil {
+								s.logger.Error("relay: failed to generate relay code", slog.String("error", err.Error()))
+								http.Error(w, "failed to create auth relay", http.StatusInternalServerError)
+								return
+							}
 							http.Redirect(w, r, relayTarget+"/auth/relay?code="+code, http.StatusTemporaryRedirect)
 							return
 						}
@@ -402,7 +407,7 @@ func (s *Service) Handler() http.Handler {
 			// For new authentications, check if we need to relay to a tenant subdomain.
 			if isNewAuth {
 				if relayTarget, redirectPath, tenant, relayOK := s.parseRelayTarget(redirectTo); relayOK {
-					code := s.RelayStore.Generate(&RelayCode{
+					code, err := s.RelayStore.Generate(r.Context(), &RelayCode{
 						Session:      authSession,
 						Provider:     authProvider,
 						TenantSlug:   tenant.Slug,
@@ -410,6 +415,11 @@ func (s *Service) Handler() http.Handler {
 						RedirectPath: redirectPath,
 						ExpiresAt:    time.Now().Add(60 * time.Second),
 					})
+					if err != nil {
+						s.logger.Error("relay: failed to generate relay code", slog.String("error", err.Error()))
+						http.Error(w, "failed to create auth relay", http.StatusInternalServerError)
+						return
+					}
 
 					// Also set the session cookie on the primary domain so
 					// the user stays logged in here too.
@@ -568,10 +578,15 @@ func (s *Service) HandleRelay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	relay, err := s.RelayStore.Redeem(code)
-	if err != nil {
+	relay, err := s.RelayStore.Redeem(r.Context(), code)
+	if errors.Is(err, errRelayCodeInvalid) {
 		// Code is invalid, expired, or already consumed.
 		http.Redirect(w, r, "/login?error=relay_expired", http.StatusTemporaryRedirect)
+		return
+	}
+	if err != nil {
+		s.logger.Error("relay: failed to redeem relay code", slog.String("error", err.Error()))
+		http.Error(w, "failed to redeem auth relay", http.StatusInternalServerError)
 		return
 	}
 

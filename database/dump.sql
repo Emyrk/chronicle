@@ -1338,6 +1338,18 @@ CREATE VIEW log_instances_guild AS
      LEFT JOIN guilds g ON ((li.guild_id = g.id)))
      LEFT JOIN wow_log_groups wlg ON ((wlg.id = li.log_group_id)));
 
+CREATE TABLE oauth_relay_codes (
+    code_hash bytea NOT NULL,
+    user_auth_session_id uuid NOT NULL,
+    provider text NOT NULL,
+    tenant_slug text NOT NULL,
+    tenant_name text NOT NULL,
+    redirect_path text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT oauth_relay_codes_code_hash_length CHECK ((octet_length(code_hash) = 32))
+);
+
 CREATE TABLE parse_score_receipts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
@@ -2355,6 +2367,9 @@ ALTER TABLE ONLY log_instance_youtube_timestamped
 ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY oauth_relay_codes
+    ADD CONSTRAINT oauth_relay_codes_pkey PRIMARY KEY (code_hash);
+
 ALTER TABLE ONLY parse_score_receipts
     ADD CONSTRAINT parse_score_receipts_pkey PRIMARY KEY (id);
 
@@ -2762,6 +2777,8 @@ CREATE UNIQUE INDEX log_instance_youtube_timestamped_slug_idx ON log_instance_yo
 
 CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
 
+CREATE INDEX oauth_relay_codes_expires_at_idx ON oauth_relay_codes USING btree (expires_at);
+
 CREATE INDEX raid_compositions_user_tenant_idx ON raid_compositions USING btree (user_id, tenant_id);
 
 CREATE INDEX ranking_runs_instance_filter_idx ON ranking_runs USING btree (instance_name, difficulty_name, max_players, realm_id);
@@ -3083,6 +3100,9 @@ ALTER TABLE ONLY log_instances
 
 ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY oauth_relay_codes
+    ADD CONSTRAINT oauth_relay_codes_user_auth_session_id_fkey FOREIGN KEY (user_auth_session_id) REFERENCES user_auth_session(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY parse_score_receipts
     ADD CONSTRAINT parse_score_receipts_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;

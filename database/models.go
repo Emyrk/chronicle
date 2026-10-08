@@ -1789,6 +1789,17 @@ type LogInstancesGuild struct {
 	Flavor                  []string           `db:"flavor" json:"flavor"`
 }
 
+type OauthRelayCode struct {
+	CodeHash          []byte             `db:"code_hash" json:"code_hash"`
+	UserAuthSessionID uuid.UUID          `db:"user_auth_session_id" json:"user_auth_session_id"`
+	Provider          string             `db:"provider" json:"provider"`
+	TenantSlug        string             `db:"tenant_slug" json:"tenant_slug"`
+	TenantName        string             `db:"tenant_name" json:"tenant_name"`
+	RedirectPath      string             `db:"redirect_path" json:"redirect_path"`
+	ExpiresAt         pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type ParseScoreReceipt struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
 	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
