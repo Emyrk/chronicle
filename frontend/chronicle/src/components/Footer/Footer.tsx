@@ -58,9 +58,10 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/blog" className="hover:text-foreground transition-colors">
+                {/* The blog is a separately hydrated app, so it requires a document navigation. */}
+                <a href="/blog" className="hover:text-foreground transition-colors">
                   What's New
-                </Link>
+                </a>
               </li>
               <li>
                 <Link to="/technical" className="hover:text-foreground transition-colors">
