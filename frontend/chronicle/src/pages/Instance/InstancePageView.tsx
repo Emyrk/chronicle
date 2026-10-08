@@ -70,7 +70,7 @@ import {
   DEFAULT_INSTANCE_PANEL_OPTIONS,
   DEFAULT_INSTANCE_PANEL_FILTERS,
 } from "./viewDefaults";
-import { PRESET_LAYOUTS, PRESET_LAYOUTS_BY_ID, DEFAULT_PRESET_ID } from "./presetLayouts";
+import { getAvailablePresetLayouts, PRESET_LAYOUTS_BY_ID, DEFAULT_PRESET_ID } from "./presetLayouts";
 import { openLayoutPopup, syncPopupAppearance, type LayoutPopup } from "./EventsPanels/panelPopup";
 
 // ============================================================================
@@ -1108,6 +1108,7 @@ function PoppedOutLayoutContent({
   layouts,
   onExplainerClick,
 }: PoppedOutLayoutContentProps) {
+  const availablePresetLayouts = getAvailablePresetLayouts(context.instance.capabilities ?? []);
   const [layoutItems, setLayoutItems] = useState(() => session.snapshot.layoutItems);
   const [panelTypesById, setPanelTypesById] = useState(() => session.snapshot.panelTypesById);
   const [panelOptionsById, setPanelOptionsById] = useState(() => session.snapshot.panelOptionsById);
@@ -1216,7 +1217,7 @@ function PoppedOutLayoutContent({
       <div className="min-h-screen bg-background text-foreground p-3">
         <div className="sticky top-0 z-40 mb-3 border-b border-border bg-background/95 pb-2 pt-1 backdrop-blur">
           <div className="flex gap-1 overflow-x-auto styled-scrollbar">
-            {PRESET_LAYOUTS.map((preset) => (
+            {availablePresetLayouts.map((preset) => (
               <button
                 key={preset.id}
                 type="button"
@@ -1326,6 +1327,7 @@ function EncounterDetail({
   actionBarSlots,
   layouts,
 }: EncounterDetailProps) {
+  const availablePresetLayouts = getAvailablePresetLayouts(instance.capabilities ?? []);
   const isSingle = encounters.length === 1;
   const encounter = encounters[0];
 
@@ -1881,7 +1883,7 @@ function EncounterDetail({
 
       {/* Preset layout tabs */}
       <div className="flex gap-1 overflow-x-auto mb-3 pb-1 pt-1 styled-scrollbar">
-        {PRESET_LAYOUTS.map((preset) => (
+        {availablePresetLayouts.map((preset) => (
           <button
             key={preset.id}
             type="button"
