@@ -99,6 +99,7 @@ type sqlcQuerier interface {
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
 	DeleteEmptyCooldownOverrides(ctx context.Context, datasetID uuid.UUID) error
 	DeleteExpiredGuildResourceVisitors(ctx context.Context) error
+	DeleteExpiredOAuthRelayCodes(ctx context.Context) (int64, error)
 	DeleteGearList(ctx context.Context, arg DeleteGearListParams) (int64, error)
 	DeleteGearProgression(ctx context.Context, arg DeleteGearProgressionParams) (int64, error)
 	DeleteGearStatWeight(ctx context.Context, arg DeleteGearStatWeightParams) (int64, error)
@@ -509,6 +510,7 @@ type sqlcQuerier interface {
 	InsertLogInstanceEvents(ctx context.Context, arg []InsertLogInstanceEventsParams) *InsertLogInstanceEventsBatchResults
 	// Modification Requests
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)
+	InsertOAuthRelayCode(ctx context.Context, arg InsertOAuthRelayCodeParams) error
 	// Insert a successful computation receipt. Receipt existence = fully committed success.
 	// On conflict (same tenant+instance+snapshot+lookback+policy+query), update counts
 	// to reflect re-computation (idempotent upsert).
@@ -760,6 +762,7 @@ type sqlcQuerier interface {
 	RecordAuthzMigration(ctx context.Context, version int32) error
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
+	RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error)
 	// Resolves the dataset for a realm. Precedence:
 	//   server.default_dataset_id > tenant.default_dataset_id.
 	// The result is NULL when neither is set (and when the realm is unknown the

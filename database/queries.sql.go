@@ -7964,6 +7964,117 @@ func (q *sqlQuerier) GetInstanceLoot(ctx context.Context, arg GetInstanceLootPar
 	return items, nil
 }
 
+const deleteExpiredOAuthRelayCodes = `-- name: DeleteExpiredOAuthRelayCodes :execrows
+DELETE FROM oauth_relay_codes
+WHERE expires_at <= NOW()
+`
+
+func (q *sqlQuerier) DeleteExpiredOAuthRelayCodes(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredOAuthRelayCodes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertOAuthRelayCode = `-- name: InsertOAuthRelayCode :exec
+INSERT INTO oauth_relay_codes (
+  code_hash,
+  user_auth_session_id,
+  provider,
+  tenant_slug,
+  tenant_name,
+  redirect_path,
+  expires_at
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7
+)
+`
+
+type InsertOAuthRelayCodeParams struct {
+	CodeHash          []byte             `db:"code_hash" json:"code_hash"`
+	UserAuthSessionID uuid.UUID          `db:"user_auth_session_id" json:"user_auth_session_id"`
+	Provider          string             `db:"provider" json:"provider"`
+	TenantSlug        string             `db:"tenant_slug" json:"tenant_slug"`
+	TenantName        string             `db:"tenant_name" json:"tenant_name"`
+	RedirectPath      string             `db:"redirect_path" json:"redirect_path"`
+	ExpiresAt         pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+func (q *sqlQuerier) InsertOAuthRelayCode(ctx context.Context, arg InsertOAuthRelayCodeParams) error {
+	_, err := q.db.Exec(ctx, insertOAuthRelayCode,
+		arg.CodeHash,
+		arg.UserAuthSessionID,
+		arg.Provider,
+		arg.TenantSlug,
+		arg.TenantName,
+		arg.RedirectPath,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const redeemOAuthRelayCode = `-- name: RedeemOAuthRelayCode :one
+WITH redeemed AS (
+  DELETE FROM oauth_relay_codes
+  WHERE code_hash = $1
+  RETURNING
+    user_auth_session_id,
+    provider,
+    tenant_slug,
+    tenant_name,
+    redirect_path,
+    expires_at
+)
+SELECT
+  user_auth_session.id, user_auth_session.user_auth_id, user_auth_session.user_id, user_auth_session.access_token, user_auth_session.access_token_secret, user_auth_session.refresh_token, user_auth_session.expires_at, user_auth_session.created_at, user_auth_session.updated_at, user_auth_session.jwt_id,
+  redeemed.provider,
+  redeemed.tenant_slug,
+  redeemed.tenant_name,
+  redeemed.redirect_path,
+  redeemed.expires_at AS relay_expires_at
+FROM redeemed
+JOIN user_auth_session ON user_auth_session.id = redeemed.user_auth_session_id
+`
+
+type RedeemOAuthRelayCodeRow struct {
+	UserAuthSession UserAuthSession    `db:"user_auth_session" json:"user_auth_session"`
+	Provider        string             `db:"provider" json:"provider"`
+	TenantSlug      string             `db:"tenant_slug" json:"tenant_slug"`
+	TenantName      string             `db:"tenant_name" json:"tenant_name"`
+	RedirectPath    string             `db:"redirect_path" json:"redirect_path"`
+	RelayExpiresAt  pgtype.Timestamptz `db:"relay_expires_at" json:"relay_expires_at"`
+}
+
+func (q *sqlQuerier) RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error) {
+	row := q.db.QueryRow(ctx, redeemOAuthRelayCode, codeHash)
+	var i RedeemOAuthRelayCodeRow
+	err := row.Scan(
+		&i.UserAuthSession.ID,
+		&i.UserAuthSession.UserAuthID,
+		&i.UserAuthSession.UserID,
+		&i.UserAuthSession.AccessToken,
+		&i.UserAuthSession.AccessTokenSecret,
+		&i.UserAuthSession.RefreshToken,
+		&i.UserAuthSession.ExpiresAt,
+		&i.UserAuthSession.CreatedAt,
+		&i.UserAuthSession.UpdatedAt,
+		&i.UserAuthSession.JwtID,
+		&i.Provider,
+		&i.TenantSlug,
+		&i.TenantName,
+		&i.RedirectPath,
+		&i.RelayExpiresAt,
+	)
+	return i, err
+}
+
 const getInstanceOverviewMetrics = `-- name: GetInstanceOverviewMetrics :one
 SELECT instance_id, requirements_complete, player_deaths, wipe_count, top_incoming_damage_abilities, encounter_span_duration_ms, total_combat_duration_ms, total_boss_duration_ms, metrics_version, created_at, updated_at
 FROM instance_overview_metrics

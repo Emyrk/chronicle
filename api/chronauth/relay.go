@@ -1,13 +1,16 @@
 package chronauth
 
 import (
+	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"sync"
+	"fmt"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/jackc/pgx/v5"
 )
 
 // TenantInfo is a lightweight struct carrying tenant metadata through the
@@ -28,81 +31,68 @@ type RelayCode struct {
 	ExpiresAt    time.Time
 }
 
-// RelayCodeStore is an in-memory, one-time-use code store for cross-subdomain
-// auth relay. Codes are short-lived (60s) and consumed on first use.
+// RelayCodeStore persists one-time cross-subdomain auth relay codes in
+// PostgreSQL so any backend node can redeem them. Only a SHA-256 hash of each
+// short-lived code is stored.
 type RelayCodeStore struct {
-	mu    sync.Mutex
-	codes map[string]*RelayCode
-	done  chan struct{}
+	db database.StoreQueries
 }
 
-// NewRelayCodeStore creates a store and starts a background cleanup goroutine.
-func NewRelayCodeStore() *RelayCodeStore {
-	s := &RelayCodeStore{
-		codes: make(map[string]*RelayCode),
-		done:  make(chan struct{}),
+func NewRelayCodeStore(db database.StoreQueries) *RelayCodeStore {
+	return &RelayCodeStore{db: db}
+}
+
+// Generate creates and persists a one-time relay code. Expired rows are cleaned
+// opportunistically whenever a new code is issued.
+func (s *RelayCodeStore) Generate(ctx context.Context, relay *RelayCode) (string, error) {
+	if _, err := s.db.DeleteExpiredOAuthRelayCodes(ctx); err != nil {
+		return "", fmt.Errorf("delete expired OAuth relay codes: %w", err)
 	}
-	go s.cleanup()
-	return s
-}
 
-// Generate creates a one-time relay code (32 random bytes, hex-encoded) with the
-// given payload. Returns the hex code string.
-func (s *RelayCodeStore) Generate(relay *RelayCode) string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		panic("crypto/rand failed: " + err.Error())
+		return "", fmt.Errorf("generate OAuth relay code: %w", err)
 	}
 	code := hex.EncodeToString(b)
+	hash := sha256.Sum256([]byte(code))
 
-	s.mu.Lock()
-	s.codes[code] = relay
-	s.mu.Unlock()
-
-	return code
+	err := s.db.InsertOAuthRelayCode(ctx, database.InsertOAuthRelayCodeParams{
+		CodeHash:          hash[:],
+		UserAuthSessionID: relay.Session.ID,
+		Provider:          relay.Provider,
+		TenantSlug:        relay.TenantSlug,
+		TenantName:        relay.TenantName,
+		RedirectPath:      relay.RedirectPath,
+		ExpiresAt:         database.Timestamptz(relay.ExpiresAt),
+	})
+	if err != nil {
+		return "", fmt.Errorf("insert OAuth relay code: %w", err)
+	}
+	return code, nil
 }
 
 var errRelayCodeInvalid = errors.New("relay code not found or expired")
 
-// Redeem atomically retrieves and deletes a relay code. Returns an error if the
-// code doesn't exist or has expired.
-func (s *RelayCodeStore) Redeem(code string) (*RelayCode, error) {
-	s.mu.Lock()
-	relay, ok := s.codes[code]
-	if ok {
-		delete(s.codes, code)
-	}
-	s.mu.Unlock()
-
-	if !ok {
+// Redeem atomically deletes and returns a relay code. The DELETE ... RETURNING
+// query guarantees that concurrent requests across nodes have one winner.
+func (s *RelayCodeStore) Redeem(ctx context.Context, code string) (*RelayCode, error) {
+	hash := sha256.Sum256([]byte(code))
+	redeemed, err := s.db.RedeemOAuthRelayCode(ctx, hash[:])
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errRelayCodeInvalid
 	}
-	if time.Now().After(relay.ExpiresAt) {
+	if err != nil {
+		return nil, fmt.Errorf("redeem OAuth relay code: %w", err)
+	}
+	if !redeemed.RelayExpiresAt.Valid || time.Now().After(redeemed.RelayExpiresAt.Time) {
 		return nil, errRelayCodeInvalid
 	}
-	return relay, nil
-}
-
-// Close stops the background cleanup goroutine.
-func (s *RelayCodeStore) Close() {
-	close(s.done)
-}
-
-func (s *RelayCodeStore) cleanup() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-s.done:
-			return
-		case now := <-ticker.C:
-			s.mu.Lock()
-			for code, relay := range s.codes {
-				if now.After(relay.ExpiresAt) {
-					delete(s.codes, code)
-				}
-			}
-			s.mu.Unlock()
-		}
-	}
+	return &RelayCode{
+		Session:      redeemed.UserAuthSession,
+		Provider:     redeemed.Provider,
+		TenantSlug:   redeemed.TenantSlug,
+		TenantName:   redeemed.TenantName,
+		RedirectPath: redeemed.RedirectPath,
+		ExpiresAt:    redeemed.RelayExpiresAt.Time,
+	}, nil
 }

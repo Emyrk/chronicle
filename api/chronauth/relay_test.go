@@ -4,25 +4,62 @@ import (
 	"log/slog"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRelayCodeStore_GenerateAndRedeem(t *testing.T) {
+func newRelayTestSession(t *testing.T) (database.Store, database.UserAuthSession) {
+	t.Helper()
+
+	ctx := t.Context()
+	store, _ := dbtestutil.NewDB(t)
+	now := time.Now()
+	user, err := store.InsertUser(ctx, database.InsertUserParams{
+		ID:        uuid.New(),
+		Username:  "relay-" + uuid.NewString(),
+		Email:     uuid.NewString() + "@example.com",
+		CreatedAt: database.Timestamptz(now),
+		UpdatedAt: database.Timestamptz(now),
+	})
+	require.NoError(t, err)
+	linked, err := store.InsertUserAuth(ctx, database.InsertUserAuthParams{
+		ID:        uuid.New(),
+		LinkedID:  uuid.NewString(),
+		UserID:    user.ID,
+		Provider:  "discord",
+		CreatedAt: database.Timestamptz(now),
+		UpdatedAt: database.Timestamptz(now),
+	})
+	require.NoError(t, err)
+	session, err := store.InsertUserAuthSession(ctx, database.InsertUserAuthSessionParams{
+		ID:         uuid.New(),
+		UserID:     user.ID,
+		UserAuthID: linked.ID,
+		ExpiresAt:  database.Timestamptz(now.Add(time.Hour)),
+		CreatedAt:  database.Timestamptz(now),
+		UpdatedAt:  database.Timestamptz(now),
+		JwtID:      uuid.New(),
+	})
+	require.NoError(t, err)
+	return store, session
+}
+
+func TestRelayCodeStore_GenerateAndRedeemAcrossStores(t *testing.T) {
 	t.Parallel()
-	store := NewRelayCodeStore()
-	defer store.Close()
+	ctx := t.Context()
+	db, session := newRelayTestSession(t)
+	issuer := NewRelayCodeStore(db)
+	redeemer := NewRelayCodeStore(db)
 
 	relay := &RelayCode{
-		Session: database.UserAuthSession{
-			ID:     uuid.New(),
-			UserID: uuid.New(),
-		},
+		Session:      session,
 		Provider:     "discord",
 		TenantSlug:   "epoch",
 		TenantName:   "Epoch",
@@ -30,11 +67,12 @@ func TestRelayCodeStore_GenerateAndRedeem(t *testing.T) {
 		ExpiresAt:    time.Now().Add(60 * time.Second),
 	}
 
-	code := store.Generate(relay)
+	code, err := issuer.Generate(ctx, relay)
+	require.NoError(t, err)
 	require.NotEmpty(t, code)
 	assert.Len(t, code, 64) // 32 bytes = 64 hex chars
 
-	got, err := store.Redeem(code)
+	got, err := redeemer.Redeem(ctx, code)
 	require.NoError(t, err)
 	assert.Equal(t, relay.Session.ID, got.Session.ID)
 	assert.Equal(t, relay.Provider, got.Provider)
@@ -42,75 +80,112 @@ func TestRelayCodeStore_GenerateAndRedeem(t *testing.T) {
 	assert.Equal(t, relay.RedirectPath, got.RedirectPath)
 }
 
-func TestRelayCodeStore_RedeemOnce(t *testing.T) {
+func TestRelayCodeStore_RedeemOnceAcrossStores(t *testing.T) {
 	t.Parallel()
-	store := NewRelayCodeStore()
-	defer store.Close()
+	ctx := t.Context()
+	db, session := newRelayTestSession(t)
+	issuer := NewRelayCodeStore(db)
+	redeemer := NewRelayCodeStore(db)
 
-	code := store.Generate(&RelayCode{
+	code, err := issuer.Generate(ctx, &RelayCode{
+		Session:   session,
 		Provider:  "discord",
 		ExpiresAt: time.Now().Add(60 * time.Second),
 	})
-
-	_, err := store.Redeem(code)
 	require.NoError(t, err)
 
-	// Second redeem must fail.
-	_, err = store.Redeem(code)
-	require.Error(t, err)
+	_, err = redeemer.Redeem(ctx, code)
+	require.NoError(t, err)
+
+	_, err = issuer.Redeem(ctx, code)
+	require.ErrorIs(t, err, errRelayCodeInvalid)
 }
 
 func TestRelayCodeStore_Expired(t *testing.T) {
 	t.Parallel()
-	store := NewRelayCodeStore()
-	defer store.Close()
+	ctx := t.Context()
+	db, session := newRelayTestSession(t)
+	store := NewRelayCodeStore(db)
 
-	code := store.Generate(&RelayCode{
+	code, err := store.Generate(ctx, &RelayCode{
+		Session:   session,
 		Provider:  "discord",
-		ExpiresAt: time.Now().Add(-1 * time.Second), // Already expired
+		ExpiresAt: time.Now().Add(-time.Second),
 	})
+	require.NoError(t, err)
 
-	_, err := store.Redeem(code)
-	require.Error(t, err)
+	_, err = store.Redeem(ctx, code)
+	require.ErrorIs(t, err, errRelayCodeInvalid)
+}
+
+func TestRelayCodeStore_GenerateCleansExpiredCodes(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	db, session := newRelayTestSession(t)
+	store := NewRelayCodeStore(db)
+
+	_, err := store.Generate(ctx, &RelayCode{
+		Session:   session,
+		Provider:  "discord",
+		ExpiresAt: time.Now().Add(-time.Second),
+	})
+	require.NoError(t, err)
+	_, err = store.Generate(ctx, &RelayCode{
+		Session:   session,
+		Provider:  "discord",
+		ExpiresAt: time.Now().Add(time.Minute),
+	})
+	require.NoError(t, err)
+
+	deleted, err := db.DeleteExpiredOAuthRelayCodes(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, deleted)
 }
 
 func TestRelayCodeStore_NotFound(t *testing.T) {
 	t.Parallel()
-	store := NewRelayCodeStore()
-	defer store.Close()
+	ctx := t.Context()
+	db, _ := newRelayTestSession(t)
+	store := NewRelayCodeStore(db)
 
-	_, err := store.Redeem("nonexistent")
-	require.Error(t, err)
+	_, err := store.Redeem(ctx, "nonexistent")
+	require.ErrorIs(t, err, errRelayCodeInvalid)
 }
 
-func TestRelayCodeStore_ConcurrentAccess(t *testing.T) {
+func TestRelayCodeStore_ConcurrentRedemptionHasOneWinner(t *testing.T) {
 	t.Parallel()
-	store := NewRelayCodeStore()
-	defer store.Close()
+	ctx := t.Context()
+	db, session := newRelayTestSession(t)
+	issuer := NewRelayCodeStore(db)
+	code, err := issuer.Generate(ctx, &RelayCode{
+		Session:   session,
+		Provider:  "discord",
+		ExpiresAt: time.Now().Add(time.Minute),
+	})
+	require.NoError(t, err)
 
-	const n = 100
-	codes := make([]string, n)
-	for i := 0; i < n; i++ {
-		codes[i] = store.Generate(&RelayCode{
-			Provider:  "discord",
-			ExpiresAt: time.Now().Add(60 * time.Second),
-		})
-	}
-
-	// Redeem all codes concurrently.
+	const attempts = 20
+	var successes atomic.Int32
 	var wg sync.WaitGroup
-	results := make([]error, n)
-	for i := 0; i < n; i++ {
+	errs := make([]error, attempts)
+	for i := range attempts {
 		wg.Add(1)
-		go func(idx int) {
+		go func() {
 			defer wg.Done()
-			_, results[idx] = store.Redeem(codes[idx])
-		}(i)
+			store := NewRelayCodeStore(db)
+			_, errs[i] = store.Redeem(ctx, code)
+			if errs[i] == nil {
+				successes.Add(1)
+			}
+		}()
 	}
 	wg.Wait()
 
-	for i, err := range results {
-		assert.NoError(t, err, "code %d should redeem successfully", i)
+	assert.EqualValues(t, 1, successes.Load())
+	for _, err := range errs {
+		if err != nil {
+			assert.ErrorIs(t, err, errRelayCodeInvalid)
+		}
 	}
 }
 
