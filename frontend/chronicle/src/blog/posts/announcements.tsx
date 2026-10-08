@@ -1,3 +1,4 @@
+import { AbsorbAttributionDetails } from "@/pages/ClassDetails/AbsorbAttributionDetails";
 import type { BlogPostDefinition } from "../blogRegistry";
 import { ShortPost } from "./ShortPost";
 
@@ -12,11 +13,19 @@ export function AbsorbAttributionPost({ post }: PostProps) {
         Chronicle now <strong>guesses</strong> absorption attribution from the logs. This value is counted as
         "Effective Healing".
       </p>
-      <p>Only new logs will have this. If you have old logs you want re-run, you can request it.</p>
-      <p>
-        If you see any issues, please report them. WotLK shields look incredibly strong from my small sample. I am
-        skeptical, but also do not have much experience with Power Word: Shield in WotLK.
-      </p>
+      <figure>
+        <img
+          src="/c/images/blog/absorbs.webp"
+          alt="Healing Done breakdown for a priest showing Power Word: Shield credited with 1,104 absorbed healing"
+          width={614}
+          height={316}
+          className="rounded-md border border-border"
+        />
+        <figcaption>Absorbs appear in their own column of the Healing Done breakdown.</figcaption>
+      </figure>
+      <div className="not-prose">
+        <AbsorbAttributionDetails />
+      </div>
     </ShortPost>
   );
 }
