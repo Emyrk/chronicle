@@ -110,7 +110,7 @@ function useRecentUploads() {
   return useQuery({
     queryKey: ["home", "recent-uploads"],
     queryFn: () =>
-      fetchJSON<RecentInstancesResponse>("/api/v1/raidlogs/recent?limit=12"),
+      fetchJSON<RecentInstancesResponse>("/api/v1/raidlogs/recent?days=60&limit=12"),
     staleTime: 60 * 1000,
   });
 }
