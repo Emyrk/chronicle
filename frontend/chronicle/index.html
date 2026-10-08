@@ -10,7 +10,16 @@
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
 
-      gtag('config', 'G-G0Q1B9GRC0');
+      const query = new URLSearchParams(window.location.search);
+      const chronicleAttribution = {};
+      ['chr_src', 'chr_pos', 'chr_cmp'].forEach((parameter) => {
+        const value = query.get(parameter);
+        if (value) {
+          chronicleAttribution[parameter] = value;
+        }
+      });
+
+      gtag('config', 'G-G0Q1B9GRC0', chronicleAttribution);
     </script>
 
 
