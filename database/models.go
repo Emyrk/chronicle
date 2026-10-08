@@ -2292,6 +2292,12 @@ type UserTrackedLayout struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type UserWhatsNewState struct {
+	UserID uuid.UUID          `db:"user_id" json:"user_id"`
+	SeenID string             `db:"seen_id" json:"seen_id"`
+	SeenAt pgtype.Timestamptz `db:"seen_at" json:"seen_at"`
+}
+
 type WoWLogGroup struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
 	Owner         uuid.UUID          `db:"owner" json:"owner"`

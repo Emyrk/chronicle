@@ -37,6 +37,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -103,6 +104,9 @@ type Options struct {
 
 	// CacheSvc is the centralized cache service for admin introspection.
 	CacheSvc *servicecache.Service
+
+	// WhatsNew tracks whether authenticated users have opened the current What's New revision.
+	WhatsNew *servicewhatsnew.Service
 }
 
 type API struct {
@@ -139,13 +143,14 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	}
 
 	service, err := chronauth.New(ctx, opts.Logger, chronauth.Options{
-		AccessURL:     opts.AccessURL,
-		DevServer:     opts.DevOAuth,
-		Discord:       opts.Discord,
-		Bot:           opts.Bot,
-		Zed:           opts.Zed,
-		Mailer:        opts.Mailer,
-		TenantChecker: tenantChecker,
+		AccessURL:         opts.AccessURL,
+		DevServer:         opts.DevOAuth,
+		Discord:           opts.Discord,
+		Bot:               opts.Bot,
+		Zed:               opts.Zed,
+		Mailer:            opts.Mailer,
+		WhatsNewCurrentID: servicewhatsnew.CurrentID(),
+		TenantChecker:     tenantChecker,
 		Sessions: chronauth.SessionOptions{
 			SecretPEM: opts.SecretPEM,
 			Registry:  opts.Registry,
@@ -220,6 +225,8 @@ func (api *API) Routes() chi.Router {
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
+				r.Get("/me/whats-new", api.GetMyWhatsNewStatus)
+				r.Put("/me/whats-new/read", api.MarkMyWhatsNewRead)
 
 				r.Get("/me/favorites", api.ListMyFavorites)
 				r.Put("/me/favorites/guilds/{guildID}", api.AddMyFavoriteGuild)

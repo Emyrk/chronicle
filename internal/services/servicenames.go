@@ -26,4 +26,5 @@ const (
 	ServiceDataset     = "dataset"
 	ServiceGitHub      = "github"
 	ServiceCache       = "cache"
+	ServiceWhatsNew    = "whats-new"
 )

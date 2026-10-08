@@ -37,6 +37,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
 	"github.com/Emyrk/chronicle/internal/services/zugzuglink"
 
@@ -117,6 +118,7 @@ func (s *Service) DependsOn() []string {
 		serviceaccessurl.OnAccessURL(),
 		servicetenant.OnTenant(),
 		serviceapplication.OnApplication(),
+		servicewhatsnew.OnWhatsNew(),
 		servicedataset.OnDataset(),
 		servicegithub.OnGitHub(),
 		serviceexternalapi.OnExternalAPI(),
@@ -242,6 +244,7 @@ func (s *Service) Start(ctx context.Context) error {
 		Application:           appSvc,
 		Dataset:               datasetSvc,
 		CacheSvc:              servicecache.CacheService(s.broker),
+		WhatsNew:              servicewhatsnew.WhatsNew(s.broker),
 	})
 
 	if err != nil {

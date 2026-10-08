@@ -1,4 +1,5 @@
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
+import type { WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
   recordPublicNoticeResult,
@@ -176,6 +177,85 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
     },
     retry: false,
     ...options,
+  });
+}
+
+const WHATS_NEW_CACHE_MS = 24 * 60 * 60 * 1000;
+
+interface CachedWhatsNewStatus {
+  status: WhatsNewStatus;
+  expiresAt: number;
+}
+
+function whatsNewCacheKey(userID: string): string {
+  return `chronicle:whats-new:${userID}`;
+}
+
+function readWhatsNewCache(userID: string): WhatsNewStatus | null {
+  if (!userID || typeof window === "undefined") return null;
+  try {
+    const cached = JSON.parse(window.localStorage.getItem(whatsNewCacheKey(userID)) ?? "null") as CachedWhatsNewStatus | null;
+    return cached && cached.expiresAt > Date.now() ? cached.status : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeWhatsNewCache(userID: string, status: WhatsNewStatus) {
+  if (!userID || typeof window === "undefined") return;
+  window.localStorage.setItem(whatsNewCacheKey(userID), JSON.stringify({
+    status,
+    expiresAt: Date.now() + WHATS_NEW_CACHE_MS,
+  } satisfies CachedWhatsNewStatus));
+}
+
+export function useWhatsNewStatus(userID: string, enabled = true) {
+  return useQuery({
+    queryKey: ["whats-new", userID],
+    queryFn: async () => {
+      const cached = readWhatsNewCache(userID);
+      if (cached) return cached;
+      const response = await fetch("/api/v1/me/whats-new");
+      if (!response.ok) throw new Error("Failed to fetch What's New status");
+      const status = await response.json() as WhatsNewStatus;
+      writeWhatsNewCache(userID, status);
+      return status;
+    },
+    enabled: enabled && !!userID,
+    staleTime: WHATS_NEW_CACHE_MS,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
+
+export function useMarkWhatsNewRead(userID: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/v1/me/whats-new/read", { method: "PUT" });
+      if (!response.ok) throw new Error("Failed to mark What's New as read");
+      return response.json() as Promise<WhatsNewStatus>;
+    },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["whats-new", userID] });
+      const previous = queryClient.getQueryData<WhatsNewStatus>(["whats-new", userID]);
+      if (previous) {
+        const next = { ...previous, has_unread: false };
+        queryClient.setQueryData(["whats-new", userID], next);
+        writeWhatsNewCache(userID, next);
+      }
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["whats-new", userID], context.previous);
+        writeWhatsNewCache(userID, context.previous);
+      }
+    },
+    onSuccess: (status) => {
+      queryClient.setQueryData(["whats-new", userID], status);
+      writeWhatsNewCache(userID, status);
+    },
   });
 }
 

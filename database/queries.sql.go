@@ -20725,6 +20725,59 @@ func (q *sqlQuerier) ListVulnerabilitySpellsByDataset(ctx context.Context, arg L
 	return items, nil
 }
 
+const getUserWhatsNewState = `-- name: GetUserWhatsNewState :one
+SELECT user_id, seen_id, seen_at
+FROM user_whats_new_state
+WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetUserWhatsNewState(ctx context.Context, userID uuid.UUID) (UserWhatsNewState, error) {
+	row := q.db.QueryRow(ctx, getUserWhatsNewState, userID)
+	var i UserWhatsNewState
+	err := row.Scan(&i.UserID, &i.SeenID, &i.SeenAt)
+	return i, err
+}
+
+const initializeUserWhatsNewState = `-- name: InitializeUserWhatsNewState :one
+INSERT INTO user_whats_new_state (user_id, seen_id)
+VALUES ($1, $2)
+ON CONFLICT (user_id) DO NOTHING
+RETURNING user_id, seen_id, seen_at
+`
+
+type InitializeUserWhatsNewStateParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	SeenID string    `db:"seen_id" json:"seen_id"`
+}
+
+func (q *sqlQuerier) InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error) {
+	row := q.db.QueryRow(ctx, initializeUserWhatsNewState, arg.UserID, arg.SeenID)
+	var i UserWhatsNewState
+	err := row.Scan(&i.UserID, &i.SeenID, &i.SeenAt)
+	return i, err
+}
+
+const markWhatsNewRead = `-- name: MarkWhatsNewRead :one
+INSERT INTO user_whats_new_state (user_id, seen_id)
+VALUES ($1, $2)
+ON CONFLICT (user_id) DO UPDATE
+SET seen_id = EXCLUDED.seen_id,
+    seen_at = NOW()
+RETURNING user_id, seen_id, seen_at
+`
+
+type MarkWhatsNewReadParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	SeenID string    `db:"seen_id" json:"seen_id"`
+}
+
+func (q *sqlQuerier) MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error) {
+	row := q.db.QueryRow(ctx, markWhatsNewRead, arg.UserID, arg.SeenID)
+	var i UserWhatsNewState
+	err := row.Scan(&i.UserID, &i.SeenID, &i.SeenAt)
+	return i, err
+}
+
 const getCreatureTemplatesByEntries = `-- name: GetCreatureTemplatesByEntries :many
 SELECT entry, display_id1, display_id2, display_id3, display_id4, mount_display_id, name, subname, level_min, level_max, health_min, health_max, mana_min, mana_max, armor, dmg_min, dmg_max, dmg_school, attack_power, dmg_multiplier, base_attack_time, ranged_attack_time, unit_class, unit_flags, ranged_dmg_min, ranged_dmg_max, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, mechanic_immune_mask, school_immune_mask, immunity_flags, dataset_id FROM world_creature_template WHERE dataset_id = $1 AND entry = ANY($2::int[])
 `
