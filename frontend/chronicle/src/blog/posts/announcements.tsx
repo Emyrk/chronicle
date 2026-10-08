@@ -169,7 +169,10 @@ export function PhaseSelectionsPost({ post }: PostProps) {
 export function GearProgressionPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
-      <p>First release of a way to share gear lists via Chronicle.</p>
+      <p>
+        First release of a way to share gear lists via Chronicle. Browse and build lists on the{" "}
+        <a href="/gear">gear page</a>.
+      </p>
       <p>
         <a href="https://chromie.chronicleclassic.com/gear/progression/1842f136-7e45-4609-87b7-4d2f8ebb573b?profile=c7b747cf-e5b9-4ecb-97db-1b57e45cdb9e&char=ChromieCraft%3APeepovanish">
           Here is an example
