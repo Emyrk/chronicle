@@ -50,6 +50,18 @@ CHRONICLE_ADS_TXT_URL=https://chronicleclassic.com/ads.txt
 
 Chronicle returns `404 Not Found` for `/ads.txt` when the option is unset, so self-hosted deployments do not advertise Chronicle's seller account by default.
 
+### Google Analytics
+
+The landing site always sends page views to Chronicle's GA4 property and includes `chr_src`, `chr_pos`, and `chr_cmp` when present in the URL.
+
+Chronicle application deployments are opt-in instead. Official deployments enable the same property with:
+
+```bash
+CHRONICLE_GA_MEASUREMENT_ID=G-G0Q1B9GRC0
+```
+
+When the variable is unset, the application does not load Google Analytics. Self-hosted deployments therefore remain untracked by default.
+
 ### DNS setup
 
 The apex `chronicleclassic.com` points to GitHub Pages (A records to GitHub's IPs):

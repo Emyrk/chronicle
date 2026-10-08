@@ -3,8 +3,9 @@
   <head>
     <!-- Allows live tweaking -->
     <script src="https://tweakcn.com/live-preview.min.js"></script>
+    <!-- {{ if .GA4ID }} -->
     <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-G0Q1B9GRC0"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ .GA4ID }}"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
@@ -19,8 +20,9 @@
         }
       });
 
-      gtag('config', 'G-G0Q1B9GRC0', chronicleAttribution);
+      gtag('config', '{{ .GA4ID }}', chronicleAttribution);
     </script>
+    <!-- {{ end }} -->
 
 
     <!-- {{ if .AdSenseClientID }} -->

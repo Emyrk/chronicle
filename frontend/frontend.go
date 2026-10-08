@@ -52,6 +52,7 @@ type HTMLBranding struct {
 	Favicon         string // Favicon URL. Empty = default /c/chronicle/favicon.ico.
 	ThemeCSS        string // Pre-built CSS variable overrides for tenant theming.
 	AdSenseClientID string // Public publisher ID for verification metadata; empty disables it.
+	GA4ID           string // GA4 measurement ID; empty disables analytics.
 }
 
 // BrandingResolver is an optional callback that returns per-request branding
@@ -199,6 +200,7 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			state.Favicon = b.Favicon
 			state.ThemeCSS = b.ThemeCSS
 			state.AdSenseClientID = b.AdSenseClientID
+			state.GA4ID = b.GA4ID
 		}
 	}
 
@@ -319,6 +321,7 @@ type htmlState struct {
 	Favicon         string
 	ThemeCSS        string
 	AdSenseClientID string
+	GA4ID           string
 }
 
 func (s *htmlState) escapeHTMLAttributes() {

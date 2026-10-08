@@ -74,6 +74,9 @@ type Options struct {
 	// AdSenseClientID is the public publisher client ID (ca-pub-...). It is
 	// exposed only for requests whose tenant and deployment are eligible for ads.
 	AdSenseClientID string
+	// GA4ID is the GA4 measurement ID (G-...). When
+	// empty, the application does not load Google Analytics.
+	GA4ID string
 	// ShortLinkDomain is the domain used for short share links (e.g. "chrn.link").
 	// If empty, short links use same-origin paths instead.
 	ShortLinkDomain string

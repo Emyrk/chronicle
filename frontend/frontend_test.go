@@ -80,6 +80,44 @@ func TestHandlerAdSenseVerificationMetadata(t *testing.T) {
 	}
 }
 
+func TestHandlerGoogleAnalyticsMetadata(t *testing.T) {
+	t.Parallel()
+
+	indexHTML, err := os.ReadFile("chronicle/index.html")
+	require.NoError(t, err)
+	siteFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: indexHTML}}
+
+	tests := []struct {
+		name          string
+		measurementID string
+		shouldEmit    bool
+	}{
+		{name: "configured", measurementID: "G-G0Q1B9GRC0", shouldEmit: true},
+		{name: "disabled", shouldEmit: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler := Handler(siteFS, nil, func(_ *http.Request) *HTMLBranding {
+				return &HTMLBranding{GA4ID: test.measurementID}
+			}, nil)
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+
+			body := recorder.Body.String()
+			if test.shouldEmit {
+				require.Contains(t, body, "googletagmanager.com/gtag/js?id=G-G0Q1B9GRC0")
+				require.Contains(t, body, "gtag('config', 'G-G0Q1B9GRC0', chronicleAttribution)")
+			} else {
+				require.NotContains(t, body, "googletagmanager.com/gtag/js")
+				require.NotContains(t, body, "gtag('config'")
+			}
+		})
+	}
+}
+
 func TestHandlerBlogFlavorFiltering(t *testing.T) {
 	t.Parallel()
 
