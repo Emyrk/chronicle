@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://chronicleclassic.com/?utm_source=github&amp;utm_medium=referral&amp;utm_campaign=readme&amp;utm_content=logo">
+  <a href="https://chronicleclassic.com/?utm_source=github&amp;utm_medium=referral&amp;utm_campaign=readme&amp;utm_id=chronicle&amp;utm_content=logo">
     <img src="frontend/chronicle/public/c/chronicle/ChronicleLogoCenter.svg" alt="Chronicle" width="320" />
   </a>
 </p>
@@ -7,7 +7,7 @@
 <h3 align="center">Combat log analysis for Classic World of Warcraft</h3>
 
 <p align="center">
-  <a href="https://chronicleclassic.com/?utm_source=github&amp;utm_medium=referral&amp;utm_campaign=readme&amp;utm_content=site_link">chronicleclassic.com</a>
+  <a href="https://chronicleclassic.com/?utm_source=github&amp;utm_medium=referral&amp;utm_campaign=readme&amp;utm_id=chronicle&amp;utm_content=site_link">chronicleclassic.com</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/sponsors/Emyrk">💖 Sponsor</a>
 </p>
