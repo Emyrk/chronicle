@@ -76,7 +76,7 @@ function Content() {
   const cursorY = interpolate(
     frame,
     [18, 64, OPEN_FRAME, 135, EXPAND_FRAME, 230, SCRUB_FRAME, 354, STEP_FRAME, 460, SPEED_FRAME, 545, VIDEO_FRAME, 612],
-    [630, 136, 136, 644, 644, 542, 542, 607, 607, 629, 629, 136, 136, 620],
+    [630, 150, 150, 644, 644, 542, 542, 607, 607, 629, 629, 150, 150, 620],
     { ...clamp, easing: entranceEasing },
   );
   const click = Math.max(
@@ -147,7 +147,7 @@ function ReplayCaption({ step, text, opacity }: { step: number; text: string; op
 function InstanceChrome({ entrance, replayOpen, videoDriving }: { entrance: number; replayOpen: boolean; videoDriving: boolean }) {
   return (
     <div
-      className="absolute left-[72px] right-[72px] top-[112px] flex h-12 items-center rounded-lg border border-zinc-700 bg-zinc-950/90 px-4 shadow-xl"
+      className="absolute left-[72px] right-[72px] top-[126px] flex h-12 items-center rounded-lg border border-zinc-700 bg-zinc-950/90 px-4 shadow-xl"
       style={{ opacity: entrance, translate: `0 ${interpolate(entrance, [0, 1], [18, 0])}px` }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -174,7 +174,7 @@ function PanelGrid({ playhead, replayOpen, final }: { playhead: number; replayOp
   const healing = Math.round(151000 + playhead * 6700);
   const deaths = playhead < 58 ? 0 : playhead < 76 ? 1 : 2;
   return (
-    <div className="absolute left-[72px] right-[72px] top-[178px] grid h-[330px] grid-cols-2 gap-4" style={{ opacity: final ? 0.18 : 1 }}>
+    <div className="absolute left-[72px] right-[72px] top-[192px] grid h-[330px] grid-cols-2 gap-4" style={{ opacity: final ? 0.18 : 1 }}>
       <MetricPanel icon={<Activity className="h-4 w-4 text-rose-300" />} title="Damage Done">
         <MetricRow name="Dreadnaught" value={damage} color="bg-amber-400" width={Math.min(96, 34 + playhead * 0.56)} />
         <MetricRow name="Welfs" value={Math.round(damage * 0.86)} color="bg-sky-400" width={Math.min(88, 29 + playhead * 0.5)} />
