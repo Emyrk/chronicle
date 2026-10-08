@@ -3,6 +3,7 @@ package frontend
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -49,15 +50,30 @@ type HTMLBranding struct {
 // from the request context (e.g. tenant branding for title/favicon).
 type BrandingResolver func(r *http.Request) *HTMLBranding
 
-type handler struct {
-	fs               fs.FS
-	mux              *http.ServeMux
-	htmlTemplates    *template.Template
-	ogRouter         chi.Router
-	brandingResolver BrandingResolver
+// BlogFlavorResolver returns the flavor tags available to the current request.
+// The blog uses them both to hydrate the client and to reject flavor-bound posts.
+type BlogFlavorResolver func(r *http.Request) []string
+
+type blogManifest struct {
+	Posts []blogManifestPost `json:"posts"`
 }
 
-func Handler(siteFS fs.FS, ogRoutes []OGRoute, resolvers ...BrandingResolver) http.Handler {
+type blogManifestPost struct {
+	Path       string     `json:"path"`
+	FlavorSets [][]string `json:"flavor_sets"`
+}
+
+type handler struct {
+	fs                 fs.FS
+	mux                *http.ServeMux
+	htmlTemplates      *template.Template
+	ogRouter           chi.Router
+	brandingResolver   BrandingResolver
+	blogFlavorResolver BlogFlavorResolver
+	blogPosts          map[string]blogManifestPost
+}
+
+func Handler(siteFS fs.FS, ogRoutes []OGRoute, brandingResolver BrandingResolver, blogFlavorResolver BlogFlavorResolver) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", etagMiddleware(http.FileServer(http.FS(siteFS))))
 
@@ -78,18 +94,41 @@ func Handler(siteFS fs.FS, ogRoutes []OGRoute, resolvers ...BrandingResolver) ht
 		}))
 	}
 
-	var brandingResolver BrandingResolver
-	if len(resolvers) > 0 {
-		brandingResolver = resolvers[0]
+	blogPosts, err := loadBlogManifest(siteFS)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to parse blog manifest: %v", err))
 	}
 
 	return &handler{
-		fs:               siteFS,
-		mux:              mux,
-		htmlTemplates:    tmpls,
-		ogRouter:         ogRouter,
-		brandingResolver: brandingResolver,
+		fs:                 siteFS,
+		mux:                mux,
+		htmlTemplates:      tmpls,
+		ogRouter:           ogRouter,
+		brandingResolver:   brandingResolver,
+		blogFlavorResolver: blogFlavorResolver,
+		blogPosts:          blogPosts,
 	}
+}
+
+func loadBlogManifest(siteFS fs.FS) (map[string]blogManifestPost, error) {
+	data, err := fs.ReadFile(siteFS, "blog-manifest.json")
+	if err != nil {
+		if xerrors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var manifest blogManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, err
+	}
+
+	posts := make(map[string]blogManifestPost, len(manifest.Posts))
+	for _, post := range manifest.Posts {
+		posts[path.Clean(post.Path)] = post
+	}
+	return posts, nil
 }
 
 type ogResultKey struct{}
@@ -115,13 +154,28 @@ func (h *handler) resolveOG(req *http.Request) *OGData {
 }
 
 func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	// reqFile is the static file requested
+	flavor := []string(nil)
+	if h.blogFlavorResolver != nil {
+		flavor = h.blogFlavorResolver(req)
+	}
+	if !h.blogPathAllowed(req.URL.Path, flavor) {
+		http.NotFound(resp, req)
+		return
+	}
+
+	flavorJSON, _ := json.Marshal(flavor)
+
+	// reqFile is the static file requested.
 	reqFile := filePath(req.URL.Path)
+	if path.Clean(req.URL.Path) == "/blog" {
+		reqFile = "blog/index.html"
+	}
 
 	state := htmlState{
-		GitCommit: version.GitCommit,
-		GitTag:    version.GitTag,
-		BuildTime: version.BuildTime,
+		GitCommit:      version.GitCommit,
+		GitTag:         version.GitTag,
+		BuildTime:      version.BuildTime,
+		BlogFlavorJSON: string(flavorJSON),
 	}
 
 	// Enrich OG meta tags for matching pages.
@@ -174,6 +228,40 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	h.mux.ServeHTTP(resp, req)
 }
 
+func (h *handler) blogPathAllowed(requestPath string, flavor []string) bool {
+	cleanPath := path.Clean(requestPath)
+	if cleanPath == "/blog" || !strings.HasPrefix(cleanPath, "/blog/") {
+		return true
+	}
+
+	post, ok := h.blogPosts[cleanPath]
+	if !ok {
+		return false
+	}
+	if len(post.FlavorSets) == 0 {
+		return true
+	}
+
+	available := make(map[string]struct{}, len(flavor))
+	for _, tag := range flavor {
+		available[strings.ToLower(tag)] = struct{}{}
+	}
+
+	for _, required := range post.FlavorSets {
+		matches := true
+		for _, tag := range required {
+			if _, ok := available[strings.ToLower(tag)]; !ok {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *handler) exists(filePath string) bool {
 	f, err := h.fs.Open(filePath)
 	if err == nil {
@@ -186,6 +274,9 @@ type htmlState struct {
 	GitCommit string
 	GitTag    string
 	BuildTime string
+
+	// BlogFlavorJSON is injected into pre-rendered blog pages for tenant-aware hydration.
+	BlogFlavorJSON string
 
 	// OG meta tags (empty = use defaults from index.html).
 	OGTitle       string
