@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import { ArrowLeft } from "lucide-react";
-import { Link, Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
+import { Link, Navigate, Outlet, Route, Routes, useMatch, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { iconUrl } from "@/config/iconUrl";
@@ -24,19 +24,25 @@ function requestFlavor(): readonly string[] {
 }
 
 function BlogLayout() {
+  const onPost = useMatch("/blog/:post") !== null;
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-10">
-          <a href="/" className="group inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-            Return to Home
-          </a>
-          <Link to="/blog" className="flex items-center gap-2.5 text-foreground">
-            <img src={iconUrl("inv_misc_book_09")} alt="" width={28} height={28} className="h-7 w-7 rounded border border-accent" />
-            <span className="font-wow text-xl">Chronicle Journal</span>
+      <header className="relative flex h-16 items-center border-b border-border bg-card px-4 sm:px-6">
+        {onPost ? (
+          <Link
+            to="/blog"
+            className="group inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+            All posts
           </Link>
-        </div>
+        ) : (
+          <span className="hidden px-2 text-sm font-medium text-muted-foreground sm:inline">Journal</span>
+        )}
+        {/* Center logo returns to the main site, matching the app NavBar. */}
+        <a href="/" aria-label="Back to Chronicle" className="ml-auto flex items-center sm:absolute sm:left-1/2 sm:ml-0 sm:-translate-x-1/2">
+          <img src="/c/chronicle/ChronicleLogoCenter.svg" alt="Chronicle" className="-my-2 h-15" />
+        </a>
       </header>
       <main>
         <Outlet />
