@@ -40,6 +40,22 @@ export function ShortPost({ post, children }: { post: BlogPostDefinition; childr
         </div>
       )}
 
+      {post.youtubeID && (
+        <div className="mx-auto mt-10 w-full max-w-7xl px-4 sm:px-8">
+          <div className="aspect-video w-full overflow-hidden rounded-md border border-border bg-muted">
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${post.youtubeID}`}
+              title={post.title}
+              loading="lazy"
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+              className="h-full w-full"
+            />
+          </div>
+        </div>
+      )}
+
       <div className="prose prose-invert mx-auto mt-8 w-full max-w-3xl px-4 prose-a:text-primary prose-a:no-underline sm:px-10 [&_a:hover]:underline">
         {children}
       </div>

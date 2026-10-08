@@ -41,6 +41,8 @@ export interface BlogPostDefinition {
   flavor?: string;
   /** Optional Remotion video shown at the top of the post. Loaded lazily. */
   video?: LessonVideo;
+  /** Optional YouTube video ID embedded at the top of the post. */
+  youtubeID?: string;
   flavorSets?: readonly BlogFlavorSet[];
   component: ComponentType<{ post: BlogPostDefinition }>;
 }
@@ -73,6 +75,7 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
     tag: "Feature",
     icon: "trade_engineering",
     flavor: "Some assembly required.",
+    youtubeID: "XQZ6K3rGTrU",
     component: CustomPanelsPost,
   },
   {

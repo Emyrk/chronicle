@@ -298,8 +298,6 @@ export function CustomPanelsPost({ post }: PostProps) {
         <li>Community-created ideas that can be shared through GitHub and installed directly in Chronicle</li>
       </ul>
       <p>
-        🎥 <a href="https://www.youtube.com/watch?v=XQZ6K3rGTrU">Introduction video</a>
-        <br />
         🛠️ <a href="https://github.com/Emyrk/chronicle-panel">Example panels and authoring guide</a>
       </p>
       <p>
