@@ -16,7 +16,7 @@ export function AbsorbAttributionPost({ post }: PostProps) {
       <figure>
         <img
           src="/c/images/blog/absorbs.webp"
-          alt="Healing Done breakdown for a priest showing Power Word: Shield credited with 1,104 absorbed healing"
+          alt="Healing Done breakdown with an Absorbed column crediting a shield with 1,104 absorbed healing"
           width={614}
           height={316}
           className="rounded-md border border-border"
@@ -24,7 +24,7 @@ export function AbsorbAttributionPost({ post }: PostProps) {
         <figcaption>Absorbs appear in their own column of the Healing Done breakdown.</figcaption>
       </figure>
       <div className="not-prose">
-        <AbsorbAttributionDetails />
+        <AbsorbAttributionDetails generic />
       </div>
     </ShortPost>
   );

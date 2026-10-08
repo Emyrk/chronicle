@@ -1,29 +1,37 @@
 import { CircleHelp, Shield } from "lucide-react"
 import { specializationIconUrl } from "@/config/specializationIcon"
 
-/** Explains Discipline absorb attribution. Shared by /class-details and the blog. */
-export function AbsorbAttributionDetails() {
+/**
+ * Explains absorb attribution. Shared by /class-details and the blog; `generic`
+ * drops the Discipline Priest framing for class-neutral contexts.
+ */
+export function AbsorbAttributionDetails({ generic = false }: { generic?: boolean }) {
   return (
     <section className="rounded-xl border border-sky-300/20 bg-sky-400/5 p-5">
-      <div className="mb-4 flex items-center gap-3">
-        <img
-          src={specializationIconUrl("Priest", "Discipline")}
-          alt="Discipline Priest specialization icon"
-          className="h-11 w-11 rounded-md border border-sky-200/20 object-cover shadow-sm"
-        />
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300/80">
-            Discipline
-          </p>
-          <h3 className="text-lg font-semibold">Absorption shield attribution</h3>
+      {generic ? (
+        <h3 className="mb-4 text-lg font-semibold">Absorption shield attribution</h3>
+      ) : (
+        <div className="mb-4 flex items-center gap-3">
+          <img
+            src={specializationIconUrl("Priest", "Discipline")}
+            alt="Discipline Priest specialization icon"
+            className="h-11 w-11 rounded-md border border-sky-200/20 object-cover shadow-sm"
+          />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300/80">
+              Discipline
+            </p>
+            <h3 className="text-lg font-semibold">Absorption shield attribution</h3>
+          </div>
         </div>
-      </div>
+      )}
 
       <p className="leading-relaxed text-muted-foreground">
         Client-side combat logs can report how much damage was absorbed without
         naming the shield that absorbed it. Chronicle estimates the most likely
-        active shield so mitigation can be credited to spells such as Power Word:
-        Shield instead of remaining unattributed.
+        active shield so mitigation can be credited to{" "}
+        {generic ? "the spell that cast it" : "spells such as Power Word: Shield"} instead
+        of remaining unattributed.
       </p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
