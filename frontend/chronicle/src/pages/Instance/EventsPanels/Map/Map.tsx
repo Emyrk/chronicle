@@ -20,9 +20,8 @@ import type { PanelDefinition, PanelRenderProps } from "../types";
 import { mapProcessor, type MapPositionSample, type MapResult } from "./map.processor";
 import {
   dominantMapId,
+  dungeonMapPoint,
   latestPositionAt,
-  observedBounds,
-  observedMapPoint,
   resolveMapArtwork,
   selectMapEncounter,
   zoneMapPoint,
@@ -148,8 +147,9 @@ function MapContent(props: PanelRenderProps<MapResult>) {
   }, [cursorMs, encounter]);
   const mapId = dominantMapId(visibleUnits.map((unit) => unit.sample));
   const representativeSample = visibleUnits.find((unit) => unit.sample.mapId === mapId)?.sample;
-  const artwork = manifestQuery.data && mapId !== null
-    ? resolveMapArtwork(manifestQuery.data, mapId, representativeSample, props.context.instance.name)
+  const artworkMapId = props.context.instance.mapId || mapId;
+  const artwork = manifestQuery.data && artworkMapId !== null
+    ? resolveMapArtwork(manifestQuery.data, artworkMapId, representativeSample, props.context.instance.name)
     : null;
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
 
@@ -159,9 +159,8 @@ function MapContent(props: PanelRenderProps<MapResult>) {
   if (!encounter || visibleUnits.length === 0 || mapId === null) {
     return <MapMessage title="No position telemetry" detail="This encounter does not contain unit-position data." />;
   }
-  if (!artwork) return <MapMessage title={`Map ${mapId} is unavailable`} detail="The active dataset does not publish artwork for this world map." />;
+  if (!artwork) return <MapMessage title={`Map ${artworkMapId} is unavailable`} detail="The active dataset does not publish artwork for this world map." />;
 
-  const bounds = artwork.kind === "instance" ? observedBounds(encounter, mapId) : null;
   const zoneSelection = artwork.kind === "zone"
     ? artwork.map.art?.flatMap((art) => art.layers.map((layer) => ({ art, layer })))
       .find(({ layer }) => layer.width > 0 && layer.height > 0 && layer.tiles.length > 0)
@@ -170,18 +169,20 @@ function MapContent(props: PanelRenderProps<MapResult>) {
     && artwork.instance.floors.some((floor) => floor.floor === floorNumber)
     ? floorNumber
     : artwork.kind === "instance" ? artwork.instance.floors[0]?.floor ?? null : null;
-  const canvas = artwork.kind === "zone"
-    ? zoneSelection?.layer
-    : artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0];
+  const selectedFloor = artwork.kind === "instance"
+    ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
+    : undefined;
+  const canvas = artwork.kind === "zone" ? zoneSelection?.layer : selectedFloor;
   if (!canvas) return <MapMessage title="Map artwork unavailable" detail="No renderable map layer was published." />;
 
   const mapName = artwork.kind === "zone" ? artwork.map.name : artwork.instance.name;
   const displayedMapId = artwork.kind === "instance" ? artwork.instance.mapID : mapId;
+  const dungeonBounds = selectedFloor?.bounds;
   const markers = visibleUnits.flatMap((unit) => {
     if (unit.sample.mapId !== mapId) return [];
     const point = artwork.kind === "zone"
       ? zoneMapPoint(unit.sample, artwork.assignment)
-      : bounds && observedMapPoint(unit.sample, bounds);
+      : dungeonBounds ? dungeonMapPoint(unit.sample, dungeonBounds) : null;
     return point ? [{ unit, point }] : [];
   });
 
@@ -191,7 +192,9 @@ function MapContent(props: PanelRenderProps<MapResult>) {
         <div className="min-w-0 truncate">
           <span className="font-semibold text-foreground">{mapName}</span>
           <span className="ml-1.5 font-mono">world {displayedMapId}</span>
-          {artwork.kind === "instance" && <span className="ml-1.5 text-amber-300/70">relative placement</span>}
+          {artwork.kind === "instance" && !dungeonBounds && (
+            <span className="ml-1.5 text-amber-300/80">position overlay unavailable</span>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <span className="flex items-center gap-1"><Users className="h-3 w-3" />{markers.length}</span>
@@ -214,7 +217,11 @@ function MapContent(props: PanelRenderProps<MapResult>) {
           {markers.map(({ unit, point }) => <MapMarker key={unit.guid} unit={unit} props={props} point={point} />)}
         </div>
       </div>
-      {!sync?.enabled && <p className="px-1 text-[9px] text-muted-foreground">Showing the final position snapshot. Enable Replay to watch units move.</p>}
+      {artwork.kind === "instance" && !dungeonBounds ? (
+        <p className="px-1 text-[9px] text-amber-300/80">This floor has no published world-coordinate bounds, so unit markers are hidden.</p>
+      ) : !sync?.enabled ? (
+        <p className="px-1 text-[9px] text-muted-foreground">Showing the final position snapshot. Enable Replay to watch units move.</p>
+      ) : null}
     </div>
   );
 }

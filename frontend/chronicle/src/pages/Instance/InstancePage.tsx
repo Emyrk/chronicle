@@ -60,6 +60,7 @@ export interface Encounter {
 export interface Instance {
   id: string;
   slug?: string;
+  mapId: number;
   logGroupId?: string;
   name: string;
   realm?: string;
@@ -123,6 +124,7 @@ function normalizeArray<T>(value: readonly T[] | null | undefined): readonly T[]
 function transformToInstance(
   apiInstance: {
     id: string;
+    map_id: number;
     slug?: string;
     log_group_id: string;
     name: string;
@@ -207,6 +209,7 @@ function transformToInstance(
 
   return {
     id: apiInstance.id,
+    mapId: apiInstance.map_id,
     slug: apiInstance.slug,
     logGroupId: apiInstance.log_group_id,
     name: apiInstance.name,

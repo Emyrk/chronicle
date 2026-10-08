@@ -375,7 +375,7 @@ func (w *WoWClient) DungeonMap() (Table[dbdefs.Ent_DungeonMap], error) {
 	}
 
 	db := dbc.NewDB(w.Build())
-	table, err := db.Open("Map", bytes.NewReader(data))
+	table, err := db.Open("DungeonMap", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}

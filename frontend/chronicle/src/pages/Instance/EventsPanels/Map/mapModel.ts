@@ -1,6 +1,7 @@
 import type {
   WowMap,
   WowMapAssignment,
+  WowMapFloorBounds,
   WowMapInstance,
   WowMapManifest,
 } from "@/pages/Technical/mapGallery";
@@ -9,13 +10,6 @@ import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 export interface MapPoint {
   leftPercent: number;
   topPercent: number;
-}
-
-export interface ObservedBounds {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
 }
 
 export type ResolvedMapArtwork =
@@ -100,7 +94,7 @@ export function resolveMapArtwork(
   const normalizedInstanceName = instanceName ? normalizedMapName(instanceName) : "";
   const instance = manifest.instances?.find((candidate) =>
     candidate.mapID === mapId
-      || (normalizedInstanceName !== "" && normalizedMapName(candidate.name) === normalizedInstanceName),
+      || (mapId === 0 && normalizedInstanceName !== "" && normalizedMapName(candidate.name) === normalizedInstanceName),
   );
   if (instance) return { kind: "instance", instance };
 
@@ -120,32 +114,6 @@ export function resolveMapArtwork(
   return map && assignment ? { kind: "zone", map, assignment } : null;
 }
 
-export function observedBounds(encounter: MapEncounterPositions, mapId: number): ObservedBounds | null {
-  const samples = Array.from(encounter.positionsByUnit.values())
-    .flat()
-    .filter((sample) => sample.mapId === mapId);
-  if (samples.length === 0) return null;
-
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const sample of samples) {
-    minX = Math.min(minX, sample.x);
-    maxX = Math.max(maxX, sample.x);
-    minY = Math.min(minY, sample.y);
-    maxY = Math.max(maxY, sample.y);
-  }
-  const xPadding = Math.max((maxX - minX) * 0.08, 5);
-  const yPadding = Math.max((maxY - minY) * 0.08, 5);
-  return {
-    minX: minX - xPadding,
-    maxX: maxX + xPadding,
-    minY: minY - yPadding,
-    maxY: maxY + yPadding,
-  };
-}
-
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value * 100));
 }
@@ -160,10 +128,12 @@ export function zoneMapPoint(sample: MapPositionSample, assignment: WowMapAssign
   return { leftPercent: clampPercent(uiX), topPercent: clampPercent(uiY) };
 }
 
-export function observedMapPoint(sample: MapPositionSample, bounds: ObservedBounds): MapPoint | null {
+export function dungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBounds): MapPoint | null {
   if (bounds.maxX === bounds.minX || bounds.maxY === bounds.minY) return null;
+  // DungeonMap's horizontal bounds apply to world Y and its vertical bounds
+  // apply to world X, both descending from the artwork's top-left origin.
   return {
-    leftPercent: clampPercent((bounds.maxY - sample.y) / (bounds.maxY - bounds.minY)),
-    topPercent: clampPercent((bounds.maxX - sample.x) / (bounds.maxX - bounds.minX)),
+    leftPercent: clampPercent((bounds.maxX - sample.y) / (bounds.maxX - bounds.minX)),
+    topPercent: clampPercent((bounds.maxY - sample.x) / (bounds.maxY - bounds.minY)),
   };
 }

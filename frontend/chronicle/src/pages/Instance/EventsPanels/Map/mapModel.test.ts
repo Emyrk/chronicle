@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 import {
+  dungeonMapPoint,
   latestPositionAt,
-  observedBounds,
-  observedMapPoint,
   resolveMapArtwork,
   selectMapEncounter,
   zoneMapPoint,
@@ -140,11 +139,22 @@ describe("map replay model", () => {
     });
   });
 
-  it("uses stable full-encounter bounds for instance-relative placement", () => {
-    const bounds = observedBounds(encounter, 1420);
-    expect(bounds).not.toBeNull();
-    const point = observedMapPoint(samples[1], bounds!);
-    expect(point?.leftPercent).toBeCloseTo(50);
-    expect(point?.topPercent).toBeCloseTo(50);
+  it("does not fall back to an instance name when a persisted map ID is available", () => {
+    expect(resolveMapArtwork(manifest, 1420, undefined, "Naxxramas")).toMatchObject({
+      kind: "zone",
+      map: { name: "Tirisfal Glades" },
+    });
+  });
+
+  it("converts dungeon world coordinates using authoritative floor bounds", () => {
+    const bounds = { minX: -410.946014, maxX: 595.528992, minY: -483.479004, maxY: 187.503998 };
+    expect(dungeonMapPoint(
+      { timestampMs: 0, x: bounds.maxY, y: bounds.maxX, mapId: 0, facing: 0 },
+      bounds,
+    )).toEqual({ leftPercent: 0, topPercent: 0 });
+    expect(dungeonMapPoint(
+      { timestampMs: 0, x: bounds.minY, y: bounds.minX, mapId: 0, facing: 0 },
+      bounds,
+    )).toEqual({ leftPercent: 100, topPercent: 100 });
   });
 });

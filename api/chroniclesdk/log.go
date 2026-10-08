@@ -126,6 +126,7 @@ type WoWInstance struct {
 	TenantIncludeAll        bool                    `json:"tenant_include_in_all,omitempty"`
 	LogGroupID              uuid.UUID               `json:"log_group_id"`
 	Name                    string                  `json:"name"`
+	MapID                   int                     `json:"map_id"`
 	Slug                    string                  `json:"slug"`
 	StartTime               *time.Time              `json:"start_time,omitempty"`
 	EndTime                 *time.Time              `json:"end_time,omitempty"`

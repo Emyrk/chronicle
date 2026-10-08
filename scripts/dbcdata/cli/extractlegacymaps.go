@@ -557,7 +557,10 @@ func buildLegacyMapInstances(maps []wowdataMap, files []legacyMapFile) []wowMapI
 			if len(tilesByIndex) != 12 {
 				continue
 			}
-			floor := wowMapInstanceFloor{Floor: floorNumber, Width: 1002, Height: 668, TileWidth: 256, TileHeight: 256}
+			floor := wowMapInstanceFloor{
+				Floor: floorNumber, Width: 1002, Height: 668, TileWidth: 256, TileHeight: 256,
+				Bounds: classicDungeonFloorBounds(mapRow.ID, floorNumber),
+			}
 			for tileIndex := int32(1); tileIndex <= 12; tileIndex++ {
 				tile, ok := tilesByIndex[tileIndex]
 				if !ok {

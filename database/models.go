@@ -1669,6 +1669,7 @@ type LogInstance struct {
 	UpdatedAt               pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`
+	MapID                   int32              `db:"map_id" json:"map_id"`
 }
 
 type LogInstanceEncounter struct {
@@ -1762,6 +1763,7 @@ type LogInstancesGuild struct {
 	RealmID                 uuid.UUID          `db:"realm_id" json:"realm_id"`
 	LogGroupID              uuid.UUID          `db:"log_group_id" json:"log_group_id"`
 	Name                    string             `db:"name" json:"name"`
+	MapID                   int32              `db:"map_id" json:"map_id"`
 	HashedSlug              pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
 	GuildID                 uuid.NullUUID      `db:"guild_id" json:"guild_id"`
 	Capabilities            []string           `db:"capabilities" json:"capabilities"`

@@ -174,6 +174,7 @@ export function SimPage() {
     return {
       id: "sim-1",
       name: "DPS Simulation",
+      mapId: 0,
       startTime: startTimestamp.toISOString(),
       endTime: new Date(startTimestamp.getTime() + result.durationMs).toISOString(),
       encounters: [{

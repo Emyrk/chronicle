@@ -93,6 +93,7 @@ func TestBuildWowMapInstances(t *testing.T) {
 		files = append(files,
 			wowdataFile{FileDataID: int32(100 + tile), FileName: fmt.Sprintf("interface/worldmap/shadowfangkeep/shadowfangkeep1_%d.blp", tile)},
 			wowdataFile{FileDataID: int32(200 + tile), FileName: fmt.Sprintf("interface/worldmap/zulfarrak/zulfarrak%d.blp", tile)},
+			wowdataFile{FileDataID: int32(300 + tile), FileName: fmt.Sprintf("interface/worldmap/wailingcaverns/wailingcaverns1_%d.blp", tile)},
 		)
 	}
 	files = append(files, wowdataFile{FileDataID: 999, FileName: "interface/worldmap/incomplete/incomplete1_1.blp"})
@@ -100,18 +101,28 @@ func TestBuildWowMapInstances(t *testing.T) {
 	instances := buildWowMapInstances([]wowdataMap{
 		{ID: 209, Name: "Zul'Farrak", Directory: "TanarisInstance", InstanceType: 1, ExpansionID: 0},
 		{ID: 33, Name: "Shadowfang Keep", Directory: "Shadowfang", InstanceType: 1, ExpansionID: 0},
+		{ID: 43, Name: "Wailing Caverns", Directory: "WailingCaverns", InstanceType: 1, ExpansionID: 0},
 		{ID: 999, Name: "Incomplete", Directory: "Incomplete", InstanceType: 1, ExpansionID: 0},
 		{ID: 1000, Name: "Future Dungeon", Directory: "ShadowfangKeep", InstanceType: 1, ExpansionID: 1},
 	}, files)
 
-	require.Len(t, instances, 2)
+	require.Len(t, instances, 3)
 	require.Equal(t, int32(33), instances[0].MapID)
 	require.Equal(t, int32(1), instances[0].Floors[0].Floor)
 	require.Equal(t, int32(101), instances[0].Floors[0].Tiles[0].FileDataID)
 	require.Equal(t, int32(2), instances[0].Floors[0].Tiles[11].Row)
 	require.Equal(t, int32(3), instances[0].Floors[0].Tiles[11].Column)
-	require.Equal(t, int32(209), instances[1].MapID)
-	require.Equal(t, int32(201), instances[1].Floors[0].Tiles[0].FileDataID)
+	require.Nil(t, instances[0].Floors[0].Bounds)
+	require.Equal(t, int32(43), instances[1].MapID)
+	require.Equal(t, int32(301), instances[1].Floors[0].Tiles[0].FileDataID)
+	require.Equal(t, &wowMapFloorBounds{
+		MinX: -410.946014,
+		MaxX: 595.528992,
+		MinY: -483.479004,
+		MaxY: 187.503998,
+	}, instances[1].Floors[0].Bounds)
+	require.Equal(t, int32(209), instances[2].MapID)
+	require.Equal(t, int32(201), instances[2].Floors[0].Tiles[0].FileDataID)
 }
 
 func TestParseWowMapInstanceTile(t *testing.T) {

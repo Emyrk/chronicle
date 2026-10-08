@@ -513,6 +513,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				RealmID:    realmID,
 				LogGroupID: job.Args.LogID,
 				Name:       inst.Name(),
+				MapID:      int32(inst.CurrentZone.MapID),
 				HashedSlug: pgtype.Text{
 					String: database.InstanceSlug(job.Args.LogID, inst.Name()),
 					Valid:  true,
