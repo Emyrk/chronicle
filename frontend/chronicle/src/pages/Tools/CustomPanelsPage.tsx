@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { Link } from "react-router-dom"
 import { cn } from "@/lib/utils"
+import { ToolsBackLink } from "./ToolsBackLink"
 
 const facts = [
   ["Trust model", "Trusted code, runs in the page. Not a sandbox."],
@@ -133,9 +134,7 @@ export function CustomPanelsPage() {
     <main className="mx-auto flex max-w-[1180px] flex-col gap-16 px-5 pb-20 pt-10 sm:px-8 lg:px-16">
       <header className="grid items-end gap-x-16 gap-y-8 md:grid-cols-2">
         <div className="flex flex-col gap-3.5">
-          <Link to="/tools" className="font-mono text-xs text-muted-foreground hover:text-foreground">
-            ← tools / custom-panels
-          </Link>
+          <ToolsBackLink />
           <h1 className="text-balance text-4xl font-semibold leading-none tracking-tight md:text-5xl">Custom panel plugins</h1>
           <p className="max-w-[560px] text-pretty leading-relaxed text-muted-foreground">
             A plugin is a public GitHub repository, pinned to one commit, that provides fully custom panel views. Panels render any

@@ -1,7 +1,7 @@
 import { useState } from "react"
-import { ArrowLeft, Check, ChevronRight, Info, TriangleAlert } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Check, ChevronRight, Info, TriangleAlert } from "lucide-react"
 import { useSiteConfig } from "@/api/queries"
+import { ToolsBackLink } from "@/pages/Tools/ToolsBackLink"
 import { specializationIconUrl } from "@/config/specializationIcon"
 import { subspecRulesForFlavor } from "./subspecs"
 
@@ -14,13 +14,7 @@ export function SubspecsPage() {
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
-      <Link
-        to="/tools"
-        className="mb-5 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Back to Tools &amp; FAQ
-      </Link>
+      <ToolsBackLink className="mb-5" />
 
       <div className="mb-8 max-w-2xl">
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">

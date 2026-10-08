@@ -1,6 +1,7 @@
 import { useSupportedInstances } from "@/api/queries"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert"
 import { AlertTriangle, Check, Clock3, Flag, Skull, Swords, Trophy } from "lucide-react"
+import { ToolsBackLink } from "@/pages/Tools/ToolsBackLink"
 
 function SpeedrunTimingDiagram() {
   return (
@@ -90,6 +91,8 @@ export function SpeedrunningPage() {
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8">
+      <ToolsBackLink className="mb-5" />
+
       <h1 className="mb-2 text-3xl font-bold">How Speedrunning Works</h1>
       <p className="mb-6 text-muted-foreground">
         A guide to how Chronicle qualifies, times, and ranks complete raid logs.
