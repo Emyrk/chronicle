@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { iconUrl } from "@/config/iconUrl";
 import { serverCapabilities } from "@/config/serverCapabilities";
+import { formatPublishedDate, rarityColor, rarityGlow, RARITY_LABELS } from "./blogFormat";
 import {
   BLOG_RARITIES,
   blogPostMatchesFlavor,
@@ -14,15 +15,6 @@ import {
   type BlogPostDefinition,
   type BlogRarity,
 } from "./blogRegistry";
-
-function formatPublishedDate(value: string): string {
-  const [year, month, day] = value.split("-").map(Number);
-  const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-  ];
-  return `${months[(month ?? 1) - 1]} ${day}, ${year}`;
-}
 
 function requestFlavor(): readonly string[] {
   if (typeof window === "undefined") {
@@ -54,27 +46,6 @@ function BlogLayout() {
 }
 
 const subscribeToRequestFlavor = () => () => {};
-
-const RARITY_LABELS: Record<BlogRarity, string> = {
-  legendary: "Legendary",
-  epic: "Epic",
-  rare: "Rare",
-  uncommon: "Uncommon",
-  common: "Common",
-};
-
-function rarityColor(rarity: BlogRarity): string {
-  return `var(--color-quality-${rarity})`;
-}
-
-/** Legendary and epic drops get a soft glow, matching how big the update is. */
-function rarityGlow(rarity: BlogRarity): string | undefined {
-  if (rarity !== "legendary" && rarity !== "epic") {
-    return undefined;
-  }
-  const color = rarityColor(rarity);
-  return `0 0 28px color-mix(in srgb, ${color} 20%, transparent), inset 0 0 40px color-mix(in srgb, ${color} 5%, transparent)`;
-}
 
 function postMatchesSearch(post: BlogPostDefinition, query: string): boolean {
   if (!query) {
@@ -249,7 +220,7 @@ function BlogPostRoute({ enforceFlavor }: { enforceFlavor: boolean }) {
   }
 
   const Post = post.component;
-  return <Post />;
+  return <Post post={post} />;
 }
 
 export function BlogApp({ enforceFlavor = true }: { enforceFlavor?: boolean }) {
