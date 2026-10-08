@@ -20,14 +20,22 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/x-icon" href="{{ if .Favicon }}{{ .Favicon }}{{ else }}/c/chronicle/favicon.ico{{ end }}" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Chronicle transforms Classic World of Warcraft raid logs into clear, actionable insights for raid leaders." />
-    
+    <meta name="description" content="{{ if .OGDescription }}{{ .OGDescription }}{{ else if .Description }}{{ .Description }}{{ else }}Chronicle provides combat log analysis for World of Warcraft communities. Upload combat logs to explore encounters, rankings, and performance insights.{{ end }}" />
+    <!-- {{ if .CanonicalURL }} --><link rel="canonical" href="{{ .CanonicalURL }}" /><!-- {{ end }} -->
+    <!-- {{ if .Robots }} --><meta name="robots" content="{{ .Robots }}" /><!-- {{ end }} -->
+
     <!-- Open Graph / Social -->
-    <meta property="og:title" content="{{ if .OGTitle }}{{ .OGTitle }}{{ else }}Chronicle - WoW Raid Log Analysis{{ end }}" />
-    <meta property="og:description" content="{{ if .OGDescription }}{{ .OGDescription }}{{ else }}Transform Classic World of Warcraft raid logs into clear, actionable insights for raid leaders.{{ end }}" />
+    <meta property="og:site_name" content="{{ if .SiteName }}{{ .SiteName }}{{ else }}Chronicle{{ end }}" />
+    <meta property="og:title" content="{{ if .OGTitle }}{{ .OGTitle }}{{ else if .Title }}{{ .Title }}{{ else }}Chronicle - WoW Raid Log Analysis{{ end }}" />
+    <meta property="og:description" content="{{ if .OGDescription }}{{ .OGDescription }}{{ else if .Description }}{{ .Description }}{{ else }}Chronicle provides combat log analysis for World of Warcraft communities. Upload combat logs to explore encounters, rankings, and performance insights.{{ end }}" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="{{ .OGURL }}" />
-    <meta property="og:logo" content="https://chronicleclassic.com/c/chronicle/ChronicleIcon.png" />
+    <!-- {{ if .CanonicalURL }} --><meta property="og:url" content="{{ .CanonicalURL }}" /><!-- {{ end }} -->
+    <!-- {{ if .ImageURL }} --><meta property="og:image" content="{{ .ImageURL }}" /><!-- {{ end }} -->
+    <meta name="twitter:card" content="{{ if .ImageURL }}summary_large_image{{ else }}summary{{ end }}" />
+    <meta name="twitter:title" content="{{ if .OGTitle }}{{ .OGTitle }}{{ else if .Title }}{{ .Title }}{{ else }}Chronicle - WoW Raid Log Analysis{{ end }}" />
+    <meta name="twitter:description" content="{{ if .OGDescription }}{{ .OGDescription }}{{ else if .Description }}{{ .Description }}{{ else }}Chronicle provides combat log analysis for World of Warcraft communities. Upload combat logs to explore encounters, rankings, and performance insights.{{ end }}" />
+    <!-- {{ if .ImageURL }} --><meta name="twitter:image" content="{{ .ImageURL }}" /><!-- {{ end }} -->
+    <!-- {{ if .JSONLD }} --><script type="application/ld+json">{{ .JSONLD }}</script><!-- {{ end }} -->
     
     <meta property="GitCommit" content="{{ .GitCommit }}" />
     <meta property="GitTag" content="{{ .GitTag }}" />

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"net/http"
@@ -40,6 +41,12 @@ type ogResult struct {
 // HTMLBranding carries per-request branding overrides for the HTML template.
 type HTMLBranding struct {
 	Title           string // Page title. Empty = default "Chronicle".
+	SiteName        string // Tenant/site display name used to suffix route-specific titles.
+	Description     string // Tenant/site description. Empty = default Chronicle description.
+	CanonicalURL    string // Absolute canonical URL for this request.
+	ImageURL        string // Absolute social preview image URL.
+	Robots          string // Page-level robots directive. Empty = indexable default.
+	JSONLD          string // JSON-LD generated from trusted, JSON-marshaled values.
 	Favicon         string // Favicon URL. Empty = default /c/chronicle/favicon.ico.
 	ThemeCSS        string // Pre-built CSS variable overrides for tenant theming.
 	AdSenseClientID string // Public publisher ID for verification metadata; empty disables it.
@@ -124,22 +131,39 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		BuildTime: version.BuildTime,
 	}
 
-	// Enrich OG meta tags for matching pages.
-	if og := h.resolveOG(req); og != nil {
-		state.OGTitle = og.Title
-		state.OGDescription = og.Description
-		state.OGURL = og.URL
-	}
-
-	// Enrich from request context (e.g. tenant branding).
+	// Enrich from request context (e.g. tenant branding and indexing policy).
 	if h.brandingResolver != nil {
 		if b := h.brandingResolver(req); b != nil {
 			state.Title = b.Title
+			state.SiteName = b.SiteName
+			state.Description = b.Description
+			state.CanonicalURL = b.CanonicalURL
+			state.ImageURL = b.ImageURL
+			state.Robots = b.Robots
+			state.JSONLD = b.JSONLD
 			state.Favicon = b.Favicon
 			state.ThemeCSS = b.ThemeCSS
 			state.AdSenseClientID = b.AdSenseClientID
 		}
 	}
+
+	// Route metadata overrides tenant defaults while retaining tenant identity.
+	if og := h.resolveOG(req); og != nil {
+		state.OGTitle = og.Title
+		state.OGDescription = og.Description
+		state.OGURL = og.URL
+		if og.URL != "" {
+			state.CanonicalURL = og.URL
+		}
+		if og.Title != "" {
+			state.Title = og.Title
+			if state.SiteName != "" {
+				state.Title += " | " + state.SiteName
+			}
+		}
+	}
+
+	state.escapeHTMLAttributes()
 
 	if h.serveHTML(resp, req, reqFile, state) {
 		return
@@ -192,15 +216,37 @@ type htmlState struct {
 	OGDescription string
 	OGURL         string
 
-	// Branding overrides (populated by StateEnricher from tenant context).
-	Title           string // Page title. Empty = default "Chronicle".
-	Favicon         string // Favicon URL. Empty = default /c/chronicle/favicon.ico.
-	ThemeCSS        string // CSS variable overrides, e.g. "--primary: #D4A844; --tertiary: #D4A844;".
-	AdSenseClientID string // Public publisher ID for verification metadata; empty disables it.
+	// Branding and SEO overrides populated from tenant context.
+	Title           string
+	SiteName        string
+	Description     string
+	CanonicalURL    string
+	ImageURL        string
+	Robots          string
+	JSONLD          string
+	Favicon         string
+	ThemeCSS        string
+	AdSenseClientID string
+}
+
+func (s *htmlState) escapeHTMLAttributes() {
+	s.Title = html.EscapeString(s.Title)
+	s.SiteName = html.EscapeString(s.SiteName)
+	s.Description = html.EscapeString(s.Description)
+	s.CanonicalURL = html.EscapeString(s.CanonicalURL)
+	s.ImageURL = html.EscapeString(s.ImageURL)
+	s.Robots = html.EscapeString(s.Robots)
+	s.Favicon = html.EscapeString(s.Favicon)
+	s.OGTitle = html.EscapeString(s.OGTitle)
+	s.OGDescription = html.EscapeString(s.OGDescription)
+	s.OGURL = html.EscapeString(s.OGURL)
 }
 
 func (h *handler) serveHTML(resp http.ResponseWriter, request *http.Request, reqPath string, state htmlState) bool {
 	if data, err := h.renderHTMLWithState(reqPath, state); err == nil {
+		if state.Robots != "" {
+			resp.Header().Set("X-Robots-Tag", state.Robots)
+		}
 		if reqPath == "" {
 			// Pass "index.html" to the ServeContent so the ServeContent sets the right content headers.
 			reqPath = "index.html"

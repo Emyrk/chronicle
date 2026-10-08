@@ -20,23 +20,33 @@ import (
 
 // OGRoutes returns the Open Graph route definitions for the frontend handler.
 func (api *API) OGRoutes() []frontend.OGRoute {
-	return []frontend.OGRoute{
+	routes := make([]frontend.OGRoute, 0, len(staticOGRoutes)+5)
+	for pattern, metadata := range staticOGRoutes {
+		pattern, metadata := pattern, metadata
+		routes = append(routes, frontend.OGRoute{
+			Pattern: pattern,
+			Resolve: func(r *http.Request) *frontend.OGData {
+				return &frontend.OGData{Title: metadata.Title, Description: metadata.Description, URL: canonicalRequestURL(api, r)}
+			},
+		})
+	}
+	return append(routes, []frontend.OGRoute{
 		{
 			Pattern: "/instances/{idOrSlug}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return api.instanceOG(chi.URLParam(r, "idOrSlug"))
+				return api.instanceOG(ogHost(r), chi.URLParam(r, "idOrSlug"))
 			},
 		},
 		{
 			Pattern: "/s/{code}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return api.shareOG(chi.URLParam(r, "code"))
+				return api.shareOG(ogHost(r), chi.URLParam(r, "code"))
 			},
 		},
 		{
 			Pattern: "/armory/{realm}/{player}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return api.armoryOG(chi.URLParam(r, "realm"), chi.URLParam(r, "player"))
+				return api.armoryOG(ogHost(r), chi.URLParam(r, "realm"), chi.URLParam(r, "player"))
 			},
 		},
 		{
@@ -51,7 +61,26 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 				return talentCalculatorOG(ogHost(r), chi.URLParam(r, "class"), r.URL.Query().Get("build"))
 			},
 		},
-	}
+	}...)
+}
+
+type staticOGMetadata struct {
+	Title       string
+	Description string
+}
+
+var staticOGRoutes = map[string]staticOGMetadata{
+	"/":                        {Title: "Raid Logs and Performance Analysis", Description: defaultSEODescription},
+	"/recent":                  {Title: "Recent Raids", Description: "Explore recently uploaded raid logs and performance reports."},
+	"/guilds":                  {Title: "Guilds", Description: "Find guild rosters, raid history, and performance analytics."},
+	"/armory":                  {Title: "Character Armory", Description: "Search character profiles, equipment, talents, and raid performance."},
+	"/leaderboards/statistics": {Title: "Raid Statistics", Description: "Explore raid performance statistics and player rankings."},
+	"/leaderboards/speedruns":  {Title: "Raid Speedruns", Description: "Compare the fastest raid clears and guild speedrun rankings."},
+	"/wowdb":                   {Title: "World of Warcraft Database", Description: "Explore game data and reference information."},
+	"/technical":               {Title: "Technical Reference", Description: "Explore Chronicle combat analysis references."},
+	"/census":                  {Title: "Realm Census", Description: "Explore character and population statistics."},
+	"/speedrunning":            {Title: "Speedrunning", Description: "Explore raid speedrunning records and performance."},
+	"/tools":                   {Title: "Tools", Description: "Explore Chronicle raid and character analysis tools."},
 }
 
 // talentClassSlugs maps calculator URL slugs to display and wowspec names.
@@ -59,15 +88,15 @@ var talentClassSlugs = map[string]struct {
 	Display string
 	Spec    string // wowspec.InferSpec class key
 }{
-	"warrior":      {"Warrior", "WARRIOR"},
-	"paladin":      {"Paladin", "PALADIN"},
-	"hunter":       {"Hunter", "HUNTER"},
-	"rogue":        {"Rogue", "ROGUE"},
-	"priest":       {"Priest", "PRIEST"},
-	"shaman":       {"Shaman", "SHAMAN"},
-	"mage":         {"Mage", "MAGE"},
-	"warlock":      {"Warlock", "WARLOCK"},
-	"druid":        {"Druid", "DRUID"},
+	"warrior":     {"Warrior", "WARRIOR"},
+	"paladin":     {"Paladin", "PALADIN"},
+	"hunter":      {"Hunter", "HUNTER"},
+	"rogue":       {"Rogue", "ROGUE"},
+	"priest":      {"Priest", "PRIEST"},
+	"shaman":      {"Shaman", "SHAMAN"},
+	"mage":        {"Mage", "MAGE"},
+	"warlock":     {"Warlock", "WARLOCK"},
+	"druid":       {"Druid", "DRUID"},
 	"deathknight": {"Death Knight", "DEATH_KNIGHT"},
 	"pet":         {"Hunter Pet", ""},
 }
@@ -169,7 +198,7 @@ func talentCalculatorOG(host, classSlug, build string) *frontend.OGData {
 	}
 }
 
-func (api *API) instanceOG(idOrSlug string) *frontend.OGData {
+func (api *API) instanceOG(host, idOrSlug string) *frontend.OGData {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -178,10 +207,10 @@ func (api *API) instanceOG(idOrSlug string) *frontend.OGData {
 		return nil
 	}
 
-	return api.buildInstanceOG(ctx, inst)
+	return api.buildInstanceOG(ctx, host, inst)
 }
 
-func (api *API) shareOG(code string) *frontend.OGData {
+func (api *API) shareOG(host, code string) *frontend.OGData {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -204,10 +233,10 @@ func (api *API) shareOG(code string) *frontend.OGData {
 		return nil
 	}
 
-	return api.buildInstanceOG(ctx, inst)
+	return api.buildInstanceOG(ctx, host, inst)
 }
 
-func (api *API) buildInstanceOG(ctx context.Context, inst database.LogInstancesGuild) *frontend.OGData {
+func (api *API) buildInstanceOG(ctx context.Context, host string, inst database.LogInstancesGuild) *frontend.OGData {
 	db := api.Opts.Zed
 
 	encounters, _ := db.EncountersByInstanceID(ctx, inst.ID)
@@ -260,14 +289,17 @@ func (api *API) buildInstanceOG(ctx context.Context, inst database.LogInstancesG
 		identifier = inst.HashedSlug.String
 	}
 
+	if inst.TenantSlug.Valid && inst.TenantSlug.String != "" && api.Opts.Tenant != nil && api.Opts.Tenant.PrimaryDomain() != "" {
+		host = inst.TenantSlug.String + "." + api.Opts.Tenant.PrimaryDomain()
+	}
 	return &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
-		URL:         fmt.Sprintf("https://chronicleclassic.com/instances/%s", identifier),
+		URL:         fmt.Sprintf("https://%s/instances/%s", host, identifier),
 	}
 }
 
-func (api *API) armoryOG(realm, player string) *frontend.OGData {
+func (api *API) armoryOG(host, realm, player string) *frontend.OGData {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -324,7 +356,7 @@ func (api *API) armoryOG(realm, player string) *frontend.OGData {
 	return &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
-		URL:         fmt.Sprintf("https://chronicleclassic.com/armory/%s/%s", realm, p.ID),
+		URL:         fmt.Sprintf("https://%s/armory/%s/%s", host, realm, p.ID),
 	}
 }
 
