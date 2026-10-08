@@ -1,7 +1,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link, Navigate, Outlet, Route, Routes, useMatch, useParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { iconUrl } from "@/config/iconUrl";
 import { serverCapabilities } from "@/config/serverCapabilities";
@@ -161,7 +161,7 @@ function FeaturedPostCard({ post }: { post: BlogPostDefinition }) {
   const color = rarityColor(post.rarity);
   return (
     <article
-      className="grid gap-6 rounded-lg border bg-card p-6 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-7 sm:p-8"
+      className="group relative transition-[translate,background-color] hover:-translate-y-0.5 hover:bg-muted/40 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring grid gap-6 rounded-lg border bg-card p-6 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-7 sm:p-8"
       style={{ borderColor: color, boxShadow: rarityGlow(post.rarity) }}
     >
       <img
@@ -175,14 +175,13 @@ function FeaturedPostCard({ post }: { post: BlogPostDefinition }) {
       <div className="flex min-w-0 flex-col gap-3">
         <PostMeta post={post} />
         <h2 className="font-wow text-3xl leading-tight sm:text-4xl" style={{ color }}>
-          <Link to={blogPostPath(post.id)}>{post.title}</Link>
+          {/* The title link stretches over the whole card so the entire box is clickable. */}
+          <Link to={blogPostPath(post.id)} className="after:absolute after:inset-0 focus-visible:outline-none">{post.title}</Link>
         </h2>
         <p className="max-w-3xl text-base leading-7 text-pretty text-foreground sm:text-[17px]">{post.description}</p>
         {post.flavor && <p className="text-[15px] italic text-yellow-400">“{post.flavor}”</p>}
         <div className="mt-1">
-          <Button asChild>
-            <Link to={blogPostPath(post.id)}>Read the notes</Link>
-          </Button>
+          <span aria-hidden className={buttonVariants()}>Read the notes</span>
         </div>
       </div>
     </article>
@@ -193,7 +192,7 @@ function BlogPostCard({ post }: { post: BlogPostDefinition }) {
   const color = rarityColor(post.rarity);
   return (
     <article
-      className="group flex flex-col gap-3.5 rounded-lg border border-t-2 border-border bg-card p-5"
+      className="group relative transition-[translate,background-color] hover:-translate-y-0.5 hover:bg-muted/40 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring flex flex-col gap-3.5 rounded-lg border border-t-2 border-border bg-card p-5"
       style={{ borderTopColor: color, boxShadow: rarityGlow(post.rarity) }}
     >
       <div className="flex items-center gap-3">
@@ -208,12 +207,12 @@ function BlogPostCard({ post }: { post: BlogPostDefinition }) {
         <PostMeta post={post} stacked />
       </div>
       <h3 className="font-wow text-xl leading-tight" style={{ color }}>
-        <Link to={blogPostPath(post.id)}>{post.title}</Link>
+        <Link to={blogPostPath(post.id)} className="after:absolute after:inset-0 focus-visible:outline-none">{post.title}</Link>
       </h3>
       <p className="text-sm leading-6 text-pretty text-muted-foreground">{post.description}</p>
-      <Link to={blogPostPath(post.id)} className="mt-auto self-end text-xs font-medium text-primary">
+      <span aria-hidden className="mt-auto self-end text-xs font-medium text-primary group-hover:underline">
         Read →
-      </Link>
+      </span>
     </article>
   );
 }
