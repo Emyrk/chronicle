@@ -53,7 +53,10 @@ export function ParsingPost({ post }: PostProps) {
 export function TalentBuilderRefreshPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
-      <p>The talent builder page started to gain some traction, so I decided to give it some love.</p>
+      <p>
+        The <a href="/talents">talent builder</a> page started to gain some traction, so I decided to give it some
+        love.
+      </p>
       <ul>
         <li>You can now <strong>save builds to your account</strong> and load them back at any time</li>
         <li><strong>Mobile</strong> friendly usage</li>
@@ -80,8 +83,9 @@ export function TalentBuilderRefreshPost({ post }: PostProps) {
 export function ArmoryRefreshPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
-      <p>Player armory pages just got a lot more interesting. Take a look!</p>
-      <p><em>Old raids are being reparsed to populate your historical data. Guild pages are next.</em></p>
+      <p>
+        Player <a href="/armory">armory</a> pages just got a lot more interesting. Take a look!
+      </p>
     </ShortPost>
   );
 }
