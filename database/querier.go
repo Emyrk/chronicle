@@ -232,6 +232,10 @@ type sqlcQuerier interface {
 	GetExpiredRawLogGroups(ctx context.Context, limit int32) ([]uuid.UUID, error)
 	GetExternalAPICharacter(ctx context.Context, arg GetExternalAPICharacterParams) (GetExternalAPICharacterRow, error)
 	GetExternalCharacterLinkSync(ctx context.Context, arg GetExternalCharacterLinkSyncParams) (ExternalCharacterLinkSync, error)
+	GetExternalReferenceContent(ctx context.Context, arg GetExternalReferenceContentParams) (ExternalReferenceContent, error)
+	GetExternalReferenceCurrentSnapshot(ctx context.Context, entityID uuid.UUID) (GetExternalReferenceCurrentSnapshotRow, error)
+	GetExternalReferenceEntityByName(ctx context.Context, arg GetExternalReferenceEntityByNameParams) (ExternalReferenceEntity, error)
+	GetExternalReferenceSnapshotAt(ctx context.Context, arg GetExternalReferenceSnapshotAtParams) (GetExternalReferenceSnapshotAtRow, error)
 	GetFileByHash(ctx context.Context, hash string) (LogFile, error)
 	// Full page fetch with all tabs and panels
 	GetFullGuildPage(ctx context.Context, guildID uuid.UUID) (GetFullGuildPageRow, error)
@@ -281,6 +285,7 @@ type sqlcQuerier interface {
 	GetItemTemplateMetadataBatch(ctx context.Context, arg GetItemTemplateMetadataBatchParams) ([]GetItemTemplateMetadataBatchRow, error)
 	GetItemTemplatesByEntries(ctx context.Context, arg GetItemTemplatesByEntriesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
+	GetLatestExternalReferenceSnapshotForDay(ctx context.Context, arg GetLatestExternalReferenceSnapshotForDayParams) (ExternalReferenceSnapshot, error)
 	// Return the most recently published snapshot for a tenant+lookback.
 	GetLatestPublishedSnapshot(ctx context.Context, arg GetLatestPublishedSnapshotParams) (RankingSnapshot, error)
 	// Return the latest published snapshot whose cutoff <= the given timestamp.
@@ -497,6 +502,8 @@ type sqlcQuerier interface {
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
 	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
 	InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error
+	InsertExternalReferenceContent(ctx context.Context, arg InsertExternalReferenceContentParams) error
+	InsertExternalReferenceSnapshot(ctx context.Context, arg InsertExternalReferenceSnapshotParams) (ExternalReferenceSnapshot, error)
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
@@ -602,6 +609,7 @@ type sqlcQuerier interface {
 	ListExternalAPIRealms(ctx context.Context, server string) ([]ListExternalAPIRealmsRow, error)
 	ListExternalAPIRecentInstances(ctx context.Context, arg ListExternalAPIRecentInstancesParams) ([]ListExternalAPIRecentInstancesRow, error)
 	ListExternalAPIServers(ctx context.Context) ([]ListExternalAPIServersRow, error)
+	ListExternalReferenceSnapshotHistory(ctx context.Context, entityID uuid.UUID) ([]ListExternalReferenceSnapshotHistoryRow, error)
 	ListGearListsByUser(ctx context.Context, arg ListGearListsByUserParams) ([]GearList, error)
 	ListGearProgressionsByUser(ctx context.Context, arg ListGearProgressionsByUserParams) ([]GearProgression, error)
 	ListGearStatWeightsByUser(ctx context.Context, arg ListGearStatWeightsByUserParams) ([]GearStatWeight, error)
@@ -685,6 +693,7 @@ type sqlcQuerier interface {
 	ListWoWServers(ctx context.Context) ([]WowServer, error)
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
+	LockExternalReferenceEntity(ctx context.Context, entityID uuid.UUID) (uuid.UUID, error)
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
@@ -794,6 +803,7 @@ type sqlcQuerier interface {
 	SetDiscordAnnouncementDeliveryError(ctx context.Context, arg SetDiscordAnnouncementDeliveryErrorParams) error
 	SetDiscordAnnouncementMessage(ctx context.Context, arg SetDiscordAnnouncementMessageParams) (GuildDiscordLogAnnouncement, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
+	SetExternalReferenceCurrentSnapshot(ctx context.Context, arg SetExternalReferenceCurrentSnapshotParams) error
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)
 	SetResetToken(ctx context.Context, arg SetResetTokenParams) error
@@ -855,6 +865,7 @@ type sqlcQuerier interface {
 	UpdateDataset(ctx context.Context, arg UpdateDatasetParams) (Dataset, error)
 	UpdateDiscordAnnouncementRun(ctx context.Context, arg UpdateDiscordAnnouncementRunParams) (GuildDiscordLogAnnouncement, error)
 	UpdateExternalCharacterLinkSyncResponse(ctx context.Context, arg UpdateExternalCharacterLinkSyncResponseParams) error
+	UpdateExternalReferenceSnapshotObservation(ctx context.Context, arg UpdateExternalReferenceSnapshotObservationParams) (ExternalReferenceSnapshot, error)
 	UpdateGearList(ctx context.Context, arg UpdateGearListParams) (GearList, error)
 	UpdateGearProgression(ctx context.Context, arg UpdateGearProgressionParams) (GearProgression, error)
 	UpdateGearStatWeight(ctx context.Context, arg UpdateGearStatWeightParams) (GearStatWeight, error)
@@ -901,6 +912,7 @@ type sqlcQuerier interface {
 	// Refreshes the rate-limit timestamp. Clears the cached response: it is
 	// stale once a new sync starts, and stays NULL if the sync fails.
 	UpsertExternalCharacterLinkSync(ctx context.Context, arg UpsertExternalCharacterLinkSyncParams) error
+	UpsertExternalReferenceEntity(ctx context.Context, arg UpsertExternalReferenceEntityParams) (ExternalReferenceEntity, error)
 	UpsertGuild(ctx context.Context, arg UpsertGuildParams) (Guild, error)
 	UpsertGuildDiscordInstallation(ctx context.Context, arg UpsertGuildDiscordInstallationParams) (GuildDiscordInstallation, error)
 	UpsertGuildPage(ctx context.Context, arg UpsertGuildPageParams) (GuildPage, error)
