@@ -28,25 +28,35 @@ type Config struct {
 	PrimaryDomain string
 }
 
+type gatewaySession interface {
+	Open() error
+	Close() error
+}
+
 // Bot represents a Discord bot instance.
 type Bot struct {
 	session         *discordgo.Session
+	gateway         gatewaySession
 	httpDiagnostics *discordHTTPDiagnostics
 	logger          *slog.Logger
 	config          Config
 
-	mu       sync.RWMutex
-	handlers []func()
-	queue    JobInserter
+	mu                sync.RWMutex
+	gatewayMu         sync.Mutex
+	commandMu         sync.Mutex
+	handlers          []func()
+	handlersInstalled bool
+	commandHandlers   map[string]func(*discordgo.Session, *discordgo.InteractionCreate)
+	gatewayRunning    bool
+	queue             JobInserter
 
 	roles    []*discordgo.Role
 	disabled bool
 }
 
-// New creates a new Discord bot instance.
-// Call Open() to connect to Discord.
-func New(ctx context.Context, logger *slog.Logger, config Config) (*Bot, error) {
-	if config.Token == "" {
+// New constructs a Discord bot without opening its gateway connection.
+func New(_ context.Context, logger *slog.Logger, config Config) (*Bot, error) {
+	if config.Disabled || config.Token == "" {
 		logger.Info("discord bot is disabled, skipping initialization")
 		return &Bot{
 			logger:   logger.With(slog.String("component", "discord-bot")),
@@ -64,36 +74,17 @@ func New(ctx context.Context, logger *slog.Logger, config Config) (*Bot, error) 
 	session.Client.Transport = httpDiagnostics
 	bot := &Bot{
 		session:         session,
+		gateway:         session,
 		httpDiagnostics: httpDiagnostics,
 		logger:          logger.With(slog.String("component", "discord-bot")),
 		config:          config,
+		commandHandlers: make(map[string]func(*discordgo.Session, *discordgo.InteractionCreate)),
 	}
-
-	// Register default handlers
-	session.AddHandler(bot.onReady)
-	session.AddHandler(bot.onGuildMemberAdd)
-	session.AddHandler(bot.onGuildMemberUpdate)
-	session.AddHandler(bot.onGuildMemberRemove)
-
-	err = bot.Open(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("open bot session: %w", err)
-	}
-
-	// Pre-populate the roles cache. This is best-effort — a transient Discord
-	// API failure (rate-limit, CloudFlare HTML response, etc.) should not
-	// prevent the server from starting.
-	bot.roles, err = bot.GetGuildRoles(bot.ChronicleGuildID())
-	if err != nil {
-		bot.logger.Warn("initial guild role fetch failed, roles will be fetched on next call",
-			slog.String("error", err.Error()),
-		)
-	}
-
+	bot.installHandlers()
 	return bot, nil
 }
 
-// Available reports whether the Discord bot is configured and connected.
+// Available reports whether the Discord bot is configured for REST operations.
 func (b *Bot) Available() bool {
 	return b != nil && !b.disabled
 }
@@ -123,47 +114,131 @@ func (b *Bot) SetQueue(queue JobInserter) {
 	b.queue = queue
 }
 
-// Open connects to Discord and starts the bot.
-func (b *Bot) Open(ctx context.Context) error {
-	// Set intents - adjust based on what your bot needs
+func (b *Bot) installHandlers() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.handlersInstalled || b.session == nil {
+		return
+	}
+	if b.commandHandlers == nil {
+		b.commandHandlers = make(map[string]func(*discordgo.Session, *discordgo.InteractionCreate))
+	}
+	b.handlers = append(b.handlers,
+		b.session.AddHandler(b.onReady),
+		b.session.AddHandler(b.onGuildMemberAdd),
+		b.session.AddHandler(b.onGuildMemberUpdate),
+		b.session.AddHandler(b.onGuildMemberRemove),
+		b.session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			if i.Type != discordgo.InteractionApplicationCommand {
+				return
+			}
+			b.mu.RLock()
+			handler := b.commandHandlers[i.ApplicationCommandData().Name]
+			b.mu.RUnlock()
+			if handler != nil {
+				handler(s, i)
+			}
+		}),
+	)
+	b.handlersInstalled = true
+}
+
+// StartGateway connects the configured bot to Discord. Repeated calls are safe.
+func (b *Bot) StartGateway(ctx context.Context) error {
+	if b == nil || b.disabled {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	b.gatewayMu.Lock()
+	if b.GatewayRunning() {
+		b.gatewayMu.Unlock()
+		return nil
+	}
+
 	b.session.Identify.Intents = discordgo.IntentsGuilds |
 		discordgo.IntentsGuildMembers |
 		discordgo.IntentsGuildMessages |
 		discordgo.IntentsDirectMessages
-
 	b.httpDiagnostics.reset()
-	if err := b.session.Open(); err != nil {
+	if err := b.gateway.Open(); err != nil {
+		b.gatewayMu.Unlock()
 		return fmt.Errorf("open discord session: %w", b.httpDiagnostics.annotate(err))
 	}
+	b.mu.Lock()
+	b.gatewayRunning = true
+	b.mu.Unlock()
+	b.gatewayMu.Unlock()
 
 	var username, discriminator string
 	if b.session.State != nil && b.session.State.User != nil {
 		username = b.session.State.User.Username
 		discriminator = b.session.State.User.Discriminator
 	}
-
 	b.logger.Info("discord bot connected",
 		slog.String("username", username),
 		slog.String("discriminator", discriminator),
 	)
 
+	// Pre-populate the roles cache after each successful connection. This is
+	// best-effort because a transient Discord failure should not surrender an
+	// otherwise healthy gateway connection.
+	if b.ChronicleGuildID() != "" {
+		if _, err := b.GetGuildRoles(b.ChronicleGuildID()); err != nil {
+			b.logger.Warn("initial guild role fetch failed, roles will be fetched on next call",
+				slog.String("error", err.Error()))
+		}
+	}
 	return nil
 }
 
-// Close gracefully shuts down the bot.
-func (b *Bot) Close() error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+// StopGateway disconnects the bot from Discord. Repeated calls are safe.
+func (b *Bot) StopGateway() error {
+	if b == nil || b.disabled {
+		return nil
+	}
 
-	// Clean up any registered slash commands if needed
-	for _, cleanup := range b.handlers {
+	b.gatewayMu.Lock()
+	defer b.gatewayMu.Unlock()
+	if !b.GatewayRunning() {
+		return nil
+	}
+	if err := b.gateway.Close(); err != nil {
+		return err
+	}
+	b.mu.Lock()
+	b.gatewayRunning = false
+	b.mu.Unlock()
+	return nil
+}
+
+func (b *Bot) GatewayRunning() bool {
+	if b == nil {
+		return false
+	}
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.gatewayRunning
+}
+
+// Close permanently shuts down the bot and unregisters local event handlers.
+func (b *Bot) Close() error {
+	if b == nil {
+		return nil
+	}
+	stopErr := b.StopGateway()
+
+	b.mu.Lock()
+	handlers := b.handlers
+	b.handlers = nil
+	b.handlersInstalled = false
+	b.mu.Unlock()
+	for _, cleanup := range handlers {
 		cleanup()
 	}
-
-	if b.session != nil {
-		return b.session.Close()
-	}
-	return nil
+	return stopErr
 }
 
 // onReady is called when the bot successfully connects to Discord.

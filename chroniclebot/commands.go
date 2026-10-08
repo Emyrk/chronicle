@@ -19,8 +19,8 @@ type Command struct {
 // If guildID is empty, commands are registered globally (takes up to 1 hour to propagate).
 // If guildID is set, commands are registered instantly for that guild only.
 func (b *Bot) RegisterCommands(commands []Command) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.commandMu.Lock()
+	defer b.commandMu.Unlock()
 
 	// Resolve the application (bot user) ID. State.User is populated by the
 	// Ready event; if the gateway hasn't delivered it yet, fall back to "" so
@@ -30,22 +30,15 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 		appID = b.session.State.User.ID
 	}
 
-	// Create a map of command handlers
-	handlers := make(map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate))
+	// Replace the command-handler registry used by the dispatcher installed at
+	// construction time. This avoids accumulating handlers when a process loses
+	// and later regains gateway leadership.
+	b.mu.Lock()
+	b.commandHandlers = make(map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate), len(commands))
 	for _, cmd := range commands {
-		handlers[cmd.Definition.Name] = cmd.Handler
+		b.commandHandlers[cmd.Definition.Name] = cmd.Handler
 	}
-
-	// Add interaction handler
-	b.session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if i.Type != discordgo.InteractionApplicationCommand {
-			return
-		}
-
-		if handler, ok := handlers[i.ApplicationCommandData().Name]; ok {
-			handler(s, i)
-		}
-	})
+	b.mu.Unlock()
 
 	// Register commands with Discord
 	for _, cmd := range commands {

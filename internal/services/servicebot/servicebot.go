@@ -79,7 +79,14 @@ func (s *Service) Start(ctx context.Context) error {
 		return nil
 	}
 
+	if err := bot.StartGateway(ctx); err != nil {
+		return fmt.Errorf("start discord gateway: %w", err)
+	}
+
 	if err := bot.RegisterCommands(chroniclebot.DefaultCommands(bot)); err != nil {
+		if stopErr := bot.StopGateway(); stopErr != nil {
+			logger.Error("failed to stop discord gateway after command registration error", "error", stopErr)
+		}
 		return fmt.Errorf("register discord commands: %w", err)
 	}
 
@@ -87,6 +94,9 @@ func (s *Service) Start(ctx context.Context) error {
 }
 
 func (s *Service) Close(_ context.Context) error {
+	if s.bot == nil {
+		return nil
+	}
 	return s.bot.Close()
 }
 
