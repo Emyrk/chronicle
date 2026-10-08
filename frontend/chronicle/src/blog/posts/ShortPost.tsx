@@ -10,8 +10,8 @@ export function ShortPost({ post, children }: { post: BlogPostDefinition; childr
   const color = rarityColor(post.rarity);
   const [queryClient] = useState(() => new QueryClient());
   return (
-    <article className="mx-auto w-full max-w-3xl px-4 pb-12 pt-12 sm:px-10">
-      <header className="flex items-start gap-5 border-b border-border pb-8">
+    <article className="w-full pb-12 pt-12">
+      <header className="mx-auto flex w-full max-w-3xl items-start gap-5 border-b border-border px-4 pb-8 sm:px-10">
         <img
           src={iconUrl(post.icon)}
           alt=""
@@ -32,7 +32,7 @@ export function ShortPost({ post, children }: { post: BlogPostDefinition; childr
       </header>
 
       {post.video && (
-        <div className="mt-8">
+        <div className="mx-auto mt-10 w-full max-w-7xl px-4 sm:px-8 [&>div]:max-w-none">
           {/* Some compositions render real panels that call React Query hooks. */}
           <QueryClientProvider client={queryClient}>
             <LessonPlayer video={post.video} lessonId={post.id} />
@@ -40,7 +40,7 @@ export function ShortPost({ post, children }: { post: BlogPostDefinition; childr
         </div>
       )}
 
-      <div className="prose prose-invert mt-8 max-w-none prose-a:text-primary prose-a:no-underline [&_a:hover]:underline">
+      <div className="prose prose-invert mx-auto mt-8 w-full max-w-3xl px-4 prose-a:text-primary prose-a:no-underline sm:px-10 [&_a:hover]:underline">
         {children}
       </div>
     </article>
