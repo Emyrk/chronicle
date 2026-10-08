@@ -115,12 +115,7 @@ func TestBuildWowMapInstances(t *testing.T) {
 	require.Nil(t, instances[0].Floors[0].Bounds)
 	require.Equal(t, int32(43), instances[1].MapID)
 	require.Equal(t, int32(301), instances[1].Floors[0].Tiles[0].FileDataID)
-	require.Equal(t, &wowMapFloorBounds{
-		MinX: -410.946014,
-		MaxX: 595.528992,
-		MinY: -483.479004,
-		MaxY: 187.503998,
-	}, instances[1].Floors[0].Bounds)
+	require.Nil(t, instances[1].Floors[0].Bounds, "Forever Wailing Caverns positions do not share the 3.3.5 coordinate frame")
 	require.Equal(t, int32(209), instances[2].MapID)
 	require.Equal(t, int32(201), instances[2].Floors[0].Tiles[0].FileDataID)
 }
