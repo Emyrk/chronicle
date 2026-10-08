@@ -4415,6 +4415,7 @@ export interface WoWEncounter {
     readonly instance_id: string;
     readonly boss: boolean;
     readonly name: string;
+    readonly map_id: number;
     readonly kill_type: KillType;
     readonly remaining?: readonly GUID[];
     readonly start_time: string;
@@ -4508,7 +4509,6 @@ export interface WoWInstance {
     readonly tenant_include_in_all?: boolean;
     readonly log_group_id: string;
     readonly name: string;
-    readonly map_id: number;
     readonly slug: string;
     readonly start_time?: string;
     readonly end_time?: string;

@@ -48,6 +48,7 @@ export interface Encounter {
   id: string;
   name: string;
   boss: boolean;
+  mapId: number;
   kill_type: KillType;
   start_time: string;
   end_time: string;
@@ -60,7 +61,6 @@ export interface Encounter {
 export interface Instance {
   id: string;
   slug?: string;
-  mapId: number;
   logGroupId?: string;
   name: string;
   realm?: string;
@@ -124,7 +124,6 @@ function normalizeArray<T>(value: readonly T[] | null | undefined): readonly T[]
 function transformToInstance(
   apiInstance: {
     id: string;
-    map_id: number;
     slug?: string;
     log_group_id: string;
     name: string;
@@ -179,6 +178,7 @@ function transformToInstance(
       id: enc.id,
       name: enc.name,
       boss: enc.boss,
+      mapId: enc.map_id,
       kill_type: enc.kill_type,
       start_time: enc.start_time,
       end_time: enc.end_time,
@@ -209,7 +209,6 @@ function transformToInstance(
 
   return {
     id: apiInstance.id,
-    mapId: apiInstance.map_id,
     slug: apiInstance.slug,
     logGroupId: apiInstance.log_group_id,
     name: apiInstance.name,

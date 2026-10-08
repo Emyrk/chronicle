@@ -2775,7 +2775,7 @@ func (q *sqlQuerier) GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg Get
 }
 
 const getLogInstanceForDiscordAnnouncement = `-- name: GetLogInstanceForDiscordAnnouncement :one
-SELECT id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason, map_id FROM log_instances WHERE id = $1
+SELECT id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason FROM log_instances WHERE id = $1
 `
 
 func (q *sqlQuerier) GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error) {
@@ -2804,7 +2804,6 @@ func (q *sqlQuerier) GetLogInstanceForDiscordAnnouncement(ctx context.Context, i
 		&i.UpdatedAt,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
-		&i.MapID,
 	)
 	return i, err
 }
@@ -8093,7 +8092,7 @@ func (q *sqlQuerier) DeleteLogInstanceByIDAndGroup(ctx context.Context, arg Dele
 
 const encountersByInstanceID = `-- name: EncountersByInstanceID :many
 SELECT
-  id, instance_id, name, remaining, boss, start_time, end_time, kill_type
+  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id
 FROM
   log_instance_encounters
 WHERE
@@ -8118,6 +8117,7 @@ func (q *sqlQuerier) EncountersByInstanceID(ctx context.Context, instanceID uuid
 			&i.StartTime,
 			&i.EndTime,
 			&i.KillType,
+			&i.MapID,
 		); err != nil {
 			return nil, err
 		}
@@ -8352,7 +8352,7 @@ func (q *sqlQuerier) GetInstanceEncounterCharacterFights(ctx context.Context, in
 
 const getInstancesByLogGroupID = `-- name: GetInstancesByLogGroupID :many
 SELECT
-  id, realm_id, log_group_id, name, map_id, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
 FROM
   log_instances_guild
 WHERE
@@ -8373,7 +8373,6 @@ func (q *sqlQuerier) GetInstancesByLogGroupID(ctx context.Context, logGroupID uu
 			&i.RealmID,
 			&i.LogGroupID,
 			&i.Name,
-			&i.MapID,
 			&i.HashedSlug,
 			&i.GuildID,
 			&i.Capabilities,
@@ -8412,16 +8411,17 @@ func (q *sqlQuerier) GetInstancesByLogGroupID(ctx context.Context, logGroupID uu
 
 const insertEncounter = `-- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, kill_type, remaining, boss, start_time, end_time)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id
 `
 
 type InsertEncounterParams struct {
 	ID         uuid.UUID          `db:"id" json:"id"`
 	InstanceID uuid.UUID          `db:"instance_id" json:"instance_id"`
 	Name       string             `db:"name" json:"name"`
+	MapID      int32              `db:"map_id" json:"map_id"`
 	KillType   KillType           `db:"kill_type" json:"kill_type"`
 	Remaining  guid.GUIDs         `db:"remaining" json:"remaining"`
 	Boss       bool               `db:"boss" json:"boss"`
@@ -8434,6 +8434,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		arg.ID,
 		arg.InstanceID,
 		arg.Name,
+		arg.MapID,
 		arg.KillType,
 		arg.Remaining,
 		arg.Boss,
@@ -8450,6 +8451,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		&i.StartTime,
 		&i.EndTime,
 		&i.KillType,
+		&i.MapID,
 	)
 	return i, err
 }
@@ -8488,10 +8490,10 @@ func (q *sqlQuerier) InsertEncounterPhase(ctx context.Context, arg InsertEncount
 
 const insertInstance = `-- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, map_id, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason, map_id
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason
 `
 
 type InsertInstanceParams struct {
@@ -8499,7 +8501,6 @@ type InsertInstanceParams struct {
 	RealmID                 uuid.UUID          `db:"realm_id" json:"realm_id"`
 	LogGroupID              uuid.UUID          `db:"log_group_id" json:"log_group_id"`
 	Name                    string             `db:"name" json:"name"`
-	MapID                   int32              `db:"map_id" json:"map_id"`
 	HashedSlug              pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
 	GuildID                 uuid.NullUUID      `db:"guild_id" json:"guild_id"`
 	StartTime               pgtype.Timestamptz `db:"start_time" json:"start_time"`
@@ -8524,7 +8525,6 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		arg.RealmID,
 		arg.LogGroupID,
 		arg.Name,
-		arg.MapID,
 		arg.HashedSlug,
 		arg.GuildID,
 		arg.StartTime,
@@ -8566,7 +8566,6 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		&i.UpdatedAt,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
-		&i.MapID,
 	)
 	return i, err
 }
@@ -8610,7 +8609,7 @@ func (q *sqlQuerier) InsertParsedLogGroup(ctx context.Context, id uuid.UUID) err
 
 const instance = `-- name: Instance :one
 SELECT
-  id, realm_id, log_group_id, name, map_id, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
 FROM
   log_instances_guild
 WHERE
@@ -8625,7 +8624,6 @@ func (q *sqlQuerier) Instance(ctx context.Context, id uuid.UUID) (LogInstancesGu
 		&i.RealmID,
 		&i.LogGroupID,
 		&i.Name,
-		&i.MapID,
 		&i.HashedSlug,
 		&i.GuildID,
 		&i.Capabilities,
@@ -8657,7 +8655,7 @@ func (q *sqlQuerier) Instance(ctx context.Context, id uuid.UUID) (LogInstancesGu
 
 const instanceBySlug = `-- name: InstanceBySlug :one
 SELECT
-  id, realm_id, log_group_id, name, map_id, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
 FROM
   log_instances_guild
 WHERE
@@ -8672,7 +8670,6 @@ func (q *sqlQuerier) InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text)
 		&i.RealmID,
 		&i.LogGroupID,
 		&i.Name,
-		&i.MapID,
 		&i.HashedSlug,
 		&i.GuildID,
 		&i.Capabilities,
@@ -12457,7 +12454,7 @@ members AS MATERIALIZED (
         )::integer AS boss_coverage
     FROM affected_runs
     CROSS JOIN LATERAL (
-        SELECT candidate.id, candidate.realm_id, candidate.log_group_id, candidate.name, candidate.hashed_slug, candidate.guild_id, candidate.start_time, candidate.end_time, candidate.capabilities, candidate.versions, candidate.recorder_name, candidate.recorder_guid, candidate.parser_version, candidate.duplicate_group_id, candidate.difficulty_name, candidate.max_players, candidate.dynamic_difficulty, candidate.vehicle_control_intervals, candidate.category, candidate.updated_at, candidate.invalidated_at, candidate.invalid_reason, candidate.map_id
+        SELECT candidate.id, candidate.realm_id, candidate.log_group_id, candidate.name, candidate.hashed_slug, candidate.guild_id, candidate.start_time, candidate.end_time, candidate.capabilities, candidate.versions, candidate.recorder_name, candidate.recorder_guid, candidate.parser_version, candidate.duplicate_group_id, candidate.difficulty_name, candidate.max_players, candidate.dynamic_difficulty, candidate.vehicle_control_intervals, candidate.category, candidate.updated_at, candidate.invalidated_at, candidate.invalid_reason
         FROM log_instances candidate
         WHERE COALESCE(candidate.duplicate_group_id, candidate.id) = affected_runs.run_id
           AND candidate.invalidated_at IS NULL

@@ -1160,7 +1160,8 @@ CREATE TABLE log_instance_encounters (
     boss boolean NOT NULL,
     start_time timestamp with time zone NOT NULL,
     end_time timestamp with time zone NOT NULL,
-    kill_type kill_type NOT NULL
+    kill_type kill_type NOT NULL,
+    map_id integer DEFAULT 0 NOT NULL
 );
 
 CREATE TABLE log_instance_events (
@@ -1234,7 +1235,6 @@ CREATE TABLE log_instances (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     invalidated_at timestamp with time zone,
     invalid_reason text DEFAULT ''::text NOT NULL,
-    map_id integer DEFAULT 0 NOT NULL,
     CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text])))
 );
 
@@ -1307,7 +1307,6 @@ CREATE VIEW log_instances_guild AS
     li.realm_id,
     li.log_group_id,
     li.name,
-    li.map_id,
     li.hashed_slug,
     li.guild_id,
     li.capabilities,

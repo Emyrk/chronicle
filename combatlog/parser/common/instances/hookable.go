@@ -61,6 +61,7 @@ type Hookable struct {
 	// Static
 	MatchesZoneF func(z zone.Zone) bool
 	CurrentZone  zone.Zone
+	activeMapID  uint32
 	*identifier.Identifier
 	verbose              bool
 	realm                *realm.Info       // mostly static
@@ -234,6 +235,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		units:                db,
 		preprocessors:        ip.Preprocessors,
 		CurrentZone:          z,
+		activeMapID:          z.MapID,
 		MatchesZoneF:         ip.MatchesZone,
 		Characters:           chrs,
 		Identifier:           ip.Idf,
@@ -405,6 +407,14 @@ func (h *Hookable) SetVersionsIfUnset(versions map[string]string, player *guid.G
 // MatchesZone
 // TODO: Should we care about the instance ID here?
 func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.MatchesZoneF(z) }
+
+// UpdateMapID records the active zone map for the next encounter. Existing
+// encounters retain the map that was active when their fight began.
+func (h *Hookable) UpdateMapID(mapID uint32) {
+	if mapID != 0 {
+		h.activeMapID = mapID
+	}
+}
 
 // UpdateZoneDifficulty propagates late-arriving difficulty information to this
 // instance's CurrentZone without triggering a new hookable instance.
@@ -640,6 +650,7 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 		// The ongoingFight struct can handle itself. Make sure it exists.
 		h.currentFight = &ongoingFight{
 			EncounterID:    uuid.New(),
+			MapID:          h.activeMapID,
 			ActiveHostiles: make(map[guid.GUID]struct{}),
 			Events:         encounterevents.New(h.verbose),
 			PlayerDeaths:   nil,
@@ -781,6 +792,7 @@ func (h *Hookable) finalizeFight() error {
 
 	fight := encounter.Fight{
 		Hostiles:             map[guid.GUID]encounter.CharacterFight{},
+		MapID:                h.currentFight.MapID,
 		Start:                start,
 		End:                  end,
 		EncounterID:          h.currentFight.EncounterID,

@@ -147,7 +147,9 @@ function MapContent(props: PanelRenderProps<MapResult>) {
   }, [cursorMs, encounter]);
   const mapId = dominantMapId(visibleUnits.map((unit) => unit.sample));
   const representativeSample = visibleUnits.find((unit) => unit.sample.mapId === mapId)?.sample;
-  const artworkMapId = props.context.instance.mapId || mapId;
+  const encounterMapId = props.context.instance.encounters
+    .find((candidate) => candidate.id === encounter?.encounterId)?.mapId ?? 0;
+  const artworkMapId = encounterMapId || mapId;
   const artwork = manifestQuery.data && artworkMapId !== null
     ? resolveMapArtwork(manifestQuery.data, artworkMapId, representativeSample, props.context.instance.name)
     : null;

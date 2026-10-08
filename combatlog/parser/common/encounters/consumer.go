@@ -261,6 +261,11 @@ func (s *State) Zone(z messages.Zone) {
 	result := s.CurrentZone.Process(z)
 	switch result {
 	case zone.NoChange:
+		// A zone can retain its name and instance ID while reporting a more specific
+		// map ID. Keep that map for the next encounter without splitting the run.
+		if s.CurrentInstance != nil {
+			s.CurrentInstance.UpdateMapID(z.MapID)
+		}
 		// Concatenated logs can re-enter the same zone with the same instance ID.
 		// Split only after the completed run has been inactive for its configured gap.
 		if s.CurrentInstance == nil || !s.CurrentInstance.ShouldStartNewRun(z.Seen) {
@@ -311,6 +316,7 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 			continue
 		}
 		s.CurrentInstance = inst
+		inst.UpdateMapID(z.MapID)
 		matched = true
 		s.logger.Info("Matched existing instance",
 			slog.String("name", inst.Name()),

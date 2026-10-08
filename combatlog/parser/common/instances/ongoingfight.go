@@ -11,6 +11,7 @@ import (
 
 type ongoingFight struct {
 	EncounterID    uuid.UUID
+	MapID          uint32
 	ActiveHostiles map[guid.GUID]struct{}
 	Events         *encounterevents.EncounterEventsInProgress
 

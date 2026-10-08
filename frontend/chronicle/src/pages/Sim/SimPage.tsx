@@ -174,13 +174,13 @@ export function SimPage() {
     return {
       id: "sim-1",
       name: "DPS Simulation",
-      mapId: 0,
       startTime: startTimestamp.toISOString(),
       endTime: new Date(startTimestamp.getTime() + result.durationMs).toISOString(),
       encounters: [{
         id: SIM_ENCOUNTER_ID,
         name: "Simulation",
         boss: false,
+        mapId: 0,
         kill_type: "clean" as const,
         start_time: startTimestamp.toISOString(),
         end_time: new Date(startTimestamp.getTime() + result.durationMs).toISOString(),

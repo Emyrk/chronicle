@@ -45,11 +45,10 @@ func TestWoWLogGroupRowIncludesOwnerName(t *testing.T) {
 	require.Equal(t, "LogUploader", converted.OwnerName)
 }
 
-func TestWoWInstanceIncludesMapID(t *testing.T) {
+func TestWoWEncounterIncludesMapID(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, 43, WoWInstanceWithGuild(database.LogInstance{MapID: 43}, nil).MapID)
-	require.Equal(t, 533, WoWInstance(database.LogInstancesGuild{MapID: 533}).MapID)
+	require.Equal(t, 43, WoWEncounter(database.LogInstanceEncounter{MapID: 43}).MapID)
 }
 
 func TestVehicleControlMetadata(t *testing.T) {

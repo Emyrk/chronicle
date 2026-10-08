@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE log_instance_encounters
+  ADD COLUMN map_id INTEGER NOT NULL DEFAULT 0;
+
+COMMIT;

@@ -48,9 +48,9 @@ type Encounter struct {
 
 func (e Encounter) NamedString(db *unitdb.Units) string {
 	var str strings.Builder
-	str.WriteString(fmt.Sprintf("%s Fight [KillType=%s]: against %d units\n", e.Type, e.KillType, len(e.Combat.Hostiles)))
-	str.WriteString(fmt.Sprintf("  Start: %s\n", e.Combat.Start.Format("15:04:05.000")))
-	str.WriteString(fmt.Sprintf("  End:   %s\n", e.Combat.End.Format("15:04:05.000")))
+	fmt.Fprintf(&str, "%s Fight [KillType=%s]: against %d units\n", e.Type, e.KillType, len(e.Combat.Hostiles))
+	fmt.Fprintf(&str, "  Start: %s\n", e.Combat.Start.Format("15:04:05.000"))
+	fmt.Fprintf(&str, "  End:   %s\n", e.Combat.End.Format("15:04:05.000"))
 	str.WriteString("  Hostiles:\n")
 	for charID, charFight := range e.Combat.Hostiles {
 		unit, ok := db.Get(charID)
@@ -58,12 +58,12 @@ func (e Encounter) NamedString(db *unitdb.Units) string {
 		if !ok {
 			unitName = unit.Name
 		}
-		str.WriteString(fmt.Sprintf("    - %s (ID: %s) with %d activity periods\n", unitName, charID.String(), len(charFight.Activity)))
+		fmt.Fprintf(&str, "    - %s (ID: %s) with %d activity periods\n", unitName, charID.String(), len(charFight.Activity))
 		for _, activity := range charFight.Activity {
-			str.WriteString(fmt.Sprintf("        * From %s to %s\n",
+			fmt.Fprintf(&str, "        * From %s to %s\n",
 				activity.Start.Timestamp.Date().Format("15:04:05.000"),
 				activity.End.Timestamp.Date().Format("15:04:05.000"),
-			))
+			)
 		}
 	}
 	return str.String()
@@ -75,6 +75,7 @@ func (e Encounter) NamedString(db *unitdb.Units) string {
 // grouped into the same fight.
 type Fight struct {
 	EncounterID uuid.UUID
+	MapID       uint32
 	// Hostiles contains all hostile characters that participated in this fight.
 	// Each CharacterFight contains all activity periods from that character
 	// that belong to this fight.
@@ -130,9 +131,9 @@ func (f Fight) EndStates() EndStatesReport {
 
 func (f Fight) NamedString(db *unitdb.Units) string {
 	var str strings.Builder
-	str.WriteString(fmt.Sprintf("Fight: against %d units\n", len(f.Hostiles)))
-	str.WriteString(fmt.Sprintf("  Start: %s\n", f.Start.Format("15:04:05.000")))
-	str.WriteString(fmt.Sprintf("  End:   %s\n", f.End.Format("15:04:05.000")))
+	fmt.Fprintf(&str, "Fight: against %d units\n", len(f.Hostiles))
+	fmt.Fprintf(&str, "  Start: %s\n", f.Start.Format("15:04:05.000"))
+	fmt.Fprintf(&str, "  End:   %s\n", f.End.Format("15:04:05.000"))
 	str.WriteString("  Hostiles:\n")
 	for charID, charFight := range f.Hostiles {
 		unit, ok := db.Get(charID)
@@ -140,12 +141,12 @@ func (f Fight) NamedString(db *unitdb.Units) string {
 		if !ok {
 			unitName = unit.Name
 		}
-		str.WriteString(fmt.Sprintf("    - %s (ID: %s) with %d activity periods\n", unitName, charID.String(), len(charFight.Activity)))
+		fmt.Fprintf(&str, "    - %s (ID: %s) with %d activity periods\n", unitName, charID.String(), len(charFight.Activity))
 		for _, activity := range charFight.Activity {
-			str.WriteString(fmt.Sprintf("        * From %s to %s\n",
+			fmt.Fprintf(&str, "        * From %s to %s\n",
 				activity.Start.Timestamp.Date().Format("15:04:05.000"),
 				activity.End.Timestamp.Date().Format("15:04:05.000"),
-			))
+			)
 		}
 	}
 	return str.String()

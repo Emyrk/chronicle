@@ -18,6 +18,7 @@ const encounter = (
   id,
   name: id,
   boss: false,
+  mapId: 0,
   kill_type: "clean",
   start_time: start,
   end_time: end,

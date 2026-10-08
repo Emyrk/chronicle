@@ -1023,7 +1023,6 @@ function transformToInstance(
   apiInstance: {
     id: string;
     name: string;
-    map_id: number;
     realm_name?: string;
     guild?: { id: string; name: string };
     encounters: readonly WoWEncounterWithHostiles[];
@@ -1037,6 +1036,7 @@ function transformToInstance(
     id: enc.id,
     name: enc.name,
     boss: enc.boss,
+    mapId: enc.map_id,
     kill_type: enc.kill_type,
     start_time: enc.start_time,
     end_time: enc.end_time,
@@ -1058,7 +1058,6 @@ function transformToInstance(
   return {
     id: apiInstance.id,
     name: apiInstance.name,
-    mapId: apiInstance.map_id,
     realm: apiInstance.realm_name,
     guild: apiInstance.guild,
     startTime: sortedEncounters[0]?.start_time || new Date().toISOString(),
