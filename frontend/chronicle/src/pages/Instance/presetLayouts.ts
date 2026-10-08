@@ -16,6 +16,7 @@ export interface PresetLayout {
   panelTypes: Record<string, EventsPanelType>;
   panelOptions: Record<string, string>;
   panelFilters: Record<string, PanelFilter[]>;
+  requiredCapabilities?: string[];
 }
 
 // ── Shared timeline series config ───────────────────────────────────────────
@@ -176,6 +177,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     },
     panelOptions: {},
     panelFilters: {},
+    requiredCapabilities: ["interrupt"],
   },
   {
     id: "deaths",
@@ -237,6 +239,12 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     },
   },
 ];
+
+export function getAvailablePresetLayouts(capabilities: readonly string[]): PresetLayout[] {
+  return PRESET_LAYOUTS.filter((preset) =>
+    (preset.requiredCapabilities ?? []).every((capability) => capabilities.includes(capability)),
+  );
+}
 
 export const PRESET_LAYOUTS_BY_ID = Object.fromEntries(
   PRESET_LAYOUTS.map((p) => [p.id, p]),
