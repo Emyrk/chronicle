@@ -14,6 +14,7 @@ import {
   HistoricalPerformancePost,
   ParsingPost,
   PhaseSelectionsPost,
+  ReplayPost,
   TalentBuilderRefreshPost,
   VehicleSupportPost,
   YoutubeSyncPost,
@@ -55,6 +56,18 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 export const BLOG_POSTS: readonly BlogPostDefinition[] = [
+  {
+    id: "replay",
+    title: "Replay fights moment by moment",
+    description: "Play, pause, scrub, and step through a selected encounter while Chronicle panels follow the combat-log timeline.",
+    publishedAt: "2026-10-08",
+    rarity: "legendary",
+    tag: "Feature",
+    icon: "ability_rewindtime",
+    flavor: "Wait. What happened right there?",
+    video: remotionVideo(() => import("@/pages/Instance/videos/ReplayExplainer.video"), 700),
+    component: ReplayPost,
+  },
   {
     id: "custom-panels",
     title: "Custom panels are now available",

@@ -141,6 +141,72 @@ export function VehicleSupportPost({ post }: PostProps) {
   );
 }
 
+export function ReplayPost({ post }: PostProps) {
+  return (
+    <ShortPost post={post}>
+      <p>
+        A combat log tells you everything that happened in a fight, but a finished total does not always tell you
+        <em> when</em> it happened. <strong>Replay</strong> gives Chronicle a shared playhead so you can walk through a
+        selected encounter and watch its panels at a specific moment.
+      </p>
+
+      <h2>Start a Replay</h2>
+      <p>
+        Open an instance on a desktop, select the encounter you want to investigate, and click <strong>Replay</strong> in
+        the page actions. Chronicle starts at the beginning of the selected time range and opens a compact transport at
+        the bottom of the page. You can pin it to the top if you want to keep the lower action bar visible.
+      </p>
+      <p>
+        The compact transport covers the common controls: play or pause, restart, scrub to a time, choose a speed, and
+        disable Replay. Expand it when you need more precision.
+      </p>
+
+      <h2>Find the exact moment</h2>
+      <ul>
+        <li><strong>Scrub</strong> anywhere in the selected encounter.</li>
+        <li><strong>Skull markers</strong> on the track show player deaths.</li>
+        <li>Step backward or forward by <strong>100 milliseconds</strong> or <strong>1 second</strong>.</li>
+        <li>Jump directly to the start or end.</li>
+        <li>Play at <strong>0.25×, 0.5×, 1×, 2×, or 4×</strong> speed.</li>
+      </ul>
+      <p>
+        A useful workflow is to scrub to a death marker, pause, then step backward through the seconds before it. Check
+        incoming damage, healing, casts, status, and any other panels that help explain the sequence.
+      </p>
+
+      <h2>How panels follow Replay</h2>
+      <p>
+        Most metric panels build their result only up to the Replay cursor. Damage, healing, and similar totals grow as
+        the playhead moves forward. Their per-second values use the elapsed Replay time instead of the full encounter
+        duration.
+      </p>
+      <p>
+        Some panels need the complete encounter to stay useful. Those panels keep the full result and use the Replay
+        timestamp as presentation state instead. For example, the Death Log keeps future deaths visible but muted, while
+        timeline-style views can draw a playhead and dim what has not happened yet.
+      </p>
+
+      <h2>Replay and raid video</h2>
+      <p>
+        If an instance has a synchronized YouTube VOD, the <strong>Video</strong> view drives the same combat-log
+        timestamp. Manual Replay controls are disabled while the video is in charge, so the VOD and Chronicle panels stay
+        on one shared clock.
+      </p>
+
+      <h2>Good to know</h2>
+      <ul>
+        <li>Replay is currently available on desktop instance pages.</li>
+        <li>The selected encounter or time range defines the Replay bounds.</li>
+        <li>Seeking backward can take longer because incremental panels rebuild from the start of the range.</li>
+        <li>Results still depend on the events and telemetry present in the uploaded combat log.</li>
+      </ul>
+      <p>
+        Replay is meant for the question that starts most useful log reviews: <strong>what happened right there?</strong>
+      </p>
+    </ShortPost>
+  );
+}
+
 export function YoutubeSyncPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
