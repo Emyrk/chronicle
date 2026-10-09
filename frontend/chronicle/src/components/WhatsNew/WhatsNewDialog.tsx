@@ -16,7 +16,7 @@ interface WhatsNewDialogProps {
 
 const HIGHLIGHTS = [
   "Extend Chronicle with your own panels for specialized classes, encounters, and guild workflows.",
-  "Add panels from your account and use them alongside Chronicle's built-in analysis.",
+  "Your code runs on the same log data as Chronicle's built-in analysis, right alongside it.",
   "Source code is on GitHub. Fork it and build any panel you want.",
 ];
 
