@@ -310,7 +310,7 @@ func TestRazorgorePhaseOneAddActivityKeepsBossActive(t *testing.T) {
 
 	add, ok := chars.Get(legionnaire)
 	require.True(t, ok)
-	require.IsType(t, &creatures.RazorAdCharacter{}, add)
+	require.IsType(t, &characters.ActivityBumpsOthers{}, add)
 
 	_, err = chars.Process(damage(base.Add(70*time.Second), player, razor))
 	require.NoError(t, err)

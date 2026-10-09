@@ -154,11 +154,6 @@ func NewBroodlordWhelp(id guid.GUID, all *characters.Characters) (characters.Cha
 		WithTimeoutAsDeathIf(characters.IfEntryAlive(broodlordLashlayerEntry)), true
 }
 
-type RazorAdCharacter struct {
-	*characters.Common
-	all *characters.Characters
-}
-
 func NewRazorAdCharacter(flavor database.WoWFlavor) func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	return func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 		entry, ok := id.GetEntry()
@@ -180,34 +175,7 @@ func NewRazorAdCharacter(flavor database.WoWFlavor) func(id guid.GUID, all *char
 		if flavor.Has(database.FlavorNightmareOfUrsol) {
 			base.WithTimeoutAsDeath()
 		}
-		return &RazorAdCharacter{Common: base, all: all}, true
-	}
-}
-
-func (c *RazorAdCharacter) Process(m messages.Message) error {
-	cur, ok := c.Activity.Current()
-	if ok {
-		cur.HandleTimeout(m.Date())
-	}
-	return characters.ProcessCommonActivity(c, m)
-}
-
-func (c *RazorAdCharacter) Start(reason string, m messages.Message) {
-	c.Common.Start(reason, m)
-	c.bumpRazorgore(m)
-}
-
-func (c *RazorAdCharacter) Bump(reason string, m messages.Message) {
-	c.Common.Bump(reason, m)
-	c.bumpRazorgore(m)
-}
-
-func (c *RazorAdCharacter) bumpRazorgore(m messages.Message) {
-	for _, razor := range c.all.ByEntry[12435] {
-		boss, ok := razor.(characters.CharacterBase)
-		if ok && boss.IsActive() {
-			boss.Bump("razorgore_add_activity", m)
-		}
+		return characters.NewActivityBumpsOthersCustomCharacter(base, 12435), true
 	}
 }
 
