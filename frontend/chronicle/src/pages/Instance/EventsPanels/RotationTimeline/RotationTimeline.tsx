@@ -375,7 +375,6 @@ export function RotationTimeline({
           {hovered && (
             <CastTooltip
               cast={hovered.cast}
-              derived={derived[hovered.slot]}
               left={P(hovered.cast.startMs - derived[hovered.slot].offsetMs)}
               top={castLaneTop(hovered.slot) + CAST_LANE_H - 6}
               meta={spellMeta(hovered.cast.spellId)}
@@ -551,17 +550,13 @@ function PlayerLanes({ derived, P, vs, ve, pxPerMs, gcd, ignored, nowMs, isCoold
 
 interface CastTooltipProps {
   cast: TimelineCast;
-  derived: DerivedPlayer;
   left: number;
   top: number;
   meta: SpellMeta;
   unitName: (guid: string) => string;
 }
 
-function CastTooltip({ cast, derived, left, top, meta, unitName }: CastTooltipProps) {
-  const buffs = derived.player.data.aurasOn
-    .filter((a) => a.isBuff && a.startMs <= cast.startMs && (a.endMs == null || a.endMs > cast.startMs))
-    .map((a) => a.spellName);
+function CastTooltip({ cast, left, top, meta, unitName }: CastTooltipProps) {
   const castMs = Math.max(cast.endMs - cast.startMs, cast.channelTimeMs ?? 0);
   const damage = cast.damage + cast.periodicDamage;
   return (
@@ -587,20 +582,7 @@ function CastTooltip({ cast, derived, left, top, meta, unitName }: CastTooltipPr
       {cast.periodicDamage > 0 && (
         <div className="-mt-1 text-muted-foreground">incl. {formatNumber(cast.periodicDamage)} periodic</div>
       )}
-      {(buffs.length > 0 || cast.itemId != null) && (
-        <div className="flex flex-col gap-1 border-t border-border pt-2 text-muted-foreground">
-          {buffs.length > 0 && (
-            <div>
-              Buffs{" "}
-              <span className="text-foreground">
-                {buffs.slice(0, 8).join(", ")}
-                {buffs.length > 8 ? ` +${buffs.length - 8}` : ""}
-              </span>
-            </div>
-          )}
-          {cast.itemId != null && <div>Item #{cast.itemId}</div>}
-        </div>
-      )}
+      {cast.itemId != null && <div className="text-muted-foreground">Item #{cast.itemId}</div>}
     </TooltipShell>
   );
 }
