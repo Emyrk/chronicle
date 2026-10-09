@@ -113,28 +113,14 @@ describe("loadVerifiedCustomPanelArtifacts", () => {
     expect(revokeObjectURL).toHaveBeenCalledOnce();
   });
 
-  it("rejects size mismatches before Blob execution", async () => {
+  it("reports the expected and downloaded metadata for size mismatches", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("content", { status: 200 })),
     );
     const value = await artifact(Object.keys(responses)[0], "content");
+    const actualSha256 = value.sha256;
     value.size++;
-    await expect(
-      loadVerifiedCustomPanelArtifacts(
-        { entry: value },
-        false,
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("size mismatch");
-  });
-
-  it("rejects SHA-256 mismatches before Blob execution", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("content", { status: 200 })),
-    );
-    const value = await artifact(Object.keys(responses)[0], "content");
     value.sha256 = "0".repeat(64);
     await expect(
       loadVerifiedCustomPanelArtifacts(
@@ -142,6 +128,27 @@ describe("loadVerifiedCustomPanelArtifacts", () => {
         false,
         new AbortController().signal,
       ),
-    ).rejects.toThrow("SHA-256 mismatch");
+    ).rejects.toThrow(
+      `Plugin artifact size mismatch: chronicle-panel.json expects ${value.size} bytes with SHA-256 ${value.sha256}, but the downloaded artifact is ${value.size - 1} bytes with SHA-256 ${actualSha256}. Rebuild the artifact, then update its size and sha256 in chronicle-panel.json to match the built file.`,
+    );
+  });
+
+  it("reports the expected and downloaded hashes for SHA-256 mismatches", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("content", { status: 200 })),
+    );
+    const value = await artifact(Object.keys(responses)[0], "content");
+    const actualSha256 = value.sha256;
+    value.sha256 = "0".repeat(64);
+    await expect(
+      loadVerifiedCustomPanelArtifacts(
+        { entry: value },
+        false,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow(
+      `Plugin artifact SHA-256 mismatch: chronicle-panel.json expects ${value.sha256}, but the downloaded artifact has SHA-256 ${actualSha256}. Rebuild the artifact, then update its size and sha256 in chronicle-panel.json to match the built file.`,
+    );
   });
 });
