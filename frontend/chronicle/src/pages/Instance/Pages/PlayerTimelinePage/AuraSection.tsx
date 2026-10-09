@@ -289,14 +289,7 @@ function AuraRowView({ row, offsets, P, spellMeta, compact }: AuraRowViewProps) 
   return (
     <div className={cn("grid border-t border-border", compact ? "h-6" : "h-[30px]")} style={grid}>
       <div className={cn("flex min-w-0 items-center gap-1.5 pr-3", compact ? "pl-7" : "pl-4")}>
-        {meta.spell ? (
-          <SpellIconWithTooltip spell={meta.spell} size={compact ? 12 : 14} detailed className="rounded-[2px]" />
-        ) : (
-          <span
-            className={cn("shrink-0 rounded-[2px] bg-muted bg-cover bg-center", compact ? "size-3" : "size-3.5")}
-            style={{ backgroundImage: `url(${meta.icon})` }}
-          />
-        )}
+        <AuraIcon meta={meta} name={row.name} size={compact ? 12 : 14} />
         <span className="min-w-0 flex-1 truncate" title={`${row.name}${row.spellId ? ` #${row.spellId}` : ""}`}>
           {row.name}
         </span>
@@ -382,15 +375,7 @@ function WholeFightRow({ rows, players, spellMeta }: WholeFightRowProps) {
                     className="flex rounded-[2px]"
                     style={g.slot != null ? { boxShadow: `0 2px 0 ${SLOT_COLORS[g.slot]}` } : undefined}
                   >
-                    {meta.spell ? (
-                      <SpellIconWithTooltip spell={meta.spell} size={16} detailed className="rounded-[2px]" />
-                    ) : (
-                      <span
-                        title={row.name}
-                        className="size-4 rounded-[2px] bg-muted bg-cover bg-center"
-                        style={{ backgroundImage: `url(${meta.icon})` }}
-                      />
-                    )}
+                    <AuraIcon meta={meta} name={row.name} size={16} />
                   </span>
                 );
               })}
@@ -399,4 +384,28 @@ function WholeFightRow({ rows, players, spellMeta }: WholeFightRowProps) {
       </div>
     </div>
   );
+}
+
+/**
+ * Aura icon with the spell tooltip. Spells whose data has no icon (some
+ * passive talents) or no data at all get the placeholder icon instead of
+ * rendering nothing.
+ */
+function AuraIcon({ meta, name, size }: { meta: SpellMeta; name: string; size: number }) {
+  const placeholder = (
+    <span
+      title={meta.spell ? undefined : name}
+      className="block shrink-0 rounded-[2px] bg-muted bg-cover bg-center"
+      style={{ width: size, height: size, backgroundImage: `url(${meta.icon})` }}
+    />
+  );
+  if (!meta.spell) return placeholder;
+  if (!meta.spell.spell_icon?.TextureFilename) {
+    return (
+      <SpellIconWithTooltip spell={meta.spell} detailed>
+        {placeholder}
+      </SpellIconWithTooltip>
+    );
+  }
+  return <SpellIconWithTooltip spell={meta.spell} size={size} detailed className="rounded-[2px]" />;
 }
