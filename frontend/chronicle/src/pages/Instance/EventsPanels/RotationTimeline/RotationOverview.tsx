@@ -204,15 +204,10 @@ function DpsLegendHint() {
   return (
     <div className="flex flex-col gap-2 text-xs leading-relaxed">
       <div className="text-sm font-semibold">DPS · {windowS}s trailing average</div>
-      <p className="text-zinc-300">
-        Each point is the player&apos;s damage (pets and procs included) over the previous {windowS} seconds,
-        divided by {windowS}. At 1:20 the line shows damage dealt from 1:15 to 1:20.
-      </p>
-      <ul className="list-disc space-y-1 pl-4 text-zinc-400">
-        <li>Smoothing hides single big hits, so bursts show up as humps rather than spikes.</li>
-        <li>A trailing window lags: a burst appears about {windowS / 2}s after it happened.</li>
-        <li>The first {windowS - 1} seconds average over fewer seconds so the line does not start low.</li>
-        <li>The DPS next to each name is total damage over the whole fight, so it will not match any one point.</li>
+      <p className="text-zinc-300">Damage over the last {windowS}s, divided by {windowS}. Pets and procs included.</p>
+      <ul className="list-disc space-y-0.5 pl-4 text-zinc-400">
+        <li>Bursts lag by about {windowS / 2}s.</li>
+        <li>Name DPS is the whole-fight average.</li>
       </ul>
     </div>
   );
