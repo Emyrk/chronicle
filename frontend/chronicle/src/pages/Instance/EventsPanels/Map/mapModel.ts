@@ -133,9 +133,11 @@ export interface DungeonMapCalibration {
   anchorPoint: MapPoint;
 }
 
-// Adventure Guide boss pins in artwork percentages. Forever's UNIT_POSITION
-// coordinates shift between Wailing Caverns regions, so each boss encounter
-// uses its boss as a local anchor while retaining DungeonMap scale/orientation.
+// Adventure Guide boss pins in artwork percentages. Advanced combat logs use
+// canonical map-space coordinates, but Wailing Caverns' flattened artwork does
+// not have one affine transform that fits every cavern region. Each boss
+// encounter therefore uses its boss as a local artwork anchor while retaining
+// the corrected DungeonMap scale and orientation for nearby movement.
 const WAILING_CAVERNS_BOSS_PINS = new Map<number, MapPoint>([
   [3671, { leftPercent: 30.6, topPercent: 43 }],
   [3670, { leftPercent: 19.1, topPercent: 39.5 }],
