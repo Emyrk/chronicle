@@ -6,6 +6,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { whatsNewLink } from "./trackedLinks";
 import { iconUrl } from "@/config/iconUrl";
 
 interface WhatsNewDialogProps {
@@ -14,8 +15,8 @@ interface WhatsNewDialogProps {
 }
 
 const HIGHLIGHTS = [
-  "Extend Chronicle with trusted community-built panels for specialized classes, encounters, and guild workflows.",
-  "Install verified panels, manage them from your account, and use them alongside Chronicle's built-in analysis.",
+  "Extend Chronicle with your own panels for specialized classes, encounters, and guild workflows.",
+  "Add panels from your account and use them alongside Chronicle's built-in analysis.",
   "Source code is on GitHub. Fork it and build any panel you want.",
 ];
 
@@ -64,7 +65,7 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
 
           <div className="mt-5 flex flex-wrap items-center gap-5">
             <Link
-              to="/blog/custom-panels"
+              to={whatsNewLink("/blog/custom-panels", "whats_new_primary", "custom-panels")}
               onClick={close}
               className="inline-flex items-center gap-2 rounded border border-quality-legendary bg-[linear-gradient(180deg,#ff9a2e,#cc6600)] px-[18px] py-2.5 text-sm font-semibold text-[#1a0e00] transition-[filter] hover:brightness-110"
             >
@@ -72,7 +73,7 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
-              to="/blog"
+              to={whatsNewLink("/blog", "whats_new_archive", "custom-panels")}
               onClick={close}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
