@@ -9,14 +9,37 @@ import {
 
 // ── Preset Layout Definition ────────────────────────────────────────────────
 
-export interface PresetLayout {
+interface PresetLayoutBase {
   id: string;
   label: string;
+  requiredCapabilities?: string[];
+}
+
+export const INSTANCE_PAGE_TYPES = ["empty", "player_timeline"] as const;
+
+export type InstancePageType = (typeof INSTANCE_PAGE_TYPES)[number];
+
+export function isInstancePageType(value: unknown): value is InstancePageType {
+  return (INSTANCE_PAGE_TYPES as readonly unknown[]).includes(value);
+}
+
+export interface PagePresetLayout extends PresetLayoutBase {
+  kind: "page";
+  pageType: InstancePageType;
+}
+
+export interface PanelPresetLayout extends PresetLayoutBase {
+  kind: "panels";
   layoutItems: GridEditorItem[];
   panelTypes: Record<string, EventsPanelType>;
   panelOptions: Record<string, string>;
   panelFilters: Record<string, PanelFilter[]>;
-  requiredCapabilities?: string[];
+}
+
+export type PresetLayout = PagePresetLayout | PanelPresetLayout;
+
+export function isPanelPresetLayout(preset: PresetLayout): preset is PanelPresetLayout {
+  return preset.kind === "panels";
 }
 
 // ── Shared timeline series config ───────────────────────────────────────────
@@ -84,8 +107,15 @@ const HEAL_TARGET_PLAYERS_FILTER: PanelFilter = { type: "target_type", value: "s
 
 export const PRESET_LAYOUTS: PresetLayout[] = [
   {
+    id: "player_timeline",
+    label: "Player Timeline",
+    kind: "page",
+    pageType: "player_timeline",
+  },
+  {
     id: "summary",
     label: "Summary",
+    kind: "panels",
     layoutItems: FIVE_PANEL_GRID,
     panelTypes: DEFAULT_INSTANCE_PANEL_TYPES,
     panelOptions: {
@@ -100,6 +130,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
   {
     id: "damage",
     label: "Damage",
+    kind: "panels",
     layoutItems: FIVE_PANEL_GRID,
     panelTypes: {
       "panel-1": "timeline",
@@ -130,6 +161,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
   {
     id: "healing",
     label: "Healing",
+    kind: "panels",
     layoutItems: FIVE_PANEL_GRID,
     panelTypes: {
       "panel-1": "timeline",
@@ -155,6 +187,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
   {
     id: "dispels",
     label: "Dispels",
+    kind: "panels",
     layoutItems: THREE_PANEL_GRID,
     panelTypes: {
       "panel-1": "dispel_log",
@@ -167,6 +200,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
   {
     id: "interrupts",
     label: "Interrupts",
+    kind: "panels",
     layoutItems: [
       { id: "panel-1", title: "Panel 1", x: 0, y: 0, w: 6, h: 5, minW: 4 },
       { id: "panel-2", title: "Panel 2", x: 6, y: 0, w: 6, h: 5, minW: 4 },
@@ -182,6 +216,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
   {
     id: "deaths",
     label: "Deaths",
+    kind: "panels",
     layoutItems: FOUR_PANEL_GRID,
     panelTypes: {
       "panel-1": "deaths",
@@ -201,6 +236,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
   {
     id: "loot",
     label: "Loot",
+    kind: "panels",
     layoutItems: [
       { id: "panel-1", title: "Loot", x: 0, y: 0, w: 12, h: 6, minW: 4 },
       { id: "panel-2", title: "Roles", x: 0, y: 6, w: 12, h: 5, minW: 4 },
@@ -215,6 +251,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
   {
     id: "meta",
     label: "Meta",
+    kind: "panels",
     layoutItems: [
       { id: "panel-6", title: "All Activity", x: 0, y: 0, w: 12, h: 4, minW: 4 },
       { id: "panel-7", title: "Periods", x: 0, y: 4, w: 12, h: 4, minW: 4 },
@@ -250,4 +287,4 @@ export const PRESET_LAYOUTS_BY_ID = Object.fromEntries(
   PRESET_LAYOUTS.map((p) => [p.id, p]),
 ) as Record<string, PresetLayout>;
 
-export const DEFAULT_PRESET_ID = "summary";
+export const DEFAULT_PRESET_ID = "player_timeline";

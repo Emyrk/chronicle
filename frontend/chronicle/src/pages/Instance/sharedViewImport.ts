@@ -1,3 +1,32 @@
+import { isInstancePageType, type InstancePageType } from "./presetLayouts";
+
+export interface SharedPageLayout {
+  presetId?: string;
+  pageType: InstancePageType;
+}
+
+export function readSharedPageLayout(payload: unknown): SharedPageLayout | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
+
+  const layout = (payload as { layout?: unknown }).layout;
+  if (typeof layout !== "object" || layout === null || Array.isArray(layout)) return null;
+
+  const { kind, pageType, presetId } = layout as {
+    kind?: unknown;
+    pageType?: unknown;
+    presetId?: unknown;
+  };
+  if (kind !== "page") return null;
+  if (!isInstancePageType(pageType)) {
+    throw new Error("Shared view has an unsupported page type");
+  }
+
+  return {
+    pageType,
+    ...(typeof presetId === "string" ? { presetId } : {}),
+  };
+}
+
 export interface SharedTimeRange {
   startMs: number;
   endMs: number;
