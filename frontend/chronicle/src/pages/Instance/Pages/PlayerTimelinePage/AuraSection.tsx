@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { useFriendlyClassBuffs } from "@/api/classBuffs";
 import { cn } from "@/lib/utils";
+import { classifyAura, combinePlacements } from "../../EventsPanels/RotationTimeline/auraClassification";
 import { alignOffsetMs, playerCasts } from "../../EventsPanels/RotationTimeline/derive";
 import { SLOT_COLORS } from "../../EventsPanels/RotationTimeline/format";
 import { IndicatorLine } from "../../EventsPanels/RotationTimeline/IndicatorLine";
@@ -18,8 +20,33 @@ interface AuraRow {
   uptime: number[];
 }
 
-const VISIBLE_ROWS = 10;
 const LABEL_WIDTH = 220;
+
+interface ClassifiedRows {
+  key: AuraRow[];
+  other: AuraRow[];
+  hidden: number;
+}
+
+/** Split rows into key / other / hidden using each player's class. */
+function classifyRows(
+  rows: readonly AuraRow[],
+  players: readonly RotationTimelinePlayer[],
+  spellMeta: (spellId: number | null) => SpellMeta,
+  adminIgnored: ReadonlySet<number>,
+): ClassifiedRows {
+  const out: ClassifiedRows = { key: [], other: [], hidden: 0 };
+  for (const row of rows) {
+    const classSet = row.spellId != null ? spellMeta(row.spellId).spell?.spell_class_set?.string : undefined;
+    const ignored = row.spellId != null && adminIgnored.has(row.spellId);
+    const placement = combinePlacements(
+      players.flatMap((p, slot) => (row.segs[slot]?.length ? [classifyAura(classSet, p.className, ignored)] : [])),
+    );
+    if (placement === "hidden") out.hidden++;
+    else out[placement].push(row);
+  }
+  return out;
+}
 
 function buildRows(perSlot: readonly (readonly TimelineAuraSegment[])[], durationMs: number): AuraRow[] {
   const rows = new Map<string, AuraRow>();
@@ -68,6 +95,16 @@ interface AuraSectionProps {
 export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionProps) {
   const [open, setOpen] = useState(true);
   const { durationMs } = view;
+  const classBuffs = useFriendlyClassBuffs();
+  // Only explicit admin ignores; self-targeted spells are ignored by default for
+  // raid buff coverage, but self procs are exactly what a rotation needs.
+  const adminIgnored = useMemo(() => {
+    const ids = new Set<number>();
+    for (const spells of Object.values(classBuffs.data ?? {})) {
+      for (const spell of spells) if (spell.ignored && !spell.default_ignored) ids.add(spell.id);
+    }
+    return ids;
+  }, [classBuffs.data]);
 
   const offsets = useMemo(
     () => players.map((p) => alignOffsetMs(playerCasts(p.data), view.align, view.ignored)),
@@ -75,8 +112,8 @@ export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionP
   );
 
   const buffs = useMemo(
-    () => buildRows(players.map((p) => p.data.aurasOn.filter((a) => a.isBuff)), durationMs),
-    [players, durationMs],
+    () => classifyRows(buildRows(players.map((p) => p.data.aurasOn.filter((a) => a.isBuff)), durationMs), players, spellMeta, adminIgnored),
+    [players, durationMs, spellMeta, adminIgnored],
   );
 
   // Debuff targets: units A or B debuffed, ranked by damage they took from A and B.
@@ -94,8 +131,14 @@ export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionP
   const target = pickedTarget && targets.includes(pickedTarget) ? pickedTarget : (targets[0] ?? null);
 
   const debuffs = useMemo(
-    () => (target ? buildRows(players.map((p) => p.data.debuffsCast.filter((a) => a.target === target)), durationMs) : []),
-    [players, target, durationMs],
+    () =>
+      classifyRows(
+        target ? buildRows(players.map((p) => p.data.debuffsCast.filter((a) => a.target === target)), durationMs) : [],
+        players,
+        spellMeta,
+        adminIgnored,
+      ),
+    [players, target, durationMs, spellMeta, adminIgnored],
   );
 
   const P = (ms: number) => ((ms - view.startMs) / Math.max(1, view.endMs - view.startMs)) * 100;
@@ -123,7 +166,7 @@ export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionP
           }}
           onPointerLeave={() => view.setCursorMs(null)}
         >
-          <AuraGroup title="Buffs" rows={buffs} offsets={offsets} P={P} spellMeta={spellMeta} />
+          <AuraGroup title="Buffs" otherLabel="Other buffs" rows={buffs} offsets={offsets} P={P} spellMeta={spellMeta} />
           <div className="flex h-10 items-center gap-2 border-t border-border px-4 text-[11px] text-muted-foreground">
             <span className="text-[10px] uppercase tracking-wider">Debuffs on</span>
             {targets.length === 0 ? (
@@ -142,7 +185,7 @@ export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionP
               </select>
             )}
           </div>
-          <AuraGroup title={null} rows={debuffs} offsets={offsets} P={P} spellMeta={spellMeta} />
+          <AuraGroup title={null} otherLabel="Other debuffs" rows={debuffs} offsets={offsets} P={P} spellMeta={spellMeta} />
           {view.indicatorMs != null && (
             <div className="pointer-events-none absolute inset-y-0 right-0 overflow-hidden" style={{ left: LABEL_WIDTH }}>
               <IndicatorLine leftPct={P(view.indicatorMs)} />
@@ -156,74 +199,102 @@ export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionP
 
 interface AuraGroupProps {
   title: string | null;
-  rows: AuraRow[];
+  otherLabel: string;
+  rows: ClassifiedRows;
   offsets: number[];
   P: (ms: number) => number;
   spellMeta: (spellId: number | null) => SpellMeta;
 }
 
-function AuraGroup({ title, rows, offsets, P, spellMeta }: AuraGroupProps) {
-  const [expanded, setExpanded] = useState(false);
-  const shown = expanded ? rows : rows.slice(0, VISIBLE_ROWS);
-  const grid = { gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` };
+function AuraGroup({ title, otherLabel, rows, offsets, P, spellMeta }: AuraGroupProps) {
+  const [otherOpen, setOtherOpen] = useState(false);
+  const empty = rows.key.length === 0 && rows.other.length === 0;
   return (
     <div>
-      {title && (
-        <div className="flex h-5 items-end px-4 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{title}</div>
-      )}
-      {shown.map((row) => (
-        <div key={row.key} className="grid h-[30px] border-t border-border" style={grid}>
-          <div className="flex min-w-0 items-center gap-1.5 pl-4 pr-3">
-            <span
-              className="size-3.5 shrink-0 rounded-[2px] bg-muted bg-cover bg-center"
-              style={{ backgroundImage: `url(${spellMeta(row.spellId).icon})` }}
-            />
-            <span className="min-w-0 flex-1 truncate" title={`${row.name}${row.spellId ? ` #${row.spellId}` : ""}`}>
-              {row.name}
+      {(title || rows.hidden > 0) && (
+        <div className="flex h-5 items-end gap-2 px-4 pb-0.5 text-[10px] text-muted-foreground">
+          {title && <span className="uppercase tracking-wider">{title}</span>}
+          {rows.hidden > 0 && (
+            <span title="Buffs that belong to another class, like Mark of the Wild on a rogue">
+              {rows.hidden} from other classes hidden
             </span>
-            <span className="flex gap-1.5 font-mono text-[10px]">
-              {row.uptime.map((u, slot) => (
-                <span key={slot} style={{ color: SLOT_COLORS[slot] }}>
-                  {Math.round(u * 100)}%
-                </span>
-              ))}
-            </span>
-          </div>
-          <div className="relative overflow-hidden border-l border-border">
-            {row.segs.map((segs, slot) =>
-              segs.map(([s, e]) => {
-                const left = P(s - offsets[slot]);
-                const right = P(e - offsets[slot]);
-                if (right < 0 || left > 100) return null;
-                return (
-                  <div
-                    key={`${slot}-${s}`}
-                    className="absolute h-2.5 border-l-2"
-                    style={{
-                      top: slot === 0 ? 4 : 16,
-                      left: `${left}%`,
-                      width: `${Math.max(0.2, right - left)}%`,
-                      borderColor: SLOT_COLORS[slot],
-                      background: `color-mix(in oklab, ${SLOT_COLORS[slot]} 55%, transparent)`,
-                    }}
-                  />
-                );
-              }),
-            )}
-          </div>
+          )}
         </div>
+      )}
+      {rows.key.map((row) => (
+        <AuraRowView key={row.key} row={row} offsets={offsets} P={P} spellMeta={spellMeta} />
       ))}
-      {rows.length > VISIBLE_ROWS && (
+      {rows.other.length > 0 && (
         <button
           type="button"
-          onClick={() => setExpanded(!expanded)}
-          className="flex h-[30px] w-full items-center gap-2 border-t border-border px-4 text-left text-muted-foreground hover:bg-muted/50"
+          onClick={() => setOtherOpen(!otherOpen)}
+          className="flex h-[30px] w-full items-center gap-2 border-t border-border px-4 text-left hover:bg-muted/50"
         >
-          <ChevronRight className={cn("size-3", expanded && "rotate-90")} />
-          {expanded ? "Show fewer" : `${rows.length - VISIBLE_ROWS} more`}
+          <ChevronRight className={cn("size-3 text-muted-foreground transition-transform", otherOpen && "rotate-90")} />
+          {otherLabel}
+          <span className="font-mono text-[10px] text-muted-foreground">{rows.other.length}</span>
         </button>
       )}
-      {rows.length === 0 && <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">None</div>}
+      {otherOpen &&
+        rows.other.map((row) => <AuraRowView key={row.key} row={row} offsets={offsets} P={P} spellMeta={spellMeta} compact />)}
+      {empty && <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">None</div>}
+    </div>
+  );
+}
+
+interface AuraRowViewProps {
+  row: AuraRow;
+  offsets: number[];
+  P: (ms: number) => number;
+  spellMeta: (spellId: number | null) => SpellMeta;
+  /** Smaller, indented rows for the "Other" group. */
+  compact?: boolean;
+}
+
+function AuraRowView({ row, offsets, P, spellMeta, compact }: AuraRowViewProps) {
+  const grid = { gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` };
+  const barH = compact ? 8 : 10;
+  return (
+    <div className={cn("grid border-t border-border", compact ? "h-6" : "h-[30px]")} style={grid}>
+      <div className={cn("flex min-w-0 items-center gap-1.5 pr-3", compact ? "pl-7" : "pl-4")}>
+        <span
+          className={cn("shrink-0 rounded-[2px] bg-muted bg-cover bg-center", compact ? "size-3" : "size-3.5")}
+          style={{ backgroundImage: `url(${spellMeta(row.spellId).icon})` }}
+        />
+        <span className="min-w-0 flex-1 truncate" title={`${row.name}${row.spellId ? ` #${row.spellId}` : ""}`}>
+          {row.name}
+        </span>
+        <span className="flex gap-1.5 font-mono text-[10px]">
+          {row.uptime.map((u, slot) => (
+            <span key={slot} style={{ color: SLOT_COLORS[slot] }}>
+              {Math.round(u * 100)}%
+            </span>
+          ))}
+        </span>
+      </div>
+      <div className="relative overflow-hidden border-l border-border">
+        {row.segs.map((segs, slot) =>
+          segs.map(([s, e]) => {
+            const left = P(s - offsets[slot]);
+            const right = P(e - offsets[slot]);
+            if (right < 0 || left > 100) return null;
+            return (
+              <div
+                key={`${slot}-${s}`}
+                className="absolute border-l-2"
+                style={{
+                  top: slot === 0 ? 3 : 4 + barH,
+                  height: barH,
+                  left: `${left}%`,
+                  width: `${Math.max(0.2, right - left)}%`,
+                  borderColor: SLOT_COLORS[slot],
+                  background: `color-mix(in oklab, ${SLOT_COLORS[slot]} ${compact ? 45 : 55}%, transparent)`,
+                }}
+              />
+            );
+          }),
+        )}
+      </div>
     </div>
   );
 }
