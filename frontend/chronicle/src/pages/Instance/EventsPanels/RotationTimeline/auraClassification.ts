@@ -3,7 +3,7 @@
  * curated class-buff list. See docs/player-timeline-page.md.
  */
 
-export type AuraPlacement = "key" | "other" | "hidden";
+export type AuraPlacement = "key" | "other";
 
 /** "Death Knight" / "DeathKnight" / "DEATHKNIGHT" → "deathknight" */
 export function normalizeClass(name: string): string {
@@ -17,18 +17,13 @@ export function normalizeClass(name: string): string {
  * @param adminIgnored an admin explicitly ignored this spell in the curated list.
  */
 export function classifyAura(spellClassSet: string | undefined, playerClass: string, adminIgnored: boolean): AuraPlacement {
-  if (!spellClassSet || spellClassSet === "Unknown") return "other";
+  if (!spellClassSet || spellClassSet === "Unknown" || adminIgnored) return "other";
   const owner = normalizeClass(spellClassSet);
-  if (owner !== "generic" && owner !== normalizeClass(playerClass)) return "hidden";
-  return adminIgnored ? "other" : "key";
+  // Other classes' buffs (Mark of the Wild on a rogue) stay out of the key rows.
+  return owner === "generic" || owner === normalizeClass(playerClass) ? "key" : "other";
 }
 
-/**
- * Combine per-player placements for one row. A row is hidden only when it is
- * hidden for every player who has it; otherwise the most prominent wins.
- */
+/** Combine per-player placements for one row: key if it is key for any player. */
 export function combinePlacements(placements: readonly AuraPlacement[]): AuraPlacement {
-  if (placements.includes("key")) return "key";
-  if (placements.includes("other")) return "other";
-  return "hidden";
+  return placements.includes("key") ? "key" : "other";
 }

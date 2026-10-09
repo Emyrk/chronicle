@@ -163,7 +163,7 @@ For player P with class C, each spell (aura or cooldown cast) is classified:
 | Spell belongs to | Aura on P / cast by P | Cooldown cast by P |
 | --- | --- | --- |
 | C (P's class) | **show** | **show** |
-| Another class | **hide** | **show** (external cooldown, e.g. Power Infusion) |
+| Another class | "Other" (e.g. Mark of the Wild on a rogue) | **show** (external cooldown, e.g. Power Infusion) |
 | Generic (no class) | **show** | **show** |
 | No curated set | goes to "Other" | n/a (not a cooldown) |
 

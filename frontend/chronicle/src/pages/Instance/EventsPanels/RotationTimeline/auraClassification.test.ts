@@ -7,9 +7,9 @@ describe("classifyAura", () => {
     expect(classifyAura("Death Knight", "DeathKnight", false)).toBe("key");
   });
 
-  it("hides other classes' buffs", () => {
-    expect(classifyAura("Druid", "Rogue", false)).toBe("hidden"); // Mark of the Wild
-    expect(classifyAura("Priest", "Rogue", false)).toBe("hidden"); // Power Word: Fortitude
+  it("moves other classes' buffs to Other", () => {
+    expect(classifyAura("Druid", "Rogue", false)).toBe("other"); // Mark of the Wild
+    expect(classifyAura("Priest", "Rogue", false)).toBe("other"); // Power Word: Fortitude
   });
 
   it("shows generic spells such as consumables and enchant procs", () => {
@@ -23,9 +23,8 @@ describe("classifyAura", () => {
 });
 
 describe("combinePlacements", () => {
-  it("hides a row only when every player hides it", () => {
-    expect(combinePlacements(["hidden", "hidden"])).toBe("hidden");
-    expect(combinePlacements(["hidden", "other"])).toBe("other");
+  it("is key when key for any player", () => {
+    expect(combinePlacements(["other", "other"])).toBe("other");
     expect(combinePlacements(["other", "key"])).toBe("key");
   });
 });

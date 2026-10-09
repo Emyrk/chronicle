@@ -26,25 +26,23 @@ const LABEL_WIDTH = 220;
 interface ClassifiedRows {
   key: AuraRow[];
   other: AuraRow[];
-  hidden: number;
 }
 
-/** Split rows into key / other / hidden using each player's class. */
+/** Split rows into key / other using each player's class. */
 function classifyRows(
   rows: readonly AuraRow[],
   players: readonly RotationTimelinePlayer[],
   spellMeta: (spellId: number | null) => SpellMeta,
   adminIgnored: ReadonlySet<number>,
 ): ClassifiedRows {
-  const out: ClassifiedRows = { key: [], other: [], hidden: 0 };
+  const out: ClassifiedRows = { key: [], other: [] };
   for (const row of rows) {
     const classSet = row.spellId != null ? spellMeta(row.spellId).spell?.spell_class_set?.string : undefined;
     const ignored = row.spellId != null && adminIgnored.has(row.spellId);
     const placement = combinePlacements(
       players.flatMap((p, slot) => (row.segs[slot]?.length ? [classifyAura(classSet, p.className, ignored)] : [])),
     );
-    if (placement === "hidden") out.hidden++;
-    else out[placement].push(row);
+    out[placement].push(row);
   }
   return out;
 }
@@ -212,15 +210,8 @@ function AuraGroup({ title, otherLabel, rows, offsets, P, spellMeta }: AuraGroup
   const empty = rows.key.length === 0 && rows.other.length === 0;
   return (
     <div>
-      {(title || rows.hidden > 0) && (
-        <div className="flex h-5 items-end gap-2 px-4 pb-0.5 text-[10px] text-muted-foreground">
-          {title && <span className="uppercase tracking-wider">{title}</span>}
-          {rows.hidden > 0 && (
-            <span title="Buffs that belong to another class, like Mark of the Wild on a rogue">
-              {rows.hidden} from other classes hidden
-            </span>
-          )}
-        </div>
+      {title && (
+        <div className="flex h-5 items-end px-4 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{title}</div>
       )}
       {rows.key.map((row) => (
         <AuraRowView key={row.key} row={row} offsets={offsets} P={P} spellMeta={spellMeta} />
