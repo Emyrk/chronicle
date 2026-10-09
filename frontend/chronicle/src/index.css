@@ -189,6 +189,44 @@
   animation: button-jiggle 0.4s ease-in-out;
 }
 
+/* What's New "legendary item" tooltip: drop in, then pulse an orange glow with a sweeping shine */
+@keyframes legendary-drop {
+  0% { opacity: 0; transform: translateY(-14px) scale(0.96); }
+  60% { opacity: 1; transform: translateY(2px) scale(1.01); }
+  100% { transform: none; }
+}
+
+@keyframes legendary-glow {
+  0%, 100% { box-shadow: 0 0 0 1px #ff8000, 0 0 24px rgba(255, 128, 0, 0.35), 0 24px 60px rgba(0, 0, 0, 0.7); }
+  50% { box-shadow: 0 0 0 1px #ffb24d, 0 0 48px rgba(255, 128, 0, 0.6), 0 24px 60px rgba(0, 0, 0, 0.7); }
+}
+
+@keyframes legendary-shine {
+  0% { transform: translateX(-120%) skewX(-20deg); }
+  100% { transform: translateX(320%) skewX(-20deg); }
+}
+
+.legendary-tooltip {
+  box-shadow: 0 0 0 1px #ff8000, 0 0 24px rgba(255, 128, 0, 0.35), 0 24px 60px rgba(0, 0, 0, 0.7);
+  animation:
+    legendary-drop 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+    legendary-glow 2.8s ease-in-out 0.5s infinite;
+}
+
+.legendary-shine {
+  animation: legendary-shine 3.5s ease-in-out 0.6s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legendary-tooltip {
+    animation: none;
+  }
+
+  .legendary-shine {
+    display: none;
+  }
+}
+
 .magic-particles .particle {
   position: absolute;
   width: var(--size, 3px);

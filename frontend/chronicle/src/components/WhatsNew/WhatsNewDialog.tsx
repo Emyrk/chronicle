@@ -1,11 +1,9 @@
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { iconUrl } from "@/config/iconUrl";
@@ -15,61 +13,73 @@ interface WhatsNewDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// Styled as a legendary item tooltip. Reserved for big launches.
 export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
+  const close = () => onOpenChange(false);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="overflow-hidden border-yellow-500/30 bg-card p-0 shadow-2xl shadow-black/50 sm:max-w-2xl">
-        <div className="relative overflow-hidden border-b border-yellow-500/20 bg-gradient-to-br from-yellow-500/14 via-card to-card px-6 py-5 sm:px-8">
-          <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-yellow-400/10 blur-3xl" />
-          <DialogHeader className="relative">
-            <div className="mb-2 flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-yellow-400">
-              <Sparkles className="h-4 w-4" />
-              What&apos;s New
-            </div>
-            <DialogTitle className="font-wow text-3xl leading-none text-yellow-300 sm:text-4xl">
-              Custom panels are now available
+      <DialogContent className="legendary-tooltip w-[calc(100%-2rem)] max-w-[520px] gap-0 overflow-hidden rounded-md border-0 bg-[linear-gradient(180deg,rgba(20,14,8,0.98),rgba(10,10,14,0.98))] p-0 sm:max-w-[520px]">
+        <span className="legendary-shine pointer-events-none absolute inset-y-0 left-0 w-[30%] bg-[linear-gradient(90deg,transparent,rgba(255,200,120,0.12),transparent)]" />
+
+        <div className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-4 px-6 pt-[22px]">
+          <img
+            src={iconUrl("trade_engineering")}
+            alt=""
+            width={56}
+            height={56}
+            className="h-14 w-14 rounded border-2 border-quality-legendary bg-[#1a1206] shadow-[0_0_16px_rgba(255,128,0,0.5)]"
+          />
+          <div className="flex flex-col gap-1">
+            <span className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-quality-legendary">
+              Legendary update
+            </span>
+            <DialogTitle className="font-wow text-[28px] font-normal leading-tight text-quality-legendary [text-shadow:0_0_18px_rgba(255,128,0,0.45)]">
+              Custom panels are here
             </DialogTitle>
-            <DialogDescription className="max-w-xl text-sm leading-6 text-foreground/75 sm:text-base">
-              Community-built panels bring class, encounter, and guild-specific analysis to Chronicle.
-            </DialogDescription>
-          </DialogHeader>
+          </div>
         </div>
 
-        <div className="space-y-4 px-6 pb-6 sm:px-8 sm:pb-8">
-          <article className="relative -mt-px rounded-xl border border-yellow-500/35 bg-background/65 p-5 shadow-[0_0_28px_rgba(234,179,8,0.08)] sm:p-6">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-              <img
-                src={iconUrl("trade_engineering")}
-                alt=""
-                width={72}
-                height={72}
-                className="h-[72px] w-[72px] shrink-0 rounded-lg border-2 border-yellow-400 bg-black/30 shadow-lg shadow-yellow-500/10"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-yellow-400">
-                  Legendary · Feature
-                </p>
-                <h3 className="mt-1 text-lg font-semibold text-card-foreground">Build the view your raid needs</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Install verified panels directly from GitHub, manage them from your account, and use them alongside Chronicle&apos;s built-in analysis.
-                </p>
-              </div>
+        <div className="flex flex-col gap-1 px-6 pb-6 pt-4 text-sm leading-relaxed">
+          <p className="text-foreground">Binds to account</p>
+          <p className="text-foreground">Unique</p>
+
+          <DialogDescription asChild className="mt-3 flex max-w-[440px] flex-col gap-2.5 text-[15px] leading-relaxed text-[#5cff4a] [text-wrap:pretty]">
+            <div>
+              <p>
+                <span className="font-semibold text-quality-uncommon">Use: </span>
+                Extend Chronicle with trusted community-built panels for specialized classes, encounters, and guild workflows.
+              </p>
+              <p>
+                <span className="font-semibold text-quality-uncommon">Equip: </span>
+                Install verified panels, manage them from your account, and use them alongside Chronicle&apos;s built-in analysis.
+              </p>
+              <p>
+                <span className="font-semibold text-quality-uncommon">Equip: </span>
+                Source code is on GitHub. Fork it and build any panel you want.
+              </p>
             </div>
+          </DialogDescription>
 
-            <Button asChild size="lg" className="mt-6 w-full justify-between text-base shadow-lg shadow-primary/15">
-              <Link to="/blog/custom-panels" onClick={() => onOpenChange(false)}>
-                Read the full announcement
-                <ArrowRight className="h-5 w-5" />
-              </Link>
-            </Button>
-          </article>
+          <p className="mt-2 italic text-[#ffd100]">&ldquo;Build the view your raid needs.&rdquo;</p>
 
-          <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/blog" onClick={() => onOpenChange(false)}>
-              View all Chronicle updates
+          <div className="mt-5 flex flex-wrap items-center gap-5">
+            <Link
+              to="/blog/custom-panels"
+              onClick={close}
+              className="inline-flex items-center gap-2 rounded border border-quality-legendary bg-[linear-gradient(180deg,#ff9a2e,#cc6600)] px-[18px] py-2.5 text-sm font-semibold text-[#1a0e00] transition-[filter] hover:brightness-110"
+            >
+              Read about custom panels
               <ArrowRight className="h-4 w-4" />
             </Link>
-          </Button>
+            <Link
+              to="/blog"
+              onClick={close}
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              View all Chronicle updates
+            </Link>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
