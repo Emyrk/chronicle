@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowUpRight, X } from "lucide-react";
+import { useSiteConfig } from "@/api/queries";
 import { SERVER_NAME, serverCapabilities } from "@/config/serverCapabilities";
 import { Button } from "@/components/ui/button";
 
@@ -28,13 +29,12 @@ function wasDismissed(): boolean {
 
 export function ForeverAnnouncementBanner({
   flavor = serverCapabilities.defaultFlavor,
-  source = SERVER_NAME,
 }: {
   flavor?: readonly string[];
-  source?: string;
 }) {
+  const { data: siteConfig } = useSiteConfig();
   const [dismissed, setDismissed] = useState(wasDismissed);
-  const foreverURL = trackedForeverURL(source);
+  const foreverURL = trackedForeverURL(siteConfig?.tenant?.slug ?? SERVER_NAME);
 
   if (dismissed || !shouldShowForeverAnnouncement(flavor)) {
     return null;
