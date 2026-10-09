@@ -5,7 +5,7 @@ import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip/Spell
 import { cn } from "@/lib/utils";
 import { classifyAura, combinePlacements } from "../../EventsPanels/RotationTimeline/auraClassification";
 import { alignOffsetMs, playerCasts } from "../../EventsPanels/RotationTimeline/derive";
-import { SLOT_COLORS } from "../../EventsPanels/RotationTimeline/format";
+import { SLOT_COLORS, SLOT_TEXT_COLORS } from "../../EventsPanels/RotationTimeline/format";
 import { IndicatorLine } from "../../EventsPanels/RotationTimeline/IndicatorLine";
 import type { TimelineAuraSegment } from "../../EventsPanels/RotationTimeline/rotationTimeline.processor";
 import type { RotationTimelinePlayer } from "../../EventsPanels/RotationTimeline/RotationTimeline";
@@ -26,23 +26,35 @@ const LABEL_WIDTH = 220;
 interface ClassifiedRows {
   key: AuraRow[];
   other: AuraRow[];
+  /** Up the whole fight or not at all for every player; shown densely as icons. */
+  flat: AuraRow[];
 }
 
-/** Split rows into key / other using each player's class. */
+/** Uptime at or above this counts as "the whole fight", at or below NONE as "not at all". */
+const FULL_UPTIME = 0.98;
+const NONE_UPTIME = 0.01;
+
+function isFlat(row: AuraRow): boolean {
+  const full = row.uptime.some((u) => u >= FULL_UPTIME);
+  return full && row.uptime.every((u) => u >= FULL_UPTIME || u <= NONE_UPTIME);
+}
+
+/** Split rows into key / other / flat using each player's class. */
 function classifyRows(
   rows: readonly AuraRow[],
   players: readonly RotationTimelinePlayer[],
   spellMeta: (spellId: number | null) => SpellMeta,
   adminIgnored: ReadonlySet<number>,
 ): ClassifiedRows {
-  const out: ClassifiedRows = { key: [], other: [] };
+  const out: ClassifiedRows = { key: [], other: [], flat: [] };
   for (const row of rows) {
     const classSet = row.spellId != null ? spellMeta(row.spellId).spell?.spell_class_set?.string : undefined;
     const ignored = row.spellId != null && adminIgnored.has(row.spellId);
     const placement = combinePlacements(
       players.flatMap((p, slot) => (row.segs[slot]?.length ? [classifyAura(classSet, p.className, ignored)] : [])),
     );
-    out[placement].push(row);
+    if (isFlat(row)) out.flat.push(row);
+    else out[placement].push(row);
   }
   return out;
 }
@@ -174,7 +186,15 @@ export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionP
             view.pinAt(view.startMs + (x / width) * span, (6 / width) * span);
           }}
         >
-          <AuraGroup title="Buffs" otherLabel="Other buffs" rows={buffs} offsets={offsets} P={P} spellMeta={spellMeta} />
+          <AuraGroup
+            title="Buffs"
+            otherLabel="Other buffs"
+            rows={buffs}
+            players={players}
+            offsets={offsets}
+            P={P}
+            spellMeta={spellMeta}
+          />
           <div className="flex h-10 items-center gap-2 border-t border-border px-4 text-[11px] text-muted-foreground">
             <span className="text-[10px] uppercase tracking-wider">Debuffs on</span>
             {targets.length === 0 ? (
@@ -193,7 +213,15 @@ export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionP
               </select>
             )}
           </div>
-          <AuraGroup title={null} otherLabel="Other debuffs" rows={debuffs} offsets={offsets} P={P} spellMeta={spellMeta} />
+          <AuraGroup
+            title={null}
+            otherLabel="Other debuffs"
+            rows={debuffs}
+            players={players}
+            offsets={offsets}
+            P={P}
+            spellMeta={spellMeta}
+          />
           {view.indicatorMs != null && (
             <div className="pointer-events-none absolute inset-y-0 right-0 overflow-hidden" style={{ left: LABEL_WIDTH }}>
               <IndicatorLine leftPct={P(view.indicatorMs)} />
@@ -209,14 +237,15 @@ interface AuraGroupProps {
   title: string | null;
   otherLabel: string;
   rows: ClassifiedRows;
+  players: readonly RotationTimelinePlayer[];
   offsets: number[];
   P: (ms: number) => number;
   spellMeta: (spellId: number | null) => SpellMeta;
 }
 
-function AuraGroup({ title, otherLabel, rows, offsets, P, spellMeta }: AuraGroupProps) {
+function AuraGroup({ title, otherLabel, rows, players, offsets, P, spellMeta }: AuraGroupProps) {
   const [otherOpen, setOtherOpen] = useState(false);
-  const empty = rows.key.length === 0 && rows.other.length === 0;
+  const empty = rows.key.length === 0 && rows.other.length === 0 && rows.flat.length === 0;
   return (
     <div>
       {title && (
@@ -225,6 +254,7 @@ function AuraGroup({ title, otherLabel, rows, offsets, P, spellMeta }: AuraGroup
       {rows.key.map((row) => (
         <AuraRowView key={row.key} row={row} offsets={offsets} P={P} spellMeta={spellMeta} />
       ))}
+      {rows.flat.length > 0 && <WholeFightRow rows={rows.flat} players={players} spellMeta={spellMeta} />}
       {rows.other.length > 0 && (
         <button
           type="button"
@@ -300,6 +330,72 @@ function AuraRowView({ row, offsets, P, spellMeta, compact }: AuraRowViewProps) 
             );
           }),
         )}
+      </div>
+    </div>
+  );
+}
+
+interface WholeFightRowProps {
+  rows: readonly AuraRow[];
+  players: readonly RotationTimelinePlayer[];
+  spellMeta: (spellId: number | null) => SpellMeta;
+}
+
+/**
+ * Auras that were up the whole fight (or not at all) for every player, as
+ * icon groups: both players, A only, B only (design: Rotations 2a).
+ */
+function WholeFightRow({ rows, players, spellMeta }: WholeFightRowProps) {
+  const full = (row: AuraRow, slot: number) => (row.uptime[slot] ?? 0) >= FULL_UPTIME;
+  const groups =
+    players.length === 2
+      ? [
+          { label: "Both", color: undefined, slot: null, items: rows.filter((r) => full(r, 0) && full(r, 1)) },
+          { label: `${players[0].name} only`, color: SLOT_TEXT_COLORS[0], slot: 0, items: rows.filter((r) => full(r, 0) && !full(r, 1)) },
+          { label: `${players[1].name} only`, color: SLOT_TEXT_COLORS[1], slot: 1, items: rows.filter((r) => !full(r, 0) && full(r, 1)) },
+        ]
+      : [{ label: players[0]?.name ?? "", color: SLOT_TEXT_COLORS[0], slot: 0, items: [...rows] }];
+  return (
+    <div
+      className="grid h-[30px] border-t border-border bg-muted/30"
+      style={{ gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` }}
+      title="Auras that were up for the entire fight or not at all, for every player"
+    >
+      <div className="flex items-center gap-2 pl-4 pr-3">
+        <span>Whole fight</span>
+        <span className="font-mono text-[10px] text-muted-foreground">{rows.length}</span>
+        <span className="ml-auto font-mono text-[10px] text-muted-foreground">100 / 0%</span>
+      </div>
+      <div className="styled-scrollbar flex items-center gap-4 overflow-x-auto border-l border-border px-2.5 text-[10px] text-muted-foreground">
+        {groups
+          .filter((g) => g.items.length > 0)
+          .map((g) => (
+            <span key={g.label} className="flex shrink-0 items-center gap-[3px]">
+              <span className="mr-[3px]" style={{ color: g.color }}>
+                {g.label}
+              </span>
+              {g.items.map((row) => {
+                const meta = spellMeta(row.spellId);
+                return (
+                  <span
+                    key={row.key}
+                    className="flex rounded-[2px]"
+                    style={g.slot != null ? { boxShadow: `0 2px 0 ${SLOT_COLORS[g.slot]}` } : undefined}
+                  >
+                    {meta.spell ? (
+                      <SpellIconWithTooltip spell={meta.spell} size={16} detailed className="rounded-[2px]" />
+                    ) : (
+                      <span
+                        title={row.name}
+                        className="size-4 rounded-[2px] bg-muted bg-cover bg-center"
+                        style={{ backgroundImage: `url(${meta.icon})` }}
+                      />
+                    )}
+                  </span>
+                );
+              })}
+            </span>
+          ))}
       </div>
     </div>
   );
