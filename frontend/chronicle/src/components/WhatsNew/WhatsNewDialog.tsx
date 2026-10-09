@@ -42,7 +42,6 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
 
         <div className="flex flex-col gap-1 px-6 pb-6 pt-4 text-sm leading-relaxed">
           <p className="text-foreground">Binds to account</p>
-          <p className="text-foreground">Unique</p>
 
           <DialogDescription asChild className="mt-3 flex max-w-[440px] flex-col gap-2.5 text-[15px] leading-relaxed text-[#5cff4a] [text-wrap:pretty]">
             <div>
