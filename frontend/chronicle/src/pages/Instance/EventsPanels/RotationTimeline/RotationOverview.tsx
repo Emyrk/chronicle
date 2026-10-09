@@ -3,13 +3,15 @@ import { formatNumber } from "@/lib/format";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { DPS_SMOOTHING_BINS } from "./derive";
 import { DAMAGE_BIN_MS } from "./rotationTimeline.processor";
-import { formatClock, SLOT_COLORS } from "./format";
+import { formatClock, SLOT_COLORS, SLOT_TEXT_COLORS } from "./format";
 import { IndicatorLine } from "./IndicatorLine";
 import type { RotationView } from "./useRotationView";
 
 export interface OverviewSeries {
   name: string;
   dps: readonly number[];
+  /** Whole-fight average DPS, shown when nothing is under the indicator. */
+  avgDps: number;
 }
 
 interface RotationOverviewProps {
@@ -40,13 +42,13 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
   const { durationMs } = view;
   const bins = Math.max(1, Math.ceil(durationMs / DAMAGE_BIN_MS));
 
+  const maxDps = useMemo(() => Math.max(1, ...series.flatMap((s) => s.dps)), [series]);
   const paths = useMemo(() => {
-    const max = Math.max(1, ...series.flatMap((s) => s.dps));
     return series.map((s) => {
-      const line = linePath(s.dps, max, bins);
+      const line = linePath(s.dps, maxDps, bins);
       return { line, area: line ? `${line}L${W},${H}L0,${H}Z` : "" };
     });
-  }, [series, bins]);
+  }, [series, bins, maxDps]);
 
   const leadBars = useMemo(() => {
     if (!lead || lead.length === 0) return [];
@@ -111,92 +113,79 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
           {lead && (
             <span className="flex items-center gap-1.5">
               <span className="h-2.5 w-2 bg-muted-foreground/50" />
-              Total damage lead
+              Damage lead
             </span>
           )}
         </span>
-        <span className="flex gap-3.5">
-          {series.map((s, i) => (
-            <span key={s.name} className="flex items-center gap-1.5">
-              <span className="h-0.5 w-3" style={{ background: SLOT_COLORS[i] }} />
-              {s.name}
-            </span>
-          ))}
-        </span>
       </div>
-      <div
-        ref={ref}
-        className="relative h-[76px] cursor-crosshair touch-none select-none rounded-sm border border-border bg-background"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={() => view.setCursorMs(null)}
-      >
-        {lead && (
-          <>
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-border" />
-            {leadBars.map((bar, i) => (
-              <div
-                key={i}
-                className="pointer-events-none absolute opacity-30"
-                style={{
-                  left: `${bar.pos}%`,
-                  width: `${bar.w}%`,
-                  top: bar.ahead ? `${50 - bar.h}%` : "50%",
-                  height: `${bar.h}%`,
-                  background: SLOT_COLORS[bar.ahead ? 0 : 1],
-                }}
+      <div className="grid grid-cols-[minmax(0,1fr)_176px] gap-2.5">
+        <div
+          ref={ref}
+          className="relative min-h-[76px] cursor-crosshair touch-none select-none rounded-sm border border-border bg-background"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={() => view.setCursorMs(null)}
+        >
+          {lead && (
+            <>
+              <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-border" />
+              {leadBars.map((bar, i) => (
+                <div
+                  key={i}
+                  className="pointer-events-none absolute opacity-30"
+                  style={{
+                    left: `${bar.pos}%`,
+                    width: `${bar.w}%`,
+                    top: bar.ahead ? `${50 - bar.h}%` : "50%",
+                    height: `${bar.h}%`,
+                    background: SLOT_COLORS[bar.ahead ? 0 : 1],
+                  }}
+                />
+              ))}
+            </>
+          )}
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            preserveAspectRatio="none"
+            className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+          >
+            {paths.map((p, i) => (
+              <path key={`a${i}`} d={p.area} style={{ fill: `color-mix(in oklab, ${SLOT_COLORS[i]} 16%, transparent)` }} />
+            ))}
+            {paths.map((p, i) => (
+              <path
+                key={`l${i}`}
+                d={p.line}
+                fill="none"
+                stroke={SLOT_COLORS[i]}
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
               />
             ))}
-          </>
-        )}
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          preserveAspectRatio="none"
-          className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-        >
-          {paths.map((p, i) => (
-            <path key={`a${i}`} d={p.area} style={{ fill: `color-mix(in oklab, ${SLOT_COLORS[i]} 16%, transparent)` }} />
-          ))}
-          {paths.map((p, i) => (
-            <path
-              key={`l${i}`}
-              d={p.line}
-              fill="none"
-              stroke={SLOT_COLORS[i]}
-              strokeWidth={1.5}
-              vectorEffect="non-scaling-stroke"
-              strokeLinejoin="round"
-            />
-          ))}
-        </svg>
-        <div
-          className="pointer-events-none absolute inset-y-0 border-x border-foreground bg-foreground/10"
-          style={{ left: `${pct(view.startMs)}%`, width: `${pct(view.endMs - view.startMs)}%` }}
-        />
-        {indicator != null && <IndicatorLine leftPct={pct(indicator)} />}
-        {brush && (
+          </svg>
           <div
-            className="pointer-events-none absolute inset-y-0 border border-dashed border-school-holy bg-school-holy/20"
-            style={{ left: `${Math.min(...brush) * 100}%`, width: `${Math.abs(brush[1] - brush[0]) * 100}%` }}
+            className="pointer-events-none absolute inset-y-0 border-x border-foreground bg-foreground/10"
+            style={{ left: `${pct(view.startMs)}%`, width: `${pct(view.endMs - view.startMs)}%` }}
           />
-        )}
-        {indicator != null && indicatorBin != null && (
-          <span
-            className="pointer-events-none absolute top-0.5 z-10 flex -translate-x-1/2 flex-col whitespace-nowrap rounded-sm border border-border bg-popover px-1.5 font-mono text-[10px]"
-            style={{ left: `${Math.min(92, Math.max(8, pct(indicator)))}%` }}
-          >
-            <span>
+          {indicator != null && <IndicatorLine leftPct={pct(indicator)} />}
+          {indicator != null && pct(indicator) >= 0 && pct(indicator) <= 100 && (
+            <span
+              className="pointer-events-none absolute top-0.5 z-10 -translate-x-1/2 rounded-sm bg-school-holy px-1 font-mono text-[10px] font-semibold text-background"
+              style={{ left: `${Math.min(96, Math.max(4, pct(indicator)))}%` }}
+            >
               {formatClock(indicator)}
-              {series.map((s, i) => (
-                <span key={s.name} className="ml-2" style={{ color: SLOT_COLORS[i] }}>
-                  {formatNumber(Math.round(s.dps[indicatorBin] ?? 0))}
-                </span>
-              ))}
             </span>
-            {lead && <LeadReadout value={lead[indicatorBin] ?? 0} />}
-          </span>
-        )}
+          )}
+          {brush && (
+            <div
+              className="pointer-events-none absolute inset-y-0 border border-dashed border-school-holy bg-school-holy/20"
+              style={{ left: `${Math.min(...brush) * 100}%`, width: `${Math.abs(brush[1] - brush[0]) * 100}%` }}
+            />
+          )}
+        </div>
+        <Scoreboard series={series} lead={lead} bin={indicatorBin} timeMs={indicator} maxDps={maxDps} />
       </div>
     </div>
   );
@@ -216,15 +205,72 @@ function DpsLegendHint() {
   );
 }
 
-/** Cumulative damage lead of A over B: "+1.2K" in A's color, "-1.2K" in B's. */
-function LeadReadout({ value }: { value: number }) {
-  const rounded = Math.round(value);
-  const sign = rounded > 0 ? "+" : rounded < 0 ? "-" : "±";
-  const color = rounded > 0 ? SLOT_COLORS[0] : rounded < 0 ? SLOT_COLORS[1] : undefined;
+/** Signed "+1.2K" / "−1.2K" in the leader's color (A when ≥ 0). */
+function signed(value: number): { text: string; color: string } {
+  const v = Math.round(value);
+  return {
+    text: `${v >= 0 ? "+" : "−"}${formatNumber(Math.abs(v))}`,
+    color: SLOT_TEXT_COLORS[v >= 0 ? 0 : 1],
+  };
+}
+
+interface ScoreboardProps {
+  series: readonly OverviewSeries[];
+  lead: readonly number[] | null;
+  /** Bin under the indicator, or null to show whole-fight figures. */
+  bin: number | null;
+  timeMs: number | null;
+  maxDps: number;
+}
+
+/**
+ * Fixed readout beside the chart (design: Crosshair Readout 1c). Shows values
+ * at the indicator, or whole-fight figures when there is no indicator.
+ */
+function Scoreboard({ series, lead, bin, timeMs, maxDps }: ScoreboardProps) {
+  const dps = series.map((s) => (bin != null ? (s.dps[bin] ?? 0) : s.avgDps));
+  const leadValue = lead && lead.length > 0 ? (bin != null ? (lead[bin] ?? 0) : lead[lead.length - 1]) : null;
+  const gap = series.length === 2 ? signed(dps[0] - dps[1]) : null;
+  const leadText = leadValue != null ? signed(leadValue) : null;
   return (
-    <span className="text-right" style={{ color }}>
-      {sign}
-      {formatNumber(Math.abs(rounded))}
-    </span>
+    <div className="flex flex-col justify-between gap-1 rounded-sm border border-border px-2.5 py-1.5 text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between">
+        <span>{bin != null ? "At" : "Whole fight"}</span>
+        {timeMs != null && bin != null && (
+          <span className="rounded-sm bg-school-holy px-1.5 font-mono font-semibold text-background">{formatClock(timeMs)}</span>
+        )}
+      </div>
+      {series.map((s, i) => (
+        <div key={s.name} className="flex flex-col gap-0.5">
+          <div className="flex justify-between gap-2">
+            <span className="truncate">{s.name}</span>
+            <span className="font-mono font-semibold text-foreground">{formatNumber(Math.round(dps[i]))}</span>
+          </div>
+          <div className="h-1 rounded-sm bg-muted">
+            <div
+              className="h-full rounded-sm"
+              style={{ width: `${Math.min(100, (dps[i] / maxDps) * 100)}%`, background: SLOT_COLORS[i] }}
+            />
+          </div>
+        </div>
+      ))}
+      {(gap || leadText) && <div className="h-px bg-border" />}
+      {gap && (
+        <div className="flex justify-between" title="DPS difference at this second (A minus B)">
+          <span>Gap</span>
+          <span className="font-mono font-semibold" style={{ color: gap.color }}>
+            {gap.text}
+          </span>
+        </div>
+      )}
+      {leadText && (
+        <div className="flex justify-between" title="Damage difference so far (A minus B)">
+          <span>Lead</span>
+          <span className="font-mono font-semibold" style={{ color: leadText.color }}>
+            {leadText.text}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }

@@ -134,7 +134,11 @@ export function RotationTimeline({
   const overview = useMemo(() => {
     const bins = Math.ceil(durationMs / DAMAGE_BIN_MS);
     return {
-      series: players.map((p) => ({ name: p.name, dps: dpsSeries(p.data.damageBins, bins) })),
+      series: players.map((p) => ({
+        name: p.name,
+        dps: dpsSeries(p.data.damageBins, bins),
+        avgDps: durationMs > 0 ? p.data.totalDamage / (durationMs / 1000) : 0,
+      })),
       lead: players.length === 2 ? damageLead(players[0].data.damageBins, players[1].data.damageBins, bins) : null,
     };
   }, [players, durationMs]);
