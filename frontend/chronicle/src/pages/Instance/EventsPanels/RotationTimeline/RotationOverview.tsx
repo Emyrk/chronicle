@@ -204,10 +204,10 @@ function DpsLegendHint() {
   return (
     <div className="flex flex-col gap-2 text-xs leading-relaxed">
       <div className="text-sm font-semibold">DPS · {windowS}s trailing average</div>
-      <p className="text-zinc-300">Damage over the last {windowS}s, divided by {windowS}. Pets and procs included.</p>
+      <p className="text-zinc-300">Damage over the last {windowS}s, divided by {windowS}. Pets included.</p>
       <ul className="list-disc space-y-0.5 pl-4 text-zinc-400">
         <li>Bursts lag by about {windowS / 2}s.</li>
-        <li>Name DPS is the whole-fight average.</li>
+        <li>Smoothing turns single big hits into humps, not spikes.</li>
       </ul>
     </div>
   );
