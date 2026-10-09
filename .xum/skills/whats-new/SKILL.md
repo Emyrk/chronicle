@@ -22,6 +22,7 @@ Chronicle's What's New system is a binary unread notification backed by an appen
 | Account indicator and menu entry | `frontend/chronicle/src/components/NavBar/NavBar.tsx` |
 | Custom preview content | `frontend/chronicle/src/components/WhatsNew/WhatsNewDialog.tsx` |
 | React Query and local cache | `frontend/chronicle/src/api/queries.ts` |
+| Modal tracking links | `frontend/chronicle/src/components/WhatsNew/trackedLinks.ts` |
 | OAuth and password signup initialization | `api/chronauth/signup.go`, `api/chronauth/password.go` |
 
 ## Data model
@@ -60,8 +61,9 @@ New OAuth and password accounts must initialize `seen_id` to `CurrentID()` insid
 2. Update `WhatsNewDialog.tsx` with the desired static React content. This UI may use custom layouts, screenshots, videos, buttons, and links.
 3. Keep the Account-menu entry below **Settings** and immediately before **Sign Out** on desktop and mobile.
 4. Link detailed release material to `/blog/<post-id>` and retain a route to the `/blog` archive when useful.
-5. Update the service tests so `CurrentID()` expects the new final ID and stale-ID behavior remains covered.
-6. Regenerate TypeScript API types only if the API contract changed; appending an ID alone requires no generation or migration.
+5. Tag modal-to-blog links through `whatsNewLink()` with distinct `chr_pos` values and a snake-case campaign matching the release ID.
+6. Update the service tests so `CurrentID()` expects the new final ID and stale-ID behavior remains covered.
+7. Regenerate TypeScript API types only if the API contract changed; appending an ID alone requires no generation or migration.
 
 Example:
 
@@ -89,6 +91,7 @@ Do not add a database catalog or a migration for each release. The compiled ID l
 
 ## Gotchas
 
+- Do not add raw untracked blog links to the modal. Use `whatsNewLink()` so primary and archive placements remain distinguishable.
 - Do not replace string IDs with numeric positions. Persisted IDs must remain meaningful across versions and deployments.
 - Do not treat an unknown persisted ID as current. Unknown means stale and should show the indicator.
 - Do not restore a database trigger for signup initialization. The trigger cannot read the Go release list; initialize both production signup paths explicitly.
