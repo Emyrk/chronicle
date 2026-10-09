@@ -183,15 +183,18 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
         )}
         {indicator != null && indicatorBin != null && (
           <span
-            className="pointer-events-none absolute top-0.5 z-10 -translate-x-1/2 whitespace-nowrap rounded-sm border border-border bg-popover px-1.5 font-mono text-[10px]"
+            className="pointer-events-none absolute top-0.5 z-10 flex -translate-x-1/2 flex-col whitespace-nowrap rounded-sm border border-border bg-popover px-1.5 font-mono text-[10px]"
             style={{ left: `${Math.min(92, Math.max(8, pct(indicator)))}%` }}
           >
-            {formatClock(indicator)}
-            {series.map((s, i) => (
-              <span key={s.name} className="ml-2" style={{ color: SLOT_COLORS[i] }}>
-                {formatNumber(Math.round(s.dps[indicatorBin] ?? 0))}
-              </span>
-            ))}
+            <span>
+              {formatClock(indicator)}
+              {series.map((s, i) => (
+                <span key={s.name} className="ml-2" style={{ color: SLOT_COLORS[i] }}>
+                  {formatNumber(Math.round(s.dps[indicatorBin] ?? 0))}
+                </span>
+              ))}
+            </span>
+            {lead && <LeadReadout value={lead[indicatorBin] ?? 0} />}
           </span>
         )}
       </div>
@@ -210,5 +213,18 @@ function DpsLegendHint() {
         <li>Smoothing turns single big hits into humps, not spikes.</li>
       </ul>
     </div>
+  );
+}
+
+/** Cumulative damage lead of A over B: "+1.2K" in A's color, "-1.2K" in B's. */
+function LeadReadout({ value }: { value: number }) {
+  const rounded = Math.round(value);
+  const sign = rounded > 0 ? "+" : rounded < 0 ? "-" : "±";
+  const color = rounded > 0 ? SLOT_COLORS[0] : rounded < 0 ? SLOT_COLORS[1] : undefined;
+  return (
+    <span className="text-right" style={{ color }}>
+      {sign}
+      {formatNumber(Math.abs(rounded))}
+    </span>
   );
 }
