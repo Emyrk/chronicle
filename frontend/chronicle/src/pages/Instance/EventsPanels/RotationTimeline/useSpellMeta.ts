@@ -53,7 +53,11 @@ export function useSpellMeta(spellIds: readonly number[]) {
     });
 
     const meta = (id: number | null): SpellMeta =>
-      (id != null ? byId.get(id) : undefined) ?? { spell: null, icon: iconUrl(FALLBACK_ICON, iconBaseUrl), school: "physical" };
+      (id != null ? byId.get(id) : undefined) ?? {
+        spell: null,
+        icon: iconUrl(id === AUTO_ATTACK_SPELL_ID ? "inv_sword_04" : FALLBACK_ICON, iconBaseUrl),
+        school: "physical",
+      };
 
     const gcd: GcdLookup = (id) => {
       const spell = byId.get(id)?.spell;

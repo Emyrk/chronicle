@@ -19,6 +19,7 @@ import {
 } from "./derive";
 import { formatClock, SLOT_COLORS, SLOT_LABELS, swingColor, tickStepMs } from "./format";
 import {
+  AUTO_ATTACK_SPELL_ID,
   DAMAGE_BIN_MS,
   type PlayerTimelineData,
   type TimelineCast,
@@ -368,6 +369,7 @@ export function RotationTimeline({
               left={P(hoveredSwing.swing.offsetMs - derived[hoveredSwing.slot].offsetMs)}
               top={castLaneTop(hoveredSwing.slot) + CAST_LANE_H + SWING_LANE_H - 2}
               unitName={unitName}
+              icon={spellMeta(AUTO_ATTACK_SPELL_ID).icon}
             />
           )}
           {hovered && (
@@ -561,47 +563,77 @@ function CastTooltip({ cast, derived, left, top, meta, unitName }: CastTooltipPr
     .filter((a) => a.isBuff && a.startMs <= cast.startMs && (a.endMs == null || a.endMs > cast.startMs))
     .map((a) => a.spellName);
   const castMs = Math.max(cast.endMs - cast.startMs, cast.channelTimeMs ?? 0);
+  const damage = cast.damage + cast.periodicDamage;
+  return (
+    <TooltipShell left={left} top={top} width="w-72">
+      <TooltipHeader
+        icon={meta.icon}
+        title={cast.spellName}
+        failed={cast.failed}
+        subtitle={[
+          formatClock(cast.startMs),
+          castMs > 0 ? `${(castMs / 1000).toFixed(1)}s cast` : "instant",
+        ].join(" · ") + (cast.target ? ` → ${unitName(cast.target)}` : "")}
+      />
+      {damage > 0 && (
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-2xl font-bold">{formatNumber(damage)}</span>
+          {cast.crits > 0 && (
+            <span className="text-[11px] font-bold text-school-holy">CRIT{cast.hits > 1 ? ` ×${cast.crits}` : ""}</span>
+          )}
+          {cast.hits > 1 && <span className="text-muted-foreground">{cast.hits} hits</span>}
+        </div>
+      )}
+      {cast.periodicDamage > 0 && (
+        <div className="-mt-1 text-muted-foreground">incl. {formatNumber(cast.periodicDamage)} periodic</div>
+      )}
+      {(buffs.length > 0 || cast.itemId != null) && (
+        <div className="flex flex-col gap-1 border-t border-border pt-2 text-muted-foreground">
+          {buffs.length > 0 && (
+            <div>
+              Buffs{" "}
+              <span className="text-foreground">
+                {buffs.slice(0, 8).join(", ")}
+                {buffs.length > 8 ? ` +${buffs.length - 8}` : ""}
+              </span>
+            </div>
+          )}
+          {cast.itemId != null && <div>Item #{cast.itemId}</div>}
+        </div>
+      )}
+    </TooltipShell>
+  );
+}
+
+/** Shared frame for the lane tooltips. */
+function TooltipShell({ left, top, width, children }: { left: number; top: number; width: string; children: ReactNode }) {
   return (
     <div
-      className="pointer-events-none absolute z-20 flex w-64 -translate-x-1/2 flex-col gap-1.5 rounded border border-border bg-popover p-2.5 text-[11px] shadow-lg"
+      className={cn(
+        "pointer-events-none absolute z-20 flex -translate-x-1/2 flex-col gap-2 rounded-md border border-border bg-popover p-3 text-[11px] shadow-xl",
+        width,
+      )}
       style={{ left: `${Math.min(88, Math.max(12, left))}%`, top }}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className="size-[30px] shrink-0 rounded-[3px] border border-border bg-muted bg-cover bg-center"
-          style={{ backgroundImage: `url(${meta.icon})` }}
-        />
-        <div className="flex min-w-0 flex-col">
-          <span className="font-wow truncate text-sm" style={{ color: `var(--color-school-${meta.school})` }}>
-            {cast.spellName}
-            {cast.failed && <span className="ml-1 text-destructive">(failed)</span>}
-          </span>
-          <span className="font-mono text-muted-foreground">
-            {formatClock(cast.startMs)} · {castMs > 0 ? `${(castMs / 1000).toFixed(1)}s cast` : "instant"} · #{cast.spellId}
-          </span>
-        </div>
+      {children}
+    </div>
+  );
+}
+
+function TooltipHeader({ icon, title, subtitle, failed }: { icon: string; title: string; subtitle: string; failed?: boolean }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span
+        className="size-9 shrink-0 rounded-[4px] border border-border bg-muted bg-cover bg-center"
+        style={{ backgroundImage: `url(${icon})` }}
+      />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate text-base font-medium leading-tight text-foreground">
+          {title}
+          {failed && <span className="ml-1.5 text-xs text-destructive">failed</span>}
+        </span>
+        <span className="truncate font-mono text-[11px] text-muted-foreground">{subtitle}</span>
       </div>
-      {(cast.damage > 0 || cast.periodicDamage > 0) && (
-        <div className="flex items-baseline gap-1.5">
-          <span className="font-mono text-[15px] font-semibold">{formatNumber(cast.damage + cast.periodicDamage)}</span>
-          {cast.crits > 0 && <span className="text-[10px] font-bold text-school-holy">CRIT{cast.hits > 1 ? ` ×${cast.crits}` : ""}</span>}
-          {cast.hits > 1 && <span className="text-muted-foreground">{cast.hits} hits</span>}
-          {cast.periodicDamage > 0 && (
-            <span className="text-muted-foreground">({formatNumber(cast.periodicDamage)} periodic)</span>
-          )}
-        </div>
-      )}
-      {cast.target && (
-        <div className="text-muted-foreground">
-          Target <span className="text-foreground">{unitName(cast.target)}</span>
-        </div>
-      )}
-      {buffs.length > 0 && (
-        <div className="text-muted-foreground">
-          Buffs <span className="text-foreground">{buffs.slice(0, 8).join(", ")}{buffs.length > 8 ? ` +${buffs.length - 8}` : ""}</span>
-        </div>
-      )}
-      {cast.itemId != null && <div className="text-muted-foreground">Item #{cast.itemId}</div>}
     </div>
   );
 }
@@ -611,39 +643,31 @@ interface SwingTooltipProps {
   left: number;
   top: number;
   unitName: (guid: string) => string;
+  icon: string;
 }
 
-function SwingTooltip({ swing, left, top, unitName }: SwingTooltipProps) {
+function SwingTooltip({ swing, left, top, unitName, icon }: SwingTooltipProps) {
   const outcome = hitTypeNames(swing.hitType).filter((n) => n !== "Off-Hand" && n !== "Hit");
   return (
-    <div
-      className="pointer-events-none absolute z-20 flex w-52 -translate-x-1/2 flex-col gap-1 rounded border border-border bg-popover p-2.5 text-[11px] shadow-lg"
-      style={{ left: `${Math.min(90, Math.max(10, left))}%`, top }}
-    >
-      <div className="flex justify-between text-muted-foreground">
-        <span className="text-foreground">{swing.offHand ? "Off hand" : "Main hand"}</span>
-        <span className="font-mono">{formatClock(swing.offsetMs)}</span>
-      </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className={cn("font-mono text-[15px] font-semibold", swing.amount === 0 && "text-destructive")}>
+    <TooltipShell left={left} top={top} width="w-60">
+      <TooltipHeader
+        icon={icon}
+        title={swing.offHand ? "Off hand" : "Main hand"}
+        subtitle={formatClock(swing.offsetMs) + (swing.target ? ` → ${unitName(swing.target)}` : "")}
+      />
+      <div className="flex items-baseline gap-2">
+        <span className={cn("font-mono text-2xl font-bold", swing.amount === 0 && "text-destructive")}>
           {swing.amount > 0 ? formatNumber(swing.amount) : "0"}
         </span>
         {outcome.length > 0 && (
-          <span className="text-[10px] font-bold uppercase" style={{ color: swingColor(swing.hitType, swing.amount) }}>
+          <span className="text-[11px] font-bold uppercase" style={{ color: swingColor(swing.hitType, swing.amount) }}>
             {outcome.join(" · ")}
           </span>
         )}
       </div>
       {swing.tailerAmount > 0 && (
-        <div className="text-muted-foreground">
-          incl. <span className="font-mono text-foreground">{formatNumber(swing.tailerAmount)}</span> from procs
-        </div>
+        <div className="-mt-1 text-muted-foreground">incl. {formatNumber(swing.tailerAmount)} from procs</div>
       )}
-      {swing.target && (
-        <div className="text-muted-foreground">
-          Target <span className="text-foreground">{unitName(swing.target)}</span>
-        </div>
-      )}
-    </div>
+    </TooltipShell>
   );
 }
