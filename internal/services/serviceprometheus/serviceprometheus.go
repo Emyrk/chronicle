@@ -2,9 +2,11 @@ package serviceprometheus
 
 import (
 	"context"
+	"crypto/subtle"
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
@@ -30,8 +32,9 @@ type Service struct {
 
 	reg *prometheus.Registry
 
-	enabled bool
-	address string
+	enabled   bool
+	address   string
+	sharedKey string
 }
 
 func New(broker *services.Services) *Service {
@@ -59,8 +62,11 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	srv := http.Server{
-		Addr:    s.address,
-		Handler: promhttp.HandlerFor(s.reg, promhttp.HandlerOpts{}),
+		Addr: s.address,
+		Handler: bearerAuth(
+			s.sharedKey,
+			promhttp.HandlerFor(s.reg, promhttp.HandlerOpts{}),
+		),
 		BaseContext: func(listener net.Listener) context.Context {
 			return ctx
 		},
@@ -73,6 +79,29 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 	}()
 	return nil
+}
+
+func bearerAuth(sharedKey string, next http.Handler) http.Handler {
+	if sharedKey == "" {
+		return next
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		const prefix = "Bearer "
+		authorization := r.Header.Get("Authorization")
+		if len(authorization) <= len(prefix) ||
+			!strings.EqualFold(authorization[:len(prefix)], prefix) ||
+			subtle.ConstantTimeCompare(
+				[]byte(strings.TrimSpace(authorization[len(prefix):])),
+				[]byte(sharedKey),
+			) != 1 {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Service) Close(_ context.Context) error {
@@ -98,6 +127,15 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_PROMETHEUS_ADDRESS",
 			Default:     "0.0.0.0:9091",
 			Value:       serpent.StringOf(&s.address),
+		},
+		{
+			Name:        "Prometheus Shared Key",
+			Description: "Optional shared key required as a Bearer token to access Prometheus metrics.",
+			Required:    false,
+			Flag:        "prometheus-shared-key",
+			Env:         "CHRONICLE_PROMETHEUS_SHARED_KEY",
+			Default:     "",
+			Value:       serpent.StringOf(&s.sharedKey),
 		},
 	}
 }

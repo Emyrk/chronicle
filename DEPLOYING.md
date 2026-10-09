@@ -337,11 +337,14 @@ docker compose logs -f chronicle
 | `CHRONICLE_RETENTION_SCHEDULE` | `24h` | Retention cleanup interval, or `0` to disable |
 | `CHRONICLE_PROMETHEUS_ENABLED` | `false` | Enable Prometheus on its separate listener |
 | `CHRONICLE_PROMETHEUS_ADDRESS` | `0.0.0.0:9091` | Prometheus listen address |
+| `CHRONICLE_PROMETHEUS_SHARED_KEY` | unset | Optional bearer token required to access Prometheus metrics |
 | `CHRONICLE_PPROF_ENABLED` | `false` | Enable Go pprof on its separate listener |
 | `CHRONICLE_PPROF_ADDRESS` | `0.0.0.0:6060` | pprof listen address |
 | `CHRONICLE_OCR_URL` | unset | Optional OCR service URL |
 | `CHRONICLE_RESEND_API_KEY` | unset | Optional Resend email API key |
 | `CHRONICLE_EMAIL_FROM` | Chronicle default | Outgoing email sender |
+
+When `CHRONICLE_PROMETHEUS_SHARED_KEY` is set, scrapers must send `Authorization: Bearer <shared-key>`. When it is unset, the Prometheus listener remains unauthenticated.
 
 Run the image's help command for the complete configuration supported by your pinned release:
 
