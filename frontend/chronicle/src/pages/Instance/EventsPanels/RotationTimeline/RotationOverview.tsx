@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState, type PointerEvent } from "react";
 import { formatNumber } from "@/lib/format";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { DPS_SMOOTHING_BINS } from "./derive";
 import { DAMAGE_BIN_MS } from "./rotationTimeline.processor";
 import { formatClock, SLOT_COLORS } from "./format";
 import { IndicatorLine } from "./IndicatorLine";
@@ -95,10 +97,17 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
     <div className="border-b border-border px-4 py-2.5">
       <div className="mb-1.5 flex justify-between text-[11px] text-muted-foreground">
         <span className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5">
-            <span className="h-0.5 w-3 bg-muted-foreground" />
-            DPS
-          </span>
+          <HintTooltip>
+            <TooltipTrigger asChild>
+              <span className="flex cursor-help items-center gap-1.5 decoration-dotted underline-offset-2 hover:underline">
+                <span className="h-0.5 w-3 bg-muted-foreground" />
+                DPS
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start" className="max-w-80 p-3 text-left">
+              <DpsLegendHint />
+            </TooltipContent>
+          </HintTooltip>
           {lead && (
             <span className="flex items-center gap-1.5">
               <span className="h-2.5 w-2 bg-muted-foreground/50" />
@@ -186,6 +195,25 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+function DpsLegendHint() {
+  const windowS = (DPS_SMOOTHING_BINS * DAMAGE_BIN_MS) / 1000;
+  return (
+    <div className="flex flex-col gap-2 text-xs leading-relaxed">
+      <div className="text-sm font-semibold">DPS · {windowS}s trailing average</div>
+      <p className="text-zinc-300">
+        Each point is the player&apos;s damage (pets and procs included) over the previous {windowS} seconds,
+        divided by {windowS}. At 1:20 the line shows damage dealt from 1:15 to 1:20.
+      </p>
+      <ul className="list-disc space-y-1 pl-4 text-zinc-400">
+        <li>Smoothing hides single big hits, so bursts show up as humps rather than spikes.</li>
+        <li>A trailing window lags: a burst appears about {windowS / 2}s after it happened.</li>
+        <li>The first {windowS - 1} seconds average over fewer seconds so the line does not start low.</li>
+        <li>The DPS next to each name is total damage over the whole fight, so it will not match any one point.</li>
+      </ul>
     </div>
   );
 }
