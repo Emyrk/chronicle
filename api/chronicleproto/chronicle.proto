@@ -99,6 +99,7 @@ message Damage {
   optional SpellData spellData = 10;
   int32 overkill = 11;
   repeated School schools = 12;
+  optional int64 ranked_damage = 13;
 }
 
 message UnitPosition {

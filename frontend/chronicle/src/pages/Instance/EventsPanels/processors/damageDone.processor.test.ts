@@ -127,6 +127,20 @@ describe('damageDoneProcessor', () => {
     expect(playerData.target.get('0xF130000CE0000001')).toBe(1000);
   });
 
+  it('uses explicit ranked damage for encounter and breakout totals', () => {
+    const state = processor.createState();
+    const context = createContext();
+
+    processor.processEvent(state, createDamageEvent({
+      amount: 1000,
+      rankedDamage: 0,
+    }), 'enc1', new Date(), 'damage', context);
+
+    const playerData = state.EncounterDamage.get('enc1')!.get('0x0000000000001234')!;
+    expect(playerData.target.get('0xF130000CE0000001')).toBe(0);
+    expect(state.ByAbility.get('0x0000000000001234')!.get('Mortal Strike')!.Total).toBe(0);
+  });
+
   it('includes partially absorbed damage in totals and hit statistics', () => {
     const state = processor.createState();
     const context = createContext();

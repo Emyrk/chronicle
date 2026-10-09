@@ -266,6 +266,21 @@ describe('FastDamageCursor', () => {
     expect(cursor.next()?.schools).toEqual([School.Fire]);
   });
 
+  it('decodes explicit zero ranked damage', () => {
+    const message = create(DamageSchema, {
+      target: '0xTARGET',
+      amount: 500,
+      rankedDamage: 0n,
+    });
+    const encoded = toBinary(DamageSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    const cursor = new FastDamageCursor(payload);
+
+    expect(cursor.next()?.rankedDamage).toBe(0);
+  });
+
   it('decodes every spell school', () => {
     const message = create(DamageSchema, {
       meta: create(EventMetaSchema, { index: 9, offsetMilli: 2500n }),

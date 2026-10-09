@@ -66,6 +66,8 @@ export interface DamageProcessorEvent extends EventMeta {
   /** AttackOutcome bitmask of possible hit table results (from SpellData) */
   spellAttackOutcome: number | null;
   overkill: number;
+  /** Encounter-adjusted damage contribution when explicitly classified. */
+  rankedDamage?: number;
 }
 
 /**

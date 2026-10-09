@@ -257,6 +257,7 @@ export interface ReusableDamage {
   spellId: number | null; // From SpellData field 10
   spellAttackOutcome: number | null; // From SpellData field 3 (AttackOutcome bitmask)
   overkill: number;
+  rankedDamage?: number;
 }
 
 /**
@@ -286,6 +287,7 @@ export class DamageDecoder {
     spellId: null,
     spellAttackOutcome: null,
     overkill: 0,
+    rankedDamage: undefined,
   };
   
   /**
@@ -312,6 +314,7 @@ export class DamageDecoder {
     msg.spellId = null;
     msg.spellAttackOutcome = null;
     msg.overkill = 0;
+    msg.rankedDamage = undefined;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -328,6 +331,7 @@ export class DamageDecoder {
         else if (fieldNumber === 8) legacySchool = value;
         else if (fieldNumber === 11) msg.overkill = value;
         else if (fieldNumber === 12) msg.schools.push(value);
+        else if (fieldNumber === 13) msg.rankedDamage = value;
       } else if (wireType === 2) {
         // Length-delimited
         const { value: len, bytesRead } = readVarintFast(data, offset);

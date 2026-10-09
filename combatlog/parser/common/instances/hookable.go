@@ -125,6 +125,10 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	if f.Preprocessors != nil {
 		preprocessors = f.Preprocessors()
 	}
+	var extraHooks []instancehook.Hook
+	if f.ExtraHooks != nil {
+		extraHooks = f.ExtraHooks()
+	}
 	return NewHookable(ctx, logger, db, z, InstanceParams{
 		Name:          name,
 		Category:      f.Category,
@@ -132,6 +136,7 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 		Idf:           f.Hostiles(flavor),
 		Rankings:      r,
 		Preprocessors: preprocessors,
+		ExtraHooks:    extraHooks,
 	})
 }
 
