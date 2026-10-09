@@ -337,11 +337,15 @@ docker compose logs -f chronicle
 | `CHRONICLE_RETENTION_SCHEDULE` | `24h` | Retention cleanup interval, or `0` to disable |
 | `CHRONICLE_PROMETHEUS_ENABLED` | `false` | Enable Prometheus on its separate listener |
 | `CHRONICLE_PROMETHEUS_ADDRESS` | `0.0.0.0:9091` | Prometheus listen address |
+| `CHRONICLE_PROMETHEUS_SHARED_KEY` | unset | Optional bearer token required to access Prometheus metrics |
+| `CHRONICLE_PROMETHEUS_IP_ALLOW` | unset | Optional comma-separated IP addresses allowed to access Prometheus metrics |
 | `CHRONICLE_PPROF_ENABLED` | `false` | Enable Go pprof on its separate listener |
 | `CHRONICLE_PPROF_ADDRESS` | `0.0.0.0:6060` | pprof listen address |
 | `CHRONICLE_OCR_URL` | unset | Optional OCR service URL |
 | `CHRONICLE_RESEND_API_KEY` | unset | Optional Resend email API key |
 | `CHRONICLE_EMAIL_FROM` | Chronicle default | Outgoing email sender |
+
+When `CHRONICLE_PROMETHEUS_SHARED_KEY` is set, scrapers must send `Authorization: Bearer <shared-key>`. When `CHRONICLE_PROMETHEUS_IP_ALLOW` is set, the client IP must match one of its comma-separated IPv4 or IPv6 addresses. When both are set, both checks must pass. Forwarded client IPs are trusted only when the direct peer is a private or loopback reverse proxy.
 
 Run the image's help command for the complete configuration supported by your pinned release:
 
