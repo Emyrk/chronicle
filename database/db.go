@@ -246,6 +246,13 @@ func NewPostgresDB(ctx context.Context, logger *slog.Logger, dbURL string, opts 
 	return pool, nil
 }
 
+// NewQueries creates a query-only store around a specific database connection.
+// It is useful for session-scoped operations, such as PostgreSQL advisory locks,
+// that must remain bound to one acquired connection.
+func NewQueries(db DBTX) StoreQueries {
+	return &sqlQuerier{db: db}
+}
+
 // New creates a new database store using a SQL database connection.
 func New(sdb *pgxpool.Pool) Store {
 	return &sqlQuerier{
