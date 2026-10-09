@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Pin, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatNumber } from "@/lib/format";
 import { hitTypeNames } from "@/lib/hittype/hittype";
@@ -63,6 +63,8 @@ interface DerivedPlayer {
 }
 
 const LABEL_WIDTH = 220;
+/** Pointer movement under this many px is a click, not a drag. */
+const CLICK_SLOP_PX = 4;
 const CAST_LANE_H = 56;
 const SWING_LANE_H = 24;
 const CD_LANE_H = 28;
@@ -106,7 +108,7 @@ export function RotationTimeline({
   const [trackRef, trackWidth] = useElementWidth<HTMLDivElement>();
   const [hovered, setHovered] = useState<{ slot: number; cast: TimelineCast } | null>(null);
   const [hoveredSwing, setHoveredSwing] = useState<{ slot: number; swing: TimelineSwing } | null>(null);
-  const panRef = useRef<{ x: number; startMs: number; endMs: number } | null>(null);
+  const panRef = useRef<{ x: number; startMs: number; endMs: number; moved: boolean } | null>(null);
   const { startMs: vs, endMs: ve, durationMs, ignored, nowMs } = view;
   const replaying = nowMs != null;
   const probeMs = view.indicatorMs;
@@ -161,11 +163,13 @@ export function RotationTimeline({
   const onTrackPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || e.ctrlKey || e.metaKey || replaying) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    panRef.current = { x: e.clientX, startMs: vs, endMs: ve };
+    panRef.current = { x: e.clientX, startMs: vs, endMs: ve, moved: false };
   };
   const onTrackPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const pan = panRef.current;
     if (pan && trackWidth > 0) {
+      if (Math.abs(e.clientX - pan.x) < CLICK_SLOP_PX && !pan.moved) return;
+      pan.moved = true;
       const shift = -((e.clientX - pan.x) / trackWidth) * (pan.endMs - pan.startMs);
       view.setWindow(pan.startMs + shift, pan.endMs + shift);
       return;
@@ -174,6 +178,14 @@ export function RotationTimeline({
   };
   const endPan = () => {
     panRef.current = null;
+  };
+  const onTrackPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    const pan = panRef.current;
+    panRef.current = null;
+    if (!pan || pan.moved || trackWidth === 0) return;
+    // A click without a drag pins the indicator.
+    const ms = trackMs(e);
+    if (ms != null) view.pinAt(ms, CLICK_SLOP_PX / pxPerMs);
   };
 
   const castLaneTop = (index: number) =>
@@ -262,6 +274,7 @@ export function RotationTimeline({
               className="absolute top-0.5 z-10 -translate-x-1/2 rounded-sm bg-school-holy px-1 font-mono text-[10px] font-semibold text-background"
               style={{ left: `${P(probeMs)}%` }}
             >
+              {view.pinnedMs != null && <Pin className="mr-0.5 inline size-2.5 align-[-1px]" />}
               {formatClock(probeMs)}
             </span>
           )}
@@ -315,7 +328,7 @@ export function RotationTimeline({
           className="relative cursor-grab touch-none select-none border-l border-border active:cursor-grabbing"
           onPointerDown={onTrackPointerDown}
           onPointerMove={onTrackPointerMove}
-          onPointerUp={endPan}
+          onPointerUp={onTrackPointerUp}
           onPointerCancel={endPan}
           onPointerLeave={() => {
             view.setCursorMs(null);

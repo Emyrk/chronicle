@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type PointerEvent } from "react";
+import { Pin, X } from "lucide-react";
 import { formatNumber } from "@/lib/format";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { DPS_SMOOTHING_BINS } from "./derive";
@@ -85,8 +86,9 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
     const b = Math.max(...brush) * durationMs;
     if (b - a > 1500) view.setWindow(a, b);
     else {
-      const span = view.endMs - view.startMs;
-      view.setWindow(a - span / 2, a + span / 2);
+      // A click pins the indicator (and scrolls the lanes to it).
+      const width = ref.current?.getBoundingClientRect().width ?? 0;
+      view.pinAt(a, width > 0 ? (6 / width) * durationMs : 0);
     }
     setBrush(null);
   };
@@ -185,7 +187,15 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
             />
           )}
         </div>
-        <Scoreboard series={series} lead={lead} bin={indicatorBin} timeMs={indicator} maxDps={maxDps} />
+        <Scoreboard
+          series={series}
+          lead={lead}
+          bin={indicatorBin}
+          timeMs={indicator}
+          maxDps={maxDps}
+          pinned={view.pinnedMs != null}
+          onUnpin={view.unpin}
+        />
       </div>
     </div>
   );
@@ -221,13 +231,15 @@ interface ScoreboardProps {
   bin: number | null;
   timeMs: number | null;
   maxDps: number;
+  pinned: boolean;
+  onUnpin: () => void;
 }
 
 /**
  * Fixed readout beside the chart (design: Crosshair Readout 1c). Shows values
  * at the indicator, or whole-fight figures when there is no indicator.
  */
-function Scoreboard({ series, lead, bin, timeMs, maxDps }: ScoreboardProps) {
+function Scoreboard({ series, lead, bin, timeMs, maxDps, pinned, onUnpin }: ScoreboardProps) {
   const dps = series.map((s) => (bin != null ? (s.dps[bin] ?? 0) : s.avgDps));
   const leadValue = lead && lead.length > 0 ? (bin != null ? (lead[bin] ?? 0) : lead[lead.length - 1]) : null;
   const gap = series.length === 2 ? signed(dps[0] - dps[1]) : null;
@@ -235,7 +247,20 @@ function Scoreboard({ series, lead, bin, timeMs, maxDps }: ScoreboardProps) {
   return (
     <div className="flex flex-col justify-between gap-1 rounded-sm border border-border px-2.5 py-1.5 text-[11px] text-muted-foreground">
       <div className="flex items-center justify-between">
-        <span>{bin != null ? "At" : "Whole fight"}</span>
+        {pinned ? (
+          <button
+            type="button"
+            onClick={onUnpin}
+            title="Unpin (Esc)"
+            className="flex items-center gap-1 rounded-sm text-foreground hover:text-destructive"
+          >
+            <Pin className="size-3" />
+            Pinned
+            <X className="size-3" />
+          </button>
+        ) : (
+          <span>{bin != null ? "At" : "Whole fight"}</span>
+        )}
         {timeMs != null && bin != null && (
           <span className="rounded-sm bg-school-holy px-1.5 font-mono font-semibold text-background">{formatClock(timeMs)}</span>
         )}

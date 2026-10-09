@@ -164,6 +164,15 @@ export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionP
             view.setCursorMs(x < 0 || width <= 0 ? null : view.startMs + (x / width) * (view.endMs - view.startMs));
           }}
           onPointerLeave={() => view.setCursorMs(null)}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest("button, select")) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left - LABEL_WIDTH;
+            const width = rect.width - LABEL_WIDTH;
+            if (x < 0 || width <= 0) return;
+            const span = view.endMs - view.startMs;
+            view.pinAt(view.startMs + (x / width) * span, (6 / width) * span);
+          }}
         >
           <AuraGroup title="Buffs" otherLabel="Other buffs" rows={buffs} offsets={offsets} P={P} spellMeta={spellMeta} />
           <div className="flex h-10 items-center gap-2 border-t border-border px-4 text-[11px] text-muted-foreground">

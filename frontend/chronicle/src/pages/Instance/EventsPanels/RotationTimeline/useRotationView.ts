@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AlignMode } from "./derive";
 
 export const MIN_WINDOW_MS = 4000;
@@ -20,7 +20,9 @@ export interface RotationViewState {
    * the window follows it: casts scroll left past a fixed "now" line.
    */
   nowMs: number | null;
-  /** Where the shared yellow indicator sits: replay time while replaying, else the pointer. */
+  /** Time the user clicked to lock the indicator, or null. Ignored while replaying. */
+  pinnedMs: number | null;
+  /** Where the shared yellow indicator sits: replay time, else the pin, else the pointer. */
   indicatorMs: number | null;
 }
 
@@ -32,6 +34,12 @@ export interface RotationView extends RotationViewState {
   setAlign: (align: AlignMode) => void;
   toggleIgnored: (spellId: number) => void;
   setCursorMs: (ms: number | null) => void;
+  /**
+   * Pin the indicator at ms (a click). Clicking within toleranceMs of the
+   * current pin unpins. Scrolls the window to the pin when it is off screen.
+   */
+  pinAt: (ms: number, toleranceMs: number) => void;
+  unpin: () => void;
 }
 
 function clampWindow(startMs: number, endMs: number, durationMs: number): [number, number] {
@@ -65,6 +73,7 @@ export function useRotationView(
   const align: AlignMode = nowMs != null ? "pull" : alignState;
   const [ignored, setIgnored] = useState<ReadonlySet<number>>(() => new Set(initialIgnored));
   const [cursorMs, setCursorMs] = useState<number | null>(null);
+  const [pinnedMs, setPinnedMs] = useState<number | null>(null);
 
   const setRange = useCallback(
     (update: (current: [number, number]) => [number, number]) =>
@@ -92,6 +101,33 @@ export function useRotationView(
 
   const fit = useCallback(() => setRange(() => [0, durationMs]), [durationMs, setRange]);
 
+  const pinAt = useCallback(
+    (ms: number, toleranceMs: number) => {
+      if (nowMs != null) return;
+      if (pinnedMs != null && Math.abs(ms - pinnedMs) <= toleranceMs) {
+        setPinnedMs(null);
+        return;
+      }
+      setPinnedMs(ms);
+      if (ms < userStart || ms > userEnd) {
+        const span = userEnd - userStart;
+        setRange(() => clampWindow(ms - span / 2, ms + span / 2, durationMs));
+      }
+    },
+    [nowMs, pinnedMs, userStart, userEnd, durationMs, setRange],
+  );
+  const unpin = useCallback(() => setPinnedMs(null), []);
+
+  // Esc unpins.
+  useEffect(() => {
+    if (pinnedMs == null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPinnedMs(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pinnedMs]);
+
   const toggleIgnored = useCallback((spellId: number) => {
     setIgnored((prev) => {
       const next = new Set(prev);
@@ -109,7 +145,8 @@ export function useRotationView(
       ignored,
       cursorMs,
       nowMs,
-      indicatorMs: nowMs ?? cursorMs,
+      pinnedMs: nowMs == null ? pinnedMs : null,
+      indicatorMs: nowMs ?? pinnedMs ?? cursorMs,
       durationMs,
       setWindow,
       zoom,
@@ -117,7 +154,9 @@ export function useRotationView(
       setAlign,
       toggleIgnored,
       setCursorMs,
+      pinAt,
+      unpin,
     }),
-    [startMs, endMs, align, ignored, cursorMs, nowMs, durationMs, setWindow, zoom, fit, toggleIgnored],
+    [startMs, endMs, align, ignored, cursorMs, pinnedMs, nowMs, durationMs, setWindow, zoom, fit, toggleIgnored, pinAt, unpin],
   );
 }
