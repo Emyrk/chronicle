@@ -1,14 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { ArrowLeftRight, ChevronDown } from "lucide-react";
+import { ArrowLeftRight } from "lucide-react";
 import { useCooldownSpells } from "@/api/cooldownSpells";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/DropdownMenu/DropdownMenu";
-import { formatNumber } from "@/lib/format";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelContext, PanelDefinition } from "../../EventsPanels/types";
 import { usePanelAggregation } from "../../EventsPanels/usePanelAggregation";
@@ -19,11 +12,11 @@ import {
   type RotationTimelineResult,
 } from "../../EventsPanels/RotationTimeline/rotationTimeline.processor";
 import { playerCasts } from "../../EventsPanels/RotationTimeline/derive";
-import { SLOT_COLORS, SLOT_LABELS } from "../../EventsPanels/RotationTimeline/format";
 import { useRotationView } from "../../EventsPanels/RotationTimeline/useRotationView";
 import { useSmoothReplayTime } from "../../EventsPanels/RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 import { AuraSection } from "./AuraSection";
+import { PlayerPicker } from "./PlayerPicker";
 
 /** Picker value meaning "no second player". */
 const NONE = "none";
@@ -161,9 +154,10 @@ function PlayerTimelineContent({ context }: PlayerTimelinePageProps) {
     [instance.players, instance.units],
   );
 
+  const instancePlayers = instance.players ?? {};
   const pickers = (
     <div className="flex items-center gap-1.5">
-      <PlayerPicker slot={0} value={picked[0]} ranked={ranked} context={context} onChange={(g) => setPicked([g, picked[1]])} />
+      <PlayerPicker slot={0} value={picked[0]} ranked={ranked} players={instancePlayers} onChange={(g) => setPicked([g, picked[1]])} />
       <Button variant="ghost" size="sm" onClick={() => setPicked([picked[1], picked[0]])} className="text-[11px] text-muted-foreground">
         vs <ArrowLeftRight className="size-3" />
       </Button>
@@ -171,7 +165,7 @@ function PlayerTimelineContent({ context }: PlayerTimelinePageProps) {
         slot={1}
         value={picked[1]}
         ranked={ranked}
-        context={context}
+        players={instancePlayers}
         allowNone
         onChange={(g) => setPicked([picked[0], g ?? NONE])}
       />
@@ -199,55 +193,5 @@ function PlayerTimelineContent({ context }: PlayerTimelinePageProps) {
         <div className="p-6 text-center text-sm text-muted-foreground">Loading events…</div>
       )}
     </div>
-  );
-}
-
-interface PlayerPickerProps {
-  slot: number;
-  value: string | null;
-  ranked: [string, number][];
-  context: PanelContext;
-  /** Offer a "None" entry, which calls onChange(null). */
-  allowNone?: boolean;
-  onChange: (guid: string | null) => void;
-}
-
-function PlayerPicker({ slot, value, ranked, context, allowNone, onChange }: PlayerPickerProps) {
-  const players = context.instance.players ?? {};
-  const current = value ? players[value] : undefined;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <span
-            className="flex size-4 items-center justify-center rounded-[3px] text-[10px] font-bold text-background"
-            style={{ background: SLOT_COLORS[slot] }}
-          >
-            {SLOT_LABELS[slot]}
-          </span>
-          <span className="font-semibold" style={{ color: current ? `var(--color-class-${current.class.toLowerCase()})` : undefined }}>
-            {current?.name ?? (allowNone ? "None" : "Pick player")}
-          </span>
-          <ChevronDown className="size-3 text-muted-foreground" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="styled-scrollbar max-h-96 overflow-y-auto">
-        {allowNone && (
-          <DropdownMenuItem onSelect={() => onChange(null)} className="text-muted-foreground">
-            None
-          </DropdownMenuItem>
-        )}
-        {ranked.map(([guid, damage]) => {
-          const p = players[guid];
-          if (!p) return null;
-          return (
-            <DropdownMenuItem key={guid} onSelect={() => onChange(guid)} className="flex justify-between gap-6">
-              <span style={{ color: `var(--color-class-${p.class.toLowerCase()})` }}>{p.name}</span>
-              <span className="font-mono text-xs text-muted-foreground">{formatNumber(damage)}</span>
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
