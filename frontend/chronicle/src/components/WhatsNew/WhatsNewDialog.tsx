@@ -1,5 +1,4 @@
 import { ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -64,21 +63,22 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
           <p className="mt-2 italic text-[#ffd100]">&ldquo;Build the view your raid needs.&rdquo;</p>
 
           <div className="mt-5 flex flex-wrap items-center gap-5">
-            <Link
-              to={whatsNewLink("/blog/custom-panels", "whats_new_primary", "custom-panels")}
+            {/* Blog routes mount a separate app entry, so these links must reload the document. */}
+            <a
+              href={whatsNewLink("/blog/custom-panels", "whats_new_primary", "custom-panels")}
               onClick={close}
               className="inline-flex items-center gap-2 rounded border border-quality-legendary bg-[linear-gradient(180deg,#ff9a2e,#cc6600)] px-[18px] py-2.5 text-sm font-semibold text-[#1a0e00] transition-[filter] hover:brightness-110"
             >
               Read about custom panels
               <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link
-              to={whatsNewLink("/blog", "whats_new_archive", "custom-panels")}
+            </a>
+            <a
+              href={whatsNewLink("/blog", "whats_new_archive", "custom-panels")}
               onClick={close}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               View all Chronicle updates
-            </Link>
+            </a>
           </div>
         </div>
       </DialogContent>
