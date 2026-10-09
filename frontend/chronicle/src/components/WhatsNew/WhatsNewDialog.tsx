@@ -13,6 +13,12 @@ interface WhatsNewDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const HIGHLIGHTS = [
+  "Extend Chronicle with trusted community-built panels for specialized classes, encounters, and guild workflows.",
+  "Install verified panels, manage them from your account, and use them alongside Chronicle's built-in analysis.",
+  "Source code is on GitHub. Fork it and build any panel you want.",
+];
+
 // Styled as a legendary item tooltip. Reserved for big launches.
 export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
   const close = () => onOpenChange(false);
@@ -43,21 +49,15 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
         <div className="flex flex-col gap-1 px-6 pb-6 pt-4 text-sm leading-relaxed">
           <p className="text-foreground">Binds to account</p>
 
-          <DialogDescription asChild className="mt-3 flex max-w-[440px] flex-col gap-2.5 text-[15px] leading-relaxed text-[#5cff4a] [text-wrap:pretty]">
-            <div>
-              <p>
-                <span className="font-semibold text-quality-uncommon">Use: </span>
-                Extend Chronicle with trusted community-built panels for specialized classes, encounters, and guild workflows.
-              </p>
-              <p>
-                <span className="font-semibold text-quality-uncommon">Equip: </span>
-                Install verified panels, manage them from your account, and use them alongside Chronicle&apos;s built-in analysis.
-              </p>
-              <p>
-                <span className="font-semibold text-quality-uncommon">Equip: </span>
-                Source code is on GitHub. Fork it and build any panel you want.
-              </p>
-            </div>
+          <DialogDescription asChild className="mt-3 flex max-w-[440px] flex-col gap-2.5 text-[15px] leading-relaxed text-foreground [text-wrap:pretty]">
+            <ul>
+              {HIGHLIGHTS.map((text) => (
+                <li key={text} className="grid grid-cols-[14px_minmax(0,1fr)] gap-2.5">
+                  <span aria-hidden className="text-[10px] leading-6 text-quality-legendary">◆</span>
+                  <span>{text}</span>
+                </li>
+              ))}
+            </ul>
           </DialogDescription>
 
           <p className="mt-2 italic text-[#ffd100]">&ldquo;Build the view your raid needs.&rdquo;</p>
