@@ -167,10 +167,10 @@ describe("map replay model", () => {
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => entry);
     expect(calibration).not.toBeNull();
     expect(calibratedDungeonMapPoint(sample, {
-      minX: -410.946014,
-      maxX: 595.528992,
-      minY: -483.479004,
-      maxY: 187.503998,
+      minX: -375.946014,
+      maxX: 560.528992,
+      minY: -410.145996,
+      maxY: 214.169998,
     }, calibration!)).toEqual(point);
   });
 
@@ -200,13 +200,13 @@ describe("map replay model", () => {
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670)!;
     const point = calibratedDungeonMapPoint({ ...anchor, x: anchor.x + 10, y: anchor.y - 10 }, {
-      minX: -410.946014,
-      maxX: 595.528992,
-      minY: -483.479004,
-      maxY: 187.503998,
+      minX: -375.946014,
+      maxX: 560.528992,
+      minY: -410.145996,
+      maxY: 214.169998,
     }, calibration)!;
-    expect(point.leftPercent).toBeCloseTo(20.0936, 3);
-    expect(point.topPercent).toBeCloseTo(38.0097, 3);
+    expect(point.leftPercent).toBeCloseTo(20.1678, 3);
+    expect(point.topPercent).toBeCloseTo(37.8982, 3);
   });
 
   it("requires a known boss position to calibrate Wailing Caverns", () => {
