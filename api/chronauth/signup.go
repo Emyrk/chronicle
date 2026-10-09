@@ -65,6 +65,15 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 				return err
 			}
 
+			if s.whatsNewCurrentID != "" {
+				_, err = tx.InitializeUserWhatsNewState(ctx, database.InitializeUserWhatsNewStateParams{
+					UserID: userRow.ID, SeenID: s.whatsNewCurrentID,
+				})
+				if err != nil {
+					return fmt.Errorf("initialize what's new state: %w", err)
+				}
+			}
+
 			linked, err = tx.InsertUserAuth(ctx, database.InsertUserAuthParams{
 				ID:        uuid.New(),
 				LinkedID:  user.UserID,

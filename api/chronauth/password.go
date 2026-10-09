@@ -161,6 +161,15 @@ func (s *Service) PasswordRegister(w http.ResponseWriter, r *http.Request) {
 		}
 		userID := userRow.ID
 
+		if s.whatsNewCurrentID != "" {
+			_, err = tx.InitializeUserWhatsNewState(ctx, database.InitializeUserWhatsNewStateParams{
+				UserID: userID, SeenID: s.whatsNewCurrentID,
+			})
+			if err != nil {
+				return fmt.Errorf("initialize what's new state: %w", err)
+			}
+		}
+
 		// Create auth link
 		linked, err := tx.InsertUserAuth(ctx, database.InsertUserAuthParams{
 			ID:        uuid.New(),

@@ -1854,6 +1854,13 @@ CREATE TABLE user_tracked_layouts (
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE user_whats_new_state (
+    user_id uuid NOT NULL,
+    seen_id text NOT NULL,
+    seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_whats_new_state_seen_id_check CHECK ((seen_id <> ''::text))
+);
+
 CREATE TABLE world (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
@@ -2535,6 +2542,9 @@ ALTER TABLE ONLY user_tracked_layouts
 
 ALTER TABLE ONLY user_tracked_layouts
     ADD CONSTRAINT user_tracked_layouts_unique UNIQUE (user_id, layout_id);
+
+ALTER TABLE ONLY user_whats_new_state
+    ADD CONSTRAINT user_whats_new_state_pkey PRIMARY KEY (user_id);
 
 ALTER TABLE ONLY users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
@@ -3257,6 +3267,9 @@ ALTER TABLE ONLY user_tracked_layouts
 
 ALTER TABLE ONLY user_tracked_layouts
     ADD CONSTRAINT user_tracked_layouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_whats_new_state
+    ADD CONSTRAINT user_whats_new_state_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY users
     ADD CONSTRAINT users_default_desktop_layout_id_fkey FOREIGN KEY (default_desktop_layout_id) REFERENCES user_panel_layouts(id) ON DELETE SET NULL;

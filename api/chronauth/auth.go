@@ -44,7 +44,8 @@ type Options struct {
 	Bot       *chroniclebot.Bot
 	Mailer    *chroniclemail.Mailer
 
-	Sessions SessionOptions
+	WhatsNewCurrentID string
+	Sessions          SessionOptions
 
 	// TenantChecker resolves a host to tenant info for cross-subdomain auth relay.
 	// Nil means relay is disabled (e.g. dev mode without primary domain).
@@ -58,9 +59,10 @@ type Service struct {
 	Bot       *chroniclebot.Bot
 	logger    *slog.Logger
 
-	sessions *Sessions
-	mailer   *chroniclemail.Mailer
-	devMode  bool
+	sessions          *Sessions
+	mailer            *chroniclemail.Mailer
+	whatsNewCurrentID string
+	devMode           bool
 
 	// RelayStore holds one-time codes for cross-subdomain auth relay.
 	RelayStore    *RelayCodeStore
@@ -127,19 +129,20 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 	}
 
 	return &Service{
-		Providers:        providers,
-		Store:            store,
-		logger:           logger.With(slog.String("service", "auth")),
-		sessions:         sess,
-		Bot:              opts.Bot,
-		Zed:              opts.Zed,
-		mailer:           opts.Mailer,
-		devMode:          opts.DevServer,
-		RelayStore:       NewRelayCodeStore(opts.Zed),
-		accessURL:        opts.AccessURL,
-		tenantChecker:    opts.TenantChecker,
-		registerAttempts: make(map[string]time.Time),
-		loginAttempts:    make(map[string]time.Time),
+		Providers:         providers,
+		Store:             store,
+		logger:            logger.With(slog.String("service", "auth")),
+		sessions:          sess,
+		Bot:               opts.Bot,
+		Zed:               opts.Zed,
+		mailer:            opts.Mailer,
+		whatsNewCurrentID: opts.WhatsNewCurrentID,
+		devMode:           opts.DevServer,
+		RelayStore:        NewRelayCodeStore(opts.Zed),
+		accessURL:         opts.AccessURL,
+		tenantChecker:     opts.TenantChecker,
+		registerAttempts:  make(map[string]time.Time),
+		loginAttempts:     make(map[string]time.Time),
 	}, nil
 }
 

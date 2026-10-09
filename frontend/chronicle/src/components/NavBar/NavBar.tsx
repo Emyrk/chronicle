@@ -1,13 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, ChartSpline, Database, Server, Users, Compass, Sparkles, Shirt } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthorizationCheck, useMyFavorites, useSiteConfig } from "@/api/queries";
+import { useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSession, useSiteConfig, useWhatsNewStatus } from "@/api/queries";
 import type { Branding } from "@/api/typesGenerated";
 import { Button } from "../ui/button";
 import { FavoritesMenu } from "../Favorites";
+import { WhatsNewDialog } from "../WhatsNew/WhatsNewDialog";
 import {
   Sheet,
   SheetContent,
@@ -23,12 +24,14 @@ import {
 type NavItem = {
   title: string;
   icon: LucideIcon;
+  indicator?: boolean;
 } & ({ href: string; external?: boolean } | { onClick: () => void });
 
 export function NavBar() {
   const location = useLocation();
   const { isAuthenticated, isLoading, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
 
   // Check admin permissions via SpiceDB
   const authzChecks = useMemo(() => ({
@@ -51,6 +54,11 @@ export function NavBar() {
   const hasAdminLogs = authz?.adminLogs ?? false;
 
   const { data: siteConfig } = useSiteConfig();
+  const { data: session } = useSession({ enabled: isAuthenticated });
+  const userID = session?.user_id ?? "";
+  const whatsNewStatus = useWhatsNewStatus(userID, isAuthenticated);
+  const { mutate: markWhatsNewRead, isPending: markingWhatsNewRead } = useMarkWhatsNewRead(userID);
+  const hasUnreadWhatsNew = whatsNewStatus.data?.has_unread ?? false;
   const { data: favorites } = useMyFavorites({ enabled: isAuthenticated });
   const hasFavorites = !!favorites && (favorites.guilds.length > 0 || favorites.players.length > 0);
   const uploadsEnabled = !siteConfig?.client_uploads_disabled || hasAdminLogs;
@@ -58,6 +66,14 @@ export function NavBar() {
   // Resolve branding: tenant overrides site-level.
   const branding: Branding | null = siteConfig?.tenant?.branding ?? siteConfig?.branding ?? null;
   const hasBranding = !!(branding?.logo_wide || branding?.square_logo || branding?.display_name);
+
+  useEffect(() => {
+    if (whatsNewOpen && hasUnreadWhatsNew && !markingWhatsNewRead) {
+      markWhatsNewRead();
+    }
+  }, [hasUnreadWhatsNew, markWhatsNewRead, markingWhatsNewRead, whatsNewOpen]);
+
+  const openWhatsNew = () => setWhatsNewOpen(true);
 
   const accountMenuItems: NavItem[] = [
     ...(uploadsEnabled ? [{ title: "My Logs", href: "/logs", icon: FileText } as NavItem] : []),
@@ -68,6 +84,7 @@ export function NavBar() {
     ...(canManageServers ? [{ title: "Servers", href: "/servers", icon: Server } as NavItem] : []),
     ...(canAdminAuthz ? [{ title: "Saffron", href: "/saffron", icon: Key, external: true } as NavItem] : []),
     { title: "Settings", href: "/account/settings", icon: Settings },
+    { title: "What's New", onClick: openWhatsNew, icon: Sparkles, indicator: hasUnreadWhatsNew },
     { title: "Sign Out", onClick: logout, icon: LogOut },
   ];
 
@@ -105,6 +122,7 @@ export function NavBar() {
       >
         <item.icon className="h-4 w-4" />
         {item.title}
+        {item.indicator && <span className="ml-auto h-2 w-2 rounded-full bg-primary" aria-label="New" />}
       </button>
     );
   };
@@ -304,8 +322,11 @@ export function NavBar() {
         {isLoading ? null : isAuthenticated ? (
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-9 px-4 text-sm font-medium">
+              <Button variant="ghost" size="sm" className="relative h-9 px-4 text-sm font-medium">
                 Account
+                {hasUnreadWhatsNew && (
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" aria-label="New What's New update" />
+                )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className={hasFavorites ? "w-[300px]" : "w-[200px]"}>
@@ -329,6 +350,7 @@ export function NavBar() {
                   <DropdownMenuItem key={item.title} onSelect={item.onClick} className="flex items-center gap-2">
                     <item.icon className="h-4 w-4" />
                     {item.title}
+                    {item.indicator && <span className="ml-auto h-2 w-2 rounded-full bg-primary" aria-label="New" />}
                   </DropdownMenuItem>
                 )
               )}
@@ -343,6 +365,7 @@ export function NavBar() {
 
       {/* Right: Empty spacer for mobile to balance hamburger on left */}
       <div className="md:hidden w-10" />
+      <WhatsNewDialog open={whatsNewOpen} onOpenChange={setWhatsNewOpen} />
     </nav>
   );
 }

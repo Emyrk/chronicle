@@ -4363,6 +4363,12 @@ export interface WDBUploadResponse {
     readonly diffs: readonly WDBItemDiff[];
 }
 
+// From chroniclesdk/whats_new.go
+export interface WhatsNewStatus {
+    readonly current_id: string;
+    readonly has_unread: boolean;
+}
+
 // From types/date.go
 /**
  * AddonDateFormat is the date format for addon created logs like `COMBATANT_INFO`
