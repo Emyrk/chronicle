@@ -10,6 +10,18 @@ metadata:
 
 Chronicle's What's New system is a binary unread notification backed by an append-only Go ID list. The backend decides whether the current release ID is unread; the frontend owns the fully custom presentation.
 
+## Quick start
+
+To alert existing users about a release:
+
+1. Append one stable kebab-case ID to `releaseIDs` in `internal/services/servicewhatsnew/service.go`.
+2. Replace or extend the static presentation in `WhatsNewDialog.tsx`.
+3. Use `whatsNewLink()` for every modal-to-blog link, with a distinct placement such as `whats_new_primary` or `whats_new_archive`.
+4. Update `service_test.go` to expect the new final ID.
+5. Run the ID-only validation commands below.
+
+Do not add a migration for a new release. Deploying the binary with a new final ID is what makes existing users unread.
+
 ## Sources of truth
 
 | Concern | File |
