@@ -45,17 +45,22 @@ async function verifyArtifact(
   if (!response.ok)
     throw new Error(`Plugin artifact failed (${response.status})`);
   const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength !== artifact.size) {
-    throw new Error(
-      `Plugin artifact size mismatch: expected ${artifact.size} bytes, received ${bytes.byteLength}.`,
-    );
-  }
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  const actual = Array.from(digest, (value) =>
+  const actualSha256 = Array.from(digest, (value) =>
     value.toString(16).padStart(2, "0"),
   ).join("");
-  if (actual !== artifact.sha256)
-    throw new Error("Plugin artifact SHA-256 mismatch.");
+  const fixManifest =
+    "Rebuild the artifact, then update its size and sha256 in chronicle-panel.json to match the built file.";
+  if (bytes.byteLength !== artifact.size) {
+    throw new Error(
+      `Plugin artifact size mismatch: chronicle-panel.json expects ${artifact.size} bytes with SHA-256 ${artifact.sha256}, but the downloaded artifact is ${bytes.byteLength} bytes with SHA-256 ${actualSha256}. ${fixManifest}`,
+    );
+  }
+  if (actualSha256 !== artifact.sha256) {
+    throw new Error(
+      `Plugin artifact SHA-256 mismatch: chronicle-panel.json expects ${artifact.sha256}, but the downloaded artifact has SHA-256 ${actualSha256}. ${fixManifest}`,
+    );
+  }
   return bytes;
 }
 
