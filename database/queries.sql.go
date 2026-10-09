@@ -7799,6 +7799,28 @@ func (q *sqlQuerier) UpsertLeaderboardVersionRequirements(ctx context.Context, a
 	return i, err
 }
 
+const releaseAdvisoryLock = `-- name: ReleaseAdvisoryLock :one
+SELECT pg_advisory_unlock($1)::boolean
+`
+
+func (q *sqlQuerier) ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseAdvisoryLock, lockKey)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const tryAcquireAdvisoryLock = `-- name: TryAcquireAdvisoryLock :one
+SELECT pg_try_advisory_lock($1)::boolean
+`
+
+func (q *sqlQuerier) TryAcquireAdvisoryLock(ctx context.Context, lockKey int64) (bool, error) {
+	row := q.db.QueryRow(ctx, tryAcquireAdvisoryLock, lockKey)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getCharacterLoot = `-- name: GetCharacterLoot :many
 WITH ranked AS (
   SELECT
