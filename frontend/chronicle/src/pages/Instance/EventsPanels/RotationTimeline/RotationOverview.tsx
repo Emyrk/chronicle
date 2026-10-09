@@ -290,7 +290,7 @@ function Scoreboard({ series, lead, bin, timeMs, maxDps, pinned, onUnpin }: Scor
       )}
       {leadText && (
         <div className="flex justify-between" title="Damage difference so far (A minus B)">
-          <span>Lead</span>
+          <span>Total lead</span>
           <span className="font-mono font-semibold" style={{ color: leadText.color }}>
             {leadText.text}
           </span>
