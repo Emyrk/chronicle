@@ -19,9 +19,11 @@ import type { UnitPositionProcessorEvent } from "../processorTypes";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { mapProcessor, type MapPositionSample, type MapResult } from "./map.processor";
 import {
+  calibratedDungeonMapPoint,
   dominantMapId,
   dungeonMapPoint,
   latestPositionAt,
+  resolveDungeonMapCalibration,
   resolveMapArtwork,
   selectMapEncounter,
   zoneMapPoint,
@@ -179,12 +181,25 @@ function MapContent(props: PanelRenderProps<MapResult>) {
 
   const mapName = artwork.kind === "zone" ? artwork.map.name : artwork.instance.name;
   const displayedMapId = artwork.kind === "instance" ? artwork.instance.mapID : mapId;
-  const dungeonBounds = selectedFloor?.bounds;
+  const dungeonBounds = artwork.kind === "instance" ? selectedFloor?.bounds ?? null : null;
+  const dungeonCalibration = artwork.kind === "instance" && encounter
+    ? resolveDungeonMapCalibration(
+      artwork.instance.mapID,
+      encounter,
+      (guid) => props.context.instance.units?.[guid]?.entry,
+    )
+    : null;
+  const dungeonOverlayAvailable = Boolean(dungeonBounds)
+    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || dungeonCalibration !== null);
   const markers = visibleUnits.flatMap((unit) => {
     if (unit.sample.mapId !== mapId) return [];
     const point = artwork.kind === "zone"
       ? zoneMapPoint(unit.sample, artwork.assignment)
-      : dungeonBounds ? dungeonMapPoint(unit.sample, dungeonBounds) : null;
+      : dungeonBounds && dungeonOverlayAvailable
+        ? dungeonCalibration
+          ? calibratedDungeonMapPoint(unit.sample, dungeonBounds, dungeonCalibration)
+          : dungeonMapPoint(unit.sample, dungeonBounds)
+        : null;
     return point ? [{ unit, point }] : [];
   });
 
@@ -194,7 +209,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
         <div className="min-w-0 truncate">
           <span className="font-semibold text-foreground">{mapName}</span>
           <span className="ml-1.5 font-mono">world {displayedMapId}</span>
-          {artwork.kind === "instance" && !dungeonBounds && (
+          {artwork.kind === "instance" && !dungeonOverlayAvailable && (
             <span className="ml-1.5 text-amber-300/80">position overlay unavailable</span>
           )}
         </div>
@@ -219,8 +234,8 @@ function MapContent(props: PanelRenderProps<MapResult>) {
           {markers.map(({ unit, point }) => <MapMarker key={unit.guid} unit={unit} props={props} point={point} />)}
         </div>
       </div>
-      {artwork.kind === "instance" && !dungeonBounds ? (
-        <p className="px-1 text-[9px] text-amber-300/80">This floor has no published world-coordinate bounds, so unit markers are hidden.</p>
+      {artwork.kind === "instance" && !dungeonOverlayAvailable ? (
+        <p className="px-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
       ) : !sync?.enabled ? (
         <p className="px-1 text-[9px] text-muted-foreground">Showing the final position snapshot. Enable Replay to watch units move.</p>
       ) : null}

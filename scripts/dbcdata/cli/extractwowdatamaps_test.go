@@ -116,10 +116,10 @@ func TestBuildWowMapInstances(t *testing.T) {
 	require.Equal(t, int32(43), instances[1].MapID)
 	require.Equal(t, int32(301), instances[1].Floors[0].Tiles[0].FileDataID)
 	require.Equal(t, &wowMapFloorBounds{
-		MinX: -410.946014,
-		MaxX: 595.528992,
-		MinY: -483.479004,
-		MaxY: 187.503998,
+		MinX: -375.946014,
+		MaxX: 560.528992,
+		MinY: -410.145996,
+		MaxY: 214.169998,
 	}, instances[1].Floors[0].Bounds)
 	require.Equal(t, int32(209), instances[2].MapID)
 	require.Equal(t, int32(201), instances[2].Floors[0].Tiles[0].FileDataID)

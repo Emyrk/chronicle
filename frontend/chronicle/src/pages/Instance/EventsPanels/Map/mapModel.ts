@@ -128,6 +128,78 @@ export function zoneMapPoint(sample: MapPositionSample, assignment: WowMapAssign
   return { leftPercent: clampPercent(uiX), topPercent: clampPercent(uiY) };
 }
 
+export interface DungeonMapCalibration {
+  anchorSample: MapPositionSample;
+  anchorPoint: MapPoint;
+}
+
+// Adventure Guide boss pins in artwork percentages. Advanced combat logs use
+// canonical map-space coordinates, but Wailing Caverns' flattened artwork does
+// not have one affine transform that fits every cavern region. Each boss
+// encounter therefore uses its boss as a local artwork anchor while retaining
+// the corrected DungeonMap scale and orientation for nearby movement.
+const WAILING_CAVERNS_BOSS_PINS = new Map<number, MapPoint>([
+  [3671, { leftPercent: 30.6, topPercent: 43 }],
+  [3670, { leftPercent: 19.1, topPercent: 39.5 }],
+  [3669, { leftPercent: 16.7, topPercent: 56.8 }],
+  [3653, { leftPercent: 38.5, topPercent: 36.1 }],
+  [3674, { leftPercent: 62.3, topPercent: 74.4 }],
+  [3673, { leftPercent: 61.6, topPercent: 53.9 }],
+  [5775, { leftPercent: 55.5, topPercent: 46.5 }],
+  [3654, { leftPercent: 34.6, topPercent: 13.7 }],
+]);
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+function terminalMedianPosition(positions: MapPositionSample[]): MapPositionSample | null {
+  const last = positions.at(-1);
+  if (!last) return null;
+  const terminal = positions.filter((sample) => sample.timestampMs >= last.timestampMs - 5_000);
+  return {
+    ...last,
+    x: median(terminal.map((sample) => sample.x)),
+    y: median(terminal.map((sample) => sample.y)),
+  };
+}
+
+export function resolveDungeonMapCalibration(
+  mapId: number,
+  encounter: MapEncounterPositions,
+  unitEntry: (guid: string) => number | undefined,
+): DungeonMapCalibration | null {
+  if (mapId !== 43) return null;
+  for (const [guid, positions] of encounter.positionsByUnit) {
+    const anchorPoint = WAILING_CAVERNS_BOSS_PINS.get(unitEntry(guid) ?? 0);
+    const anchorSample = terminalMedianPosition(positions);
+    if (anchorPoint && anchorSample) return { anchorSample, anchorPoint };
+  }
+  return null;
+}
+
+function clampPercentage(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+export function calibratedDungeonMapPoint(
+  sample: MapPositionSample,
+  bounds: WowMapFloorBounds,
+  calibration: DungeonMapCalibration,
+): MapPoint | null {
+  if (bounds.maxX === bounds.minX || bounds.maxY === bounds.minY) return null;
+  return {
+    leftPercent: clampPercentage(calibration.anchorPoint.leftPercent
+      + ((calibration.anchorSample.y - sample.y) / (bounds.maxX - bounds.minX)) * 100),
+    topPercent: clampPercentage(calibration.anchorPoint.topPercent
+      + ((calibration.anchorSample.x - sample.x) / (bounds.maxY - bounds.minY)) * 100),
+  };
+}
+
 export function dungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBounds): MapPoint | null {
   if (bounds.maxX === bounds.minX || bounds.maxY === bounds.minY) return null;
   // DungeonMap's horizontal bounds apply to world Y and its vertical bounds

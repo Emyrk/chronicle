@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 import {
+  calibratedDungeonMapPoint,
   dungeonMapPoint,
   latestPositionAt,
+  resolveDungeonMapCalibration,
   resolveMapArtwork,
   selectMapEncounter,
   zoneMapPoint,
@@ -144,6 +146,72 @@ describe("map replay model", () => {
       kind: "zone",
       map: { name: "Tirisfal Glades" },
     });
+  });
+
+  it.each([
+    { entry: 3671, sample: { timestampMs: 1_000, x: 15.04, y: 300.08, mapId: 0, facing: 0 }, point: { leftPercent: 30.6, topPercent: 43 } },
+    { entry: 3670, sample: { timestampMs: 1_000, x: 36.81, y: -241.06, mapId: 0, facing: 0 }, point: { leftPercent: 19.1, topPercent: 39.5 } },
+    { entry: 3669, sample: { timestampMs: 1_000, x: -151.14, y: 414.37, mapId: 0, facing: 0 }, point: { leftPercent: 16.7, topPercent: 56.8 } },
+    { entry: 3653, sample: { timestampMs: 1_000, x: -6.38, y: 204.62, mapId: 0, facing: 0 }, point: { leftPercent: 38.5, topPercent: 36.1 } },
+    { entry: 3674, sample: { timestampMs: 1_000, x: -279, y: -314, mapId: 0, facing: 0 }, point: { leftPercent: 62.3, topPercent: 74.4 } },
+    { entry: 3673, sample: { timestampMs: 1_000, x: -118.78, y: -25.08, mapId: 0, facing: 0 }, point: { leftPercent: 61.6, topPercent: 53.9 } },
+    { entry: 5775, sample: { timestampMs: 1_000, x: -84.95, y: 29.65, mapId: 0, facing: 0 }, point: { leftPercent: 55.5, topPercent: 46.5 } },
+    { entry: 3654, sample: { timestampMs: 1_000, x: 138.9, y: 250.94, mapId: 0, facing: 0 }, point: { leftPercent: 34.6, topPercent: 13.7 } },
+  ])("calibrates Wailing Caverns entry $entry to its boss pin", ({ entry, sample, point }) => {
+    const calibrationEncounter: MapEncounterPositions = {
+      encounterId: "boss",
+      startMs: 0,
+      endMs: 1_000,
+      positionsByUnit: new Map([["boss", [sample]]]),
+    };
+    const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => entry);
+    expect(calibration).not.toBeNull();
+    expect(calibratedDungeonMapPoint(sample, {
+      minX: -375.946014,
+      maxX: 560.528992,
+      minY: -410.145996,
+      maxY: 214.169998,
+    }, calibration!)).toEqual(point);
+  });
+
+  it("uses the median terminal boss position as the calibration anchor", () => {
+    const calibrationEncounter: MapEncounterPositions = {
+      encounterId: "pythas",
+      startMs: 0,
+      endMs: 10_000,
+      positionsByUnit: new Map([["boss", [
+        { timestampMs: 4_000, x: 999, y: 999, mapId: 0, facing: 0 },
+        { timestampMs: 6_000, x: 36, y: -242, mapId: 0, facing: 0 },
+        { timestampMs: 8_000, x: 38, y: -240, mapId: 0, facing: 0 },
+        { timestampMs: 10_000, x: 37, y: -241, mapId: 0, facing: 0 },
+      ]]]),
+    };
+    const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670);
+    expect(calibration?.anchorSample).toMatchObject({ x: 37, y: -241 });
+  });
+
+  it("preserves local movement around a Wailing Caverns boss anchor", () => {
+    const anchor = { timestampMs: 1_000, x: 36.81, y: -241.06, mapId: 0, facing: 0 };
+    const calibrationEncounter: MapEncounterPositions = {
+      encounterId: "pythas",
+      startMs: 0,
+      endMs: 1_000,
+      positionsByUnit: new Map([["boss", [anchor]]]),
+    };
+    const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670)!;
+    const point = calibratedDungeonMapPoint({ ...anchor, x: anchor.x + 10, y: anchor.y - 10 }, {
+      minX: -375.946014,
+      maxX: 560.528992,
+      minY: -410.145996,
+      maxY: 214.169998,
+    }, calibration)!;
+    expect(point.leftPercent).toBeCloseTo(20.1678, 3);
+    expect(point.topPercent).toBeCloseTo(37.8982, 3);
+  });
+
+  it("requires a known boss position to calibrate Wailing Caverns", () => {
+    expect(resolveDungeonMapCalibration(43, encounter, () => undefined)).toBeNull();
+    expect(resolveDungeonMapCalibration(533, encounter, () => 3670)).toBeNull();
   });
 
   it("converts dungeon world coordinates using authoritative floor bounds", () => {
