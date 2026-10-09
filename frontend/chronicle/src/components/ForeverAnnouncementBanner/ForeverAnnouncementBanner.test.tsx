@@ -1,16 +1,22 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ForeverAnnouncementBanner } from "./ForeverAnnouncementBanner";
 
+vi.mock("@/api/queries", () => ({
+  useSiteConfig: () => ({
+    data: { tenant: { slug: "turtle-wow" } },
+  }),
+}));
+
 describe("ForeverAnnouncementBanner", () => {
-  it("shows on deployments without the WoW Forever flavor", () => {
+  it("uses the tenant slug as the tracking source", () => {
     const markup = renderToStaticMarkup(
-      <ForeverAnnouncementBanner flavor={["vanilla", "turtle"]} source="turtle" />,
+      <ForeverAnnouncementBanner flavor={["vanilla", "turtle"]} />,
     );
 
     expect(markup).toContain("Now supporting WoW Forever");
     expect(markup).toContain(
-      'href="https://forever.chronicleclassic.com/?chr_src=turtle&amp;chr_pos=announcement_banner&amp;chr_cmp=wow_forever_launch"',
+      'href="https://forever.chronicleclassic.com/?chr_src=turtle-wow&amp;chr_pos=announcement_banner&amp;chr_cmp=wow_forever_launch"',
     );
     expect(markup).toContain('src="https://icons.chronicleclassic.com/servers/forever/logo_wide.webp"');
   });
