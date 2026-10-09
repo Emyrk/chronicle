@@ -66,7 +66,10 @@ interface DerivedPlayer {
 const LABEL_WIDTH = 220;
 /** Pointer movement under this many px is a click, not a drag. */
 const CLICK_SLOP_PX = 4;
-const CAST_LANE_H = 56;
+const CAST_LANE_H = 66;
+/** Off-GCD casts (gcd 0, instant, e.g. Vigor procs) get a row of small icons under the GCD casts. */
+const OFF_GCD_TOP = 42;
+const OFF_GCD_ICON = 14;
 const SWING_LANE_H = 24;
 const CD_LANE_H = 28;
 
@@ -289,7 +292,10 @@ export function RotationTimeline({
             const atCursor = probeMs != null ? castAt(d.casts, probeMs + d.offsetMs, gcd) : null;
             return (
               <div key={d.player.guid}>
-                <div className="flex h-14 flex-col justify-center gap-0.5 border-b border-border px-4">
+                <div
+                  className="flex flex-col justify-center gap-0.5 border-b border-border px-4"
+                  style={{ height: CAST_LANE_H }}
+                >
                   <div className="flex items-center gap-2">
                     <SlotBadge slot={d.slot} />
                     <span
@@ -410,7 +416,10 @@ function PlayerLanes({ derived, P, vs, ve, pxPerMs, gcd, ignored, nowMs, isCoold
   const margin = 2000;
   const visible = (startMs: number, endMs: number) => endMs - offsetMs >= vs - margin && startMs - offsetMs <= ve + margin;
 
-  const laneCasts = casts.filter((c) => !isCooldown(c.spellId) && visible(c.startMs, castSlotEnd(c, gcd)));
+  const isOffGcd = (c: TimelineCast) => gcd(c.spellId) === 0 && c.endMs === c.startMs && !c.channelTimeMs;
+  const shown = casts.filter((c) => !isCooldown(c.spellId) && visible(c.startMs, castSlotEnd(c, gcd)));
+  const laneCasts = shown.filter((c) => !isOffGcd(c));
+  const offGcdCasts = shown.filter(isOffGcd);
   const cdCasts = casts.filter((c) => isCooldown(c.spellId) && visible(c.startMs, c.startMs));
   const swings = player.data.swings.filter((s) => visible(s.offsetMs, s.offsetMs));
 
@@ -473,7 +482,7 @@ function PlayerLanes({ derived, P, vs, ve, pxPerMs, gcd, ignored, nowMs, isCoold
               onPointerLeave={() => onHover(null)}
             >
               <div
-                className="absolute bottom-1 left-0 h-[3px] rounded-[1px]"
+                className="absolute bottom-[3px] left-0 h-[3px] rounded-[1px]"
                 style={{
                   width: castDuration > 0 ? `${Math.min(100, (castDuration / (slotEnd - c.startMs)) * 100)}%` : "12%",
                   background: `var(--color-school-${meta.school})`,
@@ -481,23 +490,46 @@ function PlayerLanes({ derived, P, vs, ve, pxPerMs, gcd, ignored, nowMs, isCoold
               />
               {compact ? (
                 <div
-                  className="absolute left-0 top-2 h-5 w-[3px] rounded-[1px]"
+                  className="absolute left-0 top-[5px] h-[22px] w-[3px] rounded-[1px]"
                   style={{ background: `var(--color-school-${meta.school})` }}
                 />
               ) : (
                 <div
-                  className="absolute left-px top-[7px] size-[22px] rounded-[3px] border border-border bg-muted bg-cover bg-center"
+                  className="absolute left-px top-[5px] size-[22px] rounded-[3px] border border-border bg-muted bg-cover bg-center"
                   style={{ backgroundImage: `url(${meta.icon})` }}
                 />
               )}
               {!compact && widthPx > 24 && damage > 0 && (
                 <div
-                  className={cn("absolute left-0 top-8 whitespace-nowrap font-mono text-[9px]", c.crits > 0 ? "text-school-holy" : "text-muted-foreground")}
+                  className={cn("absolute left-0 top-[29px] whitespace-nowrap font-mono text-[9px]", c.crits > 0 ? "text-school-holy" : "text-muted-foreground")}
                 >
                   {formatNumber(damage)}
                 </div>
               )}
             </div>
+          );
+        })}
+        {offGcdCasts.map((c, i) => {
+          const meta = spellMeta(c.spellId);
+          return (
+            <div
+              key={`og-${c.startMs}-${i}`}
+              className={cn(
+                "absolute rounded-[2px] border border-border bg-muted bg-cover bg-center",
+                c.failed && "opacity-40",
+              )}
+              style={{
+                left: `${P(c.startMs - offsetMs)}%`,
+                top: OFF_GCD_TOP,
+                width: OFF_GCD_ICON,
+                height: OFF_GCD_ICON,
+                backgroundImage: `url(${meta.icon})`,
+                opacity: opacityOf(c.spellId, c.startMs),
+              }}
+              onClick={(e) => onSpellClick(e, c.spellId)}
+              onPointerEnter={() => onHover(c)}
+              onPointerLeave={() => onHover(null)}
+            />
           );
         })}
       </div>
