@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useFriendlyClassBuffs } from "@/api/classBuffs";
+import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip/SpellIconWithTooltip";
 import { cn } from "@/lib/utils";
 import { classifyAura, combinePlacements } from "../../EventsPanels/RotationTimeline/auraClassification";
 import { alignOffsetMs, playerCasts } from "../../EventsPanels/RotationTimeline/derive";
@@ -254,13 +255,18 @@ interface AuraRowViewProps {
 function AuraRowView({ row, offsets, P, spellMeta, compact }: AuraRowViewProps) {
   const grid = { gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` };
   const barH = compact ? 8 : 10;
+  const meta = spellMeta(row.spellId);
   return (
     <div className={cn("grid border-t border-border", compact ? "h-6" : "h-[30px]")} style={grid}>
       <div className={cn("flex min-w-0 items-center gap-1.5 pr-3", compact ? "pl-7" : "pl-4")}>
-        <span
-          className={cn("shrink-0 rounded-[2px] bg-muted bg-cover bg-center", compact ? "size-3" : "size-3.5")}
-          style={{ backgroundImage: `url(${spellMeta(row.spellId).icon})` }}
-        />
+        {meta.spell ? (
+          <SpellIconWithTooltip spell={meta.spell} size={compact ? 12 : 14} detailed className="rounded-[2px]" />
+        ) : (
+          <span
+            className={cn("shrink-0 rounded-[2px] bg-muted bg-cover bg-center", compact ? "size-3" : "size-3.5")}
+            style={{ backgroundImage: `url(${meta.icon})` }}
+          />
+        )}
         <span className="min-w-0 flex-1 truncate" title={`${row.name}${row.spellId ? ` #${row.spellId}` : ""}`}>
           {row.name}
         </span>
