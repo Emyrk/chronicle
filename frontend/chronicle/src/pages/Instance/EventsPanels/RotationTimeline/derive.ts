@@ -281,7 +281,8 @@ export function withOverrideBuffCasts(
   overrides: readonly SpellOverride[],
   durationMs: number,
 ): PlayerTimelineData {
-  const wanted = overrides.filter((o) => o.showAsCooldown);
+  // A zero duration means "no tint", so there is nothing to build from buffs.
+  const wanted = overrides.filter((o) => o.showAsCooldown && o.showAsCooldown.durationMs !== 0);
   if (wanted.length === 0) return data;
   const casts = data.goCasts.length > 0 ? data.goCasts : data.textCasts;
   const cast = new Set(casts.map((c) => c.spellName.toLowerCase()));
