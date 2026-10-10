@@ -28,6 +28,43 @@ var spellOverrides = []spellOverride{
 	},
 	{
 		flavor:           database.FlavorVanilla,
+		spellID:          20572,
+		allClassCooldown: true,
+		mutate: func(spell *chrondbc.Spell, spells map[chrondbc.SpellID]*chrondbc.Spell) {
+			aura := spells[23234]
+			if aura == nil {
+				return
+			}
+			// The cast owns the cooldown while the triggered aura owns the duration.
+			spell.Duration = aura.Duration
+			spell.DurationIndex_ = aura.DurationIndex_
+			if spell.Duration.MaxDuration <= 0 {
+				spell.Duration.ID = aura.DurationIndex_
+				spell.Duration.Duration = 15_000
+				spell.Duration.MaxDuration = 15_000
+			}
+		},
+	},
+	{
+		flavor:  database.FlavorVanilla,
+		spellID: 23234,
+		mutate: func(spell *chrondbc.Spell, spells map[chrondbc.SpellID]*chrondbc.Spell) {
+			cast := spells[20572]
+			if cast == nil {
+				return
+			}
+			spell.Description_lang = cast.Description_lang
+			spell.SpellIcon = cast.SpellIcon
+			spell.SpellIconID_ = cast.SpellIconID_
+			if spell.Duration.MaxDuration <= 0 {
+				spell.Duration.ID = spell.DurationIndex_
+				spell.Duration.Duration = 15_000
+				spell.Duration.MaxDuration = 15_000
+			}
+		},
+	},
+	{
+		flavor:           database.FlavorVanilla,
 		spellID:          20554,
 		allClassCooldown: true,
 		mutate: func(spell *chrondbc.Spell, spells map[chrondbc.SpellID]*chrondbc.Spell) {
