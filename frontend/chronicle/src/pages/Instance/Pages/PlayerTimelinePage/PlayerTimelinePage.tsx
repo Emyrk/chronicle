@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeftRight } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
+import { ArrowLeftRight, Sparkles } from "lucide-react";
 import { useCooldownSpells } from "@/api/cooldownSpells";
 import { useMyFavorites } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -74,20 +75,46 @@ export function PlayerTimelinePage({ context, initialState, onStateChange }: Pla
   // Like the picks, the damage/healing view carries across encounters.
   const [metric, setMetric] = useState<TimelineMetric>(saved?.metric ?? "damage");
 
-  if (selectedEncounterIds.length !== 1) {
-    return <EncounterPicker context={context} />;
-  }
   return (
-    <PlayerTimelineContent
-      key={selectedEncounterIds[0]}
-      context={context}
-      saved={saved}
-      onStateChange={onStateChange}
-      overrides={overrides}
-      setOverrides={setOverrides}
-      metric={metric}
-      setMetric={setMetric}
-    />
+    <div className="flex flex-col gap-3">
+      <FeedbackBanner />
+      {selectedEncounterIds.length !== 1 ? (
+        <EncounterPicker context={context} />
+      ) : (
+        <PlayerTimelineContent
+          key={selectedEncounterIds[0]}
+          context={context}
+          saved={saved}
+          onStateChange={onStateChange}
+          overrides={overrides}
+          setOverrides={setOverrides}
+          metric={metric}
+          setMetric={setMetric}
+        />
+      )}
+    </div>
+  );
+}
+
+const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
+
+/** The page is new: asks every class for feedback on what it gets right and wrong. */
+function FeedbackBanner() {
+  return (
+    <Alert className="border-yellow-500/40 bg-yellow-500/10">
+      <Sparkles className="text-yellow-300" />
+      <AlertTitle className="text-yellow-200">The Player Timeline is new</AlertTitle>
+      <AlertDescription>
+        <p>
+          I need feedback from every class on what is correct and what is incorrect: missing or extra casts, procs,
+          cooldowns, buffs, GCDs and idle time. Please send your feedback on{" "}
+          <a href={DISCORD_URL} target="_blank" rel="noreferrer" className="font-medium text-foreground underline underline-offset-2">
+            Discord
+          </a>
+          .
+        </p>
+      </AlertDescription>
+    </Alert>
   );
 }
 
