@@ -6,7 +6,7 @@
 
 import type { TimelineCast } from "./rotationTimeline.processor";
 
-export type RailKind = "cd" | "proc";
+export type RailKind = "cd" | "proc" | "consume";
 
 export interface RailEvent {
   cast: TimelineCast;

@@ -19,7 +19,12 @@ import {
   type RotationTimelineEvent,
   type RotationTimelineResult,
 } from "../../EventsPanels/RotationTimeline/rotationTimeline.processor";
-import { playerCasts, withOverrideBuffCasts, type TimelineMetric } from "../../EventsPanels/RotationTimeline/derive";
+import {
+  playerCasts,
+  withConsumeCasts,
+  withOverrideBuffCasts,
+  type TimelineMetric,
+} from "../../EventsPanels/RotationTimeline/derive";
 import { useRotationView, type RotationViewInitial } from "../../EventsPanels/RotationTimeline/useRotationView";
 import { useSmoothReplayTime } from "../../EventsPanels/RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
@@ -234,7 +239,7 @@ function PlayerTimelineContent({
         const data = guid ? result.players.get(guid) : undefined;
         const info = guid ? instance.players?.[guid] : undefined;
         if (!guid || !data || !info) return [];
-        return [{ guid, name: info.name, className: info.class, data: withOverrideBuffCasts(data, spellOverrides, durationMs) }];
+        return [{ guid, name: info.name, className: info.class, data: withOverrideBuffCasts(withConsumeCasts(data), spellOverrides, durationMs) }];
       }),
     [picked, result.players, instance.players, spellOverrides, durationMs],
   );

@@ -94,6 +94,9 @@ const LABEL_WIDTH = 220;
 /** Pointer movement under this many px is a click, not a drag. */
 const CLICK_SLOP_PX = 4;
 const SWING_LANE_H = 24;
+/** Ring color for consumables on the rail. */
+const CONSUME_COLOR = "#34d399"; // emerald-400
+
 /** Yellow border marking a cast that crit (in the current DPS/HPS metric). */
 const CRIT_RING = "0 0 0 1px rgba(0,0,0,0.6), 0 0 0 2px var(--color-school-holy)";
 
@@ -671,7 +674,8 @@ function PlayerLanes({
   const clusters = useMemo(() => {
     const events: RailEvent[] = casts.flatMap((c) => {
       const kind = castKind(c, gcd, cooldownInfo);
-      return kind === "gcd" ? [] : [{ cast: c, kind: kind === "cooldown" ? "cd" : "proc" } as RailEvent];
+      if (kind === "gcd") return [];
+      return [{ cast: c, kind: kind === "cooldown" ? "cd" : kind } as RailEvent];
     });
     return clusterRailEvents(events, pxPerMs, cooldown);
   }, [casts, cooldownInfo, gcd, pxPerMs, cooldown]);
@@ -895,8 +899,9 @@ function PlayerLanes({
                 onPointerLeave={() => (multi ? onHoverCluster(null) : onHover(null))}
               >
                 {k.events.slice(0, MAX_STACKED_ICONS).map((e, j) => {
-                  const size = e.kind === "cd" ? cooldown : proc;
-                  const ring = e.kind === "cd" ? cooldownColor(e.cast.spellId).color : null;
+                  const size = e.kind === "proc" ? proc : cooldown;
+                  const ring =
+                    e.kind === "cd" ? cooldownColor(e.cast.spellId).color : e.kind === "consume" ? CONSUME_COLOR : null;
                   return (
                     <span
                       key={`${e.cast.startMs}-${j}`}
@@ -1057,7 +1062,9 @@ function ClusterTooltip({ cluster, casts, anchor, spellMeta, cooldownColor }: Cl
       ? { label: "Cooldown", color: cooldownColor(e.cast.spellId).color }
       : e.kind === "proc"
         ? { label: "Proc", color: "var(--color-school-holy)" }
-        : { label: "Cast", color: "var(--muted-foreground)" };
+        : e.kind === "consume"
+          ? { label: "Consumable", color: CONSUME_COLOR }
+          : { label: "Cast", color: "var(--muted-foreground)" };
 
   return (
     <TooltipShell anchor={anchor} width={300}>
@@ -1140,10 +1147,14 @@ function CastTooltip({ cast, anchor, meta, endMs, unitName, activeCooldowns }: C
         icon={meta.icon}
         title={cast.spellName}
         failed={cast.failed}
-        subtitle={[
-          formatClock(cast.startMs),
-          castMs > 0 ? `${(castMs / 1000).toFixed(1)}s ${cast.channel ? "channel" : "cast"}` : "instant",
-        ].join(" · ") + (cast.target ? ` → ${unitName(cast.target)}` : "")}
+        subtitle={
+          cast.consume
+            ? `${formatClock(cast.startMs)} · consumable${cast.consume.itemId ? ` · item #${cast.consume.itemId}` : ""}`
+            : [
+                formatClock(cast.startMs),
+                castMs > 0 ? `${(castMs / 1000).toFixed(1)}s ${cast.channel ? "channel" : "cast"}` : "instant",
+              ].join(" · ") + (cast.target ? ` → ${unitName(cast.target)}` : "")
+        }
       />
       {damage > 0 && (
         <div className="flex items-baseline gap-2">

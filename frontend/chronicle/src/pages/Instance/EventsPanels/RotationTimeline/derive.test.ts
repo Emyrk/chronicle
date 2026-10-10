@@ -3,6 +3,8 @@ import type { PlayerTimelineData, TimelineCast } from "./rotationTimeline.proces
 import {
   alignOffsetMs,
   busySegments,
+  castKind,
+  withConsumeCasts,
   withOverrideBuffCasts,
   nearbyActivity,
   castAt,
@@ -54,6 +56,7 @@ function player(extra: Partial<PlayerTimelineData> = {}): PlayerTimelineData {
     aurasOn: [],
     debuffsCast: [],
     damageByTarget: {},
+    consumes: [],
     ...extra,
   };
 }
@@ -257,5 +260,25 @@ describe("withOverrideBuffCasts", () => {
   it("leaves data alone when the spell was cast", () => {
     const data = player({ goCasts: [cast(500, 51442, { spellName: "Nature Eclipse" })], aurasOn: [buff(500, 15_500)] });
     expect(withOverrideBuffCasts(data, overrides, 30_000)).toBe(data);
+  });
+});
+
+describe("withConsumeCasts", () => {
+  const potion = { offsetMs: 5000, consumeId: "c1", itemId: 13444, itemName: "Major Mana Potion", spellId: 17531, spellName: "Restore Mana" };
+
+  it("adds consumes as consume casts and drops the matching item cast", () => {
+    const data = player({ goCasts: [cast(1000, 1), cast(5200, 17531)], consumes: [potion] });
+    const out = withConsumeCasts(data);
+    expect(out.goCasts.map((c) => [c.startMs, c.spellName])).toEqual([
+      [1000, "spell 1"],
+      [5000, "Major Mana Potion"],
+    ]);
+    const consumeCast = out.goCasts[1];
+    expect(castKind(consumeCast, () => 0, () => null)).toBe("consume");
+  });
+
+  it("returns the data unchanged without consumes", () => {
+    const data = player({ goCasts: [cast(0)] });
+    expect(withConsumeCasts(data)).toBe(data);
   });
 });

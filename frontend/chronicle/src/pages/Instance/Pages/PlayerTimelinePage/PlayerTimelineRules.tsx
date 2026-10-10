@@ -67,8 +67,8 @@ interface SpellRow {
   uses: number[];
 }
 
-const KIND_LABEL: Record<CastKind, string> = { cooldown: "Cooldown", proc: "Proc", gcd: "Cast" };
-const KIND_ORDER: Record<CastKind, number> = { cooldown: 0, gcd: 1, proc: 2 };
+const KIND_LABEL: Record<CastKind, string> = { cooldown: "Cooldown", proc: "Proc", consume: "Consumable", gcd: "Cast" };
+const KIND_ORDER: Record<CastKind, number> = { cooldown: 0, gcd: 1, consume: 2, proc: 3 };
 
 const ms = (v: number) => (v >= 1000 ? `${+(v / 1000).toFixed(2)}s` : `${Math.round(v)}ms`);
 /** Spell data uses -1 for auras that last until cancelled. */
@@ -137,6 +137,9 @@ export function PlayerTimelineRules({
     if (r.kind === "cooldown") {
       const tint = cooldownInfo(r.spellId)?.durationMs;
       return `Curated cooldown ${ms(curated?.cooldownMs ?? 0)} ≥ ${ms(cooldownMinMs)}${tint ? `; tints ${ms(tint)}` : "; no duration, no tint"}`;
+    }
+    if (r.kind === "consume") {
+      return `Consumable (consume evidence); GCD from spell data: ${gcd(r.spellId) > 0 ? ms(gcd(r.spellId)) : "none"}`;
     }
     if (r.kind === "proc") {
       const note = curated ? ` (curated cooldown ${ms(curated.cooldownMs)} < ${ms(cooldownMinMs)})` : "";
@@ -277,6 +280,11 @@ export function PlayerTimelineRules({
           <li>
             A cast is a <b>Proc</b> when it is instant and its spell data has a GCD of 0. Procs are circles on the rail and
             are not counted as actions in the last/next readout.
+          </li>
+          <li>
+            A <b>Consumable</b> comes from the consume stream (the Consumables panel's evidence): a green-ringed square on the
+            rail. A logged cast of the same spell within a second is the same use and is replaced. Whether it uses the GCD
+            comes from its spell data; most potions and elixirs do not.
           </li>
           <li>Everything else is a <b>Cast</b>: an icon in the lane, with a bar for cast time or channel.</li>
           <li>

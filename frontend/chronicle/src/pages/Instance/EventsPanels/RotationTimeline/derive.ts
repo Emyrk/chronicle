@@ -257,13 +257,14 @@ export function nearbyActivity(
  * How a cast is drawn: a curated cooldown (ringed square on the rail), a proc
  * (instant and off the GCD, circle on the rail), or a GCD cast (icon in the lane).
  */
-export type CastKind = "cooldown" | "proc" | "gcd";
+export type CastKind = "cooldown" | "proc" | "consume" | "gcd";
 
 export function castKind(
   cast: TimelineCast,
   gcd: GcdLookup,
   cooldownInfo: (spellId: number) => unknown,
 ): CastKind {
+  if (cast.consume) return "consume";
   if (cooldownInfo(cast.spellId) != null) return "cooldown";
   if (gcd(cast.spellId) === 0 && cast.endMs === cast.startMs && !cast.channelTimeMs) return "proc";
   return "gcd";
@@ -315,4 +316,42 @@ export function withOverrideBuffCasts(
   return data.goCasts.length > 0
     ? { ...data, goCasts: [...data.goCasts, ...added] }
     : { ...data, textCasts: [...data.textCasts, ...added] };
+}
+
+/** A logged cast of the same spell this close to a consume is the same use. */
+const CONSUME_MATCH_MS = 1000;
+
+/**
+ * Adds the player's consumables as casts drawn on the rail. A logged cast of
+ * the same spell within a second (an item-backed spell_go) is replaced, so a
+ * use shows once. GCD and busy time still come from the spell's data.
+ */
+export function withConsumeCasts(data: PlayerTimelineData): PlayerTimelineData {
+  if (data.consumes.length === 0) return data;
+  const matches = (c: TimelineCast) =>
+    data.consumes.some((u) => u.spellId === c.spellId && Math.abs(u.offsetMs - c.startMs) <= CONSUME_MATCH_MS);
+  const added: TimelineCast[] = data.consumes.map((u) => ({
+    startMs: u.offsetMs,
+    endMs: u.offsetMs,
+    spellId: u.spellId,
+    spellName: u.itemName ?? u.spellName,
+    target: "",
+    castTimeMs: null,
+    channelTimeMs: null,
+    channel: false,
+    tickMs: [],
+    failed: false,
+    itemId: u.itemId,
+    damage: 0,
+    periodicDamage: 0,
+    hits: 0,
+    crits: 0,
+    healing: 0,
+    overheal: 0,
+    healCrits: 0,
+    consume: { itemId: u.itemId, itemName: u.itemName },
+  }));
+  return data.goCasts.length > 0
+    ? { ...data, goCasts: [...data.goCasts.filter((c) => !matches(c)), ...added] }
+    : { ...data, textCasts: [...data.textCasts.filter((c) => !matches(c)), ...added] };
 }

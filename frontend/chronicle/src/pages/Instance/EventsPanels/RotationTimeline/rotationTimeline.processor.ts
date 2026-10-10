@@ -16,6 +16,7 @@ import type {
   AbsorbedProcessorEvent,
   AuraProcessorEvent,
   CastProcessorEvent,
+  ConsumeProcessorEvent,
   HealProcessorEvent,
   DamageProcessorEvent,
   SlainProcessorEvent,
@@ -60,6 +61,8 @@ export interface TimelineCast {
    * cast, only gained): when the buff faded. Not produced by this processor.
    */
   buffEndMs?: number;
+  /** Set on casts made from consume evidence (see withConsumeCasts). */
+  consume?: { itemId: number | null; itemName: string | null };
   failed: boolean;
   itemId: number | null;
   /** Damage linked to this cast: direct hits plus periodic ticks. */
@@ -72,6 +75,16 @@ export interface TimelineCast {
   /** Overhealing linked to this cast (0 when the log does not record it). */
   overheal: number;
   healCrits: number;
+}
+
+/** A consumable use, from the consume stream (deduplicated by consume ID). */
+export interface TimelineConsume {
+  offsetMs: number;
+  consumeId: string;
+  itemId: number | null;
+  itemName: string | null;
+  spellId: number;
+  spellName: string;
 }
 
 export interface TimelineSwing {
@@ -117,6 +130,8 @@ export interface PlayerTimelineData {
   debuffsCast: TimelineAuraSegment[];
   /** Damage dealt per target GUID. */
   damageByTarget: Record<string, number>;
+  /** Consumables used during the encounter. */
+  consumes: TimelineConsume[];
 }
 
 interface PendingStart {
@@ -163,6 +178,7 @@ export type RotationTimelineEvent =
   | HealProcessorEvent
   | AbsorbedProcessorEvent
   | AuraProcessorEvent
+  | ConsumeProcessorEvent
   | SlainProcessorEvent;
 
 export function focusFromContext(context: ProcessorContext): Set<string> {
@@ -184,6 +200,7 @@ function emptyPlayer(guid: string): PlayerTimelineData {
     aurasOn: [],
     debuffsCast: [],
     damageByTarget: {},
+    consumes: [],
   };
 }
 
@@ -236,7 +253,7 @@ function completeCast(cast: TimelineCast, pending: PendingStart | null): void {
 
 export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, RotationTimelineEvent> = {
   id: "rotation_timeline",
-  streams: ["spell_go", "spell_start", "spell_fail", "cast", "damage", "heal", "absorbed", "aura", "slain"] as StreamType[],
+  streams: ["spell_go", "spell_start", "spell_fail", "cast", "damage", "heal", "absorbed", "aura", "slain", "consume"] as StreamType[],
 
   createState: (): RotationTimelineResult => ({
     encounterId: null,
@@ -369,6 +386,23 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         };
         link(p.goCasts, s.lastGoBySpell);
         link(p.textCasts, s.lastTextBySpell);
+        return;
+      }
+
+      case "consume": {
+        // Projections (pre-pull effects) and pre-combat uses are outside the fight.
+        if (event.isProjection || event.kind === 7 || event.kind === 9) return;
+        if (!focus.has(event.player)) return;
+        const p = player(event.player);
+        if (p.consumes.some((c) => c.consumeId === event.consumeId)) return;
+        p.consumes.push({
+          offsetMs: event.offsetMilli,
+          consumeId: event.consumeId,
+          itemId: event.itemId,
+          itemName: event.itemName,
+          spellId: event.spell.id,
+          spellName: event.spell.name,
+        });
         return;
       }
 
