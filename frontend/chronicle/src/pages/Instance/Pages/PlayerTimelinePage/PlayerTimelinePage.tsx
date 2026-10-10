@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { useCooldownSpells } from "@/api/cooldownSpells";
+import { useMyFavorites } from "@/api/queries";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelContext, PanelDefinition } from "../../EventsPanels/types";
@@ -16,6 +18,7 @@ import { useRotationView, type RotationViewInitial } from "../../EventsPanels/Ro
 import { useSmoothReplayTime } from "../../EventsPanels/RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 import { AuraSection } from "./AuraSection";
+import { defaultPlayers } from "./defaultPlayers";
 import { PlayerPicker } from "./PlayerPicker";
 import { parsePlayerTimelineState, type PlayerTimelineState } from "./playerTimelineState";
 
@@ -109,16 +112,28 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
         .sort((a, b) => b[1] - a[1]),
     [damageByPlayer, instance.players],
   );
+  // Favorited characters (name + realm) seed the defaults when nothing was picked.
+  const { isAuthenticated } = useAuth();
+  const { data: favorites } = useMyFavorites({ enabled: isAuthenticated });
+  const isFavorite = useMemo(() => {
+    const realm = instance.realm?.toLowerCase();
+    const keys = new Set(
+      (favorites?.players ?? []).map((f) => `${f.name.toLowerCase()}|${realm ? f.realm_name.toLowerCase() : ""}`),
+    );
+    return (guid: string) => {
+      const name = instance.players?.[guid]?.name;
+      return name != null && keys.has(`${name.toLowerCase()}|${realm ?? ""}`);
+    };
+  }, [favorites, instance.players, instance.realm]);
+
   const picked = useMemo((): [string | null, string | null] => {
-    const top = ranked[0]?.[0] ?? null;
-    const cls = top ? instance.players?.[top]?.class : undefined;
-    const next = ranked.find(([guid]) => guid !== top && instance.players?.[guid]?.class === cls)?.[0] ?? null;
+    const [top, next] = defaultPlayers(ranked, (guid) => instance.players?.[guid]?.class, isFavorite);
     // A pick who was not in this encounter falls back to the default here, but
     // stays picked for encounters they were in.
     const present = (guid: string | null) =>
       guid != null && (ranked.length === 0 || ranked.some(([id]) => id === guid)) ? guid : null;
     return [present(overrides[0]) ?? top, overrides[1] === NONE ? null : (present(overrides[1]) ?? next)];
-  }, [ranked, overrides, instance.players]);
+  }, [ranked, overrides, instance.players, isFavorite]);
   const setPicked = setOverrides;
 
   const focusKey = picked.filter((g): g is string => g != null).join(",");
