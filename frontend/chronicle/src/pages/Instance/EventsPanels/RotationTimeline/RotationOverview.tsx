@@ -172,6 +172,19 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
             style={{ left: `${pct(view.startMs)}%`, width: `${pct(view.endMs - view.startMs)}%` }}
           />
           {indicator != null && <IndicatorLine leftPct={pct(indicator)} />}
+          {view.pinnedMs != null && (
+            <button
+              type="button"
+              // Keep the chart from treating this click as a brush or a new pin.
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onClick={view.unpin}
+              title="Unpin (Esc)"
+              className="absolute left-1.5 top-1 z-20 cursor-pointer select-none rounded border border-red-500/30 bg-red-950/40 px-1.5 py-0.5 text-[10px] font-semibold text-red-400 transition-colors hover:border-red-400/50 hover:bg-red-950/60 hover:text-red-300"
+            >
+              Unpin
+            </button>
+          )}
           {indicator != null && pct(indicator) >= 0 && pct(indicator) <= 100 && (
             <span
               className="pointer-events-none absolute top-0.5 z-10 -translate-x-1/2 rounded-sm bg-school-holy px-1 font-mono text-[10px] font-semibold text-background"
