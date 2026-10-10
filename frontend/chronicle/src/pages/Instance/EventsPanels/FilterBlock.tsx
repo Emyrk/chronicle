@@ -51,6 +51,7 @@ const HITTYPE_OPTIONS = [
   // { label: "Interrupt", value: "interrupt" },
   // { label: "Reflect", value: "reflect" },
   { label: "Periodic", value: "periodic" },
+  { label: "Main-hand", value: "mainhand" },
   { label: "Off-hand", value: "offhand" },
   { label: "Split", value: "split" },
 ] as const;

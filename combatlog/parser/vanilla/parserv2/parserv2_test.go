@@ -174,7 +174,7 @@ func TestParserMessages(t *testing.T) {
 				Caster:      ptr.Ref(guid.GUID(0x000000000001C7AC)),
 				Target:      guid.GUID(0xF130002C3800949C),
 				Amount:      194, // subDamage adds to amount
-				HitType:     types.HitTypeHit,
+				HitType:     types.HitTypeHit | types.HitTypeMainHand,
 				School:      types.PhysicalSchool,
 				Trailer:     nil,
 			},
@@ -192,7 +192,7 @@ func TestParserMessages(t *testing.T) {
 				Caster:      ptr.Ref(guid.GUID(0xF130002C3600BE05)),
 				Target:      guid.GUID(0x000000000001C80A),
 				Amount:      100,
-				HitType:     types.HitTypeCrit,
+				HitType:     types.HitTypeCrit | types.HitTypeMainHand,
 				School:      types.PhysicalSchool,
 				Trailer:     nil,
 			},

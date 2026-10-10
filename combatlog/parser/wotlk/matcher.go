@@ -179,12 +179,17 @@ func (p *Parser) suffixDamage(ts time.Time, base baseParams, spell *spellInfo, e
 	critical := m.NilBool()
 	glancing := m.NilBool()
 	crushing := m.NilBool()
+	var isOffHand *bool
+	if prefix == "SWING" && m.Remain() > 0 {
+		isOffHand = m.NilBool()
+	}
 
 	if err := m.Error(); err != nil {
 		return nil, err
 	}
 
 	ht := DamageHitType(critical, glancing, crushing, resisted, blocked, absorbed)
+	ht |= weaponHandHitType(isOffHand)
 	if isPeriodic {
 		ht |= types.HitTypePeriodic
 	}
@@ -234,16 +239,11 @@ func (p *Parser) suffixDamage(ts time.Time, base baseParams, spell *spellInfo, e
 func (p *Parser) suffixMissed(ts time.Time, base baseParams, spell *spellInfo, isPeriodic bool, m *Matched) ([]messages.Message, error) {
 	var trailer types.Trailer
 	missTypeStr := m.String()
-	switch missTypeStr {
-	case "ABSORB":
-		if m.Remain() < 1 {
-			break
-		}
-
-		if m.Remain() == 2 {
-			m.pop()
-		}
-
+	var isOffHand *bool
+	if spell == nil && m.Remain() > 0 && (missTypeStr != "ABSORB" || m.Remain() > 1) {
+		isOffHand = m.NilBool()
+	}
+	if missTypeStr == "ABSORB" && m.Remain() > 0 {
 		amount := m.Int32()
 		trailer = append(trailer, types.TrailerEntry{
 			Amount:  ptr.Ref(uint32(amount)),
@@ -251,10 +251,8 @@ func (p *Parser) suffixMissed(ts time.Time, base baseParams, spell *spellInfo, i
 		})
 	}
 
-	// isOffHand and amountMissed are optional and may not be present.
-	// We don't consume them to avoid index-out-of-range on short lines.
-
 	ht := MissTypeToHitType(missTypeStr)
+	ht |= weaponHandHitType(isOffHand)
 	if isPeriodic {
 		ht |= types.HitTypePeriodic
 	}

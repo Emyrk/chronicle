@@ -24,6 +24,7 @@ import {
   HitTypeSplit,
   HitTypeReflect,
   HitTypePeriodic,
+  HitTypeMainHand,
   hasHitType,
   hitTypeName,
   hitTypeNames,
@@ -54,6 +55,7 @@ describe("HitType constants", () => {
     expect(HitTypeSplit).toBe(0x00080000);
     expect(HitTypeReflect).toBe(0x00100000);
     expect(HitTypePeriodic).toBe(0x00200000);
+    expect(HitTypeMainHand).toBe(0x00400000);
   });
 
   it("constants are powers of 2 (single bit flags)", () => {
@@ -80,6 +82,7 @@ describe("HitType constants", () => {
       HitTypeSplit,
       HitTypeReflect,
       HitTypePeriodic,
+      HitTypeMainHand,
     ];
 
     for (const flag of flags) {
@@ -148,6 +151,7 @@ describe("hitTypeName", () => {
     [HitTypeSplit, "Split"],
     [HitTypeReflect, "Reflect"],
     [HitTypePeriodic, "Periodic"],
+    [HitTypeMainHand, "Main-Hand"],
   ];
 
   it.each(nameTests)("hitTypeName(0x%s) returns %s", (flag, expectedName) => {
@@ -178,6 +182,11 @@ describe("hitTypeNames", () => {
   it("handles off-hand crit with partial resist", () => {
     const ht: HitType = HitTypeOffHand | HitTypeCrit | HitTypePartialResist;
     expect(hitTypeNames(ht)).toEqual(["Off-Hand", "Crit", "Partial Resist"]);
+  });
+
+  it("handles main-hand crits", () => {
+    const ht: HitType = HitTypeMainHand | HitTypeCrit;
+    expect(hitTypeNames(ht)).toEqual(["Main-Hand", "Crit"]);
   });
 
   it("handles periodic damage", () => {

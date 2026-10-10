@@ -43,6 +43,7 @@ func (h HitType) String() string {
 	var parts []string
 	for k, v := range map[HitType]string{
 		HitTypeOffHand:       "OffHand",
+		HitTypeMainHand:      "MainHand",
 		HitTypeHit:           "Hit",
 		HitTypeCrit:          "Crit",
 		HitTypePartialResist: "PartialResist",
@@ -101,6 +102,7 @@ const (
 	HitTypeSplit         HitType = 0x00080000
 	HitTypeReflect       HitType = 0x00100000
 	HitTypePeriodic      HitType = 0x00200000
+	HitTypeMainHand      HitType = 0x00400000
 )
 
 // ParseHitMask assumes "full" blocks/resists/absorbs

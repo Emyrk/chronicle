@@ -41,6 +41,7 @@ import {
   HitTypePartialResist,
   HitTypePeriodic,
   HitTypeOffHand,
+  HitTypeMainHand,
 } from "../lib/hittype/hittype";
 import { SIM_ENCOUNTER_ID } from "./panelBridge";
 
@@ -145,7 +146,7 @@ export function buildSimDamageStream(
 
     let hitType = outcomeToHitType(step.outcome, step.resisted);
     if (isDot) hitType |= HitTypePeriodic;
-    if (isOffHand) hitType |= HitTypeOffHand;
+    if (isAutoAttack) hitType |= isOffHand ? HitTypeOffHand : HitTypeMainHand;
 
     const meta = create(EventMetaSchema, {
       index: eventIndex++,
