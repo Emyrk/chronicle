@@ -101,9 +101,12 @@ interface AuraSectionProps {
   view: RotationView;
   spellMeta: (spellId: number | null) => SpellMeta;
   unitName: (guid: string) => string;
+  /** Debuff target the user picked, or null for the default (most damaged). */
+  pickedTarget: string | null;
+  onPickTarget: (guid: string) => void;
 }
 
-export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionProps) {
+export function AuraSection({ players, view, spellMeta, unitName, pickedTarget, onPickTarget }: AuraSectionProps) {
   const [open, setOpen] = useState(true);
   const { durationMs } = view;
   const classBuffs = useFriendlyClassBuffs();
@@ -138,7 +141,6 @@ export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionP
     }
     return Array.from(score.entries()).sort((a, b) => b[1] - a[1]).map(([guid]) => guid);
   }, [players]);
-  const [pickedTarget, setPickedTarget] = useState<string | null>(null);
   const target = pickedTarget && targets.includes(pickedTarget) ? pickedTarget : (targets[0] ?? null);
 
   const debuffs = useMemo(
@@ -202,7 +204,7 @@ export function AuraSection({ players, view, spellMeta, unitName }: AuraSectionP
             ) : (
               <select
                 value={target ?? ""}
-                onChange={(e) => setPickedTarget(e.target.value)}
+                onChange={(e) => onPickTarget(e.target.value)}
                 className="h-7 max-w-64 rounded border border-border bg-background px-2 text-xs text-foreground"
               >
                 {targets.map((guid) => (

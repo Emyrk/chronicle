@@ -38,6 +38,12 @@ describe("readSharedPageLayout", () => {
     })).toEqual({ presetId: "player_timeline", pageType: "player_timeline" });
   });
 
+  it("passes page state through for the page to validate", () => {
+    expect(readSharedPageLayout({
+      layout: { kind: "page", pageType: "player_timeline", pageState: { encounterId: "e" } },
+    })).toEqual({ pageType: "player_timeline", pageState: { encounterId: "e" } });
+  });
+
   it("ignores panel layouts", () => {
     expect(readSharedPageLayout({ layout: { kind: "panels", items: [] } })).toBeNull();
   });

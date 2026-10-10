@@ -60,6 +60,35 @@ function clampWindow(startMs: number, endMs: number, durationMs: number): [numbe
   return [start, start + span];
 }
 
+/** Starting values, e.g. restored from a share link. Read on mount only. */
+export interface RotationViewInitial {
+  align?: AlignMode;
+  ignored?: readonly number[];
+  window?: { startMs: number; endMs: number } | null;
+  pinnedMs?: number | null;
+  follow?: boolean;
+}
+
+const ICON_SIZE_STORAGE_KEY = "chronicle.playerTimeline.iconSize";
+
+/** Icon size is a per-viewer preference; storage may be unavailable. */
+function readIconSize(): IconSizeMode {
+  try {
+    const v = window.localStorage.getItem(ICON_SIZE_STORAGE_KEY);
+    return v === "s" || v === "m" || v === "l" || v === "auto" ? v : "auto";
+  } catch {
+    return "auto";
+  }
+}
+
+function writeIconSize(size: IconSizeMode) {
+  try {
+    window.localStorage.setItem(ICON_SIZE_STORAGE_KEY, size);
+  } catch {
+    // Private mode or blocked storage: the choice just won't persist.
+  }
+}
+
 /**
  * Interaction state for a rotation timeline. Owned by whoever renders the
  * timeline (the Player Timeline page today, a trimmed panel later).
@@ -67,21 +96,26 @@ function clampWindow(startMs: number, endMs: number, durationMs: number): [numbe
 export function useRotationView(
   durationMs: number,
   nowMs: number | null = null,
-  initialIgnored: readonly number[] = [],
+  initial: RotationViewInitial = {},
 ): RotationView {
-  // The window resets when the encounter (its duration) changes.
+  // The window resets when the encounter (its duration) changes, falling back
+  // to the initial window when it fits (the duration settles after events load).
+  const [initialWindow] = useState(initial.window ?? null);
+  const defaultRange: [number, number] =
+    initialWindow && initialWindow.endMs <= durationMs ? [initialWindow.startMs, initialWindow.endMs] : [0, durationMs];
+  const [defaultStart, defaultEnd] = defaultRange;
   const [rangeState, setRangeState] = useState<{ durationMs: number; range: [number, number] }>({
     durationMs,
-    range: [0, durationMs],
+    range: defaultRange,
   });
   const [cursorMs, setCursorState] = useState<number | null>(null);
-  const [pinnedMs, setPinnedMs] = useState<number | null>(null);
-  const [follow, setFollow] = useState(false);
+  const [pinnedMs, setPinnedMs] = useState<number | null>(initial.pinnedMs ?? null);
+  const [follow, setFollow] = useState(initial.follow ?? false);
   /** Last time hovered on the overview chart; what Follow centers on. */
   const [overviewMs, setOverviewMs] = useState<number | null>(null);
 
-  const userStart = rangeState.durationMs === durationMs ? rangeState.range[0] : 0;
-  const userEnd = rangeState.durationMs === durationMs ? rangeState.range[1] : durationMs;
+  const userStart = rangeState.durationMs === durationMs ? rangeState.range[0] : defaultRange[0];
+  const userEnd = rangeState.durationMs === durationMs ? rangeState.range[1] : defaultRange[1];
   const userSpan = userEnd - userStart;
   // Replay keeps the user's zoom (span) but puts now at a fixed spot; it ignores pan.
   // Follow centers the user's zoom on the pin or the overview cursor (at full
@@ -96,11 +130,15 @@ export function useRotationView(
   } else if (followMs != null) {
     [startMs, endMs] = clampWindow(followMs - userSpan / 2, followMs + userSpan / 2, durationMs);
   }
-  const [alignState, setAlign] = useState<AlignMode>("pull");
+  const [alignState, setAlign] = useState<AlignMode>(initial.align ?? "pull");
   // Replay time is pull time, so per-player alignment does not apply.
   const align: AlignMode = nowMs != null ? "pull" : alignState;
-  const [iconSize, setIconSize] = useState<IconSizeMode>("auto");
-  const [ignored, setIgnored] = useState<ReadonlySet<number>>(() => new Set(initialIgnored));
+  const [iconSize, setIconSizeState] = useState<IconSizeMode>(readIconSize);
+  const setIconSize = useCallback((size: IconSizeMode) => {
+    setIconSizeState(size);
+    writeIconSize(size);
+  }, []);
+  const [ignored, setIgnored] = useState<ReadonlySet<number>>(() => new Set(initial.ignored ?? []));
 
   const setCursorMs = useCallback((ms: number | null, source: "lanes" | "overview" = "lanes") => {
     setCursorState(ms);
@@ -125,9 +163,9 @@ export function useRotationView(
     (update: (current: [number, number]) => [number, number]) =>
       setRangeState((prev) => ({
         durationMs,
-        range: update(prev.durationMs === durationMs ? prev.range : [0, durationMs]),
+        range: update(prev.durationMs === durationMs ? prev.range : [defaultStart, defaultEnd]),
       })),
-    [durationMs],
+    [durationMs, defaultStart, defaultEnd],
   );
 
   const setWindow = useCallback(
@@ -217,6 +255,6 @@ export function useRotationView(
       pinAt,
       unpin,
     }),
-    [startMs, endMs, align, iconSize, ignored, cursorMs, pinnedMs, nowMs, follow, toggleFollow, followMs, setCursorMs, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
+    [startMs, endMs, align, iconSize, ignored, cursorMs, pinnedMs, nowMs, follow, toggleFollow, followMs, setCursorMs, setIconSize, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
   );
 }

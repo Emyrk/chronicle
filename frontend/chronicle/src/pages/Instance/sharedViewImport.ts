@@ -3,6 +3,8 @@ import { isInstancePageType, type InstancePageType } from "./presetLayouts";
 export interface SharedPageLayout {
   presetId?: string;
   pageType: InstancePageType;
+  /** Page-specific view state; each page validates its own shape. */
+  pageState?: unknown;
 }
 
 export function readSharedPageLayout(payload: unknown): SharedPageLayout | null {
@@ -11,10 +13,11 @@ export function readSharedPageLayout(payload: unknown): SharedPageLayout | null 
   const layout = (payload as { layout?: unknown }).layout;
   if (typeof layout !== "object" || layout === null || Array.isArray(layout)) return null;
 
-  const { kind, pageType, presetId } = layout as {
+  const { kind, pageType, presetId, pageState } = layout as {
     kind?: unknown;
     pageType?: unknown;
     presetId?: unknown;
+    pageState?: unknown;
   };
   if (kind !== "page") return null;
   if (!isInstancePageType(pageType)) {
@@ -24,6 +27,7 @@ export function readSharedPageLayout(payload: unknown): SharedPageLayout | null 
   return {
     pageType,
     ...(typeof presetId === "string" ? { presetId } : {}),
+    ...(pageState !== undefined ? { pageState } : {}),
   };
 }
 

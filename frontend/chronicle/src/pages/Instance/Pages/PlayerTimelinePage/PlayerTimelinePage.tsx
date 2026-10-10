@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { useCooldownSpells } from "@/api/cooldownSpells";
 import { Button } from "@/components/ui/button";
@@ -12,11 +12,12 @@ import {
   type RotationTimelineResult,
 } from "../../EventsPanels/RotationTimeline/rotationTimeline.processor";
 import { playerCasts } from "../../EventsPanels/RotationTimeline/derive";
-import { useRotationView } from "../../EventsPanels/RotationTimeline/useRotationView";
+import { useRotationView, type RotationViewInitial } from "../../EventsPanels/RotationTimeline/useRotationView";
 import { useSmoothReplayTime } from "../../EventsPanels/RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 import { AuraSection } from "./AuraSection";
 import { PlayerPicker } from "./PlayerPicker";
+import { parsePlayerTimelineState, type PlayerTimelineState } from "./playerTimelineState";
 
 /** Picker value meaning "no second player". */
 const NONE = "none";
@@ -34,18 +35,30 @@ const ROTATION_TIMELINE_PANEL: PanelDefinition<RotationTimelineResult, RotationT
 
 interface PlayerTimelinePageProps {
   context: PanelContext;
+  /** Saved view state (from a share link); validated here. */
+  initialState?: unknown;
+  /** Receives the current view state so share links can include it. */
+  onStateChange?: (state: PlayerTimelineState) => void;
 }
 
-export function PlayerTimelinePage({ context }: PlayerTimelinePageProps) {
+export function PlayerTimelinePage({ context, initialState, onStateChange }: PlayerTimelinePageProps) {
   const { selectedEncounterIds } = context;
+  const saved = useMemo(() => parsePlayerTimelineState(initialState), [initialState]);
 
   if (selectedEncounterIds.length !== 1) {
     return <EncounterPicker context={context} />;
   }
-  return <PlayerTimelineContent key={selectedEncounterIds[0]} context={context} />;
+  return (
+    <PlayerTimelineContent
+      key={selectedEncounterIds[0]}
+      context={context}
+      saved={saved}
+      onStateChange={onStateChange}
+    />
+  );
 }
 
-function EncounterPicker({ context }: PlayerTimelinePageProps) {
+function EncounterPicker({ context }: { context: PanelContext }) {
   const encounters = context.instance.encounters.filter((e) => e.boss);
   const list = encounters.length > 0 ? encounters : context.instance.encounters;
   return (
@@ -65,10 +78,22 @@ function EncounterPicker({ context }: PlayerTimelinePageProps) {
   );
 }
 
-function PlayerTimelineContent({ context }: PlayerTimelinePageProps) {
+interface PlayerTimelineContentProps {
+  context: PanelContext;
+  saved: PlayerTimelineState | null;
+  onStateChange?: (state: PlayerTimelineState) => void;
+}
+
+function PlayerTimelineContent({ context, saved, onStateChange }: PlayerTimelineContentProps) {
   const { instance } = context;
+  const encounterId = context.selectedEncounterIds[0];
+  // Window, pin and debuff target only make sense on the encounter they were saved on.
+  const sameEncounter = saved?.encounterId === encounterId;
   // Explicit picks; null slots fall back to the defaults below, NONE leaves B empty.
-  const [overrides, setOverrides] = useState<[string | null, string | null]>([null, null]);
+  const [overrides, setOverrides] = useState<[string | null, string | null]>(() =>
+    saved?.players[0] ? [saved.players[0], saved.players[1] ?? NONE] : [null, null],
+  );
+  const [debuffTarget, setDebuffTarget] = useState<string | null>(sameEncounter ? (saved?.debuffTarget ?? null) : null);
   const [damageByPlayer, setDamageByPlayer] = useState<ReadonlyMap<string, number>>(new Map());
 
   // Default A/B: the top damage dealer and the next player of the same class.
@@ -113,7 +138,39 @@ function PlayerTimelineContent({ context }: PlayerTimelinePageProps) {
       ? Math.min(durationMs, Math.max(0, sync.currentTimestamp.getTime() - result.firstTimestampMs))
       : null;
   const smoothReplayMs = useSmoothReplayTime(replayMs, Boolean(sync?.isPlaying), sync?.playbackSpeed ?? 1);
-  const view = useRotationView(durationMs, smoothReplayMs == null ? null : Math.min(durationMs, smoothReplayMs));
+  const [viewInitial] = useState<RotationViewInitial>(() =>
+    saved
+      ? {
+          align: saved.align,
+          ignored: saved.ignoredSpellIds,
+          follow: saved.follow,
+          window: sameEncounter ? saved.window : null,
+          pinnedMs: sameEncounter ? saved.pinnedMs : null,
+        }
+      : {},
+  );
+  const view = useRotationView(
+    durationMs,
+    smoothReplayMs == null ? null : Math.min(durationMs, smoothReplayMs),
+    viewInitial,
+  );
+
+  // Report the view so share links capture it. Replay moves the window on its
+  // own, so the saved window is only taken outside replay.
+  const replaying = view.nowMs != null;
+  const wholeFight = view.startMs <= 0 && view.endMs >= durationMs;
+  useEffect(() => {
+    onStateChange?.({
+      encounterId,
+      players: [picked[0], picked[1]],
+      align: view.align,
+      ignoredSpellIds: Array.from(view.ignored),
+      window: replaying || wholeFight ? null : { startMs: view.startMs, endMs: view.endMs },
+      pinnedMs: view.pinnedMs,
+      follow: view.follow,
+      debuffTarget,
+    });
+  }, [onStateChange, encounterId, picked, view.align, view.ignored, replaying, wholeFight, view.startMs, view.endMs, view.pinnedMs, view.follow, debuffTarget]);
 
   const players: RotationTimelinePlayer[] = useMemo(
     () =>
@@ -196,7 +253,16 @@ function PlayerTimelineContent({ context }: PlayerTimelinePageProps) {
         unitName={unitName}
         headerStart={pickers}
       >
-        {players.length > 0 && <AuraSection players={players} view={view} spellMeta={meta} unitName={unitName} />}
+        {players.length > 0 && (
+          <AuraSection
+            players={players}
+            view={view}
+            spellMeta={meta}
+            unitName={unitName}
+            pickedTarget={debuffTarget}
+            onPickTarget={setDebuffTarget}
+          />
+        )}
       </RotationTimeline>
       {(aggregation.loading || aggregation.processing) && players.length === 0 && (
         <div className="p-6 text-center text-sm text-muted-foreground">Loading events…</div>

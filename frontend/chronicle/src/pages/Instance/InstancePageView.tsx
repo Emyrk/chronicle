@@ -50,7 +50,7 @@ import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceAction
 import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
 import { InstanceMenu } from "./InstanceMenu";
-import { InstanceContentPage } from "./Pages/InstanceContentPage";
+import { InstanceContentPage, type PageStateBinding } from "./Pages/InstanceContentPage";
 import {
   readSharedPageLayout,
   readSharedTimeRange,
@@ -919,6 +919,7 @@ interface SharedViewPayload {
     kind?: "panels" | "page";
     presetId?: string;
     pageType?: InstancePageType;
+    pageState?: unknown;
     items?: GridEditorItem[];
     panelTypesById?: Record<string, EventsPanelType>;
   };
@@ -1308,6 +1309,8 @@ interface EncounterDetailProps {
   activePresetId: string | null;
   /** Full-page content owned by the active layout, or null for a panel grid. */
   pageType: InstancePageType | null;
+  /** Share-link state binding for the active page; the key remounts it on import. */
+  pageState: PageStateBinding & { key: number };
   /** Callback when user clicks a preset tab */
   onPresetChange: (presetId: string) => void;
   /** Popup hosting the complete panel grid, when the layout is popped out. */
@@ -1341,6 +1344,7 @@ function EncounterDetail({
   isMobile,
   activePresetId,
   pageType,
+  pageState,
   onPresetChange,
   layoutPopup,
   actionBarSlots,
@@ -1920,7 +1924,7 @@ function EncounterDetail({
       </div>
 
       {pageType ? (
-        <InstanceContentPage pageType={pageType} context={panelContext} />
+        <InstanceContentPage key={pageState.key} pageType={pageType} context={panelContext} pageState={pageState} />
       ) : (
         <PanelTimingProvider panelCount={layoutItems.length}>
           <PanelTimingResetter encounters={encounters} />
@@ -2259,6 +2263,18 @@ export function InstancePageView({
   const [activePresetId, setActivePresetId] = useState<string | null>(DEFAULT_PRESET_ID);
   const activePreset = activePresetId ? PRESET_LAYOUTS_BY_ID[activePresetId] : null;
   const activePageType = activePreset?.kind === "page" ? activePreset.pageType : null;
+
+  // Page view state for share links: the page reports it here (a ref, so no
+  // re-render), and an imported share link remounts the page with its state.
+  const pageStateRef = useRef<unknown>(undefined);
+  const [importedPageState, setImportedPageState] = useState<{ key: number; state: unknown }>({ key: 0, state: undefined });
+  const onPageStateChange = useCallback((state: unknown) => {
+    pageStateRef.current = state;
+  }, []);
+  const pageStateBinding = useMemo(
+    () => ({ key: importedPageState.key, initial: importedPageState.state, onChange: onPageStateChange }),
+    [importedPageState, onPageStateChange],
+  );
 
   const applyPreset = useCallback((presetId: string) => {
     const preset = PRESET_LAYOUTS_BY_ID[presetId];
@@ -2849,6 +2865,7 @@ export function InstancePageView({
         ? requestedPreset
         : PRESET_LAYOUTS.find((preset) => preset.kind === "page" && preset.pageType === sharedPageType);
       setActivePresetId(pagePreset?.id ?? DEFAULT_PRESET_ID);
+      setImportedPageState((prev) => ({ key: prev.key + 1, state: sharedPageLayout?.pageState }));
     }
 
     // Restore per-panel filters if present in the payload.
@@ -2980,6 +2997,7 @@ export function InstancePageView({
           kind: "page",
           presetId: activePresetId ?? undefined,
           pageType: activePageType,
+          ...(pageStateRef.current !== undefined ? { pageState: pageStateRef.current } : {}),
         },
         view,
       };
@@ -3687,6 +3705,7 @@ export function InstancePageView({
             isMobile={isMobile}
             activePresetId={activePresetId}
             pageType={activePageType}
+            pageState={pageStateBinding}
             layoutPopup={layoutPopup}
             actionBarSlots={actionBarSlots}
             layouts={instanceDefaults?.action_bar_layouts ?? []}
