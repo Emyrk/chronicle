@@ -113,10 +113,17 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
             </TooltipContent>
           </HintTooltip>
           {lead && (
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2 bg-muted-foreground/50" />
-              Damage lead
-            </span>
+            <HintTooltip>
+              <TooltipTrigger asChild>
+                <span className="flex cursor-help items-center gap-1.5 decoration-dotted underline-offset-2 hover:underline">
+                  <span className="h-2.5 w-2 bg-muted-foreground/50" />
+                  Damage lead
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start" className="max-w-80 p-3 text-left">
+                <LeadLegendHint names={series.map((s) => s.name)} />
+              </TooltipContent>
+            </HintTooltip>
           )}
         </span>
       </div>
@@ -210,6 +217,24 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
           onUnpin={view.unpin}
         />
       </div>
+    </div>
+  );
+}
+
+function LeadLegendHint({ names }: { names: string[] }) {
+  return (
+    <div className="flex flex-col gap-2 text-xs leading-relaxed">
+      <div className="text-sm font-semibold">Damage lead</div>
+      <p className="text-zinc-300">
+        Total damage so far, {names[0] ?? "A"} minus {names[1] ?? "B"}.
+      </p>
+      <ul className="list-disc space-y-0.5 pl-4 text-zinc-400">
+        <li>
+          Above the line: <span style={{ color: SLOT_TEXT_COLORS[0] }}>{names[0] ?? "A"}</span> is ahead. Below:{" "}
+          <span style={{ color: SLOT_TEXT_COLORS[1] }}>{names[1] ?? "B"}</span> is ahead.
+        </li>
+        <li>Bars are scaled to the biggest lead in the fight.</li>
+      </ul>
     </div>
   );
 }
