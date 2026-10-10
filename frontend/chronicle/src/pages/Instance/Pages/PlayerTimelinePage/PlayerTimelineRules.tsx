@@ -276,7 +276,7 @@ export function PlayerTimelineRules({
           <li>
             A cast is a <b>Cooldown</b> when the curated list (/technical/cooldowns) has it with a cooldown of at least{" "}
             {ms(cooldownMinMs)} and an admin has not ignored it. Cooldowns are ringed squares on the rail and tint the lane
-            for their duration.
+            for their duration, unless they were cast on another player (e.g. Power Infusion on a mage).
           </li>
           <li>
             A cast is a <b>Proc</b> when it is instant and its spell data has a GCD of 0. Procs are circles on the rail and

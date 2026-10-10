@@ -276,9 +276,11 @@ export function RotationTimeline({
   // One color per cooldown spell, in order of first use, shared by both players.
   // How long a cast tints its lane: a buff's real duration when known (buff
   // overrides, consumables with a matching aura), a consumable's spell
-  // duration, or the cooldown's duration. 0 for everything else.
+  // duration, or the cooldown's duration. 0 for everything else, and for
+  // cooldowns cast on another player (the caster never had the buff).
   const tintDurationMs = useCallback(
     (c: TimelineCast) => {
+      if (c.onOtherPlayer) return 0;
       if (c.buffEndMs != null) return c.buffEndMs - c.startMs;
       if (c.consume) return Math.max(0, spellMeta(c.spellId).spell?.duration?.Duration ?? 0);
       return cooldownInfo(c.spellId)?.durationMs ?? 0;

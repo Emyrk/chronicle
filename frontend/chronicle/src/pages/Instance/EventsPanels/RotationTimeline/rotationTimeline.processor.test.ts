@@ -107,6 +107,15 @@ describe("rotationTimelineProcessor healing", () => {
     expect(state.healingByPlayer.get(PLAYER)).toBe(1200);
   });
 
+  it("marks casts on another player", () => {
+    const state = rotationTimelineProcessor.createState();
+    const ctx = context();
+    (ctx.players as Record<string, unknown>).mage = { name: "Mage", class: "Mage", level: 60 };
+    const events = [{ ...go(1000, 10060), target: "mage" }, { ...go(2000, 10060), target: PLAYER }, { ...go(3000, 10060), target: BOSS }];
+    for (const e of events) rotationTimelineProcessor.processEvent(state, e, ENC, new Date(0), e.type, ctx);
+    expect(state.players.get(PLAYER)!.goCasts.map((c) => c.onOtherPlayer ?? false)).toEqual([true, false, false]);
+  });
+
   it("credits HoT ticks to the latest cast on the same target", () => {
     const state = rotationTimelineProcessor.createState();
     const ctx = context();

@@ -69,6 +69,8 @@ export interface TimelineCast {
    * cast, only gained): when the buff faded. Not produced by this processor.
    */
   buffEndMs?: number;
+  /** Set when the cast targeted another player (e.g. Power Infusion on a mage). */
+  onOtherPlayer?: boolean;
   /** Set on casts made from consume evidence (see withConsumeCasts). */
   consume?: { itemId: number | null; itemName: string | null };
   failed: boolean;
@@ -459,6 +461,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         const s = scratch(event.caster);
         const cast = newCast("spell_go", event.offsetMilli, event.offsetMilli, event.spell.id, event.spell.name, event.target);
         cast.itemId = event.itemId;
+        if (event.target && event.target !== event.caster && context.players[event.target]) cast.onOtherPlayer = true;
         completeCast(cast, s.pendingGo);
         s.pendingGo = null;
         rememberCast(s.lastGoBySpell, cast, p.goCasts.length);
@@ -501,6 +504,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         if (event.action !== CastAction.Casts && event.action !== CastAction.Channels) return;
         const cast = newCast("cast", event.offsetMilli, event.offsetMilli, spellId, event.spell.name, event.target);
         cast.channel = event.action === CastAction.Channels;
+        if (event.target && event.target !== event.caster && context.players[event.target]) cast.onOtherPlayer = true;
         completeCast(cast, s.pendingText);
         s.pendingText = null;
         rememberCast(s.lastTextBySpell, cast, p.textCasts.length);
