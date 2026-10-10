@@ -486,6 +486,7 @@ export function RotationTimeline({
                 cooldownInfo={cooldownInfo}
                 cooldownColor={cooldownColor}
                 near={probeMs != null ? nearbyActivity(d.actions, probeMs + d.offsetMs, gcd, d.gaps) : null}
+                hoveredCast={hovered?.slot === d.slot ? hovered.cast : null}
                 probeMs={probeMs != null ? probeMs + d.offsetMs : null}
                 spellMeta={spellMeta}
                 onToggleIgnored={view.toggleIgnored}
@@ -552,6 +553,8 @@ interface PlayerLanesProps {
   layout: LaneLayout;
   /** Last/next action around the indicator, in this player's raw time. */
   near: NearbyActivity | null;
+  /** The cast under the pointer; its bar draws above the icons. */
+  hoveredCast: TimelineCast | null;
   probeMs: number | null;
   cooldownInfo: (spellId: number) => { durationMs: number } | null;
   cooldownColor: (spellId: number) => { color: string; index: number };
@@ -578,6 +581,7 @@ function PlayerLanes({
   nowMs,
   layout,
   near,
+  hoveredCast,
   probeMs,
   cooldownInfo,
   cooldownColor,
@@ -733,10 +737,46 @@ function PlayerLanes({
           </div>
         )}
 
-        {/* GCD casts. */}
+        {/* GCD casts: every bar first, then every icon on top, so a bar never hides
+            another cast's icon. The hovered cast's bar is raised above the icons. */}
+        {!layout.compact &&
+          gcdCasts.map((c, i) => {
+            const endMs = ends.get(c) ?? castEndMs(c);
+            if (endMs <= c.startMs) return null;
+            const left = P(c.startMs - offsetMs);
+            const focused = c === hoveredCast;
+            return (
+              <div
+                key={`bar-${c.startMs}-${i}`}
+                // Cast time leads into the icon (it lands at the end); a channel trails out of it, notched per tick.
+                className={cn(
+                  "pointer-events-none absolute h-1",
+                  c.channel ? "rounded-r-sm" : "rounded-l-sm",
+                  focused ? "z-[3] shadow-[0_0_0_1px_var(--background)]" : "z-0",
+                )}
+                style={{
+                  left: `${left}%`,
+                  width: `${P(endMs - offsetMs) - left}%`,
+                  top: layout.iconTop + icon / 2 - 2,
+                  background: `var(--color-school-${spellMeta(c.spellId).school})`,
+                  opacity: opacityOf(c),
+                }}
+              >
+                {c.channel &&
+                  c.tickMs
+                    .filter((t) => t > c.startMs && t <= endMs)
+                    .map((t) => (
+                      <span
+                        key={t}
+                        className="absolute -top-0.5 h-2 w-px bg-background"
+                        style={{ left: `${((t - c.startMs) / (endMs - c.startMs)) * 100}%` }}
+                      />
+                    ))}
+              </div>
+            );
+          })}
         {gcdCasts.map((c, i) => {
           const meta = spellMeta(c.spellId);
-          const left = P(c.startMs - offsetMs);
           const endMs = ends.get(c) ?? castEndMs(c);
           const iconLeft = P(iconTimeMs(c, endMs) - offsetMs);
           const damage = c.damage + c.periodicDamage;
@@ -750,34 +790,10 @@ function PlayerLanes({
               />
             );
           }
-          const school = `var(--color-school-${meta.school})`;
           return (
             <div key={`${c.startMs}-${i}`} style={{ opacity: opacityOf(c) }}>
-              {/* Cast time leads into the icon (it lands at the end); a channel trails out of it, notched per tick. */}
-              {endMs > c.startMs && (
-                <div
-                  className={cn("pointer-events-none absolute h-1", c.channel ? "rounded-r-sm" : "rounded-l-sm")}
-                  style={{
-                    left: `${left}%`,
-                    width: `${P(endMs - offsetMs) - left}%`,
-                    top: layout.iconTop + icon / 2 - 2,
-                    background: school,
-                  }}
-                >
-                  {c.channel &&
-                    c.tickMs
-                      .filter((t) => t > c.startMs && t <= endMs)
-                      .map((t) => (
-                        <span
-                          key={t}
-                          className="absolute -top-0.5 h-2 w-px bg-background"
-                          style={{ left: `${((t - c.startMs) / (endMs - c.startMs)) * 100}%` }}
-                        />
-                      ))}
-                </div>
-              )}
               <div
-                className="absolute rounded-[3px] bg-muted bg-cover bg-center shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
+                className="absolute z-[1] rounded-[3px] bg-muted bg-cover bg-center shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
                 style={{ left: `${iconLeft}%`, top: layout.iconTop, width: icon, height: icon, marginLeft: -icon / 2, backgroundImage: `url(${meta.icon})` }}
                 {...hoverProps(c)}
               />
