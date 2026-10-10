@@ -83,6 +83,7 @@ import {
   PRESET_LAYOUTS_BY_ID,
   DEFAULT_PRESET_ID,
   type InstancePageType,
+  type PresetLayout,
 } from "./presetLayouts";
 import { openLayoutPopup, syncPopupAppearance, type LayoutPopup } from "./EventsPanels/panelPopup";
 
@@ -1941,6 +1942,7 @@ function EncounterDetail({
             {preset.label}
           </button>
         ))}
+        {pageType && <PageModeIndicator presets={availablePresetLayouts} onPresetChange={onPresetChange} />}
       </div>
 
       {pageType ? (
@@ -3776,6 +3778,48 @@ export function InstancePageView({
           {actionBarOpen ? <X className="h-5 w-5" /> : <BookOpen className="h-5 w-5" />}
         </Button>,
         document.body
+      )}
+    </div>
+  );
+}
+
+/**
+ * Shown beside the preset tabs while a page is open: says it is a page (a
+ * fixed view) rather than a layout of panels, with a way back to a layout.
+ */
+function PageModeIndicator({
+  presets,
+  onPresetChange,
+}: {
+  presets: readonly PresetLayout[];
+  onPresetChange: (presetId: string) => void;
+}) {
+  const layout = presets.find((p) => p.id === "summary") ?? presets.find((p) => p.kind === "panels");
+  return (
+    <div className="ml-auto flex shrink-0 items-center gap-2 pl-3">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex cursor-help items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground">
+            Page
+            <HelpCircle className="size-3.5" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-[280px]">
+          <p className="font-semibold">This is a page, not a layout</p>
+          <p className="mt-1">
+            A page is a fixed view built for one job, like comparing two players. A layout is a grid of panels you can
+            add, remove, resize and rearrange.
+          </p>
+        </TooltipContent>
+      </Tooltip>
+      {layout && (
+        <button
+          type="button"
+          onClick={() => onPresetChange(layout.id)}
+          className="whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          Switch to a layout
+        </button>
       )}
     </div>
   );
