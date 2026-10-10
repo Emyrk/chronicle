@@ -24,11 +24,6 @@ describe("laneLayout", () => {
     expect(l.cooldown).toBe(28);
   });
 
-  it("shows names only with large icons and room between casts", () => {
-    expect(laneLayout(0.1, "auto").showNames).toBe(true);
-    expect(laneLayout(0.04, "auto").showNames).toBe(false);
-  });
-
   it("makes the lane tall enough for the rail below the labels", () => {
     const l = laneLayout(0.04, "auto");
     expect(l.railTop).toBeGreaterThan(l.labelTop);

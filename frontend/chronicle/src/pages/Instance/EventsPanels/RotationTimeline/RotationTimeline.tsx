@@ -683,14 +683,6 @@ function PlayerLanes({
                   {formatNumber(damage)}
                 </span>
               )}
-              {layout.showNames && (
-                <span
-                  className="pointer-events-none absolute -translate-x-1/2 whitespace-nowrap text-[10px] text-muted-foreground"
-                  style={{ left: `${left}%`, top: layout.nameTop }}
-                >
-                  {c.spellName}
-                </span>
-              )}
             </div>
           );
         })}

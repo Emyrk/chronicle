@@ -27,10 +27,8 @@ export interface LaneLayout {
   cooldown: number;
   /** Damage label font size. */
   labelFont: number;
-  showNames: boolean;
   iconTop: number;
   labelTop: number;
-  nameTop: number;
   /** y of the busy/idle rail; procs and cooldowns sit centered on it. */
   railTop: number;
   height: number;
@@ -45,10 +43,9 @@ export function laneLayout(pxPerMs: number, mode: IconSizeMode): LaneLayout {
   const proc = Math.round(icon * 0.5);
   const cooldown = Math.round(icon * 0.7);
   const labelFont = icon >= 40 ? 11 : icon >= 32 ? 10 : 9;
-  const showNames = !compact && icon >= 40 && gap >= icon + 40;
+  // No spell names: icons and tooltips identify spells.
   const labelTop = ICON_TOP + icon + 3;
-  const nameTop = labelTop + labelFont + 2;
-  const labelsBottom = showNames ? nameTop + 12 : labelTop + labelFont + 2;
+  const labelsBottom = labelTop + labelFont + 2;
   const railTop = labelsBottom + cooldown / 2 + 2;
   return {
     compact,
@@ -56,10 +53,8 @@ export function laneLayout(pxPerMs: number, mode: IconSizeMode): LaneLayout {
     proc,
     cooldown,
     labelFont,
-    showNames,
     iconTop: ICON_TOP,
     labelTop,
-    nameTop,
     railTop,
     height: Math.round(railTop + cooldown / 2 + 5),
   };
