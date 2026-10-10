@@ -27,6 +27,7 @@ import {
 } from "./rotationTimeline.processor";
 import { IndicatorLine } from "./IndicatorLine";
 import { COOLDOWN_COLORS, laneLayout, type LaneLayout } from "./laneLayout";
+import { clusterRailEvents, MAX_STACKED_ICONS, type RailCluster, type RailEvent } from "./railClusters";
 import { RotationOverview } from "./RotationOverview";
 import type { SpellMeta } from "./useSpellMeta";
 import type { RotationView } from "./useRotationView";
@@ -164,6 +165,7 @@ export function RotationTimeline({
   }, []);
   const [hovered, setHovered] = useState<{ slot: number; cast: TimelineCast } | null>(null);
   const [hoveredSwing, setHoveredSwing] = useState<{ slot: number; swing: TimelineSwing } | null>(null);
+  const [hoveredCluster, setHoveredCluster] = useState<{ slot: number; cluster: RailCluster } | null>(null);
   const panRef = useRef<{ x: number; startMs: number; endMs: number; moved: boolean } | null>(null);
   const { startMs: vs, endMs: ve, durationMs, isIgnored, nowMs } = view;
   const replaying = nowMs != null;
@@ -431,6 +433,7 @@ export function RotationTimeline({
             view.setCursorMs(null);
             setHovered(null);
             setHoveredSwing(null);
+            setHoveredCluster(null);
           }}
         >
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -456,6 +459,7 @@ export function RotationTimeline({
                 onToggleIgnored={view.toggleIgnored}
                 onHover={(cast) => setHovered(cast ? { slot: d.slot, cast } : null)}
                 onHoverSwing={(swing) => setHoveredSwing(swing ? { slot: d.slot, swing } : null)}
+                onHoverCluster={(cluster) => setHoveredCluster(cluster ? { slot: d.slot, cluster } : null)}
               />
             ))}
           </div>
@@ -467,6 +471,16 @@ export function RotationTimeline({
               top={castLaneTop(hoveredSwing.slot) + layout.height + SWING_LANE_H - 2}
               unitName={unitName}
               icon={spellMeta(AUTO_ATTACK_SPELL_ID).icon}
+            />
+          )}
+          {hoveredCluster && (
+            <ClusterTooltip
+              cluster={hoveredCluster.cluster}
+              casts={derived[hoveredCluster.slot].shownCasts}
+              left={P(hoveredCluster.cluster.startMs - derived[hoveredCluster.slot].offsetMs)}
+              top={castLaneTop(hoveredCluster.slot) + layout.height - 4}
+              spellMeta={spellMeta}
+              cooldownColor={cooldownColor}
             />
           )}
           {hovered && (
@@ -506,6 +520,8 @@ interface PlayerLanesProps {
   onToggleIgnored: (spellName: string) => void;
   onHover: (cast: TimelineCast | null) => void;
   onHoverSwing: (swing: TimelineSwing | null) => void;
+  /** Hovering a stack of several rail events; single events use onHover. */
+  onHoverCluster: (cluster: RailCluster | null) => void;
 }
 
 /**
@@ -528,6 +544,7 @@ function PlayerLanes({
   onToggleIgnored,
   onHover,
   onHoverSwing,
+  onHoverCluster,
 }: PlayerLanesProps) {
   const { shownCasts: casts, offsetMs, gaps, busy, slot, player } = derived;
   const margin = 2000;
@@ -538,11 +555,19 @@ function PlayerLanes({
     const info = cooldownInfo(c.spellId);
     return info != null && visible(c.startMs, c.startMs + info.durationMs);
   });
-  const others = casts.filter((c) => !cooldownInfo(c.spellId) && visible(c.startMs, castSlotEnd(c, gcd)));
-  const gcdCasts = others.filter((c) => !isOffGcd(c));
-  const procs = others.filter(isOffGcd);
+  const gcdCasts = casts.filter((c) => !cooldownInfo(c.spellId) && !isOffGcd(c) && visible(c.startMs, castSlotEnd(c, gcd)));
   const swings = player.data.swings.filter((s) => visible(s.offsetMs, s.offsetMs));
   const { icon, proc, cooldown, railTop } = layout;
+
+  // Procs and cooldowns share the rail; ones close together stack into clusters.
+  const clusters = useMemo(() => {
+    const events: RailEvent[] = casts
+      .filter((c) => cooldownInfo(c.spellId) || isOffGcd(c))
+      .map((c) => ({ cast: c, kind: cooldownInfo(c.spellId) ? "cd" : "proc" }));
+    return clusterRailEvents(events, pxPerMs, cooldown);
+    // isOffGcd only depends on gcd.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [casts, cooldownInfo, gcd, pxPerMs, cooldown]);
 
   const opacityOf = (c: TimelineCast) => {
     if (c.failed) return 0.4;
@@ -670,45 +695,54 @@ function PlayerLanes({
           );
         })}
 
-        {/* Procs: off-GCD casts as circles on the rail. */}
-        {procs.map((c, i) => (
-          <div
-            key={`proc-${c.startMs}-${i}`}
-            className="absolute rounded-full bg-muted bg-cover bg-center shadow-[0_0_0_1px_var(--background)]"
-            style={{
-              left: `${P(c.startMs - offsetMs)}%`,
-              top: railTop + 1 - proc / 2,
-              width: proc,
-              height: proc,
-              marginLeft: -proc / 2,
-              backgroundImage: `url(${spellMeta(c.spellId).icon})`,
-              opacity: opacityOf(c),
-            }}
-            {...hoverProps(c)}
-          />
-        ))}
-
-        {/* Cooldowns: squares with their color ring on the rail. */}
-        {cooldownCasts.map((c, i) => {
-          const { color } = cooldownColor(c.spellId);
-          return (
-            <div
-              key={`cd-${c.startMs}-${i}`}
-              className="absolute rounded-[2px] bg-muted bg-cover bg-center"
-              style={{
-                left: `${P(c.startMs - offsetMs)}%`,
-                top: railTop + 1 - cooldown / 2,
-                width: cooldown,
-                height: cooldown,
-                marginLeft: -cooldown / 2,
-                backgroundImage: `url(${spellMeta(c.spellId).icon})`,
-                boxShadow: `0 0 0 1px var(--background), 0 0 0 2px ${color}`,
-                opacity: opacityOf(c),
-              }}
-              {...hoverProps(c)}
-            />
-          );
-        })}
+        {/* Rail: procs (circles) and cooldowns (ringed squares), stacked when close. */}
+        {clusters
+          .filter((k) => visible(k.startMs, k.endMs))
+          .map((k) => {
+            const multi = k.events.length > 1;
+            const step = Math.round(cooldown * 0.5);
+            return (
+              <div
+                key={`rail-${k.startMs}`}
+                className="absolute flex items-center"
+                style={{ left: `${P(k.startMs - offsetMs)}%`, top: railTop + 1 - cooldown / 2, height: cooldown, marginLeft: -cooldown / 2 }}
+                onPointerEnter={() => (multi ? onHoverCluster(k) : onHover(k.events[0].cast))}
+                onPointerLeave={() => (multi ? onHoverCluster(null) : onHover(null))}
+              >
+                {multi && (
+                  <div
+                    className="pointer-events-none absolute bg-school-holy opacity-70"
+                    style={{ left: cooldown / 2, bottom: -3, height: 2, minWidth: 4, width: (k.endMs - k.startMs) * pxPerMs + 2 }}
+                  />
+                )}
+                {k.events.slice(0, MAX_STACKED_ICONS).map((e, j) => {
+                  const size = e.kind === "cd" ? cooldown : proc;
+                  const ring = e.kind === "cd" ? cooldownColor(e.cast.spellId).color : null;
+                  return (
+                    <span
+                      key={`${e.cast.startMs}-${j}`}
+                      className={cn("relative shrink-0 bg-muted bg-cover bg-center", e.kind === "proc" ? "rounded-full" : "rounded-[2px]")}
+                      style={{
+                        width: size,
+                        height: size,
+                        marginLeft: j === 0 ? 0 : -step,
+                        zIndex: MAX_STACKED_ICONS - j,
+                        backgroundImage: `url(${spellMeta(e.cast.spellId).icon})`,
+                        boxShadow: ring ? `0 0 0 1px var(--background), 0 0 0 2px ${ring}` : "0 0 0 1px var(--background)",
+                        opacity: opacityOf(e.cast),
+                      }}
+                      onClick={(ev) => onSpellClick(ev, e.cast.spellName)}
+                    />
+                  );
+                })}
+                {multi && (
+                  <span className="ml-1 rounded-sm bg-muted px-1 font-mono text-[9px] leading-[14px] text-foreground">
+                    {k.events.length}
+                  </span>
+                )}
+              </div>
+            );
+          })}
       </div>
       {player.data.swings.length > 0 && (
         <div className="relative border-b border-border" style={{ height: SWING_LANE_H }}>
@@ -796,6 +830,101 @@ function SegButton({
 /** Square glyph for the S / M / L icon size buttons. */
 function IconGlyph({ size }: { size: number }) {
   return <span className="block rounded-[2px] border-[1.5px] border-current" style={{ width: size, height: size }} />;
+}
+
+interface ClusterTooltipProps {
+  cluster: RailCluster;
+  /** The player's shown casts, for GCD casts that landed in the same window. */
+  casts: readonly TimelineCast[];
+  left: number;
+  top: number;
+  spellMeta: (spellId: number | null) => SpellMeta;
+  cooldownColor: (spellId: number) => { color: string; index: number };
+}
+
+const CLUSTER_CAST_MARGIN_MS = 300;
+
+/**
+ * Stacked rail events (design: Rotations 2a): a mini timeline with numbered
+ * marks, then one row per event with its offset from the first.
+ */
+function ClusterTooltip({ cluster, casts, left, top, spellMeta, cooldownColor }: ClusterTooltipProps) {
+  const railCasts = new Set(cluster.events.map((e) => e.cast));
+  const gcdCasts = casts
+    .filter(
+      (c) =>
+        !railCasts.has(c) &&
+        c.startMs >= cluster.startMs - CLUSTER_CAST_MARGIN_MS &&
+        c.startMs <= cluster.endMs + CLUSTER_CAST_MARGIN_MS,
+    )
+    .map((c) => ({ cast: c, kind: "cast" as const }));
+  const all = [...cluster.events, ...gcdCasts].sort((a, b) => a.cast.startMs - b.cast.startMs);
+  const first = all[0].cast.startMs;
+  const last = all[all.length - 1].cast.startMs;
+  const lo = first - 150;
+  const hi = Math.max(last + 150, lo + 600);
+  const kindInfo = (e: (typeof all)[number]) =>
+    e.kind === "cd"
+      ? { label: "Cooldown", color: cooldownColor(e.cast.spellId).color }
+      : e.kind === "proc"
+        ? { label: "Proc", color: "var(--color-school-holy)" }
+        : { label: "Cast", color: "var(--muted-foreground)" };
+
+  return (
+    <TooltipShell left={left} top={top} width="w-[300px]">
+      <div className="text-xs font-semibold">
+        {all.length} events within {((last - first) / 1000).toFixed(2)}s
+      </div>
+      <div className="flex flex-col gap-0.5">
+        <div className="relative h-[18px] rounded-sm border border-border bg-background">
+          {all.map((e, i) => {
+            const pos = ((e.cast.startMs - lo) / (hi - lo)) * 100;
+            return (
+              <span key={i}>
+                <span className="absolute inset-y-0.5 -ml-px w-0.5" style={{ left: `${pos}%`, background: kindInfo(e).color }} />
+                <span
+                  className="absolute -top-px ml-[3px] font-mono text-[9px] leading-[18px] text-muted-foreground"
+                  style={{ left: `${pos}%` }}
+                >
+                  {i + 1}
+                </span>
+              </span>
+            );
+          })}
+        </div>
+        <div className="flex justify-between font-mono text-[9px] text-muted-foreground">
+          <span>+0.00s</span>
+          <span>+{((hi - lo) / 1000).toFixed(2)}s</span>
+        </div>
+      </div>
+      <div className="flex flex-col">
+        {all.map((e, i) => {
+          const kind = kindInfo(e);
+          const damage = e.cast.damage + e.cast.periodicDamage;
+          return (
+            <div key={i} className="grid grid-cols-[14px_20px_minmax(0,1fr)_auto] items-center gap-1.5 border-t border-border py-1">
+              <span className="font-mono text-[10px] text-muted-foreground">{i + 1}</span>
+              <span
+                className={cn("size-5 border border-border bg-muted bg-cover bg-center", e.kind === "proc" ? "rounded-full" : "rounded-[3px]")}
+                style={{ backgroundImage: `url(${spellMeta(e.cast.spellId).icon})` }}
+              />
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-xs text-foreground">{e.cast.spellName}</span>
+                <span className="text-[10px]" style={{ color: kind.color }}>
+                  {kind.label}
+                  {damage > 0 && <span className="ml-1 font-mono text-muted-foreground">{formatNumber(damage)}</span>}
+                </span>
+              </span>
+              <span className="flex flex-col items-end font-mono text-[10px]">
+                <span className="text-foreground">{i === 0 ? "first" : `+${((e.cast.startMs - first) / 1000).toFixed(2)}s`}</span>
+                <span className="text-muted-foreground">{formatClock(e.cast.startMs, 2)}</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </TooltipShell>
+  );
 }
 
 interface CastTooltipProps {
