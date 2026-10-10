@@ -84,19 +84,18 @@ describe("rotationTimelineProcessor auras", () => {
 });
 
 describe("rotationTimelineProcessor aura procs", () => {
-  it("records gains, refreshes and stack gains of curated auras, not charges used up", () => {
+  it("records applications and refreshes of curated auras, not stack changes", () => {
     const flurry = (offsetMilli: number, extra: Partial<AuraProcessorEvent>) =>
       aura(offsetMilli, { spellName: "Flurry", spellId: 12970, caster: PLAYER, amount: 3, ...extra });
     const state = run([
-      flurry(1000, {}),
-      flurry(2000, { amount: 2, state: AuraState.Modified, transition: AuraTransition.StackChanged }),
-      flurry(3000, { amount: 3, state: AuraState.Modified, transition: AuraTransition.StackChanged }),
-      flurry(4000, { transition: AuraTransition.Refreshed }),
+      // wotlk writes amount 1 on applied/refreshed lines, so 3 → 2 charges looks like a gain.
+      flurry(1000, { amount: 1 }),
+      flurry(1200, { amount: 2, state: AuraState.Modified, transition: AuraTransition.StackChanged }),
+      flurry(4000, { amount: 1, transition: AuraTransition.Refreshed }),
       aura(5000, { target: BOSS, caster: PLAYER, isBuff: false, spellName: "Deep Wounds", spellId: 43104 }),
     ]);
     expect(state.players.get(PLAYER)?.auraProcs.map((p) => [p.offsetMs, p.spellName])).toEqual([
       [1000, "Flurry"],
-      [3000, "Flurry"],
       [4000, "Flurry"],
       [5000, "Deep Wounds"],
     ]);

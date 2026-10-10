@@ -98,7 +98,7 @@ export interface TimelineConsume {
   spellName: string;
 }
 
-/** An application, refresh or stack gain of a curated proc aura (auraProcs.ts) caused by the player. */
+/** An application or refresh of a curated proc aura (auraProcs.ts) caused by the player. */
 export interface TimelineAuraProc {
   offsetMs: number;
   spellId: number | null;
@@ -207,8 +207,6 @@ export interface RotationTimelineResult {
   _auraState: AuraProcessorState;
   /** target guid → segments currently open on it */
   _openAuras: Map<string, TimelineAuraSegment[]>;
-  /** "target|aura" → last stack count, to tell stack gains from charges used up. */
-  _procStacks: Map<string, number>;
 }
 
 export type RotationTimelineEvent =
@@ -317,7 +315,6 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
     _scratch: new Map(),
     _auraState: createAuraProcessorState(),
     _openAuras: new Map(),
-    _procStacks: new Map(),
   }),
 
   processEvent(state, event, encounterID, firstTimestamp, _streamType, context): void {
@@ -535,19 +532,13 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         applyAuraEvent(state._auraState, encounterID, event);
         const isActive = hasAura(state._auraState, encounterID, event.target, ref);
 
-        // Curated proc auras: every gain, refresh or stack gain is a proc by
-        // whoever caused it (the player for "self" auras, the caster on enemies).
+        // Curated proc auras: every application or refresh is a proc by whoever
+        // caused it (the player for "self" auras, the caster on enemies). Stack
+        // changes are not: these formats write charges being used up (Flurry)
+        // as doses, and their applied/refreshed lines carry no stack count.
         const procOn = AURA_PROC_NAMES.get(event.spellName.trim().toLowerCase());
         if (procOn) {
-          const key = `${event.target}|${event.spellName}`;
-          const prevStacks = state._procStacks.get(key) ?? 0;
-          const stacks = isActive ? Math.max(1, event.amount) : 0;
-          state._procStacks.set(key, stacks);
-          const gained =
-            isActive &&
-            (!wasActive ||
-              event.transition === AuraTransition.Refreshed ||
-              (event.transition === AuraTransition.StackChanged && stacks > prevStacks));
+          const gained = !event.isSynthetic && isActive && (!wasActive || event.transition === AuraTransition.Refreshed);
           const by = procOn === "self" ? event.target : (getAuraCaster(state._auraState, encounterID, event.target, ref) ?? event.caster);
           if (gained && by && focus.has(by) && (procOn === "self" || event.target !== by)) {
             player(by).auraProcs.push({

@@ -249,7 +249,7 @@ export function PlayerTimelineRules({
       <section className="flex flex-col gap-2">
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Aura procs</h3>
         <p className="text-muted-foreground">
-          Some log formats do not write procs as casts. In those formats, each application, refresh or stack gain of these
+          Some log formats do not write procs as casts. In those formats, each application or refresh of these
           auras is drawn as a proc on the rail (auraProcs.ts).
         </p>
         <ul className="flex flex-col gap-1.5 text-muted-foreground">

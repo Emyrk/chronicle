@@ -1,8 +1,8 @@
 /**
  * Curated auras whose applications count as procs on the rotation timeline.
  * Some log formats never write a spell_go for many procs (talent triggers,
- * weapon procs); the aura they apply is the only evidence. Each application,
- * refresh or stack gain of one of these auras becomes a proc on the rail.
+ * weapon procs); the aura they apply is the only evidence. Each application
+ * or refresh of one of these auras becomes a proc on the rail.
  * Worker-safe: the processor imports the names.
  */
 
