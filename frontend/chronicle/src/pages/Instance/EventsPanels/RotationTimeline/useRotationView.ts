@@ -15,7 +15,8 @@ export interface RotationViewState {
   align: AlignMode;
   /** Cast icon size: auto grows icons as you zoom in. */
   iconSize: IconSizeMode;
-  ignored: ReadonlySet<number>;
+  /** Spell names hidden from the timeline (display casing), saved per viewer. */
+  ignoredNames: readonly string[];
   /** Aligned time under the pointer, synced across every lane. */
   cursorMs: number | null;
   /**
@@ -38,7 +39,9 @@ export interface RotationView extends RotationViewState {
   panBy: (ms: number) => void;
   setAlign: (align: AlignMode) => void;
   setIconSize: (size: IconSizeMode) => void;
-  toggleIgnored: (spellId: number) => void;
+  /** Hide or show every rank of a spell, by name. */
+  toggleIgnored: (spellName: string) => void;
+  isIgnored: (spellName: string) => boolean;
   /** source "overview" also updates what Follow centers on. */
   setCursorMs: (ms: number | null, source?: "lanes" | "overview") => void;
   /** Keep the window centered on the pin or the overview cursor. */
@@ -63,13 +66,37 @@ function clampWindow(startMs: number, endMs: number, durationMs: number): [numbe
 /** Starting values, e.g. restored from a share link. Read on mount only. */
 export interface RotationViewInitial {
   align?: AlignMode;
-  ignored?: readonly number[];
   window?: { startMs: number; endMs: number } | null;
   pinnedMs?: number | null;
   follow?: boolean;
 }
 
 const ICON_SIZE_STORAGE_KEY = "chronicle.playerTimeline.iconSize";
+const IGNORED_STORAGE_KEY = "chronicle.playerTimeline.ignoredSpells";
+
+/** Hidden until the viewer changes their list: frequent procs that clutter lanes. */
+export const DEFAULT_IGNORED_SPELLS = ["Judgement of Wisdom", "Judgement of Light"];
+
+export const normalizeSpellName = (name: string) => name.trim().toLowerCase();
+
+function readIgnored(): string[] {
+  try {
+    const raw = window.localStorage.getItem(IGNORED_STORAGE_KEY);
+    if (raw == null) return DEFAULT_IGNORED_SPELLS;
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((n): n is string => typeof n === "string") : DEFAULT_IGNORED_SPELLS;
+  } catch {
+    return DEFAULT_IGNORED_SPELLS;
+  }
+}
+
+function writeIgnored(names: readonly string[]) {
+  try {
+    window.localStorage.setItem(IGNORED_STORAGE_KEY, JSON.stringify(names));
+  } catch {
+    // Storage unavailable: the list lasts for this page only.
+  }
+}
 
 /** Icon size is a per-viewer preference; storage may be unavailable. */
 function readIconSize(): IconSizeMode {
@@ -138,7 +165,9 @@ export function useRotationView(
     setIconSizeState(size);
     writeIconSize(size);
   }, []);
-  const [ignored, setIgnored] = useState<ReadonlySet<number>>(() => new Set(initial.ignored ?? []));
+  const [ignoredNames, setIgnoredNames] = useState<readonly string[]>(readIgnored);
+  const ignoredSet = useMemo(() => new Set(ignoredNames.map(normalizeSpellName)), [ignoredNames]);
+  const isIgnored = useCallback((spellName: string) => ignoredSet.has(normalizeSpellName(spellName)), [ignoredSet]);
 
   const setCursorMs = useCallback((ms: number | null, source: "lanes" | "overview" = "lanes") => {
     setCursorState(ms);
@@ -199,11 +228,13 @@ export function useRotationView(
   const unpin = useCallback(() => setPinnedMs(null), []);
 
 
-  const toggleIgnored = useCallback((spellId: number) => {
-    setIgnored((prev) => {
-      const next = new Set(prev);
-      if (next.has(spellId)) next.delete(spellId);
-      else next.add(spellId);
+  const toggleIgnored = useCallback((spellName: string) => {
+    setIgnoredNames((prev) => {
+      const key = normalizeSpellName(spellName);
+      const next = prev.some((n) => normalizeSpellName(n) === key)
+        ? prev.filter((n) => normalizeSpellName(n) !== key)
+        : [...prev, spellName];
+      writeIgnored(next);
       return next;
     });
   }, []);
@@ -214,7 +245,8 @@ export function useRotationView(
       endMs,
       align,
       iconSize,
-      ignored,
+      ignoredNames,
+      isIgnored,
       cursorMs,
       nowMs,
       follow,
@@ -234,6 +266,6 @@ export function useRotationView(
       pinAt,
       unpin,
     }),
-    [startMs, endMs, align, iconSize, ignored, cursorMs, pinnedMs, nowMs, follow, toggleFollow, followMs, setCursorMs, setIconSize, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
+    [startMs, endMs, align, iconSize, ignoredNames, isIgnored, cursorMs, pinnedMs, nowMs, follow, toggleFollow, followMs, setCursorMs, setIconSize, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
   );
 }

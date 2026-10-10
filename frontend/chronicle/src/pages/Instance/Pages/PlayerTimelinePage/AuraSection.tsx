@@ -121,8 +121,8 @@ export function AuraSection({ players, view, spellMeta, unitName, pickedTarget, 
   }, [classBuffs.data]);
 
   const offsets = useMemo(
-    () => players.map((p) => alignOffsetMs(playerCasts(p.data), view.align, view.ignored)),
-    [players, view.align, view.ignored],
+    () => players.map((p) => alignOffsetMs(playerCasts(p.data), view.align, view.isIgnored)),
+    [players, view.align, view.isIgnored],
   );
 
   const buffs = useMemo(

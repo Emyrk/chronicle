@@ -2,7 +2,7 @@ import type { AlignMode } from "../../EventsPanels/RotationTimeline/derive";
 
 /**
  * Player Timeline view state saved in share links (layout.pageState).
- * Icon size is a per-viewer preference and lives in localStorage instead.
+ * Icon size and ignored spells are per-viewer preferences in localStorage.
  */
 export interface PlayerTimelineState {
   /** Encounter the window, pin and debuff target belong to. */
@@ -10,7 +10,6 @@ export interface PlayerTimelineState {
   /** Player A and B GUIDs; B is null for "None". */
   players: [string | null, string | null];
   align: AlignMode;
-  ignoredSpellIds: number[];
   /** Visible window, or null for the whole fight. */
   window: { startMs: number; endMs: number } | null;
   pinnedMs: number | null;
@@ -37,7 +36,6 @@ export function parsePlayerTimelineState(raw: unknown): PlayerTimelineState | nu
     encounterId: raw.encounterId,
     players,
     align: raw.align === "first_cast" ? "first_cast" : "pull",
-    ignoredSpellIds: Array.isArray(raw.ignoredSpellIds) ? raw.ignoredSpellIds.filter(finite) : [],
     window,
     pinnedMs: finite(raw.pinnedMs) && raw.pinnedMs >= 0 ? raw.pinnedMs : null,
     follow: raw.follow === true,

@@ -113,11 +113,11 @@ describe("alignOffsetMs", () => {
   const casts = [cast(500, 1, { failed: true }), cast(800, 7), cast(1200, 2)];
 
   it("is zero when aligned to pull", () => {
-    expect(alignOffsetMs(casts, "pull", new Set())).toBe(0);
+    expect(alignOffsetMs(casts, "pull")).toBe(0);
   });
 
   it("skips failed and ignored casts", () => {
-    expect(alignOffsetMs(casts, "first_cast", new Set([7]))).toBe(1200);
+    expect(alignOffsetMs(casts, "first_cast", (name) => name === "spell 7")).toBe(1200);
   });
 });
 

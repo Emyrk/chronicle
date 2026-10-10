@@ -142,7 +142,6 @@ function PlayerTimelineContent({ context, saved, onStateChange }: PlayerTimeline
     saved
       ? {
           align: saved.align,
-          ignored: saved.ignoredSpellIds,
           follow: saved.follow,
           window: sameEncounter ? saved.window : null,
           pinnedMs: sameEncounter ? saved.pinnedMs : null,
@@ -164,13 +163,12 @@ function PlayerTimelineContent({ context, saved, onStateChange }: PlayerTimeline
       encounterId,
       players: [picked[0], picked[1]],
       align: view.align,
-      ignoredSpellIds: Array.from(view.ignored),
       window: replaying || wholeFight ? null : { startMs: view.startMs, endMs: view.endMs },
       pinnedMs: view.pinnedMs,
       follow: view.follow,
       debuffTarget,
     });
-  }, [onStateChange, encounterId, picked, view.align, view.ignored, replaying, wholeFight, view.startMs, view.endMs, view.pinnedMs, view.follow, debuffTarget]);
+  }, [onStateChange, encounterId, picked, view.align, replaying, wholeFight, view.startMs, view.endMs, view.pinnedMs, view.follow, debuffTarget]);
 
   const players: RotationTimelinePlayer[] = useMemo(
     () =>

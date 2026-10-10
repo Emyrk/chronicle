@@ -61,7 +61,10 @@ export interface RotationTimelineProps {
 interface DerivedPlayer {
   player: RotationTimelinePlayer;
   slot: number;
+  /** Every cast; idle time and stats use these. */
   casts: TimelineCast[];
+  /** Casts drawn on the timeline: ignored spells removed. */
+  shownCasts: TimelineCast[];
   offsetMs: number;
   gaps: IdleGap[];
   busy: IdleGap[];
@@ -162,7 +165,7 @@ export function RotationTimeline({
   const [hovered, setHovered] = useState<{ slot: number; cast: TimelineCast } | null>(null);
   const [hoveredSwing, setHoveredSwing] = useState<{ slot: number; swing: TimelineSwing } | null>(null);
   const panRef = useRef<{ x: number; startMs: number; endMs: number; moved: boolean } | null>(null);
-  const { startMs: vs, endMs: ve, durationMs, ignored, nowMs } = view;
+  const { startMs: vs, endMs: ve, durationMs, isIgnored, nowMs } = view;
   const replaying = nowMs != null;
   const probeMs = view.indicatorMs;
   const span = Math.max(1, ve - vs);
@@ -178,13 +181,14 @@ export function RotationTimeline({
           player,
           slot,
           casts,
-          offsetMs: alignOffsetMs(casts, view.align, ignored),
+          shownCasts: casts.filter((c) => !isIgnored(c.spellName)),
+          offsetMs: alignOffsetMs(casts, view.align, isIgnored),
           gaps,
           busy: busySegments(casts, gcd, idleThresholdMs),
           stats: playerStats(player.data, casts, gaps, durationMs),
         };
       }),
-    [players, gcd, idleThresholdMs, view.align, ignored, durationMs],
+    [players, gcd, idleThresholdMs, view.align, isIgnored, durationMs],
   );
 
   const overview = useMemo(() => {
@@ -206,14 +210,18 @@ export function RotationTimeline({
     return out;
   }, [vs, ve, span]);
 
-  const ignoredSpells = Array.from(ignored);
+  // Ignored spells by name, with an icon from any cast of that spell when one exists.
+  const ignoredSpells = view.ignoredNames.map((name) => {
+    const cast = derived.flatMap((d) => d.casts).find((c) => c.spellName.toLowerCase() === name.trim().toLowerCase());
+    return { name, icon: spellMeta(cast?.spellId ?? null).icon };
+  });
   const layout = laneLayout(pxPerMs, view.iconSize);
 
   // One color per cooldown spell, in order of first use, shared by both players.
   const cooldownColor = useMemo(() => {
     const ids: number[] = [];
     for (const d of derived) {
-      for (const c of d.casts) if (cooldownInfo(c.spellId) && !ids.includes(c.spellId)) ids.push(c.spellId);
+      for (const c of d.shownCasts) if (cooldownInfo(c.spellId) && !ids.includes(c.spellId)) ids.push(c.spellId);
     }
     return (spellId: number) => {
       const i = ids.indexOf(spellId);
@@ -268,19 +276,16 @@ export function RotationTimeline({
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span>Ignored</span>
           {ignoredSpells.length === 0 && <span className="opacity-70">Ctrl+click a spell to hide it</span>}
-          {ignoredSpells.map((id) => {
-            const meta = spellMeta(id);
-            return (
-              <button
-                key={id}
-                type="button"
-                title={`${meta.spell?.name ?? id} (click to show)`}
-                onClick={() => view.toggleIgnored(id)}
-                className="size-5 rounded-[3px] border border-border bg-muted bg-cover bg-center opacity-60 grayscale hover:opacity-100 hover:grayscale-0"
-                style={{ backgroundImage: `url(${meta.icon})` }}
-              />
-            );
-          })}
+          {ignoredSpells.map(({ name, icon }) => (
+            <button
+              key={name}
+              type="button"
+              title={`${name} (click to show)`}
+              onClick={() => view.toggleIgnored(name)}
+              className="size-5 rounded-[3px] border border-border bg-muted bg-cover bg-center opacity-60 grayscale hover:opacity-100 hover:grayscale-0"
+              style={{ backgroundImage: `url(${icon})` }}
+            />
+          ))}
         </div>
       </div>
 
@@ -375,7 +380,7 @@ export function RotationTimeline({
         {/* Labels */}
         <div className="text-[11px] text-muted-foreground">
           {derived.map((d) => {
-            const atCursor = probeMs != null ? castAt(d.casts, probeMs + d.offsetMs, gcd) : null;
+            const atCursor = probeMs != null ? castAt(d.shownCasts, probeMs + d.offsetMs, gcd) : null;
             return (
               <div key={d.player.guid}>
                 <div
@@ -443,7 +448,6 @@ export function RotationTimeline({
                 ve={ve}
                 pxPerMs={pxPerMs}
                 gcd={gcd}
-                ignored={ignored}
                 nowMs={nowMs}
                 layout={layout}
                 cooldownInfo={cooldownInfo}
@@ -472,7 +476,7 @@ export function RotationTimeline({
               top={castLaneTop(hovered.slot) + layout.height - 4}
               meta={spellMeta(hovered.cast.spellId)}
               unitName={unitName}
-              activeCooldowns={activeCooldownsAt(derived[hovered.slot].casts, hovered.cast, cooldownInfo).map((a) => ({
+              activeCooldowns={activeCooldownsAt(derived[hovered.slot].shownCasts, hovered.cast, cooldownInfo).map((a) => ({
                 ...a,
                 icon: spellMeta(a.cast.spellId).icon,
                 color: cooldownColor(a.cast.spellId).color,
@@ -493,14 +497,13 @@ interface PlayerLanesProps {
   ve: number;
   pxPerMs: number;
   gcd: GcdLookup;
-  ignored: ReadonlySet<number>;
   /** Replay time; casts after it are dimmed. */
   nowMs: number | null;
   layout: LaneLayout;
   cooldownInfo: (spellId: number) => { durationMs: number } | null;
   cooldownColor: (spellId: number) => { color: string; index: number };
   spellMeta: (spellId: number | null) => SpellMeta;
-  onToggleIgnored: (spellId: number) => void;
+  onToggleIgnored: (spellName: string) => void;
   onHover: (cast: TimelineCast | null) => void;
   onHoverSwing: (swing: TimelineSwing | null) => void;
 }
@@ -517,7 +520,6 @@ function PlayerLanes({
   ve,
   pxPerMs,
   gcd,
-  ignored,
   nowMs,
   layout,
   cooldownInfo,
@@ -527,7 +529,7 @@ function PlayerLanes({
   onHover,
   onHoverSwing,
 }: PlayerLanesProps) {
-  const { casts, offsetMs, gaps, busy, slot, player } = derived;
+  const { shownCasts: casts, offsetMs, gaps, busy, slot, player } = derived;
   const margin = 2000;
   const visible = (startMs: number, endMs: number) => endMs - offsetMs >= vs - margin && startMs - offsetMs <= ve + margin;
 
@@ -543,20 +545,19 @@ function PlayerLanes({
   const { icon, proc, cooldown, railTop } = layout;
 
   const opacityOf = (c: TimelineCast) => {
-    if (ignored.has(c.spellId)) return 0.15;
     if (c.failed) return 0.4;
     if (nowMs != null && c.startMs - offsetMs > nowMs) return 0.45;
     return undefined;
   };
 
-  const onSpellClick = (e: React.MouseEvent, spellId: number) => {
+  const onSpellClick = (e: React.MouseEvent, spellName: string) => {
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     e.stopPropagation();
-    onToggleIgnored(spellId);
+    onToggleIgnored(spellName);
   };
   const hoverProps = (c: TimelineCast) => ({
-    onClick: (e: React.MouseEvent) => onSpellClick(e, c.spellId),
+    onClick: (e: React.MouseEvent) => onSpellClick(e, c.spellName),
     onPointerEnter: () => onHover(c),
     onPointerLeave: () => onHover(null),
   });

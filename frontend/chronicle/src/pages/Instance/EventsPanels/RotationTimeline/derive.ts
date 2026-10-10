@@ -107,9 +107,13 @@ export function damageLead(binsA: readonly number[], binsB: readonly number[], l
 
 export type AlignMode = "pull" | "first_cast";
 
-export function alignOffsetMs(casts: readonly TimelineCast[], mode: AlignMode, ignored: ReadonlySet<number>): number {
+export function alignOffsetMs(
+  casts: readonly TimelineCast[],
+  mode: AlignMode,
+  isIgnored: (spellName: string) => boolean = () => false,
+): number {
   if (mode === "pull") return 0;
-  return casts.find((c) => !c.failed && !ignored.has(c.spellId))?.startMs ?? 0;
+  return casts.find((c) => !c.failed && !isIgnored(c.spellName))?.startMs ?? 0;
 }
 
 export interface PlayerStats {
