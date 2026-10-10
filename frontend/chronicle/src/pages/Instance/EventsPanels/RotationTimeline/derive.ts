@@ -292,6 +292,7 @@ export function withOverrideBuffCasts(
     const override = findOverride(wanted, seg.spellId, seg.spellName);
     if (!override) continue;
     added.push({
+      source: "aura",
       startMs: seg.startMs,
       endMs: seg.startMs,
       spellId: seg.spellId ?? override.spellIds?.[0] ?? -1,
@@ -339,6 +340,7 @@ export function withConsumeCasts(data: PlayerTimelineData): PlayerTimelineData {
   const matches = (c: TimelineCast) =>
     data.consumes.some((u) => u.spellId === c.spellId && Math.abs(u.offsetMs - c.startMs) <= CONSUME_MATCH_MS);
   const added: TimelineCast[] = data.consumes.map((u) => ({
+    source: "consume",
     startMs: u.offsetMs,
     endMs: u.offsetMs,
     spellId: u.spellId,

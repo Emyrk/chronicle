@@ -20,6 +20,7 @@ import {
 
 function cast(startMs: number, spellId = 1, extra: Partial<TimelineCast> = {}): TimelineCast {
   return {
+    source: "spell_go",
     startMs,
     endMs: startMs,
     spellId,

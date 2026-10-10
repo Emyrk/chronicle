@@ -40,7 +40,15 @@ export const AUTO_ATTACK_SPELL_ID = 6603;
 export const DAMAGE_LINK_WINDOW_MS = 3000;
 export const DAMAGE_BIN_MS = 1000;
 
+/**
+ * The log event a timeline cast was built from: a spell_go, a spell_start that
+ * ended in spell_fail, a text "cast" line, a buff gain (spell overrides), or a
+ * consume event.
+ */
+export type CastSource = "spell_go" | "spell_fail" | "cast" | "aura" | "consume";
+
 export interface TimelineCast {
+  source: CastSource;
   /** When the cast began (spell_start / "begins to cast"), or the go time for instants. */
   startMs: number;
   /** When the spell went off. Equal to startMs for instants. */
@@ -238,8 +246,16 @@ function sameAura(seg: TimelineAuraSegment, spellId: number | null, spellName: s
 }
 
 
-function newCast(startMs: number, endMs: number, spellId: number, spellName: string, target: string): TimelineCast {
+function newCast(
+  source: CastSource,
+  startMs: number,
+  endMs: number,
+  spellId: number,
+  spellName: string,
+  target: string,
+): TimelineCast {
   return {
+    source,
     startMs,
     endMs,
     spellId,
@@ -441,7 +457,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         if (!focus.has(event.caster)) return;
         const p = player(event.caster);
         const s = scratch(event.caster);
-        const cast = newCast(event.offsetMilli, event.offsetMilli, event.spell.id, event.spell.name, event.target);
+        const cast = newCast("spell_go", event.offsetMilli, event.offsetMilli, event.spell.id, event.spell.name, event.target);
         cast.itemId = event.itemId;
         completeCast(cast, s.pendingGo);
         s.pendingGo = null;
@@ -455,7 +471,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         const s = scratch(event.caster);
         const pending = s.pendingGo;
         if (!pending || pending.spellId !== event.spell.id) return;
-        const cast = newCast(pending.startMs, event.offsetMilli, event.spell.id, event.spell.name, "");
+        const cast = newCast("spell_fail", pending.startMs, event.offsetMilli, event.spell.id, event.spell.name, "");
         cast.castTimeMs = pending.castTimeMs;
         cast.failed = true;
         player(event.caster).goCasts.push(cast);
@@ -475,7 +491,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         if (event.action === CastAction.FailsCasting) {
           const pending = s.pendingText;
           if (pending && pending.spellId === spellId) {
-            const cast = newCast(pending.startMs, event.offsetMilli, spellId, event.spell.name, "");
+            const cast = newCast("cast", pending.startMs, event.offsetMilli, spellId, event.spell.name, "");
             cast.failed = true;
             p.textCasts.push(cast);
           }
@@ -483,7 +499,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
           return;
         }
         if (event.action !== CastAction.Casts && event.action !== CastAction.Channels) return;
-        const cast = newCast(event.offsetMilli, event.offsetMilli, spellId, event.spell.name, event.target);
+        const cast = newCast("cast", event.offsetMilli, event.offsetMilli, spellId, event.spell.name, event.target);
         cast.channel = event.action === CastAction.Channels;
         completeCast(cast, s.pendingText);
         s.pendingText = null;

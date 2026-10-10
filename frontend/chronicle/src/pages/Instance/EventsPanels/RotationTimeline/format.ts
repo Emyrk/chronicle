@@ -6,6 +6,16 @@ import {
   HitTypeMiss,
   HitTypeParry,
 } from "@/lib/hittype/hittype";
+import type { CastSource } from "./rotationTimeline.processor";
+
+/** The log event behind a timeline cast, as shown in tooltips. */
+export const CAST_SOURCE_LABELS: Record<CastSource, string> = {
+  spell_go: "spell_go event",
+  spell_fail: "spell_start → spell_fail",
+  cast: "cast log line",
+  aura: "aura gained",
+  consume: "consume event",
+};
 
 /** Player A uses the primary color, player B the accent. */
 export const SLOT_COLORS = ["var(--primary)", "var(--accent)"] as const;

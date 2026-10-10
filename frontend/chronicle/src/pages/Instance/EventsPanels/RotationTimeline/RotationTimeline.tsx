@@ -24,7 +24,7 @@ import {
   type IdleGap,
   type PlayerStats,
 } from "./derive";
-import { formatClock, SLOT_COLORS, SLOT_LABELS, swingColor, tickStepMs } from "./format";
+import { CAST_SOURCE_LABELS, formatClock, SLOT_COLORS, SLOT_LABELS, swingColor, tickStepMs } from "./format";
 import {
   AUTO_ATTACK_SPELL_ID,
   DAMAGE_BIN_MS,
@@ -1143,6 +1143,7 @@ function ClusterTooltip({ cluster, casts, anchor, spellMeta, cooldownColor }: Cl
                 <span className="truncate text-xs text-foreground">{e.cast.spellName}</span>
                 <span className="text-[10px]" style={{ color: kind.color }}>
                   {kind.label}
+                  <span className="ml-1 font-mono text-muted-foreground">· {CAST_SOURCE_LABELS[e.cast.source]}</span>
                   {damage > 0 && <span className="ml-1 font-mono text-muted-foreground">{formatNumber(damage)}</span>}
                 </span>
               </span>
@@ -1215,6 +1216,7 @@ function CastTooltip({ cast, anchor, meta, endMs, unitName, activeCooldowns }: C
         </div>
       )}
       {cast.itemId != null && <div className="text-muted-foreground">Item #{cast.itemId}</div>}
+      <div className="font-mono text-[10px] text-muted-foreground">from {CAST_SOURCE_LABELS[cast.source]}</div>
       {activeCooldowns.length > 0 && (
         <div className="flex flex-col gap-1 border-t border-border pt-2">
           {activeCooldowns.map((a) => (
