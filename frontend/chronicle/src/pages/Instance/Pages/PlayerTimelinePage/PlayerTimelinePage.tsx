@@ -21,6 +21,7 @@ import {
 } from "../../EventsPanels/RotationTimeline/rotationTimeline.processor";
 import {
   playerCasts,
+  withAuraProcCasts,
   withConsumeCasts,
   withOverrideBuffCasts,
   withoutHiddenCasts,
@@ -30,6 +31,7 @@ import { useRotationView, type RotationViewInitial } from "../../EventsPanels/Ro
 import { useSmoothReplayTime } from "../../EventsPanels/RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 import { activeOverrides, findOverride } from "../../EventsPanels/RotationTimeline/spellOverrides";
+import { activeAuraProcs } from "../../EventsPanels/RotationTimeline/auraProcs";
 import { AuraSection } from "./AuraSection";
 import { defaultPlayers } from "./defaultPlayers";
 import { PlayerPicker } from "./PlayerPicker";
@@ -236,6 +238,8 @@ function PlayerTimelineContent({
 
   // Manual spell mutations for this log's flavor (spellOverrides.ts).
   const spellOverrides = useMemo(() => activeOverrides(instance.flavor ?? []), [instance.flavor]);
+  // Auras that count as procs for this log's format (auraProcs.ts).
+  const auraProcs = useMemo(() => activeAuraProcs(instance.format), [instance.format]);
 
   const players: RotationTimelinePlayer[] = useMemo(
     () =>
@@ -243,10 +247,10 @@ function PlayerTimelineContent({
         const data = guid ? result.players.get(guid) : undefined;
         const info = guid ? instance.players?.[guid] : undefined;
         if (!guid || !data || !info) return [];
-        const shown = withoutHiddenCasts(withConsumeCasts(data), spellOverrides);
+        const shown = withoutHiddenCasts(withAuraProcCasts(withConsumeCasts(data), auraProcs), spellOverrides);
         return [{ guid, name: info.name, className: info.class, data: withOverrideBuffCasts(shown, spellOverrides, durationMs) }];
       }),
-    [picked, result.players, instance.players, spellOverrides, durationMs],
+    [picked, result.players, instance.players, spellOverrides, auraProcs, durationMs],
   );
 
   const spellIds = useMemo(() => {
@@ -393,6 +397,7 @@ function PlayerTimelineContent({
             cooldownInfo={cooldownInfo}
             curatedCooldown={curatedCooldown}
             overrides={spellOverrides}
+            auraProcs={auraProcs}
             isIgnored={view.isIgnored}
             cooldownMinMs={COOLDOWN_LANE_MIN_MS}
             onFlipBack={() => setFlipped(false)}

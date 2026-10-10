@@ -24,7 +24,7 @@ import type {
   SpellGoProcessorEvent,
   SpellStartProcessorEvent,
 } from "../processorTypes";
-import { CastAction } from "../processorTypes";
+import { AuraTransition, CastAction } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 import {
   applyAuraEvent,
@@ -34,6 +34,7 @@ import {
   type AuraProcessorState,
 } from "../processors/auraProcessor";
 import { hasHitType, HitTypeCrit, HitTypeOffHand, HitTypePeriodic } from "@/lib/hittype/hittype";
+import { AURA_PROC_NAMES } from "./auraProcs";
 
 export const AUTO_ATTACK_SPELL_ID = 6603;
 /** A direct hit links to a cast of the same spell this recently (travel time). */
@@ -97,6 +98,14 @@ export interface TimelineConsume {
   spellName: string;
 }
 
+/** An application, refresh or stack gain of a curated proc aura (auraProcs.ts) caused by the player. */
+export interface TimelineAuraProc {
+  offsetMs: number;
+  spellId: number | null;
+  spellName: string;
+  target: string;
+}
+
 export interface TimelineSwing {
   offsetMs: number;
   offHand: boolean;
@@ -142,6 +151,8 @@ export interface PlayerTimelineData {
   damageByTarget: Record<string, number>;
   /** Consumables used during the encounter. */
   consumes: TimelineConsume[];
+  /** Curated proc auras the player gained or applied (see auraProcs.ts). */
+  auraProcs: TimelineAuraProc[];
 }
 
 interface PendingStart {
@@ -196,6 +207,8 @@ export interface RotationTimelineResult {
   _auraState: AuraProcessorState;
   /** target guid → segments currently open on it */
   _openAuras: Map<string, TimelineAuraSegment[]>;
+  /** "target|aura" → last stack count, to tell stack gains from charges used up. */
+  _procStacks: Map<string, number>;
 }
 
 export type RotationTimelineEvent =
@@ -230,6 +243,7 @@ function emptyPlayer(guid: string): PlayerTimelineData {
     debuffsCast: [],
     damageByTarget: {},
     consumes: [],
+    auraProcs: [],
   };
 }
 
@@ -303,6 +317,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
     _scratch: new Map(),
     _auraState: createAuraProcessorState(),
     _openAuras: new Map(),
+    _procStacks: new Map(),
   }),
 
   processEvent(state, event, encounterID, firstTimestamp, _streamType, context): void {
@@ -519,6 +534,30 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         const wasActive = hasAura(state._auraState, encounterID, event.target, ref);
         applyAuraEvent(state._auraState, encounterID, event);
         const isActive = hasAura(state._auraState, encounterID, event.target, ref);
+
+        // Curated proc auras: every gain, refresh or stack gain is a proc by
+        // whoever caused it (the player for "self" auras, the caster on enemies).
+        const procOn = AURA_PROC_NAMES.get(event.spellName.trim().toLowerCase());
+        if (procOn) {
+          const key = `${event.target}|${event.spellName}`;
+          const prevStacks = state._procStacks.get(key) ?? 0;
+          const stacks = isActive ? Math.max(1, event.amount) : 0;
+          state._procStacks.set(key, stacks);
+          const gained =
+            isActive &&
+            (!wasActive ||
+              event.transition === AuraTransition.Refreshed ||
+              (event.transition === AuraTransition.StackChanged && stacks > prevStacks));
+          const by = procOn === "self" ? event.target : (getAuraCaster(state._auraState, encounterID, event.target, ref) ?? event.caster);
+          if (gained && by && focus.has(by) && (procOn === "self" || event.target !== by)) {
+            player(by).auraProcs.push({
+              offsetMs: event.offsetMilli,
+              spellId: event.spellId,
+              spellName: event.spellName,
+              target: event.target,
+            });
+          }
+        }
 
         const open = state._openAuras.get(event.target) ?? [];
         if (wasActive && !isActive) {

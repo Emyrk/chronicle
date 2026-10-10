@@ -13,7 +13,7 @@ export const CAST_SOURCE_LABELS: Record<CastSource, string> = {
   spell_go: "spell_go event",
   spell_fail: "spell_start → spell_fail",
   cast: "cast log line",
-  aura: "aura gained",
+  aura: "aura event",
   consume: "consume event",
 };
 

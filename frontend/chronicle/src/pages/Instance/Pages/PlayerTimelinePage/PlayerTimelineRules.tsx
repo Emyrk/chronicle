@@ -34,6 +34,8 @@ import { DEFAULT_IGNORED_SPELLS } from "../../EventsPanels/RotationTimeline/useR
 import type { SpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 import { AuraIcon, FULL_UPTIME, NONE_UPTIME } from "./AuraSection";
 import { findOverride, SPELL_OVERRIDES, type SpellOverride } from "../../EventsPanels/RotationTimeline/spellOverrides";
+import { AURA_PROCS, findAuraProc, type AuraProc } from "../../EventsPanels/RotationTimeline/auraProcs";
+import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
 
 export interface CuratedCooldown {
   cooldownMs: number;
@@ -54,6 +56,8 @@ interface PlayerTimelineRulesProps {
   cooldownMinMs: number;
   /** Spell overrides active for this log's flavor. */
   overrides: readonly SpellOverride[];
+  /** Aura procs active for this log's format. */
+  auraProcs: readonly AuraProc[];
   onFlipBack: () => void;
 }
 
@@ -92,6 +96,7 @@ export function PlayerTimelineRules({
   isIgnored,
   cooldownMinMs,
   overrides,
+  auraProcs,
   onFlipBack,
 }: PlayerTimelineRulesProps) {
   const overrideFor = (r: SpellRow) => findOverride(overrides, r.spellId, r.name);
@@ -142,6 +147,8 @@ export function PlayerTimelineRules({
       return `Consumable (consume evidence); GCD from spell data: ${gcd(r.spellId) > 0 ? ms(gcd(r.spellId)) : "none"}`;
     }
     if (r.kind === "proc") {
+      const auraProc = findAuraProc(auraProcs, r.name);
+      if (auraProc) return `Curated aura proc: drawn from the aura being applied or refreshed (${auraProc.on === "self" ? "on the player" : "on the target"})`;
       const note = curated ? ` (curated cooldown ${ms(curated.cooldownMs)} < ${ms(cooldownMinMs)})` : "";
       return `Instant with GCD 0, assumed not pressed${note}`;
     }
@@ -237,6 +244,32 @@ export function PlayerTimelineRules({
           </span>
           <span>* No spell data loaded; the default GCD is assumed.</span>
         </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Aura procs</h3>
+        <p className="text-muted-foreground">
+          Some log formats do not write procs as casts. In those formats, each application, refresh or stack gain of these
+          auras is drawn as a proc on the rail (auraProcs.ts).
+        </p>
+        <ul className="flex flex-col gap-1.5 text-muted-foreground">
+          {AURA_PROCS.map((p) => {
+            const active = auraProcs.includes(p);
+            return (
+              <li key={p.id} className="flex flex-wrap items-baseline gap-2">
+                <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-semibold", active ? "bg-yellow-500/15 text-yellow-300" : "bg-muted text-muted-foreground")}>
+                  {active ? "Active" : "Inactive"}
+                </span>
+                <span className="text-foreground">{p.names.join(", ")}</span>
+                <span>{p.on === "self" ? "gained by the player" : "applied to the target"}</span>
+                <span className="font-mono text-[10px]">
+                  formats: {p.formats.map((f) => LOG_FORMAT_OPTIONS.find((o) => o.value === f)?.label ?? f).join(", ")}
+                </span>
+                <span>· {p.note}</span>
+              </li>
+            );
+          })}
+        </ul>
       </section>
 
       <section className="flex flex-col gap-2">

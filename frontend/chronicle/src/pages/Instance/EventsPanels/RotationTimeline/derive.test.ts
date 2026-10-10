@@ -4,6 +4,7 @@ import {
   alignOffsetMs,
   busySegments,
   castKind,
+  withAuraProcCasts,
   withConsumeCasts,
   withoutHiddenCasts,
   withOverrideBuffCasts,
@@ -59,6 +60,7 @@ function player(extra: Partial<PlayerTimelineData> = {}): PlayerTimelineData {
     debuffsCast: [],
     damageByTarget: {},
     consumes: [],
+    auraProcs: [],
     ...extra,
   };
 }
@@ -304,5 +306,25 @@ describe("withoutHiddenCasts", () => {
   it("returns the data unchanged without hide overrides", () => {
     const data = player({ goCasts: [cast(0, 12868)] });
     expect(withoutHiddenCasts(data, [{ id: "x", names: ["Deep Wounds"], note: "" }])).toBe(data);
+  });
+});
+
+describe("withAuraProcCasts", () => {
+  const procs = [{ id: "flurry", names: ["Flurry"], on: "self" as const, formats: [], note: "" }];
+  const flurry = (offsetMs: number) => ({ offsetMs, spellId: 12970, spellName: "Flurry", target: "p" });
+
+  it("adds aura procs as rail procs, skipping ones a logged cast already shows", () => {
+    const data = player({ goCasts: [cast(1000, 12970, { spellName: "Flurry" })], auraProcs: [flurry(1100), flurry(5000)] });
+    const out = withAuraProcCasts(data, procs);
+    expect(out.goCasts.map((c) => [c.startMs, c.source])).toEqual([
+      [1000, "spell_go"],
+      [5000, "aura"],
+    ]);
+    expect(castKind(out.goCasts[1], () => 1500, () => null)).toBe("proc");
+  });
+
+  it("returns the data unchanged when no entries apply", () => {
+    const data = player({ auraProcs: [flurry(1000)] });
+    expect(withAuraProcCasts(data, [])).toBe(data);
   });
 });

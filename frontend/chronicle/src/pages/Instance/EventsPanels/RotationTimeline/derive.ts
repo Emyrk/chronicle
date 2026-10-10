@@ -4,6 +4,7 @@
  */
 
 import { DAMAGE_BIN_MS, type PlayerTimelineData, type TimelineCast } from "./rotationTimeline.processor";
+import { findAuraProc, type AuraProc } from "./auraProcs";
 import { findOverride, type SpellOverride } from "./spellOverrides";
 
 export const DEFAULT_GCD_MS = 1500;
@@ -266,6 +267,7 @@ export function castKind(
 ): CastKind {
   if (cast.consume) return "consume";
   if (cooldownInfo(cast.spellId) != null) return "cooldown";
+  if (cast.source === "aura" && cast.buffEndMs == null) return "proc"; // curated aura procs
   if (gcd(cast.spellId) === 0 && cast.endMs === cast.startMs && !cast.channelTimeMs) return "proc";
   return "gcd";
 }
@@ -326,6 +328,48 @@ export function withoutHiddenCasts(data: PlayerTimelineData, overrides: readonly
   if (hidden.length === 0) return data;
   const keep = (c: TimelineCast) => !findOverride(hidden, c.spellId, c.spellName);
   return { ...data, goCasts: data.goCasts.filter(keep), textCasts: data.textCasts.filter(keep) };
+}
+
+/** A logged cast of the same spell this close to an aura proc is the same proc. */
+const AURA_PROC_MATCH_MS = 250;
+
+/**
+ * Adds curated aura procs (auraProcs.ts) as casts drawn on the rail, for log
+ * formats that do not write the proc as a cast. A logged cast of the same
+ * spell within AURA_PROC_MATCH_MS already shows it, so that one is skipped.
+ */
+export function withAuraProcCasts(data: PlayerTimelineData, procs: readonly AuraProc[]): PlayerTimelineData {
+  if (procs.length === 0 || data.auraProcs.length === 0) return data;
+  const casts = data.goCasts.length > 0 ? data.goCasts : data.textCasts;
+  const logged = (name: string, atMs: number) =>
+    casts.some((c) => c.spellName.toLowerCase() === name.toLowerCase() && Math.abs(c.startMs - atMs) <= AURA_PROC_MATCH_MS);
+  const added: TimelineCast[] = data.auraProcs
+    .filter((a) => findAuraProc(procs, a.spellName) && !logged(a.spellName, a.offsetMs))
+    .map((a) => ({
+      source: "aura",
+      startMs: a.offsetMs,
+      endMs: a.offsetMs,
+      spellId: a.spellId ?? -1,
+      spellName: a.spellName,
+      target: a.target,
+      castTimeMs: null,
+      channelTimeMs: null,
+      channel: false,
+      tickMs: [],
+      failed: false,
+      itemId: null,
+      damage: 0,
+      periodicDamage: 0,
+      hits: 0,
+      crits: 0,
+      healing: 0,
+      overheal: 0,
+      healCrits: 0,
+    }));
+  if (added.length === 0) return data;
+  return data.goCasts.length > 0
+    ? { ...data, goCasts: [...data.goCasts, ...added] }
+    : { ...data, textCasts: [...data.textCasts, ...added] };
 }
 
 /** A logged cast of the same spell this close to a consume is the same use. */
