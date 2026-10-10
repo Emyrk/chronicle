@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AbsorbedProcessorEvent, AuraProcessorEvent, HealProcessorEvent, ProcessorContext, SpellGoProcessorEvent } from "../processorTypes";
 import { AuraState, AuraTransition } from "../processorTypes";
+import { HitTypePeriodic } from "@/lib/hittype/hittype";
 import { rotationTimelineProcessor } from "./rotationTimeline.processor";
 
 const ENC = "enc-1";
@@ -104,5 +105,19 @@ describe("rotationTimelineProcessor healing", () => {
       [10901, 600, 0],
     ]);
     expect(state.healingByPlayer.get(PLAYER)).toBe(1200);
+  });
+
+  it("credits HoT ticks to the latest cast on the same target", () => {
+    const state = rotationTimelineProcessor.createState();
+    const ctx = context();
+    const goOn = (offsetMilli: number, target: string) => ({ ...go(offsetMilli, 48441), target });
+    const tick = (offsetMilli: number, target: string, amount: number) => ({ ...heal(offsetMilli, 48441, amount, 0), target, hitType: 2 | HitTypePeriodic });
+    const events = [goOn(1000, "tank"), goOn(2000, "mage"), tick(4000, "tank", 300), tick(5000, "mage", 100), tick(6000, "rogue", 50)];
+    for (const e of events) rotationTimelineProcessor.processEvent(state, e, ENC, new Date(0), e.type, ctx);
+    // The rogue had no Rejuvenation cast on it: falls back to the latest cast.
+    expect(state.players.get(PLAYER)!.goCasts.map((c) => [c.target, c.healing])).toEqual([
+      ["tank", 300],
+      ["mage", 150],
+    ]);
   });
 });

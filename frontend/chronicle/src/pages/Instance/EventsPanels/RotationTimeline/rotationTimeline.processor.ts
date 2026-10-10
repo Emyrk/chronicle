@@ -145,9 +145,28 @@ interface PendingStart {
 interface PlayerScratch {
   pendingGo: PendingStart | null;
   pendingText: PendingStart | null;
-  /** spellId → index of the latest cast, per source. */
-  lastGoBySpell: Map<number, number>;
-  lastTextBySpell: Map<number, number>;
+  /** Index of the latest cast per source, keyed by castKey (spell, and spell + target). */
+  lastGoBySpell: Map<string, number>;
+  lastTextBySpell: Map<string, number>;
+}
+
+/** Key for the latest cast of a spell, optionally on one target. */
+const castKey = (spellId: number, target?: string | null) => (target ? `${spellId}:${target}` : `${spellId}`);
+
+function rememberCast(last: Map<string, number>, cast: TimelineCast, index: number): void {
+  last.set(castKey(cast.spellId), index);
+  if (cast.target) last.set(castKey(cast.spellId, cast.target), index);
+}
+
+/**
+ * The cast a damage or heal event belongs to. Lingering effects (HoT/DoT ticks,
+ * shield absorbs) prefer the latest cast of the spell on the same target, so
+ * rolling HoTs on several targets (or stacked Lifeblooms) credit the cast that
+ * applied them; spells that hit other targets (Wild Growth, AoE channels) fall
+ * back to the latest cast of the spell.
+ */
+function findCast(last: Map<string, number>, spellId: number, target: string | null, lingering: boolean): number | undefined {
+  return (lingering ? last.get(castKey(spellId, target)) : undefined) ?? last.get(castKey(spellId));
 }
 
 export interface RotationTimelineResult {
@@ -328,8 +347,8 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
 
         const periodic = hasHitType(event.hitType, HitTypePeriodic);
         const s = scratch(owner);
-        const link = (casts: TimelineCast[], lastBySpell: Map<number, number>) => {
-          const idx = lastBySpell.get(event.spellId as number);
+        const link = (casts: TimelineCast[], lastBySpell: Map<string, number>) => {
+          const idx = findCast(lastBySpell, event.spellId as number, event.target, periodic);
           if (idx == null) return;
           const cast = casts[idx];
           if (periodic) {
@@ -374,8 +393,8 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         const lingering = event.type === "absorbed" || hasHitType(event.hitType, HitTypePeriodic);
         const crit = event.type === "heal" && hasHitType(event.hitType, HitTypeCrit);
         const s = scratch(owner);
-        const link = (casts: TimelineCast[], lastBySpell: Map<number, number>) => {
-          const idx = lastBySpell.get(spellId);
+        const link = (casts: TimelineCast[], lastBySpell: Map<string, number>) => {
+          const idx = findCast(lastBySpell, spellId, event.target, lingering);
           if (idx == null) return;
           const cast = casts[idx];
           if (!lingering && event.offsetMilli - cast.endMs > DAMAGE_LINK_WINDOW_MS) return;
@@ -426,7 +445,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         cast.itemId = event.itemId;
         completeCast(cast, s.pendingGo);
         s.pendingGo = null;
-        s.lastGoBySpell.set(cast.spellId, p.goCasts.length);
+        rememberCast(s.lastGoBySpell, cast, p.goCasts.length);
         p.goCasts.push(cast);
         return;
       }
@@ -468,7 +487,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         cast.channel = event.action === CastAction.Channels;
         completeCast(cast, s.pendingText);
         s.pendingText = null;
-        s.lastTextBySpell.set(spellId, p.textCasts.length);
+        rememberCast(s.lastTextBySpell, cast, p.textCasts.length);
         p.textCasts.push(cast);
         return;
       }
