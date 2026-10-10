@@ -21,8 +21,15 @@ import type {
   SpellGoProcessorEvent,
   SpellStartProcessorEvent,
 } from "../processorTypes";
-import { AuraState, CastAction } from "../processorTypes";
+import { CastAction } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
+import {
+  applyAuraEvent,
+  createAuraProcessorState,
+  getAuraCaster,
+  hasAura,
+  type AuraProcessorState,
+} from "../processors/auraProcessor";
 import { hasHitType, HitTypeCrit, HitTypeOffHand, HitTypePeriodic } from "@/lib/hittype/hittype";
 
 export const AUTO_ATTACK_SPELL_ID = 6603;
@@ -117,7 +124,9 @@ export interface RotationTimelineResult {
   /** Every player's total damage (including pets), for default A/B selection. */
   damageByPlayer: Map<string, number>;
   _scratch: Map<string, PlayerScratch>;
-  /** target guid → open aura segments on it */
+  /** Shared aura tracker (same as Aura Uptime / Unit Auras); decides when auras start and end. */
+  _auraState: AuraProcessorState;
+  /** target guid → segments currently open on it */
   _openAuras: Map<string, TimelineAuraSegment[]>;
 }
 
@@ -163,25 +172,6 @@ function sameAura(seg: TimelineAuraSegment, spellId: number | null, spellName: s
   return normalizeName(seg.spellName) === normalizeName(spellName);
 }
 
-/**
- * Close open segments for a removed aura. Like the shared aura state machine,
- * a removal matches by spell ID or name whatever the caster, because fades are
- * often logged without one. When the fade does name a caster, only that
- * caster's segment closes.
- */
-export function closeAuraSegments(
-  open: TimelineAuraSegment[],
-  spellId: number | null,
-  spellName: string,
-  caster: string | null,
-  atMs: number,
-): TimelineAuraSegment[] {
-  const matches = open.filter((seg) => sameAura(seg, spellId, spellName));
-  const exact = caster != null ? matches.filter((seg) => seg.caster === caster) : [];
-  const closing = new Set(exact.length > 0 ? exact : matches);
-  for (const seg of closing) seg.endMs = atMs;
-  return open.filter((seg) => !closing.has(seg));
-}
 
 function newCast(startMs: number, endMs: number, spellId: number, spellName: string, target: string): TimelineCast {
   return {
@@ -221,6 +211,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
     players: new Map(),
     damageByPlayer: new Map(),
     _scratch: new Map(),
+    _auraState: createAuraProcessorState(),
     _openAuras: new Map(),
   }),
 
@@ -368,35 +359,39 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
       }
 
       case "aura": {
+        // Let the shared tracker decide whether this event starts or ends the
+        // aura (fades without a caster, name-only lines, stack changes, ...).
+        const ref = { spellId: event.spellId ?? undefined, spellName: event.spellName };
+        const wasActive = hasAura(state._auraState, encounterID, event.target, ref);
+        applyAuraEvent(state._auraState, encounterID, event);
+        const isActive = hasAura(state._auraState, encounterID, event.target, ref);
+
         const open = state._openAuras.get(event.target) ?? [];
-        if (event.amount <= 0 || event.state === AuraState.Removed) {
-          if (open.length > 0) {
-            state._openAuras.set(
-              event.target,
-              closeAuraSegments(open, event.spellId, event.spellName, event.caster, event.offsetMilli),
-            );
+        if (wasActive && !isActive) {
+          const remaining = open.filter((seg) => {
+            if (!sameAura(seg, event.spellId, event.spellName)) return true;
+            seg.endMs = event.offsetMilli;
+            return false;
+          });
+          state._openAuras.set(event.target, remaining);
+          return;
+        }
+        if (wasActive || !isActive) {
+          for (const seg of open) {
+            if (sameAura(seg, event.spellId, event.spellName)) seg.maxStacks = Math.max(seg.maxStacks, event.amount);
           }
           return;
         }
 
+        const caster = getAuraCaster(state._auraState, encounterID, event.target, ref) ?? event.caster;
         const onFocus = focus.has(event.target);
-        const byFocus = !event.isBuff && event.caster != null && focus.has(event.caster);
+        const byFocus = !event.isBuff && caster != null && focus.has(caster);
         if (!onFocus && !byFocus) return;
-
-        // A gain of an aura that is already up is a refresh or stack change.
-        // Buffs merge across casters; debuffs stay per caster (A and B each).
-        const existing = open.find(
-          (seg) => sameAura(seg, event.spellId, event.spellName) && (seg.isBuff || seg.caster === event.caster),
-        );
-        if (existing) {
-          existing.maxStacks = Math.max(existing.maxStacks, event.amount);
-          return;
-        }
         const seg: TimelineAuraSegment = {
           spellId: event.spellId,
           spellName: event.spellName,
           isBuff: event.isBuff,
-          caster: event.caster,
+          caster,
           target: event.target,
           startMs: event.offsetMilli,
           endMs: null,
@@ -405,11 +400,12 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         open.push(seg);
         state._openAuras.set(event.target, open);
         if (onFocus) player(event.target).aurasOn.push(seg);
-        if (byFocus) player(event.caster as string).debuffsCast.push(seg);
+        if (byFocus) player(caster as string).debuffsCast.push(seg);
         return;
       }
 
       case "slain": {
+        applyAuraEvent(state._auraState, encounterID, event);
         const open = state._openAuras.get(event.target);
         if (!open) return;
         for (const seg of open) seg.endMs = event.offsetMilli;
