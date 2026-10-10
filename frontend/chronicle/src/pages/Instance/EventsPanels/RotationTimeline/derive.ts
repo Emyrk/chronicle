@@ -330,6 +330,45 @@ export function withoutHiddenCasts(data: PlayerTimelineData, overrides: readonly
   return { ...data, goCasts: data.goCasts.filter(keep), textCasts: data.textCasts.filter(keep) };
 }
 
+/** A buff of the cast's spell starting this close to the cast is the buff it applied. */
+const COOLDOWN_BUFF_MATCH_MS = 1500;
+
+/**
+ * Cooldowns tint the lane for as long as their buff really lasted: when the
+ * player gained a buff of the same spell (by ID or name) within
+ * COOLDOWN_BUFF_MATCH_MS of the cast, the cast's buffEndMs is set to when it
+ * faded. Talents and set bonuses that change the duration, buffs clicked off
+ * or consumed early, and deaths all show. Casts without a matching buff keep
+ * the curated duration. tintsFromAura picks the spells this applies to.
+ */
+export function withCooldownBuffEnds(
+  data: PlayerTimelineData,
+  tintsFromAura: (spellId: number) => boolean,
+  durationMs: number,
+): PlayerTimelineData {
+  const buffFor = (c: TimelineCast) => {
+    const name = c.spellName.toLowerCase();
+    return data.aurasOn.find(
+      (a) =>
+        a.isBuff &&
+        (a.spellId === c.spellId || a.spellName.toLowerCase() === name) &&
+        Math.abs(a.startMs - c.startMs) <= COOLDOWN_BUFF_MATCH_MS,
+    );
+  };
+  let changed = false;
+  const withEnds = (casts: TimelineCast[]) =>
+    casts.map((c) => {
+      if (c.buffEndMs != null || c.consume || c.onOtherPlayer || c.failed || !tintsFromAura(c.spellId)) return c;
+      const buff = buffFor(c);
+      if (!buff) return c;
+      changed = true;
+      return { ...c, buffEndMs: Math.min(buff.endMs ?? durationMs, durationMs) };
+    });
+  const goCasts = withEnds(data.goCasts);
+  const textCasts = withEnds(data.textCasts);
+  return changed ? { ...data, goCasts, textCasts } : data;
+}
+
 /** A logged cast of the same spell this close to an aura proc is the same proc. */
 const AURA_PROC_MATCH_MS = 250;
 

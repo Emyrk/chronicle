@@ -24,6 +24,7 @@ import {
   playerCasts,
   withAuraProcCasts,
   withConsumeCasts,
+  withCooldownBuffEnds,
   withOverrideBuffCasts,
   withoutHiddenCasts,
   type TimelineMetric,
@@ -268,7 +269,8 @@ function PlayerTimelineContent({
   // Auras that count as procs for this log's format (auraProcs.ts).
   const auraProcs = useMemo(() => activeAuraProcs(instance.format), [instance.format]);
 
-  const players: RotationTimelinePlayer[] = useMemo(
+  // Player data before cooldown buffs are matched (spell metadata loads from these).
+  const basePlayers: RotationTimelinePlayer[] = useMemo(
     () =>
       picked.flatMap((guid) => {
         const data = guid ? result.players.get(guid) : undefined;
@@ -282,22 +284,22 @@ function PlayerTimelineContent({
 
   const spellIds = useMemo(() => {
     const ids: number[] = [];
-    for (const p of players) {
+    for (const p of basePlayers) {
       for (const c of playerCasts(p.data)) ids.push(c.spellId);
       for (const a of p.data.aurasOn) if (a.spellId) ids.push(a.spellId);
       for (const a of p.data.debuffsCast) if (a.spellId) ids.push(a.spellId);
     }
     return ids;
-  }, [players]);
+  }, [basePlayers]);
   const { meta, gcd } = useSpellMeta(spellIds);
 
   const cooldowns = useCooldownSpells();
   const cooldownById = useMemo(() => {
-    const byId = new Map<number, { durationMs: number }>();
+    const byId = new Map<number, { durationMs: number; durationHidden: boolean }>();
     for (const spells of Object.values(cooldowns.data?.byClass ?? {})) {
       for (const spell of spells) {
         if (spell.ignored || spell.cooldown_ms < COOLDOWN_LANE_MIN_MS) continue;
-        byId.set(spell.id, { durationMs: spell.duration_hidden ? 0 : spell.duration_ms });
+        byId.set(spell.id, { durationMs: spell.duration_hidden ? 0 : spell.duration_ms, durationHidden: spell.duration_hidden });
       }
     }
     return byId;
@@ -313,10 +315,24 @@ function PlayerTimelineContent({
           color: override.color,
         };
       }
-      return cooldownById.get(id) ?? null;
+      const curated = cooldownById.get(id);
+      return curated ? { durationMs: curated.durationMs } : null;
     },
     [cooldownById, spellOverrides, meta],
   );
+
+  // Cooldowns tint for as long as their buff really lasted (talents, early
+  // fades); the duration above is the fallback. Durations hidden on purpose (by
+  // an admin, or an override's durationMs: 0) stay untinted.
+  const players: RotationTimelinePlayer[] = useMemo(() => {
+    const tintsFromAura = (id: number) => {
+      const override = findOverride(spellOverrides, id, meta(id).spell?.name?.["0"] ?? null);
+      if (override?.showAsCooldown) return override.showAsCooldown.durationMs !== 0;
+      const curated = cooldownById.get(id);
+      return curated != null && !curated.durationHidden;
+    };
+    return basePlayers.map((p) => ({ ...p, data: withCooldownBuffEnds(p.data, tintsFromAura, durationMs) }));
+  }, [basePlayers, spellOverrides, cooldownById, meta, durationMs]);
   // Every curated entry, before the lane threshold, for the rules view.
   const curatedById = useMemo(() => {
     const byId = new Map<number, CuratedCooldown>();

@@ -141,7 +141,7 @@ export function PlayerTimelineRules({
     const meta = spellMeta(r.spellId).spell;
     if (r.kind === "cooldown") {
       const tint = cooldownInfo(r.spellId)?.durationMs;
-      return `Curated cooldown ${ms(curated?.cooldownMs ?? 0)} ≥ ${ms(cooldownMinMs)}${tint ? `; tints ${ms(tint)}` : "; no duration, no tint"}`;
+      return `Curated cooldown ${ms(curated?.cooldownMs ?? 0)} ≥ ${ms(cooldownMinMs)}${tint ? `; tints for its buff, else ${ms(tint)}` : "; tints only for a matching buff"}`;
     }
     if (r.kind === "consume") {
       return `Consumable (consume evidence); GCD from spell data: ${gcd(r.spellId) > 0 ? ms(gcd(r.spellId)) : "none"}`;
@@ -309,7 +309,9 @@ export function PlayerTimelineRules({
           <li>
             A cast is a <b>Cooldown</b> when the curated list (/technical/cooldowns) has it with a cooldown of at least{" "}
             {ms(cooldownMinMs)} and an admin has not ignored it. Cooldowns are ringed squares on the rail and tint the lane
-            for their duration, unless they were cast on another player (e.g. Power Infusion on a mage).
+            for as long as the buff they gave the player lasted (so talents and early fades show), or for the curated
+            duration when no buff of the spell starts within 1.5s of the cast. Hidden durations never tint, and nor do
+            cooldowns cast on another player (e.g. Power Infusion on a mage).
           </li>
           <li>
             A cast is a <b>Proc</b> when it is instant and its spell data has a GCD of 0. Procs are circles on the rail and

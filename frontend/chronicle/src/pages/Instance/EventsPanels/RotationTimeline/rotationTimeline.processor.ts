@@ -66,8 +66,9 @@ export interface TimelineCast {
   /** Offsets of periodic damage ticks linked to this cast (channel ticks, DoT ticks). */
   tickMs: number[];
   /**
-   * Set only on casts made from a buff by a spell override (the spell was never
-   * cast, only gained): when the buff faded. Not produced by this processor.
+   * When the buff this cast gave the player faded: set on casts made from a
+   * buff by a spell override, consumables and cooldowns with a matching buff
+   * (see derive.ts). Not produced by this processor.
    */
   buffEndMs?: number;
   /** Set when the cast targeted another player (e.g. Power Infusion on a mage). */

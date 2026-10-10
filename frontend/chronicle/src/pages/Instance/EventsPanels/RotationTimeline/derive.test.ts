@@ -6,6 +6,7 @@ import {
   castKind,
   withAuraProcCasts,
   withConsumeCasts,
+  withCooldownBuffEnds,
   withoutHiddenCasts,
   withOverrideBuffCasts,
   nearbyActivity,
@@ -326,5 +327,37 @@ describe("withAuraProcCasts", () => {
   it("returns the data unchanged when no entries apply", () => {
     const data = player({ auraProcs: [flurry(1000)] });
     expect(withAuraProcCasts(data, [])).toBe(data);
+  });
+});
+
+describe("withCooldownBuffEnds", () => {
+  const buff = (spellId: number, startMs: number, endMs: number | null) => ({
+    spellId,
+    spellName: `spell ${spellId}`,
+    isBuff: true,
+    caster: null,
+    target: "p",
+    startMs,
+    endMs,
+    maxStacks: 1,
+  });
+
+  it("ends a cooldown's tint when its buff faded, and keeps the duration without one", () => {
+    const data = player({
+      goCasts: [cast(1000, 1719), cast(60_000, 1719), cast(90_000, 12292)],
+      aurasOn: [buff(1719, 1050, 19_000), buff(12292, 95_000, 100_000)],
+    });
+    const out = withCooldownBuffEnds(data, () => true, 120_000);
+    expect(out.goCasts.map((c) => c.buffEndMs)).toEqual([19_000, undefined, undefined]);
+  });
+
+  it("skips spells that should not tint from auras, and casts on other players", () => {
+    const data = player({ goCasts: [cast(1000, 1), cast(5000, 2, { onOtherPlayer: true })], aurasOn: [buff(1, 1000, 9000), buff(2, 5000, 9000)] });
+    expect(withCooldownBuffEnds(data, (id) => id !== 1, 120_000)).toBe(data);
+  });
+
+  it("caps a buff still up at the end of the fight", () => {
+    const data = player({ goCasts: [cast(1000, 1)], aurasOn: [buff(1, 1000, null)] });
+    expect(withCooldownBuffEnds(data, () => true, 30_000).goCasts[0].buffEndMs).toBe(30_000);
   });
 });
