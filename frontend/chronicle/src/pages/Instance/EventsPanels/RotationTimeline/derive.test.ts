@@ -164,6 +164,19 @@ describe("nearbyActivity", () => {
     expect(nearbyActivity(casts, -500, gcd15)).toMatchObject({ sinceLastMs: null, untilNextMs: 500, idleMs: 0, lastMs: null });
   });
 
+  it("treats pauses shorter than the idle threshold as busy when given the gaps", () => {
+    // Slot ends at 3000, next cast at 3300: a 300ms pause, under the 400ms threshold.
+    const tight = [cast(0), cast(1500), cast(3300)];
+    const gaps = idleGaps(tight, gcd15, 400);
+    expect(nearbyActivity(tight, 3200, gcd15).idleMs).toBe(200);
+    expect(nearbyActivity(tight, 3200, gcd15, gaps).idleMs).toBe(0);
+  });
+
+  it("reports idle inside a real gap when given the gaps", () => {
+    const gaps = idleGaps(casts, gcd15, 400);
+    expect(nearbyActivity(casts, 4000, gcd15, gaps)).toMatchObject({ idleMs: 1000, busyUntilMs: 3000 });
+  });
+
   it("has no next action after the last cast", () => {
     expect(nearbyActivity(casts, 9000, gcd15).untilNextMs).toBeNull();
   });

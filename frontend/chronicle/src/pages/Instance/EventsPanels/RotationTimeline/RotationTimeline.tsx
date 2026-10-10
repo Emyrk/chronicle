@@ -390,7 +390,7 @@ export function RotationTimeline({
         {/* Labels */}
         <div className="text-[11px] text-muted-foreground">
           {derived.map((d) => {
-            const near = probeMs != null ? nearbyActivity(d.actions, probeMs + d.offsetMs, gcd) : null;
+            const near = probeMs != null ? nearbyActivity(d.actions, probeMs + d.offsetMs, gcd, d.gaps) : null;
             return (
               <div key={d.player.guid}>
                 <div
@@ -480,7 +480,7 @@ export function RotationTimeline({
                 layout={layout}
                 cooldownInfo={cooldownInfo}
                 cooldownColor={cooldownColor}
-                near={probeMs != null ? nearbyActivity(d.actions, probeMs + d.offsetMs, gcd) : null}
+                near={probeMs != null ? nearbyActivity(d.actions, probeMs + d.offsetMs, gcd, d.gaps) : null}
                 probeMs={probeMs != null ? probeMs + d.offsetMs : null}
                 spellMeta={spellMeta}
                 onToggleIgnored={view.toggleIgnored}

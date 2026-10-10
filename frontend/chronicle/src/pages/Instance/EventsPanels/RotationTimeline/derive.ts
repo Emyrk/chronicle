@@ -166,8 +166,16 @@ export interface NearbyActivity {
  * What a player was doing around timeMs: time since their last action, time
  * to their next, and whether they were idle. casts must be sorted by start
  * and contain only actions the player pressed (no procs).
+ *
+ * Pass the player's idleGaps so "idle" matches the rail exactly: short pauses
+ * under the idle threshold count as busy there, and must here too.
  */
-export function nearbyActivity(casts: readonly TimelineCast[], timeMs: number, gcd: GcdLookup): NearbyActivity {
+export function nearbyActivity(
+  casts: readonly TimelineCast[],
+  timeMs: number,
+  gcd: GcdLookup,
+  gaps?: readonly IdleGap[],
+): NearbyActivity {
   let last: TimelineCast | null = null;
   let next: TimelineCast | null = null;
   let busyUntil = -Infinity;
@@ -181,12 +189,19 @@ export function nearbyActivity(casts: readonly TimelineCast[], timeMs: number, g
       break;
     }
   }
+  let idleMs = last && timeMs > busyUntil ? timeMs - busyUntil : 0;
+  let busyUntilMs = last ? busyUntil : null;
+  if (gaps) {
+    const gap = gaps.find((g) => g.startMs <= timeMs && timeMs < g.endMs);
+    idleMs = gap ? timeMs - gap.startMs : 0;
+    busyUntilMs = gap ? gap.startMs : busyUntilMs;
+  }
   return {
     sinceLastMs: last ? timeMs - last.startMs : null,
     untilNextMs: next ? next.startMs - timeMs : null,
-    idleMs: last && timeMs > busyUntil ? timeMs - busyUntil : 0,
+    idleMs,
     lastMs: last?.startMs ?? null,
     nextMs: next?.startMs ?? null,
-    busyUntilMs: last ? busyUntil : null,
+    busyUntilMs,
   };
 }
