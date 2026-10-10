@@ -31,6 +31,8 @@ export interface RotationView extends RotationViewState {
   setWindow: (startMs: number, endMs: number) => void;
   zoom: (factor: number) => void;
   fit: () => void;
+  /** Shift the window by ms (positive = later), keeping the zoom. No-op while replaying. */
+  panBy: (ms: number) => void;
   setAlign: (align: AlignMode) => void;
   toggleIgnored: (spellId: number) => void;
   setCursorMs: (ms: number | null) => void;
@@ -101,6 +103,14 @@ export function useRotationView(
 
   const fit = useCallback(() => setRange(() => [0, durationMs]), [durationMs, setRange]);
 
+  const panBy = useCallback(
+    (ms: number) => {
+      if (nowMs != null) return;
+      setRange(([s, e]) => clampWindow(s + ms, e + ms, durationMs));
+    },
+    [nowMs, durationMs, setRange],
+  );
+
   const pinAt = useCallback(
     (ms: number, toleranceMs: number) => {
       if (nowMs != null) return;
@@ -151,12 +161,13 @@ export function useRotationView(
       setWindow,
       zoom,
       fit,
+      panBy,
       setAlign,
       toggleIgnored,
       setCursorMs,
       pinAt,
       unpin,
     }),
-    [startMs, endMs, align, ignored, cursorMs, pinnedMs, nowMs, durationMs, setWindow, zoom, fit, toggleIgnored, pinAt, unpin],
+    [startMs, endMs, align, ignored, cursorMs, pinnedMs, nowMs, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
   );
 }

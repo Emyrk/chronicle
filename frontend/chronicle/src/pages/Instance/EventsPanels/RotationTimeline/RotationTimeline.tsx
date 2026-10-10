@@ -110,6 +110,33 @@ export function RotationTimeline({
   children,
 }: RotationTimelineProps) {
   const [trackRef, trackWidth] = useElementWidth<HTMLDivElement>();
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Latest values for the native wheel listener below.
+  const wheelRef = useRef({ panBy: view.panBy, msPerPx: 0 });
+  const msPerPx = trackWidth > 0 ? (view.endMs - view.startMs) / trackWidth : 0;
+  useEffect(() => {
+    wheelRef.current = { panBy: view.panBy, msPerPx };
+  }, [view.panBy, msPerPx]);
+
+  // Shift+wheel (or a horizontal trackpad swipe) pans the timeline. Native and
+  // non-passive so it can stop the page from scrolling instead.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const horizontal = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      if (!horizontal) return;
+      const { panBy, msPerPx } = wheelRef.current;
+      if (msPerPx === 0) return;
+      // Browsers report shift+wheel as deltaX or deltaY depending on platform.
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      const px = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? delta * 16 : delta;
+      e.preventDefault();
+      panBy(px * msPerPx);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
   const [hovered, setHovered] = useState<{ slot: number; cast: TimelineCast } | null>(null);
   const [hoveredSwing, setHoveredSwing] = useState<{ slot: number; swing: TimelineSwing } | null>(null);
   const panRef = useRef<{ x: number; startMs: number; endMs: number; moved: boolean } | null>(null);
@@ -196,7 +223,7 @@ export function RotationTimeline({
     derived.slice(0, index).reduce((sum, d) => sum + CAST_LANE_H + (d.player.data.swings.length > 0 ? SWING_LANE_H : 0) + CD_LANE_H, 0);
 
   return (
-    <div className="bg-card text-[13px] text-foreground">
+    <div ref={rootRef} className="bg-card text-[13px] text-foreground">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
         <div className="text-[15px] font-semibold">Rotation</div>
