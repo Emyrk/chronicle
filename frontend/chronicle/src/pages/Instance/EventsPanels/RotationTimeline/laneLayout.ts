@@ -11,7 +11,7 @@ export const FIXED_ICON_SIZES: Record<Exclude<IconSizeMode, "auto">, number> = {
 const GCD_SPACING_MS = 1600;
 const AUTO_FILL = 0.6;
 const MIN_ICON = 22;
-const MAX_ICON = 60;
+const MAX_ICON = 44;
 /** Below this many px per GCD, icons cannot fit and casts draw as ticks. */
 const COMPACT_GAP_PX = 14;
 const ICON_TOP = 8;
@@ -41,8 +41,9 @@ export function laneLayout(pxPerMs: number, mode: IconSizeMode): LaneLayout {
   const icon =
     mode === "auto" ? Math.round(Math.max(MIN_ICON, Math.min(MAX_ICON, gap * AUTO_FILL))) : FIXED_ICON_SIZES[mode];
   const compact = mode === "auto" && gap < COMPACT_GAP_PX;
-  const proc = Math.min(20, Math.round(icon * 0.5));
-  const cooldown = Math.min(26, Math.round(icon * 0.7));
+  // Procs and cooldowns keep their proportion to the cast icons at every size.
+  const proc = Math.round(icon * 0.5);
+  const cooldown = Math.round(icon * 0.7);
   const labelFont = icon >= 44 ? 11 : icon >= 34 ? 10 : 9;
   const showNames = !compact && icon >= 44 && gap >= icon + 40;
   const labelTop = ICON_TOP + icon + 3;
