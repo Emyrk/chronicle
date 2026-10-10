@@ -6,11 +6,11 @@ import { cn } from "@/lib/utils";
 import {
   alignOffsetMs,
   busySegments,
-  castAt,
   castSlotEnd,
   damageLead,
   dpsSeries,
   idleGaps,
+  nearbyActivity,
   playerCasts,
   playerStats,
   DEFAULT_IDLE_THRESHOLD_MS,
@@ -66,6 +66,8 @@ interface DerivedPlayer {
   casts: TimelineCast[];
   /** Casts drawn on the timeline: ignored spells removed. */
   shownCasts: TimelineCast[];
+  /** Shown casts the player pressed (no procs), for the last/next readout. */
+  actions: TimelineCast[];
   offsetMs: number;
   gaps: IdleGap[];
   busy: IdleGap[];
@@ -184,13 +186,18 @@ export function RotationTimeline({
           slot,
           casts,
           shownCasts: casts.filter((c) => !isIgnored(c.spellName)),
+          actions: casts.filter(
+            (c) =>
+              !isIgnored(c.spellName) &&
+              (cooldownInfo(c.spellId) != null || !(gcd(c.spellId) === 0 && c.endMs === c.startMs && !c.channelTimeMs)),
+          ),
           offsetMs: alignOffsetMs(casts, view.align, isIgnored),
           gaps,
           busy: busySegments(casts, gcd, idleThresholdMs),
           stats: playerStats(player.data, casts, gaps, durationMs),
         };
       }),
-    [players, gcd, idleThresholdMs, view.align, isIgnored, durationMs],
+    [players, gcd, idleThresholdMs, view.align, isIgnored, durationMs, cooldownInfo],
   );
 
   const overview = useMemo(() => {
@@ -382,7 +389,7 @@ export function RotationTimeline({
         {/* Labels */}
         <div className="text-[11px] text-muted-foreground">
           {derived.map((d) => {
-            const atCursor = probeMs != null ? castAt(d.shownCasts, probeMs + d.offsetMs, gcd) : null;
+            const near = probeMs != null ? nearbyActivity(d.actions, probeMs + d.offsetMs, gcd) : null;
             return (
               <div key={d.player.guid}>
                 <div
@@ -400,13 +407,26 @@ export function RotationTimeline({
                     <span className="flex-1" />
                     <span className="font-mono text-foreground">{formatNumber(Math.round(d.stats.dps))}</span>
                   </div>
-                  <div className="flex gap-2.5 font-mono text-[10px]">
-                    <span>{d.stats.casts} casts</span>
-                    <span title={`${formatClock(d.stats.idleMs)} idle`}>{d.stats.idlePct.toFixed(1)}% idle</span>
-                    {probeMs != null && (
-                      <span className="truncate text-school-holy">→ {atCursor ? atCursor.spellName : "idle"}</span>
-                    )}
-                  </div>
+                  {/* Idle % normally; around the indicator: last action, idle or busy, next action (design: Rotations 2a). */}
+                  {near ? (
+                    <div className="flex items-center gap-1.5 whitespace-nowrap font-mono text-[10px]">
+                      <span className="text-foreground">
+                        ‹ {near.sinceLastMs != null ? `${(near.sinceLastMs / 1000).toFixed(1)}s ago` : "—"}
+                      </span>
+                      {near.idleMs > 50 ? (
+                        <span className="font-semibold text-destructive">idle {(near.idleMs / 1000).toFixed(1)}s</span>
+                      ) : (
+                        near.sinceLastMs != null && <span className="text-muted-foreground">casting / GCD</span>
+                      )}
+                      <span className="ml-auto text-foreground">
+                        {near.untilNextMs != null ? `next ${(near.untilNextMs / 1000).toFixed(1)}s` : "—"} ›
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="font-mono text-[10px]">
+                      <span title={`${formatClock(d.stats.idleMs)} idle in total`}>{d.stats.idlePct.toFixed(1)}% idle</span>
+                    </div>
+                  )}
                 </div>
                 {d.player.data.swings.length > 0 && (
                   <div

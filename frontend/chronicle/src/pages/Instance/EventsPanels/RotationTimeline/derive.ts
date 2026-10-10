@@ -148,3 +148,38 @@ export function castAt(casts: readonly TimelineCast[], timeMs: number, gcd: GcdL
   }
   return null;
 }
+
+export interface NearbyActivity {
+  /** ms since the last action started, or null before the first. */
+  sinceLastMs: number | null;
+  /** ms until the next action starts, or null after the last. */
+  untilNextMs: number | null;
+  /** ms idle at timeMs (0 while casting or on the GCD). */
+  idleMs: number;
+}
+
+/**
+ * What a player was doing around timeMs: time since their last action, time
+ * to their next, and whether they were idle. casts must be sorted by start
+ * and contain only actions the player pressed (no procs).
+ */
+export function nearbyActivity(casts: readonly TimelineCast[], timeMs: number, gcd: GcdLookup): NearbyActivity {
+  let last: TimelineCast | null = null;
+  let next: TimelineCast | null = null;
+  let busyUntil = -Infinity;
+  for (const cast of casts) {
+    if (cast.failed) continue;
+    if (cast.startMs <= timeMs) {
+      last = cast;
+      busyUntil = Math.max(busyUntil, castSlotEnd(cast, gcd));
+    } else {
+      next = cast;
+      break;
+    }
+  }
+  return {
+    sinceLastMs: last ? timeMs - last.startMs : null,
+    untilNextMs: next ? next.startMs - timeMs : null,
+    idleMs: last && timeMs > busyUntil ? timeMs - busyUntil : 0,
+  };
+}
