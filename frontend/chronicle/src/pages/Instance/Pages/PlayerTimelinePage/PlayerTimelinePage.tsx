@@ -239,7 +239,10 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
       const override = findOverride(spellOverrides, id, meta(id).spell?.name?.["0"] ?? null);
       if (override?.showAsCooldown) {
         const spellDuration = meta(id).spell?.duration?.Duration ?? 0;
-        return { durationMs: override.showAsCooldown.durationMs ?? Math.max(0, spellDuration) };
+        return {
+          durationMs: override.showAsCooldown.durationMs ?? Math.max(0, spellDuration),
+          color: override.color,
+        };
       }
       return cooldownById.get(id) ?? null;
     },

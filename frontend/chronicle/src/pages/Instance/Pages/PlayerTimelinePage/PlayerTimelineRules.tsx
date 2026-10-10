@@ -25,7 +25,11 @@ import {
   DAMAGE_BIN_MS,
   DAMAGE_LINK_WINDOW_MS,
 } from "../../EventsPanels/RotationTimeline/rotationTimeline.processor";
-import { CLUSTER_CAST_MARGIN_MS, type RotationTimelinePlayer } from "../../EventsPanels/RotationTimeline/RotationTimeline";
+import {
+  CLUSTER_CAST_MARGIN_MS,
+  type CooldownInfo,
+  type RotationTimelinePlayer,
+} from "../../EventsPanels/RotationTimeline/RotationTimeline";
 import { DEFAULT_IGNORED_SPELLS } from "../../EventsPanels/RotationTimeline/useRotationView";
 import type { SpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 import { FULL_UPTIME, NONE_UPTIME } from "./AuraSection";
@@ -42,7 +46,7 @@ interface PlayerTimelineRulesProps {
   players: readonly RotationTimelinePlayer[];
   spellMeta: (spellId: number | null) => SpellMeta;
   gcd: GcdLookup;
-  cooldownInfo: (spellId: number) => { durationMs: number } | null;
+  cooldownInfo: (spellId: number) => CooldownInfo | null;
   /** Any curated cooldown entry for the spell, before the lane threshold. */
   curatedCooldown: (spellId: number) => CuratedCooldown | null;
   isIgnored: (spellName: string) => boolean;
@@ -250,6 +254,12 @@ export function PlayerTimelineRules({
                   <span>
                     shown as a cooldown
                     {o.showAsCooldown.durationMs != null ? ` (${ms(o.showAsCooldown.durationMs)})` : " (spell or buff duration)"}
+                  </span>
+                )}
+                {o.color && (
+                  <span className="flex items-center gap-1">
+                    <span className="size-2.5 rounded-sm" style={{ background: o.color }} />
+                    color
                   </span>
                 )}
                 {o.flavor && <span className="font-mono text-[10px]">flavor: {o.flavor.join(" + ")}</span>}

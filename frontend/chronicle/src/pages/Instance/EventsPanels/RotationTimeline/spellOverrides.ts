@@ -19,17 +19,29 @@ export interface SpellOverride {
    * spell only appears as a buff, each buff's real duration is.
    */
   showAsCooldown?: { durationMs?: number };
+  /** Color for the cooldown's ring, strip and lane tint (any CSS color). */
+  color?: string;
   /** Why the override exists. */
   note: string;
 }
 
 export const SPELL_OVERRIDES: SpellOverride[] = [
   {
-    id: "eclipse",
-    names: ["Nature Eclipse", "Arcane Eclipse"],
-    spellIds: [51442, 51443],
+    id: "nature-eclipse",
+    names: ["Nature Eclipse"],
+    spellIds: [51442],
     flavor: ["nightmare-of-ursol"],
     showAsCooldown: {},
+    color: "var(--color-school-nature)",
+    note: "Eclipse procs change a balance druid's damage enough to show their duration like a cooldown.",
+  },
+  {
+    id: "arcane-eclipse",
+    names: ["Arcane Eclipse"],
+    spellIds: [51443],
+    flavor: ["nightmare-of-ursol"],
+    showAsCooldown: {},
+    color: "#3b82f6", // blue-500; the arcane school color is pink
     note: "Eclipse procs change a balance druid's damage enough to show their duration like a cooldown.",
   },
 ];

@@ -39,6 +39,13 @@ import type { SpellMeta } from "./useSpellMeta";
 import type { RotationView } from "./useRotationView";
 import type { GcdLookup } from "./derive";
 
+/** A spell drawn as a cooldown: how long it tints the lane, and optionally its color. */
+export interface CooldownInfo {
+  durationMs: number;
+  /** Fixed ring/tint color (from a spell override); otherwise one is assigned. */
+  color?: string;
+}
+
 export interface RotationTimelinePlayer {
   guid: string;
   name: string;
@@ -55,7 +62,7 @@ export interface RotationTimelineProps {
    * Curated cooldowns: casts of these spells sit on the rail as squares and
    * tint the lane for their duration (0 when unknown or hidden).
    */
-  cooldownInfo: (spellId: number) => { durationMs: number } | null;
+  cooldownInfo: (spellId: number) => CooldownInfo | null;
   unitName: (guid: string) => string;
   /** Rendered after the title, e.g. player pickers. */
   headerStart?: ReactNode;
@@ -251,8 +258,8 @@ export function RotationTimeline({
       for (const c of d.shownCasts) if (cooldownInfo(c.spellId) && !ids.includes(c.spellId)) ids.push(c.spellId);
     }
     return (spellId: number) => {
-      const i = ids.indexOf(spellId);
-      return { color: COOLDOWN_COLORS[Math.max(0, i) % COOLDOWN_COLORS.length], index: Math.max(0, i) };
+      const i = Math.max(0, ids.indexOf(spellId));
+      return { color: cooldownInfo(spellId)?.color ?? COOLDOWN_COLORS[i % COOLDOWN_COLORS.length], index: i };
     };
   }, [derived, cooldownInfo]);
 
@@ -589,7 +596,7 @@ interface PlayerLanesProps {
   /** The cast under the pointer; its bar draws above the icons. */
   hoveredCast: TimelineCast | null;
   probeMs: number | null;
-  cooldownInfo: (spellId: number) => { durationMs: number } | null;
+  cooldownInfo: (spellId: number) => CooldownInfo | null;
   cooldownColor: (spellId: number) => { color: string; index: number };
   spellMeta: (spellId: number | null) => SpellMeta;
   onToggleIgnored: (spellName: string) => void;
@@ -916,7 +923,7 @@ function iconTimeMs(cast: TimelineCast, endMs: number): number {
 function activeCooldownsAt(
   casts: readonly TimelineCast[],
   at: TimelineCast,
-  cooldownInfo: (spellId: number) => { durationMs: number } | null,
+  cooldownInfo: (spellId: number) => CooldownInfo | null,
 ): { cast: TimelineCast; leftMs: number }[] {
   const out: { cast: TimelineCast; leftMs: number }[] = [];
   for (const c of casts) {
