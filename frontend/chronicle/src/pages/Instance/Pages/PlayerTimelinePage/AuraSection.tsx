@@ -1,24 +1,45 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronRight } from "lucide-react";
 import { useFriendlyClassBuffs } from "@/api/classBuffs";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip/SpellIconWithTooltip";
 import { cn } from "@/lib/utils";
 import { classifyAura, combinePlacements } from "../../EventsPanels/RotationTimeline/auraClassification";
 import { alignOffsetMs, playerCasts } from "../../EventsPanels/RotationTimeline/derive";
-import { SLOT_COLORS, SLOT_TEXT_COLORS } from "../../EventsPanels/RotationTimeline/format";
+import { formatClock, SLOT_COLORS, SLOT_TEXT_COLORS } from "../../EventsPanels/RotationTimeline/format";
 import { IndicatorLine } from "../../EventsPanels/RotationTimeline/IndicatorLine";
+import { TooltipHeader, TooltipShell, type TooltipAnchor } from "../../EventsPanels/RotationTimeline/TimelineTooltip";
 import type { TimelineAuraSegment } from "../../EventsPanels/RotationTimeline/rotationTimeline.processor";
 import type { RotationTimelinePlayer } from "../../EventsPanels/RotationTimeline/RotationTimeline";
 import type { RotationView } from "../../EventsPanels/RotationTimeline/useRotationView";
 import type { SpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 
+/** One application of an aura, in the player's raw time. */
+interface AuraSeg {
+  startMs: number;
+  endMs: number;
+  /** Still up when the fight ended. */
+  open: boolean;
+  caster: string | null;
+  target: string;
+  maxStacks: number;
+}
+
 interface AuraRow {
   key: string;
   spellId: number | null;
   name: string;
-  /** Per slot: segments as [start, end] in that player's raw time. */
-  segs: [number, number][][];
+  isBuff: boolean;
+  /** Per slot: applications in that player's raw time. */
+  segs: AuraSeg[][];
   uptime: number[];
+}
+
+/** The aura application under the pointer, for its tooltip. */
+interface HoveredAura {
+  row: AuraRow;
+  slot: number;
+  seg: AuraSeg;
+  anchor: TooltipAnchor;
 }
 
 const LABEL_WIDTH = 220;
@@ -66,17 +87,33 @@ function buildRows(perSlot: readonly (readonly TimelineAuraSegment[])[], duratio
       const key = String(seg.spellId ?? seg.spellName);
       let row = rows.get(key);
       if (!row) {
-        row = { key, spellId: seg.spellId, name: seg.spellName, segs: perSlot.map(() => []), uptime: perSlot.map(() => 0) };
+        row = {
+          key,
+          spellId: seg.spellId,
+          name: seg.spellName,
+          isBuff: seg.isBuff,
+          segs: perSlot.map(() => []),
+          uptime: perSlot.map(() => 0),
+        };
         rows.set(key, row);
       }
       const end = Math.min(seg.endMs ?? durationMs, durationMs);
-      if (end > seg.startMs) row.segs[slot].push([seg.startMs, end]);
+      if (end > seg.startMs) {
+        row.segs[slot].push({
+          startMs: seg.startMs,
+          endMs: end,
+          open: seg.endMs == null || seg.endMs >= durationMs,
+          caster: seg.caster,
+          target: seg.target,
+          maxStacks: seg.maxStacks,
+        });
+      }
     }
   });
   for (const row of rows.values()) {
     row.uptime = row.segs.map((segs) => {
       // Merge overlaps (same aura from different casters) before summing.
-      const sorted = segs.slice().sort((a, b) => a[0] - b[0]);
+      const sorted = segs.map((s): [number, number] => [s.startMs, s.endMs]).sort((a, b) => a[0] - b[0]);
       let total = 0;
       let cur: [number, number] | null = null;
       for (const s of sorted) {
@@ -155,6 +192,8 @@ export function AuraSection({ players, view, spellMeta, unitName, pickedTarget, 
   );
 
   const P = (ms: number) => ((ms - view.startMs) / Math.max(1, view.endMs - view.startMs)) * 100;
+  const [hovered, setHovered] = useState<HoveredAura | null>(null);
+  const groupProps = { players, offsets, P, spellMeta, onHover: setHovered };
 
   return (
     <div className="border-t border-border">
@@ -188,15 +227,7 @@ export function AuraSection({ players, view, spellMeta, unitName, pickedTarget, 
             view.pinAt(view.startMs + (x / width) * span, (6 / width) * span);
           }}
         >
-          <AuraGroup
-            title="Buffs"
-            otherLabel="Other buffs"
-            rows={buffs}
-            players={players}
-            offsets={offsets}
-            P={P}
-            spellMeta={spellMeta}
-          />
+          <AuraGroup title="Buffs" otherLabel="Other buffs" rows={buffs} {...groupProps} />
           <div className="flex h-10 items-center gap-2 border-t border-border px-4 text-[11px] text-muted-foreground">
             <span className="text-[10px] uppercase tracking-wider">Debuffs on</span>
             {targets.length === 0 ? (
@@ -215,19 +246,20 @@ export function AuraSection({ players, view, spellMeta, unitName, pickedTarget, 
               </select>
             )}
           </div>
-          <AuraGroup
-            title={null}
-            otherLabel="Other debuffs"
-            rows={debuffs}
-            players={players}
-            offsets={offsets}
-            P={P}
-            spellMeta={spellMeta}
-          />
+          <AuraGroup title={null} otherLabel="Other debuffs" rows={debuffs} {...groupProps} />
           {view.indicatorMs != null && (
             <div className="pointer-events-none absolute inset-y-0 right-0 overflow-hidden" style={{ left: LABEL_WIDTH }}>
               <IndicatorLine leftPct={P(view.indicatorMs)} />
             </div>
+          )}
+          {hovered && (
+            <AuraTooltip
+              hovered={hovered}
+              player={players[hovered.slot]}
+              icon={spellMeta(hovered.row.spellId).icon}
+              durationMs={durationMs}
+              unitName={unitName}
+            />
           )}
         </div>
       )}
@@ -243,9 +275,10 @@ interface AuraGroupProps {
   offsets: number[];
   P: (ms: number) => number;
   spellMeta: (spellId: number | null) => SpellMeta;
+  onHover: (hovered: HoveredAura | null) => void;
 }
 
-function AuraGroup({ title, otherLabel, rows, players, offsets, P, spellMeta }: AuraGroupProps) {
+function AuraGroup({ title, otherLabel, rows, players, offsets, P, spellMeta, onHover }: AuraGroupProps) {
   const [otherOpen, setOtherOpen] = useState(false);
   const empty = rows.key.length === 0 && rows.other.length === 0 && rows.flat.length === 0;
   return (
@@ -254,7 +287,7 @@ function AuraGroup({ title, otherLabel, rows, players, offsets, P, spellMeta }: 
         <div className="flex h-5 items-end px-4 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{title}</div>
       )}
       {rows.key.map((row) => (
-        <AuraRowView key={row.key} row={row} offsets={offsets} P={P} spellMeta={spellMeta} />
+        <AuraRowView key={row.key} row={row} offsets={offsets} P={P} spellMeta={spellMeta} onHover={onHover} />
       ))}
       {rows.flat.length > 0 && <WholeFightRow rows={rows.flat} players={players} spellMeta={spellMeta} />}
       {rows.other.length > 0 && (
@@ -269,7 +302,9 @@ function AuraGroup({ title, otherLabel, rows, players, offsets, P, spellMeta }: 
         </button>
       )}
       {otherOpen &&
-        rows.other.map((row) => <AuraRowView key={row.key} row={row} offsets={offsets} P={P} spellMeta={spellMeta} compact />)}
+        rows.other.map((row) => (
+          <AuraRowView key={row.key} row={row} offsets={offsets} P={P} spellMeta={spellMeta} onHover={onHover} compact />
+        ))}
       {empty && <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">None</div>}
     </div>
   );
@@ -280,11 +315,12 @@ interface AuraRowViewProps {
   offsets: number[];
   P: (ms: number) => number;
   spellMeta: (spellId: number | null) => SpellMeta;
+  onHover: (hovered: HoveredAura | null) => void;
   /** Smaller, indented rows for the "Other" group. */
   compact?: boolean;
 }
 
-function AuraRowView({ row, offsets, P, spellMeta, compact }: AuraRowViewProps) {
+function AuraRowView({ row, offsets, P, spellMeta, onHover, compact }: AuraRowViewProps) {
   const grid = { gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` };
   const barH = compact ? 8 : 10;
   const meta = spellMeta(row.spellId);
@@ -305,13 +341,16 @@ function AuraRowView({ row, offsets, P, spellMeta, compact }: AuraRowViewProps) 
       </div>
       <div className="relative overflow-hidden border-l border-border">
         {row.segs.map((segs, slot) =>
-          segs.map(([s, e]) => {
-            const left = P(s - offsets[slot]);
-            const right = P(e - offsets[slot]);
+          segs.map((seg) => {
+            const left = P(seg.startMs - offsets[slot]);
+            const right = P(seg.endMs - offsets[slot]);
             if (right < 0 || left > 100) return null;
             return (
               <div
-                key={`${slot}-${s}`}
+                key={`${slot}-${seg.startMs}`}
+                onPointerEnter={(e) => onHover({ row, slot, seg, anchor: anchorFrom(e) })}
+                onPointerMove={(e) => onHover({ row, slot, seg, anchor: anchorFrom(e) })}
+                onPointerLeave={() => onHover(null)}
                 className="absolute border-l-2"
                 style={{
                   top: slot === 0 ? 3 : 4 + barH,
@@ -410,4 +449,53 @@ export function AuraIcon({ meta, name, size }: { meta: SpellMeta; name: string; 
     );
   }
   return <SpellIconWithTooltip spell={meta.spell} size={size} detailed className="rounded-[2px]" />;
+}
+
+/** Tooltip anchor at the pointer, opening below or above the hovered bar. */
+function anchorFrom(e: ReactPointerEvent<HTMLElement>): TooltipAnchor {
+  const rect = e.currentTarget.getBoundingClientRect();
+  return { x: e.clientX, below: rect.bottom, above: rect.top, win: e.currentTarget.ownerDocument.defaultView ?? window };
+}
+
+interface AuraTooltipProps {
+  hovered: HoveredAura;
+  player: RotationTimelinePlayer | undefined;
+  icon: string;
+  durationMs: number;
+  unitName: (guid: string) => string;
+}
+
+/** One application of a buff or debuff: when it was up, for how long, and who applied it. */
+function AuraTooltip({ hovered, player, icon, durationMs, unitName }: AuraTooltipProps) {
+  const { row, slot, seg, anchor } = hovered;
+  const lengthMs = seg.endMs - seg.startMs;
+  // Who applied it, when someone other than the player did (buffs only: the
+  // debuff rows are the player's own debuffs on the target).
+  const from = row.isBuff && seg.caster && seg.caster !== player?.guid ? unitName(seg.caster) : null;
+  const subtitle = row.isBuff ? (player?.name ?? "") : `${player?.name ?? ""} → ${unitName(seg.target)}`;
+  const rows: [string, string][] = [
+    ["Started", formatClock(seg.startMs, 1)],
+    ["Ended", seg.open ? "still up at the end" : formatClock(seg.endMs, 1)],
+    ["Duration", `${(lengthMs / 1000).toFixed(1)}s`],
+    ["Of the fight", `${durationMs > 0 ? ((lengthMs / durationMs) * 100).toFixed(1) : "0"}%`],
+  ];
+  if (seg.maxStacks > 1) rows.push(["Max stacks", String(seg.maxStacks)]);
+  if (from) rows.push(["From", from]);
+  return (
+    <TooltipShell anchor={anchor} width={240}>
+      <TooltipHeader icon={icon} title={row.name} subtitle={subtitle} />
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+        {rows.map(([label, value]) => (
+          <div key={label} className="contents">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="truncate text-right font-mono">{value}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+        <span className="size-2 rounded-sm" style={{ background: SLOT_COLORS[slot] }} />
+        {row.isBuff ? "Buff" : "Debuff"} · {Math.round((row.uptime[slot] ?? 0) * 100)}% uptime overall
+      </div>
+    </TooltipShell>
+  );
 }
