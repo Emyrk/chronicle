@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AuraProcessorEvent, ProcessorContext } from "../processorTypes";
+import type { AbsorbedProcessorEvent, AuraProcessorEvent, HealProcessorEvent, ProcessorContext, SpellGoProcessorEvent } from "../processorTypes";
 import { AuraState, AuraTransition } from "../processorTypes";
 import { rotationTimelineProcessor } from "./rotationTimeline.processor";
 
@@ -79,5 +79,30 @@ describe("rotationTimelineProcessor auras", () => {
       aura(32000, { target: BOSS, caster: null, isBuff: false, spellName: "Sunder Armor", spellId: 11597, amount: 0, state: AuraState.Removed }),
     ]);
     expect(state.players.get(PLAYER)?.debuffsCast.map((s) => [s.startMs, s.endMs])).toEqual([[2000, 32000]]);
+  });
+});
+
+describe("rotationTimelineProcessor healing", () => {
+  const base = { activity: [], activityCount: 0, isSynthetic: false };
+  const go = (offsetMilli: number, spellId: number): SpellGoProcessorEvent =>
+    ({ ...base, type: "spell_go", index: offsetMilli, offsetMilli, caster: PLAYER, target: "tank", spell: { id: spellId, name: "Flash of Light" }, numHits: 1, numMisses: 0, itemId: null, corpseOwner: null }) as SpellGoProcessorEvent;
+  const heal = (offsetMilli: number, spellId: number, amount: number, overheal: number): HealProcessorEvent =>
+    ({ ...base, type: "heal", index: offsetMilli, offsetMilli, caster: PLAYER, sourceName: "", target: "tank", hitType: 2, amount, overheal, absorbed: 0, schools: [], spellId, spellAttackOutcome: null }) as HealProcessorEvent;
+  const absorb = (offsetMilli: number, amount: number): AbsorbedProcessorEvent =>
+    ({ ...base, type: "absorbed", index: offsetMilli, offsetMilli, attacker: "boss", target: "tank", damageSpellId: null, damageSpellName: null, caster: PLAYER, absorbSpellId: 10901, absorbSpellName: "Power Word: Shield", absorbSchools: [], amount, estimated: false }) as AbsorbedProcessorEvent;
+
+  it("links effective healing and overheal to the cast, and counts shield absorbs", () => {
+    const state = rotationTimelineProcessor.createState();
+    const ctx = context();
+    const events = [go(1000, 19750), heal(1100, 19750, 1000, 400), go(2000, 10901), absorb(5000, 600)];
+    for (const e of events) rotationTimelineProcessor.processEvent(state, e, ENC, new Date(0), e.type, ctx);
+    const p = state.players.get(PLAYER)!;
+    expect(p.totalHealing).toBe(1200);
+    expect(p.totalOverheal).toBe(400);
+    expect(p.goCasts.map((c) => [c.spellId, c.healing, c.overheal])).toEqual([
+      [19750, 600, 400],
+      [10901, 600, 0],
+    ]);
+    expect(state.healingByPlayer.get(PLAYER)).toBe(1200);
   });
 });

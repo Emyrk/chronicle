@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type { AlignMode } from "./derive";
+import type { AlignMode, TimelineMetric } from "./derive";
 import type { IconSizeMode } from "./laneLayout";
 
 export const MIN_WINDOW_MS = 4000;
@@ -13,6 +13,8 @@ export interface RotationViewState {
   startMs: number;
   endMs: number;
   align: AlignMode;
+  /** Damage (DPS) or healing (HPS) view. */
+  metric: TimelineMetric;
   /** Cast icon size: auto grows icons as you zoom in. */
   iconSize: IconSizeMode;
   /** Spell names hidden from the timeline (display casing), saved per viewer. */
@@ -38,6 +40,7 @@ export interface RotationView extends RotationViewState {
   /** Shift the window by ms (positive = later), keeping the zoom. No-op while replaying. */
   panBy: (ms: number) => void;
   setAlign: (align: AlignMode) => void;
+  setMetric: (metric: TimelineMetric) => void;
   setIconSize: (size: IconSizeMode) => void;
   /** Hide or show every rank of a spell, by name. */
   toggleIgnored: (spellName: string) => void;
@@ -124,6 +127,8 @@ export function useRotationView(
   durationMs: number,
   nowMs: number | null = null,
   initial: RotationViewInitial = {},
+  /** Optional controlled metric, for owners that need it before the view exists. */
+  controlledMetric?: { metric: TimelineMetric; setMetric: (metric: TimelineMetric) => void },
 ): RotationView {
   // The window resets when the encounter (its duration) changes, falling back
   // to the initial window when it fits (the duration settles after events load).
@@ -160,6 +165,9 @@ export function useRotationView(
   const [alignState, setAlign] = useState<AlignMode>(initial.align ?? "pull");
   // Replay time is pull time, so per-player alignment does not apply.
   const align: AlignMode = nowMs != null ? "pull" : alignState;
+  const [metricState, setMetricState] = useState<TimelineMetric>("damage");
+  const metric = controlledMetric?.metric ?? metricState;
+  const setMetric = controlledMetric?.setMetric ?? setMetricState;
   const [iconSize, setIconSizeState] = useState<IconSizeMode>(readIconSize);
   const setIconSize = useCallback((size: IconSizeMode) => {
     setIconSizeState(size);
@@ -244,6 +252,7 @@ export function useRotationView(
       startMs,
       endMs,
       align,
+      metric,
       iconSize,
       ignoredNames,
       isIgnored,
@@ -260,12 +269,13 @@ export function useRotationView(
       fit,
       panBy,
       setAlign,
+      setMetric,
       setIconSize,
       toggleIgnored,
       setCursorMs,
       pinAt,
       unpin,
     }),
-    [startMs, endMs, align, iconSize, ignoredNames, isIgnored, cursorMs, pinnedMs, nowMs, follow, toggleFollow, followMs, setCursorMs, setIconSize, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
+    [startMs, endMs, align, metric, setMetric, iconSize, ignoredNames, isIgnored, cursorMs, pinnedMs, nowMs, follow, toggleFollow, followMs, setCursorMs, setIconSize, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
   );
 }

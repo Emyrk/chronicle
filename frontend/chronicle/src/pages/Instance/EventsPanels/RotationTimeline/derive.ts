@@ -147,6 +147,9 @@ export function damageLead(binsA: readonly number[], binsB: readonly number[], l
 
 export type AlignMode = "pull" | "first_cast";
 
+/** What the chart, lead, labels and default picks measure. */
+export type TimelineMetric = "damage" | "healing";
+
 export function alignOffsetMs(
   casts: readonly TimelineCast[],
   mode: AlignMode,
@@ -158,6 +161,7 @@ export function alignOffsetMs(
 
 export interface PlayerStats {
   dps: number;
+  hps: number;
   casts: number;
   idleMs: number;
   idlePct: number;
@@ -172,6 +176,7 @@ export function playerStats(
   const idleMs = totalIdleMs(gaps);
   return {
     dps: durationMs > 0 ? player.totalDamage / (durationMs / 1000) : 0,
+    hps: durationMs > 0 ? player.totalHealing / (durationMs / 1000) : 0,
     casts: casts.filter((c) => !c.failed).length,
     idleMs,
     idlePct: durationMs > 0 ? (idleMs / durationMs) * 100 : 0,
@@ -300,6 +305,9 @@ export function withOverrideBuffCasts(
       periodicDamage: 0,
       hits: 0,
       crits: 0,
+      healing: 0,
+      overheal: 0,
+      healCrits: 0,
       buffEndMs: Math.min(seg.endMs ?? durationMs, durationMs),
     });
   }

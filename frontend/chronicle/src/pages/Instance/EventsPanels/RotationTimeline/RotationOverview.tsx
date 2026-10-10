@@ -41,6 +41,7 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
   const ref = useRef<HTMLDivElement>(null);
   const [brush, setBrush] = useState<[number, number] | null>(null);
   const { durationMs } = view;
+  const healing = view.metric === "healing";
   const bins = Math.max(1, Math.ceil(durationMs / DAMAGE_BIN_MS));
 
   const maxDps = useMemo(() => Math.max(1, ...series.flatMap((s) => s.dps)), [series]);
@@ -106,11 +107,11 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
             <TooltipTrigger asChild>
               <span className="flex cursor-help items-center gap-1.5 decoration-dotted underline-offset-2 hover:underline">
                 <span className="h-0.5 w-3 bg-muted-foreground" />
-                DPS
+                {healing ? "HPS" : "DPS"}
               </span>
             </TooltipTrigger>
             <TooltipContent side="bottom" align="start" className="max-w-80 p-3 text-left">
-              <DpsLegendHint />
+              <DpsLegendHint healing={healing} />
             </TooltipContent>
           </HintTooltip>
           {lead && (
@@ -118,11 +119,11 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
               <TooltipTrigger asChild>
                 <span className="flex cursor-help items-center gap-1.5 decoration-dotted underline-offset-2 hover:underline">
                   <span className="h-2.5 w-2 bg-muted-foreground/50" />
-                  Damage lead
+                  {healing ? "Healing lead" : "Damage lead"}
                 </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="start" className="max-w-80 p-3 text-left">
-                <LeadLegendHint names={series.map((s) => s.name)} />
+                <LeadLegendHint names={series.map((s) => s.name)} healing={healing} />
               </TooltipContent>
             </HintTooltip>
           )}
@@ -222,12 +223,12 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
   );
 }
 
-function LeadLegendHint({ names }: { names: string[] }) {
+function LeadLegendHint({ names, healing }: { names: string[]; healing: boolean }) {
   return (
     <div className="flex flex-col gap-2 text-xs leading-relaxed">
-      <div className="text-sm font-semibold">Damage lead</div>
+      <div className="text-sm font-semibold">{healing ? "Healing lead" : "Damage lead"}</div>
       <p className="text-zinc-300">
-        Total damage so far, {names[0] ?? "A"} minus {names[1] ?? "B"}.
+        Total {healing ? "effective healing" : "damage"} so far, {names[0] ?? "A"} minus {names[1] ?? "B"}.
       </p>
       <ul className="list-disc space-y-0.5 pl-4 text-zinc-400">
         <li>
@@ -240,12 +241,18 @@ function LeadLegendHint({ names }: { names: string[] }) {
   );
 }
 
-function DpsLegendHint() {
+function DpsLegendHint({ healing }: { healing: boolean }) {
   const windowS = (DPS_SMOOTHING_BINS * DAMAGE_BIN_MS) / 1000;
   return (
     <div className="flex flex-col gap-2 text-xs leading-relaxed">
-      <div className="text-sm font-semibold">DPS · {windowS}s trailing average</div>
-      <p className="text-zinc-300">Damage over the last {windowS}s, divided by {windowS}. Pets included.</p>
+      <div className="text-sm font-semibold">
+        {healing ? "HPS" : "DPS"} · {windowS}s trailing average
+      </div>
+      <p className="text-zinc-300">
+        {healing
+          ? `Effective healing (shield absorbs included, overheal removed when the log has it) over the last ${windowS}s, divided by ${windowS}.`
+          : `Damage over the last ${windowS}s, divided by ${windowS}. Pets included.`}
+      </p>
       <ul className="list-disc space-y-0.5 pl-4 text-zinc-400">
         <li>Bursts lag by about {windowS / 2}s.</li>
         <li>Smoothing turns single big hits into humps, not spikes.</li>

@@ -1,4 +1,4 @@
-import type { AlignMode } from "../../EventsPanels/RotationTimeline/derive";
+import type { AlignMode, TimelineMetric } from "../../EventsPanels/RotationTimeline/derive";
 
 /**
  * Player Timeline view state saved in share links (layout.pageState).
@@ -10,6 +10,8 @@ export interface PlayerTimelineState {
   /** Player A and B GUIDs; B is null for "None". */
   players: [string | null, string | null];
   align: AlignMode;
+  /** Damage (DPS) or healing (HPS) view. */
+  metric: TimelineMetric;
   /** Visible window, or null for the whole fight. */
   window: { startMs: number; endMs: number } | null;
   pinnedMs: number | null;
@@ -36,6 +38,7 @@ export function parsePlayerTimelineState(raw: unknown): PlayerTimelineState | nu
     encounterId: raw.encounterId,
     players,
     align: raw.align === "first_cast" ? "first_cast" : "pull",
+    metric: raw.metric === "healing" ? "healing" : "damage",
     window,
     pinnedMs: finite(raw.pinnedMs) && raw.pinnedMs >= 0 ? raw.pinnedMs : null,
     follow: raw.follow === true,

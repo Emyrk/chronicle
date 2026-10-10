@@ -33,6 +33,9 @@ function cast(startMs: number, spellId = 1, extra: Partial<TimelineCast> = {}): 
     periodicDamage: 0,
     hits: 0,
     crits: 0,
+    healing: 0,
+    overheal: 0,
+    healCrits: 0,
     ...extra,
   };
 }
@@ -45,6 +48,9 @@ function player(extra: Partial<PlayerTimelineData> = {}): PlayerTimelineData {
     swings: [],
     damageBins: [],
     totalDamage: 0,
+    healBins: [],
+    totalHealing: 0,
+    totalOverheal: 0,
     aurasOn: [],
     debuffsCast: [],
     damageByTarget: {},

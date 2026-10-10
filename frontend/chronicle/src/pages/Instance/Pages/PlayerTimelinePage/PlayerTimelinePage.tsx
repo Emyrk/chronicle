@@ -8,13 +8,18 @@ import { Button } from "@/components/ui/button";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelContext, PanelDefinition } from "../../EventsPanels/types";
 import { usePanelAggregation } from "../../EventsPanels/usePanelAggregation";
-import { RotationTimeline, type RotationTimelinePlayer } from "../../EventsPanels/RotationTimeline/RotationTimeline";
+import {
+  RotationTimeline,
+  SegButton,
+  Segmented,
+  type RotationTimelinePlayer,
+} from "../../EventsPanels/RotationTimeline/RotationTimeline";
 import {
   rotationTimelineProcessor,
   type RotationTimelineEvent,
   type RotationTimelineResult,
 } from "../../EventsPanels/RotationTimeline/rotationTimeline.processor";
-import { playerCasts, withOverrideBuffCasts } from "../../EventsPanels/RotationTimeline/derive";
+import { playerCasts, withOverrideBuffCasts, type TimelineMetric } from "../../EventsPanels/RotationTimeline/derive";
 import { useRotationView, type RotationViewInitial } from "../../EventsPanels/RotationTimeline/useRotationView";
 import { useSmoothReplayTime } from "../../EventsPanels/RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
@@ -55,6 +60,8 @@ export function PlayerTimelinePage({ context, initialState, onStateChange }: Pla
   const [overrides, setOverrides] = useState<[string | null, string | null]>(() =>
     saved?.players[0] ? [saved.players[0], saved.players[1] ?? NONE] : [null, null],
   );
+  // Like the picks, the damage/healing view carries across encounters.
+  const [metric, setMetric] = useState<TimelineMetric>(saved?.metric ?? "damage");
 
   if (selectedEncounterIds.length !== 1) {
     return <EncounterPicker context={context} />;
@@ -67,6 +74,8 @@ export function PlayerTimelinePage({ context, initialState, onStateChange }: Pla
       onStateChange={onStateChange}
       overrides={overrides}
       setOverrides={setOverrides}
+      metric={metric}
+      setMetric={setMetric}
     />
   );
 }
@@ -97,23 +106,36 @@ interface PlayerTimelineContentProps {
   onStateChange?: (state: PlayerTimelineState) => void;
   overrides: [string | null, string | null];
   setOverrides: (overrides: [string | null, string | null]) => void;
+  metric: TimelineMetric;
+  setMetric: (metric: TimelineMetric) => void;
 }
 
-function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOverrides }: PlayerTimelineContentProps) {
+function PlayerTimelineContent({
+  context,
+  saved,
+  onStateChange,
+  overrides,
+  setOverrides,
+  metric,
+  setMetric,
+}: PlayerTimelineContentProps) {
   const { instance } = context;
+  // Healing totals remove overheal only when the log records it.
+  const hasServerOverheal = instance.capabilities?.includes("overheal") ?? false;
   const encounterId = context.selectedEncounterIds[0];
   // Window, pin and debuff target only make sense on the encounter they were saved on.
   const sameEncounter = saved?.encounterId === encounterId;
   const [debuffTarget, setDebuffTarget] = useState<string | null>(sameEncounter ? (saved?.debuffTarget ?? null) : null);
   const [damageByPlayer, setDamageByPlayer] = useState<ReadonlyMap<string, number>>(new Map());
+  const [healingByPlayer, setHealingByPlayer] = useState<ReadonlyMap<string, number>>(new Map());
 
   // Default A/B: the top damage dealer and the next player of the same class.
   const ranked = useMemo(
     () =>
-      Array.from(damageByPlayer.entries())
+      Array.from((metric === "healing" ? healingByPlayer : damageByPlayer).entries())
         .filter(([guid]) => instance.players?.[guid])
         .sort((a, b) => b[1] - a[1]),
-    [damageByPlayer, instance.players],
+    [damageByPlayer, healingByPlayer, metric, instance.players],
   );
   // Favorited characters (name + realm) seed the defaults when nothing was picked.
   const { isAuthenticated } = useAuth();
@@ -155,6 +177,9 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
   if (damageByPlayer.size === 0 && result.damageByPlayer.size > 0) {
     setDamageByPlayer(result.damageByPlayer);
   }
+  if (healingByPlayer.size === 0 && result.healingByPlayer.size > 0) {
+    setHealingByPlayer(result.healingByPlayer);
+  }
 
   const encounter = instance.encounters.find((e) => e.id === context.selectedEncounterIds[0]);
   const encounterMs = encounter ? new Date(encounter.end_time).getTime() - new Date(encounter.start_time).getTime() : 0;
@@ -175,10 +200,12 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
         }
       : {},
   );
+  const controlledMetric = useMemo(() => ({ metric, setMetric }), [metric, setMetric]);
   const view = useRotationView(
     durationMs,
     smoothReplayMs == null ? null : Math.min(durationMs, smoothReplayMs),
     viewInitial,
+    controlledMetric,
   );
 
   // Report the view so share links capture it. Replay moves the window on its
@@ -190,12 +217,13 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
       encounterId,
       players: [picked[0], picked[1]],
       align: view.align,
+      metric,
       window: replaying || wholeFight ? null : { startMs: view.startMs, endMs: view.endMs },
       pinnedMs: view.pinnedMs,
       follow: view.follow,
       debuffTarget,
     });
-  }, [onStateChange, encounterId, picked, view.align, replaying, wholeFight, view.startMs, view.endMs, view.pinnedMs, view.follow, debuffTarget]);
+  }, [onStateChange, encounterId, picked, view.align, metric, replaying, wholeFight, view.startMs, view.endMs, view.pinnedMs, view.follow, debuffTarget]);
 
   // Manual spell mutations for this log's flavor (spellOverrides.ts).
   const spellOverrides = useMemo(() => activeOverrides(instance.flavor ?? []), [instance.flavor]);
@@ -291,6 +319,19 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
       >
         <ArrowLeftRight className="size-3.5" />
       </Button>
+      <Segmented label="" title="Damage or healing view">
+        <SegButton active={metric === "damage"} onClick={() => setMetric("damage")} title="Damage: DPS, damage lead and damage per cast">
+          DPS
+        </SegButton>
+        <SegButton active={metric === "healing"} onClick={() => setMetric("healing")} title="Healing: HPS, healing lead and healing per cast">
+          HPS
+        </SegButton>
+      </Segmented>
+      {metric === "healing" && !hasServerOverheal && (
+        <span className="text-[10px] text-muted-foreground" title="This log does not record overheal, so healing totals include it">
+          incl. overheal
+        </span>
+      )}
     </div>
   );
 

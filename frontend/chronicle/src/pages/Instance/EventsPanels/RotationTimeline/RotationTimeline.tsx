@@ -17,6 +17,7 @@ import {
   idleGaps,
   nearbyActivity,
   type NearbyActivity,
+  type TimelineMetric,
   playerCasts,
   playerStats,
   DEFAULT_IDLE_THRESHOLD_MS,
@@ -226,16 +227,22 @@ export function RotationTimeline({
   );
 
   const overview = useMemo(() => {
+    const healing = view.metric === "healing";
     const bins = Math.ceil(durationMs / DAMAGE_BIN_MS);
     return {
       series: players.map((p) => ({
         name: p.name,
-        dps: dpsSeries(p.data.damageBins, bins),
-        avgDps: durationMs > 0 ? p.data.totalDamage / (durationMs / 1000) : 0,
+        dps: dpsSeries(healing ? p.data.healBins : p.data.damageBins, bins),
+        avgDps: durationMs > 0 ? (healing ? p.data.totalHealing : p.data.totalDamage) / (durationMs / 1000) : 0,
       })),
-      lead: players.length === 2 ? damageLead(players[0].data.damageBins, players[1].data.damageBins, bins) : null,
+      lead:
+        players.length === 2
+          ? healing
+            ? damageLead(players[0].data.healBins, players[1].data.healBins, bins)
+            : damageLead(players[0].data.damageBins, players[1].data.damageBins, bins)
+          : null,
     };
-  }, [players, durationMs]);
+  }, [players, durationMs, view.metric]);
 
   const ticks = useMemo(() => {
     const step = tickStepMs(span);
@@ -442,7 +449,9 @@ export function RotationTimeline({
                       {d.player.name}
                     </span>
                     <span className="flex-1" />
-                    <span className="font-mono text-foreground">{formatNumber(Math.round(d.stats.dps))}</span>
+                    <span className="font-mono text-foreground">
+                      {formatNumber(Math.round(view.metric === "healing" ? d.stats.hps : d.stats.dps))}
+                    </span>
                   </div>
                   {/* Idle % normally; around the indicator: last action, idle or busy, next action (design: Rotations 2a). */}
                   {near ? (
@@ -516,6 +525,7 @@ export function RotationTimeline({
                 layout={layout}
                 cooldownInfo={cooldownInfo}
                 cooldownColor={cooldownColor}
+                metric={view.metric}
                 near={probeMs != null ? nearbyActivity(d.actions, probeMs + d.offsetMs, gcd, d.gaps) : null}
                 hoveredCast={hovered?.slot === d.slot ? hovered.cast : null}
                 probeMs={probeMs != null ? probeMs + d.offsetMs : null}
@@ -591,6 +601,8 @@ interface PlayerLanesProps {
   /** Replay time; casts after it are dimmed. */
   nowMs: number | null;
   layout: LaneLayout;
+  /** Which amount labels the casts: damage or healing. */
+  metric: TimelineMetric;
   /** Last/next action around the indicator, in this player's raw time. */
   near: NearbyActivity | null;
   /** The cast under the pointer; its bar draws above the icons. */
@@ -620,6 +632,7 @@ function PlayerLanes({
   gcd,
   nowMs,
   layout,
+  metric,
   near,
   hoveredCast,
   probeMs,
@@ -818,7 +831,8 @@ function PlayerLanes({
           const meta = spellMeta(c.spellId);
           const endMs = ends.get(c) ?? castEndMs(c);
           const iconLeft = P(iconTimeMs(c, endMs) - offsetMs);
-          const damage = c.damage + c.periodicDamage;
+          const amount = metric === "healing" ? c.healing : c.damage + c.periodicDamage;
+          const crit = metric === "healing" ? c.healCrits > 0 : c.crits > 0;
           if (layout.compact) {
             return (
               <div
@@ -836,12 +850,15 @@ function PlayerLanes({
                 style={{ left: `${iconLeft}%`, top: layout.iconTop, width: icon, height: icon, marginLeft: -icon / 2, backgroundImage: `url(${meta.icon})` }}
                 {...hoverProps(c)}
               />
-              {damage > 0 && (
+              {amount > 0 && (
                 <span
-                  className={cn("pointer-events-none absolute -translate-x-1/2 whitespace-nowrap font-mono", c.crits > 0 ? "text-school-holy" : "text-muted-foreground")}
+                  className={cn(
+                    "pointer-events-none absolute -translate-x-1/2 whitespace-nowrap font-mono",
+                    crit ? "text-school-holy" : metric === "healing" ? "text-school-nature" : "text-muted-foreground",
+                  )}
                   style={{ left: `${iconLeft}%`, top: layout.labelTop, fontSize: layout.labelFont }}
                 >
-                  {formatNumber(damage)}
+                  {formatNumber(amount)}
                 </span>
               )}
             </div>
@@ -935,10 +952,10 @@ function activeCooldownsAt(
   return out;
 }
 
-function Segmented({ label, title, children }: { label: string; title?: string; children: ReactNode }) {
+export function Segmented({ label, title, children }: { label: string; title?: string; children: ReactNode }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
+      {label && <span className="text-[11px] text-muted-foreground">{label}</span>}
       <div title={title} className="flex h-7 items-center gap-0.5 rounded-[5px] border border-border bg-background p-0.5">
         {children}
       </div>
@@ -946,7 +963,7 @@ function Segmented({ label, title, children }: { label: string; title?: string; 
   );
 }
 
-function SegButton({
+export function SegButton({
   active,
   disabled,
   title,
@@ -1120,6 +1137,17 @@ function CastTooltip({ cast, anchor, meta, endMs, unitName, activeCooldowns }: C
       )}
       {cast.periodicDamage > 0 && (
         <div className="-mt-1 text-muted-foreground">incl. {formatNumber(cast.periodicDamage)} periodic</div>
+      )}
+      {(cast.healing > 0 || cast.overheal > 0) && (
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="font-mono text-xl font-bold text-school-nature">+{formatNumber(cast.healing)}</span>
+          {cast.healCrits > 0 && <span className="text-[11px] font-bold text-school-holy">CRIT</span>}
+          {cast.overheal > 0 && (
+            <span className="text-muted-foreground">
+              overheal {formatNumber(cast.overheal)} ({Math.round((cast.overheal / (cast.healing + cast.overheal)) * 100)}%)
+            </span>
+          )}
+        </div>
       )}
       {cast.itemId != null && <div className="text-muted-foreground">Item #{cast.itemId}</div>}
       {activeCooldowns.length > 0 && (

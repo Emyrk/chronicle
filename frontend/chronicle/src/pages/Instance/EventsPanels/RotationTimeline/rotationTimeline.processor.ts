@@ -13,8 +13,10 @@
 import type {
   PanelProcessor,
   ProcessorContext,
+  AbsorbedProcessorEvent,
   AuraProcessorEvent,
   CastProcessorEvent,
+  HealProcessorEvent,
   DamageProcessorEvent,
   SlainProcessorEvent,
   SpellFailProcessorEvent,
@@ -65,6 +67,11 @@ export interface TimelineCast {
   periodicDamage: number;
   hits: number;
   crits: number;
+  /** Effective healing linked to this cast (heals and shield absorbs). */
+  healing: number;
+  /** Overhealing linked to this cast (0 when the log does not record it). */
+  overheal: number;
+  healCrits: number;
 }
 
 export interface TimelineSwing {
@@ -100,6 +107,10 @@ export interface PlayerTimelineData {
   /** Damage per DAMAGE_BIN_MS bin, including pets. */
   damageBins: number[];
   totalDamage: number;
+  /** Effective healing per DAMAGE_BIN_MS bin (heals and shield absorbs, pets included). */
+  healBins: number[];
+  totalHealing: number;
+  totalOverheal: number;
   /** Buffs and debuffs on this player. */
   aurasOn: TimelineAuraSegment[];
   /** Debuffs this player applied to other units (caster attributed). */
@@ -134,6 +145,8 @@ export interface RotationTimelineResult {
   players: Map<string, PlayerTimelineData>;
   /** Every player's total damage (including pets), for default A/B selection. */
   damageByPlayer: Map<string, number>;
+  /** Every player's effective healing, for default A/B selection in healing mode. */
+  healingByPlayer: Map<string, number>;
   _scratch: Map<string, PlayerScratch>;
   /** Shared aura tracker (same as Aura Uptime / Unit Auras); decides when auras start and end. */
   _auraState: AuraProcessorState;
@@ -147,6 +160,8 @@ export type RotationTimelineEvent =
   | SpellFailProcessorEvent
   | CastProcessorEvent
   | DamageProcessorEvent
+  | HealProcessorEvent
+  | AbsorbedProcessorEvent
   | AuraProcessorEvent
   | SlainProcessorEvent;
 
@@ -163,6 +178,9 @@ function emptyPlayer(guid: string): PlayerTimelineData {
     swings: [],
     damageBins: [],
     totalDamage: 0,
+    healBins: [],
+    totalHealing: 0,
+    totalOverheal: 0,
     aurasOn: [],
     debuffsCast: [],
     damageByTarget: {},
@@ -201,6 +219,9 @@ function newCast(startMs: number, endMs: number, spellId: number, spellName: str
     periodicDamage: 0,
     hits: 0,
     crits: 0,
+    healing: 0,
+    overheal: 0,
+    healCrits: 0,
   };
 }
 
@@ -215,7 +236,7 @@ function completeCast(cast: TimelineCast, pending: PendingStart | null): void {
 
 export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, RotationTimelineEvent> = {
   id: "rotation_timeline",
-  streams: ["spell_go", "spell_start", "spell_fail", "cast", "damage", "aura", "slain"] as StreamType[],
+  streams: ["spell_go", "spell_start", "spell_fail", "cast", "damage", "heal", "absorbed", "aura", "slain"] as StreamType[],
 
   createState: (): RotationTimelineResult => ({
     encounterId: null,
@@ -224,6 +245,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
     lastOffsetMs: 0,
     players: new Map(),
     damageByPlayer: new Map(),
+    healingByPlayer: new Map(),
     _scratch: new Map(),
     _auraState: createAuraProcessorState(),
     _openAuras: new Map(),
@@ -302,6 +324,48 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
           cast.damage += amount;
           cast.hits += 1;
           if (hasHitType(event.hitType, HitTypeCrit)) cast.crits += 1;
+        };
+        link(p.goCasts, s.lastGoBySpell);
+        link(p.textCasts, s.lastTextBySpell);
+        return;
+      }
+
+      case "heal":
+      case "absorbed": {
+        if (!event.caster) return;
+        const owner = ownerOf(event.caster, context);
+        if (!context.players[owner]) return;
+        // Like the healing panels: overheal comes from the log when it records it;
+        // shield absorbs are fully effective.
+        const overheal = event.type === "heal" ? Math.min(event.amount, event.overheal ?? 0) : 0;
+        const effective = event.amount - overheal;
+        state.healingByPlayer.set(owner, (state.healingByPlayer.get(owner) ?? 0) + effective);
+        if (!focus.has(owner)) return;
+
+        const p = player(owner);
+        p.totalHealing += effective;
+        p.totalOverheal += overheal;
+        const bin = Math.floor(event.offsetMilli / DAMAGE_BIN_MS);
+        while (p.healBins.length <= bin) p.healBins.push(0);
+        p.healBins[bin] += effective;
+
+        if (owner !== event.caster) return;
+        const spellId = event.type === "heal" ? event.spellId : event.absorbSpellId;
+        if (spellId == null) return;
+        // Direct heals link within the window; HoT ticks and shield absorbs link
+        // to the latest cast of the spell whenever they land.
+        const lingering = event.type === "absorbed" || hasHitType(event.hitType, HitTypePeriodic);
+        const crit = event.type === "heal" && hasHitType(event.hitType, HitTypeCrit);
+        const s = scratch(owner);
+        const link = (casts: TimelineCast[], lastBySpell: Map<number, number>) => {
+          const idx = lastBySpell.get(spellId);
+          if (idx == null) return;
+          const cast = casts[idx];
+          if (!lingering && event.offsetMilli - cast.endMs > DAMAGE_LINK_WINDOW_MS) return;
+          cast.healing += effective;
+          cast.overheal += overheal;
+          if (crit) cast.healCrits += 1;
+          if (lingering && event.type === "heal") cast.tickMs.push(event.offsetMilli);
         };
         link(p.goCasts, s.lastGoBySpell);
         link(p.textCasts, s.lastTextBySpell);

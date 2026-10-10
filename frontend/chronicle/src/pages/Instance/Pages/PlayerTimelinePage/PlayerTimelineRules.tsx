@@ -309,6 +309,11 @@ export function PlayerTimelineRules({
             average. Damage lead is cumulative A minus B.
           </li>
           <li>
+            HPS (DPS | HPS toggle): effective healing, meaning heals minus overheal when the log records it, plus shield
+            absorbs credited to the shield's caster. Heals link to casts like damage does; HoT ticks and absorbs link to the
+            latest cast of their spell. Default players rank by healing in this mode.
+          </li>
+          <li>
             Auto icon size: {Math.round(AUTO_FILL * 100)}% of a {ms(GCD_SPACING_MS)} GCD's width, {MIN_ICON}–{MAX_ICON}px.
             Under {COMPACT_GAP_PX}px per GCD, casts draw as ticks.
           </li>
