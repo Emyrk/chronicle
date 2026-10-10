@@ -64,10 +64,8 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		if spell == nil {
 			continue
 		}
-		gamedataoverrides.ApplySpell(flavor, spell)
-
 		// --- Major player cooldowns ---
-		if cooldown, ok := cooldownSpellFromSpell(spell); ok {
+		if cooldown, ok := cooldownSpellFromSpell(spell, gamedataoverrides.IsAllClassCooldown(flavor, spell.ID)); ok {
 			cooldowns = append(cooldowns, cooldown)
 		}
 

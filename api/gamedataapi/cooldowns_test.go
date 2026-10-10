@@ -26,9 +26,12 @@ func TestCooldownSpellFromSpell(t *testing.T) {
 			CategoryRecoveryTime: category,
 		}
 	}
+	cooldownSpell := func(spell *chrondbc.Spell) (cooldownSpellRow, bool) {
+		return cooldownSpellFromSpell(spell, false)
+	}
 
 	t.Run("individual cooldown", func(t *testing.T) {
-		row, ok := cooldownSpellFromSpell(spell(chrondbc.SpellClassSetWarrior, 30*time.Minute, 0))
+		row, ok := cooldownSpell(spell(chrondbc.SpellClassSetWarrior, 30*time.Minute, 0))
 		require.True(t, ok)
 		assert.Equal(t, int32(871), row.SpellID)
 		assert.Equal(t, "Shield Wall", row.Name)
@@ -39,30 +42,36 @@ func TestCooldownSpellFromSpell(t *testing.T) {
 	})
 
 	t.Run("shared category cooldown", func(t *testing.T) {
-		row, ok := cooldownSpellFromSpell(spell(chrondbc.SpellClassSetMage, 0, 45*time.Second))
+		row, ok := cooldownSpell(spell(chrondbc.SpellClassSetMage, 0, 45*time.Second))
 		require.True(t, ok)
 		assert.Zero(t, row.RecoveryTimeMS)
 		assert.Equal(t, int64(45_000), row.CategoryRecoveryTimeMS)
 	})
 
 	t.Run("short individual cooldown", func(t *testing.T) {
-		row, ok := cooldownSpellFromSpell(spell(chrondbc.SpellClassSetRogue, 6*time.Second, 0))
+		row, ok := cooldownSpell(spell(chrondbc.SpellClassSetRogue, 6*time.Second, 0))
 		require.True(t, ok)
 		assert.Equal(t, int64(6_000), row.RecoveryTimeMS)
 	})
 
 	t.Run("no cooldown", func(t *testing.T) {
-		_, ok := cooldownSpellFromSpell(spell(chrondbc.SpellClassSetRogue, 0, 0))
+		_, ok := cooldownSpell(spell(chrondbc.SpellClassSetRogue, 0, 0))
 		assert.False(t, ok)
 	})
 
 	t.Run("generic spell", func(t *testing.T) {
-		_, ok := cooldownSpellFromSpell(spell(chrondbc.SpellClassSetGeneric, time.Minute, 0))
+		_, ok := cooldownSpell(spell(chrondbc.SpellClassSetGeneric, time.Minute, 0))
 		assert.False(t, ok)
 	})
 
+	t.Run("all-class generic spell", func(t *testing.T) {
+		row, ok := cooldownSpellFromSpell(spell(chrondbc.SpellClassSetGeneric, 3*time.Minute, 0), true)
+		require.True(t, ok)
+		assert.Equal(t, int32(chrondbc.SpellClassSetGeneric), row.SpellClassSet)
+	})
+
 	t.Run("unknown class set", func(t *testing.T) {
-		_, ok := cooldownSpellFromSpell(spell(chrondbc.SpellClassSet1, time.Minute, 0))
+		_, ok := cooldownSpell(spell(chrondbc.SpellClassSet1, time.Minute, 0))
 		assert.False(t, ok)
 	})
 
@@ -70,7 +79,7 @@ func TestCooldownSpellFromSpell(t *testing.T) {
 		berserk := spell(chrondbc.SpellClassSetDruid, 6*time.Minute, 0)
 		berserk.Duration.MaxDuration = 20_000
 
-		row, ok := cooldownSpellFromSpell(berserk)
+		row, ok := cooldownSpell(berserk)
 		require.True(t, ok)
 		assert.Equal(t, int64(20_000), row.DurationMS)
 	})
@@ -78,7 +87,7 @@ func TestCooldownSpellFromSpell(t *testing.T) {
 	t.Run("passive spell", func(t *testing.T) {
 		passive := spell(chrondbc.SpellClassSetWarrior, time.Minute, 0)
 		passive.Attrs.Set(chrondbc.Attr_Passive)
-		_, ok := cooldownSpellFromSpell(passive)
+		_, ok := cooldownSpell(passive)
 		assert.False(t, ok)
 	})
 }

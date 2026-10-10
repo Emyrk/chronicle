@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/spelldb"
+	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/google/uuid"
 )
@@ -15,14 +16,11 @@ import (
 func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table, datasetID uuid.UUID) {
 	spellDBC := chrondbc.NewSpells(table)
 
-	var spells []spelldb.SpellRow
 	var canonicalSpells []*chrondbc.Spell
 	err := spellDBC.Range(func(cursor *chrondbc.Spell) bool {
-		if cursor == nil {
-			return true
+		if cursor != nil {
+			canonicalSpells = append(canonicalSpells, cursor)
 		}
-		spells = append(spells, spelldb.FromSpell(datasetID, cursor))
-		canonicalSpells = append(canonicalSpells, cursor)
 		return true
 	})
 	if err != nil {
@@ -35,14 +33,28 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 
 	resp := chroniclesdk.DBCUploadResponse{
 		DBCName:     "Spell",
-		RecordCount: len(spells),
+		RecordCount: len(canonicalSpells),
 		Mode:        mode,
 	}
 
 	if mode == "compare" {
-		resp.Inserted = len(spells)
+		resp.Inserted = len(canonicalSpells)
 		httpapi.Write(ctx, w, http.StatusOK, resp)
 		return
+	}
+
+	flavor, err := h.flavorForDataset(ctx, datasetID)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Dataset flavor lookup failed",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	gamedataoverrides.ApplySpells(flavor, canonicalSpells)
+	spells := make([]spelldb.SpellRow, 0, len(canonicalSpells))
+	for _, spell := range canonicalSpells {
+		spells = append(spells, spelldb.FromSpell(datasetID, spell))
 	}
 
 	if err := h.persistLegacySpells(ctx, datasetID, spells, canonicalSpells); err != nil {
@@ -55,14 +67,6 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 
 	// Derive parser and technical-page spell metadata after the canonical and
 	// compatibility rows commit.
-	flavor, err := h.flavorForDataset(ctx, datasetID)
-	if err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Spells imported but dataset flavor lookup failed",
-			Detail:  err.Error(),
-		})
-		return
-	}
 	if err := h.deriveSpellMetadata(ctx, datasetID, flavor, canonicalSpells); err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Spells imported but derived table generation failed",

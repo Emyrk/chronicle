@@ -12,11 +12,11 @@ type cooldownSpellRow struct {
 	DurationMS             int64
 }
 
-func cooldownSpellFromSpell(spell *chrondbc.Spell) (cooldownSpellRow, bool) {
+func cooldownSpellFromSpell(spell *chrondbc.Spell, allClasses bool) (cooldownSpellRow, bool) {
 	if spell == nil || spell.Attrs.Has(chrondbc.Attr_Passive) {
 		return cooldownSpellRow{}, false
 	}
-	if _, ok := playerClassName(spell.SpellClassSet); !ok {
+	if _, ok := playerClassName(spell.SpellClassSet); !ok && (!allClasses || spell.SpellClassSet != chrondbc.SpellClassSetGeneric) {
 		return cooldownSpellRow{}, false
 	}
 
