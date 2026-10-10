@@ -71,6 +71,11 @@ export interface RotationTimelineProps {
   headerStart?: ReactNode;
   showOverview?: boolean;
   idleThresholdMs?: number;
+  /**
+   * Whether the log tells main-hand and off-hand swings apart (only the
+   * 1.12a-cc-addon format does). Otherwise swings are one row of "Auto attack".
+   */
+  swingHandKnown?: boolean;
   /** Extra shortcuts the owner handles (e.g. the page's Shift+click flip), listed after the timeline's. */
   extraKeybinds?: readonly Keybind[];
   /** Rendered under the lanes, e.g. the page's aura section. */
@@ -155,6 +160,7 @@ export function RotationTimeline({
   showOverview = true,
   idleThresholdMs = DEFAULT_IDLE_THRESHOLD_MS,
   extraKeybinds = [],
+  swingHandKnown = false,
   children,
 }: RotationTimelineProps) {
   const [trackRef, trackWidth, trackEl] = useElementWidth<HTMLDivElement>();
@@ -528,7 +534,7 @@ export function RotationTimeline({
                 {d.player.data.swings.length > 0 && (
                   <div
                     className="flex h-6 items-center border-b border-border pl-10 pr-4"
-                    title="Top: main hand · bottom: off hand · white: hit · yellow: crit · grey: glancing · red: miss · pink: dodge · dark red: parry"
+                    title={`${swingHandKnown ? "Top: main hand · bottom: off hand · " : ""}white: hit · yellow: crit · grey: glancing · red: miss · pink: dodge · dark red: parry`}
                   >
                     Auto attacks
                   </div>
@@ -573,6 +579,7 @@ export function RotationTimeline({
                 cooldownInfo={cooldownInfo}
                 cooldownColor={cooldownColor}
                 tintDurationMs={tintDurationMs}
+                swingHandKnown={swingHandKnown}
                 metric={view.metric}
                 near={probeMs != null ? nearbyActivity(d.actions, probeMs + d.offsetMs, gcd, d.gaps) : null}
                 hoveredCast={hovered?.slot === d.slot ? hovered.cast : null}
@@ -596,6 +603,7 @@ export function RotationTimeline({
               )}
               unitName={unitName}
               icon={spellMeta(AUTO_ATTACK_SPELL_ID).icon}
+              handKnown={swingHandKnown}
             />
           )}
           {hoveredCluster && (
@@ -660,6 +668,8 @@ interface PlayerLanesProps {
   cooldownColor: (spellId: number) => { color: string; index: number };
   /** How long a cast tints the lane (0 when it does not). */
   tintDurationMs: (cast: TimelineCast) => number;
+  /** Split swings into main-hand (top) and off-hand (bottom) rows. */
+  swingHandKnown: boolean;
   spellMeta: (spellId: number | null) => SpellMeta;
   onToggleIgnored: (spellName: string) => void;
   onHover: (cast: TimelineCast | null) => void;
@@ -689,6 +699,7 @@ function PlayerLanes({
   cooldownInfo,
   cooldownColor,
   tintDurationMs,
+  swingHandKnown,
   spellMeta,
   onToggleIgnored,
   onHover,
@@ -978,7 +989,7 @@ function PlayerLanes({
               <div
                 key={i}
                 className="absolute flex h-3 w-2 -translate-x-1/2 justify-center"
-                style={{ left: `${P(s.offsetMs - offsetMs)}%`, top: s.offHand ? 11 : 1 }}
+                style={{ left: `${P(s.offsetMs - offsetMs)}%`, top: !swingHandKnown ? 6 : s.offHand ? 11 : 1 }}
                 onPointerEnter={() => onHoverSwing(s)}
                 onPointerLeave={() => onHoverSwing(null)}
               >
@@ -1294,15 +1305,17 @@ interface SwingTooltipProps {
   anchor: TooltipAnchor | null;
   unitName: (guid: string) => string;
   icon: string;
+  /** False when the log does not say which hand swung. */
+  handKnown: boolean;
 }
 
-function SwingTooltip({ swing, anchor, unitName, icon }: SwingTooltipProps) {
+function SwingTooltip({ swing, anchor, unitName, icon, handKnown }: SwingTooltipProps) {
   const outcome = hitTypeNames(swing.hitType).filter((n) => n !== "Off-Hand" && n !== "Hit");
   return (
     <TooltipShell anchor={anchor} width={240}>
       <TooltipHeader
         icon={icon}
-        title={swing.offHand ? "Off hand" : "Main hand"}
+        title={!handKnown ? "Auto attack" : swing.offHand ? "Off hand" : "Main hand"}
         subtitle={formatClock(swing.offsetMs) + (swing.target ? ` → ${unitName(swing.target)}` : "")}
       />
       <div className="flex items-baseline gap-2">

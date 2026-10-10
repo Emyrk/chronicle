@@ -360,6 +360,7 @@ function PlayerTimelineContent({
         unitName={unitName}
         headerStart={pickers}
         extraKeybinds={PAGE_KEYBINDS}
+        swingHandKnown={instance.format === "1.12a-cc-addon"}
       >
         {players.length > 0 && (
           <AuraSection
