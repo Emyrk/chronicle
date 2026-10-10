@@ -35,6 +35,9 @@ import { PlayerPicker } from "./PlayerPicker";
 import { PlayerTimelineRules, type CuratedCooldown } from "./PlayerTimelineRules";
 import { parsePlayerTimelineState, type PlayerTimelineState } from "./playerTimelineState";
 
+/** Shortcuts the page adds on top of the timeline's own. */
+const PAGE_KEYBINDS = [{ keys: "Shift + click", action: "Flip to the rules & assumptions view" }];
+
 /** Picker value meaning "no second player". */
 const NONE = "none";
 
@@ -354,6 +357,7 @@ function PlayerTimelineContent({
         cooldownInfo={cooldownInfo}
         unitName={unitName}
         headerStart={pickers}
+        extraKeybinds={PAGE_KEYBINDS}
       >
         {players.length > 0 && (
           <AuraSection

@@ -33,6 +33,8 @@ import {
   type TimelineSwing,
 } from "./rotationTimeline.processor";
 import { IndicatorLine } from "./IndicatorLine";
+import { KeybindsButton } from "./KeybindsButton";
+import { TIMELINE_KEYBINDS, type Keybind } from "./keybinds";
 import { COOLDOWN_COLORS, laneLayout, type LaneLayout } from "./laneLayout";
 import { clusterRailEvents, MAX_STACKED_ICONS, type RailCluster, type RailEvent } from "./railClusters";
 import { RotationOverview } from "./RotationOverview";
@@ -69,6 +71,8 @@ export interface RotationTimelineProps {
   headerStart?: ReactNode;
   showOverview?: boolean;
   idleThresholdMs?: number;
+  /** Extra shortcuts the owner handles (e.g. the page's Shift+click flip), listed after the timeline's. */
+  extraKeybinds?: readonly Keybind[];
   /** Rendered under the lanes, e.g. the page's aura section. */
   children?: ReactNode;
 }
@@ -150,6 +154,7 @@ export function RotationTimeline({
   headerStart,
   showOverview = true,
   idleThresholdMs = DEFAULT_IDLE_THRESHOLD_MS,
+  extraKeybinds = [],
   children,
 }: RotationTimelineProps) {
   const [trackRef, trackWidth, trackEl] = useElementWidth<HTMLDivElement>();
@@ -350,7 +355,16 @@ export function RotationTimeline({
     derived.slice(0, index).reduce((sum, d) => sum + layout.height + (d.player.data.swings.length > 0 ? SWING_LANE_H : 0), 0);
 
   return (
-    <div ref={rootRef} className="bg-card text-[13px] text-foreground">
+    <div
+      ref={rootRef}
+      className="bg-card text-[13px] text-foreground"
+      // Right-click unpins. The browser menu is only suppressed while something is pinned.
+      onContextMenu={(e) => {
+        if (view.pinnedMs == null) return;
+        e.preventDefault();
+        view.unpin();
+      }}
+    >
       {/* Title row: players and ignored spells (design: Rotations 9c). */}
       <div className="flex min-h-14 flex-wrap items-center gap-3 border-b border-border px-4 py-2">
         <div className="text-[15px] font-semibold">Rotation</div>
@@ -370,6 +384,7 @@ export function RotationTimeline({
             />
           ))}
         </div>
+        <KeybindsButton keybinds={[...TIMELINE_KEYBINDS, ...extraKeybinds]} />
       </div>
 
       {showOverview && <RotationOverview series={overview.series} lead={overview.lead} view={view} />}
