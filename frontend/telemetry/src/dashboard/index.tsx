@@ -154,7 +154,8 @@ dashboard.get("/internal", async (c) => {
       </head>
       <body>
         <h1>Chronicle <span>Telemetry</span></h1>
-        <div style="display:flex;justify-content:flex-end;margin-top:-52px;margin-bottom:28px;">
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:-52px;margin-bottom:28px;">
+          <a href="/internal/analytics" style="border:1px solid #3b4c54;border-radius:6px;padding:8px 12px;background:#20282c;font-size:12px;font-weight:600;">Web analytics</a>
           <a href="/internal/notices" style="border:1px solid #3b4c54;border-radius:6px;padding:8px 12px;background:#20282c;font-size:12px;font-weight:600;">Manage notices</a>
         </div>
 
