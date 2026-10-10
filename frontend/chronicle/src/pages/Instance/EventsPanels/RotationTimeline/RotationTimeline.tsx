@@ -94,6 +94,13 @@ const LABEL_WIDTH = 220;
 /** Pointer movement under this many px is a click, not a drag. */
 const CLICK_SLOP_PX = 4;
 const SWING_LANE_H = 24;
+/** Yellow border marking a cast that crit (in the current DPS/HPS metric). */
+const CRIT_RING = "0 0 0 1px rgba(0,0,0,0.6), 0 0 0 2px var(--color-school-holy)";
+
+function isCrit(cast: TimelineCast, metric: TimelineMetric): boolean {
+  return metric === "healing" ? cast.healCrits > 0 : cast.crits > 0;
+}
+
 /** Idle gaps get a duration label once they are this wide. */
 const IDLE_LABEL_MIN_PX = 30;
 
@@ -832,7 +839,7 @@ function PlayerLanes({
           const endMs = ends.get(c) ?? castEndMs(c);
           const iconLeft = P(iconTimeMs(c, endMs) - offsetMs);
           const amount = metric === "healing" ? c.healing : c.damage + c.periodicDamage;
-          const crit = metric === "healing" ? c.healCrits > 0 : c.crits > 0;
+          const crit = isCrit(c, metric);
           if (layout.compact) {
             return (
               <div
@@ -846,8 +853,16 @@ function PlayerLanes({
           return (
             <div key={`${c.startMs}-${i}`} style={{ opacity: opacityOf(c) }}>
               <div
-                className="absolute z-[1] rounded-[3px] bg-muted bg-cover bg-center shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
-                style={{ left: `${iconLeft}%`, top: layout.iconTop, width: icon, height: icon, marginLeft: -icon / 2, backgroundImage: `url(${meta.icon})` }}
+                className="absolute z-[1] rounded-[3px] bg-muted bg-cover bg-center"
+                style={{
+                  left: `${iconLeft}%`,
+                  top: layout.iconTop,
+                  width: icon,
+                  height: icon,
+                  marginLeft: -icon / 2,
+                  backgroundImage: `url(${meta.icon})`,
+                  boxShadow: crit ? CRIT_RING : "0 0 0 1px rgba(0,0,0,0.6)",
+                }}
                 {...hoverProps(c)}
               />
               {amount > 0 && (
@@ -892,7 +907,11 @@ function PlayerLanes({
                         marginLeft: j === 0 ? 0 : -step,
                         zIndex: MAX_STACKED_ICONS - j,
                         backgroundImage: `url(${spellMeta(e.cast.spellId).icon})`,
-                        boxShadow: ring ? `0 0 0 1px var(--background), 0 0 0 2px ${ring}` : "0 0 0 1px var(--background)",
+                        boxShadow: ring
+                          ? `0 0 0 1px var(--background), 0 0 0 2px ${ring}`
+                          : isCrit(e.cast, metric)
+                            ? CRIT_RING
+                            : "0 0 0 1px var(--background)",
                         opacity: opacityOf(e.cast),
                       }}
                       onClick={(ev) => onSpellClick(ev, e.cast.spellName)}
