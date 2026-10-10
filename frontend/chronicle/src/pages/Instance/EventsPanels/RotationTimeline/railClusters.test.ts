@@ -9,18 +9,14 @@ function ev(startMs: number, kind: RailEvent["kind"] = "proc"): RailEvent {
 const sizes = (clusters: ReturnType<typeof clusterRailEvents>) => clusters.map((c) => c.events.length);
 
 describe("clusterRailEvents", () => {
-  it("groups events within a second of each other", () => {
-    // Zoomed in far enough that nothing overlaps on screen.
-    expect(sizes(clusterRailEvents([ev(0), ev(800), ev(1500), ev(5000)], 1, 20))).toEqual([3, 1]);
-  });
-
-  it("caps a time-based cluster at two seconds from its start", () => {
-    expect(sizes(clusterRailEvents([ev(0), ev(900), ev(1800), ev(2700)], 1, 20))).toEqual([3, 1]);
+  it("keeps events apart when zoomed in enough for each icon", () => {
+    // 1 px/ms: 800ms apart is 800px.
+    expect(sizes(clusterRailEvents([ev(0), ev(800), ev(1500), ev(5000)], 1, 20))).toEqual([1, 1, 1, 1]);
   });
 
   it("groups events that would overlap on screen when zoomed out", () => {
-    // 0.01 px/ms: 5s apart is 50px, closer than a 2-icon stack (20 + 10 + 20 + 4 = 54px).
-    expect(sizes(clusterRailEvents([ev(0, "cd"), ev(5000)], 0.01, 20))).toEqual([2]);
+    // 0.01 px/ms: 3s apart is 30px, closer than a 2-icon stack (20 + 10 + 4 = 34px).
+    expect(sizes(clusterRailEvents([ev(0, "cd"), ev(3000)], 0.01, 20))).toEqual([2]);
   });
 
   it("keeps distant events apart", () => {

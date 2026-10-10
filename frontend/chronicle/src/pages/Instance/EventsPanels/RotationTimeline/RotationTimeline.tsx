@@ -701,12 +701,6 @@ function PlayerLanes({
                 onPointerEnter={() => (multi ? onHoverCluster(k) : onHover(k.events[0].cast))}
                 onPointerLeave={() => (multi ? onHoverCluster(null) : onHover(null))}
               >
-                {multi && (
-                  <div
-                    className="pointer-events-none absolute bg-school-holy opacity-70"
-                    style={{ left: cooldown / 2, bottom: -3, height: 2, minWidth: 4, width: (k.endMs - k.startMs) * pxPerMs + 2 }}
-                  />
-                )}
                 {k.events.slice(0, MAX_STACKED_ICONS).map((e, j) => {
                   const size = e.kind === "cd" ? cooldown : proc;
                   const ring = e.kind === "cd" ? cooldownColor(e.cast.spellId).color : null;
@@ -727,11 +721,6 @@ function PlayerLanes({
                     />
                   );
                 })}
-                {multi && (
-                  <span className="ml-1 rounded-sm bg-muted px-1 font-mono text-[9px] leading-[14px] text-foreground">
-                    {k.events.length}
-                  </span>
-                )}
               </div>
             );
           })}
