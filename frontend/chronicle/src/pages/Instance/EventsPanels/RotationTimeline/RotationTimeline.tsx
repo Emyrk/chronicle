@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Minus, Pin, Plus } from "lucide-react";
+import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { formatNumber } from "@/lib/format";
 import { hitTypeNames } from "@/lib/hittype/hittype";
 import { cn } from "@/lib/utils";
@@ -86,17 +88,26 @@ const SWING_LANE_H = 24;
 /** Idle gaps get a duration label once they are this wide. */
 const IDLE_LABEL_MIN_PX = 30;
 
+/** Tracks an element's width; returns a callback ref, the width, and the element. */
 function useElementWidth<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
+  const [el, setEl] = useState<T | null>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
-    const el = ref.current;
     if (!el) return;
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
-  return [ref, width] as const;
+  }, [el]);
+  return [setEl, width, el] as const;
+}
+
+/** Where a lane tooltip attaches, in viewport coordinates of the window it renders in. */
+interface TooltipAnchor {
+  x: number;
+  /** Top of the space below the lane, and bottom of the space above it. */
+  below: number;
+  above: number;
+  win: Window;
 }
 
 function SlotBadge({ slot }: { slot: number }) {
@@ -122,7 +133,7 @@ export function RotationTimeline({
   idleThresholdMs = DEFAULT_IDLE_THRESHOLD_MS,
   children,
 }: RotationTimelineProps) {
-  const [trackRef, trackWidth] = useElementWidth<HTMLDivElement>();
+  const [trackRef, trackWidth, trackEl] = useElementWidth<HTMLDivElement>();
   const rootRef = useRef<HTMLDivElement>(null);
   // Latest values for the native wheel listener below.
   const wheelRef = useRef({ panBy: view.panBy, msPerPx: 0 });
@@ -245,7 +256,7 @@ export function RotationTimeline({
   }, [derived, cooldownInfo]);
 
   const trackMs = (e: PointerEvent) => {
-    const rect = trackRef.current?.getBoundingClientRect();
+    const rect = trackEl?.getBoundingClientRect();
     if (!rect || rect.width === 0) return null;
     return vs + ((e.clientX - rect.left) / rect.width) * span;
   };
@@ -276,6 +287,18 @@ export function RotationTimeline({
     // A click without a drag pins the indicator.
     const ms = trackMs(e);
     if (ms != null) view.pinAt(ms, CLICK_SLOP_PX / pxPerMs);
+  };
+
+  // Tooltips render outside the card (it clips), so they need viewport coordinates.
+  const anchorAt = (leftPct: number, laneTop: number, laneBottom: number): TooltipAnchor | null => {
+    if (!trackEl) return null;
+    const rect = trackEl.getBoundingClientRect();
+    return {
+      x: rect.left + (Math.min(100, Math.max(0, leftPct)) / 100) * rect.width,
+      below: rect.top + laneBottom,
+      above: rect.top + laneTop,
+      win: trackEl.ownerDocument.defaultView ?? window,
+    };
   };
 
   const castLaneTop = (index: number) =>
@@ -500,8 +523,11 @@ export function RotationTimeline({
           {hoveredSwing && (
             <SwingTooltip
               swing={hoveredSwing.swing}
-              left={P(hoveredSwing.swing.offsetMs - derived[hoveredSwing.slot].offsetMs)}
-              top={castLaneTop(hoveredSwing.slot) + layout.height + SWING_LANE_H - 2}
+              anchor={anchorAt(
+                P(hoveredSwing.swing.offsetMs - derived[hoveredSwing.slot].offsetMs),
+                castLaneTop(hoveredSwing.slot) + layout.height,
+                castLaneTop(hoveredSwing.slot) + layout.height + SWING_LANE_H,
+              )}
               unitName={unitName}
               icon={spellMeta(AUTO_ATTACK_SPELL_ID).icon}
             />
@@ -510,8 +536,11 @@ export function RotationTimeline({
             <ClusterTooltip
               cluster={hoveredCluster.cluster}
               casts={derived[hoveredCluster.slot].shownCasts}
-              left={P(hoveredCluster.cluster.startMs - derived[hoveredCluster.slot].offsetMs)}
-              top={castLaneTop(hoveredCluster.slot) + layout.height - 4}
+              anchor={anchorAt(
+                P(hoveredCluster.cluster.startMs - derived[hoveredCluster.slot].offsetMs),
+                castLaneTop(hoveredCluster.slot),
+                castLaneTop(hoveredCluster.slot) + layout.height,
+              )}
               spellMeta={spellMeta}
               cooldownColor={cooldownColor}
             />
@@ -519,11 +548,14 @@ export function RotationTimeline({
           {hovered && (
             <CastTooltip
               cast={hovered.cast}
-              left={P(
-                iconTimeMs(hovered.cast, derived[hovered.slot].ends.get(hovered.cast) ?? castEndMs(hovered.cast)) -
-                  derived[hovered.slot].offsetMs,
+              anchor={anchorAt(
+                P(
+                  iconTimeMs(hovered.cast, derived[hovered.slot].ends.get(hovered.cast) ?? castEndMs(hovered.cast)) -
+                    derived[hovered.slot].offsetMs,
+                ),
+                castLaneTop(hovered.slot),
+                castLaneTop(hovered.slot) + layout.height,
               )}
-              top={castLaneTop(hovered.slot) + layout.height - 4}
               meta={spellMeta(hovered.cast.spellId)}
               endMs={derived[hovered.slot].ends.get(hovered.cast) ?? castEndMs(hovered.cast)}
               unitName={unitName}
@@ -944,19 +976,20 @@ interface ClusterTooltipProps {
   cluster: RailCluster;
   /** The player's shown casts, for GCD casts that landed in the same window. */
   casts: readonly TimelineCast[];
-  left: number;
-  top: number;
+  anchor: TooltipAnchor | null;
   spellMeta: (spellId: number | null) => SpellMeta;
   cooldownColor: (spellId: number) => { color: string; index: number };
 }
 
 const CLUSTER_CAST_MARGIN_MS = 300;
+/** Rows listed in the stack tooltip; the rest are summarized. */
+const CLUSTER_MAX_ROWS = 12;
 
 /**
  * Stacked rail events (design: Rotations 2a): a mini timeline with numbered
  * marks, then one row per event with its offset from the first.
  */
-function ClusterTooltip({ cluster, casts, left, top, spellMeta, cooldownColor }: ClusterTooltipProps) {
+function ClusterTooltip({ cluster, casts, anchor, spellMeta, cooldownColor }: ClusterTooltipProps) {
   const railCasts = new Set(cluster.events.map((e) => e.cast));
   const gcdCasts = casts
     .filter(
@@ -979,7 +1012,7 @@ function ClusterTooltip({ cluster, casts, left, top, spellMeta, cooldownColor }:
         : { label: "Cast", color: "var(--muted-foreground)" };
 
   return (
-    <TooltipShell left={left} top={top} width="w-[300px]">
+    <TooltipShell anchor={anchor} width={300}>
       <div className="text-xs font-semibold">
         {all.length} events within {((last - first) / 1000).toFixed(2)}s
       </div>
@@ -1006,7 +1039,7 @@ function ClusterTooltip({ cluster, casts, left, top, spellMeta, cooldownColor }:
         </div>
       </div>
       <div className="flex flex-col">
-        {all.map((e, i) => {
+        {all.slice(0, CLUSTER_MAX_ROWS).map((e, i) => {
           const kind = kindInfo(e);
           const damage = e.cast.damage + e.cast.periodicDamage;
           return (
@@ -1030,6 +1063,11 @@ function ClusterTooltip({ cluster, casts, left, top, spellMeta, cooldownColor }:
             </div>
           );
         })}
+        {all.length > CLUSTER_MAX_ROWS && (
+          <div className="border-t border-border pt-1 text-[10px] text-muted-foreground">
+            +{all.length - CLUSTER_MAX_ROWS} more
+          </div>
+        )}
       </div>
     </TooltipShell>
   );
@@ -1037,8 +1075,7 @@ function ClusterTooltip({ cluster, casts, left, top, spellMeta, cooldownColor }:
 
 interface CastTooltipProps {
   cast: TimelineCast;
-  left: number;
-  top: number;
+  anchor: TooltipAnchor | null;
   meta: SpellMeta;
   /** When the cast or channel finished. */
   endMs: number;
@@ -1046,11 +1083,11 @@ interface CastTooltipProps {
   activeCooldowns: { cast: TimelineCast; leftMs: number; icon: string; color: string }[];
 }
 
-function CastTooltip({ cast, left, top, meta, endMs, unitName, activeCooldowns }: CastTooltipProps) {
+function CastTooltip({ cast, anchor, meta, endMs, unitName, activeCooldowns }: CastTooltipProps) {
   const castMs = endMs - cast.startMs;
   const damage = cast.damage + cast.periodicDamage;
   return (
-    <TooltipShell left={left} top={top} width="w-72">
+    <TooltipShell anchor={anchor} width={288}>
       <TooltipHeader
         icon={meta.icon}
         title={cast.spellName}
@@ -1091,18 +1128,37 @@ function CastTooltip({ cast, left, top, meta, endMs, unitName, activeCooldowns }
   );
 }
 
-/** Shared frame for the lane tooltips. */
-function TooltipShell({ left, top, width, children }: { left: number; top: number; width: string; children: ReactNode }) {
-  return (
+/** Opens above the lane when there is less room than this below and more above. */
+const TOOLTIP_FLIP_SPACE = 260;
+const TOOLTIP_MARGIN = 8;
+
+/**
+ * Shared frame for the lane tooltips. Portaled out of the timeline card, which
+ * clips its content, and placed in viewport coordinates: below the lane, or
+ * above it when there is more room there, never taller than the space.
+ */
+function TooltipShell({ anchor, width, children }: { anchor: TooltipAnchor | null; width: number; children: ReactNode }) {
+  const container = usePortalContainer();
+  if (!anchor || !container) return null;
+  const { win } = anchor;
+  const spaceBelow = win.innerHeight - anchor.below - TOOLTIP_MARGIN;
+  const spaceAbove = anchor.above - TOOLTIP_MARGIN;
+  const flip = spaceBelow < TOOLTIP_FLIP_SPACE && spaceAbove > spaceBelow;
+  const left = Math.min(Math.max(anchor.x - width / 2, TOOLTIP_MARGIN), win.innerWidth - width - TOOLTIP_MARGIN);
+  return createPortal(
     <div
-      className={cn(
-        "pointer-events-none absolute z-20 flex -translate-x-1/2 flex-col gap-2 rounded-md border border-border bg-popover p-3 text-[11px] shadow-xl",
+      className="pointer-events-none fixed z-50 flex flex-col gap-2 overflow-hidden rounded-md border border-border bg-popover p-3 text-[11px] text-foreground shadow-xl"
+      style={{
+        left,
         width,
-      )}
-      style={{ left: `${Math.min(88, Math.max(12, left))}%`, top }}
+        ...(flip
+          ? { bottom: win.innerHeight - anchor.above + 4, maxHeight: spaceAbove - 4 }
+          : { top: anchor.below + 4, maxHeight: spaceBelow - 4 }),
+      }}
     >
       {children}
-    </div>
+    </div>,
+    container,
   );
 }
 
@@ -1126,16 +1182,15 @@ function TooltipHeader({ icon, title, subtitle, failed }: { icon: string; title:
 
 interface SwingTooltipProps {
   swing: TimelineSwing;
-  left: number;
-  top: number;
+  anchor: TooltipAnchor | null;
   unitName: (guid: string) => string;
   icon: string;
 }
 
-function SwingTooltip({ swing, left, top, unitName, icon }: SwingTooltipProps) {
+function SwingTooltip({ swing, anchor, unitName, icon }: SwingTooltipProps) {
   const outcome = hitTypeNames(swing.hitType).filter((n) => n !== "Off-Hand" && n !== "Hit");
   return (
-    <TooltipShell left={left} top={top} width="w-60">
+    <TooltipShell anchor={anchor} width={240}>
       <TooltipHeader
         icon={icon}
         title={swing.offHand ? "Off hand" : "Main hand"}
