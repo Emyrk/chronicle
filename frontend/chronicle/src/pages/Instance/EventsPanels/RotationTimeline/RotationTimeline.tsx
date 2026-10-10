@@ -1143,8 +1143,8 @@ function ClusterTooltip({ cluster, casts, anchor, spellMeta, cooldownColor }: Cl
                 <span className="truncate text-xs text-foreground">{e.cast.spellName}</span>
                 <span className="text-[10px]" style={{ color: kind.color }}>
                   {kind.label}
+                  {damage > 0 && <span className="ml-1 font-mono text-foreground">{formatNumber(damage)} dmg</span>}
                   <span className="ml-1 font-mono text-muted-foreground">· {CAST_SOURCE_LABELS[e.cast.source]}</span>
-                  {damage > 0 && <span className="ml-1 font-mono text-muted-foreground">{formatNumber(damage)}</span>}
                 </span>
               </span>
               <span className="flex flex-col items-end font-mono text-[10px]">
