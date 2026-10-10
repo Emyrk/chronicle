@@ -27,6 +27,18 @@ var spellOverrides = []spellOverride{
 		},
 	},
 	{
+		flavor:  database.FlavorVanilla,
+		spellID: 31818,
+		mutate: func(spell *chrondbc.Spell, spells map[chrondbc.SpellID]*chrondbc.Spell) {
+			cast := spells[1454]
+			if cast == nil {
+				return
+			}
+			spell.SpellIcon = cast.SpellIcon
+			spell.SpellIconID_ = cast.SpellIconID_
+		},
+	},
+	{
 		flavor:           database.FlavorVanilla,
 		spellID:          20572,
 		allClassCooldown: true,

@@ -40,6 +40,26 @@ func TestApplySpell(t *testing.T) {
 	require.Equal(t, int32(20_000), otherSpell.Duration.MaxDuration)
 }
 
+func TestApplySpellsLifeTapIcon(t *testing.T) {
+	t.Parallel()
+
+	cast := &chrondbc.Spell{
+		ID:           1454,
+		SpellIcon:    dbcmem.SpellIcon{ID: 208, TextureFilename: "Spell_Shadow_BurningSpirit"},
+		SpellIconID_: 208,
+	}
+	triggered := &chrondbc.Spell{
+		ID:           31818,
+		SpellIcon:    dbcmem.SpellIcon{ID: 206, TextureFilename: "Spell_Shadow_LifeDrain"},
+		SpellIconID_: 206,
+	}
+
+	ApplySpells(database.WoWFlavor{database.FlavorVanilla}, []*chrondbc.Spell{cast, triggered})
+
+	require.Equal(t, cast.SpellIcon, triggered.SpellIcon)
+	require.Equal(t, cast.SpellIconID_, triggered.SpellIconID_)
+}
+
 func TestApplySpellsBerserking(t *testing.T) {
 	t.Parallel()
 
