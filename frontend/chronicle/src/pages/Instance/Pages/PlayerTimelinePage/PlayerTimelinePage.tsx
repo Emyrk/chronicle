@@ -44,6 +44,11 @@ interface PlayerTimelinePageProps {
 export function PlayerTimelinePage({ context, initialState, onStateChange }: PlayerTimelinePageProps) {
   const { selectedEncounterIds } = context;
   const saved = useMemo(() => parsePlayerTimelineState(initialState), [initialState]);
+  // Player picks live here, above the per-encounter content, so they survive
+  // switching encounters. null slots use the encounter's defaults, NONE leaves B empty.
+  const [overrides, setOverrides] = useState<[string | null, string | null]>(() =>
+    saved?.players[0] ? [saved.players[0], saved.players[1] ?? NONE] : [null, null],
+  );
 
   if (selectedEncounterIds.length !== 1) {
     return <EncounterPicker context={context} />;
@@ -54,6 +59,8 @@ export function PlayerTimelinePage({ context, initialState, onStateChange }: Pla
       context={context}
       saved={saved}
       onStateChange={onStateChange}
+      overrides={overrides}
+      setOverrides={setOverrides}
     />
   );
 }
@@ -82,17 +89,15 @@ interface PlayerTimelineContentProps {
   context: PanelContext;
   saved: PlayerTimelineState | null;
   onStateChange?: (state: PlayerTimelineState) => void;
+  overrides: [string | null, string | null];
+  setOverrides: (overrides: [string | null, string | null]) => void;
 }
 
-function PlayerTimelineContent({ context, saved, onStateChange }: PlayerTimelineContentProps) {
+function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOverrides }: PlayerTimelineContentProps) {
   const { instance } = context;
   const encounterId = context.selectedEncounterIds[0];
   // Window, pin and debuff target only make sense on the encounter they were saved on.
   const sameEncounter = saved?.encounterId === encounterId;
-  // Explicit picks; null slots fall back to the defaults below, NONE leaves B empty.
-  const [overrides, setOverrides] = useState<[string | null, string | null]>(() =>
-    saved?.players[0] ? [saved.players[0], saved.players[1] ?? NONE] : [null, null],
-  );
   const [debuffTarget, setDebuffTarget] = useState<string | null>(sameEncounter ? (saved?.debuffTarget ?? null) : null);
   const [damageByPlayer, setDamageByPlayer] = useState<ReadonlyMap<string, number>>(new Map());
 
@@ -108,7 +113,11 @@ function PlayerTimelineContent({ context, saved, onStateChange }: PlayerTimeline
     const top = ranked[0]?.[0] ?? null;
     const cls = top ? instance.players?.[top]?.class : undefined;
     const next = ranked.find(([guid]) => guid !== top && instance.players?.[guid]?.class === cls)?.[0] ?? null;
-    return [overrides[0] ?? top, overrides[1] === NONE ? null : (overrides[1] ?? next)];
+    // A pick who was not in this encounter falls back to the default here, but
+    // stays picked for encounters they were in.
+    const present = (guid: string | null) =>
+      guid != null && (ranked.length === 0 || ranked.some(([id]) => id === guid)) ? guid : null;
+    return [present(overrides[0]) ?? top, overrides[1] === NONE ? null : (present(overrides[1]) ?? next)];
   }, [ranked, overrides, instance.players]);
   const setPicked = setOverrides;
 
