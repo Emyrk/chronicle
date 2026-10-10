@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { ChevronDown, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -76,18 +75,16 @@ export function PlayerPicker({ slot, value, ranked, players, allowNone, onChange
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <PopoverPrimitive.Trigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <span
-            className="flex size-4 items-center justify-center rounded-[3px] text-[10px] font-bold text-background"
-            style={{ background: SLOT_COLORS[slot] }}
-          >
-            {SLOT_LABELS[slot]}
-          </span>
-          <span className="font-semibold" style={{ color: classColor(current?.class ?? null) }}>
-            {current?.name ?? (allowNone ? "None" : "Pick player")}
-          </span>
+        {/* Plain name underlined in the player's line color (design: Rotations 4a). */}
+        <button
+          type="button"
+          aria-label={`Player ${SLOT_LABELS[slot]}`}
+          className="flex items-center gap-1 border-b-2 pb-0.5 text-sm font-semibold outline-none hover:opacity-80 focus-visible:opacity-80"
+          style={{ borderColor: SLOT_COLORS[slot], color: current ? classColor(current.class) : undefined }}
+        >
+          <span className={cn(!current && "text-muted-foreground")}>{current?.name ?? (allowNone ? "None" : "Pick player")}</span>
           <ChevronDown className="size-3 text-muted-foreground" />
-        </Button>
+        </button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal container={portalContainer}>
         <PopoverPrimitive.Content

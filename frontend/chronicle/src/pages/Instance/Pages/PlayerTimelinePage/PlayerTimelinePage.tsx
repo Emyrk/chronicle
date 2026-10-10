@@ -156,11 +156,9 @@ function PlayerTimelineContent({ context }: PlayerTimelinePageProps) {
 
   const instancePlayers = instance.players ?? {};
   const pickers = (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2.5">
       <PlayerPicker slot={0} value={picked[0]} ranked={ranked} players={instancePlayers} onChange={(g) => setPicked([g, picked[1]])} />
-      <Button variant="ghost" size="sm" onClick={() => setPicked([picked[1], picked[0]])} className="text-[11px] text-muted-foreground">
-        vs <ArrowLeftRight className="size-3" />
-      </Button>
+      <span className="text-xs text-muted-foreground">vs</span>
       <PlayerPicker
         slot={1}
         value={picked[1]}
@@ -169,6 +167,16 @@ function PlayerTimelineContent({ context }: PlayerTimelinePageProps) {
         allowNone
         onChange={(g) => setPicked([picked[0], g ?? NONE])}
       />
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => setPicked([picked[1], picked[0]])}
+        aria-label="Swap players"
+        title="Swap players"
+        className="text-muted-foreground"
+      >
+        <ArrowLeftRight className="size-3.5" />
+      </Button>
     </div>
   );
 
