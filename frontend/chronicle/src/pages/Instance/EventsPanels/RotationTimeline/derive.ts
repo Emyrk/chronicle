@@ -156,6 +156,10 @@ export interface NearbyActivity {
   untilNextMs: number | null;
   /** ms idle at timeMs (0 while casting or on the GCD). */
   idleMs: number;
+  /** Start of the last and next actions, and when the player stopped being busy. */
+  lastMs: number | null;
+  nextMs: number | null;
+  busyUntilMs: number | null;
 }
 
 /**
@@ -181,5 +185,8 @@ export function nearbyActivity(casts: readonly TimelineCast[], timeMs: number, g
     sinceLastMs: last ? timeMs - last.startMs : null,
     untilNextMs: next ? next.startMs - timeMs : null,
     idleMs: last && timeMs > busyUntil ? timeMs - busyUntil : 0,
+    lastMs: last?.startMs ?? null,
+    nextMs: next?.startMs ?? null,
+    busyUntilMs: last ? busyUntil : null,
   };
 }

@@ -11,6 +11,7 @@ import {
   dpsSeries,
   idleGaps,
   nearbyActivity,
+  type NearbyActivity,
   playerCasts,
   playerStats,
   DEFAULT_IDLE_THRESHOLD_MS,
@@ -475,6 +476,8 @@ export function RotationTimeline({
                 layout={layout}
                 cooldownInfo={cooldownInfo}
                 cooldownColor={cooldownColor}
+                near={probeMs != null ? nearbyActivity(d.actions, probeMs + d.offsetMs, gcd) : null}
+                probeMs={probeMs != null ? probeMs + d.offsetMs : null}
                 spellMeta={spellMeta}
                 onToggleIgnored={view.toggleIgnored}
                 onHover={(cast) => setHovered(cast ? { slot: d.slot, cast } : null)}
@@ -534,6 +537,9 @@ interface PlayerLanesProps {
   /** Replay time; casts after it are dimmed. */
   nowMs: number | null;
   layout: LaneLayout;
+  /** Last/next action around the indicator, in this player's raw time. */
+  near: NearbyActivity | null;
+  probeMs: number | null;
   cooldownInfo: (spellId: number) => { durationMs: number } | null;
   cooldownColor: (spellId: number) => { color: string; index: number };
   spellMeta: (spellId: number | null) => SpellMeta;
@@ -558,6 +564,8 @@ function PlayerLanes({
   gcd,
   nowMs,
   layout,
+  near,
+  probeMs,
   cooldownInfo,
   cooldownColor,
   spellMeta,
@@ -672,6 +680,42 @@ function PlayerLanes({
               </div>
             );
           })}
+
+        {/* Around the indicator: a bracket from the last action to the next, red while idle (design: Rotations 2a). */}
+        {near && probeMs != null && (
+          <div className="pointer-events-none absolute inset-0 z-[5]">
+            {(near.lastMs != null || near.nextMs != null) && (
+              <div
+                className="absolute h-px bg-muted-foreground opacity-60"
+                style={{
+                  top: railTop + 1,
+                  left: `${near.lastMs != null ? P(near.lastMs - offsetMs) : 0}%`,
+                  width: `${(near.nextMs != null ? P(near.nextMs - offsetMs) : 100) - (near.lastMs != null ? P(near.lastMs - offsetMs) : 0)}%`,
+                }}
+              />
+            )}
+            {near.idleMs > 50 && near.busyUntilMs != null && (
+              <div
+                className="absolute h-[3px] bg-destructive"
+                style={{
+                  top: railTop,
+                  left: `${P(near.busyUntilMs - offsetMs)}%`,
+                  width: `${P(probeMs - offsetMs) - P(near.busyUntilMs - offsetMs)}%`,
+                }}
+              />
+            )}
+            {[near.lastMs, near.nextMs].map(
+              (ms, i) =>
+                ms != null && (
+                  <div
+                    key={i}
+                    className="absolute -ml-px h-2.5 w-0.5 bg-foreground"
+                    style={{ top: railTop - 4, left: `${P(ms - offsetMs)}%` }}
+                  />
+                ),
+            )}
+          </div>
+        )}
 
         {/* GCD casts. */}
         {gcdCasts.map((c, i) => {

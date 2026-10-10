@@ -146,15 +146,22 @@ describe("nearbyActivity", () => {
   const casts = [cast(0), cast(1500), cast(5000)];
 
   it("is busy while a cast's GCD is running", () => {
-    expect(nearbyActivity(casts, 2000, gcd15)).toEqual({ sinceLastMs: 500, untilNextMs: 3000, idleMs: 0 });
+    expect(nearbyActivity(casts, 2000, gcd15)).toMatchObject({ sinceLastMs: 500, untilNextMs: 3000, idleMs: 0 });
   });
 
   it("counts idle time after the last slot ends", () => {
-    expect(nearbyActivity(casts, 4000, gcd15)).toEqual({ sinceLastMs: 2500, untilNextMs: 1000, idleMs: 1000 });
+    expect(nearbyActivity(casts, 4000, gcd15)).toEqual({
+      sinceLastMs: 2500,
+      untilNextMs: 1000,
+      idleMs: 1000,
+      lastMs: 1500,
+      nextMs: 5000,
+      busyUntilMs: 3000,
+    });
   });
 
   it("has no last action before the first cast", () => {
-    expect(nearbyActivity(casts, -500, gcd15)).toEqual({ sinceLastMs: null, untilNextMs: 500, idleMs: 0 });
+    expect(nearbyActivity(casts, -500, gcd15)).toMatchObject({ sinceLastMs: null, untilNextMs: 500, idleMs: 0, lastMs: null });
   });
 
   it("has no next action after the last cast", () => {
