@@ -5,6 +5,8 @@ import {
   busySegments,
   nearbyActivity,
   castAt,
+  castEndMs,
+  castEnds,
   castSlotEnd,
   damageLead,
   dpsSeries,
@@ -22,6 +24,8 @@ function cast(startMs: number, spellId = 1, extra: Partial<TimelineCast> = {}): 
     target: "",
     castTimeMs: null,
     channelTimeMs: null,
+    channel: false,
+    tickMs: [],
     failed: false,
     itemId: null,
     damage: 0,
@@ -71,7 +75,45 @@ describe("castSlotEnd", () => {
   });
 
   it("uses the channel time", () => {
-    expect(castSlotEnd(cast(1000, 1, { channelTimeMs: 8000 }), gcd15)).toBe(9000);
+    expect(castSlotEnd(cast(1000, 1, { channel: true, channelTimeMs: 8000 }), gcd15)).toBe(9000);
+  });
+});
+
+describe("castEndMs", () => {
+  it("ends a channel at its last tick when cut short", () => {
+    expect(castEndMs(cast(1000, 1, { channel: true, channelTimeMs: 15000, tickMs: [4000, 7000] }))).toBe(7000);
+  });
+
+  it("ignores ticks after the planned channel end", () => {
+    expect(castEndMs(cast(0, 1, { channel: true, channelTimeMs: 3000, tickMs: [1000, 2000, 3000, 9000] }))).toBe(3000);
+  });
+
+  it("falls back to the planned length without ticks", () => {
+    expect(castEndMs(cast(0, 1, { channel: true, channelTimeMs: 5000 }))).toBe(5000);
+  });
+
+  it("uses ticks for text-log channels with no logged duration", () => {
+    expect(castEndMs(cast(0, 1, { channel: true, tickMs: [1000, 2000, 3000] }))).toBe(3000);
+  });
+
+  it("cuts a channel short at the next interrupting cast", () => {
+    expect(castEndMs(cast(0, 1, { channel: true, channelTimeMs: 5000 }), 3800)).toBe(3800);
+  });
+
+  it("ends a cast when the spell went off and ignores DoT ticks", () => {
+    expect(castEndMs(cast(0, 1, { endMs: 2500, tickMs: [5000, 8000] }))).toBe(2500);
+  });
+});
+
+describe("castEnds", () => {
+  it("clamps overlapping channels to the next GCD cast but not to off-GCD spells", () => {
+    const gcd: GcdLookup = (id) => (id === 99 ? 0 : 1500);
+    const a = cast(0, 1, { channel: true, channelTimeMs: 5000 });
+    const trinket = cast(1000, 99);
+    const b = cast(3800, 1, { channel: true, channelTimeMs: 5000 });
+    const ends = castEnds([a, trinket, b], gcd);
+    expect(ends.get(a)).toBe(3800);
+    expect(ends.get(b)).toBe(8800);
   });
 });
 

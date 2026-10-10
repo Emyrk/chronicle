@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import {
   alignOffsetMs,
   busySegments,
+  castEndMs,
+  castEnds,
   castSlotEnd,
   damageLead,
   dpsSeries,
@@ -69,6 +71,8 @@ interface DerivedPlayer {
   shownCasts: TimelineCast[];
   /** Shown casts the player pressed (no procs), for the last/next readout. */
   actions: TimelineCast[];
+  /** When each cast or channel finished (cut short by the next cast). */
+  ends: Map<TimelineCast, number>;
   offsetMs: number;
   gaps: IdleGap[];
   busy: IdleGap[];
@@ -187,6 +191,7 @@ export function RotationTimeline({
           slot,
           casts,
           shownCasts: casts.filter((c) => !isIgnored(c.spellName)),
+          ends: castEnds(casts, gcd),
           actions: casts.filter(
             (c) =>
               !isIgnored(c.spellName) &&
@@ -516,6 +521,7 @@ export function RotationTimeline({
               left={P(hovered.cast.startMs - derived[hovered.slot].offsetMs)}
               top={castLaneTop(hovered.slot) + layout.height - 4}
               meta={spellMeta(hovered.cast.spellId)}
+              endMs={derived[hovered.slot].ends.get(hovered.cast) ?? castEndMs(hovered.cast)}
               unitName={unitName}
               activeCooldowns={activeCooldownsAt(derived[hovered.slot].shownCasts, hovered.cast, cooldownInfo).map((a) => ({
                 ...a,
@@ -587,7 +593,10 @@ function PlayerLanes({
     const info = cooldownInfo(c.spellId);
     return info != null && visible(c.startMs, c.startMs + info.durationMs);
   });
-  const gcdCasts = casts.filter((c) => !cooldownInfo(c.spellId) && !isOffGcd(c) && visible(c.startMs, castSlotEnd(c, gcd)));
+  const { ends } = derived;
+  const gcdCasts = casts.filter(
+    (c) => !cooldownInfo(c.spellId) && !isOffGcd(c) && visible(c.startMs, castSlotEnd(c, gcd, ends)),
+  );
   const swings = player.data.swings.filter((s) => visible(s.offsetMs, s.offsetMs));
   const { icon, proc, cooldown, railTop } = layout;
 
@@ -736,8 +745,33 @@ function PlayerLanes({
               />
             );
           }
+          const endMs = ends.get(c) ?? castEndMs(c);
+          const school = `var(--color-school-${meta.school})`;
           return (
             <div key={`${c.startMs}-${i}`} style={{ opacity: opacityOf(c) }}>
+              {/* Cast time or channel: a bar out of the icon to when it finished, notched per channel tick. */}
+              {endMs > c.startMs && (
+                <div
+                  className="pointer-events-none absolute h-1 rounded-r-sm"
+                  style={{
+                    left: `${left}%`,
+                    width: `${P(endMs - offsetMs) - left}%`,
+                    top: layout.iconTop + icon / 2 - 2,
+                    background: school,
+                  }}
+                >
+                  {c.channel &&
+                    c.tickMs
+                      .filter((t) => t > c.startMs && t <= endMs)
+                      .map((t) => (
+                        <span
+                          key={t}
+                          className="absolute -top-0.5 h-2 w-px bg-background"
+                          style={{ left: `${((t - c.startMs) / (endMs - c.startMs)) * 100}%` }}
+                        />
+                      ))}
+                </div>
+              )}
               <div
                 className="absolute rounded-[3px] bg-muted bg-cover bg-center shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
                 style={{ left: `${left}%`, top: layout.iconTop, width: icon, height: icon, marginLeft: -icon / 2, backgroundImage: `url(${meta.icon})` }}
@@ -981,12 +1015,14 @@ interface CastTooltipProps {
   left: number;
   top: number;
   meta: SpellMeta;
+  /** When the cast or channel finished. */
+  endMs: number;
   unitName: (guid: string) => string;
   activeCooldowns: { cast: TimelineCast; leftMs: number; icon: string; color: string }[];
 }
 
-function CastTooltip({ cast, left, top, meta, unitName, activeCooldowns }: CastTooltipProps) {
-  const castMs = Math.max(cast.endMs - cast.startMs, cast.channelTimeMs ?? 0);
+function CastTooltip({ cast, left, top, meta, endMs, unitName, activeCooldowns }: CastTooltipProps) {
+  const castMs = endMs - cast.startMs;
   const damage = cast.damage + cast.periodicDamage;
   return (
     <TooltipShell left={left} top={top} width="w-72">
@@ -996,7 +1032,7 @@ function CastTooltip({ cast, left, top, meta, unitName, activeCooldowns }: CastT
         failed={cast.failed}
         subtitle={[
           formatClock(cast.startMs),
-          castMs > 0 ? `${(castMs / 1000).toFixed(1)}s cast` : "instant",
+          castMs > 0 ? `${(castMs / 1000).toFixed(1)}s ${cast.channel ? "channel" : "cast"}` : "instant",
         ].join(" · ") + (cast.target ? ` → ${unitName(cast.target)}` : "")}
       />
       {damage > 0 && (

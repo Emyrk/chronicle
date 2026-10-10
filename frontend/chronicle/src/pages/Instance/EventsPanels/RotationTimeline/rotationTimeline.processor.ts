@@ -47,7 +47,12 @@ export interface TimelineCast {
   target: string;
   /** Cast time reported by the log (spell_start), if any. */
   castTimeMs: number | null;
+  /** Planned channel length from spell_start, if logged. */
   channelTimeMs: number | null;
+  /** A channeled spell (spell_start spell type 1, a channel time, or a "channels" log line). */
+  channel: boolean;
+  /** Offsets of periodic damage ticks linked to this cast (channel ticks, DoT ticks). */
+  tickMs: number[];
   failed: boolean;
   itemId: number | null;
   /** Damage linked to this cast: direct hits plus periodic ticks. */
@@ -103,6 +108,7 @@ interface PendingStart {
   spellId: number;
   castTimeMs: number | null;
   channelTimeMs: number | null;
+  channel: boolean;
 }
 
 interface PlayerScratch {
@@ -182,6 +188,8 @@ function newCast(startMs: number, endMs: number, spellId: number, spellName: str
     target,
     castTimeMs: null,
     channelTimeMs: null,
+    channel: false,
+    tickMs: [],
     failed: false,
     itemId: null,
     damage: 0,
@@ -197,6 +205,7 @@ function completeCast(cast: TimelineCast, pending: PendingStart | null): void {
   cast.startMs = pending.startMs;
   cast.castTimeMs = pending.castTimeMs ?? cast.endMs - pending.startMs;
   cast.channelTimeMs = pending.channelTimeMs;
+  cast.channel = cast.channel || pending.channel;
 }
 
 export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, RotationTimelineEvent> = {
@@ -281,6 +290,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
           const cast = casts[idx];
           if (periodic) {
             cast.periodicDamage += amount;
+            cast.tickMs.push(event.offsetMilli);
             return;
           }
           if (event.offsetMilli - cast.endMs > DAMAGE_LINK_WINDOW_MS) return;
@@ -300,6 +310,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
           spellId: event.spell.id,
           castTimeMs: event.castTimeMilli > 0 ? event.castTimeMilli : null,
           channelTimeMs: event.channelTimeMilli > 0 ? event.channelTimeMilli : null,
+          channel: event.spellType === 1 || event.channelTimeMilli > 0,
         };
         return;
       }
@@ -336,7 +347,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         const s = scratch(event.caster);
         const spellId = event.spell.id;
         if (event.action === CastAction.BeginsToCast) {
-          s.pendingText = { startMs: event.offsetMilli, spellId, castTimeMs: null, channelTimeMs: null };
+          s.pendingText = { startMs: event.offsetMilli, spellId, castTimeMs: null, channelTimeMs: null, channel: false };
           return;
         }
         if (event.action === CastAction.FailsCasting) {
@@ -351,6 +362,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         }
         if (event.action !== CastAction.Casts && event.action !== CastAction.Channels) return;
         const cast = newCast(event.offsetMilli, event.offsetMilli, spellId, event.spell.name, event.target);
+        cast.channel = event.action === CastAction.Channels;
         completeCast(cast, s.pendingText);
         s.pendingText = null;
         s.lastTextBySpell.set(spellId, p.textCasts.length);
