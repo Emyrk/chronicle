@@ -84,7 +84,8 @@ export function useRotationView(
   const userEnd = rangeState.durationMs === durationMs ? rangeState.range[1] : durationMs;
   const userSpan = userEnd - userStart;
   // Replay keeps the user's zoom (span) but puts now at a fixed spot; it ignores pan.
-  // Follow does the same around the pin or the overview cursor, centered.
+  // Follow centers the user's zoom on the pin or the overview cursor (at full
+  // zoom out that is simply the whole fight).
   const replaySpan = userSpan >= durationMs ? Math.min(REPLAY_WINDOW_MS, durationMs) : userSpan;
   const followMs = follow ? (pinnedMs ?? overviewMs) : null;
   let startMs = userStart;
@@ -93,7 +94,7 @@ export function useRotationView(
     startMs = nowMs - replaySpan * REPLAY_NOW_FRACTION;
     endMs = startMs + replaySpan;
   } else if (followMs != null) {
-    [startMs, endMs] = clampWindow(followMs - replaySpan / 2, followMs + replaySpan / 2, durationMs);
+    [startMs, endMs] = clampWindow(followMs - userSpan / 2, followMs + userSpan / 2, durationMs);
   }
   const [alignState, setAlign] = useState<AlignMode>("pull");
   // Replay time is pull time, so per-player alignment does not apply.
@@ -144,11 +145,7 @@ export function useRotationView(
     [durationMs, setRange],
   );
 
-  // Showing the whole fight and following a point are opposites: Fit ends Follow.
-  const fit = useCallback(() => {
-    setFollow(false);
-    setRange(() => [0, durationMs]);
-  }, [durationMs, setRange]);
+  const fit = useCallback(() => setRange(() => [0, durationMs]), [durationMs, setRange]);
 
   const panBy = useCallback(
     (ms: number) => {

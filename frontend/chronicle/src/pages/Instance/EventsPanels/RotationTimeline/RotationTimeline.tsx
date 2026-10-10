@@ -280,6 +280,8 @@ export function RotationTimeline({
           <SegButton onClick={view.fit} title="Show whole fight">
             Fit
           </SegButton>
+        </Segmented>
+        <div className="flex h-7 items-center rounded-[5px] border border-border bg-background p-0.5">
           <button
             type="button"
             onClick={view.toggleFollow}
@@ -295,7 +297,7 @@ export function RotationTimeline({
             </span>
             Follow
           </button>
-        </Segmented>
+        </div>
         <span className="h-4 w-px bg-border" />
         <Segmented label="Align">
           <SegButton active={view.align === "pull"} disabled={replaying} onClick={() => view.setAlign("pull")}>
