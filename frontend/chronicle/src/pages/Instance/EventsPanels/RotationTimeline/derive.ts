@@ -320,6 +320,8 @@ export function withOverrideBuffCasts(
 
 /** A logged cast of the same spell this close to a consume is the same use. */
 const CONSUME_MATCH_MS = 1000;
+/** A buff of the consumable's spell starting this close to the use is the buff it applied. */
+const CONSUME_BUFF_MATCH_MS = 1500;
 
 /**
  * Adds the player's consumables as casts drawn on the rail. A logged cast of
@@ -328,6 +330,11 @@ const CONSUME_MATCH_MS = 1000;
  */
 export function withConsumeCasts(data: PlayerTimelineData): PlayerTimelineData {
   if (data.consumes.length === 0) return data;
+  // The buff a consumable applied, so its tint shows how long it really lasted.
+  const buffFor = (spellId: number, atMs: number) =>
+    data.aurasOn.find(
+      (a) => a.isBuff && a.spellId === spellId && Math.abs(a.startMs - atMs) <= CONSUME_BUFF_MATCH_MS,
+    );
   const matches = (c: TimelineCast) =>
     data.consumes.some((u) => u.spellId === c.spellId && Math.abs(u.offsetMs - c.startMs) <= CONSUME_MATCH_MS);
   const added: TimelineCast[] = data.consumes.map((u) => ({
@@ -350,6 +357,10 @@ export function withConsumeCasts(data: PlayerTimelineData): PlayerTimelineData {
     overheal: 0,
     healCrits: 0,
     consume: { itemId: u.itemId, itemName: u.itemName },
+    ...(() => {
+      const buff = buffFor(u.spellId, u.offsetMs);
+      return buff?.endMs != null ? { buffEndMs: buff.endMs } : {};
+    })(),
   }));
   return data.goCasts.length > 0
     ? { ...data, goCasts: [...data.goCasts.filter((c) => !matches(c)), ...added] }

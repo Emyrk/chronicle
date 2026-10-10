@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Minus, Pin, Plus } from "lucide-react";
 import { usePortalContainer } from "@/components/ui/PortalContainerContext";
@@ -269,14 +269,34 @@ export function RotationTimeline({
   const layout = laneLayout(pxPerMs, view.iconSize);
 
   // One color per cooldown spell, in order of first use, shared by both players.
+  // How long a cast tints its lane: a buff's real duration when known (buff
+  // overrides, consumables with a matching aura), a consumable's spell
+  // duration, or the cooldown's duration. 0 for everything else.
+  const tintDurationMs = useCallback(
+    (c: TimelineCast) => {
+      if (c.buffEndMs != null) return c.buffEndMs - c.startMs;
+      if (c.consume) return Math.max(0, spellMeta(c.spellId).spell?.duration?.Duration ?? 0);
+      return cooldownInfo(c.spellId)?.durationMs ?? 0;
+    },
+    [cooldownInfo, spellMeta],
+  );
+
+  // One color and strip row per tinting spell, in order of first use, shared by both players.
   const cooldownColor = useMemo(() => {
     const ids: number[] = [];
+    const consumes = new Set<number>();
     for (const d of derived) {
-      for (const c of d.shownCasts) if (cooldownInfo(c.spellId) && !ids.includes(c.spellId)) ids.push(c.spellId);
+      for (const c of d.shownCasts) {
+        if (c.consume) consumes.add(c.spellId);
+        if ((c.consume || cooldownInfo(c.spellId)) && !ids.includes(c.spellId)) ids.push(c.spellId);
+      }
     }
     return (spellId: number) => {
       const i = Math.max(0, ids.indexOf(spellId));
-      return { color: cooldownInfo(spellId)?.color ?? COOLDOWN_COLORS[i % COOLDOWN_COLORS.length], index: i };
+      const color = consumes.has(spellId)
+        ? CONSUME_COLOR
+        : (cooldownInfo(spellId)?.color ?? COOLDOWN_COLORS[i % COOLDOWN_COLORS.length]);
+      return { color, index: i };
     };
   }, [derived, cooldownInfo]);
 
@@ -535,6 +555,7 @@ export function RotationTimeline({
                 layout={layout}
                 cooldownInfo={cooldownInfo}
                 cooldownColor={cooldownColor}
+                tintDurationMs={tintDurationMs}
                 metric={view.metric}
                 near={probeMs != null ? nearbyActivity(d.actions, probeMs + d.offsetMs, gcd, d.gaps) : null}
                 hoveredCast={hovered?.slot === d.slot ? hovered.cast : null}
@@ -587,7 +608,7 @@ export function RotationTimeline({
               meta={spellMeta(hovered.cast.spellId)}
               endMs={derived[hovered.slot].ends.get(hovered.cast) ?? castEndMs(hovered.cast)}
               unitName={unitName}
-              activeCooldowns={activeCooldownsAt(derived[hovered.slot].shownCasts, hovered.cast, cooldownInfo).map((a) => ({
+              activeCooldowns={activeCooldownsAt(derived[hovered.slot].shownCasts, hovered.cast, tintDurationMs).map((a) => ({
                 ...a,
                 icon: spellMeta(a.cast.spellId).icon,
                 color: cooldownColor(a.cast.spellId).color,
@@ -620,6 +641,8 @@ interface PlayerLanesProps {
   probeMs: number | null;
   cooldownInfo: (spellId: number) => CooldownInfo | null;
   cooldownColor: (spellId: number) => { color: string; index: number };
+  /** How long a cast tints the lane (0 when it does not). */
+  tintDurationMs: (cast: TimelineCast) => number;
   spellMeta: (spellId: number | null) => SpellMeta;
   onToggleIgnored: (spellName: string) => void;
   onHover: (cast: TimelineCast | null) => void;
@@ -648,6 +671,7 @@ function PlayerLanes({
   probeMs,
   cooldownInfo,
   cooldownColor,
+  tintDurationMs,
   spellMeta,
   onToggleIgnored,
   onHover,
@@ -659,9 +683,10 @@ function PlayerLanes({
   const visible = (startMs: number, endMs: number) => endMs - offsetMs >= vs - margin && startMs - offsetMs <= ve + margin;
 
   const kindOf = (c: TimelineCast) => castKind(c, gcd, cooldownInfo);
-  const cooldownCasts = casts.filter((c) => {
-    const info = cooldownInfo(c.spellId);
-    return info != null && visible(c.startMs, c.startMs + cooldownDurationMs(c, info.durationMs));
+  // Cooldowns and consumables tint the lane for their duration.
+  const tintedCasts = casts.filter((c) => {
+    const kind = kindOf(c);
+    return (kind === "cooldown" || kind === "consume") && visible(c.startMs, c.startMs + tintDurationMs(c));
   });
   const { ends } = derived;
   const gcdCasts = casts.filter(
@@ -705,9 +730,9 @@ function PlayerLanes({
   return (
     <>
       <div className="relative border-b border-border" style={{ height: layout.height }}>
-        {/* Cooldown durations: lane tint plus a strip per cooldown along the top. */}
-        {cooldownCasts.map((c, i) => {
-          const durationMs = cooldownDurationMs(c, cooldownInfo(c.spellId)?.durationMs ?? 0);
+        {/* Cooldown and consumable durations: lane tint plus a strip per spell along the top. */}
+        {tintedCasts.map((c, i) => {
+          const durationMs = tintDurationMs(c);
           if (durationMs <= 0) return null;
           const { color, index } = cooldownColor(c.spellId);
           const { left, width } = span(c.startMs, c.startMs + durationMs);
@@ -950,11 +975,6 @@ function PlayerLanes({
   );
 }
 
-/** How long a cooldown tints the lane: the real buff for buff-made casts, else the spell's duration. */
-function cooldownDurationMs(cast: TimelineCast, spellDurationMs: number): number {
-  return cast.buffEndMs != null ? cast.buffEndMs - cast.startMs : spellDurationMs;
-}
-
 /** Where a cast's icon sits: where a cast-time spell landed, or where a channel or instant began. */
 function iconTimeMs(cast: TimelineCast, endMs: number): number {
   return !cast.channel && endMs > cast.startMs ? endMs : cast.startMs;
@@ -964,12 +984,12 @@ function iconTimeMs(cast: TimelineCast, endMs: number): number {
 function activeCooldownsAt(
   casts: readonly TimelineCast[],
   at: TimelineCast,
-  cooldownInfo: (spellId: number) => CooldownInfo | null,
+  tintDurationMs: (cast: TimelineCast) => number,
 ): { cast: TimelineCast; leftMs: number }[] {
   const out: { cast: TimelineCast; leftMs: number }[] = [];
   for (const c of casts) {
     if (c === at || c.failed || c.startMs > at.startMs) continue;
-    const durationMs = cooldownDurationMs(c, cooldownInfo(c.spellId)?.durationMs ?? 0);
+    const durationMs = tintDurationMs(c);
     const endMs = c.startMs + durationMs;
     if (durationMs > 0 && endMs > at.startMs) out.push({ cast: c, leftMs: endMs - at.startMs });
   }

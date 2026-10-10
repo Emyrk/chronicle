@@ -277,6 +277,12 @@ describe("withConsumeCasts", () => {
     expect(castKind(consumeCast, () => 0, () => null)).toBe("consume");
   });
 
+  it("takes the tint duration from the buff the consumable applied", () => {
+    const buff = { spellId: 17531, spellName: "Restore Mana", isBuff: true, caster: null, target: "p", startMs: 5100, endMs: 17_100, maxStacks: 1 };
+    const out = withConsumeCasts(player({ consumes: [potion], aurasOn: [buff] }));
+    expect(out.textCasts[0].buffEndMs).toBe(17_100);
+  });
+
   it("returns the data unchanged without consumes", () => {
     const data = player({ goCasts: [cast(0)] });
     expect(withConsumeCasts(data)).toBe(data);

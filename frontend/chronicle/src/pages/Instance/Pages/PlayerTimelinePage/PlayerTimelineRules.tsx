@@ -284,7 +284,8 @@ export function PlayerTimelineRules({
           <li>
             A <b>Consumable</b> comes from the consume stream (the Consumables panel's evidence): a green-ringed square on the
             rail. A logged cast of the same spell within a second is the same use and is replaced. Whether it uses the GCD
-            comes from its spell data; most potions and elixirs do not.
+            comes from its spell data; most potions and elixirs do not. A consumable that applies a buff tints the lane like
+            a cooldown, for the buff's real duration (the buff of its spell starting within 1.5s), else the spell's duration.
           </li>
           <li>Everything else is a <b>Cast</b>: an icon in the lane, with a bar for cast time or channel.</li>
           <li>
