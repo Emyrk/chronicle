@@ -518,7 +518,10 @@ export function RotationTimeline({
           {hovered && (
             <CastTooltip
               cast={hovered.cast}
-              left={P(hovered.cast.startMs - derived[hovered.slot].offsetMs)}
+              left={P(
+                iconTimeMs(hovered.cast, derived[hovered.slot].ends.get(hovered.cast) ?? castEndMs(hovered.cast)) -
+                  derived[hovered.slot].offsetMs,
+              )}
               top={castLaneTop(hovered.slot) + layout.height - 4}
               meta={spellMeta(hovered.cast.spellId)}
               endMs={derived[hovered.slot].ends.get(hovered.cast) ?? castEndMs(hovered.cast)}
@@ -734,25 +737,26 @@ function PlayerLanes({
         {gcdCasts.map((c, i) => {
           const meta = spellMeta(c.spellId);
           const left = P(c.startMs - offsetMs);
+          const endMs = ends.get(c) ?? castEndMs(c);
+          const iconLeft = P(iconTimeMs(c, endMs) - offsetMs);
           const damage = c.damage + c.periodicDamage;
           if (layout.compact) {
             return (
               <div
                 key={`${c.startMs}-${i}`}
                 className="absolute w-[3px] -translate-x-1/2 rounded-[1px]"
-                style={{ left: `${left}%`, top: layout.iconTop, height: icon, background: `var(--color-school-${meta.school})`, opacity: opacityOf(c) }}
+                style={{ left: `${iconLeft}%`, top: layout.iconTop, height: icon, background: `var(--color-school-${meta.school})`, opacity: opacityOf(c) }}
                 {...hoverProps(c)}
               />
             );
           }
-          const endMs = ends.get(c) ?? castEndMs(c);
           const school = `var(--color-school-${meta.school})`;
           return (
             <div key={`${c.startMs}-${i}`} style={{ opacity: opacityOf(c) }}>
-              {/* Cast time or channel: a bar out of the icon to when it finished, notched per channel tick. */}
+              {/* Cast time leads into the icon (it lands at the end); a channel trails out of it, notched per tick. */}
               {endMs > c.startMs && (
                 <div
-                  className="pointer-events-none absolute h-1 rounded-r-sm"
+                  className={cn("pointer-events-none absolute h-1", c.channel ? "rounded-r-sm" : "rounded-l-sm")}
                   style={{
                     left: `${left}%`,
                     width: `${P(endMs - offsetMs) - left}%`,
@@ -774,13 +778,13 @@ function PlayerLanes({
               )}
               <div
                 className="absolute rounded-[3px] bg-muted bg-cover bg-center shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
-                style={{ left: `${left}%`, top: layout.iconTop, width: icon, height: icon, marginLeft: -icon / 2, backgroundImage: `url(${meta.icon})` }}
+                style={{ left: `${iconLeft}%`, top: layout.iconTop, width: icon, height: icon, marginLeft: -icon / 2, backgroundImage: `url(${meta.icon})` }}
                 {...hoverProps(c)}
               />
               {damage > 0 && (
                 <span
                   className={cn("pointer-events-none absolute -translate-x-1/2 whitespace-nowrap font-mono", c.crits > 0 ? "text-school-holy" : "text-muted-foreground")}
-                  style={{ left: `${left}%`, top: layout.labelTop, fontSize: layout.labelFont }}
+                  style={{ left: `${iconLeft}%`, top: layout.labelTop, fontSize: layout.labelFont }}
                 >
                   {formatNumber(damage)}
                 </span>
@@ -848,6 +852,11 @@ function PlayerLanes({
       )}
     </>
   );
+}
+
+/** Where a cast's icon sits: where a cast-time spell landed, or where a channel or instant began. */
+function iconTimeMs(cast: TimelineCast, endMs: number): number {
+  return !cast.channel && endMs > cast.startMs ? endMs : cast.startMs;
 }
 
 /** Cooldowns (with a duration) active when a cast went off, excluding the cast itself. */
