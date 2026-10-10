@@ -66,6 +66,15 @@ func TestCooldownSpellFromSpell(t *testing.T) {
 		assert.False(t, ok)
 	})
 
+	t.Run("effective duration", func(t *testing.T) {
+		berserk := spell(chrondbc.SpellClassSetDruid, 6*time.Minute, 0)
+		berserk.Duration.MaxDuration = 20_000
+
+		row, ok := cooldownSpellFromSpell(berserk)
+		require.True(t, ok)
+		assert.Equal(t, int64(20_000), row.DurationMS)
+	})
+
 	t.Run("passive spell", func(t *testing.T) {
 		passive := spell(chrondbc.SpellClassSetWarrior, time.Minute, 0)
 		passive.Attrs.Set(chrondbc.Attr_Passive)

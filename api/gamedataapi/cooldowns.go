@@ -9,6 +9,7 @@ type cooldownSpellRow struct {
 	RecoveryTimeMS         int64
 	CategoryRecoveryTimeMS int64
 	SpellClassSet          int32
+	DurationMS             int64
 }
 
 func cooldownSpellFromSpell(spell *chrondbc.Spell) (cooldownSpellRow, bool) {
@@ -31,6 +32,7 @@ func cooldownSpellFromSpell(spell *chrondbc.Spell) (cooldownSpellRow, bool) {
 		RecoveryTimeMS:         spell.RecoveryTime.Milliseconds(),
 		CategoryRecoveryTimeMS: spell.CategoryRecoveryTime.Milliseconds(),
 		SpellClassSet:          int32(spell.SpellClassSet),
+		DurationMS:             int64(spell.Duration.MaxDuration),
 	}, true
 }
 

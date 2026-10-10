@@ -392,7 +392,8 @@ CREATE TABLE dbc_cooldown_spells (
     name_subtext text DEFAULT ''::text NOT NULL,
     recovery_time_ms bigint DEFAULT 0 NOT NULL,
     category_recovery_time_ms bigint DEFAULT 0 NOT NULL,
-    spell_class_set integer NOT NULL
+    spell_class_set integer NOT NULL,
+    duration_ms bigint
 );
 
 CREATE TABLE dbc_duration_modifiers (

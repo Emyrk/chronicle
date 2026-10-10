@@ -1658,8 +1658,9 @@ SELECT
     c.spell_class_set,
     COALESCE(o.ignored, FALSE)::BOOLEAN AS ignored,
     COALESCE(o.hide_duration, FALSE)::BOOLEAN AS duration_hidden,
-    -- Aura/effect duration; 0 when instant, unknown, or infinite (-1).
-    GREATEST(COALESCE(d.max_duration, 0), 0)::BIGINT AS duration_ms
+    -- Imported effective duration takes precedence; legacy rows fall back to
+    -- SpellDuration metadata. Reports 0 when instant, unknown, or infinite (-1).
+    GREATEST(COALESCE(c.duration_ms, d.max_duration, 0), 0)::BIGINT AS duration_ms
 FROM dbc_cooldown_spells c
 LEFT JOIN dataset_cooldown_overrides o
     ON o.dataset_id = c.dataset_id AND o.spell_id = c.spell_id

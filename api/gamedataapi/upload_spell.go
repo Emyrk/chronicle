@@ -55,7 +55,15 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 
 	// Derive parser and technical-page spell metadata after the canonical and
 	// compatibility rows commit.
-	if err := h.deriveSpellMetadata(ctx, datasetID, canonicalSpells); err != nil {
+	flavor, err := h.flavorForDataset(ctx, datasetID)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Spells imported but dataset flavor lookup failed",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	if err := h.deriveSpellMetadata(ctx, datasetID, flavor, canonicalSpells); err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Spells imported but derived table generation failed",
 			Detail:  err.Error(),

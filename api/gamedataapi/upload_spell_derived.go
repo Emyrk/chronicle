@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -20,9 +22,17 @@ func spellForDerivedMetadata(spell *chrondbc.Spell) *chrondbc.Spell {
 	return spell.Resolve(0)
 }
 
+func (h *Handler) flavorForDataset(ctx context.Context, datasetID uuid.UUID) (database.WoWFlavor, error) {
+	dataset, err := database.New(h.pool).GetDataset(ctx, datasetID)
+	if err != nil {
+		return nil, fmt.Errorf("get dataset flavor: %w", err)
+	}
+	return database.FlavorFromStrings(dataset.DefaultFlavor), nil
+}
+
 // deriveSpellMetadata analyses canonical imported spells and populates the
 // derived spell metadata tables used by the parser and technical pages.
-func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, spells []*chrondbc.Spell) error {
+func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, flavor database.WoWFlavor, spells []*chrondbc.Spell) error {
 	type extraAttackRow struct {
 		SpellID         int32
 		Name            string
@@ -54,6 +64,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		if spell == nil {
 			continue
 		}
+		gamedataoverrides.ApplySpell(flavor, spell)
 
 		// --- Major player cooldowns ---
 		if cooldown, ok := cooldownSpellFromSpell(spell); ok {
@@ -229,8 +240,8 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 	// Insert major player cooldowns.
 	batch = &pgx.Batch{}
 	for _, r := range cooldowns {
-		batch.Queue(`INSERT INTO dbc_cooldown_spells (dataset_id, spell_id, name, name_subtext, recovery_time_ms, category_recovery_time_ms, spell_class_set) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-			datasetID, r.SpellID, r.Name, r.NameSubtext, r.RecoveryTimeMS, r.CategoryRecoveryTimeMS, r.SpellClassSet,
+		batch.Queue(`INSERT INTO dbc_cooldown_spells (dataset_id, spell_id, name, name_subtext, recovery_time_ms, category_recovery_time_ms, spell_class_set, duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+			datasetID, r.SpellID, r.Name, r.NameSubtext, r.RecoveryTimeMS, r.CategoryRecoveryTimeMS, r.SpellClassSet, r.DurationMS,
 		)
 		if batch.Len() >= batchSize {
 			if err := flushBatch(ctx, h.pool, batch); err != nil {
