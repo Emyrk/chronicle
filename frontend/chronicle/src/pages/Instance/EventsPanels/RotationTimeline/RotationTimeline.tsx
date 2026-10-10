@@ -410,14 +410,18 @@ export function RotationTimeline({
                   </div>
                   {/* Idle % normally; around the indicator: last action, idle or busy, next action (design: Rotations 2a). */}
                   {near ? (
-                    <div className="flex items-center gap-1.5 whitespace-nowrap font-mono text-[10px]">
+                    <div className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap font-mono text-[10px]">
                       <span className="text-foreground">
                         ‹ {near.sinceLastMs != null ? `${(near.sinceLastMs / 1000).toFixed(1)}s ago` : "—"}
                       </span>
                       {near.idleMs > 50 ? (
                         <span className="font-semibold text-destructive">idle {(near.idleMs / 1000).toFixed(1)}s</span>
                       ) : (
-                        near.sinceLastMs != null && <span className="text-muted-foreground">casting / GCD</span>
+                        near.sinceLastMs != null && (
+                          <span className="text-muted-foreground" title="Casting or on the global cooldown">
+                            busy
+                          </span>
+                        )
                       )}
                       <span className="ml-auto text-foreground">
                         {near.untilNextMs != null ? `next ${(near.untilNextMs / 1000).toFixed(1)}s` : "—"} ›
