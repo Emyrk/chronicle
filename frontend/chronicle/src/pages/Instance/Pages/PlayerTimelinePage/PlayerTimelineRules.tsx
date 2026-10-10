@@ -32,7 +32,7 @@ import {
 } from "../../EventsPanels/RotationTimeline/RotationTimeline";
 import { DEFAULT_IGNORED_SPELLS } from "../../EventsPanels/RotationTimeline/useRotationView";
 import type { SpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
-import { FULL_UPTIME, NONE_UPTIME } from "./AuraSection";
+import { AuraIcon, FULL_UPTIME, NONE_UPTIME } from "./AuraSection";
 import { findOverride, SPELL_OVERRIDES, type SpellOverride } from "../../EventsPanels/RotationTimeline/spellOverrides";
 
 export interface CuratedCooldown {
@@ -196,10 +196,7 @@ export function PlayerTimelineRules({
                   <tr key={r.spellId} className={cn("border-t border-border", ignored && "opacity-50")}>
                     <Td>
                       <span className="flex items-center gap-2">
-                        <span
-                          className="size-4 shrink-0 rounded-[2px] bg-muted bg-cover bg-center"
-                          style={{ backgroundImage: `url(${meta.icon})` }}
-                        />
+                        <AuraIcon meta={meta} name={r.name} size={16} />
                         <span className="truncate">{r.name}</span>
                         <span className="font-mono text-[10px] text-muted-foreground">#{r.spellId}</span>
                         {ignored && <span className="text-[10px] text-destructive">ignored</span>}

@@ -393,7 +393,7 @@ function WholeFightRow({ rows, players, spellMeta }: WholeFightRowProps) {
  * passive talents) or no data at all get the placeholder icon instead of
  * rendering nothing.
  */
-function AuraIcon({ meta, name, size }: { meta: SpellMeta; name: string; size: number }) {
+export function AuraIcon({ meta, name, size }: { meta: SpellMeta; name: string; size: number }) {
   const placeholder = (
     <span
       title={meta.spell ? undefined : name}
