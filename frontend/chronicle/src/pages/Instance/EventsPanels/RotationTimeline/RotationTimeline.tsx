@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { Minus, Pin, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { formatNumber } from "@/lib/format";
 import { hitTypeNames } from "@/lib/hittype/hittype";
 import { cn } from "@/lib/utils";
 import {
   alignOffsetMs,
+  busySegments,
   castAt,
   castSlotEnd,
   damageLead,
@@ -26,6 +26,7 @@ import {
   type TimelineSwing,
 } from "./rotationTimeline.processor";
 import { IndicatorLine } from "./IndicatorLine";
+import { COOLDOWN_COLORS, laneLayout, type LaneLayout } from "./laneLayout";
 import { RotationOverview } from "./RotationOverview";
 import type { SpellMeta } from "./useSpellMeta";
 import type { RotationView } from "./useRotationView";
@@ -43,8 +44,11 @@ export interface RotationTimelineProps {
   view: RotationView;
   spellMeta: (spellId: number | null) => SpellMeta;
   gcd: GcdLookup;
-  /** Casts of these spells go to the cooldown lane instead of the cast lane. */
-  isCooldown: (spellId: number) => boolean;
+  /**
+   * Curated cooldowns: casts of these spells sit on the rail as squares and
+   * tint the lane for their duration (0 when unknown or hidden).
+   */
+  cooldownInfo: (spellId: number) => { durationMs: number } | null;
   unitName: (guid: string) => string;
   /** Rendered after the title, e.g. player pickers. */
   headerStart?: ReactNode;
@@ -60,18 +64,16 @@ interface DerivedPlayer {
   casts: TimelineCast[];
   offsetMs: number;
   gaps: IdleGap[];
+  busy: IdleGap[];
   stats: PlayerStats;
 }
 
 const LABEL_WIDTH = 220;
 /** Pointer movement under this many px is a click, not a drag. */
 const CLICK_SLOP_PX = 4;
-const CAST_LANE_H = 66;
-/** Off-GCD casts (gcd 0, instant, e.g. Vigor procs) get a row of small icons under the GCD casts. */
-const OFF_GCD_TOP = 42;
-const OFF_GCD_ICON = 14;
 const SWING_LANE_H = 24;
-const CD_LANE_H = 28;
+/** Idle gaps get a duration label once they are this wide. */
+const IDLE_LABEL_MIN_PX = 30;
 
 function useElementWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -102,7 +104,7 @@ export function RotationTimeline({
   view,
   spellMeta,
   gcd,
-  isCooldown,
+  cooldownInfo,
   unitName,
   headerStart,
   showOverview = true,
@@ -158,6 +160,7 @@ export function RotationTimeline({
           casts,
           offsetMs: alignOffsetMs(casts, view.align, ignored),
           gaps,
+          busy: busySegments(casts, gcd, idleThresholdMs),
           stats: playerStats(player.data, casts, gaps, durationMs),
         };
       }),
@@ -184,6 +187,19 @@ export function RotationTimeline({
   }, [vs, ve, span]);
 
   const ignoredSpells = Array.from(ignored);
+  const layout = laneLayout(pxPerMs, view.iconSize);
+
+  // One color per cooldown spell, in order of first use, shared by both players.
+  const cooldownColor = useMemo(() => {
+    const ids: number[] = [];
+    for (const d of derived) {
+      for (const c of d.casts) if (cooldownInfo(c.spellId) && !ids.includes(c.spellId)) ids.push(c.spellId);
+    }
+    return (spellId: number) => {
+      const i = ids.indexOf(spellId);
+      return { color: COOLDOWN_COLORS[Math.max(0, i) % COOLDOWN_COLORS.length], index: Math.max(0, i) };
+    };
+  }, [derived, cooldownInfo]);
 
   const trackMs = (e: PointerEvent) => {
     const rect = trackRef.current?.getBoundingClientRect();
@@ -220,12 +236,12 @@ export function RotationTimeline({
   };
 
   const castLaneTop = (index: number) =>
-    derived.slice(0, index).reduce((sum, d) => sum + CAST_LANE_H + (d.player.data.swings.length > 0 ? SWING_LANE_H : 0) + CD_LANE_H, 0);
+    derived.slice(0, index).reduce((sum, d) => sum + layout.height + (d.player.data.swings.length > 0 ? SWING_LANE_H : 0), 0);
 
   return (
     <div ref={rootRef} className="bg-card text-[13px] text-foreground">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
+      {/* Title row: players and ignored spells (design: Rotations 9c). */}
+      <div className="flex min-h-14 flex-wrap items-center gap-3 border-b border-border px-4 py-2">
         <div className="text-[15px] font-semibold">Rotation</div>
         {headerStart}
         <div className="flex-1" />
@@ -246,44 +262,50 @@ export function RotationTimeline({
             );
           })}
         </div>
-        <div className="h-5 w-px bg-border" />
-        <div className="flex items-center gap-0.5 rounded border border-border bg-background p-0.5">
-          <span className="px-1.5 text-[11px] text-muted-foreground">Align</span>
-          <Button
-            variant={view.align === "pull" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7"
-            disabled={replaying}
-            onClick={() => view.setAlign("pull")}
-          >
+      </div>
+
+      {showOverview && <RotationOverview series={overview.series} lead={overview.lead} view={view} />}
+
+      {/* View toolbar, directly above the time axis it controls. */}
+      <div className="flex h-10 flex-wrap items-center gap-4 border-b border-border bg-background px-4">
+        <Segmented label="Align">
+          <SegButton active={view.align === "pull"} disabled={replaying} onClick={() => view.setAlign("pull")}>
             Pull
-          </Button>
-          <Button
-            variant={view.align === "first_cast" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7"
+          </SegButton>
+          <SegButton
+            active={view.align === "first_cast"}
             disabled={replaying}
             title={replaying ? "Replay follows pull time" : undefined}
             onClick={() => view.setAlign("first_cast")}
           >
             First cast
-          </Button>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon-sm" onClick={() => view.zoom(1.5)} aria-label="Zoom out">
-            <Minus />
-          </Button>
-          <span className="min-w-12 text-center font-mono text-[11px] text-muted-foreground">{formatClock(span, 0)}</span>
-          <Button variant="outline" size="icon-sm" onClick={() => view.zoom(1 / 1.5)} aria-label="Zoom in">
-            <Plus />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={view.fit}>
+          </SegButton>
+        </Segmented>
+        <Segmented label="Icons" title="Icon size. Auto grows icons as you zoom in">
+          <SegButton active={view.iconSize === "auto"} onClick={() => view.setIconSize("auto")} title="Auto">
+            <span className="text-[10px] font-semibold tracking-wide">AUTO</span>
+          </SegButton>
+          {(["s", "m", "l"] as const).map((size, i) => (
+            <SegButton key={size} active={view.iconSize === size} onClick={() => view.setIconSize(size)} title={size.toUpperCase()}>
+              <IconGlyph size={[8, 11, 14][i]} />
+            </SegButton>
+          ))}
+        </Segmented>
+        <div className="flex-1" />
+        <Segmented label="Zoom" title="Visible time span">
+          <SegButton onClick={() => view.zoom(1.5)} title="Zoom out" ariaLabel="Zoom out">
+            <Minus className="size-3.5" />
+          </SegButton>
+          <span className="min-w-[38px] text-center font-mono text-[11px] text-foreground">{formatClock(span, 0)}</span>
+          <SegButton onClick={() => view.zoom(1 / 1.5)} title="Zoom in" ariaLabel="Zoom in">
+            <Plus className="size-3.5" />
+          </SegButton>
+          <span className="mx-0.5 h-4 w-px bg-border" />
+          <SegButton onClick={view.fit} title="Show whole fight">
             Fit
-          </Button>
-        </div>
+          </SegButton>
+        </Segmented>
       </div>
-
-      {showOverview && <RotationOverview series={overview.series} lead={overview.lead} view={view} />}
 
       {/* Ruler */}
       <div className="grid h-6 border-b border-border" style={{ gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` }}>
@@ -321,7 +343,7 @@ export function RotationTimeline({
               <div key={d.player.guid}>
                 <div
                   className="flex flex-col justify-center gap-0.5 border-b border-border px-4"
-                  style={{ height: CAST_LANE_H }}
+                  style={{ height: layout.height }}
                 >
                   <div className="flex items-center gap-2">
                     <SlotBadge slot={d.slot} />
@@ -350,7 +372,6 @@ export function RotationTimeline({
                     Auto attacks
                   </div>
                 )}
-                <div className="flex h-7 items-center border-b border-border pl-10 pr-4">Cooldowns</div>
               </div>
             );
           })}
@@ -387,7 +408,9 @@ export function RotationTimeline({
                 gcd={gcd}
                 ignored={ignored}
                 nowMs={nowMs}
-                isCooldown={isCooldown}
+                layout={layout}
+                cooldownInfo={cooldownInfo}
+                cooldownColor={cooldownColor}
                 spellMeta={spellMeta}
                 onToggleIgnored={view.toggleIgnored}
                 onHover={(cast) => setHovered(cast ? { slot: d.slot, cast } : null)}
@@ -400,7 +423,7 @@ export function RotationTimeline({
             <SwingTooltip
               swing={hoveredSwing.swing}
               left={P(hoveredSwing.swing.offsetMs - derived[hoveredSwing.slot].offsetMs)}
-              top={castLaneTop(hoveredSwing.slot) + CAST_LANE_H + SWING_LANE_H - 2}
+              top={castLaneTop(hoveredSwing.slot) + layout.height + SWING_LANE_H - 2}
               unitName={unitName}
               icon={spellMeta(AUTO_ATTACK_SPELL_ID).icon}
             />
@@ -409,9 +432,14 @@ export function RotationTimeline({
             <CastTooltip
               cast={hovered.cast}
               left={P(hovered.cast.startMs - derived[hovered.slot].offsetMs)}
-              top={castLaneTop(hovered.slot) + CAST_LANE_H - 6}
+              top={castLaneTop(hovered.slot) + layout.height - 4}
               meta={spellMeta(hovered.cast.spellId)}
               unitName={unitName}
+              activeCooldowns={activeCooldownsAt(derived[hovered.slot].casts, hovered.cast, cooldownInfo).map((a) => ({
+                ...a,
+                icon: spellMeta(a.cast.spellId).icon,
+                color: cooldownColor(a.cast.spellId).color,
+              }))}
             />
           )}
         </div>
@@ -431,28 +459,56 @@ interface PlayerLanesProps {
   ignored: ReadonlySet<number>;
   /** Replay time; casts after it are dimmed. */
   nowMs: number | null;
-  isCooldown: (spellId: number) => boolean;
+  layout: LaneLayout;
+  cooldownInfo: (spellId: number) => { durationMs: number } | null;
+  cooldownColor: (spellId: number) => { color: string; index: number };
   spellMeta: (spellId: number | null) => SpellMeta;
   onToggleIgnored: (spellId: number) => void;
   onHover: (cast: TimelineCast | null) => void;
   onHoverSwing: (swing: TimelineSwing | null) => void;
 }
 
-function PlayerLanes({ derived, P, vs, ve, pxPerMs, gcd, ignored, nowMs, isCooldown, spellMeta, onToggleIgnored, onHover, onHoverSwing }: PlayerLanesProps) {
-  const { casts, offsetMs, gaps, slot, player } = derived;
+/**
+ * One player's cast lane and auto attacks (design: Rotations 8a). GCD casts
+ * are icons sized to the zoom; procs (off-GCD casts) and cooldowns sit on the
+ * busy/idle rail below them, and cooldowns tint the lane for their duration.
+ */
+function PlayerLanes({
+  derived,
+  P,
+  vs,
+  ve,
+  pxPerMs,
+  gcd,
+  ignored,
+  nowMs,
+  layout,
+  cooldownInfo,
+  cooldownColor,
+  spellMeta,
+  onToggleIgnored,
+  onHover,
+  onHoverSwing,
+}: PlayerLanesProps) {
+  const { casts, offsetMs, gaps, busy, slot, player } = derived;
   const margin = 2000;
   const visible = (startMs: number, endMs: number) => endMs - offsetMs >= vs - margin && startMs - offsetMs <= ve + margin;
 
   const isOffGcd = (c: TimelineCast) => gcd(c.spellId) === 0 && c.endMs === c.startMs && !c.channelTimeMs;
-  const shown = casts.filter((c) => !isCooldown(c.spellId) && visible(c.startMs, castSlotEnd(c, gcd)));
-  const laneCasts = shown.filter((c) => !isOffGcd(c));
-  const offGcdCasts = shown.filter(isOffGcd);
-  const cdCasts = casts.filter((c) => isCooldown(c.spellId) && visible(c.startMs, c.startMs));
+  const cooldownCasts = casts.filter((c) => {
+    const info = cooldownInfo(c.spellId);
+    return info != null && visible(c.startMs, c.startMs + info.durationMs);
+  });
+  const others = casts.filter((c) => !cooldownInfo(c.spellId) && visible(c.startMs, castSlotEnd(c, gcd)));
+  const gcdCasts = others.filter((c) => !isOffGcd(c));
+  const procs = others.filter(isOffGcd);
   const swings = player.data.swings.filter((s) => visible(s.offsetMs, s.offsetMs));
+  const { icon, proc, cooldown, railTop } = layout;
 
-  const opacityOf = (spellId: number, startMs: number) => {
-    if (ignored.has(spellId)) return 0.15;
-    if (nowMs != null && startMs - offsetMs > nowMs) return 0.45;
+  const opacityOf = (c: TimelineCast) => {
+    if (ignored.has(c.spellId)) return 0.15;
+    if (c.failed) return 0.4;
+    if (nowMs != null && c.startMs - offsetMs > nowMs) return 0.45;
     return undefined;
   };
 
@@ -462,100 +518,156 @@ function PlayerLanes({ derived, P, vs, ve, pxPerMs, gcd, ignored, nowMs, isCoold
     e.stopPropagation();
     onToggleIgnored(spellId);
   };
+  const hoverProps = (c: TimelineCast) => ({
+    onClick: (e: React.MouseEvent) => onSpellClick(e, c.spellId),
+    onPointerEnter: () => onHover(c),
+    onPointerLeave: () => onHover(null),
+  });
+  const span = (startMs: number, endMs: number) => {
+    const left = P(startMs - offsetMs);
+    return { left, width: P(endMs - offsetMs) - left };
+  };
 
   return (
     <>
-      <div className="relative border-b border-border" style={{ height: CAST_LANE_H }}>
+      <div className="relative border-b border-border" style={{ height: layout.height }}>
+        {/* Cooldown durations: lane tint plus a strip per cooldown along the top. */}
+        {cooldownCasts.map((c, i) => {
+          const durationMs = cooldownInfo(c.spellId)?.durationMs ?? 0;
+          if (durationMs <= 0) return null;
+          const { color, index } = cooldownColor(c.spellId);
+          const { left, width } = span(c.startMs, c.startMs + durationMs);
+          return (
+            <div key={`cdt-${c.startMs}-${i}`} className="pointer-events-none">
+              <div
+                className="absolute inset-y-0 border-l"
+                style={{ left: `${left}%`, width: `${width}%`, borderColor: color, background: `color-mix(in oklab, ${color} 9%, transparent)` }}
+              />
+              <div className="absolute h-[3px]" style={{ left: `${left}%`, width: `${width}%`, top: index * 3, background: color }} />
+            </div>
+          );
+        })}
+
+        {/* Busy / idle rail. */}
+        {busy
+          .filter((b) => visible(b.startMs, b.endMs))
+          .map((b) => {
+            const { left, width } = span(b.startMs, b.endMs);
+            return (
+              <div
+                key={`busy-${b.startMs}`}
+                className="pointer-events-none absolute h-[3px] opacity-75"
+                style={{ left: `${left}%`, width: `${width}%`, top: railTop, background: SLOT_COLORS[slot] }}
+              />
+            );
+          })}
         {gaps
           .filter((g) => visible(g.startMs, g.endMs))
           .map((g) => {
-            const left = P(g.startMs - offsetMs);
-            const width = P(g.endMs - offsetMs) - left;
+            const { left, width } = span(g.startMs, g.endMs);
+            const widthPx = (g.endMs - g.startMs) * pxPerMs;
             return (
-              <div
-                key={g.startMs}
-                className="pointer-events-none absolute inset-y-0"
-                style={{
-                  left: `${left}%`,
-                  width: `${width}%`,
-                  background:
-                    "repeating-linear-gradient(135deg, color-mix(in oklab, var(--destructive) 30%, transparent) 0 3px, transparent 3px 7px)",
-                }}
-              >
-                {(g.endMs - g.startMs) * pxPerMs > 34 && (
-                  <span className="absolute bottom-0.5 left-1 font-mono text-[9px] text-destructive">
+              <div key={`idle-${g.startMs}`} className="pointer-events-none">
+                <div
+                  className="absolute border-t border-dashed border-destructive"
+                  style={{ left: `${left}%`, width: `${width}%`, top: railTop + 1 }}
+                />
+                {/* Icons are centered on cast times, so leave room for half an icon on each side. */}
+                {widthPx >= icon + IDLE_LABEL_MIN_PX && (
+                  <span
+                    className="absolute text-center font-mono text-[10px]"
+                    style={{
+                      left: `${left}%`,
+                      width: `${width}%`,
+                      top: layout.iconTop + icon / 2 - 6,
+                      color: "color-mix(in oklab, var(--destructive) 75%, var(--foreground))",
+                    }}
+                  >
                     {((g.endMs - g.startMs) / 1000).toFixed(1)}s
                   </span>
                 )}
               </div>
             );
           })}
-        {laneCasts.map((c, i) => {
+
+        {/* GCD casts. */}
+        {gcdCasts.map((c, i) => {
           const meta = spellMeta(c.spellId);
-          const slotEnd = castSlotEnd(c, gcd);
           const left = P(c.startMs - offsetMs);
-          const width = P(slotEnd - offsetMs) - left;
-          const castDuration = Math.max(c.endMs - c.startMs, c.channelTimeMs ?? 0);
-          const widthPx = (slotEnd - c.startMs) * pxPerMs;
-          const compact = widthPx < 14;
           const damage = c.damage + c.periodicDamage;
-          return (
-            <div
-              key={`${c.startMs}-${i}`}
-              className={cn("absolute inset-y-0", c.failed && "opacity-40")}
-              style={{ left: `${left}%`, width: `${width}%`, opacity: opacityOf(c.spellId, c.startMs) }}
-              onClick={(e) => onSpellClick(e, c.spellId)}
-              onPointerEnter={() => onHover(c)}
-              onPointerLeave={() => onHover(null)}
-            >
+          if (layout.compact) {
+            return (
               <div
-                className="absolute bottom-[3px] left-0 h-[3px] rounded-[1px]"
-                style={{
-                  width: castDuration > 0 ? `${Math.min(100, (castDuration / (slotEnd - c.startMs)) * 100)}%` : "12%",
-                  background: `var(--color-school-${meta.school})`,
-                }}
+                key={`${c.startMs}-${i}`}
+                className="absolute w-[3px] -translate-x-1/2 rounded-[1px]"
+                style={{ left: `${left}%`, top: layout.iconTop, height: icon, background: `var(--color-school-${meta.school})`, opacity: opacityOf(c) }}
+                {...hoverProps(c)}
               />
-              {compact ? (
-                <div
-                  className="absolute left-0 top-[5px] h-[22px] w-[3px] rounded-[1px]"
-                  style={{ background: `var(--color-school-${meta.school})` }}
-                />
-              ) : (
-                <div
-                  className="absolute left-px top-[5px] size-[22px] rounded-[3px] border border-border bg-muted bg-cover bg-center"
-                  style={{ backgroundImage: `url(${meta.icon})` }}
-                />
-              )}
-              {!compact && widthPx > 24 && damage > 0 && (
-                <div
-                  className={cn("absolute left-0 top-[29px] whitespace-nowrap font-mono text-[9px]", c.crits > 0 ? "text-school-holy" : "text-muted-foreground")}
+            );
+          }
+          return (
+            <div key={`${c.startMs}-${i}`} style={{ opacity: opacityOf(c) }}>
+              <div
+                className="absolute rounded-[3px] bg-muted bg-cover bg-center shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
+                style={{ left: `${left}%`, top: layout.iconTop, width: icon, height: icon, marginLeft: -icon / 2, backgroundImage: `url(${meta.icon})` }}
+                {...hoverProps(c)}
+              />
+              {damage > 0 && (
+                <span
+                  className={cn("pointer-events-none absolute -translate-x-1/2 whitespace-nowrap font-mono", c.crits > 0 ? "text-school-holy" : "text-muted-foreground")}
+                  style={{ left: `${left}%`, top: layout.labelTop, fontSize: layout.labelFont }}
                 >
                   {formatNumber(damage)}
-                </div>
+                </span>
+              )}
+              {layout.showNames && (
+                <span
+                  className="pointer-events-none absolute -translate-x-1/2 whitespace-nowrap text-[10px] text-muted-foreground"
+                  style={{ left: `${left}%`, top: layout.nameTop }}
+                >
+                  {c.spellName}
+                </span>
               )}
             </div>
           );
         })}
-        {offGcdCasts.map((c, i) => {
-          const meta = spellMeta(c.spellId);
+
+        {/* Procs: off-GCD casts as circles on the rail. */}
+        {procs.map((c, i) => (
+          <div
+            key={`proc-${c.startMs}-${i}`}
+            className="absolute rounded-full bg-muted bg-cover bg-center shadow-[0_0_0_1px_var(--background)]"
+            style={{
+              left: `${P(c.startMs - offsetMs)}%`,
+              top: railTop + 1 - proc / 2,
+              width: proc,
+              height: proc,
+              marginLeft: -proc / 2,
+              backgroundImage: `url(${spellMeta(c.spellId).icon})`,
+              opacity: opacityOf(c),
+            }}
+            {...hoverProps(c)}
+          />
+        ))}
+
+        {/* Cooldowns: squares with their color ring on the rail. */}
+        {cooldownCasts.map((c, i) => {
+          const { color } = cooldownColor(c.spellId);
           return (
             <div
-              key={`og-${c.startMs}-${i}`}
-              className={cn(
-                "absolute rounded-[2px] border border-border bg-muted bg-cover bg-center",
-                c.failed && "opacity-40",
-              )}
+              key={`cd-${c.startMs}-${i}`}
+              className="absolute rounded-[2px] bg-muted bg-cover bg-center"
               style={{
                 left: `${P(c.startMs - offsetMs)}%`,
-                top: OFF_GCD_TOP,
-                width: OFF_GCD_ICON,
-                height: OFF_GCD_ICON,
-                backgroundImage: `url(${meta.icon})`,
-                opacity: opacityOf(c.spellId, c.startMs),
+                top: railTop + 1 - cooldown / 2,
+                width: cooldown,
+                height: cooldown,
+                marginLeft: -cooldown / 2,
+                backgroundImage: `url(${spellMeta(c.spellId).icon})`,
+                boxShadow: `0 0 0 1px var(--background), 0 0 0 2px ${color}`,
+                opacity: opacityOf(c),
               }}
-              onClick={(e) => onSpellClick(e, c.spellId)}
-              onPointerEnter={() => onHover(c)}
-              onPointerLeave={() => onHover(null)}
+              {...hoverProps(c)}
             />
           );
         })}
@@ -573,38 +685,79 @@ function PlayerLanes({ derived, P, vs, ve, pxPerMs, gcd, ignored, nowMs, isCoold
                 onPointerEnter={() => onHoverSwing(s)}
                 onPointerLeave={() => onHoverSwing(null)}
               >
-                <div
-                  className="mt-0.5 h-2 w-[2px]"
-                  style={{ background: color }}
-                />
+                <div className="mt-0.5 h-2 w-[2px]" style={{ background: color }} />
               </div>
             );
           })}
         </div>
       )}
-      <div className="relative border-b border-border" style={{ height: CD_LANE_H }}>
-        {cdCasts.map((c, i) => {
-          const meta = spellMeta(c.spellId);
-          return (
-            <div
-              key={`${c.startMs}-${i}`}
-              title={c.spellName}
-              className="absolute top-1 size-[18px] rounded-[3px] border bg-muted bg-cover bg-center"
-              style={{
-                left: `${P(c.startMs - offsetMs)}%`,
-                borderColor: SLOT_COLORS[slot],
-                backgroundImage: `url(${meta.icon})`,
-                opacity: opacityOf(c.spellId, c.startMs),
-              }}
-              onClick={(e) => onSpellClick(e, c.spellId)}
-              onPointerEnter={() => onHover(c)}
-              onPointerLeave={() => onHover(null)}
-            />
-          );
-        })}
-      </div>
     </>
   );
+}
+
+/** Cooldowns (with a duration) active when a cast went off, excluding the cast itself. */
+function activeCooldownsAt(
+  casts: readonly TimelineCast[],
+  at: TimelineCast,
+  cooldownInfo: (spellId: number) => { durationMs: number } | null,
+): { cast: TimelineCast; leftMs: number }[] {
+  const out: { cast: TimelineCast; leftMs: number }[] = [];
+  for (const c of casts) {
+    if (c === at || c.failed || c.startMs > at.startMs) continue;
+    const durationMs = cooldownInfo(c.spellId)?.durationMs ?? 0;
+    const endMs = c.startMs + durationMs;
+    if (durationMs > 0 && endMs > at.startMs) out.push({ cast: c, leftMs: endMs - at.startMs });
+  }
+  return out;
+}
+
+function Segmented({ label, title, children }: { label: string; title?: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <div title={title} className="flex h-7 items-center gap-0.5 rounded-[5px] border border-border bg-background p-0.5">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function SegButton({
+  active,
+  disabled,
+  title,
+  ariaLabel,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  disabled?: boolean;
+  title?: string;
+  ariaLabel?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={ariaLabel}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex h-[22px] min-w-[22px] items-center justify-center whitespace-nowrap rounded-[3px] px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+        active && "bg-secondary text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Square glyph for the S / M / L icon size buttons. */
+function IconGlyph({ size }: { size: number }) {
+  return <span className="block rounded-[2px] border-[1.5px] border-current" style={{ width: size, height: size }} />;
 }
 
 interface CastTooltipProps {
@@ -613,9 +766,10 @@ interface CastTooltipProps {
   top: number;
   meta: SpellMeta;
   unitName: (guid: string) => string;
+  activeCooldowns: { cast: TimelineCast; leftMs: number; icon: string; color: string }[];
 }
 
-function CastTooltip({ cast, left, top, meta, unitName }: CastTooltipProps) {
+function CastTooltip({ cast, left, top, meta, unitName, activeCooldowns }: CastTooltipProps) {
   const castMs = Math.max(cast.endMs - cast.startMs, cast.channelTimeMs ?? 0);
   const damage = cast.damage + cast.periodicDamage;
   return (
@@ -642,6 +796,20 @@ function CastTooltip({ cast, left, top, meta, unitName }: CastTooltipProps) {
         <div className="-mt-1 text-muted-foreground">incl. {formatNumber(cast.periodicDamage)} periodic</div>
       )}
       {cast.itemId != null && <div className="text-muted-foreground">Item #{cast.itemId}</div>}
+      {activeCooldowns.length > 0 && (
+        <div className="flex flex-col gap-1 border-t border-border pt-2">
+          {activeCooldowns.map((a) => (
+            <div key={`${a.cast.spellId}-${a.cast.startMs}`} className="flex items-center gap-2">
+              <span
+                className="size-4 shrink-0 rounded-[2px] bg-muted bg-cover bg-center"
+                style={{ backgroundImage: `url(${a.icon})`, boxShadow: `0 0 0 1px var(--background), 0 0 0 2px ${a.color}` }}
+              />
+              <span className="min-w-0 flex-1 truncate text-foreground">{a.cast.spellName}</span>
+              <span className="font-mono text-muted-foreground">{(a.leftMs / 1000).toFixed(0)}s left</span>
+            </div>
+          ))}
+        </div>
+      )}
     </TooltipShell>
   );
 }

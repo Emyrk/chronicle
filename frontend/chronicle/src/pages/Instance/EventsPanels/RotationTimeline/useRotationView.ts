@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AlignMode } from "./derive";
+import type { IconSizeMode } from "./laneLayout";
 
 export const MIN_WINDOW_MS = 4000;
 /** Visible span when replay starts from a fully zoomed-out view. */
@@ -12,6 +13,8 @@ export interface RotationViewState {
   startMs: number;
   endMs: number;
   align: AlignMode;
+  /** Cast icon size: auto grows icons as you zoom in. */
+  iconSize: IconSizeMode;
   ignored: ReadonlySet<number>;
   /** Aligned time under the pointer, synced across every lane. */
   cursorMs: number | null;
@@ -34,6 +37,7 @@ export interface RotationView extends RotationViewState {
   /** Shift the window by ms (positive = later), keeping the zoom. No-op while replaying. */
   panBy: (ms: number) => void;
   setAlign: (align: AlignMode) => void;
+  setIconSize: (size: IconSizeMode) => void;
   toggleIgnored: (spellId: number) => void;
   setCursorMs: (ms: number | null) => void;
   /**
@@ -73,6 +77,7 @@ export function useRotationView(
   const [alignState, setAlign] = useState<AlignMode>("pull");
   // Replay time is pull time, so per-player alignment does not apply.
   const align: AlignMode = nowMs != null ? "pull" : alignState;
+  const [iconSize, setIconSize] = useState<IconSizeMode>("auto");
   const [ignored, setIgnored] = useState<ReadonlySet<number>>(() => new Set(initialIgnored));
   const [cursorMs, setCursorMs] = useState<number | null>(null);
   const [pinnedMs, setPinnedMs] = useState<number | null>(null);
@@ -152,6 +157,7 @@ export function useRotationView(
       startMs,
       endMs,
       align,
+      iconSize,
       ignored,
       cursorMs,
       nowMs,
@@ -163,11 +169,12 @@ export function useRotationView(
       fit,
       panBy,
       setAlign,
+      setIconSize,
       toggleIgnored,
       setCursorMs,
       pinAt,
       unpin,
     }),
-    [startMs, endMs, align, ignored, cursorMs, pinnedMs, nowMs, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
+    [startMs, endMs, align, iconSize, ignored, cursorMs, pinnedMs, nowMs, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
   );
 }

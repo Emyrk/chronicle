@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PlayerTimelineData, TimelineCast } from "./rotationTimeline.processor";
 import {
   alignOffsetMs,
+  busySegments,
   castAt,
   castSlotEnd,
   damageLead,
@@ -126,5 +127,16 @@ describe("castAt", () => {
     expect(castAt(casts, 1000, gcd15)?.spellId).toBe(1);
     expect(castAt(casts, 2000, gcd15)).toBeNull();
     expect(castAt(casts, 4100, gcd15)?.spellId).toBe(2);
+  });
+});
+
+describe("busySegments", () => {
+  it("merges slots across gaps shorter than the threshold", () => {
+    const casts = [cast(0), cast(1500), cast(3400), cast(5000)];
+    // gap 3.0→3.4 is exactly the threshold, so it splits; 4.9→5.0 merges
+    expect(busySegments(casts, gcd15, 400)).toEqual([
+      { startMs: 0, endMs: 3000 },
+      { startMs: 3400, endMs: 6500 },
+    ]);
   });
 });

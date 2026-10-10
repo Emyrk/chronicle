@@ -1,0 +1,68 @@
+/**
+ * Cast lane geometry for a zoom level (design: Rotations "Zoom that enlarges
+ * icons", 8a). Pure so the lane, label column and tooltips agree on it.
+ */
+
+export type IconSizeMode = "auto" | "s" | "m" | "l";
+
+export const FIXED_ICON_SIZES: Record<Exclude<IconSizeMode, "auto">, number> = { s: 22, m: 34, l: 48 };
+
+/** Spacing auto sizing aims to fill: roughly one global cooldown. */
+const GCD_SPACING_MS = 1600;
+const AUTO_FILL = 0.6;
+const MIN_ICON = 22;
+const MAX_ICON = 60;
+/** Below this many px per GCD, icons cannot fit and casts draw as ticks. */
+const COMPACT_GAP_PX = 14;
+const ICON_TOP = 8;
+
+export interface LaneLayout {
+  /** Casts draw as thin ticks instead of icons. */
+  compact: boolean;
+  /** Cast icon size. */
+  icon: number;
+  /** Proc (off-GCD) circle size. */
+  proc: number;
+  /** Cooldown square size. */
+  cooldown: number;
+  /** Damage label font size. */
+  labelFont: number;
+  showNames: boolean;
+  iconTop: number;
+  labelTop: number;
+  nameTop: number;
+  /** y of the busy/idle rail; procs and cooldowns sit centered on it. */
+  railTop: number;
+  height: number;
+}
+
+export function laneLayout(pxPerMs: number, mode: IconSizeMode): LaneLayout {
+  const gap = GCD_SPACING_MS * pxPerMs;
+  const icon =
+    mode === "auto" ? Math.round(Math.max(MIN_ICON, Math.min(MAX_ICON, gap * AUTO_FILL))) : FIXED_ICON_SIZES[mode];
+  const compact = mode === "auto" && gap < COMPACT_GAP_PX;
+  const proc = Math.min(20, Math.round(icon * 0.5));
+  const cooldown = Math.min(26, Math.round(icon * 0.7));
+  const labelFont = icon >= 44 ? 11 : icon >= 34 ? 10 : 9;
+  const showNames = !compact && icon >= 44 && gap >= icon + 40;
+  const labelTop = ICON_TOP + icon + 3;
+  const nameTop = labelTop + labelFont + 2;
+  const labelsBottom = showNames ? nameTop + 12 : labelTop + labelFont + 2;
+  const railTop = labelsBottom + cooldown / 2 + 2;
+  return {
+    compact,
+    icon,
+    proc,
+    cooldown,
+    labelFont,
+    showNames,
+    iconTop: ICON_TOP,
+    labelTop,
+    nameTop,
+    railTop,
+    height: Math.round(railTop + cooldown / 2 + 5),
+  };
+}
+
+/** Distinct colors for cooldown strips and rings, assigned in order. */
+export const COOLDOWN_COLORS = ["#f59e0b", "#ef4444", "#a855f7", "#22c55e", "#06b6d4", "#ec4899", "#eab308", "#3b82f6"];

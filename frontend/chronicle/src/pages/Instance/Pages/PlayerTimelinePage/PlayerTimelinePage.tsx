@@ -21,7 +21,7 @@ import { PlayerPicker } from "./PlayerPicker";
 /** Picker value meaning "no second player". */
 const NONE = "none";
 
-/** Casts of spells with at least this cooldown go to the cooldown lane. */
+/** Casts of spells with at least this cooldown are drawn as cooldowns (squares on the rail). */
 const COOLDOWN_LANE_MIN_MS = 30_000;
 
 const ROTATION_TIMELINE_PANEL: PanelDefinition<RotationTimelineResult, RotationTimelineEvent> = {
@@ -138,16 +138,17 @@ function PlayerTimelineContent({ context }: PlayerTimelinePageProps) {
   const { meta, gcd } = useSpellMeta(spellIds);
 
   const cooldowns = useCooldownSpells();
-  const cooldownIds = useMemo(() => {
-    const ids = new Set<number>();
+  const cooldownById = useMemo(() => {
+    const byId = new Map<number, { durationMs: number }>();
     for (const spells of Object.values(cooldowns.data?.byClass ?? {})) {
       for (const spell of spells) {
-        if (!spell.ignored && spell.cooldown_ms >= COOLDOWN_LANE_MIN_MS) ids.add(spell.id);
+        if (spell.ignored || spell.cooldown_ms < COOLDOWN_LANE_MIN_MS) continue;
+        byId.set(spell.id, { durationMs: spell.duration_hidden ? 0 : spell.duration_ms });
       }
     }
-    return ids;
+    return byId;
   }, [cooldowns.data]);
-  const isCooldown = useCallback((id: number) => cooldownIds.has(id), [cooldownIds]);
+  const cooldownInfo = useCallback((id: number) => cooldownById.get(id) ?? null, [cooldownById]);
 
   const unitName = useCallback(
     (guid: string) => instance.players?.[guid]?.name ?? instance.units?.[guid]?.name ?? guid,
@@ -191,7 +192,7 @@ function PlayerTimelineContent({ context }: PlayerTimelinePageProps) {
         view={view}
         spellMeta={meta}
         gcd={gcd}
-        isCooldown={isCooldown}
+        cooldownInfo={cooldownInfo}
         unitName={unitName}
         headerStart={pickers}
       >

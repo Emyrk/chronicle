@@ -57,6 +57,26 @@ export function idleGaps(
   return gaps;
 }
 
+/**
+ * Stretches where the player was busy casting: cast slots merged across any
+ * gap shorter than the idle threshold. The complement of idleGaps.
+ */
+export function busySegments(
+  casts: readonly TimelineCast[],
+  gcd: GcdLookup,
+  thresholdMs: number = DEFAULT_IDLE_THRESHOLD_MS,
+): IdleGap[] {
+  const out: IdleGap[] = [];
+  for (const cast of casts) {
+    if (cast.failed) continue;
+    const end = castSlotEnd(cast, gcd);
+    const last = out[out.length - 1];
+    if (last && cast.startMs - last.endMs < thresholdMs) last.endMs = Math.max(last.endMs, end);
+    else out.push({ startMs: cast.startMs, endMs: end });
+  }
+  return out;
+}
+
 export function totalIdleMs(gaps: readonly IdleGap[]): number {
   return gaps.reduce((sum, g) => sum + (g.endMs - g.startMs), 0);
 }
