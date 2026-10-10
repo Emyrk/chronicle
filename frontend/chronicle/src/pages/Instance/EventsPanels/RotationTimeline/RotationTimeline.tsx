@@ -631,7 +631,7 @@ function PlayerLanes({
   const kindOf = (c: TimelineCast) => castKind(c, gcd, cooldownInfo);
   const cooldownCasts = casts.filter((c) => {
     const info = cooldownInfo(c.spellId);
-    return info != null && visible(c.startMs, c.startMs + info.durationMs);
+    return info != null && visible(c.startMs, c.startMs + cooldownDurationMs(c, info.durationMs));
   });
   const { ends } = derived;
   const gcdCasts = casts.filter(
@@ -676,7 +676,7 @@ function PlayerLanes({
       <div className="relative border-b border-border" style={{ height: layout.height }}>
         {/* Cooldown durations: lane tint plus a strip per cooldown along the top. */}
         {cooldownCasts.map((c, i) => {
-          const durationMs = cooldownInfo(c.spellId)?.durationMs ?? 0;
+          const durationMs = cooldownDurationMs(c, cooldownInfo(c.spellId)?.durationMs ?? 0);
           if (durationMs <= 0) return null;
           const { color, index } = cooldownColor(c.spellId);
           const { left, width } = span(c.startMs, c.startMs + durationMs);
@@ -902,6 +902,11 @@ function PlayerLanes({
   );
 }
 
+/** How long a cooldown tints the lane: the real buff for buff-made casts, else the spell's duration. */
+function cooldownDurationMs(cast: TimelineCast, spellDurationMs: number): number {
+  return cast.buffEndMs != null ? cast.buffEndMs - cast.startMs : spellDurationMs;
+}
+
 /** Where a cast's icon sits: where a cast-time spell landed, or where a channel or instant began. */
 function iconTimeMs(cast: TimelineCast, endMs: number): number {
   return !cast.channel && endMs > cast.startMs ? endMs : cast.startMs;
@@ -916,7 +921,7 @@ function activeCooldownsAt(
   const out: { cast: TimelineCast; leftMs: number }[] = [];
   for (const c of casts) {
     if (c === at || c.failed || c.startMs > at.startMs) continue;
-    const durationMs = cooldownInfo(c.spellId)?.durationMs ?? 0;
+    const durationMs = cooldownDurationMs(c, cooldownInfo(c.spellId)?.durationMs ?? 0);
     const endMs = c.startMs + durationMs;
     if (durationMs > 0 && endMs > at.startMs) out.push({ cast: c, leftMs: endMs - at.startMs });
   }

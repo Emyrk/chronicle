@@ -14,10 +14,11 @@ import {
   type RotationTimelineEvent,
   type RotationTimelineResult,
 } from "../../EventsPanels/RotationTimeline/rotationTimeline.processor";
-import { playerCasts } from "../../EventsPanels/RotationTimeline/derive";
+import { playerCasts, withOverrideBuffCasts } from "../../EventsPanels/RotationTimeline/derive";
 import { useRotationView, type RotationViewInitial } from "../../EventsPanels/RotationTimeline/useRotationView";
 import { useSmoothReplayTime } from "../../EventsPanels/RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
+import { activeOverrides, findOverride } from "../../EventsPanels/RotationTimeline/spellOverrides";
 import { AuraSection } from "./AuraSection";
 import { defaultPlayers } from "./defaultPlayers";
 import { PlayerPicker } from "./PlayerPicker";
@@ -196,15 +197,18 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
     });
   }, [onStateChange, encounterId, picked, view.align, replaying, wholeFight, view.startMs, view.endMs, view.pinnedMs, view.follow, debuffTarget]);
 
+  // Manual spell mutations for this log's flavor (spellOverrides.ts).
+  const spellOverrides = useMemo(() => activeOverrides(instance.flavor ?? []), [instance.flavor]);
+
   const players: RotationTimelinePlayer[] = useMemo(
     () =>
       picked.flatMap((guid) => {
         const data = guid ? result.players.get(guid) : undefined;
         const info = guid ? instance.players?.[guid] : undefined;
         if (!guid || !data || !info) return [];
-        return [{ guid, name: info.name, className: info.class, data }];
+        return [{ guid, name: info.name, className: info.class, data: withOverrideBuffCasts(data, spellOverrides, durationMs) }];
       }),
-    [picked, result.players, instance.players],
+    [picked, result.players, instance.players, spellOverrides, durationMs],
   );
 
   const spellIds = useMemo(() => {
@@ -229,7 +233,18 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
     }
     return byId;
   }, [cooldowns.data]);
-  const cooldownInfo = useCallback((id: number) => cooldownById.get(id) ?? null, [cooldownById]);
+  const cooldownInfo = useCallback(
+    (id: number) => {
+      // A "show as cooldown" override wins over the curated list.
+      const override = findOverride(spellOverrides, id, meta(id).spell?.name?.["0"] ?? null);
+      if (override?.showAsCooldown) {
+        const spellDuration = meta(id).spell?.duration?.Duration ?? 0;
+        return { durationMs: override.showAsCooldown.durationMs ?? Math.max(0, spellDuration) };
+      }
+      return cooldownById.get(id) ?? null;
+    },
+    [cooldownById, spellOverrides, meta],
+  );
   // Every curated entry, before the lane threshold, for the rules view.
   const curatedById = useMemo(() => {
     const byId = new Map<number, CuratedCooldown>();
@@ -321,6 +336,7 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
             gcd={gcd}
             cooldownInfo={cooldownInfo}
             curatedCooldown={curatedCooldown}
+            overrides={spellOverrides}
             isIgnored={view.isIgnored}
             cooldownMinMs={COOLDOWN_LANE_MIN_MS}
             onFlipBack={() => setFlipped(false)}

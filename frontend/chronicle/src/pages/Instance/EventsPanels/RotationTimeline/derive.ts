@@ -4,6 +4,7 @@
  */
 
 import { DAMAGE_BIN_MS, type PlayerTimelineData, type TimelineCast } from "./rotationTimeline.processor";
+import { findOverride, type SpellOverride } from "./spellOverrides";
 
 export const DEFAULT_GCD_MS = 1500;
 export const DEFAULT_IDLE_THRESHOLD_MS = 400;
@@ -261,4 +262,49 @@ export function castKind(
   if (cooldownInfo(cast.spellId) != null) return "cooldown";
   if (gcd(cast.spellId) === 0 && cast.endMs === cast.startMs && !cast.channelTimeMs) return "proc";
   return "gcd";
+}
+
+/**
+ * Spell overrides that show a proc as a cooldown also need casts to draw. When
+ * a player gained the buff but never cast the spell (common for procs), each
+ * buff becomes a cast that ends when the buff faded. Returns player data with
+ * those casts added; unchanged when nothing applies.
+ */
+export function withOverrideBuffCasts(
+  data: PlayerTimelineData,
+  overrides: readonly SpellOverride[],
+  durationMs: number,
+): PlayerTimelineData {
+  const wanted = overrides.filter((o) => o.showAsCooldown);
+  if (wanted.length === 0) return data;
+  const casts = data.goCasts.length > 0 ? data.goCasts : data.textCasts;
+  const cast = new Set(casts.map((c) => c.spellName.toLowerCase()));
+  const added: TimelineCast[] = [];
+  for (const seg of data.aurasOn) {
+    if (!seg.isBuff || cast.has(seg.spellName.toLowerCase())) continue;
+    const override = findOverride(wanted, seg.spellId, seg.spellName);
+    if (!override) continue;
+    added.push({
+      startMs: seg.startMs,
+      endMs: seg.startMs,
+      spellId: seg.spellId ?? override.spellIds?.[0] ?? -1,
+      spellName: seg.spellName,
+      target: seg.target,
+      castTimeMs: null,
+      channelTimeMs: null,
+      channel: false,
+      tickMs: [],
+      failed: false,
+      itemId: null,
+      damage: 0,
+      periodicDamage: 0,
+      hits: 0,
+      crits: 0,
+      buffEndMs: Math.min(seg.endMs ?? durationMs, durationMs),
+    });
+  }
+  if (added.length === 0) return data;
+  return data.goCasts.length > 0
+    ? { ...data, goCasts: [...data.goCasts, ...added] }
+    : { ...data, textCasts: [...data.textCasts, ...added] };
 }

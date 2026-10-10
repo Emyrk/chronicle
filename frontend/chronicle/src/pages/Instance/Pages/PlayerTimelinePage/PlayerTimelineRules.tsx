@@ -29,6 +29,7 @@ import { CLUSTER_CAST_MARGIN_MS, type RotationTimelinePlayer } from "../../Event
 import { DEFAULT_IGNORED_SPELLS } from "../../EventsPanels/RotationTimeline/useRotationView";
 import type { SpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 import { FULL_UPTIME, NONE_UPTIME } from "./AuraSection";
+import { findOverride, SPELL_OVERRIDES, type SpellOverride } from "../../EventsPanels/RotationTimeline/spellOverrides";
 
 export interface CuratedCooldown {
   cooldownMs: number;
@@ -47,6 +48,8 @@ interface PlayerTimelineRulesProps {
   isIgnored: (spellName: string) => boolean;
   /** Curated cooldowns at least this long are drawn as cooldowns. */
   cooldownMinMs: number;
+  /** Spell overrides active for this log's flavor. */
+  overrides: readonly SpellOverride[];
   onFlipBack: () => void;
 }
 
@@ -84,8 +87,10 @@ export function PlayerTimelineRules({
   curatedCooldown,
   isIgnored,
   cooldownMinMs,
+  overrides,
   onFlipBack,
 }: PlayerTimelineRulesProps) {
+  const overrideFor = (r: SpellRow) => findOverride(overrides, r.spellId, r.name);
   const rows = useMemo(() => {
     const byId = new Map<number, SpellRow & { observedTotal: number; observedCount: number }>();
     players.forEach((p, slot) => {
@@ -121,6 +126,8 @@ export function PlayerTimelineRules({
   }, [players, gcd, cooldownInfo]);
 
   const reason = (r: SpellRow): string => {
+    const override = overrideFor(r);
+    if (override) return `Manual override: ${override.note}`;
     const curated = curatedCooldown(r.spellId);
     const meta = spellMeta(r.spellId).spell;
     if (r.kind === "cooldown") {
@@ -180,6 +187,7 @@ export function PlayerTimelineRules({
                 const spell = meta.spell;
                 const curated = curatedCooldown(r.spellId);
                 const ignored = isIgnored(r.name);
+                const overridden = overrideFor(r)?.showAsCooldown != null;
                 return (
                   <tr key={r.spellId} className={cn("border-t border-border", ignored && "opacity-50")}>
                     <Td>
@@ -193,15 +201,19 @@ export function PlayerTimelineRules({
                         {ignored && <span className="text-[10px] text-destructive">ignored</span>}
                       </span>
                     </Td>
-                    <Td>{r.channel && r.kind === "gcd" ? "Channel" : KIND_LABEL[r.kind]}</Td>
-                    <Td muted>{reason(r)}</Td>
+                    <Td override={overridden}>{r.channel && r.kind === "gcd" ? "Channel" : KIND_LABEL[r.kind]}</Td>
+                    <Td muted override={overridden}>{reason(r)}</Td>
                     <Td right mono>{spell ? ms(gcd(r.spellId)) : `${ms(DEFAULT_GCD_MS)}*`}</Td>
                     <Td right mono>{spell?.casting_time?.Base ? ms(spell.casting_time.Base) : "—"}</Td>
                     <Td right mono>{r.observedMs >= MIN_CAST_TIME_MS ? ms(r.observedMs) : "—"}</Td>
                     <Td right mono>
                       {curated ? `${ms(curated.cooldownMs)}${curated.ignored ? " (admin ignored)" : ""}` : "—"}
                     </Td>
-                    <Td right mono>{duration(spell?.duration?.Duration)}</Td>
+                    <Td right mono override={overridden}>
+                      {overridden && cooldownInfo(r.spellId)
+                        ? duration(cooldownInfo(r.spellId)?.durationMs)
+                        : duration(spell?.duration?.Duration)}
+                    </Td>
                     <Td>{spell ? (spell.attributes?.string?.includes("IsAbility") ? "yes" : "no") : "?"}</Td>
                     {r.uses.map((n, i) => (
                       <Td key={i} right mono>
@@ -214,7 +226,38 @@ export function PlayerTimelineRules({
             </tbody>
           </table>
         </div>
-        <p className="text-[10px] text-muted-foreground">* No spell data loaded; the default GCD is assumed.</p>
+        <div className="flex flex-wrap items-center gap-4 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="size-3 rounded-sm border border-yellow-500/40 bg-yellow-500/15" />
+            Manual override (spellOverrides.ts)
+          </span>
+          <span>* No spell data loaded; the default GCD is assumed.</span>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Spell overrides</h3>
+        <ul className="flex flex-col gap-1.5 text-muted-foreground">
+          {SPELL_OVERRIDES.map((o) => {
+            const active = overrides.includes(o);
+            return (
+              <li key={o.id} className="flex flex-wrap items-baseline gap-2">
+                <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-semibold", active ? "bg-yellow-500/15 text-yellow-300" : "bg-muted text-muted-foreground")}>
+                  {active ? "Active" : "Inactive"}
+                </span>
+                <span className="text-foreground">{[...(o.names ?? []), ...(o.spellIds ?? []).map((id) => `#${id}`)].join(", ")}</span>
+                {o.showAsCooldown && (
+                  <span>
+                    shown as a cooldown
+                    {o.showAsCooldown.durationMs != null ? ` (${ms(o.showAsCooldown.durationMs)})` : " (spell or buff duration)"}
+                  </span>
+                )}
+                {o.flavor && <span className="font-mono text-[10px]">flavor: {o.flavor.join(" + ")}</span>}
+                <span>· {o.note}</span>
+              </li>
+            );
+          })}
+        </ul>
       </section>
 
       <div className="grid gap-5 md:grid-cols-2">
@@ -286,7 +329,20 @@ function Th({ children, right }: { children: ReactNode; right?: boolean }) {
   return <th className={cn("whitespace-nowrap px-2 py-1.5 font-medium", right && "text-right")}>{children}</th>;
 }
 
-function Td({ children, right, mono, muted }: { children: ReactNode; right?: boolean; mono?: boolean; muted?: boolean }) {
+function Td({
+  children,
+  right,
+  mono,
+  muted,
+  override,
+}: {
+  children: ReactNode;
+  right?: boolean;
+  mono?: boolean;
+  muted?: boolean;
+  /** Value changed by a manual spell override: highlighted yellow. */
+  override?: boolean;
+}) {
   return (
     <td
       className={cn(
@@ -294,6 +350,7 @@ function Td({ children, right, mono, muted }: { children: ReactNode; right?: boo
         right && "text-right",
         mono && "font-mono",
         muted && "text-muted-foreground",
+        override && "bg-yellow-500/15 text-yellow-200",
       )}
     >
       {children}

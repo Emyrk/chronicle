@@ -53,6 +53,11 @@ export interface TimelineCast {
   channel: boolean;
   /** Offsets of periodic damage ticks linked to this cast (channel ticks, DoT ticks). */
   tickMs: number[];
+  /**
+   * Set only on casts made from a buff by a spell override (the spell was never
+   * cast, only gained): when the buff faded. Not produced by this processor.
+   */
+  buffEndMs?: number;
   failed: boolean;
   itemId: number | null;
   /** Damage linked to this cast: direct hits plus periodic ticks. */

@@ -3,6 +3,7 @@ import type { PlayerTimelineData, TimelineCast } from "./rotationTimeline.proces
 import {
   alignOffsetMs,
   busySegments,
+  withOverrideBuffCasts,
   nearbyActivity,
   castAt,
   castEndMs,
@@ -221,5 +222,34 @@ describe("nearbyActivity", () => {
 
   it("has no next action after the last cast", () => {
     expect(nearbyActivity(casts, 9000, gcd15).untilNextMs).toBeNull();
+  });
+});
+
+describe("withOverrideBuffCasts", () => {
+  const overrides = [{ id: "e", names: ["Nature Eclipse"], showAsCooldown: {}, note: "" }];
+  const buff = (startMs: number, endMs: number | null) => ({
+    spellId: 51442,
+    spellName: "Nature Eclipse",
+    isBuff: true,
+    caster: null,
+    target: "p",
+    startMs,
+    endMs,
+    maxStacks: 1,
+  });
+
+  it("turns each buff into a cast that ends when the buff faded", () => {
+    const data = player({ goCasts: [cast(0, 9)], aurasOn: [buff(1000, 9000), buff(20_000, null)] });
+    const out = withOverrideBuffCasts(data, overrides, 30_000);
+    const added = out.goCasts.filter((c) => c.spellName === "Nature Eclipse");
+    expect(added.map((c) => [c.startMs, c.buffEndMs])).toEqual([
+      [1000, 9000],
+      [20_000, 30_000],
+    ]);
+  });
+
+  it("leaves data alone when the spell was cast", () => {
+    const data = player({ goCasts: [cast(500, 51442, { spellName: "Nature Eclipse" })], aurasOn: [buff(500, 15_500)] });
+    expect(withOverrideBuffCasts(data, overrides, 30_000)).toBe(data);
   });
 });
