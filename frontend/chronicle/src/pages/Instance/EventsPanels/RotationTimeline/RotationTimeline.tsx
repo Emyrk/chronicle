@@ -208,7 +208,7 @@ export function RotationTimeline({
   };
 
   const onTrackPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || e.ctrlKey || e.metaKey || replaying) return;
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || view.windowLocked) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     panRef.current = { x: e.clientX, startMs: vs, endMs: ve, moved: false };
   };
@@ -266,8 +266,37 @@ export function RotationTimeline({
 
       {showOverview && <RotationOverview series={overview.series} lead={overview.lead} view={view} />}
 
-      {/* View toolbar, directly above the time axis it controls. */}
-      <div className="flex h-10 flex-wrap items-center gap-4 border-b border-border bg-background px-4">
+      {/* View toolbar, directly above the time axis it controls (design: Rotations 9c). */}
+      <div className="flex min-h-10 flex-wrap items-center gap-4 border-b border-border bg-background px-4 py-1.5">
+        <Segmented label="Zoom" title="Visible time span">
+          <SegButton onClick={() => view.zoom(1.5)} title="Zoom out" ariaLabel="Zoom out">
+            <Minus className="size-3.5" />
+          </SegButton>
+          <span className="min-w-[38px] text-center font-mono text-[11px] text-foreground">{formatClock(span, 0)}</span>
+          <SegButton onClick={() => view.zoom(1 / 1.5)} title="Zoom in" ariaLabel="Zoom in">
+            <Plus className="size-3.5" />
+          </SegButton>
+          <span className="mx-0.5 h-4 w-px bg-border" />
+          <SegButton onClick={view.fit} title="Show whole fight">
+            Fit
+          </SegButton>
+          <button
+            type="button"
+            onClick={view.toggleFollow}
+            aria-pressed={view.follow}
+            title="Follow cursor: the lanes stay centered on the overview cursor as you move it (F)"
+            className={cn(
+              "flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-[3px] px-2 text-xs",
+              view.follow ? "bg-school-holy/15 text-school-holy" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className="flex size-[9px] items-center justify-center rounded-full border-[1.5px] border-current">
+              <span className={cn("size-[3px] rounded-full", view.follow && "bg-school-holy")} />
+            </span>
+            Follow
+          </button>
+        </Segmented>
+        <span className="h-4 w-px bg-border" />
         <Segmented label="Align">
           <SegButton active={view.align === "pull"} disabled={replaying} onClick={() => view.setAlign("pull")}>
             Pull
@@ -290,20 +319,6 @@ export function RotationTimeline({
               <IconGlyph size={[8, 11, 14][i]} />
             </SegButton>
           ))}
-        </Segmented>
-        <div className="flex-1" />
-        <Segmented label="Zoom" title="Visible time span">
-          <SegButton onClick={() => view.zoom(1.5)} title="Zoom out" ariaLabel="Zoom out">
-            <Minus className="size-3.5" />
-          </SegButton>
-          <span className="min-w-[38px] text-center font-mono text-[11px] text-foreground">{formatClock(span, 0)}</span>
-          <SegButton onClick={() => view.zoom(1 / 1.5)} title="Zoom in" ariaLabel="Zoom in">
-            <Plus className="size-3.5" />
-          </SegButton>
-          <span className="mx-0.5 h-4 w-px bg-border" />
-          <SegButton onClick={view.fit} title="Show whole fight">
-            Fit
-          </SegButton>
         </Segmented>
       </div>
 

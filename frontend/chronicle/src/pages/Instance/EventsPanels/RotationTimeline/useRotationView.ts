@@ -39,7 +39,13 @@ export interface RotationView extends RotationViewState {
   setAlign: (align: AlignMode) => void;
   setIconSize: (size: IconSizeMode) => void;
   toggleIgnored: (spellId: number) => void;
-  setCursorMs: (ms: number | null) => void;
+  /** source "overview" also updates what Follow centers on. */
+  setCursorMs: (ms: number | null, source?: "lanes" | "overview") => void;
+  /** Keep the window centered on the pin or the overview cursor. */
+  follow: boolean;
+  toggleFollow: () => void;
+  /** Replay or Follow controls the window, so dragging to pan is off. */
+  windowLocked: boolean;
   /**
    * Pin the indicator at ms (a click). Clicking within toleranceMs of the
    * current pin unpins. Scrolls the window to the pin when it is off screen.
@@ -68,19 +74,51 @@ export function useRotationView(
     durationMs,
     range: [0, durationMs],
   });
+  const [cursorMs, setCursorState] = useState<number | null>(null);
+  const [pinnedMs, setPinnedMs] = useState<number | null>(null);
+  const [follow, setFollow] = useState(false);
+  /** Last time hovered on the overview chart; what Follow centers on. */
+  const [overviewMs, setOverviewMs] = useState<number | null>(null);
+
   const userStart = rangeState.durationMs === durationMs ? rangeState.range[0] : 0;
   const userEnd = rangeState.durationMs === durationMs ? rangeState.range[1] : durationMs;
-  // Replay keeps the user's zoom (span) but centers on now; it ignores pan.
-  const replaySpan = userEnd - userStart >= durationMs ? Math.min(REPLAY_WINDOW_MS, durationMs) : userEnd - userStart;
-  const startMs = nowMs != null ? nowMs - replaySpan * REPLAY_NOW_FRACTION : userStart;
-  const endMs = nowMs != null ? startMs + replaySpan : userEnd;
+  const userSpan = userEnd - userStart;
+  // Replay keeps the user's zoom (span) but puts now at a fixed spot; it ignores pan.
+  // Follow does the same around the pin or the overview cursor, centered.
+  const replaySpan = userSpan >= durationMs ? Math.min(REPLAY_WINDOW_MS, durationMs) : userSpan;
+  const followMs = follow ? (pinnedMs ?? overviewMs) : null;
+  let startMs = userStart;
+  let endMs = userEnd;
+  if (nowMs != null) {
+    startMs = nowMs - replaySpan * REPLAY_NOW_FRACTION;
+    endMs = startMs + replaySpan;
+  } else if (followMs != null) {
+    [startMs, endMs] = clampWindow(followMs - replaySpan / 2, followMs + replaySpan / 2, durationMs);
+  }
   const [alignState, setAlign] = useState<AlignMode>("pull");
   // Replay time is pull time, so per-player alignment does not apply.
   const align: AlignMode = nowMs != null ? "pull" : alignState;
   const [iconSize, setIconSize] = useState<IconSizeMode>("auto");
   const [ignored, setIgnored] = useState<ReadonlySet<number>>(() => new Set(initialIgnored));
-  const [cursorMs, setCursorMs] = useState<number | null>(null);
-  const [pinnedMs, setPinnedMs] = useState<number | null>(null);
+
+  const setCursorMs = useCallback((ms: number | null, source: "lanes" | "overview" = "lanes") => {
+    setCursorState(ms);
+    if (source === "overview" && ms != null) setOverviewMs(ms);
+  }, []);
+  const toggleFollow = useCallback(() => setFollow((f) => !f), []);
+
+  // F toggles Follow, unless typing in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "f" && e.key !== "F") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
+      setFollow((f) => !f);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const setRange = useCallback(
     (update: (current: [number, number]) => [number, number]) =>
@@ -106,14 +144,18 @@ export function useRotationView(
     [durationMs, setRange],
   );
 
-  const fit = useCallback(() => setRange(() => [0, durationMs]), [durationMs, setRange]);
+  // Showing the whole fight and following a point are opposites: Fit ends Follow.
+  const fit = useCallback(() => {
+    setFollow(false);
+    setRange(() => [0, durationMs]);
+  }, [durationMs, setRange]);
 
   const panBy = useCallback(
     (ms: number) => {
-      if (nowMs != null) return;
+      if (nowMs != null || followMs != null) return;
       setRange(([s, e]) => clampWindow(s + ms, e + ms, durationMs));
     },
-    [nowMs, durationMs, setRange],
+    [nowMs, followMs, durationMs, setRange],
   );
 
   const pinAt = useCallback(
@@ -161,6 +203,9 @@ export function useRotationView(
       ignored,
       cursorMs,
       nowMs,
+      follow,
+      toggleFollow,
+      windowLocked: nowMs != null || followMs != null,
       pinnedMs: nowMs == null ? pinnedMs : null,
       indicatorMs: nowMs ?? pinnedMs ?? cursorMs,
       durationMs,
@@ -175,6 +220,6 @@ export function useRotationView(
       pinAt,
       unpin,
     }),
-    [startMs, endMs, align, iconSize, ignored, cursorMs, pinnedMs, nowMs, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
+    [startMs, endMs, align, iconSize, ignored, cursorMs, pinnedMs, nowMs, follow, toggleFollow, followMs, setCursorMs, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
   );
 }

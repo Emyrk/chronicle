@@ -77,7 +77,7 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const f = fracAt(e);
     // Overview time is pull time, which matches the lanes when aligned to pull.
-    view.setCursorMs(f * durationMs);
+    view.setCursorMs(f * durationMs, "overview");
     if (brush) setBrush([brush[0], f]);
   };
   const onPointerUp = () => {
