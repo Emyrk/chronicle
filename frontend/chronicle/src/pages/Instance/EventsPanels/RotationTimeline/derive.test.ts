@@ -5,6 +5,7 @@ import {
   busySegments,
   castKind,
   withConsumeCasts,
+  withoutHiddenCasts,
   withOverrideBuffCasts,
   nearbyActivity,
   castAt,
@@ -287,5 +288,21 @@ describe("withConsumeCasts", () => {
   it("returns the data unchanged without consumes", () => {
     const data = player({ goCasts: [cast(0)] });
     expect(withConsumeCasts(data)).toBe(data);
+  });
+});
+
+describe("withoutHiddenCasts", () => {
+  const hide = [{ id: "dw", names: ["Deep Wounds"], spellIds: [12868], hide: true, note: "" }];
+
+  it("drops casts of hidden spells by ID or name, keeping similar names", () => {
+    const data = player({
+      goCasts: [cast(0, 12868), cast(10, 12162, { spellName: "Deep Wounds" }), cast(20, 12721, { spellName: "Deep Wound" })],
+    });
+    expect(withoutHiddenCasts(data, hide).goCasts.map((c) => c.spellId)).toEqual([12721]);
+  });
+
+  it("returns the data unchanged without hide overrides", () => {
+    const data = player({ goCasts: [cast(0, 12868)] });
+    expect(withoutHiddenCasts(data, [{ id: "x", names: ["Deep Wounds"], note: "" }])).toBe(data);
   });
 });

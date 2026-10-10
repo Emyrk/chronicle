@@ -256,6 +256,7 @@ export function PlayerTimelineRules({
                     {o.showAsCooldown.durationMs != null ? ` (${ms(o.showAsCooldown.durationMs)})` : " (spell or buff duration)"}
                   </span>
                 )}
+                {o.hide && <span>hidden from the timeline</span>}
                 {o.color && (
                   <span className="flex items-center gap-1">
                     <span className="size-2.5 rounded-sm" style={{ background: o.color }} />

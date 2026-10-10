@@ -23,6 +23,7 @@ import {
   playerCasts,
   withConsumeCasts,
   withOverrideBuffCasts,
+  withoutHiddenCasts,
   type TimelineMetric,
 } from "../../EventsPanels/RotationTimeline/derive";
 import { useRotationView, type RotationViewInitial } from "../../EventsPanels/RotationTimeline/useRotationView";
@@ -242,7 +243,8 @@ function PlayerTimelineContent({
         const data = guid ? result.players.get(guid) : undefined;
         const info = guid ? instance.players?.[guid] : undefined;
         if (!guid || !data || !info) return [];
-        return [{ guid, name: info.name, className: info.class, data: withOverrideBuffCasts(withConsumeCasts(data), spellOverrides, durationMs) }];
+        const shown = withoutHiddenCasts(withConsumeCasts(data), spellOverrides);
+        return [{ guid, name: info.name, className: info.class, data: withOverrideBuffCasts(shown, spellOverrides, durationMs) }];
       }),
     [picked, result.players, instance.players, spellOverrides, durationMs],
   );

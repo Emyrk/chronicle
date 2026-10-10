@@ -320,6 +320,14 @@ export function withOverrideBuffCasts(
     : { ...data, textCasts: [...data.textCasts, ...added] };
 }
 
+/** Drops casts of spells a spell override hides. Unchanged when nothing applies. */
+export function withoutHiddenCasts(data: PlayerTimelineData, overrides: readonly SpellOverride[]): PlayerTimelineData {
+  const hidden = overrides.filter((o) => o.hide);
+  if (hidden.length === 0) return data;
+  const keep = (c: TimelineCast) => !findOverride(hidden, c.spellId, c.spellName);
+  return { ...data, goCasts: data.goCasts.filter(keep), textCasts: data.textCasts.filter(keep) };
+}
+
 /** A logged cast of the same spell this close to a consume is the same use. */
 const CONSUME_MATCH_MS = 1000;
 /** A buff of the consumable's spell starting this close to the use is the buff it applied. */
