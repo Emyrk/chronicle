@@ -1007,6 +1007,8 @@ interface LayoutSnapshot {
   panelOptionsById: Record<string, string | null>;
   panelFiltersById: Record<string, PanelFilter[]>;
   activePresetId: string | null;
+  /** View state of the page being popped out, if a page preset was active. */
+  pageState?: unknown;
 }
 
 interface LayoutPopupSession extends LayoutPopup {
@@ -1125,7 +1127,7 @@ function PoppedOutLayoutContent({
   layouts,
   onExplainerClick,
 }: PoppedOutLayoutContentProps) {
-  const availablePresetLayouts = getAvailablePresetLayouts(context.instance.capabilities ?? []).filter(isPanelPresetLayout);
+  const availablePresetLayouts = getAvailablePresetLayouts(context.instance.capabilities ?? []);
   const [layoutItems, setLayoutItems] = useState(() => session.snapshot.layoutItems);
   const [panelTypesById, setPanelTypesById] = useState(() => session.snapshot.panelTypesById);
   const [panelOptionsById, setPanelOptionsById] = useState(() => session.snapshot.panelOptionsById);
@@ -1136,7 +1138,12 @@ function PoppedOutLayoutContent({
 
   const applyPreset = useCallback((presetId: string) => {
     const preset = PRESET_LAYOUTS_BY_ID[presetId];
-    if (!preset || !isPanelPresetLayout(preset)) return;
+    if (!preset) return;
+    if (!isPanelPresetLayout(preset)) {
+      // Pages keep the popup's panel layout around for switching back.
+      setActivePresetId(presetId);
+      return;
+    }
 
     const items = orderLayoutItems(normalizeLayoutItems(preset.layoutItems));
     setLayoutItems(items);
@@ -1229,6 +1236,15 @@ function PoppedOutLayoutContent({
     setActivePresetId(null);
   }, []);
 
+  // A page in the popup starts from the main window's page state, then runs on
+  // its own; its changes are not reported back.
+  const popupPreset = activePresetId ? PRESET_LAYOUTS_BY_ID[activePresetId] : null;
+  const popupPageType = popupPreset?.kind === "page" ? popupPreset.pageType : null;
+  const popupPageState = useMemo(
+    () => ({ initial: session.snapshot.pageState, onChange: () => {} }),
+    [session.snapshot.pageState],
+  );
+
   return (
     <PortalContainerProvider container={session.container}>
       <div className="min-h-screen bg-background text-foreground p-3">
@@ -1251,26 +1267,30 @@ function PoppedOutLayoutContent({
             ))}
           </div>
         </div>
-        <PanelTimingProvider panelCount={layoutItems.length}>
-          <ChartDataRegistryProvider>
-            <EventsPanelGrid
-              layoutItems={layoutItems}
-              panelTypesById={panelTypesById}
-              panelOptionsById={panelOptionsById}
-              seedFiltersByID={seedFiltersById}
-              seedFiltersVersion={seedFiltersVersion}
-              durationMs={durationMs}
-              context={context}
-              showHints={showHints}
-              isMobile={false}
-              onPanelTypeChange={handlePanelTypeChange}
-              onStripTypeChange={handleStripTypeChange}
-              onPanelOptionChange={handlePanelOptionChange}
-              onPanelFiltersChange={handlePanelFiltersChange}
-              onExplainerClick={onExplainerClick}
-            />
-          </ChartDataRegistryProvider>
-        </PanelTimingProvider>
+        {popupPageType ? (
+          <InstanceContentPage pageType={popupPageType} context={context} pageState={popupPageState} />
+        ) : (
+          <PanelTimingProvider panelCount={layoutItems.length}>
+            <ChartDataRegistryProvider>
+              <EventsPanelGrid
+                layoutItems={layoutItems}
+                panelTypesById={panelTypesById}
+                panelOptionsById={panelOptionsById}
+                seedFiltersByID={seedFiltersById}
+                seedFiltersVersion={seedFiltersVersion}
+                durationMs={durationMs}
+                context={context}
+                showHints={showHints}
+                isMobile={false}
+                onPanelTypeChange={handlePanelTypeChange}
+                onStripTypeChange={handleStripTypeChange}
+                onPanelOptionChange={handlePanelOptionChange}
+                onPanelFiltersChange={handlePanelFiltersChange}
+                onExplainerClick={onExplainerClick}
+              />
+            </ChartDataRegistryProvider>
+          </PanelTimingProvider>
+        )}
       </div>
     </PortalContainerProvider>
   );
@@ -2508,6 +2528,7 @@ export function InstancePageView({
         panelOptionsById: { ...panelOptionsByID },
         panelFiltersById: structuredClone(panelFiltersByID),
         activePresetId,
+        pageState: activePageType ? pageStateRef.current : undefined,
       },
     };
     layoutPopupRef.current = session;
@@ -2521,6 +2542,7 @@ export function InstancePageView({
     panelFiltersByID,
     panelOptionsByID,
     panelTypesByID,
+    activePageType,
   ]);
 
   // Use URL state if present, otherwise default to all encounters
@@ -3355,7 +3377,7 @@ export function InstancePageView({
               <InstanceMenu
                 onImportLayout={isEncounterView ? handleImportLayout : undefined}
                 onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
-                onPopOutLayout={isEncounterView && (!activePageType || layoutPopup !== null) ? popOutLayout : undefined}
+                onPopOutLayout={isEncounterView ? popOutLayout : undefined}
                 layoutPoppedOut={isEncounterView && layoutPopup !== null}
                 onResetView={isEncounterView ? resetView : undefined}
                 onOpenTimeRange={isEncounterView ? onOpenTimeRange : undefined}
@@ -3531,7 +3553,7 @@ export function InstancePageView({
               <InstanceMenu
                 onImportLayout={isEncounterView ? handleImportLayout : undefined}
                 onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
-                onPopOutLayout={isEncounterView && (!activePageType || layoutPopup !== null) ? popOutLayout : undefined}
+                onPopOutLayout={isEncounterView ? popOutLayout : undefined}
                 layoutPoppedOut={isEncounterView && layoutPopup !== null}
                 onResetView={isEncounterView ? resetView : undefined}
                 onOpenTimeRange={isEncounterView ? onOpenTimeRange : undefined}

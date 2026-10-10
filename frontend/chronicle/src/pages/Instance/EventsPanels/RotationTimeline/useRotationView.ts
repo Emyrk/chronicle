@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { AlignMode } from "./derive";
 import type { IconSizeMode } from "./laneLayout";
 
@@ -146,18 +146,6 @@ export function useRotationView(
   }, []);
   const toggleFollow = useCallback(() => setFollow((f) => !f), []);
 
-  // F toggles Follow, unless typing in a field.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "f" && e.key !== "F") return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const el = e.target as HTMLElement | null;
-      if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
-      setFollow((f) => !f);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   const setRange = useCallback(
     (update: (current: [number, number]) => [number, number]) =>
@@ -210,15 +198,6 @@ export function useRotationView(
   );
   const unpin = useCallback(() => setPinnedMs(null), []);
 
-  // Esc unpins.
-  useEffect(() => {
-    if (pinnedMs == null) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPinnedMs(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pinnedMs]);
 
   const toggleIgnored = useCallback((spellId: number) => {
     setIgnored((prev) => {

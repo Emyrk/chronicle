@@ -139,6 +139,26 @@ export function RotationTimeline({
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
+
+  // Keyboard: F toggles Follow, Esc unpins. Bound to the window this timeline is
+  // rendered in, so a popped-out copy gets its own shortcuts.
+  const keysRef = useRef({ toggleFollow: view.toggleFollow, unpin: view.unpin });
+  useEffect(() => {
+    keysRef.current = { toggleFollow: view.toggleFollow, unpin: view.unpin };
+  }, [view.toggleFollow, view.unpin]);
+  useEffect(() => {
+    const win = rootRef.current?.ownerDocument.defaultView;
+    if (!win) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
+      if (e.key === "Escape") keysRef.current.unpin();
+      else if (e.key === "f" || e.key === "F") keysRef.current.toggleFollow();
+    };
+    win.addEventListener("keydown", onKey);
+    return () => win.removeEventListener("keydown", onKey);
+  }, []);
   const [hovered, setHovered] = useState<{ slot: number; cast: TimelineCast } | null>(null);
   const [hoveredSwing, setHoveredSwing] = useState<{ slot: number; swing: TimelineSwing } | null>(null);
   const panRef = useRef<{ x: number; startMs: number; endMs: number; moved: boolean } | null>(null);
