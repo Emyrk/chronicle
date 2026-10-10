@@ -5,6 +5,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
@@ -34,13 +35,18 @@ func (s *Service) handleGetCooldownSpells(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	byClass := cooldownSpellsByClass(rows)
+
+	w.Header().Set(httpapi.DatasetHeader, datasetID.String())
+	// Ignores can be toggled by admins at any time, so always revalidate.
+	w.Header().Set("Cache-Control", "no-cache")
+	httpapi.Write(ctx, w, http.StatusOK, byClass)
+}
+
+func cooldownSpellsByClass(rows []database.ListCooldownSpellsByDatasetRow) map[string][]CooldownSpellEntry {
 	byClass := make(map[string][]CooldownSpellEntry)
 	for _, row := range rows {
-		className, ok := cooldownClassName(chrondbc.SpellClassSet(row.SpellClassSet))
-		if !ok {
-			continue
-		}
-		byClass[className] = append(byClass[className], CooldownSpellEntry{
+		entry := CooldownSpellEntry{
 			ID:                     row.SpellID,
 			Name:                   row.Name,
 			NameSubtext:            row.NameSubtext,
@@ -50,13 +56,34 @@ func (s *Service) handleGetCooldownSpells(w http.ResponseWriter, r *http.Request
 			Ignored:                row.Ignored,
 			DurationHidden:         row.DurationHidden,
 			DurationMS:             row.DurationMs,
-		})
+		}
+		classSet := chrondbc.SpellClassSet(row.SpellClassSet)
+		if classSet == chrondbc.SpellClassSetGeneric {
+			for _, playerClass := range cooldownPlayerClassSets {
+				className, _ := cooldownClassName(playerClass)
+				byClass[className] = append(byClass[className], entry)
+			}
+			continue
+		}
+		className, ok := cooldownClassName(classSet)
+		if ok {
+			byClass[className] = append(byClass[className], entry)
+		}
 	}
+	return byClass
+}
 
-	w.Header().Set(httpapi.DatasetHeader, datasetID.String())
-	// Ignores can be toggled by admins at any time, so always revalidate.
-	w.Header().Set("Cache-Control", "no-cache")
-	httpapi.Write(ctx, w, http.StatusOK, byClass)
+var cooldownPlayerClassSets = []chrondbc.SpellClassSet{
+	chrondbc.SpellClassSetMage,
+	chrondbc.SpellClassSetWarrior,
+	chrondbc.SpellClassSetWarlock,
+	chrondbc.SpellClassSetPriest,
+	chrondbc.SpellClassSetDruid,
+	chrondbc.SpellClassSetRogue,
+	chrondbc.SpellClassSetHunter,
+	chrondbc.SpellClassSetPaladin,
+	chrondbc.SpellClassSetShaman,
+	chrondbc.SpellClassSetDeathKnight,
 }
 
 func cooldownClassName(classSet chrondbc.SpellClassSet) (string, bool) {

@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/spelldb"
+	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
 	"github.com/Emyrk/chronicle/internal/wowdata"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -75,6 +76,21 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 		p.Items[i].DatasetID = datasetID
 	}
 	canonicalSpells := p.CanonicalSpells()
+	flavor, err := h.flavorForDataset(ctx, datasetID)
+	if err != nil {
+		return err
+	}
+	gamedataoverrides.ApplySpells(flavor, canonicalSpells)
+	spellIndexes := make(map[int32]int, len(p.Spells))
+	for i := range p.Spells {
+		spellIndexes[p.Spells[i].SpellID] = i
+	}
+	for _, spell := range canonicalSpells {
+		if i, ok := spellIndexes[int32(spell.ID)]; ok {
+			p.Spells[i] = spelldb.FromSpell(datasetID, spell)
+		}
+	}
+
 	store := database.New(h.pool)
 	if err := store.InTx(ctx, func(tx database.Store) error {
 		const batchSize = 500
@@ -114,10 +130,6 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 		}
 		return nil
 	}, nil); err != nil {
-		return err
-	}
-	flavor, err := h.flavorForDataset(ctx, datasetID)
-	if err != nil {
 		return err
 	}
 	if err := h.deriveSpellMetadata(ctx, datasetID, flavor, canonicalSpells); err != nil {
