@@ -16,7 +16,8 @@ export interface SpellOverride {
   /**
    * Draw as a cooldown: a ringed square on the rail that tints the lane for its
    * duration. Without a durationMs, the spell data's duration is used; when the
-   * spell only appears as a buff, each buff's real duration is.
+   * spell only appears as a buff, each buff's real duration is. durationMs: 0
+   * keeps the marker but drops the tint.
    */
   showAsCooldown?: { durationMs?: number };
   /** Color for the cooldown's ring, strip and lane tint (any CSS color). */
@@ -43,6 +44,14 @@ export const SPELL_OVERRIDES: SpellOverride[] = [
     showAsCooldown: {},
     color: "#3b82f6", // blue-500; the arcane school color is pink
     note: "Eclipse procs change a balance druid's damage enough to show their duration like a cooldown.",
+  },
+  {
+    id: "blood-tap",
+    names: ["Blood Tap"],
+    spellIds: [45529],
+    flavor: ["wrath"],
+    showAsCooldown: { durationMs: 0 }, // still a cooldown marker, but no lane tint
+    note: "Blood Tap's buff duration is not useful on the timeline; show the press only.",
   },
 ];
 
