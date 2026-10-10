@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { laneLayout } from "./laneLayout";
 
 describe("laneLayout", () => {
-  it("grows auto icons with zoom between 22 and 44px", () => {
+  it("grows auto icons with zoom between 22 and 40px", () => {
     expect(laneLayout(0.02, "auto").icon).toBe(22); // 32px per GCD
-    expect(laneLayout(0.04, "auto").icon).toBe(38); // 64px per GCD → 60%
-    expect(laneLayout(1, "auto").icon).toBe(44);
+    expect(laneLayout(0.04, "auto").icon).toBe(32); // 64px per GCD → 50%
+    expect(laneLayout(1, "auto").icon).toBe(40);
   });
 
   it("uses fixed sizes for S / M / L", () => {
@@ -19,9 +19,9 @@ describe("laneLayout", () => {
   });
 
   it("sizes procs and cooldowns in proportion to the cast icon", () => {
-    const l = laneLayout(0.1, "auto"); // 44px icons
-    expect(l.proc).toBe(22);
-    expect(l.cooldown).toBe(31);
+    const l = laneLayout(0.1, "auto"); // 40px icons
+    expect(l.proc).toBe(20);
+    expect(l.cooldown).toBe(28);
   });
 
   it("shows names only with large icons and room between casts", () => {

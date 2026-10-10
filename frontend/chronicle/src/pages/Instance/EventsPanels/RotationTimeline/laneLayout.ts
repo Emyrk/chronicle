@@ -9,9 +9,9 @@ export const FIXED_ICON_SIZES: Record<Exclude<IconSizeMode, "auto">, number> = {
 
 /** Spacing auto sizing aims to fill: roughly one global cooldown. */
 const GCD_SPACING_MS = 1600;
-const AUTO_FILL = 0.6;
+const AUTO_FILL = 0.5;
 const MIN_ICON = 22;
-const MAX_ICON = 44;
+const MAX_ICON = 40;
 /** Below this many px per GCD, icons cannot fit and casts draw as ticks. */
 const COMPACT_GAP_PX = 14;
 const ICON_TOP = 8;
@@ -44,8 +44,8 @@ export function laneLayout(pxPerMs: number, mode: IconSizeMode): LaneLayout {
   // Procs and cooldowns keep their proportion to the cast icons at every size.
   const proc = Math.round(icon * 0.5);
   const cooldown = Math.round(icon * 0.7);
-  const labelFont = icon >= 44 ? 11 : icon >= 34 ? 10 : 9;
-  const showNames = !compact && icon >= 44 && gap >= icon + 40;
+  const labelFont = icon >= 40 ? 11 : icon >= 32 ? 10 : 9;
+  const showNames = !compact && icon >= 40 && gap >= icon + 40;
   const labelTop = ICON_TOP + icon + 3;
   const nameTop = labelTop + labelFont + 2;
   const labelsBottom = showNames ? nameTop + 12 : labelTop + labelFont + 2;
