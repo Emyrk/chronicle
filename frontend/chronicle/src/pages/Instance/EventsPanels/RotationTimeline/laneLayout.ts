@@ -8,12 +8,12 @@ export type IconSizeMode = "auto" | "s" | "m" | "l";
 export const FIXED_ICON_SIZES: Record<Exclude<IconSizeMode, "auto">, number> = { s: 22, m: 34, l: 48 };
 
 /** Spacing auto sizing aims to fill: roughly one global cooldown. */
-const GCD_SPACING_MS = 1600;
-const AUTO_FILL = 0.5;
-const MIN_ICON = 22;
-const MAX_ICON = 40;
+export const GCD_SPACING_MS = 1600;
+export const AUTO_FILL = 0.5;
+export const MIN_ICON = 22;
+export const MAX_ICON = 40;
 /** Below this many px per GCD, icons cannot fit and casts draw as ticks. */
-const COMPACT_GAP_PX = 14;
+export const COMPACT_GAP_PX = 14;
 const ICON_TOP = 8;
 
 export interface LaneLayout {

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { useCooldownSpells } from "@/api/cooldownSpells";
 import { useMyFavorites } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelContext, PanelDefinition } from "../../EventsPanels/types";
@@ -20,6 +21,7 @@ import { useSpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 import { AuraSection } from "./AuraSection";
 import { defaultPlayers } from "./defaultPlayers";
 import { PlayerPicker } from "./PlayerPicker";
+import { PlayerTimelineRules, type CuratedCooldown } from "./PlayerTimelineRules";
 import { parsePlayerTimelineState, type PlayerTimelineState } from "./playerTimelineState";
 
 /** Picker value meaning "no second player". */
@@ -228,6 +230,20 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
     return byId;
   }, [cooldowns.data]);
   const cooldownInfo = useCallback((id: number) => cooldownById.get(id) ?? null, [cooldownById]);
+  // Every curated entry, before the lane threshold, for the rules view.
+  const curatedById = useMemo(() => {
+    const byId = new Map<number, CuratedCooldown>();
+    for (const spells of Object.values(cooldowns.data?.byClass ?? {})) {
+      for (const spell of spells) {
+        byId.set(spell.id, { cooldownMs: spell.cooldown_ms, durationMs: spell.duration_ms, ignored: spell.ignored });
+      }
+    }
+    return byId;
+  }, [cooldowns.data]);
+  const curatedCooldown = useCallback((id: number) => curatedById.get(id) ?? null, [curatedById]);
+
+  // Shift+click flips the page to its rules, like panels flip to their settings.
+  const [flipped, setFlipped] = useState(false);
 
   const unitName = useCallback(
     (guid: string) => instance.players?.[guid]?.name ?? instance.units?.[guid]?.name ?? guid,
@@ -264,7 +280,7 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
     return <div className="rounded-lg border border-destructive p-4 text-sm">Failed to load events: {aggregation.error.message}</div>;
   }
 
-  return (
+  const timeline = (
     <div className="overflow-hidden rounded-lg border border-border">
       <RotationTimeline
         players={players}
@@ -289,6 +305,59 @@ function PlayerTimelineContent({ context, saved, onStateChange, overrides, setOv
       {(aggregation.loading || aggregation.processing) && players.length === 0 && (
         <div className="p-6 text-center text-sm text-muted-foreground">Loading events…</div>
       )}
+    </div>
+  );
+
+  return (
+    <FlipCard
+      flipped={flipped}
+      onFlip={() => setFlipped((f) => !f)}
+      front={timeline}
+      back={
+        <div className="overflow-hidden rounded-lg border border-border">
+          <PlayerTimelineRules
+            players={players}
+            spellMeta={meta}
+            gcd={gcd}
+            cooldownInfo={cooldownInfo}
+            curatedCooldown={curatedCooldown}
+            isIgnored={view.isIgnored}
+            cooldownMinMs={COOLDOWN_LANE_MIN_MS}
+            onFlipBack={() => setFlipped(false)}
+          />
+        </div>
+      }
+    />
+  );
+}
+
+/**
+ * A two-sided card that turns over on Shift+click, like panels. Both faces
+ * share one grid cell, so the card is as tall as the taller face.
+ */
+function FlipCard({ flipped, onFlip, front, back }: { flipped: boolean; onFlip: () => void; front: ReactNode; back: ReactNode }) {
+  return (
+    <div
+      className="[perspective:2400px]"
+      onMouseDown={(e) => {
+        if (!e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        onFlip();
+      }}
+    >
+      <div
+        className={cn(
+          "grid transition-transform duration-500 [transform-style:preserve-3d]",
+          flipped && "[transform:rotateY(180deg)]",
+        )}
+      >
+        <div className={cn("[grid-area:1/1] [backface-visibility:hidden]", flipped && "pointer-events-none")}>{front}</div>
+        <div
+          className={cn("[grid-area:1/1] [backface-visibility:hidden] [transform:rotateY(180deg)]", !flipped && "pointer-events-none")}
+        >
+          {flipped && back}
+        </div>
+      </div>
     </div>
   );
 }

@@ -31,8 +31,8 @@ interface ClassifiedRows {
 }
 
 /** Uptime at or above this counts as "the whole fight", at or below NONE as "not at all". */
-const FULL_UPTIME = 0.98;
-const NONE_UPTIME = 0.01;
+export const FULL_UPTIME = 0.98;
+export const NONE_UPTIME = 0.01;
 
 function isFlat(row: AuraRow): boolean {
   const full = row.uptime.some((u) => u >= FULL_UPTIME);
@@ -179,7 +179,7 @@ export function AuraSection({ players, view, spellMeta, unitName, pickedTarget, 
           }}
           onPointerLeave={() => view.setCursorMs(null)}
           onClick={(e) => {
-            if ((e.target as HTMLElement).closest("button, select")) return;
+            if (e.shiftKey || (e.target as HTMLElement).closest("button, select")) return;
             const rect = e.currentTarget.getBoundingClientRect();
             const x = e.clientX - rect.left - LABEL_WIDTH;
             const width = rect.width - LABEL_WIDTH;

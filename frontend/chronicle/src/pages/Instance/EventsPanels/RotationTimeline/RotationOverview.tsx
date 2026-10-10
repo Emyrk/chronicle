@@ -70,6 +70,7 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
   };
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.shiftKey) return; // Shift+click flips the page.
     e.currentTarget.setPointerCapture(e.pointerId);
     const f = fracAt(e);
     setBrush([f, f]);

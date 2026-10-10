@@ -10,6 +10,7 @@ import {
   busySegments,
   castEndMs,
   castEnds,
+  castKind,
   castSlotEnd,
   damageLead,
   dpsSeries,
@@ -206,7 +207,7 @@ export function RotationTimeline({
           actions: casts.filter(
             (c) =>
               !isIgnored(c.spellName) &&
-              (cooldownInfo(c.spellId) != null || !(gcd(c.spellId) === 0 && c.endMs === c.startMs && !c.channelTimeMs)),
+              castKind(c, gcd, cooldownInfo) !== "proc",
           ),
           offsetMs: alignOffsetMs(casts, view.align, isIgnored),
           gaps,
@@ -262,7 +263,7 @@ export function RotationTimeline({
   };
 
   const onTrackPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || e.ctrlKey || e.metaKey || view.windowLocked) return;
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || view.windowLocked) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     panRef.current = { x: e.clientX, startMs: vs, endMs: ve, moved: false };
   };
@@ -627,26 +628,25 @@ function PlayerLanes({
   const margin = 2000;
   const visible = (startMs: number, endMs: number) => endMs - offsetMs >= vs - margin && startMs - offsetMs <= ve + margin;
 
-  const isOffGcd = (c: TimelineCast) => gcd(c.spellId) === 0 && c.endMs === c.startMs && !c.channelTimeMs;
+  const kindOf = (c: TimelineCast) => castKind(c, gcd, cooldownInfo);
   const cooldownCasts = casts.filter((c) => {
     const info = cooldownInfo(c.spellId);
     return info != null && visible(c.startMs, c.startMs + info.durationMs);
   });
   const { ends } = derived;
   const gcdCasts = casts.filter(
-    (c) => !cooldownInfo(c.spellId) && !isOffGcd(c) && visible(c.startMs, castSlotEnd(c, gcd, ends)),
+    (c) => kindOf(c) === "gcd" && visible(c.startMs, castSlotEnd(c, gcd, ends)),
   );
   const swings = player.data.swings.filter((s) => visible(s.offsetMs, s.offsetMs));
   const { icon, proc, cooldown, railTop } = layout;
 
   // Procs and cooldowns share the rail; ones close together stack into clusters.
   const clusters = useMemo(() => {
-    const events: RailEvent[] = casts
-      .filter((c) => cooldownInfo(c.spellId) || isOffGcd(c))
-      .map((c) => ({ cast: c, kind: cooldownInfo(c.spellId) ? "cd" : "proc" }));
+    const events: RailEvent[] = casts.flatMap((c) => {
+      const kind = castKind(c, gcd, cooldownInfo);
+      return kind === "gcd" ? [] : [{ cast: c, kind: kind === "cooldown" ? "cd" : "proc" } as RailEvent];
+    });
     return clusterRailEvents(events, pxPerMs, cooldown);
-    // isOffGcd only depends on gcd.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [casts, cooldownInfo, gcd, pxPerMs, cooldown]);
 
   const opacityOf = (c: TimelineCast) => {
@@ -981,7 +981,7 @@ interface ClusterTooltipProps {
   cooldownColor: (spellId: number) => { color: string; index: number };
 }
 
-const CLUSTER_CAST_MARGIN_MS = 300;
+export const CLUSTER_CAST_MARGIN_MS = 300;
 /** Rows listed in the stack tooltip; the rest are summarized. */
 const CLUSTER_MAX_ROWS = 12;
 

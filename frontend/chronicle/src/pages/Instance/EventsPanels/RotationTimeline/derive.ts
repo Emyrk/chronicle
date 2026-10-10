@@ -24,7 +24,7 @@ export function playerCasts(player: PlayerTimelineData): TimelineCast[] {
 }
 
 /** Ticks after the planned channel end by more than this belong to something else. */
-const CHANNEL_TICK_SLACK_MS = 250;
+export const CHANNEL_TICK_SLACK_MS = 250;
 
 /**
  * When the cast or channel actually finished. A channel ends at its last tick
@@ -245,4 +245,20 @@ export function nearbyActivity(
     nextMs: next?.startMs ?? null,
     busyUntilMs,
   };
+}
+
+/**
+ * How a cast is drawn: a curated cooldown (ringed square on the rail), a proc
+ * (instant and off the GCD, circle on the rail), or a GCD cast (icon in the lane).
+ */
+export type CastKind = "cooldown" | "proc" | "gcd";
+
+export function castKind(
+  cast: TimelineCast,
+  gcd: GcdLookup,
+  cooldownInfo: (spellId: number) => unknown,
+): CastKind {
+  if (cooldownInfo(cast.spellId) != null) return "cooldown";
+  if (gcd(cast.spellId) === 0 && cast.endMs === cast.startMs && !cast.channelTimeMs) return "proc";
+  return "gcd";
 }
