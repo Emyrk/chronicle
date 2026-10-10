@@ -927,13 +927,14 @@ type DbcConsumableBuff struct {
 }
 
 type DbcCooldownSpell struct {
-	DatasetID              uuid.UUID `db:"dataset_id" json:"dataset_id"`
-	SpellID                int32     `db:"spell_id" json:"spell_id"`
-	Name                   string    `db:"name" json:"name"`
-	NameSubtext            string    `db:"name_subtext" json:"name_subtext"`
-	RecoveryTimeMs         int64     `db:"recovery_time_ms" json:"recovery_time_ms"`
-	CategoryRecoveryTimeMs int64     `db:"category_recovery_time_ms" json:"category_recovery_time_ms"`
-	SpellClassSet          int32     `db:"spell_class_set" json:"spell_class_set"`
+	DatasetID              uuid.UUID   `db:"dataset_id" json:"dataset_id"`
+	SpellID                int32       `db:"spell_id" json:"spell_id"`
+	Name                   string      `db:"name" json:"name"`
+	NameSubtext            string      `db:"name_subtext" json:"name_subtext"`
+	RecoveryTimeMs         int64       `db:"recovery_time_ms" json:"recovery_time_ms"`
+	CategoryRecoveryTimeMs int64       `db:"category_recovery_time_ms" json:"category_recovery_time_ms"`
+	SpellClassSet          int32       `db:"spell_class_set" json:"spell_class_set"`
+	DurationMs             pgtype.Int8 `db:"duration_ms" json:"duration_ms"`
 }
 
 type DbcDurationModifier struct {

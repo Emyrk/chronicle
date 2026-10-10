@@ -116,7 +116,11 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 	}, nil); err != nil {
 		return err
 	}
-	if err := h.deriveSpellMetadata(ctx, datasetID, canonicalSpells); err != nil {
+	flavor, err := h.flavorForDataset(ctx, datasetID)
+	if err != nil {
+		return err
+	}
+	if err := h.deriveSpellMetadata(ctx, datasetID, flavor, canonicalSpells); err != nil {
 		return fmt.Errorf("derive spell metadata: %w", err)
 	}
 	if err := h.deriveClassBuffs(ctx, datasetID, canonicalSpells); err != nil {

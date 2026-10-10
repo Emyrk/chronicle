@@ -196,6 +196,35 @@ func TestPersistWowdataDerivesAndReplacesSpellMetadata(t *testing.T) {
 	}
 }
 
+func TestPersistWowdataAppliesFlavorSpellMutation(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	dataset, err := store.InsertDataset(ctx, database.InsertDatasetParams{
+		Name: "Nightmare cooldown override", Slug: "nightmare-cooldown-override", WowVersion: "1.12.1", BuildVersion: 5875,
+		DefaultFlavor: []string{string(database.FlavorVanilla), string(database.FlavorNightmareOfUrsol)}, IconBaseUrl: "",
+	})
+	require.NoError(t, err)
+
+	payload := &wowdata.Import{
+		Spells: []spelldb.SpellRow{{
+			SpellID: 45708, Name: "Berserk", SpellClassSet: int32(chrondbc.SpellClassSetDruid),
+			RecoveryTimeMs: 360_000, DurationIndex: 407,
+		}},
+		SpellDurations: []wowdata.SpellDuration{{ID: 407, Duration: 100, MaxDuration: 100}},
+	}
+
+	h := New(authz.NewDatabaseOnly(testutil.Logger(t), store), nil, pool, nil)
+	require.NoError(t, h.persistWowdata(ctx, dataset.ID, payload))
+
+	rows, err := store.ListCooldownSpellsByDataset(ctx, dataset.ID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, int32(45708), rows[0].SpellID)
+	require.Equal(t, int64(20_000), rows[0].DurationMs)
+}
+
 func TestUploadWowdataSnapshotRejectsInvalidRequests(t *testing.T) {
 	t.Parallel()
 	h := New(nil, nil, nil, nil)
