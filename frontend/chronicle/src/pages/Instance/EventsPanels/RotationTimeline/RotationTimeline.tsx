@@ -747,7 +747,7 @@ function SegButton({
       onClick={onClick}
       className={cn(
         "flex h-[22px] min-w-[22px] items-center justify-center whitespace-nowrap rounded-[3px] px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
-        active && "bg-secondary text-foreground",
+        active && "bg-muted text-foreground",
       )}
     >
       {children}
