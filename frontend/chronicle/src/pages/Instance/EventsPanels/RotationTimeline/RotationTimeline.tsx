@@ -3,6 +3,7 @@ import { Minus, Pin, Plus } from "lucide-react";
 import { formatNumber } from "@/lib/format";
 import { hitTypeNames } from "@/lib/hittype/hittype";
 import { cn } from "@/lib/utils";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import {
   alignOffsetMs,
   busySegments,
@@ -23,7 +24,15 @@ import {
   type PlayerStats,
 } from "./derive";
 import { TooltipHeader, TooltipShell, type TooltipAnchor } from "./TimelineTooltip";
-import { CAST_SOURCE_LABELS, formatClock, SLOT_COLORS, SLOT_LABELS, swingColor, tickStepMs } from "./format";
+import {
+  CAST_SOURCE_LABELS,
+  formatClock,
+  SLOT_COLORS,
+  SLOT_LABELS,
+  SLOT_TEXT_COLORS,
+  swingColor,
+  tickStepMs,
+} from "./format";
 import {
   AUTO_ATTACK_SPELL_ID,
   DAMAGE_BIN_MS,
@@ -266,10 +275,12 @@ export function RotationTimeline({
     return out;
   }, [vs, ve, span]);
 
-  // Ignored spells by name, with an icon from any cast of that spell when one exists.
+  // Ignored spells by name, with an icon from any cast of that spell when one
+  // exists, and how many casts each player has hidden.
   const ignoredSpells = view.ignoredNames.map((name) => {
-    const cast = derived.flatMap((d) => d.casts).find((c) => c.spellName.toLowerCase() === name.trim().toLowerCase());
-    return { name, icon: spellMeta(cast?.spellId ?? null).icon };
+    const matches = (c: TimelineCast) => c.spellName.toLowerCase() === name.trim().toLowerCase();
+    const cast = derived.flatMap((d) => d.casts).find(matches);
+    return { name, icon: spellMeta(cast?.spellId ?? null).icon, hidden: derived.map((d) => d.casts.filter(matches).length) };
   });
   const layout = laneLayout(pxPerMs, view.iconSize);
 
@@ -375,15 +386,35 @@ export function RotationTimeline({
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span>Ignored</span>
           {ignoredSpells.length === 0 && <span className="opacity-70">Ctrl+click a spell to hide it</span>}
-          {ignoredSpells.map(({ name, icon }) => (
-            <button
-              key={name}
-              type="button"
-              title={`${name} (click to show)`}
-              onClick={() => view.toggleIgnored(name)}
-              className="size-5 rounded-[3px] border border-border bg-muted bg-cover bg-center opacity-60 grayscale hover:opacity-100 hover:grayscale-0"
-              style={{ backgroundImage: `url(${icon})` }}
-            />
+          {ignoredSpells.map(({ name, icon, hidden }) => (
+            <HintTooltip key={name}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`${name} (click to show)`}
+                  onClick={() => view.toggleIgnored(name)}
+                  className="size-5 rounded-[3px] border border-border bg-muted bg-cover bg-center opacity-60 grayscale hover:opacity-100 hover:grayscale-0"
+                  style={{ backgroundImage: `url(${icon})` }}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="w-56 text-pretty">
+                <p className="font-semibold">{name}</p>
+                {hidden.some((n) => n > 0) ? (
+                  <div className="mt-1 text-zinc-400">
+                    Hidden casts
+                    {players.map((p, slot) => (
+                      <div key={p.guid} className="flex justify-between gap-4">
+                        <span style={{ color: SLOT_TEXT_COLORS[slot] }}>{p.name}</span>
+                        <span className="font-mono text-zinc-100">{hidden[slot]}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-zinc-400">Not cast by these players in this fight.</p>
+                )}
+                <p className="mt-1 text-zinc-400">Click to show it again. Ignored spells are saved in this browser.</p>
+              </TooltipContent>
+            </HintTooltip>
           ))}
         </div>
         <KeybindsButton keybinds={[...TIMELINE_KEYBINDS, ...extraKeybinds]} />
