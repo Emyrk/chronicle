@@ -266,6 +266,21 @@ describe("withOverrideBuffCasts", () => {
     const data = player({ goCasts: [cast(500, 51442, { spellName: "Nature Eclipse" })], aurasOn: [buff(500, 15_500)] });
     expect(withOverrideBuffCasts(data, overrides, 30_000)).toBe(data);
   });
+
+  it("adds raised buffs beside the spell's own casts, which stay GCD casts", () => {
+    const raised = [{ id: "r", names: ["Nature Eclipse"], showAsCooldown: {}, proc: true, raised: true, note: "" }];
+    const own = cast(500, 51442, { spellName: "Nature Eclipse" });
+    const out = withOverrideBuffCasts(player({ goCasts: [own], aurasOn: [buff(500, 15_500)] }), raised, 30_000);
+    expect(out.goCasts.map((c) => [c.source, c.raised ?? false])).toEqual([
+      ["spell_go", false],
+      ["aura", true],
+    ]);
+    expect(castKind(out.goCasts[0], gcd15, () => null)).toBe("gcd");
+    expect(castKind(out.goCasts[1], gcd15, () => null)).toBe("proc");
+    // The buff is not an action: idle time is the same with or without it.
+    const later = cast(5000);
+    expect(idleGaps([...out.goCasts, later], gcd15, 400)).toEqual(idleGaps([own, later], gcd15, 400));
+  });
 });
 
 describe("withConsumeCasts", () => {

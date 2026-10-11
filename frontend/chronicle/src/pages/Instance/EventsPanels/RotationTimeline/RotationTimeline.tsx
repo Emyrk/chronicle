@@ -295,7 +295,7 @@ export function RotationTimeline({
     for (const d of derived) {
       for (const c of d.shownCasts) {
         if (c.consume) consumes.add(c.spellId);
-        if ((c.consume || cooldownInfo(c.spellId)) && !ids.includes(c.spellId)) ids.push(c.spellId);
+        if ((c.consume || c.raised || cooldownInfo(c.spellId)) && !ids.includes(c.spellId)) ids.push(c.spellId);
       }
     }
     return (spellId: number) => {
@@ -708,7 +708,7 @@ function PlayerLanes({
   // Cooldowns, consumables and procs with a tint override tint the lane for their duration.
   const tintedCasts = casts.filter((c) => {
     const kind = kindOf(c);
-    const tints = kind === "cooldown" || kind === "consume" || (kind === "proc" && cooldownInfo(c.spellId)?.proc);
+    const tints = kind === "cooldown" || kind === "consume" || (kind === "proc" && (c.raised || cooldownInfo(c.spellId)?.proc));
     return tints && visible(c.startMs, c.startMs + tintDurationMs(c));
   });
   const { ends } = derived;

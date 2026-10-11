@@ -48,7 +48,7 @@ export function castEndMs(cast: TimelineCast, nextStartMs: number | null = null)
 
 /** True when starting this spell would cancel a channel: it triggers the GCD or has a cast time. */
 function interrupts(cast: TimelineCast, gcd: GcdLookup): boolean {
-  return !cast.failed && (gcd(cast.spellId) > 0 || cast.endMs > cast.startMs || cast.channel);
+  return !cast.failed && cast.source !== "aura" && (gcd(cast.spellId) > 0 || cast.endMs > cast.startMs || cast.channel);
 }
 
 /** Finish time of every cast (casts sorted by start), clamped to the next interrupting cast. */
@@ -92,6 +92,8 @@ export function idleGaps(
   const ends = castEnds(casts, gcd);
   let busyUntil: number | null = null;
   for (const cast of casts) {
+    // Buffs drawn as casts (procs, raised buffs) were not something the player did.
+    if (cast.source === "aura") continue;
     if (busyUntil != null && cast.startMs - busyUntil >= thresholdMs) {
       gaps.push({ startMs: busyUntil, endMs: cast.startMs });
     }
@@ -113,6 +115,7 @@ export function busySegments(
   const out: IdleGap[] = [];
   const ends = castEnds(casts, gcd);
   for (const cast of casts) {
+    if (cast.source === "aura") continue;
     const end = castSlotEnd(cast, gcd, ends);
     const last = out[out.length - 1];
     if (last && cast.startMs - last.endMs < thresholdMs) last.endMs = Math.max(last.endMs, end);
@@ -269,6 +272,7 @@ export function castKind(
   cooldownInfo: (spellId: number) => { durationMs?: number; proc?: boolean } | null,
 ): CastKind {
   if (cast.consume) return "consume";
+  if (cast.raised) return "proc";
   const info = cooldownInfo(cast.spellId);
   if (info != null) return info.proc ? "proc" : "cooldown";
   if (cast.source === "aura" && cast.buffEndMs == null) return "proc"; // curated aura procs
@@ -294,9 +298,11 @@ export function withOverrideBuffCasts(
   const cast = new Set(casts.map((c) => c.spellName.toLowerCase()));
   const added: TimelineCast[] = [];
   for (const seg of data.aurasOn) {
-    if (!seg.isBuff || cast.has(seg.spellName.toLowerCase())) continue;
+    if (!seg.isBuff) continue;
     const override = findOverride(wanted, seg.spellId, seg.spellName);
-    if (!override) continue;
+    // Raised buffs draw beside the spell's casts; other overrides only fill in
+    // for a spell the player never cast.
+    if (!override || (!override.raised && cast.has(seg.spellName.toLowerCase()))) continue;
     added.push({
       source: "aura",
       startMs: seg.startMs,
@@ -318,6 +324,7 @@ export function withOverrideBuffCasts(
       overheal: 0,
       healCrits: 0,
       buffEndMs: Math.min(seg.endMs ?? durationMs, durationMs),
+      ...(override.raised && { raised: true }),
     });
   }
   if (added.length === 0) return data;

@@ -71,6 +71,11 @@ export interface TimelineCast {
    * (see derive.ts). Not produced by this processor.
    */
   buffEndMs?: number;
+  /**
+   * Made from a buff the viewer raised onto the timeline (derive.ts): a proc
+   * that tints the lane. The spell's own casts stay as they are.
+   */
+  raised?: boolean;
   /** Set when the cast targeted another player (e.g. Power Infusion on a mage). */
   onOtherPlayer?: boolean;
   /** Set on casts made from consume evidence (see withConsumeCasts). */

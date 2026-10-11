@@ -106,6 +106,7 @@ export function PlayerTimelineRules({
       const casts = playerCasts(p.data);
       const ends = castEnds(casts, gcd);
       for (const c of casts) {
+        if (c.raised) continue; // listed under overrides; the spell's own casts keep their row
         let row = byId.get(c.spellId);
         if (!row) {
           row = {

@@ -328,7 +328,8 @@ function PlayerTimelineContent({
   const cooldownInfo = useCallback(
     (id: number) => {
       // A "show as cooldown" override wins over the curated list.
-      const override = findOverride(spellOverrides, id, meta(id).spell?.name?.["0"] ?? null);
+      // Raised buffs mark only their own buff casts (cast.raised), never the spell.
+      const override = findOverride(spellOverrides.filter((o) => !o.raised), id, meta(id).spell?.name?.["0"] ?? null);
       if (override?.showAsCooldown) {
         const spellDuration = meta(id).spell?.duration?.Duration ?? 0;
         return {
@@ -348,7 +349,7 @@ function PlayerTimelineContent({
   // an admin, or an override's durationMs: 0) stay untinted.
   const players: RotationTimelinePlayer[] = useMemo(() => {
     const tintsFromAura = (id: number) => {
-      const override = findOverride(spellOverrides, id, meta(id).spell?.name?.["0"] ?? null);
+      const override = findOverride(spellOverrides.filter((o) => !o.raised), id, meta(id).spell?.name?.["0"] ?? null);
       if (override?.showAsCooldown) return override.showAsCooldown.durationMs !== 0;
       const curated = cooldownById.get(id);
       return curated != null && !curated.durationHidden;
