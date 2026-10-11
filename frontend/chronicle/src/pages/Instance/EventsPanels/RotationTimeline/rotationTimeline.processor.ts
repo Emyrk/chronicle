@@ -159,6 +159,11 @@ export interface PlayerTimelineData {
   consumes: TimelineConsume[];
   /** Curated proc auras the player gained or applied (see auraProcs.ts). */
   auraProcs: TimelineAuraProc[];
+  /**
+   * Spells of every consumable the player used, pre-pull projections included,
+   * so their buffs can be told apart from class buffs.
+   */
+  consumeSpells: { spellId: number; spellName: string }[];
 }
 
 interface PendingStart {
@@ -248,6 +253,7 @@ function emptyPlayer(guid: string): PlayerTimelineData {
     damageByTarget: {},
     consumes: [],
     auraProcs: [],
+    consumeSpells: [],
   };
 }
 
@@ -458,10 +464,14 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
       }
 
       case "consume": {
-        // Projections (pre-pull effects) and pre-combat uses are outside the fight.
-        if (event.isProjection || event.kind === 7 || event.kind === 9) return;
         if (!focus.has(event.player)) return;
         const p = player(event.player);
+        // Pre-pull flasks and elixirs still mark their buffs as consumables.
+        if (!p.consumeSpells.some((s) => s.spellId === event.spell.id)) {
+          p.consumeSpells.push({ spellId: event.spell.id, spellName: event.spell.name });
+        }
+        // Projections (pre-pull effects) and pre-combat uses are outside the fight.
+        if (event.isProjection || event.kind === 7 || event.kind === 9) return;
         if (p.consumes.some((c) => c.consumeId === event.consumeId)) return;
         p.consumes.push({
           offsetMs: event.offsetMilli,

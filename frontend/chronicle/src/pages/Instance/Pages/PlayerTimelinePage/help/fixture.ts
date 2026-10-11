@@ -59,6 +59,8 @@ export const HELP_SPELLS: Record<number, HelpSpell> = {
   20007: { name: "Holy Strength", icon: "spell_holy_blessingofstrength", school: "holy", gcdMs: 0 },
   11354: { name: "Deadly Poison", icon: "ability_rogue_dualweild", school: "nature", gcdMs: 0 },
   25289: { name: "Battle Shout", icon: "ability_warrior_battleshout", school: "physical", gcdMs: 1500 },
+  17628: { name: "Supreme Power", icon: "inv_potion_41", school: "arcane", gcdMs: 0 },
+  17538: { name: "Elixir of the Mongoose", icon: "inv_potion_32", school: "nature", gcdMs: 0 },
 };
 
 /** Cooldowns that sit on the rail and tint the lane while their buff is up. */
@@ -152,6 +154,9 @@ function withTotals(data: Omit<PlayerTimelineData, "damageBins" | "totalDamage" 
 
 const empty = { textCasts: [], healBins: [], totalHealing: 0, totalOverheal: 0, consumes: [], auraProcs: [] };
 
+/** Consumables a player used, by their spell, the way the consume stream reports them. */
+const consumeSpells = (...ids: number[]) => ids.map((spellId) => ({ spellId, spellName: HELP_SPELLS[spellId].name }));
+
 function mage(): PlayerTimelineData {
   const goCasts = [
     cast(0, 25304, { castMs: 2500, damage: 1800 }),
@@ -179,12 +184,14 @@ function mage(): PlayerTimelineData {
     guid: MAGE,
     goCasts,
     swings: [],
+    consumeSpells: consumeSpells(17628, 17531),
     aurasOn: [
       aura(12042, 5000, 20_000),
       aura(12536, 17_000, 20_400),
       aura(10060, 24_000, 39_000, { caster: PRIEST }),
       aura(10157, 0, null),
       aura(9885, 0, null),
+      aura(17628, 0, null),
     ],
     debuffsCast: [
       aura(12579, 2500, null, { isBuff: false, target: BOSS, maxStacks: 5 }),
@@ -246,6 +253,7 @@ function rogue(): PlayerTimelineData {
     guid: ROGUE,
     goCasts,
     swings,
+    consumeSpells: consumeSpells(17538),
     aurasOn: [
       aura(6774, 500, 9500),
       aura(6774, 25_000, 34_000),
@@ -255,6 +263,7 @@ function rogue(): PlayerTimelineData {
       aura(20007, 20_100, 35_500),
       aura(9885, 0, null),
       aura(25289, 0, null, { caster: "help-player-warrior" }),
+      aura(17538, 0, 32_000),
     ],
     debuffsCast: [aura(11354, 2000, null, { isBuff: false, target: BOSS, maxStacks: 5 })],
   });
