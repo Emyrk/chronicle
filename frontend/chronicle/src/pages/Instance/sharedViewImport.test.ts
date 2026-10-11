@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { readSharedTimeRange, sameEncounterSelection, validateSharedViewPayload } from "./sharedViewImport";
+import {
+  readSharedPageLayout,
+  readSharedTimeRange,
+  sameEncounterSelection,
+  validateSharedViewPayload,
+} from "./sharedViewImport";
 
 describe("validateSharedViewPayload", () => {
   it("ignores a stale instance ID embedded before a reparse", () => {
@@ -23,6 +28,30 @@ describe("validateSharedViewPayload", () => {
   it("rejects non-object payloads", () => {
     expect(() => validateSharedViewPayload(null, "instance-id", "instance-id"))
       .toThrow("Shared view payload is invalid");
+  });
+});
+
+describe("readSharedPageLayout", () => {
+  it("restores the page type and preset from shared state", () => {
+    expect(readSharedPageLayout({
+      layout: { kind: "page", presetId: "player_timeline", pageType: "player_timeline" },
+    })).toEqual({ presetId: "player_timeline", pageType: "player_timeline" });
+  });
+
+  it("passes page state through for the page to validate", () => {
+    expect(readSharedPageLayout({
+      layout: { kind: "page", pageType: "player_timeline", pageState: { encounterId: "e" } },
+    })).toEqual({ pageType: "player_timeline", pageState: { encounterId: "e" } });
+  });
+
+  it("ignores panel layouts", () => {
+    expect(readSharedPageLayout({ layout: { kind: "panels", items: [] } })).toBeNull();
+  });
+
+  it("rejects unsupported page types", () => {
+    expect(() => readSharedPageLayout({
+      layout: { kind: "page", pageType: "unknown" },
+    })).toThrow("Shared view has an unsupported page type");
   });
 });
 

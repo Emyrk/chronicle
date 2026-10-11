@@ -50,7 +50,13 @@ import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceAction
 import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
 import { InstanceMenu } from "./InstanceMenu";
-import { readSharedTimeRange, sameEncounterSelection, validateSharedViewPayload } from "./sharedViewImport";
+import { InstanceContentPage, type PageStateBinding } from "./Pages/InstanceContentPage";
+import {
+  readSharedPageLayout,
+  readSharedTimeRange,
+  sameEncounterSelection,
+  validateSharedViewPayload,
+} from "./sharedViewImport";
 import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
@@ -70,7 +76,15 @@ import {
   DEFAULT_INSTANCE_PANEL_OPTIONS,
   DEFAULT_INSTANCE_PANEL_FILTERS,
 } from "./viewDefaults";
-import { getAvailablePresetLayouts, PRESET_LAYOUTS_BY_ID, DEFAULT_PRESET_ID } from "./presetLayouts";
+import {
+  getAvailablePresetLayouts,
+  isPanelPresetLayout,
+  PRESET_LAYOUTS,
+  PRESET_LAYOUTS_BY_ID,
+  DEFAULT_PRESET_ID,
+  type InstancePageType,
+  type PresetLayout,
+} from "./presetLayouts";
 import { openLayoutPopup, syncPopupAppearance, type LayoutPopup } from "./EventsPanels/panelPopup";
 
 // ============================================================================
@@ -903,6 +917,10 @@ interface SharedViewPayload {
   instance_id?: string;
   layoutId?: string;
   layout?: {
+    kind?: "panels" | "page";
+    presetId?: string;
+    pageType?: InstancePageType;
+    pageState?: unknown;
     items?: GridEditorItem[];
     panelTypesById?: Record<string, EventsPanelType>;
   };
@@ -990,6 +1008,8 @@ interface LayoutSnapshot {
   panelOptionsById: Record<string, string | null>;
   panelFiltersById: Record<string, PanelFilter[]>;
   activePresetId: string | null;
+  /** View state of the page being popped out, if a page preset was active. */
+  pageState?: unknown;
 }
 
 interface LayoutPopupSession extends LayoutPopup {
@@ -1120,6 +1140,11 @@ function PoppedOutLayoutContent({
   const applyPreset = useCallback((presetId: string) => {
     const preset = PRESET_LAYOUTS_BY_ID[presetId];
     if (!preset) return;
+    if (!isPanelPresetLayout(preset)) {
+      // Pages keep the popup's panel layout around for switching back.
+      setActivePresetId(presetId);
+      return;
+    }
 
     const items = orderLayoutItems(normalizeLayoutItems(preset.layoutItems));
     setLayoutItems(items);
@@ -1212,6 +1237,15 @@ function PoppedOutLayoutContent({
     setActivePresetId(null);
   }, []);
 
+  // A page in the popup starts from the main window's page state, then runs on
+  // its own; its changes are not reported back.
+  const popupPreset = activePresetId ? PRESET_LAYOUTS_BY_ID[activePresetId] : null;
+  const popupPageType = popupPreset?.kind === "page" ? popupPreset.pageType : null;
+  const popupPageState = useMemo(
+    () => ({ initial: session.snapshot.pageState, onChange: () => {} }),
+    [session.snapshot.pageState],
+  );
+
   return (
     <PortalContainerProvider container={session.container}>
       <div className="min-h-screen bg-background text-foreground p-3">
@@ -1234,26 +1268,30 @@ function PoppedOutLayoutContent({
             ))}
           </div>
         </div>
-        <PanelTimingProvider panelCount={layoutItems.length}>
-          <ChartDataRegistryProvider>
-            <EventsPanelGrid
-              layoutItems={layoutItems}
-              panelTypesById={panelTypesById}
-              panelOptionsById={panelOptionsById}
-              seedFiltersByID={seedFiltersById}
-              seedFiltersVersion={seedFiltersVersion}
-              durationMs={durationMs}
-              context={context}
-              showHints={showHints}
-              isMobile={false}
-              onPanelTypeChange={handlePanelTypeChange}
-              onStripTypeChange={handleStripTypeChange}
-              onPanelOptionChange={handlePanelOptionChange}
-              onPanelFiltersChange={handlePanelFiltersChange}
-              onExplainerClick={onExplainerClick}
-            />
-          </ChartDataRegistryProvider>
-        </PanelTimingProvider>
+        {popupPageType ? (
+          <InstanceContentPage pageType={popupPageType} context={context} durationMs={durationMs} pageState={popupPageState} />
+        ) : (
+          <PanelTimingProvider panelCount={layoutItems.length}>
+            <ChartDataRegistryProvider>
+              <EventsPanelGrid
+                layoutItems={layoutItems}
+                panelTypesById={panelTypesById}
+                panelOptionsById={panelOptionsById}
+                seedFiltersByID={seedFiltersById}
+                seedFiltersVersion={seedFiltersVersion}
+                durationMs={durationMs}
+                context={context}
+                showHints={showHints}
+                isMobile={false}
+                onPanelTypeChange={handlePanelTypeChange}
+                onStripTypeChange={handleStripTypeChange}
+                onPanelOptionChange={handlePanelOptionChange}
+                onPanelFiltersChange={handlePanelFiltersChange}
+                onExplainerClick={onExplainerClick}
+              />
+            </ChartDataRegistryProvider>
+          </PanelTimingProvider>
+        )}
       </div>
     </PortalContainerProvider>
   );
@@ -1290,6 +1328,10 @@ interface EncounterDetailProps {
   isMobile: boolean;
   /** Currently active preset ID (null if custom layout) */
   activePresetId: string | null;
+  /** Full-page content owned by the active layout, or null for a panel grid. */
+  pageType: InstancePageType | null;
+  /** Share-link state binding for the active page; the key remounts it on import. */
+  pageState: PageStateBinding & { key: number };
   /** Callback when user clicks a preset tab */
   onPresetChange: (presetId: string) => void;
   /** Popup hosting the complete panel grid, when the layout is popped out. */
@@ -1322,6 +1364,8 @@ function EncounterDetail({
   showHints,
   isMobile,
   activePresetId,
+  pageType,
+  pageState,
   onPresetChange,
   layoutPopup,
   actionBarSlots,
@@ -1898,51 +1942,56 @@ function EncounterDetail({
             {preset.label}
           </button>
         ))}
+        {pageType && <PageModeIndicator presets={availablePresetLayouts} onPresetChange={onPresetChange} />}
       </div>
 
-      {/* Events Panels */}
-      <PanelTimingProvider panelCount={layoutItems.length}>
-        <PanelTimingResetter encounters={encounters} />
+      {pageType ? (
+        <InstanceContentPage key={pageState.key} pageType={pageType} context={panelContext} durationMs={totalDurationMs} pageState={pageState} />
+      ) : (
+        <PanelTimingProvider panelCount={layoutItems.length}>
+          <PanelTimingResetter encounters={encounters} />
 
-        <ChartDataRegistryProvider>
-          <PortalContainerProvider container={typeof document === "undefined" ? null : document.body}>
-            <EventsPanelGrid
-              layoutItems={layoutItems}
-              panelTypesById={panelTypesById}
-              panelOptionsById={panelOptionsById}
-              seedFiltersByID={seedFiltersByID}
-              seedFiltersVersion={seedFiltersVersion}
-              durationMs={totalDurationMs}
-              context={panelContext}
-              showHints={showHints}
-              isMobile={isMobile}
-              onPanelTypeChange={onPanelTypeChange}
-              onStripTypeChange={onStripTypeChange}
-              onPanelOptionChange={onPanelOptionChange}
-              onPanelFiltersChange={onPanelFiltersChange}
-              onExplainerClick={onExplainerClick}
-            />
-          </PortalContainerProvider>
-        </ChartDataRegistryProvider>
+          <ChartDataRegistryProvider>
+            <PortalContainerProvider container={typeof document === "undefined" ? null : document.body}>
+              <EventsPanelGrid
+                layoutItems={layoutItems}
+                panelTypesById={panelTypesById}
+                panelOptionsById={panelOptionsById}
+                seedFiltersByID={seedFiltersByID}
+                seedFiltersVersion={seedFiltersVersion}
+                durationMs={totalDurationMs}
+                context={panelContext}
+                showHints={showHints}
+                isMobile={isMobile}
+                onPanelTypeChange={onPanelTypeChange}
+                onStripTypeChange={onStripTypeChange}
+                onPanelOptionChange={onPanelOptionChange}
+                onPanelFiltersChange={onPanelFiltersChange}
+                onExplainerClick={onExplainerClick}
+              />
+            </PortalContainerProvider>
+          </ChartDataRegistryProvider>
 
-        {layoutPopup && createPortal(
-          <PoppedOutLayoutContent
-            key={layoutPopup.sessionId}
-            session={layoutPopup}
-            durationMs={totalDurationMs}
-            context={panelContext}
-            showHints={showHints}
-            actionBarSlots={actionBarSlots}
-            layouts={layouts}
-            onExplainerClick={onExplainerClick}
-          />,
-          layoutPopup.container,
-        )}
+          <div className="mt-4 flex justify-end">
+            <PanelTimingDisplay />
+          </div>
+        </PanelTimingProvider>
+      )}
 
-        <div className="mt-4 flex justify-end">
-          <PanelTimingDisplay />
-        </div>
-      </PanelTimingProvider>
+      {/* Outside the page/grid switch so the popout survives switching to a page. */}
+      {layoutPopup && createPortal(
+        <PoppedOutLayoutContent
+          key={layoutPopup.sessionId}
+          session={layoutPopup}
+          durationMs={totalDurationMs}
+          context={panelContext}
+          showHints={showHints}
+          actionBarSlots={actionBarSlots}
+          layouts={layouts}
+          onExplainerClick={onExplainerClick}
+        />,
+        layoutPopup.container,
+      )}
     </div>
   );
 }
@@ -2234,10 +2283,31 @@ export function InstancePageView({
 
   // ── Preset layouts ──────────────────────────────────────────────────────
   const [activePresetId, setActivePresetId] = useState<string | null>(DEFAULT_PRESET_ID);
+  const activePreset = activePresetId ? PRESET_LAYOUTS_BY_ID[activePresetId] : null;
+  const activePageType = activePreset?.kind === "page" ? activePreset.pageType : null;
+
+  // Page view state for share links: the page reports it here (a ref, so no
+  // re-render), and an imported share link remounts the page with its state.
+  const pageStateRef = useRef<unknown>(undefined);
+  const [importedPageState, setImportedPageState] = useState<{ key: number; state: unknown }>({ key: 0, state: undefined });
+  const onPageStateChange = useCallback((state: unknown) => {
+    pageStateRef.current = state;
+  }, []);
+  const pageStateBinding = useMemo(
+    () => ({ key: importedPageState.key, initial: importedPageState.state, onChange: onPageStateChange }),
+    [importedPageState, onPageStateChange],
+  );
 
   const applyPreset = useCallback((presetId: string) => {
     const preset = PRESET_LAYOUTS_BY_ID[presetId];
     if (!preset) return;
+
+    if (!isPanelPresetLayout(preset)) {
+      // A popped-out layout keeps its own snapshot, so it stays open while
+      // the main window shows a page.
+      setActivePresetId(presetId);
+      return;
+    }
 
     const items = orderLayoutItems(normalizeLayoutItems(preset.layoutItems));
     const panels = items.map((item) => (preset.panelTypes[item.id] ?? "empty") as PanelType);
@@ -2460,6 +2530,7 @@ export function InstancePageView({
         panelOptionsById: { ...panelOptionsByID },
         panelFiltersById: structuredClone(panelFiltersByID),
         activePresetId,
+        pageState: activePageType ? pageStateRef.current : undefined,
       },
     };
     layoutPopupRef.current = session;
@@ -2473,6 +2544,7 @@ export function InstancePageView({
     panelFiltersByID,
     panelOptionsByID,
     panelTypesByID,
+    activePageType,
   ]);
 
   // Use URL state if present, otherwise default to all encounters
@@ -2723,26 +2795,34 @@ export function InstancePageView({
   }, [activeLayoutItems, setPanelOption]);
 
   const applySharedViewPayload = useCallback((payload: SharedViewPayload) => {
-    const layoutItems = payload.layout?.items ?? payload.items ?? [];
-    const panelTypesById = payload.layout?.panelTypesById ?? payload.panelTypesById ?? {};
+    const sharedPageLayout = readSharedPageLayout(payload);
+    const sharedPageType = sharedPageLayout?.pageType ?? null;
 
-    const normalizedItems = normalizeLayoutItems(layoutItems);
-    if (normalizedItems.length === 0) {
-      throw new Error("Shared view is missing layout items");
+    let orderedItems: GridEditorItem[] = [];
+    let orderedPanels: PanelType[] = [];
+    let orderedOptions: Array<string | null> = [];
+
+    if (!sharedPageType) {
+      const layoutItems = payload.layout?.items ?? payload.items ?? [];
+      const panelTypesById = payload.layout?.panelTypesById ?? payload.panelTypesById ?? {};
+      const normalizedItems = normalizeLayoutItems(layoutItems);
+      if (normalizedItems.length === 0) {
+        throw new Error("Shared view is missing layout items");
+      }
+
+      const importedTypes: Record<string, EventsPanelType> = {};
+      normalizedItems.forEach((item) => {
+        const candidate = panelTypesById[item.id] ?? "empty";
+        importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
+      });
+
+      orderedItems = orderLayoutItems(normalizedItems);
+      orderedPanels = orderedItems.map((item) => (importedTypes[item.id] ?? "empty") as PanelType);
+      orderedOptions = orderedItems.map((item) => {
+        const raw = payload.view?.panelOptions?.[item.id];
+        return typeof raw === "string" ? raw : null;
+      });
     }
-
-    const importedTypes: Record<string, EventsPanelType> = {};
-    normalizedItems.forEach((item) => {
-      const candidate = panelTypesById[item.id] ?? "empty";
-      importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
-    });
-
-    const orderedItems = orderLayoutItems(normalizedItems);
-    const orderedPanels = orderedItems.map((item) => (importedTypes[item.id] ?? "empty") as PanelType);
-    const orderedOptions = orderedItems.map((item) => {
-      const raw = payload.view?.panelOptions?.[item.id];
-      return typeof raw === "string" ? raw : null;
-    });
 
     const encounterIds = (() => {
       const enc = payload.view?.encounters;
@@ -2788,8 +2868,7 @@ export function InstancePageView({
 
     setViewState((prev) => ({
       ...prev,
-      panels: orderedPanels,
-      panelOptions: orderedOptions,
+      ...(!sharedPageType ? { panels: orderedPanels, panelOptions: orderedOptions } : {}),
       encounters: resolvedEncounters,
       enemies: enemyIDs,
       players: playerIDs,
@@ -2798,9 +2877,20 @@ export function InstancePageView({
     // Sync the parent so its encounter state matches, preventing the
     // parent→child sync effect from overwriting the shared-link selection.
     onSelectEncounters?.(resolvedEncounters);
-    setActiveLayoutId(typeof payload.layoutId === "string" ? payload.layoutId : null);
-    setImportedLayoutItems(orderedItems);
-    setActivePresetId(null);
+    setActiveLayoutId(sharedPageType ? null : typeof payload.layoutId === "string" ? payload.layoutId : null);
+    if (!sharedPageType) {
+      setImportedLayoutItems(orderedItems);
+      setActivePresetId(null);
+    } else {
+      const requestedPreset = sharedPageLayout?.presetId
+        ? PRESET_LAYOUTS_BY_ID[sharedPageLayout.presetId]
+        : null;
+      const pagePreset = requestedPreset?.kind === "page" && requestedPreset.pageType === sharedPageType
+        ? requestedPreset
+        : PRESET_LAYOUTS.find((preset) => preset.kind === "page" && preset.pageType === sharedPageType);
+      setActivePresetId(pagePreset?.id ?? DEFAULT_PRESET_ID);
+      setImportedPageState((prev) => ({ key: prev.key + 1, state: sharedPageLayout?.pageState }));
+    }
 
     // Restore per-panel filters if present in the payload.
     const importedFilters: Record<string, PanelFilter[]> = {};
@@ -2904,10 +2994,44 @@ export function InstancePageView({
     }
   }, [setPanels]);
 
-  const buildSharedViewPayload = useCallback((): SharedViewPayload => ({
+  const buildSharedViewPayload = useCallback((): SharedViewPayload => {
+    const view: NonNullable<SharedViewPayload["view"]> = {
+      encounters: viewState.encounters.length > 0
+        ? viewState.encounters
+          .map((id) => instance.encounters.findIndex((enc) => enc.id === id))
+          .filter((idx) => idx >= 0)
+          .join("-")
+        : "all",
+      enemies: Array.from(viewState.enemies)
+        .map((id) => allMergedEnemies.findIndex((enemy) => enemy.id === id))
+        .filter((idx) => idx >= 0),
+      players: Array.from(viewState.players)
+        .map((id) => Object.keys(instance.players ?? {}).sort().indexOf(id))
+        .filter((idx) => idx >= 0),
+      ...(viewState.includeWipes ? { includeWipes: true } : {}),
+      ...(timeRange?.enabled && timeRange.startOffsetMs != null && timeRange.endOffsetMs != null
+        ? { timeRange: { startMs: timeRange.startOffsetMs, endMs: timeRange.endOffsetMs } }
+        : {}),
+    };
+
+    if (activePageType) {
+      return {
+        version: 2,
+        layout: {
+          kind: "page",
+          presetId: activePresetId ?? undefined,
+          pageType: activePageType,
+          ...(pageStateRef.current !== undefined ? { pageState: pageStateRef.current } : {}),
+        },
+        view,
+      };
+    }
+
+    return {
       version: 2,
       layoutId: activeLayoutId ?? undefined,
       layout: {
+        kind: "panels",
         items: activeLayoutItems,
         panelTypesById: Object.fromEntries(Object.entries(panelTypesByID).map(([id, panelType]) => [
           id,
@@ -2915,28 +3039,14 @@ export function InstancePageView({
         ])) as Record<string, EventsPanelType>,
       },
       view: {
-        encounters: viewState.encounters.length > 0
-          ? viewState.encounters
-            .map((id) => instance.encounters.findIndex((enc) => enc.id === id))
-            .filter((idx) => idx >= 0)
-            .join("-")
-          : "all",
-        enemies: Array.from(viewState.enemies)
-          .map((id) => allMergedEnemies.findIndex((enemy) => enemy.id === id))
-          .filter((idx) => idx >= 0),
-        players: Array.from(viewState.players)
-          .map((id) => Object.keys(instance.players ?? {}).sort().indexOf(id))
-          .filter((idx) => idx >= 0),
+        ...view,
         panelOptions: Object.fromEntries(
           Object.entries(panelOptionsByID).filter(([, value]) => value !== null),
         ),
         ...(Object.keys(panelFiltersByID).length > 0 ? { panelFilters: panelFiltersByID } : {}),
-        ...(viewState.includeWipes ? { includeWipes: true } : {}),
-        ...(timeRange?.enabled && timeRange.startOffsetMs != null && timeRange.endOffsetMs != null
-          ? { timeRange: { startMs: timeRange.startOffsetMs, endMs: timeRange.endOffsetMs } }
-          : {}),
       },
-    }), [activeLayoutId, activeLayoutItems, allMergedEnemies, instance.encounters, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
+    };
+  }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, allMergedEnemies, instance.encounters, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
 
   const copyStateToClipboard = useCallback(async () => {
     try {
@@ -3268,7 +3378,7 @@ export function InstancePageView({
               <div className="flex items-center gap-2">
               <InstanceMenu
                 onImportLayout={isEncounterView ? handleImportLayout : undefined}
-                onExportLayout={isEncounterView ? handleExportLayout : undefined}
+                onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
                 onPopOutLayout={isEncounterView ? popOutLayout : undefined}
                 layoutPoppedOut={isEncounterView && layoutPopup !== null}
                 onResetView={isEncounterView ? resetView : undefined}
@@ -3278,7 +3388,7 @@ export function InstancePageView({
                 instanceName={instance.name}
                 invalidated={Boolean(instance.invalidatedAt)}
                 logDetailUrl={logDetailUrl}
-                layoutLabUrl={isEncounterView && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
+                layoutLabUrl={isEncounterView && !activePageType && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}
                 canAdminLogs={canAdminLogs}
                 canInvalidateLogs={canInvalidateLogs}
@@ -3444,7 +3554,7 @@ export function InstancePageView({
               )}
               <InstanceMenu
                 onImportLayout={isEncounterView ? handleImportLayout : undefined}
-                onExportLayout={isEncounterView ? handleExportLayout : undefined}
+                onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
                 onPopOutLayout={isEncounterView ? popOutLayout : undefined}
                 layoutPoppedOut={isEncounterView && layoutPopup !== null}
                 onResetView={isEncounterView ? resetView : undefined}
@@ -3454,7 +3564,7 @@ export function InstancePageView({
                 instanceName={instance.name}
                 invalidated={Boolean(instance.invalidatedAt)}
                 logDetailUrl={logDetailUrl}
-                layoutLabUrl={isEncounterView && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
+                layoutLabUrl={isEncounterView && !activePageType && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}
                 canAdminLogs={canAdminLogs}
                 canInvalidateLogs={canInvalidateLogs}
@@ -3618,6 +3728,8 @@ export function InstancePageView({
             showHints={showHints}
             isMobile={isMobile}
             activePresetId={activePresetId}
+            pageType={activePageType}
+            pageState={pageStateBinding}
             layoutPopup={layoutPopup}
             actionBarSlots={actionBarSlots}
             layouts={instanceDefaults?.action_bar_layouts ?? []}
@@ -3666,6 +3778,48 @@ export function InstancePageView({
           {actionBarOpen ? <X className="h-5 w-5" /> : <BookOpen className="h-5 w-5" />}
         </Button>,
         document.body
+      )}
+    </div>
+  );
+}
+
+/**
+ * Shown beside the preset tabs while a page is open: says it is a page (a
+ * fixed view) rather than a layout of panels, with a way back to a layout.
+ */
+function PageModeIndicator({
+  presets,
+  onPresetChange,
+}: {
+  presets: readonly PresetLayout[];
+  onPresetChange: (presetId: string) => void;
+}) {
+  const layout = presets.find((p) => p.id === "summary") ?? presets.find((p) => p.kind === "panels");
+  return (
+    <div className="ml-auto flex shrink-0 items-center gap-2 pl-3">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex cursor-help items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground">
+            Page
+            <HelpCircle className="size-3.5" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-[280px]">
+          <p className="font-semibold">This is a page, not a layout</p>
+          <p className="mt-1">
+            A page is a fixed view built for one job, like comparing two players. A layout is a grid of panels you can
+            add, remove, resize and rearrange.
+          </p>
+        </TooltipContent>
+      </Tooltip>
+      {layout && (
+        <button
+          type="button"
+          onClick={() => onPresetChange(layout.id)}
+          className="whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          Switch to a layout
+        </button>
       )}
     </div>
   );

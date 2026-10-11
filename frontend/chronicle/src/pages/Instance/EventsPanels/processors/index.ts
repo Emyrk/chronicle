@@ -3,6 +3,7 @@
  */
 
 import type { PanelProcessor } from "../processorTypes";
+import { rotationTimelineProcessor } from "../RotationTimeline/rotationTimeline.processor";
 import { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
 import { damageTakenProcessor, enemyDamageTakenProcessor } from "../DamageTaken/damageTaken.processor";
 import { extraAttacksProcessor } from "../ExtraAttacks/extraAttacks.processor";
@@ -197,6 +198,8 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   comparison: comparisonProcessor,
   // Charts
   timeline: timelineProcessor,
+  // Pages
+  rotation_timeline: rotationTimelineProcessor,
   // Replay
   map: mapProcessor,
   status: statusProcessor,

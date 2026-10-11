@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_INSTANCE_PANEL_OPTIONS } from "./viewDefaults";
-import { getAvailablePresetLayouts, PRESET_LAYOUTS } from "./presetLayouts";
+import {
+  DEFAULT_PRESET_ID,
+  getAvailablePresetLayouts,
+  isPanelPresetLayout,
+  PRESET_LAYOUTS,
+  PRESET_LAYOUTS_BY_ID,
+} from "./presetLayouts";
 import {
   deserializeTimelineConfig,
   extractTimelineToken,
@@ -11,7 +17,7 @@ function timelineSettings(panelOption: string | undefined) {
 }
 
 describe("built-in Timeline settings", () => {
-  it("enables Raid Durability and player deaths for the default Summary layout", () => {
+  it("enables Raid Durability and player deaths for the default panel grid", () => {
     const settings = timelineSettings(DEFAULT_INSTANCE_PANEL_OPTIONS["panel-1"]);
 
     expect(settings?.background).toBe("raid_durability");
@@ -19,7 +25,7 @@ describe("built-in Timeline settings", () => {
   });
 
   it("enables Raid Durability and player deaths for every preset tab containing a line chart", () => {
-    const timelinePresets = PRESET_LAYOUTS.filter((preset) =>
+    const timelinePresets = PRESET_LAYOUTS.filter(isPanelPresetLayout).filter((preset) =>
       Object.values(preset.panelTypes).includes("timeline"),
     );
 
@@ -34,11 +40,27 @@ describe("built-in Timeline settings", () => {
   });
 });
 
+describe("default preset layout", () => {
+  it("uses the Player Timeline page", () => {
+    expect(PRESET_LAYOUTS_BY_ID[DEFAULT_PRESET_ID]).toMatchObject({
+      id: "player_timeline",
+      label: "Player Timeline",
+      kind: "page",
+      pageType: "player_timeline",
+    });
+    expect(PRESET_LAYOUTS_BY_ID.summary).toMatchObject({
+      id: "summary",
+      kind: "panels",
+    });
+  });
+});
+
 describe("preset layout availability", () => {
   it("hides the Interrupts quick select when the log does not support interrupts", () => {
     const labels = getAvailablePresetLayouts([]).map((preset) => preset.label);
 
     expect(labels).not.toContain("Interrupts");
+    expect(labels).toContain("Player Timeline");
     expect(labels).toContain("Summary");
   });
 
