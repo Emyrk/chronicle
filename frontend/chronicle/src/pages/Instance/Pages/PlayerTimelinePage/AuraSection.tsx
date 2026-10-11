@@ -8,6 +8,7 @@ import { classifyAura, combinePlacements } from "../../EventsPanels/RotationTime
 import { alignOffsetMs, playerCasts } from "../../EventsPanels/RotationTimeline/derive";
 import { formatClock, SLOT_COLORS, SLOT_TEXT_COLORS } from "../../EventsPanels/RotationTimeline/format";
 import { IndicatorLine } from "../../EventsPanels/RotationTimeline/IndicatorLine";
+import { LABEL_WIDTH } from "../../EventsPanels/RotationTimeline/laneLayout";
 import { TooltipHeader, TooltipShell, type TooltipAnchor } from "../../EventsPanels/RotationTimeline/TimelineTooltip";
 import type { TimelineAuraSegment } from "../../EventsPanels/RotationTimeline/rotationTimeline.processor";
 import type { RotationTimelinePlayer } from "../../EventsPanels/RotationTimeline/RotationTimeline";
@@ -42,8 +43,6 @@ interface HoveredAura {
   seg: AuraSeg;
   anchor: TooltipAnchor;
 }
-
-const LABEL_WIDTH = 220;
 
 interface ClassifiedRows {
   key: AuraRow[];

@@ -62,3 +62,6 @@ export function laneLayout(pxPerMs: number, mode: IconSizeMode): LaneLayout {
 
 /** Distinct colors for cooldown strips and rings, assigned in order. */
 export const COOLDOWN_COLORS = ["#f59e0b", "#ef4444", "#a855f7", "#22c55e", "#06b6d4", "#ec4899", "#eab308", "#3b82f6"];
+
+/** Width of the label column shared by the overview, lanes and aura rows. */
+export const LABEL_WIDTH = 220;
