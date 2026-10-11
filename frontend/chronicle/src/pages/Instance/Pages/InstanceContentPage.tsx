@@ -13,14 +13,16 @@ export interface PageStateBinding {
 interface InstanceContentPageProps {
   pageType: InstancePageType;
   context: PanelContext;
+  /** Total duration of the selected encounters, for regular panels on the page. */
+  durationMs: number;
   pageState: PageStateBinding;
 }
 
 /** Full-page content that replaces the panel grid for `kind: "page"` presets. */
-export function InstanceContentPage({ pageType, context, pageState }: InstanceContentPageProps) {
+export function InstanceContentPage({ pageType, context, durationMs, pageState }: InstanceContentPageProps) {
   switch (pageType) {
     case "player_timeline":
-      return <PlayerTimelinePage context={context} initialState={pageState.initial} onStateChange={pageState.onChange} />;
+      return <PlayerTimelinePage context={context} durationMs={durationMs} initialState={pageState.initial} onStateChange={pageState.onChange} />;
     case "empty":
       return (
         <div className="flex min-h-[28rem] items-center justify-center rounded-lg border border-dashed border-border bg-card/30 px-6 text-center">

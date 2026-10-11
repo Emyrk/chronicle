@@ -34,6 +34,7 @@ import { useSpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 import { activeOverrides, findOverride } from "../../EventsPanels/RotationTimeline/spellOverrides";
 import { activeAuraProcs } from "../../EventsPanels/RotationTimeline/auraProcs";
 import { AuraSection } from "./AuraSection";
+import { PanelTray } from "./PanelTray";
 import { defaultPlayers } from "./defaultPlayers";
 import { PlayerPicker } from "./PlayerPicker";
 import { PlayerTimelineRules, type CuratedCooldown } from "./PlayerTimelineRules";
@@ -58,13 +59,15 @@ const ROTATION_TIMELINE_PANEL: PanelDefinition<RotationTimelineResult, RotationT
 
 interface PlayerTimelinePageProps {
   context: PanelContext;
+  /** Total duration of the selected encounters, for the panel tray. */
+  durationMs: number;
   /** Saved view state (from a share link); validated here. */
   initialState?: unknown;
   /** Receives the current view state so share links can include it. */
   onStateChange?: (state: PlayerTimelineState) => void;
 }
 
-export function PlayerTimelinePage({ context, initialState, onStateChange }: PlayerTimelinePageProps) {
+export function PlayerTimelinePage({ context, durationMs, initialState, onStateChange }: PlayerTimelinePageProps) {
   const { selectedEncounterIds } = context;
   const saved = useMemo(() => parsePlayerTimelineState(initialState), [initialState]);
   // Player picks live here, above the per-encounter content, so they survive
@@ -78,6 +81,7 @@ export function PlayerTimelinePage({ context, initialState, onStateChange }: Pla
   return (
     <div className="flex flex-col gap-3">
       <FeedbackBanner />
+      <PanelTray context={context} durationMs={durationMs} />
       {selectedEncounterIds.length !== 1 ? (
         <EncounterPicker context={context} />
       ) : (

@@ -1269,7 +1269,7 @@ function PoppedOutLayoutContent({
           </div>
         </div>
         {popupPageType ? (
-          <InstanceContentPage pageType={popupPageType} context={context} pageState={popupPageState} />
+          <InstanceContentPage pageType={popupPageType} context={context} durationMs={durationMs} pageState={popupPageState} />
         ) : (
           <PanelTimingProvider panelCount={layoutItems.length}>
             <ChartDataRegistryProvider>
@@ -1946,7 +1946,7 @@ function EncounterDetail({
       </div>
 
       {pageType ? (
-        <InstanceContentPage key={pageState.key} pageType={pageType} context={panelContext} pageState={pageState} />
+        <InstanceContentPage key={pageState.key} pageType={pageType} context={panelContext} durationMs={totalDurationMs} pageState={pageState} />
       ) : (
         <PanelTimingProvider panelCount={layoutItems.length}>
           <PanelTimingResetter encounters={encounters} />
