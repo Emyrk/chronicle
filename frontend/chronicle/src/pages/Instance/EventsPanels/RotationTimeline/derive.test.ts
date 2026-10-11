@@ -145,9 +145,9 @@ describe("idleGaps", () => {
     expect(idleGaps(casts, gcd, 400)).toEqual([{ startMs: 1500, endMs: 2500 }]);
   });
 
-  it("ignores failed casts", () => {
-    const casts = [cast(0), cast(1500, 1, { failed: true }), cast(3000)];
-    expect(idleGaps(casts, gcd15, 400)).toEqual([{ startMs: 1500, endMs: 3000 }]);
+  it("counts a failed cast as busy until it failed, without a GCD", () => {
+    const casts = [cast(0), cast(1500, 1, { endMs: 2600, failed: true }), cast(4000)];
+    expect(idleGaps(casts, gcd15, 400)).toEqual([{ startMs: 2600, endMs: 4000 }]);
   });
 });
 

@@ -63,8 +63,12 @@ export function castEnds(casts: readonly TimelineCast[], gcd: GcdLookup): Map<Ti
   return ends;
 }
 
-/** How long the cast kept the player busy: cast time, channel, or the GCD. */
+/**
+ * How long the cast kept the player busy: cast time, channel, or the GCD. A
+ * failed cast kept them busy until it failed; it never triggered the GCD.
+ */
 export function castSlotEnd(cast: TimelineCast, gcd: GcdLookup, ends?: ReadonlyMap<TimelineCast, number>): number {
+  if (cast.failed) return cast.endMs;
   return Math.max(ends?.get(cast) ?? castEndMs(cast), cast.startMs + gcd(cast.spellId));
 }
 
@@ -76,7 +80,8 @@ export interface IdleGap {
 /**
  * Gaps between one cast's slot ending and the next cast starting. Spells off
  * the GCD (gcd 0, e.g. Heroic Strike) neither start nor end a gap on their own
- * slot, but they still mark the player as active at that moment.
+ * slot, but they still mark the player as active at that moment. Failed casts
+ * count too: the player was casting until the fail.
  */
 export function idleGaps(
   casts: readonly TimelineCast[],
@@ -87,7 +92,6 @@ export function idleGaps(
   const ends = castEnds(casts, gcd);
   let busyUntil: number | null = null;
   for (const cast of casts) {
-    if (cast.failed) continue;
     if (busyUntil != null && cast.startMs - busyUntil >= thresholdMs) {
       gaps.push({ startMs: busyUntil, endMs: cast.startMs });
     }
@@ -109,7 +113,6 @@ export function busySegments(
   const out: IdleGap[] = [];
   const ends = castEnds(casts, gcd);
   for (const cast of casts) {
-    if (cast.failed) continue;
     const end = castSlotEnd(cast, gcd, ends);
     const last = out[out.length - 1];
     if (last && cast.startMs - last.endMs < thresholdMs) last.endMs = Math.max(last.endMs, end);
