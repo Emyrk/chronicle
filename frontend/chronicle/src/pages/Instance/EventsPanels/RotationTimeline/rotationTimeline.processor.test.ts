@@ -6,6 +6,7 @@ import type {
   ProcessorContext,
   SpellGoProcessorEvent,
   SpellStartProcessorEvent,
+  ConsumeProcessorEvent,
 } from "../processorTypes";
 import { AuraState, AuraTransition } from "../processorTypes";
 import { HitTypePeriodic } from "@/lib/hittype/hittype";
@@ -179,5 +180,42 @@ describe("rotationTimelineProcessor cast starts", () => {
 
   it("drops a start whose cast never completed", () => {
     expect(casts([start(1000, 9912, 1500), go(20_000, 9912)])).toEqual([[9912, 20_000, 20_000]]);
+  });
+});
+
+describe("rotationTimelineProcessor consumables", () => {
+  const consume = (offsetMilli: number, id: string, spellId: number, isProjection: boolean): ConsumeProcessorEvent =>
+    ({
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+      type: "consume",
+      index: offsetMilli,
+      offsetMilli,
+      consumeId: id,
+      evidenceId: id,
+      player: PLAYER,
+      itemId: null,
+      itemName: null,
+      candidateItemIds: [],
+      candidateItemIdsCount: 0,
+      spell: { id: spellId, name: `spell ${spellId}` },
+      kind: 1,
+      confidence: 1,
+      consumedAtUnixMilli: null,
+      observedAtUnixMilli: 0,
+      amount: null,
+      resourceType: null,
+      isProjection,
+    }) as unknown as ConsumeProcessorEvent;
+
+  it("marks pre-pull consumables' spells without counting them as uses in the fight", () => {
+    const state = rotationTimelineProcessor.createState();
+    const ctx = context();
+    const events = [consume(0, "flask", 17628, true), consume(5000, "potion", 17531, false)];
+    for (const e of events) rotationTimelineProcessor.processEvent(state, e, ENC, new Date(0), e.type, ctx);
+    const p = state.players.get(PLAYER)!;
+    expect(p.consumeSpells.map((s) => s.spellId)).toEqual([17628, 17531]);
+    expect(p.consumes.map((c) => c.spellId)).toEqual([17531]);
   });
 });

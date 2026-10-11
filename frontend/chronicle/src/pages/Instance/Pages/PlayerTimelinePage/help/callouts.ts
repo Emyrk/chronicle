@@ -154,6 +154,11 @@ export const CALLOUT_SECTIONS: CalloutSection[] = [
     callouts: [
       { anchor: "auras", title: "Buffs & debuffs", body: "Collapse or expand the section. Its rows share the lanes' time axis." },
       {
+        anchor: "consumables",
+        title: "Consumables",
+        body: "Buffs from flasks, elixirs, potions and food either player used, first and apart from class buffs. Pre-pull ones count too.",
+      },
+      {
         anchor: "aura-bar",
         title: "Aura bar",
         body: "One bar per application: A on top, B below. Hover for when it started and ended, its share of the fight and who applied it.",

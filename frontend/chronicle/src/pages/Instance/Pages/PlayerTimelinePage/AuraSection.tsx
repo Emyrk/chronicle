@@ -6,6 +6,7 @@ import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip/Spell
 import { cn } from "@/lib/utils";
 import { classifyAura, combinePlacements } from "../../EventsPanels/RotationTimeline/auraClassification";
 import { alignOffsetMs, playerCasts } from "../../EventsPanels/RotationTimeline/derive";
+import { normalizeSpellName } from "../../EventsPanels/RotationTimeline/useRotationView";
 import { formatClock, SLOT_COLORS, SLOT_TEXT_COLORS } from "../../EventsPanels/RotationTimeline/format";
 import { IndicatorLine } from "../../EventsPanels/RotationTimeline/IndicatorLine";
 import { LABEL_WIDTH } from "../../EventsPanels/RotationTimeline/laneLayout";
@@ -45,6 +46,8 @@ interface HoveredAura {
 }
 
 interface ClassifiedRows {
+  /** Buffs from a consumable either player used; shown first. */
+  consumes: AuraRow[];
   key: AuraRow[];
   other: AuraRow[];
   /** Up the whole fight or not at all for every player; shown densely as icons. */
@@ -67,8 +70,15 @@ function classifyRows(
   spellMeta: (spellId: number | null) => SpellMeta,
   adminIgnored: ReadonlySet<number>,
 ): ClassifiedRows {
-  const out: ClassifiedRows = { key: [], other: [], flat: [] };
+  const out: ClassifiedRows = { consumes: [], key: [], other: [], flat: [] };
+  const consumeIds = new Set(players.flatMap((p) => p.data.consumeSpells.map((s) => s.spellId)));
+  const consumeNames = new Set(players.flatMap((p) => p.data.consumeSpells.map((s) => normalizeSpellName(s.spellName))));
   for (const row of rows) {
+    // Consumables win over every other group, even when up the whole fight (flasks).
+    if ((row.spellId != null && consumeIds.has(row.spellId)) || consumeNames.has(normalizeSpellName(row.name))) {
+      out.consumes.push(row);
+      continue;
+    }
     const classSet = row.spellId != null ? spellMeta(row.spellId).spell?.spell_class_set?.string : undefined;
     const ignored = row.spellId != null && adminIgnored.has(row.spellId);
     const placement = combinePlacements(
@@ -322,12 +332,21 @@ function AuraGroup({
 }: AuraGroupProps) {
   const rowProps = { offsets, P, spellMeta, onHover, isRaised, onToggleRaised };
   const [otherOpen, setOtherOpen] = useState(otherOpenByDefault);
-  const empty = rows.key.length === 0 && rows.other.length === 0 && rows.flat.length === 0;
+  const empty = rows.consumes.length === 0 && rows.key.length === 0 && rows.other.length === 0 && rows.flat.length === 0;
+  const heading = (text: string) => (
+    <div className="flex h-5 items-end px-4 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{text}</div>
+  );
   return (
     <div>
-      {title && (
-        <div className="flex h-5 items-end px-4 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{title}</div>
+      {rows.consumes.length > 0 && (
+        <div data-help="consumables">
+          {heading("Consumables")}
+          {rows.consumes.map((row) => (
+            <AuraRowView key={row.key} row={row} {...rowProps} />
+          ))}
+        </div>
       )}
+      {title && heading(title)}
       {rows.key.map((row) => (
         <AuraRowView key={row.key} row={row} {...rowProps} />
       ))}

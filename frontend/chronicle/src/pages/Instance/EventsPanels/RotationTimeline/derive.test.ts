@@ -62,6 +62,7 @@ function player(extra: Partial<PlayerTimelineData> = {}): PlayerTimelineData {
     damageByTarget: {},
     consumes: [],
     auraProcs: [],
+    consumeSpells: [],
     ...extra,
   };
 }
