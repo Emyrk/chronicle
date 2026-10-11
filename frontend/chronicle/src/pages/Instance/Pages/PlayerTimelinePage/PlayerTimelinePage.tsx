@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
-import { ArrowLeftRight, Sparkles } from "lucide-react";
+import { ArrowLeftRight, FlaskConical } from "lucide-react";
 import { useCooldownSpells } from "@/api/cooldownSpells";
 import { useMyFavorites } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -99,23 +98,23 @@ export function PlayerTimelinePage({ context, initialState, onStateChange }: Pla
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 
-/** The page is new: asks every class for feedback on what it gets right and wrong. */
+/** Beta notice, styled like the Overview one: asks every class for feedback. */
 function FeedbackBanner() {
   return (
-    <Alert className="border-yellow-500/40 bg-yellow-500/10">
-      <Sparkles className="text-yellow-300" />
-      <AlertTitle className="text-yellow-200">The Player Timeline is new</AlertTitle>
-      <AlertDescription>
-        <p>
-          I need feedback from every class on what is correct and what is incorrect: missing or extra casts, procs,
-          cooldowns, buffs, GCDs and idle time. Please send your feedback on{" "}
+    <div className="flex items-center gap-3 rounded-lg border border-amber-400/25 bg-amber-400/[0.06] px-4 py-2.5 text-amber-100">
+      <FlaskConical className="size-4 shrink-0 text-amber-400" aria-hidden />
+      <div className="min-w-0 text-xs">
+        <span className="font-semibold text-amber-300">Player Timeline Beta</span>
+        <span className="ml-2 text-muted-foreground">
+          This page is in active development. Feedback from every class is welcome: missing or extra casts, procs,
+          cooldowns, buffs, GCDs and idle time. Share it on{" "}
           <a href={DISCORD_URL} target="_blank" rel="noreferrer" className="font-medium text-foreground underline underline-offset-2">
             Discord
           </a>
           .
-        </p>
-      </AlertDescription>
-    </Alert>
+        </span>
+      </div>
+    </div>
   );
 }
 
