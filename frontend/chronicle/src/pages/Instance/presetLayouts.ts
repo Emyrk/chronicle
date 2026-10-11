@@ -107,12 +107,6 @@ const HEAL_TARGET_PLAYERS_FILTER: PanelFilter = { type: "target_type", value: "s
 
 export const PRESET_LAYOUTS: PresetLayout[] = [
   {
-    id: "player_timeline",
-    label: "Player Timeline",
-    kind: "page",
-    pageType: "player_timeline",
-  },
-  {
     id: "summary",
     label: "Summary",
     kind: "panels",
@@ -232,6 +226,12 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     panelFilters: {
       "panel-3": [DAMAGE_TIME_RANGE_FILTER, DAMAGE_SOURCE_ENEMIES_FILTER],
     },
+  },
+  {
+    id: "player_timeline",
+    label: "Player Timeline",
+    kind: "page",
+    pageType: "player_timeline",
   },
   {
     id: "loot",
