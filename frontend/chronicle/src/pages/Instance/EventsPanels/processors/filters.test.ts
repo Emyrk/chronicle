@@ -437,6 +437,16 @@ describe("evaluateFilters", () => {
     expect(evaluateFilters(filters, createDamageEvent({ hitType: 0x0002 }), ctx)).toBe(false);
   });
 
+  it("matches explicit main-hand hit types", () => {
+    const filters: PanelFilter[] = [
+      { type: "ability_hittype", value: ["mainhand"] },
+    ];
+    const ctx = createContext();
+
+    expect(evaluateFilters(filters, createDamageEvent({ hitType: 0x00400002 }), ctx)).toBe(true);
+    expect(evaluateFilters(filters, createDamageEvent({ hitType: 0x00000002 }), ctx)).toBe(false);
+  });
+
   it("matches ability_hittype with multi-flag event", () => {
     const filters: PanelFilter[] = [
       { type: "ability_hittype", value: ["crit"] },

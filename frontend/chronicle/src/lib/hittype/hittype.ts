@@ -28,6 +28,7 @@ export const HitTypeFullBlock: HitType = 0x00040000;
 export const HitTypeSplit: HitType = 0x00080000;
 export const HitTypeReflect: HitType = 0x00100000;
 export const HitTypePeriodic: HitType = 0x00200000;
+export const HitTypeMainHand: HitType = 0x00400000;
 
 /**
  * Check if a HitType value has a specific flag set.
@@ -96,6 +97,8 @@ export function hitTypeName(flag: HitType): string {
       return "Reflect";
     case HitTypePeriodic:
       return "Periodic";
+    case HitTypeMainHand:
+      return "Main-Hand";
     default:
       return `Unknown(0x${flag.toString(16).toUpperCase()})`;
   }
@@ -104,6 +107,7 @@ export function hitTypeName(flag: HitType): string {
 // All HitType flags for iteration
 const allHitTypeFlags: HitType[] = [
   HitTypeOffHand,
+  HitTypeMainHand,
   HitTypeHit,
   HitTypeCrit,
   HitTypePartialResist,

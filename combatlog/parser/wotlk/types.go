@@ -62,6 +62,18 @@ func MissTypeToHitType(s string) types.HitType {
 	}
 }
 
+// weaponHandHitType maps an explicit CLEU off-hand flag to a hand hit type.
+// A nil flag leaves the weapon hand unknown.
+func weaponHandHitType(isOffHand *bool) types.HitType {
+	if isOffHand == nil {
+		return types.HitTypeNone
+	}
+	if *isOffHand {
+		return types.HitTypeOffHand
+	}
+	return types.HitTypeMainHand
+}
+
 // EnvironmentTypeFromString maps WotLK environmental type strings to
 // types.EnvironmentType.
 func EnvironmentTypeFromString(s string) types.EnvironmentType {

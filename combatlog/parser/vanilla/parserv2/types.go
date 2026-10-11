@@ -76,6 +76,8 @@ func HitType(amount int32, components int32, info SwingHitInfo, state VictimStat
 
 	if info.Has(HITINFO_LEFTSWING) {
 		t |= types.HitTypeOffHand
+	} else {
+		t |= types.HitTypeMainHand
 	}
 
 	switch state {

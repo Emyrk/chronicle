@@ -35,6 +35,7 @@ func HitType() *serpent.Command {
 			printType("None", types.HitTypeNone)
 			printType("Hit", types.HitTypeHit)
 			printType("Offhand", types.HitTypeOffHand)
+			printType("Mainhand", types.HitTypeMainHand)
 			printType("Hit", types.HitTypeHit)
 			printType("Crit", types.HitTypeCrit)
 			printType("PartialResist", types.HitTypePartialResist)

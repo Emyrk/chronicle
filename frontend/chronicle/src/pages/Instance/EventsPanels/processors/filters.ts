@@ -105,6 +105,7 @@ const SCHOOL_MASK_MAP: Record<string, number> = {
 
 const HITTYPE_MASK_MAP: Record<string, number> = {
   offhand: 0x00000001,
+  mainhand: 0x00400000,
   hit: 0x00000002,
   crit: 0x00000004,
   partial_resist: 0x00000008,

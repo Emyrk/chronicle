@@ -20,6 +20,7 @@ import type {
 } from "../processorTypes";
 import { AuraState } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
+import { hasHitType, HitTypeMainHand, HitTypeOffHand } from "@/lib/hittype/hittype";
 import { createGuidCache, type GuidCache } from "../processors/guidCache";
 
 // ── Result types ──────────────────────────────────────────────
@@ -202,7 +203,11 @@ export const rotationsProcessor: PanelProcessor<RotationsResult, RotationsEvent>
         state.spellNames.set(AUTO_ATTACK_SPELL_ID, "Auto Attack");
       }
 
-      const isOffHand = (event.hitType & 0x1) !== 0;
+      const isOffHand = hasHitType(event.hitType, HitTypeOffHand)
+        ? true
+        : hasHitType(event.hitType, HitTypeMainHand)
+          ? false
+          : undefined;
       const entry: CastEntry = {
         offsetMilli: event.offsetMilli,
         spellId: AUTO_ATTACK_SPELL_ID,
