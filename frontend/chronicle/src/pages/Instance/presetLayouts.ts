@@ -287,4 +287,4 @@ export const PRESET_LAYOUTS_BY_ID = Object.fromEntries(
   PRESET_LAYOUTS.map((p) => [p.id, p]),
 ) as Record<string, PresetLayout>;
 
-export const DEFAULT_PRESET_ID = "player_timeline";
+export const DEFAULT_PRESET_ID = "summary";

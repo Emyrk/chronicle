@@ -41,16 +41,16 @@ describe("built-in Timeline settings", () => {
 });
 
 describe("default preset layout", () => {
-  it("uses the Player Timeline page", () => {
+  it("uses the Summary panels", () => {
     expect(PRESET_LAYOUTS_BY_ID[DEFAULT_PRESET_ID]).toMatchObject({
+      id: "summary",
+      label: "Summary",
+      kind: "panels",
+    });
+    expect(PRESET_LAYOUTS_BY_ID.player_timeline).toMatchObject({
       id: "player_timeline",
-      label: "Player Timeline",
       kind: "page",
       pageType: "player_timeline",
-    });
-    expect(PRESET_LAYOUTS_BY_ID.summary).toMatchObject({
-      id: "summary",
-      kind: "panels",
     });
   });
 });
