@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { iconUrl } from "@/config/iconUrl";
@@ -81,6 +81,26 @@ function useAnchorRects(container: HTMLElement | null): Map<string, AnchorRect> 
   return rects;
 }
 
+/** Callouts for every marked element under a point, smallest element first, at most this many. */
+const MAX_HOVERED = 3;
+
+function calloutsAt(container: HTMLElement, x: number, y: number): (Callout & { anchor: string })[] {
+  const hits: { area: number; callouts: (Callout & { anchor: string })[] }[] = [];
+  for (const el of container.querySelectorAll<HTMLElement>("[data-help]")) {
+    const r = el.getBoundingClientRect();
+    // Thin lines (rails, idle gaps) get a few pixels of slack so they can be hovered.
+    const slack = r.height < 6 ? 4 : 0;
+    if (x < r.left || x > r.right || y < r.top - slack || y > r.bottom + slack) continue;
+    const tokens = (el.dataset.help ?? "").split(" ");
+    const callouts = NUMBERED.filter((c) => tokens.includes(c.anchor));
+    if (callouts.length > 0) hits.push({ area: r.width * Math.max(r.height, 1), callouts });
+  }
+  hits.sort((a, b) => a.area - b.area);
+  const out: (Callout & { anchor: string })[] = [];
+  for (const hit of hits) for (const c of hit.callouts) if (!out.includes(c)) out.push(c);
+  return out.slice(0, MAX_HOVERED);
+}
+
 interface PlayerTimelineHelpProps {
   onExit: () => void;
 }
@@ -134,6 +154,20 @@ export function PlayerTimelineHelp({ onExit }: PlayerTimelineHelpProps) {
   const [active, setActive] = useState<string | null>(null);
   const [showCallouts, setShowCallouts] = useState(true);
   const activeRect = active ? rects.get(active) : undefined;
+  // What the pointer is over in the example, for the description bar.
+  const [hovered, setHovered] = useState<(Callout & { anchor: string })[]>([]);
+  const hoverFrame = useRef(0);
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const { clientX, clientY, currentTarget } = e;
+    cancelAnimationFrame(hoverFrame.current);
+    hoverFrame.current = requestAnimationFrame(() => setHovered(calloutsAt(currentTarget, clientX, clientY)));
+  };
+  const onPointerLeave = () => {
+    cancelAnimationFrame(hoverFrame.current);
+    setHovered([]);
+  };
+  // A hovered badge or legend entry wins over what is under the pointer.
+  const described = active ? NUMBERED.filter((c) => c.anchor === active) : hovered;
 
   const header = (
     <div className="flex items-center gap-2.5">
@@ -175,7 +209,7 @@ export function PlayerTimelineHelp({ onExit }: PlayerTimelineHelpProps) {
           click. Hover a number, or an entry below, to highlight what it describes.
         </p>
 
-        <div ref={setContainer} className="relative">
+        <div ref={setContainer} className="relative" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
           <div className="overflow-hidden rounded-lg border border-border">
             <RotationTimeline
               players={players}
@@ -235,7 +269,8 @@ export function PlayerTimelineHelp({ onExit }: PlayerTimelineHelpProps) {
             })}
         </div>
 
-        <div className="columns-1 gap-6 md:columns-2 xl:columns-3">
+        {/* Room for the description bar, so it never covers the last legend entries. */}
+        <div className="columns-1 gap-6 pb-24 md:columns-2 xl:columns-3">
           {CALLOUT_SECTIONS.map((section) => (
             <section key={section.title} className="mb-5 break-inside-avoid">
               <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{section.title}</h2>
@@ -275,6 +310,24 @@ export function PlayerTimelineHelp({ onExit }: PlayerTimelineHelpProps) {
           ))}
         </div>
       </div>
+
+      {showCallouts && described.length > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
+          <div className="flex w-full max-w-3xl flex-col gap-2 rounded-lg border border-border bg-card/95 px-4 py-3 shadow-2xl backdrop-blur">
+            {described.map((c) => (
+              <div key={c.anchor} className="flex gap-2.5 text-sm">
+                <span className="mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full bg-school-holy font-mono text-[10px] font-bold text-background">
+                  {numberOf(c)}
+                </span>
+                <span className="min-w-0">
+                  <span className="font-medium text-foreground">{c.title}</span>
+                  <span className="ml-1.5 text-muted-foreground">{c.body}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
