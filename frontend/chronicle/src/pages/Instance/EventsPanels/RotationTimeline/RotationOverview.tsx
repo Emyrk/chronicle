@@ -6,6 +6,7 @@ import { DPS_SMOOTHING_BINS } from "./derive";
 import { DAMAGE_BIN_MS } from "./rotationTimeline.processor";
 import { formatClock, SLOT_COLORS, SLOT_TEXT_COLORS } from "./format";
 import { IndicatorLine } from "./IndicatorLine";
+import { LABEL_WIDTH } from "./laneLayout";
 import type { RotationView } from "./useRotationView";
 
 export interface OverviewSeries {
@@ -101,40 +102,53 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
   const indicatorBin = indicator != null ? Math.min(bins - 1, Math.max(0, Math.floor(indicator / DAMAGE_BIN_MS))) : null;
 
   return (
-    <div className="border-b border-border px-4 py-2.5">
-      <div className="mb-1.5 flex justify-between text-[11px] text-muted-foreground">
-        <span className="flex items-center gap-3">
-          <HintTooltip>
-            <TooltipTrigger asChild>
-              <span className="flex cursor-help items-center gap-1.5 decoration-dotted underline-offset-2 hover:underline">
-                <span className="h-0.5 w-3 bg-muted-foreground" />
-                {healing ? "HPS" : "DPS"}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="start" className="max-w-80 p-3 text-left">
-              <DpsLegendHint healing={healing} />
-            </TooltipContent>
-          </HintTooltip>
-          {lead && (
+    // Same columns as the lanes below: the readout sits in the label column so
+    // the chart spans exactly the lanes' track and their time axes line up.
+    <div className="grid border-b border-border" style={{ gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` }}>
+      <div className="flex min-w-0 flex-col gap-1.5 px-4 py-2.5">
+        <div className="flex justify-between text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-3">
             <HintTooltip>
               <TooltipTrigger asChild>
                 <span className="flex cursor-help items-center gap-1.5 decoration-dotted underline-offset-2 hover:underline">
-                  <span className="h-2.5 w-2 bg-muted-foreground/50" />
-                  {healing ? "Healing lead" : "Damage lead"}
+                  <span className="h-0.5 w-3 bg-muted-foreground" />
+                  {healing ? "HPS" : "DPS"}
                 </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="start" className="max-w-80 p-3 text-left">
-                <LeadLegendHint names={series.map((s) => s.name)} healing={healing} />
+                <DpsLegendHint healing={healing} />
               </TooltipContent>
             </HintTooltip>
-          )}
-        </span>
+            {lead && (
+              <HintTooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex cursor-help items-center gap-1.5 decoration-dotted underline-offset-2 hover:underline">
+                    <span className="h-2.5 w-2 bg-muted-foreground/50" />
+                    {healing ? "Healing lead" : "Damage lead"}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start" className="max-w-80 p-3 text-left">
+                  <LeadLegendHint names={series.map((s) => s.name)} healing={healing} />
+                </TooltipContent>
+              </HintTooltip>
+            )}
+          </span>
+        </div>
+        <Scoreboard
+          series={series}
+          lead={lead}
+          bin={indicatorBin}
+          timeMs={indicator}
+          maxDps={maxDps}
+          pinned={view.pinnedMs != null}
+          onUnpin={view.unpin}
+        />
       </div>
-      <div className="grid grid-cols-[minmax(0,1fr)_176px] gap-2.5">
+      <div className="min-w-0">
         <div
           ref={ref}
           data-help="overview"
-          className="relative min-h-[76px] cursor-crosshair touch-none select-none rounded-sm border border-border bg-background"
+          className="relative h-full min-h-[96px] cursor-crosshair touch-none select-none border-l border-border bg-background"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -211,15 +225,6 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
             />
           )}
         </div>
-        <Scoreboard
-          series={series}
-          lead={lead}
-          bin={indicatorBin}
-          timeMs={indicator}
-          maxDps={maxDps}
-          pinned={view.pinnedMs != null}
-          onUnpin={view.unpin}
-        />
       </div>
     </div>
   );

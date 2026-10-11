@@ -43,7 +43,7 @@ import {
 import { IndicatorLine } from "./IndicatorLine";
 import { KeybindsButton } from "./KeybindsButton";
 import { TIMELINE_KEYBINDS, type Keybind } from "./keybinds";
-import { COOLDOWN_COLORS, laneLayout, type LaneLayout } from "./laneLayout";
+import { COOLDOWN_COLORS, LABEL_WIDTH, laneLayout, type LaneLayout } from "./laneLayout";
 import { clusterRailEvents, MAX_STACKED_ICONS, type RailCluster, type RailEvent } from "./railClusters";
 import { RotationOverview } from "./RotationOverview";
 import type { SpellMeta } from "./useSpellMeta";
@@ -109,7 +109,6 @@ interface DerivedPlayer {
   stats: PlayerStats;
 }
 
-const LABEL_WIDTH = 220;
 /** Pointer movement under this many px is a click, not a drag. */
 const CLICK_SLOP_PX = 4;
 const SWING_LANE_H = 24;
