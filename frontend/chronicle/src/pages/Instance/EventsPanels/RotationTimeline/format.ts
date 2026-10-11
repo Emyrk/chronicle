@@ -17,11 +17,16 @@ export const CAST_SOURCE_LABELS: Record<CastSource, string> = {
   consume: "consume event",
 };
 
-/** Player A uses the primary color, player B the accent. */
-export const SLOT_COLORS = ["var(--primary)", "var(--accent)"] as const;
+/**
+ * Player A is steel blue, player B tan: the default theme's primary and
+ * accent, fixed here because other deployments theme those two close together.
+ */
+const SLOT_A = "#5f8fa6";
+const SLOT_B = "oklch(0.5692 0.0609 82.3871)";
+export const SLOT_COLORS = [SLOT_A, SLOT_B] as const;
 export const SLOT_LABELS = ["A", "B"] as const;
 /** Slot colors for text; B is lightened so it reads on dark backgrounds. */
-export const SLOT_TEXT_COLORS = ["var(--primary)", "color-mix(in oklab, var(--accent) 70%, white)"] as const;
+export const SLOT_TEXT_COLORS = [SLOT_A, `color-mix(in oklab, ${SLOT_B} 70%, white)`] as const;
 
 /** 75_300 → "1:15.3"; negative values get a leading "-". */
 export function formatClock(ms: number, decimals = 1): string {
