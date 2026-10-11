@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { AbsorbedProcessorEvent, AuraProcessorEvent, HealProcessorEvent, ProcessorContext, SpellGoProcessorEvent } from "../processorTypes";
+import type {
+  AbsorbedProcessorEvent,
+  AuraProcessorEvent,
+  HealProcessorEvent,
+  ProcessorContext,
+  SpellGoProcessorEvent,
+  SpellStartProcessorEvent,
+} from "../processorTypes";
 import { AuraState, AuraTransition } from "../processorTypes";
 import { HitTypePeriodic } from "@/lib/hittype/hittype";
 import { rotationTimelineProcessor } from "./rotationTimeline.processor";
@@ -147,5 +154,30 @@ describe("rotationTimelineProcessor healing", () => {
       ["tank", 300],
       ["mage", 150],
     ]);
+  });
+});
+
+describe("rotationTimelineProcessor cast starts", () => {
+  const base = { activity: [], activityCount: 0, isSynthetic: false };
+  const start = (offsetMilli: number, spellId: number, castTimeMilli: number): SpellStartProcessorEvent =>
+    ({ ...base, type: "spell_start", index: offsetMilli, offsetMilli, caster: PLAYER, target: BOSS, spell: { id: spellId, name: "Wrath" }, castTimeMilli, channelTimeMilli: 0, spellType: 0 }) as unknown as SpellStartProcessorEvent;
+  const go = (offsetMilli: number, spellId: number): SpellGoProcessorEvent =>
+    ({ ...base, type: "spell_go", index: offsetMilli, offsetMilli, caster: PLAYER, target: BOSS, spell: { id: spellId, name: "Wrath" }, numHits: 1, numMisses: 0, itemId: null, corpseOwner: null }) as SpellGoProcessorEvent;
+  const casts = (events: (SpellStartProcessorEvent | SpellGoProcessorEvent)[]) => {
+    const state = rotationTimelineProcessor.createState();
+    const ctx = context();
+    for (const e of events) rotationTimelineProcessor.processEvent(state, e, ENC, new Date(0), e.type, ctx);
+    return state.players.get(PLAYER)!.goCasts.map((c) => [c.spellId, c.startMs, c.endMs]);
+  };
+
+  it("keeps the start when another spell goes off mid-cast", () => {
+    expect(casts([start(38_800, 9912, 1500), go(39_500, 17670), go(40_300, 9912)])).toEqual([
+      [17670, 39_500, 39_500],
+      [9912, 38_800, 40_300],
+    ]);
+  });
+
+  it("drops a start whose cast never completed", () => {
+    expect(casts([start(1000, 9912, 1500), go(20_000, 9912)])).toEqual([[9912, 20_000, 20_000]]);
   });
 });

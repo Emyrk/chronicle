@@ -292,13 +292,26 @@ function newCast(
   };
 }
 
-/** Attach a pending "begins to cast" to the cast that completes it. */
-function completeCast(cast: TimelineCast, pending: PendingStart | null): void {
-  if (!pending || pending.spellId !== cast.spellId) return;
+/**
+ * A start this far past its cast time (or with no known cast time) is stale:
+ * the cast was cancelled without a fail line. Covers pushback with room to spare.
+ */
+const STALE_START_SLACK_MS = 5000;
+
+/**
+ * Attach a pending "begins to cast" to the cast that completes it. Returns
+ * whether the pending start is used up; another spell's cast (an instant proc
+ * or trinket mid-cast) leaves it waiting for its own completion.
+ */
+function completeCast(cast: TimelineCast, pending: PendingStart | null): boolean {
+  if (!pending) return false;
+  if (cast.endMs - pending.startMs > (pending.castTimeMs ?? STALE_START_SLACK_MS) + STALE_START_SLACK_MS) return true;
+  if (pending.spellId !== cast.spellId) return false;
   cast.startMs = pending.startMs;
   cast.castTimeMs = pending.castTimeMs ?? cast.endMs - pending.startMs;
   cast.channelTimeMs = pending.channelTimeMs;
   cast.channel = cast.channel || pending.channel;
+  return true;
 }
 
 export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, RotationTimelineEvent> = {
@@ -475,8 +488,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         const cast = newCast("spell_go", event.offsetMilli, event.offsetMilli, event.spell.id, event.spell.name, event.target);
         cast.itemId = event.itemId;
         if (event.target && event.target !== event.caster && context.players[event.target]) cast.onOtherPlayer = true;
-        completeCast(cast, s.pendingGo);
-        s.pendingGo = null;
+        if (completeCast(cast, s.pendingGo)) s.pendingGo = null;
         rememberCast(s.lastGoBySpell, cast, p.goCasts.length);
         p.goCasts.push(cast);
         return;
@@ -518,8 +530,7 @@ export const rotationTimelineProcessor: PanelProcessor<RotationTimelineResult, R
         const cast = newCast("cast", event.offsetMilli, event.offsetMilli, spellId, event.spell.name, event.target);
         cast.channel = event.action === CastAction.Channels;
         if (event.target && event.target !== event.caster && context.players[event.target]) cast.onOtherPlayer = true;
-        completeCast(cast, s.pendingText);
-        s.pendingText = null;
+        if (completeCast(cast, s.pendingText)) s.pendingText = null;
         rememberCast(s.lastTextBySpell, cast, p.textCasts.length);
         p.textCasts.push(cast);
         return;
