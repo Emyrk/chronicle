@@ -316,6 +316,7 @@ function PlayerTimelineContent({
         return {
           durationMs: override.showAsCooldown.durationMs ?? Math.max(0, spellDuration),
           color: override.color,
+          proc: override.proc,
         };
       }
       const curated = cooldownById.get(id);

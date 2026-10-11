@@ -285,7 +285,7 @@ export function PlayerTimelineRules({
                 <span className="text-foreground">{[...(o.names ?? []), ...(o.spellIds ?? []).map((id) => `#${id}`)].join(", ")}</span>
                 {o.showAsCooldown && (
                   <span>
-                    shown as a cooldown
+                    {o.proc ? "shown as a proc that tints the lane" : "shown as a cooldown"}
                     {o.showAsCooldown.durationMs != null ? ` (${ms(o.showAsCooldown.durationMs)})` : " (spell or buff duration)"}
                   </span>
                 )}

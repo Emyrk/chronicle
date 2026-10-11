@@ -280,6 +280,8 @@ describe("withConsumeCasts", () => {
     ]);
     const consumeCast = out.goCasts[1];
     expect(castKind(consumeCast, () => 0, () => null)).toBe("consume");
+    expect(castKind(cast(0), () => 0, () => ({ durationMs: 15_000 }))).toBe("cooldown");
+    expect(castKind(cast(0), () => 0, () => ({ durationMs: 15_000, proc: true }))).toBe("proc");
   });
 
   it("takes the tint duration from the buff the consumable applied", () => {

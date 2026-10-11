@@ -21,6 +21,11 @@ export interface SpellOverride {
    */
   showAsCooldown?: { durationMs?: number };
   /**
+   * With showAsCooldown: draw and label the spell as a proc (a dot on the rail)
+   * while still tinting the lane for its duration.
+   */
+  proc?: boolean;
+  /**
    * Never draw this spell's casts: the log writes it next to the spell that
    * matters (e.g. a talent trigger beside the effect it applies).
    */
@@ -38,8 +43,9 @@ export const SPELL_OVERRIDES: SpellOverride[] = [
     spellIds: [51442],
     flavor: ["nightmare-of-ursol"],
     showAsCooldown: {},
+    proc: true,
     color: "var(--color-school-nature)",
-    note: "Eclipse procs change a balance druid's damage enough to show their duration like a cooldown.",
+    note: "Eclipse procs change a balance druid's damage enough to tint the lane for their duration.",
   },
   {
     id: "arcane-eclipse",
@@ -47,8 +53,9 @@ export const SPELL_OVERRIDES: SpellOverride[] = [
     spellIds: [51443],
     flavor: ["nightmare-of-ursol"],
     showAsCooldown: {},
+    proc: true,
     color: "#3b82f6", // blue-500; the arcane school color is pink
-    note: "Eclipse procs change a balance druid's damage enough to show their duration like a cooldown.",
+    note: "Eclipse procs change a balance druid's damage enough to tint the lane for their duration.",
   },
   {
     id: "blood-tap",

@@ -266,10 +266,11 @@ export type CastKind = "cooldown" | "proc" | "consume" | "gcd";
 export function castKind(
   cast: TimelineCast,
   gcd: GcdLookup,
-  cooldownInfo: (spellId: number) => unknown,
+  cooldownInfo: (spellId: number) => { durationMs?: number; proc?: boolean } | null,
 ): CastKind {
   if (cast.consume) return "consume";
-  if (cooldownInfo(cast.spellId) != null) return "cooldown";
+  const info = cooldownInfo(cast.spellId);
+  if (info != null) return info.proc ? "proc" : "cooldown";
   if (cast.source === "aura" && cast.buffEndMs == null) return "proc"; // curated aura procs
   if (gcd(cast.spellId) === 0 && cast.endMs === cast.startMs && !cast.channelTimeMs) return "proc";
   return "gcd";

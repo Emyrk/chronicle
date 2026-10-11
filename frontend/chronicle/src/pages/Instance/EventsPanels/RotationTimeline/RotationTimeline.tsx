@@ -46,6 +46,8 @@ export interface CooldownInfo {
   durationMs: number;
   /** Fixed ring/tint color (from a spell override); otherwise one is assigned. */
   color?: string;
+  /** Drawn as a proc that still tints the lane (from a spell override). */
+  proc?: boolean;
 }
 
 export interface RotationTimelinePlayer {
@@ -703,10 +705,11 @@ function PlayerLanes({
   const visible = (startMs: number, endMs: number) => endMs - offsetMs >= vs - margin && startMs - offsetMs <= ve + margin;
 
   const kindOf = (c: TimelineCast) => castKind(c, gcd, cooldownInfo);
-  // Cooldowns and consumables tint the lane for their duration.
+  // Cooldowns, consumables and procs with a tint override tint the lane for their duration.
   const tintedCasts = casts.filter((c) => {
     const kind = kindOf(c);
-    return (kind === "cooldown" || kind === "consume") && visible(c.startMs, c.startMs + tintDurationMs(c));
+    const tints = kind === "cooldown" || kind === "consume" || (kind === "proc" && cooldownInfo(c.spellId)?.proc);
+    return tints && visible(c.startMs, c.startMs + tintDurationMs(c));
   });
   const { ends } = derived;
   const gcdCasts = casts.filter(
