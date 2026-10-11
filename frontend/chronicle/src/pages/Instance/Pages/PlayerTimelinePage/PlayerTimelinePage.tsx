@@ -28,7 +28,11 @@ import {
   withoutHiddenCasts,
   type TimelineMetric,
 } from "../../EventsPanels/RotationTimeline/derive";
-import { useRotationView, type RotationViewInitial } from "../../EventsPanels/RotationTimeline/useRotationView";
+import {
+  normalizeSpellName,
+  useRotationView,
+  type RotationViewInitial,
+} from "../../EventsPanels/RotationTimeline/useRotationView";
 import { useSmoothReplayTime } from "../../EventsPanels/RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../../EventsPanels/RotationTimeline/useSpellMeta";
 import { activeOverrides, findOverride } from "../../EventsPanels/RotationTimeline/spellOverrides";
@@ -37,6 +41,7 @@ import { AuraSection } from "./AuraSection";
 import { PanelTray } from "./PanelTray";
 import { defaultPlayers } from "./defaultPlayers";
 import { PlayerPicker } from "./PlayerPicker";
+import { raisedAuraOverrides, useRaisedAuras } from "./useRaisedAuras";
 import { PlayerTimelineRules, type CuratedCooldown } from "./PlayerTimelineRules";
 import { parsePlayerTimelineState, type PlayerTimelineState } from "./playerTimelineState";
 
@@ -267,8 +272,21 @@ function PlayerTimelineContent({
     });
   }, [onStateChange, encounterId, picked, view.align, metric, replaying, wholeFight, view.startMs, view.endMs, view.pinnedMs, view.follow, debuffTarget]);
 
-  // Manual spell mutations for this log's flavor (spellOverrides.ts).
-  const spellOverrides = useMemo(() => activeOverrides(instance.flavor ?? []), [instance.flavor]);
+  // Manual spell mutations for this log's flavor (spellOverrides.ts), plus the
+  // buffs the viewer raised from Buffs & debuffs.
+  const { raised, isRaised, toggleRaised } = useRaisedAuras();
+  const spellOverrides = useMemo(() => {
+    const idsByName = new Map<string, number[]>();
+    for (const guid of picked) {
+      for (const seg of (guid && result.players.get(guid)?.aurasOn) || []) {
+        if (seg.spellId == null) continue;
+        const ids = idsByName.get(normalizeSpellName(seg.spellName)) ?? [];
+        if (!ids.includes(seg.spellId)) ids.push(seg.spellId);
+        idsByName.set(normalizeSpellName(seg.spellName), ids);
+      }
+    }
+    return [...activeOverrides(instance.flavor ?? []), ...raisedAuraOverrides(raised, idsByName)];
+  }, [instance.flavor, raised, picked, result.players]);
   // Auras that count as procs for this log's format (auraProcs.ts).
   const auraProcs = useMemo(() => activeAuraProcs(instance.format), [instance.format]);
 
@@ -421,6 +439,8 @@ function PlayerTimelineContent({
             unitName={unitName}
             pickedTarget={debuffTarget}
             onPickTarget={setDebuffTarget}
+            isRaised={isRaised}
+            onToggleRaised={toggleRaised}
           />
         )}
       </RotationTimeline>

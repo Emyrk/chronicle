@@ -1,5 +1,6 @@
 import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronRight } from "lucide-react";
+import { ArrowUpToLine, ChevronRight, CircleHelp } from "lucide-react";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { useFriendlyClassBuffs } from "@/api/classBuffs";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip/SpellIconWithTooltip";
 import { cn } from "@/lib/utils";
@@ -141,9 +142,21 @@ interface AuraSectionProps {
   /** Debuff target the user picked, or null for the default (most damaged). */
   pickedTarget: string | null;
   onPickTarget: (guid: string) => void;
+  /** Buffs raised onto the cast timeline (useRaisedAuras); clicking a buff's name toggles it. */
+  isRaised?: (name: string) => boolean;
+  onToggleRaised?: (name: string) => void;
 }
 
-export function AuraSection({ players, view, spellMeta, unitName, pickedTarget, onPickTarget }: AuraSectionProps) {
+export function AuraSection({
+  players,
+  view,
+  spellMeta,
+  unitName,
+  pickedTarget,
+  onPickTarget,
+  isRaised,
+  onToggleRaised,
+}: AuraSectionProps) {
   const [open, setOpen] = useState(true);
   const { durationMs } = view;
   const classBuffs = useFriendlyClassBuffs();
@@ -227,7 +240,14 @@ export function AuraSection({ players, view, spellMeta, unitName, pickedTarget, 
             view.pinAt(view.startMs + (x / width) * span, (6 / width) * span);
           }}
         >
-          <AuraGroup title="Buffs" otherLabel="Other buffs" rows={buffs} {...groupProps} />
+          <AuraGroup
+            title="Buffs"
+            otherLabel="Other buffs"
+            rows={buffs}
+            isRaised={isRaised}
+            onToggleRaised={onToggleRaised}
+            {...groupProps}
+          />
           <div className="flex h-10 items-center gap-2 border-t border-border px-4 text-[11px] text-muted-foreground">
             <span className="text-[10px] uppercase tracking-wider">Debuffs on</span>
             {targets.length === 0 ? (
@@ -276,9 +296,12 @@ interface AuraGroupProps {
   P: (ms: number) => number;
   spellMeta: (spellId: number | null) => SpellMeta;
   onHover: (hovered: HoveredAura | null) => void;
+  isRaised?: (name: string) => boolean;
+  onToggleRaised?: (name: string) => void;
 }
 
-function AuraGroup({ title, otherLabel, rows, players, offsets, P, spellMeta, onHover }: AuraGroupProps) {
+function AuraGroup({ title, otherLabel, rows, players, offsets, P, spellMeta, onHover, isRaised, onToggleRaised }: AuraGroupProps) {
+  const rowProps = { offsets, P, spellMeta, onHover, isRaised, onToggleRaised };
   const [otherOpen, setOtherOpen] = useState(false);
   const empty = rows.key.length === 0 && rows.other.length === 0 && rows.flat.length === 0;
   return (
@@ -287,7 +310,7 @@ function AuraGroup({ title, otherLabel, rows, players, offsets, P, spellMeta, on
         <div className="flex h-5 items-end px-4 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{title}</div>
       )}
       {rows.key.map((row) => (
-        <AuraRowView key={row.key} row={row} offsets={offsets} P={P} spellMeta={spellMeta} onHover={onHover} />
+        <AuraRowView key={row.key} row={row} {...rowProps} />
       ))}
       {rows.flat.length > 0 && <WholeFightRow rows={rows.flat} players={players} spellMeta={spellMeta} />}
       {rows.other.length > 0 && (
@@ -303,7 +326,7 @@ function AuraGroup({ title, otherLabel, rows, players, offsets, P, spellMeta, on
       )}
       {otherOpen &&
         rows.other.map((row) => (
-          <AuraRowView key={row.key} row={row} offsets={offsets} P={P} spellMeta={spellMeta} onHover={onHover} compact />
+          <AuraRowView key={row.key} row={row} {...rowProps} compact />
         ))}
       {empty && <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">None</div>}
     </div>
@@ -318,19 +341,53 @@ interface AuraRowViewProps {
   onHover: (hovered: HoveredAura | null) => void;
   /** Smaller, indented rows for the "Other" group. */
   compact?: boolean;
+  isRaised?: (name: string) => boolean;
+  /** Clicking the name raises the buff onto the cast timeline, or drops it. */
+  onToggleRaised?: (name: string) => void;
 }
 
-function AuraRowView({ row, offsets, P, spellMeta, onHover, compact }: AuraRowViewProps) {
+function AuraRowView({ row, offsets, P, spellMeta, onHover, compact, isRaised, onToggleRaised }: AuraRowViewProps) {
   const grid = { gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` };
   const barH = compact ? 8 : 10;
   const meta = spellMeta(row.spellId);
+  const raisable = onToggleRaised != null && row.isBuff;
+  const raised = raisable && (isRaised?.(row.name) ?? false);
   return (
     <div className={cn("grid border-t border-border", compact ? "h-6" : "h-[30px]")} style={grid}>
-      <div className={cn("flex min-w-0 items-center gap-1.5 pr-3", compact ? "pl-7" : "pl-4")}>
+      <div
+        className={cn(
+          "group/raise flex min-w-0 items-center gap-1.5 pr-3",
+          compact ? "pl-7" : "pl-4",
+          raisable && "cursor-pointer hover:bg-muted/50",
+          raised && "bg-yellow-500/15 hover:bg-yellow-500/20",
+        )}
+        onClick={raisable ? () => onToggleRaised(row.name) : undefined}
+      >
         <AuraIcon meta={meta} name={row.name} size={compact ? 12 : 14} />
-        <span className="min-w-0 flex-1 truncate" title={`${row.name}${row.spellId ? ` #${row.spellId}` : ""}`}>
+        <span
+          className={cn("min-w-0 flex-1 truncate", raised && "text-yellow-200")}
+          title={`${row.name}${row.spellId ? ` #${row.spellId}` : ""}${raisable ? (raised ? " · click to drop it from the cast timeline" : " · click to raise it onto the cast timeline") : ""}`}
+        >
           {row.name}
         </span>
+        {raised && (
+          <HintTooltip>
+            <TooltipTrigger asChild>
+              <CircleHelp className="size-3 shrink-0 text-yellow-300" onClick={(e) => e.stopPropagation()} />
+            </TooltipTrigger>
+            <TooltipContent side="right" className="max-w-64">
+              <p className="font-semibold">Raised onto the cast timeline</p>
+              <p className="mt-1">
+                Each time {row.name} is gained it shows as a proc on the rail and tints the lane until it fades. Saved in
+                this browser for every log.
+              </p>
+              <p className="mt-1">Click the name again to drop it.</p>
+            </TooltipContent>
+          </HintTooltip>
+        )}
+        {raisable && !raised && (
+          <ArrowUpToLine className="size-3 shrink-0 text-muted-foreground opacity-0 group-hover/raise:opacity-100" aria-hidden />
+        )}
         <span className="flex gap-1.5 font-mono text-[10px]">
           {row.uptime.map((u, slot) => (
             <span key={slot} style={{ color: SLOT_COLORS[slot] }}>

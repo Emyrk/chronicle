@@ -25,6 +25,8 @@ export interface SpellOverride {
    * while still tinting the lane for its duration.
    */
   proc?: boolean;
+  /** Made in the browser: the viewer raised this buff from Buffs & debuffs. */
+  raised?: boolean;
   /**
    * Never draw this spell's casts: the log writes it next to the spell that
    * matters (e.g. a talent trigger beside the effect it applies).
