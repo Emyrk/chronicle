@@ -45,6 +45,8 @@ import type { StripType } from "./EventsPanels/Strips/types";
 import { PanelTimingProvider, PanelTimingDisplay, PanelTimingResetter } from "./EventsPanels/PanelTimingContext";
 import { ChartDataRegistryProvider } from "./EventsPanels/ChartDataRegistry";
 import { PanelExplainerView } from "./PanelExplainer";
+import { PlayerTimelineHelp } from "./Pages/PlayerTimelinePage/help/PlayerTimelineHelp";
+import { PLAYER_TIMELINE_HELP } from "./Pages/PlayerTimelinePage/help/callouts";
 import { RandomTip } from "@/components/RandomTip";
 import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceActionBar";
 import { InstanceHelpSheet } from "@/components/HelpSheet";
@@ -3291,6 +3293,11 @@ export function InstancePageView({
     onTogglePlayers: togglePlayersSelection,
   }), [instance, selectedEncounters, viewState.enemies, viewState.players, setInternalSelectedIds, togglePlayerSelection, togglePlayersSelection]);
   
+  // The Player Timeline page's help uses the same ?explain= URL, with its own view.
+  if ((explainerPanelType as string | null) === PLAYER_TIMELINE_HELP) {
+    return <PlayerTimelineHelp onExit={handleExplainerExit} />;
+  }
+
   // If explainer mode is active on desktop, show only the explainer view
   if (explainerPanelType && !isMobile) {
     return (

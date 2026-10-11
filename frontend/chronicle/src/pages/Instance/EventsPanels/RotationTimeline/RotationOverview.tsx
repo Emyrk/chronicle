@@ -133,6 +133,7 @@ export function RotationOverview({ series, lead, view }: RotationOverviewProps) 
       <div className="grid grid-cols-[minmax(0,1fr)_176px] gap-2.5">
         <div
           ref={ref}
+          data-help="overview"
           className="relative min-h-[76px] cursor-crosshair touch-none select-none rounded-sm border border-border bg-background"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -292,7 +293,10 @@ function Scoreboard({ series, lead, bin, timeMs, maxDps, pinned, onUnpin }: Scor
   const gap = series.length === 2 ? signed(dps[0] - dps[1]) : null;
   const leadText = leadValue != null ? signed(leadValue) : null;
   return (
-    <div className="flex flex-col justify-between gap-1 rounded-sm border border-border px-2.5 py-1.5 text-[11px] text-muted-foreground">
+    <div
+      data-help="scoreboard"
+      className="flex flex-col justify-between gap-1 rounded-sm border border-border px-2.5 py-1.5 text-[11px] text-muted-foreground"
+    >
       <div className="flex items-center justify-between">
         {pinned ? (
           <button

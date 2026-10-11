@@ -383,7 +383,7 @@ export function RotationTimeline({
         <div className="text-[15px] font-semibold">Rotation</div>
         {headerStart}
         <div className="flex-1" />
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div data-help="ignored" className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span>Ignored</span>
           {ignoredSpells.length === 0 && <span className="opacity-70">Ctrl+click a spell to hide it</span>}
           {ignoredSpells.map(({ name, icon, hidden }) => (
@@ -417,14 +417,16 @@ export function RotationTimeline({
             </HintTooltip>
           ))}
         </div>
-        <KeybindsButton keybinds={[...TIMELINE_KEYBINDS, ...extraKeybinds]} />
+        <span data-help="keybinds" className="flex">
+          <KeybindsButton keybinds={[...TIMELINE_KEYBINDS, ...extraKeybinds]} />
+        </span>
       </div>
 
       {showOverview && <RotationOverview series={overview.series} lead={overview.lead} view={view} />}
 
       {/* View toolbar, directly above the time axis it controls (design: Rotations 9c). */}
       <div className="flex min-h-10 flex-wrap items-center gap-4 border-b border-border bg-background px-4 py-1.5">
-        <Segmented label="Zoom" title="Visible time span">
+        <Segmented label="Zoom" title="Visible time span" help="zoom">
           <SegButton onClick={() => view.zoom(1.5)} title="Zoom out" ariaLabel="Zoom out">
             <Minus className="size-3.5" />
           </SegButton>
@@ -437,7 +439,7 @@ export function RotationTimeline({
             Fit
           </SegButton>
         </Segmented>
-        <div className="flex h-7 items-center rounded-[5px] border border-border bg-background p-0.5">
+        <div data-help="follow" className="flex h-7 items-center rounded-[5px] border border-border bg-background p-0.5">
           <button
             type="button"
             onClick={view.toggleFollow}
@@ -455,7 +457,7 @@ export function RotationTimeline({
           </button>
         </div>
         <span className="h-4 w-px bg-border" />
-        <Segmented label="Align">
+        <Segmented label="Align" help="align">
           <SegButton active={view.align === "pull"} disabled={replaying} onClick={() => view.setAlign("pull")}>
             Pull
           </SegButton>
@@ -468,7 +470,7 @@ export function RotationTimeline({
             First cast
           </SegButton>
         </Segmented>
-        <Segmented label="Icons" title="Icon size. Auto grows icons as you zoom in">
+        <Segmented label="Icons" title="Icon size. Auto grows icons as you zoom in" help="icons">
           <SegButton active={view.iconSize === "auto"} onClick={() => view.setIconSize("auto")} title="Auto">
             <span className="text-[10px] font-semibold tracking-wide">AUTO</span>
           </SegButton>
@@ -481,7 +483,7 @@ export function RotationTimeline({
       </div>
 
       {/* Ruler */}
-      <div className="grid h-6 border-b border-border" style={{ gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` }}>
+      <div data-help="ruler" className="grid h-6 border-b border-border" style={{ gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` }}>
         <div className="px-4 py-1 text-[11px] text-muted-foreground">
           {view.align === "pull" ? "Time since pull" : "Time since first cast"}
         </div>
@@ -515,6 +517,7 @@ export function RotationTimeline({
             return (
               <div key={d.player.guid}>
                 <div
+                  data-help="player-label"
                   className="flex flex-col justify-center gap-0.5 border-b border-border px-4"
                   style={{ height: layout.height }}
                 >
@@ -533,7 +536,10 @@ export function RotationTimeline({
                   </div>
                   {/* Idle % normally; around the indicator: last action, idle or busy, next action (design: Rotations 2a). */}
                   {near ? (
-                    <div className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap font-mono text-[10px]">
+                    <div
+                      data-help="readout"
+                      className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap font-mono text-[10px]"
+                    >
                       <span className="text-foreground">
                         ‹ {near.sinceLastMs != null ? `${(near.sinceLastMs / 1000).toFixed(1)}s ago` : "—"}
                       </span>
@@ -551,7 +557,7 @@ export function RotationTimeline({
                       </span>
                     </div>
                   ) : (
-                    <div className="font-mono text-[10px]">
+                    <div data-help="idle-pct" className="font-mono text-[10px]">
                       <span title={`${formatClock(d.stats.idleMs)} idle in total`}>{d.stats.idlePct.toFixed(1)}% idle</span>
                     </div>
                   )}
@@ -793,6 +799,7 @@ function PlayerLanes({
           return (
             <div key={`cdt-${c.startMs}-${i}`} className="pointer-events-none">
               <div
+                data-help="tint"
                 className="absolute inset-y-0 border-l"
                 style={{ left: `${left}%`, width: `${width}%`, borderColor: color, background: `color-mix(in oklab, ${color} 9%, transparent)` }}
               />
@@ -809,6 +816,7 @@ function PlayerLanes({
             return (
               <div
                 key={`busy-${b.startMs}`}
+                data-help="busy"
                 className="pointer-events-none absolute h-[3px] opacity-75"
                 style={{ left: `${left}%`, width: `${width}%`, top: railTop, background: SLOT_COLORS[slot] }}
               />
@@ -822,6 +830,7 @@ function PlayerLanes({
             return (
               <div key={`idle-${g.startMs}`} className="pointer-events-none">
                 <div
+                  data-help="idle-gap"
                   className="absolute border-t border-dashed border-destructive"
                   style={{ left: `${left}%`, width: `${width}%`, top: railTop + 1 }}
                 />
@@ -848,6 +857,7 @@ function PlayerLanes({
           <div className="pointer-events-none absolute inset-0 z-[5]">
             {(near.lastMs != null || near.nextMs != null) && (
               <div
+                data-help="bracket"
                 className="absolute h-px bg-muted-foreground opacity-60"
                 style={{
                   top: railTop + 1,
@@ -890,6 +900,7 @@ function PlayerLanes({
             return (
               <div
                 key={`bar-${c.startMs}-${i}`}
+                data-help={c.channel ? "channel-bar" : "cast-bar"}
                 // Cast time leads into the icon (it lands at the end); a channel trails out of it, notched per tick.
                 className={cn(
                   "pointer-events-none absolute h-1",
@@ -936,6 +947,7 @@ function PlayerLanes({
           return (
             <div key={`${c.startMs}-${i}`} style={{ opacity: opacityOf(c) }}>
               <div
+                data-help={castHelp(c, endMs, crit)}
                 className="absolute z-[1] rounded-[3px] bg-muted bg-cover bg-center"
                 style={{
                   left: `${iconLeft}%`,
@@ -950,6 +962,7 @@ function PlayerLanes({
               />
               {amount > 0 && (
                 <span
+                  data-help="amount"
                   className={cn(
                     "pointer-events-none absolute -translate-x-1/2 whitespace-nowrap font-mono",
                     crit ? "text-school-holy" : metric === "healing" ? "text-school-nature" : "text-muted-foreground",
@@ -972,6 +985,7 @@ function PlayerLanes({
             return (
               <div
                 key={`rail-${k.startMs}`}
+                data-help={["rail", multi && "cluster", ...new Set(k.events.map((e) => e.kind))].filter(Boolean).join(" ")}
                 className="absolute flex items-center"
                 style={{ left: `${P(k.startMs - offsetMs)}%`, top: railTop + 1 - cooldown / 2, height: cooldown, marginLeft: -cooldown / 2 }}
                 onPointerEnter={() => (multi ? onHoverCluster(k) : onHover(k.events[0].cast))}
@@ -1007,7 +1021,7 @@ function PlayerLanes({
           })}
       </div>
       {player.data.swings.length > 0 && (
-        <div className="relative border-b border-border" style={{ height: SWING_LANE_H }}>
+        <div data-help="swings" className="relative border-b border-border" style={{ height: SWING_LANE_H }}>
           {swings.map((s, i) => {
             const color = swingColor(s.hitType, s.amount);
             // A wider transparent hit area around the 2px tick makes it hoverable.
@@ -1027,6 +1041,12 @@ function PlayerLanes({
       )}
     </>
   );
+}
+
+/** data-help tokens for a cast icon, so the help page can point at each kind. */
+function castHelp(cast: TimelineCast, endMs: number, crit: boolean): string {
+  const kind = cast.failed ? "failed" : cast.channel ? "channel" : endMs > cast.startMs ? "hardcast" : "instant";
+  return ["cast", kind, crit && "crit"].filter(Boolean).join(" ");
 }
 
 /** Where a cast's icon sits: where a cast-time spell landed, or where a channel or instant began. */
@@ -1050,9 +1070,20 @@ function activeCooldownsAt(
   return out;
 }
 
-export function Segmented({ label, title, children }: { label: string; title?: string; children: ReactNode }) {
+export function Segmented({
+  label,
+  title,
+  help,
+  children,
+}: {
+  label: string;
+  title?: string;
+  /** data-help anchor for the help page's callouts. */
+  help?: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div data-help={help} className="flex items-center gap-1.5">
       {label && <span className="text-[11px] text-muted-foreground">{label}</span>}
       <div title={title} className="flex h-7 items-center gap-0.5 rounded-[5px] border border-border bg-background p-0.5">
         {children}
