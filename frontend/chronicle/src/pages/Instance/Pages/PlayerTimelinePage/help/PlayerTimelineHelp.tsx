@@ -313,7 +313,7 @@ export function PlayerTimelineHelp({ onExit }: PlayerTimelineHelpProps) {
 
       {showCallouts && described.length > 0 && (
         <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
-          <div className="flex w-full max-w-3xl flex-col gap-2 rounded-lg border border-border bg-card/95 px-4 py-3 shadow-2xl backdrop-blur">
+          <div className="flex w-full max-w-3xl flex-col gap-2 rounded-lg border-2 border-school-holy/70 bg-zinc-950/95 px-4 py-3 shadow-[0_0_0_4px_color-mix(in_oklab,var(--color-school-holy)_15%,transparent),0_12px_40px_rgba(0,0,0,0.7)] backdrop-blur">
             {described.map((c) => (
               <div key={c.anchor} className="flex gap-2.5 text-sm">
                 <span className="mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full bg-school-holy font-mono text-[10px] font-bold text-background">
