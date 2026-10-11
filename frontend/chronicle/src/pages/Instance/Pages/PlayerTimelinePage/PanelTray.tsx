@@ -45,7 +45,7 @@ export function PanelTray({ context, durationMs }: PanelTrayProps) {
         {opened && (
           <ChartDataRegistryProvider>
             {TRAY_PANEL_IDS.map((id, index) => (
-              <div key={id} className="h-[26rem] min-h-0">
+              <div key={id} className="h-[34rem] min-h-0">
                 <EventsPanel
                   panelType={types[index]}
                   onPanelTypeChange={(next) => setTypes((list) => setAt(list, index, next))}
