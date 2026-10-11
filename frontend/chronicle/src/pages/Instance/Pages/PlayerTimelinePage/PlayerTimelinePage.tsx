@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeftRight, FlaskConical } from "lucide-react";
+import { ArrowLeftRight, CircleHelp, FlaskConical } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { useCooldownSpells } from "@/api/cooldownSpells";
 import { useMyFavorites } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -41,6 +42,7 @@ import { AuraSection } from "./AuraSection";
 import { PanelTray } from "./PanelTray";
 import { defaultPlayers } from "./defaultPlayers";
 import { PlayerPicker } from "./PlayerPicker";
+import { PLAYER_TIMELINE_HELP } from "./help/callouts";
 import { raisedAuraOverrides, useRaisedAuras } from "./useRaisedAuras";
 import { PlayerTimelineRules, type CuratedCooldown } from "./PlayerTimelineRules";
 import { parsePlayerTimelineState, type PlayerTimelineState } from "./playerTimelineState";
@@ -173,6 +175,15 @@ function PlayerTimelineContent({
   // Window, pin and debuff target only make sense on the encounter they were saved on.
   const sameEncounter = saved?.encounterId === encounterId;
   const [debuffTarget, setDebuffTarget] = useState<string | null>(sameEncounter ? (saved?.debuffTarget ?? null) : null);
+  const [, setSearchParams] = useSearchParams();
+  const openHelp = useCallback(
+    () =>
+      setSearchParams((prev) => {
+        prev.set("explain", PLAYER_TIMELINE_HELP);
+        return prev;
+      }),
+    [setSearchParams],
+  );
   const [damageByPlayer, setDamageByPlayer] = useState<ReadonlyMap<string, number>>(new Map());
   const [healingByPlayer, setHealingByPlayer] = useState<ReadonlyMap<string, number>>(new Map());
 
@@ -399,7 +410,7 @@ function PlayerTimelineContent({
       >
         <ArrowLeftRight className="size-3.5" />
       </Button>
-      <Segmented label="" title="Damage or healing view">
+      <Segmented label="" title="Damage or healing view" help="metric">
         <SegButton active={metric === "damage"} onClick={() => setMetric("damage")} title="Damage: DPS, damage lead and damage per cast">
           DPS
         </SegButton>
@@ -412,6 +423,16 @@ function PlayerTimelineContent({
           incl. overheal
         </span>
       )}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={openHelp}
+        title="What everything on the timeline means, on an example fight"
+        className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+      >
+        <CircleHelp className="size-3.5" />
+        Help
+      </Button>
     </div>
   );
 

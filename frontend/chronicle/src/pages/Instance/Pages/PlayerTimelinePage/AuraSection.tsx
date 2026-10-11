@@ -145,6 +145,8 @@ interface AuraSectionProps {
   /** Buffs raised onto the cast timeline (useRaisedAuras); clicking a buff's name toggles it. */
   isRaised?: (name: string) => boolean;
   onToggleRaised?: (name: string) => void;
+  /** Start the "Other buffs/debuffs" groups expanded (the help page's example fight). */
+  otherOpenByDefault?: boolean;
 }
 
 export function AuraSection({
@@ -156,6 +158,7 @@ export function AuraSection({
   onPickTarget,
   isRaised,
   onToggleRaised,
+  otherOpenByDefault = false,
 }: AuraSectionProps) {
   const [open, setOpen] = useState(true);
   const { durationMs } = view;
@@ -206,12 +209,13 @@ export function AuraSection({
 
   const P = (ms: number) => ((ms - view.startMs) / Math.max(1, view.endMs - view.startMs)) * 100;
   const [hovered, setHovered] = useState<HoveredAura | null>(null);
-  const groupProps = { players, offsets, P, spellMeta, onHover: setHovered };
+  const groupProps = { players, offsets, P, spellMeta, onHover: setHovered, otherOpenByDefault };
 
   return (
     <div className="border-t border-border">
       <button
         type="button"
+        data-help="auras"
         onClick={() => setOpen(!open)}
         className="flex h-9 w-full items-center gap-2 bg-background px-4 text-left font-semibold hover:bg-muted/50"
       >
@@ -248,7 +252,10 @@ export function AuraSection({
             onToggleRaised={onToggleRaised}
             {...groupProps}
           />
-          <div className="flex h-10 items-center gap-2 border-t border-border px-4 text-[11px] text-muted-foreground">
+          <div
+            data-help="debuff-target"
+            className="flex h-10 items-center gap-2 border-t border-border px-4 text-[11px] text-muted-foreground"
+          >
             <span className="text-[10px] uppercase tracking-wider">Debuffs on</span>
             {targets.length === 0 ? (
               <span>No debuffs attributed to these players</span>
@@ -298,11 +305,24 @@ interface AuraGroupProps {
   onHover: (hovered: HoveredAura | null) => void;
   isRaised?: (name: string) => boolean;
   onToggleRaised?: (name: string) => void;
+  otherOpenByDefault: boolean;
 }
 
-function AuraGroup({ title, otherLabel, rows, players, offsets, P, spellMeta, onHover, isRaised, onToggleRaised }: AuraGroupProps) {
+function AuraGroup({
+  title,
+  otherLabel,
+  rows,
+  players,
+  offsets,
+  P,
+  spellMeta,
+  onHover,
+  isRaised,
+  onToggleRaised,
+  otherOpenByDefault,
+}: AuraGroupProps) {
   const rowProps = { offsets, P, spellMeta, onHover, isRaised, onToggleRaised };
-  const [otherOpen, setOtherOpen] = useState(false);
+  const [otherOpen, setOtherOpen] = useState(otherOpenByDefault);
   const empty = rows.key.length === 0 && rows.other.length === 0 && rows.flat.length === 0;
   return (
     <div>
@@ -355,6 +375,7 @@ function AuraRowView({ row, offsets, P, spellMeta, onHover, compact, isRaised, o
   return (
     <div className={cn("grid border-t border-border", compact ? "h-6" : "h-[30px]")} style={grid}>
       <div
+        data-help={raised ? "aura-label raised" : raisable ? "aura-label raisable" : "aura-label"}
         className={cn(
           "group/raise flex min-w-0 items-center gap-1.5 pr-3",
           compact ? "pl-7" : "pl-4",
@@ -388,7 +409,7 @@ function AuraRowView({ row, offsets, P, spellMeta, onHover, compact, isRaised, o
         {raisable && !raised && (
           <ArrowUpToLine className="size-3 shrink-0 text-muted-foreground opacity-0 group-hover/raise:opacity-100" aria-hidden />
         )}
-        <span className="flex gap-1.5 font-mono text-[10px]">
+        <span data-help="uptime" className="flex gap-1.5 font-mono text-[10px]">
           {row.uptime.map((u, slot) => (
             <span key={slot} style={{ color: SLOT_COLORS[slot] }}>
               {Math.round(u * 100)}%
@@ -408,6 +429,7 @@ function AuraRowView({ row, offsets, P, spellMeta, onHover, compact, isRaised, o
                 onPointerEnter={(e) => onHover({ row, slot, seg, anchor: anchorFrom(e) })}
                 onPointerMove={(e) => onHover({ row, slot, seg, anchor: anchorFrom(e) })}
                 onPointerLeave={() => onHover(null)}
+                data-help="aura-bar"
                 className="absolute border-l-2"
                 style={{
                   top: slot === 0 ? 3 : 4 + barH,
@@ -448,6 +470,7 @@ function WholeFightRow({ rows, players, spellMeta }: WholeFightRowProps) {
       : [{ label: players[0]?.name ?? "", color: SLOT_TEXT_COLORS[0], slot: 0, items: [...rows] }];
   return (
     <div
+      data-help="whole-fight"
       className="grid h-[30px] border-t border-border bg-muted/30"
       style={{ gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` }}
       title="Auras that were up for the entire fight or not at all, for every player"
