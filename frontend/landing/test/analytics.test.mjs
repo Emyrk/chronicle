@@ -7,6 +7,7 @@ const landingEntries = [
   "self-hosting/index.html",
   "support/index.html",
   "privacy/index.html",
+  "warcraft-logs/index.html",
 ];
 
 test("loads analytics from every landing entry", async () => {
