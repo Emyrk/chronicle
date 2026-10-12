@@ -24,6 +24,7 @@ func OnWhatsNew() string { return (&Service{}).Name() }
 // older or unknown persisted IDs are treated as unread.
 var releaseIDs = []string{
 	"custom-panels",
+	"player-timeline",
 }
 
 func CurrentID() string {

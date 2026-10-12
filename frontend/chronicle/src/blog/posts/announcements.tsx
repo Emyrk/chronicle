@@ -282,6 +282,32 @@ export function CooldownUsagePost({ post }: PostProps) {
   );
 }
 
+export function PlayerTimelinePost({ post }: PostProps) {
+  return (
+    <ShortPost post={post}>
+      <p>
+        <strong>Player Timeline</strong> is a new full-page view for understanding exactly what happened during a pull.
+        Compare two players second by second, or select just one player for a focused rotation review.
+      </p>
+      <p>
+        Open any raid, select one encounter, and choose <strong>Player Timeline</strong> from the preset bar. Chronicle
+        starts with two comparable players, and you can swap either one at any time.
+      </p>
+      <ul>
+        <li>Switch between DPS and HPS, with an overview that shows output and the lead between players</li>
+        <li>Zoom and pan from the full encounter down to individual casts, swings, cooldowns, and idle gaps</li>
+        <li>Inspect spell damage, targets, outcomes, active buffs, consumables, and debuffs at any moment</li>
+        <li>Follow the timeline during replay, or pin a moment so every lane stays aligned</li>
+        <li>Share the selected players and timeline setup with the rest of your raid</li>
+      </ul>
+      <p>
+        The page is in beta and every class has edge cases. Use the built-in <strong>Help</strong> view for an interactive,
+        annotated example, and send missing casts, procs, cooldowns, buffs, GCDs, or idle-time issues through Discord.
+      </p>
+    </ShortPost>
+  );
+}
+
 export function CustomPanelsPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
