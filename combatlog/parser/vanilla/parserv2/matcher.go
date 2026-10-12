@@ -600,6 +600,83 @@ func canonicalTalentTabs(input [3]messages.CombatantTalentTab, treeData *talents
 	return input
 }
 
+func canonicalCombatantTalents(input *combatant.Talents, class types.HeroClasses, treeData *talents.TalentTreeData) *combatant.Talents {
+	if input == nil || treeData == nil {
+		return input
+	}
+
+	classID, ok := talentClassID(class)
+	if !ok {
+		return input
+	}
+	classData, ok := treeData.Classes[classID]
+	if !ok {
+		return input
+	}
+	ordered := orderedTalentTabs(classData.Tabs)
+	if len(ordered) != len(input.Trees) {
+		return input
+	}
+
+	permutations := [][3]int{
+		{0, 1, 2}, {0, 2, 1}, {1, 0, 2},
+		{1, 2, 0}, {2, 0, 1}, {2, 1, 0},
+	}
+	var match [3]int
+	matches := 0
+	for _, permutation := range permutations {
+		matched := true
+		for canonicalIndex, inputIndex := range permutation {
+			if len(input.Trees[inputIndex]) != len(ordered[canonicalIndex].Talents) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			match = permutation
+			matches++
+		}
+	}
+	if matches != 1 {
+		return input
+	}
+
+	result := &combatant.Talents{}
+	for canonicalIndex, inputIndex := range match {
+		result.Summary[canonicalIndex] = input.Summary[inputIndex]
+		result.Trees[canonicalIndex] = input.Trees[inputIndex]
+		result.TabNames[canonicalIndex] = ordered[canonicalIndex].Name
+	}
+	return result
+}
+
+func talentClassID(class types.HeroClasses) (int32, bool) {
+	switch class {
+	case types.HeroClassesWARRIOR:
+		return 1, true
+	case types.HeroClassesPALADIN:
+		return 2, true
+	case types.HeroClassesHUNTER:
+		return 3, true
+	case types.HeroClassesROGUE:
+		return 4, true
+	case types.HeroClassesPRIEST:
+		return 5, true
+	case types.HeroClassesDEATHKNIGHT:
+		return 6, true
+	case types.HeroClassesSHAMAN:
+		return 7, true
+	case types.HeroClassesMAGE:
+		return 8, true
+	case types.HeroClassesWARLOCK:
+		return 9, true
+	case types.HeroClassesDRUID:
+		return 11, true
+	default:
+		return 0, false
+	}
+}
+
 func orderedTalentTabs(input []talents.TalentTabData) []talents.TalentTabData {
 	ordered := append([]talents.TalentTabData(nil), input...)
 	sort.Slice(ordered, func(i, j int) bool {
@@ -644,11 +721,13 @@ func (p *Parser) combatantInfo(ctx context.Context, ts time.Time, m *Matched) ([
 		talentsStr = ""
 	}
 
-	talents, err := combatant.ParseTalents(talentsStr)
+	playerTalents, err := combatant.ParseTalents(talentsStr)
 	if err != nil {
-		talents = nil
+		playerTalents = nil
 		p.logger.Error("parsing talents, setting to nil", "error", err)
 	}
+	_, treeData := parsectx.DatasetTalents(ctx)
+	playerTalents = canonicalCombatantTalents(playerTalents, class, treeData)
 
 	gear := combatant.ParseGear(strings.Split(gearStr, "&"))
 	if p.itemFetcher != nil {
@@ -667,7 +746,7 @@ func (p *Parser) combatantInfo(ctx context.Context, ts time.Time, m *Matched) ([
 			PetName:    petName,
 			Guild:      guild,
 			GearSetups: gear,
-			Talents:    talents,
+			Talents:    playerTalents,
 		},
 	})
 }

@@ -590,6 +590,33 @@ func TestCanonicalTalentTabsReordersLocalizedDruidTrees(t *testing.T) {
 	}, got)
 }
 
+func TestCanonicalCombatantTalentsReordersUnnamedDruidTrees(t *testing.T) {
+	t.Parallel()
+
+	input := &combatant.Talents{
+		Summary: [3]uint8{35, 5, 11},
+		Trees: [3][]uint8{
+			make([]uint8, 18),
+			make([]uint8, 16),
+			make([]uint8, 20),
+		},
+	}
+	treeData := &talents.TalentTreeData{Classes: map[int32]talents.ClassTalentData{
+		11: {Tabs: []talents.TalentTabData{
+			{Name: "Restoration", OrderIndex: 2, Talents: make([]talents.TalentEntry, 16)},
+			{Name: "Balance", OrderIndex: 0, Talents: make([]talents.TalentEntry, 20)},
+			{Name: "Feral Combat", OrderIndex: 1, Talents: make([]talents.TalentEntry, 18)},
+		}},
+	}}
+
+	got := canonicalCombatantTalents(input, types.HeroClassesDRUID, treeData)
+	require.Equal(t, [3]uint8{11, 35, 5}, got.Summary)
+	require.Equal(t, [3]string{"Balance", "Feral Combat", "Restoration"}, got.TabNames)
+	require.Len(t, got.Trees[0], 20)
+	require.Len(t, got.Trees[1], 18)
+	require.Len(t, got.Trees[2], 16)
+}
+
 func TestCanonicalTalentTabsLeavesAmbiguousSizesUnchanged(t *testing.T) {
 	t.Parallel()
 
