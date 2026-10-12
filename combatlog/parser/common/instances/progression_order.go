@@ -22,6 +22,7 @@ var raidProgressionOrder = map[string]int{
 	"Scarlet Monastery":       50,
 	"Molten Core":             100,
 	"Onyxia's Lair":           200,
+	"Onyxia Classic":          200,
 	"Blackwing Lair":          300,
 	"Zul'Gurub":               400,
 	"Ruins of Ahn'Qiraj":      500,
