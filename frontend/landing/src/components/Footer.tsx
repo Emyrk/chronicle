@@ -39,6 +39,14 @@ export function Footer() {
               </li>
               <li>
                 <a
+                  href="/warcraft-logs/"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Chronicle vs Warcraft Logs
+                </a>
+              </li>
+              <li>
+                <a
                   href={SELF_HOSTING_URL}
                   className="hover:text-foreground transition-colors"
                 >

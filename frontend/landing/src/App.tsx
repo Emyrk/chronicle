@@ -3,6 +3,7 @@ import { Footer } from "./components/Footer";
 import { SelfHostedRequirementsPage } from "./components/ForkRequirementsPage";
 import { SupportPage } from "./components/SupportPage";
 import { PrivacyPage } from "./components/PrivacyPage";
+import { WarcraftLogsComparisonPage } from "./components/WarcraftLogsComparisonPage";
 import { SupportRibbon } from "./components/SupportRibbon";
 import { useDiscovery } from "./hooks/useDiscovery";
 import { SERVERS, DISCOVERY_URLS } from "./data/servers";
@@ -18,6 +19,8 @@ export function App() {
   const isSupportPage = pathname.endsWith("/support");
   const isSelfHostingPage = pathname.endsWith("/self-hosting");
   const isPrivacyPage = pathname.endsWith("/privacy");
+  const isWarcraftLogsPage = pathname.endsWith("/warcraft-logs");
+  const isStandalonePage = isSupportPage || isSelfHostingPage || isPrivacyPage || isWarcraftLogsPage;
 
   let page = <HomePage />;
   if (isSupportPage) {
@@ -26,11 +29,13 @@ export function App() {
     page = <SelfHostedRequirementsPage />;
   } else if (isPrivacyPage) {
     page = <PrivacyPage />;
+  } else if (isWarcraftLogsPage) {
+    page = <WarcraftLogsComparisonPage />;
   }
 
   return (
     <div className="flex min-h-dvh flex-col">
-      {!isSupportPage && !isSelfHostingPage && !isPrivacyPage && <SupportRibbon />}
+      {!isStandalonePage && <SupportRibbon />}
       <main className="flex-1">{page}</main>
       <Footer />
     </div>

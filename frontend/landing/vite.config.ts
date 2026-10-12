@@ -70,6 +70,7 @@ export default defineConfig(({ mode }) => {
           selfHosting: "self-hosting/index.html",
           support: "support/index.html",
           privacy: "privacy/index.html",
+          warcraftLogs: "warcraft-logs/index.html",
         },
       },
     },

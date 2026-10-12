@@ -206,6 +206,44 @@ body {
   border-color: rgb(252 211 77 / 0.7);
 }
 
+@keyframes comparison-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.comparison-page {
+  background:
+    linear-gradient(180deg, rgb(18 22 24 / 0.2), rgb(15 15 15 / 0.72)),
+    var(--background);
+}
+
+.comparison-grid {
+  opacity: 0.18;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.06) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: linear-gradient(to bottom, black, transparent 72%);
+}
+
+.comparison-reveal {
+  animation: comparison-reveal 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.comparison-delay-1 {
+  animation-delay: 90ms;
+}
+
+.comparison-delay-2 {
+  animation-delay: 180ms;
+}
+
 @media (max-width: 639px) {
   .support-ribbon {
     border-radius: 9999px;
@@ -215,7 +253,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .support-ribbon,
   .support-ribbon-coin,
-  .support-ribbon-coin-spin {
+  .support-ribbon-coin-spin,
+  .comparison-reveal {
     animation: none;
   }
 
