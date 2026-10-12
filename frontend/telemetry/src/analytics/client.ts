@@ -193,11 +193,17 @@ function requireCompleteReport(report: GaReport | undefined, label: string): GaR
   return report;
 }
 
-function overviewRows(report: GaReport | undefined): [GaRow | undefined, GaRow | undefined] {
-  const rows = report?.rows ?? [];
-  const current = rows.find((row) => dimensionValue(row, 0) === "current") ?? rows[0];
-  const previous = rows.find((row) => dimensionValue(row, 0) === "previous") ?? rows[1];
-  return [current, previous];
+function requireOverviewRow(
+  report: GaReport | undefined,
+  label: string,
+  expectedMetricCount: number
+): GaRow {
+  const completeReport = requireCompleteReport(report, label);
+  const row = completeReport.rows?.[0];
+  if (!row || (row.metricValues?.length ?? 0) < expectedMetricCount) {
+    throw new Error(`GA4 ${label} report did not include the expected metrics`);
+  }
+  return row;
 }
 
 export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<AnalyticsDashboard> {
@@ -219,8 +225,7 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
       body: JSON.stringify({
         requests: [
           {
-            dateRanges: [ranges.current, ranges.previous],
-            dimensions: [{ name: "dateRange" }],
+            dateRanges: [ranges.current],
             metrics: metrics.map((name) => ({ name })),
             dimensionFilter: hostFilter(),
           },
@@ -281,6 +286,11 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
       body: JSON.stringify({
         requests: [
           {
+            dateRanges: [ranges.previous],
+            metrics: metrics.map((name) => ({ name })),
+            dimensionFilter: hostFilter(),
+          },
+          {
             dateRanges: [ranges.current],
             dimensions: [{ name: "hostName" }, { name: "pagePath" }],
             metrics: [{ name: "screenPageViews" }],
@@ -307,13 +317,15 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
 
   const [overviewReport, timeseriesReport, hostsReport, acquisitionReport, countriesReport] =
     payload.reports ?? [];
-  const [routesReportRaw, leaderboardLocationsReportRaw] = productPayload.reports ?? [];
+  const [previousOverviewReport, routesReportRaw, leaderboardLocationsReportRaw] =
+    productPayload.reports ?? [];
   const routesReport = requireCompleteReport(routesReportRaw, "route-family");
   const leaderboardLocationsReport = requireCompleteReport(
     leaderboardLocationsReportRaw,
     "leaderboard URL"
   );
-  const [current, previous] = overviewRows(overviewReport);
+  const current = requireOverviewRow(overviewReport, "current overview", metrics.length);
+  const previous = requireOverviewRow(previousOverviewReport, "previous overview", metrics.length);
 
   const timeseries: AnalyticsTimeseriesPoint[] = (timeseriesReport?.rows ?? []).map((row) => ({
     date: parseGaDate(dimensionValue(row, 0)),

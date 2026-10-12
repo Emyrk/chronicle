@@ -78,6 +78,24 @@ npx wrangler secret put GOOGLE_PRIVATE_KEY
 
 Do not configure `ANALYTICS_MOCK` in production. Cloudflare Access must cover `/internal/*`, including the analytics page and JSON API.
 
+## Production deployment and troubleshooting
+
+The production Worker authenticates directly to the Google Analytics Data API with a dedicated service account. This is separate from the local `analytics-mcp` setup, which uses Google Application Default Credentials.
+
+Before deploying live analytics:
+
+1. Add the exact `GOOGLE_CLIENT_EMAIL` service-account address as a **Viewer** under GA4 property `522770959` → **Property access management**.
+2. Store `GOOGLE_CLIENT_EMAIL` and `GOOGLE_PRIVATE_KEY` with `wrangler secret put`.
+3. Confirm `GA4_PROPERTY_ID = "522770959"` remains in `wrangler.toml` and that `ANALYTICS_MOCK` is absent.
+4. Deploy the Worker, run `npx wrangler tail`, and load `/internal/api/v1/analytics/dashboard?days=30` through Cloudflare Access.
+5. Confirm the endpoint returns `mock: false`, nonzero overview metrics, the GA4 reporting timezone, and route-family totals that reconcile to overview page views.
+
+Common live failures:
+
+- `403 User does not have sufficient permissions for this property`: the service account has not been granted Viewer access to the GA4 property, or a different service-account address was granted.
+- `400 Field dateRange is not a dimension`: standard GA4 reports cannot request `dateRange` as a dimension. Query the current and comparison periods as separate reports and combine them in the Worker.
+- A successful response with missing overview data should be treated as an application error. The client validates that both overview reports contain all expected metrics instead of displaying fabricated zeros.
+
 ## Validation and deployment
 
 ```sh
