@@ -15,9 +15,9 @@ func TestStatusUnreadComparison(t *testing.T) {
 		seen    string
 		unread  bool
 	}{
-		{name: "current release", current: "custom-panels", seen: "custom-panels", unread: false},
-		{name: "older release", current: "custom-panels", seen: "historical-performance", unread: true},
-		{name: "stale release", current: "custom-panels", seen: "removed-release", unread: true},
+		{name: "current release", current: "player-timeline", seen: "player-timeline", unread: false},
+		{name: "older release", current: "player-timeline", seen: "custom-panels", unread: true},
+		{name: "stale release", current: "player-timeline", seen: "removed-release", unread: true},
 		{name: "no releases", current: "", seen: "", unread: false},
 	}
 
@@ -28,5 +28,5 @@ func TestStatusUnreadComparison(t *testing.T) {
 		})
 	}
 
-	require.Equal(t, "custom-panels", CurrentID())
+	require.Equal(t, "player-timeline", CurrentID())
 }

@@ -14,6 +14,7 @@ import {
   HistoricalPerformancePost,
   ParsingPost,
   PhaseSelectionsPost,
+  PlayerTimelinePost,
   TalentBuilderRefreshPost,
   VehicleSupportPost,
   YoutubeSyncPost,
@@ -55,6 +56,17 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 export const BLOG_POSTS: readonly BlogPostDefinition[] = [
+  {
+    id: "player-timeline",
+    title: "Player Timeline is here",
+    description: "Compare rotations second by second across casts, damage or healing, cooldowns, consumables, buffs, debuffs, and idle time.",
+    publishedAt: "2026-10-12",
+    rarity: "legendary",
+    tag: "Feature",
+    icon: "inv_misc_pocketwatch_01",
+    flavor: "Find the moment the fight changed.",
+    component: PlayerTimelinePost,
+  },
   {
     id: "custom-panels",
     title: "Custom panels are now available",
