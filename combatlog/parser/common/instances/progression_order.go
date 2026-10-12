@@ -46,7 +46,7 @@ var raidProgressionOrder = map[string]int{
 	"Sunwell Plateau":      1300,
 
 	// Wrath of the Lich King names that do not replace a vanilla raid.
-	"Vault of Archavon":     2000,
+	"Vault of Archavon":     2001,
 	"Obsidian Sanctum":      2010,
 	"Eye of Eternity":       2020,
 	"Ulduar":                2100,
@@ -57,5 +57,5 @@ var raidProgressionOrder = map[string]int{
 
 var wrathRaidProgressionOrder = map[string]int{
 	"Naxxramas":     2030,
-	"Onyxia's Lair": 2150,
+	"Onyxia's Lair": 2000,
 }

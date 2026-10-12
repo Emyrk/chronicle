@@ -306,7 +306,7 @@ func TestInstanceDetailsRaidProgressionOrder(t *testing.T) {
 	require.Greater(t, tower.DerivedRaidProgressionOrders["Upper Tower of Karazhan"], tower.DerivedRaidProgressionOrders["Lower Tower of Karazhan"])
 	require.Greater(t, wrathNaxx.RaidProgressionOrder, vanillaNaxx.RaidProgressionOrder)
 	require.Greater(t, icecrown.RaidProgressionOrder, wrathNaxx.RaidProgressionOrder)
-	require.Greater(t, progressionOnyxia.DerivedRaidProgressionOrders["Onyxia's Lair"], ulduar.RaidProgressionOrder)
+	require.Less(t, progressionOnyxia.DerivedRaidProgressionOrders["Onyxia's Lair"], ulduar.RaidProgressionOrder)
 	require.Less(t, progressionOnyxia.DerivedRaidProgressionOrders["Onyxia Classic"], wrathNaxx.RaidProgressionOrder)
 }
 

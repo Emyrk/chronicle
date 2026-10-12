@@ -12,7 +12,7 @@ const supportedInstances = [
   { name: "Naxxramas", category: "raid", raid_progression_order: 2030 },
   { name: "Karazhan", category: "raid", raid_progression_order: 1000 },
   { name: "Ulduar", category: "raid", raid_progression_order: 2100 },
-  { name: "Onyxia's Lair", category: "raid", raid_progression_order: 2150 },
+  { name: "Onyxia's Lair", category: "raid", raid_progression_order: 2000 },
   {
     name: "Tower of Karazhan",
     category: "raid",
@@ -66,10 +66,14 @@ describe("raid progression order", () => {
     expect(getRaidLevel("Unknown Raid", supportedInstances)).toBeNull()
   })
 
-  it("places Wrath Onyxia after Ulduar", () => {
-    expect(
-      compareByRaidProgression("Onyxia's Lair", "Ulduar", supportedInstances),
-    ).toBeLessThan(0)
+  it("places Wrath Onyxia last in the level 80 group", () => {
+    const raids = ["Onyxia's Lair", "Naxxramas", "Ulduar"]
+
+    raids.sort((left, right) =>
+      compareByRaidProgression(left, right, supportedInstances),
+    )
+
+    expect(raids).toEqual(["Ulduar", "Naxxramas", "Onyxia's Lair"])
   })
 
   it("sorts unconfigured raids alphabetically after configured raids", () => {
