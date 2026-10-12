@@ -21,6 +21,10 @@ export interface TelemetryReport {
 
 export interface Env {
   DB: D1Database;
+  GA4_PROPERTY_ID?: string;
+  GOOGLE_CLIENT_EMAIL?: string;
+  GOOGLE_PRIVATE_KEY?: string;
+  ANALYTICS_MOCK?: string;
 }
 
 export type NoticeAudience = "public" | "admin";

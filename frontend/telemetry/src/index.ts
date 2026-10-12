@@ -6,6 +6,9 @@ import ingest from "./routes/ingest";
 import api from "./routes/api";
 import dashboard from "./dashboard/index";
 import noticesDashboard from "./dashboard/notices";
+import analytics from "./routes/analytics";
+import analyticsDashboard from "./dashboard/analytics";
+import analyticsExplore from "./dashboard/analyticsExplore";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -26,8 +29,11 @@ app.route("/", ingest);
 
 // Protected: dashboard + read API (behind Cloudflare Access on /internal/*).
 app.route("/", api);
+app.route("/", analytics);
 app.route("/", dashboard);
 app.route("/", noticesDashboard);
+app.route("/", analyticsDashboard);
+app.route("/", analyticsExplore);
 
 // Public root — friendly landing page matching Chronicle's brand.
 app.get("/", (c) => {

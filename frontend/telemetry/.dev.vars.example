@@ -1,0 +1,6 @@
+# Fast local dashboard preview without Google credentials.
+ANALYTICS_MOCK=true
+
+# To preview live GA4 data instead, remove ANALYTICS_MOCK and provide:
+# GOOGLE_CLIENT_EMAIL=telemetry@example-project.iam.gserviceaccount.com
+# GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"

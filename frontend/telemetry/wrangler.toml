@@ -8,6 +8,9 @@ routes = [
   { pattern = "telemetry.chronicleclassic.com", custom_domain = true }
 ]
 
+[vars]
+GA4_PROPERTY_ID = "522770959"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "chronicle-telemetry"
