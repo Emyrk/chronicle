@@ -286,6 +286,23 @@ func TestRankingEncounterSets(t *testing.T) {
 	require.Equal(t, moltenCore.ProgressionBosses, moltenCore.RankingEncounterSets[0].Encounters)
 }
 
+func TestInstanceDetailsRaidProgressionOrder(t *testing.T) {
+	t.Parallel()
+
+	vanilla := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla})
+	wrath := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorWrath})
+
+	vanillaNaxx := instanceDetailByName(t, vanilla, "Naxxramas")
+	tower := instanceDetailByName(t, RegistryForFlavor(nil, database.WoWFlavor{database.FlavorNightmareOfUrsol}), "Tower of Karazhan")
+	wrathNaxx := instanceDetailByName(t, wrath, "Naxxramas")
+	icecrown := instanceDetailByName(t, wrath, "Icecrown Citadel")
+
+	require.Positive(t, vanillaNaxx.RaidProgressionOrder)
+	require.Greater(t, tower.DerivedRaidProgressionOrders["Upper Tower of Karazhan"], tower.DerivedRaidProgressionOrders["Lower Tower of Karazhan"])
+	require.Greater(t, wrathNaxx.RaidProgressionOrder, vanillaNaxx.RaidProgressionOrder)
+	require.Greater(t, icecrown.RaidProgressionOrder, wrathNaxx.RaidProgressionOrder)
+}
+
 func TestInstanceDetailsCategories(t *testing.T) {
 	t.Parallel()
 

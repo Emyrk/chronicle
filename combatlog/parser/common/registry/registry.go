@@ -47,6 +47,11 @@ type Entry struct {
 	ProgressionBosses []string
 	// RankingEncounterSets are named encounter groups available on rankings pages.
 	RankingEncounterSets []instances.RankingEncounterSet
+	// RaidProgressionOrder controls raid display order on rankings pages.
+	// Higher values are later in progression and display first.
+	RaidProgressionOrder int
+	// DerivedRaidProgressionOrders overrides the order for derived instance names.
+	DerivedRaidProgressionOrders map[string]int
 	// DerivedNames are instance names selected from encounter data within a shared zone.
 	DerivedNames []string
 	// DerivedSpeedrunRules holds per-sub-instance speedrun rules when
@@ -101,10 +106,17 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 		BossCount:            bossCount,
 		ProgressionBosses:    progressionBosses,
 		RankingEncounterSets: rankingEncounterSets,
+		RaidProgressionOrder: instances.RaidProgressionOrder(f.Name, flavor),
 	}
 
 	if f.DerivedName != nil {
 		entry.DerivedNames = f.DerivedName(flavor).Names()
+		entry.DerivedRaidProgressionOrders = make(map[string]int, len(entry.DerivedNames))
+		for _, name := range entry.DerivedNames {
+			if order := instances.RaidProgressionOrder(name, flavor); order > 0 {
+				entry.DerivedRaidProgressionOrders[name] = order
+			}
+		}
 	}
 
 	// When DerivedRankings are present, collect per-sub-instance speedrun rules
@@ -329,18 +341,20 @@ type InstanceDetailUnit struct {
 
 // InstanceDetail holds enriched metadata for a registered instance.
 type InstanceDetail struct {
-	Name                        string
-	Comment                     string
-	Category                    instances.InstanceCategory
-	Fallback                    bool
-	ZoneNames                   []string
-	DerivedNames                []string
-	BossCount                   *int
-	ProgressionBosses           []string
-	RankingEncounterSets        []instances.RankingEncounterSet
-	RankedStartAfterRequirement string
-	Bosses                      []InstanceDetailUnit
-	Trash                       []InstanceDetailUnit
+	Name                         string
+	Comment                      string
+	Category                     instances.InstanceCategory
+	Fallback                     bool
+	ZoneNames                    []string
+	DerivedNames                 []string
+	BossCount                    *int
+	ProgressionBosses            []string
+	RankingEncounterSets         []instances.RankingEncounterSet
+	RaidProgressionOrder         int
+	DerivedRaidProgressionOrders map[string]int
+	RankedStartAfterRequirement  string
+	Bosses                       []InstanceDetailUnit
+	Trash                        []InstanceDetailUnit
 }
 
 func rankedStartAfterRequirement(entry *Entry) string {
@@ -492,18 +506,20 @@ func (r *Registry) AllInstanceDetails() []InstanceDetail {
 			sort.Slice(trash, func(i, j int) bool { return trash[i].Name < trash[j].Name })
 
 			result = append(result, InstanceDetail{
-				Name:                        entry.Name,
-				Comment:                     entry.Comment,
-				Category:                    entry.Category,
-				Fallback:                    fallback,
-				ZoneNames:                   entry.ZoneNames,
-				DerivedNames:                entry.DerivedNames,
-				BossCount:                   progressionBossCount(entry),
-				ProgressionBosses:           progressionBosses(entry),
-				RankingEncounterSets:        rankingEncounterSets(entry),
-				RankedStartAfterRequirement: rankedStartAfterRequirement(entry),
-				Bosses:                      bosses,
-				Trash:                       trash,
+				Name:                         entry.Name,
+				Comment:                      entry.Comment,
+				Category:                     entry.Category,
+				Fallback:                     fallback,
+				ZoneNames:                    entry.ZoneNames,
+				DerivedNames:                 entry.DerivedNames,
+				BossCount:                    progressionBossCount(entry),
+				ProgressionBosses:            progressionBosses(entry),
+				RankingEncounterSets:         rankingEncounterSets(entry),
+				RaidProgressionOrder:         entry.RaidProgressionOrder,
+				DerivedRaidProgressionOrders: entry.DerivedRaidProgressionOrders,
+				RankedStartAfterRequirement:  rankedStartAfterRequirement(entry),
+				Bosses:                       bosses,
+				Trash:                        trash,
 			})
 		}
 	}

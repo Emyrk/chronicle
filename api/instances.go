@@ -58,18 +58,20 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		result[i] = chroniclesdk.SupportedInstance{
-			Name:                        d.Name,
-			Comment:                     d.Comment,
-			Category:                    string(d.Category),
-			Fallback:                    d.Fallback,
-			ZoneNames:                   d.ZoneNames,
-			DerivedNames:                d.DerivedNames,
-			BossCount:                   d.BossCount,
-			ProgressionBosses:           d.ProgressionBosses,
-			RankingEncounterSets:        rankingEncounterSets,
-			RankedStartAfterRequirement: d.RankedStartAfterRequirement,
-			Bosses:                      bosses,
-			Trash:                       trash,
+			Name:                         d.Name,
+			Comment:                      d.Comment,
+			Category:                     string(d.Category),
+			Fallback:                     d.Fallback,
+			ZoneNames:                    d.ZoneNames,
+			DerivedNames:                 d.DerivedNames,
+			BossCount:                    d.BossCount,
+			ProgressionBosses:            d.ProgressionBosses,
+			RankingEncounterSets:         rankingEncounterSets,
+			RaidProgressionOrder:         d.RaidProgressionOrder,
+			DerivedRaidProgressionOrders: d.DerivedRaidProgressionOrders,
+			RankedStartAfterRequirement:  d.RankedStartAfterRequirement,
+			Bosses:                       bosses,
+			Trash:                        trash,
 		}
 	}
 	httpapi.Write(ctx, w, http.StatusOK, result)
