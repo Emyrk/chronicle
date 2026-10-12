@@ -16,7 +16,6 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	overviewmetricsversion "github.com/Emyrk/chronicle/internal/overviewmetrics"
-	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
@@ -26,17 +25,9 @@ import (
 func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Resolve per-tenant registry when a tenant is present and has a dataset.
-	reg := api.Chronicle.Registry()
-	if tenant := servicetenant.TenantFromContext(ctx); tenant != nil && tenant.DefaultDatasetID.Valid {
-		if ds, err := api.Opts.Dataset.GetDataset(ctx, tenant.DefaultDatasetID.UUID); err == nil {
-			flavor := database.FlavorFromStrings(ds.DefaultFlavor)
-			if len(flavor) > 0 {
-				reg = api.Chronicle.RegistryForFlavor(flavor)
-			}
-		}
-	}
-
+	// Use the same tenant-aware flavor resolution as the rest of the site so
+	// additional flavor tags affect supported instance metadata and ordering.
+	reg := api.Chronicle.RegistryForFlavor(api.resolvedSiteFlavor(ctx))
 	details := reg.AllInstanceDetails()
 
 	result := make([]chroniclesdk.SupportedInstance, len(details))
@@ -58,18 +49,20 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		result[i] = chroniclesdk.SupportedInstance{
-			Name:                        d.Name,
-			Comment:                     d.Comment,
-			Category:                    string(d.Category),
-			Fallback:                    d.Fallback,
-			ZoneNames:                   d.ZoneNames,
-			DerivedNames:                d.DerivedNames,
-			BossCount:                   d.BossCount,
-			ProgressionBosses:           d.ProgressionBosses,
-			RankingEncounterSets:        rankingEncounterSets,
-			RankedStartAfterRequirement: d.RankedStartAfterRequirement,
-			Bosses:                      bosses,
-			Trash:                       trash,
+			Name:                         d.Name,
+			Comment:                      d.Comment,
+			Category:                     string(d.Category),
+			Fallback:                     d.Fallback,
+			ZoneNames:                    d.ZoneNames,
+			DerivedNames:                 d.DerivedNames,
+			BossCount:                    d.BossCount,
+			ProgressionBosses:            d.ProgressionBosses,
+			RankingEncounterSets:         rankingEncounterSets,
+			RaidProgressionOrder:         d.RaidProgressionOrder,
+			DerivedRaidProgressionOrders: d.DerivedRaidProgressionOrders,
+			RankedStartAfterRequirement:  d.RankedStartAfterRequirement,
+			Bosses:                       bosses,
+			Trash:                        trash,
 		}
 	}
 	httpapi.Write(ctx, w, http.StatusOK, result)

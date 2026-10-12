@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Loader2, SlidersHorizontal, Check, Users, Globe, X, ChevronDown, Info, ArrowLeft, Trophy } from "lucide-react"
 import { getInstanceConfig, getInstanceBackground } from "../Logs/utils/instanceImages"
 import { getInstanceCategory } from "../Logs/utils/instanceCategory"
+import { compareByRaidProgression } from "../Logs/utils/instanceProgressionOrder"
 import { useSupportedInstances } from "@/api/queries"
 import { useState, useEffect, useCallback, useRef } from "react"
 import type { SpeedrunInstanceBoard, SpeedrunLeaderboardEntry, SpeedrunRulesResponse } from "../../api/typesGenerated"
@@ -316,6 +317,8 @@ function CriteriaModal({
 
   // Sync draft when modal opens
   useEffect(() => {
+    // The modal draft intentionally resets only when the modal opens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) setDraft(initial)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -518,7 +521,11 @@ function InstanceBrowser({
   onSelect: (board: SpeedrunInstanceBoard) => void
 }) {
   const { data: supportedInstances } = useSupportedInstances()
-  const raids = boards.filter((b) => getInstanceCategory(b.instance_name, supportedInstances) === "raid")
+  const raids = boards
+    .filter((b) => getInstanceCategory(b.instance_name, supportedInstances) === "raid")
+    .sort((left, right) =>
+      compareByRaidProgression(left.instance_name, right.instance_name, supportedInstances),
+    )
   const dungeons = boards.filter((b) => getInstanceCategory(b.instance_name, supportedInstances) !== "raid")
 
   if (boards.length === 0) {

@@ -7,6 +7,7 @@ import {
   getInstanceAbbrev,
 } from "@/pages/Logs/utils/instanceImages"
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory"
+import { compareByRaidProgression } from "@/pages/Logs/utils/instanceProgressionOrder"
 import { useSupportedInstances } from "@/api/queries"
 import type { RankingsInstanceSummary } from "@/api/typesGenerated"
 
@@ -46,9 +47,11 @@ export function RankingsLanding() {
     )
   }
 
-  const raids = summaries.filter(
-    (s) => getInstanceCategory(s.instance_name, supportedInstances) === "raid",
-  )
+  const raids = summaries
+    .filter((s) => getInstanceCategory(s.instance_name, supportedInstances) === "raid")
+    .sort((left, right) =>
+      compareByRaidProgression(left.instance_name, right.instance_name, supportedInstances),
+    )
   const dungeons = summaries.filter(
     (s) => getInstanceCategory(s.instance_name, supportedInstances) !== "raid",
   )

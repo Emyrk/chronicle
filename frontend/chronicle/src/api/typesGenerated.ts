@@ -3796,6 +3796,8 @@ export interface SupportedInstance {
     readonly boss_count?: number;
     readonly progression_bosses?: readonly string[];
     readonly ranking_encounter_sets?: readonly RankingEncounterSet[];
+    readonly raid_progression_order?: number;
+    readonly derived_raid_progression_orders?: Record<string, number>;
     readonly ranked_start_after_requirement?: string;
     readonly bosses?: readonly SupportedInstanceUnit[];
     readonly trash?: readonly SupportedInstanceUnit[];
@@ -4486,9 +4488,9 @@ export type WoWHeroRaces = "BloodElf" | "Draenei" | "Dwarf" | "Gnome" | "Goblin"
 export const WoWHeroRaceses: WoWHeroRaces[] = ["BloodElf", "Draenei", "Dwarf", "Gnome", "Goblin", "Human", "NightElf", "Orc", "Scourge", "Tauren", "Troll", "Unknown"];
 
 // From types/constants.go
-export type WoWHitType = 4 | 512 | 32768 | 2048 | 16384 | 1024 | 128 | 262144 | 16 | 256 | 2 | 8192 | 65536 | 32 | 0 | 1 | 4096 | 64 | 131072 | 8 | 2097152 | 1048576 | 524288;
+export type WoWHitType = 4 | 512 | 32768 | 2048 | 16384 | 1024 | 128 | 262144 | 16 | 256 | 2 | 8192 | 65536 | 4194304 | 32 | 0 | 1 | 4096 | 64 | 131072 | 8 | 2097152 | 1048576 | 524288;
 
-export const WoWHitTypes: WoWHitType[] = [4, 512, 32768, 2048, 16384, 1024, 128, 262144, 16, 256, 2, 8192, 65536, 32, 0, 1, 4096, 64, 131072, 8, 2097152, 1048576, 524288];
+export const WoWHitTypes: WoWHitType[] = [4, 512, 32768, 2048, 16384, 1024, 128, 262144, 16, 256, 2, 8192, 65536, 4194304, 32, 0, 1, 4096, 64, 131072, 8, 2097152, 1048576, 524288];
 
 // From chroniclesdk/log.go
 export interface WoWInstance {
