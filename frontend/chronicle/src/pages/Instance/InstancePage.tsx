@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Loader2, Youtube, Timer, TriangleAlert } from "lucide-react";
 import { useInstance, useInstanceYoutube, useAuthorizationCheck } from "@/api/queries";
@@ -19,6 +19,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { TimeRangeProvider } from "./TimeRangeContext";
 import { TimeRangeController } from "./TimeRangeController";
 import { useTenantGate } from "./TenantGate";
+import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 
 // Types for the Instance page
 export interface EnemyUnit {
@@ -260,7 +261,7 @@ function InstancePageInner({
   selectedEncounterIds?: string[];
   onSelectEncounters: (ids: string[] | null) => void;
   youtubeData: { url: string; results: readonly import("@/api/typesGenerated").VideoTimestamp[] } | null | undefined;
-  selectedEncounterTimes: { start: string | undefined; end: string | undefined };
+  selectedEncounterTimes: SelectedEncounterTimes;
   logDetailUrl?: string;
   rawEncounters?: readonly import("@/api/typesGenerated").WoWEncounterWithHostiles[];
   canAdminLogs?: boolean;
@@ -270,7 +271,8 @@ function InstancePageInner({
   const [showYoutube, setShowYoutube] = useState(false);
   const [showReplayPanel, setShowReplayPanel] = useState(false);
   const [showTimeRange, setShowTimeRange] = useState(false);
-  const { setEncounterBounds, enabled: syncEnabled } = useSyncModeContext();
+  const { setEncounterBounds, setTimestamp, enabled: syncEnabled } = useSyncModeContext();
+  const previousEncounterTimesRef = useRef(selectedEncounterTimes);
   const isMobile = useIsMobile();
   // Replay is disabled on mobile - never show the panel there
   const replayPanelVisible = showReplayPanel && !isMobile;
@@ -280,17 +282,27 @@ function InstancePageInner({
   // One-shot jiggle to acknowledge the Replay button was clicked.
   const [replayJiggle, setReplayJiggle] = useState(false);
   
-  // Update sync mode encounter bounds when selection changes
+  // Update sync mode encounter bounds when selection changes. If replay is
+  // already active, reset its cursor to the new selection's start.
   useEffect(() => {
+    const resetTimestamp = getReplayResetTimestamp(
+      previousEncounterTimesRef.current,
+      selectedEncounterTimes,
+      syncEnabled,
+    );
+
     if (selectedEncounterTimes.start && selectedEncounterTimes.end) {
       setEncounterBounds({
         start: new Date(selectedEncounterTimes.start),
         end: new Date(selectedEncounterTimes.end),
       });
+      if (resetTimestamp) setTimestamp(resetTimestamp);
     } else {
       setEncounterBounds(null);
     }
-  }, [selectedEncounterTimes.start, selectedEncounterTimes.end, setEncounterBounds]);
+
+    previousEncounterTimesRef.current = selectedEncounterTimes;
+  }, [selectedEncounterTimes, setEncounterBounds, setTimestamp, syncEnabled]);
   
   return (
     <>
