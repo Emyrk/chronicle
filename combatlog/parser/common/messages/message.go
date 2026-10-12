@@ -224,7 +224,7 @@ type CombatantTalents struct {
 
 type CombatantTalentTab struct {
 	TabName     string
-	PointsSpent int
+	TalentCount int
 	RankDigits  string
 }
 

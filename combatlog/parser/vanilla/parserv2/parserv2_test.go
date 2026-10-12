@@ -566,6 +566,49 @@ func TestJudgementOfLightCreditsTarget(t *testing.T) {
 	require.Equal(t, heal.Target, heal.Caster)
 }
 
+func TestCanonicalTalentTabsReordersLocalizedDruidTrees(t *testing.T) {
+	t.Parallel()
+
+	input := [3]messages.CombatantTalentTab{
+		{TabName: "야성", TalentCount: 18, RankDigits: "503030213232021521"},
+		{TabName: "복원", TalentCount: 16, RankDigits: "0500000000000000"},
+		{TabName: "조화", TalentCount: 20, RankDigits: "01400032010000000000"},
+	}
+	treeData := &talents.TalentTreeData{Classes: map[int32]talents.ClassTalentData{
+		11: {Tabs: []talents.TalentTabData{
+			{Name: "Restoration", OrderIndex: 2, Talents: make([]talents.TalentEntry, 16)},
+			{Name: "Balance", OrderIndex: 0, Talents: make([]talents.TalentEntry, 20)},
+			{Name: "Feral Combat", OrderIndex: 1, Talents: make([]talents.TalentEntry, 18)},
+		}},
+	}}
+
+	got := canonicalTalentTabs(input, treeData)
+	require.Equal(t, [3]messages.CombatantTalentTab{
+		{TabName: "Balance", TalentCount: 20, RankDigits: "01400032010000000000"},
+		{TabName: "Feral Combat", TalentCount: 18, RankDigits: "503030213232021521"},
+		{TabName: "Restoration", TalentCount: 16, RankDigits: "0500000000000000"},
+	}, got)
+}
+
+func TestCanonicalTalentTabsLeavesAmbiguousSizesUnchanged(t *testing.T) {
+	t.Parallel()
+
+	input := [3]messages.CombatantTalentTab{
+		{TabName: "로컬1", TalentCount: 17, RankDigits: strings.Repeat("0", 17)},
+		{TabName: "로컬2", TalentCount: 16, RankDigits: strings.Repeat("0", 16)},
+		{TabName: "로컬3", TalentCount: 16, RankDigits: strings.Repeat("0", 16)},
+	}
+	treeData := &talents.TalentTreeData{Classes: map[int32]talents.ClassTalentData{
+		2: {Tabs: []talents.TalentTabData{
+			{Name: "Holy", OrderIndex: 0, Talents: make([]talents.TalentEntry, 17)},
+			{Name: "Protection", OrderIndex: 1, Talents: make([]talents.TalentEntry, 16)},
+			{Name: "Retribution", OrderIndex: 2, Talents: make([]talents.TalentEntry, 16)},
+		}},
+	}}
+
+	require.Equal(t, input, canonicalTalentTabs(input, treeData))
+}
+
 func TestAuraCastCorrelation(t *testing.T) {
 	t.Parallel()
 

@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
@@ -19,6 +21,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/Masterminds/semver"
@@ -482,8 +485,8 @@ func (p *Parser) combatantTransmog(ctx context.Context, ts time.Time, m *Matched
 }
 
 // COMBATANT_TALENTS: guid|playerName|tab1|tab2|tab3
-// Each tab: TabName;pointsSpent;rankDigits
-func (p *Parser) combatantTalents(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
+// Each tab: TabName;talentCount;rankDigits
+func (p *Parser) combatantTalents(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	id := m.Guid()
 	name := m.String()
 
@@ -494,13 +497,13 @@ func (p *Parser) combatantTalents(_ context.Context, ts time.Time, m *Matched) (
 		if len(parts) != 3 {
 			return nil, fmt.Errorf("invalid talent tab format: %q", raw)
 		}
-		pts, err := strconv.Atoi(parts[1])
+		talentCount, err := strconv.Atoi(parts[1])
 		if err != nil {
-			return nil, fmt.Errorf("invalid points spent in talent tab: %w", err)
+			return nil, fmt.Errorf("invalid talent count in talent tab: %w", err)
 		}
 		tabs[i] = messages.CombatantTalentTab{
 			TabName:     parts[0],
-			PointsSpent: pts,
+			TalentCount: talentCount,
 			RankDigits:  parts[2],
 		}
 	}
@@ -509,12 +512,100 @@ func (p *Parser) combatantTalents(_ context.Context, ts time.Time, m *Matched) (
 		return nil, err
 	}
 
+	_, treeData := parsectx.DatasetTalents(ctx)
+	tabs = canonicalTalentTabs(tabs, treeData)
+
 	return set(&messages.CombatantTalents{
 		MessageBase: messages.Base(ts),
 		Guid:        id,
 		PlayerName:  name,
 		Tabs:        tabs,
 	})
+}
+
+// canonicalTalentTabs normalizes addon-provided tab order to the dataset's
+// canonical order. Some localized clients emit the three tabs in a different
+// order, so treating their positions as Balance/Feral/Restoration (and similar)
+// corrupts both specialization inference and the displayed talent build.
+func canonicalTalentTabs(input [3]messages.CombatantTalentTab, treeData *talents.TalentTreeData) [3]messages.CombatantTalentTab {
+	if treeData == nil {
+		return input
+	}
+
+	// Exact tab names are authoritative when the client and dataset use the same locale.
+	for _, classData := range treeData.Classes {
+		ordered := orderedTalentTabs(classData.Tabs)
+		if len(ordered) != len(input) {
+			continue
+		}
+		var result [3]messages.CombatantTalentTab
+		used := [3]bool{}
+		matched := true
+		for canonicalIndex, tab := range ordered {
+			found := -1
+			for inputIndex, candidate := range input {
+				if !used[inputIndex] && strings.EqualFold(candidate.TabName, tab.Name) {
+					found = inputIndex
+					break
+				}
+			}
+			if found < 0 {
+				matched = false
+				break
+			}
+			used[found] = true
+			result[canonicalIndex] = input[found]
+			result[canonicalIndex].TabName = tab.Name
+		}
+		if matched {
+			return result
+		}
+	}
+
+	// Localized names cannot be compared to the English dataset. The number of
+	// rank digits still identifies the tabs for classes whose three tree sizes
+	// have exactly one possible dataset match. Ambiguous matches are left alone.
+	permutations := [][3]int{
+		{0, 1, 2}, {0, 2, 1}, {1, 0, 2},
+		{1, 2, 0}, {2, 0, 1}, {2, 1, 0},
+	}
+	var result [3]messages.CombatantTalentTab
+	matches := 0
+	for _, classData := range treeData.Classes {
+		ordered := orderedTalentTabs(classData.Tabs)
+		if len(ordered) != len(input) {
+			continue
+		}
+		for _, permutation := range permutations {
+			matched := true
+			for canonicalIndex, inputIndex := range permutation {
+				if len(input[inputIndex].RankDigits) != len(ordered[canonicalIndex].Talents) {
+					matched = false
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+			matches++
+			for canonicalIndex, inputIndex := range permutation {
+				result[canonicalIndex] = input[inputIndex]
+				result[canonicalIndex].TabName = ordered[canonicalIndex].Name
+			}
+		}
+	}
+	if matches == 1 {
+		return result
+	}
+	return input
+}
+
+func orderedTalentTabs(input []talents.TalentTabData) []talents.TalentTabData {
+	ordered := append([]talents.TalentTabData(nil), input...)
+	sort.Slice(ordered, func(i, j int) bool {
+		return ordered[i].OrderIndex < ordered[j].OrderIndex
+	})
+	return ordered
 }
 
 func (p *Parser) combatantInfo(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
