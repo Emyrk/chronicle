@@ -7,7 +7,10 @@ import {
   getInstanceAbbrev,
 } from "@/pages/Logs/utils/instanceImages"
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory"
-import { compareByRaidProgression } from "@/pages/Logs/utils/instanceProgressionOrder"
+import {
+  compareByRaidProgression,
+  groupByRaidLevel,
+} from "@/pages/Logs/utils/instanceProgressionOrder"
 import { useSupportedInstances } from "@/api/queries"
 import type { RankingsInstanceSummary } from "@/api/typesGenerated"
 
@@ -52,6 +55,11 @@ export function RankingsLanding() {
     .sort((left, right) =>
       compareByRaidProgression(left.instance_name, right.instance_name, supportedInstances),
     )
+  const raidGroups = groupByRaidLevel(
+    raids,
+    (raid) => raid.instance_name,
+    supportedInstances,
+  )
   const dungeons = summaries.filter(
     (s) => getInstanceCategory(s.instance_name, supportedInstances) !== "raid",
   )
@@ -122,10 +130,17 @@ export function RankingsLanding() {
 
   return (
     <div className="space-y-6">
-      {raids.length > 0 && (
-        <section className="space-y-3">
+      {raidGroups.length > 0 && (
+        <section className="space-y-5">
           <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
-          {renderGrid(raids)}
+          {raidGroups.map((group) => (
+            <div key={group.level ?? "other"} className="space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
+                {group.level ? `Level ${group.level}` : "Other"}
+              </h3>
+              {renderGrid(group.items)}
+            </div>
+          ))}
         </section>
       )}
 

@@ -3,7 +3,10 @@ import { useQuery } from "@tanstack/react-query"
 import { Loader2, SlidersHorizontal, Check, Users, Globe, X, ChevronDown, Info, ArrowLeft, Trophy } from "lucide-react"
 import { getInstanceConfig, getInstanceBackground } from "../Logs/utils/instanceImages"
 import { getInstanceCategory } from "../Logs/utils/instanceCategory"
-import { compareByRaidProgression } from "../Logs/utils/instanceProgressionOrder"
+import {
+  compareByRaidProgression,
+  groupByRaidLevel,
+} from "../Logs/utils/instanceProgressionOrder"
 import { useSupportedInstances } from "@/api/queries"
 import { useState, useEffect, useCallback, useRef } from "react"
 import type { SpeedrunInstanceBoard, SpeedrunLeaderboardEntry, SpeedrunRulesResponse } from "../../api/typesGenerated"
@@ -526,6 +529,11 @@ function InstanceBrowser({
     .sort((left, right) =>
       compareByRaidProgression(left.instance_name, right.instance_name, supportedInstances),
     )
+  const raidGroups = groupByRaidLevel(
+    raids,
+    (raid) => raid.instance_name,
+    supportedInstances,
+  )
   const dungeons = boards.filter((b) => getInstanceCategory(b.instance_name, supportedInstances) !== "raid")
 
   if (boards.length === 0) {
@@ -538,8 +546,8 @@ function InstanceBrowser({
 
   return (
     <div className="space-y-6">
-      {raids.length > 0 && (
-        <section className="space-y-3">
+      {raidGroups.length > 0 && (
+        <section className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-baseline gap-3">
               <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
@@ -547,11 +555,18 @@ function InstanceBrowser({
             </div>
             <SpeedrunTimingToggle value={timing} onChange={onTimingChange} />
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {raids.map((board) => (
-              <InstanceCard key={`${board.instance_name}-${board.difficulty_name}`} board={board} timing={timing} onSelect={onSelect} />
-            ))}
-          </div>
+          {raidGroups.map((group) => (
+            <div key={group.level ?? "other"} className="space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
+                {group.level ? `Level ${group.level}` : "Other"}
+              </h3>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {group.items.map((board) => (
+                  <InstanceCard key={`${board.instance_name}-${board.difficulty_name}`} board={board} timing={timing} onSelect={onSelect} />
+                ))}
+              </div>
+            </div>
+          ))}
         </section>
       )}
       {dungeons.length > 0 && (

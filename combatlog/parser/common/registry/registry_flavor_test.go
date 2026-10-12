@@ -295,12 +295,19 @@ func TestInstanceDetailsRaidProgressionOrder(t *testing.T) {
 	vanillaNaxx := instanceDetailByName(t, vanilla, "Naxxramas")
 	tower := instanceDetailByName(t, RegistryForFlavor(nil, database.WoWFlavor{database.FlavorNightmareOfUrsol}), "Tower of Karazhan")
 	wrathNaxx := instanceDetailByName(t, wrath, "Naxxramas")
+	ulduar := instanceDetailByName(t, wrath, "Ulduar")
 	icecrown := instanceDetailByName(t, wrath, "Icecrown Citadel")
+	progressionOnyxia := instanceDetailByName(t, RegistryForFlavor(nil, database.WoWFlavor{
+		database.FlavorWrath,
+		database.FlavorAzerothcoreProgression,
+	}), "Onyxia's Lair")
 
 	require.Positive(t, vanillaNaxx.RaidProgressionOrder)
 	require.Greater(t, tower.DerivedRaidProgressionOrders["Upper Tower of Karazhan"], tower.DerivedRaidProgressionOrders["Lower Tower of Karazhan"])
 	require.Greater(t, wrathNaxx.RaidProgressionOrder, vanillaNaxx.RaidProgressionOrder)
 	require.Greater(t, icecrown.RaidProgressionOrder, wrathNaxx.RaidProgressionOrder)
+	require.Greater(t, progressionOnyxia.DerivedRaidProgressionOrders["Onyxia's Lair"], ulduar.RaidProgressionOrder)
+	require.Less(t, progressionOnyxia.DerivedRaidProgressionOrders["Onyxia Classic"], wrathNaxx.RaidProgressionOrder)
 }
 
 func TestInstanceDetailsCategories(t *testing.T) {
@@ -334,6 +341,8 @@ func TestInstanceDetailsCategories(t *testing.T) {
 
 	require.Equal(t, instances.InstanceCategoryDungeon, categoryFor(database.WoWFlavor{database.FlavorVanilla}, "Scarlet Monastery"))
 	require.Equal(t, instances.InstanceCategoryRaid, categoryFor(database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, "Scarlet Monastery"))
+	require.Equal(t, instances.InstanceCategoryRaid, categoryFor(database.WoWFlavor{database.FlavorTBC}, "Karazhan"))
+	require.Equal(t, instances.InstanceCategoryRaid, categoryFor(database.WoWFlavor{database.FlavorWrath}, "Sunwell Plateau"))
 }
 
 func instanceDetailByName(t *testing.T, reg *Registry, name string) InstanceDetail {

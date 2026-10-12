@@ -14,8 +14,10 @@ func TestRaidProgressionOrder(t *testing.T) {
 	wrath := database.WoWFlavor{database.FlavorWrath}
 
 	require.Greater(t, RaidProgressionOrder("Naxxramas", vanilla), RaidProgressionOrder("Molten Core", vanilla))
+	require.Equal(t, RaidProgressionOrder("Onyxia's Lair", vanilla), RaidProgressionOrder("Onyxia Classic", vanilla))
 	require.Greater(t, RaidProgressionOrder("Upper Tower of Karazhan", vanilla), RaidProgressionOrder("Lower Tower of Karazhan", vanilla))
 	require.Greater(t, RaidProgressionOrder("Icecrown Citadel", wrath), RaidProgressionOrder("Naxxramas", wrath))
+	require.Greater(t, RaidProgressionOrder("Onyxia's Lair", wrath), RaidProgressionOrder("Ulduar", wrath))
 	require.Greater(t, RaidProgressionOrder("Naxxramas", wrath), RaidProgressionOrder("Naxxramas", vanilla))
 	require.Zero(t, RaidProgressionOrder("Deadmines", vanilla))
 	require.Zero(t, RaidProgressionOrder("Unknown Raid", vanilla))
