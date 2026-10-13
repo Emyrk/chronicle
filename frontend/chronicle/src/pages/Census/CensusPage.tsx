@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronDown, Users, X } from "lucide-react";
+import { AdSlot } from "@/components/Ads/AdSlot";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCensus, useRealms, useSiteConfig } from "@/api/queries";
 import { PlayersTab } from "./PlayersTab";
@@ -129,60 +130,68 @@ export function CensusPage() {
   const { data: censusData, isLoading } = useCensus({ days, realmIds });
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-      {/* Header */}
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Users className="h-6 w-6" />
-          Census
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Player population statistics based on combat log activity
-        </p>
+    <div className="mx-auto flex w-full max-w-[2080px] items-start justify-center gap-6 px-4 py-8">
+      <div className="hidden self-stretch 2xl:block">
+        <AdSlot placement="census-left-rail" format="rail" railLayout="paired" />
       </div>
 
-      {/* Shared controls */}
-      <div className="flex flex-wrap items-center gap-4">
-        {/* Day presets */}
-        <div className="flex items-center gap-1 rounded-lg border bg-muted/50 p-1">
-          {DAY_PRESETS.map((d) => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                days === d
-                  ? "bg-background text-foreground shadow-sm font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {d}d
-            </button>
-          ))}
+      <main className="w-full max-w-5xl space-y-6">
+        {/* Header */}
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Users className="h-6 w-6" />
+            Census
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Player population statistics based on combat log activity
+          </p>
         </div>
 
-        {/* Realm filter */}
-        {realmOptions.length > 1 && (
-          <RealmMultiSelect
-            options={realmOptions}
-            selected={realmIds}
-            onChange={setRealmIds}
-          />
-        )}
-      </div>
+        {/* Shared controls */}
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Day presets */}
+          <div className="flex items-center gap-1 rounded-lg border bg-muted/50 p-1">
+            {DAY_PRESETS.map((d) => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  days === d
+                    ? "bg-background text-foreground shadow-sm font-medium"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
 
-      {/* Tabs */}
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="players">Players</TabsTrigger>
-        </TabsList>
-        <TabsContent value="players" className="mt-6">
-          <PlayersTab
-            data={censusData}
-            isLoading={isLoading || isSiteConfigLoading}
-            flavor={tenantFlavor}
-          />
-        </TabsContent>
-      </Tabs>
+          {/* Realm filter */}
+          {realmOptions.length > 1 && (
+            <RealmMultiSelect
+              options={realmOptions}
+              selected={realmIds}
+              onChange={setRealmIds}
+            />
+          )}
+        </div>
+
+        {/* Tabs */}
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="players">Players</TabsTrigger>
+          </TabsList>
+          <TabsContent value="players" className="mt-6">
+            <PlayersTab
+              data={censusData}
+              isLoading={isLoading || isSiteConfigLoading}
+              flavor={tenantFlavor}
+            />
+          </TabsContent>
+        </Tabs>
+      </main>
+
+      <AdSlot placement="census-right-rail" format="rail" railLayout="paired" />
     </div>
   );
 }

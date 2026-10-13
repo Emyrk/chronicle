@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 import type { SiteConfig } from "@/api/typesGenerated"
 import { AdSlot } from "./AdSlot"
+import { adSizeLabel, adSizesForFormat } from "./adFormats"
 import { clearNitroPayAds } from "./nitroPay"
 import {
   isLocalAdPreviewHost,
@@ -35,12 +36,43 @@ describe("AdSlot", () => {
 
     expect(markup).toContain("Advertisement")
     expect(markup).toContain("160 × 600")
+    expect(markup).not.toContain("300 × 600")
     expect(markup).toContain("2xl:block")
+    expect(markup).toContain("min-[1920px]:w-[300px]")
     expect(markup).toContain("2xl:sticky")
     expect(markup).toContain("2xl:top-20")
     expect(markup).toContain("self-start")
     expect(markup).toContain('aria-label="Advertisement preview"')
     expect(markup).toContain('data-ad-placement="leaderboards-right-rail"')
+  })
+
+  it("waits for extra viewport width when rails are paired", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="recent-left-rail"
+        format="rail"
+        railLayout="paired"
+        hostname="localhost"
+        previewEnabled
+      />,
+    )
+
+    expect(markup).toContain("min-[2080px]:w-[300px]")
+    expect(markup).not.toContain("min-[1920px]:w-[300px]")
+  })
+
+  it("offers both rail sizes only when 300px is reserved", () => {
+    expect(adSizesForFormat("rail", false)).toEqual([[160, 600]])
+    expect(adSizesForFormat("rail", true)).toEqual([
+      [300, 600],
+      [160, 600],
+    ])
+  })
+
+  it("labels only the rail sizes eligible at the current width", () => {
+    expect(adSizeLabel("rail", false)).toBe("160 × 600")
+    expect(adSizeLabel("rail", true)).toBe("300 × 600 / 160 × 600")
+    expect(adSizeLabel("responsive", false)).toBe("responsive")
   })
 
   it("renders the responsive desktop format by default", () => {
@@ -98,6 +130,7 @@ describe("AdSlot", () => {
     expect(markup).toContain('aria-label="Advertisement"')
     expect(markup).toContain('data-ad-provider="nitropay"')
     expect(markup).toContain('id="nitropay-leaderboards-right-rail"')
+    expect(markup).toContain(">Advertisement</div>")
     expect(markup).not.toContain("Ad preview")
   })
 

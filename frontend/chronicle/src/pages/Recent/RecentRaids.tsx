@@ -330,9 +330,9 @@ export function RecentRaids() {
   const isRefreshing = loading && instances.length > 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1800px] items-start justify-center gap-6 p-4 md:p-8">
+    <div className="mx-auto flex w-full max-w-[2080px] items-start justify-center gap-6 p-4 md:p-8">
       <div className="hidden self-stretch min-[1800px]:block">
-        <AdSlot placement="recent-left-rail" format="rail" />
+        <AdSlot placement="recent-left-rail" format="rail" railLayout="paired" />
       </div>
 
       <main className="min-w-0 w-full max-w-7xl">
@@ -474,7 +474,7 @@ export function RecentRaids() {
         </div>
       </main>
 
-      <AdSlot placement="recent-right-rail" format="rail" />
+      <AdSlot placement="recent-right-rail" format="rail" railLayout="paired" />
     </div>
   );
 }

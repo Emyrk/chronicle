@@ -30,6 +30,8 @@ Wide-screen rail:
 <AdSlot placement="leaderboards-right-rail" format="rail" />
 ```
 
+Use `railLayout="paired"` when a page renders rails on both sides. Single rails reserve 300px at 1920px; paired rails wait until 2080px so the page can reserve 300px on both sides without reducing the primary content width.
+
 `responsive` is the default format. A placement ID is a stable, kebab-case description of the page region, not the advertiser, campaign, or current dimensions.
 
 ## Ownership boundary
@@ -45,6 +47,7 @@ Wide-screen rail:
 
 - Local preview rendering.
 - Shared format dimensions and responsive breakpoints.
+- The visible `Advertisement` label above every rendered preview or live placement.
 - Stable placement metadata.
 
 ### `AdSlot` must own when live serving is added
@@ -76,7 +79,7 @@ Do not create a placement-specific wrapper merely to render `AdSlot`. A wrapper 
 | Format | Component usage | Current layout contract |
 |---|---|---|
 | Responsive | `<AdSlot placement="..." />` | Hidden below `lg`; fills available width; minimum preview height 7rem |
-| Rail | `<AdSlot placement="..." format="rail" />` | Hidden below `2xl`; 160px wide; 600px minimum height; sticky below navigation |
+| Rail | `<AdSlot placement="..." format="rail" />` | Hidden below `2xl`; 160px wide by default; expands to 300px when its layout has spare viewport width; 600px minimum height; sticky below navigation |
 
 Add a new format only when neither existing format can represent the required dimensions or breakpoint behavior. Format changes belong in `AdSlot.tsx` and require component tests plus a Storybook story.
 
@@ -88,6 +91,8 @@ Add a new format only when neither existing format can represent the required di
 | `statistics-encounter-sidebar` | `pages/Rankings/InstanceView.tsx` | Explicitly non-mobile statistics detail with 1–8 encounter rows; rendered after the keybind help text |
 | `recent-right-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible at `2xl` |
 | `recent-left-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible with the right rail at 1800px and wider |
+| `census-left-rail` | `pages/Census/CensusPage.tsx` | Census statistics; paired left rail visible at `2xl` |
+| `census-right-rail` | `pages/Census/CensusPage.tsx` | Census statistics; paired right rail visible at `2xl` |
 
 ## Enablement model
 
@@ -116,7 +121,8 @@ Keep each provider concern centralized:
 At minimum, `AdSlot.test.tsx` must cover:
 
 - Responsive preview defaults.
-- Rail preview dimensions and breakpoint class.
+- Rail preview dimensions, sticky behavior, and single/paired width breakpoints.
+- NitroPay rail size eligibility: 160×600 normally and both 300×600 plus 160×600 only after 300px is reserved; the local preview label must reflect the same eligible set.
 - Stable `data-ad-placement` output.
 - No rendering without the preview flag or on a non-local hostname while live serving is unavailable.
 - Effective tenant enablement for both disabled and live NitroPay branches.
