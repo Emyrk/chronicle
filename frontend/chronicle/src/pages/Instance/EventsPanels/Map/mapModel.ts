@@ -12,14 +12,17 @@ export interface MapPoint {
   topPercent: number;
 }
 
+export interface MapViewport {
+  leftPercent: number;
+  topPercent: number;
+  spanPercent: number;
+}
+
 export type ResolvedMapArtwork =
   | { kind: "instance"; instance: WowMapInstance }
   | { kind: "zone"; map: WowMap; assignment: WowMapAssignment };
 
-export function latestPositionAt(
-  positions: MapPositionSample[],
-  timestampMs: number,
-): MapPositionSample | null {
+function latestPositionIndex(positions: MapPositionSample[], timestampMs: number): number {
   let low = 0;
   let high = positions.length - 1;
   let match = -1;
@@ -32,7 +35,43 @@ export function latestPositionAt(
       high = middle - 1;
     }
   }
+  return match;
+}
+
+export function latestPositionAt(
+  positions: MapPositionSample[],
+  timestampMs: number,
+): MapPositionSample | null {
+  const match = latestPositionIndex(positions, timestampMs);
   return match >= 0 ? positions[match] : null;
+}
+
+function interpolateFacing(from: number, to: number, progress: number): number {
+  const turn = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+  return from + turn * progress;
+}
+
+export function interpolatedPositionAt(
+  positions: MapPositionSample[],
+  timestampMs: number,
+): MapPositionSample | null {
+  const previousIndex = latestPositionIndex(positions, timestampMs);
+  if (previousIndex < 0) return null;
+
+  const previous = positions[previousIndex];
+  const next = positions[previousIndex + 1];
+  if (!next || next.mapId !== previous.mapId || next.timestampMs <= previous.timestampMs) return previous;
+
+  const progress = Math.max(0, Math.min(1,
+    (timestampMs - previous.timestampMs) / (next.timestampMs - previous.timestampMs),
+  ));
+  return {
+    timestampMs,
+    x: previous.x + (next.x - previous.x) * progress,
+    y: previous.y + (next.y - previous.y) * progress,
+    mapId: previous.mapId,
+    facing: interpolateFacing(previous.facing, next.facing, progress),
+  };
 }
 
 export function selectMapEncounter(
@@ -128,6 +167,43 @@ export function zoneMapPoint(sample: MapPositionSample, assignment: WowMapAssign
   return { leftPercent: clampPercent(uiX), topPercent: clampPercent(uiY) };
 }
 
+export function fitMapViewport(
+  points: MapPoint[],
+  paddingPercent = 7,
+  minimumSpanPercent = 28,
+): MapViewport {
+  if (points.length === 0) return { leftPercent: 0, topPercent: 0, spanPercent: 100 };
+
+  let left = points[0].leftPercent;
+  let right = left;
+  let top = points[0].topPercent;
+  let bottom = top;
+  for (const point of points.slice(1)) {
+    left = Math.min(left, point.leftPercent);
+    right = Math.max(right, point.leftPercent);
+    top = Math.min(top, point.topPercent);
+    bottom = Math.max(bottom, point.topPercent);
+  }
+  const spanPercent = Math.min(100, Math.max(
+    minimumSpanPercent,
+    right - left + paddingPercent * 2,
+    bottom - top + paddingPercent * 2,
+  ));
+  const maxOffset = 100 - spanPercent;
+  return {
+    leftPercent: Math.max(0, Math.min(maxOffset, (left + right - spanPercent) / 2)),
+    topPercent: Math.max(0, Math.min(maxOffset, (top + bottom - spanPercent) / 2)),
+    spanPercent,
+  };
+}
+
+export function pointInMapViewport(point: MapPoint, viewport: MapViewport): MapPoint {
+  return {
+    leftPercent: ((point.leftPercent - viewport.leftPercent) / viewport.spanPercent) * 100,
+    topPercent: ((point.topPercent - viewport.topPercent) / viewport.spanPercent) * 100,
+  };
+}
+
 export interface DungeonMapCalibration {
   anchorSample: MapPositionSample;
   anchorPoint: MapPoint;
@@ -197,6 +273,28 @@ export function calibratedDungeonMapPoint(
       + ((calibration.anchorSample.y - sample.y) / (bounds.maxX - bounds.minX)) * 100),
     topPercent: clampPercentage(calibration.anchorPoint.topPercent
       + ((calibration.anchorSample.x - sample.x) / (bounds.maxY - bounds.minY)) * 100),
+  };
+}
+
+export function projectDungeonMapPoint(
+  sample: MapPositionSample,
+  bounds: WowMapFloorBounds,
+  mapId: number,
+  calibration: DungeonMapCalibration | null,
+  rendered = false,
+): MapPoint | null {
+  if (rendered) return renderedDungeonMapPoint(sample, bounds);
+  if (mapId === 43 && !calibration) return null;
+  return calibration
+    ? calibratedDungeonMapPoint(sample, bounds, calibration)
+    : dungeonMapPoint(sample, bounds);
+}
+
+export function renderedDungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBounds): MapPoint | null {
+  if (bounds.maxX === bounds.minX || bounds.maxY === bounds.minY) return null;
+  return {
+    leftPercent: clampPercent((bounds.maxY - sample.y) / (bounds.maxY - bounds.minY)),
+    topPercent: clampPercent((bounds.maxX - sample.x) / (bounds.maxX - bounds.minX)),
   };
 }
 

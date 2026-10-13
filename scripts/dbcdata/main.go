@@ -34,6 +34,7 @@ func rootCmd() *serpent.Command {
 		cli.ExtractIconsCmd(),
 		cli.ExtractWowdataIconsCmd(),
 		cli.ExtractWowdataMapsCmd(),
+		cli.RenderWowdataMapsCmd(),
 		cli.ExtractWowdataLoadingScreensCmd(),
 		cli.ExtractLegacyMapsCmd(),
 		cli.ExtractLoadingScreensCmd(),

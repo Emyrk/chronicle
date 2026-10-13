@@ -34,6 +34,19 @@ rclone copy "${MAPS_DIR}/tiles" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/tiles/" \
   --progress \
   --verbose
 
+if [[ -d "${MAPS_DIR}/renders" ]]; then
+  rendered_total="$(find "${MAPS_DIR}/renders" -type f -name '*.png' | wc -l)"
+  echo "Uploading ${rendered_total} rendered maps to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/renders/"
+  rclone copy "${MAPS_DIR}/renders" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/renders/" \
+    --include '*.png' \
+    --header-upload "Cache-Control: public, max-age=31536000, immutable" \
+    --header-upload "Content-Type: image/png" \
+    --transfers 8 \
+    --checkers 8 \
+    --progress \
+    --verbose
+fi
+
 echo "Uploading map manifest to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/manifest.json"
 rclone copyto "${MAPS_DIR}/manifest.json" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/manifest.json" \
   --header-upload "Cache-Control: public, max-age=3600" \

@@ -106,18 +106,22 @@ go run ./scripts/dbcdata extract-wowdata-maps \
 
 The command defaults to `--build latest` against Blizzard's remote `wow_classic_beta` data because the current local Forever CASC index contains an unreadable BLTE entry. At startup, `latest` is resolved once to an exact build; that build is then used for every table and texture request and recorded in the manifest. This prevents a release during extraction from mixing assets across builds. Use `--source local --server forever` when the installed client data is healthy. Existing non-empty tiles are retained, so interrupted exports can be resumed. Pass `--metadata-only` to refresh and inspect the manifest without downloading tiles.
 
-`make maps` also reads the currently published manifest when it targets the exact same build, region, and locale, then reuses its already-published FileDataID tile URLs. Only tiles absent from that manifest are downloaded and converted locally before upload, using four concurrent `wowdata` processes by default. Set `WOWDATA_MAP_REUSE_MANIFEST=` to force a complete local export, point it at another compatible published manifest, or set `WOWDATA_MAP_WORKERS` to tune concurrency. Generated map manifests and tiles under `frontend/imagecache/forever/maps/` are ignored by Git and should remain in object storage rather than source control.
+`make maps` also reads the currently published manifest when it targets the exact same build, region, and locale, then reuses its already-published FileDataID tile URLs. Only tiles absent from that manifest are downloaded and converted locally before upload, using four concurrent `wowdata` processes by default. After the artwork extraction, Chronicle renders coordinate-faithful geometry maps for the supported instances (currently Wailing Caverns and Excavation Site: Wetlands) from the same exact build's WDT/WMO or ADT data. Set `WOWDATA_MAP_REUSE_MANIFEST=` to force a complete local art export, point it at another compatible published manifest, or set `WOWDATA_MAP_WORKERS` to tune both tile and geometry-export concurrency. Generated map manifests and assets under `frontend/imagecache/forever/maps/` are ignored by Git and should remain in object storage rather than source control.
 
 The output layout is:
 
 ```text
 frontend/imagecache/forever/maps/
 ├── manifest.json
+├── renders/
+│   └── <MapID>-<build>.png
 └── tiles/
     └── <FileDataID>.webp
 ```
 
-`manifest.json` uses the `chronicle-wow-map-art-v1` format. It records the product and build, map hierarchy, phase-specific artwork, explored-area overlays, available dungeon and raid floors, layer and tile dimensions, and the raw `UiMapAssignment` `Region`, `UiMin`, and `UiMax` arrays needed to convert world coordinates into UI coordinates. The arrays are intentionally preserved in DB2 order rather than assigning inferred axis names. Instance floors are included only when the client listfile contains a complete 12-tile map canvas, so instances without published artwork remain absent rather than receiving guessed geometry.
+`manifest.json` uses the `chronicle-wow-map-art-v1` format. It records the product and build, map hierarchy, phase-specific artwork, explored-area overlays, available dungeon and raid floors, layer and tile dimensions, and the raw `UiMapAssignment` `Region`, `UiMin`, and `UiMax` arrays needed to convert world coordinates into UI coordinates. The arrays are intentionally preserved in DB2 order rather than assigning inferred axis names. Instance floor artwork is included only when the client listfile has a complete canvas. An instance's optional `rendered` object independently advertises a generated geometry asset, its source, dimensions, ordinary world-X/world-Y bounds, and triangle count. Consumers can therefore prefer coordinate-faithful geometry while still presenting Blizzard artwork when available.
+
+The generated-map stage invokes the checked-in Rust renderer through Cargo, so the publishing host needs a current Rust toolchain in addition to the existing `wowdata`, image-conversion, and R2 tools.
 
 To extract and upload the tiles and manifest to Cloudflare R2:
 
@@ -125,7 +129,7 @@ To extract and upload the tiles and manifest to Cloudflare R2:
 make maps
 ```
 
-This publishes the manifest at `https://icons.chronicleclassic.com/forever/maps/manifest.json` and tiles under `https://icons.chronicleclassic.com/forever/maps/tiles/`. The `/technical/maps` page discovers those paths from the selected dataset's configured icon base URL. Tile responses are immutable for one year; the manifest uses a one-hour cache so a newly published build can become visible without renaming the base URL. Set `WOWDATA_BUILD`, `WOWDATA_BIN`, or `WOWDATA_CACHE` to override their defaults. `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH` override the upload destination.
+This publishes the manifest at `https://icons.chronicleclassic.com/forever/maps/manifest.json`, art tiles under `https://icons.chronicleclassic.com/forever/maps/tiles/`, and generated maps under `https://icons.chronicleclassic.com/forever/maps/renders/`. The `/technical/maps` page discovers both map kinds from the selected dataset's configured icon base URL. Tile and rendered-map responses are immutable for one year; the manifest uses a one-hour cache so a newly published build can become visible without renaming the base URL. Set `WOWDATA_BUILD`, `WOWDATA_BIN`, or `WOWDATA_CACHE` to override their defaults. `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH` override the upload destination.
 
 ## Extract loading screens
 

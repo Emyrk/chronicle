@@ -43,10 +43,27 @@ function useMapManifest(iconBaseUrl: string | undefined) {
 }
 
 function MapArtwork({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: string }) {
-  const canvas = item.kind === "zone" ? item.layer : item.floor;
-  const tiles = canvas.tiles;
   const name = item.kind === "zone" ? item.map.name : item.instance.name;
+  if (item.kind === "rendered") {
+    return (
+      <div
+        className="relative w-full overflow-hidden bg-[#11100d]"
+        style={{ aspectRatio: `${item.rendered.width} / ${item.rendered.height}` }}
+        role="img"
+        aria-label={`${name} rendered map`}
+      >
+        <img
+          src={mapAssetUrl(iconBaseUrl, item.rendered.path)}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 size-full select-none object-contain"
+        />
+      </div>
+    );
+  }
 
+  const canvas = item.kind === "zone" ? item.layer : item.floor;
   return (
     <div
       className="relative w-full overflow-hidden bg-[#11100d]"
@@ -54,7 +71,7 @@ function MapArtwork({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: 
       role="img"
       aria-label={`${name} map artwork`}
     >
-      {tiles.map((tile) => (
+      {canvas.tiles.map((tile) => (
         <img
           key={`base-${tile.row}-${tile.column}-${tile.fileDataID}`}
           src={mapAssetUrl(iconBaseUrl, tile.path)}
@@ -93,7 +110,7 @@ function MapCard({
 }) {
   const assignment = item.kind === "zone" ? item.map.assignments?.[0] : undefined;
   const name = item.kind === "zone" ? (item.map.name || `Map ${item.map.id}`) : item.instance.name;
-  const canvas = item.kind === "zone" ? item.layer : item.floor;
+  const canvas = item.kind === "zone" ? item.layer : item.kind === "instance" ? item.floor : item.rendered;
 
   return (
     <Card className="group relative gap-0 overflow-hidden border-amber-950/40 bg-[#171611] py-0 shadow-[0_18px_45px_-30px_rgba(0,0,0,0.9)] transition-transform duration-200 hover:-translate-y-0.5 hover:border-amber-800/50">
@@ -119,7 +136,10 @@ function MapCard({
             {name}
           </h2>
           <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-amber-200/45">
-            {item.kind === "zone" ? `UI map ${item.map.id}` : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"} · world ${item.instance.mapID}`}
+            {item.kind === "zone"
+              ? `UI map ${item.map.id}`
+              : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"} · world ${item.instance.mapID}`}
+            {item.kind === "rendered" ? ` · ${item.rendered.source}` : ""}
             {assignment ? ` · world ${assignment.mapID}` : ""}
           </p>
         </div>
@@ -128,7 +148,8 @@ function MapCard({
           {item.kind === "zone" && (item.art.phaseID !== 0 || item.layer.index !== 0) && (
             <div>phase {item.art.phaseID} · layer {item.layer.index}</div>
           )}
-          {item.kind === "instance" && <div>floor {item.floor.floor}</div>}
+          {item.kind === "instance" && <div>art floor {item.floor.floor}</div>}
+          {item.kind === "rendered" && <div>{item.rendered.triangles?.toLocaleString() ?? "generated"} triangles</div>}
         </div>
       </div>
     </Card>
@@ -147,10 +168,12 @@ function MapModal({
   if (!item || !iconBaseUrl) return null;
 
   const name = item.kind === "zone" ? (item.map.name || `Map ${item.map.id}`) : item.instance.name;
-  const canvas = item.kind === "zone" ? item.layer : item.floor;
+  const canvas = item.kind === "zone" ? item.layer : item.kind === "instance" ? item.floor : item.rendered;
   const description = item.kind === "zone"
     ? `UI map ${item.map.id}${item.art.phaseID !== 0 || item.layer.index !== 0 ? `, phase ${item.art.phaseID}, layer ${item.layer.index}` : ""}`
-    : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, floor ${item.floor.floor}`;
+    : item.kind === "instance"
+      ? `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, art floor ${item.floor.floor}`
+      : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, generated from ${item.rendered.source}`;
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
@@ -189,7 +212,7 @@ export function MapGalleryPage() {
     const query = search.trim().toLowerCase();
     if (!query) return items;
     return items.filter((item) => {
-      if (item.kind === "instance") {
+      if (item.kind !== "zone") {
         return item.instance.name.toLowerCase().includes(query)
           || String(item.instance.mapID).includes(query)
           || item.instance.directory.toLowerCase().includes(query);
@@ -221,7 +244,7 @@ export function MapGalleryPage() {
                   <h1 className="font-serif text-2xl font-semibold tracking-wide">Dataset Map Atlas</h1>
                 </div>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  UI map artwork published by the active dataset. Every preview is assembled from the same tiles used by Chronicle's position visualizations.
+                  Map artwork and coordinate-faithful geometry published by the active dataset. These are the same assets Chronicle can use for position visualizations.
                 </p>
                 {manifestQuery.data && (
                   <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-amber-200/50">

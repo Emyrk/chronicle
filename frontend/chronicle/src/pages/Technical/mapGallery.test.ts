@@ -96,6 +96,14 @@ describe("map gallery rendering model", () => {
         name: "Blackrock Depths",
         instanceType: 1,
         directory: "blackrockdepths",
+        rendered: {
+          path: "renders/230-build.png",
+          width: 1200,
+          height: 800,
+          source: "wmo-geometry",
+          bounds: { minX: -10, maxX: 20, minY: -30, maxY: 40 },
+          triangles: 1234,
+        },
         floors: [{
           floor: 1,
           width: 1002,
@@ -111,6 +119,7 @@ describe("map gallery rendering model", () => {
 
     expect(items.map((item) => item.key)).toEqual([
       "instance-230-1",
+      "rendered-230",
       "zone-1411-0-2169-0",
       "zone-1411-1-2170-1",
       "zone-1412-0-1200-0",

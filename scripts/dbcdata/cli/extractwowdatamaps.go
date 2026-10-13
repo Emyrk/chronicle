@@ -78,11 +78,21 @@ type wowMapArtOverlay struct {
 }
 
 type wowMapInstance struct {
-	MapID        int32                 `json:"mapID"`
-	Name         string                `json:"name"`
-	InstanceType int32                 `json:"instanceType"`
-	Directory    string                `json:"directory"`
-	Floors       []wowMapInstanceFloor `json:"floors"`
+	MapID        int32                   `json:"mapID"`
+	Name         string                  `json:"name"`
+	InstanceType int32                   `json:"instanceType"`
+	Directory    string                  `json:"directory"`
+	Floors       []wowMapInstanceFloor   `json:"floors"`
+	Rendered     *wowMapRenderedInstance `json:"rendered,omitempty"`
+}
+
+type wowMapRenderedInstance struct {
+	Path      string            `json:"path"`
+	Width     int32             `json:"width"`
+	Height    int32             `json:"height"`
+	Source    string            `json:"source"`
+	Bounds    wowMapFloorBounds `json:"bounds"`
+	Triangles int64             `json:"triangles,omitempty"`
 }
 
 type wowMapFloorBounds struct {
