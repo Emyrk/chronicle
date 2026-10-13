@@ -5,11 +5,14 @@ import { mapAssetUrl, type WowMapLayer, type WowMapTile } from "@/pages/Technica
 import { bossMiniSlug, bossMiniUrl } from "./bossMinis";
 import { FULL_MAP_VIEWPORT, healthBarColor, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
+  CAST_ICON_MS,
   DEFAULT_EFFECT_OPTIONS,
   deriveActiveEffects,
+  deriveCastIcons,
   deriveCombatText,
   isDeadAt,
   type ActiveEffect,
+  type CastIcon,
   type CombatText,
   type DeriveEffectsOptions,
   type EncounterEffects,
@@ -45,6 +48,16 @@ const COMBAT_TEXT_HEIGHT = 1.8;
 // Rendered label textures kept for reuse (spell name + colour).
 const MAX_LABEL_TEXTURES = 128;
 const DEAD_COLOR = 0x57534e;
+// Spell icons above casters: pooled sprites over the bars and combat text.
+const MAX_CAST_ICONS = 12;
+const CAST_ICON_SIZE = 2.2;
+// Gap between a caster's hover-label height and its icons.
+const CAST_ICON_LIFT = 0.6;
+const CAST_ICON_FADE_IN_MS = 80;
+// Ongoing casts pulse slightly over this period (replay time).
+const CAST_ICON_PULSE_MS = 600;
+// Loaded icon textures kept for reuse, keyed by URL.
+const MAX_ICON_TEXTURES = 128;
 // Boss minis have a 1-unit footprint; scaled a little wider than the 1.8-unit
 // hostile box so they read at boss-fight zoom.
 const BOSS_MINI_SIZE = 2.6;
@@ -116,6 +129,14 @@ export interface MapScene3DEffects {
   resolveColor: (color: string) => string;
   /** Casters whose recent hits float their spell name; null for none. */
   combatTextGuids: ReadonlySet<string> | null;
+  /** Casters whose casts show a spell icon above them; null for none. */
+  castIcons: {
+    guids: ReadonlySet<string>;
+    /** The spell's icon URL (a question mark when unknown). */
+    iconUrl: (spellId: number) => string;
+    /** Shown until a spell's icon loads, or when it fails to. */
+    placeholderUrl: string;
+  } | null;
 }
 
 /** The spell effect under the pointer, for an HTML tooltip. */
@@ -205,6 +226,10 @@ export class MapScene3D {
   private readonly combatText: CombatText[] = [];
   private readonly combatSprites: THREE.Sprite[] = [];
   private readonly labelTextures = new Map<string, { texture: THREE.CanvasTexture; aspect: number }>();
+  private readonly castIcons: CastIcon[] = [];
+  private readonly castSprites: THREE.Sprite[] = [];
+  // Icon textures by URL, in least-recently-used order.
+  private readonly iconTextures = new Map<string, THREE.Texture | "loading" | "failed">();
 
   private readonly container: HTMLElement;
   private readonly onContextLost: () => void;
@@ -265,6 +290,14 @@ export class MapScene3D {
       sprite.renderOrder = 10;
       sprite.visible = false;
       this.combatSprites.push(sprite);
+      this.scene.add(sprite);
+    }
+    for (let index = 0; index < MAX_CAST_ICONS; index++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
+      sprite.center.set(0.5, 0);
+      sprite.renderOrder = 11;
+      sprite.visible = false;
+      this.castSprites.push(sprite);
       this.scene.add(sprite);
     }
 
@@ -481,6 +514,10 @@ export class MapScene3D {
     }
     for (const sprite of this.combatSprites) sprite.material.dispose();
     for (const { texture } of this.labelTextures.values()) texture.dispose();
+    for (const sprite of this.castSprites) sprite.material.dispose();
+    for (const texture of this.iconTextures.values()) {
+      if (typeof texture !== "string") texture.dispose();
+    }
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     canvas.remove();
@@ -752,6 +789,7 @@ export class MapScene3D {
     this.commitPool(this.bolts, boltCount);
     this.commitPool(this.slashes, slashCount);
     this.updateCombatText(fx, cursorMs);
+    this.updateCastIcons(fx, cursorMs);
     return fx !== null && clock.playing;
   }
 
@@ -781,6 +819,84 @@ export class MapScene3D {
       shown++;
     }
     for (let index = shown; index < MAX_COMBAT_TEXT; index++) this.combatSprites[index].visible = false;
+  }
+
+  private updateCastIcons(fx: EncounterEffects | null, cursorMs: number) {
+    const castIcons = this.effects?.castIcons;
+    const icons = fx && castIcons && castIcons.guids.size > 0
+      ? deriveCastIcons(fx, cursorMs, castIcons.guids, MAX_CAST_ICONS, this.castIcons)
+      : this.castIcons;
+    if (!fx || !castIcons || castIcons.guids.size === 0) icons.length = 0;
+    const right = this.vectorB.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    let shown = 0;
+    for (let index = 0; index < icons.length; index++) {
+      const icon = icons[index];
+      const caster = this.units.get(icon.caster);
+      if (!caster) continue;
+      const texture = this.iconTexture(castIcons!.iconUrl(icon.spellId)) ?? this.iconTexture(castIcons!.placeholderUrl);
+      if (!texture) continue;
+      const sprite = this.castSprites[shown];
+      if (sprite.material.map !== texture) {
+        sprite.material.map = texture;
+        sprite.material.needsUpdate = true;
+      }
+      // Ongoing casts stay opaque and pulse; instants fade in, then out.
+      let size = CAST_ICON_SIZE * this.unitScale;
+      if (icon.phase === "casting") {
+        sprite.material.opacity = 1;
+        size *= 1 + 0.06 * Math.sin((cursorMs / CAST_ICON_PULSE_MS) * Math.PI * 2);
+      } else {
+        const fadeIn = Math.min(1, (icon.progress * CAST_ICON_MS) / CAST_ICON_FADE_IN_MS);
+        sprite.material.opacity = fadeIn * (1 - icon.progress * icon.progress);
+      }
+      sprite.scale.set(size, size, 1);
+      // The newest icon on a caster is centred; an older one sits beside it.
+      let slot = 0;
+      for (let previous = 0; previous < index; previous++) {
+        if (icons[previous].caster === icon.caster) slot++;
+      }
+      sprite.position.set(caster.base.x, (caster.labelHeight + CAST_ICON_LIFT) * this.unitScale, caster.base.z)
+        .addScaledVector(right, slot * CAST_ICON_SIZE * 1.1 * this.unitScale);
+      sprite.visible = true;
+      shown++;
+    }
+    for (let index = shown; index < MAX_CAST_ICONS; index++) this.castSprites[index].visible = false;
+  }
+
+  // The icon's texture once loaded, starting the load on first use; null
+  // while loading or after a failed load.
+  private iconTexture(url: string): THREE.Texture | null {
+    const cached = this.iconTextures.get(url);
+    if (cached !== undefined) {
+      // Re-insert to keep the cache in least-recently-used order.
+      this.iconTextures.delete(url);
+      this.iconTextures.set(url, cached);
+      return typeof cached === "string" ? null : cached;
+    }
+    this.iconTextures.set(url, "loading");
+    this.textureLoader.load(corsTextureUrl(url), (texture) => {
+      if (this.disposed || this.iconTextures.get(url) !== "loading") {
+        texture.dispose();
+        return;
+      }
+      texture.colorSpace = THREE.SRGBColorSpace;
+      this.iconTextures.set(url, texture);
+      this.requestRender();
+    }, undefined, () => {
+      if (this.disposed || this.iconTextures.get(url) !== "loading") return;
+      this.iconTextures.set(url, "failed");
+      this.requestRender();
+    });
+    if (this.iconTextures.size > MAX_ICON_TEXTURES) {
+      // Evict the least recently used icon that is not on screen.
+      for (const [oldestUrl, oldest] of this.iconTextures) {
+        if (typeof oldest !== "string" && this.castSprites.some((sprite) => sprite.visible && sprite.material.map === oldest)) continue;
+        if (typeof oldest !== "string") oldest.dispose();
+        this.iconTextures.delete(oldestUrl);
+        break;
+      }
+    }
+    return null;
   }
 
   private labelTexture(text: string, color: string, crit: boolean) {

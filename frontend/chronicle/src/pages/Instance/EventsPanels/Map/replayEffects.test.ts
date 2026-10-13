@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   addEffectEvent,
   BEAM_MS,
+  CAST_ICON_MS,
   COMBAT_TEXT_MS,
   createEncounterEffects,
   DEFAULT_EFFECT_OPTIONS,
   deriveActiveEffects,
+  deriveCastIcons,
   deriveCombatText,
   eventWindow,
   HIT_WOBBLE_MS,
@@ -225,5 +227,82 @@ describe("deriveCombatText", () => {
     const forward = out.map((text) => ({ ...text }));
     expect(deriveCombatText(fx, 1_000 + COMBAT_TEXT_MS + 500, sources, options, 8, out)).toEqual([]);
     expect(deriveCombatText(fx, 1_050, sources, options, 8, out).map((text) => ({ ...text }))).toEqual(forward);
+  });
+});
+
+describe("deriveCastIcons", () => {
+  const casters = new Set(["mage", "boss"]);
+  const icons = (fx: EncounterEffects, cursorMs: number, max = 12) =>
+    deriveCastIcons(fx, cursorMs, casters, max).map((icon) => ({ ...icon }));
+
+  it("shows a cast from its start until it goes off, then briefly as an instant", () => {
+    const fx = effects(
+      event(1_000, "cast_start", "mage", "boss", { castTimeMs: 2_000 }),
+      event(3_000, "cast_go", "mage", "boss"),
+    );
+    expect(icons(fx, 999)).toEqual([]);
+    expect(icons(fx, 2_000)).toEqual([{ caster: "mage", spellId: 133, progress: 0.5, phase: "casting" }]);
+    expect(icons(fx, 3_000 + CAST_ICON_MS / 2)).toEqual([{ caster: "mage", spellId: 133, progress: 0.5, phase: "instant" }]);
+    expect(icons(fx, 3_000 + CAST_ICON_MS)).toEqual([]);
+  });
+
+  it("ends a cast at an interrupt, the caster's next cast, or the capped cast time", () => {
+    const interrupted = effects(
+      event(1_000, "cast_start", "mage", "boss", { castTimeMs: 2_500 }),
+      event(1_500, "interrupt", "rogue", "mage"),
+    );
+    expect(icons(interrupted, 1_400)).toHaveLength(1);
+    expect(icons(interrupted, 1_600)).toEqual([]);
+    const replaced = effects(
+      event(1_000, "cast_start", "mage", "boss", { castTimeMs: 2_500 }),
+      event(1_500, "cast_start", "mage", "boss", { castTimeMs: 1_500, spellId: 116 }),
+    );
+    expect(icons(replaced, 1_600).map((icon) => icon.spellId)).toEqual([116]);
+    const long = effects(event(1_000, "cast_start", "boss", "", { castTimeMs: 10_000 }));
+    expect(icons(long, 3_999)).toHaveLength(1);
+    expect(icons(long, 4_000)).toEqual([]);
+  });
+
+  it("keeps a cast up through another spell going off", () => {
+    const fx = effects(
+      event(1_000, "cast_start", "mage", "boss", { castTimeMs: 2_000 }),
+      event(1_500, "cast_go", "mage", "boss", { spellId: 12_654 }),
+    );
+    expect(icons(fx, 1_600).map((icon) => [icon.spellId, icon.phase])).toEqual([[12_654, "instant"], [133, "casting"]]);
+  });
+
+  it("depends only on the cursor, so scrubbing backwards matches playing forwards", () => {
+    const fx = effects(
+      event(1_000, "cast_start", "mage", "boss", { castTimeMs: 2_000 }),
+      event(1_800, "interrupt", "rogue", "mage"),
+      event(2_000, "cast_go", "boss", "mage", { spellId: 2120 }),
+    );
+    const forward = [500, 1_200, 1_900, 2_300].map((ms) => icons(fx, ms));
+    icons(fx, 10_000);
+    const backward = [2_300, 1_900, 1_200, 500].map((ms) => icons(fx, ms)).reverse();
+    expect(backward).toEqual(forward);
+    expect(forward[1]).toHaveLength(1);
+  });
+
+  it("skips auto attacks, unknown spells and other casters", () => {
+    const fx = effects(
+      event(1_000, "cast_go", "mage", "boss", { spellId: 6603 }),
+      event(1_000, "cast_go", "mage", "boss", { spellId: 75 }),
+      event(1_000, "cast_go", "mage", "boss", { spellId: 5019 }),
+      event(1_000, "cast_go", "mage", "boss", { spellId: null }),
+      event(1_000, "cast_go", "priest", "mage"),
+    );
+    expect(icons(fx, 1_100)).toEqual([]);
+  });
+
+  it("limits icons per caster and in all", () => {
+    const fx = effects(
+      event(1_000, "cast_go", "mage", "boss", { spellId: 1 }),
+      event(1_100, "cast_go", "mage", "boss", { spellId: 2 }),
+      event(1_200, "cast_go", "mage", "boss", { spellId: 3 }),
+      event(1_200, "cast_go", "boss", "mage", { spellId: 4 }),
+    );
+    expect(icons(fx, 1_300).map((icon) => icon.spellId)).toEqual([4, 3, 2]);
+    expect(icons(fx, 1_300, 1).map((icon) => icon.spellId)).toEqual([4]);
   });
 });
