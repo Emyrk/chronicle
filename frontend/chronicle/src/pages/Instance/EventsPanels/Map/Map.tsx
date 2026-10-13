@@ -1,10 +1,11 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
-import { lazy, Suspense, useState } from "react";
-import { Map as MapIcon, Users } from "lucide-react";
+import { lazy, Suspense, useMemo, useState } from "react";
+import { Focus, Map as MapIcon, Maximize, Users } from "lucide-react";
 import type { UnitPositionProcessorEvent } from "../processorTypes";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { mapProcessor, type MapResult } from "./map.processor";
-import { MapView2D } from "./MapView2D";
+import { fitViewportToBounds, FULL_MAP_VIEWPORT } from "./mapModel";
+import { MapView2D, type MapViewRequest } from "./MapView2D";
 import { useMapScene } from "./useMapScene";
 
 const MapView3D = lazy(() => import("./MapView3D"));
@@ -47,19 +48,41 @@ function ViewModeToggle({ mode, onChange }: { mode: MapViewMode; onChange: (mode
   );
 }
 
+type MapFraming = "fit" | "full";
+
+const framingButtonClass = "flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground";
+
 function MapContent(props: PanelRenderProps<MapResult>) {
   const scene = useMapScene(props);
   const [viewMode, setViewMode] = useState<MapViewMode>(readStoredViewMode);
   const [webglUnavailable, setWebglUnavailable] = useState(false);
+  // An explicit Fit / Reset applies to the encounter it was chosen in; a new
+  // encounter falls back to the default framing. `revision` re-applies the
+  // same framing after the user has panned or zoomed.
+  const [framingChoice, setFramingChoice] = useState<{ encounterId: string; framing: MapFraming; revision: number } | null>(null);
+  const ready = scene.status === "ready" ? scene : null;
+  const encounterId = ready?.encounterId ?? "";
+  const focusBounds = ready?.focusBounds ?? null;
+  const choice = framingChoice?.encounterId === encounterId ? framingChoice : null;
+  const framing: MapFraming = choice?.framing ?? (ready?.fitByDefault && focusBounds ? "fit" : "full");
+  const revision = choice?.revision ?? 0;
+  // Both views take the same request, so toggling 2D <-> 3D keeps the framing.
+  const view = useMemo((): MapViewRequest => ({
+    viewport: framing === "fit" && focusBounds ? fitViewportToBounds(focusBounds) : FULL_MAP_VIEWPORT,
+    // Distinguishes requests for different encounters with equal viewports.
+    key: `${encounterId}:${revision}`,
+  }), [encounterId, focusBounds, framing, revision]);
 
   if (scene.status === "message") return <MapMessage title={scene.title} detail={scene.detail} />;
+
+  const chooseFraming = (next: MapFraming) => setFramingChoice({ encounterId, framing: next, revision: revision + 1 });
 
   const changeViewMode = (mode: MapViewMode) => {
     setViewMode(mode);
     storeViewMode(mode);
   };
   const show3D = viewMode === "3d" && !webglUnavailable;
-  const view2D = <MapView2D ground={scene.ground} markers={scene.markers} />;
+  const view2D = <MapView2D ground={scene.ground} markers={scene.markers} view={view} />;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
@@ -83,6 +106,20 @@ function MapContent(props: PanelRenderProps<MapResult>) {
               {scene.floors.map((floor) => <option key={floor} value={floor}>Floor {floor}</option>)}
             </select>
           )}
+          <button
+            type="button"
+            onClick={() => chooseFraming("fit")}
+            disabled={!focusBounds}
+            title="Zoom to the boss area"
+            className={framingButtonClass}
+          >
+            <Focus className="h-3 w-3" />
+            Fit
+          </button>
+          <button type="button" onClick={() => chooseFraming("full")} title="Show the full map" className={framingButtonClass}>
+            <Maximize className="h-3 w-3" />
+            Reset
+          </button>
           <ViewModeToggle mode={viewMode} onChange={changeViewMode} />
         </div>
       </div>
@@ -96,6 +133,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
               cursorMs={scene.cursorMs}
               playing={scene.playing}
               playbackSpeed={scene.playbackSpeed}
+              view={view}
               onUnavailable={() => setWebglUnavailable(true)}
             />
           </Suspense>

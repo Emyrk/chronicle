@@ -20,9 +20,29 @@ import {
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   selectMapEncounter,
+  unitFocusBounds,
   zoneMapPoint,
   type MapPoint,
+  type MapPointBounds,
 } from "./mapModel";
+
+// Fit bounds scan the encounter's whole track, so cache them per encounter
+// and projection instead of recomputing on every replay tick.
+const focusBoundsCache = new WeakMap<Map<string, MapPositionSample[]>, Map<string, MapPointBounds | null>>();
+
+function cachedFocusBounds(
+  positionsByUnit: Map<string, MapPositionSample[]>,
+  key: string,
+  compute: () => MapPointBounds | null,
+): MapPointBounds | null {
+  let byKey = focusBoundsCache.get(positionsByUnit);
+  if (!byKey) {
+    byKey = new Map();
+    focusBoundsCache.set(positionsByUnit, byKey);
+  }
+  if (!byKey.has(key)) byKey.set(key, compute());
+  return byKey.get(key) ?? null;
+}
 
 function useMapManifest(iconBaseUrl: string | undefined) {
   return useQuery({
@@ -65,6 +85,7 @@ export type MapScene =
   | { status: "message"; title: string; detail: string }
   | {
     status: "ready";
+    encounterId: string;
     mapName: string;
     displayedMapId: number;
     floors: number[];
@@ -79,6 +100,10 @@ export type MapScene =
     markers: MapSceneMarker[];
     /** Projects a sample onto the artwork with the same mapping as `markers`. */
     projectSample: (sample: MapPositionSample) => MapPoint | null;
+    /** Boss-area bounds of the encounter's whole unit track; stable across replay ticks. */
+    focusBounds: MapPointBounds | null;
+    /** Whether the view should start framed on `focusBounds` rather than the full map. */
+    fitByDefault: boolean;
   };
 
 /**
@@ -105,8 +130,9 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
   }, [cursorMs, encounter]);
   const mapId = dominantMapId(visibleUnits.map((unit) => unit.sample));
   const representativeSample = visibleUnits.find((unit) => unit.sample.mapId === mapId)?.sample;
-  const encounterMapId = props.context.instance.encounters
-    .find((candidate) => candidate.id === encounter?.encounterId)?.mapId ?? 0;
+  const instanceEncounter = props.context.instance.encounters
+    .find((candidate) => candidate.id === encounter?.encounterId);
+  const encounterMapId = instanceEncounter?.mapId ?? 0;
   const artworkMapId = encounterMapId || mapId;
   const artwork = manifestQuery.data && artworkMapId !== null
     ? resolveMapArtwork(manifestQuery.data, artworkMapId, representativeSample, props.context.instance.name)
@@ -175,8 +201,19 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     }];
   });
 
+  const bossGuids = new Set(instanceEncounter?.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id));
+  const projectionKey = artwork.kind === "zone"
+    ? `zone:${artwork.map.id}:${artwork.assignment.id}`
+    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}`;
+  const focusBounds = cachedFocusBounds(
+    encounter.positionsByUnit,
+    `${mapId}|${projectionKey}|${[...bossGuids].join(",")}`,
+    () => unitFocusBounds(encounter.positionsByUnit, mapId, projectSample, bossGuids),
+  );
+
   return {
     status: "ready",
+    encounterId: encounter.encounterId,
     mapName: artwork.kind === "zone" ? artwork.map.name : artwork.instance.name,
     displayedMapId: artwork.kind === "instance" ? artwork.instance.mapID : mapId,
     floors: artwork.kind === "instance" ? artwork.instance.floors.map((floor) => floor.floor) : [],
@@ -194,5 +231,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     },
     markers,
     projectSample,
+    focusBounds,
+    fitByDefault: Boolean(sync?.enabled) && props.context.selectedEncounterIds.length === 1,
   };
 }
