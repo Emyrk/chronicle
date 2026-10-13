@@ -97,7 +97,7 @@ The backend computes effective `SiteConfig.ads_enabled`. It is true only when:
 2. The deployment configures a valid numeric `CHRONICLE_NITROPAY_SITE_ID`.
 3. The resolved tenant has `ads_enabled = true`.
 
-Eligible tenant site config exposes the public NitroPay site ID. `AdSlot` loads NitroPay once and requests the placement only after this effective gate passes. Disabled tenants do not render an ad container, load NitroPay, or receive the advertising CSP expansion. Local preview remains available only when the frontend is running in dev mode, `CHRONICLE_PREVIEW_ADS=true`, and the hostname is `localhost` or `127.0.0.1`. `pnpm run dev --with-ads` sets that flag for convenience. Do not replace production eligibility with a frontend-only environment flag.
+Eligible tenant site config exposes the public NitroPay site ID. `NitroPayRuntime` loads NitroPay once on every route so its bundled CMP can collect and manage consent, while `AdSlot` requests placements only after the effective gate passes. Disabled tenants do not render an ad container, load NitroPay, or receive the advertising CSP expansion. Local preview remains available only when the frontend is running in dev mode, `CHRONICLE_PREVIEW_ADS=true`, and the hostname is `localhost` or `127.0.0.1`. `pnpm run dev --with-ads` sets that flag for convenience. Do not replace production eligibility with a frontend-only environment flag.
 
 ## Live-serving contract
 
@@ -107,7 +107,7 @@ Keep each provider concern centralized:
 2. Expose only `nitropay_site_id` through effective site config for eligible tenants.
 3. Keep NitroPay's privacy-choice links in the shared footer.
 4. Expand advertising CSP only for eligible tenant hosts.
-5. Load the provider script once through `components/Ads/nitroPay.ts`.
+5. Load the provider script once through `NitroPayRuntime` and `components/Ads/nitroPay.ts` so the CMP works on routes without placements.
 6. Have each mounted `AdSlot` call `createAd` without exposing provider APIs to callers.
 7. Keep localhost previews deterministic and prevent real ad requests during tests, Storybook, and local development.
 
@@ -135,7 +135,7 @@ Use these scenarios when revising this skill or the component contract:
 
 - The tenant toggle alone does not render ads; the deployment must also configure NitroPay and ads.txt.
 - Do not expose the NitroPay site ID as a page-level prop.
-- Do not put the provider script in `index.html`; disabled tenants and pages without placements should not load it.
+- Do not put the provider script in `index.html`; `NitroPayRuntime` must gate it with effective tenant enablement and keep the CMP available sitewide.
 - Do not reserve blank production space when a placement is disabled or unfilled unless product design explicitly requests it.
 - Keep `/speedrunning` as the speedrunning documentation route; leaderboard ads live under the leaderboard page layouts.
 

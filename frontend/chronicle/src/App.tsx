@@ -98,6 +98,7 @@ import { ToolsPage } from "./pages/Tools/ToolsPage"
 import { SpeedrunningPage } from "./pages/Speedrunning/SpeedrunningPage"
 import { ClassDetailsPage } from "./pages/ClassDetails/ClassDetailsPage"
 import { SubspecsPage } from "./pages/Subspecs/SubspecsPage"
+import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
 import { Layout } from "./components/Layout/Layout"
 import { TenantDatasetLayout } from "./components/Layout/TenantDatasetLayout"
 
@@ -119,7 +120,9 @@ function CatchAllRoute() {
 
 function App() {
   return (
-    <Routes>
+    <>
+      <NitroPayRuntime />
+      <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/youtube-sync" element={<YouTubeSyncPage />} />
       <Route path="/youtube-sync-v2" element={<YouTubeSyncV2Page />} />
@@ -252,8 +255,9 @@ function App() {
           <Route path="layout-lab" element={<LayoutLabSettings />} />
         </Route>
       </Route>
-      <Route path="*" element={<CatchAllRoute />} />
-    </Routes>
+        <Route path="*" element={<CatchAllRoute />} />
+      </Routes>
+    </>
   )
 }
 
