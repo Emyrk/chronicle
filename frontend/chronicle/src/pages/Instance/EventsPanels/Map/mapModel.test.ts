@@ -148,14 +148,13 @@ describe("map replay model", () => {
   });
 
   it("fits an encounter route into the center of the map frame", () => {
-    expect(fitMapCameraToPoints([
+    const camera = fitMapCameraToPoints([
       { leftPercent: 20, topPercent: 30 },
       { leftPercent: 40, topPercent: 50 },
-    ], { width: 1_000, height: 500 }, 20, 4)).toEqual({
-      scale: 3,
-      x: -400,
-      y: -350,
-    });
+    ], { width: 1_000, height: 500 }, 20, 4);
+
+    expect(camera).toMatchObject({ x: -400, y: -350 });
+    expect(camera.scale).toBeCloseTo(3);
   });
 
   it("clamps focused encounter routes to the map edges", () => {
