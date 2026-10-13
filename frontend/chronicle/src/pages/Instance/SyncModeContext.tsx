@@ -130,10 +130,13 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
   }, []);
 
   const play = useCallback(() => {
-    if (!enabled) return;
+    // Playing implicitly enables Sync mode. This also lets external drivers,
+    // such as a live collaboration session, apply play and timestamp state in
+    // one update without waiting for a provider re-render.
+    setEnabled(true);
     setIsPlaying(true);
     lastFrameTimeRef.current = null;
-  }, [enabled]);
+  }, []);
 
   const pause = useCallback(() => {
     setIsPlaying(false);

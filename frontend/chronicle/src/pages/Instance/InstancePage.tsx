@@ -14,6 +14,7 @@ import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
 import { InstancePageView } from "./InstancePageView";
 import { YouTubeOverlay } from "./YouTubeOverlay";
 import { SyncModeProvider, useSyncModeContext } from "./SyncModeContext";
+import { LiveSessionProvider } from "./LiveSessionContext";
 import { ReplayControlOverlay, useReplayPosition } from "./ReplayControlOverlay";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { TimeRangeProvider } from "./TimeRangeContext";
@@ -494,6 +495,7 @@ export function InstancePage() {
   return (
     <DatasetProvider datasetId={instance.datasetId} iconBaseUrl={instance.iconBaseUrl}>
     <SyncModeProvider>
+      <LiveSessionProvider>
       <TimeRangeProvider totalDurationMs={totalEncounterDurationMs}>
         <InstanceEventsProvider instanceId={instance.id}>
           <PlayerSpecializationProvider
@@ -522,6 +524,7 @@ export function InstancePage() {
           </PlayerSpecializationProvider>
         </InstanceEventsProvider>
       </TimeRangeProvider>
+      </LiveSessionProvider>
     </SyncModeProvider>
     </DatasetProvider>
   );

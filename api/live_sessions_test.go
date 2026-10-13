@@ -50,6 +50,39 @@ func TestLiveSessionHubPasswordCapacityAndLifecycle(t *testing.T) {
 	require.ErrorIs(t, err, errLiveSessionNotFound)
 }
 
+func TestLiveSessionHubCleansExpiredReservationsAndUnstartedRooms(t *testing.T) {
+	t.Parallel()
+
+	hub := newLiveSessionHub()
+	room, err := hub.create(uuid.New(), "")
+	require.NoError(t, err)
+	peer, _, err := hub.join(room.code, "")
+	require.NoError(t, err)
+
+	hub.mu.Lock()
+	peer.reservedAt = time.Now().Add(-liveSessionJoinReservationTTL - time.Second)
+	hub.mu.Unlock()
+
+	_, _, err = hub.join(room.code, "")
+	require.NoError(t, err)
+	hub.mu.Lock()
+	_, staleReservationExists := room.participants[peer.token]
+	hub.mu.Unlock()
+	require.False(t, staleReservationExists)
+
+	staleRoom, err := hub.create(uuid.New(), "")
+	require.NoError(t, err)
+	hub.mu.Lock()
+	staleRoom.createdAt = time.Now().Add(-liveSessionUnstartedRoomTTL - time.Second)
+	hub.mu.Unlock()
+	_, err = hub.create(uuid.New(), "")
+	require.NoError(t, err)
+	hub.mu.Lock()
+	_, staleRoomExists := hub.rooms[staleRoom.code]
+	hub.mu.Unlock()
+	require.False(t, staleRoomExists)
+}
+
 func TestLiveSessionHandlers(t *testing.T) {
 	t.Parallel()
 
@@ -66,7 +99,7 @@ func TestLiveSessionHandlers(t *testing.T) {
 	require.NoError(t, json.NewDecoder(createRes.Body).Decode(&created))
 	require.NotEmpty(t, created.Code)
 	require.NotEmpty(t, created.LeaderToken)
-	require.Equal(t, "https://chronicle.example.com/live/"+created.Code, created.URL)
+	require.Equal(t, "https://chronicle.example.com/instances/"+instanceID.String()+"?live="+created.Code, created.URL)
 
 	joinRouter := chi.NewRouter()
 	joinRouter.Post("/api/v1/live-sessions/{code}/join", api.JoinLiveSession)

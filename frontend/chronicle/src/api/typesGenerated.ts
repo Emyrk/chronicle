@@ -796,6 +796,25 @@ export interface CreateJoinRequestBody {
     readonly message: string;
 }
 
+// From chroniclesdk/live_session.go
+/**
+ * CreateLiveSessionRequest starts an ephemeral live session for an instance.
+ */
+export interface CreateLiveSessionRequest {
+    readonly instance_id: string;
+    readonly password?: string;
+}
+
+// From chroniclesdk/live_session.go
+/**
+ * CreateLiveSessionResponse contains the leader credentials for a live session.
+ */
+export interface CreateLiveSessionResponse {
+    readonly code: string;
+    readonly leader_token: string;
+    readonly url: string;
+}
+
 // From chroniclesdk/server_application.go
 /**
  * CreateModificationRequestPayload is sent to create/upsert a mod request.
@@ -2405,6 +2424,23 @@ export interface JobStatus {
     readonly errors: readonly RiverAttemptError[];
     readonly kind: string;
     readonly output?: Record<string, string>;
+}
+
+// From chroniclesdk/live_session.go
+/**
+ * JoinLiveSessionRequest contains the optional password for a live session.
+ */
+export interface JoinLiveSessionRequest {
+    readonly password?: string;
+}
+
+// From chroniclesdk/live_session.go
+/**
+ * JoinLiveSessionResponse contains the guest credentials for a live session.
+ */
+export interface JoinLiveSessionResponse {
+    readonly participant_token: string;
+    readonly instance_id: string;
 }
 
 // From chroniclesdk/rankings.go

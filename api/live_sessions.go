@@ -24,6 +24,8 @@ const (
 	liveSessionParticipantIDLength = 12
 	liveSessionMaxParticipants     = 40
 	liveSessionMaxMessageBytes     = 64 << 10
+	liveSessionJoinReservationTTL  = 2 * time.Minute
+	liveSessionUnstartedRoomTTL    = 10 * time.Minute
 	liveSessionLeaderID            = "leader"
 )
 
@@ -48,13 +50,15 @@ type liveSession struct {
 	leader           *liveSessionPeer
 	participants     map[string]*liveSessionPeer
 	participantsByID map[string]*liveSessionPeer
+	createdAt        time.Time
 }
 
 type liveSessionPeer struct {
-	id      string
-	token   string
-	conn    *websocket.Conn
-	writeMu sync.Mutex
+	id         string
+	token      string
+	conn       *websocket.Conn
+	reservedAt time.Time
+	writeMu    sync.Mutex
 }
 
 type liveSessionClientMessage struct {
@@ -80,6 +84,28 @@ func newLiveSessionHub() *liveSessionHub {
 	return &liveSessionHub{rooms: make(map[string]*liveSession)}
 }
 
+func (h *liveSessionHub) cleanupLocked(now time.Time) {
+	for code, room := range h.rooms {
+		hasConnectedParticipant := false
+		for _, peer := range room.participants {
+			if peer.conn != nil {
+				hasConnectedParticipant = true
+				break
+			}
+		}
+		if room.leader == nil && !hasConnectedParticipant && now.Sub(room.createdAt) >= liveSessionUnstartedRoomTTL {
+			delete(h.rooms, code)
+			continue
+		}
+		for token, peer := range room.participants {
+			if peer.conn == nil && now.Sub(peer.reservedAt) >= liveSessionJoinReservationTTL {
+				delete(room.participants, token)
+				delete(room.participantsByID, peer.id)
+			}
+		}
+	}
+}
+
 func (h *liveSessionHub) create(instanceID uuid.UUID, password string) (*liveSession, error) {
 	var passwordHash []byte
 	var err error
@@ -103,6 +129,7 @@ func (h *liveSessionHub) create(instanceID uuid.UUID, password string) (*liveSes
 		code = strings.ToUpper(code)
 
 		h.mu.Lock()
+		h.cleanupLocked(time.Now())
 		if _, exists := h.rooms[code]; !exists {
 			room := &liveSession{
 				code:             code,
@@ -111,6 +138,7 @@ func (h *liveSessionHub) create(instanceID uuid.UUID, password string) (*liveSes
 				leaderToken:      leaderToken,
 				participants:     make(map[string]*liveSessionPeer),
 				participantsByID: make(map[string]*liveSessionPeer),
+				createdAt:        time.Now(),
 			}
 			h.rooms[code] = room
 			h.mu.Unlock()
@@ -126,6 +154,7 @@ func (h *liveSessionHub) join(code, password string) (*liveSessionPeer, uuid.UUI
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	h.cleanupLocked(time.Now())
 	room, ok := h.rooms[code]
 	if !ok {
 		return nil, uuid.Nil, errLiveSessionNotFound
@@ -154,7 +183,7 @@ func (h *liveSessionHub) join(code, password string) (*liveSessionPeer, uuid.UUI
 			continue
 		}
 
-		peer := &liveSessionPeer{id: participantID, token: token}
+		peer := &liveSessionPeer{id: participantID, token: token, reservedAt: time.Now()}
 		room.participants[token] = peer
 		room.participantsByID[participantID] = peer
 		return peer, room.instanceID, nil
@@ -328,7 +357,10 @@ func (api *API) CreateLiveSession(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	liveURL := api.Opts.AccessURL.ResolveReference(&url.URL{Path: "/live/" + room.code}).String()
+	liveURL := api.Opts.AccessURL.ResolveReference(&url.URL{
+		Path:     "/instances/" + room.instanceID.String(),
+		RawQuery: "live=" + url.QueryEscape(room.code),
+	}).String()
 	httpapi.Write(r.Context(), w, http.StatusCreated, chroniclesdk.CreateLiveSessionResponse{
 		Code:        room.code,
 		LeaderToken: room.leaderToken,

@@ -62,6 +62,8 @@ import {
 import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
+import { LiveSessionButton } from "./LiveSessionButton";
+import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
 import { HeroicBadge } from "@/components/HeroicBadge";
@@ -913,7 +915,7 @@ function EncounterSidebar({
 }
 
 
-interface SharedViewPayload {
+export interface SharedViewPayload {
   version: number;
   instanceId?: string;
   instance_id?: string;
@@ -2125,6 +2127,8 @@ export function InstancePageView({
   const isMobile = useIsMobile();
   const { data: session } = useSession();
   const isLoggedIn = !!session?.user_id;
+  const liveSession = useLiveSession();
+  useAutoJoinLiveSession(instance.id);
   const createShare = useCreateShare();
   const instanceDefaults = useInstanceDefaultsCache(isLoggedIn);
 
@@ -3050,6 +3054,18 @@ export function InstancePageView({
     };
   }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, allMergedEnemies, instance.encounters, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
 
+  useEffect(() => {
+    liveSession.registerViewApplier((view) => {
+      const payload = validateSharedViewPayload(view, instance.id, instance.id) as unknown as SharedViewPayload;
+      applySharedViewPayload(payload);
+    });
+    return () => liveSession.registerViewApplier(null);
+  }, [applySharedViewPayload, instance.id, liveSession]);
+
+  useEffect(() => {
+    liveSession.publishView(buildSharedViewPayload());
+  }, [buildSharedViewPayload, liveSession]);
+
   const copyStateToClipboard = useCallback(async () => {
     try {
       const payload = buildSharedViewPayload();
@@ -3383,6 +3399,7 @@ export function InstancePageView({
           {isMobile && (
             <div className="flex flex-col items-end gap-2 shrink-0">
               <div className="flex items-center gap-2">
+              <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
               <InstanceMenu
                 onImportLayout={isEncounterView ? handleImportLayout : undefined}
                 onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
@@ -3497,6 +3514,7 @@ export function InstancePageView({
           )}
           {!isMobile && (
             <div className="flex items-center gap-2 shrink-0">
+              <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
               <DropdownMenu modal={false}>
                 <Tooltip>
                   <TooltipTrigger asChild>

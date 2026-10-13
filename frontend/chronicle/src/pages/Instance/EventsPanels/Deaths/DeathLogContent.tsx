@@ -22,9 +22,11 @@ import { cn } from "@/lib/utils";
 import { hitTypeNames, HitTypeCrit } from "@/lib/hittype/hittype";
 
 import { extractDeathWindow, normalizeDeathWindow, updateDeathWindow } from "./deathBreakoutWindow";
+import { extractOpenDeathRecaps, updateOpenDeathRecaps } from "./deathBreakoutState";
 import {
   getSortedDeathLogEvents,
   isResurrectionEvent,
+  type DeathLogEvent,
   type DeathLogMode,
 } from "./deathLogEvents";
 
@@ -94,6 +96,10 @@ function extractDeathMode(panelOption: string | null | undefined): DeathMode {
   return val === "enemies" ? "enemies" : "players";
 }
 
+function deathRecapKey(event: DeathLogEvent, index: number): string {
+  return `${event.encounterID}:${event.playerID}:${event.offsetMilli}:${index}`;
+}
+
 interface FloatingDeathRecap {
   death: DeathEvent;
   initialPosition: { x: number; y: number };
@@ -104,7 +110,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
   const syncMode = useSyncModeContextOptional();
   const [mode, setModeLocal] = useState<DeathMode>(() => extractDeathMode(panelOption));
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-  const [floatingRecaps, setFloatingRecaps] = useState<Map<string, FloatingDeathRecap>>(() => new Map());
+  const [floatingRecapMemory, setFloatingRecapMemory] = useState<Map<string, FloatingDeathRecap>>(() => new Map());
   const [sharedFightOffsetMilli, setSharedFightOffsetMilli] = useState<number | null>(null);
   const [breakoutWindow, setBreakoutWindowLocal] = useState<IncomingEventsWindow>(() => extractDeathWindow(panelOption));
 
@@ -128,20 +134,20 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
     const rect = target.getBoundingClientRect();
     const x = Math.max(8, Math.min(rect.right + 8, window.innerWidth - 640));
     const y = Math.max(8, Math.min(rect.top, window.innerHeight - 520));
-    setFloatingRecaps((current) => {
-      const next = new Map(current);
-      next.set(key, { death, initialPosition: { x, y } });
-      return next;
-    });
-  }, []);
+    const openKeys = extractOpenDeathRecaps(panelOption);
+    const next = new Map(Array.from(floatingRecapMemory).filter(([recapKey]) => openKeys.has(recapKey)));
+    next.set(key, { death, initialPosition: { x, y } });
+    setFloatingRecapMemory(next);
+    setPanelOption?.(updateOpenDeathRecaps(panelOption, next.keys()));
+  }, [floatingRecapMemory, panelOption, setPanelOption]);
 
   const closeFloatingRecap = useCallback((key: string) => {
-    setFloatingRecaps((current) => {
-      const next = new Map(current);
-      next.delete(key);
-      return next;
-    });
-  }, []);
+    const openKeys = extractOpenDeathRecaps(panelOption);
+    const next = new Map(Array.from(floatingRecapMemory).filter(([recapKey]) => openKeys.has(recapKey)));
+    next.delete(key);
+    setFloatingRecapMemory(next);
+    setPanelOption?.(updateOpenDeathRecaps(panelOption, next.keys()));
+  }, [floatingRecapMemory, panelOption, setPanelOption]);
 
   // Build encounter name lookup
   const encounterNames = useMemo(() => {
@@ -169,6 +175,23 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
     () => getSortedDeathLogEvents(context.selectedEncounterIds, cachedResult, mode),
     [context.selectedEncounterIds, cachedResult, mode],
   );
+  const floatingRecaps = useMemo(() => {
+    const requestedKeys = extractOpenDeathRecaps(panelOption);
+    const next = new Map<string, FloatingDeathRecap>();
+    sortedEvents.forEach((death, index) => {
+      const key = deathRecapKey(death, index);
+      if (!requestedKeys.has(key) || isResurrectionEvent(death)) return;
+      next.set(key, floatingRecapMemory.get(key) ?? {
+        death,
+        initialPosition: {
+          x: Math.max(8, Math.min(32 + next.size * 18, window.innerWidth - 640)),
+          y: Math.max(8, Math.min(96 + next.size * 18, window.innerHeight - 520)),
+        },
+      });
+    });
+    return next;
+  }, [floatingRecapMemory, panelOption, sortedEvents]);
+
   const resurrectionCount = useMemo(
     () => sortedEvents.filter(isResurrectionEvent).length,
     [sortedEvents],
@@ -261,7 +284,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                   syncMode?.enabled === true,
                   syncMode?.currentTimestamp ?? null,
                 );
-                const rowKey = `${event.encounterID}:${event.playerID}:${event.offsetMilli}:${index}`;
+                const rowKey = deathRecapKey(event, index);
 
                 if (isResurrectionEvent(event)) {
                   return (

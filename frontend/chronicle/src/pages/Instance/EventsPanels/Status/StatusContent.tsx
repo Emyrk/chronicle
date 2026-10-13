@@ -428,7 +428,23 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
       ),
     };
   }, [displayRows, lifeTransitionsByPlayer]);
-  const [floatingBreakouts, setFloatingBreakouts] = useState<Map<string, FloatingStatusBreakout>>(() => new Map());
+  const [floatingBreakoutMemory, setFloatingBreakoutMemory] = useState<Map<string, FloatingStatusBreakout>>(() => new Map());
+  const floatingBreakouts = useMemo(() => {
+    const requested = parseStatusFocuses(panelOption);
+    const next = new Map<string, FloatingStatusBreakout>();
+    for (const unitId of requested) {
+      if (!encounter?.units.has(unitId)) continue;
+      next.set(unitId, floatingBreakoutMemory.get(unitId) ?? {
+        unitId,
+        initialPosition: {
+          x: Math.max(8, Math.min(32 + next.size * 18, window.innerWidth - 640)),
+          y: Math.max(8, Math.min(96 + next.size * 18, window.innerHeight - 520)),
+        },
+      });
+    }
+    return next;
+  }, [encounter, floatingBreakoutMemory, panelOption]);
+
   const focusedUnitIds = useMemo(() => {
     const focused = parseStatusFocuses(panelOption);
     for (const unitId of floatingBreakouts.keys()) focused.add(unitId);
@@ -447,20 +463,20 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
     const existing = next.get(unitId);
     next.delete(unitId);
     next.set(unitId, existing ?? { unitId, initialPosition: { x, y } });
-    setFloatingBreakouts(next);
+    setFloatingBreakoutMemory(next);
     setPanelOption?.(updateStatusFocuses(panelOption, next.keys()));
   }, [floatingBreakouts, panelOption, setPanelOption]);
 
   const closeBreakout = useCallback((unitId: string) => {
     const next = new Map(floatingBreakouts);
     next.delete(unitId);
-    setFloatingBreakouts(next);
+    setFloatingBreakoutMemory(next);
     if (next.size === 0) setSharedFightOffsetMilli(null);
     setPanelOption?.(updateStatusFocuses(panelOption, next.keys()));
   }, [floatingBreakouts, panelOption, setPanelOption]);
 
   const selectUnitMode = useCallback((mode: StatusUnitMode) => {
-    setFloatingBreakouts(new Map());
+    setFloatingBreakoutMemory(new Map());
     setSharedFightOffsetMilli(null);
     setPanelOption?.(updateUnitMode(panelOption, mode));
   }, [panelOption, setPanelOption]);
