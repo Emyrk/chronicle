@@ -4,6 +4,7 @@ import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import type { MapPositionSample } from "./map.processor";
 import { interpolatedPositionAt, type MapPoint } from "./mapModel";
 import { MapScene3D, type MapScene3DUnit } from "./MapScene3D";
+import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 
 export interface MapView3DProps {
@@ -13,6 +14,7 @@ export interface MapView3DProps {
   cursorMs: number;
   playing: boolean;
   playbackSpeed: number;
+  view: MapViewRequest;
   /** Called when WebGL cannot be created or the context is lost. */
   onUnavailable: () => void;
 }
@@ -46,6 +48,7 @@ export default function MapView3D({
   cursorMs,
   playing,
   playbackSpeed,
+  view,
   onUnavailable,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -79,6 +82,10 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setGround(ground);
   }, [ground]);
+
+  useEffect(() => {
+    sceneRef.current?.setViewport(view.viewport);
+  }, [view]);
 
   useEffect(() => {
     const container = containerRef.current;

@@ -260,3 +260,115 @@ export function mapPointToScene(point: MapPoint, aspect: number, width = 1): Sce
     z: (point.topPercent / 100 - 0.5) * width * aspect,
   };
 }
+
+/** A box in artwork percentages, like MapPoint. */
+export interface MapPointBounds {
+  minLeft: number;
+  maxLeft: number;
+  minTop: number;
+  maxTop: number;
+}
+
+/** Units further than this from the focus centre (in world yards) are left out of the fit. */
+export const FOCUS_RADIUS_YARDS = 80;
+
+// Frames the encounter's whole unit track rather than the current frame, so
+// the view stays put during replay. The track is centred on the boss (or on
+// every unit when no boss is known) and clamped to `maxRadius` world yards
+// around that centre, so a straggler or a pet left at the entrance does not
+// blow the framing out to the whole map.
+export function unitFocusBounds(
+  positionsByUnit: Map<string, MapPositionSample[]>,
+  mapId: number,
+  project: (sample: MapPositionSample) => MapPoint | null,
+  focusGuids: ReadonlySet<string> = new Set(),
+  maxRadius = FOCUS_RADIUS_YARDS,
+): MapPointBounds | null {
+  const all: MapPositionSample[] = [];
+  const focus: MapPositionSample[] = [];
+  for (const [guid, positions] of positionsByUnit) {
+    for (const sample of positions) {
+      if (sample.mapId !== mapId) continue;
+      all.push(sample);
+      if (focusGuids.has(guid)) focus.push(sample);
+    }
+  }
+  if (all.length === 0) return null;
+  const centreSamples = focus.length > 0 ? focus : all;
+  const centreX = median(centreSamples.map((sample) => sample.x));
+  const centreY = median(centreSamples.map((sample) => sample.y));
+
+  let bounds: MapPointBounds | null = null;
+  for (const sample of all) {
+    if (Math.hypot(sample.x - centreX, sample.y - centreY) > maxRadius) continue;
+    const point = project(sample);
+    if (!point) continue;
+    if (!bounds) {
+      bounds = { minLeft: point.leftPercent, maxLeft: point.leftPercent, minTop: point.topPercent, maxTop: point.topPercent };
+      continue;
+    }
+    bounds.minLeft = Math.min(bounds.minLeft, point.leftPercent);
+    bounds.maxLeft = Math.max(bounds.maxLeft, point.leftPercent);
+    bounds.minTop = Math.min(bounds.minTop, point.topPercent);
+    bounds.maxTop = Math.max(bounds.maxTop, point.topPercent);
+  }
+  return bounds;
+}
+
+/**
+ * The visible part of the artwork: its centre in artwork fractions (0..1)
+ * and a zoom relative to the whole artwork fitting the view (1 = full map).
+ */
+export interface MapViewport {
+  centerX: number;
+  centerY: number;
+  zoom: number;
+}
+
+export const FULL_MAP_VIEWPORT: MapViewport = { centerX: 0.5, centerY: 0.5, zoom: 1 };
+export const MAX_MAP_ZOOM = 50;
+const FIT_PADDING = 0.15;
+const FIT_MIN_SPAN = 1 / MAX_MAP_ZOOM;
+
+export function clampViewport(viewport: MapViewport): MapViewport {
+  const zoom = Math.max(1, Math.min(MAX_MAP_ZOOM, viewport.zoom));
+  const half = 0.5 / zoom;
+  return {
+    centerX: Math.max(half, Math.min(1 - half, viewport.centerX)),
+    centerY: Math.max(half, Math.min(1 - half, viewport.centerY)),
+    zoom,
+  };
+}
+
+// Frames `bounds` plus padding in a view with the artwork's aspect ratio,
+// where a zoom of z shows 1/z of the artwork's width and of its height.
+export function fitViewportToBounds(bounds: MapPointBounds): MapViewport {
+  const spanX = (bounds.maxLeft - bounds.minLeft) / 100;
+  const spanY = (bounds.maxTop - bounds.minTop) / 100;
+  const span = Math.max(FIT_MIN_SPAN, Math.max(spanX, spanY) * (1 + FIT_PADDING * 2));
+  return clampViewport({
+    centerX: (bounds.minLeft + bounds.maxLeft) / 200,
+    centerY: (bounds.minTop + bounds.maxTop) / 200,
+    zoom: 1 / span,
+  });
+}
+
+/** Zooms by `factor` keeping the artwork point under view fraction (`viewX`, `viewY`) fixed. */
+export function zoomViewportAt(viewport: MapViewport, factor: number, viewX: number, viewY: number): MapViewport {
+  const anchorX = viewport.centerX + (viewX - 0.5) / viewport.zoom;
+  const anchorY = viewport.centerY + (viewY - 0.5) / viewport.zoom;
+  const zoom = Math.max(1, Math.min(MAX_MAP_ZOOM, viewport.zoom * factor));
+  return clampViewport({
+    centerX: anchorX - (viewX - 0.5) / zoom,
+    centerY: anchorY - (viewY - 0.5) / zoom,
+    zoom,
+  });
+}
+
+/** Where an artwork point lands in a view showing `viewport`, in view percentages. */
+export function viewportPoint(point: MapPoint, viewport: MapViewport): MapPoint {
+  return {
+    leftPercent: ((point.leftPercent / 100 - viewport.centerX) * viewport.zoom + 0.5) * 100,
+    topPercent: ((point.topPercent / 100 - viewport.centerY) * viewport.zoom + 0.5) * 100,
+  };
+}
