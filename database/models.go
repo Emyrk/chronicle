@@ -2061,6 +2061,7 @@ type SiteConfig struct {
 	AvailableFormats      []string           `db:"available_formats" json:"available_formats"`
 	ClientUploadsDisabled bool               `db:"client_uploads_disabled" json:"client_uploads_disabled"`
 	ParseConfig           []byte             `db:"parse_config" json:"parse_config"`
+	AdsEnabled            bool               `db:"ads_enabled" json:"ads_enabled"`
 }
 
 type TalentBuild struct {

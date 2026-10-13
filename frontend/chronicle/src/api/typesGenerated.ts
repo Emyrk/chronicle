@@ -3476,8 +3476,8 @@ export interface SiteConfig {
      */
     readonly client_uploads_disabled: boolean;
     /**
-     * AdsEnabled is true only when the resolved tenant opted into ads and the
-     * deployment configured both ads.txt and a NitroPay site ID.
+     * AdsEnabled is true only when the resolved tenant or root site opted into ads
+     * and the deployment configured both ads.txt and a NitroPay site ID.
      */
     readonly ads_enabled: boolean;
     /**
@@ -4108,6 +4108,7 @@ export interface UpdateRegressionFixtureNoteRequest {
  */
 export interface UpdateSiteConfigRequest {
     readonly signups_enabled?: boolean;
+    readonly ads_enabled?: boolean;
     readonly disable_client_upload?: boolean;
     readonly branding?: Branding;
     readonly discoverable?: boolean;

@@ -781,8 +781,14 @@ func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.R
 	httpapi.Write(ctx, w, http.StatusAccepted, resp)
 }
 
-func tenantAdsEnabled(deploymentEnabled bool, tenant *database.Tenant) bool {
-	return deploymentEnabled && tenant != nil && tenant.AdsEnabled
+func siteAdsEnabled(deploymentEnabled, rootEnabled bool, tenant *database.Tenant) bool {
+	if !deploymentEnabled {
+		return false
+	}
+	if tenant != nil {
+		return tenant.AdsEnabled
+	}
+	return rootEnabled
 }
 
 func (a *API) adsDeploymentEnabled() bool {
@@ -790,16 +796,22 @@ func (a *API) adsDeploymentEnabled() bool {
 }
 
 func (a *API) adsEnabledForRequest(r *http.Request) bool {
-	if !a.adsDeploymentEnabled() || a.Opts.Tenant == nil {
+	// CSP only governs the document that loads NitroPay. Avoid a site-config query
+	// for API and asset requests, whose response CSP cannot enable document scripts.
+	if !a.adsDeploymentEnabled() || !strings.Contains(r.Header.Get("Accept"), "text/html") {
 		return false
 	}
 
-	slug := a.Opts.Tenant.ExtractSlug(r.Host)
-	if slug == "" {
-		return false
+	if a.Opts.Tenant != nil {
+		slug := a.Opts.Tenant.ExtractSlug(r.Host)
+		if slug != "" {
+			tenant, ok := a.Opts.Tenant.GetTenantBySlug(slug)
+			return ok && tenant.AdsEnabled
+		}
 	}
-	tenant, ok := a.Opts.Tenant.GetTenantBySlug(slug)
-	return ok && tenant.AdsEnabled
+
+	config, err := a.Opts.Zed.GetSiteConfig(r.Context())
+	return err == nil && config.AdsEnabled
 }
 
 func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
@@ -811,7 +823,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	t := servicetenant.TenantFromContext(ctx)
-	adsEnabled := tenantAdsEnabled(a.adsDeploymentEnabled(), t)
+	adsEnabled := siteAdsEnabled(a.adsDeploymentEnabled(), config.AdsEnabled, t)
 	resp := chroniclesdk.SiteConfig{
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
@@ -872,6 +884,9 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if req.SignupsEnabled != nil {
 		params.SignupsEnabled = pgtype.Bool{Bool: *req.SignupsEnabled, Valid: true}
 	}
+	if req.AdsEnabled != nil {
+		params.AdsEnabled = pgtype.Bool{Bool: *req.AdsEnabled, Valid: true}
+	}
 	if req.Branding != nil {
 		b, _ := json.Marshal(req.Branding)
 		params.Branding = b
@@ -895,13 +910,19 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.SiteConfig{
+	adsEnabled := siteAdsEnabled(a.adsDeploymentEnabled(), config.AdsEnabled, t)
+	resp := chroniclesdk.SiteConfig{
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
 		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+		AdsEnabled:            adsEnabled,
 		Branding:              unmarshalBranding(config.Branding),
 		Discoverable:          config.Discoverable,
-	})
+	}
+	if adsEnabled {
+		resp.NitroPaySiteID = a.Opts.NitroPaySiteID
+	}
+	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
 // unmarshalBranding converts raw JSONB bytes into a Branding pointer.

@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE site_config
+    ADD COLUMN ads_enabled BOOLEAN NOT NULL DEFAULT false;
+
+COMMIT;
