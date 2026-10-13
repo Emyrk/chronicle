@@ -1,0 +1,11 @@
+[package]
+name = "render-wow-map"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tiny-skia = "0.11"
+wow-wmo = "0.7.0"

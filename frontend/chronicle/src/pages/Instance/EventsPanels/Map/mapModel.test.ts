@@ -4,7 +4,11 @@ import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 import {
   calibratedDungeonMapPoint,
   dungeonMapPoint,
+  fitMapViewport,
+  interpolatedPositionAt,
   latestPositionAt,
+  pointInMapViewport,
+  projectDungeonMapPoint,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   selectMapEncounter,
@@ -105,6 +109,47 @@ describe("map replay model", () => {
     expect(latestPositionAt(samples, 200)).toBe(samples[1]);
     expect(latestPositionAt(samples, 250)).toBe(samples[1]);
     expect(latestPositionAt(samples, 999)).toBe(samples[2]);
+  });
+
+  it("interpolates position and facing between replay samples", () => {
+    const result = interpolatedPositionAt(samples, 250);
+    expect(result).toMatchObject({ timestampMs: 250, x: 4, y: 5, mapId: 1420 });
+    expect(result?.facing).toBeCloseTo(1.5);
+    expect(interpolatedPositionAt(samples, 99)).toBeNull();
+    expect(interpolatedPositionAt(samples, 999)).toBe(samples[2]);
+  });
+
+  it("interpolates facing across the zero-radian boundary", () => {
+    const positions: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: Math.PI * 1.9 },
+      { timestampMs: 100, x: 10, y: 10, mapId: 1, facing: Math.PI * 0.1 },
+    ];
+    expect(interpolatedPositionAt(positions, 50)?.facing).toBeCloseTo(Math.PI * 2);
+  });
+
+  it("fits and remaps movement into a padded viewport", () => {
+    const viewport = fitMapViewport([
+      { leftPercent: 20, topPercent: 30 },
+      { leftPercent: 40, topPercent: 50 },
+    ], 5, 20);
+    expect(viewport).toEqual({ leftPercent: 15, topPercent: 25, spanPercent: 30 });
+    expect(pointInMapViewport({ leftPercent: 15, topPercent: 25 }, viewport)).toEqual({
+      leftPercent: 0,
+      topPercent: 0,
+    });
+    expect(pointInMapViewport({ leftPercent: 45, topPercent: 55 }, viewport)).toEqual({
+      leftPercent: 100,
+      topPercent: 100,
+    });
+  });
+
+  it("keeps fitted viewports inside the map and uses a useful minimum zoom", () => {
+    expect(fitMapViewport([{ leftPercent: 2, topPercent: 98 }])).toEqual({
+      leftPercent: 0,
+      topPercent: 72,
+      spanPercent: 28,
+    });
+    expect(fitMapViewport([])).toEqual({ leftPercent: 0, topPercent: 0, spanPercent: 100 });
   });
 
   it("selects the encounter containing the replay timestamp", () => {
@@ -209,9 +254,81 @@ describe("map replay model", () => {
     expect(point.topPercent).toBeCloseTo(37.8982, 3);
   });
 
+  it("keeps supported Wailing Caverns tracks when another encounter cannot be calibrated", () => {
+    const bounds = {
+      minX: -375.946014,
+      maxX: 560.528992,
+      minY: -410.145996,
+      maxY: 214.169998,
+    };
+    const supportedSample = { timestampMs: 1_000, x: 36.81, y: -241.06, mapId: 0, facing: 0 };
+    const supportedEncounter = { ...encounter, positionsByUnit: new Map([["boss", [supportedSample]]]) };
+    const unsupportedEncounter = { ...encounter, positionsByUnit: new Map([["trash", [supportedSample]]]) };
+    const calibrations = [
+      resolveDungeonMapCalibration(43, supportedEncounter, () => 3670),
+      resolveDungeonMapCalibration(43, unsupportedEncounter, () => undefined),
+    ];
+    const points = calibrations.flatMap((calibration) => {
+      const point = projectDungeonMapPoint(supportedSample, bounds, 43, calibration);
+      return point ? [point] : [];
+    });
+    expect(points).toEqual([{ leftPercent: 19.1, topPercent: 39.5 }]);
+  });
+
+  it("fits separately calibrated Wailing Caverns encounters into one viewport", () => {
+    const bounds = {
+      minX: -375.946014,
+      maxX: 560.528992,
+      minY: -410.145996,
+      maxY: 214.169998,
+    };
+    const pythasSample = { timestampMs: 1_000, x: 36.81, y: -241.06, mapId: 0, facing: 0 };
+    const cobrahnSample = { timestampMs: 1_000, x: 15.04, y: 300.08, mapId: 0, facing: 0 };
+    const pythas = { ...encounter, positionsByUnit: new Map([["boss", [pythasSample]]]) };
+    const cobrahn = { ...encounter, positionsByUnit: new Map([["boss", [cobrahnSample]]]) };
+    const points = [
+      calibratedDungeonMapPoint(
+        pythasSample,
+        bounds,
+        resolveDungeonMapCalibration(43, pythas, () => 3670)!,
+      )!,
+      calibratedDungeonMapPoint(
+        cobrahnSample,
+        bounds,
+        resolveDungeonMapCalibration(43, cobrahn, () => 3671)!,
+      )!,
+    ];
+    const viewport = fitMapViewport(points, 5, 20);
+    expect(points).toEqual([
+      { leftPercent: 19.1, topPercent: 39.5 },
+      { leftPercent: 30.6, topPercent: 43 },
+    ]);
+    expect(viewport.spanPercent).toBe(21.5);
+    expect(pointInMapViewport(points[0], viewport).leftPercent).toBeCloseTo(23.26, 2);
+    expect(pointInMapViewport(points[1], viewport).leftPercent).toBeCloseTo(76.74, 2);
+  });
+
   it("requires a known boss position to calibrate Wailing Caverns", () => {
     expect(resolveDungeonMapCalibration(43, encounter, () => undefined)).toBeNull();
     expect(resolveDungeonMapCalibration(533, encounter, () => 3670)).toBeNull();
+  });
+
+  it("projects rendered geometry from ordinary world X/Y bounds", () => {
+    const bounds = { minX: -200, maxX: 300, minY: -400, maxY: 600 };
+    expect(projectDungeonMapPoint(
+      { timestampMs: 0, x: bounds.maxX, y: bounds.maxY, mapId: 43, facing: 0 },
+      bounds,
+      43,
+      null,
+      true,
+    )).toEqual({ leftPercent: 0, topPercent: 0 });
+    expect(projectDungeonMapPoint(
+      { timestampMs: 0, x: bounds.minX, y: bounds.minY, mapId: 43, facing: 0 },
+      bounds,
+      43,
+      null,
+      true,
+    )).toEqual({ leftPercent: 100, topPercent: 100 });
   });
 
   it("converts dungeon world coordinates using authoritative floor bounds", () => {

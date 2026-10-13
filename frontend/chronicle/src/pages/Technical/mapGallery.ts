@@ -57,6 +57,16 @@ export interface WowMapInstance {
   instanceType: number;
   directory: string;
   floors: WowMapInstanceFloor[];
+  rendered?: WowMapRenderedInstance;
+}
+
+export interface WowMapRenderedInstance {
+  path: string;
+  width: number;
+  height: number;
+  source: string;
+  bounds: WowMapFloorBounds;
+  triangles?: number;
 }
 
 export interface WowMapFloorBounds {
@@ -108,6 +118,12 @@ export type MapGalleryItem =
     key: string;
     instance: WowMapInstance;
     floor: WowMapInstanceFloor;
+  }
+  | {
+    kind: "rendered";
+    key: string;
+    instance: WowMapInstance;
+    rendered: WowMapRenderedInstance;
   };
 
 function stripTrailingSlash(value: string): string {
@@ -160,8 +176,8 @@ export function mapGalleryItems(manifest: WowMapManifest): MapGalleryItem[] {
         })),
     ),
   );
-  const instances: MapGalleryItem[] = (manifest.instances ?? []).flatMap((instance) =>
-    instance.floors
+  const instances: MapGalleryItem[] = (manifest.instances ?? []).flatMap((instance) => [
+    ...instance.floors
       .filter((floor) => floor.width > 0 && floor.height > 0 && floor.tiles.length > 0)
       .map((floor) => ({
         kind: "instance" as const,
@@ -169,7 +185,15 @@ export function mapGalleryItems(manifest: WowMapManifest): MapGalleryItem[] {
         instance,
         floor,
       })),
-  );
+    ...(instance.rendered && instance.rendered.width > 0 && instance.rendered.height > 0
+      ? [{
+          kind: "rendered" as const,
+          key: `rendered-${instance.mapID}`,
+          instance,
+          rendered: instance.rendered,
+        }]
+      : []),
+  ]);
 
   return [...zones, ...instances].sort((left, right) => {
     const leftName = left.kind === "zone" ? left.map.name : left.instance.name;

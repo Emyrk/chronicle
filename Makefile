@@ -269,8 +269,17 @@ maps/forever-extract:
 		$(if $(WOWDATA_MAP_REUSE_MANIFEST),--reuse-manifest-url="$(WOWDATA_MAP_REUSE_MANIFEST)") \
 		--workers="$(WOWDATA_MAP_WORKERS)"
 
+.PHONY: maps/forever-render
+maps/forever-render: maps/forever-extract
+	go run ./scripts/dbcdata render-wowdata-maps \
+		--server=forever \
+		--manifest=frontend/imagecache/forever/maps/manifest.json \
+		$(if $(WOWDATA_BIN),--wowdata="$(WOWDATA_BIN)") \
+		$(if $(WOWDATA_CACHE),--cache="$(WOWDATA_CACHE)") \
+		--workers="$(WOWDATA_MAP_WORKERS)"
+
 .PHONY: maps/forever-upload
-maps/forever-upload: maps/forever-extract
+maps/forever-upload: maps/forever-render
 	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps ./upload-maps-r2.sh)
 
 .PHONY: maps/forever
