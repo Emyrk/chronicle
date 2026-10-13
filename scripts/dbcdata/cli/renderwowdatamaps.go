@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -156,7 +157,10 @@ func renderWowdataMap(
 	defer func() { _ = os.RemoveAll(workDir) }()
 
 	wdtPath := filepath.Join(workDir, "map.wdt")
-	if err := exportWowdataFile(ctx, stderr, target, wdtFileDataID, wdtPath); err != nil {
+	if err := exportWowdataFile(
+		ctx, stderr, target, wdtFileDataID, wdtPath,
+		fmt.Sprintf("map %d WDT FileDataID %d", spec.MapID, wdtFileDataID),
+	); err != nil {
 		return nil, err
 	}
 	wdt, err := os.ReadFile(wdtPath)
@@ -186,7 +190,10 @@ func renderWowdataMap(
 			return nil, fmt.Errorf("write WDT placements: %w", err)
 		}
 		rootPath := filepath.Join(workDir, "root.wmo")
-		if err := exportWowdataFile(ctx, stderr, target, rootID, rootPath); err != nil {
+		if err := exportWowdataFile(
+			ctx, stderr, target, rootID, rootPath,
+			fmt.Sprintf("map %d WMO root FileDataID %d", spec.MapID, rootID),
+		); err != nil {
 			return nil, err
 		}
 		root, err := os.ReadFile(rootPath)
@@ -206,6 +213,7 @@ func renderWowdataMap(
 			outputs = append(outputs, wowdataFileExport{
 				FileDataID: fileDataID,
 				Output:     filepath.Join(groupsDir, fmt.Sprintf("group_%03d.wmo", index)),
+				Label:      fmt.Sprintf("map %d WMO group %d/%d FileDataID %d", spec.MapID, index+1, len(groupIDs), fileDataID),
 			})
 		}
 		if err := exportWowdataFiles(ctx, stderr, target, outputs, int(opts.Workers)); err != nil {
@@ -226,6 +234,7 @@ func renderWowdataMap(
 			outputs = append(outputs, wowdataFileExport{
 				FileDataID: tile.FileDataID,
 				Output:     filepath.Join(adtDir, fmt.Sprintf("tile_%02d_%02d.adt", tile.Column, tile.Row)),
+				Label:      fmt.Sprintf("map %d ADT %d,%d FileDataID %d", spec.MapID, tile.Column, tile.Row, tile.FileDataID),
 			})
 		}
 		if err := exportWowdataFiles(ctx, stderr, target, outputs, int(opts.Workers)); err != nil {
@@ -262,11 +271,55 @@ func renderWowdataMap(
 	}, nil
 }
 
+type prefixedLineWriter struct {
+	destination io.Writer
+	mutex       *sync.Mutex
+	prefix      string
+	pending     []byte
+}
+
+func (writer *prefixedLineWriter) Write(data []byte) (int, error) {
+	writer.pending = append(writer.pending, data...)
+	for {
+		newline := bytes.IndexByte(writer.pending, '\n')
+		if newline < 0 {
+			break
+		}
+		if err := writer.writeLine(writer.pending[:newline]); err != nil {
+			return 0, err
+		}
+		writer.pending = writer.pending[newline+1:]
+	}
+	return len(data), nil
+}
+
+func (writer *prefixedLineWriter) Flush() error {
+	if len(writer.pending) == 0 {
+		return nil
+	}
+	err := writer.writeLine(writer.pending)
+	writer.pending = nil
+	return err
+}
+
+func (writer *prefixedLineWriter) writeLine(line []byte) error {
+	writer.mutex.Lock()
+	defer writer.mutex.Unlock()
+	_, err := fmt.Fprintf(writer.destination, "[%s] %s\n", writer.prefix, line)
+	return err
+}
+
 func readWowMapWDTFileDataID(ctx context.Context, stderr io.Writer, target wowMapExtractOptions, mapID int32) (int32, error) {
 	args := append([]string{"db2", "rows", "Map", "--id", fmt.Sprint(mapID)}, wowdataTargetArgs(target)...)
 	cmd := exec.CommandContext(ctx, target.WowdataBin, args...)
-	cmd.Stderr = stderr
+	logWriter := &prefixedLineWriter{
+		destination: stderr,
+		mutex:       &sync.Mutex{},
+		prefix:      fmt.Sprintf("map %d DB2 Map row", mapID),
+	}
+	cmd.Stderr = logWriter
 	output, err := cmd.Output()
+	_ = logWriter.Flush()
 	if err != nil {
 		return 0, fmt.Errorf("read Map row %d: %w", mapID, err)
 	}
@@ -287,11 +340,19 @@ func readWowMapWDTFileDataID(ctx context.Context, stderr io.Writer, target wowMa
 	return response.Data.Rows[0].WDTFileDataID, nil
 }
 
-func exportWowdataFile(ctx context.Context, stderr io.Writer, target wowMapExtractOptions, fileDataID int32, output string) error {
-	return exportWowdataFileWithRetries(ctx, stderr, target, fileDataID, output, []time.Duration{
-		time.Second,
-		2 * time.Second,
-	})
+var wowdataExportRetryDelays = []time.Duration{time.Second, 2 * time.Second}
+
+func exportWowdataFile(
+	ctx context.Context,
+	stderr io.Writer,
+	target wowMapExtractOptions,
+	fileDataID int32,
+	output string,
+	label string,
+) error {
+	return exportWowdataFileWithRetries(
+		ctx, stderr, target, fileDataID, output, label, &sync.Mutex{}, wowdataExportRetryDelays,
+	)
 }
 
 func exportWowdataFileWithRetries(
@@ -300,18 +361,22 @@ func exportWowdataFileWithRetries(
 	target wowMapExtractOptions,
 	fileDataID int32,
 	output string,
+	label string,
+	logMutex *sync.Mutex,
 	retryDelays []time.Duration,
 ) error {
 	args := append([]string{"file", "export", "--file-data-id", fmt.Sprint(fileDataID), "--output", output}, wowdataTargetArgs(target)...)
 	var lastErr error
 	for attempt := 0; attempt <= len(retryDelays); attempt++ {
 		cmd := exec.CommandContext(ctx, target.WowdataBin, args...)
-		cmd.Stderr = stderr
-		if err := cmd.Run(); err == nil {
+		logWriter := &prefixedLineWriter{destination: stderr, mutex: logMutex, prefix: label}
+		cmd.Stderr = logWriter
+		err := cmd.Run()
+		_ = logWriter.Flush()
+		if err == nil {
 			return nil
-		} else {
-			lastErr = err
 		}
+		lastErr = err
 		if ctx.Err() != nil {
 			return fmt.Errorf("export FileDataID %d: %w", fileDataID, ctx.Err())
 		}
@@ -319,7 +384,9 @@ func exportWowdataFileWithRetries(
 			break
 		}
 		_ = os.Remove(output)
-		_, _ = fmt.Fprintf(stderr, "Retrying FileDataID %d after export failure (%d/%d)\n", fileDataID, attempt+1, len(retryDelays))
+		_ = logWriter.writeLine([]byte(fmt.Sprintf(
+			"retrying after export failure (%d/%d)", attempt+1, len(retryDelays),
+		)))
 		timer := time.NewTimer(retryDelays[attempt])
 		select {
 		case <-ctx.Done():
@@ -334,6 +401,7 @@ func exportWowdataFileWithRetries(
 type wowdataFileExport struct {
 	FileDataID int32
 	Output     string
+	Label      string
 }
 
 func exportWowdataFiles(ctx context.Context, stderr io.Writer, target wowMapExtractOptions, files []wowdataFileExport, workers int) error {
@@ -342,11 +410,14 @@ func exportWowdataFiles(ctx context.Context, stderr io.Writer, target wowMapExtr
 	jobs := make(chan wowdataFileExport)
 	var wait sync.WaitGroup
 	var mu sync.Mutex
+	var logMutex sync.Mutex
 	var firstErr error
 	worker := func() {
 		defer wait.Done()
 		for file := range jobs {
-			if err := exportWowdataFile(ctx, stderr, target, file.FileDataID, file.Output); err != nil {
+			if err := exportWowdataFileWithRetries(
+				ctx, stderr, target, file.FileDataID, file.Output, file.Label, &logMutex, wowdataExportRetryDelays,
+			); err != nil {
 				mu.Lock()
 				if firstErr == nil {
 					firstErr = err
