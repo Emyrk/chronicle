@@ -5,7 +5,7 @@ import type {
   WowMapInstance,
   WowMapManifest,
 } from "@/pages/Technical/mapGallery";
-import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
+import type { MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
 
 export interface MapPoint {
   leftPercent: number;
@@ -24,7 +24,56 @@ export function latestPositionAt(
   return index >= 0 ? positions[index] : null;
 }
 
-function latestPositionIndex(positions: MapPositionSample[], timestampMs: number): number {
+/** Most health bars drawn at once. */
+export const MAX_HEALTH_BARS = 48;
+/** Units whose health changed this recently get a bar. */
+export const RECENT_HEALTH_MS = 3_000;
+
+const HEALTH_RED = [239, 68, 68];
+const HEALTH_AMBER = [245, 158, 11];
+const HEALTH_GREEN = [34, 197, 94];
+
+/** Bar fill colour: red at 0, amber at half, green at full health. */
+export function healthBarColor(fraction: number): string {
+  const t = Math.min(1, Math.max(0, fraction)) * 2;
+  const [from, to] = t <= 1 ? [HEALTH_RED, HEALTH_AMBER] : [HEALTH_AMBER, HEALTH_GREEN];
+  const mix = t <= 1 ? t : t - 1;
+  const channel = (index: number) => Math.round(from[index] + (to[index] - from[index]) * mix);
+  return `rgb(${channel(0)}, ${channel(1)}, ${channel(2)})`;
+}
+
+/** The unit's latest health sample at or before `timestampMs`, or null. */
+export function latestHealthAt(samples: MapHealthSample[], timestampMs: number): MapHealthSample | null {
+  const index = latestPositionIndex(samples, timestampMs);
+  return index >= 0 ? samples[index] : null;
+}
+
+/**
+ * Declutters health bars: bosses, then selected players, then units whose
+ * health changed in the last RECENT_HEALTH_MS (most recent first), up to
+ * MAX_HEALTH_BARS. Units without a sample at or before the cursor get none.
+ * Returns each chosen unit's sample at the cursor.
+ */
+export function selectHealthBars(
+  guids: readonly string[],
+  healthByUnit: Map<string, MapHealthSample[]>,
+  cursorMs: number,
+  bossGuids: ReadonlySet<string>,
+  selectedGuids: ReadonlySet<string>,
+): Map<string, MapHealthSample> {
+  const candidates = guids.flatMap((guid) => {
+    const sample = latestHealthAt(healthByUnit.get(guid) ?? [], cursorMs);
+    if (!sample) return [];
+    const priority = bossGuids.has(guid) ? 0
+      : selectedGuids.has(guid) ? 1
+      : cursorMs - sample.timestampMs <= RECENT_HEALTH_MS ? 2 : -1;
+    return priority < 0 ? [] : [{ guid, sample, priority }];
+  });
+  candidates.sort((left, right) => left.priority - right.priority || right.sample.timestampMs - left.sample.timestampMs);
+  return new Map(candidates.slice(0, MAX_HEALTH_BARS).map(({ guid, sample }) => [guid, sample]));
+}
+
+function latestPositionIndex(positions: readonly { timestampMs: number }[], timestampMs: number): number {
   let low = 0;
   let high = positions.length - 1;
   let match = -1;

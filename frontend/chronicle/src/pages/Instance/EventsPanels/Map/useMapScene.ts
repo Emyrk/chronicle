@@ -12,7 +12,7 @@ import {
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import type { MapPositionSample, MapResult } from "./map.processor";
-import type { EncounterEffects } from "./replayEffects";
+import { isDeadAt, type EncounterEffects } from "./replayEffects";
 import {
   calibratedDungeonMapPoint,
   dominantMapId,
@@ -20,6 +20,7 @@ import {
   latestPositionAt,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
+  selectHealthBars,
   selectMapEncounter,
   unitFocusBounds,
   zoneMapPoint,
@@ -64,6 +65,13 @@ function useMapManifest(iconBaseUrl: string | undefined) {
 
 export type MapMarkerKind = "player" | "pet" | "hostile";
 
+export interface MapUnitHealth {
+  current: number;
+  max: number;
+  absorb: number;
+  dead: boolean;
+}
+
 export interface MapSceneMarker {
   guid: string;
   sample: MapPositionSample;
@@ -74,6 +82,8 @@ export interface MapSceneMarker {
   kind: MapMarkerKind;
   muted: boolean;
   name: string;
+  /** Health bar at the cursor, or null when the unit has none or it was decluttered. */
+  health: MapUnitHealth | null;
 }
 
 export interface MapSceneGround {
@@ -184,6 +194,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
       : null;
 
   const selectedPlayers = props.context.entitySelection.playerIds;
+  const bossGuids = new Set(instanceEncounter?.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id));
   const markers = visibleUnits.flatMap(({ guid, sample, positions }): MapSceneMarker[] => {
     if (sample.mapId !== mapId) return [];
     const point = projectSample(sample);
@@ -202,10 +213,14 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
       kind,
       muted: Boolean(player) && selectedPlayers.size > 0 && !selectedPlayers.has(guid),
       name: player?.name ?? metadata?.name ?? guid,
+      health: null,
     }];
   });
-
-  const bossGuids = new Set(instanceEncounter?.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id));
+  const bars = selectHealthBars(markers.map((marker) => marker.guid), encounter.healthByUnit, cursorMs, bossGuids, selectedPlayers);
+  for (const marker of markers) {
+    const sample = bars.get(marker.guid);
+    if (sample) marker.health = { current: sample.current, max: sample.max, absorb: sample.absorb, dead: isDeadAt(encounter.effects, marker.guid, cursorMs) };
+  }
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
     : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}`;
@@ -241,3 +256,4 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     bossGuids,
   };
 }
+

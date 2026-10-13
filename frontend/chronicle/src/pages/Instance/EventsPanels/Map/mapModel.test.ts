@@ -13,10 +13,14 @@ import {
   zoomViewportAt,
   dungeonMapPoint,
   interpolatedPositionAt,
+  healthBarColor,
+  latestHealthAt,
   latestPositionAt,
+  MAX_HEALTH_BARS,
   mapPointToScene,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
+  selectHealthBars,
   selectMapEncounter,
   zoneMapPoint,
 } from "./mapModel";
@@ -32,6 +36,7 @@ const encounter: MapEncounterPositions = {
   startMs: 100,
   endMs: 300,
   positionsByUnit: new Map([["player", samples]]),
+  healthByUnit: new Map(),
   effects: createEncounterEffects(),
 };
 
@@ -118,6 +123,47 @@ describe("map replay model", () => {
     expect(latestPositionAt(samples, 999)).toBe(samples[2]);
   });
 
+  it("finds the latest health sample at or before the replay cursor", () => {
+    const health = [
+      { timestampMs: 100, current: 1000, max: 1000, absorb: 0 },
+      { timestampMs: 300, current: 400, max: 1000, absorb: 0 },
+    ];
+    expect(latestHealthAt(health, 99)).toBeNull();
+    expect(latestHealthAt(health, 299)).toBe(health[0]);
+    expect(latestHealthAt(health, 300)).toBe(health[1]);
+    // Scrubbing back returns the earlier sample again.
+    expect(latestHealthAt(health, 150)).toBe(health[0]);
+  });
+
+  it("keeps bars for bosses and selected players and caps recently damaged units", () => {
+    const sample = (timestampMs: number) => [{ timestampMs, current: 500, max: 1000, absorb: 0 }];
+    const healthByUnit = new Map([
+      ["boss", sample(0)],
+      ["selected", sample(0)],
+      ["idle", sample(0)],
+      ["future", sample(20_000)],
+      ...Array.from({ length: 60 }, (_, index) => [`p${index}`, sample(9_000 + index)] as const),
+    ]);
+    const guids = ["idle", "future", ...Array.from({ length: 60 }, (_, index) => `p${index}`), "selected", "boss"];
+    const bars = selectHealthBars(guids, healthByUnit, 10_000, new Set(["boss"]), new Set(["selected"]));
+    expect(bars.size).toBe(MAX_HEALTH_BARS);
+    expect(bars.has("boss")).toBe(true);
+    expect(bars.has("selected")).toBe(true);
+    // Unchanged for longer than RECENT_HEALTH_MS, or no sample yet.
+    expect(bars.has("idle")).toBe(false);
+    expect(bars.has("future")).toBe(false);
+    // The most recently damaged units win the remaining slots.
+    expect(bars.has("p59")).toBe(true);
+    expect(bars.has("p0")).toBe(false);
+  });
+
+  it("colours health bars green to amber to red", () => {
+    expect(healthBarColor(1)).toBe("rgb(34, 197, 94)");
+    expect(healthBarColor(0.5)).toBe("rgb(245, 158, 11)");
+    expect(healthBarColor(0)).toBe("rgb(239, 68, 68)");
+    expect(healthBarColor(2)).toBe(healthBarColor(1));
+  });
+
   it("selects the encounter containing the replay timestamp", () => {
     const second = { ...encounter, encounterId: "two", startMs: 400, endMs: 600 };
     const encounters = new Map([["one", encounter], ["two", second]]);
@@ -174,6 +220,7 @@ describe("map replay model", () => {
       startMs: 0,
       endMs: 1_000,
       positionsByUnit: new Map([["boss", [sample]]]),
+      healthByUnit: new Map(),
       effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => entry);
@@ -197,6 +244,7 @@ describe("map replay model", () => {
         { timestampMs: 8_000, x: 38, y: -240, mapId: 0, facing: 0 },
         { timestampMs: 10_000, x: 37, y: -241, mapId: 0, facing: 0 },
       ]]]),
+      healthByUnit: new Map(),
       effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670);
@@ -210,6 +258,7 @@ describe("map replay model", () => {
       startMs: 0,
       endMs: 1_000,
       positionsByUnit: new Map([["boss", [anchor]]]),
+      healthByUnit: new Map(),
       effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670)!;

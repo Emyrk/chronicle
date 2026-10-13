@@ -2,15 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   addEffectEvent,
   BEAM_MS,
+  COMBAT_TEXT_MS,
   createEncounterEffects,
   DEFAULT_EFFECT_OPTIONS,
   deriveActiveEffects,
+  deriveCombatText,
   eventWindow,
   HIT_WOBBLE_MS,
   INTERRUPT_COLOR,
   isDeadAt,
   MELEE_FLASH_MS,
+  RANGED_AUTO_COLOR,
   schoolColor,
+  SLASH_MS,
+  STREAK_MS,
   type DeriveEffectsOptions,
   type EncounterEffects,
   type ReplayEffectEvent,
@@ -26,10 +31,11 @@ function event(timestampMs: number, kind: ReplayEffectEvent["kind"], source: str
     amount: 100,
     crit: false,
     periodic: false,
-    melee: false,
+    attack: "spell",
     aoe: false,
     castTimeMs: 0,
     spellId: 133,
+    spellName: "Fireball",
     ...extra,
   };
 }
@@ -73,10 +79,29 @@ describe("deriveActiveEffects", () => {
     expect(derive(fx, 1_000 + BEAM_MS).map((effect) => effect.type)).toEqual([]);
   });
 
-  it("flashes the target without a beam for melee", () => {
-    const fx = effects(event(1_000, "damage", "warrior", "boss", { melee: true, school: 2 }));
-    expect(derive(fx, 1_050)).toEqual([expect.objectContaining({ type: "hit", target: "boss", color: schoolColor(2) })]);
-    expect(derive(fx, 1_000 + MELEE_FLASH_MS)).toEqual([]);
+  it("draws swings as a lunge and slash, never a beam", () => {
+    const fx = effects(event(1_000, "damage", "warrior", "boss", { attack: "swing", school: 2, spellId: 6603 }));
+    expect(derive(fx, 1_050)).toEqual([
+      expect.objectContaining({ type: "lunge", source: "warrior", target: "boss" }),
+      expect.objectContaining({ type: "slash", source: "warrior", target: "boss" }),
+      expect.objectContaining({ type: "hit", target: "boss", color: schoolColor(2) }),
+    ]);
+    expect(derive(fx, 1_000 + MELEE_FLASH_MS).map((effect) => effect.type)).toEqual(["slash"]);
+    expect(derive(fx, 1_000 + SLASH_MS)).toEqual([]);
+  });
+
+  it("adds an impact burst for melee abilities", () => {
+    const fx = effects(event(1_000, "damage", "warrior", "boss", { attack: "melee_ability", school: 2, spellId: 78 }));
+    expect(derive(fx, 1_050).map((effect) => effect.type)).toEqual(["lunge", "slash", "impact", "hit"]);
+  });
+
+  it("draws ranged auto attacks as a fast white streak", () => {
+    const fx = effects(event(1_000, "damage", "hunter", "boss", { attack: "ranged_auto", school: 2, spellId: 75 }));
+    expect(derive(fx, 1_050)).toEqual([
+      expect.objectContaining({ type: "streak", source: "hunter", target: "boss", color: RANGED_AUTO_COLOR }),
+      expect.objectContaining({ type: "hit", target: "boss" }),
+    ]);
+    expect(derive(fx, 1_000 + STREAK_MS).map((effect) => effect.type)).toEqual(["hit"]);
   });
 
   it("drops periodic ticks and heals unless enabled", () => {
@@ -96,8 +121,8 @@ describe("deriveActiveEffects", () => {
   });
 
   it("honours the guid filter and visibility", () => {
-    const fx = effects(event(1_000, "damage", "mage", "boss"), event(1_000, "damage", "rogue", "boss", { melee: true, school: 2 }));
-    expect(derive(fx, 1_010, { filterGuids: new Set(["rogue"]) })).toEqual([expect.objectContaining({ type: "hit", target: "boss" })]);
+    const fx = effects(event(1_000, "damage", "mage", "boss"), event(1_000, "damage", "rogue", "boss", { attack: "swing", school: 2 }));
+    expect(derive(fx, 1_010, { filterGuids: new Set(["rogue"]) }).map((effect) => effect.type)).toEqual(["lunge", "slash", "hit"]);
     expect(derive(fx, 1_010, { visibleGuids: new Set(["boss"]) }).map((effect) => effect.type)).toEqual(["hit", "hit"]);
   });
 
@@ -114,7 +139,7 @@ describe("deriveActiveEffects", () => {
     const fx = effects(
       event(1_000, "damage", "mage", "boss"),
       event(1_100, "cast_start", "priest", "", { castTimeMs: 2_500 }),
-      event(1_200, "damage", "rogue", "boss", { melee: true }),
+      event(1_200, "damage", "rogue", "boss", { attack: "swing" }),
       event(1_400, "cast_go", "mage", "", { aoe: true }),
     );
     const out = deriveActiveEffects(fx, 1_450, DEFAULT_EFFECT_OPTIONS, []);
@@ -164,5 +189,41 @@ describe("isDeadAt", () => {
     expect(isDeadAt(fx, "tank", 5_000)).toBe(false);
     expect(isDeadAt(fx, "tank", 9_000)).toBe(true);
     expect(isDeadAt(fx, "healer", 9_000)).toBe(false);
+  });
+});
+
+describe("effect spell info", () => {
+  it("carries the event's spell and amount for hover tooltips", () => {
+    const fx = effects(event(1_000, "damage", "mage", "boss", { spellId: 116, spellName: "Frostbolt", amount: 812, school: 6 }));
+    expect(derive(fx, 1_010)[0]).toMatchObject({ type: "beam", eventKind: "damage", spellId: 116, spellName: "Frostbolt", amount: 812 });
+  });
+});
+
+describe("deriveCombatText", () => {
+  const options = { showPeriodic: false, showHeals: true };
+  const fx = effects(
+    event(1_000, "damage", "mage", "boss", { spellName: "Frostbolt", school: 6, crit: true }),
+    event(1_200, "damage", "lock", "boss", { spellName: "Shadow Bolt" }),
+    event(1_300, "damage", "mage", "boss", { spellName: "Ignite", periodic: true }),
+    event(1_400, "heal", "mage", "tank", { spellName: "Heal" }),
+    event(1_500, "cast_go", "mage", "boss", { spellName: "Frostbolt" }),
+  );
+
+  it("names recent hits and heals from the given sources, newest first", () => {
+    const texts = deriveCombatText(fx, 1_500, new Set(["mage"]), options, 8).map((text) => ({ ...text }));
+    expect(texts).toEqual([
+      { target: "tank", spellName: "Heal", color: schoolColor(4), crit: false, progress: 100 / COMBAT_TEXT_MS },
+      { target: "boss", spellName: "Frostbolt", color: schoolColor(6), crit: true, progress: 500 / COMBAT_TEXT_MS },
+    ]);
+    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), { ...options, showHeals: false }, 8).map((text) => text.spellName)).toEqual(["Frostbolt"]);
+    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), options, 1)).toHaveLength(1);
+  });
+
+  it("expires after COMBAT_TEXT_MS and re-derives the same text when scrubbing back", () => {
+    const sources = new Set(["mage"]);
+    const out = deriveCombatText(fx, 1_050, sources, options, 8);
+    const forward = out.map((text) => ({ ...text }));
+    expect(deriveCombatText(fx, 1_000 + COMBAT_TEXT_MS + 500, sources, options, 8, out)).toEqual([]);
+    expect(deriveCombatText(fx, 1_050, sources, options, 8, out).map((text) => ({ ...text }))).toEqual(forward);
   });
 });
