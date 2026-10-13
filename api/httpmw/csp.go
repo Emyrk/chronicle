@@ -12,16 +12,21 @@ func ContentSecurityPolicy(adsEnabled func(*http.Request) bool) func(next http.H
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			httpsSource := ""
+			scriptAdSources := ""
+			mediaSources := "media-src 'self'"
 			if adsEnabled != nil && adsEnabled(r) {
 				httpsSource = " https:"
+				scriptAdSources = " 'unsafe-eval' https:"
+				mediaSources = "media-src 'self' data: blob: https:"
 			}
 
 			policy := strings.Join([]string{
 				"default-src 'self'",
-				"script-src 'self' 'unsafe-inline' blob: https://www.googletagmanager.com https://www.google-analytics.com https://tweakcn.com https://www.youtube.com https://static.cloudflareinsights.com" + httpsSource,
+				"script-src 'self' 'unsafe-inline' blob: https://www.googletagmanager.com https://www.google-analytics.com https://tweakcn.com https://www.youtube.com https://static.cloudflareinsights.com" + scriptAdSources,
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 				"font-src 'self' https://fonts.gstatic.com",
 				"img-src 'self' data: blob: https://cdn.brandfetch.io https://icons.chronicleclassic.com https://cdn.discordapp.com https://i.imgur.com https://avatars.githubusercontent.com" + httpsSource,
+				mediaSources,
 				"connect-src 'self' https://raw.githubusercontent.com https://www.google-analytics.com https://region1.google-analytics.com https://icons.chronicleclassic.com https://models.chronicleclassic.com" + httpsSource,
 				"worker-src 'self' blob:",
 				"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com" + httpsSource,
