@@ -1,9 +1,17 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { Focus, Map as MapIcon, Maximize, Users } from "lucide-react";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
-import { fitViewportToBounds, FULL_MAP_VIEWPORT } from "./mapModel";
+import {
+  FULL_MAP_VIEWPORT,
+  INITIAL_MAP_FRAMING,
+  manualMapFraming,
+  pinMapFraming,
+  reconcileMapFraming,
+  type MapFraming,
+  type MapViewport,
+} from "./mapModel";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
 import { useMapScene } from "./useMapScene";
 
@@ -47,41 +55,39 @@ function ViewModeToggle({ mode, onChange }: { mode: MapViewMode; onChange: (mode
   );
 }
 
-type MapFraming = "fit" | "full";
-
 const framingButtonClass = "flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground";
 
 function MapContent(props: PanelRenderProps<MapResult>) {
   const scene = useMapScene(props);
   const [viewMode, setViewMode] = useState<MapViewMode>(readStoredViewMode);
   const [webglUnavailable, setWebglUnavailable] = useState(false);
-  // An explicit Fit / Reset applies to the encounter it was chosen in; a new
-  // encounter falls back to the default framing. `revision` re-applies the
-  // same framing after the user has panned or zoomed.
-  const [framingChoice, setFramingChoice] = useState<{ encounterId: string; framing: MapFraming; revision: number } | null>(null);
   const ready = scene.status === "ready" ? scene : null;
-  const encounterId = ready?.encounterId ?? "";
-  const focusBounds = ready?.focusBounds ?? null;
-  const choice = framingChoice?.encounterId === encounterId ? framingChoice : null;
-  const framing: MapFraming = choice?.framing ?? (ready?.fitByDefault && focusBounds ? "fit" : "full");
-  const revision = choice?.revision ?? 0;
+  const autoFit = ready?.autoFit ?? null;
+  const defaultViewport = ready?.fitByDefault && autoFit ? autoFit : FULL_MAP_VIEWPORT;
+  const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
+  // A new selection or replay moving into another encounter re-frames;
+  // loading states (e.g. reprocessing after a filter change) keep the framing.
+  const framing = ready
+    ? reconcileMapFraming(storedFraming, `${props.context.selectedEncounterIds.join(",")}|${ready.encounterId}`, defaultViewport)
+    : storedFraming;
+  if (framing !== storedFraming) setFraming(framing);
   // Both views take the same request, so toggling 2D <-> 3D keeps the framing.
-  const view = useMemo((): MapViewRequest => ({
-    viewport: framing === "fit" && focusBounds ? fitViewportToBounds(focusBounds) : FULL_MAP_VIEWPORT,
-    // Distinguishes requests for different encounters with equal viewports.
-    key: `${encounterId}:${revision}`,
-  }), [encounterId, focusBounds, framing, revision]);
+  const view: MapViewRequest = { viewport: framing.viewport ?? defaultViewport, key: String(framing.revision) };
+
+  const handleUserViewport = useCallback((viewport: MapViewport) => {
+    setFraming((current) => manualMapFraming(current, viewport));
+  }, []);
 
   if (scene.status === "message") return <MapMessage title={scene.title} detail={scene.detail} />;
 
-  const chooseFraming = (next: MapFraming) => setFramingChoice({ encounterId, framing: next, revision: revision + 1 });
+  const applyFraming = (viewport: MapViewport) => setFraming(pinMapFraming(framing, viewport));
 
   const changeViewMode = (mode: MapViewMode) => {
     setViewMode(mode);
     storeViewMode(mode);
   };
   const show3D = viewMode === "3d" && !webglUnavailable;
-  const view2D = <MapView2D ground={scene.ground} markers={scene.markers} view={view} />;
+  const view2D = <MapView2D ground={scene.ground} markers={scene.markers} view={view} onUserViewport={handleUserViewport} />;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
@@ -107,15 +113,15 @@ function MapContent(props: PanelRenderProps<MapResult>) {
           )}
           <button
             type="button"
-            onClick={() => chooseFraming("fit")}
-            disabled={!focusBounds}
+            onClick={() => autoFit && applyFraming(autoFit)}
+            disabled={!autoFit}
             title="Zoom to the boss area"
             className={framingButtonClass}
           >
             <Focus className="h-3 w-3" />
             Fit
           </button>
-          <button type="button" onClick={() => chooseFraming("full")} title="Show the full map" className={framingButtonClass}>
+          <button type="button" onClick={() => applyFraming(FULL_MAP_VIEWPORT)} title="Show the full map" className={framingButtonClass}>
             <Maximize className="h-3 w-3" />
             Reset
           </button>
@@ -133,6 +139,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
               playing={scene.playing}
               playbackSpeed={scene.playbackSpeed}
               view={view}
+              onUserViewport={handleUserViewport}
               effects={scene.effects}
               bossGuids={scene.bossGuids}
               tankGuids={scene.tankGuids}

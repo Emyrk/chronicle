@@ -6,16 +6,31 @@ import {
   tilePlacement,
   type WowMapLayer,
 } from "@/pages/Technical/mapGallery";
-import { clampViewport, healthBarColor, viewportPoint, zoomViewportAt, type MapViewport } from "./mapModel";
+import {
+  clampViewport,
+  healthBarColor,
+  interpolateViewport,
+  prefersReducedMotion,
+  VIEW_TRANSITION_MS,
+  viewportPoint,
+  zoomViewportAt,
+  type MapViewport,
+} from "./mapModel";
 import type { MapSceneGround, MapSceneMarker, MapUnitHealth } from "./useMapScene";
 
-/** A framing for the views to apply; a new object re-applies it (Fit / Reset). */
+/**
+ * A framing for the views to apply. A view applies `viewport` when it mounts
+ * and again whenever `key` changes (Fit / Reset / a new encounter); otherwise
+ * it keeps the user's own zoom and pan.
+ */
 export interface MapViewRequest {
   viewport: MapViewport;
   key: string;
 }
 
 const WHEEL_ZOOM_SPEED = 0.0015;
+// A wheel gesture is many events; report the viewport once it settles.
+const WHEEL_REPORT_DELAY_MS = 150;
 
 function MapTiles({ ground: { canvas, iconBaseUrl, overlays } }: { ground: MapSceneGround }) {
   return (
@@ -96,15 +111,58 @@ function MapMarker({ marker, viewport }: { marker: MapSceneMarker; viewport: Map
   );
 }
 
-export function MapView2D({ ground, markers, view }: { ground: MapSceneGround; markers: MapSceneMarker[]; view: MapViewRequest }) {
+export function MapView2D({ ground, markers, view, onUserViewport }: {
+  ground: MapSceneGround;
+  markers: MapSceneMarker[];
+  view: MapViewRequest;
+  /** Called with the viewport after the user zooms or pans. */
+  onUserViewport?: (viewport: MapViewport) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
-  const [state, setState] = useState({ view, viewport: view.viewport });
-  let viewport = state.viewport;
-  if (state.view !== view) {
-    setState({ view, viewport: view.viewport });
-    viewport = view.viewport;
-  }
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null);
+  // The 3D view can zoom past MAX_MAP_ZOOM and pan off the artwork; 2D keeps to them.
+  const [viewport, setViewport] = useState(() => clampViewport(view.viewport));
+  // The source of truth for handlers and the animation; `viewport` mirrors it for rendering.
+  const viewportRef = useRef(viewport);
+  const appliedKeyRef = useRef(view.key);
+  const animationRef = useRef(0);
+  const wheelReportRef = useRef(0);
+  const onUserViewportRef = useRef(onUserViewport);
+
+  useEffect(() => {
+    onUserViewportRef.current = onUserViewport;
+  }, [onUserViewport]);
+
+  const userMoved = (next: MapViewport) => {
+    cancelAnimationFrame(animationRef.current);
+    viewportRef.current = next;
+    setViewport(next);
+  };
+
+  // A new request eases from the current view to its viewport.
+  useEffect(() => {
+    if (appliedKeyRef.current === view.key) return;
+    appliedKeyRef.current = view.key;
+    cancelAnimationFrame(animationRef.current);
+    // A wheel report still pending would mark this new framing as manual.
+    clearTimeout(wheelReportRef.current);
+    const from = viewportRef.current;
+    const to = clampViewport(view.viewport);
+    const duration = prefersReducedMotion() ? 0 : VIEW_TRANSITION_MS;
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = duration > 0 ? Math.min(1, (now - start) / duration) : 1;
+      viewportRef.current = interpolateViewport(from, to, 1 - (1 - t) ** 3);
+      setViewport(viewportRef.current);
+      if (t < 1) animationRef.current = requestAnimationFrame(step);
+    };
+    animationRef.current = requestAnimationFrame(step);
+  }, [view]);
+
+  useEffect(() => () => {
+    cancelAnimationFrame(animationRef.current);
+    clearTimeout(wheelReportRef.current);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -116,7 +174,11 @@ export function MapView2D({ ground, markers, view }: { ground: MapSceneGround; m
       const factor = Math.exp(-event.deltaY * WHEEL_ZOOM_SPEED);
       const viewX = (event.clientX - rect.left) / rect.width;
       const viewY = (event.clientY - rect.top) / rect.height;
-      setState((current) => ({ ...current, viewport: zoomViewportAt(current.viewport, factor, viewX, viewY) }));
+      cancelAnimationFrame(animationRef.current);
+      viewportRef.current = zoomViewportAt(viewportRef.current, factor, viewX, viewY);
+      setViewport(viewportRef.current);
+      clearTimeout(wheelReportRef.current);
+      wheelReportRef.current = window.setTimeout(() => onUserViewportRef.current?.(viewportRef.current), WHEEL_REPORT_DELAY_MS);
     };
     container.addEventListener("wheel", handleWheel, { passive: false });
     return () => container.removeEventListener("wheel", handleWheel);
@@ -125,7 +187,7 @@ export function MapView2D({ ground, markers, view }: { ground: MapSceneGround; m
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
   };
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
@@ -133,18 +195,18 @@ export function MapView2D({ ground, markers, view }: { ground: MapSceneGround; m
     const rect = event.currentTarget.getBoundingClientRect();
     const dx = (event.clientX - drag.x) / rect.width;
     const dy = (event.clientY - drag.y) / rect.height;
-    dragRef.current = { ...drag, x: event.clientX, y: event.clientY };
-    setState((current) => ({
+    dragRef.current = { ...drag, x: event.clientX, y: event.clientY, moved: drag.moved || dx !== 0 || dy !== 0 };
+    const current = viewportRef.current;
+    userMoved(clampViewport({
       ...current,
-      viewport: clampViewport({
-        ...current.viewport,
-        centerX: current.viewport.centerX - dx / current.viewport.zoom,
-        centerY: current.viewport.centerY - dy / current.viewport.zoom,
-      }),
+      centerX: current.centerX - dx / current.zoom,
+      centerY: current.centerY - dy / current.zoom,
     }));
   };
   const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    if (dragRef.current.moved) onUserViewport?.(viewportRef.current);
+    dragRef.current = null;
   };
 
   return (

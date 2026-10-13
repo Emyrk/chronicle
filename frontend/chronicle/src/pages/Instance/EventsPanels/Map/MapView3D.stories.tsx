@@ -795,11 +795,12 @@ function KreshRealPlayer({ fixture }: { fixture: LoadedMapFixture }) {
     return () => clearTimeout(id);
   }, [currentTimestamp, enabled, fixture, isPlaying, play, setTimestamp]);
 
-  const focusBounds = scene.status === "ready" ? scene.focusBounds : null;
+  // The panel's auto fit on selecting the boss.
+  const autoFit = scene.status === "ready" ? scene.autoFit : null;
   const view = useMemo((): MapViewRequest => ({
-    viewport: focusBounds ? fitViewportToBounds(focusBounds) : FULL_MAP_VIEWPORT,
+    viewport: autoFit ?? FULL_MAP_VIEWPORT,
     key: "fit",
-  }), [focusBounds]);
+  }), [autoFit]);
 
   const elapsed = Math.max(0, (currentTimestamp?.getTime() ?? fixture.startMs) - fixture.startMs) / 1000;
   return (

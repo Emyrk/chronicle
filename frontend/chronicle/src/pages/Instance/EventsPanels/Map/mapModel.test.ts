@@ -3,8 +3,17 @@ import type { WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 import { createEncounterEffects } from "./replayEffects";
 import {
+  AUTO_FIT_MIN_SPAN_YARDS,
+  autoFitViewport,
   calibratedDungeonMapPoint,
   clampViewport,
+  focusCentre,
+  INITIAL_MAP_FRAMING,
+  interpolateViewport,
+  manualMapFraming,
+  pinMapFraming,
+  projectionScale,
+  reconcileMapFraming,
   fitViewportToBounds,
   FULL_MAP_VIEWPORT,
   MAX_MAP_ZOOM,
@@ -23,6 +32,7 @@ import {
   selectHealthBars,
   selectMapEncounter,
   zoneMapPoint,
+  type MapViewport,
 } from "./mapModel";
 
 const samples: MapPositionSample[] = [
@@ -404,5 +414,127 @@ describe("map viewport", () => {
     const viewport = { centerX: 0.5, centerY: 0.5, zoom: 10 };
     expect(viewportPoint({ leftPercent: 50, topPercent: 50 }, viewport)).toEqual({ leftPercent: 50, topPercent: 50 });
     expect(viewportPoint({ leftPercent: 51, topPercent: 50 }, viewport).leftPercent).toBeCloseTo(60);
+  });
+});
+
+describe("autoFitViewport", () => {
+  const at = (x: number, y: number): MapPositionSample => ({ timestampMs: 0, x, y, mapId: 1, facing: 0 });
+  // A 1000 x 1000 yd artwork: world y -> left, world x -> top, 0.1 % per yard.
+  const project = (sample: MapPositionSample) => ({ leftPercent: sample.y / 10, topPercent: sample.x / 10 });
+  const fit = (positions: Map<string, MapPositionSample[]>, bosses: ReadonlySet<string> = new Set()) => {
+    const bounds = unitFocusBounds(positions, 1, project, bosses)!;
+    const centre = focusCentre(positions, 1, bosses)!;
+    return autoFitViewport(bounds, {
+      minSpanYards: AUTO_FIT_MIN_SPAN_YARDS,
+      scale: projectionScale(project, centre.sample),
+      centre: centre.fromFocus ? project(centre.sample) : null,
+    });
+  };
+  // The zoom that shows `yards` across the view on this artwork.
+  const zoomForYards = (yards: number) => 1000 / yards;
+
+  it("measures the projection's percent per yard, even at the artwork edge", () => {
+    expect(projectionScale(project, at(500, 500))).toEqual({ left: 0.1, top: 0.1 });
+    const clamped = (sample: MapPositionSample) => ({ leftPercent: Math.min(100, sample.y / 10), topPercent: Math.min(100, sample.x / 10) });
+    expect(projectionScale(clamped, at(1000, 1000))).toEqual({ left: 0.1, top: 0.1 });
+    expect(projectionScale(() => null, at(0, 0))).toBeNull();
+  });
+
+  it("frames a tiny fight at the minimum span, the boss at the centre", () => {
+    const positions = new Map([
+      ["boss", [at(500, 505)]],
+      ["tank", [at(498, 503)]],
+      ["healer", [at(510, 520)]],
+      ["mage", [at(495, 500)]],
+    ]);
+    const viewport = fit(positions, new Set(["boss"]));
+    expect(viewport.zoom).toBeCloseTo(zoomForYards(AUTO_FIT_MIN_SPAN_YARDS * 1.3));
+    expect(viewport.centerX).toBeCloseTo(0.505);
+    expect(viewport.centerY).toBeCloseTo(0.5);
+  });
+
+  it("frames a wide fight on its bounds, biased towards the boss without zooming out", () => {
+    const positions = new Map([
+      ["boss", [at(500, 510)]],
+      ["west", [at(500, 440)]],
+      ["east", [at(500, 560)]],
+    ]);
+    const viewport = fit(positions, new Set(["boss"]));
+    expect(viewport.zoom).toBeCloseTo(zoomForYards(120 * 1.3));
+    // The box centre is at y 500; the slack (156 - 120 * 1.15) / 2 = 9 yd moves it towards the boss.
+    expect(viewport.centerX).toBeCloseTo(0.509);
+  });
+
+  it("centres a boss-less fight on its units", () => {
+    const positions = new Map([
+      ["a", [at(500, 500)]],
+      ["b", [at(510, 530)]],
+    ]);
+    const viewport = fit(positions);
+    expect(viewport.zoom).toBeCloseTo(zoomForYards(AUTO_FIT_MIN_SPAN_YARDS * 1.3));
+    expect(viewport.centerX).toBeCloseTo(0.515);
+    expect(viewport.centerY).toBeCloseTo(0.505);
+  });
+
+  it("leaves stragglers past the 80 yd clamp out of the fit", () => {
+    const pack = new Map([
+      ["boss", [at(500, 500)]],
+      ["tank", [at(505, 505)]],
+    ]);
+    const withStraggler = new Map([...pack, ["straggler", [at(500, 700)]]]);
+    expect(fit(withStraggler, new Set(["boss"]))).toEqual(fit(pack, new Set(["boss"])));
+  });
+
+  it("keeps the old fit without a minimum span", () => {
+    expect(autoFitViewport({ minLeft: 40, maxLeft: 50, minTop: 45, maxTop: 50 }))
+      .toEqual(fitViewportToBounds({ minLeft: 40, maxLeft: 50, minTop: 45, maxTop: 50 }));
+  });
+
+  it("eases between viewports", () => {
+    const from = { centerX: 0.5, centerY: 0.5, zoom: 1 };
+    const to = { centerX: 0.7, centerY: 0.3, zoom: 16 };
+    expect(interpolateViewport(from, to, 0)).toEqual(from);
+    expect(interpolateViewport(from, to, 0.5)).toEqual({ centerX: 0.6, centerY: 0.4, zoom: 4 });
+    expect(interpolateViewport(from, to, 1)).toBe(to);
+  });
+});
+
+describe("map framing", () => {
+  const fitted = { centerX: 0.4, centerY: 0.6, zoom: 17 };
+  const zoomTimes = (viewport: MapViewport, factor: number, times: number) =>
+    Array.from({ length: times }).reduce<MapViewport>((current) => zoomViewportAt(current, factor, 0.3, 0.7), viewport);
+
+  it("applies the default framing on a new selection", () => {
+    const framing = reconcileMapFraming(INITIAL_MAP_FRAMING, "kresh|kresh", fitted);
+    expect(framing).toMatchObject({ revision: 1, viewport: null, manual: false });
+    // A replay tick or re-render with the same fit changes nothing.
+    expect(reconcileMapFraming(framing, "kresh|kresh", { ...fitted })).toBe(framing);
+    // The fit itself changing (e.g. floor) re-fits while untouched.
+    expect(reconcileMapFraming(framing, "kresh|kresh", FULL_MAP_VIEWPORT).revision).toBe(2);
+  });
+
+  it("lets manual zoom reach both bounds and keeps it across ticks and filter changes", () => {
+    const framing = reconcileMapFraming(INITIAL_MAP_FRAMING, "kresh|kresh", fitted);
+    const zoomedIn = zoomTimes(fitted, 1.5, 40);
+    expect(zoomedIn.zoom).toBe(MAX_MAP_ZOOM);
+    const zoomedOut = zoomTimes(zoomedIn, 0.5, 40);
+    expect(zoomedOut).toEqual(FULL_MAP_VIEWPORT);
+
+    for (const manualViewport of [zoomedIn, zoomedOut]) {
+      const manual = manualMapFraming(framing, manualViewport);
+      expect(manual.revision).toBe(framing.revision);
+      // Replay tick: same selection and fit.
+      expect(reconcileMapFraming(manual, "kresh|kresh", fitted)).toBe(manual);
+      // Filter change: the scene reprocesses and the fit comes back different.
+      expect(reconcileMapFraming(manual, "kresh|kresh", { ...fitted, zoom: 12 })).toBe(manual);
+      expect(manual.viewport).toBe(manualViewport);
+    }
+  });
+
+  it("re-frames on a new encounter, Fit or Reset", () => {
+    const manual = manualMapFraming(reconcileMapFraming(INITIAL_MAP_FRAMING, "kresh|kresh", fitted), { centerX: 0.5, centerY: 0.5, zoom: 3 });
+    expect(reconcileMapFraming(manual, "mutanus|mutanus", fitted)).toMatchObject({ revision: 2, viewport: null, manual: false });
+    expect(pinMapFraming(manual, fitted)).toMatchObject({ revision: 2, viewport: fitted, manual: false });
+    expect(pinMapFraming(manual, FULL_MAP_VIEWPORT)).toMatchObject({ revision: 2, viewport: FULL_MAP_VIEWPORT, manual: false });
   });
 });
