@@ -2,10 +2,24 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { SpellContextPanel } from "./SpellContextPanel";
 
+vi.mock("@/hooks/useDatasetId", () => ({ useIconBaseUrl: () => "" }));
+
 vi.mock("@tanstack/react-query", () => ({
   useQueries: () => [
-    { data: { name: { "0": "Improved Life Tap" } } },
-    { data: { name: { "0": "Improved Life Tap Rank 2" } } },
+    {
+      data: {
+        name: { "0": "Improved Life Tap" },
+        subtext: { "0": "Rank 1" },
+        spell_icon: {},
+      },
+    },
+    {
+      data: {
+        name: { "0": "Improved Life Tap" },
+        subtext: { "0": "Rank 2" },
+        spell_icon: {},
+      },
+    },
   ],
 }));
 
@@ -35,8 +49,7 @@ describe("SpellContextPanel", () => {
       />,
     );
 
-    expect(markup).toContain("Customize tooltip context");
-    expect(markup).toContain("<details");
+    expect(markup).toContain('aria-label="Tooltip context"');
     expect(markup).toContain("Spirit");
     expect(markup).toContain("Shadow spell power");
     expect(markup).toContain("Improved Life Tap");
