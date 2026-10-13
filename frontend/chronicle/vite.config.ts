@@ -16,24 +16,25 @@ function backendProxy(): ProxyOptions {
   const target = process.env.HOST || "http://localhost:4000";
   const isRemote = !target.includes("localhost");
   const targetUrl = new URL(target);
+  const rewriteHeaders = (proxyReq: { setHeader: (name: string, value: string) => void }, host: string | undefined) => {
+    if (isRemote) {
+      // Fake browser headers to bypass "only browser connections allowed"
+      proxyReq.setHeader('Host', targetUrl.host);
+      proxyReq.setHeader('Origin', target.replace(/\/$/, ''));
+      proxyReq.setHeader('Referer', target);
+    } else if (host) {
+      proxyReq.setHeader('Host', host.replace(/:\d+$/, ':4000'));
+    }
+  };
+
   return {
     target,
     secure: false,
     changeOrigin: isRemote,
+    ws: true,
     configure: (proxy) => {
-      proxy.on('proxyReq', (proxyReq, req) => {
-        if (isRemote) {
-          // Fake browser headers to bypass "only browser connections allowed"
-          proxyReq.setHeader('Host', targetUrl.host);
-          proxyReq.setHeader('Origin', target.replace(/\/$/, ''));
-          proxyReq.setHeader('Referer', target);
-        } else {
-          const host = req.headers.host;
-          if (host) {
-            proxyReq.setHeader('Host', host.replace(/:\d+$/, ':4000'));
-          }
-        }
-      });
+      proxy.on('proxyReq', (proxyReq, req) => rewriteHeaders(proxyReq, req.headers.host));
+      proxy.on('proxyReqWs', (proxyReq, req) => rewriteHeaders(proxyReq, req.headers.host));
     },
   };
 }
