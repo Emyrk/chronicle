@@ -106,7 +106,7 @@ go run ./scripts/dbcdata extract-wowdata-maps \
 
 The command defaults to `--build latest` against Blizzard's remote `wow_classic_beta` data because the current local Forever CASC index contains an unreadable BLTE entry. At startup, `latest` is resolved once to an exact build; that build is then used for every table and texture request and recorded in the manifest. This prevents a release during extraction from mixing assets across builds. Use `--source local --server forever` when the installed client data is healthy. Existing non-empty tiles are retained, so interrupted exports can be resumed. Pass `--metadata-only` to refresh and inspect the manifest without downloading tiles.
 
-`make maps` also reads the currently published manifest when it targets the exact same build, region, and locale, then reuses its already-published FileDataID tile URLs. Only tiles absent from that manifest are downloaded and converted locally before upload, using four concurrent `wowdata` processes by default. After the artwork extraction, Chronicle renders coordinate-faithful geometry maps for the supported instances (currently Wailing Caverns and Excavation Site: Wetlands) from the same exact build's WDT/WMO or ADT data. Set `WOWDATA_MAP_REUSE_MANIFEST=` to force a complete local art export, point it at another compatible published manifest, or set `WOWDATA_MAP_WORKERS` to tune both tile and geometry-export concurrency. Generated map manifests and assets under `frontend/imagecache/forever/maps/` are ignored by Git and should remain in object storage rather than source control.
+`make maps` also reads the currently published manifest when it targets the exact same build, region, and locale, then reuses its already-published FileDataID tile URLs. Only tiles absent from that manifest are downloaded and converted locally before upload, using four concurrent `wowdata` processes by default. After the artwork extraction, Chronicle renders a coordinate-faithful Wailing Caverns map from the same exact build's WDT/WMO data. Set `WOWDATA_MAP_REUSE_MANIFEST=` to force a complete local art export, point it at another compatible published manifest, or set `WOWDATA_MAP_WORKERS` to tune both tile and geometry-export concurrency. Generated map manifests and assets under `frontend/imagecache/forever/maps/` are ignored by Git and should remain in object storage rather than source control.
 
 The output layout is:
 
@@ -123,7 +123,7 @@ frontend/imagecache/forever/maps/
 
 The generated-map stage invokes the checked-in Rust renderer through Cargo, so the publishing host needs a current Rust toolchain in addition to the existing `wowdata`, image-conversion, and R2 tools.
 
-To regenerate only the supported instance renders using the existing local manifest, without refreshing UI artwork or its tiles:
+To regenerate only the Wailing Caverns render using the existing local manifest, without refreshing UI artwork or its tiles:
 
 ```bash
 make maps/forever-render
@@ -131,7 +131,7 @@ make maps/forever-render
 
 This updates the files under `frontend/imagecache/forever/maps/renders/` and the corresponding `instances[].rendered` manifest entries. The manifest must already exist from an earlier extraction.
 
-To regenerate those instance renders and publish only the PNGs plus the updated manifest:
+To regenerate that instance render and publish only its PNG plus the updated manifest:
 
 ```bash
 make maps/forever-render-upload

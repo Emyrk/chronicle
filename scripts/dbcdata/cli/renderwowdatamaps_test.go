@@ -24,6 +24,18 @@ func wowTestChunk(tag string, payload []byte) []byte {
 	return data
 }
 
+func TestClearRenderedWowMapInstances(t *testing.T) {
+	t.Parallel()
+
+	manifest := wowMapManifest{Instances: []wowMapInstance{
+		{MapID: 43, Rendered: &wowMapRenderedInstance{Path: "renders/43.png"}},
+		{MapID: 2998, Rendered: &wowMapRenderedInstance{Path: "renders/2998.png"}},
+	}}
+	clearRenderedWowMapInstances(&manifest)
+	require.Nil(t, manifest.Instances[0].Rendered)
+	require.Nil(t, manifest.Instances[1].Rendered)
+}
+
 func TestRenderedWowMapAssetPathIncludesContentDigest(t *testing.T) {
 	t.Parallel()
 
@@ -86,17 +98,17 @@ printf 'geometry' > "${output}"
 		context.Background(),
 		&stderr,
 		wowMapExtractOptions{WowdataBin: binaryPath},
-		7288580,
+		7953467,
 		outputPath,
-		"map 2998 ADT 36,38 FileDataID 7288580",
+		"map 43 WMO group 1/23 FileDataID 7953467",
 		&sync.Mutex{},
 		[]time.Duration{0, 0},
 	)
 	require.NoError(t, err)
 	require.Equal(t, "3", string(requireFile(t, counterPath)))
 	require.Equal(t, "geometry", string(requireFile(t, outputPath)))
-	require.Contains(t, stderr.String(), "[map 2998 ADT 36,38 FileDataID 7288580] transient export failure")
-	require.Contains(t, stderr.String(), "[map 2998 ADT 36,38 FileDataID 7288580] retrying after export failure")
+	require.Contains(t, stderr.String(), "[map 43 WMO group 1/23 FileDataID 7953467] transient export failure")
+	require.Contains(t, stderr.String(), "[map 43 WMO group 1/23 FileDataID 7953467] retrying after export failure")
 }
 
 func requireFile(t *testing.T, path string) []byte {
@@ -104,21 +116,6 @@ func requireFile(t *testing.T, path string) []byte {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return data
-}
-
-func TestParseWDTADTRootFileDataIDs(t *testing.T) {
-	t.Parallel()
-
-	payload := make([]byte, 64)
-	binary.LittleEndian.PutUint32(payload[0:], 101)
-	binary.LittleEndian.PutUint32(payload[32:], 202)
-
-	tiles, err := parseWDTADTRootFileDataIDs(wowTestChunk("MAID", payload))
-	require.NoError(t, err)
-	require.Equal(t, []wdtADTTile{
-		{FileDataID: 101, Column: 0, Row: 0},
-		{FileDataID: 202, Column: 1, Row: 0},
-	}, tiles)
 }
 
 func TestParseWMOGroupFileDataIDs(t *testing.T) {
