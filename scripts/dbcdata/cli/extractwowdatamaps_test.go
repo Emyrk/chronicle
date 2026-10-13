@@ -82,7 +82,7 @@ func TestBuildWowMapManifest(t *testing.T) {
 		manifest.Maps[0].Art[0].Overlays[0].Tiles[0].FileDataID,
 		manifest.Maps[0].Art[0].Overlays[0].Tiles[1].FileDataID,
 	})
-	require.Equal(t, "tiles/10.webp", manifest.Maps[0].Art[0].Layers[0].Tiles[0].Path)
+	require.Equal(t, "original/10.webp", manifest.Maps[0].Art[0].Layers[0].Tiles[0].Path)
 }
 
 func TestBuildWowMapInstances(t *testing.T) {
@@ -118,9 +118,9 @@ func TestBuildWowMapInstances(t *testing.T) {
 	require.Equal(t, int32(1792), instances[0].Floors[0].Width)
 	require.Equal(t, int32(1792), instances[0].Floors[0].Height)
 	require.Equal(t, []wowMapTile{
-		{Row: 0, Column: 0, FileDataID: 400, Path: "tiles/400.webp"},
-		{Row: 3, Column: 3, FileDataID: 401, Path: "tiles/401.webp"},
-		{Row: 6, Column: 6, FileDataID: 402, Path: "tiles/402.webp"},
+		{Row: 0, Column: 0, FileDataID: 400, Path: "original/400.webp"},
+		{Row: 3, Column: 3, FileDataID: 401, Path: "original/401.webp"},
+		{Row: 6, Column: 6, FileDataID: 402, Path: "original/402.webp"},
 	}, instances[0].Floors[0].Tiles)
 	require.Equal(t, &wowMapFloorBounds{
 		MinX: -4266.666666666667,
@@ -288,7 +288,7 @@ func TestExportWowdataTexturesSkipsUnavailableFloorSiblings(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "tiles"), 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "original"), 0o755))
 	calls := filepath.Join(dir, "calls")
 	binary := filepath.Join(dir, "wowdata")
 	require.NoError(t, os.WriteFile(binary, []byte(fmt.Sprintf(`#!/usr/bin/env bash

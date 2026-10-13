@@ -7,7 +7,7 @@ Chronicle publishes each dataset's map manifest beneath its configured icon base
 <icon-base>/maps/tiles/<tile-id>.webp
 ```
 
-The frontend consumes the shared `chronicle-wow-map-art-v1` manifest for both modern CASC clients and legacy MPQ clients. Generated manifests and tiles live under `frontend/imagecache/<server>/maps/`, are ignored by Git, and are published to object storage.
+The frontend accepts legacy `chronicle-wow-map-art-v1` manifests and the Forever `chronicle-wow-map-art-v2` manifest. The latter uses `original/` for Blizzard tiles, `render/` for geometry, and `render-styled/` for hand-authored art. Generated manifests and tiles live under `frontend/imagecache/<server>/maps/`, are ignored by Git, and are published to object storage.
 
 ## MPQ-era clients
 

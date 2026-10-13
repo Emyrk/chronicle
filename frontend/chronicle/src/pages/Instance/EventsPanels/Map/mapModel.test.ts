@@ -51,7 +51,7 @@ const encounter: MapEncounterPositions = {
 };
 
 const manifest: WowMapManifest = {
-  format: "chronicle-wow-map-art-v1",
+  format: "chronicle-wow-map-art-v2",
   target: { product: "wow_classic_beta", build: "1.60.1.70205", region: "us", locale: "enUS" },
   maps: [{
     id: 947,
@@ -81,7 +81,7 @@ const manifest: WowMapManifest = {
         minScale: 1,
         maxScale: 2,
         additionalZoomSteps: 0,
-        tiles: [{ row: 0, column: 0, fileDataID: 2, path: "tiles/2.webp" }],
+        tiles: [{ row: 0, column: 0, fileDataID: 2, path: "original/2.webp" }],
       }],
     }],
   }, {
@@ -112,7 +112,7 @@ const manifest: WowMapManifest = {
         minScale: 1,
         maxScale: 2,
         additionalZoomSteps: 0,
-        tiles: [{ row: 0, column: 0, fileDataID: 1, path: "tiles/1.webp" }],
+        tiles: [{ row: 0, column: 0, fileDataID: 1, path: "original/1.webp" }],
       }],
     }],
   }],

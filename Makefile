@@ -285,6 +285,11 @@ maps/forever-render:
 maps/forever-render-upload: maps/forever-render
 	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh)
 
+# Hand-authored styled maps are checked into Git and published independently.
+.PHONY: maps/forever-styled-upload
+maps/forever-styled-upload:
+	$(call run-imagecache,R2_PATH=forever/maps MAPS_UPLOAD_MODE=styled ./upload-maps-r2.sh)
+
 # The full publishing pipeline refreshes artwork before rendering instances.
 .PHONY: maps/forever-build
 maps/forever-build: maps/forever-extract

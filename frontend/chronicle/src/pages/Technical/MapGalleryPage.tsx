@@ -18,7 +18,7 @@ import {
   mapManifestUrl,
   overlayTilePlacement,
   tilePlacement,
-  WOW_MAP_MANIFEST_FORMAT,
+  isSupportedMapManifestFormat,
   type MapGalleryItem,
   type WowMapManifest,
 } from "./mapGallery";
@@ -34,7 +34,7 @@ function useMapManifest(iconBaseUrl: string | undefined) {
         throw new Error(`Map manifest request failed with ${response.status}`);
       }
       const manifest = await response.json() as WowMapManifest;
-      if (manifest.format !== WOW_MAP_MANIFEST_FORMAT) {
+      if (!isSupportedMapManifestFormat(manifest.format)) {
         throw new Error(`Unsupported map manifest format: ${manifest.format || "missing"}`);
       }
       return manifest;
@@ -44,13 +44,13 @@ function useMapManifest(iconBaseUrl: string | undefined) {
 
 function MapArtwork({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: string }) {
   const name = item.kind === "zone" ? item.map.name : item.instance.name;
-  if (item.kind === "rendered") {
+  if ((item.kind === "rendered" || item.kind === "styled")) {
     return (
       <div
         className="relative w-full overflow-hidden bg-[#11100d]"
         style={{ aspectRatio: `${item.rendered.width} / ${item.rendered.height}` }}
         role="img"
-        aria-label={`${name} rendered map`}
+        aria-label={`${name} ${item.kind === "styled" ? "stylized" : "rendered"} map`}
       >
         <img
           src={mapAssetUrl(iconBaseUrl, item.rendered.path)}
@@ -139,7 +139,7 @@ function MapCard({
             {item.kind === "zone"
               ? `UI map ${item.map.id}`
               : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"} · world ${item.instance.mapID}`}
-            {item.kind === "rendered" ? ` · ${item.rendered.source}` : ""}
+            {(item.kind === "rendered" || item.kind === "styled") ? ` · ${item.rendered.source}` : ""}
             {assignment ? ` · world ${assignment.mapID}` : ""}
           </p>
         </div>
@@ -150,6 +150,7 @@ function MapCard({
           )}
           {item.kind === "instance" && <div>art floor {item.floor.floor}</div>}
           {item.kind === "rendered" && <div>{item.rendered.triangles?.toLocaleString() ?? "generated"} triangles</div>}
+          {item.kind === "styled" && <div>stylized art</div>}
         </div>
       </div>
     </Card>
@@ -173,7 +174,7 @@ function MapModal({
     ? `UI map ${item.map.id}${item.art.phaseID !== 0 || item.layer.index !== 0 ? `, phase ${item.art.phaseID}, layer ${item.layer.index}` : ""}`
     : item.kind === "instance"
       ? `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, art floor ${item.floor.floor}`
-      : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, generated from ${item.rendered.source}`;
+      : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, ${item.kind === "styled" ? "stylized render" : `generated from ${item.rendered.source}`}`;
 
   return (
     <Dialog open onOpenChange={onOpenChange}>

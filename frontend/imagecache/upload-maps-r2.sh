@@ -15,25 +15,31 @@ R2_BUCKET="${R2_BUCKET:-icons}"
 R2_PATH="${R2_PATH:-forever/maps}"
 MAPS_UPLOAD_MODE="${MAPS_UPLOAD_MODE:-all}"
 
-if [[ ! -f "${MAPS_DIR}/manifest.json" ]]; then
+if [[ "${MAPS_UPLOAD_MODE}" != "styled" && ! -f "${MAPS_DIR}/manifest.json" ]]; then
   echo "Error: map export must contain manifest.json: ${MAPS_DIR}" >&2
   exit 1
 fi
 case "${MAPS_UPLOAD_MODE}" in
   all)
-    if [[ ! -d "${MAPS_DIR}/tiles" ]]; then
-      echo "Error: full map upload requires tiles/: ${MAPS_DIR}" >&2
+    if [[ ! -d "${MAPS_DIR}/original" ]]; then
+      echo "Error: full map upload requires original/: ${MAPS_DIR}" >&2
       exit 1
     fi
     ;;
   rendered)
-    if [[ ! -d "${MAPS_DIR}/renders" ]]; then
-      echo "Error: rendered map upload requires renders/: ${MAPS_DIR}" >&2
+    if [[ ! -d "${MAPS_DIR}/render" ]]; then
+      echo "Error: rendered map upload requires render/: ${MAPS_DIR}" >&2
+      exit 1
+    fi
+    ;;
+  styled)
+    if [[ ! -s "${SCRIPT_DIR}/styled-maps/43-wailing-caverns-v1.jpeg" ]]; then
+      echo "Error: styled Wailing Caverns map is missing" >&2
       exit 1
     fi
     ;;
   *)
-    echo "Error: MAPS_UPLOAD_MODE must be 'all' or 'rendered', got '${MAPS_UPLOAD_MODE}'" >&2
+    echo "Error: MAPS_UPLOAD_MODE must be 'all', 'rendered', or 'styled', got '${MAPS_UPLOAD_MODE}'" >&2
     exit 1
     ;;
 esac
@@ -42,10 +48,15 @@ if ! command -v rclone >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ "${MAPS_UPLOAD_MODE}" == "all" && ! -d "${MAPS_DIR}/render" ]]; then
+  echo "Error: full map upload requires render/: ${MAPS_DIR}" >&2
+  exit 1
+fi
+
 if [[ "${MAPS_UPLOAD_MODE}" == "all" ]]; then
-  total="$(find "${MAPS_DIR}/tiles" -type f -name '*.webp' | wc -l)"
-  echo "Uploading ${total} map tiles to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/tiles/"
-  rclone copy "${MAPS_DIR}/tiles" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/tiles/" \
+  total="$(find "${MAPS_DIR}/original" -type f -name '*.webp' | wc -l)"
+  echo "Uploading ${total} map tiles to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/original/"
+  rclone copy "${MAPS_DIR}/original" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/original/" \
     --include '*.webp' \
     --header-upload "Cache-Control: public, max-age=31536000, immutable" \
     --header-upload "Content-Type: image/webp" \
@@ -55,14 +66,14 @@ if [[ "${MAPS_UPLOAD_MODE}" == "all" ]]; then
     --verbose
 fi
 
-if [[ -d "${MAPS_DIR}/renders" ]]; then
-  rendered_total="$(find "${MAPS_DIR}/renders" -type f -name '*.png' | wc -l)"
+if [[ "${MAPS_UPLOAD_MODE}" != "styled" && -d "${MAPS_DIR}/render" ]]; then
+  rendered_total="$(find "${MAPS_DIR}/render" -type f -name '*.png' | wc -l)"
   if [[ "${MAPS_UPLOAD_MODE}" == "rendered" && "${rendered_total}" -eq 0 ]]; then
-    echo "Error: rendered map upload found no PNG files in ${MAPS_DIR}/renders" >&2
+    echo "Error: rendered map upload found no PNG files in ${MAPS_DIR}/render" >&2
     exit 1
   fi
-  echo "Uploading ${rendered_total} rendered maps to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/renders/"
-  rclone copy "${MAPS_DIR}/renders" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/renders/" \
+  echo "Uploading ${rendered_total} rendered maps to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/render/"
+  rclone copy "${MAPS_DIR}/render" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/render/" \
     --include '*.png' \
     --header-upload "Cache-Control: public, max-age=31536000, immutable" \
     --header-upload "Content-Type: image/png" \
@@ -70,6 +81,16 @@ if [[ -d "${MAPS_DIR}/renders" ]]; then
     --checkers 8 \
     --progress \
     --verbose
+fi
+
+if [[ "${MAPS_UPLOAD_MODE}" == "styled" ]]; then
+  rclone copyto "${SCRIPT_DIR}/styled-maps/43-wailing-caverns-v1.jpeg" \
+    "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/render-styled/43-wailing-caverns-v1.jpeg" \
+    --header-upload "Cache-Control: public, max-age=31536000, immutable" \
+    --header-upload "Content-Type: image/jpeg" \
+    --verbose
+  echo "Published styled map under https://icons.chronicleclassic.com/${R2_PATH}/render-styled/"
+  exit 0
 fi
 
 echo "Uploading map manifest to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/manifest.json"
