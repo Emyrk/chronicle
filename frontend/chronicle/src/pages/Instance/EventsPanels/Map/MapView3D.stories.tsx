@@ -5,7 +5,7 @@ import type { WoWSpell } from "@/api/wowdb";
 import { BOSS_MINI_SLUGS } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
 import type { MapHealthSample } from "./map.processor";
-import { fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
+import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
 import MapView3D from "./MapView3D";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
@@ -30,6 +30,7 @@ interface SyntheticUnit {
   name: string;
   kind: MapMarkerKind;
   color: string;
+  entry?: number;
   positions: MapPositionSample[];
 }
 
@@ -210,6 +211,8 @@ const AOE_LAND_MS = 22_500;
 const AOE_CLEAR_MS = 25_500;
 const BOSS_DEATH_MS = 35_000;
 const BOSS_POSITION = { x: 50, y: 50 };
+// Kresh, so the boss renders as its miniature (see bossMinis.ts).
+const BOSS_ENTRY = 3653;
 // The boss faces the tanks along -x; the raid walks in from that side.
 const TANK_SIDE = Math.PI;
 const BOSS_TURN_RATE = 1.2; // radians per second
@@ -251,8 +254,12 @@ function spread(index: number, count: number, width: number): number {
   return count > 1 ? (index / (count - 1) - 0.5) * width : 0;
 }
 
+// The 25-player raid stands on a slightly wider ring than the 10-player group.
+const ringScale = (size: number) => (size > 10 ? 1.15 : 1);
+
 function fightMembers(size: number): FightMember[] {
   const roster = FIGHT_ROSTERS[size] ?? FIGHT_ROSTERS[10];
+  const ring = ringScale(size);
   const counts: Record<FightRole, number> = { tank: 0, melee: 0, ranged: 0, healer: 0 };
   for (const [role] of roster) counts[role]++;
   const seen: Record<FightRole, number> = { tank: 0, melee: 0, ranged: 0, healer: 0 };
@@ -262,20 +269,21 @@ function fightMembers(size: number): FightMember[] {
     let angle: number;
     let radius: number;
     if (role === "tank") {
-      angle = TANK_SIDE + spread(nth, count, 0.7);
-      radius = nth === 0 ? 3 : 4.5;
-    } else if (role === "melee") {
-      angle = spread(nth, count, 1.6);
-      radius = 5 + (nth % 2) * 0.8;
-    } else if (role === "ranged") {
-      // Two flanks, clear of the boss's front and back.
-      const side = nth % 2 === 0 ? 1 : -1;
-      const half = Math.ceil(count / 2);
-      angle = side * (Math.PI / 2 + spread(Math.floor(nth / 2), half, 1.2));
-      radius = 25 + (nth % 3) * 2.5;
-    } else {
+      // In front of the boss, 3-4 yd.
       angle = TANK_SIDE + spread(nth, count, 0.9);
-      radius = 31;
+      radius = nth === 0 ? 3 : 3.8;
+    } else if (role === "melee") {
+      // A tight arc behind and beside the boss, 4-6 yd.
+      angle = spread(nth, count, count > 3 ? 2.6 : 1.8);
+      radius = 4.5 + (nth % 2) * 1.3;
+    } else if (role === "ranged") {
+      // A ring round the sides and back, clear of the tanks' front.
+      angle = spread(nth, count, 4.2);
+      radius = (12 + (nth % 2) * 2.5) * ring;
+    } else {
+      // Behind the tanks, in range of everyone.
+      angle = TANK_SIDE + spread(nth, count, count > 2 ? 1.6 : 0.9);
+      radius = (15 + (nth % 2) * 2.5) * ring;
     }
     return { guid: `Player-${index}`, role, cls, angle, radius };
   });
@@ -362,7 +370,7 @@ function bossFightUnits(size: number): SyntheticUnit[] {
       positions: memberPositions(member, index, dodgesAoe(member, members)),
     };
   });
-  units.push({ guid: "Boss", name: "Synthetic Boss", kind: "hostile", color: "#fb7185", positions: bossPositions(units[0].positions) });
+  units.push({ guid: "Boss", name: "Kresh", kind: "hostile", color: "#fb7185", entry: BOSS_ENTRY, positions: bossPositions(units[0].positions) });
   return units;
 }
 
@@ -465,15 +473,27 @@ function bossFightHealth(size: number): Map<string, MapHealthSample[]> {
 }
 
 const NO_SELECTION = new Set<string>();
+const FIGHT_ZOOM_IN = 1.6;
 
 function BossFightReplay({ players, playbackSpeed }: { players: number; playbackSpeed: number }) {
   const [units] = useState(() => bossFightUnits(players));
   const [fx] = useState(() => bossFightEffects(players));
   const [healthByUnit] = useState(() => bossFightHealth(players));
-  // The panel's Fit framing: the encounter's whole track, centred on the boss.
+  // The panel's Fit zoom over the encounter's track, clamped just past the
+  // healers so the walk in from the entrance is left out, then centred on the
+  // boss. The angled 3D camera shows more ground than the Fit box, so zoom in
+  // further for the group to fill the canvas.
   const [view] = useState((): MapViewRequest => {
-    const bounds = unitFocusBounds(new Map(units.map((unit) => [unit.guid, unit.positions])), 1, projectSample, BOSS_GUIDS);
-    return { viewport: bounds ? fitViewportToBounds(bounds) : FULL_MAP_VIEWPORT, key: "fit" };
+    const tracks = new Map(units.map((unit) => [unit.guid, unit.positions]));
+    const bounds = unitFocusBounds(tracks, 1, projectSample, BOSS_GUIDS, 19 * ringScale(players));
+    if (!bounds) return { viewport: FULL_MAP_VIEWPORT, key: "fit" };
+    const boss = projectSample({ timestampMs: 0, ...BOSS_POSITION, mapId: 1, facing: 0 });
+    const viewport = clampViewport({
+      centerX: boss.leftPercent / 100,
+      centerY: boss.topPercent / 100,
+      zoom: fitViewportToBounds(bounds).zoom * FIGHT_ZOOM_IN,
+    });
+    return { viewport, key: "fit" };
   });
   const [cursorMs, setCursorMs] = useState(0);
 
