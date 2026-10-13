@@ -366,14 +366,12 @@ Successful resync URLs are appended to .resync-completed.log for later spot chec
 				}
 			}()
 
-			// Resync uses DatabaseSpellsOnly mode: no Spell.dbc file needed;
-			// all spell data comes from the realm-resolved dataset in PostgreSQL.
+			// Spell data comes from the realm-resolved dataset in PostgreSQL.
 			wowDB, err := gamedb.New(ctx, gamedb.Options{
-				DatabaseSpellsOnly: true,
-				DB:                 zed,
-				Pool:               pool,
-				DatasetID:          servicedataset.DefaultDatasetID,
-				CacheSvc:           nil, // Nil is fine — caches work without metrics.
+				DB:        zed,
+				Pool:      pool,
+				DatasetID: servicedataset.DefaultDatasetID,
+				CacheSvc:  nil, // Nil is fine — caches work without metrics.
 			})
 			if err != nil {
 				return fmt.Errorf("init game db: %w", err)

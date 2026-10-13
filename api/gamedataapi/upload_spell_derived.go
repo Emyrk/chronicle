@@ -76,7 +76,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		}
 
 		// --- Extra attacks ---
-		// Mirrors scripts/dbcdata/cli/extraattacks.go: collectExtraAttackSpells
+		// Persist parser metadata for spells that grant extra attacks.
 		for _, effect := range spell.Effects {
 			if effect.Effect == chrondbc.EffectAddExtraAttacks {
 				extraAttacks = append(extraAttacks, extraAttackRow{
@@ -89,7 +89,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		}
 
 		// --- Periodic spells ---
-		// Mirrors scripts/dbcdata/cli/periodic.go: collectPeriodicSpells
+		// Persist whether periodic spells also have a direct component.
 		dmgType := spell.SpellDamageType()
 		if dmgType.Has(chrondbc.SpellDamagePeriodic) {
 			periodics = append(periodics, periodicRow{
@@ -100,7 +100,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		}
 
 		// --- Duration modifiers ---
-		// Mirrors scripts/dbcdata/cli/durationmodifiers.go: collectDurationModifiers
+		// Persist passive spell-duration modifiers for parser lookups.
 		if !spell.Attrs.Has(chrondbc.Attr_Passive) {
 			continue
 		}

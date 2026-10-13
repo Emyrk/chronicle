@@ -66,7 +66,7 @@ func checkSpellDatasets(ctx context.Context, stdout io.Writer, pgURL string, sel
 		return err
 	}
 
-	spellFetcher := spells.NewFetcherDBOnly(ctx, pool, nil, nil, 1000)
+	spellFetcher := spells.NewFetcher(pool, nil, nil, 1000)
 
 	checked := 0
 	selectionActive := len(wanted) > 0

@@ -93,6 +93,7 @@ jobs:
 
   docker-push:
     name: Build and Push Docker Image (${{ matrix.server }})
+    if: github.ref_type == 'tag'
     needs: [golangci-lint, test]
     runs-on: ubuntu-latest
     environment: actions
@@ -128,10 +129,8 @@ jobs:
         with:
           images: emyrk/chronicled
           tags: |
-            type=raw,value=${{ matrix.server }},enable=${{ github.ref_type == 'tag' }}
-            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=latest
             type=ref,event=tag
-            type=raw,value=${{ matrix.server }}-unstable,enable=${{ github.ref_type != 'tag' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
