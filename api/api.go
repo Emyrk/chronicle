@@ -117,6 +117,7 @@ type API struct {
 	Queues         *riverqueue.Queues
 	Zed            *authz.Authz
 	CustomPanels   *custompanelapi.Handler
+	liveSessions   *liveSessionHub
 	discoveryStats discoveryStatsCache
 }
 
@@ -168,6 +169,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		Queues:       opts.RiverQueue,
 		Zed:          opts.Zed,
 		CustomPanels: custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
+		liveSessions: newLiveSessionHub(),
 	}, nil
 }
 
@@ -213,6 +215,8 @@ func (api *API) Routes() chi.Router {
 			)
 
 			r.Get("/discord-integration/callback", api.CompleteGuildDiscordInstall)
+			r.Post("/live-sessions/{code}/join", api.JoinLiveSession)
+			r.Get("/live-sessions/{code}/ws", api.LiveSessionWebSocket)
 
 			r.Group(func(r chi.Router) {
 				r.Use(
@@ -221,6 +225,7 @@ func (api *API) Routes() chi.Router {
 				r.Get("/whoami", api.WhoAmI)
 				r.Get("/whoami/dump", api.DumpToken)
 				r.Post("/authcheck", api.checkAuthorization)
+				r.Post("/live-sessions", api.CreateLiveSession)
 				r.Get("/me/storage", api.GetMyStorage)
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
