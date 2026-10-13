@@ -331,7 +331,7 @@ Consumers decoupled from `dbcmem` globals via WoWDB resolvers:
 - [x] `MaxAuraDuration` accepts `*chrondbc.DurationModifierSet` param
 - [x] `extrattack.go` uses `GameDB.ExtraAttackSpell()` resolver
 - [x] `GameDB` extended with `ExtraAttackSpell()`, `DurationModifiers()`, `PeriodicSpells()`
-- [x] Per-dataset LRU caches with DB→compiled-in fallback
+- [x] Per-dataset LRU caches backed exclusively by dataset tables
 
 ### ~~Dataset-Aware WoWDB~~ ✅ DONE (PRs #138–#149)
 
@@ -351,7 +351,7 @@ Consumers decoupled from `dbcmem` globals via WoWDB resolvers:
 ### Future: Dataset Population Tooling
 
 - [ ] `scripts/dbcdata export-dataset` — output JSON from DBC files for bulk API upload
-- [ ] `chronicled dataset seed --from-compiled` — bootstrap datasets from current dbcmem globals
+- [ ] `chronicled dataset seed` — populate datasets from exported DBC artifacts
 - [ ] `POST /api/v1/datasets/{id}/populate` — bulk-upload dbcmem tables
 
 ### Future: Frontend Asset Resolution

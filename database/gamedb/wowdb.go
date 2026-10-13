@@ -92,9 +92,8 @@ type WoWDB struct {
 	ctx       context.Context
 	spellFile *os.File // Non-nil only for explicit DBC-backed offline use.
 	datasetID uuid.UUID
-	pool      *pgxpool.Pool // For DB-backed derived data queries; nil = fallback to compiled-in globals.
+	pool      *pgxpool.Pool // For DB-backed derived data queries.
 	store     database.Store
-	dbOnly    bool // When true, no compiled-in fallback for derived data.
 
 	spells          spellSource
 	itemFetcher     *itemFetcher
@@ -126,12 +125,10 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 		store = database.New(opts.Pool)
 	}
 
-	dbOnly := opts.Pool != nil
-
 	var spellFetcher spellSource
 	var sf *os.File
 
-	if dbOnly {
+	if opts.Pool != nil {
 		spellFetcher = spells.NewFetcher(opts.Pool, customSpells, opts.CacheSvc, 1000)
 	} else {
 		if opts.SpellsDBCPath == "" {
@@ -163,7 +160,6 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 		datasetID:       opts.DatasetID,
 		pool:            opts.Pool,
 		store:           store,
-		dbOnly:          dbOnly,
 		spells:          spellFetcher,
 		itemFetcher:     newItemFetcher(ctx, opts.DB, opts.CacheSvc, 400),
 		creatureFetcher: newCreatureFetcher(ctx, opts.DB, opts.CacheSvc, 500),
@@ -262,7 +258,10 @@ func (w *WoWDB) durationModifiers(ctx context.Context, datasetID uuid.UUID) (*ch
 	if ms, ok := w.durationMods.Get(datasetID); ok {
 		return ms, nil
 	}
-	ms := w.loadDurationModifiers(ctx, datasetID)
+	ms, err := w.loadDurationModifiers(ctx, datasetID)
+	if err != nil {
+		return nil, err
+	}
 	w.durationMods.Add(datasetID, ms)
 	return ms, nil
 }
@@ -308,113 +307,101 @@ func (w *WoWDB) periodicSpells_(ctx context.Context, datasetID uuid.UUID) (map[i
 	if m, ok := w.periodicSpells.Get(datasetID); ok {
 		return m, nil
 	}
-	m := w.loadPeriodicSpells(ctx, datasetID)
+	m, err := w.loadPeriodicSpells(ctx, datasetID)
+	if err != nil {
+		return nil, err
+	}
 	w.periodicSpells.Add(datasetID, m)
 	return m, nil
 }
 
-// --- Load functions (DB with compiled-in fallback) ---
+// --- Database-backed derived spell data ---
 
 func (w *WoWDB) loadExtraAttacks(ctx context.Context, datasetID uuid.UUID) map[int32]dbcmem.ExtraAttackSpell {
-	if w.pool != nil {
-		rows, err := w.pool.Query(ctx,
-			`SELECT spell_id, name, num_extra_attacks FROM dbc_extra_attack_spells WHERE dataset_id = $1`, datasetID)
-		if err == nil {
-			defer rows.Close()
-			m := make(map[int32]dbcmem.ExtraAttackSpell)
-			for rows.Next() {
-				var id, num int32
-				var name string
-				if err := rows.Scan(&id, &name, &num); err == nil {
-					m[id] = dbcmem.ExtraAttackSpell{Name: name, NumExtraAttacks: num}
-				}
-			}
-			if len(m) > 0 {
-				return m
-			}
+	m := make(map[int32]dbcmem.ExtraAttackSpell)
+	if w.pool == nil {
+		return m
+	}
+	rows, err := w.pool.Query(ctx,
+		`SELECT spell_id, name, num_extra_attacks FROM dbc_extra_attack_spells WHERE dataset_id = $1`, datasetID)
+	if err != nil {
+		return m
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, num int32
+		var name string
+		if err := rows.Scan(&id, &name, &num); err != nil {
+			return make(map[int32]dbcmem.ExtraAttackSpell)
 		}
+		m[id] = dbcmem.ExtraAttackSpell{Name: name, NumExtraAttacks: num}
 	}
-	if w.dbOnly {
-		// DB-only mode: return empty map, no compiled-in fallback.
-		return nil
-	}
-	// Fallback to compiled-in globals.
-	return dbcmem.ExtraAttackSpells
+	return m
 }
 
-func (w *WoWDB) loadDurationModifiers(ctx context.Context, datasetID uuid.UUID) *chrondbc.DurationModifierSet {
-	if w.pool != nil {
-		rows, err := w.pool.Query(ctx,
-			`SELECT spell_id, name, percent, flat, deprecated, spell_class_set, spell_class_mask FROM dbc_duration_modifiers WHERE dataset_id = $1`, datasetID)
-		if err == nil {
-			defer rows.Close()
-			ms := &chrondbc.DurationModifierSet{
-				ByID:       make(map[int32]dbcmem.DurationModifier),
-				ByClassBit: make(map[int32]map[uint64][]int32),
-			}
-			for rows.Next() {
-				var mod dbcmem.DurationModifier
-				var classSet int32
-				var classMask int64
-				if err := rows.Scan(&mod.SpellID, &mod.Name, &mod.Percent, &mod.Flat, &mod.Deprecated, &classSet, &classMask); err == nil {
-					ms.ByID[mod.SpellID] = mod
-					mask := uint64(classMask)
-					if _, ok := ms.ByClassBit[classSet]; !ok {
-						ms.ByClassBit[classSet] = make(map[uint64][]int32)
-					}
-					for bit := uint64(0); bit < 64; bit++ {
-						b := uint64(1) << bit
-						if mask&b != 0 {
-							ms.ByClassBit[classSet][b] = append(ms.ByClassBit[classSet][b], mod.SpellID)
-						}
-					}
-				}
-			}
-			if len(ms.ByID) > 0 {
-				return ms
+func (w *WoWDB) loadDurationModifiers(ctx context.Context, datasetID uuid.UUID) (*chrondbc.DurationModifierSet, error) {
+	ms := &chrondbc.DurationModifierSet{
+		ByID:       make(map[int32]dbcmem.DurationModifier),
+		ByClassBit: make(map[int32]map[uint64][]int32),
+	}
+	if w.pool == nil {
+		return ms, nil
+	}
+	rows, err := w.pool.Query(ctx,
+		`SELECT spell_id, name, percent, flat, deprecated, spell_class_set, spell_class_mask FROM dbc_duration_modifiers WHERE dataset_id = $1`, datasetID)
+	if err != nil {
+		return nil, fmt.Errorf("query duration modifiers: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var mod dbcmem.DurationModifier
+		var classSet int32
+		var classMask int64
+		if err := rows.Scan(&mod.SpellID, &mod.Name, &mod.Percent, &mod.Flat, &mod.Deprecated, &classSet, &classMask); err != nil {
+			return nil, fmt.Errorf("scan duration modifier: %w", err)
+		}
+		ms.ByID[mod.SpellID] = mod
+		mask := uint64(classMask)
+		if _, ok := ms.ByClassBit[classSet]; !ok {
+			ms.ByClassBit[classSet] = make(map[uint64][]int32)
+		}
+		for bit := uint64(0); bit < 64; bit++ {
+			b := uint64(1) << bit
+			if mask&b != 0 {
+				ms.ByClassBit[classSet][b] = append(ms.ByClassBit[classSet][b], mod.SpellID)
 			}
 		}
 	}
-	if w.dbOnly {
-		// DB-only mode: return empty set, no compiled-in fallback.
-		return &chrondbc.DurationModifierSet{
-			ByID:       make(map[int32]dbcmem.DurationModifier),
-			ByClassBit: make(map[int32]map[uint64][]int32),
-		}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate duration modifiers: %w", err)
 	}
-	// Fallback to compiled-in globals.
-	return &chrondbc.DurationModifierSet{
-		ByID:       dbcmem.DurationModifiers,
-		ByClassBit: dbcmem.DurationModifiersByClassBit,
-	}
+	return ms, nil
 }
 
-func (w *WoWDB) loadPeriodicSpells(ctx context.Context, datasetID uuid.UUID) map[int32]dbcmem.PeriodicSpell {
-	if w.pool != nil {
-		rows, err := w.pool.Query(ctx,
-			`SELECT spell_id, name, has_direct FROM dbc_periodic_spells WHERE dataset_id = $1`, datasetID)
-		if err == nil {
-			defer rows.Close()
-			m := make(map[int32]dbcmem.PeriodicSpell)
-			for rows.Next() {
-				var id int32
-				var name string
-				var hasDirect bool
-				if err := rows.Scan(&id, &name, &hasDirect); err == nil {
-					m[id] = dbcmem.PeriodicSpell{Name: name, HasDirect: hasDirect}
-				}
-			}
-			if len(m) > 0 {
-				return m
-			}
+func (w *WoWDB) loadPeriodicSpells(ctx context.Context, datasetID uuid.UUID) (map[int32]dbcmem.PeriodicSpell, error) {
+	m := make(map[int32]dbcmem.PeriodicSpell)
+	if w.pool == nil {
+		return m, nil
+	}
+	rows, err := w.pool.Query(ctx,
+		`SELECT spell_id, name, has_direct FROM dbc_periodic_spells WHERE dataset_id = $1`, datasetID)
+	if err != nil {
+		return nil, fmt.Errorf("query periodic spells: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int32
+		var name string
+		var hasDirect bool
+		if err := rows.Scan(&id, &name, &hasDirect); err != nil {
+			return nil, fmt.Errorf("scan periodic spell: %w", err)
 		}
+		m[id] = dbcmem.PeriodicSpell{Name: name, HasDirect: hasDirect}
 	}
-	if w.dbOnly {
-		// DB-only mode: return empty map, no compiled-in fallback.
-		return nil
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate periodic spells: %w", err)
 	}
-	// Fallback to compiled-in globals.
-	return dbcmem.PeriodicSpells
+	return m, nil
 }
 
 // --- Invalidation ---

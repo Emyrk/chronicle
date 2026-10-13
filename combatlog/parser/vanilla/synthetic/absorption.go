@@ -178,11 +178,9 @@ const defaultMaxShieldDurationMS = 5 * 60 * 1000
 // TODO: Replace the blanket 2x slack with a per-spell upper bound via
 // chrondbc.MaxAuraDuration(spell, mods), which computes the theoretical max
 // duration with every duration-modifier talent at max rank (Permafrost,
-// Booming Voice, etc.). The `aura-duration-modifiers` table is already
-// auto-generated for the compiled-in dbcmem servers
-// (database/gamedb/chrondbc/dbcmem/*/durationmodifiers.go) but has not been
-// ported to each database-backed dataset yet. Once datasets carry it, thread
-// a *chrondbc.DurationModifierSet into NewAbsorption and use MaxAuraDuration
+// Booming Voice, etc.). Duration modifiers are generated per dataset during
+// spell import, but are not yet threaded into this consumer. Pass a
+// *chrondbc.DurationModifierSet into NewAbsorption and use MaxAuraDuration
 // here instead of doubling.
 func resolveShieldDuration(explicitMS int32, spell *chrondbc.Spell) int32 {
 	var dbcMax int32

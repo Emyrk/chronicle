@@ -1,9 +1,5 @@
-// Package dbcmem holds compiled-in DBC lookup data populated by server-specific
-// sub-packages at init() time. Per-dataset DB tables now exist for all data
-// types (dbc_spell_cast_times, dbc_spell_durations, etc. — see migration 000130).
-// WoWDB resolvers load from DB first, falling back to these globals for datasets
-// without imported companion DBC files. Once all datasets are populated in prod,
-// these globals and the server-specific sub-packages can be removed.
+// Package dbcmem defines DBC lookup types and the remaining compiled companion
+// tables used while converting legacy Spell.dbc files.
 package dbcmem
 
 // This file defines the shared types, package-level variables, and getter
@@ -121,24 +117,6 @@ var SpellRadii map[int32]SpellRadius
 
 // SpellFocusObjects is a lookup table for spell focus objects by ID.
 var SpellFocusObjects map[int32]SpellFocusObject
-
-// PeriodicSpells maps spell IDs to their metadata for all periodic spells.
-var PeriodicSpells map[int32]PeriodicSpell
-
-// ExtraAttackSpells maps spell IDs to metadata for all spells
-// with the EffectAddExtraAttacks effect.
-var ExtraAttackSpells map[int32]ExtraAttackSpell
-
-// DurationModifiers maps modifier spell IDs to their metadata.
-var DurationModifiers map[int32]DurationModifier
-
-// DurationModifiersByClassBit provides a reverse lookup from target spell
-// properties to the modifier spell IDs that can affect duration.
-//
-// Key 1: SpellClassSet (e.g. 8 = Rogue)
-// Key 2: individual bit from the modifier's family mask
-// Value: slice of modifier spell IDs (keys into DurationModifiers)
-var DurationModifiersByClassBit map[int32]map[uint64][]int32
 
 // -----------------------------------------------------------------------
 // Getter functions (nil map reads return zero values — safe without data)
