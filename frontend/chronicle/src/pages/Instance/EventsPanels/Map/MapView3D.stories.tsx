@@ -122,7 +122,7 @@ function syntheticEffects(players: number): EncounterEffects {
   for (let t = 4_000; t < DURATION_MS; t += 6_000) {
     events.push({ ...base, ...flamestrike, timestampMs: t - 2_500, kind: "cast_start", source: "Boss", target: "", school: 4, castTimeMs: 2_500 });
     if (t % 18_000 === 10_000) {
-      events.push({ ...base, timestampMs: t - 1_000, kind: "interrupt", source: "Player-3", target: "Boss", school: 2 });
+      events.push({ ...base, ...flamestrike, timestampMs: t - 1_000, kind: "interrupt", source: "Player-3", target: "Boss", school: 2 });
       continue;
     }
     events.push({ ...base, ...flamestrike, timestampMs: t, kind: "cast_go", source: "Boss", target: "", school: 4, aoe: true });
@@ -706,21 +706,63 @@ function BossMiniReplay({ playbackSpeed }: { playbackSpeed: number }) {
 
 // Seeds the spell lookups the cast icons use (the query key useSpellMeta and
 // useSpell share), so the story needs no backend. Starfire is left out and
-// falls back to the question mark.
-const SPELL_ICONS: Record<number, string> = {
-  585: "spell_holy_holysmite",
-  403: "spell_nature_lightning",
-  116: "spell_frost_frostbolt02",
-  686: "spell_shadow_shadowbolt",
-  2054: "spell_holy_heal",
-  2120: "spell_fire_selfdestruct",
+// falls back to the question mark. The second group are the real Kresh
+// fight's casts, as forever's /api/v1/wowdb/spell/:id returns them.
+const SPELL_ICONS: Record<number, [icon: string, name: string]> = {
+  585: ["spell_holy_holysmite", "Smite"],
+  403: ["spell_nature_lightning", "Lightning Bolt"],
+  116: ["spell_frost_frostbolt02", "Frostbolt"],
+  686: ["spell_shadow_shadowbolt", "Shadow Bolt"],
+  2054: ["spell_holy_heal", "Heal"],
+  2120: ["spell_fire_selfdestruct", "Flamestrike"],
+  2136: ["spell_fire_fireball", "Fire Blast"],
+  837: ["spell_frost_frostbolt02", "Frostbolt"],
+  1238640: ["spell_nature_spiritwolf", "Ghost Wolf"],
+  1866: ["classicon_paladin", "Holy Strike"],
+  3599: ["spell_fire_searingtotem", "Searing Totem"],
+  13550: ["ability_hunter_quickshot", "Serpent Sting"],
+  17256: ["ability_racial_cannibalize", "Bite"],
+  26573: ["spell_holy_innerfire", "Consecration"],
+  8052: ["spell_fire_flameshock", "Flame Shock"],
+  16829: ["ability_druid_rake", "Claw"],
+  408341: ["spell_fire_sealoffire", "Fire Nova"],
+  19434: ["inv_spear_07", "Aimed Shot"],
+  8154: ["spell_nature_stoneskintotem", "Stoneskin Totem"],
+  14282: ["ability_impalingbolt", "Arcane Shot"],
 };
+
+// Just enough of a spell for SpellTooltip, so hovering an icon or effect works.
+function seededSpell(id: number, icon: string, name: string): WoWSpell {
+  return {
+    id,
+    name: { 0: name },
+    subtext: {},
+    description: { 0: "" },
+    aura_description: {},
+    spell_icon: { ID: 0, TextureFilename: icon },
+    spell_level: 0,
+    school: { value: 0, string: "Physical" },
+    power_type: { value: 0, string: "Mana" },
+    mana_cost: 0,
+    mana_cost_pct: 0,
+    mana_cost_per_level: 0,
+    mana_per_second: 0,
+    casting_time: { ID: 0, Base: 0, PerLevel: 0, Minimum: 0 },
+    range: { ID: 0, RangeMin: 0, RangeMax: 0, Flags: 0, Name: "" },
+    duration: { ID: 0, Duration: 0, DurationPerLevel: 0, MaxDuration: 0 },
+    recovery_time: 0,
+    category_recovery_time: 0,
+    start_recovery_time: 0,
+    attributes: { blocks: [0, 0, 0, 0, 0, 0, 0, 0, 0], string: "" },
+    effects: [],
+  } as unknown as WoWSpell;
+}
 
 function WithSpellIcons({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   useState(() => {
-    for (const [id, icon] of Object.entries(SPELL_ICONS)) {
-      queryClient.setQueryData(["wowdb", "spell", id, "default"], { id: Number(id), spell_icon: { TextureFilename: icon } } as unknown as WoWSpell);
+    for (const [id, [icon, name]] of Object.entries(SPELL_ICONS)) {
+      queryClient.setQueryData(["wowdb", "spell", id, "default"], seededSpell(Number(id), icon, name));
     }
   });
   return children;
@@ -786,8 +828,17 @@ function KreshRealPlayer({ fixture }: { fixture: LoadedMapFixture }) {
   );
 }
 
+// The paladin, left out of the selection: with every player selected no marker
+// is muted, and MapView3D (which reads the selection from muted markers) would
+// see none, so no cast icons or spell names.
+const KRESH_UNSELECTED = "0x0000120C006422B6";
+
 function KreshRealReplay({ selectPlayers }: { selectPlayers: boolean }) {
-  const [fixture] = useState(() => loadMapFixture(kreshReal, { selectPlayers }));
+  const [fixture] = useState(() => {
+    const loaded = loadMapFixture(kreshReal, { selectPlayers });
+    if (selectPlayers) (loaded.props.context.entitySelection.playerIds as Set<string>).delete(KRESH_UNSELECTED);
+    return loaded;
+  });
   // Seed the artwork manifest so the scene needs no fetch; only tiles and
   // boss-mini textures load from the icon CDN.
   const [queryClient] = useState(() => {
@@ -797,10 +848,129 @@ function KreshRealReplay({ selectPlayers }: { selectPlayers: boolean }) {
   });
   return (
     <QueryClientProvider client={queryClient}>
-      <SyncModeProvider>
-        <KreshRealPlayer fixture={fixture} />
-      </SyncModeProvider>
+      <WithSpellIcons>
+        <SyncModeProvider>
+          <KreshRealPlayer fixture={fixture} />
+        </SyncModeProvider>
+      </WithSpellIcons>
     </QueryClientProvider>
+  );
+}
+
+// --- Cast icon phases on an 8 s loop. ---
+
+const CASTS_MS = 8_000;
+const CAST_MAGE = "Player-0";
+const CAST_HUNTER = "Player-1";
+const CAST_WARRIOR = "Player-2";
+const CAST_PRIEST = "Player-3";
+const FROSTBOLT = { spellId: 116, spellName: "Frostbolt", school: 6 };
+const FIRE_BLAST = { spellId: 2136, spellName: "Fire Blast", school: 4 };
+const CASTS_VIEW = { viewport: { centerX: 0.5, centerY: 0.5, zoom: 4 }, key: "casts" };
+
+const castUnits: SyntheticUnit[] = [
+  { guid: CAST_MAGE, name: "Mage", kind: "player", color: "var(--color-class-mage)", positions: standing(38, 50, 0) },
+  { guid: CAST_HUNTER, name: "Hunter", kind: "player", color: "var(--color-class-hunter)", positions: standing(40, 42, 0.5) },
+  { guid: CAST_WARRIOR, name: "Warrior", kind: "player", color: "var(--color-class-warrior)", positions: standing(47, 50, 0) },
+  { guid: CAST_PRIEST, name: "Priest", kind: "player", color: "var(--color-class-priest)", positions: standing(40, 58, -0.5) },
+  { guid: "Player-4", name: "Rogue (unselected)", kind: "player", color: "var(--color-class-rogue)", positions: standing(53, 45, Math.PI) },
+  { guid: "Boss", name: "Synthetic Boss", kind: "hostile", color: "#fb7185", positions: standing(50, 50, Math.PI) },
+];
+const CAST_SELECTED = new Set([CAST_MAGE, CAST_HUNTER, CAST_WARRIOR, CAST_PRIEST]);
+
+// The mage casts a Frostbolt that lands 600 ms after it goes off, starts a
+// second one that the boss interrupts, then fires an instant Fire Blast. The
+// boss casts Flamestrike. Auto Shot, Auto Attack and wand Shoot repeat
+// throughout and show no icon or text.
+function castEvents(): EncounterEffects {
+  const base = { amount: 800, overheal: 0, absorbed: 0, effective: 0, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, school: 2 };
+  const events: ReplayEffectEvent[] = [
+    { ...base, ...FROSTBOLT, timestampMs: 500, kind: "cast_start", source: CAST_MAGE, target: "Boss", castTimeMs: 2_500 },
+    { ...base, ...FROSTBOLT, timestampMs: 3_000, kind: "cast_go", source: CAST_MAGE, target: "Boss" },
+    { ...base, ...FROSTBOLT, timestampMs: 3_600, kind: "damage", source: CAST_MAGE, target: "Boss" },
+    { ...base, ...FROSTBOLT, timestampMs: 4_000, kind: "cast_start", source: CAST_MAGE, target: "Boss", castTimeMs: 2_500 },
+    { ...base, timestampMs: 5_400, kind: "interrupt", source: "Boss", target: CAST_MAGE, spellId: null, spellName: "" },
+    { ...base, ...FIRE_BLAST, timestampMs: 6_500, kind: "cast_go", source: CAST_MAGE, target: "Boss" },
+    { ...base, ...FIRE_BLAST, timestampMs: 6_500, kind: "damage", source: CAST_MAGE, target: "Boss" },
+    { ...base, ...BOSS_AOE, school: 4, timestampMs: 1_500, kind: "cast_start", source: "Boss", target: "", castTimeMs: 2_500 },
+    { ...base, ...BOSS_AOE, school: 4, timestampMs: 4_000, kind: "cast_go", source: "Boss", target: "", aoe: true },
+  ];
+  for (let t = 300; t < CASTS_MS; t += 2_000) {
+    events.push({ ...base, timestampMs: t, kind: "cast_go", source: CAST_HUNTER, target: "Boss", spellId: 75, spellName: "Auto Shot" });
+    events.push({ ...base, timestampMs: t, kind: "damage", source: CAST_HUNTER, target: "Boss", attack: "ranged_auto", spellId: 75, spellName: "Auto Shot" });
+  }
+  for (let t = 700; t < CASTS_MS; t += 1_500) {
+    events.push({ ...base, timestampMs: t, kind: "damage", source: CAST_WARRIOR, target: "Boss", attack: "swing", spellId: 6603, spellName: "Auto Attack" });
+    events.push({ ...base, timestampMs: t + 200, kind: "cast_go", source: CAST_PRIEST, target: "Boss", school: 7, spellId: 5019, spellName: "Shoot" });
+    events.push({ ...base, timestampMs: t + 200, kind: "damage", source: CAST_PRIEST, target: "Boss", school: 7, attack: "ranged_auto", spellId: 5019, spellName: "Shoot" });
+  }
+  const fx = createEncounterEffects();
+  for (const event of events.sort((left, right) => left.timestampMs - right.timestampMs)) addEffectEvent(fx, event);
+  return fx;
+}
+
+// The boss's Flamestrike is kicked 1.2 s in (the interrupt names the spell),
+// then a 3.5 s Flamestrike is interrupted 3.2 s in with no spell id (as the
+// vanilla parser logs it). No player is selected; the boss still shows icons.
+function bossInterruptEvents(): EncounterEffects {
+  const base = { amount: 600, overheal: 0, absorbed: 0, effective: 0, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, school: 4 };
+  const events: ReplayEffectEvent[] = [
+    { ...base, ...BOSS_AOE, timestampMs: 500, kind: "cast_start", source: "Boss", target: "", castTimeMs: 2_500 },
+    { ...base, ...BOSS_AOE, timestampMs: 1_700, kind: "interrupt", source: CAST_HUNTER, target: "Boss", school: 2 },
+    { ...base, ...BOSS_AOE, timestampMs: 3_000, kind: "cast_start", source: "Boss", target: "", castTimeMs: 3_500 },
+    { ...base, timestampMs: 6_200, kind: "interrupt", source: CAST_WARRIOR, target: "Boss", school: 2, spellId: null, spellName: "" },
+  ];
+  for (let t = 700; t < CASTS_MS; t += 1_500) {
+    events.push({ ...base, timestampMs: t, kind: "damage", source: CAST_WARRIOR, target: "Boss", school: 2, attack: "swing", spellId: 6603, spellName: "Auto Attack" });
+    events.push({ ...base, timestampMs: t + 300, kind: "damage", source: CAST_HUNTER, target: "Boss", school: 2, attack: "ranged_auto", spellId: 75, spellName: "Auto Shot" });
+  }
+  const fx = createEncounterEffects();
+  for (const event of events.sort((left, right) => left.timestampMs - right.timestampMs)) addEffectEvent(fx, event);
+  return fx;
+}
+
+const NO_CAST_SELECTION = new Set<string>();
+
+function CastPhaseReplay({ playbackSpeed, events = castEvents, selected = CAST_SELECTED }: {
+  playbackSpeed: number;
+  events?: () => EncounterEffects;
+  selected?: ReadonlySet<string>;
+}) {
+  const [fx] = useState(events);
+  const [cursorMs, setCursorMs] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setCursorMs((previous) => (previous + 100 * playbackSpeed) % CASTS_MS), 100);
+    return () => clearInterval(id);
+  }, [playbackSpeed]);
+
+  const markers = castUnits.flatMap((unit): MapSceneMarker[] => {
+    const sample = latestPositionAt(unit.positions, cursorMs);
+    if (!sample) return [];
+    return [{
+      ...unit,
+      sample,
+      point: projectSample(sample),
+      muted: unit.kind === "player" && selected.size > 0 && !selected.has(unit.guid),
+      health: { current: 70, max: 100, absorb: 0, dead: false },
+    }];
+  });
+
+  return (
+    <div style={{ width: 800, height: 520 }} className="overflow-hidden rounded-md border border-white/10 bg-black/70">
+      <MapView3D
+        ground={ground}
+        markers={markers}
+        projectSample={projectSample}
+        cursorMs={cursorMs}
+        playing
+        playbackSpeed={playbackSpeed}
+        view={CASTS_VIEW}
+        effects={fx}
+        bossGuids={BOSS_GUIDS}
+        onUnavailable={() => console.warn("WebGL unavailable")}
+      />
+    </div>
   );
 }
 
@@ -874,7 +1044,10 @@ export const KreshReal: Story = {
   render: () => <KreshRealReplay selectPlayers={false} />,
 };
 
-/** The real Kresh kill with the five players as the entity selection. */
+/**
+ * The real Kresh kill with four of the five players as the entity selection:
+ * their casts show spell icons (seeded, no backend), never auto attacks.
+ */
 export const KreshRealSelected: Story = {
   render: () => <KreshRealReplay selectPlayers />,
 };
@@ -888,4 +1061,32 @@ export const KreshRealSelected: Story = {
 export const Heals: Story = {
   args: { playbackSpeed: 1 },
   render: ({ playbackSpeed }) => <HealReplay playbackSpeed={playbackSpeed} />,
+};
+
+/**
+ * Cast icon phases above the selected mage and the boss: a Frostbolt grows
+ * in with a progress outline, pops as it goes off and stays up while the
+ * bolt lands; the next Frostbolt is interrupted (turns grey, wiggles, its
+ * outline freezes with a red tick at the cut, then fades); an
+ * instant Fire Blast pops in. Auto Shot, Auto Attack and wand Shoot show
+ * nothing. Hover an icon for its spell tooltip.
+ */
+export const Interrupted: Story = {
+  args: { playbackSpeed: 1 },
+  render: ({ playbackSpeed }) => <WithSpellIcons><CastPhaseReplay playbackSpeed={playbackSpeed} /></WithSpellIcons>,
+};
+
+/**
+ * Interrupted boss casts with no player selected: the Flamestrike icon bumps,
+ * drains to grey and wiggles, its outline freezes grey with a red tick where
+ * the cast was cut, "Interrupted" floats above it, and it fades out after
+ * 800 ms. The second cast is cut 3.2 s into a 3.5 s cast.
+ */
+export const InterruptedBossCast: Story = {
+  args: { playbackSpeed: 1 },
+  render: ({ playbackSpeed }) => (
+    <WithSpellIcons>
+      <CastPhaseReplay playbackSpeed={playbackSpeed} events={bossInterruptEvents} selected={NO_CAST_SELECTION} />
+    </WithSpellIcons>
+  ),
 };

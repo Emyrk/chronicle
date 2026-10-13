@@ -5,12 +5,13 @@ import { mapAssetUrl, type WowMapLayer, type WowMapTile } from "@/pages/Technica
 import { bossMiniSlug, bossMiniUrl } from "./bossMinis";
 import { FULL_MAP_VIEWPORT, healthBarColor, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
-  CAST_ICON_MS,
   DEFAULT_EFFECT_OPTIONS,
   deriveActiveEffects,
   deriveCastIcons,
   deriveCombatText,
   deriveRecentHealGain,
+  INTERRUPTED_ICON_MS,
+  INTERRUPTED_PLAYER_ICON_MS,
   isDeadAt,
   type ActiveEffect,
   type CastIcon,
@@ -53,14 +54,49 @@ const MAX_LABEL_TEXTURES = 128;
 const DEAD_COLOR = 0x57534e;
 // Spell icons above casters: pooled sprites over the bars and combat text.
 const MAX_CAST_ICONS = 12;
-const CAST_ICON_SIZE = 2.2;
-// Gap between a caster's hover-label height and its icons.
-const CAST_ICON_LIFT = 0.6;
-const CAST_ICON_FADE_IN_MS = 80;
-// Ongoing casts pulse slightly over this period (replay time).
-const CAST_ICON_PULSE_MS = 600;
+// About 26 px at the constant on-screen size.
+const CAST_ICON_SIZE = 3.4;
+// Gap between a caster's health bar and the bottom of its icons.
+const CAST_ICON_BAR_GAP = 0.55;
+// Gap above the icons for combat text and the hover label.
+const CAST_ICON_TOP_GAP = 0.3;
+// Above this many icons, all draw at CAST_ICON_CROWDED_SCALE.
+const CAST_ICON_CROWDED = 8;
+const CAST_ICON_CROWDED_SCALE = 0.8;
+// A cast grows in from CAST_ICON_GROW_FROM over this long (replay time).
+const CAST_ICON_GROW_MS = 150;
+const CAST_ICON_GROW_FROM = 0.75;
+// A cast going off pops to CAST_ICON_POP_SCALE and back over this long.
+const CAST_ICON_POP_MS = 180;
+const CAST_ICON_POP_SCALE = 1.35;
+// A white ring flashes around the icon as the cast goes off.
+const CAST_ICON_FLASH_MS = 120;
+// An interrupted icon (times from the interrupt): a quick impact bump, drains
+// to grey and dims, wiggles 3 times by up to +-8 degrees (decaying), then
+// fades and shrinks over its last INTERRUPT_FADE_MS. Enemies also float
+// "Interrupted" above the icon.
+const INTERRUPT_IMPACT_MS = 80;
+const INTERRUPT_IMPACT_SCALE = 1.15;
+const INTERRUPT_GREY_MS = 150;
+const INTERRUPT_BRIGHTNESS = 0.7;
+const INTERRUPT_WIGGLE_MS = 240;
+const INTERRUPT_WIGGLE = (8 * Math.PI) / 180;
+const INTERRUPT_FADE_MS = 300;
+const INTERRUPT_SHRINK = 0.85;
+const INTERRUPT_LABEL_MS = 550;
+const INTERRUPT_LABEL_COLOR = "#c2847e";
+const INTERRUPT_LABEL_HEIGHT = 1.6;
+// The frozen outline of a cut cast, with a red tick where it was cut.
+const CUT_ARC_COLOR = "#78716c";
+const CUT_TICK_COLOR = "#ef4444";
+// The cast progress outline around an icon, in 5 % steps.
+const CAST_ARC_STEPS = 20;
+const CAST_ARC_SIZE = 1.25;
+const CAST_ARC_OPACITY = 0.7;
 // Loaded icon textures kept for reuse, keyed by URL.
 const MAX_ICON_TEXTURES = 128;
+// A failed icon load is retried after this long (real time).
+const ICON_RETRY_MS = 30_000;
 // Boss minis have a 1-unit footprint; scaled a little wider than the 1.8-unit
 // hostile box so they read at boss-fight zoom.
 const BOSS_MINI_SIZE = 2.6;
@@ -132,9 +168,15 @@ export interface MapScene3DEffects {
   resolveColor: (color: string) => string;
   /** Casters whose recent hits float their spell name; null for none. */
   combatTextGuids: ReadonlySet<string> | null;
+  /** Casters whose hits float no spell name (their cast icon shows it); null for none. */
+  suppressNameGuids: ReadonlySet<string> | null;
   /** Casters whose casts show a spell icon above them; null for none. */
   castIcons: {
     guids: ReadonlySet<string>;
+    /** Casters whose icons are kept first when over the cap (bosses). */
+    priorityGuids: ReadonlySet<string> | null;
+    /** Enemy casters, whose interrupted casts linger longer and are labelled. */
+    enemyGuids: ReadonlySet<string> | null;
     /** The spell's icon URL (a question mark when unknown). */
     iconUrl: (spellId: number) => string;
     /** Shown until a spell's icon loads, or when it fails to. */
@@ -235,8 +277,21 @@ export class MapScene3D {
   private readonly labelTextures = new Map<string, { texture: THREE.CanvasTexture; aspect: number }>();
   private readonly castIcons: CastIcon[] = [];
   private readonly castSprites: THREE.Sprite[] = [];
-  // Icon textures by URL, in least-recently-used order.
-  private readonly iconTextures = new Map<string, THREE.Texture | "loading" | "failed">();
+  // Progress outlines and go flashes, one per icon sprite.
+  private readonly castArcs: THREE.Sprite[] = [];
+  // "Interrupted" labels, one per icon sprite.
+  private readonly castLabels: THREE.Sprite[] = [];
+  // Outline textures by step (index CAST_ARC_STEPS is the full ring), made on
+  // first use; cut outlines (grey, red tick) likewise.
+  private readonly arcTextures: (THREE.CanvasTexture | undefined)[] = [];
+  private readonly cutArcTextures: (THREE.CanvasTexture | undefined)[] = [];
+  // Index into castIcons of each shown icon sprite, for hover picking.
+  private readonly castSpriteIcons = new Int16Array(MAX_CAST_ICONS);
+  // Top of each caster's icons (unscaled height), for text and the hover label.
+  private readonly castIconTops = new Map<string, number>();
+  private readonly castIconCast = { caster: "", spellId: 0, spellName: "", phase: "casting" as CastIcon["phase"] };
+  // Icon textures by URL, in least-recently-used order; a number is the time a load failed.
+  private readonly iconTextures = new Map<string, THREE.Texture | "loading" | number>();
 
   private readonly container: HTMLElement;
   private readonly onContextLost: () => void;
@@ -300,12 +355,20 @@ export class MapScene3D {
       this.scene.add(sprite);
     }
     for (let index = 0; index < MAX_CAST_ICONS; index++) {
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
-      sprite.center.set(0.5, 0);
+      const sprite = new THREE.Sprite(createIconMaterial());
       sprite.renderOrder = 11;
       sprite.visible = false;
       this.castSprites.push(sprite);
-      this.scene.add(sprite);
+      const arc = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, depthWrite: false, transparent: true }));
+      arc.renderOrder = 12;
+      arc.visible = false;
+      this.castArcs.push(arc);
+      const label = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
+      label.center.set(0.5, 0);
+      label.renderOrder = 12;
+      label.visible = false;
+      this.castLabels.push(label);
+      this.scene.add(sprite, arc, label);
     }
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -521,9 +584,10 @@ export class MapScene3D {
     }
     for (const sprite of this.combatSprites) sprite.material.dispose();
     for (const { texture } of this.labelTextures.values()) texture.dispose();
-    for (const sprite of this.castSprites) sprite.material.dispose();
+    for (const sprite of [...this.castSprites, ...this.castArcs, ...this.castLabels]) sprite.material.dispose();
+    for (const texture of [...this.arcTextures, ...this.cutArcTextures]) texture?.dispose();
     for (const texture of this.iconTextures.values()) {
-      if (typeof texture !== "string") texture.dispose();
+      if (typeof texture === "object") texture.dispose();
     }
     this.renderer.dispose();
     this.renderer.forceContextLoss();
@@ -799,8 +863,9 @@ export class MapScene3D {
     this.commitPool(this.rings, ringCount);
     this.commitPool(this.bolts, boltCount);
     this.commitPool(this.slashes, slashCount);
-    this.updateCombatText(fx, cursorMs);
+    // Icons first: combat text on a unit with icons floats above them.
     this.updateCastIcons(fx, cursorMs);
+    this.updateCombatText(fx, cursorMs);
     return fx !== null && clock.playing;
   }
 
@@ -809,7 +874,7 @@ export class MapScene3D {
     const healGuids = this.effects?.healTextGuids ?? null;
     const any = Boolean(fx && ((sources && sources.size > 0) || (healGuids && healGuids.size > 0)));
     const texts = any
-      ? deriveCombatText(fx!, cursorMs, sources, healGuids, this.effectOptions, MAX_COMBAT_TEXT, this.combatText)
+      ? deriveCombatText(fx!, cursorMs, sources, healGuids, this.effects?.suppressNameGuids ?? null, this.effectOptions, MAX_COMBAT_TEXT, this.combatText)
       : this.combatText;
     if (!any) texts.length = 0;
     let shown = 0;
@@ -825,8 +890,11 @@ export class MapScene3D {
       sprite.material.opacity = 1 - text.progress * text.progress;
       const height = COMBAT_TEXT_HEIGHT * (text.crit ? 1.25 : 1) * this.unitScale;
       sprite.scale.set(height * label.aspect, height, 1);
-      // Float up from above the bar; stagger labels on the same target.
-      const lift = (target.labelHeight + 0.5 + 2 * text.progress + (shown % 3) * 1.2) * this.unitScale;
+      // Float up from above the bar (or the unit's cast icons); stagger
+      // labels on the same target.
+      const iconTop = this.castIconTops.get(text.target);
+      const start = iconTop !== undefined ? iconTop + CAST_ICON_TOP_GAP : target.labelHeight + 0.5;
+      const lift = (start + 2 * text.progress + (shown % 3) * 1.2) * this.unitScale;
       sprite.position.set(target.base.x, lift, target.base.z);
       sprite.visible = true;
       shown++;
@@ -836,56 +904,189 @@ export class MapScene3D {
 
   private updateCastIcons(fx: EncounterEffects | null, cursorMs: number) {
     const castIcons = this.effects?.castIcons;
-    const icons = fx && castIcons && castIcons.guids.size > 0
-      ? deriveCastIcons(fx, cursorMs, castIcons.guids, MAX_CAST_ICONS, this.castIcons)
+    const on = Boolean(fx && castIcons && castIcons.guids.size > 0);
+    const icons = on
+      ? deriveCastIcons(fx!, cursorMs, castIcons!.guids, Math.min(MAX_CAST_ICONS, this.effectOptions.maxEffects), this.castIcons, {
+        priorityGuids: castIcons!.priorityGuids,
+        enemyGuids: castIcons!.enemyGuids,
+        filterGuids: this.effectOptions.filterGuids,
+      })
       : this.castIcons;
-    if (!fx || !castIcons || castIcons.guids.size === 0) icons.length = 0;
+    if (!on) icons.length = 0;
     const right = this.vectorB.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    let visible = 0;
+    for (const icon of icons) {
+      if (this.units.has(icon.caster)) visible++;
+    }
+    const baseSize = CAST_ICON_SIZE * (visible > CAST_ICON_CROWDED ? CAST_ICON_CROWDED_SCALE : 1);
+    this.castIconTops.clear();
+    // Every pooled sprite starts each frame in colour, upright and untinted,
+    // so scrubbing back before an interrupt shows the colour icon again.
+    for (const sprite of this.castSprites) {
+      sprite.material.userData.saturation.value = 1;
+      sprite.material.rotation = 0;
+      sprite.material.color.setHex(0xffffff);
+    }
     let shown = 0;
     for (let index = 0; index < icons.length; index++) {
       const icon = icons[index];
       const caster = this.units.get(icon.caster);
       if (!caster) continue;
+      // The question mark stands in while the icon loads or after it failed.
       const texture = this.iconTexture(castIcons!.iconUrl(icon.spellId)) ?? this.iconTexture(castIcons!.placeholderUrl);
       if (!texture) continue;
       const sprite = this.castSprites[shown];
-      if (sprite.material.map !== texture) {
-        sprite.material.map = texture;
-        sprite.material.needsUpdate = true;
+      const arc = this.castArcs[shown];
+      const material = sprite.material;
+      if (material.map !== texture) {
+        material.map = texture;
+        material.needsUpdate = true;
       }
-      // Ongoing casts stay opaque and pulse; instants fade in, then out.
-      let size = CAST_ICON_SIZE * this.unitScale;
+      let scale = 1;
+      let opacity = 1;
+      let rotation = 0;
+      let arcTexture: THREE.CanvasTexture | null = null;
+      let arcOpacity = 0;
+      let flash = false;
+      let label = false;
       if (icon.phase === "casting") {
-        sprite.material.opacity = 1;
-        size *= 1 + 0.06 * Math.sin((cursorMs / CAST_ICON_PULSE_MS) * Math.PI * 2);
+        // Grows in, then holds while the outline sweeps round with the cast.
+        scale = icon.elapsedMs < CAST_ICON_GROW_MS
+          ? CAST_ICON_GROW_FROM + (1 - CAST_ICON_GROW_FROM) * easeOutCubic(icon.elapsedMs / CAST_ICON_GROW_MS)
+          : 1;
+        const step = Math.floor(icon.progress * CAST_ARC_STEPS);
+        if (step > 0) {
+          arcTexture = this.arcTexture(step, false);
+          arcOpacity = CAST_ARC_OPACITY;
+        }
+      } else if (icon.phase === "instant") {
+        // Pops as the cast goes off with a white ring flash, then fades.
+        const pop = icon.elapsedMs / CAST_ICON_POP_MS;
+        if (pop < 0.35) scale = 1 + (CAST_ICON_POP_SCALE - 1) * easeOutCubic(pop / 0.35);
+        else if (pop < 1) scale = CAST_ICON_POP_SCALE - (CAST_ICON_POP_SCALE - 1) * easeOutBack((pop - 0.35) / 0.65, 1.7);
+        opacity = 1 - icon.progress * icon.progress;
+        if (icon.elapsedMs < CAST_ICON_FLASH_MS) {
+          arcTexture = this.arcTexture(CAST_ARC_STEPS, false);
+          arcOpacity = 1 - icon.elapsedMs / CAST_ICON_FLASH_MS;
+          flash = true;
+        }
       } else {
-        const fadeIn = Math.min(1, (icon.progress * CAST_ICON_MS) / CAST_ICON_FADE_IN_MS);
-        sprite.material.opacity = fadeIn * (1 - icon.progress * icon.progress);
+        // Interrupted: the icon bumps, drains to grey and wiggles; the
+        // outline freezes where the cast was cut, then everything fades.
+        const elapsed = icon.elapsedMs;
+        const lingerMs = icon.enemy ? INTERRUPTED_ICON_MS : INTERRUPTED_PLAYER_ICON_MS;
+        if (elapsed < INTERRUPT_IMPACT_MS) {
+          const impact = elapsed / INTERRUPT_IMPACT_MS;
+          scale = impact < 0.5
+            ? 1 + (INTERRUPT_IMPACT_SCALE - 1) * easeOutCubic(impact / 0.5)
+            : INTERRUPT_IMPACT_SCALE - (INTERRUPT_IMPACT_SCALE - 1) * easeOutBack((impact - 0.5) / 0.5, 1.7);
+        }
+        const grey = 1 - (1 - Math.min(1, elapsed / INTERRUPT_GREY_MS)) ** 2;
+        material.userData.saturation.value = 1 - grey;
+        material.color.setScalar(1 - (1 - INTERRUPT_BRIGHTNESS) * grey);
+        if (elapsed < INTERRUPT_WIGGLE_MS) {
+          const wiggle = elapsed / INTERRUPT_WIGGLE_MS;
+          rotation = Math.sin(wiggle * Math.PI * 6) * INTERRUPT_WIGGLE * (1 - wiggle);
+        }
+        const fadeFrom = lingerMs - INTERRUPT_FADE_MS;
+        if (elapsed > fadeFrom) {
+          const fade = ((elapsed - fadeFrom) / INTERRUPT_FADE_MS) ** 2;
+          opacity = 1 - fade;
+          scale *= 1 - (1 - INTERRUPT_SHRINK) * fade;
+        }
+        const step = Math.floor(icon.cutProgress * CAST_ARC_STEPS);
+        if (step > 0) {
+          arcTexture = this.arcTexture(step, true);
+          arcOpacity = 1;
+        }
+        label = icon.enemy && elapsed < INTERRUPT_LABEL_MS;
       }
+      material.opacity = opacity;
+      material.rotation = rotation;
+      const size = baseSize * scale * this.unitScale;
       sprite.scale.set(size, size, 1);
-      // The newest icon on a caster is centred; an older one sits beside it.
+      // Directly above the health bar; the newest icon on a caster is
+      // centred and an older one sits to its right.
       let slot = 0;
       for (let previous = 0; previous < index; previous++) {
         if (icons[previous].caster === icon.caster) slot++;
       }
-      sprite.position.set(caster.base.x, (caster.labelHeight + CAST_ICON_LIFT) * this.unitScale, caster.base.z)
-        .addScaledVector(right, slot * CAST_ICON_SIZE * 1.1 * this.unitScale);
+      const bottom = caster.barHeight + CAST_ICON_BAR_GAP;
+      sprite.position.set(caster.base.x, (bottom + baseSize / 2) * this.unitScale, caster.base.z)
+        .addScaledVector(right, slot * baseSize * 1.1 * this.unitScale);
       sprite.visible = true;
+      if (arcTexture) {
+        const arcMaterial = arc.material;
+        if (arcMaterial.map !== arcTexture) {
+          arcMaterial.map = arcTexture;
+          arcMaterial.needsUpdate = true;
+        }
+        const blending = flash ? THREE.AdditiveBlending : THREE.NormalBlending;
+        if (arcMaterial.blending !== blending) {
+          arcMaterial.blending = blending;
+          arcMaterial.needsUpdate = true;
+        }
+        arcMaterial.opacity = arcOpacity * opacity;
+        arc.scale.set(size * CAST_ARC_SIZE, size * CAST_ARC_SIZE, 1);
+        arc.position.copy(sprite.position);
+        arc.visible = true;
+      } else {
+        arc.visible = false;
+      }
+      let top = bottom + baseSize;
+      const labelSprite = this.castLabels[shown];
+      if (label) {
+        const text = this.labelTexture("Interrupted", INTERRUPT_LABEL_COLOR, false);
+        if (labelSprite.material.map !== text.texture) {
+          labelSprite.material.map = text.texture;
+          labelSprite.material.needsUpdate = true;
+        }
+        labelSprite.material.opacity = opacity;
+        const height = INTERRUPT_LABEL_HEIGHT * this.unitScale;
+        labelSprite.scale.set(height * text.aspect, height, 1);
+        labelSprite.position.copy(sprite.position).setY((top + 0.1) * this.unitScale);
+        labelSprite.visible = true;
+        top += 0.1 + INTERRUPT_LABEL_HEIGHT;
+      } else {
+        labelSprite.visible = false;
+      }
+      this.castIconTops.set(icon.caster, Math.max(this.castIconTops.get(icon.caster) ?? 0, top));
+      this.castSpriteIcons[shown] = index;
       shown++;
     }
-    for (let index = shown; index < MAX_CAST_ICONS; index++) this.castSprites[index].visible = false;
+    for (let index = shown; index < MAX_CAST_ICONS; index++) {
+      this.castSprites[index].visible = false;
+      this.castArcs[index].visible = false;
+      this.castLabels[index].visible = false;
+    }
+    // The hover label sits above the hovered unit's icons.
+    if (this.hoveredGuid) this.updateLabel();
+  }
+
+  // The cast outline traced `step / CAST_ARC_STEPS` of the way round,
+  // clockwise from 12 o'clock (grey with a red tick at the end when `cut`);
+  // created on first use and kept.
+  private arcTexture(step: number, cut: boolean): THREE.CanvasTexture {
+    const textures = cut ? this.cutArcTextures : this.arcTextures;
+    let texture = textures[step];
+    if (!texture) {
+      texture = createArcTexture(step / CAST_ARC_STEPS, cut);
+      textures[step] = texture;
+    }
+    return texture;
   }
 
   // The icon's texture once loaded, starting the load on first use; null
-  // while loading or after a failed load.
+  // while loading or after a failed load (retried after ICON_RETRY_MS).
   private iconTexture(url: string): THREE.Texture | null {
     const cached = this.iconTextures.get(url);
-    if (cached !== undefined) {
+    if (cached !== undefined && !(typeof cached === "number" && performance.now() - cached >= ICON_RETRY_MS)) {
       // Re-insert to keep the cache in least-recently-used order.
       this.iconTextures.delete(url);
       this.iconTextures.set(url, cached);
-      return typeof cached === "string" ? null : cached;
+      return typeof cached === "object" ? cached : null;
     }
+    this.iconTextures.delete(url);
     this.iconTextures.set(url, "loading");
     this.textureLoader.load(corsTextureUrl(url), (texture) => {
       if (this.disposed || this.iconTextures.get(url) !== "loading") {
@@ -897,14 +1098,14 @@ export class MapScene3D {
       this.requestRender();
     }, undefined, () => {
       if (this.disposed || this.iconTextures.get(url) !== "loading") return;
-      this.iconTextures.set(url, "failed");
+      this.iconTextures.set(url, performance.now());
       this.requestRender();
     });
     if (this.iconTextures.size > MAX_ICON_TEXTURES) {
       // Evict the least recently used icon that is not on screen.
       for (const [oldestUrl, oldest] of this.iconTextures) {
-        if (typeof oldest !== "string" && this.castSprites.some((sprite) => sprite.visible && sprite.material.map === oldest)) continue;
-        if (typeof oldest !== "string") oldest.dispose();
+        if (typeof oldest === "object" && this.castSprites.some((sprite) => sprite.visible && sprite.material.map === oldest)) continue;
+        if (typeof oldest === "object") oldest.dispose();
         this.iconTextures.delete(oldestUrl);
         break;
       }
@@ -926,7 +1127,7 @@ export class MapScene3D {
     if (this.labelTextures.size > MAX_LABEL_TEXTURES) {
       const [oldestKey, oldest] = this.labelTextures.entries().next().value!;
       // Still drawn this frame by another sprite? Keep it one more round.
-      if (!this.combatSprites.some((sprite) => sprite.material.map === oldest.texture)) {
+      if (![...this.combatSprites, ...this.castLabels].some((sprite) => sprite.material.map === oldest.texture)) {
         oldest.texture.dispose();
         this.labelTextures.delete(oldestKey);
       }
@@ -936,9 +1137,23 @@ export class MapScene3D {
 
   // Reports the spell effect under the pointer when it changes.
   private updateEffectHover() {
-    let hit: { effect: ActiveEffect; key: string } | null = null;
+    let hit: { effect: ActiveEffect | null; key: string } | null = null;
+    let iconSprite: THREE.Sprite | null = null;
     if (this.pointerInside && this.effects) {
       this.raycaster.setFromCamera(this.pointer, this.camera);
+      // Cast icons draw over everything, so they are picked first.
+      for (let index = 0; index < MAX_CAST_ICONS; index++) {
+        const sprite = this.castSprites[index];
+        if (!sprite.visible || this.raycaster.intersectObject(sprite, false).length === 0) continue;
+        const icon = this.castIcons[this.castSpriteIcons[index]];
+        if (!icon) continue;
+        Object.assign(this.castIconCast, { caster: icon.caster, spellId: icon.spellId, spellName: icon.spellName, phase: icon.phase });
+        hit = { effect: null, key: `icon|${icon.caster}|${icon.spellId}` };
+        iconSprite = sprite;
+        break;
+      }
+    }
+    if (!hit && this.pointerInside && this.effects) {
       this.raycaster.params.Line.threshold = 0.4 * this.unitScale;
       const pools: [THREE.Object3D, Int16Array][] = [
         [this.bolts, this.boltEffects],
@@ -958,13 +1173,26 @@ export class MapScene3D {
     }
     if ((hit?.key ?? "") === this.hoveredEffectKey) return;
     this.hoveredEffectKey = hit?.key ?? "";
-    const target = hit ? this.units.get(hit.effect.target) : undefined;
-    if (!hit || !target) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (hit && !hit.effect && iconSprite) {
+      const projected = this.vector.copy(iconSprite.position).project(this.camera);
+      const cast = this.castIconCast;
+      this.onEffectHover({
+        eventKind: cast.phase === "casting" ? "cast_start" : cast.phase === "interrupted" ? "interrupt" : "cast_go",
+        spellId: cast.spellId,
+        spellName: cast.spellName,
+        amount: 0,
+        x: (projected.x + 1) / 2 * rect.width,
+        y: (1 - projected.y) / 2 * rect.height,
+      });
+      return;
+    }
+    const target = hit?.effect ? this.units.get(hit.effect.target) : undefined;
+    if (!hit?.effect || !target) {
       this.onEffectHover(null);
       return;
     }
     const projected = this.vector.copy(target.base).setY(BEAM_HEIGHT * this.unitScale).project(this.camera);
-    const rect = this.renderer.domElement.getBoundingClientRect();
     this.onEffectHover({
       eventKind: hit.effect.eventKind,
       spellId: hit.effect.spellId,
@@ -1071,7 +1299,10 @@ export class MapScene3D {
       this.scene.add(this.label);
     }
     this.label!.scale.copy(this.label!.userData.baseScale as THREE.Vector3).multiplyScalar(this.unitScale);
-    this.label!.position.set(object.group.position.x, object.labelHeight * this.unitScale, object.group.position.z);
+    // Above the unit's cast icons while it has any.
+    const iconTop = this.castIconTops.get(this.hoveredGuid!);
+    const height = iconTop !== undefined ? iconTop + CAST_ICON_TOP_GAP : object.labelHeight;
+    this.label!.position.set(object.group.position.x, height * this.unitScale, object.group.position.z);
   }
 
   private clearLabel() {
@@ -1248,4 +1479,84 @@ function createTextTexture(text: string, color: string): { texture: THREE.Canvas
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return { texture, aspect: canvas.width / canvas.height };
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
+// Overshoots past 1 by an amount set by `overshoot`, then settles at 1.
+function easeOutBack(t: number, overshoot: number): number {
+  const x = t - 1;
+  return 1 + (overshoot + 1) * x ** 3 + overshoot * x ** 2;
+}
+
+// A white outline round a square icon, traced `fraction` of the way round
+// clockwise from 12 o'clock. Drawn on a canvas CAST_ARC_SIZE times the icon,
+// about 2 px wide at the icon's on-screen size. A `cut` outline is grey with
+// a red tick across its end.
+function createArcTexture(fraction: number, cut: boolean): THREE.CanvasTexture {
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d")!;
+  const inset = (size * (1 - 1 / CAST_ARC_SIZE)) / 2 - 6;
+  const far = size - inset;
+  const middle = size / 2;
+  const points: [number, number][] = [[middle, inset], [far, inset], [far, far], [inset, far], [inset, inset], [middle, inset]];
+  let remaining = fraction * 4 * (far - inset);
+  let endX = points[0][0];
+  let endY = points[0][1];
+  let alongX = 1;
+  let alongY = 0;
+  context.strokeStyle = cut ? CUT_ARC_COLOR : "#ffffff";
+  context.lineWidth = 8;
+  context.lineCap = "butt";
+  context.lineJoin = "miter";
+  context.beginPath();
+  context.moveTo(...points[0]);
+  for (let index = 1; index < points.length && remaining > 0; index++) {
+    const [fromX, fromY] = points[index - 1];
+    const [toX, toY] = points[index];
+    const length = Math.hypot(toX - fromX, toY - fromY);
+    const part = Math.min(1, remaining / length);
+    endX = fromX + (toX - fromX) * part;
+    endY = fromY + (toY - fromY) * part;
+    alongX = (toX - fromX) / length;
+    alongY = (toY - fromY) / length;
+    context.lineTo(endX, endY);
+    remaining -= length;
+  }
+  context.stroke();
+  if (cut) {
+    // Across the outline, sticking out a little on both sides.
+    context.strokeStyle = CUT_TICK_COLOR;
+    context.lineWidth = 6;
+    context.beginPath();
+    context.moveTo(endX - alongY * 12, endY + alongX * 12);
+    context.lineTo(endX + alongY * 12, endY - alongX * 12);
+    context.stroke();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+// A sprite material whose `userData.saturation.value` (1 = colour, 0 = grey)
+// mixes the texel towards its luminance. Every icon sprite has its own
+// material and uniform; the shared cache key compiles one program for all.
+function createIconMaterial(): THREE.SpriteMaterial {
+  const material = new THREE.SpriteMaterial({ depthTest: false, transparent: true });
+  const saturation = { value: 1 };
+  material.userData.saturation = saturation;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uSaturation = saturation;
+    shader.fragmentShader = `uniform float uSaturation;\n${shader.fragmentShader}`.replace(
+      "#include <map_fragment>",
+      "#include <map_fragment>\ndiffuseColor.rgb = mix(vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))), diffuseColor.rgb, uSaturation);",
+    );
+  };
+  material.customProgramCacheKey = () => "cast-icon-saturation";
+  return material;
 }

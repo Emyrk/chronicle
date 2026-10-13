@@ -181,16 +181,19 @@ describe("mapProcessor", () => {
       expect(effectsOf({ ...go, numHits: 1 })?.events[0]).toMatchObject({ aoe: false });
     });
 
-    it("records interrupts", () => {
-      expect(effectsOf({
+    it("records interrupts with the interrupted spell, if known", () => {
+      const interrupt = {
         ...meta,
-        type: "interrupt",
+        type: "interrupt" as const,
         caster: "rogue",
         target: "boss",
         spellName: "Shadow Bolt",
         extraSpellId: 686,
         extraSchools: [7],
-      })?.events[0]).toMatchObject({ kind: "interrupt", source: "rogue", target: "boss" });
+      };
+      expect(effectsOf(interrupt)?.events[0])
+        .toMatchObject({ kind: "interrupt", source: "rogue", target: "boss", spellId: 686, spellName: "Shadow Bolt" });
+      expect(effectsOf({ ...interrupt, extraSpellId: 0, spellName: "" })?.events[0]).toMatchObject({ spellId: null, spellName: "" });
     });
 
     it("tracks deaths and resurrections per unit", () => {

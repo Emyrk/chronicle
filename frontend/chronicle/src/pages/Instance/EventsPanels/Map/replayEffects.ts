@@ -450,8 +450,9 @@ export interface CombatText {
 
 /**
  * Floating text over the targets of recent hits, newest first, at most
- * `max`: spell names of damage dealt by `sources`, and healing numbers for
- * heals cast by or landing on `healGuids` (green, grey when all overheal).
+ * `max`: spell names of damage dealt by `sources` (never basic attacks, nor
+ * casters in `suppressNamesFor`), and healing numbers for heals cast by or
+ * landing on `healGuids` (green, grey when all overheal).
  * Like deriveActiveEffects, a pure function of the cursor; `out` and its
  * objects are reused.
  */
@@ -460,6 +461,7 @@ export function deriveCombatText(
   cursorMs: number,
   sources: ReadonlySet<string> | null,
   healGuids: ReadonlySet<string> | null,
+  suppressNamesFor: ReadonlySet<string> | null,
   options: Pick<DeriveEffectsOptions, "showPeriodic" | "showHeals" | "showOverheal">,
   max: number,
   out: CombatText[] = [],
@@ -478,7 +480,9 @@ export function deriveCombatText(
       text = formatHealAmount(event.effective > 0 ? event.effective : event.overheal);
       color = event.effective > 0 ? HEAL_COLOR : OVERHEAL_COLOR;
     } else {
-      if (!event.spellName || !sources || !sources.has(event.source)) continue;
+      if (!event.spellName || !sources || !sources.has(event.source) || isBasicAttack(event)) continue;
+      // Casters showing cast icons show the icon instead of the name.
+      if (suppressNamesFor?.has(event.source)) continue;
       text = event.spellName;
       color = schoolColor(event.school);
     }
@@ -495,47 +499,111 @@ export function deriveCombatText(
 }
 
 /** How long an instant cast's (or a finished cast's) icon stays up. */
-export const CAST_ICON_MS = 700;
+export const CAST_ICON_MS = 900;
 /** Icons shown side by side above one caster, at most. */
 export const MAX_CAST_ICONS_PER_UNIT = 2;
 /** Auto attack, Auto Shot and wand Shoot: repeating swings, not casts. */
-export const CAST_ICON_SKIP_SPELLS: ReadonlySet<number> = new Set([6603, 75, 5019]);
+export const BASIC_ATTACK_SPELL_IDS: ReadonlySet<number> = new Set([6603, 75, 5019]);
+// Exact (trimmed, lowercased) names only: "Attack Power" must not match.
+const BASIC_ATTACK_NAMES: ReadonlySet<string> = new Set([
+  "auto attack", "auto attack (oh)", "auto attack - offhand", "auto shot", "shoot", "melee", "attack",
+]);
+
+/**
+ * Whether an event is a basic swing, Auto Shot or wand shot, which never
+ * floats a spell name or shows a cast icon.
+ */
+export function isBasicAttack(event: Pick<ReplayEffectEvent, "kind" | "spellId" | "spellName" | "attack">): boolean {
+  if (event.spellId != null && BASIC_ATTACK_SPELL_IDS.has(event.spellId)) return true;
+  if (event.kind === "damage" && (event.attack === "swing" || event.attack === "ranged_auto")) return true;
+  if ((event.kind === "cast_start" || event.kind === "cast_go") && event.spellId == null) return true;
+  return BASIC_ATTACK_NAMES.has(event.spellName.trim().toLowerCase());
+}
+
+/** How long an interrupted enemy cast's icon stays up (greyed). */
+export const INTERRUPTED_ICON_MS = 800;
+/** How long an interrupted player cast's icon stays up (greyed). */
+export const INTERRUPTED_PLAYER_ICON_MS = 550;
 
 export interface CastIcon {
   caster: string;
   spellId: number;
-  /** 0 at the cast start (or instant cast), approaching 1 as the icon expires. */
+  spellName: string;
+  /**
+   * 0 when the phase began, approaching 1 as it ends: the cast bar while
+   * casting, the linger after a cast goes off, the greyed interrupted icon.
+   */
   progress: number;
-  /** "casting" while a cast bar runs; "instant" after a cast goes off. */
-  phase: "casting" | "instant";
+  /** Replay time since the phase began. */
+  elapsedMs: number;
+  /**
+   * "casting" while a cast bar runs; "instant" after a cast goes off;
+   * "interrupted" for a while after an interrupt cuts the cast.
+   */
+  phase: "casting" | "instant" | "interrupted";
+  /** Interrupted only: how far the cast bar had run when it was cut (0-1). */
+  cutProgress: number;
+  /** Whether the caster is an enemy (in `enemyGuids`). */
+  enemy: boolean;
 }
 
-const showsCastIcon = (event: ReplayEffectEvent) =>
-  event.spellId != null && !CAST_ICON_SKIP_SPELLS.has(event.spellId);
+export interface CastIconOptions {
+  /** Kept first when over the cap (bosses). */
+  priorityGuids: ReadonlySet<string> | null;
+  /** When set, only casts by or on these units ("Only selected"). */
+  filterGuids: ReadonlySet<string> | null;
+  /** Enemies: their interrupted casts stay up for INTERRUPTED_ICON_MS. */
+  enemyGuids?: ReadonlySet<string> | null;
+}
 
-// Whether the caster's cast at `index` ended by `end`: their next cast start,
-// the same spell going off, or an interrupt.
-function castEndedBy(events: readonly ReplayEffectEvent[], index: number, end: number): boolean {
+/**
+ * How a cast ended: it went off, the caster started another cast, an
+ * interrupt cut it, or the caster died.
+ */
+export interface CastEnd {
+  how: "go" | "replaced" | "interrupt" | "died";
+  timeMs: number;
+}
+
+// Reused by castEndedBy so a frame's derivation allocates nothing once warm.
+const castEnd: CastEnd = { how: "go", timeMs: 0 };
+
+// How the caster's cast at `index` ended by `end`, or null while it runs. An
+// interrupt counts only within the (uncapped) cast time, and only for the
+// cast's own spell or an unknown one (the vanilla parser logs id 0).
+function castEndedBy(events: readonly ReplayEffectEvent[], index: number, end: number): CastEnd | null {
   const cast = events[index];
   for (let next = index + 1; next < end; next++) {
     const event = events[next];
+    let how: CastEnd["how"] | null = null;
     if (event.kind === "interrupt") {
-      if (event.target === cast.source) return true;
-      continue;
+      if (event.target === cast.source && event.timestampMs - cast.timestampMs < cast.castTimeMs
+        && (!event.spellId || event.spellId === cast.spellId)) how = "interrupt";
+    } else if (event.kind === "slain") {
+      if (event.target === cast.source) how = "died";
+    } else if (event.source === cast.source && (event.kind === "cast_start" || event.kind === "cast_go") && !isBasicAttack(event)) {
+      if (event.kind === "cast_start") how = "replaced";
+      else if (event.spellId === cast.spellId) how = "go";
     }
-    if (event.source !== cast.source || !showsCastIcon(event)) continue;
-    if (event.kind === "cast_start" || (event.kind === "cast_go" && event.spellId === cast.spellId)) return true;
+    if (how) {
+      castEnd.how = how;
+      castEnd.timeMs = event.timestampMs;
+      return castEnd;
+    }
   }
-  return false;
+  return null;
 }
 
 /**
  * Spell icons above `sources` while they cast, newest first: a cast with a
- * cast time shows until it goes off, is interrupted or replaced (at most
- * CAST_RING_MAX_MS), and every cast that goes off shows for CAST_ICON_MS.
- * At most MAX_CAST_ICONS_PER_UNIT per caster and `max` in all. Like
- * deriveCombatText, a pure function of the cursor; `out` and its objects
- * are reused.
+ * cast time shows from its start until it goes off or is replaced (at most
+ * CAST_RING_MAX_MS) and disappears if the caster dies; an interrupted cast
+ * stays up greyed for INTERRUPTED_ICON_MS (enemies) or
+ * INTERRUPTED_PLAYER_ICON_MS; every cast that goes off shows for
+ * CAST_ICON_MS. At most MAX_CAST_ICONS_PER_UNIT per caster and `max` in
+ * all; over the cap, priority casters are kept first, then ongoing casts
+ * over finished ones, then the newest. Like deriveCombatText, a pure
+ * function of the cursor; `out` and its objects are reused.
  */
 export function deriveCastIcons(
   fx: EncounterEffects,
@@ -543,36 +611,82 @@ export function deriveCastIcons(
   sources: ReadonlySet<string>,
   max: number,
   out: CastIcon[] = [],
+  options: CastIconOptions = { priorityGuids: null, filterGuids: null },
 ): CastIcon[] {
   let count = 0;
+  const { priorityGuids, filterGuids, enemyGuids } = options;
   const events = fx.events;
-  const [start, end] = eventWindow(events, cursorMs - CAST_RING_MAX_MS, cursorMs);
-  for (let index = end - 1; index >= start && count < max; index--) {
+  const [start, end] = eventWindow(events, cursorMs - CAST_RING_MAX_MS - INTERRUPTED_ICON_MS, cursorMs);
+  for (let index = end - 1; index >= start; index--) {
     const event = events[index];
     if (event.kind !== "cast_start" && event.kind !== "cast_go") continue;
-    if (!sources.has(event.source) || !showsCastIcon(event)) continue;
+    if (!sources.has(event.source) || isBasicAttack(event)) continue;
+    if (filterGuids && !filterGuids.has(event.source) && !filterGuids.has(event.target)) continue;
     const ageMs = cursorMs - event.timestampMs;
+    const enemy = Boolean(enemyGuids?.has(event.source));
+    let phase: CastIcon["phase"];
+    let elapsedMs: number;
     let progress: number;
+    let cutProgress = 0;
     if (event.kind === "cast_go") {
       if (ageMs >= CAST_ICON_MS) continue;
+      phase = "instant";
+      elapsedMs = ageMs;
       progress = ageMs / CAST_ICON_MS;
     } else {
       if (event.castTimeMs <= 0) continue;
       const durationMs = Math.min(event.castTimeMs, CAST_RING_MAX_MS);
-      if (ageMs >= durationMs || castEndedBy(events, index, end)) continue;
-      progress = ageMs / durationMs;
+      const ended = castEndedBy(events, index, end);
+      if (ended?.how === "interrupt") {
+        const lingerMs = enemy ? INTERRUPTED_ICON_MS : INTERRUPTED_PLAYER_ICON_MS;
+        const interruptedMs = cursorMs - ended.timeMs;
+        if (interruptedMs >= lingerMs) continue;
+        phase = "interrupted";
+        elapsedMs = interruptedMs;
+        progress = interruptedMs / lingerMs;
+        cutProgress = Math.min(1, (ended.timeMs - event.timestampMs) / durationMs);
+      } else {
+        if (ageMs >= durationMs || ended) continue;
+        phase = "casting";
+        elapsedMs = ageMs;
+        progress = ageMs / durationMs;
+      }
     }
-    let onCaster = 0;
+  let onCaster = 0;
     for (let shown = 0; shown < count; shown++) {
       if (out[shown].caster === event.source) onCaster++;
     }
     if (onCaster >= MAX_CAST_ICONS_PER_UNIT) continue;
-    const icon = out[count] ?? (out[count] = { caster: "", spellId: 0, progress: 0, phase: "instant" });
+    const icon = out[count] ?? (out[count] = {
+      caster: "", spellId: 0, spellName: "", progress: 0, elapsedMs: 0, phase: "instant", cutProgress: 0, enemy: false,
+    });
     icon.caster = event.source;
     icon.spellId = event.spellId!;
+    icon.spellName = event.spellName;
     icon.progress = progress;
-    icon.phase = event.kind === "cast_start" ? "casting" : "instant";
+    icon.elapsedMs = elapsedMs;
+    icon.phase = phase;
+    icon.cutProgress = cutProgress;
+    icon.enemy = enemy;
     count++;
+  }
+  // Over the cap: drop the lowest-ranked icon (non-priority, finished, oldest)
+  // until it fits, keeping the rest newest first.
+  while (count > max) {
+    let drop = -1;
+    let dropRank = Infinity;
+    for (let index = count - 1; index >= 0; index--) {
+      const icon = out[index];
+      const rank = (priorityGuids?.has(icon.caster) ? 2 : 0) + (icon.phase === "instant" ? 0 : 1);
+      if (rank < dropRank) {
+        drop = index;
+        dropRank = rank;
+      }
+    }
+    const dropped = out[drop];
+    for (let index = drop; index < count - 1; index++) out[index] = out[index + 1];
+    out[count - 1] = dropped;
+    count--;
   }
   out.length = count;
   return out;
