@@ -180,6 +180,12 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	}
 	chrs.RegisterHook(cie)
 
+	var unitTelemetryEmitter *UnitTelemetryEmitter
+	if format == database.LogFormatV22Cleu {
+		unitTelemetryEmitter = newUnitTelemetryEmitter(chrs)
+		chrs.RegisterHook(unitTelemetryEmitter)
+	}
+
 	engagementTracker := rankings.NewEngagementTracker(db)
 	overviewTracker := overviewmetrics.NewTracker(db)
 
@@ -205,6 +211,9 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		engagementTracker,
 		overviewTracker,
 	}...)
+	if unitTelemetryEmitter != nil {
+		hooks = append(hooks, unitTelemetryEmitter)
+	}
 	switch format {
 	case database.LogFormat112aCcAddon, database.LogFormat112aSuperwowAddon, database.LogFormat243CcAddon:
 		// 1.12 and 2.4.3 do not record overheals in the logs, so this hook
@@ -269,6 +278,17 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 			err := c.currentFight.Events.Process(evt)
 			if err != nil {
 				logger.Error("processing classification event in ongoing fight", slog.String("error", err.Error()))
+			}
+		}
+	}
+
+	if unitTelemetryEmitter != nil {
+		unitTelemetryEmitter.emit = func(evt messages.Message) {
+			if c.currentFight != nil && c.currentFight.active() {
+				err := c.currentFight.Events.Process(evt)
+				if err != nil {
+					logger.Error("processing synthetic unit telemetry in ongoing fight", slog.String("error", err.Error()))
+				}
 			}
 		}
 	}
