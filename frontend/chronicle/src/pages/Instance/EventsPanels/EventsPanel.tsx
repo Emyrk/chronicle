@@ -783,11 +783,11 @@ function BuiltinEventsPanel({
   }, [pendingFilters, applyFilters, panel.renderCardBack]);
 
   const onPanelMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if (event.shiftKey && event.button === 0 && !isSyncActive) {
+    if (event.shiftKey && event.button === 0 && !isSyncActive && !panel.disableCardFlip) {
       event.preventDefault();
       flipCard();
     }
-  }, [isSyncActive, flipCard]);
+  }, [isSyncActive, panel.disableCardFlip, flipCard]);
 
   // Reset panel context when panel type changes to avoid leaking options across panel types.
   // Seed default filters if the panel defines them.
@@ -947,7 +947,7 @@ function BuiltinEventsPanel({
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <HintTooltip>
+                {!panel.disableCardFlip && <HintTooltip>
                   <TooltipTrigger asChild>
                     <span
                       className={hasCustomFilters ? "text-emerald-500 cursor-pointer" : "text-muted-foreground cursor-pointer"}
@@ -966,8 +966,8 @@ function BuiltinEventsPanel({
                       <span className="text-xs text-muted-foreground">No custom filters</span>
                     )}
                   </TooltipContent>
-                </HintTooltip>
-                {filterContextMenu && (
+                </HintTooltip>}
+                {!panel.disableCardFlip && filterContextMenu && (
                   <FilterContextMenu
                     position={filterContextMenu}
                     onReset={() => { resetFilters(); setFilterContextMenu(null); }}

@@ -3,7 +3,11 @@ import type { WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 import {
   calibratedDungeonMapPoint,
+  clampMapCamera,
   dungeonMapPoint,
+  encounterRouteSamples,
+  fitMapCameraToPoints,
+  fitMapCanvasRect,
   fitMapViewport,
   interpolatedPositionAt,
   latestPositionAt,
@@ -12,6 +16,8 @@ import {
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   selectMapEncounter,
+  selectMapJourneyEncounters,
+  zoomMapCameraAtPoint,
   zoneMapPoint,
 } from "./mapModel";
 
@@ -127,6 +133,95 @@ describe("map replay model", () => {
     expect(interpolatedPositionAt(positions, 50)?.facing).toBeCloseTo(Math.PI * 2);
   });
 
+  it("contains a wide map without stretching it", () => {
+    expect(fitMapCanvasRect(
+      { width: 1_600, height: 500 },
+      { width: 1_200, height: 800 },
+    )).toEqual({ left: 425, top: 0, width: 750, height: 500 });
+  });
+
+  it("contains a wide map inside a tall panel", () => {
+    expect(fitMapCanvasRect(
+      { width: 600, height: 800 },
+      { width: 1_200, height: 800 },
+    )).toEqual({ left: 0, top: 200, width: 600, height: 400 });
+  });
+
+  it("fits an encounter route into the center of the map frame", () => {
+    expect(fitMapCameraToPoints([
+      { leftPercent: 20, topPercent: 30 },
+      { leftPercent: 40, topPercent: 50 },
+    ], { width: 1_000, height: 500 }, 20, 4)).toEqual({
+      scale: 3,
+      x: -400,
+      y: -350,
+    });
+  });
+
+  it("clamps focused encounter routes to the map edges", () => {
+    expect(fitMapCameraToPoints([
+      { leftPercent: 90, topPercent: 90 },
+    ], { width: 1_000, height: 500 }, 20, 4)).toEqual({
+      scale: 4,
+      x: -3_000,
+      y: -1_500,
+    });
+  });
+
+  it("zooms around the cursor and keeps the map inside its frame", () => {
+    expect(zoomMapCameraAtPoint(
+      { scale: 1, x: 0, y: 0 },
+      2,
+      { x: 25, y: 75 },
+      { width: 100, height: 100 },
+    )).toEqual({ scale: 2, x: -25, y: -75 });
+
+    expect(clampMapCamera(
+      { scale: 3, x: 40, y: -500 },
+      { width: 100, height: 80 },
+    )).toEqual({ scale: 3, x: 0, y: -160 });
+  });
+
+  it("resets panning when zoom returns to the fitted view", () => {
+    expect(clampMapCamera(
+      { scale: 0.5, x: -40, y: -20 },
+      { width: 100, height: 100 },
+    )).toEqual({ scale: 1, x: 0, y: 0 });
+  });
+
+  it("summarizes player movement as a median raid route", () => {
+    const routeEncounter: MapEncounterPositions = {
+      encounterId: "route",
+      startMs: 0,
+      endMs: 4_000,
+      positionsByUnit: new Map([
+        ["player-one", [
+          { timestampMs: 500, x: 10, y: 20, mapId: 43, facing: 1 },
+          { timestampMs: 2_500, x: 30, y: 40, mapId: 43, facing: 1 },
+        ]],
+        ["player-two", [
+          { timestampMs: 1_000, x: 14, y: 24, mapId: 43, facing: 2 },
+          { timestampMs: 3_000, x: 34, y: 44, mapId: 43, facing: 2 },
+        ]],
+        ["boss", [
+          { timestampMs: 1_000, x: 900, y: 900, mapId: 43, facing: 0 },
+        ]],
+      ]),
+    };
+
+    expect(encounterRouteSamples(routeEncounter, (guid) => guid.startsWith("player"))).toEqual([
+      { timestampMs: 750, x: 12, y: 22, mapId: 43, facing: 0 },
+      { timestampMs: 2_750, x: 32, y: 42, mapId: 43, facing: 0 },
+    ]);
+  });
+
+  it("falls back to available units when player metadata is unavailable", () => {
+    expect(encounterRouteSamples(encounter, () => false, 100)).toEqual(samples.map((sample) => ({
+      ...sample,
+      facing: 0,
+    })));
+  });
+
   it("fits and remaps movement into a padded viewport", () => {
     const viewport = fitMapViewport([
       { leftPercent: 20, topPercent: 30 },
@@ -157,6 +252,26 @@ describe("map replay model", () => {
     const encounters = new Map([["one", encounter], ["two", second]]);
     expect(selectMapEncounter(encounters, ["one", "two"], 500)?.encounterId).toBe("two");
     expect(selectMapEncounter(encounters, ["one", "two"], null)?.encounterId).toBe("two");
+  });
+
+  it("retains unselected encounters between selected fights", () => {
+    const before = { ...encounter, encounterId: "before", startMs: 0, endMs: 50 };
+    const transit = { ...encounter, encounterId: "transit", startMs: 350, endMs: 390 };
+    const second = { ...encounter, encounterId: "two", startMs: 400, endMs: 600 };
+    const after = { ...encounter, encounterId: "after", startMs: 700, endMs: 800 };
+    const encounters = new Map([
+      [before.encounterId, before],
+      [encounter.encounterId, encounter],
+      [transit.encounterId, transit],
+      [second.encounterId, second],
+      [after.encounterId, after],
+    ]);
+
+    expect(selectMapJourneyEncounters(encounters, ["one", "two"]).map((item) => item.encounterId)).toEqual([
+      "one",
+      "transit",
+      "two",
+    ]);
   });
 
   it("prefers instance artwork before matching zone assignments", () => {

@@ -18,6 +18,94 @@ export interface MapViewport {
   spanPercent: number;
 }
 
+export interface MapCamera {
+  scale: number;
+  x: number;
+  y: number;
+}
+
+export interface MapCameraBounds {
+  width: number;
+  height: number;
+}
+
+export interface MapCanvasRect extends MapCameraBounds {
+  left: number;
+  top: number;
+}
+
+export function fitMapCanvasRect(container: MapCameraBounds, canvas: MapCameraBounds): MapCanvasRect {
+  if (container.width <= 0 || container.height <= 0 || canvas.width <= 0 || canvas.height <= 0) {
+    return { left: 0, top: 0, width: 0, height: 0 };
+  }
+  const scale = Math.min(container.width / canvas.width, container.height / canvas.height);
+  const width = canvas.width * scale;
+  const height = canvas.height * scale;
+  return {
+    left: (container.width - width) / 2,
+    top: (container.height - height) / 2,
+    width,
+    height,
+  };
+}
+
+export function clampMapCamera(camera: MapCamera, bounds: MapCameraBounds): MapCamera {
+  const scale = Math.max(1, Math.min(5, camera.scale));
+  if (bounds.width <= 0 || bounds.height <= 0 || scale === 1) return { scale, x: 0, y: 0 };
+  return {
+    scale,
+    x: Math.max(bounds.width * (1 - scale), Math.min(0, camera.x)),
+    y: Math.max(bounds.height * (1 - scale), Math.min(0, camera.y)),
+  };
+}
+
+export function fitMapCameraToPoints(
+  points: MapPoint[],
+  bounds: MapCameraBounds,
+  paddingPercent = 18,
+  maximumScale = 4,
+): MapCamera {
+  if (points.length === 0 || bounds.width <= 0 || bounds.height <= 0) return { scale: 1, x: 0, y: 0 };
+
+  let left = points[0].leftPercent;
+  let right = left;
+  let top = points[0].topPercent;
+  let bottom = top;
+  for (const point of points.slice(1)) {
+    left = Math.min(left, point.leftPercent);
+    right = Math.max(right, point.leftPercent);
+    top = Math.min(top, point.topPercent);
+    bottom = Math.max(bottom, point.topPercent);
+  }
+
+  const availableRatio = Math.max(0.1, 1 - paddingPercent / 50);
+  const widthRatio = Math.max((right - left) / 100, 0.04);
+  const heightRatio = Math.max((bottom - top) / 100, 0.04);
+  const scale = Math.max(1, Math.min(maximumScale, availableRatio / widthRatio, availableRatio / heightRatio));
+  const centerX = ((left + right) / 2 / 100) * bounds.width;
+  const centerY = ((top + bottom) / 2 / 100) * bounds.height;
+  return clampMapCamera({
+    scale,
+    x: bounds.width / 2 - centerX * scale,
+    y: bounds.height / 2 - centerY * scale,
+  }, bounds);
+}
+
+export function zoomMapCameraAtPoint(
+  camera: MapCamera,
+  nextScale: number,
+  focalPoint: { x: number; y: number },
+  bounds: MapCameraBounds,
+): MapCamera {
+  const scale = Math.max(1, Math.min(5, nextScale));
+  const ratio = scale / camera.scale;
+  return clampMapCamera({
+    scale,
+    x: focalPoint.x - (focalPoint.x - camera.x) * ratio,
+    y: focalPoint.y - (focalPoint.y - camera.y) * ratio,
+  }, bounds);
+}
+
 export type ResolvedMapArtwork =
   | { kind: "instance"; instance: WowMapInstance }
   | { kind: "zone"; map: WowMap; assignment: WowMapAssignment };
@@ -91,6 +179,59 @@ export function selectMapEncounter(
     if (selected[index].startMs <= timestampMs) return selected[index];
   }
   return selected[0];
+}
+
+export function selectMapJourneyEncounters(
+  encounters: Map<string, MapEncounterPositions>,
+  selectedEncounterIds: string[],
+): MapEncounterPositions[] {
+  const selected = selectedEncounterIds
+    .map((id) => encounters.get(id))
+    .filter((encounter): encounter is MapEncounterPositions => Boolean(encounter));
+  if (selected.length === 0) return [];
+
+  const startMs = Math.min(...selected.map((encounter) => encounter.startMs));
+  const endMs = Math.max(...selected.map((encounter) => encounter.endMs));
+  return Array.from(encounters.values())
+    .filter((encounter) => encounter.endMs >= startMs && encounter.startMs <= endMs)
+    .sort((left, right) => left.startMs - right.startMs);
+}
+
+export function encounterRouteSamples(
+  encounter: MapEncounterPositions,
+  includeUnit: (guid: string) => boolean,
+  minimumBucketMs = 2_000,
+  maximumPoints = 240,
+): MapPositionSample[] {
+  const included = Array.from(encounter.positionsByUnit.entries())
+    .filter(([guid]) => includeUnit(guid));
+  const sources = included.length > 0 ? included : Array.from(encounter.positionsByUnit.entries());
+  const samples = sources.flatMap(([, positions]) => positions);
+  if (samples.length === 0) return [];
+
+  const durationMs = Math.max(0, encounter.endMs - encounter.startMs);
+  const bucketMs = Math.max(minimumBucketMs, Math.ceil(durationMs / maximumPoints));
+  const buckets = new Map<number, MapPositionSample[]>();
+  for (const sample of samples) {
+    const bucket = Math.floor((sample.timestampMs - encounter.startMs) / bucketMs);
+    const values = buckets.get(bucket) ?? [];
+    values.push(sample);
+    buckets.set(bucket, values);
+  }
+
+  return Array.from(buckets.entries())
+    .sort(([left], [right]) => left - right)
+    .map(([, values]) => {
+      const mapId = dominantMapId(values);
+      const mapSamples = values.filter((sample) => sample.mapId === mapId);
+      return {
+        timestampMs: median(mapSamples.map((sample) => sample.timestampMs)),
+        x: median(mapSamples.map((sample) => sample.x)),
+        y: median(mapSamples.map((sample) => sample.y)),
+        mapId: mapId!,
+        facing: 0,
+      };
+    });
 }
 
 export function dominantMapId(samples: MapPositionSample[]): number | null {

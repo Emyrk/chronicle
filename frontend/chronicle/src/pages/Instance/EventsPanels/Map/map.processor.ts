@@ -23,9 +23,7 @@ export const mapProcessor: PanelProcessor<MapResult, UnitPositionProcessorEvent>
   id: "map",
   streams: ["unit_position"],
   createState: () => ({ encounters: new Map() }),
-  processEvent: (state, event, encounterId, firstTimestamp, _streamType, context) => {
-    if (!context.selectedEncounterIds.has(encounterId)) return;
-
+  processEvent: (state, event, encounterId, firstTimestamp) => {
     const timestampMs = firstTimestamp.getTime() + event.offsetMilli;
     let encounter = state.encounters.get(encounterId);
     if (!encounter) {
