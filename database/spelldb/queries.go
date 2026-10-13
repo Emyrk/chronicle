@@ -236,6 +236,32 @@ func GetSpellsByName(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUI
 	return rows, nil
 }
 
+// ListSpellIDs returns all spell IDs for a dataset in stable order.
+func ListSpellIDs(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID) ([]int32, error) {
+	rows, err := pool.Query(ctx, `SELECT spell_id FROM dbc_spells WHERE dataset_id = $1 ORDER BY spell_id`, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int32
+	for rows.Next() {
+		var id int32
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// CountSpells returns the number of spells persisted for a dataset.
+func CountSpells(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID) (int, error) {
+	var count int
+	err := pool.QueryRow(ctx, `SELECT count(*) FROM dbc_spells WHERE dataset_id = $1`, datasetID).Scan(&count)
+	return count, err
+}
+
 // UpsertBatch inserts multiple spells in a single round-trip using pgx Batch.
 func UpsertBatch(ctx context.Context, pool interface {
 	SendBatch(context.Context, *pgx.Batch) pgx.BatchResults

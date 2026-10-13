@@ -30,41 +30,41 @@ func (c *queryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.T
 
 func (*queryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
-func TestNewFetcherDBOnly_NoDBC(t *testing.T) {
+func TestNewFetcher_NoDatabase(t *testing.T) {
 	t.Parallel()
 
-	// NewFetcherDBOnly should not panic and should produce a valid fetcher
-	// even without a DBC file or pool.
-	f := spells.NewFetcherDBOnly(context.Background(), nil, nil, nil, 100)
+	f := spells.NewFetcher(nil, nil, nil, 100)
 	require.NotNil(t, f)
 
-	// TotalSpells and RangeSpells should be safe with nil DBC.
-	require.Equal(t, 0, f.TotalSpells())
-	require.NoError(t, f.RangeSpells(func(_ *chrondbc.Spell) bool {
+	datasetID := uuid.New()
+	_, err := f.TotalSpells(context.Background(), datasetID)
+	require.Error(t, err)
+	err = f.RangeSpells(context.Background(), datasetID, func(_ *chrondbc.Spell) bool {
 		t.Fatal("should not be called")
 		return false
-	}))
+	})
+	require.Error(t, err)
 }
 
-func TestFetcherDBOnly_NoFallback(t *testing.T) {
+func TestFetcher_NoFallback(t *testing.T) {
 	t.Parallel()
 
-	// With no pool and DB-only mode, Spell() should return not-found, never
+	// With no pool configured, Spell() should return not-found, never
 	// panic or attempt DBC fallback.
-	f := spells.NewFetcherDBOnly(context.Background(), nil, nil, nil, 100)
+	f := spells.NewFetcher(nil, nil, nil, 100)
 
 	_, err := f.Spell(context.Background(), uuid.New(), 12345)
 	require.Error(t, err)
 	require.True(t, chrondbc.IsSpellNotFound(err))
 }
 
-func TestFetcherDBOnly_CustomSpellsStillWork(t *testing.T) {
+func TestFetcher_CustomSpellsStillWork(t *testing.T) {
 	t.Parallel()
 
 	custom := map[chrondbc.SpellID]chrondbc.Spell{
 		6603: {ID: 6603}, // auto-attack
 	}
-	f := spells.NewFetcherDBOnly(context.Background(), nil, custom, nil, 100)
+	f := spells.NewFetcher(nil, custom, nil, 100)
 
 	sp, err := f.Spell(context.Background(), uuid.New(), 6603)
 	require.NoError(t, err)
@@ -72,7 +72,33 @@ func TestFetcherDBOnly_CustomSpellsStillWork(t *testing.T) {
 	require.Equal(t, chrondbc.SpellID(6603), sp.ID)
 }
 
-func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
+func TestFetcher_RangeAndCountUseDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	datasetID := uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO datasets (id, name, slug, wow_version) VALUES ($1, 'Spell fetcher test', $2, '1.12.1')`, datasetID, "spell-fetcher-"+datasetID.String())
+	require.NoError(t, err)
+
+	require.NoError(t, spelldb.UpsertBatch(ctx, pool, []spelldb.SpellRow{
+		spelldb.FromSpell(datasetID, &chrondbc.Spell{ID: 20}),
+		spelldb.FromSpell(datasetID, &chrondbc.Spell{ID: 10}),
+	}))
+
+	fetcher := spells.NewFetcher(pool, nil, nil, 100)
+	count, err := fetcher.TotalSpells(ctx, datasetID)
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+
+	var ids []chrondbc.SpellID
+	require.NoError(t, fetcher.RangeSpells(ctx, datasetID, func(spell *chrondbc.Spell) bool {
+		ids = append(ids, spell.ID)
+		return true
+	}))
+	require.Equal(t, []chrondbc.SpellID{10, 20}, ids)
+}
+
+func TestFetcher_PopulatesModernSpellComponents(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	queries := &queryCounter{}
@@ -161,7 +187,7 @@ func TestFetcherDBOnly_PopulatesModernSpellComponents(t *testing.T) {
 	`, datasetID, int32(modern.ID))
 	require.NoError(t, err)
 
-	fetcher := spells.NewFetcherDBOnly(ctx, pool, nil, nil, 100)
+	fetcher := spells.NewFetcher(pool, nil, nil, 100)
 	queries.count.Store(0)
 	got, err := fetcher.Spell(ctx, datasetID, modern.ID)
 	require.NoError(t, err)

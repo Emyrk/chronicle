@@ -84,7 +84,7 @@ func TestCheckDatasetProductionFetchAndJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	store := database.New(pool)
-	spellFetcher := spells.NewFetcherDBOnly(ctx, pool, nil, nil, 100)
+	spellFetcher := spells.NewFetcher(pool, nil, nil, 100)
 
 	report, err := spellcheck.CheckDataset(ctx, store, datasetID, spellFetcher)
 	require.NoError(t, err)

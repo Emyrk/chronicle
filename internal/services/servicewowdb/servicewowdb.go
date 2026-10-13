@@ -45,8 +45,6 @@ func WoWDB(broker *services.Services) *Service {
 type Service struct {
 	broker *services.Services
 
-	spellDBCPath string
-
 	db     *gamedb.WoWDB
 	store  database.Store
 	router chi.Router
@@ -84,15 +82,19 @@ func (s *Service) Start(ctx context.Context) error {
 	cacheSvc := servicecache.CacheService(s.broker)
 	talentFetcher := talents.NewFetcher(store, cacheSvc, 16)
 	db, err := gamedb.New(ctx, gamedb.Options{
-		SpellsDBCPath: s.spellDBCPath,
-		DB:            az,
-		Pool:          pool,
-		DatasetID:     servicedataset.DefaultDatasetID,
-		Talents:       talentFetcher,
-		CacheSvc:      cacheSvc,
+		DB:        az,
+		Pool:      pool,
+		DatasetID: servicedataset.DefaultDatasetID,
+		Talents:   talentFetcher,
+		CacheSvc:  cacheSvc,
 	})
 	if err != nil {
 		return err
+	}
+	spellCount, err := db.TotalSpells()
+	if err != nil {
+		_ = db.Close()
+		return fmt.Errorf("count spells: %w", err)
 	}
 	s.db = db
 	s.store = store
@@ -100,7 +102,7 @@ func (s *Service) Start(ctx context.Context) error {
 	s.router = chi.NewRouter()
 	s.setupRoutes()
 	logger.Info("WoWDB service started",
-		slog.Int("spell_count", s.db.TotalSpells()),
+		slog.Int("spell_count", spellCount),
 	)
 
 	return nil
@@ -421,15 +423,7 @@ func (s *Service) Close(_ context.Context) error {
 }
 
 func (s *Service) Options() serpent.OptionSet {
-	return serpent.OptionSet{
-		{
-			Name:        "spell-dbc-path",
-			Description: "Path to Spell.dbc file.",
-			Default:     "./assets/" + services.ServerName + "/Spell.dbc",
-			Env:         "CHRONICLE_SPELL_DBC_PATH",
-			Value:       serpent.StringOf(&s.spellDBCPath),
-		},
-	}
+	return nil
 }
 
 func (s *Service) Configures() []string {

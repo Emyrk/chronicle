@@ -40,6 +40,9 @@
 **/.gen
 **/.gen-golden
 
+# Large Spell.dbc fixtures are retained for local tests only.
+assets/*/Spell.dbc
+
 # Build
 **/bin
 **/build

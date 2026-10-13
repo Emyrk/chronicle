@@ -65,18 +65,24 @@ type WorldQuerier interface {
 
 // Options configures a new [WoWDB].
 type Options struct {
+	// SpellsDBCPath explicitly selects a Spell.dbc-backed source for tests and
+	// offline CLI tools. Production callers provide Pool and use PostgreSQL.
 	SpellsDBCPath string
 	DB            WorldQuerier
-	Pool          *pgxpool.Pool // For DB-backed spell lookups; nil = DBC-only.
-	DatasetID     uuid.UUID     // Default dataset for item/creature lookups.
+	Pool          *pgxpool.Pool
+	DatasetID     uuid.UUID // Default dataset for item/creature lookups.
 	Talents       talents.TalentFetcher
 	CacheSvc      *servicecache.Service // Centralized cache service; all caches register here.
+}
 
-	// DatabaseSpellsOnly, when true, constructs a WoWDB that does not
-	// require or open a Spell.dbc file. All spell lookups go through the
-	// database; DBC fallback is disabled. Used by the resync CLI where
-	// spells must come from the realm-resolved dataset in PostgreSQL.
-	DatabaseSpellsOnly bool
+// spellSource is implemented by the database-backed runtime fetcher and the
+// explicit DBC source used by tests and offline CLI tools.
+type spellSource interface {
+	Spell(context.Context, uuid.UUID, chrondbc.SpellID) (*chrondbc.Spell, error)
+	SpellsByName(context.Context, uuid.UUID, string) ([]*chrondbc.Spell, error)
+	RangeSpells(context.Context, uuid.UUID, func(*chrondbc.Spell) bool) error
+	TotalSpells(context.Context, uuid.UUID) (int, error)
+	InvalidateDataset(uuid.UUID)
 }
 
 // WoWDB holds all game data sources used during parsing and API serving.
@@ -84,13 +90,13 @@ type Options struct {
 // lookups to a specific dataset while sharing the same underlying caches.
 type WoWDB struct {
 	ctx       context.Context
-	spellFile *os.File // nil when DatabaseSpellsOnly is true.
+	spellFile *os.File // Non-nil only for explicit DBC-backed offline use.
 	datasetID uuid.UUID
 	pool      *pgxpool.Pool // For DB-backed derived data queries; nil = fallback to compiled-in globals.
 	store     database.Store
-	dbOnly    bool // When true, no DBC fallback for derived data.
+	dbOnly    bool // When true, no compiled-in fallback for derived data.
 
-	spells          *spells.Fetcher
+	spells          spellSource
 	itemFetcher     *itemFetcher
 	creatureFetcher *creatureFetcher
 	talents         talents.TalentFetcher
@@ -101,11 +107,9 @@ type WoWDB struct {
 	periodicSpells *lrucache.Cache[uuid.UUID, map[int32]dbcmem.PeriodicSpell]
 }
 
-// New creates a WoWDB. The spell DBC file is opened and held for the lifetime
-// of the returned value; call [WoWDB.Close] to release it.
-//
-// When [Options.DatabaseSpellsOnly] is true, no DBC file is opened and all
-// spell lookups go through the database. Pool must be non-nil in this mode.
+// New creates a WoWDB. When Pool is configured, spell lookups are strictly
+// database-backed. SpellsDBCPath is only used when Pool is nil, for tests and
+// offline CLI tools; call [WoWDB.Close] to release that file.
 func New(ctx context.Context, opts Options) (*WoWDB, error) {
 	eaCache, _ := servicecache.NewCache(opts.CacheSvc, lrucache.Opts[uuid.UUID, map[int32]dbcmem.ExtraAttackSpell]{
 		Capacity: 64, Name: "extra_attacks", TTL: servicecache.TTLExtraAttacks,
@@ -122,18 +126,17 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 		store = database.New(opts.Pool)
 	}
 
-	dbOnly := opts.DatabaseSpellsOnly
+	dbOnly := opts.Pool != nil
 
-	var spellFetcher *spells.Fetcher
+	var spellFetcher spellSource
 	var sf *os.File
 
 	if dbOnly {
-		// DB-only mode: no DBC file, no DBC fallback.
-		if opts.Pool == nil {
-			return nil, fmt.Errorf("DatabaseSpellsOnly requires a non-nil Pool")
-		}
-		spellFetcher = spells.NewFetcherDBOnly(ctx, opts.Pool, customSpells, opts.CacheSvc, 1000)
+		spellFetcher = spells.NewFetcher(opts.Pool, customSpells, opts.CacheSvc, 1000)
 	} else {
+		if opts.SpellsDBCPath == "" {
+			return nil, fmt.Errorf("either Pool or SpellsDBCPath must be configured")
+		}
 		build := services.ServerBuild
 		if dbcdb.SpellBuildOverride != 0 {
 			build = dbcdb.SpellBuildOverride
@@ -147,11 +150,11 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 
 		v, err := dbInst.Open("Spell", sf)
 		if err != nil {
+			_ = sf.Close()
 			return nil, err
 		}
 
-		spDBC := chrondbc.NewSpells(v)
-		spellFetcher = spells.NewFetcher(ctx, opts.Pool, spDBC, customSpells, opts.CacheSvc, 1000)
+		spellFetcher = spells.NewDBCFetcher(chrondbc.NewSpells(v), customSpells)
 	}
 
 	return &WoWDB{
@@ -203,13 +206,17 @@ func (w *WoWDB) TalentTrees(ctx context.Context, datasetID uuid.UUID) (*talents.
 	return w.talents.TalentTrees(ctx, datasetID)
 }
 
-// --- Delegated spell helpers (used by HTTP API) ---
+// --- Delegated spell helpers (used by HTTP API and CLI tooling) ---
 
-func (w *WoWDB) TotalSpells() int { return w.spells.TotalSpells() }
+func (w *WoWDB) TotalSpells() (int, error) {
+	return w.spells.TotalSpells(w.ctx, w.datasetID)
+}
 func (w *WoWDB) SpellsByName(ctx context.Context, name string) ([]*chrondbc.Spell, error) {
 	return w.spells.SpellsByName(ctx, w.datasetID, name)
 }
-func (w *WoWDB) RangeSpells(f func(*chrondbc.Spell) bool) error { return w.spells.RangeSpells(f) }
+func (w *WoWDB) RangeSpells(f func(*chrondbc.Spell) bool) error {
+	return w.spells.RangeSpells(w.ctx, w.datasetID, f)
+}
 
 // --- Derived spell data resolvers (default dataset) ---
 
