@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Loader2, Youtube, Timer, TriangleAlert } from "lucide-react";
 import { useInstance, useInstanceYoutube, useAuthorizationCheck } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,7 +20,6 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { TimeRangeProvider } from "./TimeRangeContext";
 import { TimeRangeController } from "./TimeRangeController";
 import { useTenantGate } from "./TenantGate";
-import { showDebugDesktopControls } from "./debugFeatureGate";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 
 // Types for the Instance page
@@ -276,8 +275,7 @@ function InstancePageInner({
   const { setEncounterBounds, setTimestamp, enabled: syncEnabled } = useSyncModeContext();
   const previousEncounterTimesRef = useRef(selectedEncounterTimes);
   const isMobile = useIsMobile();
-  const [searchParams] = useSearchParams();
-  const showReplayControls = showDebugDesktopControls(searchParams, isMobile);
+  const showReplayControls = !isMobile;
   const replayPanelVisible = showReplayPanel && showReplayControls;
   // When pinned to the top, the replay controls no longer occupy the action
   // bar's space, so the spellbook can show again.
@@ -322,7 +320,7 @@ function InstancePageInner({
         supportsOverview
         youtubeButton={
           <div className="flex gap-1.5">
-            {/* Replay is experimental and desktop-only. */}
+            {/* Replay is desktop-only. */}
             {showReplayControls && (
               <Button
                 variant={showReplayPanel || syncEnabled ? "default" : "outline"}
