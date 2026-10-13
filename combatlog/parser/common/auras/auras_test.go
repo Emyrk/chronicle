@@ -12,7 +12,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,11 +22,11 @@ var (
 	testUnit2 = guid.GUID(2)
 	testSpell = &chrondbc.Spell{
 		ID:       100,
-		Duration: dbcmem.SpellDuration{Duration: 30_000, MaxDuration: 30_000}, // 30s in ms
+		Duration: chrondbc.SpellDuration{Duration: 30_000, MaxDuration: 30_000}, // 30s in ms
 	}
 	testSpell2 = &chrondbc.Spell{
 		ID:       200,
-		Duration: dbcmem.SpellDuration{Duration: 10_000, MaxDuration: 10_000}, // 10s in ms
+		Duration: chrondbc.SpellDuration{Duration: 10_000, MaxDuration: 10_000}, // 10s in ms
 	}
 	t0 = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 )
@@ -199,7 +198,7 @@ func TestTracking_DeathPersistentSurvives(t *testing.T) {
 	t.Parallel()
 	persistentSpell := &chrondbc.Spell{
 		ID:       300,
-		Duration: dbcmem.SpellDuration{Duration: 3600_000}, // 1hr
+		Duration: chrondbc.SpellDuration{Duration: 3600_000}, // 1hr
 	}
 	persistentSpell.Attrs.Set(chrondbc.AttrEx3_DeathPersistent)
 
@@ -364,12 +363,12 @@ func TestTracking_UsesDatasetDurationModifiers(t *testing.T) {
 	t.Parallel()
 	spell := &chrondbc.Spell{
 		ID:             401,
-		Duration:       dbcmem.SpellDuration{MaxDuration: 10_000},
+		Duration:       chrondbc.SpellDuration{MaxDuration: 10_000},
 		SpellClassSet:  8,
 		SpellClassMask: 1,
 	}
 	mods := &chrondbc.DurationModifierSet{
-		ByID: map[int32]dbcmem.DurationModifier{
+		ByID: map[int32]chrondbc.DurationModifier{
 			1: {SpellID: 1, Name: "Extended Duration", Percent: 50},
 		},
 		ByClassBit: map[int32]map[uint64][]int32{8: {1: {1}}},
@@ -385,7 +384,7 @@ func TestTracking_UsesDatasetDurationModifiers(t *testing.T) {
 
 func TestTracking_NonFiniteDurationDoesNotExpire(t *testing.T) {
 	t.Parallel()
-	spell := &chrondbc.Spell{ID: 400, Duration: dbcmem.SpellDuration{MaxDuration: -1}}
+	spell := &chrondbc.Spell{ID: 400, Duration: chrondbc.SpellDuration{MaxDuration: -1}}
 	tr := auras.New(nil)
 	tr.Process(makeAuraMsg(t0, testUnit, spell, types.AuraStateAdded, 1, false))
 

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/internal/bitmask"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/google/uuid"
@@ -27,7 +26,7 @@ func UnknownSpell(id SpellID) Spell {
 		ID:               id,
 		Name_lang:        i18n.Text{i18n.English: fmt.Sprintf("Unknown Spell (%d)", id)},
 		Description_lang: i18n.Text{i18n.English: "Spell is missing from Spells.dbc. Report this as a bug."},
-		SpellIcon:        dbcmem.SpellIcon{ID: 1}, // INV_Misc_QuestionMark
+		SpellIcon:        SpellIcon{ID: 1}, // INV_Misc_QuestionMark
 		SpellIconID_:     1,
 		BaseLevel:        1,
 		SpellLevel:       1,
@@ -43,38 +42,38 @@ type Spell struct {
 	AuraDescription_lang i18n.Text `json:"aura_description"` // Buff/debuff tooltip shown when aura is active
 
 	// === Display ===
-	SpellIcon  dbcmem.SpellIcon `json:"spell_icon"`  // Resolved icon from SpellIcon.dbc
-	ActiveIcon dbcmem.SpellIcon `json:"active_icon"` // Icon shown while spell is active/channeling (often zero)
+	SpellIcon  SpellIcon `json:"spell_icon"`  // Resolved icon from SpellIcon.dbc
+	ActiveIcon SpellIcon `json:"active_icon"` // Icon shown while spell is active/channeling (often zero)
 
 	// === Level Requirements ===
-	MaxLevel       int32                `json:"max_level"`        // Level cap for scaling (0 = no cap)
-	BaseLevel      int32                `json:"base_level"`       // Minimum player level to use this spell
-	SpellLevel     int32                `json:"spell_level"`      // Spell's own level for scaling calculations
-	Category       dbcmem.SpellCategory `json:"category"`         // Resolved spell category from SpellCategory.dbc
-	MaxTargetLevel int32                `json:"max_target_level"` // Maximum target level (0 = no limit, used for CC diminishing)
+	MaxLevel       int32         `json:"max_level"`        // Level cap for scaling (0 = no cap)
+	BaseLevel      int32         `json:"base_level"`       // Minimum player level to use this spell
+	SpellLevel     int32         `json:"spell_level"`      // Spell's own level for scaling calculations
+	Category       SpellCategory `json:"category"`         // Resolved spell category from SpellCategory.dbc
+	MaxTargetLevel int32         `json:"max_target_level"` // Maximum target level (0 = no limit, used for CC diminishing)
 
 	// === Behavior ===
 	// 3.3.5a uses SchoolMask instead of School. Bitmask of damage schools (1=Phys,2=Holy,4=Fire,8=Nature,16=Frost,32=Shadow,64=Arcane)
-	School             School                  `json:"school"`           // Magic school: physical, holy, fire, nature, frost, shadow, arcane
-	SpellPriority      int32                   `json:"spell_priority"`   // AI priority for NPC spell selection
-	StanceBarOrder     int32                   `json:"stance_bar_order"` // Position on stance/shapeshift action bar
-	ProcTypeMask       bitmask.Bitmask32       `json:"proc_type_mask"`   // Events that can trigger this spell (on hit, on crit, on kill, etc.)
-	ProcFlags          ProcFlags               `json:"proc_flags"`       // Additional proc configuration
-	ProcChance         int32                   `json:"proc_chance"`      // Percent chance to proc (>100 means server-side calculation)
-	ProcCharges        int32                   `json:"proc_charges"`     // Number of times proc can trigger before aura fades (0 = unlimited)
-	Speed              float32                 `json:"speed"`            // Projectile travel speed in yards/sec (0 = instant)
-	DispelType         DispelType              `json:"dispel_type"`      // Dispel category: 0=none, 1=magic, 2=curse, 3=disease, 4=poison
-	AuraInterruptFlags AuraInterruptFlags      `json:"aura_interrupt_flags"`
-	ModalNextSpell     int32                   `json:"modal_next_spell"`  // The "Modal" suggests it's about spells that share a button slot but swap based on game state.
-	InterruptFlags     InterruptFlags          `json:"interrupt_flags"`   // what can interrupt a spell while casting (different from AuraInterruptFlags which is for buffs).
-	CumulativeAura     int32                   `json:"cumulative_aura"`   // Max charges I think?
-	Mechanic           Mechanic                `json:"mechanic"`          // Combat mechanic: stun, root, silence, etc. (for immunity checks)
-	DefenseType        DefenseType             `json:"defense_type"`      // How the target can defend against this spell
-	CasterAuraState    AuraState               `json:"caster_aura_state"` // what state the target must be in for the spell to be usable.
-	TargetAuraState    AuraState               `json:"target_aura_state"`
-	MaxTargets         int32                   `json:"max_targets"`
-	TargetCreatureType TargetCreatureType      `json:"target_creature_type"`
-	SpellFocus         dbcmem.SpellFocusObject `json:"requires_spell_focus"` // Resolved focus object from SpellFocusObject.dbc
+	School             School             `json:"school"`           // Magic school: physical, holy, fire, nature, frost, shadow, arcane
+	SpellPriority      int32              `json:"spell_priority"`   // AI priority for NPC spell selection
+	StanceBarOrder     int32              `json:"stance_bar_order"` // Position on stance/shapeshift action bar
+	ProcTypeMask       bitmask.Bitmask32  `json:"proc_type_mask"`   // Events that can trigger this spell (on hit, on crit, on kill, etc.)
+	ProcFlags          ProcFlags          `json:"proc_flags"`       // Additional proc configuration
+	ProcChance         int32              `json:"proc_chance"`      // Percent chance to proc (>100 means server-side calculation)
+	ProcCharges        int32              `json:"proc_charges"`     // Number of times proc can trigger before aura fades (0 = unlimited)
+	Speed              float32            `json:"speed"`            // Projectile travel speed in yards/sec (0 = instant)
+	DispelType         DispelType         `json:"dispel_type"`      // Dispel category: 0=none, 1=magic, 2=curse, 3=disease, 4=poison
+	AuraInterruptFlags AuraInterruptFlags `json:"aura_interrupt_flags"`
+	ModalNextSpell     int32              `json:"modal_next_spell"`  // The "Modal" suggests it's about spells that share a button slot but swap based on game state.
+	InterruptFlags     InterruptFlags     `json:"interrupt_flags"`   // what can interrupt a spell while casting (different from AuraInterruptFlags which is for buffs).
+	CumulativeAura     int32              `json:"cumulative_aura"`   // Max charges I think?
+	Mechanic           Mechanic           `json:"mechanic"`          // Combat mechanic: stun, root, silence, etc. (for immunity checks)
+	DefenseType        DefenseType        `json:"defense_type"`      // How the target can defend against this spell
+	CasterAuraState    AuraState          `json:"caster_aura_state"` // what state the target must be in for the spell to be usable.
+	TargetAuraState    AuraState          `json:"target_aura_state"`
+	MaxTargets         int32              `json:"max_targets"`
+	TargetCreatureType TargetCreatureType `json:"target_creature_type"`
+	SpellFocus         SpellFocusObject   `json:"requires_spell_focus"` // Resolved focus object from SpellFocusObject.dbc
 
 	// === Resource Cost ===
 	PowerType        Power     `json:"power_type"`          // Resource type: 0=mana, 1=rage, 2=focus, 3=energy
@@ -86,13 +85,13 @@ type Spell struct {
 	ReagentCount     [8]int32  `json:"reagent_count"`       // Quantity of each reagent consumed per cast
 
 	// === Timing ===
-	CastTime              dbcmem.SpellCastTime `json:"casting_time"`            // Resolved cast time from SpellCastTimes.dbc
-	RecoveryTime          time.Duration        `json:"recovery_time"`           // Spell cooldown (real time.Duration; JSON is nanoseconds)
-	StartRecoveryCategory int32                `json:"start_recovery_category"` // controls which Global Cooldown (GCD) group a spell belongs to.
-	StartRecoveryTime     time.Duration        `json:"start_recovery_time"`     // GCD (real time.Duration; JSON is nanoseconds)
-	CategoryRecoveryTime  time.Duration        `json:"category_recovery_time"`  // Shared cooldown for spells in the same category (real time.Duration; JSON is nanoseconds)
-	Range                 dbcmem.SpellRange    `json:"range"`                   // Resolved range from SpellRange.dbc
-	Duration              dbcmem.SpellDuration `json:"duration"`                // Resolved duration from SpellDuration.dbc
+	CastTime              SpellCastTime `json:"casting_time"`            // Resolved cast time from SpellCastTimes.dbc
+	RecoveryTime          time.Duration `json:"recovery_time"`           // Spell cooldown (real time.Duration; JSON is nanoseconds)
+	StartRecoveryCategory int32         `json:"start_recovery_category"` // controls which Global Cooldown (GCD) group a spell belongs to.
+	StartRecoveryTime     time.Duration `json:"start_recovery_time"`     // GCD (real time.Duration; JSON is nanoseconds)
+	CategoryRecoveryTime  time.Duration `json:"category_recovery_time"`  // Shared cooldown for spells in the same category (real time.Duration; JSON is nanoseconds)
+	Range                 SpellRange    `json:"range"`                   // Resolved range from SpellRange.dbc
+	Duration              SpellDuration `json:"duration"`                // Resolved duration from SpellDuration.dbc
 
 	// === Filtering/Logic ===
 	Attrs                SpellAttributes      `json:"attributes"`              // 9 attribute flags controlling spell behavior (can't crit, channeled, etc.)
@@ -189,29 +188,29 @@ func (s Spell) MarshalJSON() ([]byte, error) {
 	type spellAlias Spell
 	payload := struct {
 		spellAlias
-		ModernEffects            []SpellEffect         `json:"modern_effects,omitempty"`
-		ModernPowers             []SpellPower          `json:"modern_powers,omitempty"`
-		ModernVariants           []SpellVariant        `json:"modern_variants,omitempty"`
-		Effect                   [3]Effect             `json:"effect"`
-		EffectDieSides           [3]int32              `json:"effect_die_sides"`
-		EffectRealPointsPerLevel [3]float32            `json:"effect_real_points_per_level"`
-		EffectBasePoints         [3]int32              `json:"effect_base_points"`
-		EffectBasePointsF        []float32             `json:"effect_base_points_f"`
-		EffectMechanic           [3]int32              `json:"effect_mechanic"`
-		EffectRadius             [3]dbcmem.SpellRadius `json:"effect_radius"`
-		EffectAura               [3]AuraEffect         `json:"effect_aura"`
-		EffectAuraPeriod         [3]int32              `json:"effect_aura_period"`
-		EffectAmplitude          [3]float32            `json:"effect_amplitude"`
-		EffectChainTargets       [3]int32              `json:"effect_chain_targets"`
-		EffectItemType           [3]ItemID             `json:"effect_item_type"`
-		EffectMiscValue          [3]int32              `json:"effect_misc_value"`
-		EffectTriggerSpell       [3]SpellID            `json:"effect_trigger_spell"`
-		EffectPointsPerCombo     [3]float32            `json:"effect_points_per_combo"`
-		EffectBaseDice           [3]int32              `json:"effect_base_dice"`
-		EffectDicePerLevel       [3]int32              `json:"effect_dice_per_level"`
-		EffectChainAmplitude     [3]float32            `json:"effect_chain_amplitude"`
-		ImplicitTargetA          [3]ImplicitTarget     `json:"implicit_target_a"`
-		ImplicitTargetB          [3]ImplicitTarget     `json:"implicit_target_b"`
+		ModernEffects            []SpellEffect     `json:"modern_effects,omitempty"`
+		ModernPowers             []SpellPower      `json:"modern_powers,omitempty"`
+		ModernVariants           []SpellVariant    `json:"modern_variants,omitempty"`
+		Effect                   [3]Effect         `json:"effect"`
+		EffectDieSides           [3]int32          `json:"effect_die_sides"`
+		EffectRealPointsPerLevel [3]float32        `json:"effect_real_points_per_level"`
+		EffectBasePoints         [3]int32          `json:"effect_base_points"`
+		EffectBasePointsF        []float32         `json:"effect_base_points_f"`
+		EffectMechanic           [3]int32          `json:"effect_mechanic"`
+		EffectRadius             [3]SpellRadius    `json:"effect_radius"`
+		EffectAura               [3]AuraEffect     `json:"effect_aura"`
+		EffectAuraPeriod         [3]int32          `json:"effect_aura_period"`
+		EffectAmplitude          [3]float32        `json:"effect_amplitude"`
+		EffectChainTargets       [3]int32          `json:"effect_chain_targets"`
+		EffectItemType           [3]ItemID         `json:"effect_item_type"`
+		EffectMiscValue          [3]int32          `json:"effect_misc_value"`
+		EffectTriggerSpell       [3]SpellID        `json:"effect_trigger_spell"`
+		EffectPointsPerCombo     [3]float32        `json:"effect_points_per_combo"`
+		EffectBaseDice           [3]int32          `json:"effect_base_dice"`
+		EffectDicePerLevel       [3]int32          `json:"effect_dice_per_level"`
+		EffectChainAmplitude     [3]float32        `json:"effect_chain_amplitude"`
+		ImplicitTargetA          [3]ImplicitTarget `json:"implicit_target_a"`
+		ImplicitTargetB          [3]ImplicitTarget `json:"implicit_target_b"`
 	}{spellAlias: spellAlias(s)}
 
 	for _, effect := range s.Effects {

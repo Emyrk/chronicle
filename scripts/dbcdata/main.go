@@ -27,7 +27,6 @@ func rootCmd() *serpent.Command {
 		Handler: serpent.DefaultHelpFn(),
 	}
 	cmd.AddSubcommands(
-		cli.StaticPopulateCmd(),
 		cli.DerivedStaticsCmd(),
 		cli.SpellTestDataCmd(),
 		cli.ExtractDBCCmd(),

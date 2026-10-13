@@ -6,7 +6,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/spelldb"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/testutil"
@@ -34,7 +33,7 @@ func TestDeriveAffectedAuraDurations(t *testing.T) {
 	spell := &chrondbc.Spell{
 		ID:             100,
 		Name_lang:      i18n.Text{i18n.English: "Affected Aura"},
-		Duration:       dbcmem.SpellDuration{ID: 1},
+		Duration:       chrondbc.SpellDuration{ID: 1},
 		SpellClassSet:  8,
 		SpellClassMask: 0b11,
 	}

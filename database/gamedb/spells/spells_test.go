@@ -8,7 +8,6 @@ import (
 
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/spells"
 	"github.com/Emyrk/chronicle/database/spelldb"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
@@ -110,7 +109,7 @@ func TestFetcher_PopulatesModernSpellComponents(t *testing.T) {
 		Name_lang: i18n.Text{i18n.English: "Modern Test Spell"},
 		Effects: []chrondbc.SpellEffect{{
 			EffectIndex:  0,
-			EffectRadius: dbcmem.SpellRadius{ID: 14},
+			EffectRadius: chrondbc.SpellRadius{ID: 14},
 		}},
 	}
 	legacy := chrondbc.Spell{ID: 900002, Name_lang: i18n.Text{i18n.English: modern.Name()}}
@@ -214,7 +213,7 @@ func TestFetcher_PopulatesModernSpellComponents(t *testing.T) {
 	require.Equal(t, []int32{12, 13}, effect.EffectMiscValue)
 	require.Equal(t, float32(0.5), effect.EffectPointsPerResource)
 	require.Equal(t, float32(0.6), effect.EffectPosFacing)
-	require.Equal(t, dbcmem.SpellRadius{ID: 14, Radius: 8.5, RadiusPerLevel: 0.5, RadiusMin: 2, RadiusMax: 12}, effect.EffectRadius)
+	require.Equal(t, chrondbc.SpellRadius{ID: 14, Radius: 8.5, RadiusPerLevel: 0.5, RadiusMin: 2, RadiusMax: 12}, effect.EffectRadius)
 	require.Equal(t, []int32{14, 15}, effect.EffectRadiusIndex)
 	require.Equal(t, float32(0.7), effect.EffectRealPointsPerLevel)
 	require.Equal(t, chrondbc.SpellID(16), effect.EffectTriggerSpell)

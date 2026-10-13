@@ -12,21 +12,21 @@ import (
 type DBCFile string
 
 const (
-	FileSpell                DBCFile = "Spell.dbc"
-	FileSpellIcon            DBCFile = "SpellIcon.dbc"
-	FileTalent               DBCFile = "Talent.dbc"
-	FileTalentTab            DBCFile = "TalentTab.dbc"
-	FileItemDisplayInfo      DBCFile = "ItemDisplayInfo.dbc"
-	FileSpellItemEnchantment DBCFile = "SpellItemEnchantment.dbc"
-	FileItemRandomProperties DBCFile = "ItemRandomProperties.dbc"
-	FileItemSet              DBCFile = "ItemSet.dbc"
-	FileSpellCastTimes       DBCFile = "SpellCastTimes.dbc"
-	FileSpellDuration        DBCFile = "SpellDuration.dbc"
-	FileSpellRange           DBCFile = "SpellRange.dbc"
-	FileSpellCategory        DBCFile = "SpellCategory.dbc"
-	FileSpellRadius          DBCFile = "SpellRadius.dbc"
-	FileSpellFocusObject              DBCFile = "SpellFocusObject.dbc"
-	FileSpellDescriptionVariables     DBCFile = "SpellDescriptionVariables.dbc"
+	FileSpell                     DBCFile = "Spell.dbc"
+	FileSpellIcon                 DBCFile = "SpellIcon.dbc"
+	FileTalent                    DBCFile = "Talent.dbc"
+	FileTalentTab                 DBCFile = "TalentTab.dbc"
+	FileItemDisplayInfo           DBCFile = "ItemDisplayInfo.dbc"
+	FileSpellItemEnchantment      DBCFile = "SpellItemEnchantment.dbc"
+	FileItemRandomProperties      DBCFile = "ItemRandomProperties.dbc"
+	FileItemSet                   DBCFile = "ItemSet.dbc"
+	FileSpellCastTimes            DBCFile = "SpellCastTimes.dbc"
+	FileSpellDuration             DBCFile = "SpellDuration.dbc"
+	FileSpellRange                DBCFile = "SpellRange.dbc"
+	FileSpellCategory             DBCFile = "SpellCategory.dbc"
+	FileSpellRadius               DBCFile = "SpellRadius.dbc"
+	FileSpellFocusObject          DBCFile = "SpellFocusObject.dbc"
+	FileSpellDescriptionVariables DBCFile = "SpellDescriptionVariables.dbc"
 )
 
 // UploadKind describes how an artifact is sent to the Chronicle API.
@@ -72,11 +72,9 @@ type Importer interface {
 func Registry() []Importer {
 	return []Importer{
 		&talentImporter{},
-		&rawDBCImporter{key: "spells", name: "Spells", file: FileSpell, dbcType: "Spell"},
-		&rawDBCImporter{key: "item-display-info", name: "Item Display Info", file: FileItemDisplayInfo, dbcType: "ItemDisplayInfo"},
-		&rawDBCImporter{key: "spell-enchantments", name: "Spell Item Enchantments", file: FileSpellItemEnchantment, dbcType: "SpellItemEnchantment"},
-		&rawDBCImporter{key: "item-random-properties", name: "Item Random Properties", file: FileItemRandomProperties, dbcType: "ItemRandomProperties"},
-		&rawDBCImporter{key: "item-sets", name: "Item Sets", file: FileItemSet, dbcType: "ItemSet"},
+		// Companion spell tables must be uploaded before Spell.dbc. The server
+		// resolves legacy spell metadata from these dataset-scoped rows while
+		// deriving cooldowns and parser metadata.
 		&rawDBCImporter{key: "spell-cast-times", name: "Spell Cast Times", file: FileSpellCastTimes, dbcType: "SpellCastTimes"},
 		&rawDBCImporter{key: "spell-durations", name: "Spell Durations", file: FileSpellDuration, dbcType: "SpellDuration"},
 		&rawDBCImporter{key: "spell-ranges", name: "Spell Ranges", file: FileSpellRange, dbcType: "SpellRange"},
@@ -85,6 +83,11 @@ func Registry() []Importer {
 		&rawDBCImporter{key: "spell-radii", name: "Spell Radii", file: FileSpellRadius, dbcType: "SpellRadius"},
 		&rawDBCImporter{key: "spell-focus-objects", name: "Spell Focus Objects", file: FileSpellFocusObject, dbcType: "SpellFocusObject"},
 		&rawDBCImporter{key: "spell-desc-vars", name: "Spell Description Variables", file: FileSpellDescriptionVariables, dbcType: "SpellDescriptionVariables"},
+		&rawDBCImporter{key: "spells", name: "Spells", file: FileSpell, dbcType: "Spell"},
+		&rawDBCImporter{key: "item-display-info", name: "Item Display Info", file: FileItemDisplayInfo, dbcType: "ItemDisplayInfo"},
+		&rawDBCImporter{key: "spell-enchantments", name: "Spell Item Enchantments", file: FileSpellItemEnchantment, dbcType: "SpellItemEnchantment"},
+		&rawDBCImporter{key: "item-random-properties", name: "Item Random Properties", file: FileItemRandomProperties, dbcType: "ItemRandomProperties"},
+		&rawDBCImporter{key: "item-sets", name: "Item Sets", file: FileItemSet, dbcType: "ItemSet"},
 	}
 }
 
@@ -132,8 +135,8 @@ type rawDBCImporter struct {
 	dbcType string
 }
 
-func (r *rawDBCImporter) Key() string             { return r.key }
-func (r *rawDBCImporter) Name() string            { return r.name }
+func (r *rawDBCImporter) Key() string              { return r.key }
+func (r *rawDBCImporter) Name() string             { return r.name }
 func (r *rawDBCImporter) RequiredFiles() []DBCFile { return []DBCFile{r.file} }
 
 func (r *rawDBCImporter) Produce(_ *dbcdb.WoWClient, files map[DBCFile][]byte) ([]Artifact, error) {

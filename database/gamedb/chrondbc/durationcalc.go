@@ -2,21 +2,19 @@ package chrondbc
 
 import (
 	"time"
-
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 )
 
 // DurationModifierSet holds duration modifier data for a dataset, pre-indexed
 // by spell class set and bit for efficient lookup during aura processing.
 type DurationModifierSet struct {
-	ByID       map[int32]dbcmem.DurationModifier
+	ByID       map[int32]DurationModifier
 	ByClassBit map[int32]map[uint64][]int32 // SpellClassSet → bit → modifier IDs
 }
 
 // DurationModifiersForSpell returns every duration modifier whose spell class
 // set and mask overlap the target spell. Modifier IDs are de-duplicated when
 // multiple class-mask bits match.
-func DurationModifiersForSpell(spell *Spell, mods *DurationModifierSet) []dbcmem.DurationModifier {
+func DurationModifiersForSpell(spell *Spell, mods *DurationModifierSet) []DurationModifier {
 	if mods == nil {
 		return nil
 	}
@@ -28,7 +26,7 @@ func DurationModifiersForSpell(spell *Spell, mods *DurationModifierSet) []dbcmem
 
 	mask := uint64(spell.SpellClassMask)
 	seen := make(map[int32]bool)
-	var matched []dbcmem.DurationModifier
+	var matched []DurationModifier
 	for bit := uint64(0); bit < 64; bit++ {
 		b := uint64(1) << bit
 		if mask&b == 0 {
@@ -76,7 +74,7 @@ func MaxAuraDuration(spell *Spell, mods *DurationModifierSet) time.Duration {
 
 	// A player can only have one rank of each talent. Group by name
 	// and keep the strongest rank to get the true maximum.
-	best := make(map[string]dbcmem.DurationModifier)
+	best := make(map[string]DurationModifier)
 	for _, mod := range matched {
 		prev, exists := best[mod.Name]
 		if !exists || mod.Percent > prev.Percent || mod.Flat > prev.Flat {

@@ -9,7 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/stretchr/testify/assert"
@@ -498,7 +497,7 @@ func TestAbsorption_WotlkDBCFallbackDuration(t *testing.T) {
 
 	// Spell with a 30s duration from DBC → tracked for 2x = 60s (talent slack)
 	pwsSpell := makeAbsorbSpell("Power Word: Shield", 500, 127)
-	pwsSpell.Duration = dbcmem.SpellDuration{Duration: 30000}
+	pwsSpell.Duration = chrondbc.SpellDuration{Duration: 30000}
 
 	msgs := []messages.Message{
 		auraCastWotlk(now, pwsSpell, priestGUID, tankGUID),
@@ -523,7 +522,7 @@ func TestResolveShieldDuration(t *testing.T) {
 
 	withMax := func(durMS, maxMS int32) *chrondbc.Spell {
 		s := makeAbsorbSpell("Test Shield", 100, 127)
-		s.Duration = dbcmem.SpellDuration{Duration: durMS, MaxDuration: maxMS}
+		s.Duration = chrondbc.SpellDuration{Duration: durMS, MaxDuration: maxMS}
 		return s
 	}
 

@@ -19,7 +19,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/google/uuid"
@@ -44,13 +43,13 @@ func (hermesProxyTestDB) SpellsByName(context.Context, string) ([]*chrondbc.Spel
 func (hermesProxyTestDB) TalentTrees(context.Context, uuid.UUID) (*talents.TalentTreeData, error) {
 	return nil, nil
 }
-func (hermesProxyTestDB) ExtraAttackSpell(context.Context, int32) (dbcmem.ExtraAttackSpell, bool) {
-	return dbcmem.ExtraAttackSpell{}, false
+func (hermesProxyTestDB) ExtraAttackSpell(context.Context, int32) (chrondbc.ExtraAttackSpell, bool) {
+	return chrondbc.ExtraAttackSpell{}, false
 }
 func (hermesProxyTestDB) DurationModifiers(context.Context) (*chrondbc.DurationModifierSet, error) {
 	return &chrondbc.DurationModifierSet{}, nil
 }
-func (hermesProxyTestDB) PeriodicSpells(context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+func (hermesProxyTestDB) PeriodicSpells(context.Context) (map[int32]chrondbc.PeriodicSpell, error) {
 	return nil, nil
 }
 

@@ -8,7 +8,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/google/uuid"
 )
 
@@ -37,11 +36,11 @@ func deriveAffectedAuraDurations(ctx context.Context, tx database.Store, dataset
 	}
 
 	modifierSet := &chrondbc.DurationModifierSet{
-		ByID:       make(map[int32]dbcmem.DurationModifier, len(modifierRows)),
+		ByID:       make(map[int32]chrondbc.DurationModifier, len(modifierRows)),
 		ByClassBit: make(map[int32]map[uint64][]int32),
 	}
 	for _, row := range modifierRows {
-		modifierSet.ByID[row.SpellID] = dbcmem.DurationModifier{
+		modifierSet.ByID[row.SpellID] = chrondbc.DurationModifier{
 			SpellID:    row.SpellID,
 			Name:       row.Name,
 			Percent:    row.Percent,
@@ -69,7 +68,7 @@ func deriveAffectedAuraDurations(ctx context.Context, tx database.Store, dataset
 	for _, row := range candidateRows {
 		spell := &chrondbc.Spell{
 			ID:             chrondbc.SpellID(row.SpellID),
-			Duration:       dbcmem.SpellDuration{MaxDuration: row.BaseDurationMs},
+			Duration:       chrondbc.SpellDuration{MaxDuration: row.BaseDurationMs},
 			SpellClassSet:  chrondbc.SpellClassSet(row.SpellClassSet),
 			SpellClassMask: chrondbc.SpellClassMask(row.SpellClassMask),
 		}

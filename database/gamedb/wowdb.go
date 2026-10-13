@@ -8,7 +8,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 	"github.com/Emyrk/chronicle/database/gamedb/spells"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
@@ -31,9 +30,9 @@ type GameDB interface {
 	GearResolver
 	CreatureFetcher
 	TalentTreeFetcher
-	ExtraAttackSpell(ctx context.Context, spellID int32) (dbcmem.ExtraAttackSpell, bool)
+	ExtraAttackSpell(ctx context.Context, spellID int32) (chrondbc.ExtraAttackSpell, bool)
 	DurationModifiers(ctx context.Context) (*chrondbc.DurationModifierSet, error)
-	PeriodicSpells(ctx context.Context) (map[int32]dbcmem.PeriodicSpell, error)
+	PeriodicSpells(ctx context.Context) (map[int32]chrondbc.PeriodicSpell, error)
 }
 
 // TalentTreeFetcher loads pre-computed talent tree data per dataset.
@@ -101,22 +100,22 @@ type WoWDB struct {
 	talents         talents.TalentFetcher
 
 	// Per-dataset caches for derived spell data.
-	extraAttacks   *lrucache.Cache[uuid.UUID, map[int32]dbcmem.ExtraAttackSpell]
+	extraAttacks   *lrucache.Cache[uuid.UUID, map[int32]chrondbc.ExtraAttackSpell]
 	durationMods   *lrucache.Cache[uuid.UUID, *chrondbc.DurationModifierSet]
-	periodicSpells *lrucache.Cache[uuid.UUID, map[int32]dbcmem.PeriodicSpell]
+	periodicSpells *lrucache.Cache[uuid.UUID, map[int32]chrondbc.PeriodicSpell]
 }
 
 // New creates a WoWDB. When Pool is configured, spell lookups are strictly
 // database-backed. SpellsDBCPath is only used when Pool is nil, for tests and
 // offline CLI tools; call [WoWDB.Close] to release that file.
 func New(ctx context.Context, opts Options) (*WoWDB, error) {
-	eaCache, _ := servicecache.NewCache(opts.CacheSvc, lrucache.Opts[uuid.UUID, map[int32]dbcmem.ExtraAttackSpell]{
+	eaCache, _ := servicecache.NewCache(opts.CacheSvc, lrucache.Opts[uuid.UUID, map[int32]chrondbc.ExtraAttackSpell]{
 		Capacity: 64, Name: "extra_attacks", TTL: servicecache.TTLExtraAttacks,
 	})
 	dmCache, _ := servicecache.NewCache(opts.CacheSvc, lrucache.Opts[uuid.UUID, *chrondbc.DurationModifierSet]{
 		Capacity: 64, Name: "duration_mods", TTL: servicecache.TTLDurationMods,
 	})
-	psCache, _ := servicecache.NewCache(opts.CacheSvc, lrucache.Opts[uuid.UUID, map[int32]dbcmem.PeriodicSpell]{
+	psCache, _ := servicecache.NewCache(opts.CacheSvc, lrucache.Opts[uuid.UUID, map[int32]chrondbc.PeriodicSpell]{
 		Capacity: 64, Name: "periodic_spells", TTL: servicecache.TTLPeriodicSpells,
 	})
 
@@ -216,12 +215,12 @@ func (w *WoWDB) RangeSpells(f func(*chrondbc.Spell) bool) error {
 
 // --- Derived spell data resolvers (default dataset) ---
 
-func (w *WoWDB) ExtraAttackSpell(ctx context.Context, spellID int32) (dbcmem.ExtraAttackSpell, bool) {
+func (w *WoWDB) ExtraAttackSpell(ctx context.Context, spellID int32) (chrondbc.ExtraAttackSpell, bool) {
 	return w.extraAttackSpell(ctx, w.datasetID, spellID)
 }
 
 // ExtraAttackSpells returns the full extra-attack spell map for a dataset.
-func (w *WoWDB) ExtraAttackSpells(ctx context.Context, datasetID uuid.UUID) map[int32]dbcmem.ExtraAttackSpell {
+func (w *WoWDB) ExtraAttackSpells(ctx context.Context, datasetID uuid.UUID) map[int32]chrondbc.ExtraAttackSpell {
 	m, ok := w.extraAttacks.Get(datasetID)
 	if !ok {
 		m = w.loadExtraAttacks(ctx, datasetID)
@@ -238,13 +237,13 @@ func (w *WoWDB) Consumables(ctx context.Context) (*chrondbc.ConsumableCatalog, e
 	return w.consumables(ctx, w.datasetID)
 }
 
-func (w *WoWDB) PeriodicSpells(ctx context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+func (w *WoWDB) PeriodicSpells(ctx context.Context) (map[int32]chrondbc.PeriodicSpell, error) {
 	return w.periodicSpells_(ctx, w.datasetID)
 }
 
 // Internal methods parameterised by datasetID so ScopedGameDB can reuse them.
 
-func (w *WoWDB) extraAttackSpell(ctx context.Context, datasetID uuid.UUID, spellID int32) (dbcmem.ExtraAttackSpell, bool) {
+func (w *WoWDB) extraAttackSpell(ctx context.Context, datasetID uuid.UUID, spellID int32) (chrondbc.ExtraAttackSpell, bool) {
 	m, ok := w.extraAttacks.Get(datasetID)
 	if !ok {
 		m = w.loadExtraAttacks(ctx, datasetID)
@@ -303,7 +302,7 @@ func (w *WoWDB) consumables(ctx context.Context, datasetID uuid.UUID) (*chrondbc
 	return chrondbc.NewConsumableCatalogWithItemNames(itemIDs, itemNamesByID, itemsBySpell, itemsByDirectSpell), nil
 }
 
-func (w *WoWDB) periodicSpells_(ctx context.Context, datasetID uuid.UUID) (map[int32]dbcmem.PeriodicSpell, error) {
+func (w *WoWDB) periodicSpells_(ctx context.Context, datasetID uuid.UUID) (map[int32]chrondbc.PeriodicSpell, error) {
 	if m, ok := w.periodicSpells.Get(datasetID); ok {
 		return m, nil
 	}
@@ -317,8 +316,8 @@ func (w *WoWDB) periodicSpells_(ctx context.Context, datasetID uuid.UUID) (map[i
 
 // --- Database-backed derived spell data ---
 
-func (w *WoWDB) loadExtraAttacks(ctx context.Context, datasetID uuid.UUID) map[int32]dbcmem.ExtraAttackSpell {
-	m := make(map[int32]dbcmem.ExtraAttackSpell)
+func (w *WoWDB) loadExtraAttacks(ctx context.Context, datasetID uuid.UUID) map[int32]chrondbc.ExtraAttackSpell {
+	m := make(map[int32]chrondbc.ExtraAttackSpell)
 	if w.pool == nil {
 		return m
 	}
@@ -332,16 +331,16 @@ func (w *WoWDB) loadExtraAttacks(ctx context.Context, datasetID uuid.UUID) map[i
 		var id, num int32
 		var name string
 		if err := rows.Scan(&id, &name, &num); err != nil {
-			return make(map[int32]dbcmem.ExtraAttackSpell)
+			return make(map[int32]chrondbc.ExtraAttackSpell)
 		}
-		m[id] = dbcmem.ExtraAttackSpell{Name: name, NumExtraAttacks: num}
+		m[id] = chrondbc.ExtraAttackSpell{Name: name, NumExtraAttacks: num}
 	}
 	return m
 }
 
 func (w *WoWDB) loadDurationModifiers(ctx context.Context, datasetID uuid.UUID) (*chrondbc.DurationModifierSet, error) {
 	ms := &chrondbc.DurationModifierSet{
-		ByID:       make(map[int32]dbcmem.DurationModifier),
+		ByID:       make(map[int32]chrondbc.DurationModifier),
 		ByClassBit: make(map[int32]map[uint64][]int32),
 	}
 	if w.pool == nil {
@@ -354,7 +353,7 @@ func (w *WoWDB) loadDurationModifiers(ctx context.Context, datasetID uuid.UUID) 
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var mod dbcmem.DurationModifier
+		var mod chrondbc.DurationModifier
 		var classSet int32
 		var classMask int64
 		if err := rows.Scan(&mod.SpellID, &mod.Name, &mod.Percent, &mod.Flat, &mod.Deprecated, &classSet, &classMask); err != nil {
@@ -378,8 +377,8 @@ func (w *WoWDB) loadDurationModifiers(ctx context.Context, datasetID uuid.UUID) 
 	return ms, nil
 }
 
-func (w *WoWDB) loadPeriodicSpells(ctx context.Context, datasetID uuid.UUID) (map[int32]dbcmem.PeriodicSpell, error) {
-	m := make(map[int32]dbcmem.PeriodicSpell)
+func (w *WoWDB) loadPeriodicSpells(ctx context.Context, datasetID uuid.UUID) (map[int32]chrondbc.PeriodicSpell, error) {
+	m := make(map[int32]chrondbc.PeriodicSpell)
 	if w.pool == nil {
 		return m, nil
 	}
@@ -396,7 +395,7 @@ func (w *WoWDB) loadPeriodicSpells(ctx context.Context, datasetID uuid.UUID) (ma
 		if err := rows.Scan(&id, &name, &hasDirect); err != nil {
 			return nil, fmt.Errorf("scan periodic spell: %w", err)
 		}
-		m[id] = dbcmem.PeriodicSpell{Name: name, HasDirect: hasDirect}
+		m[id] = chrondbc.PeriodicSpell{Name: name, HasDirect: hasDirect}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate periodic spells: %w", err)
@@ -486,7 +485,7 @@ func (s *ScopedGameDB) TalentTrees(ctx context.Context, datasetID uuid.UUID) (*t
 	return s.w.TalentTrees(ctx, datasetID)
 }
 
-func (s *ScopedGameDB) ExtraAttackSpell(ctx context.Context, spellID int32) (dbcmem.ExtraAttackSpell, bool) {
+func (s *ScopedGameDB) ExtraAttackSpell(ctx context.Context, spellID int32) (chrondbc.ExtraAttackSpell, bool) {
 	return s.w.extraAttackSpell(ctx, s.datasetID, spellID)
 }
 
@@ -498,6 +497,6 @@ func (s *ScopedGameDB) Consumables(ctx context.Context) (*chrondbc.ConsumableCat
 	return s.w.consumables(ctx, s.datasetID)
 }
 
-func (s *ScopedGameDB) PeriodicSpells(ctx context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+func (s *ScopedGameDB) PeriodicSpells(ctx context.Context) (map[int32]chrondbc.PeriodicSpell, error) {
 	return s.w.periodicSpells_(ctx, s.datasetID)
 }

@@ -6,7 +6,6 @@ import (
 
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/spelldb"
 	"github.com/Emyrk/chronicle/internal/bitmask"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
@@ -34,7 +33,7 @@ func TestSpellRoundTrip(t *testing.T) {
 		NameSubtext_lang:      i18n.Text{i18n.English: "Rank 1"},
 		Description_lang:      i18n.Text{i18n.English: "Hurls a fiery ball that causes $s1 Fire damage."},
 		AuraDescription_lang:  i18n.Text{i18n.English: ""},
-		SpellIcon:             dbcmem.SpellIcon{ID: 11},
+		SpellIcon:             chrondbc.SpellIcon{ID: 11},
 		SpellIconID_:          11,
 		MaxLevel:              0,
 		BaseLevel:             1,
@@ -68,13 +67,13 @@ func TestSpellRoundTrip(t *testing.T) {
 		ManaPerSecond:         0,
 		Reagent:               [8]chrondbc.ItemID{0, 0, 0, 0, 0, 0, 0, 0},
 		ReagentCount:          [8]int32{0, 0, 0, 0, 0, 0, 0, 0},
-		CastTime:              dbcmem.SpellCastTime{ID: 3},
+		CastTime:              chrondbc.SpellCastTime{ID: 3},
 		CastingTimeIndex_:     3,
 		RecoveryTime:          0,
 		StartRecoveryCategory: 133,
 		StartRecoveryTime:     1500 * time.Millisecond,
 		CategoryRecoveryTime:  0,
-		Range:                 dbcmem.SpellRange{ID: 4},
+		Range:                 chrondbc.SpellRange{ID: 4},
 		RangeIndex_:           4,
 		DurationIndex_:        0,
 		Attrs:                 [9]uint32{0x00010000, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -92,7 +91,7 @@ func TestSpellRoundTrip(t *testing.T) {
 				EffectIndex: 0, Effect: 2, EffectDieSides: 9,
 				EffectRealPointsPerLevel: 0.8, EffectBasePoints: 13,
 				EffectBasePointsF: float32Ptr(14.5), EffectMechanic: 4,
-				EffectRadius: dbcmem.SpellRadius{ID: 5}, EffectRadiusIndex: []int32{5},
+				EffectRadius: chrondbc.SpellRadius{ID: 5}, EffectRadiusIndex: []int32{5},
 				EffectAura: 6, EffectAuraPeriod: 700, EffectAmplitude: 0.9,
 				EffectChainTargets: 2, EffectItemType: 8, EffectMiscValue: []int32{9},
 				EffectTriggerSpell: 10, EffectPointsPerCombo: 1.1, EffectBaseDice: 1,
@@ -191,13 +190,13 @@ func TestSpellUpsertBatch(t *testing.T) {
 			ID:        100,
 			Name_lang: i18n.Text{i18n.English: "Spell A"},
 			School:    chrondbc.School(bitmask.Bitmask32(chrondbc.SchoolFire)),
-			SpellIcon: dbcmem.SpellIcon{ID: 1},
+			SpellIcon: chrondbc.SpellIcon{ID: 1},
 		},
 		{
 			ID:        200,
 			Name_lang: i18n.Text{i18n.English: "Spell B"},
 			School:    chrondbc.School(bitmask.Bitmask32(chrondbc.SchoolFrost)),
-			SpellIcon: dbcmem.SpellIcon{ID: 2},
+			SpellIcon: chrondbc.SpellIcon{ID: 2},
 		},
 	}
 

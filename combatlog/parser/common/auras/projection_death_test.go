@@ -8,7 +8,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +19,7 @@ func TestProjectionHandleDeathCancelsUnitProjectionState(t *testing.T) {
 	deadUnit := guid.GUID(1)
 	otherUnit := guid.GUID(2)
 	otherCaster := guid.GUID(3)
-	spell := &chrondbc.Spell{ID: 100, Duration: dbcmem.SpellDuration{MaxDuration: 30_000}}
+	spell := &chrondbc.Spell{ID: 100, Duration: chrondbc.SpellDuration{MaxDuration: 30_000}}
 
 	tracker := New(nil)
 	tracker.Process(&messages.Aura{

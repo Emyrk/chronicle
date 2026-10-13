@@ -20,7 +20,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/services"
@@ -693,15 +692,15 @@ func (s *stubGameDB) TalentTrees(context.Context, uuid.UUID) (*talents.TalentTre
 	return nil, nil
 }
 
-func (s *stubGameDB) ExtraAttackSpell(context.Context, int32) (dbcmem.ExtraAttackSpell, bool) {
-	return dbcmem.ExtraAttackSpell{}, false
+func (s *stubGameDB) ExtraAttackSpell(context.Context, int32) (chrondbc.ExtraAttackSpell, bool) {
+	return chrondbc.ExtraAttackSpell{}, false
 }
 
 func (s *stubGameDB) DurationModifiers(context.Context) (*chrondbc.DurationModifierSet, error) {
 	return &chrondbc.DurationModifierSet{}, nil
 }
 
-func (s *stubGameDB) PeriodicSpells(context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+func (s *stubGameDB) PeriodicSpells(context.Context) (map[int32]chrondbc.PeriodicSpell, error) {
 	return nil, nil
 }
 

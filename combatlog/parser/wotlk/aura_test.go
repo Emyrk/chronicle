@@ -12,7 +12,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +23,7 @@ type auraTestDB struct{}
 func (auraTestDB) ResolveGear([]combatant.GearItem)                       {}
 func (auraTestDB) Creature(int32) (*database.WorldCreatureTemplate, bool) { return nil, false }
 func (auraTestDB) Spell(_ context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
-	return &chrondbc.Spell{ID: id, Duration: dbcmem.SpellDuration{MaxDuration: 30_000}}, nil
+	return &chrondbc.Spell{ID: id, Duration: chrondbc.SpellDuration{MaxDuration: 30_000}}, nil
 }
 func (auraTestDB) SpellsByName(context.Context, string) ([]*chrondbc.Spell, error) {
 	return nil, fmt.Errorf("not implemented")
@@ -32,13 +31,13 @@ func (auraTestDB) SpellsByName(context.Context, string) ([]*chrondbc.Spell, erro
 func (auraTestDB) TalentTrees(context.Context, uuid.UUID) (*talents.TalentTreeData, error) {
 	return nil, fmt.Errorf("not implemented")
 }
-func (auraTestDB) ExtraAttackSpell(context.Context, int32) (dbcmem.ExtraAttackSpell, bool) {
-	return dbcmem.ExtraAttackSpell{}, false
+func (auraTestDB) ExtraAttackSpell(context.Context, int32) (chrondbc.ExtraAttackSpell, bool) {
+	return chrondbc.ExtraAttackSpell{}, false
 }
 func (auraTestDB) DurationModifiers(context.Context) (*chrondbc.DurationModifierSet, error) {
 	return nil, nil
 }
-func (auraTestDB) PeriodicSpells(context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+func (auraTestDB) PeriodicSpells(context.Context) (map[int32]chrondbc.PeriodicSpell, error) {
 	return nil, nil
 }
 
