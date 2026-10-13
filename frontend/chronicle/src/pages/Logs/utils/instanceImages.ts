@@ -52,6 +52,7 @@ export const INSTANCE_CONFIG: Record<string, InstanceConfig> = {
   "Windhorn Canyon": { background: "/c/images/loadingscreens/LoadScreenWindhorn.webp", abbrev: "WHC", contentLevel: 60 },
   // Dungeons
   "Frostmane Hollow": { background: "/c/images/loadingscreens/LoadScreenFrostmane.webp", abbrev: "FH", contentLevel: 60 },
+  "Excavation Site: Wetlands": { background: "/c/images/loadingscreens/LoadingScreenExcavationSite.webp", abbrev: "Excavation", contentLevel: 60 },
   "Black Morass": { background: "/c/images/loadingscreens/LoadScreenCavernsTime.webp", bossCount: 4, abbrev: "BM", contentLevel: 60 },
   "Blackrock Spire": { background: "/c/images/loadingscreens/LoadScreenBlackrockSpire.webp", abbrev: "BRS", contentLevel: 60 },
   "Upper Blackrock Spire": { background: "/c/images/loadingscreens/LoadScreenBlackrockSpire.webp", bossCount: 5, abbrev: "UBRS", contentLevel: 60 },

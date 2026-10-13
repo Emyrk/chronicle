@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_INSTANCE_ACCENT,
   getInstanceAccentColor,
+  getInstanceBackground,
   getInstanceContentLevel,
 } from "./instanceImages";
 
@@ -21,6 +22,14 @@ describe("getInstanceContentLevel", () => {
   it("does not guess when a reused instance has no raid size", () => {
     expect(getInstanceContentLevel("Naxxramas")).toBeUndefined();
     expect(getInstanceContentLevel("Unknown Instance", 40)).toBeUndefined();
+  });
+});
+
+describe("getInstanceBackground", () => {
+  it("returns the WoW Forever Excavation Site loading screen", () => {
+    expect(getInstanceBackground("Excavation Site: Wetlands")).toBe(
+      "/c/images/loadingscreens/LoadingScreenExcavationSite.webp",
+    );
   });
 });
 
