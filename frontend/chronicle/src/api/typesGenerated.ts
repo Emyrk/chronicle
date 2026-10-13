@@ -419,8 +419,21 @@ export interface AzerothCorePingResponse {
 }
 
 // From chroniclesdk/billing.go
+export interface BillingCheckoutRequest {
+    readonly price_id: string;
+}
+
+// From chroniclesdk/billing.go
 export interface BillingCheckoutResponse {
     readonly url: string;
+}
+
+// From chroniclesdk/billing.go
+export interface BillingPrice {
+    readonly id: string;
+    readonly currency: string;
+    readonly unit_amount: number;
+    readonly interval_months: number;
 }
 
 // From chroniclesdk/billing.go
@@ -431,6 +444,7 @@ export interface BillingSummary {
     readonly status?: string;
     readonly current_period_end?: string;
     readonly cancel_at_period_end?: boolean;
+    readonly prices?: readonly BillingPrice[];
 }
 
 // From chroniclesdk/time_parses.go

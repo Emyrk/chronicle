@@ -167,18 +167,24 @@ export function useBillingSummary() {
   })
 }
 
-async function createBillingRedirect(path: string): Promise<string> {
-  const response = await fetch(path, { method: "POST" })
+async function createBillingRedirect(path: string, body?: unknown): Promise<string> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
   if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(body?.message ?? "Failed to open billing")
+    const errorBody = await response.json().catch(() => null)
+    throw new Error(errorBody?.message ?? "Failed to open billing")
   }
-  const body = await response.json() as import("./typesGenerated").BillingCheckoutResponse
-  return body.url
+  const redirect = await response.json() as import("./typesGenerated").BillingCheckoutResponse
+  return redirect.url
 }
 
 export function useCreateBillingCheckout() {
-  return useMutation({ mutationFn: () => createBillingRedirect("/api/v1/me/billing/checkout") })
+  return useMutation({
+    mutationFn: (priceID: string) => createBillingRedirect("/api/v1/me/billing/checkout", { price_id: priceID }),
+  })
 }
 
 export function useCreateBillingPortal() {

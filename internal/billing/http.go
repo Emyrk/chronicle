@@ -29,6 +29,14 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Billing is not configured."})
 		return
 	}
+	var req chroniclesdk.BillingCheckoutRequest
+	if !httpapi.Read(r.Context(), w, r, &req) {
+		return
+	}
+	if !s.priceAllowed(req.PriceID) {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid Supporter billing period."})
+		return
+	}
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
 	if sub, err := s.store.GetBillingSubscriptionByUserID(r.Context(), claims.Subject); err == nil && subscriptionIsAdFree(time.Now(), sub) {
 		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "You already have an active subscription."})
@@ -49,7 +57,7 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		ClientReferenceID: stripe.String(claims.Subject.String()),
 		CustomerEmail:     stripe.String(user.Email),
 		LineItems: []*stripe.CheckoutSessionCreateLineItemParams{{
-			Price:    stripe.String(s.priceID),
+			Price:    stripe.String(req.PriceID),
 			Quantity: stripe.Int64(1),
 		}},
 		ManagedPayments: &stripe.CheckoutSessionCreateManagedPaymentsParams{Enabled: stripe.Bool(true)},
@@ -57,8 +65,9 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		SuccessURL:      stripe.String(success),
 		CancelURL:       stripe.String(cancel),
 		SubscriptionData: &stripe.CheckoutSessionCreateSubscriptionDataParams{Metadata: map[string]string{
-			"chronicle_user_id": claims.Subject.String(),
-			"chronicle_tier":    TierSupporter,
+			"chronicle_user_id":  claims.Subject.String(),
+			"chronicle_tier":     TierSupporter,
+			"chronicle_price_id": req.PriceID,
 		}},
 	}
 	session, err := s.stripe.V1CheckoutSessions.Create(r.Context(), params)
@@ -103,6 +112,13 @@ func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result := chroniclesdk.BillingSummary{Enabled: s.Enabled(), Tier: TierFree, AdsFree: adFree}
+	if result.Enabled && !adFree {
+		result.Prices, err = s.supporterPrices(r.Context())
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+	}
 	if adFree {
 		result.Tier = TierSupporter
 	}

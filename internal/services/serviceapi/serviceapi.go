@@ -53,6 +53,16 @@ var (
 	ga4MeasurementIDPattern = regexp.MustCompile(`^G-[A-Z0-9]+$`)
 )
 
+func (s *Service) supporterPriceIDs() []string {
+	if len(s.stripeSupporterPrices) > 0 {
+		return append([]string(nil), s.stripeSupporterPrices...)
+	}
+	if s.stripeSupporterPrice != "" {
+		return []string{s.stripeSupporterPrice}
+	}
+	return nil
+}
+
 func ConfigureDevStripeWebhookSecret(broker *services.Services, secret string) error {
 	return services.MustGet[*Service](broker).configureDevStripeWebhookSecret(secret)
 }
@@ -64,8 +74,8 @@ func (s *Service) configureDevStripeWebhookSecret(secret string) error {
 	if !strings.HasPrefix(s.stripeSecretKey, "sk_test_") {
 		return errors.New("development Stripe listener requires a sandbox secret key")
 	}
-	if s.stripeSupporterPrice == "" {
-		return errors.New("development Stripe listener requires a Supporter price ID")
+	if len(s.supporterPriceIDs()) == 0 {
+		return errors.New("development Stripe listener requires at least one Supporter price ID")
 	}
 	if !strings.HasPrefix(secret, "whsec_") {
 		return errors.New("stripe CLI returned an invalid webhook signing secret")
@@ -102,6 +112,7 @@ type Service struct {
 	stripeSecretKey       string
 	stripeWebhookSecret   string
 	stripeSupporterPrice  string
+	stripeSupporterPrices []string
 	itemPricingAPIKey     string
 	itemPricingBaseURL    string
 	discordAuth           chronauth.DiscordOAuth
@@ -239,7 +250,7 @@ func (s *Service) Start(ctx context.Context) error {
 		Store:         db,
 		SecretKey:     s.stripeSecretKey,
 		WebhookSecret: s.stripeWebhookSecret,
-		PriceID:       s.stripeSupporterPrice,
+		PriceIDs:      s.supporterPriceIDs(),
 		AccessURL:     au,
 	})
 
@@ -390,7 +401,7 @@ func (s *Service) Options() serpent.OptionSet {
 		},
 		{
 			Name:        "Stripe Secret Key",
-			Description: "Optional Stripe secret key. Billing is enabled when this, the webhook secret, and Supporter price ID are all configured.",
+			Description: "Optional Stripe secret key. Billing is enabled when this, the webhook secret, and at least one Supporter price ID are configured.",
 			Required:    false,
 			Flag:        "stripe-secret-key",
 			Env:         "CHRONICLE_STRIPE_SECRET_KEY",
@@ -407,8 +418,17 @@ func (s *Service) Options() serpent.OptionSet {
 			Value:       serpent.StringOf(&s.stripeWebhookSecret),
 		},
 		{
+			Name:        "Stripe Supporter Price IDs",
+			Description: "Optional comma-separated recurring Stripe price IDs for the ad-free Supporter tier. Prices must belong to one product and currency.",
+			Required:    false,
+			Flag:        "stripe-supporter-price-ids",
+			Env:         "CHRONICLE_STRIPE_SUPPORTER_PRICE_IDS",
+			Default:     "",
+			Value:       serpent.StringArrayOf(&s.stripeSupporterPrices),
+		},
+		{
 			Name:        "Stripe Supporter Price ID",
-			Description: "Optional recurring Stripe price ID for the ad-free Supporter tier.",
+			Description: "Optional single recurring Stripe price ID retained for backward compatibility.",
 			Required:    false,
 			Flag:        "stripe-supporter-price-id",
 			Env:         "CHRONICLE_STRIPE_SUPPORTER_PRICE_ID",

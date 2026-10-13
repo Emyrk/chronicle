@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
+	"sync"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,11 +22,13 @@ const (
 	TierSupporter = "supporter"
 )
 
+type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error)
+
 type Options struct {
 	Store         database.Store
 	SecretKey     string
 	WebhookSecret string
-	PriceID       string
+	PriceIDs      []string
 	AccessURL     *url.URL
 }
 
@@ -31,26 +36,140 @@ type Service struct {
 	store         database.Store
 	stripe        *stripe.Client
 	webhookSecret string
-	priceID       string
+	priceIDs      []string
+	allowedPrices map[string]struct{}
 	accessURL     *url.URL
+	retrievePrice priceRetriever
+
+	pricesMu sync.Mutex
+	prices   []chroniclesdk.BillingPrice
 }
 
 func New(opts Options) *Service {
 	var client *stripe.Client
+	var retrievePrice priceRetriever
 	if opts.SecretKey != "" {
 		client = stripe.NewClient(opts.SecretKey)
+		retrievePrice = client.V1Prices.Retrieve
+	}
+	priceIDs := uniqueStrings(opts.PriceIDs)
+	allowedPrices := make(map[string]struct{}, len(priceIDs))
+	for _, priceID := range priceIDs {
+		allowedPrices[priceID] = struct{}{}
 	}
 	return &Service{
 		store:         opts.Store,
 		stripe:        client,
 		webhookSecret: opts.WebhookSecret,
-		priceID:       opts.PriceID,
+		priceIDs:      priceIDs,
+		allowedPrices: allowedPrices,
 		accessURL:     opts.AccessURL,
+		retrievePrice: retrievePrice,
 	}
 }
 
 func (s *Service) Enabled() bool {
-	return s != nil && s.stripe != nil && s.webhookSecret != "" && s.priceID != "" && s.accessURL != nil
+	return s != nil && s.stripe != nil && s.webhookSecret != "" && len(s.priceIDs) > 0 && s.accessURL != nil
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
+func (s *Service) priceAllowed(priceID string) bool {
+	_, ok := s.allowedPrices[priceID]
+	return ok
+}
+
+func (s *Service) supporterPrices(ctx context.Context) ([]chroniclesdk.BillingPrice, error) {
+	s.pricesMu.Lock()
+	defer s.pricesMu.Unlock()
+	if len(s.prices) > 0 {
+		return append([]chroniclesdk.BillingPrice(nil), s.prices...), nil
+	}
+
+	prices := make([]chroniclesdk.BillingPrice, 0, len(s.priceIDs))
+	var productID string
+	var currency string
+	seenMonths := make(map[int64]struct{}, len(s.priceIDs))
+	for _, priceID := range s.priceIDs {
+		price, err := s.retrievePrice(ctx, priceID, nil)
+		if err != nil {
+			return nil, fmt.Errorf("retrieve Stripe price %q: %w", priceID, err)
+		}
+		billingPrice, err := billingPriceFromStripe(price)
+		if err != nil {
+			return nil, fmt.Errorf("validate Stripe price %q: %w", priceID, err)
+		}
+		if productID == "" {
+			productID = price.Product.ID
+			currency = billingPrice.Currency
+		} else if price.Product.ID != productID {
+			return nil, fmt.Errorf("configured Stripe prices must belong to the same product")
+		} else if billingPrice.Currency != currency {
+			return nil, fmt.Errorf("configured Stripe prices must use the same currency")
+		}
+		if _, ok := seenMonths[billingPrice.IntervalMonths]; ok {
+			return nil, fmt.Errorf("configured Stripe prices contain duplicate %d-month periods", billingPrice.IntervalMonths)
+		}
+		seenMonths[billingPrice.IntervalMonths] = struct{}{}
+		prices = append(prices, billingPrice)
+	}
+	sort.Slice(prices, func(i, j int) bool {
+		return prices[i].IntervalMonths < prices[j].IntervalMonths
+	})
+	s.prices = prices
+	return append([]chroniclesdk.BillingPrice(nil), prices...), nil
+}
+
+func billingPriceFromStripe(price *stripe.Price) (chroniclesdk.BillingPrice, error) {
+	if price == nil || price.ID == "" {
+		return chroniclesdk.BillingPrice{}, fmt.Errorf("price is missing")
+	}
+	if !price.Active {
+		return chroniclesdk.BillingPrice{}, fmt.Errorf("price is inactive")
+	}
+	if price.Product == nil || price.Product.ID == "" {
+		return chroniclesdk.BillingPrice{}, fmt.Errorf("price has no product")
+	}
+	if price.Type != stripe.PriceTypeRecurring || price.Recurring == nil {
+		return chroniclesdk.BillingPrice{}, fmt.Errorf("price is not recurring")
+	}
+	if price.BillingScheme != stripe.PriceBillingSchemePerUnit || price.UnitAmount <= 0 {
+		return chroniclesdk.BillingPrice{}, fmt.Errorf("price must have a positive flat unit amount")
+	}
+	if price.Recurring.UsageType != stripe.PriceRecurringUsageTypeLicensed {
+		return chroniclesdk.BillingPrice{}, fmt.Errorf("price must use licensed billing")
+	}
+	months := price.Recurring.IntervalCount
+	switch price.Recurring.Interval {
+	case stripe.PriceRecurringIntervalMonth:
+	case stripe.PriceRecurringIntervalYear:
+		months *= 12
+	default:
+		return chroniclesdk.BillingPrice{}, fmt.Errorf("price interval must be monthly or yearly")
+	}
+	if months <= 0 {
+		return chroniclesdk.BillingPrice{}, fmt.Errorf("price interval must be positive")
+	}
+	return chroniclesdk.BillingPrice{
+		ID:             price.ID,
+		Currency:       string(price.Currency),
+		UnitAmount:     price.UnitAmount,
+		IntervalMonths: months,
+	}, nil
 }
 
 func RoleIsAdFree(roles []string) bool {

@@ -6,6 +6,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestSupporterPriceIDsPrefersPluralConfiguration(t *testing.T) {
+	t.Parallel()
+
+	s := Service{
+		stripeSupporterPrice:  "price_legacy",
+		stripeSupporterPrices: []string{"price_monthly", "price_annual"},
+	}
+	require.Equal(t, []string{"price_monthly", "price_annual"}, s.supporterPriceIDs())
+}
+
 func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 	t.Parallel()
 
@@ -21,6 +31,15 @@ func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 				devAuth:              true,
 				stripeSecretKey:      "sk_test_example",
 				stripeSupporterPrice: "price_supporter",
+			},
+			secret: "whsec_example",
+		},
+		{
+			name: "configured with multiple prices",
+			service: Service{
+				devAuth:               true,
+				stripeSecretKey:       "sk_test_example",
+				stripeSupporterPrices: []string{"price_monthly", "price_annual"},
 			},
 			secret: "whsec_example",
 		},
@@ -50,7 +69,7 @@ func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 				stripeSecretKey: "sk_test_example",
 			},
 			secret:  "whsec_example",
-			wantErr: "requires a Supporter price ID",
+			wantErr: "requires at least one Supporter price ID",
 		},
 		{
 			name: "rejects invalid webhook secret",
