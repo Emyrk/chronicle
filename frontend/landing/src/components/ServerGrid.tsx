@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowUpRight, Search, Upload, X } from "lucide-react";
 import { trackedTenantUrl } from "../trackedLinks";
 import type { ServerEntry } from "../types";
+import { NitroAd } from "./NitroAd";
 import { ServerCard } from "./ServerCard";
 
 /** Sort servers: sponsored first, then by unique player count (14d) descending. */
@@ -207,6 +208,8 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
           </div>
         </div>
       </article>
+
+      <NitroAd />
 
       <div className="relative mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

@@ -1,15 +1,30 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import type { ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import type { SiteConfig } from "@/api/typesGenerated"
 import { AdSlot } from "./AdSlot"
+import { clearNitroPayAds } from "./nitroPay"
 import {
   isLocalAdPreviewHost,
   shouldShowAdPreview,
   shouldShowCompactEncounterAd,
 } from "./adPreview"
 
+function renderAdSlot(element: ReactNode, siteConfig?: SiteConfig) {
+  const queryClient = new QueryClient()
+  if (siteConfig) {
+    queryClient.setQueryData(["site-config"], siteConfig)
+  }
+
+  return renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
+  )
+}
+
 describe("AdSlot", () => {
   it("renders the vertical rail preview on localhost", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderAdSlot(
       <AdSlot
         placement="leaderboards-right-rail"
         format="rail"
@@ -26,7 +41,7 @@ describe("AdSlot", () => {
   })
 
   it("renders the responsive desktop format by default", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderAdSlot(
       <AdSlot placement="statistics-encounter-sidebar" hostname="127.0.0.1" previewEnabled />,
     )
 
@@ -38,7 +53,7 @@ describe("AdSlot", () => {
 
   it("does not render outside local development", () => {
     expect(
-      renderToStaticMarkup(
+      renderAdSlot(
         <AdSlot
           placement="leaderboards-right-rail"
           format="rail"
@@ -51,7 +66,7 @@ describe("AdSlot", () => {
 
   it("does not render on localhost unless previews are enabled", () => {
     expect(
-      renderToStaticMarkup(
+      renderAdSlot(
         <AdSlot
           placement="leaderboards-right-rail"
           format="rail"
@@ -60,6 +75,53 @@ describe("AdSlot", () => {
         />,
       ),
     ).toBe("")
+  })
+
+  it("renders a NitroPay container for an enabled tenant", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="leaderboards-right-rail"
+        format="rail"
+        hostname="turtle.chronicleclassic.com"
+        previewEnabled={false}
+      />,
+      {
+        ads_enabled: true,
+        nitropay_site_id: "12345",
+      } as SiteConfig,
+    )
+
+    expect(markup).toContain('aria-label="Advertisement"')
+    expect(markup).toContain('data-ad-provider="nitropay"')
+    expect(markup).toContain('id="nitropay-leaderboards-right-rail"')
+    expect(markup).not.toContain("Ad preview")
+  })
+
+  it("does not render for a tenant with ads disabled", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="leaderboards-right-rail"
+        format="rail"
+        hostname="turtle.chronicleclassic.com"
+        previewEnabled={false}
+      />,
+      {
+        ads_enabled: false,
+        nitropay_site_id: "12345",
+      } as SiteConfig,
+    )
+
+    expect(markup).toBe("")
+  })
+
+  it("clears NitroPay placements during SPA navigation", () => {
+    const first = { onNavigate: vi.fn() }
+    const second = { onNavigate: vi.fn() }
+
+    clearNitroPayAds([first, second])
+
+    expect(first.onNavigate).toHaveBeenCalledOnce()
+    expect(second.onNavigate).toHaveBeenCalledOnce()
   })
 
   it("recognizes supported local hosts", () => {

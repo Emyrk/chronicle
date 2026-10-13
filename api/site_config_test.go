@@ -58,10 +58,10 @@ func TestAdsDeploymentEnabled(t *testing.T) {
 		expected bool
 	}{
 		{
-			name: "ads txt and client ID configured",
+			name: "ads txt and NitroPay site ID configured",
 			options: Options{
-				AdsTxtURL:       adsTxtURL,
-				AdSenseClientID: "ca-pub-8208259743822818",
+				AdsTxtURL:      adsTxtURL,
+				NitroPaySiteID: "12345",
 			},
 			expected: true,
 		},
@@ -71,7 +71,7 @@ func TestAdsDeploymentEnabled(t *testing.T) {
 		},
 		{
 			name:    "missing ads txt",
-			options: Options{AdSenseClientID: "ca-pub-8208259743822818"},
+			options: Options{NitroPaySiteID: "12345"},
 		},
 	}
 

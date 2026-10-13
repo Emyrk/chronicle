@@ -47,7 +47,7 @@ import (
 var _ services.Servicer = (*Service)(nil)
 
 var (
-	adsenseClientIDPattern  = regexp.MustCompile(`^ca-pub-[0-9]+$`)
+	nitroPaySiteIDPattern   = regexp.MustCompile(`^[0-9]+$`)
 	ga4MeasurementIDPattern = regexp.MustCompile(`^G-[A-Z0-9]+$`)
 )
 
@@ -69,7 +69,7 @@ type Service struct {
 	saffronURL            *url.URL
 	ocrURL                *url.URL
 	adsTxtURL             *url.URL
-	adsenseClientID       string
+	nitroPaySiteID        string
 	ga4MeasurementID      string
 	shortLinkDomain       string
 	clientUploadsDisabled bool
@@ -126,8 +126,8 @@ func (s *Service) DependsOn() []string {
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if s.adsenseClientID != "" && !adsenseClientIDPattern.MatchString(s.adsenseClientID) {
-		return fmt.Errorf("invalid AdSense client ID %q: expected ca-pub- followed by digits", s.adsenseClientID)
+	if s.nitroPaySiteID != "" && !nitroPaySiteIDPattern.MatchString(s.nitroPaySiteID) {
+		return fmt.Errorf("invalid NitroPay site ID %q: expected digits", s.nitroPaySiteID)
 	}
 	if s.ga4MeasurementID != "" && !ga4MeasurementIDPattern.MatchString(s.ga4MeasurementID) {
 		return fmt.Errorf("invalid Google Analytics measurement ID %q: expected G- followed by uppercase letters or digits", s.ga4MeasurementID)
@@ -232,7 +232,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 		AccessURL:             au,
 		AdsTxtURL:             adsTxtURL,
-		AdSenseClientID:       s.adsenseClientID,
+		NitroPaySiteID:        s.nitroPaySiteID,
 		GA4ID:                 s.ga4MeasurementID,
 		ShortLinkDomain:       s.shortLinkDomain,
 		ClientUploadsDisabled: s.clientUploadsDisabled,
@@ -344,13 +344,13 @@ func (s *Service) Options() serpent.OptionSet {
 			Value:       serpent.URLOf(s.adsTxtURL),
 		},
 		{
-			Name:        "AdSense Client ID",
-			Description: "Optional public AdSense publisher client ID (ca-pub-...). Enables verification metadata and placement-controlled serving when ads.txt and the tenant opt-in are also configured.",
+			Name:        "NitroPay Site ID",
+			Description: "Optional public NitroPay site ID. Enables placement-controlled serving when ads.txt and the tenant opt-in are also configured.",
 			Required:    false,
-			Flag:        "adsense-client-id",
-			Env:         "CHRONICLE_ADSENSE_CLIENT_ID",
+			Flag:        "nitropay-site-id",
+			Env:         "CHRONICLE_NITROPAY_SITE_ID",
 			Default:     "",
-			Value:       serpent.StringOf(&s.adsenseClientID),
+			Value:       serpent.StringOf(&s.nitroPaySiteID),
 		},
 		{
 			Name:        "Google Analytics Measurement ID",

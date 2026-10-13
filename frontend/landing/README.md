@@ -30,25 +30,24 @@ make landing
 
 Deployed to GitHub Pages via `.github/workflows/deploy-landing.yml` on push to `main`.
 
-### ads.txt
+### NitroPay and ads.txt
 
-The landing build publishes `public/ads.txt` as `https://chronicleclassic.com/ads.txt`. Advertising authorization stays scoped to the landing site and is not embedded in Chronicle application deployments.
-
-The landing build adds AdSense account verification metadata when its public publisher ID is configured:
+The landing site loads NitroPay and renders its home-page placement when a public site ID is configured:
 
 ```bash
-CHRONICLE_ADSENSE_CLIENT_ID=ca-pub-8208259743822818 pnpm build
+CHRONICLE_NITROPAY_SITE_ID=12345 pnpm build
 ```
 
-The deployment workflow sets this public publisher ID for the official landing site. Local and self-hosted builds can provide their own value through `CHRONICLE_ADSENSE_CLIENT_ID`. This metadata does not load the AdSense script or request ads; live serving remains placement-controlled.
+The deployment workflow reads the `NITROPAY_SITE_ID` GitHub Actions variable, downloads NitroPay's current managed ads.txt file, and publishes it as `https://chronicleclassic.com/ads.txt`. If the variable is unset, the build contains neither NitroPay nor ads.txt.
 
-Official Chronicle instances can share that copy by setting:
+Official Chronicle instances can share that authorization and enable NitroPay for tenants whose **Enable Ads** toggle is on:
 
 ```bash
+CHRONICLE_NITROPAY_SITE_ID=12345
 CHRONICLE_ADS_TXT_URL=https://chronicleclassic.com/ads.txt
 ```
 
-Chronicle returns `404 Not Found` for `/ads.txt` when the option is unset, so self-hosted deployments do not advertise Chronicle's seller account by default.
+Chronicle returns `404 Not Found` for `/ads.txt` when the URL is unset. Self-hosted deployments therefore do not advertise Chronicle's seller account or load NitroPay by default.
 
 ### Google Analytics
 

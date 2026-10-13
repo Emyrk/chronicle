@@ -196,11 +196,11 @@ type SiteConfig struct {
 	// and client-side uploads should be hidden from the UI.
 	ClientUploadsDisabled bool `json:"client_uploads_disabled"`
 	// AdsEnabled is true only when the resolved tenant opted into ads and the
-	// deployment configured both ads.txt and an AdSense client ID.
+	// deployment configured both ads.txt and a NitroPay site ID.
 	AdsEnabled bool `json:"ads_enabled"`
-	// AdSenseClientID is the public publisher ID used by the shared ad runtime.
+	// NitroPaySiteID is the public site identifier used by the shared ad runtime.
 	// It is omitted unless AdsEnabled is true.
-	AdSenseClientID string `json:"adsense_client_id,omitempty"`
+	NitroPaySiteID string `json:"nitropay_site_id,omitempty"`
 	// Tenant is the resolved tenant for the current request (based on subdomain).
 	// Nil when accessed from the root domain.
 	Tenant *Tenant `json:"tenant"`

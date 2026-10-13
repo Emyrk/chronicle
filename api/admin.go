@@ -786,7 +786,20 @@ func tenantAdsEnabled(deploymentEnabled bool, tenant *database.Tenant) bool {
 }
 
 func (a *API) adsDeploymentEnabled() bool {
-	return a.Opts.AdsTxtURL != nil && a.Opts.AdSenseClientID != ""
+	return a.Opts.AdsTxtURL != nil && a.Opts.NitroPaySiteID != ""
+}
+
+func (a *API) adsEnabledForRequest(r *http.Request) bool {
+	if !a.adsDeploymentEnabled() || a.Opts.Tenant == nil {
+		return false
+	}
+
+	slug := a.Opts.Tenant.ExtractSlug(r.Host)
+	if slug == "" {
+		return false
+	}
+	tenant, ok := a.Opts.Tenant.GetTenantBySlug(slug)
+	return ok && tenant.AdsEnabled
 }
 
 func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
@@ -806,7 +819,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 		AdsEnabled:            adsEnabled,
 	}
 	if adsEnabled {
-		resp.AdSenseClientID = a.Opts.AdSenseClientID
+		resp.NitroPaySiteID = a.Opts.NitroPaySiteID
 	}
 	if t != nil {
 		tenant := chroniclesdk.TenantFromDB(*t)

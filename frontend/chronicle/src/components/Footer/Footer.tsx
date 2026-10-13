@@ -210,6 +210,12 @@ export function Footer() {
                 Disclaimer
               </Link>
             </div>
+            {siteConfig?.ads_enabled && (
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                <span id="ncmp-consent-link" className="cursor-pointer hover:text-foreground transition-colors" />
+                <span data-ccpa-link="1" className="cursor-pointer hover:text-foreground transition-colors" />
+              </div>
+            )}
             <p className="text-xs mt-2">
               {gitTag} ({gitCommit}) • Built {buildTime}
             </p>
