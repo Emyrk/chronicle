@@ -1586,17 +1586,20 @@ export interface DatasetImportSummary {
   has_talents: boolean;
 }
 
-export function useDatasetImportSummary(datasetId: string | undefined) {
+export interface DatasetImportCount {
+  dataset_id: string;
+  data_type: keyof DatasetImportSummary;
+  data_count: number;
+}
+
+export function useDatasetImportSummaries() {
   return useQuery({
-    queryKey: ["datasets", datasetId, "import-summary"],
+    queryKey: ["datasets", "import-summaries"],
     queryFn: async () => {
-      const response = await fetch(
-        `/api/v1/admin/datasets/${datasetId}/import-summary`,
-      );
-      if (!response.ok) throw new Error("Failed to fetch import summary");
-      return response.json() as Promise<DatasetImportSummary>;
+      const response = await fetch("/api/v1/admin/datasets/import-summaries");
+      if (!response.ok) throw new Error("Failed to fetch import summaries");
+      return response.json() as Promise<DatasetImportCount[]>;
     },
-    enabled: !!datasetId,
     staleTime: 30 * 1000,
   });
 }

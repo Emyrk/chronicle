@@ -590,6 +590,9 @@ type sqlcQuerier interface {
 	ListConsumableEffectPoliciesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableEffectPoliciesByDatasetRow, error)
 	ListConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumablesByDatasetRow, error)
 	ListCooldownSpellsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListCooldownSpellsByDatasetRow, error)
+	// Returns imported row counts for every dataset in one request. Each source
+	// table is scanned once, avoiding the dataset page's previous N+1 count queries.
+	ListDatasetImportCounts(ctx context.Context) ([]ListDatasetImportCountsRow, error)
 	ListDatasets(ctx context.Context) ([]Dataset, error)
 	ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error)
 	ListDiscordAnnouncementSources(ctx context.Context, announcementID uuid.UUID) ([]GuildDiscordLogAnnouncementSource, error)
