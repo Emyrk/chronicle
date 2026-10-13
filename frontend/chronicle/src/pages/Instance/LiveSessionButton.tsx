@@ -1,6 +1,7 @@
 import { Loader2, Radio, Unplug, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,10 +80,17 @@ export function LiveSessionButton({ instanceId, canCreate }: { instanceId: strin
 
   if (session.status === "error") {
     return (
-      <Button variant="outline" size="sm" className="gap-1.5 text-destructive" onClick={session.leave}>
-        <Unplug className="h-4 w-4" />
-        Live error
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-1.5 text-destructive" onClick={session.leave}>
+            <Unplug className="h-4 w-4" />
+            Live error
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-80">
+          {session.error ?? "The live session connection failed."}
+        </TooltipContent>
+      </Tooltip>
     );
   }
 
