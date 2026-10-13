@@ -346,7 +346,8 @@ func buildLegacyMapManifest(
 		}
 	}
 
-	manifest := wowMapManifest{Format: wowMapManifestFormat, Target: target}
+	// Legacy datasets retain v1 paths until their own map assets are migrated.
+	manifest := wowMapManifest{Format: "chronicle-wow-map-art-v1", Target: target}
 	sourcePaths := make(map[int32]string)
 	for _, row := range areas {
 		if _, isInstance := instanceMapIDs[row.MapID]; isInstance {

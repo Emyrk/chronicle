@@ -28,12 +28,24 @@ func TestClearRenderedWowMapInstances(t *testing.T) {
 	t.Parallel()
 
 	manifest := wowMapManifest{Instances: []wowMapInstance{
-		{MapID: 43, Rendered: &wowMapRenderedInstance{Path: "renders/43.png"}},
-		{MapID: 2998, Rendered: &wowMapRenderedInstance{Path: "renders/2998.png"}},
+		{MapID: 43, Rendered: &wowMapRenderedInstance{Path: "render/43.png"}, Styled: &wowMapRenderedInstance{Path: "render-styled/43.jpeg"}},
+		{MapID: 2998, Rendered: &wowMapRenderedInstance{Path: "render/2998.png"}},
 	}}
 	clearRenderedWowMapInstances(&manifest)
 	require.Nil(t, manifest.Instances[0].Rendered)
+	require.Nil(t, manifest.Instances[0].Styled)
 	require.Nil(t, manifest.Instances[1].Rendered)
+}
+
+func TestStyledWowMapInstanceUsesRawBounds(t *testing.T) {
+	t.Parallel()
+	raw := &wowMapRenderedInstance{Bounds: wowMapFloorBounds{MinX: -421, MaxX: 220, MinY: -396, MaxY: 565}}
+	styled := styledWowMapInstance(43, raw)
+	require.Equal(t, "render-styled/43-wailing-caverns-v2.jpeg", styled.Path)
+	require.Equal(t, int32(1600), styled.Width)
+	require.Equal(t, int32(1066), styled.Height)
+	require.Equal(t, raw.Bounds, styled.Bounds)
+	require.Nil(t, styledWowMapInstance(2998, raw))
 }
 
 func TestRenderedWowMapAssetPathIncludesContentDigest(t *testing.T) {
@@ -41,7 +53,7 @@ func TestRenderedWowMapAssetPathIncludesContentDigest(t *testing.T) {
 
 	first := renderedWowMapAssetPath(43, "1.60.1.70338", []byte("first render"))
 	second := renderedWowMapAssetPath(43, "1.60.1.70338", []byte("second render"))
-	require.Regexp(t, `^renders/43-1\.60\.1\.70338-[0-9a-f]{12}\.png$`, first)
+	require.Regexp(t, `^render/43-1\.60\.1\.70338-[0-9a-f]{12}\.png$`, first)
 	require.NotEqual(t, first, second)
 }
 

@@ -113,13 +113,15 @@ The output layout is:
 ```text
 frontend/imagecache/forever/maps/
 ├── manifest.json
-├── renders/
+├── original/
+│   └── <FileDataID>.webp
+├── render/
 │   └── <MapID>-<build>-<content-digest>.png
-└── tiles/
-    └── <FileDataID>.webp
+└── render-styled/
+    └── 43-wailing-caverns-v2.jpeg  # separately published from source control
 ```
 
-`manifest.json` uses the `chronicle-wow-map-art-v1` format. It records the product and build, map hierarchy, phase-specific artwork, explored-area overlays, available dungeon and raid floors, layer and tile dimensions, and the raw `UiMapAssignment` `Region`, `UiMin`, and `UiMax` arrays needed to convert world coordinates into UI coordinates. The arrays are intentionally preserved in DB2 order rather than assigning inferred axis names. Instance floor artwork is included only when the client listfile has a complete canvas. An instance's optional `rendered` object independently advertises a generated geometry asset, its source, dimensions, ordinary world-X/world-Y bounds, and triangle count. Consumers can therefore prefer coordinate-faithful geometry while still presenting Blizzard artwork when available.
+`manifest.json` uses the `chronicle-wow-map-art-v2` format. It records the product and build, map hierarchy, phase-specific artwork, explored-area overlays, available dungeon and raid floors, layer and tile dimensions, and the raw `UiMapAssignment` `Region`, `UiMin`, and `UiMax` arrays needed to convert world coordinates into UI coordinates. The arrays are intentionally preserved in DB2 order rather than assigning inferred axis names. Instance floor artwork is included only when the client listfile has a complete canvas. An instance's optional `rendered` object independently advertises a generated geometry asset, its source, dimensions, ordinary world-X/world-Y bounds, and triangle count. The optional `styled` object advertises a hand-authored Wailing Caverns JPEG using the raw render's bounds. Consumers prefer it for route overviews, while still offering the raw geometry and Blizzard artwork.
 
 The generated-map stage invokes the checked-in Rust renderer through Cargo, so the publishing host needs a current Rust toolchain in addition to the existing `wowdata`, image-conversion, and R2 tools.
 
@@ -129,7 +131,7 @@ To regenerate only the Wailing Caverns render using the existing local manifest,
 make maps/forever-render
 ```
 
-This updates the files under `frontend/imagecache/forever/maps/renders/` and the corresponding `instances[].rendered` manifest entries. The manifest must already exist from an earlier extraction.
+This updates the files under `frontend/imagecache/forever/maps/render/` and the corresponding `instances[].rendered` manifest entries. The manifest must already exist from an earlier extraction.
 
 To regenerate that instance render and publish only its PNG plus the updated manifest:
 
@@ -139,13 +141,21 @@ make maps/forever-render-upload
 
 This skips extraction and upload of the Blizzard artwork tiles.
 
-To extract and upload the tiles and manifest to Cloudflare R2:
+The hand-authored JPEG is tracked at `frontend/imagecache/styled-maps/43-wailing-caverns-v2.jpeg`. Upload it independently with:
 
 ```bash
-make maps
+make maps/forever-styled-upload
 ```
 
-This publishes the manifest at `https://icons.chronicleclassic.com/forever/maps/manifest.json`, art tiles under `https://icons.chronicleclassic.com/forever/maps/tiles/`, and generated maps under `https://icons.chronicleclassic.com/forever/maps/renders/`. The `/technical/maps` page discovers both map kinds from the selected dataset's configured icon base URL. Tile and rendered-map responses are immutable for one year; the manifest uses a one-hour cache so a newly published build can become visible without renaming the base URL. Set `WOWDATA_BUILD`, `WOWDATA_BIN`, or `WOWDATA_CACHE` to override their defaults. `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH` override the upload destination.
+**Breaking map URL migration:** `v2` moves `tiles/` to `original/` and `renders/` to `render/`. Do not delete the old R2 objects until the site has deployed support for the v2 manifest. Publish the styled image first, then run `WOWDATA_MAP_REUSE_MANIFEST= SERVER=forever make maps` (or `WOWDATA_MAP_REUSE_MANIFEST= make maps/forever`) to export and publish all original and raw-render assets under the new paths. A v1 reuse manifest is rejected, so the full import must download tiles rather than pointing at the old URLs. Uploading the new manifest is the final step of the generated-map upload; verify every path in it returns 200 before removing the old objects. The styled JPEG is intentionally not part of the generated upload, so re-importing cannot overwrite it.
+
+To extract and upload the Forever tiles and manifest to Cloudflare R2 (plain `make maps` uses the default server, not necessarily Forever):
+
+```bash
+SERVER=forever make maps
+```
+
+This publishes the manifest at `https://icons.chronicleclassic.com/forever/maps/manifest.json`, art tiles under `https://icons.chronicleclassic.com/forever/maps/original/`, generated maps under `https://icons.chronicleclassic.com/forever/maps/render/`, and separately published styled maps under `https://icons.chronicleclassic.com/forever/maps/render-styled/`. The `/technical/maps` page discovers both map kinds from the selected dataset's configured icon base URL. Tile and rendered-map responses are immutable for one year; the manifest uses a one-hour cache so a newly published build can become visible without renaming the base URL. Set `WOWDATA_BUILD`, `WOWDATA_BIN`, or `WOWDATA_CACHE` to override their defaults. `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH` override the upload destination.
 
 ## Extract loading screens
 

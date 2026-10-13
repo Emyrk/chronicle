@@ -22,7 +22,7 @@ import (
 	"github.com/coder/serpent"
 )
 
-const wowMapManifestFormat = "chronicle-wow-map-art-v1"
+const wowMapManifestFormat = "chronicle-wow-map-art-v2"
 
 type wowMapTarget struct {
 	Product string `json:"product"`
@@ -84,6 +84,7 @@ type wowMapInstance struct {
 	Directory    string                  `json:"directory"`
 	Floors       []wowMapInstanceFloor   `json:"floors"`
 	Rendered     *wowMapRenderedInstance `json:"rendered,omitempty"`
+	Styled       *wowMapRenderedInstance `json:"styled,omitempty"`
 }
 
 type wowMapRenderedInstance struct {
@@ -359,7 +360,7 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(opts.OutDir, "tiles"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(opts.OutDir, "original"), 0o755); err != nil {
 		return fmt.Errorf("create map output directory: %w", err)
 	}
 	if !opts.MetadataOnly {
@@ -376,7 +377,7 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 		var exportIDs []int32
 		reused := 0
 		for _, fileDataID := range fileDataIDs {
-			output := filepath.Join(opts.OutDir, "tiles", fmt.Sprintf("%d.webp", fileDataID))
+			output := filepath.Join(opts.OutDir, "original", fmt.Sprintf("%d.webp", fileDataID))
 			if info, statErr := os.Stat(output); statErr == nil && info.Size() > 0 {
 				continue
 			}
@@ -575,7 +576,7 @@ func exportWowdataTextures(
 				continue
 			}
 
-			output := filepath.Join(opts.OutDir, "tiles", fmt.Sprintf("%d.webp", fileDataID))
+			output := filepath.Join(opts.OutDir, "original", fmt.Sprintf("%d.webp", fileDataID))
 			var commandStderr bytes.Buffer
 			err := exportWowdataTexture(ctx, &commandStderr, opts, fileDataID, output)
 			if commandStderr.Len() > 0 {
@@ -691,7 +692,7 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 		key := [2]int32{tile.UiMapArtID, tile.LayerIndex}
 		tilesByArtAndLayer[key] = append(tilesByArtAndLayer[key], wowMapTile{
 			Row: tile.RowIndex, Column: tile.ColIndex, FileDataID: tile.FileDataID,
-			Path: fmt.Sprintf("tiles/%d.webp", tile.FileDataID),
+			Path: fmt.Sprintf("original/%d.webp", tile.FileDataID),
 		})
 	}
 	for key := range tilesByArtAndLayer {
@@ -713,7 +714,7 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 		}
 		overlayTilesByID[tile.WorldMapOverlayID] = append(overlayTilesByID[tile.WorldMapOverlayID], wowMapTile{
 			Row: tile.RowIndex, Column: tile.ColIndex, FileDataID: tile.FileDataID,
-			Path: fmt.Sprintf("tiles/%d.webp", tile.FileDataID),
+			Path: fmt.Sprintf("original/%d.webp", tile.FileDataID),
 		})
 	}
 	for id := range overlayTilesByID {
@@ -962,7 +963,7 @@ func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstan
 			}
 			asset.Floors[floor][tileIndex] = wowMapTile{
 				Row: (tileIndex - 1) / 4, Column: (tileIndex - 1) % 4,
-				FileDataID: file.FileDataID, Path: fmt.Sprintf("tiles/%d.webp", file.FileDataID),
+				FileDataID: file.FileDataID, Path: fmt.Sprintf("original/%d.webp", file.FileDataID),
 			}
 			continue
 		}
@@ -978,7 +979,7 @@ func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstan
 			minimapAssets[key] = asset
 		}
 		asset.Tiles[[2]int32{column, row}] = wowMapTile{
-			FileDataID: file.FileDataID, Path: fmt.Sprintf("tiles/%d.webp", file.FileDataID),
+			FileDataID: file.FileDataID, Path: fmt.Sprintf("original/%d.webp", file.FileDataID),
 		}
 	}
 

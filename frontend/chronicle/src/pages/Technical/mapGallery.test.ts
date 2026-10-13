@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isSupportedMapManifestFormat,
   mapAssetUrl,
   mapGalleryItems,
   mapManifestUrl,
@@ -19,16 +20,24 @@ const layer: WowMapLayer = {
   maxScale: 2,
   additionalZoomSteps: 0,
   tiles: [
-    { row: 1, column: 2, fileDataID: 30, path: "tiles/30.webp" },
+    { row: 1, column: 2, fileDataID: 30, path: "original/30.webp" },
   ],
 };
+
+describe("map manifest versions", () => {
+  it("accepts v1 legacy manifests and v2 Forever manifests", () => {
+    expect(isSupportedMapManifestFormat("chronicle-wow-map-art-v1")).toBe(true);
+    expect(isSupportedMapManifestFormat("chronicle-wow-map-art-v2")).toBe(true);
+    expect(isSupportedMapManifestFormat("unknown")).toBe(false);
+  });
+});
 
 describe("map gallery URLs", () => {
   it("builds manifest and tile URLs from the dataset icon base URL", () => {
     expect(mapManifestUrl("https://icons.example.test/forever/"))
       .toBe("https://icons.example.test/forever/maps/manifest.json");
-    expect(mapAssetUrl("https://icons.example.test/forever/", "/tiles/30.webp"))
-      .toBe("https://icons.example.test/forever/maps/tiles/30.webp");
+    expect(mapAssetUrl("https://icons.example.test/forever/", "/original/30.webp"))
+      .toBe("https://icons.example.test/forever/maps/original/30.webp");
   });
 });
 
@@ -50,7 +59,7 @@ describe("map gallery rendering model", () => {
       textureWidth: 300,
       textureHeight: 200,
       tiles: [],
-    }, { row: 0, column: 1, fileDataID: 31, path: "tiles/31.webp" })).toEqual({
+    }, { row: 0, column: 1, fileDataID: 31, path: "original/31.webp" })).toEqual({
       left: "25.6%",
       top: "0%",
       width: "25.6%",
@@ -60,7 +69,7 @@ describe("map gallery rendering model", () => {
 
   it("flattens renderable art layers in map-name order", () => {
     const manifest: WowMapManifest = {
-      format: "chronicle-wow-map-art-v1",
+      format: "chronicle-wow-map-art-v2",
       target: { product: "wow_classic_beta", build: "1.60.1.70205", region: "us", locale: "enUS" },
       maps: [
         {
@@ -97,12 +106,19 @@ describe("map gallery rendering model", () => {
         instanceType: 1,
         directory: "blackrockdepths",
         rendered: {
-          path: "renders/230-build.png",
+          path: "render/230-build.png",
           width: 1200,
           height: 800,
           source: "wmo-geometry",
           bounds: { minX: -10, maxX: 20, minY: -30, maxY: 40 },
           triangles: 1234,
+        },
+        styled: {
+          path: "render-styled/230-v1.jpeg",
+          width: 1600,
+          height: 1066,
+          source: "hand-styled",
+          bounds: { minX: -10, maxX: 20, minY: -30, maxY: 40 },
         },
         floors: [{
           floor: 1,
@@ -110,7 +126,7 @@ describe("map gallery rendering model", () => {
           height: 668,
           tileWidth: 256,
           tileHeight: 256,
-          tiles: [{ row: 0, column: 0, fileDataID: 40, path: "tiles/40.webp" }],
+          tiles: [{ row: 0, column: 0, fileDataID: 40, path: "original/40.webp" }],
         }],
       }],
     };
@@ -120,6 +136,7 @@ describe("map gallery rendering model", () => {
     expect(items.map((item) => item.key)).toEqual([
       "instance-230-1",
       "rendered-230",
+      "styled-230",
       "zone-1411-0-2169-0",
       "zone-1411-1-2170-1",
       "zone-1412-0-1200-0",

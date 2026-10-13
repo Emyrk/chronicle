@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import {
   mapManifestUrl,
-  WOW_MAP_MANIFEST_FORMAT,
+  isSupportedMapManifestFormat,
   type WowMapInstanceFloor,
   type WowMapLayer,
   type WowMapManifest,
@@ -66,7 +66,7 @@ function useMapManifest(iconBaseUrl: string | undefined) {
       const response = await fetch(mapManifestUrl(iconBaseUrl!));
       if (!response.ok) throw new Error(`Map manifest request failed with ${response.status}`);
       const manifest = await response.json() as WowMapManifest;
-      if (manifest.format !== WOW_MAP_MANIFEST_FORMAT) {
+      if (!isSupportedMapManifestFormat(manifest.format)) {
         throw new Error(`Unsupported map manifest format: ${manifest.format || "missing"}`);
       }
       return manifest;

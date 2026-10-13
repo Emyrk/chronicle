@@ -1,6 +1,11 @@
 import type { CSSProperties } from "react";
 
-export const WOW_MAP_MANIFEST_FORMAT = "chronicle-wow-map-art-v1";
+export const WOW_MAP_MANIFEST_FORMAT = "chronicle-wow-map-art-v2";
+
+// Legacy datasets still publish v1 until their extractors migrate.
+export function isSupportedMapManifestFormat(format: string): boolean {
+  return format === WOW_MAP_MANIFEST_FORMAT || format === "chronicle-wow-map-art-v1";
+}
 
 export interface WowMapManifest {
   format: string;
@@ -58,6 +63,7 @@ export interface WowMapInstance {
   directory: string;
   floors: WowMapInstanceFloor[];
   rendered?: WowMapRenderedInstance;
+  styled?: WowMapRenderedInstance;
 }
 
 export interface WowMapRenderedInstance {
@@ -121,6 +127,12 @@ export type MapGalleryItem =
   }
   | {
     kind: "rendered";
+    key: string;
+    instance: WowMapInstance;
+    rendered: WowMapRenderedInstance;
+  }
+  | {
+    kind: "styled";
     key: string;
     instance: WowMapInstance;
     rendered: WowMapRenderedInstance;
@@ -191,6 +203,14 @@ export function mapGalleryItems(manifest: WowMapManifest): MapGalleryItem[] {
           key: `rendered-${instance.mapID}`,
           instance,
           rendered: instance.rendered,
+        }]
+      : []),
+    ...(instance.styled && instance.styled.width > 0 && instance.styled.height > 0
+      ? [{
+          kind: "styled" as const,
+          key: `styled-${instance.mapID}`,
+          instance,
+          rendered: instance.styled,
         }]
       : []),
   ]);

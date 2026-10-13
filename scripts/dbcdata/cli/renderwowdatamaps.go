@@ -101,7 +101,7 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 	}
 	clearRenderedWowMapInstances(&manifest)
 	outDir := filepath.Dir(opts.ManifestPath)
-	if err := os.MkdirAll(filepath.Join(outDir, "renders"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(outDir, "render"), 0o755); err != nil {
 		return fmt.Errorf("create rendered map directory: %w", err)
 	}
 
@@ -124,6 +124,7 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 		for index := range manifest.Instances {
 			if manifest.Instances[index].MapID == spec.MapID {
 				manifest.Instances[index].Rendered = rendered
+				manifest.Instances[index].Styled = styledWowMapInstance(spec.MapID, rendered)
 				found = true
 				break
 			}
@@ -142,6 +143,19 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 func clearRenderedWowMapInstances(manifest *wowMapManifest) {
 	for index := range manifest.Instances {
 		manifest.Instances[index].Rendered = nil
+		manifest.Instances[index].Styled = nil
+	}
+}
+
+// The hand-authored image uses the raw geometry projection and is published independently.
+func styledWowMapInstance(mapID int32, rendered *wowMapRenderedInstance) *wowMapRenderedInstance {
+	if mapID != 43 || rendered == nil {
+		return nil
+	}
+	return &wowMapRenderedInstance{
+		Path:  "render-styled/43-wailing-caverns-v2.jpeg",
+		Width: 1600, Height: 1066, Source: "hand-styled",
+		Bounds: rendered.Bounds,
 	}
 }
 
@@ -149,7 +163,7 @@ func renderedWowMapAssetPath(mapID int32, build string, data []byte) string {
 	buildName := regexp.MustCompile(`[^A-Za-z0-9._-]+`).ReplaceAllString(build, "-")
 	digest := sha256.Sum256(data)
 	name := fmt.Sprintf("%d-%s-%x.png", mapID, buildName, digest[:6])
-	return filepath.ToSlash(filepath.Join("renders", name))
+	return filepath.ToSlash(filepath.Join("render", name))
 }
 
 func renderWowdataMap(

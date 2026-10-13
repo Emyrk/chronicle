@@ -7,7 +7,7 @@ import {
   mapManifestUrl,
   overlayTilePlacement,
   tilePlacement,
-  WOW_MAP_MANIFEST_FORMAT,
+  isSupportedMapManifestFormat,
   type WowMapInstanceFloor,
   type WowMapLayer,
   type WowMapRenderedInstance,
@@ -43,7 +43,7 @@ function useMapManifest(iconBaseUrl: string | undefined) {
       const response = await fetch(mapManifestUrl(iconBaseUrl!));
       if (!response.ok) throw new Error(`Map manifest request failed with ${response.status}`);
       const manifest = await response.json() as WowMapManifest;
-      if (manifest.format !== WOW_MAP_MANIFEST_FORMAT) {
+      if (!isSupportedMapManifestFormat(manifest.format)) {
         throw new Error(`Unsupported map manifest format: ${manifest.format || "missing"}`);
       }
       return manifest;
@@ -355,7 +355,7 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
     ? resolveMapArtwork(manifestQuery.data, artworkMapId, representativeSample, props.context.instance.name)
     : null;
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
-  const [mapSource, setMapSource] = useState<"rendered" | "art">("rendered");
+  const [mapSource, setMapSource] = useState<"styled" | "rendered" | "art">("styled");
 
   const zoneSelection = artwork?.kind === "zone"
     ? artwork.map.art?.flatMap((art) => art.layers.map((layer) => ({ art, layer })))
@@ -369,9 +369,10 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
   const selectedFloor = artwork?.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
-  const renderedMap = availableRenderedMap && (mapSource === "rendered" || !selectedFloor)
-    ? availableRenderedMap
-    : undefined;
+  const styledMap = availableRenderedMap && artwork?.kind === "instance" ? artwork.instance.styled : undefined;
+  const renderedMap = mapSource === "art" && selectedFloor
+    ? undefined
+    : mapSource === "styled" && styledMap ? styledMap : availableRenderedMap;
   const canvas = artwork?.kind === "zone" ? zoneSelection?.layer : renderedMap ?? selectedFloor;
   const dungeonBounds = artwork?.kind === "instance" ? renderedMap?.bounds ?? selectedFloor?.bounds ?? null : null;
 
@@ -487,15 +488,16 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
           <span className="ml-1.5 font-mono">world {displayedMapId}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {availableRenderedMap && selectedFloor && (
+          {availableRenderedMap && (
             <select
               aria-label="Map source"
-              value={renderedMap ? "rendered" : "art"}
-              onChange={(event) => setMapSource(event.target.value as "rendered" | "art")}
+              value={renderedMap === styledMap && styledMap ? "styled" : renderedMap ? "rendered" : "art"}
+              onChange={(event) => setMapSource(event.target.value as "styled" | "rendered" | "art")}
               className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground [color-scheme:dark]"
             >
-              <option value="rendered">Rendered</option>
-              <option value="art">Artwork</option>
+              {styledMap && <option value="styled">Stylized</option>}
+              <option value="rendered">Raw render</option>
+              {selectedFloor && <option value="art">Original artwork</option>}
             </select>
           )}
           <span>{Math.round(mapScale * camera.scale * 100)}%</span>
