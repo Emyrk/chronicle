@@ -114,7 +114,7 @@ The output layout is:
 frontend/imagecache/forever/maps/
 ├── manifest.json
 ├── renders/
-│   └── <MapID>-<build>.png
+│   └── <MapID>-<build>-<content-digest>.png
 └── tiles/
     └── <FileDataID>.webp
 ```

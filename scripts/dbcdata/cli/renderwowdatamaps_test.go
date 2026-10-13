@@ -24,6 +24,15 @@ func wowTestChunk(tag string, payload []byte) []byte {
 	return data
 }
 
+func TestRenderedWowMapAssetPathIncludesContentDigest(t *testing.T) {
+	t.Parallel()
+
+	first := renderedWowMapAssetPath(43, "1.60.1.70338", []byte("first render"))
+	second := renderedWowMapAssetPath(43, "1.60.1.70338", []byte("second render"))
+	require.Regexp(t, `^renders/43-1\.60\.1\.70338-[0-9a-f]{12}\.png$`, first)
+	require.NotEqual(t, first, second)
+}
+
 func TestPrefixedLineWriterBuffersPartialLines(t *testing.T) {
 	t.Parallel()
 
