@@ -13,29 +13,54 @@ fi
 R2_REMOTE="${R2_REMOTE:-r2}"
 R2_BUCKET="${R2_BUCKET:-icons}"
 R2_PATH="${R2_PATH:-forever/maps}"
+MAPS_UPLOAD_MODE="${MAPS_UPLOAD_MODE:-all}"
 
-if [[ ! -f "${MAPS_DIR}/manifest.json" || ! -d "${MAPS_DIR}/tiles" ]]; then
-  echo "Error: map export must contain manifest.json and tiles/: ${MAPS_DIR}" >&2
+if [[ ! -f "${MAPS_DIR}/manifest.json" ]]; then
+  echo "Error: map export must contain manifest.json: ${MAPS_DIR}" >&2
   exit 1
 fi
+case "${MAPS_UPLOAD_MODE}" in
+  all)
+    if [[ ! -d "${MAPS_DIR}/tiles" ]]; then
+      echo "Error: full map upload requires tiles/: ${MAPS_DIR}" >&2
+      exit 1
+    fi
+    ;;
+  rendered)
+    if [[ ! -d "${MAPS_DIR}/renders" ]]; then
+      echo "Error: rendered map upload requires renders/: ${MAPS_DIR}" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "Error: MAPS_UPLOAD_MODE must be 'all' or 'rendered', got '${MAPS_UPLOAD_MODE}'" >&2
+    exit 1
+    ;;
+esac
 if ! command -v rclone >/dev/null 2>&1; then
   echo "Error: rclone not found. Install it first." >&2
   exit 1
 fi
 
-total="$(find "${MAPS_DIR}/tiles" -type f -name '*.webp' | wc -l)"
-echo "Uploading ${total} map tiles to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/tiles/"
-rclone copy "${MAPS_DIR}/tiles" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/tiles/" \
-  --include '*.webp' \
-  --header-upload "Cache-Control: public, max-age=31536000, immutable" \
-  --header-upload "Content-Type: image/webp" \
-  --transfers 32 \
-  --checkers 16 \
-  --progress \
-  --verbose
+if [[ "${MAPS_UPLOAD_MODE}" == "all" ]]; then
+  total="$(find "${MAPS_DIR}/tiles" -type f -name '*.webp' | wc -l)"
+  echo "Uploading ${total} map tiles to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/tiles/"
+  rclone copy "${MAPS_DIR}/tiles" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/tiles/" \
+    --include '*.webp' \
+    --header-upload "Cache-Control: public, max-age=31536000, immutable" \
+    --header-upload "Content-Type: image/webp" \
+    --transfers 32 \
+    --checkers 16 \
+    --progress \
+    --verbose
+fi
 
 if [[ -d "${MAPS_DIR}/renders" ]]; then
   rendered_total="$(find "${MAPS_DIR}/renders" -type f -name '*.png' | wc -l)"
+  if [[ "${MAPS_UPLOAD_MODE}" == "rendered" && "${rendered_total}" -eq 0 ]]; then
+    echo "Error: rendered map upload found no PNG files in ${MAPS_DIR}/renders" >&2
+    exit 1
+  fi
   echo "Uploading ${rendered_total} rendered maps to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/renders/"
   rclone copy "${MAPS_DIR}/renders" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/renders/" \
     --include '*.png' \

@@ -131,6 +131,14 @@ make maps/forever-render
 
 This updates the files under `frontend/imagecache/forever/maps/renders/` and the corresponding `instances[].rendered` manifest entries. The manifest must already exist from an earlier extraction.
 
+To regenerate those instance renders and publish only the PNGs plus the updated manifest:
+
+```bash
+make maps/forever-render-upload
+```
+
+This skips extraction and upload of the Blizzard artwork tiles.
+
 To extract and upload the tiles and manifest to Cloudflare R2:
 
 ```bash

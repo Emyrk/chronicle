@@ -284,6 +284,11 @@ endef
 maps/forever-render:
 	$(render-forever-maps)
 
+# Re-render and publish only generated instance maps plus the updated manifest.
+.PHONY: maps/forever-render-upload
+maps/forever-render-upload: maps/forever-render
+	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh)
+
 # The full publishing pipeline refreshes artwork before rendering instances.
 .PHONY: maps/forever-build
 maps/forever-build: maps/forever-extract
