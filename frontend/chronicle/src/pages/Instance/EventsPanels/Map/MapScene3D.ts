@@ -3,7 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mapAssetUrl, type WowMapLayer, type WowMapTile } from "@/pages/Technical/mapGallery";
 import { bossMiniSlug, bossMiniUrl } from "./bossMinis";
-import { FULL_MAP_VIEWPORT, healthBarColor, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
+import { FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   DEFAULT_EFFECT_OPTIONS,
   deriveActiveEffects,
@@ -234,6 +234,10 @@ export class MapScene3D {
   private groundKey = "";
   private aspect = 1;
   private viewport: MapViewport = FULL_MAP_VIEWPORT;
+  // A re-framing easing the camera from `from` to `this.viewport`.
+  private viewAnimation: { from: MapViewport; direction: THREE.Vector3; start: number; duration: number } | null = null;
+  // The camera's viewport when the user's current gesture began.
+  private gestureStart: MapViewport | null = null;
   private unitScale = 1;
   private frame = 0;
   private disposed = false;
@@ -295,11 +299,18 @@ export class MapScene3D {
 
   private readonly container: HTMLElement;
   private readonly onContextLost: () => void;
+  private readonly onUserViewport: (viewport: MapViewport) => void;
 
-  constructor(container: HTMLElement, onContextLost: () => void, onEffectHover: (hover: MapScene3DEffectHover | null) => void = () => {}) {
+  constructor(
+    container: HTMLElement,
+    onContextLost: () => void,
+    onEffectHover: (hover: MapScene3DEffectHover | null) => void = () => {},
+    onUserViewport: (viewport: MapViewport) => void = () => {},
+  ) {
     this.container = container;
     this.onContextLost = onContextLost;
     this.onEffectHover = onEffectHover;
+    this.onUserViewport = onUserViewport;
     // Throws when WebGL is unavailable; the caller falls back to 2D.
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -376,6 +387,8 @@ export class MapScene3D {
     this.controls.minDistance = 1;
     this.controls.maxDistance = 400;
     this.controls.addEventListener("change", this.handleControlsChange);
+    this.controls.addEventListener("start", this.handleControlsStart);
+    this.controls.addEventListener("end", this.handleControlsEnd);
 
     this.resizeObserver = new ResizeObserver(this.resize);
     this.resizeObserver.observe(container);
@@ -514,31 +527,64 @@ export class MapScene3D {
     this.requestRender();
   }
 
-  /** Frames `viewport` (artwork fractions) from the current viewing angle. */
-  setViewport(viewport: MapViewport) {
-    this.viewport = viewport;
+  /**
+   * Frames `viewport` (artwork fractions) from the current viewing angle,
+   * easing there over `durationMs` when it is above zero.
+   */
+  setViewport(viewport: MapViewport, durationMs = 0) {
     const offset = this.camera.position.clone().sub(this.controls.target);
-    this.applyViewport(offset.lengthSq() > 0 ? offset.normalize() : ANGLED_OFFSET.clone().normalize());
+    const direction = offset.lengthSq() > 0 ? offset.normalize() : ANGLED_OFFSET.clone().normalize();
+    const from = this.cameraViewport();
+    this.viewport = viewport;
+    if (durationMs > 0) {
+      this.viewAnimation = { from, direction, start: performance.now(), duration: durationMs };
+      this.requestRender();
+      return;
+    }
+    this.viewAnimation = null;
+    this.placeCamera(viewport, direction);
   }
 
   /** Re-frames the current viewport straight down (`topDown`) or angled. */
   resetCamera(topDown: boolean) {
-    this.applyViewport((topDown ? TOP_DOWN_OFFSET : ANGLED_OFFSET).clone().normalize());
+    this.viewAnimation = null;
+    this.placeCamera(this.viewport, (topDown ? TOP_DOWN_OFFSET : ANGLED_OFFSET).clone().normalize());
   }
 
   // The full map at zoom 1 sits at the default angled distance; zoom moves
   // the camera proportionally closer along `direction`.
-  private applyViewport(direction: THREE.Vector3) {
+  private placeCamera(viewport: MapViewport, direction: THREE.Vector3) {
     const { x, z } = mapPointToScene(
-      { leftPercent: this.viewport.centerX * 100, topPercent: this.viewport.centerY * 100 },
+      { leftPercent: viewport.centerX * 100, topPercent: viewport.centerY * 100 },
       this.aspect,
       GROUND_WIDTH,
     );
     this.controls.target.set(x, 0, z);
-    this.camera.position.copy(direction.multiplyScalar(this.baseDistance() / this.viewport.zoom)).add(this.controls.target);
+    this.camera.position.copy(direction).multiplyScalar(this.baseDistance() / viewport.zoom).add(this.controls.target);
     this.controls.update();
     this.updateUnitScale();
     this.requestRender();
+  }
+
+  // The inverse of placeCamera: the viewport the camera shows now.
+  private cameraViewport(): MapViewport {
+    const target = this.controls.target;
+    return {
+      centerX: target.x / GROUND_WIDTH + 0.5,
+      centerY: target.z / (GROUND_WIDTH * this.aspect) + 0.5,
+      zoom: this.baseDistance() / Math.max(1e-6, this.camera.position.distanceTo(target)),
+    };
+  }
+
+  // Steps a running re-framing; returns whether it needs another frame.
+  private updateViewAnimation(now: number): boolean {
+    const animation = this.viewAnimation;
+    if (!animation) return false;
+    const t = Math.min(1, Math.max(0, (now - animation.start) / animation.duration));
+    this.placeCamera(interpolateViewport(animation.from, this.viewport, 1 - (1 - t) ** 3), animation.direction.clone());
+    if (t < 1) return true;
+    this.viewAnimation = null;
+    return false;
   }
 
   private baseDistance(): number {
@@ -561,6 +607,8 @@ export class MapScene3D {
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.controls.removeEventListener("change", this.handleControlsChange);
+    this.controls.removeEventListener("start", this.handleControlsStart);
+    this.controls.removeEventListener("end", this.handleControlsEnd);
     this.controls.dispose();
     const canvas = this.renderer.domElement;
     canvas.removeEventListener("webglcontextlost", this.handleContextLost);
@@ -1346,6 +1394,24 @@ export class MapScene3D {
     this.requestRender();
   };
 
+  // The user took the camera: stop any re-framing in progress.
+  private readonly handleControlsStart = () => {
+    this.viewAnimation = null;
+    this.gestureStart = this.cameraViewport();
+  };
+
+  // The user panned or zoomed: remember and report where they left it. A
+  // click or a pure orbit leaves the framing as it was.
+  private readonly handleControlsEnd = () => {
+    const viewport = this.cameraViewport();
+    const start = this.gestureStart;
+    this.gestureStart = null;
+    if (start && Math.abs(viewport.centerX - start.centerX) < 1e-6 && Math.abs(viewport.centerY - start.centerY) < 1e-6
+      && Math.abs(viewport.zoom / start.zoom - 1) < 1e-6) return;
+    this.viewport = viewport;
+    this.onUserViewport(viewport);
+  };
+
   private readonly handleContextLost = (event: Event) => {
     event.preventDefault();
     this.onContextLost();
@@ -1369,7 +1435,8 @@ export class MapScene3D {
       if (this.disposed) return;
       // Only keeps a frame loop running while effects animate (playback);
       // otherwise rendering stays on demand.
-      const animating = this.updateEffects(now);
+      const reframing = this.updateViewAnimation(now);
+      const animating = this.updateEffects(now) || reframing;
       this.updateBars();
       this.updateEffectHover();
       this.renderer.render(this.scene, this.camera);

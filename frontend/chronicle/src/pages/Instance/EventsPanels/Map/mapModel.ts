@@ -321,6 +321,34 @@ export interface MapPointBounds {
 /** Units further than this from the focus centre (in world yards) are left out of the fit. */
 export const FOCUS_RADIUS_YARDS = 80;
 
+// The world point a fit centres on: the median of the boss samples (`fromFocus`)
+// or of every unit's samples when no boss is known.
+export function focusCentre(
+  positionsByUnit: Map<string, MapPositionSample[]>,
+  mapId: number,
+  focusGuids: ReadonlySet<string> = new Set(),
+): { sample: MapPositionSample; fromFocus: boolean } | null {
+  const all: MapPositionSample[] = [];
+  const focus: MapPositionSample[] = [];
+  for (const [guid, positions] of positionsByUnit) {
+    for (const sample of positions) {
+      if (sample.mapId !== mapId) continue;
+      all.push(sample);
+      if (focusGuids.has(guid)) focus.push(sample);
+    }
+  }
+  if (all.length === 0) return null;
+  const centreSamples = focus.length > 0 ? focus : all;
+  return {
+    sample: {
+      ...centreSamples[0],
+      x: median(centreSamples.map((sample) => sample.x)),
+      y: median(centreSamples.map((sample) => sample.y)),
+    },
+    fromFocus: focus.length > 0,
+  };
+}
+
 // Frames the encounter's whole unit track rather than the current frame, so
 // the view stays put during replay. The track is centred on the boss (or on
 // every unit when no boss is known) and clamped to `maxRadius` world yards
@@ -333,35 +361,54 @@ export function unitFocusBounds(
   focusGuids: ReadonlySet<string> = new Set(),
   maxRadius = FOCUS_RADIUS_YARDS,
 ): MapPointBounds | null {
-  const all: MapPositionSample[] = [];
-  const focus: MapPositionSample[] = [];
-  for (const [guid, positions] of positionsByUnit) {
-    for (const sample of positions) {
-      if (sample.mapId !== mapId) continue;
-      all.push(sample);
-      if (focusGuids.has(guid)) focus.push(sample);
-    }
-  }
-  if (all.length === 0) return null;
-  const centreSamples = focus.length > 0 ? focus : all;
-  const centreX = median(centreSamples.map((sample) => sample.x));
-  const centreY = median(centreSamples.map((sample) => sample.y));
+  const centre = focusCentre(positionsByUnit, mapId, focusGuids)?.sample;
+  if (!centre) return null;
 
   let bounds: MapPointBounds | null = null;
-  for (const sample of all) {
-    if (Math.hypot(sample.x - centreX, sample.y - centreY) > maxRadius) continue;
-    const point = project(sample);
-    if (!point) continue;
-    if (!bounds) {
-      bounds = { minLeft: point.leftPercent, maxLeft: point.leftPercent, minTop: point.topPercent, maxTop: point.topPercent };
-      continue;
+  for (const positions of positionsByUnit.values()) {
+    for (const sample of positions) {
+      if (sample.mapId !== mapId) continue;
+      if (Math.hypot(sample.x - centre.x, sample.y - centre.y) > maxRadius) continue;
+      const point = project(sample);
+      if (!point) continue;
+      if (!bounds) {
+        bounds = { minLeft: point.leftPercent, maxLeft: point.leftPercent, minTop: point.topPercent, maxTop: point.topPercent };
+        continue;
+      }
+      bounds.minLeft = Math.min(bounds.minLeft, point.leftPercent);
+      bounds.maxLeft = Math.max(bounds.maxLeft, point.leftPercent);
+      bounds.minTop = Math.min(bounds.minTop, point.topPercent);
+      bounds.maxTop = Math.max(bounds.maxTop, point.topPercent);
     }
-    bounds.minLeft = Math.min(bounds.minLeft, point.leftPercent);
-    bounds.maxLeft = Math.max(bounds.maxLeft, point.leftPercent);
-    bounds.minTop = Math.min(bounds.minTop, point.topPercent);
-    bounds.maxTop = Math.max(bounds.maxTop, point.topPercent);
   }
   return bounds;
+}
+
+/** Artwork percent per world yard along each artwork axis. */
+export interface MapProjectionScale {
+  left: number;
+  top: number;
+}
+
+// Both projections are axis-aligned (world Y moves left, world X moves top),
+// so one diagonal step measures both axes. Steps both ways so a point at the
+// artwork's edge, where projection clamps, still measures.
+export function projectionScale(
+  project: (sample: MapPositionSample) => MapPoint | null,
+  at: MapPositionSample,
+  stepYards = 10,
+): MapProjectionScale | null {
+  const origin = project(at);
+  if (!origin) return null;
+  let left = 0;
+  let top = 0;
+  for (const step of [stepYards, -stepYards]) {
+    const moved = project({ ...at, x: at.x + step, y: at.y + step });
+    if (!moved) continue;
+    left = Math.max(left, Math.abs(moved.leftPercent - origin.leftPercent) / stepYards);
+    top = Math.max(top, Math.abs(moved.topPercent - origin.topPercent) / stepYards);
+  }
+  return left > 0 && top > 0 ? { left, top } : null;
 }
 
 /**
@@ -389,17 +436,51 @@ export function clampViewport(viewport: MapViewport): MapViewport {
   };
 }
 
+/**
+ * The smallest span, in yards across the view's longer axis, that the auto
+ * fit frames before padding. A five-player fight packed into ~20 yd would
+ * otherwise fit at the maximum zoom, a few blurry tiles with the boss tiny in
+ * the frame. 45 yd keeps a melee pack, its ranged and some room around them
+ * in view (≈ 58 yd with padding); manual zoom is not limited by it.
+ */
+export const AUTO_FIT_MIN_SPAN_YARDS = 45;
+
+export interface AutoFitOptions {
+  /** Smallest visible span in yards across the longer axis, before padding; needs `scale`. */
+  minSpanYards?: number;
+  /** Artwork percent per yard around the fight (projectionScale). */
+  scale?: MapProjectionScale | null;
+  /** Move the centre towards this point (the boss) as far as keeps `bounds` in view. */
+  centre?: MapPoint | null;
+}
+
 // Frames `bounds` plus padding in a view with the artwork's aspect ratio,
 // where a zoom of z shows 1/z of the artwork's width and of its height.
-export function fitViewportToBounds(bounds: MapPointBounds): MapViewport {
+// The bias towards `centre` never zooms out: it only uses the slack the
+// minimum span or the other axis leaves, keeping half the padding as margin.
+export function autoFitViewport(bounds: MapPointBounds, options: AutoFitOptions = {}): MapViewport {
   const spanX = (bounds.maxLeft - bounds.minLeft) / 100;
   const spanY = (bounds.maxTop - bounds.minTop) / 100;
-  const span = Math.max(FIT_MIN_SPAN, Math.max(spanX, spanY) * (1 + FIT_PADDING * 2));
+  // The longer visible axis in yards is the one with fewer percent per yard.
+  const minSpan = options.scale && options.minSpanYards
+    ? options.minSpanYards * Math.min(options.scale.left, options.scale.top) / 100
+    : 0;
+  const span = Math.max(FIT_MIN_SPAN, Math.max(minSpan, spanX, spanY) * (1 + FIT_PADDING * 2));
+  const centreAlong = (min: number, max: number, target: number | undefined) => {
+    const middle = (min + max) / 200;
+    if (target === undefined) return middle;
+    const slack = Math.max(0, (span - ((max - min) / 100) * (1 + FIT_PADDING)) / 2);
+    return Math.max(middle - slack, Math.min(middle + slack, target / 100));
+  };
   return clampViewport({
-    centerX: (bounds.minLeft + bounds.maxLeft) / 200,
-    centerY: (bounds.minTop + bounds.maxTop) / 200,
+    centerX: centreAlong(bounds.minLeft, bounds.maxLeft, options.centre?.leftPercent),
+    centerY: centreAlong(bounds.minTop, bounds.maxTop, options.centre?.topPercent),
     zoom: 1 / span,
   });
+}
+
+export function fitViewportToBounds(bounds: MapPointBounds): MapViewport {
+  return autoFitViewport(bounds);
 }
 
 /** Zooms by `factor` keeping the artwork point under view fraction (`viewX`, `viewY`) fixed. */
@@ -412,6 +493,70 @@ export function zoomViewportAt(viewport: MapViewport, factor: number, viewX: num
     centerY: anchorY - (viewY - 0.5) / zoom,
     zoom,
   });
+}
+
+/**
+ * How the Map panel frames its view. `viewport` null follows the default
+ * (the auto fit for one boss encounter, else the full map); Fit and Reset pin
+ * one, and a manual zoom or pan stores where the user left it. Once `manual`
+ * is set nothing re-frames until the selection changes or Fit / Reset is
+ * pressed. The views apply the framing only when `revision` changes, so
+ * replay ticks, filter changes and the user's own reports never move the
+ * camera; a view that mounts (2D <-> 3D, or after a loading state) starts
+ * from it.
+ */
+export interface MapFraming {
+  selectionKey: string;
+  revision: number;
+  viewport: MapViewport | null;
+  manual: boolean;
+  /** The default framing last applied, to re-fit when it changes before any manual input. */
+  defaultKey: string;
+}
+
+export const INITIAL_MAP_FRAMING: MapFraming = { selectionKey: "", revision: 0, viewport: null, manual: false, defaultKey: "" };
+
+function viewportKey(viewport: MapViewport): string {
+  return `${viewport.centerX.toFixed(5)},${viewport.centerY.toFixed(5)},${viewport.zoom.toFixed(4)}`;
+}
+
+/** The framing for this render: unchanged (same object) unless the selection or an untouched default changed. */
+export function reconcileMapFraming(framing: MapFraming, selectionKey: string, defaultViewport: MapViewport): MapFraming {
+  const defaultKey = viewportKey(defaultViewport);
+  if (framing.selectionKey !== selectionKey) {
+    return { selectionKey, revision: framing.revision + 1, viewport: null, manual: false, defaultKey };
+  }
+  if (!framing.manual && framing.viewport === null && framing.defaultKey !== defaultKey) {
+    return { ...framing, revision: framing.revision + 1, defaultKey };
+  }
+  return framing;
+}
+
+/** Fit / Reset: apply `viewport` now and leave manual mode. */
+export function pinMapFraming(framing: MapFraming, viewport: MapViewport): MapFraming {
+  return { ...framing, revision: framing.revision + 1, viewport, manual: false };
+}
+
+/** The user zoomed or panned to `viewport`; the views already show it, so the revision stays. */
+export function manualMapFraming(framing: MapFraming, viewport: MapViewport): MapFraming {
+  return { ...framing, viewport, manual: true };
+}
+
+/** How long a re-framing animates; instant with prefers-reduced-motion. */
+export const VIEW_TRANSITION_MS = 250;
+
+export function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+}
+
+/** The viewport `t` (0..1) of the way from `from` to `to`; zoom moves geometrically so it feels even. */
+export function interpolateViewport(from: MapViewport, to: MapViewport, t: number): MapViewport {
+  if (t >= 1) return to;
+  return {
+    centerX: from.centerX + (to.centerX - from.centerX) * t,
+    centerY: from.centerY + (to.centerY - from.centerY) * t,
+    zoom: from.zoom * (to.zoom / from.zoom) ** t,
+  };
 }
 
 /** Where an artwork point lands in a view showing `viewport`, in view percentages. */

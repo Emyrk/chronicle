@@ -6,7 +6,7 @@ import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import type { MapPositionSample } from "./map.processor";
-import { interpolatedPositionAt, type MapPoint } from "./mapModel";
+import { interpolatedPositionAt, prefersReducedMotion, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import { MAX_EFFECT_PRIMITIVES, MapScene3D, type MapScene3DEffectHover, type MapScene3DUnit } from "./MapScene3D";
 import { DEFAULT_EFFECT_OPTIONS, isBasicAttack, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
@@ -20,6 +20,8 @@ export interface MapView3DProps {
   playing: boolean;
   playbackSpeed: number;
   view: MapViewRequest;
+  /** Called with the viewport after the user pans or zooms the camera. */
+  onUserViewport?: (viewport: MapViewport) => void;
   /** Combat events for hit wobble, beams, rings and deaths. */
   effects?: EncounterEffects;
   bossGuids?: ReadonlySet<string>;
@@ -116,6 +118,7 @@ export default function MapView3D({
   playing,
   playbackSpeed,
   view,
+  onUserViewport,
   effects,
   bossGuids,
   tankGuids,
@@ -124,6 +127,7 @@ export default function MapView3D({
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
   const onUnavailableRef = useRef(onUnavailable);
+  const onUserViewportRef = useRef(onUserViewport);
   const colorCacheRef = useRef(new Map<string, string>());
   const [smooth, setSmooth] = useState(readStoredSmooth);
   const smoothMs = useSmoothReplayTime(cursorMs, playing && smooth, playbackSpeed);
@@ -133,14 +137,20 @@ export default function MapView3D({
 
   useEffect(() => {
     onUnavailableRef.current = onUnavailable;
-  }, [onUnavailable]);
+    onUserViewportRef.current = onUserViewport;
+  }, [onUnavailable, onUserViewport]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let scene: MapScene3D;
     try {
-      scene = new MapScene3D(container, () => onUnavailableRef.current(), setEffectHover);
+      scene = new MapScene3D(
+        container,
+        () => onUnavailableRef.current(),
+        setEffectHover,
+        (viewport) => onUserViewportRef.current?.(viewport),
+      );
     } catch {
       onUnavailableRef.current();
       return;
@@ -156,8 +166,14 @@ export default function MapView3D({
     sceneRef.current?.setGround(ground);
   }, [ground]);
 
+  // The first request frames instantly; later ones (a new key) ease there.
+  const appliedViewKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    sceneRef.current?.setViewport(view.viewport);
+    const scene = sceneRef.current;
+    if (!scene || appliedViewKeyRef.current === view.key) return;
+    const animate = appliedViewKeyRef.current !== null && !prefersReducedMotion();
+    appliedViewKeyRef.current = view.key;
+    scene.setViewport(view.viewport, animate ? VIEW_TRANSITION_MS : 0);
   }, [view]);
 
   useEffect(() => {
