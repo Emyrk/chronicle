@@ -2,12 +2,26 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { mapAssetUrl, type WowMapLayer, type WowMapTile } from "@/pages/Technical/mapGallery";
 import { FULL_MAP_VIEWPORT, mapPointToScene, type MapPoint, type MapViewport } from "./mapModel";
+import {
+  DEFAULT_EFFECT_OPTIONS,
+  deriveActiveEffects,
+  isDeadAt,
+  type ActiveEffect,
+  type DeriveEffectsOptions,
+  type EncounterEffects,
+} from "./replayEffects";
 import type { MapMarkerKind, MapSceneGround } from "./useMapScene";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export const GROUND_WIDTH = 100;
 const MUTED_OPACITY = 0.28;
 const LABEL_HEIGHT = 5;
+/** Primitive pool size for each effect kind; also the derivation cap's ceiling. */
+export const MAX_EFFECT_PRIMITIVES = 64;
+// Never run the effect clock further ahead of the last replay tick (real time).
+const MAX_EXTRAPOLATE_MS = 250;
+const BEAM_HEIGHT = 1.5;
+const DEAD_COLOR = 0x57534e;
 // Default camera directions from the target.
 const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
 // A tiny +z offset keeps OrbitControls' up vector stable while leaving
@@ -29,8 +43,19 @@ interface UnitObject {
   body: THREE.Mesh;
   bodyMaterial: THREE.MeshLambertMaterial;
   coneMaterial: THREE.MeshLambertMaterial;
+  cone: THREE.Mesh;
   kind: MapMarkerKind;
   name: string;
+  color: string;
+  dead: boolean;
+}
+
+export interface MapScene3DEffects {
+  fx: EncounterEffects | null;
+  /** `visibleGuids` is ignored: the scene limits effects to its own units. */
+  options: DeriveEffectsOptions;
+  /** Resolves effect colours, which may be CSS custom properties. */
+  resolveColor: (color: string) => string;
 }
 
 function createUnitGeometries(): Record<MapMarkerKind | "cone", THREE.BufferGeometry> {
@@ -71,6 +96,22 @@ export class MapScene3D {
   private frame = 0;
   private disposed = false;
 
+  // Effects layer: pooled primitives, re-derived from the effect clock on
+  // every rendered frame. Nothing here is allocated per frame.
+  private effects: MapScene3DEffects | null = null;
+  private clock = { ms: 0, at: 0, playing: false, speed: 1 };
+  private readonly activeEffects: ActiveEffect[] = [];
+  private readonly effectOptions: DeriveEffectsOptions = { ...DEFAULT_EFFECT_OPTIONS };
+  private readonly visibleUnits = { has: (guid: string) => this.units.has(guid) };
+  private readonly effectColors = new Map<string, THREE.Color>();
+  private readonly wobbling: UnitObject[] = [];
+  private readonly beamPositions = new Float32Array(MAX_EFFECT_PRIMITIVES * 6);
+  private readonly beamColors = new Float32Array(MAX_EFFECT_PRIMITIVES * 6);
+  private readonly beams: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  private readonly rings: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  private readonly matrix = new THREE.Matrix4();
+  private readonly color = new THREE.Color();
+
   private readonly container: HTMLElement;
   private readonly onContextLost: () => void;
 
@@ -93,6 +134,29 @@ export class MapScene3D {
     sun.position.set(-30, 80, 40);
     this.scene.add(sun);
     this.scene.add(this.groundGroup, this.unitsGroup);
+
+    const beamGeometry = new THREE.BufferGeometry();
+    beamGeometry.setAttribute("position", new THREE.BufferAttribute(this.beamPositions, 3).setUsage(THREE.DynamicDrawUsage));
+    beamGeometry.setAttribute("color", new THREE.BufferAttribute(this.beamColors, 3).setUsage(THREE.DynamicDrawUsage));
+    beamGeometry.setDrawRange(0, 0);
+    this.beams = new THREE.LineSegments(beamGeometry, new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }));
+    this.beams.frustumCulled = false;
+    this.rings = new THREE.InstancedMesh(
+      new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      MAX_EFFECT_PRIMITIVES,
+    );
+    this.rings.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // Allocate the colour buffer once, up front.
+    for (let index = 0; index < MAX_EFFECT_PRIMITIVES; index++) this.rings.setColorAt(index, this.color.setRGB(0, 0, 0));
+    this.rings.count = 0;
+    this.rings.frustumCulled = false;
+    this.scene.add(this.beams, this.rings);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.maxPolarAngle = Math.PI / 2 - 0.05;
@@ -195,6 +259,7 @@ export class MapScene3D {
       }
       if (!object) object = this.addUnit(unit);
       object.name = unit.name;
+      object.color = unit.color;
       const { x, z } = mapPointToScene(unit.point, this.aspect, GROUND_WIDTH);
       object.group.position.set(x, 0, z);
       object.group.rotation.y = unit.facing;
@@ -204,12 +269,33 @@ export class MapScene3D {
         material.opacity = opacity;
         material.depthWrite = !unit.muted;
       }
-      object.bodyMaterial.color.set(unit.color);
+      object.bodyMaterial.color.set(object.dead ? DEAD_COLOR : unit.color);
     }
     for (const guid of [...this.units.keys()]) {
       if (!seen.has(guid)) this.removeUnit(guid);
     }
     this.updateLabel();
+    this.requestRender();
+  }
+
+  /** Sets the combat events to draw, or turns effects off with `null`. */
+  setEffects(effects: MapScene3DEffects | null) {
+    this.effects = effects?.fx ? effects : null;
+    if (this.effects) Object.assign(this.effectOptions, this.effects.options, { visibleGuids: this.visibleUnits });
+    this.effectColors.clear();
+    this.requestRender();
+  }
+
+  /**
+   * Anchors the effect clock on a replay tick. While playing, frames run
+   * ahead of the last tick at `speed` (up to MAX_EXTRAPOLATE_MS) so short
+   * effects animate smoothly between the coarse ticks.
+   */
+  setEffectClock(cursorMs: number, playing: boolean, speed: number) {
+    this.clock.ms = cursorMs;
+    this.clock.at = performance.now();
+    this.clock.playing = playing;
+    this.clock.speed = speed;
     this.requestRender();
   }
 
@@ -269,6 +355,11 @@ export class MapScene3D {
     this.clearLabel();
     this.clearGround();
     for (const geometry of Object.values(this.geometries)) geometry.dispose();
+    this.beams.geometry.dispose();
+    this.beams.material.dispose();
+    this.rings.geometry.dispose();
+    this.rings.material.dispose();
+    this.rings.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     canvas.remove();
@@ -285,7 +376,7 @@ export class MapScene3D {
     group.add(body, cone);
     group.scale.setScalar(this.unitScale);
     this.unitsGroup.add(group);
-    const object = { group, body, bodyMaterial, coneMaterial, kind: unit.kind, name: unit.name };
+    const object = { group, body, bodyMaterial, coneMaterial, cone, kind: unit.kind, name: unit.name, color: unit.color, dead: false };
     this.units.set(unit.guid, object);
     return object;
   }
@@ -297,7 +388,109 @@ export class MapScene3D {
     object.bodyMaterial.dispose();
     object.coneMaterial.dispose();
     this.units.delete(guid);
+    const wobbling = this.wobbling.indexOf(object);
+    if (wobbling >= 0) this.wobbling.splice(wobbling, 1);
     if (this.hoveredGuid === guid) this.hoveredGuid = null;
+  }
+
+  // Applies the effects at the effect clock's current time. Returns whether
+  // another frame is needed to keep them animating.
+  private updateEffects(now: number): boolean {
+    for (const object of this.wobbling) {
+      object.body.rotation.z = 0;
+      object.bodyMaterial.emissive.setRGB(0, 0, 0);
+    }
+    this.wobbling.length = 0;
+    const fx = this.effects?.fx ?? null;
+    const { clock } = this;
+    const cursorMs = clock.playing ? clock.ms + Math.min(now - clock.at, MAX_EXTRAPOLATE_MS) * clock.speed : clock.ms;
+
+    for (const object of this.units.values()) {
+      const guid = object.group.userData.guid as string;
+      this.setDead(object, fx !== null && isDeadAt(fx, guid, cursorMs));
+    }
+
+    let beamCount = 0;
+    let ringCount = 0;
+    const active = fx ? deriveActiveEffects(fx, cursorMs, this.effectOptions, this.activeEffects) : this.activeEffects;
+    if (!fx) active.length = 0;
+    for (let index = 0; index < active.length; index++) {
+      const effect = active[index];
+      const target = this.units.get(effect.target);
+      if (!target) continue;
+      const color = this.effectColor(effect.color);
+      const fade = 1 - effect.progress;
+      if (effect.type === "beam") {
+        const source = effect.source ? this.units.get(effect.source) : undefined;
+        if (!source || beamCount >= MAX_EFFECT_PRIMITIVES) continue;
+        // A short streak travelling from the source to the target.
+        const head = Math.min(1, effect.progress * 1.5);
+        const tail = Math.max(0, head - 0.4);
+        const from = source.group.position;
+        const to = target.group.position;
+        const y = BEAM_HEIGHT * this.unitScale;
+        const offset = beamCount * 6;
+        const brightness = Math.min(1.5, fade * (0.6 + 0.4 * effect.intensity));
+        this.beamPositions[offset] = from.x + (to.x - from.x) * tail;
+        this.beamPositions[offset + 1] = y;
+        this.beamPositions[offset + 2] = from.z + (to.z - from.z) * tail;
+        this.beamPositions[offset + 3] = from.x + (to.x - from.x) * head;
+        this.beamPositions[offset + 4] = y;
+        this.beamPositions[offset + 5] = from.z + (to.z - from.z) * head;
+        this.beamColors[offset] = color.r * brightness * 0.3;
+        this.beamColors[offset + 1] = color.g * brightness * 0.3;
+        this.beamColors[offset + 2] = color.b * brightness * 0.3;
+        this.beamColors[offset + 3] = color.r * brightness;
+        this.beamColors[offset + 4] = color.g * brightness;
+        this.beamColors[offset + 5] = color.b * brightness;
+        beamCount++;
+      } else if (effect.type === "hit") {
+        if (target.dead) continue;
+        // Damped shake about the unit's facing axis plus an emissive flash.
+        target.body.rotation.z = Math.sin(effect.progress * Math.PI * 6) * 0.3 * fade * Math.min(2, effect.intensity);
+        target.bodyMaterial.emissive.copy(color).multiplyScalar(fade * 0.6 * Math.min(2, effect.intensity));
+        if (!this.wobbling.includes(target)) this.wobbling.push(target);
+      } else if (ringCount < MAX_EFFECT_PRIMITIVES) {
+        // "ring": an AoE pulse expanding from the caster; "cast": a ring that
+        // closes in on the caster as the cast completes.
+        const radius = (effect.type === "ring" ? 1.5 + 6 * effect.progress : 4 - 2.5 * effect.progress) * this.unitScale;
+        const brightness = effect.type === "ring" ? fade : 0.35 + 0.5 * effect.progress;
+        const position = target.group.position;
+        this.matrix.makeScale(radius, 1, radius).setPosition(position.x, 0.05, position.z);
+        this.rings.setMatrixAt(ringCount, this.matrix);
+        this.rings.setColorAt(ringCount, this.color.copy(color).multiplyScalar(brightness));
+        ringCount++;
+      }
+    }
+
+    this.beams.geometry.setDrawRange(0, beamCount * 2);
+    this.beams.geometry.attributes.position.needsUpdate = beamCount > 0;
+    this.beams.geometry.attributes.color.needsUpdate = beamCount > 0;
+    this.rings.count = ringCount;
+    if (ringCount > 0) {
+      this.rings.instanceMatrix.needsUpdate = true;
+      this.rings.instanceColor!.needsUpdate = true;
+    }
+    return fx !== null && clock.playing;
+  }
+
+  // Slain units lie down, grey, until resurrected.
+  private setDead(object: UnitObject, dead: boolean) {
+    if (object.dead === dead) return;
+    object.dead = dead;
+    object.body.rotation.x = dead ? -Math.PI / 2 : 0;
+    object.body.position.y = dead ? 0.9 : 0;
+    object.cone.visible = !dead;
+    object.bodyMaterial.color.set(dead ? DEAD_COLOR : object.color);
+  }
+
+  private effectColor(css: string): THREE.Color {
+    let color = this.effectColors.get(css);
+    if (!color) {
+      color = new THREE.Color(this.effects?.resolveColor(css) ?? css);
+      this.effectColors.set(css, color);
+    }
+    return color;
   }
 
   private clearGround() {
@@ -380,9 +573,14 @@ export class MapScene3D {
 
   private readonly requestRender = () => {
     if (this.disposed || this.frame) return;
-    this.frame = requestAnimationFrame(() => {
+    this.frame = requestAnimationFrame((now) => {
       this.frame = 0;
-      if (!this.disposed) this.renderer.render(this.scene, this.camera);
+      if (this.disposed) return;
+      // Only keeps a frame loop running while effects animate (playback);
+      // otherwise rendering stays on demand.
+      const animating = this.updateEffects(now);
+      this.renderer.render(this.scene, this.camera);
+      if (animating) this.requestRender();
     });
   };
 }

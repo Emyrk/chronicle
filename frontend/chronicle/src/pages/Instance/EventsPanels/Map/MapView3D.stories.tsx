@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { MapPositionSample } from "./map.processor";
 import { FULL_MAP_VIEWPORT, latestPositionAt, type MapPoint } from "./mapModel";
 import MapView3D from "./MapView3D";
+import { addEffectEvent, createEncounterEffects, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 import type { MapMarkerKind, MapSceneGround, MapSceneMarker } from "./useMapScene";
 
 const CLASSES = ["warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid"];
@@ -59,10 +60,65 @@ function syntheticUnits(players: number): SyntheticUnit[] {
   return units;
 }
 
+// School per class (chronicleproto School): melee classes swing, the rest cast.
+const CLASS_SCHOOL: Record<string, number> = { hunter: 2, mage: 6, warlock: 7, shaman: 5, priest: 3, paladin: 3, druid: 8 };
+const HEALERS = new Set(["priest", "paladin", "druid", "shaman"]);
+const MELEE = new Set(["warrior", "rogue"]);
+const BOSS_GUIDS = new Set(["Boss"]);
+
+// Deterministic combat: melee swings, spell hits with cast bars, heals,
+// periodic ticks, boss AoE pulses, interrupts, and a few deaths that are
+// resurrected later.
+function syntheticEffects(players: number): EncounterEffects {
+  const events: ReplayEffectEvent[] = [];
+  const base = { amount: 1000, crit: false, periodic: false, melee: false, aoe: false, castTimeMs: 0, spellId: 1 };
+  for (let index = 0; index < players; index++) {
+    const guid = `Player-${index}`;
+    const cls = CLASSES[index % CLASSES.length];
+    const school = CLASS_SCHOOL[cls] ?? 2;
+    const period = MELEE.has(cls) ? 1_500 + (index % 3) * 200 : 2_500 + (index % 4) * 300;
+    for (let t = 500 + index * 97; t < DURATION_MS; t += period) {
+      const crit = (t / period) % 5 < 1;
+      if (MELEE.has(cls)) {
+        events.push({ ...base, timestampMs: t, kind: "damage", source: guid, target: "Boss", school: 2, melee: true, crit, spellId: null });
+      } else if (HEALERS.has(cls) && index % 2 === 0) {
+        const target = `Player-${(index * 7 + Math.floor(t / 1000)) % players}`;
+        events.push({ ...base, timestampMs: t - 1_500, kind: "cast_start", source: guid, target, school, castTimeMs: 1_500 });
+        events.push({ ...base, timestampMs: t, kind: "cast_go", source: guid, target, school });
+        events.push({ ...base, timestampMs: t, kind: "heal", source: guid, target, school, crit });
+      } else {
+        events.push({ ...base, timestampMs: t - 2_000, kind: "cast_start", source: guid, target: "Boss", school, castTimeMs: 2_000 });
+        events.push({ ...base, timestampMs: t, kind: "cast_go", source: guid, target: "Boss", school });
+        events.push({ ...base, timestampMs: t, kind: "damage", source: guid, target: "Boss", school, crit });
+        events.push({ ...base, timestampMs: t + 1_000, kind: "damage", source: guid, target: "Boss", school, periodic: true });
+      }
+    }
+  }
+  for (let t = 4_000; t < DURATION_MS; t += 6_000) {
+    events.push({ ...base, timestampMs: t - 2_500, kind: "cast_start", source: "Boss", target: "", school: 4, castTimeMs: 2_500 });
+    if (t % 18_000 === 10_000) {
+      events.push({ ...base, timestampMs: t - 1_000, kind: "interrupt", source: "Player-3", target: "Boss", school: 2 });
+      continue;
+    }
+    events.push({ ...base, timestampMs: t, kind: "cast_go", source: "Boss", target: "", school: 4, aoe: true });
+    for (let index = 0; index < players; index += 3) {
+      events.push({ ...base, timestampMs: t, kind: "damage", source: "Boss", target: `Player-${index}`, school: 4 });
+    }
+  }
+  for (let index = 1; index < players; index += 9) {
+    events.push({ ...base, timestampMs: 15_000 + index * 300, kind: "slain", source: "Boss", target: `Player-${index}`, school: 0 });
+    events.push({ ...base, timestampMs: 40_000 + index * 300, kind: "resurrect", source: "Player-4", target: `Player-${index}`, school: 3 });
+  }
+  const fx = createEncounterEffects();
+  for (const event of events.sort((left, right) => left.timestampMs - right.timestampMs)) addEffectEvent(fx, event);
+  return fx;
+}
+
 const FULL_VIEW = { viewport: FULL_MAP_VIEWPORT, key: "full" };
 
-function SyntheticReplay({ players, playbackSpeed, mutedEvery }: { players: number; playbackSpeed: number; mutedEvery: number }) {
+function SyntheticReplay({ players, playbackSpeed, mutedEvery, effects }: { players: number; playbackSpeed: number; mutedEvery: number; effects: boolean }) {
   const [units] = useState(() => syntheticUnits(players));
+  const [fx] = useState(() => syntheticEffects(players));
   const [cursorMs, setCursorMs] = useState(0);
 
   // Mirrors SyncModeContext: coarse 100 ms ticks scaled by playback speed.
@@ -92,6 +148,8 @@ function SyntheticReplay({ players, playbackSpeed, mutedEvery }: { players: numb
         playing
         playbackSpeed={playbackSpeed}
         view={FULL_VIEW}
+        effects={effects ? fx : undefined}
+        bossGuids={BOSS_GUIDS}
         onUnavailable={() => console.warn("WebGL unavailable")}
       />
     </div>
@@ -102,7 +160,7 @@ const meta = {
   title: "Instance/Map/MapView3D",
   component: SyntheticReplay,
   parameters: { layout: "centered" },
-  args: { players: 40, playbackSpeed: 4, mutedEvery: 0 },
+  args: { players: 40, playbackSpeed: 4, mutedEvery: 0, effects: false },
 } satisfies Meta<typeof SyntheticReplay>;
 
 export default meta;
@@ -112,4 +170,14 @@ export const FortyPlayersAt4x: Story = {};
 
 export const WithSelection: Story = {
   args: { players: 20, playbackSpeed: 1, mutedEvery: 3 },
+};
+
+/** Hit wobble, beams, cast/AoE rings, interrupts and deaths at 1x. */
+export const Effects: Story = {
+  args: { players: 10, playbackSpeed: 1, effects: true },
+};
+
+/** Effect density: a 40-player raid at 4x speed, capped primitives. */
+export const EffectsFortyPlayersAt4x: Story = {
+  args: { players: 40, playbackSpeed: 4, effects: true },
 };
