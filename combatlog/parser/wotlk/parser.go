@@ -28,9 +28,10 @@ type Parser struct {
 	scanner *bufio.Scanner
 	format  database.LogFormat
 
-	lastDate   time.Time
-	guidNames  *GUIDNames
-	synthetics interface {
+	lastDate               time.Time
+	maxTimestampRegression time.Duration
+	guidNames              *GUIDNames
+	synthetics             interface {
 		ProcessMessages([]messages.Message) ([]messages.Message, error)
 	}
 	itemFetcher   gamedb.GearResolver
@@ -70,16 +71,17 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 	gn := NewGUIDNames()
 	format, _ := parsectx.Format(ctx)
 	return &Parser{
-		eventHook:   map[string]func(ts time.Time, m *Matched, raw string) ([]messages.Message, error){},
-		logger:      logger,
-		wowDB:       wowDB,
-		gameDB:      wowDB,
-		scanner:     bufio.NewScanner(r),
-		format:      format,
-		guidNames:   gn,
-		synthetics:  synthetic.New(ctx, logger, wowDB, reg, gn),
-		itemFetcher: gear,
-		baseYear:    time.Now().Year(),
+		eventHook:              map[string]func(ts time.Time, m *Matched, raw string) ([]messages.Message, error){},
+		logger:                 logger,
+		wowDB:                  wowDB,
+		gameDB:                 wowDB,
+		scanner:                bufio.NewScanner(r),
+		format:                 format,
+		guidNames:              gn,
+		synthetics:             synthetic.New(ctx, logger, wowDB, reg, gn),
+		itemFetcher:            gear,
+		baseYear:               time.Now().Year(),
+		maxTimestampRegression: time.Second,
 		metrics: parservanilla.Metrics{
 			MatchingTime:   make(map[string]time.Duration),
 			UnmatchingTime: make(map[string]time.Duration),
@@ -133,6 +135,16 @@ func (p *Parser) normalizeTimestamp(ts time.Time) time.Time {
 // server-generated logs.
 func (p *Parser) SetUnixMillisMode(enabled bool) {
 	p.useUnixMillis = enabled
+}
+
+// SetMaxTimestampRegression configures how far timestamps may move backward in
+// the source log before parsing fails. Callers that reorder messages downstream
+// should use the same duration for both limits.
+func (p *Parser) SetMaxTimestampRegression(maximum time.Duration) {
+	if maximum < 0 {
+		maximum = 0
+	}
+	p.maxTimestampRegression = maximum
 }
 
 // SawRaidGroup reports whether the companion addon emitted a valid raid layout.
@@ -217,11 +229,13 @@ func (p *Parser) advance(_ context.Context) (_ []messages.Message, final error) 
 		ts = p.normalizeTimestamp(ts)
 	}
 
-	if !p.lastDate.IsZero() && ts.Before(p.lastDate.Add(-time.Second)) {
+	if !p.lastDate.IsZero() && ts.Before(p.lastDate.Add(-p.maxTimestampRegression)) {
 		diff := ts.Sub(p.lastDate)
-		return nil, parseerrors.AsFatalError(fmt.Errorf("log dates went backwards by %s: last %v, current %v", diff.String(), p.lastDate, ts))
+		return nil, parseerrors.AsFatalError(fmt.Errorf("log dates went backwards by %s: latest %v, current %v", diff.String(), p.lastDate, ts))
 	}
-	p.lastDate = ts
+	if ts.After(p.lastDate) {
+		p.lastDate = ts
+	}
 
 	return p.dispatch(ts, event, m, next)
 }

@@ -97,6 +97,43 @@ func TestParseV22TimestampWithoutOffset(t *testing.T) {
 	assert.Equal(t, time.Date(2026, time.October, 7, 22, 0, 47, 349000000, time.UTC), batch[0].Date())
 }
 
+func TestParserAllowsTimestampRegressionWithinReorderWindow(t *testing.T) {
+	t.Parallel()
+
+	input := strings.Join([]string{
+		`10/7/2026 22:00:47.0000  COMBAT_LOG_VERSION,22`,
+		`10/7/2026 22:00:45.0000  COMBAT_LOG_VERSION,22`,
+	}, "\n")
+	p, err := New(t.Context(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
+	require.NoError(t, err)
+
+	_, err = p.Advance(t.Context())
+	require.NoError(t, err)
+	batch, err := p.Advance(t.Context())
+	require.NoError(t, err)
+	require.Len(t, batch, 1)
+	require.Equal(t, time.Date(2026, time.October, 7, 22, 0, 45, 0, time.UTC), batch[0].Date())
+}
+
+func TestParserRejectsTimestampRegressionBeyondReorderWindow(t *testing.T) {
+	t.Parallel()
+
+	input := strings.Join([]string{
+		`10/7/2026 22:00:47.0000  COMBAT_LOG_VERSION,22`,
+		`10/7/2026 22:00:45.0000  COMBAT_LOG_VERSION,22`,
+		`10/7/2026 22:00:43.0000  COMBAT_LOG_VERSION,22`,
+	}, "\n")
+	p, err := New(t.Context(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
+	require.NoError(t, err)
+
+	_, err = p.Advance(t.Context())
+	require.NoError(t, err)
+	_, err = p.Advance(t.Context())
+	require.NoError(t, err)
+	_, err = p.Advance(t.Context())
+	require.ErrorContains(t, err, "log dates went backwards")
+}
+
 func TestReadBaseYearPreservesInput(t *testing.T) {
 	t.Parallel()
 

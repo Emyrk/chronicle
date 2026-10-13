@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/logfile"
+	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/sorter"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
@@ -263,7 +264,11 @@ func (w *WorkerLogParse) parseCombatLog(
 			return nil, fmt.Errorf("create modern Blizzard CLEU parser: %w", err)
 		}
 		c.Advancer = p
-		consumeErr = c.ConsumeAll(ctx, p)
+		var parseAdvancer consumers.Advancer = p
+		if logFormat == database.LogFormatV22Cleu {
+			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
+		}
+		consumeErr = c.ConsumeAll(ctx, parseAdvancer)
 		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
 			return nil, fmt.Errorf("consume modern Blizzard CLEU log: %w", consumeErr)
 		}

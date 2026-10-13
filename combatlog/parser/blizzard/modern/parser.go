@@ -57,6 +57,11 @@ func readBaseYear(r io.Reader) (io.Reader, int, error) {
 	}
 }
 
+// ReorderWindow is the maximum timestamp regression tolerated and repaired for
+// modern Blizzard combat logs. The client can write encounter boundaries just
+// before slightly older killing-blow events.
+const ReorderWindow = 3 * time.Second
+
 // Parser adapts modern Blizzard combat-log records to Chronicle's CLEU parser
 // while retaining version-specific metadata such as gear and talent summaries.
 type Parser struct {
@@ -83,6 +88,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	switch format {
 	case database.LogFormatV22Cleu:
 		p.version = 22
+		p.inner.SetMaxTimestampRegression(ReorderWindow)
 	case database.LogFormatV9Cleu:
 		p.version = 9
 	}
