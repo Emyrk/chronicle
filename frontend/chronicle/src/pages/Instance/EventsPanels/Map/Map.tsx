@@ -135,6 +135,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
               view={view}
               effects={scene.effects}
               bossGuids={scene.bossGuids}
+              tankGuids={scene.tankGuids}
               onUnavailable={() => setWebglUnavailable(true)}
             />
           </Suspense>

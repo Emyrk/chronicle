@@ -20,7 +20,14 @@ export interface ReplayEffectEvent {
   target: string;
   /** chronicleproto School enum value (0 = unknown). */
   school: number;
+  /** Gross amount; for heals this includes overheal. */
   amount: number;
+  /** Heals only: the part of `amount` that landed on full health. */
+  overheal: number;
+  /** Heals only: the part of `amount` soaked by a heal absorb. */
+  absorbed: number;
+  /** Heals only: `amount - overheal`, the health actually restored. */
+  effective: number;
   crit: boolean;
   periodic: boolean;
   attack: ReplayAttackKind;
@@ -37,15 +44,18 @@ export interface EncounterEffects {
   /** Time-sorted death and resurrection timestamps per unit. */
   deathsByUnit: Map<string, number[]>;
   resurrectsByUnit: Map<string, number[]>;
+  /** Time-sorted heals with effective healing, per target. */
+  healsByUnit: Map<string, ReplayEffectEvent[]>;
 }
 
 /**
  * "beam": a spell bolt between units; "streak": a thin ranged auto shot;
  * "lunge": the attacker stepping toward its target; "slash": an arc at the
  * target of a melee hit; "impact": a small burst for melee abilities;
- * "hit": wobble and flash; "ring": an AoE pulse; "cast": a closing cast ring.
+ * "hit": wobble and flash; "ring": an AoE pulse; "cast": a closing cast ring;
+ * "heal": a ring rising at a healed target.
  */
-export type ActiveEffectType = "beam" | "streak" | "lunge" | "slash" | "impact" | "hit" | "ring" | "cast";
+export type ActiveEffectType = "beam" | "streak" | "lunge" | "slash" | "impact" | "hit" | "ring" | "cast" | "heal";
 
 export interface ActiveEffect {
   type: ActiveEffectType;
@@ -61,7 +71,10 @@ export interface ActiveEffect {
   intensity: number;
   /** Timestamp of the (newest merged) event that produced the effect. */
   eventMs: number;
-  /** The (newest merged) event's kind, spell and amount, for hover tooltips. */
+  /**
+   * The (newest merged) event's kind, spell and amount, for hover tooltips.
+   * Heals carry effective healing; a heal pulse sums its merged ticks.
+   */
   eventKind: ReplayEffectKind;
   spellId: number | null;
   spellName: string;
@@ -79,6 +92,8 @@ export interface DeriveEffectsOptions {
   maxEffects: number;
   showPeriodic: boolean;
   showHeals: boolean;
+  /** Also draw heals that restored no health (grey). */
+  showOverheal: boolean;
 }
 
 export const DEFAULT_EFFECT_OPTIONS: DeriveEffectsOptions = {
@@ -89,6 +104,7 @@ export const DEFAULT_EFFECT_OPTIONS: DeriveEffectsOptions = {
   maxEffects: 64,
   showPeriodic: false,
   showHeals: true,
+  showOverheal: false,
 };
 
 export const BEAM_MS = 350;
@@ -102,10 +118,18 @@ export const AOE_RING_MS = 600;
 export const CAST_RING_MAX_MS = 3000;
 export const INTERRUPT_MS = 400;
 export const MERGE_MS = 100;
+export const HEAL_PULSE_MS = 500;
+/** Heal-over-time ticks on one target this close together share a pulse. */
+export const HOT_MERGE_MS = 500;
+/** How long healing lingers as a pale chunk on the health bar. */
+export const HEAL_CHUNK_MS = 600;
 const MAX_INTENSITY = 3;
 
 export const INTERRUPT_COLOR = "#ffffff";
 export const RANGED_AUTO_COLOR = "#f5f5f4";
+export const HEAL_COLOR = "#4ade80";
+export const HEAL_CRIT_COLOR = "#facc15";
+export const OVERHEAL_COLOR = "#a8a29e";
 const SCHOOL_TOKENS: Record<number, string> = {
   2: "physical",
   3: "holy",
@@ -120,8 +144,37 @@ export function schoolColor(school: number): string {
   return `var(--color-school-${SCHOOL_TOKENS[school] ?? "physical"})`;
 }
 
+/**
+ * Bolt and pulse size for a heal: grows with log(amount), about 1 at 500
+ * and 1.5 at 5k, half again on a crit.
+ */
+export function healIntensity(amount: number, crit: boolean): number {
+  const size = Math.min(2.5, Math.max(0.6, 1 + 0.5 * Math.log10(Math.max(1, amount) / 500)));
+  return Math.min(MAX_INTENSITY, crit ? size * 1.5 : size);
+}
+
+// Rounded amount -> text; 2 significant figures keep this small.
+const healTextCache = new Map<number, string>();
+
+/**
+ * "+1.2k": rounded to 2 significant figures so few label textures are
+ * needed. Cached, so per-frame callers don't allocate.
+ */
+export function formatHealAmount(amount: number): string {
+  const value = Math.max(0, Math.round(amount));
+  const step = value >= 100 ? 10 ** (Math.floor(Math.log10(value)) - 1) : 1;
+  const rounded = Math.round(value / step) * step;
+  let text = healTextCache.get(rounded);
+  if (text === undefined) {
+    const digits = (scaled: number) => Number(scaled.toPrecision(2));
+    text = rounded >= 1e6 ? `+${digits(rounded / 1e6)}M` : rounded >= 1e3 ? `+${digits(rounded / 1e3)}k` : `+${rounded}`;
+    healTextCache.set(rounded, text);
+  }
+  return text;
+}
+
 export function createEncounterEffects(): EncounterEffects {
-  return { events: [], deathsByUnit: new Map(), resurrectsByUnit: new Map() };
+  return { events: [], deathsByUnit: new Map(), resurrectsByUnit: new Map(), healsByUnit: new Map() };
 }
 
 /**
@@ -132,6 +185,14 @@ export function addEffectEvent(fx: EncounterEffects, event: ReplayEffectEvent) {
   insertSorted(fx.events, event, (entry) => entry.timestampMs);
   if (event.kind === "slain") pushTime(fx.deathsByUnit, event.target, event.timestampMs);
   if (event.kind === "resurrect") pushTime(fx.resurrectsByUnit, event.target, event.timestampMs);
+  if (event.kind === "heal" && event.effective > 0) {
+    let heals = fx.healsByUnit.get(event.target);
+    if (!heals) {
+      heals = [];
+      fx.healsByUnit.set(event.target, heals);
+    }
+    insertSorted(heals, event, (entry) => entry.timestampMs);
+  }
 }
 
 function pushTime(byUnit: Map<string, number[]>, guid: string, timestampMs: number) {
@@ -181,6 +242,21 @@ export function eventWindow(events: readonly ReplayEffectEvent[], fromMs: number
   return [start, Math.max(start, end)];
 }
 
+/**
+ * Health `guid` gained from heals in the last HEAL_CHUNK_MS, each heal's
+ * share shrinking linearly to zero as it ages: the lagging "heal chunk" on
+ * the health bar. A pure function of the cursor.
+ */
+export function deriveRecentHealGain(fx: EncounterEffects, guid: string, cursorMs: number): number {
+  const heals = fx.healsByUnit.get(guid);
+  if (!heals) return 0;
+  let gain = 0;
+  for (let index = lowerBound(heals, cursorMs - HEAL_CHUNK_MS); index < heals.length && heals[index].timestampMs <= cursorMs; index++) {
+    gain += heals[index].effective * (1 - (cursorMs - heals[index].timestampMs) / HEAL_CHUNK_MS);
+  }
+  return gain;
+}
+
 /** Whether `guid` died at or before `cursorMs` and has not been resurrected since. */
 export function isDeadAt(fx: EncounterEffects, guid: string, cursorMs: number): boolean {
   const deaths = fx.deathsByUnit.get(guid);
@@ -213,17 +289,29 @@ export function deriveActiveEffects(
 
   let origin: ReplayEffectEvent | null = null;
   let eventMs = 0;
-  const emit = (type: ActiveEffectType, source: string | undefined, target: string, progress: number, color: string, intensity: number) => {
-    // Merge into a newer effect of the same kind between the same units
-    // whose event landed within MERGE_MS (newer events are emitted first).
+  let amount = 0;
+  // Merges into a newer effect of the same kind between the same units whose
+  // event landed within MERGE_MS (newer events are emitted first). Heal
+  // pulses add up their healing; heal-over-time ticks merge over HOT_MERGE_MS.
+  const merge = (type: ActiveEffectType, source: string | undefined, target: string, color: string, intensity: number) => {
+    const windowMs = type === "heal" && origin!.periodic ? HOT_MERGE_MS : MERGE_MS;
     for (let index = 0; index < count; index++) {
       const effect = out[index];
       if (effect.type === type && effect.target === target && effect.source === source
-        && effect.color === color && effect.eventMs - eventMs <= MERGE_MS) {
-        effect.intensity = Math.min(MAX_INTENSITY, effect.intensity + intensity * 0.5);
-        return;
+        && effect.color === color && effect.eventMs - eventMs <= windowMs) {
+        if (type === "heal") {
+          effect.amount += amount;
+          effect.intensity = healIntensity(effect.amount, color === HEAL_CRIT_COLOR);
+        } else {
+          effect.intensity = Math.min(MAX_INTENSITY, effect.intensity + intensity * 0.5);
+        }
+        return true;
       }
     }
+    return false;
+  };
+  const emit = (type: ActiveEffectType, source: string | undefined, target: string, progress: number, color: string, intensity: number) => {
+    if (merge(type, source, target, color, intensity)) return;
     let slot = count;
     if (count >= maxEffects) {
       // Full: a priority effect may displace the oldest non-priority one.
@@ -252,7 +340,7 @@ export function deriveActiveEffects(
     effect.eventKind = origin!.kind;
     effect.spellId = origin!.spellId;
     effect.spellName = origin!.spellName;
-    effect.amount = origin!.amount;
+    effect.amount = amount;
   };
 
   const events = fx.events;
@@ -263,6 +351,7 @@ export function deriveActiveEffects(
     const ageMs = cursorMs - event.timestampMs;
     eventMs = event.timestampMs;
     origin = event;
+    amount = event.kind === "heal" ? event.effective : event.amount;
     // A cast bar ends at the caster's next cast start, cast go or interrupt.
     if (event.kind === "cast_start") {
       const wasEnded = castEnded.has(event.source);
@@ -276,14 +365,34 @@ export function deriveActiveEffects(
     }
     if (event.kind === "cast_go") castEnded.add(event.source);
     if (event.kind === "interrupt") castEnded.add(event.target);
-    if (ageMs > options.lookbackMs) continue;
+    // Heal-over-time ticks stay around a little longer to merge into a newer pulse.
+    const hotTick = event.kind === "heal" && event.periodic && ageMs <= HEAL_PULSE_MS + HOT_MERGE_MS;
+    if (ageMs > options.lookbackMs && !hotTick) continue;
     if (filterGuids && !filterGuids.has(event.source) && !filterGuids.has(event.target)) continue;
 
     switch (event.kind) {
-      case "damage":
       case "heal": {
+        // Effective healing only: pure overheal draws nothing unless asked.
+        if (!options.showHeals) break;
+        const effective = event.effective > 0;
+        if (!effective && !options.showOverheal) break;
+        const color = effective ? HEAL_COLOR : OVERHEAL_COLOR;
+        const intensity = effective ? healIntensity(event.effective, event.crit) : 0.6;
+        // Ticks draw no bolt unless periodic effects are on; every effective
+        // heal pulses at its target.
+        if ((!event.periodic || options.showPeriodic) && ageMs < BEAM_MS && event.source !== "" && event.source !== event.target
+          && visible(event.source) && visible(event.target)) {
+          emit("beam", event.source, event.target, ageMs / BEAM_MS, color, intensity);
+        }
+        if (effective && visible(event.target)) {
+          const pulseColor = event.crit ? HEAL_CRIT_COLOR : HEAL_COLOR;
+          if (ageMs < HEAL_PULSE_MS) emit("heal", undefined, event.target, ageMs / HEAL_PULSE_MS, pulseColor, intensity);
+          else if (event.periodic) merge("heal", undefined, event.target, pulseColor, intensity);
+        }
+        break;
+      }
+      case "damage": {
         if (event.periodic && !options.showPeriodic) break;
-        if (event.kind === "heal" && !options.showHeals) break;
         const color = schoolColor(event.school);
         const intensity = event.crit ? 2 : 1;
         const between = event.source !== "" && event.source !== event.target
@@ -299,7 +408,7 @@ export function deriveActiveEffects(
             if (ageMs < SLASH_MS) emit("slash", event.source, event.target, ageMs / SLASH_MS, color, intensity);
           }
         }
-        if (event.kind === "damage" && visible(event.target)) {
+        if (visible(event.target)) {
           if (event.attack === "melee_ability" && ageMs < IMPACT_MS) {
             emit("impact", undefined, event.target, ageMs / IMPACT_MS, color, intensity);
           }
@@ -330,7 +439,8 @@ export const COMBAT_TEXT_MS = 1_000;
 
 export interface CombatText {
   target: string;
-  spellName: string;
+  /** A spell name for damage, a rounded amount ("+1.2k") for heals. */
+  text: string;
   /** CSS colour, possibly a `var(--token)`. */
   color: string;
   crit: boolean;
@@ -339,15 +449,18 @@ export interface CombatText {
 }
 
 /**
- * Spell names floating over the targets of recent damage and heals cast by
- * `sources`, newest first, at most `max`. Like deriveActiveEffects, a pure
- * function of the cursor; `out` and its objects are reused.
+ * Floating text over the targets of recent hits, newest first, at most
+ * `max`: spell names of damage dealt by `sources`, and healing numbers for
+ * heals cast by or landing on `healGuids` (green, grey when all overheal).
+ * Like deriveActiveEffects, a pure function of the cursor; `out` and its
+ * objects are reused.
  */
 export function deriveCombatText(
   fx: EncounterEffects,
   cursorMs: number,
-  sources: ReadonlySet<string>,
-  options: Pick<DeriveEffectsOptions, "showPeriodic" | "showHeals">,
+  sources: ReadonlySet<string> | null,
+  healGuids: ReadonlySet<string> | null,
+  options: Pick<DeriveEffectsOptions, "showPeriodic" | "showHeals" | "showOverheal">,
   max: number,
   out: CombatText[] = [],
 ): CombatText[] {
@@ -356,15 +469,25 @@ export function deriveCombatText(
   for (let index = end - 1; index >= start && count < max; index--) {
     const event = fx.events[index];
     if (event.kind !== "damage" && event.kind !== "heal") continue;
-    if (!event.spellName || !sources.has(event.source)) continue;
     if (event.periodic && !options.showPeriodic) continue;
-    if (event.kind === "heal" && !options.showHeals) continue;
-    const text = out[count] ?? (out[count] = { target: "", spellName: "", color: "", crit: false, progress: 0 });
-    text.target = event.target;
-    text.spellName = event.spellName;
-    text.color = schoolColor(event.school);
-    text.crit = event.crit;
-    text.progress = (cursorMs - event.timestampMs) / COMBAT_TEXT_MS;
+    let text: string;
+    let color: string;
+    if (event.kind === "heal") {
+      if (!options.showHeals || !healGuids || (!healGuids.has(event.source) && !healGuids.has(event.target))) continue;
+      if (event.effective <= 0 && !options.showOverheal) continue;
+      text = formatHealAmount(event.effective > 0 ? event.effective : event.overheal);
+      color = event.effective > 0 ? HEAL_COLOR : OVERHEAL_COLOR;
+    } else {
+      if (!event.spellName || !sources || !sources.has(event.source)) continue;
+      text = event.spellName;
+      color = schoolColor(event.school);
+    }
+    const entry = out[count] ?? (out[count] = { target: "", text: "", color: "", crit: false, progress: 0 });
+    entry.target = event.target;
+    entry.text = text;
+    entry.color = color;
+    entry.crit = event.crit;
+    entry.progress = (cursorMs - event.timestampMs) / COMBAT_TEXT_MS;
     count++;
   }
   out.length = count;

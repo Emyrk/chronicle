@@ -44,16 +44,19 @@ function MapTiles({ ground: { canvas, iconBaseUrl, overlays } }: { ground: MapSc
   );
 }
 
-// Same colour rule as the 3D bars: fill by percentage, a pale absorb
-// segment past current health, grey when dead.
+// Same colour rule as the 3D bars: fill by percentage, a pale green chunk
+// for recent healing at its end, a pale absorb segment past current health,
+// grey when dead.
 function HealthBar({ health }: { health: MapUnitHealth }) {
   const fraction = health.max > 0 ? Math.min(1, Math.max(0, health.current / health.max)) : 0;
   const absorb = health.max > 0 ? Math.min(1 - fraction, Math.max(0, health.absorb / health.max)) : 0;
+  const healed = health.max > 0 ? Math.min(fraction, Math.max(0, (health.healGain ?? 0) / health.max)) : 0;
   return (
     <div className={`pointer-events-none absolute left-1/2 top-full flex h-1 w-6 -translate-x-1/2 overflow-hidden rounded-sm border border-black/80 ${health.dead ? "bg-stone-600" : "bg-black/80"}`}>
       {!health.dead && (
         <>
-          <div style={{ width: `${fraction * 100}%`, backgroundColor: healthBarColor(fraction) }} />
+          <div style={{ width: `${(fraction - healed) * 100}%`, backgroundColor: healthBarColor(fraction) }} />
+          <div className="bg-green-200" style={{ width: `${healed * 100}%` }} />
           <div className="bg-stone-200" style={{ width: `${absorb * 100}%` }} />
         </>
       )}

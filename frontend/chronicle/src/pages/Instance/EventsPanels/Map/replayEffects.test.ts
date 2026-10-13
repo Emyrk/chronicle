@@ -9,6 +9,13 @@ import {
   deriveActiveEffects,
   deriveCastIcons,
   deriveCombatText,
+  deriveRecentHealGain,
+  formatHealAmount,
+  HEAL_CHUNK_MS,
+  HEAL_COLOR,
+  HEAL_CRIT_COLOR,
+  HEAL_PULSE_MS,
+  OVERHEAL_COLOR,
   eventWindow,
   HIT_WOBBLE_MS,
   INTERRUPT_COLOR,
@@ -31,6 +38,9 @@ function event(timestampMs: number, kind: ReplayEffectEvent["kind"], source: str
     target,
     school: 4,
     amount: 100,
+    overheal: 0,
+    absorbed: 0,
+    effective: kind === "heal" ? (extra.amount ?? 100) - (extra.overheal ?? 0) : 0,
     crit: false,
     periodic: false,
     attack: "spell",
@@ -109,7 +119,7 @@ describe("deriveActiveEffects", () => {
   it("drops periodic ticks and heals unless enabled", () => {
     const fx = effects(event(1_000, "damage", "lock", "boss", { periodic: true }), event(1_000, "heal", "priest", "tank"));
     expect(derive(fx, 1_010, { showHeals: false })).toEqual([]);
-    expect(derive(fx, 1_010).map((effect) => effect.type)).toEqual(["beam"]);
+    expect(derive(fx, 1_010).map((effect) => effect.type)).toEqual(["beam", "heal"]);
     expect(derive(fx, 1_010, { showPeriodic: true, showHeals: false }).map((effect) => effect.type)).toEqual(["beam", "hit"]);
   });
 
@@ -202,31 +212,113 @@ describe("effect spell info", () => {
 });
 
 describe("deriveCombatText", () => {
-  const options = { showPeriodic: false, showHeals: true };
+  const options = { showPeriodic: false, showHeals: true, showOverheal: false };
   const fx = effects(
     event(1_000, "damage", "mage", "boss", { spellName: "Frostbolt", school: 6, crit: true }),
     event(1_200, "damage", "lock", "boss", { spellName: "Shadow Bolt" }),
     event(1_300, "damage", "mage", "boss", { spellName: "Ignite", periodic: true }),
-    event(1_400, "heal", "mage", "tank", { spellName: "Heal" }),
+    event(1_400, "heal", "priest", "tank", { spellName: "Heal", amount: 1_234 }),
+    event(1_450, "heal", "priest", "tank", { spellName: "Heal", amount: 800, overheal: 800 }),
     event(1_500, "cast_go", "mage", "boss", { spellName: "Frostbolt" }),
   );
 
-  it("names recent hits and heals from the given sources, newest first", () => {
-    const texts = deriveCombatText(fx, 1_500, new Set(["mage"]), options, 8).map((text) => ({ ...text }));
+  it("names the sources' hits and numbers heals on the heal units, newest first", () => {
+    const texts = deriveCombatText(fx, 1_500, new Set(["mage"]), new Set(["tank"]), options, 8).map((text) => ({ ...text }));
     expect(texts).toEqual([
-      { target: "tank", spellName: "Heal", color: schoolColor(4), crit: false, progress: 100 / COMBAT_TEXT_MS },
-      { target: "boss", spellName: "Frostbolt", color: schoolColor(6), crit: true, progress: 500 / COMBAT_TEXT_MS },
+      { target: "tank", text: "+1.2k", color: HEAL_COLOR, crit: false, progress: 100 / COMBAT_TEXT_MS },
+      { target: "boss", text: "Frostbolt", color: schoolColor(6), crit: true, progress: 500 / COMBAT_TEXT_MS },
     ]);
-    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), { ...options, showHeals: false }, 8).map((text) => text.spellName)).toEqual(["Frostbolt"]);
-    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), options, 1)).toHaveLength(1);
+    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), new Set(["tank"]), { ...options, showOverheal: true }, 8)[0])
+      .toMatchObject({ text: "+800", color: OVERHEAL_COLOR });
+    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), null, options, 8).map((text) => text.text)).toEqual(["Frostbolt"]);
+    expect(deriveCombatText(fx, 1_500, null, new Set(["priest"]), { ...options, showHeals: false }, 8)).toEqual([]);
+    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), new Set(["tank"]), options, 1)).toHaveLength(1);
   });
 
   it("expires after COMBAT_TEXT_MS and re-derives the same text when scrubbing back", () => {
     const sources = new Set(["mage"]);
-    const out = deriveCombatText(fx, 1_050, sources, options, 8);
+    const out = deriveCombatText(fx, 1_050, sources, null, options, 8);
     const forward = out.map((text) => ({ ...text }));
-    expect(deriveCombatText(fx, 1_000 + COMBAT_TEXT_MS + 500, sources, options, 8, out)).toEqual([]);
-    expect(deriveCombatText(fx, 1_050, sources, options, 8, out).map((text) => ({ ...text }))).toEqual(forward);
+    expect(deriveCombatText(fx, 1_000 + COMBAT_TEXT_MS + 500, sources, null, options, 8, out)).toEqual([]);
+    expect(deriveCombatText(fx, 1_050, sources, null, options, 8, out).map((text) => ({ ...text }))).toEqual(forward);
+  });
+});
+
+describe("formatHealAmount", () => {
+  it.each([
+    [56, "+56"],
+    [987, "+990"],
+    [1_234, "+1.2k"],
+    [12_345, "+12k"],
+    [1_550_000, "+1.6M"],
+  ])("rounds %d to %s", (amount, text) => {
+    expect(formatHealAmount(amount)).toBe(text);
+  });
+});
+
+describe("heals", () => {
+  it("draws only effective healing unless overheal is on", () => {
+    const fx = effects(event(1_000, "heal", "priest", "tank", { amount: 500, overheal: 500 }));
+    expect(derive(fx, 1_010)).toEqual([]);
+    expect(derive(fx, 1_010, { showOverheal: true })).toEqual([
+      expect.objectContaining({ type: "beam", color: OVERHEAL_COLOR }),
+    ]);
+  });
+
+  it("draws a green bolt and a pulse sized by effective healing, gold on crits", () => {
+    const fx = effects(
+      event(1_000, "heal", "priest", "tank", { amount: 3_000, overheal: 2_500 }),
+      event(1_000, "heal", "paladin", "rogue", { amount: 3_000, crit: true }),
+    );
+    const active = derive(fx, 1_010);
+    const pulse = (target: string) => active.find((effect) => effect.type === "heal" && effect.target === target)!;
+    expect(active.find((effect) => effect.type === "beam" && effect.target === "tank")).toMatchObject({ color: HEAL_COLOR });
+    expect(pulse("tank")).toMatchObject({ color: HEAL_COLOR, amount: 500 });
+    expect(pulse("rogue")).toMatchObject({ color: HEAL_CRIT_COLOR, amount: 3_000 });
+    expect(pulse("rogue").intensity).toBeGreaterThan(pulse("tank").intensity);
+    expect(derive(fx, 1_000 + HEAL_PULSE_MS).some((effect) => effect.type === "heal")).toBe(false);
+  });
+
+  it("merges heal-over-time ticks on one target within 500 ms into one pulse", () => {
+    const fx = effects(
+      event(1_000, "heal", "priest", "tank", { periodic: true, amount: 300 }),
+      event(1_300, "heal", "druid", "tank", { periodic: true, amount: 200 }),
+      event(2_000, "heal", "druid", "tank", { periodic: true, amount: 200 }),
+    );
+    const pulses = (cursorMs: number) => derive(fx, cursorMs).filter((effect) => effect.type === "heal");
+    // No bolts for ticks by default; one pulse holding both ticks' healing,
+    // even after the older tick's own pulse would have expired.
+    expect(derive(fx, 1_310).map((effect) => effect.type)).toEqual(["heal"]);
+    expect(pulses(1_310)).toEqual([expect.objectContaining({ amount: 500, eventMs: 1_300 })]);
+    expect(pulses(1_700)).toEqual([expect.objectContaining({ amount: 500 })]);
+    expect(pulses(2_010)).toEqual([expect.objectContaining({ amount: 200, eventMs: 2_000 })]);
+  });
+
+  it("derives the recent heal gain, shrinking over HEAL_CHUNK_MS", () => {
+    const fx = effects(
+      event(1_000, "heal", "priest", "tank", { amount: 1_000 }),
+      event(1_000, "heal", "priest", "tank", { amount: 400, overheal: 400 }),
+      event(1_000, "heal", "priest", "rogue", { amount: 700 }),
+    );
+    expect(deriveRecentHealGain(fx, "tank", 999)).toBe(0);
+    expect(deriveRecentHealGain(fx, "tank", 1_000)).toBe(1_000);
+    expect(deriveRecentHealGain(fx, "tank", 1_000 + HEAL_CHUNK_MS / 2)).toBeCloseTo(500);
+    expect(deriveRecentHealGain(fx, "tank", 1_000 + HEAL_CHUNK_MS)).toBe(0);
+    expect(deriveRecentHealGain(fx, "nobody", 1_000)).toBe(0);
+  });
+
+  it("re-derives identical heal frames after scrubbing backwards", () => {
+    const fx = effects(
+      event(1_000, "heal", "priest", "tank", { periodic: true, amount: 300 }),
+      event(1_200, "heal", "druid", "tank", { periodic: true, amount: 250 }),
+      event(1_400, "heal", "priest", "tank", { amount: 2_000, crit: true }),
+      event(1_500, "heal", "priest", "tank", { amount: 500, overheal: 500 }),
+    );
+    const frame = (cursorMs: number) => ({ effects: derive(fx, cursorMs), gain: deriveRecentHealGain(fx, "tank", cursorMs) });
+    const forward = [1_100, 1_250, 1_450, 1_600].map(frame);
+    frame(3_000);
+    const backward = [1_600, 1_450, 1_250, 1_100].map(frame).reverse();
+    expect(backward).toEqual(forward);
   });
 });
 
