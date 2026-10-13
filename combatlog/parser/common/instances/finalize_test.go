@@ -14,12 +14,14 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -62,7 +64,18 @@ func newFinalizeTestHookable(t *testing.T, extraHooks ...instancehook.Hook) *Hoo
 
 	hostiles := make(map[uint32]Identity)
 	LoadBosses(hostiles, map[uint32]string{finalizeTestBossEntry: "Final Boss"})
-	return NewHookable(context.Background(), slog.Default(), unitdb.New(), zone.Zone{Name: "test instance"}, InstanceParams{
+	return newFinalizeTestHookableWithHostiles(t, hostiles, extraHooks...)
+}
+
+func newFinalizeTestHookableWithHostiles(t *testing.T, hostiles map[uint32]Identity, extraHooks ...instancehook.Hook) *Hookable {
+	t.Helper()
+	return newFinalizeTestHookableWithContext(t, context.Background(), hostiles, extraHooks...)
+}
+
+func newFinalizeTestHookableWithContext(t *testing.T, ctx context.Context, hostiles map[uint32]Identity, extraHooks ...instancehook.Hook) *Hookable {
+	t.Helper()
+
+	return NewHookable(ctx, slog.Default(), unitdb.New(), zone.Zone{Name: "test instance"}, InstanceParams{
 		Name:       "Test Instance",
 		Idf:        identifier.NewIdentifier(hostiles),
 		ExtraHooks: extraHooks,
@@ -509,6 +522,165 @@ func TestHookableFinalize_UsesPerInstanceLastProcessedTimestamp(t *testing.T) {
 	secondActivity := secondResult.Encounters[0].Combat.Hostiles[secondBoss].Activity
 	require.Equal(t, base.Add(characters.InactivityTimeout), firstActivity[0].End.Timestamp.Date())
 	require.Equal(t, base.Add(3*time.Hour+characters.InactivityTimeout), secondActivity[0].End.Timestamp.Date())
+}
+
+func TestForeverBossDeathEndsExplicitEncounterAndIgnoresLaterBoundaryEnd(t *testing.T) {
+	t.Parallel()
+
+	for _, format := range []database.LogFormat{database.LogFormatV9Cleu, database.LogFormatV22Cleu} {
+		t.Run(string(format), func(t *testing.T) {
+			t.Parallel()
+
+			hostiles := make(map[uint32]Identity)
+			LoadBosses(hostiles, map[uint32]string{finalizeTestBossEntry: "Final Boss"})
+			ctx := parsectx.With(context.Background(), parsectx.Context{
+				Flavor: database.WoWFlavor{database.FlavorWoWForever},
+				Format: format,
+			})
+			h := newFinalizeTestHookableWithContext(t, ctx, hostiles)
+			base := time.Date(2026, time.September, 23, 15, 55, 38, 0, time.UTC)
+			require.NoError(t, h.Process(&messages.EncounterBoundary{
+				MessageBase: messages.Base(base),
+				Active:      true,
+				EncounterID: 590,
+				Name:        "Final Boss",
+			}))
+			player, boss := startFinalizeTestFight(t, h, base.Add(time.Second))
+
+			death := base.Add(33 * time.Second)
+			require.NoError(t, h.Process(&messages.Slain{
+				MessageBase: messages.Base(death),
+				Victim:      boss,
+				Killer:      &player,
+			}))
+			require.Nil(t, h.currentFight)
+			require.Len(t, h.completedFights, 1)
+			require.Equal(t, death, h.completedFights[0].End)
+
+			success := true
+			require.True(t, h.HasExplicitEncounter(590), "the later boundary end must still route to this instance")
+			require.NoError(t, h.Process(&messages.EncounterBoundary{
+				MessageBase: messages.Base(base.Add(18 * time.Minute)),
+				Active:      false,
+				EncounterID: 590,
+				Name:        "Final Boss",
+				Success:     &success,
+			}))
+			require.Len(t, h.completedFights, 1)
+			require.False(t, h.HasExplicitEncounter(590))
+
+			enc, err := h.fightEncounter(h.completedFights[0])
+			require.NoError(t, err)
+			require.Equal(t, encounter.KillTypeClean, enc.KillType)
+		})
+	}
+}
+
+func TestBossDeathEndIsLimitedToForeverV9AndV22(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		flavor database.WoWFlavor
+		format database.LogFormat
+	}{
+		{
+			name:   "forever hermes proxy",
+			flavor: database.WoWFlavor{database.FlavorWoWForever},
+			format: database.LogFormatHermesproxy1142Cc,
+		},
+		{
+			name:   "non-forever v9",
+			flavor: database.WoWFlavor{database.FlavorVanilla},
+			format: database.LogFormatV9Cleu,
+		},
+		{
+			name:   "non-forever v22",
+			flavor: database.WoWFlavor{database.FlavorVanilla},
+			format: database.LogFormatV22Cleu,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			hostiles := make(map[uint32]Identity)
+			LoadBosses(hostiles, map[uint32]string{finalizeTestBossEntry: "Final Boss"})
+			ctx := parsectx.With(context.Background(), parsectx.Context{
+				Flavor: tt.flavor,
+				Format: tt.format,
+			})
+			h := newFinalizeTestHookableWithContext(t, ctx, hostiles)
+			base := time.Date(2026, time.September, 23, 15, 55, 38, 0, time.UTC)
+			require.NoError(t, h.Process(&messages.EncounterBoundary{
+				MessageBase: messages.Base(base),
+				Active:      true,
+				EncounterID: 590,
+				Name:        "Final Boss",
+			}))
+			player, boss := startFinalizeTestFight(t, h, base.Add(time.Second))
+
+			death := base.Add(33 * time.Second)
+			require.NoError(t, h.Process(&messages.Slain{
+				MessageBase: messages.Base(death),
+				Victim:      boss,
+				Killer:      &player,
+			}))
+			require.NotNil(t, h.currentFight)
+			require.True(t, h.currentFight.active())
+			require.Empty(t, h.completedFights)
+		})
+	}
+}
+
+func TestBossDeathCanWaitForExplicitEncounterEnd(t *testing.T) {
+	t.Parallel()
+
+	hostiles := map[uint32]Identity{
+		finalizeTestBossEntry: {
+			Affiliation:                  types.AffiliationHostile,
+			Name:                         "Multi-stage Boss",
+			EncounterName:                "Multi-stage Boss",
+			Boss:                         true,
+			BossDeathDoesNotEndEncounter: true,
+		},
+	}
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWoWForever},
+		Format: database.LogFormatV22Cleu,
+	})
+	h := newFinalizeTestHookableWithContext(t, ctx, hostiles)
+	base := time.Date(2026, time.September, 23, 15, 55, 38, 0, time.UTC)
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(base),
+		Active:      true,
+		EncounterID: 590,
+		Name:        "Multi-stage Boss",
+	}))
+	player, boss := startFinalizeTestFight(t, h, base.Add(time.Second))
+
+	death := base.Add(33 * time.Second)
+	require.NoError(t, h.Process(&messages.Slain{
+		MessageBase: messages.Base(death),
+		Victim:      boss,
+		Killer:      &player,
+	}))
+	require.NotNil(t, h.currentFight)
+	require.True(t, h.currentFight.active())
+	require.Empty(t, h.completedFights)
+
+	end := base.Add(time.Minute)
+	success := true
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(end),
+		Active:      false,
+		EncounterID: 590,
+		Name:        "Multi-stage Boss",
+		Success:     &success,
+	}))
+	require.Nil(t, h.currentFight)
+	require.Len(t, h.completedFights, 1)
+	require.Equal(t, death, h.completedFights[0].End)
 }
 
 func TestEncounterBoundaryKeepsFightActiveUntilEnd(t *testing.T) {

@@ -83,16 +83,18 @@ type Hookable struct {
 	derivedRankingRules     map[string]*rankings.Rankings
 
 	// Live tracking data
-	Auras             *auras.Tracking
-	Characters        *characters.Characters
-	currentFight      *ongoingFight
-	events            *encounterevents.Events
-	lastActivity      time.Time
-	completedFights   []encounter.Fight
-	explicitEncounter *messages.EncounterBoundary
-	lastProcessedAt   time.Time
-	finalizing        bool
-	finalized         bool
+	Auras                      *auras.Tracking
+	Characters                 *characters.Characters
+	currentFight               *ongoingFight
+	events                     *encounterevents.Events
+	lastActivity               time.Time
+	completedFights            []encounter.Fight
+	explicitEncounter          *messages.EncounterBoundary
+	ignoredEncounterEnds       map[int32]struct{}
+	bossDeathEndsExplicitFight bool
+	lastProcessedAt            time.Time
+	finalizing                 bool
+	finalized                  bool
 
 	// finalized references
 	g                *armory.Tracker
@@ -146,6 +148,8 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	// flavor, which falls through to the default vanilla factories.
 	flavor, _ := parsectx.Flavor(ctx)
 	format, _ := parsectx.Format(ctx)
+	bossDeathEndsExplicitFight := flavor.Has(database.FlavorWoWForever) &&
+		(format == database.LogFormatV9Cleu || format == database.LogFormatV22Cleu)
 
 	// Select character factories based on flavor + format.
 	var cres []characters.CharacterFactory
@@ -229,30 +233,32 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	}
 
 	c := &Hookable{
-		name:                 ip.Name,
-		Category:             ip.Category,
-		logger:               logger,
-		units:                db,
-		preprocessors:        ip.Preprocessors,
-		CurrentZone:          z,
-		activeMapID:          z.MapID,
-		MatchesZoneF:         ip.MatchesZone,
-		Characters:           chrs,
-		Identifier:           ip.Idf,
-		events:               encounterevents.NewEvents(),
-		g:                    g,
-		p:                    p,
-		lootTracking:         lootTracking,
-		hooks:                hooks,
-		engagementTracker:    engagementTracker,
-		overviewTracker:      overviewTracker,
-		speedrunTracker:      speedrunTracker,
-		survivabilityTracker: survivabilityTracker,
-		dpsTracker:           dpsTracker,
-		rankingRules:         ip.Rankings,
-		verbose:              parseoptions.IsVerbose(ctx),
-		timings:              timings.New(),
-		completedFights:      make([]encounter.Fight, 0),
+		name:                       ip.Name,
+		Category:                   ip.Category,
+		logger:                     logger,
+		units:                      db,
+		preprocessors:              ip.Preprocessors,
+		CurrentZone:                z,
+		activeMapID:                z.MapID,
+		MatchesZoneF:               ip.MatchesZone,
+		Characters:                 chrs,
+		Identifier:                 ip.Idf,
+		events:                     encounterevents.NewEvents(),
+		g:                          g,
+		p:                          p,
+		lootTracking:               lootTracking,
+		hooks:                      hooks,
+		engagementTracker:          engagementTracker,
+		overviewTracker:            overviewTracker,
+		speedrunTracker:            speedrunTracker,
+		survivabilityTracker:       survivabilityTracker,
+		dpsTracker:                 dpsTracker,
+		rankingRules:               ip.Rankings,
+		verbose:                    parseoptions.IsVerbose(ctx),
+		timings:                    timings.New(),
+		completedFights:            make([]encounter.Fight, 0),
+		ignoredEncounterEnds:       make(map[int32]struct{}),
+		bossDeathEndsExplicitFight: bossDeathEndsExplicitFight,
 	}
 
 	cie.emit = func(evt *messages.Combatant) {
@@ -389,7 +395,11 @@ func (h *Hookable) SetRealm(r *realm.Info) {
 }
 
 func (h *Hookable) HasExplicitEncounter(encounterID int32) bool {
-	return h.explicitEncounter != nil && h.explicitEncounter.EncounterID == encounterID
+	if h.explicitEncounter != nil && h.explicitEncounter.EncounterID == encounterID {
+		return true
+	}
+	_, ignored := h.ignoredEncounterEnds[encounterID]
+	return ignored
 }
 
 func (h *Hookable) SetVersions(versions map[string]string, player *guid.GUID) {
@@ -487,6 +497,18 @@ func (h *Hookable) FightActive() bool {
 	return h.currentFight != nil && h.currentFight.active()
 }
 
+func (h *Hookable) bossDeathEndsCurrentFight(m messages.Message) bool {
+	slain, ok := m.(*messages.Slain)
+	if !ok || !h.bossDeathEndsExplicitFight || h.currentFight == nil || !h.currentFight.active() || h.explicitEncounter == nil {
+		return false
+	}
+	if _, participating := h.currentFight.ActiveHostiles[slain.Victim]; !participating {
+		return false
+	}
+	identity := h.IdentifyUnit(slain.Victim)
+	return identity.Boss && !identity.BossDeathDoesNotEndEncounter
+}
+
 func (h *Hookable) Process(m messages.Message) error {
 	if h.finalizing || h.finalized {
 		return fmt.Errorf("cannot process message after instance finalization started")
@@ -498,6 +520,16 @@ func (h *Hookable) Process(m messages.Message) error {
 }
 
 func (h *Hookable) process(m messages.Message) (finalError error) {
+	if boundary, ok := m.(*messages.EncounterBoundary); ok {
+		if boundary.Active {
+			// Encounter IDs may be reused by later attempts.
+			delete(h.ignoredEncounterEnds, boundary.EncounterID)
+		} else if _, ignored := h.ignoredEncounterEnds[boundary.EncounterID]; ignored {
+			delete(h.ignoredEncounterEnds, boundary.EncounterID)
+			return nil
+		}
+	}
+
 	if len(h.preprocessors) > 0 {
 		err := timings.Do1(h.timings, timingsPreprocessors, func() error {
 			for _, preprocessor := range h.preprocessors {
@@ -558,6 +590,37 @@ func (h *Hookable) process(m messages.Message) (finalError error) {
 	})
 	if err != nil {
 		return fmt.Errorf("process characters: %w", err)
+	}
+	if boundary, ok := m.(*messages.EncounterBoundary); ok && !boundary.Active {
+		// An explicit end must re-evaluate fight state even if every hostile was
+		// already inactive before the boundary arrived.
+		actChange = true
+	}
+
+	if h.bossDeathEndsCurrentFight(m) {
+		encounterID := int32(0)
+		if h.explicitEncounter != nil {
+			encounterID = h.explicitEncounter.EncounterID
+			if h.ignoredEncounterEnds == nil {
+				h.ignoredEncounterEnds = make(map[int32]struct{})
+			}
+			h.ignoredEncounterEnds[encounterID] = struct{}{}
+			success := true
+			h.currentFight.AuthoritativeSuccess = &success
+			h.explicitEncounter = nil
+		}
+
+		// End any surviving adds at the boss death timestamp. The boss itself was
+		// already ended as slain by the original message.
+		endedActivity, endErr := h.Characters.Process(&messages.EncounterBoundary{
+			MessageBase: messages.Base(m.Date(), messages.WithSynthetic()),
+			Active:      false,
+			EncounterID: encounterID,
+		})
+		if endErr != nil {
+			return fmt.Errorf("end characters on boss death: %w", endErr)
+		}
+		actChange = actChange || endedActivity
 	}
 
 	h.lastProcessedAt = m.Date()

@@ -26,6 +26,9 @@ type Identity struct {
 	EncounterName string
 	// Boss indicates if the unit is considered a boss for encounter purposes.
 	Boss bool
+	// BossDeathDoesNotEndEncounter opts this boss out of the default behavior
+	// where its death immediately ends the current encounter.
+	BossDeathDoesNotEndEncounter bool
 
 	EncounterNameFn func(f encounter.Fight) *EncounterFuncResult
 }
