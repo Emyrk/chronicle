@@ -20,6 +20,11 @@ export function latestPositionAt(
   positions: MapPositionSample[],
   timestampMs: number,
 ): MapPositionSample | null {
+  const index = latestPositionIndex(positions, timestampMs);
+  return index >= 0 ? positions[index] : null;
+}
+
+function latestPositionIndex(positions: MapPositionSample[], timestampMs: number): number {
   let low = 0;
   let high = positions.length - 1;
   let match = -1;
@@ -32,7 +37,38 @@ export function latestPositionAt(
       high = middle - 1;
     }
   }
-  return match >= 0 ? positions[match] : null;
+  return match;
+}
+
+const MAX_INTERPOLATION_GAP_MS = 2_000;
+
+function lerpAngle(from: number, to: number, t: number): number {
+  const delta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+  return from + delta * t;
+}
+
+// Like latestPositionAt, but blends toward the next sample when both are on
+// the same map and close enough in time that the unit plausibly moved
+// between them. Longer gaps hold the latest sample, matching the 2D view.
+export function interpolatedPositionAt(
+  positions: MapPositionSample[],
+  timestampMs: number,
+  maxGapMs = MAX_INTERPOLATION_GAP_MS,
+): MapPositionSample | null {
+  const index = latestPositionIndex(positions, timestampMs);
+  if (index < 0) return null;
+  const latest = positions[index];
+  const next = positions[index + 1];
+  if (!next || next.mapId !== latest.mapId || next.timestampMs <= latest.timestampMs) return latest;
+  if (next.timestampMs - latest.timestampMs > maxGapMs) return latest;
+  const t = (timestampMs - latest.timestampMs) / (next.timestampMs - latest.timestampMs);
+  return {
+    timestampMs,
+    x: latest.x + (next.x - latest.x) * t,
+    y: latest.y + (next.y - latest.y) * t,
+    mapId: latest.mapId,
+    facing: lerpAngle(latest.facing, next.facing, t),
+  };
 }
 
 export function selectMapEncounter(
@@ -207,5 +243,20 @@ export function dungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBo
   return {
     leftPercent: clampPercent((bounds.maxX - sample.y) / (bounds.maxX - bounds.minX)),
     topPercent: clampPercent((bounds.maxY - sample.x) / (bounds.maxY - bounds.minY)),
+  };
+}
+
+export interface ScenePoint {
+  x: number;
+  z: number;
+}
+
+// Places a 2D artwork point on a ground plane centred on the origin that is
+// `width` wide and keeps the artwork's aspect ratio (`aspect` = height/width).
+// Artwork left grows along +x and artwork top grows along +z.
+export function mapPointToScene(point: MapPoint, aspect: number, width = 1): ScenePoint {
+  return {
+    x: (point.leftPercent / 100 - 0.5) * width,
+    z: (point.topPercent / 100 - 0.5) * width * aspect,
   };
 }
