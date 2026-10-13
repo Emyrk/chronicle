@@ -3,7 +3,7 @@ export function PrivacyPage() {
     <div className="container mx-auto px-4 py-8 max-w-3xl">
       <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
       <p className="text-sm text-muted-foreground mb-6">
-        Last updated: October 5, 2026
+        Last updated: October 13, 2026
       </p>
 
       {/* Short Version */}
@@ -15,7 +15,7 @@ export function PrivacyPage() {
         <ul className="list-disc list-inside space-y-1 text-muted-foreground mb-3">
           <li>Guild pages are public by design.</li>
           <li>Guild leadership controls uploads.</li>
-          <li>We don't sell your data.</li>
+          <li>We do not sell personal information for money.</li>
           <li>We may display advertising to help support the service.</li>
           <li>We don't use raid data to target ads.</li>
           <li>We collect only what we need to run the service.</li>
@@ -127,8 +127,10 @@ export function PrivacyPage() {
           <li>Display and measure advertising that helps support the service</li>
         </ul>
         <p className="text-muted-foreground">
-          We do <strong>not</strong> sell your data. We do <strong>not</strong>{" "}
-          use raid data to target advertising.
+          We do <strong>not</strong> sell personal information for money. Advertising
+          technology may involve sharing technical information for targeted advertising
+          as defined by applicable privacy laws. We do <strong>not</strong> use raid data
+          to target advertising.
         </p>
       </section>
 
@@ -150,6 +152,46 @@ export function PrivacyPage() {
           We do not provide raid log data, character performance, or private
           account content to advertisers for ad targeting.
         </p>
+      </section>
+
+      {/* California Privacy Rights */}
+      <section className="mb-8">
+        <h2 className="text-xl font-semibold mb-3">California Privacy Rights</h2>
+        <p className="text-muted-foreground mb-2">
+          California residents may have the right to know, access, correct, or delete
+          personal information; receive a portable copy of certain information; and opt
+          out of the sale or sharing of personal information. Chronicle will not
+          discriminate against you for exercising these rights.
+        </p>
+        <p className="text-muted-foreground mb-2">
+          Chronicle does not sell personal information in exchange for money. Our
+          advertising providers may process or disclose identifiers, device and browser
+          information, internet activity, and approximate location to deliver, measure,
+          secure, or personalize advertising. California law may define some of this
+          activity as selling or sharing personal information.
+        </p>
+        <p className="text-muted-foreground mb-2">
+          We do not provide raid logs, character performance, or private account content
+          to advertising providers for ad targeting. We do not knowingly sell or share
+          the personal information of consumers under 16 years of age.
+        </p>
+        <p className="text-muted-foreground mb-3">
+          To request access, correction, or deletion, email{" "}
+          <a
+            href="mailto:support@chronicleclassic.com"
+            className="text-primary hover:underline"
+          >
+            support@chronicleclassic.com
+          </a>
+          . We may need to verify your request before responding. An authorized agent may
+          submit a request where permitted by law.
+        </p>
+        <div className="text-muted-foreground">
+          <span
+            data-ccpa-link="1"
+            className="cursor-pointer font-medium text-primary hover:underline"
+          />
+        </div>
       </section>
 
       {/* Who Controls the Data */}
