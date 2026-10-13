@@ -269,17 +269,28 @@ maps/forever-extract:
 		$(if $(WOWDATA_MAP_REUSE_MANIFEST),--reuse-manifest-url="$(WOWDATA_MAP_REUSE_MANIFEST)") \
 		--workers="$(WOWDATA_MAP_WORKERS)"
 
-.PHONY: maps/forever-render
-maps/forever-render: maps/forever-extract
+define render-forever-maps
 	go run ./scripts/dbcdata render-wowdata-maps \
 		--server=forever \
 		--manifest=frontend/imagecache/forever/maps/manifest.json \
 		$(if $(WOWDATA_BIN),--wowdata="$(WOWDATA_BIN)") \
 		$(if $(WOWDATA_CACHE),--cache="$(WOWDATA_CACHE)") \
 		--workers="$(WOWDATA_MAP_WORKERS)"
+endef
+
+# Re-render generated instance maps using the existing manifest without
+# re-extracting UI artwork and its thousands of tiles.
+.PHONY: maps/forever-render
+maps/forever-render:
+	$(render-forever-maps)
+
+# The full publishing pipeline refreshes artwork before rendering instances.
+.PHONY: maps/forever-build
+maps/forever-build: maps/forever-extract
+	$(render-forever-maps)
 
 .PHONY: maps/forever-upload
-maps/forever-upload: maps/forever-render
+maps/forever-upload: maps/forever-build
 	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps ./upload-maps-r2.sh)
 
 .PHONY: maps/forever
