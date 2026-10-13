@@ -239,7 +239,7 @@ export function SpellPage() {
               context={resolvedTooltipContext}
             />
             {tooltipRequirements && (
-              <div className="mt-3">
+              <div className="mt-2">
                 <SpellContextPanel
                   requirements={tooltipRequirements}
                   context={resolvedTooltipContext}
