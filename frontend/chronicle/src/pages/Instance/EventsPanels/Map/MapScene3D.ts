@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mapAssetUrl, type WowMapLayer, type WowMapTile } from "@/pages/Technical/mapGallery";
+import { bossMiniSlug, bossMiniUrl } from "./bossMinis";
 import { FULL_MAP_VIEWPORT, healthBarColor, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   DEFAULT_EFFECT_OPTIONS,
@@ -43,6 +45,15 @@ const COMBAT_TEXT_HEIGHT = 1.8;
 // Rendered label textures kept for reuse (spell name + colour).
 const MAX_LABEL_TEXTURES = 128;
 const DEAD_COLOR = 0x57534e;
+// Boss minis have a 1-unit footprint; scaled a little wider than the 1.8-unit
+// hostile box so they read at boss-fight zoom.
+const BOSS_MINI_SIZE = 2.6;
+// The minis face +z (glTF front); the facing cone and WoW facing use -z.
+const BOSS_MINI_YAW = Math.PI;
+// Gap between the top of a boss mini and its health bar.
+const BOSS_MINI_BAR_GAP = 0.6;
+// Lift that keeps a dead (lying) primitive body above the ground.
+const DEAD_LIFT = 0.9;
 // Default camera directions from the target.
 const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
 // A tiny +z offset keeps OrbitControls' up vector stable while leaving
@@ -59,12 +70,28 @@ export interface MapScene3DUnit {
   name: string;
   /** Health bar to draw, or null for none. */
   health: MapUnitHealth | null;
+  /** NPC entry, which picks a boss miniature for hostiles. */
+  entry?: number;
+}
+
+interface BossMini {
+  geometry: THREE.BufferGeometry;
+  /** The model's own material when it has a base-colour texture; cloned per unit. */
+  material: THREE.MeshStandardMaterial | null;
+  /** Health bar height, above the model's bounding box. */
+  barHeight: number;
+  /** Hover label height, the same distance above the bar as for primitives. */
+  labelHeight: number;
+  /** Lift that keeps the model above the ground while it lies dead. */
+  deadLift: number;
 }
 
 interface UnitObject {
   group: THREE.Group;
   body: THREE.Mesh;
-  bodyMaterial: THREE.MeshLambertMaterial;
+  // Lambert with the unit's tint, or a textured mini's cloned material.
+  bodyMaterial: THREE.MeshLambertMaterial | THREE.MeshStandardMaterial;
+  textured: boolean;
   coneMaterial: THREE.MeshLambertMaterial;
   cone: THREE.Mesh;
   kind: MapMarkerKind;
@@ -74,6 +101,11 @@ interface UnitObject {
   /** Replayed position; lunges offset `group.position` from it. */
   base: THREE.Vector3;
   health: MapUnitHealth | null;
+  /** Boss mini file name, when this unit has one (the box shows until it loads). */
+  miniSlug: string | undefined;
+  barHeight: number;
+  labelHeight: number;
+  deadLift: number;
 }
 
 export interface MapScene3DEffects {
@@ -126,6 +158,9 @@ export class MapScene3D {
   private readonly unitsGroup = new THREE.Group();
   private readonly units = new Map<string, UnitObject>();
   private readonly textureLoader = new THREE.TextureLoader();
+  // Boss minis by slug: null while loading or after a failed load.
+  private readonly bossMinis = new Map<string, BossMini | null>();
+  private gltfLoader: Promise<GLTFLoader> | null = null;
   private label: THREE.Sprite | null = null;
   private hoveredGuid: string | null = null;
   private groundKey = "";
@@ -346,7 +381,7 @@ export class MapScene3D {
         material.opacity = opacity;
         material.depthWrite = !unit.muted;
       }
-      object.bodyMaterial.color.set(object.dead ? DEAD_COLOR : unit.color);
+      setBodyColor(object);
     }
     for (const guid of [...this.units.keys()]) {
       if (!seen.has(guid)) this.removeUnit(guid);
@@ -432,6 +467,11 @@ export class MapScene3D {
     this.clearLabel();
     this.clearGround();
     for (const geometry of Object.values(this.geometries)) geometry.dispose();
+    for (const mini of this.bossMinis.values()) {
+      mini?.geometry.dispose();
+      mini?.material?.map?.dispose();
+      mini?.material?.dispose();
+    }
     this.beams.geometry.dispose();
     this.beams.material.dispose();
     for (const pool of [this.rings, this.bolts, this.slashes, this.bars]) {
@@ -457,7 +497,7 @@ export class MapScene3D {
     group.add(body, cone);
     group.scale.setScalar(this.unitScale);
     this.unitsGroup.add(group);
-    const object = {
+    const object: UnitObject = {
       group,
       body,
       bodyMaterial,
@@ -466,12 +506,109 @@ export class MapScene3D {
       kind: unit.kind,
       name: unit.name,
       color: unit.color,
+      textured: false,
       dead: false,
       base: new THREE.Vector3(),
       health: unit.health,
+      miniSlug: unit.kind === "hostile" ? bossMiniSlug(unit.entry) : undefined,
+      barHeight: BAR_HEIGHT,
+      labelHeight: LABEL_HEIGHT,
+      deadLift: DEAD_LIFT,
     };
     this.units.set(unit.guid, object);
+    if (object.miniSlug) {
+      const mini = this.requestBossMini(object.miniSlug, bossMiniUrl(unit.entry)!);
+      if (mini) this.applyBossMini(object, mini);
+    }
     return object;
+  }
+
+  // Returns the slug's mini if it has loaded, starting the load on first use.
+  private requestBossMini(slug: string, url: string): BossMini | null {
+    if (this.bossMinis.has(slug)) return this.bossMinis.get(slug) ?? null;
+    this.bossMinis.set(slug, null);
+    void this.loadBossMini(url).then((mini) => {
+      if (!mini) return;
+      if (this.disposed) {
+        mini.geometry.dispose();
+        mini.material?.map?.dispose();
+        mini.material?.dispose();
+        return;
+      }
+      this.bossMinis.set(slug, mini);
+      for (const object of this.units.values()) {
+        if (object.miniSlug === slug) this.applyBossMini(object, mini);
+      }
+      this.updateLabel();
+      this.requestRender();
+    });
+    return null;
+  }
+
+  // Loads a mini's first mesh as plain float geometry, sized and turned to
+  // face -z, keeping its material only if it has a base-colour texture.
+  // Resolves null on any failure so the unit keeps its box.
+  private async loadBossMini(url: string): Promise<BossMini | null> {
+    try {
+      this.gltfLoader ??= createGltfLoader();
+      const gltf = await (await this.gltfLoader).loadAsync(url);
+      gltf.scene.updateMatrixWorld(true);
+      let geometry: THREE.BufferGeometry | null = null;
+      let material: THREE.MeshStandardMaterial | null = null;
+      gltf.scene.traverse((child) => {
+        const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+        if (!mesh.isMesh) return;
+        const source = mesh.material as THREE.MeshStandardMaterial;
+        if (!geometry) {
+          geometry = bakedGeometry(mesh);
+          if (source.isMeshStandardMaterial && source.map) material = source;
+        }
+        mesh.geometry.dispose();
+        if (source !== material) {
+          source.map?.dispose();
+          source.dispose();
+        }
+      });
+      if (!geometry) return null;
+      if (material) (material as THREE.MeshStandardMaterial).map!.colorSpace = THREE.SRGBColorSpace;
+      const mini = geometry as THREE.BufferGeometry;
+      mini.rotateY(BOSS_MINI_YAW).scale(BOSS_MINI_SIZE, BOSS_MINI_SIZE, BOSS_MINI_SIZE);
+      mini.computeBoundingBox();
+      mini.computeBoundingSphere();
+      const box = mini.boundingBox!;
+      const barHeight = Math.max(BAR_HEIGHT, box.max.y + BOSS_MINI_BAR_GAP);
+      return {
+        geometry: mini,
+        material,
+        barHeight,
+        labelHeight: barHeight + LABEL_HEIGHT - BAR_HEIGHT,
+        // Lying down turns -z into +y, so the back of the model rests on the ground.
+        deadLift: -box.min.z,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private applyBossMini(object: UnitObject, mini: BossMini) {
+    object.body.geometry = mini.geometry;
+    if (mini.material) {
+      // Keep the texture: the per-unit clone carries opacity, the hit flash
+      // (emissive) and the death grey (colour multiply).
+      const material = mini.material.clone();
+      material.transparent = true;
+      material.opacity = object.bodyMaterial.opacity;
+      material.depthWrite = object.bodyMaterial.depthWrite;
+      object.bodyMaterial.dispose();
+      object.body.material = material;
+      object.bodyMaterial = material;
+      object.textured = true;
+      setBodyColor(object);
+    }
+    object.barHeight = mini.barHeight;
+    object.labelHeight = mini.labelHeight;
+    object.deadLift = mini.deadLift;
+    if (object.dead) object.body.position.y = mini.deadLift;
   }
 
   private removeUnit(guid: string) {
@@ -638,7 +775,7 @@ export class MapScene3D {
       const height = COMBAT_TEXT_HEIGHT * (text.crit ? 1.25 : 1) * this.unitScale;
       sprite.scale.set(height * label.aspect, height, 1);
       // Float up from above the bar; stagger labels on the same target.
-      const lift = (LABEL_HEIGHT + 0.5 + 2 * text.progress + (shown % 3) * 1.2) * this.unitScale;
+      const lift = (target.labelHeight + 0.5 + 2 * text.progress + (shown % 3) * 1.2) * this.unitScale;
       sprite.position.set(target.base.x, lift, target.base.z);
       sprite.visible = true;
       shown++;
@@ -734,8 +871,9 @@ export class MapScene3D {
     const padding = BAR_PADDING * this.unitScale;
     const right = this.vectorB.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
     let count = 0;
+    let barHeight = BAR_HEIGHT;
     const quad = (base: THREE.Vector3, from: number, to: number, quadWidth: number, quadHeight: number, color: THREE.Color | number) => {
-      const center = this.vector.copy(base).setY(BAR_HEIGHT * this.unitScale).addScaledVector(right, ((from + to) / 2 - 0.5) * width);
+      const center = this.vector.copy(base).setY(barHeight * this.unitScale).addScaledVector(right, ((from + to) / 2 - 0.5) * width);
       this.matrix.compose(center, this.camera.quaternion, this.scaleVector.set(quadWidth, quadHeight, 1));
       this.bars.setMatrixAt(count, this.matrix);
       this.bars.setColorAt(count, typeof color === "number" ? this.color.setHex(color) : color);
@@ -745,6 +883,7 @@ export class MapScene3D {
       const { health } = object;
       if (!health || count + 3 > MAX_HEALTH_BARS * 3) continue;
       const dead = health.dead || object.dead;
+      barHeight = object.barHeight;
       const fraction = health.max > 0 ? Math.min(1, Math.max(0, health.current / health.max)) : 0;
       const absorb = health.max > 0 ? Math.min(1 - fraction, Math.max(0, health.absorb / health.max)) : 0;
       quad(object.base, 0, 1, width + padding, thickness + padding, dead ? BAR_DEAD : BAR_BACKGROUND);
@@ -760,9 +899,9 @@ export class MapScene3D {
     if (object.dead === dead) return;
     object.dead = dead;
     object.body.rotation.x = dead ? -Math.PI / 2 : 0;
-    object.body.position.y = dead ? 0.9 : 0;
+    object.body.position.y = dead ? object.deadLift : 0;
     object.cone.visible = !dead;
-    object.bodyMaterial.color.set(dead ? DEAD_COLOR : object.color);
+    setBodyColor(object);
   }
 
   private effectColor(css: string): THREE.Color {
@@ -797,7 +936,7 @@ export class MapScene3D {
       this.scene.add(this.label);
     }
     this.label!.scale.copy(this.label!.userData.baseScale as THREE.Vector3).multiplyScalar(this.unitScale);
-    this.label!.position.set(object.group.position.x, LABEL_HEIGHT * this.unitScale, object.group.position.z);
+    this.label!.position.set(object.group.position.x, object.labelHeight * this.unitScale, object.group.position.z);
   }
 
   private clearLabel() {
@@ -871,6 +1010,49 @@ export class MapScene3D {
       if (animating) this.requestRender();
     });
   };
+}
+
+// Untextured bodies take the unit's colour; textured minis keep their texture
+// (white multiply). Both turn grey when dead.
+function setBodyColor(object: UnitObject) {
+  object.bodyMaterial.color.set(object.dead ? DEAD_COLOR : object.textured ? 0xffffff : object.color);
+}
+
+// Loaded on first use so the glTF loader and meshopt decoder stay out of the
+// 3D chunk until a boss mini is needed. The minis use EXT_meshopt_compression.
+async function createGltfLoader(): Promise<GLTFLoader> {
+  const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
+    import("three/examples/jsm/loaders/GLTFLoader.js"),
+    import("three/examples/jsm/libs/meshopt_decoder.module.js"),
+  ]);
+  return new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+}
+
+// The minis' positions are quantized (KHR_mesh_quantization) with the scale in
+// the node transform; bake that into float positions, float UVs and fresh
+// normals.
+function bakedGeometry(mesh: THREE.Mesh): THREE.BufferGeometry {
+  const source = mesh.geometry.getAttribute("position");
+  const positions = new Float32Array(source.count * 3);
+  const vertex = new THREE.Vector3();
+  for (let index = 0; index < source.count; index++) {
+    vertex.fromBufferAttribute(source, index).applyMatrix4(mesh.matrixWorld).toArray(positions, index * 3);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const uv = mesh.geometry.getAttribute("uv");
+  if (uv) {
+    const uvs = new Float32Array(uv.count * 2);
+    for (let index = 0; index < uv.count; index++) {
+      uvs[index * 2] = uv.getX(index);
+      uvs[index * 2 + 1] = uv.getY(index);
+    }
+    geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  }
+  const index = mesh.geometry.getIndex();
+  if (index) geometry.setIndex(new THREE.BufferAttribute(index.array.slice(), 1));
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 // The 2D view loads the same tiles as plain <img>s, and the CDN's response to

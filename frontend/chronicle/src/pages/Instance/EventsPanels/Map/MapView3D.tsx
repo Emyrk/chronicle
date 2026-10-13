@@ -170,6 +170,7 @@ export default function MapView3D({
         muted: marker.muted,
         name: marker.name,
         health: showBars ? marker.health : null,
+        entry: marker.entry,
       }];
     });
     scene.setUnits(units);

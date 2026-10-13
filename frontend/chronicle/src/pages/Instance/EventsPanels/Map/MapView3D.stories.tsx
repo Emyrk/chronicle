@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { BOSS_MINI_SLUGS } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
 import type { MapHealthSample } from "./map.processor";
 import { fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
@@ -505,6 +506,74 @@ function BossFightReplay({ players, playbackSpeed }: { players: number; playback
   );
 }
 
+// Every Wailing Caverns boss on a ring with a health bar, each walking a small
+// circle so its facing turns; they take turns being hit and one dies at 20 s.
+// Bosses whose model is missing from public/boss-minis show the box marker.
+const BOSS_ENTRIES = [...BOSS_MINI_SLUGS.keys()];
+const BOSS_MINI_VIEW = { viewport: { centerX: 0.5, centerY: 0.5, zoom: 3 }, key: "boss-minis" };
+
+function bossMiniMarkers(cursorMs: number, fx: EncounterEffects): MapSceneMarker[] {
+  return BOSS_ENTRIES.flatMap((entry, index): MapSceneMarker[] => {
+    const angle = (index / BOSS_ENTRIES.length) * Math.PI * 2;
+    const positions = circlingPositions(index, BOSS_ENTRIES.length, 1.5, 2)
+      .map((sample) => ({ ...sample, x: sample.x + Math.cos(angle) * 9, y: sample.y + Math.sin(angle) * 9 }));
+    const sample = latestPositionAt(positions, cursorMs);
+    if (!sample) return [];
+    return [{
+      guid: `Boss-${entry}`,
+      health: { current: 100 - index * 9, max: 100, absorb: 0, dead: isDeadAt(fx, `Boss-${entry}`, cursorMs) },
+      name: BOSS_MINI_SLUGS.get(entry)!,
+      kind: "hostile",
+      color: "#fb7185",
+      entry,
+      positions,
+      sample,
+      point: projectSample(sample),
+      muted: false,
+    }];
+  });
+}
+
+function bossMiniEffects(): EncounterEffects {
+  const fx = createEncounterEffects();
+  const base = { amount: 1000, crit: false, periodic: false, melee: true, aoe: false, castTimeMs: 0, spellId: null, school: 2, source: "Player-0" };
+  const events: ReplayEffectEvent[] = [];
+  for (let t = 300; t < DURATION_MS; t += 700) {
+    events.push({ ...base, timestampMs: t, kind: "damage", target: `Boss-${BOSS_ENTRIES[Math.floor(t / 700) % BOSS_ENTRIES.length]}` });
+  }
+  const last = `Boss-${BOSS_ENTRIES[BOSS_ENTRIES.length - 1]}`;
+  events.push({ ...base, timestampMs: 20_000, kind: "slain", target: last, melee: false });
+  events.push({ ...base, timestampMs: 40_000, kind: "resurrect", target: last, melee: false });
+  for (const event of events.sort((left, right) => left.timestampMs - right.timestampMs)) addEffectEvent(fx, event);
+  return fx;
+}
+
+function BossMiniReplay({ playbackSpeed }: { playbackSpeed: number }) {
+  const [fx] = useState(bossMiniEffects);
+  const [cursorMs, setCursorMs] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setCursorMs((previous) => (previous + 100 * playbackSpeed) % DURATION_MS), 100);
+    return () => clearInterval(id);
+  }, [playbackSpeed]);
+
+  return (
+    <div style={{ width: 800, height: 520 }} className="overflow-hidden rounded-md border border-white/10 bg-black/70">
+      <MapView3D
+        ground={ground}
+        markers={bossMiniMarkers(cursorMs, fx)}
+        projectSample={projectSample}
+        cursorMs={cursorMs}
+        playing
+        playbackSpeed={playbackSpeed}
+        view={BOSS_MINI_VIEW}
+        effects={fx}
+        onUnavailable={() => console.warn("WebGL unavailable")}
+      />
+    </div>
+  );
+}
+
 const meta = {
   title: "Instance/Map/MapView3D",
   component: SyntheticReplay,
@@ -550,4 +619,10 @@ export const BossFight: Story = {
 export const BossFight25: Story = {
   args: { players: 25, playbackSpeed: 1, effects: true },
   render: ({ players, playbackSpeed }) => <BossFightReplay players={players} playbackSpeed={playbackSpeed} />,
+};
+
+/** Wailing Caverns boss miniatures (box markers where a model is missing). */
+export const BossMinis: Story = {
+  args: { playbackSpeed: 1 },
+  render: ({ playbackSpeed }) => <BossMiniReplay playbackSpeed={playbackSpeed} />,
 };
