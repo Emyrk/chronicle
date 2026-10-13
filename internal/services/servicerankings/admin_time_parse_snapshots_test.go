@@ -129,19 +129,25 @@ func TestDeleteTimeParseSnapshot(t *testing.T) {
 		clearCount, err := store.CountTimeParseSnapshotClearTimeMembers(ctx, snap.ID)
 		require.NoError(t, err)
 		assert.Greater(t, clearCount, int64(0), "should have clear-time members before delete")
+		series := database.ListTimeParseBossKillMembershipsParams{
+			TenantID: uuid.Nil, PolicyVersion: 1, QueryVersion: 1,
+		}
+		memberships, err := store.ListTimeParseBossKillMemberships(ctx, series)
+		require.NoError(t, err)
+		require.NotEmpty(t, memberships)
 
 		// Delete the snapshot.
 		err = store.DeleteTimeParseSnapshot(ctx, snap.ID)
 		require.NoError(t, err)
 
-		// Members should be cascade-deleted.
+		// Snapshot-owned clear-time members are cascade-deleted. Compact boss
+		// memberships belong to the versioned series and remain available.
 		clearCount, err = store.CountTimeParseSnapshotClearTimeMembers(ctx, snap.ID)
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), clearCount, "clear-time members should be cascade-deleted")
-
-		bossCount, err := store.CountTimeParseSnapshotBossKillMembers(ctx, snap.ID)
+		membershipsAfterDelete, err := store.ListTimeParseBossKillMemberships(ctx, series)
 		require.NoError(t, err)
-		assert.Equal(t, int64(0), bossCount, "boss-kill members should be cascade-deleted")
+		assert.Len(t, membershipsAfterDelete, len(memberships))
 	})
 
 	t.Run("DeleteNonexistentIsNoOp", func(t *testing.T) {

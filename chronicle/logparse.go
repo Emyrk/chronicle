@@ -836,15 +836,15 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
 	}
 
-	if job.Args.Replacement {
-		if result, err := db.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, job.Args.LogID); err != nil {
-			w.parent.logger.WarnContext(ctx, "failed to refresh time-parse memberships after replacement parse", slog.Any("error", err))
-		} else {
-			w.parent.logger.InfoContext(ctx, "refreshed time-parse memberships after replacement parse",
-				slog.Int64("upserted", result.UpsertedCount),
-				slog.Int64("deleted", result.DeletedCount),
-			)
-		}
+	// Keep the compact current-known cohort synchronized after every successful
+	// parse. This also makes late historical uploads visible to older snapshots.
+	if result, err := db.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, job.Args.LogID); err != nil {
+		w.parent.logger.WarnContext(ctx, "failed to refresh time-parse memberships after parse", slog.Any("error", err))
+	} else {
+		w.parent.logger.InfoContext(ctx, "refreshed time-parse memberships after parse",
+			slog.Int64("upserted", result.UpsertedCount),
+			slog.Int64("deleted", result.DeletedCount),
+		)
 	}
 
 	if refreshIDs := rankingRunRefresh.Complete(); len(refreshIDs) > 0 {

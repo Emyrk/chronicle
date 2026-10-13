@@ -26,10 +26,6 @@ type sqlcQuerier interface {
 	// documentation; log_instances does not carry numeric version columns yet, so
 	// version filtering is the caller's responsibility if needed.
 	BatchInsertSnapshotMembersFromRankings(ctx context.Context, snapshotID uuid.UUID) error
-	// Populate boss-kill members from eligible encounter kill times.
-	// Clean boss kills from cohort-eligible runs (partial or complete).
-	// Duplicate groups collapsed per encounter to fastest.
-	BatchInsertTimeParseSnapshotBossKillMembers(ctx context.Context, snapshotID uuid.UUID) error
 	// Populate clear-time members from eligible instance speedruns.
 	// Qualified complete runs only (duration_ms > 0). Duplicate groups collapsed
 	// to one representative instance (deterministic: canonical instance first,
@@ -45,7 +41,6 @@ type sqlcQuerier interface {
 	ClearSpellPowersForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellVariantsForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearWoWLogGroupInvalidation(ctx context.Context, logGroupID uuid.UUID) error
-	CompareTimeParseBossKillMembershipSnapshot(ctx context.Context, snapshotID uuid.UUID) (CompareTimeParseBossKillMembershipSnapshotRow, error)
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
 	CopyLegacySpellPowers(ctx context.Context, arg []CopyLegacySpellPowersParams) *CopyLegacySpellPowersBatchResults
@@ -57,7 +52,7 @@ type sqlcQuerier interface {
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
 	// Return the number of members in a snapshot.
 	CountSnapshotMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
-	CountTimeParseSnapshotBossKillMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
+	CountTimeParseBossKillMembershipCohort(ctx context.Context, snapshotID uuid.UUID) (int64, error)
 	CountTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserGearLists(ctx context.Context, arg CountUserGearListsParams) (int64, error)
@@ -394,9 +389,6 @@ type sqlcQuerier interface {
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
 	GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Tenant, error)
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
-	// All boss-kill durations for an (instance_name, encounter, difficulty, max_players) bucket.
-	// Used to score a specific boss kill time against the population.
-	GetTimeParseSnapshotBossKillCohort(ctx context.Context, arg GetTimeParseSnapshotBossKillCohortParams) ([]int64, error)
 	// All clear-time durations for an (instance_name, difficulty, max_players) bucket.
 	// Used to score a specific run's clear time against the population.
 	GetTimeParseSnapshotClearTimeCohort(ctx context.Context, arg GetTimeParseSnapshotClearTimeCohortParams) ([]int64, error)
@@ -411,7 +403,7 @@ type sqlcQuerier interface {
 	// content in both populations does not cancel out.
 	// Empty populations produce fingerprint = 0 (COALESCE of empty SUM).
 	// Compatible with PostgreSQL 13+ (no bit_xor aggregate required).
-	// IMPORTANT: keep WHERE clauses in sync with the corresponding BatchInsert queries.
+	// IMPORTANT: keep WHERE clauses in sync with the corresponding publication queries.
 	GetTimeParseSnapshotSourceStats(ctx context.Context, arg GetTimeParseSnapshotSourceStatsParams) (GetTimeParseSnapshotSourceStatsRow, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)
 	GetUploadKeyByHash(ctx context.Context, secretHash string) (GetUploadKeyByHashRow, error)
@@ -787,9 +779,9 @@ type sqlcQuerier interface {
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
 	RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error)
-	// Run only after a replacement parse has committed or invalidation was cleared.
-	// It upserts the current members first, then removes obsolete members from the
-	// same source log group. Failed/in-progress reparses never call this query.
+	// Run after a successful parse or invalidation change. Recompute every duplicate
+	// run group touched by this log so lifecycle refreshes use the same representative
+	// selection as snapshot publication.
 	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, logGroupID uuid.UUID) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
 	// Resolves the dataset for a realm. Precedence:
@@ -958,8 +950,9 @@ type sqlcQuerier interface {
 	// Insert a unique talent build, returning its ID. If the build already exists,
 	// return the existing row's ID.
 	UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error)
-	// Routine snapshot publication is deliberately upsert-only. Missing rows may
-	// be temporary during a reparse and are removed only by lifecycle operations.
+	// Routine snapshot publication writes current window members directly into the
+	// compact store. Missing rows may be temporary during a reparse and are removed
+	// only by lifecycle operations.
 	UpsertTimeParseBossKillMemberships(ctx context.Context, snapshotID uuid.UUID) error
 	UpsertUserActionBarSlots(ctx context.Context, arg UpsertUserActionBarSlotsParams) (UpsertUserActionBarSlotsRow, error)
 	UpsertUserCustomPanelInstallation(ctx context.Context, arg UpsertUserCustomPanelInstallationParams) (UserCustomPanelInstallation, error)
