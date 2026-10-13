@@ -5,7 +5,7 @@ describe("subspecRulesForFlavor", () => {
   it("returns Nightmare of Ursol rules when the tenant dataset enables the flavor", () => {
     const rules = subspecRulesForFlavor(["vanilla", "nightmare-of-ursol"])
 
-    expect(rules).toHaveLength(2)
+    expect(rules).toHaveLength(3)
     expect(rules[0]).toMatchObject({
       className: "Druid",
       spec: "Feral",
@@ -24,6 +24,13 @@ describe("subspecRulesForFlavor", () => {
       "Ancestral Guardian",
       "Spirit Armor",
     ])
+    expect(rules[2]).toMatchObject({
+      className: "Warrior",
+      spec: "Fury",
+      detectedSubspec: "Fury Prot",
+      fallback: "",
+    })
+    expect(rules[2].detection).toEqual(["Defiance", "Bloodthirst"])
   })
 
   it("does not show Nightmare-specific rules for other tenant flavors", () => {

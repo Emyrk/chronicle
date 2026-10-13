@@ -48,6 +48,20 @@ const SUBSPEC_RULES: readonly SubspecRule[] = [
     detectedSubspec: "Tank",
     fallback: "DPS",
   },
+  {
+    flavor: "nightmare-of-ursol",
+    className: "Warrior",
+    spec: "Fury",
+    subspecs: [
+      {
+        name: "Fury Prot",
+        description: "Fury builds that combine Bloodthirst with Defiance.",
+      },
+    ],
+    detection: ["Defiance", "Bloodthirst"],
+    detectedSubspec: "Fury Prot",
+    fallback: "",
+  },
 ]
 
 export function subspecRulesForFlavor(flavor: readonly string[]): readonly SubspecRule[] {

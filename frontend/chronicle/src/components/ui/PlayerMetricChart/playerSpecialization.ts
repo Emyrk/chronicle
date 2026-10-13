@@ -64,19 +64,19 @@ export function resolvePlayerSpecialization(
     (candidate) => normalizedClassName(candidate.className) === normalizedClassName(snapshot.heroClass)
       && tab.name.toLowerCase().includes(candidate.spec.toLowerCase()),
   );
-  const markerTab = rule
-    ? orderedTabs.find((candidate) => candidate.name.toLowerCase().includes(rule.spec.toLowerCase()))
-    : undefined;
-  const markerTreeIndex = markerTab ? orderedTabs.indexOf(markerTab) : -1;
-  const markerRanks = markerTreeIndex >= 0 ? snapshot.trees[markerTreeIndex] ?? "" : "";
-  const hasAllMarkers = rule?.detection.every((marker) => {
-    const talent = markerTab?.talents.find((candidate) => candidate.name.toLowerCase() === marker.toLowerCase());
-    return talent !== undefined && Number(markerRanks[talent.tabIndex] ?? "0") > 0;
-  });
+  const hasAllMarkers = rule?.detection.every((marker) => orderedTabs.some((candidate, treeIndex) => {
+    const talent = candidate.talents.find(
+      (entry) => entry.name.toLowerCase() === marker.toLowerCase(),
+    );
+    const ranks = snapshot.trees[treeIndex] ?? "";
+    return talent !== undefined && Number(ranks[talent.tabIndex] ?? "0") > 0;
+  }));
+
+  const subSpec = rule ? (hasAllMarkers ? rule.detectedSubspec : rule.fallback) : "";
 
   return {
     name: tab.name,
     iconUrl: specializationIconUrl(snapshot.heroClass, tab.name),
-    ...(rule ? { subSpec: hasAllMarkers ? rule.detectedSubspec : rule.fallback } : {}),
+    ...(subSpec ? { subSpec } : {}),
   };
 }

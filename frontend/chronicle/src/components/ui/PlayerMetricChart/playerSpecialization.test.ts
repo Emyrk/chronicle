@@ -38,9 +38,9 @@ const warrior: ClassTalentData = {
   id: 1,
   name: "Warrior",
   tabs: [
-    tab("Protection", "ability_warrior_defensivestance", 2),
+    tab("Protection", "ability_warrior_defensivestance", 2, [talent("Defiance", 0)]),
     tab("Arms", "ability_warrior_savageblow", 0),
-    tab("Fury", "ability_warrior_innerrage", 1),
+    tab("Fury", "ability_warrior_innerrage", 1, [talent("Bloodthirst", 0)]),
   ],
 };
 
@@ -92,6 +92,27 @@ describe("resolvePlayerSpecialization", () => {
       { "7": shaman },
       ["vanilla", "nightmare-of-ursol"],
     )).toMatchObject({ name: "Enhancement", subSpec: "DPS" });
+  });
+
+  it("separates Fury Prot from other Fury builds", () => {
+    const flavor = ["vanilla", "nightmare-of-ursol"];
+    const resolveWarrior = (trees: readonly string[], summary = [20, 31, 0]) =>
+      resolvePlayerSpecialization(
+        { heroClass: "Warrior", summary, trees },
+        { "1": warrior },
+        flavor,
+      );
+
+    expect(resolveWarrior(["", "1", "1"])).toMatchObject({
+      name: "Fury",
+      subSpec: "Fury Prot",
+    });
+    expect(resolveWarrior(["", "1", "0"])).toMatchObject({ name: "Fury" });
+    expect(resolveWarrior(["", "1", "0"])?.subSpec).toBeUndefined();
+    expect(resolveWarrior(["", "0", "1"])).toMatchObject({ name: "Fury" });
+    expect(resolveWarrior(["", "0", "1"])?.subSpec).toBeUndefined();
+    expect(resolveWarrior(["", "1", "1"], [31, 20, 0])).toMatchObject({ name: "Arms" });
+    expect(resolveWarrior(["", "1", "1"], [31, 20, 0])?.subSpec).toBeUndefined();
   });
 
   it("normalizes spaced class names and falls back when metadata is missing", () => {
