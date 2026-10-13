@@ -311,7 +311,7 @@ maps/legacy-extract:
 
 .PHONY: maps/legacy-upload
 maps/legacy-upload: maps/legacy-extract
-	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps ./upload-maps-r2.sh)
+	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=legacy ./upload-maps-r2.sh)
 
 .PHONY: maps/legacy
 maps/legacy: maps/legacy-upload

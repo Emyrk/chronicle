@@ -26,6 +26,12 @@ case "${MAPS_UPLOAD_MODE}" in
       exit 1
     fi
     ;;
+  legacy)
+    if [[ ! -d "${MAPS_DIR}/tiles" ]]; then
+      echo "Error: legacy map upload requires tiles/: ${MAPS_DIR}" >&2
+      exit 1
+    fi
+    ;;
   rendered)
     if [[ ! -d "${MAPS_DIR}/render" ]]; then
       echo "Error: rendered map upload requires render/: ${MAPS_DIR}" >&2
@@ -39,7 +45,7 @@ case "${MAPS_UPLOAD_MODE}" in
     fi
     ;;
   *)
-    echo "Error: MAPS_UPLOAD_MODE must be 'all', 'rendered', or 'styled', got '${MAPS_UPLOAD_MODE}'" >&2
+    echo "Error: MAPS_UPLOAD_MODE must be 'all', 'legacy', 'rendered', or 'styled', got '${MAPS_UPLOAD_MODE}'" >&2
     exit 1
     ;;
 esac
@@ -66,7 +72,20 @@ if [[ "${MAPS_UPLOAD_MODE}" == "all" ]]; then
     --verbose
 fi
 
-if [[ "${MAPS_UPLOAD_MODE}" != "styled" && -d "${MAPS_DIR}/render" ]]; then
+if [[ "${MAPS_UPLOAD_MODE}" == "legacy" ]]; then
+  total="$(find "${MAPS_DIR}/tiles" -type f -name '*.webp' | wc -l)"
+  echo "Uploading ${total} legacy map tiles to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/tiles/"
+  rclone copy "${MAPS_DIR}/tiles" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/tiles/" \
+    --include '*.webp' \
+    --header-upload "Cache-Control: public, max-age=31536000, immutable" \
+    --header-upload "Content-Type: image/webp" \
+    --transfers 32 \
+    --checkers 16 \
+    --progress \
+    --verbose
+fi
+
+if [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "rendered" ) && -d "${MAPS_DIR}/render" ]]; then
   rendered_total="$(find "${MAPS_DIR}/render" -type f -name '*.png' | wc -l)"
   if [[ "${MAPS_UPLOAD_MODE}" == "rendered" && "${rendered_total}" -eq 0 ]]; then
     echo "Error: rendered map upload found no PNG files in ${MAPS_DIR}/render" >&2

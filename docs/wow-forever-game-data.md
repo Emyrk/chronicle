@@ -147,12 +147,12 @@ The hand-authored JPEG is tracked at `frontend/imagecache/styled-maps/43-wailing
 make maps/forever-styled-upload
 ```
 
-**Breaking map URL migration:** `v2` moves `tiles/` to `original/` and `renders/` to `render/`. Do not delete the old R2 objects until the site has deployed support for the v2 manifest. Publish the styled image first, then run `WOWDATA_MAP_REUSE_MANIFEST= make maps` to export and publish all original and raw-render assets under the new paths. A v1 reuse manifest is rejected, so the full import must download tiles rather than pointing at the old URLs. Uploading the new manifest is the final step of the generated-map upload; verify every path in it returns 200 before removing the old objects. The styled JPEG is intentionally not part of the generated upload, so re-importing cannot overwrite it.
+**Breaking map URL migration:** `v2` moves `tiles/` to `original/` and `renders/` to `render/`. Do not delete the old R2 objects until the site has deployed support for the v2 manifest. Publish the styled image first, then run `WOWDATA_MAP_REUSE_MANIFEST= SERVER=forever make maps` (or `WOWDATA_MAP_REUSE_MANIFEST= make maps/forever`) to export and publish all original and raw-render assets under the new paths. A v1 reuse manifest is rejected, so the full import must download tiles rather than pointing at the old URLs. Uploading the new manifest is the final step of the generated-map upload; verify every path in it returns 200 before removing the old objects. The styled JPEG is intentionally not part of the generated upload, so re-importing cannot overwrite it.
 
-To extract and upload the tiles and manifest to Cloudflare R2:
+To extract and upload the Forever tiles and manifest to Cloudflare R2 (plain `make maps` uses the default server, not necessarily Forever):
 
 ```bash
-make maps
+SERVER=forever make maps
 ```
 
 This publishes the manifest at `https://icons.chronicleclassic.com/forever/maps/manifest.json`, art tiles under `https://icons.chronicleclassic.com/forever/maps/original/`, generated maps under `https://icons.chronicleclassic.com/forever/maps/render/`, and separately published styled maps under `https://icons.chronicleclassic.com/forever/maps/render-styled/`. The `/technical/maps` page discovers both map kinds from the selected dataset's configured icon base URL. Tile and rendered-map responses are immutable for one year; the manifest uses a one-hour cache so a newly published build can become visible without renaming the base URL. Set `WOWDATA_BUILD`, `WOWDATA_BIN`, or `WOWDATA_CACHE` to override their defaults. `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH` override the upload destination.
