@@ -10,7 +10,7 @@ export type AdFormat = "responsive" | "rail"
 
 const formatClasses: Record<AdFormat, string> = {
   responsive: "hidden w-full lg:block",
-  rail: "hidden w-40 shrink-0 2xl:block",
+  rail: "hidden w-40 shrink-0 self-start 2xl:sticky 2xl:top-20 2xl:block",
 }
 
 const frameClasses: Record<AdFormat, string> = {
@@ -88,7 +88,7 @@ export function AdSlot({
       data-ad-placement={placement}
       data-ad-provider={showPreview ? "preview" : "nitropay"}
     >
-      <div className={cn("sticky top-20", format === "responsive" && "static")}>
+      <div>
         {showPreview && (
           <div className="mb-1.5 text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
             Advertisement

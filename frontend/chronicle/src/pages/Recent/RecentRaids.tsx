@@ -331,7 +331,7 @@ export function RecentRaids() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1800px] items-start justify-center gap-6 p-4 md:p-8">
-      <div className="hidden min-[1800px]:block">
+      <div className="hidden self-stretch min-[1800px]:block">
         <AdSlot placement="recent-left-rail" format="rail" />
       </div>
 

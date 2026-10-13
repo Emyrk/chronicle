@@ -36,6 +36,9 @@ describe("AdSlot", () => {
     expect(markup).toContain("Advertisement")
     expect(markup).toContain("160 × 600")
     expect(markup).toContain("2xl:block")
+    expect(markup).toContain("2xl:sticky")
+    expect(markup).toContain("2xl:top-20")
+    expect(markup).toContain("self-start")
     expect(markup).toContain('aria-label="Advertisement preview"')
     expect(markup).toContain('data-ad-placement="leaderboards-right-rail"')
   })
@@ -47,6 +50,7 @@ describe("AdSlot", () => {
 
     expect(markup).toContain("responsive")
     expect(markup).toContain("lg:block")
+    expect(markup).not.toContain("2xl:sticky")
     expect(markup).not.toContain("2xl:hidden")
     expect(markup).toContain('data-ad-placement="statistics-encounter-sidebar"')
   })
