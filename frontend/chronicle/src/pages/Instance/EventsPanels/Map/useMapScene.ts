@@ -12,6 +12,7 @@ import {
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import type { MapPositionSample, MapResult } from "./map.processor";
+import type { EncounterEffects } from "./replayEffects";
 import {
   calibratedDungeonMapPoint,
   dominantMapId,
@@ -104,6 +105,9 @@ export type MapScene =
     focusBounds: MapPointBounds | null;
     /** Whether the view should start framed on `focusBounds` rather than the full map. */
     fitByDefault: boolean;
+    /** Combat events for the replay effects layer. */
+    effects: EncounterEffects;
+    bossGuids: ReadonlySet<string>;
   };
 
 /**
@@ -233,5 +237,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     projectSample,
     focusBounds,
     fitByDefault: Boolean(sync?.enabled) && props.context.selectedEncounterIds.length === 1,
+    effects: encounter.effects,
+    bossGuids,
   };
 }

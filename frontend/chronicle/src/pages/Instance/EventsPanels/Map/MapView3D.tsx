@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Scan } from "lucide-react";
 import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import type { MapPositionSample } from "./map.processor";
 import { interpolatedPositionAt, type MapPoint } from "./mapModel";
-import { MapScene3D, type MapScene3DUnit } from "./MapScene3D";
+import { MAX_EFFECT_PRIMITIVES, MapScene3D, type MapScene3DUnit } from "./MapScene3D";
+import { DEFAULT_EFFECT_OPTIONS, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 
@@ -15,11 +16,46 @@ export interface MapView3DProps {
   playing: boolean;
   playbackSpeed: number;
   view: MapViewRequest;
+  /** Combat events for hit wobble, beams, rings and deaths. */
+  effects?: EncounterEffects;
+  bossGuids?: ReadonlySet<string>;
   /** Called when WebGL cannot be created or the context is lost. */
   onUnavailable: () => void;
 }
 
 const SMOOTH_STORAGE_KEY = "chronicle.map.smooth3d";
+const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
+
+interface EffectSettings {
+  enabled: boolean;
+  heals: boolean;
+  periodic: boolean;
+  onlySelected: boolean;
+  maxEffects: number;
+}
+
+const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
+  enabled: true,
+  heals: DEFAULT_EFFECT_OPTIONS.showHeals,
+  periodic: DEFAULT_EFFECT_OPTIONS.showPeriodic,
+  onlySelected: false,
+  maxEffects: MAX_EFFECT_PRIMITIVES,
+};
+
+const DENSITY_OPTIONS = [16, 32, MAX_EFFECT_PRIMITIVES];
+
+function readStoredEffectSettings(): EffectSettings {
+  try {
+    const stored = JSON.parse(localStorage.getItem(EFFECTS_STORAGE_KEY) ?? "{}") as Partial<EffectSettings>;
+    const settings = { ...DEFAULT_EFFECT_SETTINGS, ...stored };
+    if (!DENSITY_OPTIONS.includes(settings.maxEffects)) settings.maxEffects = MAX_EFFECT_PRIMITIVES;
+    return settings;
+  } catch {
+    return DEFAULT_EFFECT_SETTINGS;
+  }
+}
+
+const toggleClass = (on: boolean) => `rounded border border-white/15 px-1.5 py-0.5 font-medium ${on ? "bg-primary/30 text-foreground" : "bg-black/70 text-muted-foreground hover:text-foreground"}`;
 
 function readStoredSmooth(): boolean {
   try {
@@ -49,6 +85,8 @@ export default function MapView3D({
   playing,
   playbackSpeed,
   view,
+  effects,
+  bossGuids,
   onUnavailable,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,6 +95,7 @@ export default function MapView3D({
   const colorCacheRef = useRef(new Map<string, string>());
   const [smooth, setSmooth] = useState(readStoredSmooth);
   const smoothMs = useSmoothReplayTime(cursorMs, playing && smooth, playbackSpeed);
+  const [effectSettings, setEffectSettings] = useState(readStoredEffectSettings);
 
   useEffect(() => {
     onUnavailableRef.current = onUnavailable;
@@ -109,6 +148,50 @@ export default function MapView3D({
     scene.setUnits(units);
   }, [markers, projectSample, smooth, smoothMs]);
 
+  // Selected players (the unmuted ones while a selection mutes the rest) and
+  // bosses; keyed by string so replay ticks don't rebuild the options.
+  const selectedKey = markers.some((marker) => marker.muted)
+    ? markers.filter((marker) => marker.kind === "player" && !marker.muted).map((marker) => marker.guid).join(",")
+    : "";
+  const bossKey = bossGuids ? [...bossGuids].join(",") : "";
+  const effectOptions = useMemo(() => {
+    const selected = selectedKey ? new Set(selectedKey.split(",")) : null;
+    const priority = new Set([...(selected ?? []), ...(bossKey ? bossKey.split(",") : [])]);
+    return {
+      ...DEFAULT_EFFECT_OPTIONS,
+      filterGuids: effectSettings.onlySelected ? selected : null,
+      priorityGuids: priority.size > 0 ? priority : null,
+      maxEffects: effectSettings.maxEffects,
+      showPeriodic: effectSettings.periodic,
+      showHeals: effectSettings.heals,
+    };
+  }, [bossKey, effectSettings, selectedKey]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const scene = sceneRef.current;
+    if (!container || !scene) return;
+    scene.setEffects(effectSettings.enabled && effects ? {
+      fx: effects,
+      options: effectOptions,
+      resolveColor: (color) => resolveCssColor(color, container, colorCacheRef.current),
+    } : null);
+  }, [effectOptions, effectSettings.enabled, effects]);
+
+  useEffect(() => {
+    sceneRef.current?.setEffectClock(cursorMs, playing, playbackSpeed);
+  }, [cursorMs, playbackSpeed, playing]);
+
+  const updateEffectSettings = (patch: Partial<EffectSettings>) => {
+    const next = { ...effectSettings, ...patch };
+    setEffectSettings(next);
+    try {
+      localStorage.setItem(EFFECTS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Storage may be unavailable; the settings still apply for this session.
+    }
+  };
+
   const toggleSmooth = () => {
     const next = !smooth;
     setSmooth(next);
@@ -122,7 +205,36 @@ export default function MapView3D({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="absolute inset-0" />
-      <div className="absolute right-2 top-2 flex gap-1 text-[10px]">
+      <div className="absolute right-2 top-2 flex flex-wrap justify-end gap-1 text-[10px]">
+        {effects && (
+          <>
+            {effectSettings.enabled && (
+              <>
+                <button type="button" aria-pressed={effectSettings.heals} onClick={() => updateEffectSettings({ heals: !effectSettings.heals })} title="Show heal beams" className={toggleClass(effectSettings.heals)}>
+                  Heals
+                </button>
+                <button type="button" aria-pressed={effectSettings.periodic} onClick={() => updateEffectSettings({ periodic: !effectSettings.periodic })} title="Show damage and heal-over-time ticks" className={toggleClass(effectSettings.periodic)}>
+                  DoT ticks
+                </button>
+                <button type="button" aria-pressed={effectSettings.onlySelected} onClick={() => updateEffectSettings({ onlySelected: !effectSettings.onlySelected })} title="Only show effects involving the selected players" className={toggleClass(effectSettings.onlySelected)}>
+                  Only selected
+                </button>
+                <select
+                  aria-label="Effect density"
+                  title="Maximum effects drawn at once"
+                  value={effectSettings.maxEffects}
+                  onChange={(event) => updateEffectSettings({ maxEffects: Number(event.target.value) })}
+                  className="rounded border border-white/15 bg-black/70 px-1 py-0.5 text-muted-foreground [color-scheme:dark]"
+                >
+                  {DENSITY_OPTIONS.map((option) => <option key={option} value={option}>{option} fx</option>)}
+                </select>
+              </>
+            )}
+            <button type="button" aria-pressed={effectSettings.enabled} onClick={() => updateEffectSettings({ enabled: !effectSettings.enabled })} title="Hit wobble, spell beams, cast rings and deaths" className={toggleClass(effectSettings.enabled)}>
+              Effects
+            </button>
+          </>
+        )}
         <button
           type="button"
           aria-pressed={smooth}

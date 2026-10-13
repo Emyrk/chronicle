@@ -1,9 +1,8 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Focus, Map as MapIcon, Maximize, Users } from "lucide-react";
-import type { UnitPositionProcessorEvent } from "../processorTypes";
 import type { PanelDefinition, PanelRenderProps } from "../types";
-import { mapProcessor, type MapResult } from "./map.processor";
+import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
 import { fitViewportToBounds, FULL_MAP_VIEWPORT } from "./mapModel";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
 import { useMapScene } from "./useMapScene";
@@ -134,6 +133,8 @@ function MapContent(props: PanelRenderProps<MapResult>) {
               playing={scene.playing}
               playbackSpeed={scene.playbackSpeed}
               view={view}
+              effects={scene.effects}
+              bossGuids={scene.bossGuids}
               onUnavailable={() => setWebglUnavailable(true)}
             />
           </Suspense>
@@ -161,7 +162,7 @@ function MapMessage({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-export function createMapPanel(): PanelDefinition<MapResult, UnitPositionProcessorEvent> {
+export function createMapPanel(): PanelDefinition<MapResult, MapProcessorEvent> {
   return {
     ...mapProcessor,
     label: "Map",

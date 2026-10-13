@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
+import { createEncounterEffects } from "./replayEffects";
 import {
   calibratedDungeonMapPoint,
   clampViewport,
@@ -31,6 +32,7 @@ const encounter: MapEncounterPositions = {
   startMs: 100,
   endMs: 300,
   positionsByUnit: new Map([["player", samples]]),
+  effects: createEncounterEffects(),
 };
 
 const manifest: WowMapManifest = {
@@ -172,6 +174,7 @@ describe("map replay model", () => {
       startMs: 0,
       endMs: 1_000,
       positionsByUnit: new Map([["boss", [sample]]]),
+      effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => entry);
     expect(calibration).not.toBeNull();
@@ -194,6 +197,7 @@ describe("map replay model", () => {
         { timestampMs: 8_000, x: 38, y: -240, mapId: 0, facing: 0 },
         { timestampMs: 10_000, x: 37, y: -241, mapId: 0, facing: 0 },
       ]]]),
+      effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670);
     expect(calibration?.anchorSample).toMatchObject({ x: 37, y: -241 });
@@ -206,6 +210,7 @@ describe("map replay model", () => {
       startMs: 0,
       endMs: 1_000,
       positionsByUnit: new Map([["boss", [anchor]]]),
+      effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670)!;
     const point = calibratedDungeonMapPoint({ ...anchor, x: anchor.x + 10, y: anchor.y - 10 }, {
