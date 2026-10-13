@@ -4,10 +4,11 @@ import { useSpell } from "@/api/queries";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
+import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import type { MapPositionSample } from "./map.processor";
 import { interpolatedPositionAt, type MapPoint } from "./mapModel";
 import { MAX_EFFECT_PRIMITIVES, MapScene3D, type MapScene3DEffectHover, type MapScene3DUnit } from "./MapScene3D";
-import { DEFAULT_EFFECT_OPTIONS, type EncounterEffects } from "./replayEffects";
+import { CAST_ICON_SKIP_SPELLS, DEFAULT_EFFECT_OPTIONS, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 
@@ -36,6 +37,7 @@ interface EffectSettings {
   onlySelected: boolean;
   maxEffects: number;
   bars: boolean;
+  casts: boolean;
 }
 
 const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
@@ -45,6 +47,7 @@ const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   onlySelected: false,
   maxEffects: MAX_EFFECT_PRIMITIVES,
   bars: true,
+  casts: true,
 };
 
 const DENSITY_OPTIONS = [16, 32, MAX_EFFECT_PRIMITIVES];
@@ -196,6 +199,19 @@ export default function MapView3D({
     };
   }, [bossKey, effectSettings, selectedKey]);
 
+  // Spell icons float over selected players and bosses while they cast.
+  const castGuids = effectSettings.enabled && effectSettings.casts ? effectOptions.priorityGuids : null;
+  const castSpellIds = useMemo(() => {
+    if (!effects || !castGuids) return [];
+    const ids = new Set<number>();
+    for (const event of effects.events) {
+      if ((event.kind !== "cast_start" && event.kind !== "cast_go") || event.spellId == null) continue;
+      if (!CAST_ICON_SKIP_SPELLS.has(event.spellId) && castGuids.has(event.source)) ids.add(event.spellId);
+    }
+    return [...ids];
+  }, [castGuids, effects]);
+  const { meta: spellMeta } = useSpellMeta(castSpellIds);
+
   useEffect(() => {
     const container = containerRef.current;
     const scene = sceneRef.current;
@@ -206,8 +222,13 @@ export default function MapView3D({
       resolveColor: (color) => resolveCssColor(color, container, colorCacheRef.current),
       // Spell names float over the selected players' targets.
       combatTextGuids: effectOptions.selected,
+      castIcons: castGuids ? {
+        guids: castGuids,
+        iconUrl: (spellId) => spellMeta(spellId).icon,
+        placeholderUrl: spellMeta(null).icon,
+      } : null,
     } : null);
-  }, [effectOptions, effectSettings.enabled, effects]);
+  }, [castGuids, effectOptions, effectSettings.enabled, effects, spellMeta]);
 
   useEffect(() => {
     sceneRef.current?.setEffectClock(cursorMs, playing, playbackSpeed);
@@ -248,6 +269,9 @@ export default function MapView3D({
             </button>
             <button type="button" aria-pressed={effectSettings.onlySelected} onClick={() => updateEffectSettings({ onlySelected: !effectSettings.onlySelected })} title="Only show effects involving the selected players" className={toggleClass(effectSettings.onlySelected)}>
               Only selected
+            </button>
+            <button type="button" aria-pressed={effectSettings.casts} onClick={() => updateEffectSettings({ casts: !effectSettings.casts })} title="Spell icons above selected players and bosses while they cast" className={toggleClass(effectSettings.casts)}>
+              Casts
             </button>
             <select
               aria-label="Effect density"
