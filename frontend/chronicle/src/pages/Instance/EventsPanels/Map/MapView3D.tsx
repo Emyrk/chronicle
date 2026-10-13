@@ -23,6 +23,8 @@ export interface MapView3DProps {
   /** Combat events for hit wobble, beams, rings and deaths. */
   effects?: EncounterEffects;
   bossGuids?: ReadonlySet<string>;
+  /** Tanks: their heals are kept when effects are capped and float numbers. */
+  tankGuids?: ReadonlySet<string>;
   /** Called when WebGL cannot be created or the context is lost. */
   onUnavailable: () => void;
 }
@@ -33,6 +35,7 @@ const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
 interface EffectSettings {
   enabled: boolean;
   heals: boolean;
+  overheal: boolean;
   periodic: boolean;
   onlySelected: boolean;
   maxEffects: number;
@@ -43,6 +46,7 @@ interface EffectSettings {
 const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   enabled: true,
   heals: DEFAULT_EFFECT_OPTIONS.showHeals,
+  overheal: DEFAULT_EFFECT_OPTIONS.showOverheal,
   periodic: DEFAULT_EFFECT_OPTIONS.showPeriodic,
   onlySelected: false,
   maxEffects: MAX_EFFECT_PRIMITIVES,
@@ -114,6 +118,7 @@ export default function MapView3D({
   view,
   effects,
   bossGuids,
+  tankGuids,
   onUnavailable,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -179,28 +184,35 @@ export default function MapView3D({
     scene.setUnits(units);
   }, [markers, projectSample, showBars, smooth, smoothMs]);
 
-  // Selected players (the unmuted ones while a selection mutes the rest) and
-  // bosses; keyed by string so replay ticks don't rebuild the options.
+  // Selected players (the unmuted ones while a selection mutes the rest),
+  // bosses and tanks; keyed by string so replay ticks don't rebuild the options.
   const selectedKey = markers.some((marker) => marker.muted)
     ? markers.filter((marker) => marker.kind === "player" && !marker.muted).map((marker) => marker.guid).join(",")
     : "";
   const bossKey = bossGuids ? [...bossGuids].join(",") : "";
+  const tankKey = tankGuids ? [...tankGuids].join(",") : "";
   const effectOptions = useMemo(() => {
     const selected = selectedKey ? new Set(selectedKey.split(",")) : null;
-    const priority = new Set([...(selected ?? []), ...(bossKey ? bossKey.split(",") : [])]);
+    const tanks = tankKey ? tankKey.split(",") : [];
+    const selectedAndBosses = new Set([...(selected ?? []), ...(bossKey ? bossKey.split(",") : [])]);
+    const priority = new Set([...selectedAndBosses, ...tanks]);
+    const healText = new Set([...(selected ?? []), ...tanks]);
     return {
       selected,
+      castIconGuids: selectedAndBosses.size > 0 ? selectedAndBosses : null,
+      healText: healText.size > 0 ? healText : null,
       ...DEFAULT_EFFECT_OPTIONS,
       filterGuids: effectSettings.onlySelected ? selected : null,
       priorityGuids: priority.size > 0 ? priority : null,
       maxEffects: effectSettings.maxEffects,
       showPeriodic: effectSettings.periodic,
       showHeals: effectSettings.heals,
+      showOverheal: effectSettings.overheal,
     };
-  }, [bossKey, effectSettings, selectedKey]);
+  }, [bossKey, effectSettings, selectedKey, tankKey]);
 
   // Spell icons float over selected players and bosses while they cast.
-  const castGuids = effectSettings.enabled && effectSettings.casts ? effectOptions.priorityGuids : null;
+  const castGuids = effectSettings.enabled && effectSettings.casts ? effectOptions.castIconGuids : null;
   const castSpellIds = useMemo(() => {
     if (!effects || !castGuids) return [];
     const ids = new Set<number>();
@@ -227,6 +239,8 @@ export default function MapView3D({
         iconUrl: (spellId) => spellMeta(spellId).icon,
         placeholderUrl: spellMeta(null).icon,
       } : null,
+      // Heal amounts float for heals cast by or landing on selected players and tanks.
+      healTextGuids: effectOptions.healText,
     } : null);
   }, [castGuids, effectOptions, effectSettings.enabled, effects, spellMeta]);
 
@@ -261,8 +275,11 @@ export default function MapView3D({
       <div className="absolute right-2 top-2 flex flex-wrap justify-end gap-1 text-[10px]">
         {effects && effectSettings.enabled && (
           <>
-            <button type="button" aria-pressed={effectSettings.heals} onClick={() => updateEffectSettings({ heals: !effectSettings.heals })} title="Show heal beams" className={toggleClass(effectSettings.heals)}>
+            <button type="button" aria-pressed={effectSettings.heals} onClick={() => updateEffectSettings({ heals: !effectSettings.heals })} title="Show heal beams, pulses and numbers" className={toggleClass(effectSettings.heals)}>
               Heals
+            </button>
+            <button type="button" aria-pressed={effectSettings.overheal} onClick={() => updateEffectSettings({ overheal: !effectSettings.overheal })} title="Also show heals that restored no health (grey)" className={toggleClass(effectSettings.overheal)}>
+              Overheal
             </button>
             <button type="button" aria-pressed={effectSettings.periodic} onClick={() => updateEffectSettings({ periodic: !effectSettings.periodic })} title="Show damage and heal-over-time ticks" className={toggleClass(effectSettings.periodic)}>
               DoT ticks

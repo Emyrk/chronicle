@@ -73,6 +73,8 @@ function toEvent(row: MapFixture["events"][number], index: number, guids: string
         schools: [f[4]],
         spellId: f[5],
         sourceName: f[6],
+        // The fixture does not record overheal or absorbs; count heals as fully effective.
+        ...(code === "h" ? { overheal: 0, absorbed: 0 } : {}),
       } as unknown as MapProcessorEvent;
     case "s":
       return { ...base, caster: guid(f[0]), target: guid(f[1]), castTimeMilli: f[2], spell: { id: f[3], name: f[4] } } as unknown as MapProcessorEvent;

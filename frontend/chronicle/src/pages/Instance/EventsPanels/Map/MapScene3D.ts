@@ -10,6 +10,7 @@ import {
   deriveActiveEffects,
   deriveCastIcons,
   deriveCombatText,
+  deriveRecentHealGain,
   isDeadAt,
   type ActiveEffect,
   type CastIcon,
@@ -42,6 +43,8 @@ const BAR_PADDING = 0.14;
 const BAR_BACKGROUND = 0x0c0a09;
 const BAR_DEAD = 0x57534e;
 const BAR_ABSORB = 0xe7e5e4;
+// Recent healing at the end of the fill (tailwind green-200).
+const BAR_HEAL = 0xbbf7d0;
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const MAX_COMBAT_TEXT = 8;
 const COMBAT_TEXT_HEIGHT = 1.8;
@@ -137,6 +140,8 @@ export interface MapScene3DEffects {
     /** Shown until a spell's icon loads, or when it fails to. */
     placeholderUrl: string;
   } | null;
+  /** Units whose heals (cast or received) float their amount; null for none. */
+  healTextGuids: ReadonlySet<string> | null;
 }
 
 /** The spell effect under the pointer, for an HTML tooltip. */
@@ -195,6 +200,8 @@ export class MapScene3D {
   // every rendered frame. Nothing here is allocated per frame.
   private effects: MapScene3DEffects | null = null;
   private clock = { ms: 0, at: 0, playing: false, speed: 1 };
+  // The effect clock's time at the last updateEffects, for the bars' heal chunk.
+  private effectCursorMs = 0;
   private readonly activeEffects: ActiveEffect[] = [];
   private readonly effectOptions: DeriveEffectsOptions = { ...DEFAULT_EFFECT_OPTIONS };
   private readonly visibleUnits = { has: (guid: string) => this.units.has(guid) };
@@ -207,7 +214,7 @@ export class MapScene3D {
   private readonly rings: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private readonly bolts: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private readonly slashes: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  // Background, fill and absorb quads per bar.
+  // Background, fill, heal chunk and absorb quads per bar.
   private readonly bars: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private readonly matrix = new THREE.Matrix4();
   private readonly color = new THREE.Color();
@@ -280,7 +287,7 @@ export class MapScene3D {
     this.bars = this.createPool(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92, depthTest: false, depthWrite: false }),
-      MAX_HEALTH_BARS * 3,
+      MAX_HEALTH_BARS * 4,
     );
     this.bars.renderOrder = 9;
     this.scene.add(this.beams, this.rings, this.bolts, this.slashes, this.bars);
@@ -675,6 +682,7 @@ export class MapScene3D {
     const fx = this.effects?.fx ?? null;
     const { clock } = this;
     const cursorMs = clock.playing ? clock.ms + Math.min(now - clock.at, MAX_EXTRAPOLATE_MS) * clock.speed : clock.ms;
+    this.effectCursorMs = cursorMs;
 
     for (const object of this.units.values()) {
       const guid = object.group.userData.guid as string;
@@ -766,13 +774,16 @@ export class MapScene3D {
       } else if (ringCount < MAX_EFFECT_PRIMITIVES) {
         // "ring": an AoE pulse expanding from the caster; "cast": a ring that
         // closes in on the caster as the cast completes; "impact": a small
-        // quick burst under a melee ability's target.
+        // quick burst under a melee ability's target; "heal": a ring rising
+        // up the healed target, sized by the healing (bigger and gold on crits).
         const radius = (effect.type === "ring"
           ? 1.5 + 6 * effect.progress
-          : effect.type === "impact" ? 0.6 + 1.8 * effect.progress : 4 - 2.5 * effect.progress) * this.unitScale;
+          : effect.type === "heal" ? (0.9 + 0.4 * effect.progress) * (0.5 + 0.5 * effect.intensity)
+            : effect.type === "impact" ? 0.6 + 1.8 * effect.progress : 4 - 2.5 * effect.progress) * this.unitScale;
         const brightness = effect.type === "cast" ? 0.35 + 0.5 * effect.progress : fade * (effect.type === "impact" ? 1.2 : 1);
         const position = target.base;
-        this.matrix.makeScale(radius, 1, radius).setPosition(position.x, 0.05, position.z);
+        const y = effect.type === "heal" ? (0.2 + 2.4 * effect.progress) * this.unitScale : 0.05;
+        this.matrix.makeScale(radius, 1, radius).setPosition(position.x, y, position.z);
         this.rings.setMatrixAt(ringCount, this.matrix);
         this.rings.setColorAt(ringCount, this.color.copy(color).multiplyScalar(brightness));
         this.ringEffects[ringCount] = index;
@@ -794,17 +805,19 @@ export class MapScene3D {
   }
 
   private updateCombatText(fx: EncounterEffects | null, cursorMs: number) {
-    const sources = this.effects?.combatTextGuids;
-    const texts = fx && sources && sources.size > 0
-      ? deriveCombatText(fx, cursorMs, sources, this.effectOptions, MAX_COMBAT_TEXT, this.combatText)
+    const sources = this.effects?.combatTextGuids ?? null;
+    const healGuids = this.effects?.healTextGuids ?? null;
+    const any = Boolean(fx && ((sources && sources.size > 0) || (healGuids && healGuids.size > 0)));
+    const texts = any
+      ? deriveCombatText(fx!, cursorMs, sources, healGuids, this.effectOptions, MAX_COMBAT_TEXT, this.combatText)
       : this.combatText;
-    if (!fx || !sources || sources.size === 0) texts.length = 0;
+    if (!any) texts.length = 0;
     let shown = 0;
     for (const text of texts) {
       const target = this.units.get(text.target);
       if (!target) continue;
       const sprite = this.combatSprites[shown];
-      const label = this.labelTexture(text.spellName, this.effects!.resolveColor(text.color), text.crit);
+      const label = this.labelTexture(text.text, this.effects!.resolveColor(text.color), text.crit);
       if (sprite.material.map !== label.texture) {
         sprite.material.map = label.texture;
         sprite.material.needsUpdate = true;
@@ -988,6 +1001,7 @@ export class MapScene3D {
     const right = this.vectorB.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
     let count = 0;
     let barHeight = BAR_HEIGHT;
+    const fx = this.effects?.fx ?? null;
     const quad = (base: THREE.Vector3, from: number, to: number, quadWidth: number, quadHeight: number, color: THREE.Color | number) => {
       const center = this.vector.copy(base).setY(barHeight * this.unitScale).addScaledVector(right, ((from + to) / 2 - 0.5) * width);
       this.matrix.compose(center, this.camera.quaternion, this.scaleVector.set(quadWidth, quadHeight, 1));
@@ -997,14 +1011,19 @@ export class MapScene3D {
     };
     for (const object of this.units.values()) {
       const { health } = object;
-      if (!health || count + 3 > MAX_HEALTH_BARS * 3) continue;
+      if (!health || count + 4 > MAX_HEALTH_BARS * 4) continue;
       const dead = health.dead || object.dead;
       barHeight = object.barHeight;
       const fraction = health.max > 0 ? Math.min(1, Math.max(0, health.current / health.max)) : 0;
       const absorb = health.max > 0 ? Math.min(1 - fraction, Math.max(0, health.absorb / health.max)) : 0;
+      // From the effect clock while effects run, so the chunk shrinks
+      // smoothly between replay ticks; the tick's value otherwise.
+      const gain = fx ? deriveRecentHealGain(fx, object.group.userData.guid as string, this.effectCursorMs) : health.healGain ?? 0;
+      const healed = health.max > 0 ? Math.min(fraction, Math.max(0, gain / health.max)) : 0;
       quad(object.base, 0, 1, width + padding, thickness + padding, dead ? BAR_DEAD : BAR_BACKGROUND);
       if (dead) continue;
       if (fraction > 0) quad(object.base, 0, fraction, width * fraction, thickness, this.color.setStyle(healthBarColor(fraction)));
+      if (healed > 0) quad(object.base, fraction - healed, fraction, width * healed, thickness, BAR_HEAL);
       if (absorb > 0) quad(object.base, fraction, fraction + absorb, width * absorb, thickness, BAR_ABSORB);
     }
     this.commitPool(this.bars, count);

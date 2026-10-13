@@ -95,6 +95,9 @@ function effectEvent(timestampMs: number, kind: ReplayEffectEvent["kind"], sourc
     target,
     school: 0,
     amount: 0,
+    overheal: 0,
+    absorbed: 0,
+    effective: 0,
     crit: false,
     periodic: false,
     attack: "spell",
@@ -137,6 +140,11 @@ function toEffectEvent(event: MapProcessorEvent, timestampMs: number, encounter:
       const fx = effectEvent(timestampMs, event.type, event.caster, event.target);
       fx.school = event.schools[0] ?? 0;
       fx.amount = event.amount;
+      if (event.type === "heal") {
+        fx.overheal = event.overheal;
+        fx.absorbed = event.absorbed;
+        fx.effective = Math.max(0, event.amount - event.overheal);
+      }
       fx.crit = (event.hitType & HitTypeCrit) !== 0;
       fx.periodic = (event.hitType & HitTypePeriodic) !== 0;
       if (event.type === "damage") fx.attack = classifyAttack(event, encounter, timestampMs);
