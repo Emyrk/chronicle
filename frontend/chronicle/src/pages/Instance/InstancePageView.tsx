@@ -65,6 +65,7 @@ import { InstanceOverview } from "./Overview/InstanceOverview";
 import { LiveSessionButton } from "./LiveSessionButton";
 import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
+import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
@@ -2126,10 +2127,11 @@ export function InstancePageView({
   );
 
   const isMobile = useIsMobile();
+  const showLiveSessionControls = showDebugDesktopControls(searchParams, isMobile);
   const { data: session } = useSession();
   const isLoggedIn = !!session?.user_id;
   const liveSession = useLiveSession();
-  useAutoJoinLiveSession(instance.id);
+  useAutoJoinLiveSession(instance.id, showLiveSessionControls);
   const createShare = useCreateShare();
   const instanceDefaults = useInstanceDefaultsCache(isLoggedIn);
 
@@ -3402,7 +3404,6 @@ export function InstancePageView({
           {isMobile && (
             <div className="flex flex-col items-end gap-2 shrink-0">
               <div className="flex items-center gap-2">
-              <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
               <InstanceMenu
                 onImportLayout={isEncounterView ? handleImportLayout : undefined}
                 onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
@@ -3517,7 +3518,9 @@ export function InstancePageView({
           )}
           {!isMobile && (
             <div className="flex items-center gap-2 shrink-0">
-              <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
+              {showLiveSessionControls && (
+                <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
+              )}
               <DropdownMenu modal={false}>
                 <Tooltip>
                   <TooltipTrigger asChild>

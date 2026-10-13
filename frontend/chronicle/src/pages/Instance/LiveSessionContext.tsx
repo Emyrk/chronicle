@@ -546,15 +546,15 @@ export function useLiveSession(): LiveSessionContextValue {
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function useAutoJoinLiveSession(instanceId: string): void {
+export function useAutoJoinLiveSession(instanceId: string, enabled = true): void {
   const session = useLiveSession();
   const [searchParams] = useSearchParams();
   const roomCode = searchParams.get(LIVE_SESSION_QUERY_PARAM);
   const attemptedCodeRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!roomCode || session.status !== "idle" || attemptedCodeRef.current === roomCode) return;
+    if (!enabled || !roomCode || session.status !== "idle" || attemptedCodeRef.current === roomCode) return;
     attemptedCodeRef.current = roomCode;
     void session.join(roomCode, instanceId).catch(() => undefined);
-  }, [instanceId, roomCode, session]);
+  }, [enabled, instanceId, roomCode, session]);
 }
