@@ -1,6 +1,7 @@
-package api
+package servicelivesession
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,16 +11,17 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLiveSessionHubPasswordCapacityAndLifecycle(t *testing.T) {
 	t.Parallel()
 
-	hub := newLiveSessionHub()
+	hub := New(Options{})
 	instanceID := uuid.New()
 	room, err := hub.create(instanceID, "secret")
 	require.NoError(t, err)
@@ -27,40 +29,40 @@ func TestLiveSessionHubPasswordCapacityAndLifecycle(t *testing.T) {
 	require.NotEqual(t, "secret", string(room.passwordHash))
 
 	_, _, err = hub.join(room.code, "wrong")
-	require.ErrorIs(t, err, errLiveSessionInvalidPassword)
+	require.ErrorIs(t, err, errInvalidPassword)
 	_, gotInstanceID, err := hub.join(room.code, "secret")
 	require.NoError(t, err)
 	require.Equal(t, instanceID, gotInstanceID)
 
 	capacityRoom, err := hub.create(instanceID, "")
 	require.NoError(t, err)
-	for range liveSessionMaxParticipants - 1 {
+	for range maxParticipants - 1 {
 		_, gotInstanceID, err = hub.join(strings.ToLower(capacityRoom.code), "")
 		require.NoError(t, err)
 		require.Equal(t, instanceID, gotInstanceID)
 	}
 	_, _, err = hub.join(capacityRoom.code, "")
-	require.ErrorIs(t, err, errLiveSessionFull)
+	require.ErrorIs(t, err, errFull)
 
 	connection, _, err := hub.attach(capacityRoom.code, capacityRoom.leaderToken, nil)
 	require.NoError(t, err)
 	hub.disconnect(connection)
 
 	_, _, err = hub.join(capacityRoom.code, "")
-	require.ErrorIs(t, err, errLiveSessionNotFound)
+	require.ErrorIs(t, err, errNotFound)
 }
 
 func TestLiveSessionHubCleansExpiredReservationsAndUnstartedRooms(t *testing.T) {
 	t.Parallel()
 
-	hub := newLiveSessionHub()
+	hub := New(Options{})
 	room, err := hub.create(uuid.New(), "")
 	require.NoError(t, err)
 	peer, _, err := hub.join(room.code, "")
 	require.NoError(t, err)
 
 	hub.mu.Lock()
-	peer.reservedAt = time.Now().Add(-liveSessionJoinReservationTTL - time.Second)
+	peer.reservedAt = time.Now().Add(-joinReservationTTL - time.Second)
 	hub.mu.Unlock()
 
 	_, _, err = hub.join(room.code, "")
@@ -73,7 +75,7 @@ func TestLiveSessionHubCleansExpiredReservationsAndUnstartedRooms(t *testing.T) 
 	staleRoom, err := hub.create(uuid.New(), "")
 	require.NoError(t, err)
 	hub.mu.Lock()
-	staleRoom.createdAt = time.Now().Add(-liveSessionUnstartedRoomTTL - time.Second)
+	staleRoom.createdAt = time.Now().Add(-unstartedRoomTTL - time.Second)
 	hub.mu.Unlock()
 	_, err = hub.create(uuid.New(), "")
 	require.NoError(t, err)
@@ -88,12 +90,12 @@ func TestLiveSessionHandlers(t *testing.T) {
 
 	accessURL, err := url.Parse("https://chronicle.example.com")
 	require.NoError(t, err)
-	api := &API{Opts: &Options{AccessURL: accessURL}, liveSessions: newLiveSessionHub()}
+	service := New(Options{AccessURL: accessURL})
 	instanceID := uuid.New()
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/live-sessions", strings.NewReader(`{"instance_id":"`+instanceID.String()+`","password":"secret"}`))
 	createRes := httptest.NewRecorder()
-	api.CreateLiveSession(createRes, createReq)
+	service.Create(createRes, createReq)
 	require.Equal(t, http.StatusCreated, createRes.Code)
 	var created chroniclesdk.CreateLiveSessionResponse
 	require.NoError(t, json.NewDecoder(createRes.Body).Decode(&created))
@@ -102,7 +104,7 @@ func TestLiveSessionHandlers(t *testing.T) {
 	require.Equal(t, "https://chronicle.example.com/instances/"+instanceID.String()+"?live="+created.Code, created.URL)
 
 	joinRouter := chi.NewRouter()
-	joinRouter.Post("/api/v1/live-sessions/{code}/join", api.JoinLiveSession)
+	joinRouter.Post("/api/v1/live-sessions/{code}/join", service.Join)
 
 	wrongReq := httptest.NewRequest(http.MethodPost, "/api/v1/live-sessions/"+strings.ToLower(created.Code)+"/join", strings.NewReader(`{"password":"wrong"}`))
 	wrongRes := httptest.NewRecorder()
@@ -122,34 +124,43 @@ func TestLiveSessionHandlers(t *testing.T) {
 func TestLiveSessionWebSocketRoutingAndLeaderDisconnect(t *testing.T) {
 	t.Parallel()
 
-	api := &API{liveSessions: newLiveSessionHub()}
-	room, err := api.liveSessions.create(uuid.New(), "")
+	service := New(Options{})
+	room, err := service.create(uuid.New(), "")
 	require.NoError(t, err)
-	participant, _, err := api.liveSessions.join(room.code, "")
+	participant, _, err := service.join(room.code, "")
 	require.NoError(t, err)
 
 	router := chi.NewRouter()
-	router.Get("/api/v1/live-sessions/{code}/ws", api.LiveSessionWebSocket)
+	router.Get("/api/v1/live-sessions/{code}/ws", service.WebSocket)
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 
 	dial := func(t *testing.T, token string) *websocket.Conn {
 		t.Helper()
 		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/v1/live-sessions/" + room.code + "/ws?token=" + url.QueryEscape(token)
-		conn, response, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		if response != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		conn, response, err := websocket.Dial(ctx, wsURL, nil)
+		if response != nil && response.Body != nil {
 			t.Cleanup(func() { _ = response.Body.Close() })
 		}
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = conn.Close() })
+		t.Cleanup(func() { _ = conn.CloseNow() })
 		return conn
 	}
-	read := func(t *testing.T, conn *websocket.Conn) liveSessionServerMessage {
+	read := func(t *testing.T, conn *websocket.Conn) serverMessage {
 		t.Helper()
-		require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
-		var message liveSessionServerMessage
-		require.NoError(t, conn.ReadJSON(&message))
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var message serverMessage
+		require.NoError(t, wsjson.Read(ctx, conn, &message))
 		return message
+	}
+	write := func(t *testing.T, conn *websocket.Conn, message clientMessage) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		require.NoError(t, wsjson.Write(ctx, conn, message))
 	}
 
 	leaderConn := dial(t, room.leaderToken)
@@ -160,39 +171,41 @@ func TestLiveSessionWebSocketRoutingAndLeaderDisconnect(t *testing.T) {
 	require.Equal(t, participant.id, joined.ParticipantID)
 
 	guestPayload := json.RawMessage(`{"sdp":"guest-offer"}`)
-	require.NoError(t, participantConn.WriteJSON(liveSessionClientMessage{Type: "signal", Payload: guestPayload}))
+	write(t, participantConn, clientMessage{Type: "signal", Payload: guestPayload})
 	toLeader := read(t, leaderConn)
 	require.Equal(t, "signal", toLeader.Type)
 	require.Equal(t, participant.id, toLeader.ParticipantID)
 	require.JSONEq(t, string(guestPayload), string(toLeader.Payload))
 
 	leaderPayload := json.RawMessage(`{"candidate":"leader-candidate"}`)
-	require.NoError(t, leaderConn.WriteJSON(liveSessionClientMessage{Type: "signal", TargetID: participant.id, Payload: leaderPayload}))
+	write(t, leaderConn, clientMessage{Type: "signal", TargetID: participant.id, Payload: leaderPayload})
 	toParticipant := read(t, participantConn)
 	require.Equal(t, "signal", toParticipant.Type)
-	require.Equal(t, liveSessionLeaderID, toParticipant.ParticipantID)
+	require.Equal(t, leaderID, toParticipant.ParticipantID)
 	require.JSONEq(t, string(leaderPayload), string(toParticipant.Payload))
 
-	require.NoError(t, participantConn.Close())
+	require.NoError(t, participantConn.Close(websocket.StatusNormalClosure, ""))
 	left := read(t, leaderConn)
 	require.Equal(t, "participant_left", left.Type)
 	require.Equal(t, participant.id, left.ParticipantID)
 
-	participant2, _, err := api.liveSessions.join(room.code, "")
+	participant2, _, err := service.join(room.code, "")
 	require.NoError(t, err)
 	participant2Conn := dial(t, participant2.token)
 	joined = read(t, leaderConn)
 	require.Equal(t, "participant_joined", joined.Type)
 	require.Equal(t, participant2.id, joined.ParticipantID)
 
-	require.NoError(t, leaderConn.Close())
+	require.NoError(t, leaderConn.Close(websocket.StatusNormalClosure, ""))
 	ended := read(t, participant2Conn)
 	require.Equal(t, "session_ended", ended.Type)
 	require.Equal(t, "leader_disconnected", ended.Reason)
-	require.NoError(t, participant2Conn.SetReadDeadline(time.Now().Add(5*time.Second)))
-	_, _, err = participant2Conn.ReadMessage()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var terminal serverMessage
+	err = wsjson.Read(ctx, participant2Conn, &terminal)
 	require.Error(t, err, "session_ended must be the terminal message")
 
-	_, _, err = api.liveSessions.join(room.code, "")
-	require.ErrorIs(t, err, errLiveSessionNotFound)
+	_, _, err = service.join(room.code, "")
+	require.ErrorIs(t, err, errNotFound)
 }

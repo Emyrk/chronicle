@@ -12,6 +12,10 @@ Chronicle instance pages can start an ephemeral collaborative session from the *
 - Any participant can edit. The leader orders participant updates and rebroadcasts them.
 - If the leader leaves, the session ends, replay pauses, and each participant keeps a functional local page with the last synchronized state.
 
+## Backend implementation
+
+The Go signaling implementation is contained in `internal/services/servicelivesession`. The API package only constructs the service and registers its create, join, and WebSocket handlers. WebSocket transport uses `github.com/coder/websocket` and `wsjson`.
+
 ## Deliberate limitations
 
 - Rooms, passwords, participant tokens, and annotations are process-local memory only. A server restart removes them.
