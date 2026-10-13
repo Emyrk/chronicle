@@ -246,6 +246,7 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 	}
 
 	var clearCount, bossCount int64
+	var legacyBossCount, membershipBossCount, membershipDifferenceCount int64
 	txErr := w.Store.InTx(ctx, func(tx database.Store) error {
 		// 1. Create pending snapshot.
 		snap, err := tx.InsertTimeParseSnapshot(ctx, database.InsertTimeParseSnapshotParams{
@@ -268,12 +269,29 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 			return fmt.Errorf("batch insert clear-time members: %w", err)
 		}
 
-		// 3. Populate boss-kill members.
+		// 3. Populate the legacy full-copy boss-kill members. These remain the
+		// authoritative cohort while interval storage runs in shadow mode.
 		if err := tx.BatchInsertTimeParseSnapshotBossKillMembers(ctx, snap.ID); err != nil {
 			return fmt.Errorf("batch insert boss-kill members: %w", err)
 		}
 
-		// 4. Count members.
+		// 4. Upsert the event-date membership store and measure its difference
+		// from the legacy snapshot. Missing rows are not deleted here because
+		// they may be temporarily absent during a replacement parse. Differences
+		// are expected when later data changes historical cohorts, so they warn
+		// after commit rather than blocking publication.
+		if err := tx.UpsertTimeParseBossKillMemberships(ctx, snap.ID); err != nil {
+			return fmt.Errorf("upsert boss-kill memberships: %w", err)
+		}
+		comparison, err := tx.CompareTimeParseBossKillMembershipSnapshot(ctx, snap.ID)
+		if err != nil {
+			return fmt.Errorf("compare boss-kill membership shadow: %w", err)
+		}
+		legacyBossCount = comparison.LegacyCount
+		membershipBossCount = comparison.MembershipCount
+		membershipDifferenceCount = comparison.DifferenceCount
+
+		// 5. Count members.
 		clearCount, err = tx.CountTimeParseSnapshotClearTimeMembers(ctx, snap.ID)
 		if err != nil {
 			return fmt.Errorf("count clear-time members: %w", err)
@@ -283,7 +301,7 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 			return fmt.Errorf("count boss-kill members: %w", err)
 		}
 
-		// 5. Publish.
+		// 6. Publish.
 		if _, err := tx.PublishTimeParseSnapshot(ctx, snap.ID); err != nil {
 			return fmt.Errorf("publish time-parse snapshot: %w", err)
 		}
@@ -292,6 +310,16 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 	}, &pgx.TxOptions{})
 	if txErr != nil {
 		return txErr
+	}
+
+	if membershipDifferenceCount != 0 || legacyBossCount != membershipBossCount {
+		w.Logger.Warn("boss-kill membership cohort differs from legacy snapshot",
+			slog.String("tenant_id", args.TenantID.String()),
+			slog.Int("lookback_days", int(args.LookbackDays)),
+			slog.Int64("legacy_count", legacyBossCount),
+			slog.Int64("membership_count", membershipBossCount),
+			slog.Int64("difference_count", membershipDifferenceCount),
+		)
 	}
 
 	duration := time.Since(start)
@@ -305,12 +333,15 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 	)
 
 	_ = river.RecordOutput(ctx, map[string]any{
-		"tenant_id":          args.TenantID.String(),
-		"lookback_days":      args.LookbackDays,
-		"clear_time_members": clearCount,
-		"boss_kill_members":  bossCount,
-		"source_row_count":   sourceStats.RowCount,
-		"duration_ms":        duration.Milliseconds(),
+		"tenant_id":               args.TenantID.String(),
+		"lookback_days":           args.LookbackDays,
+		"clear_time_members":      clearCount,
+		"boss_kill_members":       bossCount,
+		"legacy_boss_members":     legacyBossCount,
+		"stored_boss_members":     membershipBossCount,
+		"boss_member_differences": membershipDifferenceCount,
+		"source_row_count":        sourceStats.RowCount,
+		"duration_ms":             duration.Milliseconds(),
 	})
 
 	return nil

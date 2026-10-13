@@ -730,3 +730,203 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		require.ErrorIs(t, err, pgx.ErrNoRows, "mismatched query_version should find nothing")
 	})
 }
+
+func TestTimeParseBossKillEventMemberships(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupTimeParseTest(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	firstCutoff := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	secondCutoff := firstCutoff.Add(24 * time.Hour)
+	expiredCutoff := secondCutoff.Add(24 * time.Hour)
+
+	insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+		instanceName:   "Molten Core",
+		difficultyName: "Normal",
+		maxPlayers:     40,
+		qualified:      true,
+		durationMs:     600000,
+		startTime:      start,
+		encounters: []timeParseEncounterOpts{{
+			name:      "Ragnaros",
+			killType:  database.KillTypeClean,
+			boss:      true,
+			startTime: start.Add(5 * time.Minute),
+			endTime:   start.Add(6 * time.Minute),
+		}},
+	})
+
+	const lookbackDays = int32(2)
+	runTimeParseWorker(t, ctx, store, uuid.Nil, firstCutoff, lookbackDays)
+	firstSnapshot, err := store.GetPublishedTimeParseSnapshotForCutoff(ctx, database.GetPublishedTimeParseSnapshotForCutoffParams{
+		TenantID:      uuid.Nil,
+		LookbackDays:  lookbackDays,
+		PolicyVersion: int16(timeparsepolicy.PolicyVersion),
+		QueryVersion:  timeparsepolicy.SnapshotQueryVersion,
+		Cutoff:        database.Timestamptz(firstCutoff),
+	})
+	require.NoError(t, err)
+
+	// A historical log uploaded later is persisted once and intentionally
+	// becomes visible to the already-published first snapshot's date window.
+	lateStart := start.Add(2 * time.Hour)
+	insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+		instanceName:   "Molten Core",
+		difficultyName: "Normal",
+		maxPlayers:     40,
+		qualified:      true,
+		durationMs:     610000,
+		startTime:      lateStart,
+		encounters: []timeParseEncounterOpts{{
+			name:      "Ragnaros",
+			killType:  database.KillTypeClean,
+			boss:      true,
+			startTime: lateStart.Add(5 * time.Minute),
+			endTime:   lateStart.Add(7 * time.Minute),
+		}},
+	})
+	runTimeParseWorker(t, ctx, store, uuid.Nil, secondCutoff, lookbackDays)
+
+	series := database.ListTimeParseBossKillMembershipsParams{
+		TenantID:      uuid.Nil,
+		PolicyVersion: int16(timeparsepolicy.PolicyVersion),
+		QueryVersion:  timeparsepolicy.SnapshotQueryVersion,
+	}
+	memberships, err := store.ListTimeParseBossKillMemberships(ctx, series)
+	require.NoError(t, err)
+	require.Len(t, memberships, 2, "each logical member should be stored once")
+
+	firstCohort, err := store.GetTimeParseBossKillMembershipCohort(ctx, database.GetTimeParseBossKillMembershipCohortParams{
+		SnapshotID:     firstSnapshot.ID,
+		InstanceName:   "Molten Core",
+		EncounterName:  "Ragnaros",
+		DifficultyName: "Normal",
+		MaxPlayers:     40,
+	})
+	require.NoError(t, err)
+	require.Len(t, firstCohort, 2, "late data should affect the historical cohort")
+
+	// Members remain stored after aging out, while date lookup excludes them.
+	runTimeParseWorker(t, ctx, store, uuid.Nil, expiredCutoff, lookbackDays)
+	expiredSnapshot, err := store.GetPublishedTimeParseSnapshotForCutoff(ctx, database.GetPublishedTimeParseSnapshotForCutoffParams{
+		TenantID:      uuid.Nil,
+		LookbackDays:  lookbackDays,
+		PolicyVersion: int16(timeparsepolicy.PolicyVersion),
+		QueryVersion:  timeparsepolicy.SnapshotQueryVersion,
+		Cutoff:        database.Timestamptz(expiredCutoff),
+	})
+	require.NoError(t, err)
+	expiredCohort, err := store.GetTimeParseBossKillMembershipCohort(ctx, database.GetTimeParseBossKillMembershipCohortParams{
+		SnapshotID:     expiredSnapshot.ID,
+		InstanceName:   "Molten Core",
+		EncounterName:  "Ragnaros",
+		DifficultyName: "Normal",
+		MaxPlayers:     40,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, expiredCohort)
+	memberships, err = store.ListTimeParseBossKillMemberships(ctx, series)
+	require.NoError(t, err)
+	require.Len(t, memberships, 2)
+
+	comparison, err := store.CompareTimeParseBossKillMembershipSnapshot(ctx, expiredSnapshot.ID)
+	require.NoError(t, err)
+	assert.Zero(t, comparison.LegacyCount)
+	assert.Zero(t, comparison.MembershipCount)
+	assert.Zero(t, comparison.DifferenceCount)
+
+	// An out-of-band rebuild can reset the series and replay legacy snapshots.
+	deleteSeries := database.DeleteTimeParseBossKillMembershipSeriesParams(series)
+	require.NoError(t, store.DeleteTimeParseBossKillMembershipSeries(ctx, deleteSeries))
+	snapshots, err := store.ListPublishedTimeParseSnapshotsForMembershipBackfill(ctx, database.ListPublishedTimeParseSnapshotsForMembershipBackfillParams(deleteSeries))
+	require.NoError(t, err)
+	require.Len(t, snapshots, 3)
+	for _, historicalSnapshot := range snapshots {
+		require.NoError(t, store.UpsertTimeParseBossKillMemberships(ctx, historicalSnapshot.ID))
+	}
+	comparison, err = store.CompareTimeParseBossKillMembershipSnapshot(ctx, expiredSnapshot.ID)
+	require.NoError(t, err)
+	assert.Equal(t, comparison.LegacyCount, comparison.MembershipCount)
+	assert.Zero(t, comparison.DifferenceCount)
+
+	memberships, err = store.ListTimeParseBossKillMemberships(ctx, series)
+	require.NoError(t, err)
+	require.Len(t, memberships, 2)
+
+	// A completed replacement refresh upserts first, then removes a member that
+	// disappeared from that source log. Routine snapshot publication did not.
+	removed := memberships[0]
+	_, err = pool.Exec(ctx, "DELETE FROM log_instance_encounters WHERE instance_id = $1", removed.InstanceID)
+	require.NoError(t, err)
+	refresh, err := store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, removed.LogGroupID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, refresh.DeletedCount)
+	memberships, err = store.ListTimeParseBossKillMemberships(ctx, series)
+	require.NoError(t, err)
+	require.Len(t, memberships, 1)
+
+	// Explicit invalidation/deletion uses source provenance for immediate cleanup.
+	require.NoError(t, store.DeleteTimeParseBossKillMembershipsByLogGroup(ctx, memberships[0].LogGroupID))
+	memberships, err = store.ListTimeParseBossKillMemberships(ctx, series)
+	require.NoError(t, err)
+	assert.Empty(t, memberships)
+}
+
+func TestTimeParseBossKillMembershipDifferenceDoesNotBlockPublication(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupTimeParseTest(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	start := time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC)
+	firstCutoff := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC)
+	secondCutoff := firstCutoff.Add(24 * time.Hour)
+
+	instanceID := insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+		instanceName:   "Molten Core",
+		difficultyName: "Normal",
+		maxPlayers:     40,
+		qualified:      true,
+		durationMs:     600000,
+		startTime:      start,
+		encounters: []timeParseEncounterOpts{{
+			name:      "Ragnaros",
+			killType:  database.KillTypeClean,
+			boss:      true,
+			startTime: start.Add(5 * time.Minute),
+			endTime:   start.Add(6 * time.Minute),
+		}},
+	})
+	runTimeParseWorker(t, ctx, store, uuid.Nil, firstCutoff, 60)
+
+	var logGroupID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT log_group_id FROM log_instances WHERE id = $1", instanceID,
+	).Scan(&logGroupID))
+	_, err := pool.Exec(ctx, `
+		INSERT INTO time_parse_boss_kill_memberships (
+			tenant_id, policy_version, query_version,
+			run_id, encounter_name, instance_id, log_group_id,
+			instance_name, difficulty_name, max_players, duration_ms, killed_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, uuid.Nil, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.SnapshotQueryVersion,
+		uuid.New(), "Lucifron", instanceID, logGroupID,
+		"Molten Core", "Normal", int16(40), int64(90000), start.Add(30*time.Minute))
+	require.NoError(t, err)
+
+	// The extra current-known member is a warning, not a publication failure.
+	runTimeParseWorker(t, ctx, store, uuid.Nil, secondCutoff, 60)
+	snapshot, err := store.GetPublishedTimeParseSnapshotForCutoff(ctx, database.GetPublishedTimeParseSnapshotForCutoffParams{
+		TenantID:      uuid.Nil,
+		LookbackDays:  60,
+		PolicyVersion: int16(timeparsepolicy.PolicyVersion),
+		QueryVersion:  timeparsepolicy.SnapshotQueryVersion,
+		Cutoff:        database.Timestamptz(secondCutoff),
+	})
+	require.NoError(t, err)
+	comparison, err := store.CompareTimeParseBossKillMembershipSnapshot(ctx, snapshot.ID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, comparison.DifferenceCount)
+	assert.EqualValues(t, 1, comparison.LegacyCount)
+	assert.EqualValues(t, 2, comparison.MembershipCount)
+}
