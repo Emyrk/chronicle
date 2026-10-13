@@ -872,3 +872,61 @@ func TestTimeParseBossKillEventMemberships(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, memberships)
 }
+
+func TestTimeParseBossKillMembershipDifferenceDoesNotBlockPublication(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupTimeParseTest(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	start := time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC)
+	firstCutoff := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC)
+	secondCutoff := firstCutoff.Add(24 * time.Hour)
+
+	instanceID := insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+		instanceName:   "Molten Core",
+		difficultyName: "Normal",
+		maxPlayers:     40,
+		qualified:      true,
+		durationMs:     600000,
+		startTime:      start,
+		encounters: []timeParseEncounterOpts{{
+			name:      "Ragnaros",
+			killType:  database.KillTypeClean,
+			boss:      true,
+			startTime: start.Add(5 * time.Minute),
+			endTime:   start.Add(6 * time.Minute),
+		}},
+	})
+	runTimeParseWorker(t, ctx, store, uuid.Nil, firstCutoff, 60)
+
+	var logGroupID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT log_group_id FROM log_instances WHERE id = $1", instanceID,
+	).Scan(&logGroupID))
+	_, err := pool.Exec(ctx, `
+		INSERT INTO time_parse_boss_kill_memberships (
+			tenant_id, policy_version, query_version,
+			run_id, encounter_name, instance_id, log_group_id,
+			instance_name, difficulty_name, max_players, duration_ms, killed_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, uuid.Nil, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.SnapshotQueryVersion,
+		uuid.New(), "Lucifron", instanceID, logGroupID,
+		"Molten Core", "Normal", int16(40), int64(90000), start.Add(30*time.Minute))
+	require.NoError(t, err)
+
+	// The extra current-known member is a warning, not a publication failure.
+	runTimeParseWorker(t, ctx, store, uuid.Nil, secondCutoff, 60)
+	snapshot, err := store.GetPublishedTimeParseSnapshotForCutoff(ctx, database.GetPublishedTimeParseSnapshotForCutoffParams{
+		TenantID:      uuid.Nil,
+		LookbackDays:  60,
+		PolicyVersion: int16(timeparsepolicy.PolicyVersion),
+		QueryVersion:  timeparsepolicy.SnapshotQueryVersion,
+		Cutoff:        database.Timestamptz(secondCutoff),
+	})
+	require.NoError(t, err)
+	comparison, err := store.CompareTimeParseBossKillMembershipSnapshot(ctx, snapshot.ID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, comparison.DifferenceCount)
+	assert.EqualValues(t, 1, comparison.LegacyCount)
+	assert.EqualValues(t, 2, comparison.MembershipCount)
+}
