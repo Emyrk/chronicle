@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Scan } from "lucide-react";
+import { useSpell } from "@/api/queries";
+import { useDatasetId } from "@/hooks/useDatasetId";
+import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import type { MapPositionSample } from "./map.processor";
 import { interpolatedPositionAt, type MapPoint } from "./mapModel";
-import { MAX_EFFECT_PRIMITIVES, MapScene3D, type MapScene3DUnit } from "./MapScene3D";
+import { MAX_EFFECT_PRIMITIVES, MapScene3D, type MapScene3DEffectHover, type MapScene3DUnit } from "./MapScene3D";
 import { DEFAULT_EFFECT_OPTIONS, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
@@ -32,6 +35,7 @@ interface EffectSettings {
   periodic: boolean;
   onlySelected: boolean;
   maxEffects: number;
+  bars: boolean;
 }
 
 const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
@@ -40,6 +44,7 @@ const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   periodic: DEFAULT_EFFECT_OPTIONS.showPeriodic,
   onlySelected: false,
   maxEffects: MAX_EFFECT_PRIMITIVES,
+  bars: true,
 };
 
 const DENSITY_OPTIONS = [16, 32, MAX_EFFECT_PRIMITIVES];
@@ -77,6 +82,25 @@ function resolveCssColor(color: string, element: Element, cache: Map<string, str
   return resolved;
 }
 
+// The hovered effect's spell; its data is fetched only once hovered.
+function EffectTooltip({ hover }: { hover: MapScene3DEffectHover }) {
+  const datasetId = useDatasetId();
+  const { data: spell } = useSpell(String(hover.spellId ?? ""), datasetId, { enabled: hover.spellId != null });
+  const amount = hover.amount > 0
+    ? <div className="text-xs text-muted-foreground">{hover.eventKind === "heal" ? "Healed" : "Hit for"} {hover.amount.toLocaleString()}</div>
+    : null;
+  return (
+    <div className="pointer-events-none absolute z-20 max-w-xs" style={{ left: hover.x + 12, top: hover.y + 12 }}>
+      {spell ? <SpellTooltip spell={spell} footer={amount} /> : (
+        <div className="rounded border border-white/15 bg-popover px-2 py-1 text-xs text-popover-foreground shadow-lg">
+          <div className="font-medium">{hover.spellName || `Spell ${hover.spellId}`}</div>
+          {amount}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MapView3D({
   ground,
   markers,
@@ -96,6 +120,8 @@ export default function MapView3D({
   const [smooth, setSmooth] = useState(readStoredSmooth);
   const smoothMs = useSmoothReplayTime(cursorMs, playing && smooth, playbackSpeed);
   const [effectSettings, setEffectSettings] = useState(readStoredEffectSettings);
+  const showBars = effectSettings.bars;
+  const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
 
   useEffect(() => {
     onUnavailableRef.current = onUnavailable;
@@ -106,7 +132,7 @@ export default function MapView3D({
     if (!container) return;
     let scene: MapScene3D;
     try {
-      scene = new MapScene3D(container, () => onUnavailableRef.current());
+      scene = new MapScene3D(container, () => onUnavailableRef.current(), setEffectHover);
     } catch {
       onUnavailableRef.current();
       return;
@@ -143,10 +169,11 @@ export default function MapView3D({
         kind: marker.kind,
         muted: marker.muted,
         name: marker.name,
+        health: showBars ? marker.health : null,
       }];
     });
     scene.setUnits(units);
-  }, [markers, projectSample, smooth, smoothMs]);
+  }, [markers, projectSample, showBars, smooth, smoothMs]);
 
   // Selected players (the unmuted ones while a selection mutes the rest) and
   // bosses; keyed by string so replay ticks don't rebuild the options.
@@ -158,6 +185,7 @@ export default function MapView3D({
     const selected = selectedKey ? new Set(selectedKey.split(",")) : null;
     const priority = new Set([...(selected ?? []), ...(bossKey ? bossKey.split(",") : [])]);
     return {
+      selected,
       ...DEFAULT_EFFECT_OPTIONS,
       filterGuids: effectSettings.onlySelected ? selected : null,
       priorityGuids: priority.size > 0 ? priority : null,
@@ -175,6 +203,8 @@ export default function MapView3D({
       fx: effects,
       options: effectOptions,
       resolveColor: (color) => resolveCssColor(color, container, colorCacheRef.current),
+      // Spell names float over the selected players' targets.
+      combatTextGuids: effectOptions.selected,
     } : null);
   }, [effectOptions, effectSettings.enabled, effects]);
 
@@ -205,35 +235,37 @@ export default function MapView3D({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="absolute inset-0" />
+      {effectHover && <EffectTooltip hover={effectHover} />}
       <div className="absolute right-2 top-2 flex flex-wrap justify-end gap-1 text-[10px]">
-        {effects && (
+        {effects && effectSettings.enabled && (
           <>
-            {effectSettings.enabled && (
-              <>
-                <button type="button" aria-pressed={effectSettings.heals} onClick={() => updateEffectSettings({ heals: !effectSettings.heals })} title="Show heal beams" className={toggleClass(effectSettings.heals)}>
-                  Heals
-                </button>
-                <button type="button" aria-pressed={effectSettings.periodic} onClick={() => updateEffectSettings({ periodic: !effectSettings.periodic })} title="Show damage and heal-over-time ticks" className={toggleClass(effectSettings.periodic)}>
-                  DoT ticks
-                </button>
-                <button type="button" aria-pressed={effectSettings.onlySelected} onClick={() => updateEffectSettings({ onlySelected: !effectSettings.onlySelected })} title="Only show effects involving the selected players" className={toggleClass(effectSettings.onlySelected)}>
-                  Only selected
-                </button>
-                <select
-                  aria-label="Effect density"
-                  title="Maximum effects drawn at once"
-                  value={effectSettings.maxEffects}
-                  onChange={(event) => updateEffectSettings({ maxEffects: Number(event.target.value) })}
-                  className="rounded border border-white/15 bg-black/70 px-1 py-0.5 text-muted-foreground [color-scheme:dark]"
-                >
-                  {DENSITY_OPTIONS.map((option) => <option key={option} value={option}>{option} fx</option>)}
-                </select>
-              </>
-            )}
-            <button type="button" aria-pressed={effectSettings.enabled} onClick={() => updateEffectSettings({ enabled: !effectSettings.enabled })} title="Hit wobble, spell beams, cast rings and deaths" className={toggleClass(effectSettings.enabled)}>
-              Effects
+            <button type="button" aria-pressed={effectSettings.heals} onClick={() => updateEffectSettings({ heals: !effectSettings.heals })} title="Show heal beams" className={toggleClass(effectSettings.heals)}>
+              Heals
             </button>
+            <button type="button" aria-pressed={effectSettings.periodic} onClick={() => updateEffectSettings({ periodic: !effectSettings.periodic })} title="Show damage and heal-over-time ticks" className={toggleClass(effectSettings.periodic)}>
+              DoT ticks
+            </button>
+            <button type="button" aria-pressed={effectSettings.onlySelected} onClick={() => updateEffectSettings({ onlySelected: !effectSettings.onlySelected })} title="Only show effects involving the selected players" className={toggleClass(effectSettings.onlySelected)}>
+              Only selected
+            </button>
+            <select
+              aria-label="Effect density"
+              title="Maximum effects drawn at once"
+              value={effectSettings.maxEffects}
+              onChange={(event) => updateEffectSettings({ maxEffects: Number(event.target.value) })}
+              className="rounded border border-white/15 bg-black/70 px-1 py-0.5 text-muted-foreground [color-scheme:dark]"
+            >
+              {DENSITY_OPTIONS.map((option) => <option key={option} value={option}>{option} fx</option>)}
+            </select>
           </>
+        )}
+        <button type="button" aria-pressed={showBars} onClick={() => updateEffectSettings({ bars: !showBars })} title="Health bars for bosses, selected players and recently damaged units" className={toggleClass(showBars)}>
+          Bars
+        </button>
+        {effects && (
+          <button type="button" aria-pressed={effectSettings.enabled} onClick={() => updateEffectSettings({ enabled: !effectSettings.enabled })} title="Hit wobble, spell beams, cast rings and deaths" className={toggleClass(effectSettings.enabled)}>
+            Effects
+          </button>
         )}
         <button
           type="button"

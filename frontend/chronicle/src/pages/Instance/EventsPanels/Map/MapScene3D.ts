@@ -1,16 +1,19 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { mapAssetUrl, type WowMapLayer, type WowMapTile } from "@/pages/Technical/mapGallery";
-import { FULL_MAP_VIEWPORT, mapPointToScene, type MapPoint, type MapViewport } from "./mapModel";
+import { FULL_MAP_VIEWPORT, healthBarColor, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   DEFAULT_EFFECT_OPTIONS,
   deriveActiveEffects,
+  deriveCombatText,
   isDeadAt,
   type ActiveEffect,
+  type CombatText,
   type DeriveEffectsOptions,
   type EncounterEffects,
+  type ReplayEffectKind,
 } from "./replayEffects";
-import type { MapMarkerKind, MapSceneGround } from "./useMapScene";
+import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export const GROUND_WIDTH = 100;
@@ -21,6 +24,24 @@ export const MAX_EFFECT_PRIMITIVES = 64;
 // Never run the effect clock further ahead of the last replay tick (real time).
 const MAX_EXTRAPOLATE_MS = 250;
 const BEAM_HEIGHT = 1.5;
+const BOLT_WIDTH = 0.18;
+// How far a melee attacker steps toward its target, at most.
+const LUNGE_DISTANCE = 1.2;
+const SLASH_HEIGHT = 1.2;
+const SLASH_RADIUS = 1.8;
+// Health bars sit between the body and the hover label.
+const BAR_HEIGHT = 3.9;
+const BAR_WIDTH = 2.6;
+const BAR_THICKNESS = 0.36;
+const BAR_PADDING = 0.14;
+const BAR_BACKGROUND = 0x0c0a09;
+const BAR_DEAD = 0x57534e;
+const BAR_ABSORB = 0xe7e5e4;
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+const MAX_COMBAT_TEXT = 8;
+const COMBAT_TEXT_HEIGHT = 1.8;
+// Rendered label textures kept for reuse (spell name + colour).
+const MAX_LABEL_TEXTURES = 128;
 const DEAD_COLOR = 0x57534e;
 // Default camera directions from the target.
 const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
@@ -36,6 +57,8 @@ export interface MapScene3DUnit {
   kind: MapMarkerKind;
   muted: boolean;
   name: string;
+  /** Health bar to draw, or null for none. */
+  health: MapUnitHealth | null;
 }
 
 interface UnitObject {
@@ -48,6 +71,9 @@ interface UnitObject {
   name: string;
   color: string;
   dead: boolean;
+  /** Replayed position; lunges offset `group.position` from it. */
+  base: THREE.Vector3;
+  health: MapUnitHealth | null;
 }
 
 export interface MapScene3DEffects {
@@ -56,6 +82,19 @@ export interface MapScene3DEffects {
   options: DeriveEffectsOptions;
   /** Resolves effect colours, which may be CSS custom properties. */
   resolveColor: (color: string) => string;
+  /** Casters whose recent hits float their spell name; null for none. */
+  combatTextGuids: ReadonlySet<string> | null;
+}
+
+/** The spell effect under the pointer, for an HTML tooltip. */
+export interface MapScene3DEffectHover {
+  eventKind: ReplayEffectKind;
+  spellId: number | null;
+  spellName: string;
+  amount: number;
+  /** Container-relative pixels of the effect's target. */
+  x: number;
+  y: number;
 }
 
 function createUnitGeometries(): Record<MapMarkerKind | "cone", THREE.BufferGeometry> {
@@ -105,19 +144,40 @@ export class MapScene3D {
   private readonly visibleUnits = { has: (guid: string) => this.units.has(guid) };
   private readonly effectColors = new Map<string, THREE.Color>();
   private readonly wobbling: UnitObject[] = [];
+  private readonly lunging: UnitObject[] = [];
   private readonly beamPositions = new Float32Array(MAX_EFFECT_PRIMITIVES * 6);
   private readonly beamColors = new Float32Array(MAX_EFFECT_PRIMITIVES * 6);
   private readonly beams: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private readonly rings: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  private readonly bolts: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  private readonly slashes: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  // Background, fill and absorb quads per bar.
+  private readonly bars: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private readonly matrix = new THREE.Matrix4();
   private readonly color = new THREE.Color();
+  private readonly vector = new THREE.Vector3();
+  private readonly vectorB = new THREE.Vector3();
+  private readonly scaleVector = new THREE.Vector3();
+  private readonly quaternion = new THREE.Quaternion();
+  // Index into activeEffects of each pooled primitive, for hover picking.
+  private readonly beamEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
+  private readonly boltEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
+  private readonly slashEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
+  private readonly ringEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
+  private pointerInside = false;
+  private hoveredEffectKey = "";
+  private readonly onEffectHover: (hover: MapScene3DEffectHover | null) => void;
+  private readonly combatText: CombatText[] = [];
+  private readonly combatSprites: THREE.Sprite[] = [];
+  private readonly labelTextures = new Map<string, { texture: THREE.CanvasTexture; aspect: number }>();
 
   private readonly container: HTMLElement;
   private readonly onContextLost: () => void;
 
-  constructor(container: HTMLElement, onContextLost: () => void) {
+  constructor(container: HTMLElement, onContextLost: () => void, onEffectHover: (hover: MapScene3DEffectHover | null) => void = () => {}) {
     this.container = container;
     this.onContextLost = onContextLost;
+    this.onEffectHover = onEffectHover;
     // Throws when WebGL is unavailable; the caller falls back to 2D.
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -146,17 +206,32 @@ export class MapScene3D {
       depthWrite: false,
     }));
     this.beams.frustumCulled = false;
-    this.rings = new THREE.InstancedMesh(
-      new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+    const glow = () => new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    this.rings = this.createPool(new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2), glow(), MAX_EFFECT_PRIMITIVES);
+    // Spell bolts: unit boxes stretched along the source -> target segment.
+    this.bolts = this.createPool(new THREE.BoxGeometry(1, 1, 1), glow(), MAX_EFFECT_PRIMITIVES);
+    // Melee slashes: a third of a ring, centred on +x before rotation.
+    this.slashes = this.createPool(
+      new THREE.RingGeometry(0.75, 1, 16, 1, -Math.PI / 3, (Math.PI * 2) / 3).rotateX(-Math.PI / 2),
+      glow(),
       MAX_EFFECT_PRIMITIVES,
     );
-    this.rings.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    // Allocate the colour buffer once, up front.
-    for (let index = 0; index < MAX_EFFECT_PRIMITIVES; index++) this.rings.setColorAt(index, this.color.setRGB(0, 0, 0));
-    this.rings.count = 0;
-    this.rings.frustumCulled = false;
-    this.scene.add(this.beams, this.rings);
+    // Health bars: camera-facing quads drawn over everything, in instance order.
+    this.bars = this.createPool(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92, depthTest: false, depthWrite: false }),
+      MAX_HEALTH_BARS * 3,
+    );
+    this.bars.renderOrder = 9;
+    this.scene.add(this.beams, this.rings, this.bolts, this.slashes, this.bars);
+    for (let index = 0; index < MAX_COMBAT_TEXT; index++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
+      sprite.center.set(0.5, 0);
+      sprite.renderOrder = 10;
+      sprite.visible = false;
+      this.combatSprites.push(sprite);
+      this.scene.add(sprite);
+    }
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.maxPolarAngle = Math.PI / 2 - 0.05;
@@ -260,8 +335,10 @@ export class MapScene3D {
       if (!object) object = this.addUnit(unit);
       object.name = unit.name;
       object.color = unit.color;
+      object.health = unit.health;
       const { x, z } = mapPointToScene(unit.point, this.aspect, GROUND_WIDTH);
-      object.group.position.set(x, 0, z);
+      object.base.set(x, 0, z);
+      object.group.position.copy(object.base);
       object.group.rotation.y = unit.facing;
       object.group.scale.setScalar(this.unitScale);
       const opacity = unit.muted ? MUTED_OPACITY : 1;
@@ -357,9 +434,13 @@ export class MapScene3D {
     for (const geometry of Object.values(this.geometries)) geometry.dispose();
     this.beams.geometry.dispose();
     this.beams.material.dispose();
-    this.rings.geometry.dispose();
-    this.rings.material.dispose();
-    this.rings.dispose();
+    for (const pool of [this.rings, this.bolts, this.slashes, this.bars]) {
+      pool.geometry.dispose();
+      pool.material.dispose();
+      pool.dispose();
+    }
+    for (const sprite of this.combatSprites) sprite.material.dispose();
+    for (const { texture } of this.labelTextures.values()) texture.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     canvas.remove();
@@ -376,7 +457,19 @@ export class MapScene3D {
     group.add(body, cone);
     group.scale.setScalar(this.unitScale);
     this.unitsGroup.add(group);
-    const object = { group, body, bodyMaterial, coneMaterial, cone, kind: unit.kind, name: unit.name, color: unit.color, dead: false };
+    const object = {
+      group,
+      body,
+      bodyMaterial,
+      coneMaterial,
+      cone,
+      kind: unit.kind,
+      name: unit.name,
+      color: unit.color,
+      dead: false,
+      base: new THREE.Vector3(),
+      health: unit.health,
+    };
     this.units.set(unit.guid, object);
     return object;
   }
@@ -390,6 +483,8 @@ export class MapScene3D {
     this.units.delete(guid);
     const wobbling = this.wobbling.indexOf(object);
     if (wobbling >= 0) this.wobbling.splice(wobbling, 1);
+    const lunging = this.lunging.indexOf(object);
+    if (lunging >= 0) this.lunging.splice(lunging, 1);
     if (this.hoveredGuid === guid) this.hoveredGuid = null;
   }
 
@@ -401,6 +496,8 @@ export class MapScene3D {
       object.bodyMaterial.emissive.setRGB(0, 0, 0);
     }
     this.wobbling.length = 0;
+    for (const object of this.lunging) object.group.position.copy(object.base);
+    this.lunging.length = 0;
     const fx = this.effects?.fx ?? null;
     const { clock } = this;
     const cursorMs = clock.playing ? clock.ms + Math.min(now - clock.at, MAX_EXTRAPOLATE_MS) * clock.speed : clock.ms;
@@ -412,6 +509,8 @@ export class MapScene3D {
 
     let beamCount = 0;
     let ringCount = 0;
+    let boltCount = 0;
+    let slashCount = 0;
     const active = fx ? deriveActiveEffects(fx, cursorMs, this.effectOptions, this.activeEffects) : this.activeEffects;
     if (!fx) active.length = 0;
     for (let index = 0; index < active.length; index++) {
@@ -420,30 +519,70 @@ export class MapScene3D {
       if (!target) continue;
       const color = this.effectColor(effect.color);
       const fade = 1 - effect.progress;
-      if (effect.type === "beam") {
+      if (effect.type === "beam" || effect.type === "streak") {
         const source = effect.source ? this.units.get(effect.source) : undefined;
-        if (!source || beamCount >= MAX_EFFECT_PRIMITIVES) continue;
-        // A short streak travelling from the source to the target.
+        if (!source) continue;
+        // A short streak travelling from the source to the target: spells as
+        // a thick bolt (thicker on crits), ranged autos as a thin line.
         const head = Math.min(1, effect.progress * 1.5);
         const tail = Math.max(0, head - 0.4);
-        const from = source.group.position;
-        const to = target.group.position;
+        const from = source.base;
+        const to = target.base;
         const y = BEAM_HEIGHT * this.unitScale;
-        const offset = beamCount * 6;
         const brightness = Math.min(1.5, fade * (0.6 + 0.4 * effect.intensity));
-        this.beamPositions[offset] = from.x + (to.x - from.x) * tail;
+        const tailPoint = this.vector.set(from.x + (to.x - from.x) * tail, y, from.z + (to.z - from.z) * tail);
+        const headPoint = this.vectorB.set(from.x + (to.x - from.x) * head, y, from.z + (to.z - from.z) * head);
+        if (effect.type === "beam") {
+          const length = tailPoint.distanceTo(headPoint);
+          if (boltCount >= MAX_EFFECT_PRIMITIVES || length <= 0) continue;
+          const width = BOLT_WIDTH * (1 + 0.8 * (effect.intensity - 1)) * this.unitScale;
+          this.quaternion.setFromUnitVectors(Z_AXIS, headPoint.sub(tailPoint).divideScalar(length));
+          tailPoint.addScaledVector(headPoint, length / 2);
+          this.matrix.compose(tailPoint, this.quaternion, this.scaleVector.set(width, width, length));
+          this.bolts.setMatrixAt(boltCount, this.matrix);
+          this.bolts.setColorAt(boltCount, this.color.copy(color).multiplyScalar(brightness));
+          this.boltEffects[boltCount] = index;
+          boltCount++;
+          continue;
+        }
+        if (beamCount >= MAX_EFFECT_PRIMITIVES) continue;
+        const offset = beamCount * 6;
+        this.beamPositions[offset] = tailPoint.x;
         this.beamPositions[offset + 1] = y;
-        this.beamPositions[offset + 2] = from.z + (to.z - from.z) * tail;
-        this.beamPositions[offset + 3] = from.x + (to.x - from.x) * head;
+        this.beamPositions[offset + 2] = tailPoint.z;
+        this.beamPositions[offset + 3] = headPoint.x;
         this.beamPositions[offset + 4] = y;
-        this.beamPositions[offset + 5] = from.z + (to.z - from.z) * head;
+        this.beamPositions[offset + 5] = headPoint.z;
         this.beamColors[offset] = color.r * brightness * 0.3;
         this.beamColors[offset + 1] = color.g * brightness * 0.3;
         this.beamColors[offset + 2] = color.b * brightness * 0.3;
         this.beamColors[offset + 3] = color.r * brightness;
         this.beamColors[offset + 4] = color.g * brightness;
         this.beamColors[offset + 5] = color.b * brightness;
+        this.beamEffects[beamCount] = index;
         beamCount++;
+      } else if (effect.type === "lunge") {
+        // The attacker steps toward its target and back.
+        const source = effect.source ? this.units.get(effect.source) : undefined;
+        if (!source || source.dead || this.lunging.includes(source)) continue;
+        const toward = this.vector.subVectors(target.base, source.base);
+        const distance = toward.length();
+        if (distance <= 0) continue;
+        const step = Math.sin(effect.progress * Math.PI) * Math.min(LUNGE_DISTANCE * this.unitScale, distance * 0.4);
+        source.group.position.copy(source.base).addScaledVector(toward, step / distance);
+        this.lunging.push(source);
+      } else if (effect.type === "slash") {
+        // An arc on the attacker's side of the target, sweeping across it.
+        const source = effect.source ? this.units.get(effect.source) : undefined;
+        if (!source || slashCount >= MAX_EFFECT_PRIMITIVES) continue;
+        const angle = Math.atan2(-(source.base.z - target.base.z), source.base.x - target.base.x) + (effect.progress - 0.5) * 1.4;
+        const radius = SLASH_RADIUS * (0.8 + 0.3 * effect.progress) * this.unitScale;
+        this.matrix.makeRotationY(angle).scale(this.scaleVector.set(radius, 1, radius))
+          .setPosition(target.base.x, SLASH_HEIGHT * this.unitScale, target.base.z);
+        this.slashes.setMatrixAt(slashCount, this.matrix);
+        this.slashes.setColorAt(slashCount, this.color.copy(color).multiplyScalar(fade * Math.min(2, 0.7 + 0.5 * effect.intensity)));
+        this.slashEffects[slashCount] = index;
+        slashCount++;
       } else if (effect.type === "hit") {
         if (target.dead) continue;
         // Damped shake about the unit's facing axis plus an emissive flash.
@@ -452,13 +591,17 @@ export class MapScene3D {
         if (!this.wobbling.includes(target)) this.wobbling.push(target);
       } else if (ringCount < MAX_EFFECT_PRIMITIVES) {
         // "ring": an AoE pulse expanding from the caster; "cast": a ring that
-        // closes in on the caster as the cast completes.
-        const radius = (effect.type === "ring" ? 1.5 + 6 * effect.progress : 4 - 2.5 * effect.progress) * this.unitScale;
-        const brightness = effect.type === "ring" ? fade : 0.35 + 0.5 * effect.progress;
-        const position = target.group.position;
+        // closes in on the caster as the cast completes; "impact": a small
+        // quick burst under a melee ability's target.
+        const radius = (effect.type === "ring"
+          ? 1.5 + 6 * effect.progress
+          : effect.type === "impact" ? 0.6 + 1.8 * effect.progress : 4 - 2.5 * effect.progress) * this.unitScale;
+        const brightness = effect.type === "cast" ? 0.35 + 0.5 * effect.progress : fade * (effect.type === "impact" ? 1.2 : 1);
+        const position = target.base;
         this.matrix.makeScale(radius, 1, radius).setPosition(position.x, 0.05, position.z);
         this.rings.setMatrixAt(ringCount, this.matrix);
         this.rings.setColorAt(ringCount, this.color.copy(color).multiplyScalar(brightness));
+        this.ringEffects[ringCount] = index;
         ringCount++;
       }
     }
@@ -466,12 +609,150 @@ export class MapScene3D {
     this.beams.geometry.setDrawRange(0, beamCount * 2);
     this.beams.geometry.attributes.position.needsUpdate = beamCount > 0;
     this.beams.geometry.attributes.color.needsUpdate = beamCount > 0;
-    this.rings.count = ringCount;
-    if (ringCount > 0) {
-      this.rings.instanceMatrix.needsUpdate = true;
-      this.rings.instanceColor!.needsUpdate = true;
-    }
+    // Raycasts compute bounds lazily; they change every frame.
+    this.beams.geometry.boundingSphere = null;
+    this.commitPool(this.rings, ringCount);
+    this.commitPool(this.bolts, boltCount);
+    this.commitPool(this.slashes, slashCount);
+    this.updateCombatText(fx, cursorMs);
     return fx !== null && clock.playing;
+  }
+
+  private updateCombatText(fx: EncounterEffects | null, cursorMs: number) {
+    const sources = this.effects?.combatTextGuids;
+    const texts = fx && sources && sources.size > 0
+      ? deriveCombatText(fx, cursorMs, sources, this.effectOptions, MAX_COMBAT_TEXT, this.combatText)
+      : this.combatText;
+    if (!fx || !sources || sources.size === 0) texts.length = 0;
+    let shown = 0;
+    for (const text of texts) {
+      const target = this.units.get(text.target);
+      if (!target) continue;
+      const sprite = this.combatSprites[shown];
+      const label = this.labelTexture(text.spellName, this.effects!.resolveColor(text.color), text.crit);
+      if (sprite.material.map !== label.texture) {
+        sprite.material.map = label.texture;
+        sprite.material.needsUpdate = true;
+      }
+      sprite.material.opacity = 1 - text.progress * text.progress;
+      const height = COMBAT_TEXT_HEIGHT * (text.crit ? 1.25 : 1) * this.unitScale;
+      sprite.scale.set(height * label.aspect, height, 1);
+      // Float up from above the bar; stagger labels on the same target.
+      const lift = (LABEL_HEIGHT + 0.5 + 2 * text.progress + (shown % 3) * 1.2) * this.unitScale;
+      sprite.position.set(target.base.x, lift, target.base.z);
+      sprite.visible = true;
+      shown++;
+    }
+    for (let index = shown; index < MAX_COMBAT_TEXT; index++) this.combatSprites[index].visible = false;
+  }
+
+  private labelTexture(text: string, color: string, crit: boolean) {
+    const key = `${text}|${color}|${crit}`;
+    let label = this.labelTextures.get(key);
+    if (label) {
+      // Re-insert to keep the cache in least-recently-used order.
+      this.labelTextures.delete(key);
+      this.labelTextures.set(key, label);
+      return label;
+    }
+    label = createTextTexture(crit ? `${text}!` : text, color);
+    this.labelTextures.set(key, label);
+    if (this.labelTextures.size > MAX_LABEL_TEXTURES) {
+      const [oldestKey, oldest] = this.labelTextures.entries().next().value!;
+      // Still drawn this frame by another sprite? Keep it one more round.
+      if (!this.combatSprites.some((sprite) => sprite.material.map === oldest.texture)) {
+        oldest.texture.dispose();
+        this.labelTextures.delete(oldestKey);
+      }
+    }
+    return label;
+  }
+
+  // Reports the spell effect under the pointer when it changes.
+  private updateEffectHover() {
+    let hit: { effect: ActiveEffect; key: string } | null = null;
+    if (this.pointerInside && this.effects) {
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      this.raycaster.params.Line.threshold = 0.4 * this.unitScale;
+      const pools: [THREE.Object3D, Int16Array][] = [
+        [this.bolts, this.boltEffects],
+        [this.beams, this.beamEffects],
+        [this.slashes, this.slashEffects],
+        [this.rings, this.ringEffects],
+      ];
+      for (const [object, effects] of pools) {
+        const intersection = this.raycaster.intersectObject(object, false)[0];
+        if (!intersection) continue;
+        const primitive = intersection.instanceId ?? Math.floor((intersection.index ?? 0) / 2);
+        const effect = this.activeEffects[effects[primitive]];
+        if (!effect || (effect.spellId == null && !effect.spellName)) continue;
+        hit = { effect, key: `${effect.type}|${effect.source}|${effect.target}|${effect.eventMs}` };
+        break;
+      }
+    }
+    if ((hit?.key ?? "") === this.hoveredEffectKey) return;
+    this.hoveredEffectKey = hit?.key ?? "";
+    const target = hit ? this.units.get(hit.effect.target) : undefined;
+    if (!hit || !target) {
+      this.onEffectHover(null);
+      return;
+    }
+    const projected = this.vector.copy(target.base).setY(BEAM_HEIGHT * this.unitScale).project(this.camera);
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.onEffectHover({
+      eventKind: hit.effect.eventKind,
+      spellId: hit.effect.spellId,
+      spellName: hit.effect.spellName,
+      amount: hit.effect.amount,
+      x: (projected.x + 1) / 2 * rect.width,
+      y: (1 - projected.y) / 2 * rect.height,
+    });
+  }
+
+  private createPool(geometry: THREE.BufferGeometry, material: THREE.MeshBasicMaterial, size: number) {
+    const pool = new THREE.InstancedMesh(geometry, material, size);
+    pool.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // Allocate the colour buffer once, up front.
+    for (let index = 0; index < size; index++) pool.setColorAt(index, this.color.setRGB(0, 0, 0));
+    pool.count = 0;
+    pool.frustumCulled = false;
+    return pool;
+  }
+
+  private commitPool(pool: THREE.InstancedMesh, count: number) {
+    pool.count = count;
+    pool.boundingSphere = null;
+    if (count === 0) return;
+    pool.instanceMatrix.needsUpdate = true;
+    pool.instanceColor!.needsUpdate = true;
+  }
+
+  // Health bars above the units, facing the camera at a constant screen size.
+  private updateBars() {
+    const width = BAR_WIDTH * this.unitScale;
+    const thickness = BAR_THICKNESS * this.unitScale;
+    const padding = BAR_PADDING * this.unitScale;
+    const right = this.vectorB.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    let count = 0;
+    const quad = (base: THREE.Vector3, from: number, to: number, quadWidth: number, quadHeight: number, color: THREE.Color | number) => {
+      const center = this.vector.copy(base).setY(BAR_HEIGHT * this.unitScale).addScaledVector(right, ((from + to) / 2 - 0.5) * width);
+      this.matrix.compose(center, this.camera.quaternion, this.scaleVector.set(quadWidth, quadHeight, 1));
+      this.bars.setMatrixAt(count, this.matrix);
+      this.bars.setColorAt(count, typeof color === "number" ? this.color.setHex(color) : color);
+      count++;
+    };
+    for (const object of this.units.values()) {
+      const { health } = object;
+      if (!health || count + 3 > MAX_HEALTH_BARS * 3) continue;
+      const dead = health.dead || object.dead;
+      const fraction = health.max > 0 ? Math.min(1, Math.max(0, health.current / health.max)) : 0;
+      const absorb = health.max > 0 ? Math.min(1 - fraction, Math.max(0, health.absorb / health.max)) : 0;
+      quad(object.base, 0, 1, width + padding, thickness + padding, dead ? BAR_DEAD : BAR_BACKGROUND);
+      if (dead) continue;
+      if (fraction > 0) quad(object.base, 0, fraction, width * fraction, thickness, this.color.setStyle(healthBarColor(fraction)));
+      if (absorb > 0) quad(object.base, fraction, fraction + absorb, width * absorb, thickness, BAR_ABSORB);
+    }
+    this.commitPool(this.bars, count);
   }
 
   // Slain units lie down, grey, until resurrected.
@@ -536,6 +817,9 @@ export class MapScene3D {
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const hit = this.raycaster.intersectObjects([...this.units.values()].map((unit) => unit.body), false)[0];
     const guid = (hit?.object.userData.guid as string | undefined) ?? null;
+    this.pointerInside = true;
+    // The next frame re-picks the effect under the pointer.
+    if (this.effects) this.requestRender();
     if (guid === this.hoveredGuid) return;
     this.hoveredGuid = guid;
     this.renderer.domElement.style.cursor = guid ? "pointer" : "";
@@ -544,6 +828,8 @@ export class MapScene3D {
   };
 
   private readonly handlePointerLeave = () => {
+    this.pointerInside = false;
+    this.requestRender();
     if (!this.hoveredGuid) return;
     this.hoveredGuid = null;
     this.updateLabel();
@@ -579,6 +865,8 @@ export class MapScene3D {
       // Only keeps a frame loop running while effects animate (playback);
       // otherwise rendering stays on demand.
       const animating = this.updateEffects(now);
+      this.updateBars();
+      this.updateEffectHover();
       this.renderer.render(this.scene, this.camera);
       if (animating) this.requestRender();
     });
@@ -620,4 +908,27 @@ function createLabelSprite(text: string): THREE.Sprite {
   sprite.renderOrder = 10;
   sprite.userData.text = text;
   return sprite;
+}
+
+// Combat text: coloured, outlined, no background.
+function createTextTexture(text: string, color: string): { texture: THREE.CanvasTexture; aspect: number } {
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d")!;
+  const font = `600 ${11 * scale}px ui-sans-serif, system-ui, sans-serif`;
+  context.font = font;
+  const padding = 3 * scale;
+  canvas.width = Math.ceil(context.measureText(text).width + padding * 2);
+  canvas.height = 16 * scale;
+  context.font = font;
+  context.textBaseline = "middle";
+  context.lineJoin = "round";
+  context.lineWidth = 3 * scale;
+  context.strokeStyle = "rgba(0, 0, 0, 0.9)";
+  context.strokeText(text, padding, canvas.height / 2 + scale);
+  context.fillStyle = color;
+  context.fillText(text, padding, canvas.height / 2 + scale);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return { texture, aspect: canvas.width / canvas.height };
 }

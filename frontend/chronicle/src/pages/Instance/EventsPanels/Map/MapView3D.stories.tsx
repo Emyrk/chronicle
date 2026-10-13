@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { MapPositionSample } from "./map.processor";
-import { FULL_MAP_VIEWPORT, latestPositionAt, type MapPoint } from "./mapModel";
+import type { MapHealthSample } from "./map.processor";
+import { FULL_MAP_VIEWPORT, latestPositionAt, selectHealthBars, type MapPoint } from "./mapModel";
 import MapView3D from "./MapView3D";
-import { addEffectEvent, createEncounterEffects, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
+import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 import type { MapMarkerKind, MapSceneGround, MapSceneMarker } from "./useMapScene";
 
 const CLASSES = ["warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid"];
@@ -60,10 +61,21 @@ function syntheticUnits(players: number): SyntheticUnit[] {
   return units;
 }
 
-// School per class (chronicleproto School): melee classes swing, the rest cast.
+// School per class (chronicleproto School): melee classes swing (and
+// sometimes Heroic Strike), hunters Auto Shot, the rest cast.
 const CLASS_SCHOOL: Record<string, number> = { hunter: 2, mage: 6, warlock: 7, shaman: 5, priest: 3, paladin: 3, druid: 8 };
 const HEALERS = new Set(["priest", "paladin", "druid", "shaman"]);
 const MELEE = new Set(["warrior", "rogue"]);
+const RANGED = new Set(["hunter"]);
+// A representative spell per school for names and hover tooltips.
+const SCHOOL_SPELL: Record<number, { spellId: number; spellName: string }> = {
+  3: { spellId: 585, spellName: "Smite" },
+  5: { spellId: 403, spellName: "Lightning Bolt" },
+  6: { spellId: 116, spellName: "Frostbolt" },
+  7: { spellId: 686, spellName: "Shadow Bolt" },
+  8: { spellId: 2912, spellName: "Starfire" },
+};
+const HEAL_SPELL = { spellId: 2054, spellName: "Heal" };
 const BOSS_GUIDS = new Set(["Boss"]);
 
 // Deterministic combat: melee swings, spell hits with cast bars, heals,
@@ -71,7 +83,7 @@ const BOSS_GUIDS = new Set(["Boss"]);
 // resurrected later.
 function syntheticEffects(players: number): EncounterEffects {
   const events: ReplayEffectEvent[] = [];
-  const base = { amount: 1000, crit: false, periodic: false, melee: false, aoe: false, castTimeMs: 0, spellId: 1 };
+  const base = { amount: 1000, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, spellId: 1, spellName: "" };
   for (let index = 0; index < players; index++) {
     const guid = `Player-${index}`;
     const cls = CLASSES[index % CLASSES.length];
@@ -80,29 +92,34 @@ function syntheticEffects(players: number): EncounterEffects {
     for (let t = 500 + index * 97; t < DURATION_MS; t += period) {
       const crit = (t / period) % 5 < 1;
       if (MELEE.has(cls)) {
-        events.push({ ...base, timestampMs: t, kind: "damage", source: guid, target: "Boss", school: 2, melee: true, crit, spellId: null });
+        const ability = (t / period) % 4 < 1;
+        events.push({ ...base, timestampMs: t, kind: "damage", source: guid, target: "Boss", school: 2, attack: ability ? "melee_ability" : "swing", crit, ...(ability ? { spellId: 78, spellName: "Heroic Strike" } : { spellId: 6603, spellName: "Auto Attack" }) });
+      } else if (RANGED.has(cls)) {
+        events.push({ ...base, timestampMs: t, kind: "damage", source: guid, target: "Boss", school: 2, attack: "ranged_auto", crit, spellId: 75, spellName: "Auto Shot" });
       } else if (HEALERS.has(cls) && index % 2 === 0) {
         const target = `Player-${(index * 7 + Math.floor(t / 1000)) % players}`;
-        events.push({ ...base, timestampMs: t - 1_500, kind: "cast_start", source: guid, target, school, castTimeMs: 1_500 });
-        events.push({ ...base, timestampMs: t, kind: "cast_go", source: guid, target, school });
-        events.push({ ...base, timestampMs: t, kind: "heal", source: guid, target, school, crit });
+        events.push({ ...base, ...HEAL_SPELL, timestampMs: t - 1_500, kind: "cast_start", source: guid, target, school, castTimeMs: 1_500 });
+        events.push({ ...base, ...HEAL_SPELL, timestampMs: t, kind: "cast_go", source: guid, target, school });
+        events.push({ ...base, ...HEAL_SPELL, timestampMs: t, kind: "heal", source: guid, target, school, crit });
       } else {
-        events.push({ ...base, timestampMs: t - 2_000, kind: "cast_start", source: guid, target: "Boss", school, castTimeMs: 2_000 });
-        events.push({ ...base, timestampMs: t, kind: "cast_go", source: guid, target: "Boss", school });
-        events.push({ ...base, timestampMs: t, kind: "damage", source: guid, target: "Boss", school, crit });
-        events.push({ ...base, timestampMs: t + 1_000, kind: "damage", source: guid, target: "Boss", school, periodic: true });
+        const spell = SCHOOL_SPELL[school] ?? SCHOOL_SPELL[6];
+        events.push({ ...base, ...spell, timestampMs: t - 2_000, kind: "cast_start", source: guid, target: "Boss", school, castTimeMs: 2_000 });
+        events.push({ ...base, ...spell, timestampMs: t, kind: "cast_go", source: guid, target: "Boss", school });
+        events.push({ ...base, ...spell, timestampMs: t, kind: "damage", source: guid, target: "Boss", school, crit });
+        events.push({ ...base, ...spell, timestampMs: t + 1_000, kind: "damage", source: guid, target: "Boss", school, periodic: true });
       }
     }
   }
+  const flamestrike = { spellId: 2120, spellName: "Flamestrike" };
   for (let t = 4_000; t < DURATION_MS; t += 6_000) {
-    events.push({ ...base, timestampMs: t - 2_500, kind: "cast_start", source: "Boss", target: "", school: 4, castTimeMs: 2_500 });
+    events.push({ ...base, ...flamestrike, timestampMs: t - 2_500, kind: "cast_start", source: "Boss", target: "", school: 4, castTimeMs: 2_500 });
     if (t % 18_000 === 10_000) {
       events.push({ ...base, timestampMs: t - 1_000, kind: "interrupt", source: "Player-3", target: "Boss", school: 2 });
       continue;
     }
-    events.push({ ...base, timestampMs: t, kind: "cast_go", source: "Boss", target: "", school: 4, aoe: true });
+    events.push({ ...base, ...flamestrike, timestampMs: t, kind: "cast_go", source: "Boss", target: "", school: 4, aoe: true });
     for (let index = 0; index < players; index += 3) {
-      events.push({ ...base, timestampMs: t, kind: "damage", source: "Boss", target: `Player-${index}`, school: 4 });
+      events.push({ ...base, ...flamestrike, timestampMs: t, kind: "damage", source: "Boss", target: `Player-${index}`, school: 4 });
     }
   }
   for (let index = 1; index < players; index += 9) {
@@ -114,11 +131,30 @@ function syntheticEffects(players: number): EncounterEffects {
   return fx;
 }
 
+// Health snapshots that change every second: the boss drains over the fight,
+// players dip and recover, some with an absorb shield.
+function syntheticHealth(units: SyntheticUnit[], fx: EncounterEffects): Map<string, MapHealthSample[]> {
+  const healthByUnit = new Map<string, MapHealthSample[]>();
+  units.forEach((unit, index) => {
+    const max = unit.guid === "Boss" ? 1_000_000 : 5_000;
+    const samples: MapHealthSample[] = [];
+    for (let t = 0; t < DURATION_MS; t += 1_000) {
+      const fraction = unit.guid === "Boss"
+        ? 1 - t / DURATION_MS
+        : isDeadAt(fx, unit.guid, t) ? 0 : 0.55 + 0.45 * Math.cos(t / 4_000 + index);
+      samples.push({ timestampMs: t, current: Math.round(max * fraction), max, absorb: index % 4 === 0 ? max * 0.15 : 0 });
+    }
+    healthByUnit.set(unit.guid, samples);
+  });
+  return healthByUnit;
+}
+
 const FULL_VIEW = { viewport: FULL_MAP_VIEWPORT, key: "full" };
 
 function SyntheticReplay({ players, playbackSpeed, mutedEvery, effects }: { players: number; playbackSpeed: number; mutedEvery: number; effects: boolean }) {
   const [units] = useState(() => syntheticUnits(players));
   const [fx] = useState(() => syntheticEffects(players));
+  const [healthByUnit] = useState(() => syntheticHealth(units, fx));
   const [cursorMs, setCursorMs] = useState(0);
 
   // Mirrors SyncModeContext: coarse 100 ms ticks scaled by playback speed.
@@ -127,14 +163,18 @@ function SyntheticReplay({ players, playbackSpeed, mutedEvery, effects }: { play
     return () => clearInterval(id);
   }, [playbackSpeed]);
 
-  const markers = units.flatMap((unit, index): MapSceneMarker[] => {
+  const selected = new Set(mutedEvery > 0 ? units.filter((unit, index) => unit.kind === "player" && index % mutedEvery === 0).map((unit) => unit.guid) : []);
+  const bars = selectHealthBars(units.map((unit) => unit.guid), healthByUnit, cursorMs, BOSS_GUIDS, selected);
+  const markers = units.flatMap((unit): MapSceneMarker[] => {
     const sample = latestPositionAt(unit.positions, cursorMs);
     if (!sample) return [];
+    const health = bars.get(unit.guid);
     return [{
       ...unit,
       sample,
       point: projectSample(sample),
-      muted: mutedEvery > 0 && unit.kind === "player" && index % mutedEvery !== 0,
+      muted: mutedEvery > 0 && unit.kind === "player" && !selected.has(unit.guid),
+      health: health ? { ...health, dead: isDeadAt(fx, unit.guid, cursorMs) } : null,
     }];
   });
 
@@ -172,12 +212,17 @@ export const WithSelection: Story = {
   args: { players: 20, playbackSpeed: 1, mutedEvery: 3 },
 };
 
-/** Hit wobble, beams, cast/AoE rings, interrupts and deaths at 1x. */
+/** Hit wobble, melee lunges/slashes, Auto Shot streaks, spell bolts, cast/AoE rings, interrupts, deaths and health bars at 1x. */
 export const Effects: Story = {
   args: { players: 10, playbackSpeed: 1, effects: true },
 };
 
-/** Effect density: a 40-player raid at 4x speed, capped primitives. */
+/** Effect density: a 40-player raid at 4x speed, capped primitives and health bars. */
 export const EffectsFortyPlayersAt4x: Story = {
   args: { players: 40, playbackSpeed: 4, effects: true },
+};
+
+/** Selected players' spell names float over their targets; hover a beam, streak, slash or ring for its spell tooltip. */
+export const EffectsWithSelection: Story = {
+  args: { players: 20, playbackSpeed: 1, mutedEvery: 3, effects: true },
 };

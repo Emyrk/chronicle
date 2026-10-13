@@ -6,8 +6,8 @@ import {
   tilePlacement,
   type WowMapLayer,
 } from "@/pages/Technical/mapGallery";
-import { clampViewport, viewportPoint, zoomViewportAt, type MapViewport } from "./mapModel";
-import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
+import { clampViewport, healthBarColor, viewportPoint, zoomViewportAt, type MapViewport } from "./mapModel";
+import type { MapSceneGround, MapSceneMarker, MapUnitHealth } from "./useMapScene";
 
 /** A framing for the views to apply; a new object re-applies it (Fit / Reset). */
 export interface MapViewRequest {
@@ -44,6 +44,23 @@ function MapTiles({ ground: { canvas, iconBaseUrl, overlays } }: { ground: MapSc
   );
 }
 
+// Same colour rule as the 3D bars: fill by percentage, a pale absorb
+// segment past current health, grey when dead.
+function HealthBar({ health }: { health: MapUnitHealth }) {
+  const fraction = health.max > 0 ? Math.min(1, Math.max(0, health.current / health.max)) : 0;
+  const absorb = health.max > 0 ? Math.min(1 - fraction, Math.max(0, health.absorb / health.max)) : 0;
+  return (
+    <div className={`pointer-events-none absolute left-1/2 top-full flex h-1 w-6 -translate-x-1/2 overflow-hidden rounded-sm border border-black/80 ${health.dead ? "bg-stone-600" : "bg-black/80"}`}>
+      {!health.dead && (
+        <>
+          <div style={{ width: `${fraction * 100}%`, backgroundColor: healthBarColor(fraction) }} />
+          <div className="bg-stone-200" style={{ width: `${absorb * 100}%` }} />
+        </>
+      )}
+    </div>
+  );
+}
+
 // Markers live in an un-scaled overlay positioned from the zoomed
 // coordinates, so they keep their pixel size and spread apart as the
 // artwork zooms in.
@@ -68,7 +85,8 @@ function MapMarker({ marker, viewport }: { marker: MapSceneMarker; viewport: Map
         {marker.kind === "pet" && <PawPrint className="absolute -bottom-1.5 -right-1.5 h-2.5 w-2.5 rounded-full bg-black/80 p-0.5 text-cyan-200" />}
         {marker.kind === "hostile" && <Skull className="absolute -bottom-1.5 -right-1.5 h-2.5 w-2.5 rounded-full bg-black/80 p-0.5 text-rose-200" />}
       </div>
-      <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-black/85 px-1.5 py-0.5 text-[9px] font-medium text-white shadow-lg group-hover:block">
+      {marker.health && <HealthBar health={marker.health} />}
+      <span className="pointer-events-none absolute left-1/2 top-full mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-black/85 px-1.5 py-0.5 text-[9px] font-medium text-white shadow-lg group-hover:block">
         {marker.name}
       </span>
     </div>
