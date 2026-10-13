@@ -58,9 +58,8 @@ export function ParsingPage() {
           The 60-day rolling window keeps scores reflecting the{" "}
           <strong>current state of the server</strong> — as gear improves, new
           buffs are discovered, and the player pool evolves, old kills age out
-          so the cohort stays relevant. The window is frozen at each daily
-          snapshot (see below), so all players in the same raid are compared
-          against the same dataset.
+          so the cohort stays relevant. Every player in the same raid is
+          compared against the same date-bounded dataset.
         </p>
       </section>
 
@@ -90,22 +89,26 @@ export function ParsingPage() {
         </p>
       </section>
 
-      {/* Daily snapshots */}
+      {/* Historical cohorts */}
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-3">
-          Daily Snapshots &amp; Historical Stability
+          Historical Cohorts
         </h2>
         <p className="text-muted-foreground mb-3">
-          Parse scores are computed against a dataset <strong>frozen at
-          00:00&nbsp;UTC each day</strong>. A raid is compared against kills
-          from the last 60 days uploaded before that day's snapshot. Uploads
-          later the same day — or on any future day — never change a raid's
-          historical parse scores.
+          A historical parse uses the rolling window ending on the raid's date.
+          For example, a raid on October 1 is compared against eligible kills
+          from the preceding 60 days, rather than kills from today's window.
+        </p>
+        <p className="text-muted-foreground mb-3">
+          Chronicle uses the data it currently knows about for that date range.
+          A historical log uploaded later, a corrected log, or an invalidated
+          duplicate can therefore change an older raid's parse score. Historical
+          parses are date-bounded comparisons, not permanently frozen records.
         </p>
         <p className="text-muted-foreground">
-          A "current" comparison mode also exists, which uses the latest
-          snapshot. Historical scores tell you how you stacked up at the time;
-          current scores show where you'd land against today's dataset.
+          A "current" comparison mode also exists, which compares the raid
+          against the latest rolling window instead of the window around the
+          raid's date.
         </p>
       </section>
 

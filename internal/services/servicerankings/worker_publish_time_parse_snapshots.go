@@ -268,12 +268,32 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 			return fmt.Errorf("batch insert clear-time members: %w", err)
 		}
 
-		// 3. Populate boss-kill members.
+		// 3. Populate the legacy full-copy boss-kill members. These remain the
+		// authoritative cohort while interval storage runs in shadow mode.
 		if err := tx.BatchInsertTimeParseSnapshotBossKillMembers(ctx, snap.ID); err != nil {
 			return fmt.Errorf("batch insert boss-kill members: %w", err)
 		}
 
-		// 4. Count members.
+		// 4. Upsert the event-date membership store, then verify an exact
+		// match before publishing. Missing rows are not deleted here because
+		// they may be temporarily absent during a replacement parse.
+		if err := tx.UpsertTimeParseBossKillMemberships(ctx, snap.ID); err != nil {
+			return fmt.Errorf("upsert boss-kill memberships: %w", err)
+		}
+		comparison, err := tx.CompareTimeParseBossKillMembershipSnapshot(ctx, snap.ID)
+		if err != nil {
+			return fmt.Errorf("compare boss-kill membership shadow: %w", err)
+		}
+		if comparison.DifferenceCount != 0 || comparison.LegacyCount != comparison.MembershipCount {
+			return fmt.Errorf(
+				"boss-kill membership shadow mismatch: legacy=%d membership=%d differences=%d",
+				comparison.LegacyCount,
+				comparison.MembershipCount,
+				comparison.DifferenceCount,
+			)
+		}
+
+		// 5. Count members.
 		clearCount, err = tx.CountTimeParseSnapshotClearTimeMembers(ctx, snap.ID)
 		if err != nil {
 			return fmt.Errorf("count clear-time members: %w", err)
@@ -283,7 +303,7 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 			return fmt.Errorf("count boss-kill members: %w", err)
 		}
 
-		// 5. Publish.
+		// 6. Publish.
 		if _, err := tx.PublishTimeParseSnapshot(ctx, snap.ID); err != nil {
 			return fmt.Errorf("publish time-parse snapshot: %w", err)
 		}

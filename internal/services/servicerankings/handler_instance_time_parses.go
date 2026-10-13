@@ -30,6 +30,7 @@ type timeParsesQuerier interface {
 	GetInstanceCleanEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]database.GetInstanceCleanEncounterKillTimesRow, error)
 	GetTimeParseSnapshotClearTimeCohort(ctx context.Context, arg database.GetTimeParseSnapshotClearTimeCohortParams) ([]int64, error)
 	GetTimeParseSnapshotBossKillCohort(ctx context.Context, arg database.GetTimeParseSnapshotBossKillCohortParams) ([]int64, error)
+	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg database.GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
 }
 
@@ -276,13 +277,24 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Log
 			continue
 		}
 
-		bossKillCohort, cErr := store.GetTimeParseSnapshotBossKillCohort(ctx, database.GetTimeParseSnapshotBossKillCohortParams{
+		bossKillCohort, cErr := store.GetTimeParseBossKillMembershipCohort(ctx, database.GetTimeParseBossKillMembershipCohortParams{
 			SnapshotID:     snapshot.ID,
 			InstanceName:   speedrun.InstanceName,
 			EncounterName:  kill.EncounterName,
 			DifficultyName: instInfo.DifficultyName,
 			MaxPlayers:     int16(instInfo.MaxPlayers),
 		})
+		// Keep reads available between deploying the empty membership table and
+		// completing the out-of-band historical backfill.
+		if cErr == nil && len(bossKillCohort) == 0 {
+			bossKillCohort, cErr = store.GetTimeParseSnapshotBossKillCohort(ctx, database.GetTimeParseSnapshotBossKillCohortParams{
+				SnapshotID:     snapshot.ID,
+				InstanceName:   speedrun.InstanceName,
+				EncounterName:  kill.EncounterName,
+				DifficultyName: instInfo.DifficultyName,
+				MaxPlayers:     int16(instInfo.MaxPlayers),
+			})
+		}
 		if cErr != nil {
 			logger.Error("failed to load boss-kill cohort",
 				"instance_id", instanceID,
