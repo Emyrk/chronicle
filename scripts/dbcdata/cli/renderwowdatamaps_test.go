@@ -1,9 +1,14 @@
 package cli
 
 import (
+	"bytes"
+	"context"
 	"encoding/binary"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -15,6 +20,55 @@ func wowTestChunk(tag string, payload []byte) []byte {
 	}
 	binary.LittleEndian.PutUint32(data[4:], uint32(len(payload)))
 	copy(data[8:], payload)
+	return data
+}
+
+func TestExportWowdataFileRetriesTransientFailures(t *testing.T) {
+	dir := t.TempDir()
+	binaryPath := filepath.Join(dir, "wowdata")
+	counterPath := filepath.Join(dir, "attempts")
+	outputPath := filepath.Join(dir, "asset.adt")
+	require.NoError(t, os.WriteFile(binaryPath, []byte(`#!/usr/bin/env bash
+set -euo pipefail
+attempt=0
+[[ ! -f "${COUNTER_PATH}" ]] || attempt="$(cat "${COUNTER_PATH}")"
+attempt=$((attempt + 1))
+printf '%s' "${attempt}" > "${COUNTER_PATH}"
+output=""
+while (($#)); do
+  if [[ "$1" == "--output" ]]; then
+    output="$2"
+    break
+  fi
+  shift
+done
+if ((attempt < 3)); then
+  printf 'transient export failure\n' >&2
+  exit 1
+fi
+printf 'geometry' > "${output}"
+`), 0o755))
+	t.Setenv("COUNTER_PATH", counterPath)
+
+	var stderr bytes.Buffer
+	err := exportWowdataFileWithRetries(
+		context.Background(),
+		&stderr,
+		wowMapExtractOptions{WowdataBin: binaryPath},
+		7288580,
+		outputPath,
+		[]time.Duration{0, 0},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "3", string(requireFile(t, counterPath)))
+	require.Equal(t, "geometry", string(requireFile(t, outputPath)))
+	require.Contains(t, stderr.String(), "Retrying FileDataID 7288580")
+}
+
+func requireFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
 	return data
 }
 

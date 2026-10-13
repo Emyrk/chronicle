@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sync"
+	"time"
 
 	"github.com/coder/serpent"
 )
@@ -287,13 +288,47 @@ func readWowMapWDTFileDataID(ctx context.Context, stderr io.Writer, target wowMa
 }
 
 func exportWowdataFile(ctx context.Context, stderr io.Writer, target wowMapExtractOptions, fileDataID int32, output string) error {
+	return exportWowdataFileWithRetries(ctx, stderr, target, fileDataID, output, []time.Duration{
+		time.Second,
+		2 * time.Second,
+	})
+}
+
+func exportWowdataFileWithRetries(
+	ctx context.Context,
+	stderr io.Writer,
+	target wowMapExtractOptions,
+	fileDataID int32,
+	output string,
+	retryDelays []time.Duration,
+) error {
 	args := append([]string{"file", "export", "--file-data-id", fmt.Sprint(fileDataID), "--output", output}, wowdataTargetArgs(target)...)
-	cmd := exec.CommandContext(ctx, target.WowdataBin, args...)
-	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("export FileDataID %d: %w", fileDataID, err)
+	var lastErr error
+	for attempt := 0; attempt <= len(retryDelays); attempt++ {
+		cmd := exec.CommandContext(ctx, target.WowdataBin, args...)
+		cmd.Stderr = stderr
+		if err := cmd.Run(); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if ctx.Err() != nil {
+			return fmt.Errorf("export FileDataID %d: %w", fileDataID, ctx.Err())
+		}
+		if attempt == len(retryDelays) {
+			break
+		}
+		_ = os.Remove(output)
+		_, _ = fmt.Fprintf(stderr, "Retrying FileDataID %d after export failure (%d/%d)\n", fileDataID, attempt+1, len(retryDelays))
+		timer := time.NewTimer(retryDelays[attempt])
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("export FileDataID %d: %w", fileDataID, ctx.Err())
+		case <-timer.C:
+		}
 	}
-	return nil
+	return fmt.Errorf("export FileDataID %d after %d attempts: %w", fileDataID, len(retryDelays)+1, lastErr)
 }
 
 type wowdataFileExport struct {
