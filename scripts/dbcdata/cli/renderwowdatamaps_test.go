@@ -98,17 +98,17 @@ printf 'geometry' > "${output}"
 		context.Background(),
 		&stderr,
 		wowMapExtractOptions{WowdataBin: binaryPath},
-		7953467,
+		7288580,
 		outputPath,
-		"map 43 WMO group 1/23 FileDataID 7953467",
+		"map 2998 ADT 36,38 FileDataID 7288580",
 		&sync.Mutex{},
 		[]time.Duration{0, 0},
 	)
 	require.NoError(t, err)
 	require.Equal(t, "3", string(requireFile(t, counterPath)))
 	require.Equal(t, "geometry", string(requireFile(t, outputPath)))
-	require.Contains(t, stderr.String(), "[map 43 WMO group 1/23 FileDataID 7953467] transient export failure")
-	require.Contains(t, stderr.String(), "[map 43 WMO group 1/23 FileDataID 7953467] retrying after export failure")
+	require.Contains(t, stderr.String(), "[map 2998 ADT 36,38 FileDataID 7288580] transient export failure")
+	require.Contains(t, stderr.String(), "[map 2998 ADT 36,38 FileDataID 7288580] retrying after export failure")
 }
 
 func requireFile(t *testing.T, path string) []byte {
@@ -116,6 +116,21 @@ func requireFile(t *testing.T, path string) []byte {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return data
+}
+
+func TestParseWDTADTRootFileDataIDs(t *testing.T) {
+	t.Parallel()
+
+	payload := make([]byte, 64)
+	binary.LittleEndian.PutUint32(payload[0:], 101)
+	binary.LittleEndian.PutUint32(payload[32:], 202)
+
+	tiles, err := parseWDTADTRootFileDataIDs(wowTestChunk("MAID", payload))
+	require.NoError(t, err)
+	require.Equal(t, []wdtADTTile{
+		{FileDataID: 101, Column: 0, Row: 0},
+		{FileDataID: 202, Column: 1, Row: 0},
+	}, tiles)
 }
 
 func TestParseWMOGroupFileDataIDs(t *testing.T) {
