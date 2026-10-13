@@ -15,10 +15,14 @@ import type { MapPositionSample, MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
 import {
+  AUTO_FIT_MIN_SPAN_YARDS,
+  autoFitViewport,
   calibratedDungeonMapPoint,
   dominantMapId,
   dungeonMapPoint,
+  focusCentre,
   latestPositionAt,
+  projectionScale,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   selectHealthBars,
@@ -27,17 +31,23 @@ import {
   zoneMapPoint,
   type MapPoint,
   type MapPointBounds,
+  type MapViewport,
 } from "./mapModel";
+
+interface MapFocus {
+  bounds: MapPointBounds;
+  autoFit: MapViewport;
+}
 
 // Fit bounds scan the encounter's whole track, so cache them per encounter
 // and projection instead of recomputing on every replay tick.
-const focusBoundsCache = new WeakMap<Map<string, MapPositionSample[]>, Map<string, MapPointBounds | null>>();
+const focusBoundsCache = new WeakMap<Map<string, MapPositionSample[]>, Map<string, MapFocus | null>>();
 
 function cachedFocusBounds(
   positionsByUnit: Map<string, MapPositionSample[]>,
   key: string,
-  compute: () => MapPointBounds | null,
-): MapPointBounds | null {
+  compute: () => MapFocus | null,
+): MapFocus | null {
   let byKey = focusBoundsCache.get(positionsByUnit);
   if (!byKey) {
     byKey = new Map();
@@ -144,7 +154,9 @@ export type MapScene =
     projectSample: (sample: MapPositionSample) => MapPoint | null;
     /** Boss-area bounds of the encounter's whole unit track; stable across replay ticks. */
     focusBounds: MapPointBounds | null;
-    /** Whether the view should start framed on `focusBounds` rather than the full map. */
+    /** The auto-fit framing of `focusBounds`: a minimum span, centred on the boss when known. */
+    autoFit: MapViewport | null;
+    /** Whether the view should start on `autoFit` (one boss encounter selected) rather than the full map. */
     fitByDefault: boolean;
     /** Combat events for the replay effects layer. */
     effects: EncounterEffects;
@@ -266,10 +278,22 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
     : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}`;
-  const focusBounds = cachedFocusBounds(
+  const focus = cachedFocusBounds(
     encounter.positionsByUnit,
     `${mapId}|${projectionKey}|${[...bossGuids].join(",")}`,
-    () => unitFocusBounds(encounter.positionsByUnit, mapId, projectSample, bossGuids),
+    () => {
+      const bounds = unitFocusBounds(encounter.positionsByUnit, mapId, projectSample, bossGuids);
+      const centre = focusCentre(encounter.positionsByUnit, mapId, bossGuids);
+      if (!bounds || !centre) return null;
+      return {
+        bounds,
+        autoFit: autoFitViewport(bounds, {
+          minSpanYards: AUTO_FIT_MIN_SPAN_YARDS,
+          scale: projectionScale(projectSample, centre.sample),
+          centre: centre.fromFocus ? projectSample(centre.sample) : null,
+        }),
+      };
+    },
   );
 
   return {
@@ -292,8 +316,9 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     },
     markers,
     projectSample,
-    focusBounds,
-    fitByDefault: Boolean(sync?.enabled) && props.context.selectedEncounterIds.length === 1,
+    focusBounds: focus?.bounds ?? null,
+    autoFit: focus?.autoFit ?? null,
+    fitByDefault: props.context.selectedEncounterIds.length === 1 && Boolean(instanceEncounter?.boss),
     effects: encounter.effects,
     bossGuids,
     tankGuids: cachedTankGuids(encounter.effects, props.context.instance.players ?? {}),
