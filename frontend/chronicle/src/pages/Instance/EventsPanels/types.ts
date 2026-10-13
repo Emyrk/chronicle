@@ -121,6 +121,9 @@ export interface PanelDefinition<TResult, TEvent extends ProcessorEvent = Proces
   /** If true, shows a warning indicator that this panel is experimental */
   underConstruction?: boolean;
 
+  /** If true, the panel card cannot be flipped open through Shift-click or filter controls. */
+  disableCardFlip?: boolean;
+
   /** Whether this panel supports the filter-builder UI on the card back. */
   supportsFiltering?: boolean;
 

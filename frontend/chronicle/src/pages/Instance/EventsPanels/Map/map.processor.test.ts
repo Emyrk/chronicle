@@ -44,7 +44,7 @@ describe("mapProcessor", () => {
     expect(encounter?.positionsByUnit.get("enemy")).toHaveLength(1);
   });
 
-  it("ignores encounters outside the current selection", () => {
+  it("retains unselected encounters for travel between selected fights", () => {
     const state = mapProcessor.createState();
     mapProcessor.processEvent(
       state,
@@ -54,6 +54,6 @@ describe("mapProcessor", () => {
       "unit_position",
       context,
     );
-    expect(state.encounters.size).toBe(0);
+    expect(state.encounters.get("other")?.positionsByUnit.get("player")).toHaveLength(1);
   });
 });
