@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -39,7 +40,6 @@ type renderedWowMapSpec struct {
 
 var renderedWowMapSpecs = []renderedWowMapSpec{
 	{MapID: 43, Mode: "wmo", Width: 1200, Height: 800},
-	{MapID: 2998, Mode: "adt", Width: 1200, Height: 1200},
 }
 
 // RenderWowdataMapsCmd generates coordinate-faithful instance maps from WMO or
@@ -99,6 +99,7 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 	if manifest.Format != wowMapManifestFormat {
 		return fmt.Errorf("unsupported map manifest format %q", manifest.Format)
 	}
+	clearRenderedWowMapInstances(&manifest)
 	outDir := filepath.Dir(opts.ManifestPath)
 	if err := os.MkdirAll(filepath.Join(outDir, "renders"), 0o755); err != nil {
 		return fmt.Errorf("create rendered map directory: %w", err)
@@ -138,6 +139,19 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 	return nil
 }
 
+func clearRenderedWowMapInstances(manifest *wowMapManifest) {
+	for index := range manifest.Instances {
+		manifest.Instances[index].Rendered = nil
+	}
+}
+
+func renderedWowMapAssetPath(mapID int32, build string, data []byte) string {
+	buildName := regexp.MustCompile(`[^A-Za-z0-9._-]+`).ReplaceAllString(build, "-")
+	digest := sha256.Sum256(data)
+	name := fmt.Sprintf("%d-%s-%x.png", mapID, buildName, digest[:6])
+	return filepath.ToSlash(filepath.Join("renders", name))
+}
+
 func renderWowdataMap(
 	ctx context.Context,
 	stdout, stderr io.Writer,
@@ -168,10 +182,7 @@ func renderWowdataMap(
 		return nil, fmt.Errorf("read WDT: %w", err)
 	}
 
-	buildName := regexp.MustCompile(`[^A-Za-z0-9._-]+`).ReplaceAllString(target.Build, "-")
-	assetName := fmt.Sprintf("%d-%s.png", spec.MapID, buildName)
-	assetRelativePath := filepath.ToSlash(filepath.Join("renders", assetName))
-	assetPath := filepath.Join(outDir, filepath.FromSlash(assetRelativePath))
+	renderPath := filepath.Join(workDir, "render.png")
 	metadataPath := filepath.Join(workDir, "render.json")
 
 	args := []string{"run", "--release", "--manifest-path", opts.RendererManifest, "--"}
@@ -219,28 +230,7 @@ func renderWowdataMap(
 		if err := exportWowdataFiles(ctx, stderr, target, outputs, int(opts.Workers)); err != nil {
 			return nil, err
 		}
-		args = append(args, "wmo", groupsDir, placementsPath, assetPath, metadataPath)
-	case "adt":
-		tiles, err := parseWDTADTRootFileDataIDs(wdt)
-		if err != nil {
-			return nil, err
-		}
-		adtDir := filepath.Join(workDir, "adt")
-		if err := os.MkdirAll(adtDir, 0o755); err != nil {
-			return nil, fmt.Errorf("create ADT directory: %w", err)
-		}
-		outputs := make([]wowdataFileExport, 0, len(tiles))
-		for _, tile := range tiles {
-			outputs = append(outputs, wowdataFileExport{
-				FileDataID: tile.FileDataID,
-				Output:     filepath.Join(adtDir, fmt.Sprintf("tile_%02d_%02d.adt", tile.Column, tile.Row)),
-				Label:      fmt.Sprintf("map %d ADT %d,%d FileDataID %d", spec.MapID, tile.Column, tile.Row, tile.FileDataID),
-			})
-		}
-		if err := exportWowdataFiles(ctx, stderr, target, outputs, int(opts.Workers)); err != nil {
-			return nil, err
-		}
-		args = append(args, "adt", adtDir, assetPath, metadataPath)
+		args = append(args, "wmo", groupsDir, placementsPath, renderPath, metadataPath)
 	default:
 		return nil, fmt.Errorf("unsupported render mode %q", spec.Mode)
 	}
@@ -251,6 +241,20 @@ func renderWowdataMap(
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("run geometry renderer: %w", err)
 	}
+	renderData, err := os.ReadFile(renderPath)
+	if err != nil {
+		return nil, fmt.Errorf("read rendered map: %w", err)
+	}
+	assetRelativePath := renderedWowMapAssetPath(spec.MapID, target.Build, renderData)
+	assetPath := filepath.Join(outDir, filepath.FromSlash(assetRelativePath))
+	if err := os.MkdirAll(filepath.Dir(assetPath), 0o755); err != nil {
+		return nil, fmt.Errorf("create rendered map directory: %w", err)
+	}
+	if err := os.WriteFile(assetPath, renderData, 0o644); err != nil {
+		return nil, fmt.Errorf("write rendered map: %w", err)
+	}
+	_, _ = fmt.Fprintf(stdout, "Published rendered map %d to %s\n", spec.MapID, assetPath)
+
 	metadataData, err := os.ReadFile(metadataPath)
 	if err != nil {
 		return nil, fmt.Errorf("read renderer metadata: %w", err)
@@ -500,38 +504,6 @@ func parseWMOGroupFileDataIDs(root []byte) ([]int32, error) {
 		ids = append(ids, int32(binary.LittleEndian.Uint32(payload[offset:])))
 	}
 	return ids, nil
-}
-
-type wdtADTTile struct {
-	FileDataID int32
-	Column     int32
-	Row        int32
-}
-
-func parseWDTADTRootFileDataIDs(wdt []byte) ([]wdtADTTile, error) {
-	payload, err := wowChunk(wdt, "MAID")
-	if err != nil {
-		return nil, err
-	}
-	if len(payload)%32 != 0 {
-		return nil, fmt.Errorf("invalid WDT MAID size %d", len(payload))
-	}
-	var tiles []wdtADTTile
-	for offset := 0; offset < len(payload); offset += 32 {
-		fileDataID := int32(binary.LittleEndian.Uint32(payload[offset:]))
-		if fileDataID != 0 {
-			index := int32(offset / 32)
-			tiles = append(tiles, wdtADTTile{
-				FileDataID: fileDataID,
-				Column:     index % 64,
-				Row:        index / 64,
-			})
-		}
-	}
-	if len(tiles) == 0 {
-		return nil, fmt.Errorf("WDT MAID contains no root ADTs")
-	}
-	return tiles, nil
 }
 
 func wowChunk(data []byte, wanted string) ([]byte, error) {
