@@ -22,6 +22,35 @@ export type LiveSessionServerMessage =
   | { type: "session_ended"; reason?: string }
   | { type: "signal"; participant_id: string; payload: LiveSessionSignalPayload };
 
+interface CursorRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export function cursorSurfaceOffset(
+  clientX: number,
+  clientY: number,
+  rect: CursorRect,
+): { x: number; y: number } {
+  return {
+    x: Math.max(0, clientX - rect.left),
+    y: Math.max(0, clientY - rect.top),
+  };
+}
+
+export function cursorScreenPosition(
+  x: number,
+  y: number,
+  rect: CursorRect,
+): { x: number; y: number } {
+  return {
+    x: rect.left + Math.min(Math.max(0, x), rect.width),
+    y: rect.top + Math.min(Math.max(0, y), rect.height),
+  };
+}
+
 export function liveSessionInviteURL(currentURL: string, code: string): string {
   const url = new URL(currentURL);
   url.searchParams.set(LIVE_SESSION_QUERY_PARAM, code);

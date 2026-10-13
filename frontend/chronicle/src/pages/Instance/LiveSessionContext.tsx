@@ -13,6 +13,8 @@ import type { CreateLiveSessionResponse, JoinLiveSessionResponse } from "@/api/t
 import { useSyncModeContext } from "./SyncModeContext";
 import {
   LIVE_SESSION_QUERY_PARAM,
+  cursorScreenPosition,
+  cursorSurfaceOffset,
   liveSessionInviteURL,
   shouldPublishParticipantReplay,
   websocketURL,
@@ -78,10 +80,12 @@ function liveCursorSurface(surfaceId: string | undefined): HTMLElement | null {
 function pointerScreenPosition(pointer: RemotePointer): { x: number; y: number } {
   const surface = liveCursorSurface(pointer.surfaceId);
   if (!surface) {
-    return { x: pointer.x * window.innerWidth, y: pointer.y * window.innerHeight };
+    return {
+      x: Math.min(pointer.x, window.innerWidth),
+      y: Math.min(pointer.y, window.innerHeight),
+    };
   }
-  const rect = surface.getBoundingClientRect();
-  return { x: rect.left + pointer.x * rect.width, y: rect.top + pointer.y * rect.height };
+  return cursorScreenPosition(pointer.x, pointer.y, surface.getBoundingClientRect());
 }
 
 function pointerColor(participantId: string): string {
@@ -208,8 +212,8 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
         const pointer = {
           participantId,
           ...(typeof message.surfaceId === "string" ? { surfaceId: message.surfaceId } : {}),
-          x: Math.max(0, Math.min(1, message.x)),
-          y: Math.max(0, Math.min(1, message.y)),
+          x: Math.max(0, message.x),
+          y: Math.max(0, message.y),
         };
         setRemotePointers((previous) => ({ ...previous, [participantId]: pointer }));
         if (currentRoleRef.current === "leader") {
@@ -485,12 +489,14 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       const surface = eventTarget?.closest<HTMLElement>("[data-live-cursor-surface]")
         ?? document.querySelector<HTMLElement>("[data-live-cursor-surface=instance]");
       const rect = surface?.getBoundingClientRect();
+      const offset = rect
+        ? cursorSurfaceOffset(event.clientX, event.clientY, rect)
+        : { x: event.clientX, y: event.clientY };
       const pointer = {
         type: "pointer" as const,
         ...(role === "leader" ? { participantId: "leader" } : {}),
         ...(surface?.dataset.liveCursorSurface ? { surfaceId: surface.dataset.liveCursorSurface } : {}),
-        x: rect ? (event.clientX - rect.left) / Math.max(1, rect.width) : event.clientX / Math.max(1, window.innerWidth),
-        y: rect ? (event.clientY - rect.top) / Math.max(1, rect.height) : event.clientY / Math.max(1, window.innerHeight),
+        ...offset,
       };
       sendData(pointer);
     };
