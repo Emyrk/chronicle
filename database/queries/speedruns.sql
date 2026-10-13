@@ -35,6 +35,7 @@ ORDER BY lie.start_time;
 -- Used by the time-parse handler so the primary instance is scored against
 -- the clean-only snapshot cohort consistently.
 SELECT
+    lie.id AS encounter_id,
     lie.name AS encounter_name,
     (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
 FROM log_instance_encounters lie

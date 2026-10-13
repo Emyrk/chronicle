@@ -123,8 +123,8 @@ describe("mapSnapshotBossParses", () => {
   it("maps scored bosses by encounter name", () => {
     const resp = makeTimeParsesResponse({
       boss_kill_times: [
-        { encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 85.5, display_score: 86, rank: 5, sample_size: 50, status: "scored" },
-        { encounter_name: "Magmadar", duration_ms: 120_000, precise_score: 72.3, display_score: 72, rank: 10, sample_size: 50, status: "scored" },
+        { encounter_id: "00000000-0000-0000-0000-000000000001", encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 85.5, display_score: 86, rank: 5, sample_size: 50, status: "scored" },
+        { encounter_id: "00000000-0000-0000-0000-000000000002", encounter_name: "Magmadar", duration_ms: 120_000, precise_score: 72.3, display_score: 72, rank: 10, sample_size: 50, status: "scored" },
       ],
     });
 
@@ -137,7 +137,7 @@ describe("mapSnapshotBossParses", () => {
   it("maps sample_too_small bosses to null entry", () => {
     const resp = makeTimeParsesResponse({
       boss_kill_times: [
-        { encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 0, display_score: 0, rank: 0, sample_size: 3, status: "sample_too_small" },
+        { encounter_id: "00000000-0000-0000-0000-000000000001", encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 0, display_score: 0, rank: 0, sample_size: 3, status: "sample_too_small" },
       ],
     });
 

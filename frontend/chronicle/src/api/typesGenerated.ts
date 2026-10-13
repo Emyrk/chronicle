@@ -495,6 +495,7 @@ export interface AzerothCorePingResponse {
  * BossKillTimeParse is a per-boss kill-time parse.
  */
 export interface BossKillTimeParse {
+    readonly encounter_id: string;
     readonly encounter_name: string;
     readonly duration_ms: number;
     readonly precise_score: number;

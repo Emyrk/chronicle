@@ -16182,6 +16182,7 @@ func (q *sqlQuerier) SiteStats(ctx context.Context) (SiteStatsRow, error) {
 
 const getInstanceCleanEncounterKillTimes = `-- name: GetInstanceCleanEncounterKillTimes :many
 SELECT
+    lie.id AS encounter_id,
     lie.name AS encounter_name,
     (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
 FROM log_instance_encounters lie
@@ -16193,8 +16194,9 @@ ORDER BY lie.start_time
 `
 
 type GetInstanceCleanEncounterKillTimesRow struct {
-	EncounterName string `db:"encounter_name" json:"encounter_name"`
-	DurationMs    int64  `db:"duration_ms" json:"duration_ms"`
+	EncounterID   uuid.UUID `db:"encounter_id" json:"encounter_id"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	DurationMs    int64     `db:"duration_ms" json:"duration_ms"`
 }
 
 // Returns only clean boss kills for an instance, excluding partial kills.
@@ -16209,7 +16211,7 @@ func (q *sqlQuerier) GetInstanceCleanEncounterKillTimes(ctx context.Context, ins
 	var items []GetInstanceCleanEncounterKillTimesRow
 	for rows.Next() {
 		var i GetInstanceCleanEncounterKillTimesRow
-		if err := rows.Scan(&i.EncounterName, &i.DurationMs); err != nil {
+		if err := rows.Scan(&i.EncounterID, &i.EncounterName, &i.DurationMs); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
