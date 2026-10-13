@@ -111,6 +111,38 @@ export function AdminSiteSettingsPage() {
             )}
           </Button>
         </div>
+        {!config?.tenant && (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">Enable Ads</p>
+              <p className="text-sm text-muted-foreground">
+                Allow configured NitroPay placements on the root domain.
+              </p>
+            </div>
+            <Button
+              variant={config?.ads_enabled ? "default" : "outline"}
+              size="sm"
+              disabled={updateConfig.isPending}
+              onClick={() => {
+                updateConfig.mutate({ ads_enabled: !config?.ads_enabled });
+              }}
+            >
+              {updateConfig.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : config?.ads_enabled ? (
+                <>
+                  <Check className="h-4 w-4 mr-1" />
+                  Enabled
+                </>
+              ) : (
+                <>
+                  <X className="h-4 w-4 mr-1" />
+                  Disabled
+                </>
+              )}
+            </Button>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div>
             <p className="font-medium">Discoverable</p>

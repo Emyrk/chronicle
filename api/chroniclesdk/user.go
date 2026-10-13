@@ -195,8 +195,8 @@ type SiteConfig struct {
 	// ClientUploadsDisabled indicates that this server uses server-side logging
 	// and client-side uploads should be hidden from the UI.
 	ClientUploadsDisabled bool `json:"client_uploads_disabled"`
-	// AdsEnabled is true only when the resolved tenant opted into ads and the
-	// deployment configured both ads.txt and a NitroPay site ID.
+	// AdsEnabled is true only when the resolved tenant or root site opted into ads
+	// and the deployment configured both ads.txt and a NitroPay site ID.
 	AdsEnabled bool `json:"ads_enabled"`
 	// NitroPaySiteID is the public site identifier used by the shared ad runtime.
 	// It is omitted unless AdsEnabled is true.
@@ -233,6 +233,7 @@ type SiteConfig struct {
 // Only non-nil fields will be updated.
 type UpdateSiteConfigRequest struct {
 	SignupsEnabled      *bool     `json:"signups_enabled,omitempty"`
+	AdsEnabled          *bool     `json:"ads_enabled,omitempty"`
 	DisableClientUpload *bool     `json:"disable_client_upload,omitempty"`
 	Branding            *Branding `json:"branding,omitempty"`
 	Discoverable        *bool     `json:"discoverable,omitempty"`

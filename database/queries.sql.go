@@ -16069,7 +16069,7 @@ func (q *sqlQuerier) GetSharedViewByInstanceAndHash(ctx context.Context, arg Get
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -16085,6 +16085,7 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.AvailableFormats,
 		&i.ClientUploadsDisabled,
 		&i.ParseConfig,
+		&i.AdsEnabled,
 	)
 	return i, err
 }
@@ -16097,9 +16098,10 @@ UPDATE site_config SET
     default_format = COALESCE($4, default_format),
     available_formats = COALESCE($5, available_formats),
     client_uploads_disabled = COALESCE($6, client_uploads_disabled),
+    ads_enabled = COALESCE($7, ads_enabled),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled
 `
 
 type UpdateSiteConfigParams struct {
@@ -16109,6 +16111,7 @@ type UpdateSiteConfigParams struct {
 	DefaultFormat         NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats      []string      `db:"available_formats" json:"available_formats"`
 	ClientUploadsDisabled pgtype.Bool   `db:"client_uploads_disabled" json:"client_uploads_disabled"`
+	AdsEnabled            pgtype.Bool   `db:"ads_enabled" json:"ads_enabled"`
 }
 
 func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error) {
@@ -16119,6 +16122,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.ClientUploadsDisabled,
+		arg.AdsEnabled,
 	)
 	var i SiteConfig
 	err := row.Scan(
@@ -16131,6 +16135,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.AvailableFormats,
 		&i.ClientUploadsDisabled,
 		&i.ParseConfig,
+		&i.AdsEnabled,
 	)
 	return i, err
 }

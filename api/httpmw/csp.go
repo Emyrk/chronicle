@@ -6,7 +6,7 @@ import (
 )
 
 // ContentSecurityPolicy sets the Content-Security-Policy header on all responses.
-// Ad-enabled tenant responses permit HTTPS advertising resources because NitroPay
+// Ad-enabled site responses permit HTTPS advertising resources because NitroPay
 // can select demand partners dynamically. Other responses retain the strict policy.
 func ContentSecurityPolicy(adsEnabled func(*http.Request) bool) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
