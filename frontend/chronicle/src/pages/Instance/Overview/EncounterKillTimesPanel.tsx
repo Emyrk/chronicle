@@ -12,10 +12,11 @@ import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import { parseBgColor, parseBorderColor, parseColor } from "../parseColors";
 import type { PopulationSelection } from "./populationSelectionState";
-import { useSpeedrunPopulation } from "./overviewQueries";
+import { useInstanceTimeParses, useSpeedrunPopulation } from "./overviewQueries";
 import {
-  averageKillTimePercentile,
   buildEncounterKillTimeComparisonRows,
+  mapSnapshotBossParses,
+  resolveEncounterParseScore,
   summarizeEncounterKillTimes,
   type EncounterKillTimeSummary,
 } from "./encounterKillTimePopulation";
@@ -107,7 +108,7 @@ function parseBadgeClasses(percentile: number | null): string {
 }
 
 const COMPARISON_GRID = "grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem]";
-const PRIMARY_ONLY_GRID = "grid-cols-[minmax(6rem,1fr)_4rem]";
+const PRIMARY_ONLY_GRID = "grid-cols-[2.5rem_minmax(6rem,1fr)_4rem]";
 
 function EncounterRowTooltip({
   children,
@@ -190,17 +191,19 @@ export function EncounterKillTimesPanel({
 }) {
   const primaryQuery = useSpeedrunPopulation(primary);
   const comparisonQuery = useSpeedrunPopulation(comparison);
+  const timeParsesQuery = useInstanceTimeParses(
+    primary.kind === "instance" ? primary.instanceId : undefined,
+  );
   const primarySummaries = summarizeEncounterKillTimes(primaryQuery.data?.runs ?? []);
   const comparisonSummaries = summarizeEncounterKillTimes(comparisonQuery.data?.runs ?? []);
   const rows = buildEncounterKillTimeComparisonRows(primarySummaries, comparisonSummaries);
-  // Parse scores are percentiles within the selected comparison population,
-  // so they update with the selector. No comparison → no parses.
-  const averageParse = comparison
-    ? averageKillTimePercentile(rows.map((row) => row.percentile))
-    : null;
-  const killedBossCount = rows.filter((row) => row.primarySummary !== null).length;
-  const availableParseCount = rows.filter((row) => row.percentile !== null).length;
-  const incompleteAverage = killedBossCount < rows.length;
+  const snapshotParses = mapSnapshotBossParses(timeParsesQuery.data);
+  const average = timeParsesQuery.data?.average_boss_kill_parse;
+  const averageParse = average?.display_score ?? null;
+  const killedBossCount = average?.killed ?? primarySummaries.size;
+  const availableParseCount = timeParsesQuery.data?.boss_kill_times
+    .filter((parse) => parse.status !== "sample_too_small").length ?? 0;
+  const incompleteAverage = average !== undefined && average.killed < average.selected;
   const specificRaidComparison = comparison?.kind === "instance";
   const loading = primaryQuery.isLoading || comparisonQuery.isLoading;
   const error = primaryQuery.error ?? comparisonQuery.error;
@@ -213,13 +216,13 @@ export function EncounterKillTimesPanel({
             <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
             <p className="mt-0.5 text-[11px] leading-none text-muted-foreground">
               {!comparison
-                ? "Kill time per boss"
+                ? "Kill time and historical parse per boss"
                 : specificRaidComparison
                   ? "Kill time vs comparison raid"
                   : "Kill time vs comparison median"}
             </p>
           </div>
-          {comparison && (averageParse !== null || incompleteAverage) && (
+          {(averageParse !== null || incompleteAverage) && (
             <HintTooltip>
               <TooltipTrigger asChild>
                 <button
@@ -260,8 +263,8 @@ export function EncounterKillTimesPanel({
                     </p>
                     <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                       {incompleteAverage
-                        ? `${killedBossCount}/${rows.length} bosses killed. Missing bosses excluded.`
-                        : `Average of ${availableParseCount} encounter parse scores.`}
+                        ? `${killedBossCount}/${average?.selected ?? killedBossCount} bosses killed. Missing bosses excluded.`
+                        : `Average of ${availableParseCount} date-bounded encounter parse scores.`}
                     </p>
                   </div>
                 </div>
@@ -301,39 +304,51 @@ export function EncounterKillTimesPanel({
           <TooltipProvider>
             <div className="px-5 pb-3 pt-1.5">
               <div className={cn("grid items-end gap-2 border-b border-border/40 px-1 pb-1.5 text-[9px] uppercase tracking-[0.14em] text-muted-foreground/60", PRIMARY_ONLY_GRID)}>
+                <span>Parse</span>
                 <span>Boss</span>
                 <span className="text-right">Yours</span>
               </div>
-              {[...primarySummaries].map(([encounterName, summary]) => (
-                <EncounterRowTooltip
-                  key={encounterName}
-                  gridClass={PRIMARY_ONLY_GRID}
-                  content={(
-                    <>
-                      <div className="mb-2.5 flex items-center justify-between gap-3">
-                        <span className="truncate text-xs font-semibold">{encounterName}</span>
-                      </div>
-                      <div className="space-y-1 text-xs">
-                        <TimeStatLine
-                          label="Your time"
-                          value={formatClearDuration(summary.median)}
-                          highlight
-                        />
-                      </div>
-                      <p className="mt-2 text-[10px] leading-snug text-muted-foreground/70">
-                        Choose a comparison population for parses and kill-time context.
-                      </p>
-                    </>
-                  )}
-                >
-                  <span className="truncate text-xs font-medium text-foreground">
-                    {encounterName}
-                  </span>
-                  <span className="text-right font-mono text-xs font-semibold text-white">
-                    {formatClearDuration(summary.median)}
-                  </span>
-                </EncounterRowTooltip>
-              ))}
+              {[...primarySummaries].map(([encounterName, summary]) => {
+                const parseScore = resolveEncounterParseScore(snapshotParses, encounterName);
+                return (
+                  <EncounterRowTooltip
+                    key={encounterName}
+                    gridClass={PRIMARY_ONLY_GRID}
+                    content={(
+                      <>
+                        <div className="mb-2.5 flex items-center justify-between gap-3">
+                          <span className="truncate text-xs font-semibold">{encounterName}</span>
+                          <span className={parseBadgeClasses(parseScore)}>
+                            {parseScore ?? "—"}
+                          </span>
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <TimeStatLine
+                            label="Your time"
+                            value={formatClearDuration(summary.median)}
+                            highlight
+                          />
+                        </div>
+                        <p className="mt-2 text-[10px] leading-snug text-muted-foreground/70">
+                          {parseScore === null
+                            ? "Parse unavailable for this date-bounded cohort."
+                            : `Faster than or equal to ${parseScore}% of eligible kills in the historical cohort.`}
+                        </p>
+                      </>
+                    )}
+                  >
+                    <span className={parseBadgeClasses(parseScore)}>
+                      {parseScore ?? "—"}
+                    </span>
+                    <span className="truncate text-xs font-medium text-foreground">
+                      {encounterName}
+                    </span>
+                    <span className="text-right font-mono text-xs font-semibold text-white">
+                      {formatClearDuration(summary.median)}
+                    </span>
+                  </EncounterRowTooltip>
+                );
+              })}
             </div>
           </TooltipProvider>
         )
@@ -374,7 +389,8 @@ export function EncounterKillTimesPanel({
               <span className="text-right">{specificRaidComparison ? "Other" : "Median"}</span>
               <span className="text-right">Delta</span>
             </div>
-            {rows.map(({ encounterName, primarySummary, comparisonSummary, percentile }) => {
+            {rows.map(({ encounterName, primarySummary, comparisonSummary }) => {
+              const parseScore = resolveEncounterParseScore(snapshotParses, encounterName);
               const primaryDurationMs = primarySummary?.median ?? null;
               const missing = primaryDurationMs === null;
               const delta = primaryDurationMs === null
@@ -400,14 +416,14 @@ export function EncounterKillTimesPanel({
                         <p className="mb-2 rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
                           No clean kill was recorded for this raid, so no parse is available.
                         </p>
-                      ) : percentile !== null ? (
+                      ) : parseScore !== null ? (
                         <p className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                          <span className={parseBadgeClasses(percentile)}>{percentile}</span>
-                          <span>means faster than or equal to {percentile}% of comparable kills.</span>
+                          <span className={parseBadgeClasses(parseScore)}>{parseScore}</span>
+                          <span>means faster than or equal to {parseScore}% of eligible kills in the historical cohort.</span>
                         </p>
                       ) : (
                         <p className="mb-2 text-[11px] text-muted-foreground">
-                          Parse unavailable: fewer than 5 comparable kills.
+                          Parse unavailable for this date-bounded cohort.
                         </p>
                       )}
                       <div className="space-y-1 text-xs">
@@ -442,8 +458,8 @@ export function EncounterKillTimesPanel({
                     </>
                   )}
                 >
-                  <span className={parseBadgeClasses(percentile)}>
-                    {percentile === null ? "—" : percentile}
+                  <span className={parseBadgeClasses(parseScore)}>
+                    {parseScore ?? "—"}
                   </span>
                   <span className={cn(
                     "truncate text-xs font-medium",
