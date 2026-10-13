@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { MapPositionSample } from "./map.processor";
-import { latestPositionAt, type MapPoint } from "./mapModel";
+import { FULL_MAP_VIEWPORT, latestPositionAt, type MapPoint } from "./mapModel";
 import MapView3D from "./MapView3D";
 import type { MapMarkerKind, MapSceneGround, MapSceneMarker } from "./useMapScene";
 
@@ -59,6 +59,8 @@ function syntheticUnits(players: number): SyntheticUnit[] {
   return units;
 }
 
+const FULL_VIEW = { viewport: FULL_MAP_VIEWPORT, key: "full" };
+
 function SyntheticReplay({ players, playbackSpeed, mutedEvery }: { players: number; playbackSpeed: number; mutedEvery: number }) {
   const [units] = useState(() => syntheticUnits(players));
   const [cursorMs, setCursorMs] = useState(0);
@@ -89,6 +91,7 @@ function SyntheticReplay({ players, playbackSpeed, mutedEvery }: { players: numb
         cursorMs={cursorMs}
         playing
         playbackSpeed={playbackSpeed}
+        view={FULL_VIEW}
         onUnavailable={() => console.warn("WebGL unavailable")}
       />
     </div>

@@ -1,13 +1,18 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { mapAssetUrl, type WowMapLayer, type WowMapTile } from "@/pages/Technical/mapGallery";
-import { mapPointToScene, type MapPoint } from "./mapModel";
+import { FULL_MAP_VIEWPORT, mapPointToScene, type MapPoint, type MapViewport } from "./mapModel";
 import type { MapMarkerKind, MapSceneGround } from "./useMapScene";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export const GROUND_WIDTH = 100;
 const MUTED_OPACITY = 0.28;
 const LABEL_HEIGHT = 5;
+// Default camera directions from the target.
+const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
+// A tiny +z offset keeps OrbitControls' up vector stable while leaving
+// artwork-up at the top of the screen, as in the 2D view.
+const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0.0001);
 
 export interface MapScene3DUnit {
   guid: string;
@@ -61,6 +66,8 @@ export class MapScene3D {
   private hoveredGuid: string | null = null;
   private groundKey = "";
   private aspect = 1;
+  private viewport: MapViewport = FULL_MAP_VIEWPORT;
+  private unitScale = 1;
   private frame = 0;
   private disposed = false;
 
@@ -89,9 +96,9 @@ export class MapScene3D {
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.maxPolarAngle = Math.PI / 2 - 0.05;
-    this.controls.minDistance = 5;
+    this.controls.minDistance = 1;
     this.controls.maxDistance = 400;
-    this.controls.addEventListener("change", this.requestRender);
+    this.controls.addEventListener("change", this.handleControlsChange);
 
     this.resizeObserver = new ResizeObserver(this.resize);
     this.resizeObserver.observe(container);
@@ -173,7 +180,7 @@ export class MapScene3D {
         );
       }
     }
-    if (aspectChanged) this.resetCamera(false);
+    if (aspectChanged) this.setViewport(this.viewport);
     this.requestRender();
   }
 
@@ -191,6 +198,7 @@ export class MapScene3D {
       const { x, z } = mapPointToScene(unit.point, this.aspect, GROUND_WIDTH);
       object.group.position.set(x, 0, z);
       object.group.rotation.y = unit.facing;
+      object.group.scale.setScalar(this.unitScale);
       const opacity = unit.muted ? MUTED_OPACITY : 1;
       for (const material of [object.bodyMaterial, object.coneMaterial]) {
         material.opacity = opacity;
@@ -205,26 +213,53 @@ export class MapScene3D {
     this.requestRender();
   }
 
-  /** Resets to the initial view: straight down (`topDown`) or angled. */
+  /** Frames `viewport` (artwork fractions) from the current viewing angle. */
+  setViewport(viewport: MapViewport) {
+    this.viewport = viewport;
+    const offset = this.camera.position.clone().sub(this.controls.target);
+    this.applyViewport(offset.lengthSq() > 0 ? offset.normalize() : ANGLED_OFFSET.clone().normalize());
+  }
+
+  /** Re-frames the current viewport straight down (`topDown`) or angled. */
   resetCamera(topDown: boolean) {
-    const span = Math.max(GROUND_WIDTH, GROUND_WIDTH * this.aspect);
-    this.controls.target.set(0, 0, 0);
-    if (topDown) {
-      // A tiny +z offset keeps OrbitControls' up vector stable while leaving
-      // artwork-up at the top of the screen, as in the 2D view.
-      this.camera.position.set(0, span * 1.25, 0.001);
-    } else {
-      this.camera.position.set(0, span * 0.85, span * 0.75);
-    }
+    this.applyViewport((topDown ? TOP_DOWN_OFFSET : ANGLED_OFFSET).clone().normalize());
+  }
+
+  // The full map at zoom 1 sits at the default angled distance; zoom moves
+  // the camera proportionally closer along `direction`.
+  private applyViewport(direction: THREE.Vector3) {
+    const { x, z } = mapPointToScene(
+      { leftPercent: this.viewport.centerX * 100, topPercent: this.viewport.centerY * 100 },
+      this.aspect,
+      GROUND_WIDTH,
+    );
+    this.controls.target.set(x, 0, z);
+    this.camera.position.copy(direction.multiplyScalar(this.baseDistance() / this.viewport.zoom)).add(this.controls.target);
     this.controls.update();
+    this.updateUnitScale();
     this.requestRender();
+  }
+
+  private baseDistance(): number {
+    return Math.max(GROUND_WIDTH, GROUND_WIDTH * this.aspect) * ANGLED_OFFSET.length();
+  }
+
+  // Units are world meshes, so scale them with camera distance to hold a
+  // constant on-screen size: zooming in spreads them apart instead of
+  // enlarging them. Scale 1 at the default full-map distance.
+  private updateUnitScale() {
+    const scale = this.camera.position.distanceTo(this.controls.target) / this.baseDistance();
+    if (scale === this.unitScale) return;
+    this.unitScale = scale;
+    for (const object of this.units.values()) object.group.scale.setScalar(scale);
+    this.updateLabel();
   }
 
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
-    this.controls.removeEventListener("change", this.requestRender);
+    this.controls.removeEventListener("change", this.handleControlsChange);
     this.controls.dispose();
     const canvas = this.renderer.domElement;
     canvas.removeEventListener("webglcontextlost", this.handleContextLost);
@@ -248,6 +283,7 @@ export class MapScene3D {
     group.userData.guid = unit.guid;
     body.userData.guid = unit.guid;
     group.add(body, cone);
+    group.scale.setScalar(this.unitScale);
     this.unitsGroup.add(group);
     const object = { group, body, bodyMaterial, coneMaterial, kind: unit.kind, name: unit.name };
     this.units.set(unit.guid, object);
@@ -283,9 +319,11 @@ export class MapScene3D {
     if (this.label?.userData.text !== object.name) {
       this.clearLabel();
       this.label = createLabelSprite(object.name);
+      this.label.userData.baseScale = this.label.scale.clone();
       this.scene.add(this.label);
     }
-    this.label!.position.set(object.group.position.x, LABEL_HEIGHT, object.group.position.z);
+    this.label!.scale.copy(this.label!.userData.baseScale as THREE.Vector3).multiplyScalar(this.unitScale);
+    this.label!.position.set(object.group.position.x, LABEL_HEIGHT * this.unitScale, object.group.position.z);
   }
 
   private clearLabel() {
@@ -316,6 +354,11 @@ export class MapScene3D {
     if (!this.hoveredGuid) return;
     this.hoveredGuid = null;
     this.updateLabel();
+    this.requestRender();
+  };
+
+  private readonly handleControlsChange = () => {
+    this.updateUnitScale();
     this.requestRender();
   };
 

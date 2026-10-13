@@ -3,6 +3,13 @@ import type { WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 import {
   calibratedDungeonMapPoint,
+  clampViewport,
+  fitViewportToBounds,
+  FULL_MAP_VIEWPORT,
+  MAX_MAP_ZOOM,
+  unitFocusBounds,
+  viewportPoint,
+  zoomViewportAt,
   dungeonMapPoint,
   interpolatedPositionAt,
   latestPositionAt,
@@ -268,5 +275,80 @@ describe("mapPointToScene", () => {
     expect(mapPointToScene({ leftPercent: 50, topPercent: 50 }, 0.5, 100)).toEqual({ x: 0, z: 0 });
     expect(mapPointToScene({ leftPercent: 0, topPercent: 0 }, 0.5, 100)).toEqual({ x: -50, z: -25 });
     expect(mapPointToScene({ leftPercent: 100, topPercent: 100 }, 0.5, 100)).toEqual({ x: 50, z: 25 });
+  });
+});
+
+describe("unitFocusBounds", () => {
+  const at = (x: number, y: number, mapId = 1, timestampMs = 0): MapPositionSample => ({ timestampMs, x, y, mapId, facing: 0 });
+  // Identity-ish projection: world x -> left %, world y -> top %.
+  const project = (sample: MapPositionSample) => ({ leftPercent: sample.x, topPercent: sample.y });
+
+  it("returns null without samples", () => {
+    expect(unitFocusBounds(new Map(), 1, project)).toBeNull();
+    expect(unitFocusBounds(new Map([["a", []]]), 1, project)).toBeNull();
+  });
+
+  it("frames a single unit's whole track", () => {
+    const bounds = unitFocusBounds(new Map([["a", [at(10, 20), at(14, 26, 1, 100), at(12, 22, 1, 200)]]]), 1, project);
+    expect(bounds).toEqual({ minLeft: 10, maxLeft: 14, minTop: 20, maxTop: 26 });
+  });
+
+  it("ignores samples on other maps and points the floor cannot project", () => {
+    const positions = new Map([
+      ["a", [at(10, 10), at(90, 90, 2)]],
+      ["b", [at(30, 40), at(32, 44)]],
+      ["c", [at(20, 50)]],
+    ]);
+    const offFloor = (sample: MapPositionSample) => sample.y >= 50 ? null : project(sample);
+    expect(unitFocusBounds(positions, 1, offFloor)).toEqual({ minLeft: 10, maxLeft: 32, minTop: 10, maxTop: 44 });
+    expect(unitFocusBounds(positions, 2, project)).toEqual({ minLeft: 90, maxLeft: 90, minTop: 90, maxTop: 90 });
+    expect(unitFocusBounds(positions, 3, project)).toBeNull();
+  });
+
+  it("centres on the boss and clamps out far stragglers", () => {
+    const positions = new Map([
+      ["boss", [at(50, 50), at(52, 50)]],
+      ["tank", [at(48, 49)]],
+      ["healer", [at(60, 55)]],
+      ["straggler", [at(400, 400)]],
+    ]);
+    expect(unitFocusBounds(positions, 1, project, new Set(["boss"]), 80))
+      .toEqual({ minLeft: 48, maxLeft: 60, minTop: 49, maxTop: 55 });
+  });
+});
+
+describe("map viewport", () => {
+  it("fits bounds with padding, centred on the box", () => {
+    const viewport = fitViewportToBounds({ minLeft: 40, maxLeft: 50, minTop: 45, maxTop: 50 });
+    expect(viewport.centerX).toBeCloseTo(0.45);
+    expect(viewport.centerY).toBeCloseTo(0.475);
+    expect(viewport.zoom).toBeCloseTo(1 / (0.1 * 1.3));
+  });
+
+  it("caps the zoom for a single point and keeps the view on the artwork", () => {
+    expect(fitViewportToBounds({ minLeft: 0, maxLeft: 0, minTop: 100, maxTop: 100 })).toEqual({
+      centerX: 0.5 / MAX_MAP_ZOOM,
+      centerY: 1 - 0.5 / MAX_MAP_ZOOM,
+      zoom: MAX_MAP_ZOOM,
+    });
+  });
+
+  it("never zooms out past the full map", () => {
+    expect(fitViewportToBounds({ minLeft: 0, maxLeft: 100, minTop: 0, maxTop: 100 })).toEqual(FULL_MAP_VIEWPORT);
+    expect(clampViewport({ centerX: 0.1, centerY: 0.9, zoom: 0.5 })).toEqual(FULL_MAP_VIEWPORT);
+  });
+
+  it("zooms around the pointer", () => {
+    const zoomed = zoomViewportAt(FULL_MAP_VIEWPORT, 4, 0.25, 0.25);
+    expect(zoomed.zoom).toBe(4);
+    const anchor = viewportPoint({ leftPercent: 25, topPercent: 25 }, zoomed);
+    expect(anchor.leftPercent).toBeCloseTo(25);
+    expect(anchor.topPercent).toBeCloseTo(25);
+  });
+
+  it("spreads points apart as the zoom grows", () => {
+    const viewport = { centerX: 0.5, centerY: 0.5, zoom: 10 };
+    expect(viewportPoint({ leftPercent: 50, topPercent: 50 }, viewport)).toEqual({ leftPercent: 50, topPercent: 50 });
+    expect(viewportPoint({ leftPercent: 51, topPercent: 50 }, viewport).leftPercent).toBeCloseTo(60);
   });
 });
