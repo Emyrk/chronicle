@@ -96,33 +96,55 @@ func TestBuildWowMapInstances(t *testing.T) {
 			wowdataFile{FileDataID: int32(300 + tile), FileName: fmt.Sprintf("interface/worldmap/wailingcaverns/wailingcaverns1_%d.blp", tile)},
 		)
 	}
-	files = append(files, wowdataFile{FileDataID: 999, FileName: "interface/worldmap/incomplete/incomplete1_1.blp"})
+	files = append(files,
+		wowdataFile{FileDataID: 999, FileName: "interface/worldmap/incomplete/incomplete1_1.blp"},
+		wowdataFile{FileDataID: 400, FileName: "world/minimaps/2998/map33_36.blp"},
+		wowdataFile{FileDataID: 401, FileName: "world/minimaps/2998/map36_39.blp"},
+		wowdataFile{FileDataID: 402, FileName: "world/minimaps/2998/map39_42.blp"},
+	)
 
 	instances := buildWowMapInstances([]wowdataMap{
 		{ID: 209, Name: "Zul'Farrak", Directory: "TanarisInstance", InstanceType: 1, ExpansionID: 0},
 		{ID: 33, Name: "Shadowfang Keep", Directory: "Shadowfang", InstanceType: 1, ExpansionID: 0},
 		{ID: 43, Name: "Wailing Caverns", Directory: "WailingCaverns", InstanceType: 1, ExpansionID: 0},
+		{ID: 2998, Name: "Excavation Site: Wetlands", Directory: "2998", InstanceType: 1, ExpansionID: 0},
 		{ID: 999, Name: "Incomplete", Directory: "Incomplete", InstanceType: 1, ExpansionID: 0},
 		{ID: 1000, Name: "Future Dungeon", Directory: "ShadowfangKeep", InstanceType: 1, ExpansionID: 1},
 	}, files)
 
-	require.Len(t, instances, 3)
-	require.Equal(t, int32(33), instances[0].MapID)
-	require.Equal(t, int32(1), instances[0].Floors[0].Floor)
-	require.Equal(t, int32(101), instances[0].Floors[0].Tiles[0].FileDataID)
-	require.Equal(t, int32(2), instances[0].Floors[0].Tiles[11].Row)
-	require.Equal(t, int32(3), instances[0].Floors[0].Tiles[11].Column)
-	require.Nil(t, instances[0].Floors[0].Bounds)
-	require.Equal(t, int32(43), instances[1].MapID)
-	require.Equal(t, int32(301), instances[1].Floors[0].Tiles[0].FileDataID)
+	require.Len(t, instances, 4)
+	require.Equal(t, int32(2998), instances[0].MapID)
+	require.Equal(t, "2998", instances[0].Directory)
+	require.Equal(t, int32(1792), instances[0].Floors[0].Width)
+	require.Equal(t, int32(1792), instances[0].Floors[0].Height)
+	require.Equal(t, []wowMapTile{
+		{Row: 0, Column: 0, FileDataID: 400, Path: "tiles/400.webp"},
+		{Row: 3, Column: 3, FileDataID: 401, Path: "tiles/401.webp"},
+		{Row: 6, Column: 6, FileDataID: 402, Path: "tiles/402.webp"},
+	}, instances[0].Floors[0].Tiles)
+	require.Equal(t, &wowMapFloorBounds{
+		MinX: -4266.666666666667,
+		MaxX: -533.3333333333334,
+		MinY: -5866.666666666667,
+		MaxY: -2133.3333333333335,
+	}, instances[0].Floors[0].Bounds)
+
+	require.Equal(t, int32(33), instances[1].MapID)
+	require.Equal(t, int32(1), instances[1].Floors[0].Floor)
+	require.Equal(t, int32(101), instances[1].Floors[0].Tiles[0].FileDataID)
+	require.Equal(t, int32(2), instances[1].Floors[0].Tiles[11].Row)
+	require.Equal(t, int32(3), instances[1].Floors[0].Tiles[11].Column)
+	require.Nil(t, instances[1].Floors[0].Bounds)
+	require.Equal(t, int32(43), instances[2].MapID)
+	require.Equal(t, int32(301), instances[2].Floors[0].Tiles[0].FileDataID)
 	require.Equal(t, &wowMapFloorBounds{
 		MinX: -375.946014,
 		MaxX: 560.528992,
 		MinY: -410.145996,
 		MaxY: 214.169998,
-	}, instances[1].Floors[0].Bounds)
-	require.Equal(t, int32(209), instances[2].MapID)
-	require.Equal(t, int32(201), instances[2].Floors[0].Tiles[0].FileDataID)
+	}, instances[2].Floors[0].Bounds)
+	require.Equal(t, int32(209), instances[3].MapID)
+	require.Equal(t, int32(201), instances[3].Floors[0].Tiles[0].FileDataID)
 }
 
 func TestParseWowMapInstanceTile(t *testing.T) {
@@ -141,6 +163,19 @@ func TestParseWowMapInstanceTile(t *testing.T) {
 	require.Equal(t, int32(9), tile)
 
 	_, _, _, ok = parseWowMapInstanceTile("interface/worldmap/ashenvale/ashenvalehighlight.blp")
+	require.False(t, ok)
+}
+
+func TestParseWowMinimapTile(t *testing.T) {
+	t.Parallel()
+
+	directory, column, row, ok := parseWowMinimapTile("world/minimaps/2998/map34_38.blp")
+	require.True(t, ok)
+	require.Equal(t, "2998", directory)
+	require.Equal(t, int32(34), column)
+	require.Equal(t, int32(38), row)
+
+	_, _, _, ok = parseWowMinimapTile("interface/worldmap/2998/map34_38.blp")
 	require.False(t, ok)
 }
 

@@ -335,7 +335,7 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 	if err := readWowMapTable(ctx, stdout, stderr, opts, "Map", &source.WorldMaps); err != nil {
 		return err
 	}
-	if err := readWowMapFiles(ctx, stdout, stderr, opts, &source.Files); err != nil {
+	if err := readWowMapFiles(ctx, stdout, stderr, opts, source.WorldMaps, &source.Files); err != nil {
 		return err
 	}
 
@@ -482,17 +482,40 @@ func readWowMapTable[T any](ctx context.Context, stdout, stderr io.Writer, opts 
 	return nil
 }
 
-func readWowMapFiles(ctx context.Context, stdout, stderr io.Writer, opts wowMapExtractOptions, files *[]wowdataFile) error {
+func readWowMapFiles(
+	ctx context.Context,
+	stdout, stderr io.Writer,
+	opts wowMapExtractOptions,
+	maps []wowdataMap,
+	files *[]wowdataFile,
+) error {
 	if _, err := fmt.Fprintln(stdout, "Reading instance map artwork..."); err != nil {
 		return err
 	}
-	args := []string{"file", "search", "--query", "interface/worldmap/", "--limit", "100000"}
+	queries := []string{"interface/worldmap/"}
+	for _, mapRow := range maps {
+		if _, ok := minimapInstanceMapIDs[mapRow.ID]; ok {
+			queries = append(queries, fmt.Sprintf("world/minimaps/%s/", mapRow.Directory))
+		}
+	}
+	for _, query := range queries {
+		found, err := searchWowMapFiles(ctx, stderr, opts, query)
+		if err != nil {
+			return err
+		}
+		*files = append(*files, found...)
+	}
+	return nil
+}
+
+func searchWowMapFiles(ctx context.Context, stderr io.Writer, opts wowMapExtractOptions, query string) ([]wowdataFile, error) {
+	args := []string{"file", "search", "--query", query, "--limit", "100000"}
 	args = append(args, wowdataTargetArgs(opts)...)
 	cmd := exec.CommandContext(ctx, opts.WowdataBin, args...)
 	cmd.Stderr = stderr
 	output, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("search wowdata world map files: %w", err)
+		return nil, fmt.Errorf("search wowdata map files for %q: %w", query, err)
 	}
 	var response struct {
 		OK   bool `json:"ok"`
@@ -501,13 +524,12 @@ func readWowMapFiles(ctx context.Context, stdout, stderr io.Writer, opts wowMapE
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(output, &response); err != nil {
-		return fmt.Errorf("decode wowdata world map files: %w", err)
+		return nil, fmt.Errorf("decode wowdata map files for %q: %w", query, err)
 	}
 	if !response.OK {
-		return fmt.Errorf("wowdata world map file search failed")
+		return nil, fmt.Errorf("wowdata map file search for %q failed", query)
 	}
-	*files = response.Data.Files
-	return nil
+	return response.Data.Files, nil
 }
 
 func exportWowdataTextures(
@@ -896,29 +918,55 @@ var instanceMapAliases = map[int32][]string{
 	109: {"thetempleofatalhakkar"},
 }
 
+// These instances ship navigable minimap tiles but no legacy
+// interface/worldmap floor artwork.
+var minimapInstanceMapIDs = map[int32]struct{}{
+	2998: {}, // Excavation Site: Wetlands
+}
+
 type wowMapInstanceAsset struct {
 	Directory string
 	Floors    map[int32]map[int32]wowMapTile
 }
 
+type wowMapMinimapAsset struct {
+	Directory string
+	Tiles     map[[2]int32]wowMapTile
+}
+
 func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstance {
 	assets := make(map[string]*wowMapInstanceAsset)
+	minimapAssets := make(map[string]*wowMapMinimapAsset)
 	for _, file := range files {
 		directory, floor, tileIndex, ok := parseWowMapInstanceTile(file.FileName)
+		if ok {
+			key := normalizeWowMapName(directory)
+			asset := assets[key]
+			if asset == nil {
+				asset = &wowMapInstanceAsset{Directory: directory, Floors: make(map[int32]map[int32]wowMapTile)}
+				assets[key] = asset
+			}
+			if asset.Floors[floor] == nil {
+				asset.Floors[floor] = make(map[int32]wowMapTile)
+			}
+			asset.Floors[floor][tileIndex] = wowMapTile{
+				Row: (tileIndex - 1) / 4, Column: (tileIndex - 1) % 4,
+				FileDataID: file.FileDataID, Path: fmt.Sprintf("tiles/%d.webp", file.FileDataID),
+			}
+			continue
+		}
+
+		directory, column, row, ok := parseWowMinimapTile(file.FileName)
 		if !ok {
 			continue
 		}
 		key := normalizeWowMapName(directory)
-		asset := assets[key]
+		asset := minimapAssets[key]
 		if asset == nil {
-			asset = &wowMapInstanceAsset{Directory: directory, Floors: make(map[int32]map[int32]wowMapTile)}
-			assets[key] = asset
+			asset = &wowMapMinimapAsset{Directory: directory, Tiles: make(map[[2]int32]wowMapTile)}
+			minimapAssets[key] = asset
 		}
-		if asset.Floors[floor] == nil {
-			asset.Floors[floor] = make(map[int32]wowMapTile)
-		}
-		asset.Floors[floor][tileIndex] = wowMapTile{
-			Row: (tileIndex - 1) / 4, Column: (tileIndex - 1) % 4,
+		asset.Tiles[[2]int32{column, row}] = wowMapTile{
 			FileDataID: file.FileDataID, Path: fmt.Sprintf("tiles/%d.webp", file.FileDataID),
 		}
 	}
@@ -926,6 +974,7 @@ func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstan
 	sortedMaps := append([]wowdataMap(nil), maps...)
 	sort.Slice(sortedMaps, func(i, j int) bool { return sortedMaps[i].ID < sortedMaps[j].ID })
 	claimedAssets := make(map[string]struct{})
+	claimedMinimapAssets := make(map[string]struct{})
 	instances := make([]wowMapInstance, 0)
 	for _, mapRow := range sortedMaps {
 		if mapRow.ExpansionID != 0 || (mapRow.InstanceType != 1 && mapRow.InstanceType != 2) {
@@ -949,6 +998,30 @@ func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstan
 			}
 		}
 		if asset == nil {
+			var minimapAsset *wowMapMinimapAsset
+			var minimapAssetKey string
+			for _, candidate := range candidates {
+				candidate = normalizeWowMapName(candidate)
+				if candidate == "" {
+					continue
+				}
+				if _, claimed := claimedMinimapAssets[candidate]; claimed {
+					continue
+				}
+				if minimapAssets[candidate] != nil {
+					minimapAsset, minimapAssetKey = minimapAssets[candidate], candidate
+					break
+				}
+			}
+			floor, ok := buildWowMinimapFloor(minimapAsset)
+			if !ok {
+				continue
+			}
+			claimedMinimapAssets[minimapAssetKey] = struct{}{}
+			instances = append(instances, wowMapInstance{
+				MapID: mapRow.ID, Name: mapRow.Name, InstanceType: mapRow.InstanceType,
+				Directory: minimapAsset.Directory, Floors: []wowMapInstanceFloor{floor},
+			})
 			continue
 		}
 
@@ -994,6 +1067,55 @@ func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstan
 		return instances[i].MapID < instances[j].MapID
 	})
 	return instances
+}
+
+const wowMapWorldTileSize = 1600.0 / 3.0
+
+func buildWowMinimapFloor(asset *wowMapMinimapAsset) (wowMapInstanceFloor, bool) {
+	if asset == nil || len(asset.Tiles) == 0 {
+		return wowMapInstanceFloor{}, false
+	}
+
+	var minColumn, maxColumn, minRow, maxRow int32
+	initialized := false
+	for coordinate := range asset.Tiles {
+		column, row := coordinate[0], coordinate[1]
+		if !initialized {
+			minColumn, maxColumn, minRow, maxRow = column, column, row, row
+			initialized = true
+			continue
+		}
+		minColumn = min(minColumn, column)
+		maxColumn = max(maxColumn, column)
+		minRow = min(minRow, row)
+		maxRow = max(maxRow, row)
+	}
+
+	floor := wowMapInstanceFloor{
+		Floor: 1, Width: (maxColumn - minColumn + 1) * 256,
+		Height: (maxRow - minRow + 1) * 256, TileWidth: 256, TileHeight: 256,
+		Bounds: &wowMapFloorBounds{
+			MinX: float64(32-(maxColumn+1)) * wowMapWorldTileSize,
+			MaxX: float64(32-minColumn) * wowMapWorldTileSize,
+			MinY: float64(32-(maxRow+1)) * wowMapWorldTileSize,
+			MaxY: float64(32-minRow) * wowMapWorldTileSize,
+		},
+	}
+	for coordinate, tile := range asset.Tiles {
+		tile.Column = coordinate[0] - minColumn
+		tile.Row = coordinate[1] - minRow
+		floor.Tiles = append(floor.Tiles, tile)
+	}
+	sort.Slice(floor.Tiles, func(i, j int) bool {
+		if floor.Tiles[i].Row != floor.Tiles[j].Row {
+			return floor.Tiles[i].Row < floor.Tiles[j].Row
+		}
+		if floor.Tiles[i].Column != floor.Tiles[j].Column {
+			return floor.Tiles[i].Column < floor.Tiles[j].Column
+		}
+		return floor.Tiles[i].FileDataID < floor.Tiles[j].FileDataID
+	})
+	return floor, true
 }
 
 // classicDungeonMapBounds comes from 3.3.5-compatible DungeonMap.dbc records
@@ -1054,6 +1176,28 @@ func parseWowMapInstanceTile(fileName string) (directory string, floor, tileInde
 		return "", 0, 0, false
 	}
 	return directory, 1, tileValue, true
+}
+
+func parseWowMinimapTile(fileName string) (directory string, column, row int32, ok bool) {
+	const prefix = "world/minimaps/"
+	fileName = strings.ToLower(fileName)
+	if !strings.HasPrefix(fileName, prefix) || !strings.HasSuffix(fileName, ".blp") {
+		return "", 0, 0, false
+	}
+	parts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(fileName, prefix), ".blp"), "/")
+	if len(parts) != 2 || !strings.HasPrefix(parts[1], "map") {
+		return "", 0, 0, false
+	}
+	coordinates := strings.Split(strings.TrimPrefix(parts[1], "map"), "_")
+	if len(coordinates) != 2 {
+		return "", 0, 0, false
+	}
+	column, columnOK := parseWowMapNumber(coordinates[0])
+	row, rowOK := parseWowMapNumber(coordinates[1])
+	if !columnOK || !rowOK {
+		return "", 0, 0, false
+	}
+	return parts[0], column, row, true
 }
 
 func parseTrailingWowMapNumber(value string) (int32, bool) {
