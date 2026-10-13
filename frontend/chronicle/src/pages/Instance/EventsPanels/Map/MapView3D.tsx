@@ -8,7 +8,7 @@ import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import type { MapPositionSample } from "./map.processor";
 import { interpolatedPositionAt, type MapPoint } from "./mapModel";
 import { MAX_EFFECT_PRIMITIVES, MapScene3D, type MapScene3DEffectHover, type MapScene3DUnit } from "./MapScene3D";
-import { CAST_ICON_SKIP_SPELLS, DEFAULT_EFFECT_OPTIONS, type EncounterEffects } from "./replayEffects";
+import { DEFAULT_EFFECT_OPTIONS, isBasicAttack, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 
@@ -194,11 +194,13 @@ export default function MapView3D({
   const effectOptions = useMemo(() => {
     const selected = selectedKey ? new Set(selectedKey.split(",")) : null;
     const tanks = tankKey ? tankKey.split(",") : [];
-    const selectedAndBosses = new Set([...(selected ?? []), ...(bossKey ? bossKey.split(",") : [])]);
+    const bosses = bossKey ? new Set(bossKey.split(",")) : null;
+    const selectedAndBosses = new Set([...(selected ?? []), ...(bosses ?? [])]);
     const priority = new Set([...selectedAndBosses, ...tanks]);
     const healText = new Set([...(selected ?? []), ...tanks]);
     return {
       selected,
+      bosses,
       castIconGuids: selectedAndBosses.size > 0 ? selectedAndBosses : null,
       healText: healText.size > 0 ? healText : null,
       ...DEFAULT_EFFECT_OPTIONS,
@@ -217,8 +219,8 @@ export default function MapView3D({
     if (!effects || !castGuids) return [];
     const ids = new Set<number>();
     for (const event of effects.events) {
-      if ((event.kind !== "cast_start" && event.kind !== "cast_go") || event.spellId == null) continue;
-      if (!CAST_ICON_SKIP_SPELLS.has(event.spellId) && castGuids.has(event.source)) ids.add(event.spellId);
+      if ((event.kind !== "cast_start" && event.kind !== "cast_go") || isBasicAttack(event)) continue;
+      if (castGuids.has(event.source)) ids.add(event.spellId!);
     }
     return [...ids];
   }, [castGuids, effects]);
@@ -234,8 +236,12 @@ export default function MapView3D({
       resolveColor: (color) => resolveCssColor(color, container, colorCacheRef.current),
       // Spell names float over the selected players' targets.
       combatTextGuids: effectOptions.selected,
+      // Casters with cast icons show the icon instead of the spell name.
+      suppressNameGuids: castGuids,
       castIcons: castGuids ? {
         guids: castGuids,
+        priorityGuids: effectOptions.bosses,
+        enemyGuids: effectOptions.bosses,
         iconUrl: (spellId) => spellMeta(spellId).icon,
         placeholderUrl: spellMeta(null).icon,
       } : null,
