@@ -40,7 +40,7 @@ The landing build adds AdSense account verification metadata when its public pub
 CHRONICLE_ADSENSE_CLIENT_ID=ca-pub-8208259743822818 pnpm build
 ```
 
-The deployment workflow reads this value from the GitHub Actions repository variable named `CHRONICLE_ADSENSE_CLIENT_ID`. This metadata does not load the AdSense script or request ads; live serving remains placement-controlled.
+The deployment workflow sets this public publisher ID for the official landing site. Local and self-hosted builds can provide their own value through `CHRONICLE_ADSENSE_CLIENT_ID`. This metadata does not load the AdSense script or request ads; live serving remains placement-controlled.
 
 Official Chronicle instances can share that copy by setting:
 

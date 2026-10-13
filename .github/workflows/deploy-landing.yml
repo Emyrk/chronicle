@@ -38,7 +38,7 @@ jobs:
 
       - name: Build
         env:
-          CHRONICLE_ADSENSE_CLIENT_ID: ${{ vars.CHRONICLE_ADSENSE_CLIENT_ID }}
+          CHRONICLE_ADSENSE_CLIENT_ID: ca-pub-8208259743822818
         run: pnpm -C frontend/landing build
 
       - name: Upload artifact
