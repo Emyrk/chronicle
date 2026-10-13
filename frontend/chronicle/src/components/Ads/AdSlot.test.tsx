@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { SiteConfig } from "@/api/typesGenerated"
 import { AdSlot } from "./AdSlot"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
-import { clearNitroPayAds } from "./nitroPay"
+import { clearNitroPayAds, onNitroPayRendered } from "./nitroPay"
 import {
   isLocalAdPreviewHost,
   shouldShowAdPreview,
@@ -34,7 +34,7 @@ describe("AdSlot", () => {
       />,
     )
 
-    expect(markup).toContain("Advertisement")
+    expect(markup).toContain(">Advertisement</div>")
     expect(markup).toContain("160 × 600")
     expect(markup).not.toContain("300 × 600")
     expect(markup).toContain("2xl:block")
@@ -131,7 +131,7 @@ describe("AdSlot", () => {
     expect(markup).toContain('data-ad-provider="nitropay"')
     expect(markup).toContain('id="nitropay-leaderboards-right-rail"')
     expect(markup).toContain("min-h-[600px]")
-    expect(markup).toContain(">Advertisement</div>")
+    expect(markup).not.toContain(">Advertisement</div>")
     expect(markup).not.toContain("Ad preview")
   })
 
@@ -150,6 +150,33 @@ describe("AdSlot", () => {
     )
 
     expect(markup).toBe("")
+  })
+
+  it("matches rendered events to the placement ID", () => {
+    const callback = vi.fn()
+    const eventTarget = new EventTarget()
+    const unsubscribe = onNitroPayRendered("nitropay-recent-left-rail", callback, eventTarget)
+
+    eventTarget.dispatchEvent(
+      new CustomEvent("nitroAds.rendered", {
+        detail: { adInfo: { adUnitCode: "nitropay-recent-right-rail" } },
+      }),
+    )
+    eventTarget.dispatchEvent(
+      new CustomEvent("nitroAds.rendered", {
+        detail: { adInfo: { adUnitCode: "nitropay-recent-left-rail" } },
+      }),
+    )
+
+    expect(callback).toHaveBeenCalledOnce()
+    unsubscribe()
+
+    eventTarget.dispatchEvent(
+      new CustomEvent("nitroAds.rendered", {
+        detail: { adInfo: { adUnitCode: "nitropay-recent-left-rail" } },
+      }),
+    )
+    expect(callback).toHaveBeenCalledOnce()
   })
 
   it("clears NitroPay placements during SPA navigation", () => {

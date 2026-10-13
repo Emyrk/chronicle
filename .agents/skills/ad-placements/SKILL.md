@@ -47,7 +47,7 @@ Use `railLayout="paired"` when a page renders rails on both sides. Single rails 
 
 - Local preview rendering.
 - Shared format dimensions and responsive breakpoints.
-- The visible `Advertisement` label above every rendered preview or live placement.
+- The visible `Advertisement` label above every preview and every live placement after NitroPay reports an ad rendered.
 - Stable placement metadata.
 
 ### `AdSlot` must own when live serving is added
