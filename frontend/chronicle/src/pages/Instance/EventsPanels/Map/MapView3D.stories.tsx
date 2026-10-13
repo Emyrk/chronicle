@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useQueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
+import { kreshReal } from "./fixtures/kreshReal";
+import { loadMapFixture, type LoadedMapFixture } from "./fixtures/mapFixture";
 import type { WoWSpell } from "@/api/wowdb";
 import { BOSS_MINI_SLUGS } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
@@ -9,7 +12,7 @@ import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt
 import MapView3D from "./MapView3D";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
-import type { MapMarkerKind, MapSceneGround, MapSceneMarker } from "./useMapScene";
+import { useMapScene, type MapMarkerKind, type MapSceneGround, type MapSceneMarker } from "./useMapScene";
 
 const CLASSES = ["warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid"];
 const DURATION_MS = 60_000;
@@ -618,6 +621,83 @@ function WithSpellIcons({ children }: { children: React.ReactNode }) {
   return children;
 }
 
+// The real Kresh fight replayed from a captured fixture: the production map
+// processor builds the result, useMapScene derives the scene, and the real
+// SyncModeProvider drives the cursor from the pull to the kill on a loop.
+const KRESH_LOOP_PAUSE_MS = 1_000;
+
+function KreshRealPlayer({ fixture }: { fixture: LoadedMapFixture }) {
+  const sync = useSyncModeContext();
+  const { enabled, isPlaying, currentTimestamp, enable, setEncounterBounds, setTimestamp, play } = sync;
+  const scene = useMapScene(fixture.props);
+
+  useEffect(() => {
+    enable();
+    setEncounterBounds({ start: new Date(fixture.startMs), end: new Date(fixture.endMs) });
+    setTimestamp(new Date(fixture.startMs));
+  }, [enable, fixture, setEncounterBounds, setTimestamp]);
+
+  // Playback stops at the encounter end; rewind to the pull and play again.
+  useEffect(() => {
+    if (!enabled || isPlaying) return;
+    const atEnd = (currentTimestamp?.getTime() ?? 0) >= fixture.endMs;
+    const id = setTimeout(() => {
+      if (atEnd) setTimestamp(new Date(fixture.startMs));
+      play();
+    }, atEnd ? KRESH_LOOP_PAUSE_MS : 0);
+    return () => clearTimeout(id);
+  }, [currentTimestamp, enabled, fixture, isPlaying, play, setTimestamp]);
+
+  const focusBounds = scene.status === "ready" ? scene.focusBounds : null;
+  const view = useMemo((): MapViewRequest => ({
+    viewport: focusBounds ? fitViewportToBounds(focusBounds) : FULL_MAP_VIEWPORT,
+    key: "fit",
+  }), [focusBounds]);
+
+  const elapsed = Math.max(0, (currentTimestamp?.getTime() ?? fixture.startMs) - fixture.startMs) / 1000;
+  return (
+    <div style={{ width: 800, height: 520 }} className="relative overflow-hidden rounded-md border border-white/10 bg-black/70">
+      {scene.status === "ready" ? (
+        <MapView3D
+          ground={scene.ground}
+          markers={scene.markers}
+          projectSample={scene.projectSample}
+          cursorMs={scene.cursorMs}
+          playing={scene.playing}
+          playbackSpeed={scene.playbackSpeed}
+          view={view}
+          effects={scene.effects}
+          bossGuids={scene.bossGuids}
+          onUnavailable={() => console.warn("WebGL unavailable")}
+        />
+      ) : (
+        <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
+      )}
+      <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
+        {kreshReal.encounter.name} {elapsed.toFixed(1)}s
+      </div>
+    </div>
+  );
+}
+
+function KreshRealReplay({ selectPlayers }: { selectPlayers: boolean }) {
+  const [fixture] = useState(() => loadMapFixture(kreshReal, { selectPlayers }));
+  // Seed the artwork manifest so the scene needs no fetch; only tiles and
+  // boss-mini textures load from the icon CDN.
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["wow-map-manifest", kreshReal.instance.iconBaseUrl], fixture.manifest);
+    return client;
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <SyncModeProvider>
+        <KreshRealPlayer fixture={fixture} />
+      </SyncModeProvider>
+    </QueryClientProvider>
+  );
+}
+
 const meta = {
   title: "Instance/Map/MapView3D",
   component: SyntheticReplay,
@@ -678,4 +758,17 @@ export const BossMinis: Story = {
 export const CastIcons: Story = {
   args: { players: 10, playbackSpeed: 1, mutedEvery: 2, effects: true },
   render: (args) => <WithSpellIcons><SyntheticReplay {...args} /></WithSpellIcons>,
+};
+
+/**
+ * The real Kresh kill (Wailing Caverns, 5 players, ~14 s) from a public forever
+ * log, replayed at 1x on a loop through the production map processor and scene.
+ */
+export const KreshReal: Story = {
+  render: () => <KreshRealReplay selectPlayers={false} />,
+};
+
+/** The real Kresh kill with the five players as the entity selection. */
+export const KreshRealSelected: Story = {
+  render: () => <KreshRealReplay selectPlayers />,
 };
