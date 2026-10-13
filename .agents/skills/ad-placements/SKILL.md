@@ -91,6 +91,8 @@ Add a new format only when neither existing format can represent the required di
 | `statistics-encounter-sidebar` | `pages/Rankings/InstanceView.tsx` | Explicitly non-mobile statistics detail with 1–8 encounter rows; rendered after the keybind help text |
 | `recent-right-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible at `2xl` |
 | `recent-left-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible with the right rail at 1800px and wider |
+| `census-left-rail` | `pages/Census/CensusPage.tsx` | Census statistics; paired left rail visible at `2xl` |
+| `census-right-rail` | `pages/Census/CensusPage.tsx` | Census statistics; paired right rail visible at `2xl` |
 
 ## Enablement model
 
