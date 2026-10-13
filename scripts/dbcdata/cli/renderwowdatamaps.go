@@ -153,7 +153,7 @@ func styledWowMapInstance(mapID int32, rendered *wowMapRenderedInstance) *wowMap
 		return nil
 	}
 	return &wowMapRenderedInstance{
-		Path:  "render-styled/43-wailing-caverns-v1.jpeg",
+		Path:  "render-styled/43-wailing-caverns-v2.jpeg",
 		Width: 1600, Height: 1066, Source: "hand-styled",
 		Bounds: rendered.Bounds,
 	}

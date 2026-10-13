@@ -118,7 +118,7 @@ frontend/imagecache/forever/maps/
 ├── render/
 │   └── <MapID>-<build>-<content-digest>.png
 └── render-styled/
-    └── 43-wailing-caverns-v1.jpeg  # separately published from source control
+    └── 43-wailing-caverns-v2.jpeg  # separately published from source control
 ```
 
 `manifest.json` uses the `chronicle-wow-map-art-v2` format. It records the product and build, map hierarchy, phase-specific artwork, explored-area overlays, available dungeon and raid floors, layer and tile dimensions, and the raw `UiMapAssignment` `Region`, `UiMin`, and `UiMax` arrays needed to convert world coordinates into UI coordinates. The arrays are intentionally preserved in DB2 order rather than assigning inferred axis names. Instance floor artwork is included only when the client listfile has a complete canvas. An instance's optional `rendered` object independently advertises a generated geometry asset, its source, dimensions, ordinary world-X/world-Y bounds, and triangle count. The optional `styled` object advertises a hand-authored Wailing Caverns JPEG using the raw render's bounds. Consumers prefer it for route overviews, while still offering the raw geometry and Blizzard artwork.
@@ -141,7 +141,7 @@ make maps/forever-render-upload
 
 This skips extraction and upload of the Blizzard artwork tiles.
 
-The hand-authored JPEG is tracked at `frontend/imagecache/styled-maps/43-wailing-caverns-v1.jpeg`. Upload it independently with:
+The hand-authored JPEG is tracked at `frontend/imagecache/styled-maps/43-wailing-caverns-v2.jpeg`. Upload it independently with:
 
 ```bash
 make maps/forever-styled-upload

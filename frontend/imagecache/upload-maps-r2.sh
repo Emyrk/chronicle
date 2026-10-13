@@ -33,7 +33,7 @@ case "${MAPS_UPLOAD_MODE}" in
     fi
     ;;
   styled)
-    if [[ ! -s "${SCRIPT_DIR}/styled-maps/43-wailing-caverns-v1.jpeg" ]]; then
+    if [[ ! -s "${SCRIPT_DIR}/styled-maps/43-wailing-caverns-v2.jpeg" ]]; then
       echo "Error: styled Wailing Caverns map is missing" >&2
       exit 1
     fi
@@ -84,8 +84,8 @@ if [[ "${MAPS_UPLOAD_MODE}" != "styled" && -d "${MAPS_DIR}/render" ]]; then
 fi
 
 if [[ "${MAPS_UPLOAD_MODE}" == "styled" ]]; then
-  rclone copyto "${SCRIPT_DIR}/styled-maps/43-wailing-caverns-v1.jpeg" \
-    "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/render-styled/43-wailing-caverns-v1.jpeg" \
+  rclone copyto "${SCRIPT_DIR}/styled-maps/43-wailing-caverns-v2.jpeg" \
+    "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/render-styled/43-wailing-caverns-v2.jpeg" \
     --header-upload "Cache-Control: public, max-age=31536000, immutable" \
     --header-upload "Content-Type: image/jpeg" \
     --verbose

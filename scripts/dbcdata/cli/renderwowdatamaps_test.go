@@ -41,7 +41,7 @@ func TestStyledWowMapInstanceUsesRawBounds(t *testing.T) {
 	t.Parallel()
 	raw := &wowMapRenderedInstance{Bounds: wowMapFloorBounds{MinX: -421, MaxX: 220, MinY: -396, MaxY: 565}}
 	styled := styledWowMapInstance(43, raw)
-	require.Equal(t, "render-styled/43-wailing-caverns-v1.jpeg", styled.Path)
+	require.Equal(t, "render-styled/43-wailing-caverns-v2.jpeg", styled.Path)
 	require.Equal(t, int32(1600), styled.Width)
 	require.Equal(t, int32(1066), styled.Height)
 	require.Equal(t, raw.Bounds, styled.Bounds)
