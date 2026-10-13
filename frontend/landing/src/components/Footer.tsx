@@ -16,6 +16,8 @@ const PATREON_TOOLTIP =
 const GITHUB_URL = "https://github.com/Emyrk/chronicle";
 const GITHUB_SPONSORS_URL = "https://github.com/sponsors/Emyrk";
 
+const nitroPayEnabled = Boolean(import.meta.env.CHRONICLE_NITROPAY_SITE_ID);
+
 export function Footer() {
   const [cryptoModalOpen, setCryptoModalOpen] = useState(false);
 
@@ -136,6 +138,12 @@ export function Footer() {
             >
               Privacy Policy
             </a>
+            {nitroPayEnabled && (
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                <span id="ncmp-consent-link" className="cursor-pointer hover:text-foreground transition-colors" />
+                <span data-ccpa-link="1" className="cursor-pointer hover:text-foreground transition-colors" />
+              </div>
+            )}
             <p className="text-xs mt-2">
               Source-available raid log analysis for Classic World of Warcraft.
               Per-server terms are on each server's Chronicle.

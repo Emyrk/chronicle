@@ -61,12 +61,12 @@ func TestSwitchableHandler(t *testing.T) {
 	require.Equal(t, startupLogo, logo.Body.Bytes())
 }
 
-func TestAdSenseClientIDPattern(t *testing.T) {
+func TestNitroPaySiteIDPattern(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, adsenseClientIDPattern.MatchString("ca-pub-8208259743822818"))
-	require.False(t, adsenseClientIDPattern.MatchString("pub-8208259743822818"))
-	require.False(t, adsenseClientIDPattern.MatchString("ca-pub-example"))
+	require.True(t, nitroPaySiteIDPattern.MatchString("12345"))
+	require.False(t, nitroPaySiteIDPattern.MatchString("site-12345"))
+	require.False(t, nitroPaySiteIDPattern.MatchString("example"))
 }
 
 func TestGoogleAnalyticsMeasurementIDPattern(t *testing.T) {

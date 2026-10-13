@@ -42,17 +42,16 @@ type ogResult struct {
 
 // HTMLBranding carries per-request branding overrides for the HTML template.
 type HTMLBranding struct {
-	Title           string // Page title. Empty = default "Chronicle".
-	SiteName        string // Tenant/site display name used to suffix route-specific titles.
-	Description     string // Tenant/site description. Empty = default Chronicle description.
-	CanonicalURL    string // Absolute canonical URL for this request.
-	ImageURL        string // Absolute social preview image URL.
-	Robots          string // Page-level robots directive. Empty = indexable default.
-	JSONLD          string // JSON-LD generated from trusted, JSON-marshaled values.
-	Favicon         string // Favicon URL. Empty = default /c/chronicle/favicon.ico.
-	ThemeCSS        string // Pre-built CSS variable overrides for tenant theming.
-	AdSenseClientID string // Public publisher ID for verification metadata; empty disables it.
-	GA4ID           string // GA4 measurement ID; empty disables analytics.
+	Title        string // Page title. Empty = default "Chronicle".
+	SiteName     string // Tenant/site display name used to suffix route-specific titles.
+	Description  string // Tenant/site description. Empty = default Chronicle description.
+	CanonicalURL string // Absolute canonical URL for this request.
+	ImageURL     string // Absolute social preview image URL.
+	Robots       string // Page-level robots directive. Empty = indexable default.
+	JSONLD       string // JSON-LD generated from trusted, JSON-marshaled values.
+	Favicon      string // Favicon URL. Empty = default /c/chronicle/favicon.ico.
+	ThemeCSS     string // Pre-built CSS variable overrides for tenant theming.
+	GA4ID        string // GA4 measurement ID; empty disables analytics.
 }
 
 // BrandingResolver is an optional callback that returns per-request branding
@@ -199,7 +198,6 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			state.JSONLD = b.JSONLD
 			state.Favicon = b.Favicon
 			state.ThemeCSS = b.ThemeCSS
-			state.AdSenseClientID = b.AdSenseClientID
 			state.GA4ID = b.GA4ID
 		}
 	}
@@ -311,17 +309,16 @@ type htmlState struct {
 	OGURL         string
 
 	// Branding and SEO overrides populated from tenant context.
-	Title           string
-	SiteName        string
-	Description     string
-	CanonicalURL    string
-	ImageURL        string
-	Robots          string
-	JSONLD          string
-	Favicon         string
-	ThemeCSS        string
-	AdSenseClientID string
-	GA4ID           string
+	Title        string
+	SiteName     string
+	Description  string
+	CanonicalURL string
+	ImageURL     string
+	Robots       string
+	JSONLD       string
+	Favicon      string
+	ThemeCSS     string
+	GA4ID        string
 }
 
 func (s *htmlState) escapeHTMLAttributes() {

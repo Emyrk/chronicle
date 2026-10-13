@@ -3,6 +3,7 @@ package httpmw_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,7 +15,7 @@ import (
 func TestContentSecurityPolicy(t *testing.T) {
 	t.Parallel()
 
-	handler := httpmw.ContentSecurityPolicy()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httpmw.ContentSecurityPolicy(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -30,4 +31,34 @@ func TestContentSecurityPolicy(t *testing.T) {
 	assert.Contains(t, csp, "connect-src 'self' https://raw.githubusercontent.com")
 	assert.Contains(t, csp, "frame-ancestors 'none'")
 	assert.Contains(t, csp, "worker-src 'self' blob:")
+}
+
+func TestContentSecurityPolicyAllowsAdResourcesOnlyWhenEnabled(t *testing.T) {
+	t.Parallel()
+
+	handler := httpmw.ContentSecurityPolicy(func(r *http.Request) bool {
+		return r.Host == "ads.example.com"
+	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	for _, test := range []struct {
+		name        string
+		host        string
+		allowsHTTPS bool
+	}{
+		{name: "ad tenant", host: "ads.example.com", allowsHTTPS: true},
+		{name: "disabled tenant", host: "disabled.example.com", allowsHTTPS: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "https://"+test.host+"/", nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			scriptPolicy := strings.Split(rec.Header().Get("Content-Security-Policy"), "; ")[1]
+			assert.Equal(t, test.allowsHTTPS, strings.HasSuffix(scriptPolicy, " https:"))
+		})
+	}
 }

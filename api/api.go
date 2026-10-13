@@ -73,9 +73,9 @@ type Options struct {
 	// When empty, /ads.txt returns 404 so self-hosted deployments do not publish
 	// another operator's advertising authorization.
 	AdsTxtURL *url.URL
-	// AdSenseClientID is the public publisher client ID (ca-pub-...). It is
-	// exposed only for requests whose tenant and deployment are eligible for ads.
-	AdSenseClientID string
+	// NitroPaySiteID is the public NitroPay site identifier. It is exposed only
+	// for requests whose tenant and deployment are eligible for ads.
+	NitroPaySiteID string
 	// GA4ID is the GA4 measurement ID (G-...). When
 	// empty, the application does not load Google Analytics.
 	GA4ID string
@@ -181,7 +181,7 @@ func (api *API) Routes() chi.Router {
 		httpmw.Log500(api.Opts.Logger),
 		RouteCors(api.Opts.Tenant),
 		httpmw.SecurityHeaders(),
-		httpmw.ContentSecurityPolicy(),
+		httpmw.ContentSecurityPolicy(api.adsEnabledForRequest),
 		httpmw.NoWWW(),
 		httpmw.PrometheusMW(api.Opts.Registry),
 		middleware.Compress(5,

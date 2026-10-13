@@ -36,9 +36,20 @@ jobs:
       - name: Install dependencies
         run: pnpm -C frontend/landing install --frozen-lockfile
 
+      - name: Prepare NitroPay ads.txt
+        env:
+          CHRONICLE_NITROPAY_SITE_ID: ${{ vars.NITROPAY_SITE_ID }}
+        run: |
+          rm -f frontend/landing/public/ads.txt
+          if [ -n "$CHRONICLE_NITROPAY_SITE_ID" ]; then
+            curl --fail --silent --show-error --location \
+              "https://api.nitropay.com/v1/ads-${CHRONICLE_NITROPAY_SITE_ID}.txt" \
+              --output frontend/landing/public/ads.txt
+          fi
+
       - name: Build
         env:
-          CHRONICLE_ADSENSE_CLIENT_ID: ca-pub-8208259743822818
+          CHRONICLE_NITROPAY_SITE_ID: ${{ vars.NITROPAY_SITE_ID }}
         run: pnpm -C frontend/landing build
 
       - name: Upload artifact

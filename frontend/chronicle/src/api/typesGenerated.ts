@@ -3477,14 +3477,14 @@ export interface SiteConfig {
     readonly client_uploads_disabled: boolean;
     /**
      * AdsEnabled is true only when the resolved tenant opted into ads and the
-     * deployment configured both ads.txt and an AdSense client ID.
+     * deployment configured both ads.txt and a NitroPay site ID.
      */
     readonly ads_enabled: boolean;
     /**
-     * AdSenseClientID is the public publisher ID used by the shared ad runtime.
+     * NitroPaySiteID is the public site identifier used by the shared ad runtime.
      * It is omitted unless AdsEnabled is true.
      */
-    readonly adsense_client_id?: string;
+    readonly nitropay_site_id?: string;
     /**
      * Tenant is the resolved tenant for the current request (based on subdomain).
      * Nil when accessed from the root domain.

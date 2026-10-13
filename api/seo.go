@@ -31,9 +31,6 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 		GA4ID:        api.Opts.GA4ID,
 	}
 	t := servicetenant.TenantFromContext(r.Context())
-	if tenantAdsEnabled(api.adsDeploymentEnabled(), t) {
-		resolved.AdSenseClientID = api.Opts.AdSenseClientID
-	}
 
 	var branding *chroniclesdk.Branding
 	discoverable := true
