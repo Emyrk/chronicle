@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/Emyrk/chronicle/internal/services"
@@ -24,6 +25,8 @@ const (
 	defaultAccessURL = "http://localhost:4000"
 	webhookPath      = "/api/v1/billing/webhook"
 )
+
+var webhookSecretPattern = regexp.MustCompile(`whsec_[A-Za-z0-9_]+`)
 
 var eventTypes = []string{
 	"checkout.session.completed",
@@ -94,7 +97,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 	secretOutput, err := s.command(ctx, executable, "listen", "--skip-update", "--color", "off", "--print-secret").CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("read Stripe CLI webhook secret: %w: %s", err, strings.TrimSpace(string(secretOutput)))
+		return fmt.Errorf("read Stripe CLI webhook secret: %w: %s", err, redactWebhookSecrets(strings.TrimSpace(string(secretOutput))))
 	}
 	secret, err := parseWebhookSecret(secretOutput)
 	if err != nil {
@@ -114,10 +117,11 @@ func (s *Service) Start(ctx context.Context) error {
 		"--events", strings.Join(eventTypes, ","),
 		"--forward-to", forwardTo,
 	)
-	// The CLI announces the webhook signing secret on stdout. Discard it so the
-	// automatically discovered secret never lands in Chronicle logs.
+	// Stripe CLI can announce the webhook signing secret on either output
+	// stream. Discard both so the automatically discovered secret never lands
+	// in Chronicle logs.
 	cmd.Stdout = io.Discard
-	cmd.Stderr = slog.NewLogLogger(logger.Handler(), slog.LevelWarn).Writer()
+	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
 		s.listenerCancel()
 		return fmt.Errorf("start Stripe CLI listener: %w", err)
@@ -189,6 +193,10 @@ func localWebhookURL(accessURL string) (string, error) {
 	u.RawQuery = ""
 	u.Fragment = ""
 	return u.String(), nil
+}
+
+func redactWebhookSecrets(output string) string {
+	return webhookSecretPattern.ReplaceAllString(output, "[REDACTED]")
 }
 
 func parseWebhookSecret(output []byte) (string, error) {

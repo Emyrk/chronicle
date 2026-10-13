@@ -43,6 +43,13 @@ func TestLocalWebhookURL(t *testing.T) {
 	}
 }
 
+func TestRedactWebhookSecrets(t *testing.T) {
+	t.Parallel()
+
+	output := redactWebhookSecrets("Ready! secret whsec_test_secret (^C to quit)")
+	require.Equal(t, "Ready! secret [REDACTED] (^C to quit)", output)
+}
+
 func TestParseWebhookSecret(t *testing.T) {
 	t.Parallel()
 
