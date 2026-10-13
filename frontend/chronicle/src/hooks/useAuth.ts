@@ -1,10 +1,10 @@
-import { useWhoami } from "@/api/queries";
+import { useSession } from "@/api/queries";
 import { clearInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { useQueryClient } from "@tanstack/react-query";
 
 export function useAuth() {
   const queryClient = useQueryClient();
-  const { data: isAuthenticated, isLoading } = useWhoami();
+  const { data: session, isLoading } = useSession();
 
   const logout = async () => {
     await fetch("/auth/logout");
@@ -15,7 +15,8 @@ export function useAuth() {
   };
 
   return {
-    isAuthenticated: isAuthenticated ?? false,
+    session,
+    isAuthenticated: session !== null && session !== undefined,
     isLoading,
     logout,
   };

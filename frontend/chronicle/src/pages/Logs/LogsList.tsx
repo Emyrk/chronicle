@@ -6,7 +6,7 @@ import { LogIn, Loader2, Upload as UploadIcon, HardDrive, HelpCircle } from "luc
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthorizationCheck, useLogGroups, useSession, useSiteConfig, type WoWLogGroup } from "@/api/queries";
+import { useAuthorizationCheck, useLogGroups, useSiteConfig, type WoWLogGroup } from "@/api/queries";
 import { LogsCalendar } from "./components/LogsCalendar";
 import { CalendarDayContent } from "./components/CalendarDayContent";
 import { UploadsTable, type SortField, type SortDirection } from "./components/UploadsTable";
@@ -268,7 +268,7 @@ export function LogsListView({
 }
 
 export function LogsList() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { session, isAuthenticated, isLoading: authLoading } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   // Compute the visible calendar date range (full weeks covering the month)
@@ -280,10 +280,6 @@ export function LogsList() {
     start: calendarStart.toISOString(),
     end: calendarEnd.toISOString(),
   });
-  const { data: session } = useSession({
-    enabled: isAuthenticated,
-  });
-
   return (
     <LogsListView
       isAuthenticated={isAuthenticated}

@@ -155,18 +155,6 @@ export type AdminBulkDeleteResponse = AdminBulkDeleteResponseGenerated;
 export type AdminBulkSelectedReparseResponse = AdminBulkSelectedReparseResponseGenerated;
 export type AdminBulkReparseResponse = AdminBulkReparseResponseGenerated;
 
-export function useWhoami(options?: Omit<UseQueryOptions<boolean>, "queryKey" | "queryFn">) {
-  return useQuery({
-    queryKey: ["whoami"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/whoami");
-      return response.ok;
-    },
-    retry: false,
-    ...options,
-  });
-}
-
 export function useSession(options?: Omit<UseQueryOptions<Session | null>, "queryKey" | "queryFn">) {
   return useQuery({
     queryKey: ["session"],
