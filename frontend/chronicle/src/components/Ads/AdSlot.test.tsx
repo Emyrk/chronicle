@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 import type { SiteConfig } from "@/api/typesGenerated"
 import { AdSlot } from "./AdSlot"
-import { adSizesForFormat } from "./adFormats"
+import { adSizeLabel, adSizesForFormat } from "./adFormats"
 import { clearNitroPayAds } from "./nitroPay"
 import {
   isLocalAdPreviewHost,
@@ -35,7 +35,8 @@ describe("AdSlot", () => {
     )
 
     expect(markup).toContain("Advertisement")
-    expect(markup).toContain("160 × 600 / 300 × 600")
+    expect(markup).toContain("160 × 600")
+    expect(markup).not.toContain("300 × 600")
     expect(markup).toContain("2xl:block")
     expect(markup).toContain("min-[1920px]:w-[300px]")
     expect(markup).toContain("2xl:sticky")
@@ -66,6 +67,12 @@ describe("AdSlot", () => {
       [300, 600],
       [160, 600],
     ])
+  })
+
+  it("labels only the rail sizes eligible at the current width", () => {
+    expect(adSizeLabel("rail", false)).toBe("160 × 600")
+    expect(adSizeLabel("rail", true)).toBe("300 × 600 / 160 × 600")
+    expect(adSizeLabel("responsive", false)).toBe("responsive")
   })
 
   it("renders the responsive desktop format by default", () => {

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { useSiteConfig } from "@/api/queries"
 import { cn } from "@/lib/utils"
 import { shouldShowAdPreview } from "./adPreview"
-import { adSizesForFormat, type AdFormat, type RailLayout } from "./adFormats"
+import { adSizeLabel, adSizesForFormat, type AdFormat, type RailLayout } from "./adFormats"
 import { clearNitroPayAds, requestNitroPayAd, type NitroPayAd } from "./nitroPay"
 
 export type AdPlacement = `${string}-${string}`
@@ -126,7 +126,7 @@ export function AdSlot({
               <div className="relative text-center text-muted-foreground/55">
                 <p className="text-[10px] font-medium uppercase tracking-[0.16em]">Ad preview</p>
                 <p className="mt-1 font-mono text-[10px]">
-                  {format === "rail" ? "160 × 600 / 300 × 600" : "responsive"}
+                  {adSizeLabel(format, wideRail)}
                 </p>
               </div>
             </>

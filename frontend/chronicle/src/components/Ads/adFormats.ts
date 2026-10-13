@@ -22,3 +22,8 @@ export function adSizesForFormat(format: AdFormat, wideRail: boolean): NitroPayS
   }
   return formatSizes[format]
 }
+
+export function adSizeLabel(format: AdFormat, wideRail: boolean): string {
+  if (format === "responsive") return "responsive"
+  return wideRail ? "300 × 600 / 160 × 600" : "160 × 600"
+}

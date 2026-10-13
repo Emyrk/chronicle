@@ -120,7 +120,7 @@ At minimum, `AdSlot.test.tsx` must cover:
 
 - Responsive preview defaults.
 - Rail preview dimensions, sticky behavior, and single/paired width breakpoints.
-- NitroPay rail size eligibility: 160×600 normally and both 300×600 plus 160×600 only after 300px is reserved.
+- NitroPay rail size eligibility: 160×600 normally and both 300×600 plus 160×600 only after 300px is reserved; the local preview label must reflect the same eligible set.
 - Stable `data-ad-placement` output.
 - No rendering without the preview flag or on a non-local hostname while live serving is unavailable.
 - Effective tenant enablement for both disabled and live NitroPay branches.
