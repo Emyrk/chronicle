@@ -1,11 +1,13 @@
 package httpmw
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -43,6 +45,11 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 		w.body = append(w.body, capture...)
 	}
 	return w.ResponseWriter.Write(b)
+}
+
+// Hijack preserves WebSocket and other HTTP upgrade support through the logging wrapper.
+func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return http.NewResponseController(w.ResponseWriter).Hijack()
 }
 
 // Unwrap supports http.ResponseController and middleware that check the inner writer.

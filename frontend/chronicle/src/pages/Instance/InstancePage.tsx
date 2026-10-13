@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { ArrowLeft, Loader2, Youtube, Timer, TriangleAlert } from "lucide-react";
 import { useInstance, useInstanceYoutube, useAuthorizationCheck } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,11 +14,13 @@ import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
 import { InstancePageView } from "./InstancePageView";
 import { YouTubeOverlay } from "./YouTubeOverlay";
 import { SyncModeProvider, useSyncModeContext } from "./SyncModeContext";
+import { LiveSessionProvider } from "./LiveSessionContext";
 import { ReplayControlOverlay, useReplayPosition } from "./ReplayControlOverlay";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { TimeRangeProvider } from "./TimeRangeContext";
 import { TimeRangeController } from "./TimeRangeController";
 import { useTenantGate } from "./TenantGate";
+import { showDebugDesktopControls } from "./debugFeatureGate";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 
 // Types for the Instance page
@@ -274,8 +276,9 @@ function InstancePageInner({
   const { setEncounterBounds, setTimestamp, enabled: syncEnabled } = useSyncModeContext();
   const previousEncounterTimesRef = useRef(selectedEncounterTimes);
   const isMobile = useIsMobile();
-  // Replay is disabled on mobile - never show the panel there
-  const replayPanelVisible = showReplayPanel && !isMobile;
+  const [searchParams] = useSearchParams();
+  const showReplayControls = showDebugDesktopControls(searchParams, isMobile);
+  const replayPanelVisible = showReplayPanel && showReplayControls;
   // When pinned to the top, the replay controls no longer occupy the action
   // bar's space, so the spellbook can show again.
   const [replayPosition] = useReplayPosition();
@@ -319,8 +322,8 @@ function InstancePageInner({
         supportsOverview
         youtubeButton={
           <div className="flex gap-1.5">
-            {/* Replay button (desktop only - replay is disabled on mobile) */}
-            {!isMobile && (
+            {/* Replay is experimental and desktop-only. */}
+            {showReplayControls && (
               <Button
                 variant={showReplayPanel || syncEnabled ? "default" : "outline"}
                 size="sm"
@@ -494,6 +497,7 @@ export function InstancePage() {
   return (
     <DatasetProvider datasetId={instance.datasetId} iconBaseUrl={instance.iconBaseUrl}>
     <SyncModeProvider>
+      <LiveSessionProvider>
       <TimeRangeProvider totalDurationMs={totalEncounterDurationMs}>
         <InstanceEventsProvider instanceId={instance.id}>
           <PlayerSpecializationProvider
@@ -522,6 +526,7 @@ export function InstancePage() {
           </PlayerSpecializationProvider>
         </InstanceEventsProvider>
       </TimeRangeProvider>
+      </LiveSessionProvider>
     </SyncModeProvider>
     </DatasetProvider>
   );
