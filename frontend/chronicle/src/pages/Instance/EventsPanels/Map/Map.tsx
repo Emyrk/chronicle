@@ -3,6 +3,7 @@ import { lazy, Suspense, useCallback, useState } from "react";
 import { Focus, Map as MapIcon, Maximize, Users } from "lucide-react";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
+import { MapOverview2D } from "./MapOverview2D";
 import {
   FULL_MAP_VIEWPORT,
   INITIAL_MAP_FRAMING,
@@ -17,49 +18,16 @@ import { useMapScene } from "./useMapScene";
 
 const MapView3D = lazy(() => import("./MapView3D"));
 
-type MapViewMode = "2d" | "3d";
+export type MapPresentation = "replay-3d" | "overview-2d";
 
-const VIEW_MODE_STORAGE_KEY = "chronicle.map.viewMode";
-
-function readStoredViewMode(): MapViewMode {
-  try {
-    return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "3d" ? "3d" : "2d";
-  } catch {
-    return "2d";
-  }
-}
-
-function storeViewMode(mode: MapViewMode) {
-  try {
-    localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
-  } catch {
-    // Storage may be unavailable (private mode); the toggle still works for this session.
-  }
-}
-
-function ViewModeToggle({ mode, onChange }: { mode: MapViewMode; onChange: (mode: MapViewMode) => void }) {
-  return (
-    <div role="group" aria-label="Map view mode" className="flex overflow-hidden rounded border border-border">
-      {(["2d", "3d"] as const).map((option) => (
-        <button
-          key={option}
-          type="button"
-          aria-pressed={mode === option}
-          onClick={() => onChange(option)}
-          className={`px-1.5 py-0.5 text-[10px] font-medium uppercase ${mode === option ? "bg-primary/20 text-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
-        >
-          {option}
-        </button>
-      ))}
-    </div>
-  );
+export function mapPresentationForSelection(selectedEncounterCount: number): MapPresentation {
+  return selectedEncounterCount === 1 ? "replay-3d" : "overview-2d";
 }
 
 const framingButtonClass = "flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground";
 
-function MapContent(props: PanelRenderProps<MapResult>) {
+function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
   const scene = useMapScene(props);
-  const [viewMode, setViewMode] = useState<MapViewMode>(readStoredViewMode);
   const [webglUnavailable, setWebglUnavailable] = useState(false);
   const ready = scene.status === "ready" ? scene : null;
   const autoFit = ready?.autoFit ?? null;
@@ -81,12 +49,6 @@ function MapContent(props: PanelRenderProps<MapResult>) {
   if (scene.status === "message") return <MapMessage title={scene.title} detail={scene.detail} />;
 
   const applyFraming = (viewport: MapViewport) => setFraming(pinMapFraming(framing, viewport));
-
-  const changeViewMode = (mode: MapViewMode) => {
-    setViewMode(mode);
-    storeViewMode(mode);
-  };
-  const show3D = viewMode === "3d" && !webglUnavailable;
   const view2D = <MapView2D ground={scene.ground} markers={scene.markers} view={view} onUserViewport={handleUserViewport} />;
 
   return (
@@ -125,11 +87,10 @@ function MapContent(props: PanelRenderProps<MapResult>) {
             <Maximize className="h-3 w-3" />
             Reset
           </button>
-          <ViewModeToggle mode={viewMode} onChange={changeViewMode} />
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-black/70">
-        {show3D ? (
+        {webglUnavailable ? view2D : (
           <Suspense fallback={<MapMessage title="Loading 3D view" detail="Fetching the 3D renderer…" />}>
             <MapView3D
               ground={scene.ground}
@@ -146,10 +107,10 @@ function MapContent(props: PanelRenderProps<MapResult>) {
               onUnavailable={() => setWebglUnavailable(true)}
             />
           </Suspense>
-        ) : view2D}
+        )}
       </div>
-      {viewMode === "3d" && webglUnavailable && (
-        <p className="px-1 text-[9px] text-amber-300/80">3D view needs WebGL, which this browser could not provide. Showing the 2D map instead.</p>
+      {webglUnavailable && (
+        <p className="px-1 text-[9px] text-amber-300/80">3D view needs WebGL, which this browser could not provide. Showing the replay map in 2D instead.</p>
       )}
       {!scene.overlayAvailable ? (
         <p className="px-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
@@ -158,6 +119,13 @@ function MapContent(props: PanelRenderProps<MapResult>) {
       ) : null}
     </div>
   );
+}
+
+function MapContent(props: PanelRenderProps<MapResult>) {
+  const presentation = mapPresentationForSelection(props.context.selectedEncounterIds.length);
+  return presentation === "replay-3d"
+    ? <SingleEncounterReplayMap {...props} />
+    : <MapOverview2D {...props} />;
 }
 
 function MapMessage({ title, detail }: { title: string; detail: string }) {
@@ -177,6 +145,8 @@ export function createMapPanel(): PanelDefinition<MapResult, MapProcessorEvent> 
     icon: <MapIcon className="h-4 w-4" />,
     requiredCapabilities: ["unit-position"],
     syncDataMode: "full",
+    disableCardFlip: true,
+    supportsFiltering: false,
     underConstruction: true,
     render: (props) => <MapContent {...props} />,
   };
