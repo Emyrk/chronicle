@@ -10,7 +10,6 @@ import {
   useCreateTalentBuild,
   useDeleteTalentBuild,
   useMyTalentBuilds,
-  useSession,
   useUpdateTalentBuild,
 } from "@/api/queries";
 import type { UserTalentBuild } from "@/api/typesGenerated";
@@ -53,8 +52,7 @@ export function MyBuildsDrawer({
   /** Render the trigger as a floating action button (mobile). */
   floating?: boolean;
 }) {
-  const { isAuthenticated, isLoading } = useAuth();
-  const { data: session } = useSession();
+  const { session, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(false);

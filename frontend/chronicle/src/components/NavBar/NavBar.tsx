@@ -4,7 +4,7 @@ import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, 
 import type { LucideIcon } from "lucide-react";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSession, useSiteConfig, useWhatsNewStatus } from "@/api/queries";
+import { useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSiteConfig, useWhatsNewStatus } from "@/api/queries";
 import type { Branding } from "@/api/typesGenerated";
 import { Button } from "../ui/button";
 import { FavoritesMenu } from "../Favorites";
@@ -29,7 +29,7 @@ type NavItem = {
 
 export function NavBar() {
   const location = useLocation();
-  const { isAuthenticated, isLoading, logout } = useAuth();
+  const { session, isAuthenticated, isLoading, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
 
@@ -54,7 +54,6 @@ export function NavBar() {
   const hasAdminLogs = authz?.adminLogs ?? false;
 
   const { data: siteConfig } = useSiteConfig();
-  const { data: session } = useSession({ enabled: isAuthenticated });
   const userID = session?.user_id ?? "";
   const whatsNewStatus = useWhatsNewStatus(userID, isAuthenticated);
   const { mutate: markWhatsNewRead, isPending: markingWhatsNewRead } = useMarkWhatsNewRead(userID);
