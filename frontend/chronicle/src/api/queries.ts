@@ -155,6 +155,36 @@ export type AdminBulkDeleteResponse = AdminBulkDeleteResponseGenerated;
 export type AdminBulkSelectedReparseResponse = AdminBulkSelectedReparseResponseGenerated;
 export type AdminBulkReparseResponse = AdminBulkReparseResponseGenerated;
 
+export function useBillingSummary() {
+  return useQuery({
+    queryKey: ["billing"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/billing")
+      if (!response.ok) throw new Error("Failed to fetch billing status")
+      return response.json() as Promise<import("./typesGenerated").BillingSummary>
+    },
+    retry: false,
+  })
+}
+
+async function createBillingRedirect(path: string): Promise<string> {
+  const response = await fetch(path, { method: "POST" })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.message ?? "Failed to open billing")
+  }
+  const body = await response.json() as import("./typesGenerated").BillingCheckoutResponse
+  return body.url
+}
+
+export function useCreateBillingCheckout() {
+  return useMutation({ mutationFn: () => createBillingRedirect("/api/v1/me/billing/checkout") })
+}
+
+export function useCreateBillingPortal() {
+  return useMutation({ mutationFn: () => createBillingRedirect("/api/v1/me/billing/portal") })
+}
+
 export function useSession(options?: Omit<UseQueryOptions<Session | null>, "queryKey" | "queryFn">) {
   return useQuery({
     queryKey: ["session"],

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useSiteConfig } from "@/api/queries"
+import { useSession, useSiteConfig } from "@/api/queries"
 import { cn } from "@/lib/utils"
 import { shouldShowAdPreview } from "./adPreview"
 import { adSizeLabel, adSizesForFormat, type AdFormat, type RailLayout } from "./adFormats"
@@ -69,13 +69,15 @@ export function AdSlot({
   className?: string
 }) {
   const { data: siteConfig } = useSiteConfig()
+  const { data: session, isLoading: sessionLoading } = useSession()
   const showPreview = shouldShowAdPreview(hostname, previewEnabled)
   const siteID = siteConfig?.ads_enabled ? siteConfig.nitropay_site_id : undefined
   const adID = `nitropay-${placement}`
   const wideRail = useMediaQuery(format === "rail" ? railLayoutQueries[railLayout] : undefined)
+  const adsAllowed = !sessionLoading && !session?.ads_free
 
   useEffect(() => {
-    if (!siteID || showPreview) return
+    if (!adsAllowed || !siteID || showPreview) return
 
     let active = true
     let ads: NitroPayAd[] = []
@@ -95,9 +97,10 @@ export function AdSlot({
       active = false
       clearNitroPayAds(ads)
     }
-  }, [adID, format, placement, showPreview, siteID, wideRail])
+  }, [adID, adsAllowed, format, placement, showPreview, siteID, wideRail])
 
-  if (!showPreview && !siteID) {
+  // Fail closed while deciding so paid supporters never see an ad flash.
+  if (!adsAllowed || (!showPreview && !siteID)) {
     return null
   }
 

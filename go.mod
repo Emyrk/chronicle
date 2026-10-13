@@ -298,6 +298,7 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
+	github.com/stripe/stripe-go/v87 v87.0.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/superp00t/etc v0.9.2 // indirect
 	github.com/theupdateframework/go-tuf v0.7.0 // indirect

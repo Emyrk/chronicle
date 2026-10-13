@@ -18,6 +18,8 @@ type Session struct {
 	MaxStorageBytes      int64       `json:"max_storage_bytes"`
 	ConsumedStorageBytes int64       `json:"consumed_storage_bytes"`
 	Preferences          Preferences `json:"preferences"`
+	// AdsFree indicates that the user has an active paid, gifted, or supporter entitlement.
+	AdsFree bool `json:"ads_free"`
 	// Email is the user's email address (if available).
 	Email string `json:"email"`
 	// EmailVerified indicates whether the user's email has been verified.

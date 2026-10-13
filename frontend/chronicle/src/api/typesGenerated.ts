@@ -135,6 +135,21 @@ export interface AdminClearLogInvalidationResponse {
     readonly failed: readonly AdminBulkLogFailure[];
 }
 
+// From chroniclesdk/billing.go
+export interface AdminGrantBillingMonthsRequest {
+    readonly months: number;
+    readonly reason: string;
+}
+
+// From chroniclesdk/billing.go
+export interface AdminGrantBillingMonthsResponse {
+    readonly tier: string;
+    readonly starts_at: string;
+    readonly expires_at: string;
+    readonly months: number;
+    readonly reason: string;
+}
+
 // From chroniclesdk/user.go
 export interface AdminInvalidateLogsRequest {
     readonly log_ids: readonly string[];
@@ -401,6 +416,21 @@ export type AuthorizationResponse = Record<string, boolean>;
 export interface AzerothCorePingResponse {
     readonly realm_name: string;
     readonly status: string;
+}
+
+// From chroniclesdk/billing.go
+export interface BillingCheckoutResponse {
+    readonly url: string;
+}
+
+// From chroniclesdk/billing.go
+export interface BillingSummary {
+    readonly enabled: boolean;
+    readonly tier: string;
+    readonly ads_free: boolean;
+    readonly status?: string;
+    readonly current_period_end?: string;
+    readonly cancel_at_period_end?: boolean;
 }
 
 // From chroniclesdk/time_parses.go
@@ -3308,6 +3338,10 @@ export interface Session {
     readonly max_storage_bytes: number;
     readonly consumed_storage_bytes: number;
     readonly preferences: Preferences;
+    /**
+     * AdsFree indicates that the user has an active paid, gifted, or supporter entitlement.
+     */
+    readonly ads_free: boolean;
     /**
      * Email is the user's email address (if available).
      */

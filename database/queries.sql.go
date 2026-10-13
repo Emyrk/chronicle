@@ -1099,6 +1099,241 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 	return i, err
 }
 
+const getBillingSubscriptionByStripeID = `-- name: GetBillingSubscriptionByStripeID :one
+SELECT user_id, stripe_customer_id, stripe_subscription_id, tier, status, current_period_end, cancel_at_period_end, updated_at FROM billing_subscriptions
+WHERE stripe_subscription_id = $1
+`
+
+func (q *sqlQuerier) GetBillingSubscriptionByStripeID(ctx context.Context, stripeSubscriptionID pgtype.Text) (BillingSubscription, error) {
+	row := q.db.QueryRow(ctx, getBillingSubscriptionByStripeID, stripeSubscriptionID)
+	var i BillingSubscription
+	err := row.Scan(
+		&i.UserID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
+		&i.Tier,
+		&i.Status,
+		&i.CurrentPeriodEnd,
+		&i.CancelAtPeriodEnd,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBillingSubscriptionByUserID = `-- name: GetBillingSubscriptionByUserID :one
+SELECT user_id, stripe_customer_id, stripe_subscription_id, tier, status, current_period_end, cancel_at_period_end, updated_at FROM billing_subscriptions
+WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetBillingSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (BillingSubscription, error) {
+	row := q.db.QueryRow(ctx, getBillingSubscriptionByUserID, userID)
+	var i BillingSubscription
+	err := row.Scan(
+		&i.UserID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
+		&i.Tier,
+		&i.Status,
+		&i.CurrentPeriodEnd,
+		&i.CancelAtPeriodEnd,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBillingWebhookEvent = `-- name: GetBillingWebhookEvent :one
+SELECT stripe_event_id, event_type, received_at, processed_at FROM billing_webhook_events
+WHERE stripe_event_id = $1
+`
+
+func (q *sqlQuerier) GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error) {
+	row := q.db.QueryRow(ctx, getBillingWebhookEvent, stripeEventID)
+	var i BillingWebhookEvent
+	err := row.Scan(
+		&i.StripeEventID,
+		&i.EventType,
+		&i.ReceivedAt,
+		&i.ProcessedAt,
+	)
+	return i, err
+}
+
+const getLatestActiveBillingGrantExpiry = `-- name: GetLatestActiveBillingGrantExpiry :one
+SELECT MAX(expires_at)::timestamptz
+FROM billing_grants
+WHERE user_id = $1
+  AND revoked_at IS NULL
+  AND expires_at > NOW()
+`
+
+func (q *sqlQuerier) GetLatestActiveBillingGrantExpiry(ctx context.Context, userID uuid.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getLatestActiveBillingGrantExpiry, userID)
+	var column_1 pgtype.Timestamptz
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const hasActiveBillingGrant = `-- name: HasActiveBillingGrant :one
+SELECT EXISTS (
+  SELECT 1
+  FROM billing_grants
+  WHERE user_id = $1
+    AND tier = $2
+    AND revoked_at IS NULL
+    AND starts_at <= NOW()
+    AND expires_at > NOW()
+)
+`
+
+type HasActiveBillingGrantParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Tier   string    `db:"tier" json:"tier"`
+}
+
+func (q *sqlQuerier) HasActiveBillingGrant(ctx context.Context, arg HasActiveBillingGrantParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveBillingGrant, arg.UserID, arg.Tier)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const insertBillingGrant = `-- name: InsertBillingGrant :one
+INSERT INTO billing_grants (
+  id,
+  user_id,
+  tier,
+  starts_at,
+  expires_at,
+  months,
+  reason,
+  granted_by
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, tier, starts_at, expires_at, months, reason, granted_by, created_at, revoked_at
+`
+
+type InsertBillingGrantParams struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Tier      string             `db:"tier" json:"tier"`
+	StartsAt  pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
+	ExpiresAt pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	Months    int32              `db:"months" json:"months"`
+	Reason    string             `db:"reason" json:"reason"`
+	GrantedBy uuid.UUID          `db:"granted_by" json:"granted_by"`
+}
+
+func (q *sqlQuerier) InsertBillingGrant(ctx context.Context, arg InsertBillingGrantParams) (BillingGrant, error) {
+	row := q.db.QueryRow(ctx, insertBillingGrant,
+		arg.ID,
+		arg.UserID,
+		arg.Tier,
+		arg.StartsAt,
+		arg.ExpiresAt,
+		arg.Months,
+		arg.Reason,
+		arg.GrantedBy,
+	)
+	var i BillingGrant
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Tier,
+		&i.StartsAt,
+		&i.ExpiresAt,
+		&i.Months,
+		&i.Reason,
+		&i.GrantedBy,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const insertBillingWebhookEvent = `-- name: InsertBillingWebhookEvent :execrows
+INSERT INTO billing_webhook_events (stripe_event_id, event_type)
+VALUES ($1, $2)
+ON CONFLICT (stripe_event_id) DO NOTHING
+`
+
+type InsertBillingWebhookEventParams struct {
+	StripeEventID string `db:"stripe_event_id" json:"stripe_event_id"`
+	EventType     string `db:"event_type" json:"event_type"`
+}
+
+func (q *sqlQuerier) InsertBillingWebhookEvent(ctx context.Context, arg InsertBillingWebhookEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertBillingWebhookEvent, arg.StripeEventID, arg.EventType)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markBillingWebhookEventProcessed = `-- name: MarkBillingWebhookEventProcessed :exec
+UPDATE billing_webhook_events
+SET processed_at = NOW()
+WHERE stripe_event_id = $1
+`
+
+func (q *sqlQuerier) MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error {
+	_, err := q.db.Exec(ctx, markBillingWebhookEventProcessed, stripeEventID)
+	return err
+}
+
+const upsertBillingSubscription = `-- name: UpsertBillingSubscription :one
+INSERT INTO billing_subscriptions (
+  user_id,
+  stripe_customer_id,
+  stripe_subscription_id,
+  tier,
+  status,
+  current_period_end,
+  cancel_at_period_end
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (user_id) DO UPDATE SET
+  stripe_customer_id = EXCLUDED.stripe_customer_id,
+  stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+  tier = EXCLUDED.tier,
+  status = EXCLUDED.status,
+  current_period_end = EXCLUDED.current_period_end,
+  cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+  updated_at = NOW()
+RETURNING user_id, stripe_customer_id, stripe_subscription_id, tier, status, current_period_end, cancel_at_period_end, updated_at
+`
+
+type UpsertBillingSubscriptionParams struct {
+	UserID               uuid.UUID          `db:"user_id" json:"user_id"`
+	StripeCustomerID     string             `db:"stripe_customer_id" json:"stripe_customer_id"`
+	StripeSubscriptionID pgtype.Text        `db:"stripe_subscription_id" json:"stripe_subscription_id"`
+	Tier                 string             `db:"tier" json:"tier"`
+	Status               string             `db:"status" json:"status"`
+	CurrentPeriodEnd     pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
+	CancelAtPeriodEnd    bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+}
+
+func (q *sqlQuerier) UpsertBillingSubscription(ctx context.Context, arg UpsertBillingSubscriptionParams) (BillingSubscription, error) {
+	row := q.db.QueryRow(ctx, upsertBillingSubscription,
+		arg.UserID,
+		arg.StripeCustomerID,
+		arg.StripeSubscriptionID,
+		arg.Tier,
+		arg.Status,
+		arg.CurrentPeriodEnd,
+		arg.CancelAtPeriodEnd,
+	)
+	var i BillingSubscription
+	err := row.Scan(
+		&i.UserID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
+		&i.Tier,
+		&i.Status,
+		&i.CurrentPeriodEnd,
+		&i.CancelAtPeriodEnd,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteClassBuffIgnore = `-- name: DeleteClassBuffIgnore :exec
 DELETE FROM class_buff_ignores
 WHERE dataset_id = $1

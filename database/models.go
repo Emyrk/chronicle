@@ -807,6 +807,37 @@ type AuthzSchemaMigration struct {
 	AppliedAt pgtype.Timestamptz `db:"applied_at" json:"applied_at"`
 }
 
+type BillingGrant struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Tier      string             `db:"tier" json:"tier"`
+	StartsAt  pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
+	ExpiresAt pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	Months    int32              `db:"months" json:"months"`
+	Reason    string             `db:"reason" json:"reason"`
+	GrantedBy uuid.UUID          `db:"granted_by" json:"granted_by"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	RevokedAt pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+}
+
+type BillingSubscription struct {
+	UserID               uuid.UUID          `db:"user_id" json:"user_id"`
+	StripeCustomerID     string             `db:"stripe_customer_id" json:"stripe_customer_id"`
+	StripeSubscriptionID pgtype.Text        `db:"stripe_subscription_id" json:"stripe_subscription_id"`
+	Tier                 string             `db:"tier" json:"tier"`
+	Status               string             `db:"status" json:"status"`
+	CurrentPeriodEnd     pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
+	CancelAtPeriodEnd    bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+	UpdatedAt            pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type BillingWebhookEvent struct {
+	StripeEventID string             `db:"stripe_event_id" json:"stripe_event_id"`
+	EventType     string             `db:"event_type" json:"event_type"`
+	ReceivedAt    pgtype.Timestamptz `db:"received_at" json:"received_at"`
+	ProcessedAt   pgtype.Timestamptz `db:"processed_at" json:"processed_at"`
+}
+
 type ChronicleUser struct {
 	ID                     uuid.UUID          `db:"id" json:"id"`
 	Username               string             `db:"username" json:"username"`

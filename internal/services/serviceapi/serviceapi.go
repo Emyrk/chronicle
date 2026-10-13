@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
@@ -76,6 +77,9 @@ type Service struct {
 	zugzugURL             string
 	zugzugSecret          string
 	zugzugInstructionsURL string
+	stripeSecretKey       string
+	stripeWebhookSecret   string
+	stripeSupporterPrice  string
 	itemPricingAPIKey     string
 	itemPricingBaseURL    string
 	discordAuth           chronauth.DiscordOAuth
@@ -139,6 +143,7 @@ func (s *Service) Start(ctx context.Context) error {
 	que := serviceriver.RiverQueue(s.broker)
 	chron := servicechronicle.Chronicle(s.broker)
 	reg := serviceprometheus.Registry(s.broker)
+	db := servicedbstore.DatabaseStore(s.broker)
 	zed := serviceauthz.Authz(s.broker)
 	pool := servicepgxpool.PGXPool(s.broker)
 	ps := servicepgxpool.Pubsub(s.broker)
@@ -208,6 +213,14 @@ func (s *Service) Start(ctx context.Context) error {
 	externalAPI := serviceexternalapi.ExternalAPI(s.broker)
 	rankings := servicerankings.Rankings(s.broker)
 	mailer := servicemail.Mailer(s.broker)
+	billingService := billing.New(billing.Options{
+		Store:         db,
+		SecretKey:     s.stripeSecretKey,
+		WebhookSecret: s.stripeWebhookSecret,
+		PriceID:       s.stripeSupporterPrice,
+		AccessURL:     au,
+	})
+
 	handler, err := api.New(ctx, api.Options{
 		Logger:                logger,
 		Storage:               st,
@@ -230,6 +243,7 @@ func (s *Service) Start(ctx context.Context) error {
 		CustomPanelHTTPClient: githubClient,
 		ItemPricing:           itempricing.New(zed, s.itemPricingAPIKey, s.itemPricingBaseURL),
 
+		Billing:               billingService,
 		AccessURL:             au,
 		AdsTxtURL:             adsTxtURL,
 		NitroPaySiteID:        s.nitroPaySiteID,
@@ -351,6 +365,33 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_NITROPAY_SITE_ID",
 			Default:     "",
 			Value:       serpent.StringOf(&s.nitroPaySiteID),
+		},
+		{
+			Name:        "Stripe Secret Key",
+			Description: "Optional Stripe secret key. Billing is enabled when this, the webhook secret, and Supporter price ID are all configured.",
+			Required:    false,
+			Flag:        "stripe-secret-key",
+			Env:         "CHRONICLE_STRIPE_SECRET_KEY",
+			Default:     "",
+			Value:       serpent.StringOf(&s.stripeSecretKey),
+		},
+		{
+			Name:        "Stripe Webhook Secret",
+			Description: "Optional Stripe webhook signing secret.",
+			Required:    false,
+			Flag:        "stripe-webhook-secret",
+			Env:         "CHRONICLE_STRIPE_WEBHOOK_SECRET",
+			Default:     "",
+			Value:       serpent.StringOf(&s.stripeWebhookSecret),
+		},
+		{
+			Name:        "Stripe Supporter Price ID",
+			Description: "Optional recurring Stripe price ID for the ad-free Supporter tier.",
+			Required:    false,
+			Flag:        "stripe-supporter-price-id",
+			Env:         "CHRONICLE_STRIPE_SUPPORTER_PRICE_ID",
+			Default:     "",
+			Value:       serpent.StringOf(&s.stripeSupporterPrice),
 		},
 		{
 			Name:        "Google Analytics Measurement ID",

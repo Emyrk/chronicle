@@ -170,6 +170,9 @@ type sqlcQuerier interface {
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
+	GetBillingSubscriptionByStripeID(ctx context.Context, stripeSubscriptionID pgtype.Text) (BillingSubscription, error)
+	GetBillingSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (BillingSubscription, error)
+	GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error)
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
 	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
 	// Per-encounter kill aggregates for one character across all time.
@@ -273,6 +276,7 @@ type sqlcQuerier interface {
 	GetItemTemplateMetadataBatch(ctx context.Context, arg GetItemTemplateMetadataBatchParams) ([]GetItemTemplateMetadataBatchRow, error)
 	GetItemTemplatesByEntries(ctx context.Context, arg GetItemTemplatesByEntriesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
+	GetLatestActiveBillingGrantExpiry(ctx context.Context, userID uuid.UUID) (pgtype.Timestamptz, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
@@ -407,12 +411,15 @@ type sqlcQuerier interface {
 	// @best_per_player keeps only each player's single best parse so one player
 	// cannot fill the whole board.
 	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
+	HasActiveBillingGrant(ctx context.Context, arg HasActiveBillingGrantParams) (bool, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
+	InsertBillingGrant(ctx context.Context, arg InsertBillingGrantParams) (BillingGrant, error)
+	InsertBillingWebhookEvent(ctx context.Context, arg InsertBillingWebhookEventParams) (int64, error)
 	InsertCustomPanelRelease(ctx context.Context, arg InsertCustomPanelReleaseParams) (CustomPanelRelease, error)
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
 	InsertDerivedConsumableBuffs(ctx context.Context, datasetID uuid.UUID) (int64, error)
@@ -620,6 +627,7 @@ type sqlcQuerier interface {
 	ListWoWServers(ctx context.Context) ([]WowServer, error)
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
+	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
@@ -833,6 +841,7 @@ type sqlcQuerier interface {
 	UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error
 	UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error)
 	UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error)
+	UpsertBillingSubscription(ctx context.Context, arg UpsertBillingSubscriptionParams) (BillingSubscription, error)
 	UpsertClassBuffIgnore(ctx context.Context, arg UpsertClassBuffIgnoreParams) error
 	UpsertConsumableDisambiguationIfCandidate(ctx context.Context, arg UpsertConsumableDisambiguationIfCandidateParams) (UpsertConsumableDisambiguationIfCandidateRow, error)
 	// NULL ignored/hide_duration leaves that flag unchanged.

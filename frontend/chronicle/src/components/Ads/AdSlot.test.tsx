@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import type { Session } from "@/api/queries"
 import type { SiteConfig } from "@/api/typesGenerated"
+import { describe, expect, it, vi } from "vitest"
 import { AdSlot } from "./AdSlot"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
 import { clearNitroPayAds } from "./nitroPay"
@@ -12,8 +13,13 @@ import {
   shouldShowCompactEncounterAd,
 } from "./adPreview"
 
-function renderAdSlot(element: ReactNode, siteConfig?: SiteConfig) {
+function renderAdSlot(
+  element: ReactNode,
+  siteConfig?: SiteConfig,
+  session: Pick<Session, "ads_free"> | null = { ads_free: false },
+) {
   const queryClient = new QueryClient()
+  queryClient.setQueryData(["session"], session)
   if (siteConfig) {
     queryClient.setQueryData(["site-config"], siteConfig)
   }
@@ -150,6 +156,16 @@ describe("AdSlot", () => {
     )
 
     expect(markup).toBe("")
+  })
+
+  it("does not render for an ad-free user", () => {
+    expect(
+      renderAdSlot(
+        <AdSlot placement="leaderboards-right-rail" hostname="localhost" previewEnabled />,
+        undefined,
+        { ads_free: true },
+      ),
+    ).toBe("")
   })
 
   it("clears NitroPay placements during SPA navigation", () => {

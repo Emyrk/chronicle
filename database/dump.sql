@@ -210,6 +210,38 @@ CREATE TABLE authz_schema_migrations (
     applied_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE billing_grants (
+    id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    tier text NOT NULL,
+    starts_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    months integer NOT NULL,
+    reason text NOT NULL,
+    granted_by uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    revoked_at timestamp with time zone,
+    CONSTRAINT billing_grants_months_check CHECK ((months > 0))
+);
+
+CREATE TABLE billing_subscriptions (
+    user_id uuid NOT NULL,
+    stripe_customer_id text NOT NULL,
+    stripe_subscription_id text,
+    tier text NOT NULL,
+    status text NOT NULL,
+    current_period_end timestamp with time zone,
+    cancel_at_period_end boolean DEFAULT false NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE billing_webhook_events (
+    stripe_event_id text NOT NULL,
+    event_type text NOT NULL,
+    received_at timestamp with time zone DEFAULT now() NOT NULL,
+    processed_at timestamp with time zone
+);
+
 CREATE TABLE data_grants (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -2176,6 +2208,21 @@ ALTER TABLE ONLY application_modification_requests
 ALTER TABLE ONLY authz_schema_migrations
     ADD CONSTRAINT authz_schema_migrations_pkey PRIMARY KEY (version);
 
+ALTER TABLE ONLY billing_grants
+    ADD CONSTRAINT billing_grants_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY billing_subscriptions
+    ADD CONSTRAINT billing_subscriptions_pkey PRIMARY KEY (user_id);
+
+ALTER TABLE ONLY billing_subscriptions
+    ADD CONSTRAINT billing_subscriptions_stripe_customer_id_key UNIQUE (stripe_customer_id);
+
+ALTER TABLE ONLY billing_subscriptions
+    ADD CONSTRAINT billing_subscriptions_stripe_subscription_id_key UNIQUE (stripe_subscription_id);
+
+ALTER TABLE ONLY billing_webhook_events
+    ADD CONSTRAINT billing_webhook_events_pkey PRIMARY KEY (stripe_event_id);
+
 ALTER TABLE ONLY class_buff_ignores
     ADD CONSTRAINT class_buff_ignores_pkey PRIMARY KEY (dataset_id, normalized_name);
 
@@ -2638,6 +2685,8 @@ ALTER TABLE ONLY wow_server_upload_keys
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_pkey PRIMARY KEY (id);
 
+CREATE INDEX billing_grants_active_idx ON billing_grants USING btree (user_id, expires_at) WHERE (revoked_at IS NULL);
+
 CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_aura_duration_modifiers USING btree (dataset_id, modifier_spell_id);
 
 CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree (dataset_id, spell_id);
@@ -2894,6 +2943,15 @@ ALTER TABLE ONLY application_modification_requests
 
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES users(id);
+
+ALTER TABLE ONLY billing_grants
+    ADD CONSTRAINT billing_grants_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES users(id);
+
+ALTER TABLE ONLY billing_grants
+    ADD CONSTRAINT billing_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY billing_subscriptions
+    ADD CONSTRAINT billing_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY class_buff_ignores
     ADD CONSTRAINT class_buff_ignores_by_dataset_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
