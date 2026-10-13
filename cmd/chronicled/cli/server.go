@@ -29,6 +29,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceretention"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
+	"github.com/Emyrk/chronicle/internal/services/servicestripecli"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
@@ -67,6 +68,7 @@ func ServerCmd() *serpent.Command {
 		servicewhatsnew.New(srvs),
 		servicegithub.New(srvs),
 		serviceexternalapi.New(srvs),
+		servicestripecli.New(srvs),
 		apiService,
 	)
 	if err != nil {

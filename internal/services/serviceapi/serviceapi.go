@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/Emyrk/chronicle/api"
 	"github.com/Emyrk/chronicle/api/chronauth"
@@ -51,6 +52,27 @@ var (
 	nitroPaySiteIDPattern   = regexp.MustCompile(`^[0-9]+$`)
 	ga4MeasurementIDPattern = regexp.MustCompile(`^G-[A-Z0-9]+$`)
 )
+
+func ConfigureDevStripeWebhookSecret(broker *services.Services, secret string) error {
+	return services.MustGet[*Service](broker).configureDevStripeWebhookSecret(secret)
+}
+
+func (s *Service) configureDevStripeWebhookSecret(secret string) error {
+	if !s.devAuth {
+		return errors.New("development Stripe listener requires dev auth")
+	}
+	if !strings.HasPrefix(s.stripeSecretKey, "sk_test_") {
+		return errors.New("development Stripe listener requires a sandbox secret key")
+	}
+	if s.stripeSupporterPrice == "" {
+		return errors.New("development Stripe listener requires a Supporter price ID")
+	}
+	if !strings.HasPrefix(secret, "whsec_") {
+		return errors.New("stripe CLI returned an invalid webhook signing secret")
+	}
+	s.stripeWebhookSecret = secret
+	return nil
+}
 
 func API(broker *services.Services) *api.API {
 	srv := services.MustGet[*Service](broker)
