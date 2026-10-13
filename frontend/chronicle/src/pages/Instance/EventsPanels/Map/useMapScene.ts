@@ -12,7 +12,8 @@ import {
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import type { MapPositionSample, MapResult } from "./map.processor";
-import { isDeadAt, type EncounterEffects } from "./replayEffects";
+import { inferRoles } from "../Roles/roles.processor";
+import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
 import {
   calibratedDungeonMapPoint,
   dominantMapId,
@@ -70,6 +71,8 @@ export interface MapUnitHealth {
   max: number;
   absorb: number;
   dead: boolean;
+  /** Health recently gained from heals (deriveRecentHealGain), drawn as a pale chunk. */
+  healGain?: number;
 }
 
 export interface MapSceneMarker {
@@ -92,6 +95,32 @@ export interface MapSceneGround {
   iconBaseUrl: string;
   canvas: WowMapLayer | WowMapInstanceFloor;
   overlays?: WowMapOverlay[];
+}
+// Tanks by inferRoles over the encounter's own damage and heal events,
+// recomputed only when more events have streamed in.
+const tankCache = new WeakMap<EncounterEffects, { count: number; tanks: ReadonlySet<string> }>();
+
+function cachedTankGuids(fx: EncounterEffects, players: Record<string, { name: string; class: string }>): ReadonlySet<string> {
+  const cached = tankCache.get(fx);
+  if (cached && cached.count === fx.events.length) return cached.tanks;
+  const damageTaken = new Map<string, number>();
+  const healingDone = new Map<string, number>();
+  const damageDone = new Map<string, number>();
+  const add = (totals: Map<string, number>, guid: string, amount: number) => {
+    if (players[guid]) totals.set(guid, (totals.get(guid) ?? 0) + amount);
+  };
+  for (const event of fx.events) {
+    if (event.kind === "damage") {
+      add(damageTaken, event.target, event.amount);
+      add(damageDone, event.source, event.amount);
+    } else if (event.kind === "heal") {
+      add(healingDone, event.source, event.effective);
+    }
+  }
+  const { roles } = inferRoles(damageTaken, healingDone, damageDone, players);
+  const tanks = new Set([...roles.values()].filter((role) => role.role === "tank").map((role) => role.playerID));
+  tankCache.set(fx, { count: fx.events.length, tanks });
+  return tanks;
 }
 
 export type MapScene =
@@ -120,6 +149,8 @@ export type MapScene =
     /** Combat events for the replay effects layer. */
     effects: EncounterEffects;
     bossGuids: ReadonlySet<string>;
+    /** Players inferRoles takes for tanks; their heals get priority and numbers. */
+    tankGuids: ReadonlySet<string>;
   };
 
 /**
@@ -222,7 +253,15 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
   const bars = selectHealthBars(markers.map((marker) => marker.guid), encounter.healthByUnit, cursorMs, bossGuids, selectedPlayers);
   for (const marker of markers) {
     const sample = bars.get(marker.guid);
-    if (sample) marker.health = { current: sample.current, max: sample.max, absorb: sample.absorb, dead: isDeadAt(encounter.effects, marker.guid, cursorMs) };
+    if (sample) {
+      marker.health = {
+        current: sample.current,
+        max: sample.max,
+        absorb: sample.absorb,
+        dead: isDeadAt(encounter.effects, marker.guid, cursorMs),
+        healGain: deriveRecentHealGain(encounter.effects, marker.guid, cursorMs),
+      };
+    }
   }
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
@@ -257,6 +296,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     fitByDefault: Boolean(sync?.enabled) && props.context.selectedEncounterIds.length === 1,
     effects: encounter.effects,
     bossGuids,
+    tankGuids: cachedTankGuids(encounter.effects, props.context.instance.players ?? {}),
   };
 }
 

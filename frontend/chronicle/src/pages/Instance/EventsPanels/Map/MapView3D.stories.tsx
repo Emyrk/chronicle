@@ -91,7 +91,7 @@ const BOSS_GUIDS = new Set(["Boss"]);
 // resurrected later.
 function syntheticEffects(players: number): EncounterEffects {
   const events: ReplayEffectEvent[] = [];
-  const base = { amount: 1000, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, spellId: 1, spellName: "" };
+  const base = { amount: 1000, overheal: 0, absorbed: 0, effective: 1000, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, spellId: 1, spellName: "" };
   for (let index = 0; index < players; index++) {
     const guid = `Player-${index}`;
     const cls = CLASSES[index % CLASSES.length];
@@ -381,7 +381,7 @@ function bossFightEffects(size: number): EncounterEffects {
   const members = fightMembers(size);
   const tanks = members.filter((member) => member.role === "tank");
   const events: ReplayEffectEvent[] = [];
-  const base = { amount: 1000, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, spellId: 1, spellName: "" };
+  const base = { amount: 1000, overheal: 0, absorbed: 0, effective: 1000, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, spellId: 1, spellName: "" };
   const autoAttack = { attack: "swing" as const, spellId: 6603, spellName: "Auto Attack" };
 
   members.forEach((member, index) => {
@@ -482,6 +482,7 @@ function BossFightReplay({ players, playbackSpeed }: { players: number; playback
   const [units] = useState(() => bossFightUnits(players));
   const [fx] = useState(() => bossFightEffects(players));
   const [healthByUnit] = useState(() => bossFightHealth(players));
+  const [tankGuids] = useState(() => new Set(fightMembers(players).filter((member) => member.role === "tank").map((member) => member.guid)));
   // The panel's Fit zoom over the encounter's track, clamped just past the
   // healers so the walk in from the entrance is left out, then centred on the
   // boss. The angled 3D camera shows more ground than the Fit box, so zoom in
@@ -525,6 +526,110 @@ function BossFightReplay({ players, playbackSpeed }: { players: number; playback
         view={view}
         effects={fx}
         bossGuids={BOSS_GUIDS}
+        tankGuids={tankGuids}
+        onUnavailable={() => console.warn("WebGL unavailable")}
+      />
+    </div>
+  );
+}
+
+// --- Heals: one healer keeps a tank up on a 20 s loop. ---
+
+const HEALS_MS = 20_000;
+const HEAL_TANK = "Player-0";
+const HEAL_PRIEST = "Player-1";
+const HEAL_DRUID = "Player-2";
+const RENEW = { spellId: 139, spellName: "Renew", school: 3 };
+const REJUVENATION = { spellId: 774, spellName: "Rejuvenation", school: 5 };
+const GREATER_HEAL = { spellId: 2060, spellName: "Greater Heal", school: 3 };
+const HEALS_TANKS = new Set([HEAL_TANK]);
+const HEALS_VIEW = { viewport: { centerX: 0.5, centerY: 0.5, zoom: 4 }, key: "heals" };
+
+function standing(x: number, y: number, facing: number): MapPositionSample[] {
+  return Array.from({ length: HEALS_MS / 1_000 + 1 }, (_, index) => ({ timestampMs: index * 1_000, x, y, mapId: 1, facing }));
+}
+
+const healUnits: SyntheticUnit[] = [
+  { guid: HEAL_TANK, name: "Warrior (tank)", kind: "player", color: "var(--color-class-warrior)", positions: standing(47, 50, 0) },
+  { guid: HEAL_PRIEST, name: "Priest (heals)", kind: "player", color: "var(--color-class-priest)", positions: standing(38, 45, 0.5) },
+  { guid: HEAL_DRUID, name: "Druid (heals)", kind: "player", color: "var(--color-class-druid)", positions: standing(38, 55, -0.5) },
+  { guid: "Boss", name: "Synthetic Boss", kind: "hostile", color: "#fb7185", positions: standing(50, 50, Math.PI) },
+];
+
+// The boss hits the tank every 2 s. The priest's Renew and the druid's
+// Rejuvenation tick every 3 s, 200 ms apart, so each pair merges into one
+// pulse; the last Renew tick lands on full health (pure overheal, hidden
+// unless "Overheal" is on). Greater Heal lands every 5 s, the second one a
+// gold crit; the last one is half overheal.
+function healEvents(): EncounterEffects {
+  const base = { amount: 0, overheal: 0, absorbed: 0, effective: 0, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0 };
+  const heal = (timestampMs: number, source: string, spell: typeof RENEW, amount: number, overheal: number, extra: Partial<ReplayEffectEvent> = {}): ReplayEffectEvent => ({
+    ...base, ...spell, timestampMs, kind: "heal", source, target: HEAL_TANK, amount, overheal, effective: amount - overheal, ...extra,
+  });
+  const events: ReplayEffectEvent[] = [];
+  for (let t = 1_000; t < HEALS_MS; t += 2_000) {
+    events.push({ ...base, timestampMs: t, kind: "damage", source: "Boss", target: HEAL_TANK, school: 2, attack: "swing", amount: 900, effective: 0, spellId: 6603, spellName: "Auto Attack" });
+  }
+  for (let t = 1_500; t < HEALS_MS; t += 3_000) {
+    const full = t > HEALS_MS - 3_000;
+    events.push(heal(t, HEAL_PRIEST, RENEW, 300, full ? 300 : 0, { periodic: true }));
+    if (!full) events.push(heal(t + 200, HEAL_DRUID, REJUVENATION, 250, 0, { periodic: true }));
+  }
+  for (let t = 2_500, cast = 0; t < HEALS_MS; t += 5_000, cast++) {
+    const crit = cast === 1;
+    const amount = crit ? 3_300 : 2_200;
+    events.push({ ...base, ...GREATER_HEAL, timestampMs: t - 2_500, kind: "cast_start", source: HEAL_PRIEST, target: HEAL_TANK, castTimeMs: 2_500 });
+    events.push(heal(t, HEAL_PRIEST, GREATER_HEAL, amount, cast === 3 ? amount / 2 : 0, { crit }));
+  }
+  const fx = createEncounterEffects();
+  for (const event of events.sort((left, right) => left.timestampMs - right.timestampMs)) addEffectEvent(fx, event);
+  return fx;
+}
+
+// Tank health follows the events: hits take 900, heals restore their effective part.
+function healHealth(fx: EncounterEffects): Map<string, MapHealthSample[]> {
+  const max = 8_000;
+  let current = 6_000;
+  const samples: MapHealthSample[] = [{ timestampMs: 0, current, max, absorb: 0 }];
+  for (const event of fx.events) {
+    if (event.target !== HEAL_TANK || (event.kind !== "damage" && event.kind !== "heal")) continue;
+    current = Math.max(0, Math.min(max, current + (event.kind === "damage" ? -event.amount : event.effective)));
+    samples.push({ timestampMs: event.timestampMs, current, max, absorb: 0 });
+  }
+  return new Map([[HEAL_TANK, samples]]);
+}
+
+function HealReplay({ playbackSpeed }: { playbackSpeed: number }) {
+  const [fx] = useState(healEvents);
+  const [healthByUnit] = useState(() => healHealth(fx));
+  const [cursorMs, setCursorMs] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setCursorMs((previous) => (previous + 100 * playbackSpeed) % HEALS_MS), 100);
+    return () => clearInterval(id);
+  }, [playbackSpeed]);
+
+  const bars = selectHealthBars(healUnits.map((unit) => unit.guid), healthByUnit, cursorMs, BOSS_GUIDS, NO_SELECTION);
+  const markers = healUnits.flatMap((unit): MapSceneMarker[] => {
+    const sample = latestPositionAt(unit.positions, cursorMs);
+    if (!sample) return [];
+    const health = bars.get(unit.guid);
+    return [{ ...unit, sample, point: projectSample(sample), muted: false, health: health ? { ...health, dead: false } : null }];
+  });
+
+  return (
+    <div style={{ width: 800, height: 520 }} className="overflow-hidden rounded-md border border-white/10 bg-black/70">
+      <MapView3D
+        ground={ground}
+        markers={markers}
+        projectSample={projectSample}
+        cursorMs={cursorMs}
+        playing
+        playbackSpeed={playbackSpeed}
+        view={HEALS_VIEW}
+        effects={fx}
+        bossGuids={BOSS_GUIDS}
+        tankGuids={HEALS_TANKS}
         onUnavailable={() => console.warn("WebGL unavailable")}
       />
     </div>
@@ -668,6 +773,7 @@ function KreshRealPlayer({ fixture }: { fixture: LoadedMapFixture }) {
           view={view}
           effects={scene.effects}
           bossGuids={scene.bossGuids}
+          tankGuids={scene.tankGuids}
           onUnavailable={() => console.warn("WebGL unavailable")}
         />
       ) : (
@@ -771,4 +877,15 @@ export const KreshReal: Story = {
 /** The real Kresh kill with the five players as the entity selection. */
 export const KreshRealSelected: Story = {
   render: () => <KreshRealReplay selectPlayers />,
+};
+
+/**
+ * Readable heals on a tank: green bolts and rising pulses sized by effective
+ * healing, merged Renew + Rejuvenation ticks, a gold crit, "+2.2k" numbers,
+ * the pale heal chunk on the health bar, and a fully overhealed Renew tick
+ * that draws nothing until "Overheal" is toggled on.
+ */
+export const Heals: Story = {
+  args: { playbackSpeed: 1 },
+  render: ({ playbackSpeed }) => <HealReplay playbackSpeed={playbackSpeed} />,
 };
