@@ -12,103 +12,17 @@ export interface MapPoint {
   topPercent: number;
 }
 
-export interface MapViewport {
-  leftPercent: number;
-  topPercent: number;
-  spanPercent: number;
-}
-
-export interface MapCamera {
-  scale: number;
-  x: number;
-  y: number;
-}
-
-export interface MapCameraBounds {
-  width: number;
-  height: number;
-}
-
-export interface MapCanvasRect extends MapCameraBounds {
-  left: number;
-  top: number;
-}
-
-export function fitMapCanvasRect(container: MapCameraBounds, canvas: MapCameraBounds): MapCanvasRect {
-  if (container.width <= 0 || container.height <= 0 || canvas.width <= 0 || canvas.height <= 0) {
-    return { left: 0, top: 0, width: 0, height: 0 };
-  }
-  const scale = Math.min(container.width / canvas.width, container.height / canvas.height);
-  const width = canvas.width * scale;
-  const height = canvas.height * scale;
-  return {
-    left: (container.width - width) / 2,
-    top: (container.height - height) / 2,
-    width,
-    height,
-  };
-}
-
-export function clampMapCamera(camera: MapCamera, bounds: MapCameraBounds): MapCamera {
-  const scale = Math.max(1, Math.min(5, camera.scale));
-  if (bounds.width <= 0 || bounds.height <= 0 || scale === 1) return { scale, x: 0, y: 0 };
-  return {
-    scale,
-    x: Math.max(bounds.width * (1 - scale), Math.min(0, camera.x)),
-    y: Math.max(bounds.height * (1 - scale), Math.min(0, camera.y)),
-  };
-}
-
-export function fitMapCameraToPoints(
-  points: MapPoint[],
-  bounds: MapCameraBounds,
-  paddingPercent = 18,
-  maximumScale = 4,
-): MapCamera {
-  if (points.length === 0 || bounds.width <= 0 || bounds.height <= 0) return { scale: 1, x: 0, y: 0 };
-
-  let left = points[0].leftPercent;
-  let right = left;
-  let top = points[0].topPercent;
-  let bottom = top;
-  for (const point of points.slice(1)) {
-    left = Math.min(left, point.leftPercent);
-    right = Math.max(right, point.leftPercent);
-    top = Math.min(top, point.topPercent);
-    bottom = Math.max(bottom, point.topPercent);
-  }
-
-  const availableRatio = Math.max(0.1, 1 - paddingPercent / 50);
-  const widthRatio = Math.max((right - left) / 100, 0.04);
-  const heightRatio = Math.max((bottom - top) / 100, 0.04);
-  const scale = Math.max(1, Math.min(maximumScale, availableRatio / widthRatio, availableRatio / heightRatio));
-  const centerX = ((left + right) / 2 / 100) * bounds.width;
-  const centerY = ((top + bottom) / 2 / 100) * bounds.height;
-  return clampMapCamera({
-    scale,
-    x: bounds.width / 2 - centerX * scale,
-    y: bounds.height / 2 - centerY * scale,
-  }, bounds);
-}
-
-export function zoomMapCameraAtPoint(
-  camera: MapCamera,
-  nextScale: number,
-  focalPoint: { x: number; y: number },
-  bounds: MapCameraBounds,
-): MapCamera {
-  const scale = Math.max(1, Math.min(5, nextScale));
-  const ratio = scale / camera.scale;
-  return clampMapCamera({
-    scale,
-    x: focalPoint.x - (focalPoint.x - camera.x) * ratio,
-    y: focalPoint.y - (focalPoint.y - camera.y) * ratio,
-  }, bounds);
-}
-
 export type ResolvedMapArtwork =
   | { kind: "instance"; instance: WowMapInstance }
   | { kind: "zone"; map: WowMap; assignment: WowMapAssignment };
+
+export function latestPositionAt(
+  positions: MapPositionSample[],
+  timestampMs: number,
+): MapPositionSample | null {
+  const index = latestPositionIndex(positions, timestampMs);
+  return index >= 0 ? positions[index] : null;
+}
 
 function latestPositionIndex(positions: MapPositionSample[], timestampMs: number): number {
   let low = 0;
@@ -126,39 +40,34 @@ function latestPositionIndex(positions: MapPositionSample[], timestampMs: number
   return match;
 }
 
-export function latestPositionAt(
-  positions: MapPositionSample[],
-  timestampMs: number,
-): MapPositionSample | null {
-  const match = latestPositionIndex(positions, timestampMs);
-  return match >= 0 ? positions[match] : null;
+const MAX_INTERPOLATION_GAP_MS = 2_000;
+
+function lerpAngle(from: number, to: number, t: number): number {
+  const delta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+  return from + delta * t;
 }
 
-function interpolateFacing(from: number, to: number, progress: number): number {
-  const turn = Math.atan2(Math.sin(to - from), Math.cos(to - from));
-  return from + turn * progress;
-}
-
+// Like latestPositionAt, but blends toward the next sample when both are on
+// the same map and close enough in time that the unit plausibly moved
+// between them. Longer gaps hold the latest sample, matching the 2D view.
 export function interpolatedPositionAt(
   positions: MapPositionSample[],
   timestampMs: number,
+  maxGapMs = MAX_INTERPOLATION_GAP_MS,
 ): MapPositionSample | null {
-  const previousIndex = latestPositionIndex(positions, timestampMs);
-  if (previousIndex < 0) return null;
-
-  const previous = positions[previousIndex];
-  const next = positions[previousIndex + 1];
-  if (!next || next.mapId !== previous.mapId || next.timestampMs <= previous.timestampMs) return previous;
-
-  const progress = Math.max(0, Math.min(1,
-    (timestampMs - previous.timestampMs) / (next.timestampMs - previous.timestampMs),
-  ));
+  const index = latestPositionIndex(positions, timestampMs);
+  if (index < 0) return null;
+  const latest = positions[index];
+  const next = positions[index + 1];
+  if (!next || next.mapId !== latest.mapId || next.timestampMs <= latest.timestampMs) return latest;
+  if (next.timestampMs - latest.timestampMs > maxGapMs) return latest;
+  const t = (timestampMs - latest.timestampMs) / (next.timestampMs - latest.timestampMs);
   return {
     timestampMs,
-    x: previous.x + (next.x - previous.x) * progress,
-    y: previous.y + (next.y - previous.y) * progress,
-    mapId: previous.mapId,
-    facing: interpolateFacing(previous.facing, next.facing, progress),
+    x: latest.x + (next.x - latest.x) * t,
+    y: latest.y + (next.y - latest.y) * t,
+    mapId: latest.mapId,
+    facing: lerpAngle(latest.facing, next.facing, t),
   };
 }
 
@@ -179,59 +88,6 @@ export function selectMapEncounter(
     if (selected[index].startMs <= timestampMs) return selected[index];
   }
   return selected[0];
-}
-
-export function selectMapJourneyEncounters(
-  encounters: Map<string, MapEncounterPositions>,
-  selectedEncounterIds: string[],
-): MapEncounterPositions[] {
-  const selected = selectedEncounterIds
-    .map((id) => encounters.get(id))
-    .filter((encounter): encounter is MapEncounterPositions => Boolean(encounter));
-  if (selected.length === 0) return [];
-
-  const startMs = Math.min(...selected.map((encounter) => encounter.startMs));
-  const endMs = Math.max(...selected.map((encounter) => encounter.endMs));
-  return Array.from(encounters.values())
-    .filter((encounter) => encounter.endMs >= startMs && encounter.startMs <= endMs)
-    .sort((left, right) => left.startMs - right.startMs);
-}
-
-export function encounterRouteSamples(
-  encounter: MapEncounterPositions,
-  includeUnit: (guid: string) => boolean,
-  minimumBucketMs = 2_000,
-  maximumPoints = 240,
-): MapPositionSample[] {
-  const included = Array.from(encounter.positionsByUnit.entries())
-    .filter(([guid]) => includeUnit(guid));
-  const sources = included.length > 0 ? included : Array.from(encounter.positionsByUnit.entries());
-  const samples = sources.flatMap(([, positions]) => positions);
-  if (samples.length === 0) return [];
-
-  const durationMs = Math.max(0, encounter.endMs - encounter.startMs);
-  const bucketMs = Math.max(minimumBucketMs, Math.ceil(durationMs / maximumPoints));
-  const buckets = new Map<number, MapPositionSample[]>();
-  for (const sample of samples) {
-    const bucket = Math.floor((sample.timestampMs - encounter.startMs) / bucketMs);
-    const values = buckets.get(bucket) ?? [];
-    values.push(sample);
-    buckets.set(bucket, values);
-  }
-
-  return Array.from(buckets.entries())
-    .sort(([left], [right]) => left - right)
-    .map(([, values]) => {
-      const mapId = dominantMapId(values);
-      const mapSamples = values.filter((sample) => sample.mapId === mapId);
-      return {
-        timestampMs: median(mapSamples.map((sample) => sample.timestampMs)),
-        x: median(mapSamples.map((sample) => sample.x)),
-        y: median(mapSamples.map((sample) => sample.y)),
-        mapId: mapId!,
-        facing: 0,
-      };
-    });
 }
 
 export function dominantMapId(samples: MapPositionSample[]): number | null {
@@ -308,43 +164,6 @@ export function zoneMapPoint(sample: MapPositionSample, assignment: WowMapAssign
   return { leftPercent: clampPercent(uiX), topPercent: clampPercent(uiY) };
 }
 
-export function fitMapViewport(
-  points: MapPoint[],
-  paddingPercent = 7,
-  minimumSpanPercent = 28,
-): MapViewport {
-  if (points.length === 0) return { leftPercent: 0, topPercent: 0, spanPercent: 100 };
-
-  let left = points[0].leftPercent;
-  let right = left;
-  let top = points[0].topPercent;
-  let bottom = top;
-  for (const point of points.slice(1)) {
-    left = Math.min(left, point.leftPercent);
-    right = Math.max(right, point.leftPercent);
-    top = Math.min(top, point.topPercent);
-    bottom = Math.max(bottom, point.topPercent);
-  }
-  const spanPercent = Math.min(100, Math.max(
-    minimumSpanPercent,
-    right - left + paddingPercent * 2,
-    bottom - top + paddingPercent * 2,
-  ));
-  const maxOffset = 100 - spanPercent;
-  return {
-    leftPercent: Math.max(0, Math.min(maxOffset, (left + right - spanPercent) / 2)),
-    topPercent: Math.max(0, Math.min(maxOffset, (top + bottom - spanPercent) / 2)),
-    spanPercent,
-  };
-}
-
-export function pointInMapViewport(point: MapPoint, viewport: MapViewport): MapPoint {
-  return {
-    leftPercent: ((point.leftPercent - viewport.leftPercent) / viewport.spanPercent) * 100,
-    topPercent: ((point.topPercent - viewport.topPercent) / viewport.spanPercent) * 100,
-  };
-}
-
 export interface DungeonMapCalibration {
   anchorSample: MapPositionSample;
   anchorPoint: MapPoint;
@@ -417,28 +236,6 @@ export function calibratedDungeonMapPoint(
   };
 }
 
-export function projectDungeonMapPoint(
-  sample: MapPositionSample,
-  bounds: WowMapFloorBounds,
-  mapId: number,
-  calibration: DungeonMapCalibration | null,
-  rendered = false,
-): MapPoint | null {
-  if (rendered) return renderedDungeonMapPoint(sample, bounds);
-  if (mapId === 43 && !calibration) return null;
-  return calibration
-    ? calibratedDungeonMapPoint(sample, bounds, calibration)
-    : dungeonMapPoint(sample, bounds);
-}
-
-export function renderedDungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBounds): MapPoint | null {
-  if (bounds.maxX === bounds.minX || bounds.maxY === bounds.minY) return null;
-  return {
-    leftPercent: clampPercent((bounds.maxY - sample.y) / (bounds.maxY - bounds.minY)),
-    topPercent: clampPercent((bounds.maxX - sample.x) / (bounds.maxX - bounds.minX)),
-  };
-}
-
 export function dungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBounds): MapPoint | null {
   if (bounds.maxX === bounds.minX || bounds.maxY === bounds.minY) return null;
   // DungeonMap's horizontal bounds apply to world Y and its vertical bounds
@@ -446,5 +243,20 @@ export function dungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBo
   return {
     leftPercent: clampPercent((bounds.maxX - sample.y) / (bounds.maxX - bounds.minX)),
     topPercent: clampPercent((bounds.maxY - sample.x) / (bounds.maxY - bounds.minY)),
+  };
+}
+
+export interface ScenePoint {
+  x: number;
+  z: number;
+}
+
+// Places a 2D artwork point on a ground plane centred on the origin that is
+// `width` wide and keeps the artwork's aspect ratio (`aspect` = height/width).
+// Artwork left grows along +x and artwork top grows along +z.
+export function mapPointToScene(point: MapPoint, aspect: number, width = 1): ScenePoint {
+  return {
+    x: (point.leftPercent / 100 - 0.5) * width,
+    z: (point.topPercent / 100 - 0.5) * width * aspect,
   };
 }

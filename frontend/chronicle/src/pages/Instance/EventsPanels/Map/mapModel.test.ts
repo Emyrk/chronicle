@@ -3,21 +3,13 @@ import type { WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 import {
   calibratedDungeonMapPoint,
-  clampMapCamera,
   dungeonMapPoint,
-  encounterRouteSamples,
-  fitMapCameraToPoints,
-  fitMapCanvasRect,
-  fitMapViewport,
   interpolatedPositionAt,
   latestPositionAt,
-  pointInMapViewport,
-  projectDungeonMapPoint,
+  mapPointToScene,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   selectMapEncounter,
-  selectMapJourneyEncounters,
-  zoomMapCameraAtPoint,
   zoneMapPoint,
 } from "./mapModel";
 
@@ -117,160 +109,11 @@ describe("map replay model", () => {
     expect(latestPositionAt(samples, 999)).toBe(samples[2]);
   });
 
-  it("interpolates position and facing between replay samples", () => {
-    const result = interpolatedPositionAt(samples, 250);
-    expect(result).toMatchObject({ timestampMs: 250, x: 4, y: 5, mapId: 1420 });
-    expect(result?.facing).toBeCloseTo(1.5);
-    expect(interpolatedPositionAt(samples, 99)).toBeNull();
-    expect(interpolatedPositionAt(samples, 999)).toBe(samples[2]);
-  });
-
-  it("interpolates facing across the zero-radian boundary", () => {
-    const positions: MapPositionSample[] = [
-      { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: Math.PI * 1.9 },
-      { timestampMs: 100, x: 10, y: 10, mapId: 1, facing: Math.PI * 0.1 },
-    ];
-    expect(interpolatedPositionAt(positions, 50)?.facing).toBeCloseTo(Math.PI * 2);
-  });
-
-  it("contains a wide map without stretching it", () => {
-    expect(fitMapCanvasRect(
-      { width: 1_600, height: 500 },
-      { width: 1_200, height: 800 },
-    )).toEqual({ left: 425, top: 0, width: 750, height: 500 });
-  });
-
-  it("contains a wide map inside a tall panel", () => {
-    expect(fitMapCanvasRect(
-      { width: 600, height: 800 },
-      { width: 1_200, height: 800 },
-    )).toEqual({ left: 0, top: 200, width: 600, height: 400 });
-  });
-
-  it("fits an encounter route into the center of the map frame", () => {
-    const camera = fitMapCameraToPoints([
-      { leftPercent: 20, topPercent: 30 },
-      { leftPercent: 40, topPercent: 50 },
-    ], { width: 1_000, height: 500 }, 20, 4);
-
-    expect(camera).toMatchObject({ x: -400, y: -350 });
-    expect(camera.scale).toBeCloseTo(3);
-  });
-
-  it("clamps focused encounter routes to the map edges", () => {
-    expect(fitMapCameraToPoints([
-      { leftPercent: 90, topPercent: 90 },
-    ], { width: 1_000, height: 500 }, 20, 4)).toEqual({
-      scale: 4,
-      x: -3_000,
-      y: -1_500,
-    });
-  });
-
-  it("zooms around the cursor and keeps the map inside its frame", () => {
-    expect(zoomMapCameraAtPoint(
-      { scale: 1, x: 0, y: 0 },
-      2,
-      { x: 25, y: 75 },
-      { width: 100, height: 100 },
-    )).toEqual({ scale: 2, x: -25, y: -75 });
-
-    expect(clampMapCamera(
-      { scale: 3, x: 40, y: -500 },
-      { width: 100, height: 80 },
-    )).toEqual({ scale: 3, x: 0, y: -160 });
-  });
-
-  it("resets panning when zoom returns to the fitted view", () => {
-    expect(clampMapCamera(
-      { scale: 0.5, x: -40, y: -20 },
-      { width: 100, height: 100 },
-    )).toEqual({ scale: 1, x: 0, y: 0 });
-  });
-
-  it("summarizes player movement as a median raid route", () => {
-    const routeEncounter: MapEncounterPositions = {
-      encounterId: "route",
-      startMs: 0,
-      endMs: 4_000,
-      positionsByUnit: new Map([
-        ["player-one", [
-          { timestampMs: 500, x: 10, y: 20, mapId: 43, facing: 1 },
-          { timestampMs: 2_500, x: 30, y: 40, mapId: 43, facing: 1 },
-        ]],
-        ["player-two", [
-          { timestampMs: 1_000, x: 14, y: 24, mapId: 43, facing: 2 },
-          { timestampMs: 3_000, x: 34, y: 44, mapId: 43, facing: 2 },
-        ]],
-        ["boss", [
-          { timestampMs: 1_000, x: 900, y: 900, mapId: 43, facing: 0 },
-        ]],
-      ]),
-    };
-
-    expect(encounterRouteSamples(routeEncounter, (guid) => guid.startsWith("player"))).toEqual([
-      { timestampMs: 750, x: 12, y: 22, mapId: 43, facing: 0 },
-      { timestampMs: 2_750, x: 32, y: 42, mapId: 43, facing: 0 },
-    ]);
-  });
-
-  it("falls back to available units when player metadata is unavailable", () => {
-    expect(encounterRouteSamples(encounter, () => false, 100)).toEqual(samples.map((sample) => ({
-      ...sample,
-      facing: 0,
-    })));
-  });
-
-  it("fits and remaps movement into a padded viewport", () => {
-    const viewport = fitMapViewport([
-      { leftPercent: 20, topPercent: 30 },
-      { leftPercent: 40, topPercent: 50 },
-    ], 5, 20);
-    expect(viewport).toEqual({ leftPercent: 15, topPercent: 25, spanPercent: 30 });
-    expect(pointInMapViewport({ leftPercent: 15, topPercent: 25 }, viewport)).toEqual({
-      leftPercent: 0,
-      topPercent: 0,
-    });
-    expect(pointInMapViewport({ leftPercent: 45, topPercent: 55 }, viewport)).toEqual({
-      leftPercent: 100,
-      topPercent: 100,
-    });
-  });
-
-  it("keeps fitted viewports inside the map and uses a useful minimum zoom", () => {
-    expect(fitMapViewport([{ leftPercent: 2, topPercent: 98 }])).toEqual({
-      leftPercent: 0,
-      topPercent: 72,
-      spanPercent: 28,
-    });
-    expect(fitMapViewport([])).toEqual({ leftPercent: 0, topPercent: 0, spanPercent: 100 });
-  });
-
   it("selects the encounter containing the replay timestamp", () => {
     const second = { ...encounter, encounterId: "two", startMs: 400, endMs: 600 };
     const encounters = new Map([["one", encounter], ["two", second]]);
     expect(selectMapEncounter(encounters, ["one", "two"], 500)?.encounterId).toBe("two");
     expect(selectMapEncounter(encounters, ["one", "two"], null)?.encounterId).toBe("two");
-  });
-
-  it("retains unselected encounters between selected fights", () => {
-    const before = { ...encounter, encounterId: "before", startMs: 0, endMs: 50 };
-    const transit = { ...encounter, encounterId: "transit", startMs: 350, endMs: 390 };
-    const second = { ...encounter, encounterId: "two", startMs: 400, endMs: 600 };
-    const after = { ...encounter, encounterId: "after", startMs: 700, endMs: 800 };
-    const encounters = new Map([
-      [before.encounterId, before],
-      [encounter.encounterId, encounter],
-      [transit.encounterId, transit],
-      [second.encounterId, second],
-      [after.encounterId, after],
-    ]);
-
-    expect(selectMapJourneyEncounters(encounters, ["one", "two"]).map((item) => item.encounterId)).toEqual([
-      "one",
-      "transit",
-      "two",
-    ]);
   });
 
   it("prefers instance artwork before matching zone assignments", () => {
@@ -368,81 +211,9 @@ describe("map replay model", () => {
     expect(point.topPercent).toBeCloseTo(37.8982, 3);
   });
 
-  it("keeps supported Wailing Caverns tracks when another encounter cannot be calibrated", () => {
-    const bounds = {
-      minX: -375.946014,
-      maxX: 560.528992,
-      minY: -410.145996,
-      maxY: 214.169998,
-    };
-    const supportedSample = { timestampMs: 1_000, x: 36.81, y: -241.06, mapId: 0, facing: 0 };
-    const supportedEncounter = { ...encounter, positionsByUnit: new Map([["boss", [supportedSample]]]) };
-    const unsupportedEncounter = { ...encounter, positionsByUnit: new Map([["trash", [supportedSample]]]) };
-    const calibrations = [
-      resolveDungeonMapCalibration(43, supportedEncounter, () => 3670),
-      resolveDungeonMapCalibration(43, unsupportedEncounter, () => undefined),
-    ];
-    const points = calibrations.flatMap((calibration) => {
-      const point = projectDungeonMapPoint(supportedSample, bounds, 43, calibration);
-      return point ? [point] : [];
-    });
-    expect(points).toEqual([{ leftPercent: 19.1, topPercent: 39.5 }]);
-  });
-
-  it("fits separately calibrated Wailing Caverns encounters into one viewport", () => {
-    const bounds = {
-      minX: -375.946014,
-      maxX: 560.528992,
-      minY: -410.145996,
-      maxY: 214.169998,
-    };
-    const pythasSample = { timestampMs: 1_000, x: 36.81, y: -241.06, mapId: 0, facing: 0 };
-    const cobrahnSample = { timestampMs: 1_000, x: 15.04, y: 300.08, mapId: 0, facing: 0 };
-    const pythas = { ...encounter, positionsByUnit: new Map([["boss", [pythasSample]]]) };
-    const cobrahn = { ...encounter, positionsByUnit: new Map([["boss", [cobrahnSample]]]) };
-    const points = [
-      calibratedDungeonMapPoint(
-        pythasSample,
-        bounds,
-        resolveDungeonMapCalibration(43, pythas, () => 3670)!,
-      )!,
-      calibratedDungeonMapPoint(
-        cobrahnSample,
-        bounds,
-        resolveDungeonMapCalibration(43, cobrahn, () => 3671)!,
-      )!,
-    ];
-    const viewport = fitMapViewport(points, 5, 20);
-    expect(points).toEqual([
-      { leftPercent: 19.1, topPercent: 39.5 },
-      { leftPercent: 30.6, topPercent: 43 },
-    ]);
-    expect(viewport.spanPercent).toBe(21.5);
-    expect(pointInMapViewport(points[0], viewport).leftPercent).toBeCloseTo(23.26, 2);
-    expect(pointInMapViewport(points[1], viewport).leftPercent).toBeCloseTo(76.74, 2);
-  });
-
   it("requires a known boss position to calibrate Wailing Caverns", () => {
     expect(resolveDungeonMapCalibration(43, encounter, () => undefined)).toBeNull();
     expect(resolveDungeonMapCalibration(533, encounter, () => 3670)).toBeNull();
-  });
-
-  it("projects rendered geometry from ordinary world X/Y bounds", () => {
-    const bounds = { minX: -200, maxX: 300, minY: -400, maxY: 600 };
-    expect(projectDungeonMapPoint(
-      { timestampMs: 0, x: bounds.maxX, y: bounds.maxY, mapId: 43, facing: 0 },
-      bounds,
-      43,
-      null,
-      true,
-    )).toEqual({ leftPercent: 0, topPercent: 0 });
-    expect(projectDungeonMapPoint(
-      { timestampMs: 0, x: bounds.minX, y: bounds.minY, mapId: 43, facing: 0 },
-      bounds,
-      43,
-      null,
-      true,
-    )).toEqual({ leftPercent: 100, topPercent: 100 });
   });
 
   it("converts dungeon world coordinates using authoritative floor bounds", () => {
@@ -455,5 +226,47 @@ describe("map replay model", () => {
       { timestampMs: 0, x: bounds.minY, y: bounds.minX, mapId: 0, facing: 0 },
       bounds,
     )).toEqual({ leftPercent: 100, topPercent: 100 });
+  });
+});
+
+describe("interpolatedPositionAt", () => {
+  it("returns null before the first sample", () => {
+    expect(interpolatedPositionAt(samples, 99)).toBeNull();
+  });
+
+  it("blends position and facing between neighbouring samples", () => {
+    expect(interpolatedPositionAt(samples, 150)).toEqual({ timestampMs: 150, x: 2, y: 3, mapId: 1420, facing: 0.5 });
+  });
+
+  it("matches the exact sample and holds the last one", () => {
+    expect(interpolatedPositionAt(samples, 200)).toEqual({ ...samples[1] });
+    expect(interpolatedPositionAt(samples, 999)).toBe(samples[2]);
+  });
+
+  it("turns through the shortest angle", () => {
+    const wrapping: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: 6.2 },
+      { timestampMs: 100, x: 0, y: 0, mapId: 1, facing: 0.1 },
+    ];
+    const facing = interpolatedPositionAt(wrapping, 50)!.facing;
+    expect(Math.cos(facing)).toBeCloseTo(Math.cos((6.2 + 0.1 + 2 * Math.PI) / 2), 6);
+  });
+
+  it("holds the latest sample across long gaps and map changes", () => {
+    const gapped: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: 0 },
+      { timestampMs: 5_000, x: 10, y: 0, mapId: 1, facing: 0 },
+      { timestampMs: 5_100, x: 20, y: 0, mapId: 2, facing: 0 },
+    ];
+    expect(interpolatedPositionAt(gapped, 2_500)).toBe(gapped[0]);
+    expect(interpolatedPositionAt(gapped, 5_050)).toBe(gapped[1]);
+  });
+});
+
+describe("mapPointToScene", () => {
+  it("centres the artwork on the origin and keeps its aspect", () => {
+    expect(mapPointToScene({ leftPercent: 50, topPercent: 50 }, 0.5, 100)).toEqual({ x: 0, z: 0 });
+    expect(mapPointToScene({ leftPercent: 0, topPercent: 0 }, 0.5, 100)).toEqual({ x: -50, z: -25 });
+    expect(mapPointToScene({ leftPercent: 100, topPercent: 100 }, 0.5, 100)).toEqual({ x: 50, z: 25 });
   });
 });
