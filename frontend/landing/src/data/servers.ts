@@ -9,23 +9,6 @@ import type { ServerEntry } from "../types";
  */
 export const SERVERS: ServerEntry[] = [
   // {
-  //   id: "turtle",
-  //   name: "Turtle WoW",
-  //   tagline: "Vanilla+ with custom content",
-  //   description:
-  //     "Vanilla 1.12-based server with extensive custom quests, zones, dungeons, raids, races, and class changes. Focuses on expanding the original Azeroth while preserving a Classic-style experience.",
-  //   logo: "servers/turtle/logo.png",
-  //   banner: "servers/turtle/banner.webp",
-  //   accentColor: "#4ade80",
-  //   expansion: "vanilla",
-  //   client: "1.12.1",
-  //   logging: "client",
-  //   engine: "unknown",
-  //   chronicleUrl: "https://turtle.chronicleclassic.com",
-  //   homepageUrl: "https://turtlecraft.gg",
-  //   status: ["closed", "custom-content"],
-  // },
-  // {
   //   id: "alterac",
   //   name: "Alterac",
   //   tagline: "Phased WotLK+ with custom content",
@@ -68,9 +51,6 @@ export const SERVERS: ServerEntry[] = [
  */
 export const DISCOVERY_URLS: string[] = [
   "https://forever.chronicleclassic.com",
-  // Add URLs here as servers configure their branding.
-  // e.g. "https://turtle.chronicleclassic.com",
   "https://legacy.chronicleclassic.com",
-  "https://turtle.chronicleclassic.com"
 ];
 

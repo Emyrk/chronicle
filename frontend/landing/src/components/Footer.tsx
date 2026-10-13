@@ -8,6 +8,7 @@ const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
 const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/chronicleclassic";
 const SUPPORT_URL = "https://chronicleclassic.com/support/";
+const ADS_URL = "https://chronicleclassic.com/ads/";
 const SELF_HOSTING_URL = "https://chronicleclassic.com/self-hosting/";
 const PRIVACY_URL = "https://chronicleclassic.com/privacy/";
 const PATREON_TOOLTIP =
@@ -43,6 +44,14 @@ export function Footer() {
                   className="hover:text-foreground transition-colors"
                 >
                   Chronicle vs Warcraft Logs
+                </a>
+              </li>
+              <li>
+                <a
+                  href={ADS_URL}
+                  className="hover:text-foreground transition-colors"
+                >
+                  Why Chronicle Runs Ads
                 </a>
               </li>
               <li>

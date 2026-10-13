@@ -10,6 +10,7 @@ const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
 const GITHUB_SPONSORS_URL = "https://github.com/sponsors/Emyrk/";
 const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/chronicleclassic";
 const SUPPORT_URL = "https://chronicleclassic.com/support/";
+const ADS_URL = "https://chronicleclassic.com/ads/";
 const BUY_ME_A_COFFEE_ICON_URL =
   "https://cdn.brandfetch.io/idiZkYjDE2/w/192/h/192/theme/dark/logo.png?c=1bxid64Mup7aczewSAYMX&t=1708787601888";
 const PATREON_ICON_URL =
@@ -196,6 +197,12 @@ export function Footer() {
               >
                 Terms of Service
               </Link>
+              <a
+                href={ADS_URL}
+                className="hover:text-foreground transition-colors"
+              >
+                Why Ads?
+              </a>
               <Link
                 to="/disclaimer"
                 className="hover:text-foreground transition-colors"

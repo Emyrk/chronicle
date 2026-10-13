@@ -4,8 +4,8 @@ import { trackedTenantUrl } from "../src/trackedLinks.ts";
 
 test("adds landing-page tracking to a tenant URL", () => {
   assert.equal(
-    trackedTenantUrl("https://turtle.chronicleclassic.com", "server_card"),
-    "https://turtle.chronicleclassic.com/?chr_src=main&chr_pos=server_card",
+    trackedTenantUrl("https://forever.chronicleclassic.com", "server_card"),
+    "https://forever.chronicleclassic.com/?chr_src=main&chr_pos=server_card",
   );
 });
 

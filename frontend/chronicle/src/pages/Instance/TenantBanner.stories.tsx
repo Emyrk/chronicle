@@ -34,7 +34,7 @@ export const WithLink: Story = {
     serverLabel: "Turtle WoW",
     realmName: "Nordanaar",
     logoUrl: null, // placeholder — no tenant logo yet
-    targetUrl: "https://turtle.chronicleclassic.com/instances/abc-123",
+    targetUrl: "https://legacy.chronicleclassic.com/instances/abc-123",
   },
 };
 
@@ -70,6 +70,6 @@ export const NoRealmName: Story = {
   args: {
     serverLabel: "Turtle WoW",
     logoUrl: null,
-    targetUrl: "https://turtle.chronicleclassic.com/instances/abc-123",
+    targetUrl: "https://legacy.chronicleclassic.com/instances/abc-123",
   },
 };

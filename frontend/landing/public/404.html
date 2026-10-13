@@ -1,36 +1,72 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <title>Redirecting…</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex" />
-    <script>
-      // Unknown paths on the landing site redirect to the Turtle WoW Chronicle
-      // so old links like https://chronicleclassic.com/logs/abc keep working.
-      (function () {
-        var path = window.location.pathname || "/";
-        var search = window.location.search || "";
-        var hash = window.location.hash || "";
+    <title>Page Not Found | Chronicle</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        background: #242424;
+        color: #ededed;
+      }
 
-        // Strip the github.io project prefix if present (so /chronicle/foo → /foo)
-        path = path.replace(/^\/chronicle(\/|$)/, "/");
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+        background:
+          radial-gradient(circle at top, rgb(95 143 166 / 0.25), transparent 45%),
+          #242424;
+      }
 
-        // Avoid redirect loops if somehow served at the apex with no path
-        if (path === "/" || path === "") {
-          window.location.replace("https://turtle.chronicleclassic.com/");
-        } else {
-          window.location.replace(
-            "https://turtle.chronicleclassic.com" + path + search + hash,
-          );
-        }
-      })();
-    </script>
-    <meta http-equiv="refresh" content="0; url=https://turtle.chronicleclassic.com/" />
+      main {
+        width: min(32rem, calc(100% - 2rem));
+        text-align: center;
+      }
+
+      img {
+        width: min(18rem, 75%);
+      }
+
+      h1 {
+        margin: 2rem 0 0.75rem;
+        font-size: clamp(2rem, 8vw, 3.5rem);
+      }
+
+      p {
+        color: #bbb6ad;
+        line-height: 1.6;
+      }
+
+      a {
+        display: inline-block;
+        margin-top: 1rem;
+        border: 1px solid rgb(95 143 166 / 0.65);
+        border-radius: 0.5rem;
+        padding: 0.7rem 1rem;
+        color: #9dc7da;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      a:hover,
+      a:focus-visible {
+        border-color: #9dc7da;
+        color: #fff;
+      }
+    </style>
   </head>
   <body>
-    <p>
-      Redirecting to
-      <a href="https://turtle.chronicleclassic.com/">turtle.chronicleclassic.com</a>…
-    </p>
+    <main>
+      <img src="/chronicle-logo.svg" alt="Chronicle" />
+      <h1>Page not found</h1>
+      <p>This Chronicle page no longer exists, or the address may be incorrect.</p>
+      <a href="/">Return to the server directory</a>
+    </main>
   </body>
 </html>
