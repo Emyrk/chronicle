@@ -124,74 +124,8 @@ SELECT
 FROM eligible e
 ON CONFLICT (snapshot_id, instance_id) DO NOTHING;
 
--- name: BatchInsertTimeParseSnapshotBossKillMembers :exec
--- Populate boss-kill members from eligible encounter kill times.
--- Clean boss kills from cohort-eligible runs (partial or complete).
--- Duplicate groups collapsed per encounter to fastest.
-WITH snapshot AS (
-    SELECT id, cutoff, window_start
-    FROM time_parse_snapshots WHERE id = @snapshot_id
-),
-representative_instances AS (
-    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
-        li.id,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
-    ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        -- Prefer the upload with the broadest boss-ranking coverage. The group
-        -- anchor is the first upload, but it may be truncated before the final boss.
-        (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
-         WHERE coverage.instance_id = li.id
-           AND coverage.encounter_id IS NOT NULL) DESC,
-        (li.id = li.duplicate_group_id) DESC NULLS LAST,
-        li.start_time ASC,
-        li.id ASC
-),
-eligible AS (
-    SELECT DISTINCT ON (ri.run_id, lie.name)
-        lie.instance_id,
-        ri.run_id,
-        sr.instance_name,
-        lie.name AS encounter_name,
-        li.difficulty_name,
-        li.max_players,
-        (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms,
-        lie.end_time AS killed_at
-    FROM log_instance_encounters lie
-    JOIN representative_instances ri ON ri.id = lie.instance_id
-    JOIN log_instances li ON li.id = lie.instance_id
-    JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
-    CROSS JOIN snapshot s
-    WHERE lie.boss = true
-      AND lie.kill_type = 'clean'
-      AND lie.end_time > lie.start_time
-      AND (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint > 0
-      AND sr.start_time < s.cutoff
-      AND (s.window_start IS NULL OR sr.start_time >= s.window_start)
-    ORDER BY ri.run_id, lie.name,
-             (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint ASC,
-             lie.end_time ASC
-)
-INSERT INTO time_parse_boss_kill_members (
-    snapshot_id, instance_id, run_id,
-    instance_name, encounter_name,
-    difficulty_name, max_players,
-    duration_ms, killed_at
-)
-SELECT
-    @snapshot_id, e.instance_id, e.run_id,
-    e.instance_name, e.encounter_name,
-    e.difficulty_name, e.max_players,
-    e.duration_ms, e.killed_at
-FROM eligible e
-ON CONFLICT (snapshot_id, instance_id, encounter_name) DO NOTHING;
-
 -- name: CountTimeParseSnapshotClearTimeMembers :one
 SELECT COUNT(*) FROM time_parse_clear_time_members WHERE snapshot_id = @snapshot_id;
-
--- name: CountTimeParseSnapshotBossKillMembers :one
-SELECT COUNT(*) FROM time_parse_boss_kill_members WHERE snapshot_id = @snapshot_id;
 
 -- name: GetTimeParseSnapshotSourceStats :one
 -- Compute a combined source fingerprint covering both clear-time eligible
@@ -205,7 +139,7 @@ SELECT COUNT(*) FROM time_parse_boss_kill_members WHERE snapshot_id = @snapshot_
 -- content in both populations does not cancel out.
 -- Empty populations produce fingerprint = 0 (COALESCE of empty SUM).
 -- Compatible with PostgreSQL 13+ (no bit_xor aggregate required).
--- IMPORTANT: keep WHERE clauses in sync with the corresponding BatchInsert queries.
+-- IMPORTANT: keep WHERE clauses in sync with the corresponding publication queries.
 WITH clear_stats AS (
     SELECT
         COUNT(*)::bigint AS cnt,
@@ -248,12 +182,13 @@ boss_stats AS (
     FROM log_instance_encounters lie
     JOIN log_instances li ON li.id = lie.instance_id
     JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
-    WHERE lie.boss = true
+    WHERE li.invalidated_at IS NULL
+      AND lie.boss = true
       AND lie.kill_type = 'clean'
       AND lie.end_time > lie.start_time
       AND (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint > 0
-      AND sr.start_time < @cutoff
-      AND (@window_start::timestamptz IS NULL OR sr.start_time >= @window_start)
+      AND lie.end_time < @cutoff
+      AND (@window_start::timestamptz IS NULL OR lie.end_time >= @window_start)
 )
 SELECT
     (COALESCE(c.cnt, 0) + COALESCE(b.cnt, 0))::bigint AS row_count,
@@ -272,18 +207,6 @@ WHERE tpctm.snapshot_id = @snapshot_id
   AND tpctm.difficulty_name = @difficulty_name
   AND tpctm.max_players = @max_players;
 
--- name: GetTimeParseSnapshotBossKillCohort :many
--- All boss-kill durations for an (instance_name, encounter, difficulty, max_players) bucket.
--- Used to score a specific boss kill time against the population.
-SELECT
-    tpbkm.duration_ms
-FROM time_parse_boss_kill_members tpbkm
-WHERE tpbkm.snapshot_id = @snapshot_id
-  AND tpbkm.instance_name = @instance_name
-  AND tpbkm.encounter_name = @encounter_name
-  AND tpbkm.difficulty_name = @difficulty_name
-  AND tpbkm.max_players = @max_players;
-
 -- name: DeleteTimeParseSnapshot :exec
 -- Delete a time-parse snapshot by ID. Members are cascade-deleted.
 DELETE FROM time_parse_snapshots WHERE id = @id;
@@ -297,7 +220,15 @@ DELETE FROM time_parse_snapshots WHERE id = ANY(@ids::uuid[]);
 -- Includes separate clear-time and boss-kill member counts.
 SELECT tps.*,
        (SELECT COUNT(*) FROM time_parse_clear_time_members WHERE snapshot_id = tps.id) AS clear_member_count,
-       (SELECT COUNT(*) FROM time_parse_boss_kill_members WHERE snapshot_id = tps.id) AS boss_member_count,
+       (
+           SELECT COUNT(*)
+           FROM time_parse_boss_kill_memberships membership
+           WHERE membership.tenant_id = tps.tenant_id
+             AND membership.policy_version = tps.policy_version
+             AND membership.query_version = tps.query_version
+             AND membership.killed_at < tps.cutoff
+             AND (tps.window_start IS NULL OR membership.killed_at >= tps.window_start)
+       ) AS boss_member_count,
        t.name AS tenant_name
 FROM time_parse_snapshots tps
 LEFT JOIN tenants t ON t.id = tps.tenant_id
