@@ -123,6 +123,14 @@ frontend/imagecache/forever/maps/
 
 The generated-map stage invokes the checked-in Rust renderer through Cargo, so the publishing host needs a current Rust toolchain in addition to the existing `wowdata`, image-conversion, and R2 tools.
 
+To regenerate only the supported instance renders using the existing local manifest, without refreshing UI artwork or its tiles:
+
+```bash
+make maps/forever-render
+```
+
+This updates the files under `frontend/imagecache/forever/maps/renders/` and the corresponding `instances[].rendered` manifest entries. The manifest must already exist from an earlier extraction.
+
 To extract and upload the tiles and manifest to Cloudflare R2:
 
 ```bash
