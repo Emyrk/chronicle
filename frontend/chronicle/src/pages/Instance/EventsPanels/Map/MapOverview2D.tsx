@@ -380,22 +380,6 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
     canvas ? { width: canvas.width, height: canvas.height } : { width: 0, height: 0 },
   ), [canvas, mapShellSize]);
 
-  useLayoutEffect(() => {
-    const shell = mapShellRef.current;
-    if (!shell || !canvas) return;
-    const updateSize = () => {
-      const bounds = shell.getBoundingClientRect();
-      const size = { width: bounds.width, height: bounds.height };
-      const nextCanvasRect = fitMapCanvasRect(size, { width: canvas.width, height: canvas.height });
-      setMapShellSize(size);
-      setCamera((current) => clampMapCamera(current, nextCanvasRect));
-    };
-    updateSize();
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(shell);
-    return () => observer.disconnect();
-  }, [canvas]);
-
   const projectSample = useCallback((sample: MapPositionSample, calibration: ReturnType<typeof resolveDungeonMapCalibration>): MapPoint | null => {
     if (!artwork || sample.mapId !== mapId) return null;
     if (artwork.kind === "zone") return zoneMapPoint(sample, artwork.assignment);
@@ -438,6 +422,27 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
     selectedEncounters,
   ]);
   const routes = journeyRoutes.filter((route) => route.selected);
+  // The shell is conditionally mounted below. A cached manifest can resolve the canvas
+  // while telemetry is still loading, so observe only once the shell actually exists.
+  const showMap = Boolean(iconBaseUrl && !manifestQuery.isLoading && !props.loading
+    && !manifestQuery.error && selectedEncounters.length > 0 && representativeSamples.length > 0
+    && mapId !== null && artwork && canvas && routes.length > 0);
+  useLayoutEffect(() => {
+    const shell = mapShellRef.current;
+    if (!shell || !canvas || !showMap) return;
+    const updateSize = () => {
+      const bounds = shell.getBoundingClientRect();
+      const size = { width: bounds.width, height: bounds.height };
+      const nextCanvasRect = fitMapCanvasRect(size, { width: canvas.width, height: canvas.height });
+      setMapShellSize(size);
+      setCamera((current) => clampMapCamera(current, nextCanvasRect));
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(shell);
+    return () => observer.disconnect();
+  }, [canvas, showMap]);
+
   const transitRoutes = journeyRoutes.filter((route) => !route.selected);
   const allPoints = journeyRoutes.flatMap((route) => route.points);
   const viewport = fitMapViewport(allPoints, 6, 32);
