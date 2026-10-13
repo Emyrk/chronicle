@@ -129,6 +129,18 @@ describe("resolveSpellDescription — variable types", () => {
     );
   });
 
+  it("uses supplied gender context", () => {
+    const spell = makeSpell();
+    expect(
+      resolveSpellDescription(
+        spell,
+        "$gHe:She; protects $ghimself:herself;.",
+        undefined,
+        { gender: "female" },
+      ),
+    ).toBe("She protects herself.");
+  });
+
   it("$n proc charges and $t tick interval", () => {
     const spell = makeSpell({
       proc_charges: 3,
@@ -271,6 +283,53 @@ describe("resolveSpellDescription — description variables", () => {
       ),
     ).toBe(
       "Fire a musket blast at up to 4 enemies in a cone in front of you for 207 to 311 Physical damage.",
+    );
+  });
+
+  it("renders Life Tap with configurable stats and known talents", () => {
+    const lifeTap = makeSpell({
+      id: 1454,
+      spell_level: 6,
+      effects: [
+        {
+          difficulty_id: 0,
+          effect_index: 0,
+          effect: { value: 3, string: "Dummy" },
+          effect_base_points: 26,
+          effect_base_points_f: 27,
+        },
+      ],
+      description_variables: [
+        "$tap1=$?s18182[${$18182m1*0.01+1}][${1}]",
+        "$tap2=$?s18183[${$18183m1*0.01+1}][${$<tap1>}]",
+        "$mult=${$<tap2>}",
+      ].join("\r\n"),
+    });
+
+    const template =
+      "Converts ${$m1+$SPI*1.5} health into ${$m1*$<mult>+$SPS*.5*$<mult>} mana.  Spell power increases the amount of mana returned.";
+
+    expect(resolveSpellDescription(lifeTap, template)).toBe(
+      "Converts 27 health into 27 mana.  Spell power increases the amount of mana returned.",
+    );
+
+    const improvedLifeTap = makeSpell({
+      id: 18182,
+      effect_base_points: [10, 0, 0],
+    });
+    expect(
+      resolveSpellDescription(
+        lifeTap,
+        template,
+        new Map([[18182, improvedLifeTap]]),
+        {
+          spirit: 100,
+          shadowSpellPower: 200,
+          knownSpellIds: new Set([18182]),
+        },
+      ),
+    ).toBe(
+      "Converts 177 health into 140 mana.  Spell power increases the amount of mana returned.",
     );
   });
 

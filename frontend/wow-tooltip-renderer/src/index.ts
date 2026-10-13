@@ -36,6 +36,20 @@ export {
   getDefaultPower,
 } from "./spell/components.js";
 
+// Runtime character context and requirement analysis
+export type {
+  SpellTooltipContext,
+  SpellTooltipNumericContextField,
+} from "./spell/context.js";
+export {
+  SPELL_TOOLTIP_CONTEXT_VARIABLES,
+  normalizeSpellTooltipContext,
+} from "./spell/context.js";
+export {
+  getSpellTooltipRequirements,
+  type SpellTooltipRequirements,
+} from "./spell/requirements.js";
+
 // Spell template resolver
 export {
   resolveSpellDescription,

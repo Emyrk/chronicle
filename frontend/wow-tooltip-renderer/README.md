@@ -31,6 +31,7 @@ build. Releases are cut by bumping `version` in `package.json` and merging to
 ```ts
 import {
   extractReferencedSpellIds,
+  getSpellTooltipRequirements,
   resolveSpellDescription,
 } from "@emyrk/wow-tooltip-renderer";
 
@@ -40,8 +41,18 @@ const refIds = extractReferencedSpellIds(template); // e.g. [23455]
 // 2. The app fetches those spells (app owns tenant-aware API base URLs) and
 //    builds a Map<number, WoWSpell>.
 
-// 3. Resolve. The resolver never fetches.
-const text = resolveSpellDescription(spell, template, referencedSpells, 60);
+// 3. Inspect the character context used by this spell.
+const requirements = getSpellTooltipRequirements(spell);
+// requirements.numericContextFields -> ["spirit", "shadowSpellPower"]
+// requirements.conditionalSpellIds -> [18182, 18183]
+
+// 4. Resolve. The resolver never fetches.
+const text = resolveSpellDescription(spell, template, referencedSpells, {
+  playerLevel: 60,
+  spirit: 100,
+  shadowSpellPower: 200,
+  knownSpellIds: new Set([18182]),
+});
 ```
 
 Item tooltips use the same spell resolver for Use/Equip/Chance-on-hit effects,
@@ -76,7 +87,7 @@ documented grammar). Supported escapes:
 | `$d`, `$dN` | Duration |
 | `$t`, `$tN` | Tick interval (seconds) |
 | `$a1` | AOE radius |
-| `$PL`, `$AP` | Player level / attack power (`$AP` is zero without character context) |
+| `$PL`, `$AP`, `$BH`, `$SPI`, `$SPS`, `$AR`, `$SPH` | Player level and configurable character stats |
 | `$i`, `$r`, `$n`, `$h`, `$u`, `$v`, `$x1`, `$b1`, `$e1` | targets / range / charges / proc chance / stacks / etc. |
 | `$NNNNs1` | Cross-spell reference (e.g. `$23455s1`) |
 | `$*N;s1`, `$/N;s1` | Multiply / divide a value |
