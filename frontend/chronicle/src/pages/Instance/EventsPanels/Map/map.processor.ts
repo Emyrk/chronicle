@@ -166,8 +166,13 @@ function toEffectEvent(event: MapProcessorEvent, timestampMs: number, encounter:
       fx.spellName = event.spell.name;
       return fx;
     }
-    case "interrupt":
-      return effectEvent(timestampMs, "interrupt", event.caster, event.target);
+    case "interrupt": {
+      // The interrupted spell; the vanilla parser leaves its id 0 (unknown).
+      const fx = effectEvent(timestampMs, "interrupt", event.caster, event.target);
+      fx.spellId = event.extraSpellId || null;
+      fx.spellName = event.spellName ?? "";
+      return fx;
+    }
     case "slain":
       return effectEvent(timestampMs, "slain", event.caster, event.target);
     case "ressurection":

@@ -19,6 +19,9 @@ import {
   eventWindow,
   HIT_WOBBLE_MS,
   INTERRUPT_COLOR,
+  INTERRUPTED_ICON_MS,
+  INTERRUPTED_PLAYER_ICON_MS,
+  isBasicAttack,
   isDeadAt,
   MELEE_FLASH_MS,
   RANGED_AUTO_COLOR,
@@ -223,24 +226,24 @@ describe("deriveCombatText", () => {
   );
 
   it("names the sources' hits and numbers heals on the heal units, newest first", () => {
-    const texts = deriveCombatText(fx, 1_500, new Set(["mage"]), new Set(["tank"]), options, 8).map((text) => ({ ...text }));
+    const texts = deriveCombatText(fx, 1_500, new Set(["mage"]), new Set(["tank"]), null, options, 8).map((text) => ({ ...text }));
     expect(texts).toEqual([
       { target: "tank", text: "+1.2k", color: HEAL_COLOR, crit: false, progress: 100 / COMBAT_TEXT_MS },
       { target: "boss", text: "Frostbolt", color: schoolColor(6), crit: true, progress: 500 / COMBAT_TEXT_MS },
     ]);
-    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), new Set(["tank"]), { ...options, showOverheal: true }, 8)[0])
+    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), new Set(["tank"]), null, { ...options, showOverheal: true }, 8)[0])
       .toMatchObject({ text: "+800", color: OVERHEAL_COLOR });
-    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), null, options, 8).map((text) => text.text)).toEqual(["Frostbolt"]);
-    expect(deriveCombatText(fx, 1_500, null, new Set(["priest"]), { ...options, showHeals: false }, 8)).toEqual([]);
-    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), new Set(["tank"]), options, 1)).toHaveLength(1);
+    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), null, null, options, 8).map((text) => text.text)).toEqual(["Frostbolt"]);
+    expect(deriveCombatText(fx, 1_500, null, new Set(["priest"]), null, { ...options, showHeals: false }, 8)).toEqual([]);
+    expect(deriveCombatText(fx, 1_500, new Set(["mage"]), new Set(["tank"]), null, options, 1)).toHaveLength(1);
   });
 
   it("expires after COMBAT_TEXT_MS and re-derives the same text when scrubbing back", () => {
     const sources = new Set(["mage"]);
-    const out = deriveCombatText(fx, 1_050, sources, null, options, 8);
+    const out = deriveCombatText(fx, 1_050, sources, null, null, options, 8);
     const forward = out.map((text) => ({ ...text }));
-    expect(deriveCombatText(fx, 1_000 + COMBAT_TEXT_MS + 500, sources, null, options, 8, out)).toEqual([]);
-    expect(deriveCombatText(fx, 1_050, sources, null, options, 8, out).map((text) => ({ ...text }))).toEqual(forward);
+    expect(deriveCombatText(fx, 1_000 + COMBAT_TEXT_MS + 500, sources, null, null, options, 8, out)).toEqual([]);
+    expect(deriveCombatText(fx, 1_050, sources, null, null, options, 8, out).map((text) => ({ ...text }))).toEqual(forward);
   });
 });
 
@@ -333,8 +336,9 @@ describe("deriveCastIcons", () => {
       event(3_000, "cast_go", "mage", "boss"),
     );
     expect(icons(fx, 999)).toEqual([]);
-    expect(icons(fx, 2_000)).toEqual([{ caster: "mage", spellId: 133, progress: 0.5, phase: "casting" }]);
-    expect(icons(fx, 3_000 + CAST_ICON_MS / 2)).toEqual([{ caster: "mage", spellId: 133, progress: 0.5, phase: "instant" }]);
+    const icon = { caster: "mage", spellId: 133, spellName: "Fireball", progress: 0.5, cutProgress: 0, enemy: false };
+    expect(icons(fx, 2_000)).toEqual([{ ...icon, elapsedMs: 1_000, phase: "casting" }]);
+    expect(icons(fx, 3_000 + CAST_ICON_MS / 2)).toEqual([{ ...icon, elapsedMs: CAST_ICON_MS / 2, phase: "instant" }]);
     expect(icons(fx, 3_000 + CAST_ICON_MS)).toEqual([]);
   });
 
@@ -343,8 +347,10 @@ describe("deriveCastIcons", () => {
       event(1_000, "cast_start", "mage", "boss", { castTimeMs: 2_500 }),
       event(1_500, "interrupt", "rogue", "mage"),
     );
-    expect(icons(interrupted, 1_400)).toHaveLength(1);
-    expect(icons(interrupted, 1_600)).toEqual([]);
+    expect(icons(interrupted, 1_400)).toMatchObject([{ phase: "casting" }]);
+    expect(icons(interrupted, 1_600))
+      .toMatchObject([{ phase: "interrupted", elapsedMs: 100, progress: 100 / INTERRUPTED_PLAYER_ICON_MS, cutProgress: 0.2 }]);
+    expect(icons(interrupted, 1_500 + INTERRUPTED_PLAYER_ICON_MS)).toEqual([]);
     const replaced = effects(
       event(1_000, "cast_start", "mage", "boss", { castTimeMs: 2_500 }),
       event(1_500, "cast_start", "mage", "boss", { castTimeMs: 1_500, spellId: 116 }),
@@ -369,11 +375,16 @@ describe("deriveCastIcons", () => {
       event(1_800, "interrupt", "rogue", "mage"),
       event(2_000, "cast_go", "boss", "mage", { spellId: 2120 }),
     );
-    const forward = [500, 1_200, 1_900, 2_300].map((ms) => icons(fx, ms));
+    const frames = [500, 1_050, 1_200, 1_850, 1_900, 2_100, 2_300, 2_950];
+    const forward = frames.map((ms) => icons(fx, ms));
     icons(fx, 10_000);
-    const backward = [2_300, 1_900, 1_200, 500].map((ms) => icons(fx, ms)).reverse();
+    const backward = [...frames].reverse().map((ms) => icons(fx, ms)).reverse();
     expect(backward).toEqual(forward);
-    expect(forward[1]).toHaveLength(1);
+    // Grow-in, interrupt and pop phases are all covered.
+    expect(forward[1]).toMatchObject([{ phase: "casting", elapsedMs: 50 }]);
+    expect(forward[3]).toMatchObject([{ phase: "interrupted", elapsedMs: 50 }]);
+    expect(forward[5]).toMatchObject([{ phase: "instant", elapsedMs: 100 }, { phase: "interrupted", elapsedMs: 300 }]);
+    expect(forward[7]).toEqual([]);
   });
 
   it("skips auto attacks, unknown spells and other casters", () => {
@@ -382,6 +393,7 @@ describe("deriveCastIcons", () => {
       event(1_000, "cast_go", "mage", "boss", { spellId: 75 }),
       event(1_000, "cast_go", "mage", "boss", { spellId: 5019 }),
       event(1_000, "cast_go", "mage", "boss", { spellId: null }),
+      event(1_000, "cast_go", "mage", "boss", { spellId: 99_999, spellName: "Auto Shot" }),
       event(1_000, "cast_go", "priest", "mage"),
     );
     expect(icons(fx, 1_100)).toEqual([]);
@@ -396,5 +408,190 @@ describe("deriveCastIcons", () => {
     );
     expect(icons(fx, 1_300).map((icon) => icon.spellId)).toEqual([4, 3, 2]);
     expect(icons(fx, 1_300, 1).map((icon) => icon.spellId)).toEqual([4]);
+  });
+
+  it("keeps bosses, then ongoing casts, then the newest over the cap", () => {
+    const fx = effects(
+      event(1_000, "cast_start", "boss", "mage", { spellId: 1, castTimeMs: 2_000 }),
+      event(1_100, "cast_start", "mage", "boss", { spellId: 2, castTimeMs: 2_000 }),
+      event(1_200, "cast_go", "lock", "boss", { spellId: 3 }),
+      event(1_300, "cast_go", "priest", "boss", { spellId: 4 }),
+    );
+    const all = new Set(["boss", "mage", "lock", "priest"]);
+    const options = { priorityGuids: new Set(["boss"]), filterGuids: null };
+    const capped = (max: number) => deriveCastIcons(fx, 1_400, all, max, [], options).map((icon) => icon.spellId);
+    expect(capped(4)).toEqual([4, 3, 2, 1]);
+    expect(capped(3)).toEqual([4, 2, 1]);
+    expect(capped(2)).toEqual([2, 1]);
+    expect(capped(1)).toEqual([1]);
+  });
+
+  it("honours the Only selected filter", () => {
+    const fx = effects(
+      event(1_000, "cast_go", "boss", "mage", { spellId: 1 }),
+      event(1_000, "cast_go", "boss", "", { spellId: 2 }),
+    );
+    const filtered = deriveCastIcons(fx, 1_100, casters, 12, [], { priorityGuids: null, filterGuids: new Set(["mage"]) });
+    expect(filtered.map((icon) => icon.spellId)).toEqual([1]);
+  });
+});
+
+describe("interrupted casts", () => {
+  const boss = new Set(["boss"]);
+  const enemies = { priorityGuids: null, filterGuids: null, enemyGuids: boss };
+  const icons = (fx: EncounterEffects, cursorMs: number, sources: ReadonlySet<string> = boss) =>
+    deriveCastIcons(fx, cursorMs, sources, 12, [], enemies).map((icon) => ({ ...icon }));
+  const cut = effects(
+    event(1_000, "cast_start", "boss", "", { spellId: 2120, castTimeMs: 2_500 }),
+    event(2_000, "interrupt", "rogue", "boss", { spellId: 2120 }),
+  );
+
+  it("is in colour before the interrupt, greyed after it and gone INTERRUPTED_ICON_MS later", () => {
+    expect(icons(cut, 1_999)).toMatchObject([{ phase: "casting" }]);
+    expect(icons(cut, 2_001)).toMatchObject([{ phase: "interrupted", elapsedMs: 1, cutProgress: 1_000 / 2_500, enemy: true }]);
+    expect(icons(cut, 2_000 + INTERRUPTED_ICON_MS - 1)).toHaveLength(1);
+    expect(icons(cut, 2_000 + INTERRUPTED_ICON_MS)).toEqual([]);
+  });
+
+  it("returns to casting when scrubbing back before the interrupt", () => {
+    const forward = [1_500, 1_999, 2_001, 2_400, 2_799].map((ms) => icons(cut, ms));
+    icons(cut, 10_000);
+    const backward = [2_799, 2_400, 2_001, 1_999, 1_500].map((ms) => icons(cut, ms)).reverse();
+    expect(backward).toEqual(forward);
+    expect(icons(cut, 1_999)[0].phase).toBe("casting");
+  });
+
+  it("leaves an instant icon unchanged by an interrupt after the cast went off", () => {
+    const fx = effects(
+      event(1_000, "cast_start", "boss", "", { spellId: 2120, castTimeMs: 1_000 }),
+      event(2_000, "cast_go", "boss", "", { spellId: 2120 }),
+      event(2_100, "interrupt", "rogue", "boss", { spellId: null }),
+    );
+    expect(icons(fx, 2_200)).toEqual([{
+      caster: "boss", spellId: 2120, spellName: "Fireball", phase: "instant", elapsedMs: 200, progress: 200 / CAST_ICON_MS, cutProgress: 0, enemy: true,
+    }]);
+  });
+
+  it("greys the open cast for its own or an unknown spell id only", () => {
+    const withId = (spellId: number | null) => effects(
+      event(1_000, "cast_start", "boss", "", { spellId: 2120, castTimeMs: 2_500 }),
+      event(2_000, "interrupt", "rogue", "boss", { spellId }),
+    );
+    expect(icons(withId(686), 2_100)).toMatchObject([{ phase: "casting" }]);
+    expect(icons(withId(null), 2_100)).toMatchObject([{ phase: "interrupted" }]);
+    expect(icons(withId(0), 2_100)).toMatchObject([{ phase: "interrupted" }]);
+  });
+
+  it("greys only the cut cast when a caster shows two icons", () => {
+    const fx = effects(
+      event(1_000, "cast_start", "boss", "", { spellId: 2120, castTimeMs: 2_500 }),
+      event(1_800, "cast_go", "boss", "", { spellId: 8_042 }),
+      event(2_000, "interrupt", "rogue", "boss", { spellId: 2120 }),
+    );
+    expect(icons(fx, 2_100).map((icon) => [icon.spellId, icon.phase])).toEqual([[8_042, "instant"], [2120, "interrupted"]]);
+  });
+
+  it("works for a boss with no players selected, and for interrupts past the capped cast time", () => {
+    const long = effects(
+      event(1_000, "cast_start", "boss", "", { spellId: 2120, castTimeMs: 3_500 }),
+      event(4_200, "interrupt", "rogue", "boss", { spellId: null }),
+    );
+    expect(icons(long, 4_100)).toEqual([]);
+    expect(icons(long, 4_300)).toMatchObject([{ phase: "interrupted", cutProgress: 1 }]);
+    // An interrupt after the full cast time does not cut it.
+    const late = effects(
+      event(1_000, "cast_start", "boss", "", { spellId: 2120, castTimeMs: 2_000 }),
+      event(3_100, "interrupt", "rogue", "boss", { spellId: null }),
+    );
+    expect(icons(late, 3_200)).toEqual([]);
+  });
+
+  it("drops the icon at once when the caster dies", () => {
+    const fx = effects(
+      event(1_000, "cast_start", "boss", "", { spellId: 2120, castTimeMs: 2_500 }),
+      event(2_000, "slain", "rogue", "boss"),
+      event(2_000, "interrupt", "rogue", "boss", { spellId: null }),
+    );
+    expect(icons(fx, 1_999)).toHaveLength(1);
+    expect(icons(fx, 2_000)).toEqual([]);
+  });
+
+  it("keeps the spell (and so the icon texture) through the interrupt", () => {
+    const textures = new Set<number>();
+    for (let ms = 900; ms <= 3_000; ms += 10) for (const icon of icons(cut, ms)) textures.add(icon.spellId);
+    expect([...textures]).toEqual([2120]);
+  });
+});
+
+describe("isBasicAttack", () => {
+  const hit = (extra: Partial<ReplayEffectEvent>, kind: ReplayEffectEvent["kind"] = "damage") => isBasicAttack(event(0, kind, "a", "b", extra));
+
+  it("matches auto attack spell ids with any name", () => {
+    for (const spellId of [6603, 75, 5019]) {
+      expect(hit({ spellId, spellName: "Whatever" })).toBe(true);
+      expect(hit({ spellId, spellName: "" }, "cast_go")).toBe(true);
+    }
+  });
+
+  it("matches swings and ranged autos without a spell id, and casts without a spell", () => {
+    expect(hit({ spellId: null, spellName: "", attack: "swing" })).toBe(true);
+    expect(hit({ spellId: null, spellName: "", attack: "ranged_auto" })).toBe(true);
+    expect(hit({ spellId: null, spellName: "" }, "cast_start")).toBe(true);
+    expect(hit({ spellId: null, spellName: "" }, "cast_go")).toBe(true);
+  });
+
+  it("matches basic attack names exactly, ignoring case and whitespace", () => {
+    for (const spellName of ["Auto Attack", "Auto Attack (OH)", "auto attack - offhand", " Auto Shot ", "SHOOT", "Melee", "Attack"]) {
+      expect(hit({ spellId: 1, spellName })).toBe(true);
+    }
+  });
+
+  it("does not match abilities, spells, heals or names that merely contain one", () => {
+    expect(hit({ spellId: 78, spellName: "Heroic Strike", attack: "melee_ability" })).toBe(false);
+    expect(hit({ spellId: 116, spellName: "Frostbolt" })).toBe(false);
+    expect(hit({ spellId: 116, spellName: "Frostbolt" }, "cast_go")).toBe(false);
+    expect(hit({ spellId: 2054, spellName: "Heal" }, "heal")).toBe(false);
+    expect(hit({ spellId: 1, spellName: "Attack Power" })).toBe(false);
+  });
+});
+
+describe("basic attacks and cast parity", () => {
+  // Auto Shot, Auto Attack, wand Shoot and a Frostbolt that lands 600 ms after it goes off.
+  const fx = effects(
+    event(1_000, "cast_start", "mage", "boss", { spellId: 116, spellName: "Frostbolt", castTimeMs: 2_000, school: 6 }),
+    event(1_500, "cast_go", "hunter", "boss", { spellId: 75, spellName: "Auto Shot" }),
+    event(1_500, "damage", "hunter", "boss", { spellId: 75, spellName: "Auto Shot", attack: "ranged_auto" }),
+    event(1_600, "damage", "warrior", "boss", { spellId: 6603, spellName: "Auto Attack", attack: "swing" }),
+    event(1_700, "damage", "warrior", "boss", { spellId: null, spellName: "", attack: "swing" }),
+    event(1_800, "cast_go", "priest", "boss", { spellId: 5019, spellName: "Shoot" }),
+    event(1_800, "damage", "priest", "boss", { spellId: 5019, spellName: "Shoot", attack: "ranged_auto" }),
+    event(3_000, "cast_go", "mage", "boss", { spellId: 116, spellName: "Frostbolt", school: 6 }),
+    event(3_600, "damage", "mage", "boss", { spellId: 116, spellName: "Frostbolt", school: 6 }),
+  );
+  const everyone = new Set(["mage", "hunter", "warrior", "priest"]);
+  const options = { showPeriodic: false, showHeals: true, showOverheal: false };
+
+  it("never floats text or icons for basic attacks", () => {
+    for (let ms = 1_000; ms <= 4_000; ms += 50) {
+      expect(deriveCombatText(fx, ms, everyone, null, null, options, 8).every((text) => text.text === "Frostbolt")).toBe(true);
+      expect(deriveCastIcons(fx, ms, everyone, 12).every((icon) => icon.spellId === 116)).toBe(true);
+    }
+  });
+
+  it("shows the Frostbolt icon at the caster from its start to CAST_ICON_MS after it goes off", () => {
+    for (let ms = 1_000; ms < 3_000 + CAST_ICON_MS; ms += 50) {
+      expect(deriveCastIcons(fx, ms, everyone, 12)).toMatchObject([{ caster: "mage", spellId: 116 }]);
+    }
+    expect(deriveCastIcons(fx, 3_000 + CAST_ICON_MS, everyone, 12)).toEqual([]);
+    // The bolt lands while the icon is still up.
+    expect(deriveCastIcons(fx, 3_600, everyone, 12)).toMatchObject([{ phase: "instant" }]);
+  });
+
+  it("drops the spell name for casters whose icon shows it", () => {
+    expect(deriveCombatText(fx, 3_700, everyone, null, null, options, 8)).toMatchObject([{ target: "boss", text: "Frostbolt" }]);
+    expect(deriveCombatText(fx, 3_700, everyone, null, new Set(["mage"]), options, 8)).toEqual([]);
+    // Heal numbers are kept.
+    const heals = effects(event(1_000, "heal", "mage", "tank", { spellName: "Heal", amount: 500 }));
+    expect(deriveCombatText(heals, 1_100, everyone, new Set(["tank"]), new Set(["mage"]), options, 8)).toMatchObject([{ text: "+500" }]);
   });
 });
