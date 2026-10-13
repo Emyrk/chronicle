@@ -34,6 +34,7 @@ type DatasetStore interface {
 	ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (database.ResolveDatasetByRealmRow, error)
 	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (database.ResolveDatasetWithFlavorByRealmRow, error)
 	GetDatasetImportSummary(ctx context.Context, datasetID uuid.UUID) (database.GetDatasetImportSummaryRow, error)
+	ListDatasetImportCounts(ctx context.Context) ([]database.ListDatasetImportCountsRow, error)
 }
 
 var _ services.Servicer = (*Service)(nil)

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Database, Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
@@ -7,7 +7,7 @@ import {
   useDatasets,
   useUpsertDataset,
   useDeleteDataset,
-  useDatasetImportSummary,
+  useDatasetImportSummaries,
   useFlavors,
   DEFAULT_DATASET_ID,
 } from "@/api/queries";
@@ -66,25 +66,34 @@ const DATA_TYPES: { label: string; key: keyof DatasetImportSummary; isBool?: boo
 ];
 
 /** Shows green/red import status for each data type in a dataset. */
-function ImportStatusList({ datasetId }: { datasetId: string }) {
-  const { data: summary, isLoading } = useDatasetImportSummary(datasetId);
-
-  if (isLoading || !summary) {
+function ImportStatusList({
+  counts,
+  isLoading,
+  isError,
+}: {
+  counts: ReadonlyMap<keyof DatasetImportSummary, number> | undefined;
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  if (isLoading) {
     return <div className="mt-1.5 text-[10px] text-muted-foreground/40">Loading…</div>;
+  }
+  if (isError) {
+    return <div className="mt-1.5 text-[10px] text-destructive">Import status unavailable</div>;
   }
 
   return (
     <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
       {DATA_TYPES.map(({ label, key, isBool }) => {
-        const value = summary[key];
-        const imported = isBool ? !!value : (value as number) > 0;
+        const value = counts?.get(key) ?? 0;
+        const imported = value > 0;
         return (
           <div key={key} className={imported ? "text-emerald-500" : "text-muted-foreground/40"}>
             {imported ? "✓" : "✗"}{" "}
             {label}
             {!isBool && imported && (
               <span className="text-muted-foreground/60 ml-0.5">
-                ({(value as number).toLocaleString()})
+                ({value.toLocaleString()})
               </span>
             )}
           </div>
@@ -256,11 +265,29 @@ function DatasetForm({ dataset, onDone, allFlavors }: { dataset?: Dataset; onDon
 
 export function DatasetsTab() {
   const { data: datasets, isLoading } = useDatasets();
+  const {
+    data: importCounts = [],
+    isLoading: areImportSummariesLoading,
+    isError: areImportSummariesError,
+  } = useDatasetImportSummaries();
   const { data: allFlavors = [] } = useFlavors();
   const deleteDataset = useDeleteDataset();
   const [editing, setEditing] = useState<Dataset | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const importCountsByDataset = useMemo(() => {
+    const byDataset = new Map<string, Map<keyof DatasetImportSummary, number>>();
+    for (const count of importCounts) {
+      let datasetCounts = byDataset.get(count.dataset_id);
+      if (!datasetCounts) {
+        datasetCounts = new Map();
+        byDataset.set(count.dataset_id, datasetCounts);
+      }
+      datasetCounts.set(count.data_type, count.data_count);
+    }
+    return byDataset;
+  }, [importCounts]);
 
   const onDelete = (d: Dataset) => {
     setDeleteError(null);
@@ -343,7 +370,11 @@ export function DatasetsTab() {
                       ))}
                     </div>
                   )}
-                  <ImportStatusList datasetId={d.id} />
+                  <ImportStatusList
+                    counts={importCountsByDataset.get(d.id)}
+                    isLoading={areImportSummariesLoading}
+                    isError={areImportSummariesError}
+                  />
                 </div>
                 <div className="flex gap-1 justify-end">
                   <Button size="icon" variant="ghost" onClick={() => setEditing(d)} aria-label="Edit">

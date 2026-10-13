@@ -100,3 +100,55 @@ SELECT
     (SELECT COUNT(*) FROM dbc_consumables WHERE dataset_id = $1)::INT AS consumables_count,
     (SELECT EXISTS(SELECT 1 FROM dataset_talent_trees tt WHERE tt.dataset_id = $1))::BOOL AS has_talents;
 
+-- name: ListDatasetImportCounts :many
+-- Returns imported row counts for every dataset in one request. Each source
+-- table is scanned once, avoiding the dataset page's previous N+1 count queries.
+SELECT * FROM (
+    SELECT dataset_id, 'spells_count'::TEXT AS data_type, COUNT(*)::INT AS data_count FROM dbc_spells GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'creatures_count', COUNT(*)::INT FROM world_creature_template GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'items_count', COUNT(*)::INT FROM world_item_template GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'item_display_count', COUNT(*)::INT FROM dbc_item_display_info GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'enchantments_count', COUNT(*)::INT FROM dbc_spell_item_enchantment GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'random_properties_count', COUNT(*)::INT FROM dbc_item_random_properties GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'item_sets_count', COUNT(*)::INT FROM dbc_item_set GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'cast_times_count', COUNT(*)::INT FROM dbc_spell_cast_times GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'durations_count', COUNT(*)::INT FROM dbc_spell_durations GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'ranges_count', COUNT(*)::INT FROM dbc_spell_ranges GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'icons_count', COUNT(*)::INT FROM dbc_spell_icons GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'categories_count', COUNT(*)::INT FROM dbc_spell_categories GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'radii_count', COUNT(*)::INT FROM dbc_spell_radii GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'focus_objects_count', COUNT(*)::INT FROM dbc_spell_focus_objects GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'extra_attacks_count', COUNT(*)::INT FROM dbc_extra_attack_spells GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'duration_modifiers_count', COUNT(*)::INT FROM dbc_duration_modifiers GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'periodic_spells_count', COUNT(*)::INT FROM dbc_periodic_spells GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'vulnerability_spells_count', COUNT(*)::INT FROM dbc_vulnerability_spells GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'cooldowns_count', COUNT(*)::INT FROM dbc_cooldown_spells GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'desc_variables_count', COUNT(*)::INT FROM dbc_spell_description_variables GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'affected_aura_durations_count', COUNT(*)::INT FROM dbc_affected_aura_durations GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'consumables_count', COUNT(*)::INT FROM dbc_consumables GROUP BY dataset_id
+    UNION ALL
+    SELECT dataset_id, 'has_talents', COUNT(*)::INT FROM dataset_talent_trees GROUP BY dataset_id
+) AS import_counts
+ORDER BY dataset_id, data_type;
+

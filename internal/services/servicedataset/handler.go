@@ -19,6 +19,7 @@ func (s *Service) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", s.List)
 	r.Post("/", s.Upsert)
+	r.Get("/import-summaries", s.ImportSummaries)
 	r.Get("/{datasetID}", s.Get)
 	r.Get("/{datasetID}/tenants", s.ListTenants)
 	r.Get("/{datasetID}/import-summary", s.ImportSummary)
@@ -168,6 +169,20 @@ func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "deleted"})
 }
+
+func (s *Service) ImportSummaries(w http.ResponseWriter, r *http.Request) {
+	ctx := servicetenant.AdminBypass(r.Context())
+	counts, err := s.db.ListDatasetImportCounts(ctx)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if counts == nil {
+		counts = []database.ListDatasetImportCountsRow{}
+	}
+	httpapi.Write(ctx, w, http.StatusOK, counts)
+}
+
 func (s *Service) ImportSummary(w http.ResponseWriter, r *http.Request) {
 	ctx := servicetenant.AdminBypass(r.Context())
 	id, err := uuid.Parse(chi.URLParam(r, "datasetID"))
