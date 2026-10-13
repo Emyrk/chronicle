@@ -137,6 +137,7 @@ Use these scenarios when revising this skill or the component contract:
 - Do not expose the NitroPay site ID as a page-level prop.
 - Do not put the provider script in `index.html`; `NitroPayRuntime` must gate it with effective tenant enablement and keep the CMP available sitewide.
 - Do not reserve blank production space when a placement is disabled or unfilled unless product design explicitly requests it.
+- NitroPay demand partners currently require `media-src data: blob: https:` and some bidders require `'unsafe-eval'`; keep these relaxations limited to ad-enabled tenant responses.
 - Keep `/speedrunning` as the speedrunning documentation route; leaderboard ads live under the leaderboard page layouts.
 
 ## Validation
