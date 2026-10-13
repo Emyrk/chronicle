@@ -33,6 +33,7 @@ export type LiveSessionStatus = "idle" | "connecting" | "live" | "needs_password
 
 interface RemotePointer {
   participantId: string;
+  surfaceId?: string;
   x: number;
   y: number;
 }
@@ -69,10 +70,46 @@ function parseServerMessage(raw: string): LiveSessionServerMessage | null {
   }
 }
 
+function liveCursorSurface(surfaceId: string | undefined): HTMLElement | null {
+  if (!surfaceId) return null;
+  return document.querySelector<HTMLElement>(`[data-live-cursor-surface="${CSS.escape(surfaceId)}"]`);
+}
+
+function pointerScreenPosition(pointer: RemotePointer): { x: number; y: number } {
+  const surface = liveCursorSurface(pointer.surfaceId);
+  if (!surface) {
+    return { x: pointer.x * window.innerWidth, y: pointer.y * window.innerHeight };
+  }
+  const rect = surface.getBoundingClientRect();
+  return { x: rect.left + pointer.x * rect.width, y: rect.top + pointer.y * rect.height };
+}
+
 function pointerColor(participantId: string): string {
   let hash = 0;
   for (const char of participantId) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
   return `hsl(${Math.abs(hash) % 360} 80% 60%)`;
+}
+
+function RemoteCursor({ pointer, layoutVersion }: { pointer: RemotePointer; layoutVersion: number }) {
+  const position = pointerScreenPosition(pointer);
+  return (
+    <div
+      data-cursor-layout-version={layoutVersion}
+      className="pointer-events-none fixed left-0 top-0 z-[300] transition-transform duration-100"
+      style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
+    >
+      <div
+        className="h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-tl-full rounded-tr-full rounded-bl-full shadow-lg"
+        style={{ backgroundColor: pointerColor(pointer.participantId) }}
+      />
+      <span
+        className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-medium text-black shadow"
+        style={{ backgroundColor: pointerColor(pointer.participantId) }}
+      >
+        {pointer.participantId === "leader" ? "Leader" : pointer.participantId.slice(0, 6)}
+      </span>
+    </div>
+  );
 }
 
 export function LiveSessionProvider({ children }: { children: ReactNode }) {
@@ -96,6 +133,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   const [inviteURL, setInviteURL] = useState<string | null>(null);
   const [participantCount, setParticipantCount] = useState(0);
   const [remotePointers, setRemotePointers] = useState<Record<string, RemotePointer>>({});
+  const [cursorLayoutVersion, setCursorLayoutVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
@@ -169,6 +207,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
         if (!participantId || !Number.isFinite(message.x) || !Number.isFinite(message.y)) return;
         const pointer = {
           participantId,
+          ...(typeof message.surfaceId === "string" ? { surfaceId: message.surfaceId } : {}),
           x: Math.max(0, Math.min(1, message.x)),
           y: Math.max(0, Math.min(1, message.y)),
         };
@@ -442,17 +481,32 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       const now = performance.now();
       if (now - lastSentAt < 100) return;
       lastSentAt = now;
+      const eventTarget = event.target instanceof Element ? event.target : null;
+      const surface = eventTarget?.closest<HTMLElement>("[data-live-cursor-surface]")
+        ?? document.querySelector<HTMLElement>("[data-live-cursor-surface=instance]");
+      const rect = surface?.getBoundingClientRect();
       const pointer = {
         type: "pointer" as const,
         ...(role === "leader" ? { participantId: "leader" } : {}),
-        x: event.clientX / Math.max(1, window.innerWidth),
-        y: event.clientY / Math.max(1, window.innerHeight),
+        ...(surface?.dataset.liveCursorSurface ? { surfaceId: surface.dataset.liveCursorSurface } : {}),
+        x: rect ? (event.clientX - rect.left) / Math.max(1, rect.width) : event.clientX / Math.max(1, window.innerWidth),
+        y: rect ? (event.clientY - rect.top) / Math.max(1, rect.height) : event.clientY / Math.max(1, window.innerHeight),
       };
       sendData(pointer);
     };
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
     return () => window.removeEventListener("pointermove", handlePointerMove);
   }, [role, sendData, status]);
+
+  useEffect(() => {
+    const updateCursorLayout = () => setCursorLayoutVersion((version) => version + 1);
+    window.addEventListener("resize", updateCursorLayout);
+    window.addEventListener("scroll", updateCursorLayout, true);
+    return () => {
+      window.removeEventListener("resize", updateCursorLayout);
+      window.removeEventListener("scroll", updateCursorLayout, true);
+    };
+  }, []);
 
   const value = useMemo<LiveSessionContextValue>(() => ({
     status,
@@ -472,22 +526,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     <LiveSessionContext.Provider value={value}>
       {children}
       {Object.values(remotePointers).map((pointer) => (
-        <div
-          key={pointer.participantId}
-          className="pointer-events-none fixed left-0 top-0 z-[300] transition-transform duration-100"
-          style={{ transform: `translate(${pointer.x * window.innerWidth}px, ${pointer.y * window.innerHeight}px)` }}
-        >
-          <div
-            className="h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-tl-full rounded-tr-full rounded-bl-full shadow-lg"
-            style={{ backgroundColor: pointerColor(pointer.participantId) }}
-          />
-          <span
-            className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-medium text-black shadow"
-            style={{ backgroundColor: pointerColor(pointer.participantId) }}
-          >
-            {pointer.participantId === "leader" ? "Leader" : pointer.participantId.slice(0, 6)}
-          </span>
-        </div>
+        <RemoteCursor key={pointer.participantId} pointer={pointer} layoutVersion={cursorLayoutVersion} />
       ))}
     </LiveSessionContext.Provider>
   );

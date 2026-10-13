@@ -10,7 +10,7 @@ export interface LiveReplayState {
 export type LiveSessionDataMessage<TView = unknown> =
   | { type: "view"; view: TView }
   | { type: "replay"; replay: LiveReplayState }
-  | { type: "pointer"; participantId?: string; x: number; y: number };
+  | { type: "pointer"; participantId?: string; surfaceId?: string; x: number; y: number };
 
 export type LiveSessionSignalPayload =
   | { description: RTCSessionDescriptionInit }

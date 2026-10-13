@@ -1065,6 +1065,7 @@ function EventsPanelGrid({
         const isStrip = stripType !== null;
         return (
           <div
+            data-live-cursor-surface={`panel:${item.id}`}
             key={item.id}
             className="min-h-0"
             style={{
@@ -3328,12 +3329,14 @@ export function InstancePageView({
   }
 
   return (
-    <div className={cn(
-      "w-full py-6",
-      // Mobile: minimal padding, full width
-      isMobile ? "px-2" : "px-4",
-
-    )}>
+    <div
+      data-live-cursor-surface="instance"
+      className={cn(
+        "w-full py-6",
+        // Mobile: minimal padding, full width
+        isMobile ? "px-2" : "px-4",
+      )}
+    >
       {/* Header */}
       <div className={cn("mb-6 rounded-lg border relative", heroic && "border-purple-500/30")}>
         {/* Background image */}
