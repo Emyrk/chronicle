@@ -130,6 +130,7 @@ describe("AdSlot", () => {
     expect(markup).toContain('aria-label="Advertisement"')
     expect(markup).toContain('data-ad-provider="nitropay"')
     expect(markup).toContain('id="nitropay-leaderboards-right-rail"')
+    expect(markup).toContain("min-h-[600px]")
     expect(markup).toContain(">Advertisement</div>")
     expect(markup).not.toContain("Ad preview")
   })
