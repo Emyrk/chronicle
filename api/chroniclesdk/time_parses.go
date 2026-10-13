@@ -7,8 +7,8 @@ import (
 )
 
 // InstanceTimeParsesResponse contains time-based parse scores for a specific
-// instance, scoring clear time and per-boss kill times against an immutable
-// population snapshot.
+// instance. Clear time uses the published snapshot population, while boss kill
+// times use the current-known membership cohort bounded by the snapshot dates.
 type InstanceTimeParsesResponse struct {
 	Available    bool      `json:"available"`
 	Reason       string    `json:"reason,omitempty"`
@@ -44,8 +44,8 @@ type TimeParseScore struct {
 
 // BossKillTimeParse is a per-boss kill-time parse.
 type BossKillTimeParse struct {
-	EncounterName string `json:"encounter_name"`
-	DurationMs    int64  `json:"duration_ms"`
+	EncounterName string  `json:"encounter_name"`
+	DurationMs    int64   `json:"duration_ms"`
 	PreciseScore  float64 `json:"precise_score"`
 	DisplayScore  int     `json:"display_score"`
 	Rank          int     `json:"rank"`

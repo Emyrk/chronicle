@@ -1,6 +1,6 @@
 import type { InstanceTimeParsesResponse, SpeedrunCohortRun } from "@/api/typesGenerated";
 
-/** A snapshot-backed per-boss parse score ready for display. */
+/** A server-computed per-boss parse score ready for display. */
 export interface SnapshotBossParse {
   displayScore: number;
   sampleSize: number;

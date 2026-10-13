@@ -2150,8 +2150,8 @@ export interface InstanceReport {
 // From chroniclesdk/time_parses.go
 /**
  * InstanceTimeParsesResponse contains time-based parse scores for a specific
- * instance, scoring clear time and per-boss kill times against an immutable
- * population snapshot.
+ * instance. Clear time uses the published snapshot population, while boss kill
+ * times use the current-known membership cohort bounded by the snapshot dates.
  */
 export interface InstanceTimeParsesResponse {
     readonly available: boolean;

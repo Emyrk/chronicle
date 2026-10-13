@@ -118,8 +118,8 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
 }
 
 /**
- * Fetches immutable time-parse scores for an instance from the snapshot API.
- * Returns clear-time and per-boss kill-time scores computed server-side.
+ * Fetches server-computed time-parse scores for an instance.
+ * Boss scores use the current-known cohort bounded by the snapshot dates.
  */
 export function useInstanceTimeParses(instanceId: string | undefined) {
   return useQuery({
@@ -132,7 +132,7 @@ export function useInstanceTimeParses(instanceId: string | undefined) {
       if (!response.ok) throw new Error("Unable to load time parses");
       return response.json() as Promise<InstanceTimeParsesResponse>;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     retry: false,
     enabled: instanceId !== undefined,
   });
