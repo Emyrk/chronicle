@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,27 @@ func wowTestChunk(tag string, payload []byte) []byte {
 	binary.LittleEndian.PutUint32(data[4:], uint32(len(payload)))
 	copy(data[8:], payload)
 	return data
+}
+
+func TestPrefixedLineWriterBuffersPartialLines(t *testing.T) {
+	t.Parallel()
+
+	var destination bytes.Buffer
+	writer := &prefixedLineWriter{
+		destination: &destination,
+		mutex:       &sync.Mutex{},
+		prefix:      "map 43 WMO group 1/23 FileDataID 100",
+	}
+	_, err := writer.Write([]byte("prepare target="))
+	require.NoError(t, err)
+	_, err = writer.Write([]byte("remote\nprepare status=ready"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Flush())
+	require.Equal(t,
+		"[map 43 WMO group 1/23 FileDataID 100] prepare target=remote\n"+
+			"[map 43 WMO group 1/23 FileDataID 100] prepare status=ready\n",
+		destination.String(),
+	)
 }
 
 func TestExportWowdataFileRetriesTransientFailures(t *testing.T) {
@@ -57,12 +79,15 @@ printf 'geometry' > "${output}"
 		wowMapExtractOptions{WowdataBin: binaryPath},
 		7288580,
 		outputPath,
+		"map 2998 ADT 36,38 FileDataID 7288580",
+		&sync.Mutex{},
 		[]time.Duration{0, 0},
 	)
 	require.NoError(t, err)
 	require.Equal(t, "3", string(requireFile(t, counterPath)))
 	require.Equal(t, "geometry", string(requireFile(t, outputPath)))
-	require.Contains(t, stderr.String(), "Retrying FileDataID 7288580")
+	require.Contains(t, stderr.String(), "[map 2998 ADT 36,38 FileDataID 7288580] transient export failure")
+	require.Contains(t, stderr.String(), "[map 2998 ADT 36,38 FileDataID 7288580] retrying after export failure")
 }
 
 func requireFile(t *testing.T, path string) []byte {
