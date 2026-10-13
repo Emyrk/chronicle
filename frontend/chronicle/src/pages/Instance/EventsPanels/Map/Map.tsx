@@ -211,18 +211,22 @@ function MapContent(props: PanelRenderProps<MapResult>) {
     ? resolveMapArtwork(manifestQuery.data, artworkMapId, representativeSample, props.context.instance.name)
     : null;
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
+  const [mapSource, setMapSource] = useState<"rendered" | "art">("rendered");
 
   const zoneSelection = artwork?.kind === "zone"
     ? artwork.map.art?.flatMap((art) => art.layers.map((layer) => ({ art, layer })))
       .find(({ layer }) => layer.width > 0 && layer.height > 0 && layer.tiles.length > 0)
     : undefined;
-  const renderedMap = artwork?.kind === "instance" ? artwork.instance.rendered : undefined;
+  const availableRenderedMap = artwork?.kind === "instance" ? artwork.instance.rendered : undefined;
   const selectedFloorNumber = artwork?.kind === "instance"
     && artwork.instance.floors.some((floor) => floor.floor === floorNumber)
     ? floorNumber
     : artwork?.kind === "instance" ? artwork.instance.floors[0]?.floor ?? null : null;
   const selectedFloor = artwork?.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
+    : undefined;
+  const renderedMap = availableRenderedMap && (mapSource === "rendered" || !selectedFloor)
+    ? availableRenderedMap
     : undefined;
   const canvas = artwork?.kind === "zone" ? zoneSelection?.layer : renderedMap ?? selectedFloor;
   const dungeonBounds = artwork?.kind === "instance" ? renderedMap?.bounds ?? selectedFloor?.bounds ?? null : null;
@@ -307,6 +311,17 @@ function MapContent(props: PanelRenderProps<MapResult>) {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {availableRenderedMap && selectedFloor && (
+            <select
+              aria-label="Map source"
+              value={renderedMap ? "rendered" : "art"}
+              onChange={(event) => setMapSource(event.target.value as "rendered" | "art")}
+              className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground [color-scheme:dark]"
+            >
+              <option value="rendered">Rendered</option>
+              <option value="art">Artwork</option>
+            </select>
+          )}
           <span>{Math.round(mapScale * 100)}%</span>
           <span className="flex items-center gap-1"><Users className="h-3 w-3" />{viewportMarkers.length}</span>
           {artwork.kind === "instance" && !renderedMap && artwork.instance.floors.length > 1 && (
