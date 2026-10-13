@@ -72,7 +72,7 @@ The apex `chronicleclassic.com` points to GitHub Pages (A records to GitHub's IP
 185.199.111.153
 ```
 
-Server subdomains (`turtle.chronicleclassic.com`, etc.) remain pointed at Railway.
+Active Chronicle deployment subdomains remain pointed at their hosting providers.
 
 ## Live stats
 

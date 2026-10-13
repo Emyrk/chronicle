@@ -39,7 +39,7 @@ export const CrossTenantWithLogos: Story = {
     realmName: "Nordanaar",
     currentTenantName: "Epoch",
     currentTenantLogo: "/c/chronicle/ChronicleIconSquare.png",
-    targetUrl: "https://turtle.chronicleclassic.com/instances/abc-123",
+    targetUrl: "https://legacy.chronicleclassic.com/instances/abc-123",
   },
 };
 
@@ -100,7 +100,7 @@ export const NoRealmName: Story = {
     instanceTenantLogo: null,
     currentTenantName: "Epoch",
     currentTenantLogo: "/c/chronicle/ChronicleIconSquare.png",
-    targetUrl: "https://turtle.chronicleclassic.com/instances/abc-123",
+    targetUrl: "https://legacy.chronicleclassic.com/instances/abc-123",
   },
 };
 
@@ -114,6 +114,6 @@ export const NoInstanceName: Story = {
     realmName: "Nordanaar",
     currentTenantName: "Epoch",
     currentTenantLogo: "/c/chronicle/ChronicleIconSquare.png",
-    targetUrl: "https://turtle.chronicleclassic.com/instances/abc-123",
+    targetUrl: "https://legacy.chronicleclassic.com/instances/abc-123",
   },
 };

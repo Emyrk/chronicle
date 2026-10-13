@@ -6,6 +6,7 @@ const landingEntries = [
   "index.html",
   "self-hosting/index.html",
   "support/index.html",
+  "ads/index.html",
   "privacy/index.html",
   "warcraft-logs/index.html",
 ];

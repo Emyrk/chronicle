@@ -124,7 +124,7 @@ function buildTargetUrl(
   return `https://${primaryDomain}${path}`;
 }
 
-/** Extract the hostname from a full URL for display (e.g. "turtle.chronicleclassic.com"). */
+/** Extract the hostname from a full URL for display (e.g. "legacy.chronicleclassic.com"). */
 function hostnameFromUrl(url: string): string | null {
   try {
     return new URL(url).hostname;

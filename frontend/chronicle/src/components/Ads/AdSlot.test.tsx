@@ -42,7 +42,7 @@ describe("AdSlot", () => {
         <AdSlot
           placement="leaderboards-right-rail"
           format="rail"
-          hostname="turtle.chronicleclassic.com"
+          hostname="legacy.chronicleclassic.com"
           previewEnabled
         />,
       ),
