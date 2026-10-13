@@ -127,6 +127,29 @@ make maps
 
 This publishes the manifest at `https://icons.chronicleclassic.com/forever/maps/manifest.json` and tiles under `https://icons.chronicleclassic.com/forever/maps/tiles/`. The `/technical/maps` page discovers those paths from the selected dataset's configured icon base URL. Tile responses are immutable for one year; the manifest uses a one-hour cache so a newly published build can become visible without renaming the base URL. Set `WOWDATA_BUILD`, `WOWDATA_BIN`, or `WOWDATA_CACHE` to override their defaults. `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH` override the upload destination.
 
+## Extract loading screens
+
+WoW Forever loading screens use the modern `LoadingScreens` DB2 schema. Unlike legacy clients, the table references CASC textures by FileDataID and can provide separate main, narrow, wide, 16:9, and logo images. Chronicle therefore keeps them separate from the filename-based legacy loading-screen assets.
+
+Extract the current Forever rows and convert every available referenced BLP texture to WebP:
+
+```bash
+SERVER=forever make loading-screens
+```
+
+The command resolves `latest` to one exact build, joins each loading-screen row to the `Map` rows that reference it, and writes generated assets under:
+
+```text
+frontend/imagecache/forever/loading-screens/
+├── manifest.json
+└── images/
+    └── <FileDataID>.webp
+```
+
+`manifest.json` uses the `chronicle-wow-loading-screens-v1` format. It records the exact product, build, region, and locale, each loading-screen ID and skin ID, the available image variants, and associated map names and IDs. FileDataID-based filenames deduplicate textures shared by multiple records or variants. Existing non-empty images are retained so interrupted exports can resume. Pass `--metadata-only` to `extract-wowdata-loading-screens` when only the manifest needs inspection.
+
+Generated Forever loading screens are ignored by Git. They intentionally do not mix with the tracked legacy assets in `frontend/chronicle/public/c/images/loadingscreens/`.
+
 The importer sends the converted payload to:
 
 ```text

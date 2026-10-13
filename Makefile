@@ -229,6 +229,31 @@ icons/talents-extract:
 icons/talents-upload:
 	$(call run-imagecache,./upload-talent-bg-r2.sh)
 
+WOWDATA_LOADING_SCREEN_WORKERS ?= 4
+
+.PHONY: loading-screens/forever-extract
+loading-screens/forever-extract:
+	go run ./scripts/dbcdata extract-wowdata-loading-screens \
+		--server=forever \
+		--out=frontend/imagecache/forever/loading-screens \
+		$(if $(WOWDATA_BIN),--wowdata="$(WOWDATA_BIN)") \
+		$(if $(WOWDATA_CACHE),--cache="$(WOWDATA_CACHE)") \
+		$(if $(WOWDATA_BUILD),--build="$(WOWDATA_BUILD)") \
+		--workers="$(WOWDATA_LOADING_SCREEN_WORKERS)"
+
+.PHONY: loading-screens/legacy-extract
+loading-screens/legacy-extract:
+	go run ./scripts/dbcdata extract-loading-screens \
+		--server="$(SERVER)" \
+		--out=frontend/imagecache/$(SERVER)/loading-screens
+
+.PHONY: loading-screens
+ifeq ($(SERVER),forever)
+loading-screens: loading-screens/forever-extract
+else
+loading-screens: loading-screens/legacy-extract
+endif
+
 WOWDATA_MAP_REUSE_MANIFEST ?= https://icons.chronicleclassic.com/forever/maps/manifest.json
 WOWDATA_MAP_WORKERS ?= 4
 

@@ -195,11 +195,12 @@ type wowdataWorldMapOverlayTile struct {
 }
 
 type wowdataMap struct {
-	ID           int32  `json:"ID"`
-	Name         string `json:"MapName_lang"`
-	Directory    string `json:"Directory"`
-	InstanceType int32  `json:"InstanceType"`
-	ExpansionID  int32  `json:"ExpansionID"`
+	ID              int32  `json:"ID"`
+	Name            string `json:"MapName_lang"`
+	Directory       string `json:"Directory"`
+	InstanceType    int32  `json:"InstanceType"`
+	ExpansionID     int32  `json:"ExpansionID"`
+	LoadingScreenID int32  `json:"LoadingScreenID"`
 }
 
 type wowdataFile struct {
@@ -645,11 +646,11 @@ func exportWowdataTexture(ctx context.Context, stderr io.Writer, opts wowMapExtr
 		if stdout.Len() > 0 {
 			_, _ = stderr.Write(stdout.Bytes())
 		}
-		return fmt.Errorf("export map tile FileDataID %d: %w", fileDataID, err)
+		return fmt.Errorf("export texture FileDataID %d: %w", fileDataID, err)
 	}
 	if err := os.Rename(tmp, output); err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("install map tile FileDataID %d: %w", fileDataID, err)
+		return fmt.Errorf("install texture FileDataID %d: %w", fileDataID, err)
 	}
 	return nil
 }
