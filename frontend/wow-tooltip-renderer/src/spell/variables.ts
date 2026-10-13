@@ -6,6 +6,10 @@ import {
   getScaledValue,
 } from "./effects.js";
 import { getTooltipEffect, hasExactBasePoints } from "./components.js";
+import {
+  normalizeSpellTooltipContext,
+  type SpellTooltipContext,
+} from "./context.js";
 
 /**
  * Resolve a single template variable (e.g. "$s1", "$d", "$n") against a spell's
@@ -13,20 +17,31 @@ import { getTooltipEffect, hasExactBasePoints } from "./components.js";
  * resolved (runtime-only variables, unknown types), which keeps the placeholder
  * visible for diagnosis.
  *
- * @param forLevel Caster level for scaling calculations (defaults to spell level)
+ * @param contextOrLevel Character context, or the legacy caster-level argument.
  */
 export function resolveVariable(
   spell: WoWSpell,
   variable: string,
-  forLevel?: number,
+  contextOrLevel?: SpellTooltipContext | number,
 ): string {
-  const lvl = forLevel ?? spell.spell_level;
+  const context = normalizeSpellTooltipContext(contextOrLevel);
+  const lvl = context.playerLevel ?? spell.spell_level;
   const normalizedVariable = variable.toLowerCase();
 
-  // Static tooltips have no character stat context. Treat attack power and bonus
-  // healing as zero, while preserving coefficients and player-level scaling so
-  // expressions can still render their base values instead of leaking raw formulas.
-  if (normalizedVariable === "$ap" || normalizedVariable === "$bh") return "0";
+  // Preserve historical static-tooltip defaults for stats that were already
+  // treated as zero. Other runtime stats stay visible until context supplies them.
+  if (normalizedVariable === "$ap") return String(context.attackPower ?? 0);
+  if (normalizedVariable === "$bh") return String(context.bonusHealing ?? 0);
+  if (normalizedVariable === "$spi") return String(context.spirit ?? 0);
+  if (normalizedVariable === "$sps") {
+    return String(context.shadowSpellPower ?? 0);
+  }
+  if (normalizedVariable === "$ar" && context.armor !== undefined) {
+    return String(context.armor);
+  }
+  if (normalizedVariable === "$sph" && context.holySpellPower !== undefined) {
+    return String(context.holySpellPower);
+  }
   if (normalizedVariable === "$pl") return String(lvl);
   if (normalizedVariable === "$bc") {
     return String(getTooltipEffect(spell, 0)?.effect_bonus_coefficient ?? 0);

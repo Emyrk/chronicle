@@ -3,19 +3,32 @@ import { Loader2, ArrowLeft, Search } from "lucide-react";
 import { useState } from "react";
 import { useSiteConfig, useSpell } from "@/api/queries";
 import { SpellTooltip } from "./SpellTooltip";
+import { SpellContextPanel } from "./SpellContextPanel";
 import { LocaleSelector } from "./LocaleSelector";
-import type { LocaleIndex } from "@/api/wowdb";
-import { getDamageTypeLabels, getAttackOutcomeLabels, AttackOutcome, SpellDamageType } from "@/api/wowdb";
+import {
+  getAttackOutcomeLabels,
+  getDamageTypeLabels,
+  getLocalizedText,
+  getSpellTooltipRequirements,
+  AttackOutcome,
+  SpellDamageType,
+  type LocaleIndex,
+  type SpellTooltipContext,
+  type SpellTooltipNumericContextField,
+} from "@/api/wowdb";
 import {
   parseSpellPlayerLevel,
   spellLevelCapForFlavor,
-  spellUsesPlayerLevel,
 } from "./spellPlayerLevel";
 import { DamageTypeBadge } from "@/components/SpellSchoolBadge";
 
 export function SpellPage() {
   const { spellId } = useParams<{ spellId: string }>();
   const [searchId, setSearchId] = useState(spellId || "");
+  const [tooltipContext, setTooltipContext] = useState<SpellTooltipContext>({
+    gender: "male",
+    knownSpellIds: new Set(),
+  });
   const [searchParams, setSearchParams] = useSearchParams();
   const locale = (searchParams.get("locale") || "0") as LocaleIndex;
 
@@ -51,14 +64,48 @@ export function SpellPage() {
       return next;
     });
   };
-  
+
   const { data: spell, isLoading, error } = useSpell(spellId || "", undefined, {
     enabled: !!spellId,
   });
 
-  const usesPlayerLevel = spell
-    ? spellUsesPlayerLevel(spell, locale)
-    : false;
+  const tooltipRequirements = spell
+    ? getSpellTooltipRequirements(spell, [
+        getLocalizedText(spell.description, locale),
+        getLocalizedText(spell.aura_description, locale),
+      ])
+    : null;
+  const requiredNumericContext = Object.fromEntries(
+    (tooltipRequirements?.numericContextFields ?? []).map((field) => [
+      field,
+      field === "playerLevel" ? playerLevel : (tooltipContext[field] ?? 0),
+    ]),
+  ) as Partial<Record<SpellTooltipNumericContextField, number>>;
+  const resolvedTooltipContext: SpellTooltipContext = {
+    ...tooltipContext,
+    ...requiredNumericContext,
+    playerLevel,
+  };
+
+  const setTooltipNumericContext = (
+    field: SpellTooltipNumericContextField,
+    value: number,
+  ) => {
+    if (field === "playerLevel") {
+      setPlayerLevel(Math.min(value, maxPlayerLevel));
+      return;
+    }
+    setTooltipContext((current) => ({ ...current, [field]: value }));
+  };
+
+  const setKnownSpell = (knownSpellId: number, known: boolean) => {
+    setTooltipContext((current) => {
+      const knownSpellIds = new Set(current.knownSpellIds);
+      if (known) knownSpellIds.add(knownSpellId);
+      else knownSpellIds.delete(knownSpellId);
+      return { ...current, knownSpellIds };
+    });
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,46 +233,26 @@ export function SpellPage() {
             <h2 className="text-sm font-medium text-muted-foreground mb-2">
               Tooltip Preview
             </h2>
-            {usesPlayerLevel && (
-              <div className="mb-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2.5">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <label
-                    htmlFor="spell-player-level"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    Player level
-                  </label>
-                  <output
-                    htmlFor="spell-player-level"
-                    className="min-w-16 rounded border border-yellow-500/20 bg-background/70 px-2 py-0.5 text-center text-sm font-semibold tabular-nums text-yellow-400"
-                  >
-                    Level {playerLevel}
-                  </output>
-                </div>
-                <input
-                  id="spell-player-level"
-                  type="range"
-                  min={1}
-                  max={maxPlayerLevel}
-                  step={1}
-                  value={playerLevel}
-                  aria-valuetext={`Level ${playerLevel}`}
-                  onChange={(event) =>
-                    setPlayerLevel(Number(event.currentTarget.value))
-                  }
-                  className="h-2 w-full cursor-pointer accent-yellow-500"
-                />
-                <div className="mt-1 flex justify-between text-[10px] tabular-nums text-muted-foreground">
-                  <span>1</span>
-                  <span>{maxPlayerLevel}</span>
-                </div>
-              </div>
-            )}
             <SpellTooltip
               spell={spell}
               locale={locale}
-              playerLevel={usesPlayerLevel ? playerLevel : undefined}
+              context={resolvedTooltipContext}
             />
+            {tooltipRequirements && (
+              <div className="mt-3">
+                <SpellContextPanel
+                  requirements={tooltipRequirements}
+                  context={resolvedTooltipContext}
+                  locale={locale}
+                  maxPlayerLevel={maxPlayerLevel}
+                  onNumericChange={setTooltipNumericContext}
+                  onGenderChange={(gender) =>
+                    setTooltipContext((current) => ({ ...current, gender }))
+                  }
+                  onKnownSpellChange={setKnownSpell}
+                />
+              </div>
+            )}
           </div>
 
           {/* Raw Data */}

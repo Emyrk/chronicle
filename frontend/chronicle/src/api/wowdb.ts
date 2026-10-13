@@ -27,6 +27,9 @@ export type {
   SpellPower,
   WoWSpell,
   LocaleIndex,
+  SpellTooltipContext,
+  SpellTooltipNumericContextField,
+  SpellTooltipRequirements,
 } from "@emyrk/wow-tooltip-renderer";
 
 // --- Re-exported resolver / formatters / constants ---
@@ -37,6 +40,10 @@ export {
   getTooltipEffect,
   hasExactBasePoints,
   getDefaultPower,
+  // Runtime context and requirements
+  SPELL_TOOLTIP_CONTEXT_VARIABLES,
+  normalizeSpellTooltipContext,
+  getSpellTooltipRequirements,
   // Resolver
   resolveSpellDescription,
   extractReferencedSpellIds,

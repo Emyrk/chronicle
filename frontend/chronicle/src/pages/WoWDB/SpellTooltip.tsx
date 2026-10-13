@@ -1,6 +1,10 @@
 import { useMemo, type ReactNode } from "react";
 import { useQueries } from "@tanstack/react-query";
-import type { WoWSpell, LocaleIndex } from "@/api/wowdb";
+import type {
+  WoWSpell,
+  LocaleIndex,
+  SpellTooltipContext,
+} from "@/api/wowdb";
 import {
   getLocalizedText,
   getSpellIconUrl,
@@ -9,7 +13,7 @@ import {
   formatCooldown,
   formatDuration,
   resolveSpellDescription,
-  extractReferencedSpellIds,
+  getSpellTooltipRequirements,
   getDefaultPower,
 } from "@/api/wowdb";
 import { SpellSchoolText } from "@/components/SpellSchoolBadge";
@@ -22,6 +26,8 @@ interface SpellTooltipProps {
   detailed?: boolean;
   /** Player level used by tooltip formulas such as $PL. */
   playerLevel?: number;
+  /** Character-specific values used by runtime tooltip formulas. */
+  context?: SpellTooltipContext;
   /** Optional content rendered below the spell details. */
   footer?: ReactNode;
 }
@@ -31,6 +37,7 @@ export function SpellTooltip({
   locale = "0",
   detailed = false,
   playerLevel,
+  context,
   footer,
 }: SpellTooltipProps) {
   const iconBaseUrl = useIconBaseUrl();
@@ -42,14 +49,16 @@ export function SpellTooltip({
   const cooldown = formatCooldown(spell);
   // schoolColor handled by SpellSchoolText component
 
-  // Extract referenced spell IDs from templates
-  const referencedIds = useMemo(() => {
-    const ids = [
-      ...extractReferencedSpellIds(descriptionTemplate),
-      ...extractReferencedSpellIds(auraDescTemplate),
-    ];
-    return [...new Set(ids)];
-  }, [descriptionTemplate, auraDescTemplate]);
+  // Include references reachable through SpellDescriptionVariables so optional
+  // known-spell branches have the data they need when context enables them.
+  const referencedIds = useMemo(
+    () =>
+      getSpellTooltipRequirements(spell, [
+        descriptionTemplate,
+        auraDescTemplate,
+      ]).referencedSpellIds,
+    [spell, descriptionTemplate, auraDescTemplate],
+  );
 
   // Fetch all referenced spells in parallel
   const refQueries = useQueries({
@@ -75,18 +84,23 @@ export function SpellTooltip({
     return map;
   }, [referencedIds, refQueries]);
 
+  const resolutionContext = {
+    ...context,
+    playerLevel: playerLevel ?? context?.playerLevel,
+  };
+
   // Resolve descriptions with cross-spell references
   const description = resolveSpellDescription(
     spell,
     descriptionTemplate,
     referencedSpells,
-    playerLevel,
+    resolutionContext,
   );
   const auraDesc = resolveSpellDescription(
     spell,
     auraDescTemplate,
     referencedSpells,
-    playerLevel,
+    resolutionContext,
   );
 
   // Select the canonical default power. Older payloads use the renderer's

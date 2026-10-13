@@ -4,6 +4,11 @@ import { formatValue, getPeriodicTotal, getScaledValue } from "./effects.js";
 import { resolveVariable } from "./variables.js";
 import { hasExactBasePoints } from "./components.js";
 import { evaluateArithmetic } from "./arithmetic.js";
+import {
+  normalizeSpellTooltipContext,
+  type SpellTooltipContext,
+} from "./context.js";
+import { parseDescriptionVariables } from "./descriptionVariables.js";
 
 // === WoW Spell Description Template Parser ===
 //
@@ -21,14 +26,14 @@ import { evaluateArithmetic } from "./arithmetic.js";
 //   crossRef = DIGITS varRef                           -- $23455s1  (optionally -$...)
 //   plural   = 'l' TEXT ':' TEXT ';'                   -- $lpoint:points;  (lowercase l only)
 //   gender   = ('g'|'G') TEXT ':' TEXT ';'             -- $ghe:she;
-//   localVar = ('bh' | 'bc' | 'ap' | 'pl' | LETTER) DIGITS?
-//                                                        -- $bh, $AP, $PL, $m1, $M1, $d
+//   localVar = named runtime variable | LETTER DIGITS?
+//                  -- $bh, $AP, $PL, $SPI, $SPS, $AR, $SPH, $m1, $M1, $d
 //   varRef   = LETTER DIGITS?
 //
 // Notes on fidelity to the historical resolver:
 //   - Pluralization picks singular when the most recently emitted number is 1,
 //     otherwise plural (default plural when no number has been emitted).
-//   - Gender always resolves to the male form (no caster gender at tooltip time).
+//   - Gender defaults to the male form when no character context is supplied.
 //   - A '-' immediately before a crossRef/localVar is consumed: numeric results
 //     become negative, non-numeric results drop the sign. arithMod and inlineExpr
 //     never consume a leading '-'.
@@ -36,18 +41,17 @@ import { evaluateArithmetic } from "./arithmetic.js";
 //     diagnosis); a preceding '-' is preserved in that case.
 //   - Inline expressions resolve their inner variables first, then evaluate; if
 //     evaluation fails the (partially resolved) `${...}` text is kept verbatim.
-//   - Spell-known conditionals use the unknown branch because tooltip rendering
-//     has no character spellbook context.
+//   - Spell-known conditionals use the unknown branch unless knownSpellIds is supplied.
 
 // Arithmetic modifiers: $*N;var or $/N;var, with optional cross-spell ref: $/10;23690s1
 const RE_ARITH_MUL = /^\$\*(\d+);(\d+)?([a-zA-Z])(\d+)?/;
 const RE_ARITH_DIV = /^\$\/(\d+);(\d+)?([a-zA-Z])(\d+)?/;
-const RE_CONDITIONAL = /^\$\?s\d+/;
+const RE_CONDITIONAL = /^\$\?s(\d+)/;
 const RE_CROSSREF = /^\$(\d+)([a-zA-Z])(\d+)?/;
 const RE_PLURAL = /^\$l([^:]+):([^;]+);/; // lowercase $l only
 const RE_GENDER = /^\$g([^:]+):([^;]+);/i; // $g / $G
 const RE_DESCVAR = /^\$<([a-zA-Z_][a-zA-Z0-9_]*)>/; // $<total>, $<bonus>, etc.
-const RE_LOCALVAR = /^\$(bh|bc|ap|pl|[a-zA-Z])(\d+)?/i;
+const RE_LOCALVAR = /^\$(bh|bc|ap|pl|spi|sps|sph|ar|[a-zA-Z])(\d+)?/i;
 
 // Last run of digits in a string, used to update the pluralization anchor.
 const RE_LAST_NUMBER = /(\d+)(?![\s\S]*\d)/;
@@ -85,6 +89,8 @@ function parseInlineExpression(input: string): ParsedSection | null {
 }
 
 interface ParsedConditional {
+  spellId: number;
+  whenTrue: string;
   whenFalse: string;
   end: number;
 }
@@ -99,18 +105,24 @@ function parseConditional(input: string): ParsedConditional | null {
   const whenFalse = parseBalancedSection(input, whenTrue.end, "[", "]");
   if (!whenFalse) return null;
 
-  return { whenFalse: whenFalse.content, end: whenFalse.end };
+  return {
+    spellId: parseInt(match[1], 10),
+    whenTrue: whenTrue.content,
+    whenFalse: whenFalse.content,
+    end: whenFalse.end,
+  };
 }
 
 function applyArith(
   spell: WoWSpell,
   type: string,
   index: string | undefined,
-  lvl: number,
+  context: SpellTooltipContext,
   op: (n: number) => number,
   floating: boolean,
   original: string,
 ): string {
+  const lvl = context.playerLevel ?? spell.spell_level;
   const t = type.toLowerCase();
   const idx = index ? parseInt(index, 10) - 1 : 0;
   const preserveExactBase = floating || hasExactBasePoints(spell, idx);
@@ -130,7 +142,7 @@ function applyArith(
   }
   // Fallback: resolve the bare variable as a string, then apply the scalar.
   const variable = `$${type}${index || ""}`;
-  const resolved = resolveVariable(spell, variable, lvl);
+  const resolved = resolveVariable(spell, variable, context);
   const num = Number(resolved);
   if (!isNaN(num)) {
     const out = op(num);
@@ -147,13 +159,13 @@ function applyArith(
  * @param spell The spell being described.
  * @param template The template string with $ variables.
  * @param referencedSpells Optional map of spell ID -> WoWSpell for cross-spell references.
- * @param forLevel Optional caster level for scaling (defaults to spell level).
+ * @param context Character-specific values used by runtime tooltip variables.
  */
 function resolveSpellDescriptionInternal(
   spell: WoWSpell,
   template: string,
   referencedSpells: Map<number, WoWSpell> | undefined,
-  forLevel: number | undefined,
+  context: SpellTooltipContext,
   preserveIntermediatePrecision: boolean,
 ): string {
   if (!template) return "";
@@ -162,7 +174,6 @@ function resolveSpellDescriptionInternal(
   // Format is "$name=expr\n$name2=expr2\n..." from SpellDescriptionVariables.dbc.
   const descVarMap = parseDescriptionVariables(spell.description_variables);
 
-  const lvl = forLevel ?? spell.spell_level;
   let result = "";
   let lastNumber: number | null = null;
 
@@ -211,7 +222,7 @@ function resolveSpellDescriptionInternal(
           refSpell ?? spell,
           m[3],
           m[4],
-          lvl,
+          context,
           (x) => x * mult,
           false,
           m[0],
@@ -235,7 +246,7 @@ function resolveSpellDescriptionInternal(
             refSpell ?? spell,
             m[3],
             m[4],
-            lvl,
+            context,
             (x) => x / div,
             true,
             m[0],
@@ -246,16 +257,19 @@ function resolveSpellDescriptionInternal(
       continue;
     }
 
-    // $?sNNNN[known][unknown] — runtime spell-known conditional. Tooltip
-    // rendering has no character spellbook, so resolve the unknown branch.
+    // $?sNNNN[known][unknown] — select using the supplied spellbook context.
+    // Static tooltips preserve the historical behavior and use the unknown branch.
     const conditional = parseConditional(rest);
     if (conditional) {
+      const branch = context.knownSpellIds?.has(conditional.spellId)
+        ? conditional.whenTrue
+        : conditional.whenFalse;
       append(
         resolveSpellDescriptionInternal(
           spell,
-          conditional.whenFalse,
+          branch,
           referencedSpells,
-          forLevel,
+          context,
           preserveIntermediatePrecision,
         ),
       );
@@ -271,10 +285,13 @@ function resolveSpellDescriptionInternal(
         spell,
         inline.content,
         referencedSpells,
-        forLevel,
+        context,
         true,
       );
-      const evaluated = evaluateArithmetic(inner);
+      const evaluated = evaluateArithmetic(
+        inner,
+        !preserveIntermediatePrecision,
+      );
       append(evaluated !== null ? String(evaluated) : `\${${inner}}`);
       i += inline.end;
       continue;
@@ -287,7 +304,7 @@ function resolveSpellDescriptionInternal(
         append(m[0]); // leave placeholder; any leading '-' is preserved
       } else {
         const variable = `$${m[2]}${m[3] || ""}`;
-        appendVar(resolveVariable(refSpell, variable, lvl));
+        appendVar(resolveVariable(refSpell, variable, context));
       }
       i += m[0].length;
       continue;
@@ -302,7 +319,7 @@ function resolveSpellDescriptionInternal(
 
     // $gmale:female; — gender (defaults to male)
     if ((m = RE_GENDER.exec(rest))) {
-      append(m[1]);
+      append(context.gender === "female" ? m[2] : m[1]);
       i += m[0].length;
       continue;
     }
@@ -322,7 +339,7 @@ function resolveSpellDescriptionInternal(
           spell,
           expression,
           referencedSpells,
-          forLevel,
+          context,
           true,
         );
         const evaluated = evaluateArithmetic(
@@ -340,7 +357,7 @@ function resolveSpellDescriptionInternal(
     // $Xn — local variable
     if ((m = RE_LOCALVAR.exec(rest))) {
       const variable = `$${m[1]}${m[2] || ""}`;
-      appendVar(resolveVariable(spell, variable, lvl));
+      appendVar(resolveVariable(spell, variable, context));
       i += m[0].length;
       continue;
     }
@@ -358,13 +375,13 @@ export function resolveSpellDescription(
   spell: WoWSpell,
   template: string,
   referencedSpells?: Map<number, WoWSpell>,
-  forLevel?: number,
+  contextOrLevel?: SpellTooltipContext | number,
 ): string {
   return resolveSpellDescriptionInternal(
     spell,
     template,
     referencedSpells,
-    forLevel,
+    normalizeSpellTooltipContext(contextOrLevel),
     false,
   );
 }
@@ -389,31 +406,6 @@ export function extractReferencedSpellIds(template: string): number[] {
     ids.add(parseInt(match[2], 10));
   }
   return Array.from(ids);
-}
-
-/**
- * Parse SpellDescriptionVariables.dbc text into a name→expression map.
- * Format: "$name=expr\n$name2=expr2\n..." where each line defines a variable.
- * Variables can reference other variables via $<name> syntax.
- * Returns a Map from variable name (without $) to its expression string.
- */
-function parseDescriptionVariables(
-  raw: string | undefined,
-): Map<string, string> {
-  const map = new Map<string, string>();
-  if (!raw) return map;
-
-  // Each line is "$name=expression" — split on newlines, parse each.
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || !trimmed.startsWith("$")) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx < 2) continue; // need at least "$X="
-    const name = trimmed.substring(1, eqIdx); // strip leading $
-    const expr = trimmed.substring(eqIdx + 1);
-    map.set(name, expr);
-  }
-  return map;
 }
 
 /**
