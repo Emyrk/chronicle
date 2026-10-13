@@ -1,24 +1,38 @@
 import { describe, expect, it } from "vitest";
 import type { WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
+import { createEncounterEffects } from "./replayEffects";
 import {
+  AUTO_FIT_MIN_SPAN_YARDS,
+  autoFitViewport,
   calibratedDungeonMapPoint,
-  clampMapCamera,
+  clampViewport,
+  focusCentre,
+  INITIAL_MAP_FRAMING,
+  interpolateViewport,
+  manualMapFraming,
+  pinMapFraming,
+  projectionScale,
+  reconcileMapFraming,
+  fitViewportToBounds,
+  FULL_MAP_VIEWPORT,
+  MAX_MAP_ZOOM,
+  unitFocusBounds,
+  viewportPoint,
+  zoomViewportAt,
   dungeonMapPoint,
-  encounterRouteSamples,
-  fitMapCameraToPoints,
-  fitMapCanvasRect,
-  fitMapViewport,
   interpolatedPositionAt,
+  healthBarColor,
+  latestHealthAt,
   latestPositionAt,
-  pointInMapViewport,
-  projectDungeonMapPoint,
+  MAX_HEALTH_BARS,
+  mapPointToScene,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
+  selectHealthBars,
   selectMapEncounter,
-  selectMapJourneyEncounters,
-  zoomMapCameraAtPoint,
   zoneMapPoint,
+  type MapViewport,
 } from "./mapModel";
 
 const samples: MapPositionSample[] = [
@@ -32,6 +46,8 @@ const encounter: MapEncounterPositions = {
   startMs: 100,
   endMs: 300,
   positionsByUnit: new Map([["player", samples]]),
+  healthByUnit: new Map(),
+  effects: createEncounterEffects(),
 };
 
 const manifest: WowMapManifest = {
@@ -117,133 +133,45 @@ describe("map replay model", () => {
     expect(latestPositionAt(samples, 999)).toBe(samples[2]);
   });
 
-  it("interpolates position and facing between replay samples", () => {
-    const result = interpolatedPositionAt(samples, 250);
-    expect(result).toMatchObject({ timestampMs: 250, x: 4, y: 5, mapId: 1420 });
-    expect(result?.facing).toBeCloseTo(1.5);
-    expect(interpolatedPositionAt(samples, 99)).toBeNull();
-    expect(interpolatedPositionAt(samples, 999)).toBe(samples[2]);
-  });
-
-  it("interpolates facing across the zero-radian boundary", () => {
-    const positions: MapPositionSample[] = [
-      { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: Math.PI * 1.9 },
-      { timestampMs: 100, x: 10, y: 10, mapId: 1, facing: Math.PI * 0.1 },
+  it("finds the latest health sample at or before the replay cursor", () => {
+    const health = [
+      { timestampMs: 100, current: 1000, max: 1000, absorb: 0 },
+      { timestampMs: 300, current: 400, max: 1000, absorb: 0 },
     ];
-    expect(interpolatedPositionAt(positions, 50)?.facing).toBeCloseTo(Math.PI * 2);
+    expect(latestHealthAt(health, 99)).toBeNull();
+    expect(latestHealthAt(health, 299)).toBe(health[0]);
+    expect(latestHealthAt(health, 300)).toBe(health[1]);
+    // Scrubbing back returns the earlier sample again.
+    expect(latestHealthAt(health, 150)).toBe(health[0]);
   });
 
-  it("contains a wide map without stretching it", () => {
-    expect(fitMapCanvasRect(
-      { width: 1_600, height: 500 },
-      { width: 1_200, height: 800 },
-    )).toEqual({ left: 425, top: 0, width: 750, height: 500 });
-  });
-
-  it("contains a wide map inside a tall panel", () => {
-    expect(fitMapCanvasRect(
-      { width: 600, height: 800 },
-      { width: 1_200, height: 800 },
-    )).toEqual({ left: 0, top: 200, width: 600, height: 400 });
-  });
-
-  it("fits an encounter route into the center of the map frame", () => {
-    const camera = fitMapCameraToPoints([
-      { leftPercent: 20, topPercent: 30 },
-      { leftPercent: 40, topPercent: 50 },
-    ], { width: 1_000, height: 500 }, 20, 4);
-
-    expect(camera).toMatchObject({ x: -400, y: -350 });
-    expect(camera.scale).toBeCloseTo(3);
-  });
-
-  it("clamps focused encounter routes to the map edges", () => {
-    expect(fitMapCameraToPoints([
-      { leftPercent: 90, topPercent: 90 },
-    ], { width: 1_000, height: 500 }, 20, 4)).toEqual({
-      scale: 4,
-      x: -3_000,
-      y: -1_500,
-    });
-  });
-
-  it("zooms around the cursor and keeps the map inside its frame", () => {
-    expect(zoomMapCameraAtPoint(
-      { scale: 1, x: 0, y: 0 },
-      2,
-      { x: 25, y: 75 },
-      { width: 100, height: 100 },
-    )).toEqual({ scale: 2, x: -25, y: -75 });
-
-    expect(clampMapCamera(
-      { scale: 3, x: 40, y: -500 },
-      { width: 100, height: 80 },
-    )).toEqual({ scale: 3, x: 0, y: -160 });
-  });
-
-  it("resets panning when zoom returns to the fitted view", () => {
-    expect(clampMapCamera(
-      { scale: 0.5, x: -40, y: -20 },
-      { width: 100, height: 100 },
-    )).toEqual({ scale: 1, x: 0, y: 0 });
-  });
-
-  it("summarizes player movement as a median raid route", () => {
-    const routeEncounter: MapEncounterPositions = {
-      encounterId: "route",
-      startMs: 0,
-      endMs: 4_000,
-      positionsByUnit: new Map([
-        ["player-one", [
-          { timestampMs: 500, x: 10, y: 20, mapId: 43, facing: 1 },
-          { timestampMs: 2_500, x: 30, y: 40, mapId: 43, facing: 1 },
-        ]],
-        ["player-two", [
-          { timestampMs: 1_000, x: 14, y: 24, mapId: 43, facing: 2 },
-          { timestampMs: 3_000, x: 34, y: 44, mapId: 43, facing: 2 },
-        ]],
-        ["boss", [
-          { timestampMs: 1_000, x: 900, y: 900, mapId: 43, facing: 0 },
-        ]],
-      ]),
-    };
-
-    expect(encounterRouteSamples(routeEncounter, (guid) => guid.startsWith("player"))).toEqual([
-      { timestampMs: 750, x: 12, y: 22, mapId: 43, facing: 0 },
-      { timestampMs: 2_750, x: 32, y: 42, mapId: 43, facing: 0 },
+  it("keeps bars for bosses and selected players and caps recently damaged units", () => {
+    const sample = (timestampMs: number) => [{ timestampMs, current: 500, max: 1000, absorb: 0 }];
+    const healthByUnit = new Map([
+      ["boss", sample(0)],
+      ["selected", sample(0)],
+      ["idle", sample(0)],
+      ["future", sample(20_000)],
+      ...Array.from({ length: 60 }, (_, index) => [`p${index}`, sample(9_000 + index)] as const),
     ]);
+    const guids = ["idle", "future", ...Array.from({ length: 60 }, (_, index) => `p${index}`), "selected", "boss"];
+    const bars = selectHealthBars(guids, healthByUnit, 10_000, new Set(["boss"]), new Set(["selected"]));
+    expect(bars.size).toBe(MAX_HEALTH_BARS);
+    expect(bars.has("boss")).toBe(true);
+    expect(bars.has("selected")).toBe(true);
+    // Unchanged for longer than RECENT_HEALTH_MS, or no sample yet.
+    expect(bars.has("idle")).toBe(false);
+    expect(bars.has("future")).toBe(false);
+    // The most recently damaged units win the remaining slots.
+    expect(bars.has("p59")).toBe(true);
+    expect(bars.has("p0")).toBe(false);
   });
 
-  it("falls back to available units when player metadata is unavailable", () => {
-    expect(encounterRouteSamples(encounter, () => false, 100)).toEqual(samples.map((sample) => ({
-      ...sample,
-      facing: 0,
-    })));
-  });
-
-  it("fits and remaps movement into a padded viewport", () => {
-    const viewport = fitMapViewport([
-      { leftPercent: 20, topPercent: 30 },
-      { leftPercent: 40, topPercent: 50 },
-    ], 5, 20);
-    expect(viewport).toEqual({ leftPercent: 15, topPercent: 25, spanPercent: 30 });
-    expect(pointInMapViewport({ leftPercent: 15, topPercent: 25 }, viewport)).toEqual({
-      leftPercent: 0,
-      topPercent: 0,
-    });
-    expect(pointInMapViewport({ leftPercent: 45, topPercent: 55 }, viewport)).toEqual({
-      leftPercent: 100,
-      topPercent: 100,
-    });
-  });
-
-  it("keeps fitted viewports inside the map and uses a useful minimum zoom", () => {
-    expect(fitMapViewport([{ leftPercent: 2, topPercent: 98 }])).toEqual({
-      leftPercent: 0,
-      topPercent: 72,
-      spanPercent: 28,
-    });
-    expect(fitMapViewport([])).toEqual({ leftPercent: 0, topPercent: 0, spanPercent: 100 });
+  it("colours health bars green to amber to red", () => {
+    expect(healthBarColor(1)).toBe("rgb(34, 197, 94)");
+    expect(healthBarColor(0.5)).toBe("rgb(245, 158, 11)");
+    expect(healthBarColor(0)).toBe("rgb(239, 68, 68)");
+    expect(healthBarColor(2)).toBe(healthBarColor(1));
   });
 
   it("selects the encounter containing the replay timestamp", () => {
@@ -251,26 +179,6 @@ describe("map replay model", () => {
     const encounters = new Map([["one", encounter], ["two", second]]);
     expect(selectMapEncounter(encounters, ["one", "two"], 500)?.encounterId).toBe("two");
     expect(selectMapEncounter(encounters, ["one", "two"], null)?.encounterId).toBe("two");
-  });
-
-  it("retains unselected encounters between selected fights", () => {
-    const before = { ...encounter, encounterId: "before", startMs: 0, endMs: 50 };
-    const transit = { ...encounter, encounterId: "transit", startMs: 350, endMs: 390 };
-    const second = { ...encounter, encounterId: "two", startMs: 400, endMs: 600 };
-    const after = { ...encounter, encounterId: "after", startMs: 700, endMs: 800 };
-    const encounters = new Map([
-      [before.encounterId, before],
-      [encounter.encounterId, encounter],
-      [transit.encounterId, transit],
-      [second.encounterId, second],
-      [after.encounterId, after],
-    ]);
-
-    expect(selectMapJourneyEncounters(encounters, ["one", "two"]).map((item) => item.encounterId)).toEqual([
-      "one",
-      "transit",
-      "two",
-    ]);
   });
 
   it("prefers instance artwork before matching zone assignments", () => {
@@ -322,6 +230,8 @@ describe("map replay model", () => {
       startMs: 0,
       endMs: 1_000,
       positionsByUnit: new Map([["boss", [sample]]]),
+      healthByUnit: new Map(),
+      effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => entry);
     expect(calibration).not.toBeNull();
@@ -344,6 +254,8 @@ describe("map replay model", () => {
         { timestampMs: 8_000, x: 38, y: -240, mapId: 0, facing: 0 },
         { timestampMs: 10_000, x: 37, y: -241, mapId: 0, facing: 0 },
       ]]]),
+      healthByUnit: new Map(),
+      effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670);
     expect(calibration?.anchorSample).toMatchObject({ x: 37, y: -241 });
@@ -356,6 +268,8 @@ describe("map replay model", () => {
       startMs: 0,
       endMs: 1_000,
       positionsByUnit: new Map([["boss", [anchor]]]),
+      healthByUnit: new Map(),
+      effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670)!;
     const point = calibratedDungeonMapPoint({ ...anchor, x: anchor.x + 10, y: anchor.y - 10 }, {
@@ -368,81 +282,9 @@ describe("map replay model", () => {
     expect(point.topPercent).toBeCloseTo(37.8982, 3);
   });
 
-  it("keeps supported Wailing Caverns tracks when another encounter cannot be calibrated", () => {
-    const bounds = {
-      minX: -375.946014,
-      maxX: 560.528992,
-      minY: -410.145996,
-      maxY: 214.169998,
-    };
-    const supportedSample = { timestampMs: 1_000, x: 36.81, y: -241.06, mapId: 0, facing: 0 };
-    const supportedEncounter = { ...encounter, positionsByUnit: new Map([["boss", [supportedSample]]]) };
-    const unsupportedEncounter = { ...encounter, positionsByUnit: new Map([["trash", [supportedSample]]]) };
-    const calibrations = [
-      resolveDungeonMapCalibration(43, supportedEncounter, () => 3670),
-      resolveDungeonMapCalibration(43, unsupportedEncounter, () => undefined),
-    ];
-    const points = calibrations.flatMap((calibration) => {
-      const point = projectDungeonMapPoint(supportedSample, bounds, 43, calibration);
-      return point ? [point] : [];
-    });
-    expect(points).toEqual([{ leftPercent: 19.1, topPercent: 39.5 }]);
-  });
-
-  it("fits separately calibrated Wailing Caverns encounters into one viewport", () => {
-    const bounds = {
-      minX: -375.946014,
-      maxX: 560.528992,
-      minY: -410.145996,
-      maxY: 214.169998,
-    };
-    const pythasSample = { timestampMs: 1_000, x: 36.81, y: -241.06, mapId: 0, facing: 0 };
-    const cobrahnSample = { timestampMs: 1_000, x: 15.04, y: 300.08, mapId: 0, facing: 0 };
-    const pythas = { ...encounter, positionsByUnit: new Map([["boss", [pythasSample]]]) };
-    const cobrahn = { ...encounter, positionsByUnit: new Map([["boss", [cobrahnSample]]]) };
-    const points = [
-      calibratedDungeonMapPoint(
-        pythasSample,
-        bounds,
-        resolveDungeonMapCalibration(43, pythas, () => 3670)!,
-      )!,
-      calibratedDungeonMapPoint(
-        cobrahnSample,
-        bounds,
-        resolveDungeonMapCalibration(43, cobrahn, () => 3671)!,
-      )!,
-    ];
-    const viewport = fitMapViewport(points, 5, 20);
-    expect(points).toEqual([
-      { leftPercent: 19.1, topPercent: 39.5 },
-      { leftPercent: 30.6, topPercent: 43 },
-    ]);
-    expect(viewport.spanPercent).toBe(21.5);
-    expect(pointInMapViewport(points[0], viewport).leftPercent).toBeCloseTo(23.26, 2);
-    expect(pointInMapViewport(points[1], viewport).leftPercent).toBeCloseTo(76.74, 2);
-  });
-
   it("requires a known boss position to calibrate Wailing Caverns", () => {
     expect(resolveDungeonMapCalibration(43, encounter, () => undefined)).toBeNull();
     expect(resolveDungeonMapCalibration(533, encounter, () => 3670)).toBeNull();
-  });
-
-  it("projects rendered geometry from ordinary world X/Y bounds", () => {
-    const bounds = { minX: -200, maxX: 300, minY: -400, maxY: 600 };
-    expect(projectDungeonMapPoint(
-      { timestampMs: 0, x: bounds.maxX, y: bounds.maxY, mapId: 43, facing: 0 },
-      bounds,
-      43,
-      null,
-      true,
-    )).toEqual({ leftPercent: 0, topPercent: 0 });
-    expect(projectDungeonMapPoint(
-      { timestampMs: 0, x: bounds.minX, y: bounds.minY, mapId: 43, facing: 0 },
-      bounds,
-      43,
-      null,
-      true,
-    )).toEqual({ leftPercent: 100, topPercent: 100 });
   });
 
   it("converts dungeon world coordinates using authoritative floor bounds", () => {
@@ -455,5 +297,244 @@ describe("map replay model", () => {
       { timestampMs: 0, x: bounds.minY, y: bounds.minX, mapId: 0, facing: 0 },
       bounds,
     )).toEqual({ leftPercent: 100, topPercent: 100 });
+  });
+});
+
+describe("interpolatedPositionAt", () => {
+  it("returns null before the first sample", () => {
+    expect(interpolatedPositionAt(samples, 99)).toBeNull();
+  });
+
+  it("blends position and facing between neighbouring samples", () => {
+    expect(interpolatedPositionAt(samples, 150)).toEqual({ timestampMs: 150, x: 2, y: 3, mapId: 1420, facing: 0.5 });
+  });
+
+  it("matches the exact sample and holds the last one", () => {
+    expect(interpolatedPositionAt(samples, 200)).toEqual({ ...samples[1] });
+    expect(interpolatedPositionAt(samples, 999)).toBe(samples[2]);
+  });
+
+  it("turns through the shortest angle", () => {
+    const wrapping: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: 6.2 },
+      { timestampMs: 100, x: 0, y: 0, mapId: 1, facing: 0.1 },
+    ];
+    const facing = interpolatedPositionAt(wrapping, 50)!.facing;
+    expect(Math.cos(facing)).toBeCloseTo(Math.cos((6.2 + 0.1 + 2 * Math.PI) / 2), 6);
+  });
+
+  it("holds the latest sample across long gaps and map changes", () => {
+    const gapped: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: 0 },
+      { timestampMs: 5_000, x: 10, y: 0, mapId: 1, facing: 0 },
+      { timestampMs: 5_100, x: 20, y: 0, mapId: 2, facing: 0 },
+    ];
+    expect(interpolatedPositionAt(gapped, 2_500)).toBe(gapped[0]);
+    expect(interpolatedPositionAt(gapped, 5_050)).toBe(gapped[1]);
+  });
+});
+
+describe("mapPointToScene", () => {
+  it("centres the artwork on the origin and keeps its aspect", () => {
+    expect(mapPointToScene({ leftPercent: 50, topPercent: 50 }, 0.5, 100)).toEqual({ x: 0, z: 0 });
+    expect(mapPointToScene({ leftPercent: 0, topPercent: 0 }, 0.5, 100)).toEqual({ x: -50, z: -25 });
+    expect(mapPointToScene({ leftPercent: 100, topPercent: 100 }, 0.5, 100)).toEqual({ x: 50, z: 25 });
+  });
+});
+
+describe("unitFocusBounds", () => {
+  const at = (x: number, y: number, mapId = 1, timestampMs = 0): MapPositionSample => ({ timestampMs, x, y, mapId, facing: 0 });
+  // Identity-ish projection: world x -> left %, world y -> top %.
+  const project = (sample: MapPositionSample) => ({ leftPercent: sample.x, topPercent: sample.y });
+
+  it("returns null without samples", () => {
+    expect(unitFocusBounds(new Map(), 1, project)).toBeNull();
+    expect(unitFocusBounds(new Map([["a", []]]), 1, project)).toBeNull();
+  });
+
+  it("frames a single unit's whole track", () => {
+    const bounds = unitFocusBounds(new Map([["a", [at(10, 20), at(14, 26, 1, 100), at(12, 22, 1, 200)]]]), 1, project);
+    expect(bounds).toEqual({ minLeft: 10, maxLeft: 14, minTop: 20, maxTop: 26 });
+  });
+
+  it("ignores samples on other maps and points the floor cannot project", () => {
+    const positions = new Map([
+      ["a", [at(10, 10), at(90, 90, 2)]],
+      ["b", [at(30, 40), at(32, 44)]],
+      ["c", [at(20, 50)]],
+    ]);
+    const offFloor = (sample: MapPositionSample) => sample.y >= 50 ? null : project(sample);
+    expect(unitFocusBounds(positions, 1, offFloor)).toEqual({ minLeft: 10, maxLeft: 32, minTop: 10, maxTop: 44 });
+    expect(unitFocusBounds(positions, 2, project)).toEqual({ minLeft: 90, maxLeft: 90, minTop: 90, maxTop: 90 });
+    expect(unitFocusBounds(positions, 3, project)).toBeNull();
+  });
+
+  it("centres on the boss and clamps out far stragglers", () => {
+    const positions = new Map([
+      ["boss", [at(50, 50), at(52, 50)]],
+      ["tank", [at(48, 49)]],
+      ["healer", [at(60, 55)]],
+      ["straggler", [at(400, 400)]],
+    ]);
+    expect(unitFocusBounds(positions, 1, project, new Set(["boss"]), 80))
+      .toEqual({ minLeft: 48, maxLeft: 60, minTop: 49, maxTop: 55 });
+  });
+});
+
+describe("map viewport", () => {
+  it("fits bounds with padding, centred on the box", () => {
+    const viewport = fitViewportToBounds({ minLeft: 40, maxLeft: 50, minTop: 45, maxTop: 50 });
+    expect(viewport.centerX).toBeCloseTo(0.45);
+    expect(viewport.centerY).toBeCloseTo(0.475);
+    expect(viewport.zoom).toBeCloseTo(1 / (0.1 * 1.3));
+  });
+
+  it("caps the zoom for a single point and keeps the view on the artwork", () => {
+    expect(fitViewportToBounds({ minLeft: 0, maxLeft: 0, minTop: 100, maxTop: 100 })).toEqual({
+      centerX: 0.5 / MAX_MAP_ZOOM,
+      centerY: 1 - 0.5 / MAX_MAP_ZOOM,
+      zoom: MAX_MAP_ZOOM,
+    });
+  });
+
+  it("never zooms out past the full map", () => {
+    expect(fitViewportToBounds({ minLeft: 0, maxLeft: 100, minTop: 0, maxTop: 100 })).toEqual(FULL_MAP_VIEWPORT);
+    expect(clampViewport({ centerX: 0.1, centerY: 0.9, zoom: 0.5 })).toEqual(FULL_MAP_VIEWPORT);
+  });
+
+  it("zooms around the pointer", () => {
+    const zoomed = zoomViewportAt(FULL_MAP_VIEWPORT, 4, 0.25, 0.25);
+    expect(zoomed.zoom).toBe(4);
+    const anchor = viewportPoint({ leftPercent: 25, topPercent: 25 }, zoomed);
+    expect(anchor.leftPercent).toBeCloseTo(25);
+    expect(anchor.topPercent).toBeCloseTo(25);
+  });
+
+  it("spreads points apart as the zoom grows", () => {
+    const viewport = { centerX: 0.5, centerY: 0.5, zoom: 10 };
+    expect(viewportPoint({ leftPercent: 50, topPercent: 50 }, viewport)).toEqual({ leftPercent: 50, topPercent: 50 });
+    expect(viewportPoint({ leftPercent: 51, topPercent: 50 }, viewport).leftPercent).toBeCloseTo(60);
+  });
+});
+
+describe("autoFitViewport", () => {
+  const at = (x: number, y: number): MapPositionSample => ({ timestampMs: 0, x, y, mapId: 1, facing: 0 });
+  // A 1000 x 1000 yd artwork: world y -> left, world x -> top, 0.1 % per yard.
+  const project = (sample: MapPositionSample) => ({ leftPercent: sample.y / 10, topPercent: sample.x / 10 });
+  const fit = (positions: Map<string, MapPositionSample[]>, bosses: ReadonlySet<string> = new Set()) => {
+    const bounds = unitFocusBounds(positions, 1, project, bosses)!;
+    const centre = focusCentre(positions, 1, bosses)!;
+    return autoFitViewport(bounds, {
+      minSpanYards: AUTO_FIT_MIN_SPAN_YARDS,
+      scale: projectionScale(project, centre.sample),
+      centre: centre.fromFocus ? project(centre.sample) : null,
+    });
+  };
+  // The zoom that shows `yards` across the view on this artwork.
+  const zoomForYards = (yards: number) => 1000 / yards;
+
+  it("measures the projection's percent per yard, even at the artwork edge", () => {
+    expect(projectionScale(project, at(500, 500))).toEqual({ left: 0.1, top: 0.1 });
+    const clamped = (sample: MapPositionSample) => ({ leftPercent: Math.min(100, sample.y / 10), topPercent: Math.min(100, sample.x / 10) });
+    expect(projectionScale(clamped, at(1000, 1000))).toEqual({ left: 0.1, top: 0.1 });
+    expect(projectionScale(() => null, at(0, 0))).toBeNull();
+  });
+
+  it("frames a tiny fight at the minimum span, the boss at the centre", () => {
+    const positions = new Map([
+      ["boss", [at(500, 505)]],
+      ["tank", [at(498, 503)]],
+      ["healer", [at(510, 520)]],
+      ["mage", [at(495, 500)]],
+    ]);
+    const viewport = fit(positions, new Set(["boss"]));
+    expect(viewport.zoom).toBeCloseTo(zoomForYards(AUTO_FIT_MIN_SPAN_YARDS * 1.3));
+    expect(viewport.centerX).toBeCloseTo(0.505);
+    expect(viewport.centerY).toBeCloseTo(0.5);
+  });
+
+  it("frames a wide fight on its bounds, biased towards the boss without zooming out", () => {
+    const positions = new Map([
+      ["boss", [at(500, 510)]],
+      ["west", [at(500, 440)]],
+      ["east", [at(500, 560)]],
+    ]);
+    const viewport = fit(positions, new Set(["boss"]));
+    expect(viewport.zoom).toBeCloseTo(zoomForYards(120 * 1.3));
+    // The box centre is at y 500; the slack (156 - 120 * 1.15) / 2 = 9 yd moves it towards the boss.
+    expect(viewport.centerX).toBeCloseTo(0.509);
+  });
+
+  it("centres a boss-less fight on its units", () => {
+    const positions = new Map([
+      ["a", [at(500, 500)]],
+      ["b", [at(510, 530)]],
+    ]);
+    const viewport = fit(positions);
+    expect(viewport.zoom).toBeCloseTo(zoomForYards(AUTO_FIT_MIN_SPAN_YARDS * 1.3));
+    expect(viewport.centerX).toBeCloseTo(0.515);
+    expect(viewport.centerY).toBeCloseTo(0.505);
+  });
+
+  it("leaves stragglers past the 80 yd clamp out of the fit", () => {
+    const pack = new Map([
+      ["boss", [at(500, 500)]],
+      ["tank", [at(505, 505)]],
+    ]);
+    const withStraggler = new Map([...pack, ["straggler", [at(500, 700)]]]);
+    expect(fit(withStraggler, new Set(["boss"]))).toEqual(fit(pack, new Set(["boss"])));
+  });
+
+  it("keeps the old fit without a minimum span", () => {
+    expect(autoFitViewport({ minLeft: 40, maxLeft: 50, minTop: 45, maxTop: 50 }))
+      .toEqual(fitViewportToBounds({ minLeft: 40, maxLeft: 50, minTop: 45, maxTop: 50 }));
+  });
+
+  it("eases between viewports", () => {
+    const from = { centerX: 0.5, centerY: 0.5, zoom: 1 };
+    const to = { centerX: 0.7, centerY: 0.3, zoom: 16 };
+    expect(interpolateViewport(from, to, 0)).toEqual(from);
+    expect(interpolateViewport(from, to, 0.5)).toEqual({ centerX: 0.6, centerY: 0.4, zoom: 4 });
+    expect(interpolateViewport(from, to, 1)).toBe(to);
+  });
+});
+
+describe("map framing", () => {
+  const fitted = { centerX: 0.4, centerY: 0.6, zoom: 17 };
+  const zoomTimes = (viewport: MapViewport, factor: number, times: number) =>
+    Array.from({ length: times }).reduce<MapViewport>((current) => zoomViewportAt(current, factor, 0.3, 0.7), viewport);
+
+  it("applies the default framing on a new selection", () => {
+    const framing = reconcileMapFraming(INITIAL_MAP_FRAMING, "kresh|kresh", fitted);
+    expect(framing).toMatchObject({ revision: 1, viewport: null, manual: false });
+    // A replay tick or re-render with the same fit changes nothing.
+    expect(reconcileMapFraming(framing, "kresh|kresh", { ...fitted })).toBe(framing);
+    // The fit itself changing (e.g. floor) re-fits while untouched.
+    expect(reconcileMapFraming(framing, "kresh|kresh", FULL_MAP_VIEWPORT).revision).toBe(2);
+  });
+
+  it("lets manual zoom reach both bounds and keeps it across ticks and filter changes", () => {
+    const framing = reconcileMapFraming(INITIAL_MAP_FRAMING, "kresh|kresh", fitted);
+    const zoomedIn = zoomTimes(fitted, 1.5, 40);
+    expect(zoomedIn.zoom).toBe(MAX_MAP_ZOOM);
+    const zoomedOut = zoomTimes(zoomedIn, 0.5, 40);
+    expect(zoomedOut).toEqual(FULL_MAP_VIEWPORT);
+
+    for (const manualViewport of [zoomedIn, zoomedOut]) {
+      const manual = manualMapFraming(framing, manualViewport);
+      expect(manual.revision).toBe(framing.revision);
+      // Replay tick: same selection and fit.
+      expect(reconcileMapFraming(manual, "kresh|kresh", fitted)).toBe(manual);
+      // Filter change: the scene reprocesses and the fit comes back different.
+      expect(reconcileMapFraming(manual, "kresh|kresh", { ...fitted, zoom: 12 })).toBe(manual);
+      expect(manual.viewport).toBe(manualViewport);
+    }
+  });
+
+  it("re-frames on a new encounter, Fit or Reset", () => {
+    const manual = manualMapFraming(reconcileMapFraming(INITIAL_MAP_FRAMING, "kresh|kresh", fitted), { centerX: 0.5, centerY: 0.5, zoom: 3 });
+    expect(reconcileMapFraming(manual, "mutanus|mutanus", fitted)).toMatchObject({ revision: 2, viewport: null, manual: false });
+    expect(pinMapFraming(manual, fitted)).toMatchObject({ revision: 2, viewport: fitted, manual: false });
+    expect(pinMapFraming(manual, FULL_MAP_VIEWPORT)).toMatchObject({ revision: 2, viewport: FULL_MAP_VIEWPORT, manual: false });
   });
 });

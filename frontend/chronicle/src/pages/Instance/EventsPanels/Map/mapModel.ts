@@ -5,17 +5,11 @@ import type {
   WowMapInstance,
   WowMapManifest,
 } from "@/pages/Technical/mapGallery";
-import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
+import type { MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
 
 export interface MapPoint {
   leftPercent: number;
   topPercent: number;
-}
-
-export interface MapViewport {
-  leftPercent: number;
-  topPercent: number;
-  spanPercent: number;
 }
 
 export interface MapCamera {
@@ -110,7 +104,64 @@ export type ResolvedMapArtwork =
   | { kind: "instance"; instance: WowMapInstance }
   | { kind: "zone"; map: WowMap; assignment: WowMapAssignment };
 
-function latestPositionIndex(positions: MapPositionSample[], timestampMs: number): number {
+export function latestPositionAt(
+  positions: MapPositionSample[],
+  timestampMs: number,
+): MapPositionSample | null {
+  const index = latestPositionIndex(positions, timestampMs);
+  return index >= 0 ? positions[index] : null;
+}
+
+/** Most health bars drawn at once. */
+export const MAX_HEALTH_BARS = 48;
+/** Units whose health changed this recently get a bar. */
+export const RECENT_HEALTH_MS = 3_000;
+
+const HEALTH_RED = [239, 68, 68];
+const HEALTH_AMBER = [245, 158, 11];
+const HEALTH_GREEN = [34, 197, 94];
+
+/** Bar fill colour: red at 0, amber at half, green at full health. */
+export function healthBarColor(fraction: number): string {
+  const t = Math.min(1, Math.max(0, fraction)) * 2;
+  const [from, to] = t <= 1 ? [HEALTH_RED, HEALTH_AMBER] : [HEALTH_AMBER, HEALTH_GREEN];
+  const mix = t <= 1 ? t : t - 1;
+  const channel = (index: number) => Math.round(from[index] + (to[index] - from[index]) * mix);
+  return `rgb(${channel(0)}, ${channel(1)}, ${channel(2)})`;
+}
+
+/** The unit's latest health sample at or before `timestampMs`, or null. */
+export function latestHealthAt(samples: MapHealthSample[], timestampMs: number): MapHealthSample | null {
+  const index = latestPositionIndex(samples, timestampMs);
+  return index >= 0 ? samples[index] : null;
+}
+
+/**
+ * Declutters health bars: bosses, then selected players, then units whose
+ * health changed in the last RECENT_HEALTH_MS (most recent first), up to
+ * MAX_HEALTH_BARS. Units without a sample at or before the cursor get none.
+ * Returns each chosen unit's sample at the cursor.
+ */
+export function selectHealthBars(
+  guids: readonly string[],
+  healthByUnit: Map<string, MapHealthSample[]>,
+  cursorMs: number,
+  bossGuids: ReadonlySet<string>,
+  selectedGuids: ReadonlySet<string>,
+): Map<string, MapHealthSample> {
+  const candidates = guids.flatMap((guid) => {
+    const sample = latestHealthAt(healthByUnit.get(guid) ?? [], cursorMs);
+    if (!sample) return [];
+    const priority = bossGuids.has(guid) ? 0
+      : selectedGuids.has(guid) ? 1
+      : cursorMs - sample.timestampMs <= RECENT_HEALTH_MS ? 2 : -1;
+    return priority < 0 ? [] : [{ guid, sample, priority }];
+  });
+  candidates.sort((left, right) => left.priority - right.priority || right.sample.timestampMs - left.sample.timestampMs);
+  return new Map(candidates.slice(0, MAX_HEALTH_BARS).map(({ guid, sample }) => [guid, sample]));
+}
+
+function latestPositionIndex(positions: readonly { timestampMs: number }[], timestampMs: number): number {
   let low = 0;
   let high = positions.length - 1;
   let match = -1;
@@ -126,39 +177,34 @@ function latestPositionIndex(positions: MapPositionSample[], timestampMs: number
   return match;
 }
 
-export function latestPositionAt(
-  positions: MapPositionSample[],
-  timestampMs: number,
-): MapPositionSample | null {
-  const match = latestPositionIndex(positions, timestampMs);
-  return match >= 0 ? positions[match] : null;
+const MAX_INTERPOLATION_GAP_MS = 2_000;
+
+function lerpAngle(from: number, to: number, t: number): number {
+  const delta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+  return from + delta * t;
 }
 
-function interpolateFacing(from: number, to: number, progress: number): number {
-  const turn = Math.atan2(Math.sin(to - from), Math.cos(to - from));
-  return from + turn * progress;
-}
-
+// Like latestPositionAt, but blends toward the next sample when both are on
+// the same map and close enough in time that the unit plausibly moved
+// between them. Longer gaps hold the latest sample, matching the 2D view.
 export function interpolatedPositionAt(
   positions: MapPositionSample[],
   timestampMs: number,
+  maxGapMs = MAX_INTERPOLATION_GAP_MS,
 ): MapPositionSample | null {
-  const previousIndex = latestPositionIndex(positions, timestampMs);
-  if (previousIndex < 0) return null;
-
-  const previous = positions[previousIndex];
-  const next = positions[previousIndex + 1];
-  if (!next || next.mapId !== previous.mapId || next.timestampMs <= previous.timestampMs) return previous;
-
-  const progress = Math.max(0, Math.min(1,
-    (timestampMs - previous.timestampMs) / (next.timestampMs - previous.timestampMs),
-  ));
+  const index = latestPositionIndex(positions, timestampMs);
+  if (index < 0) return null;
+  const latest = positions[index];
+  const next = positions[index + 1];
+  if (!next || next.mapId !== latest.mapId || next.timestampMs <= latest.timestampMs) return latest;
+  if (next.timestampMs - latest.timestampMs > maxGapMs) return latest;
+  const t = (timestampMs - latest.timestampMs) / (next.timestampMs - latest.timestampMs);
   return {
     timestampMs,
-    x: previous.x + (next.x - previous.x) * progress,
-    y: previous.y + (next.y - previous.y) * progress,
-    mapId: previous.mapId,
-    facing: interpolateFacing(previous.facing, next.facing, progress),
+    x: latest.x + (next.x - latest.x) * t,
+    y: latest.y + (next.y - latest.y) * t,
+    mapId: latest.mapId,
+    facing: lerpAngle(latest.facing, next.facing, t),
   };
 }
 
@@ -234,6 +280,7 @@ export function encounterRouteSamples(
     });
 }
 
+
 export function dominantMapId(samples: MapPositionSample[]): number | null {
   const counts = new Map<number, number>();
   for (const sample of samples) counts.set(sample.mapId, (counts.get(sample.mapId) ?? 0) + 1);
@@ -308,11 +355,17 @@ export function zoneMapPoint(sample: MapPositionSample, assignment: WowMapAssign
   return { leftPercent: clampPercent(uiX), topPercent: clampPercent(uiY) };
 }
 
+export interface OverviewMapViewport {
+  leftPercent: number;
+  topPercent: number;
+  spanPercent: number;
+}
+
 export function fitMapViewport(
   points: MapPoint[],
   paddingPercent = 7,
   minimumSpanPercent = 28,
-): MapViewport {
+): OverviewMapViewport {
   if (points.length === 0) return { leftPercent: 0, topPercent: 0, spanPercent: 100 };
 
   let left = points[0].leftPercent;
@@ -338,7 +391,7 @@ export function fitMapViewport(
   };
 }
 
-export function pointInMapViewport(point: MapPoint, viewport: MapViewport): MapPoint {
+export function pointInMapViewport(point: MapPoint, viewport: OverviewMapViewport): MapPoint {
   return {
     leftPercent: ((point.leftPercent - viewport.leftPercent) / viewport.spanPercent) * 100,
     topPercent: ((point.topPercent - viewport.topPercent) / viewport.spanPercent) * 100,
@@ -446,5 +499,277 @@ export function dungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBo
   return {
     leftPercent: clampPercent((bounds.maxX - sample.y) / (bounds.maxX - bounds.minX)),
     topPercent: clampPercent((bounds.maxY - sample.x) / (bounds.maxY - bounds.minY)),
+  };
+}
+
+export interface ScenePoint {
+  x: number;
+  z: number;
+}
+
+// Places a 2D artwork point on a ground plane centred on the origin that is
+// `width` wide and keeps the artwork's aspect ratio (`aspect` = height/width).
+// Artwork left grows along +x and artwork top grows along +z.
+export function mapPointToScene(point: MapPoint, aspect: number, width = 1): ScenePoint {
+  return {
+    x: (point.leftPercent / 100 - 0.5) * width,
+    z: (point.topPercent / 100 - 0.5) * width * aspect,
+  };
+}
+
+/** A box in artwork percentages, like MapPoint. */
+export interface MapPointBounds {
+  minLeft: number;
+  maxLeft: number;
+  minTop: number;
+  maxTop: number;
+}
+
+/** Units further than this from the focus centre (in world yards) are left out of the fit. */
+export const FOCUS_RADIUS_YARDS = 80;
+
+// The world point a fit centres on: the median of the boss samples (`fromFocus`)
+// or of every unit's samples when no boss is known.
+export function focusCentre(
+  positionsByUnit: Map<string, MapPositionSample[]>,
+  mapId: number,
+  focusGuids: ReadonlySet<string> = new Set(),
+): { sample: MapPositionSample; fromFocus: boolean } | null {
+  const all: MapPositionSample[] = [];
+  const focus: MapPositionSample[] = [];
+  for (const [guid, positions] of positionsByUnit) {
+    for (const sample of positions) {
+      if (sample.mapId !== mapId) continue;
+      all.push(sample);
+      if (focusGuids.has(guid)) focus.push(sample);
+    }
+  }
+  if (all.length === 0) return null;
+  const centreSamples = focus.length > 0 ? focus : all;
+  return {
+    sample: {
+      ...centreSamples[0],
+      x: median(centreSamples.map((sample) => sample.x)),
+      y: median(centreSamples.map((sample) => sample.y)),
+    },
+    fromFocus: focus.length > 0,
+  };
+}
+
+// Frames the encounter's whole unit track rather than the current frame, so
+// the view stays put during replay. The track is centred on the boss (or on
+// every unit when no boss is known) and clamped to `maxRadius` world yards
+// around that centre, so a straggler or a pet left at the entrance does not
+// blow the framing out to the whole map.
+export function unitFocusBounds(
+  positionsByUnit: Map<string, MapPositionSample[]>,
+  mapId: number,
+  project: (sample: MapPositionSample) => MapPoint | null,
+  focusGuids: ReadonlySet<string> = new Set(),
+  maxRadius = FOCUS_RADIUS_YARDS,
+): MapPointBounds | null {
+  const centre = focusCentre(positionsByUnit, mapId, focusGuids)?.sample;
+  if (!centre) return null;
+
+  let bounds: MapPointBounds | null = null;
+  for (const positions of positionsByUnit.values()) {
+    for (const sample of positions) {
+      if (sample.mapId !== mapId) continue;
+      if (Math.hypot(sample.x - centre.x, sample.y - centre.y) > maxRadius) continue;
+      const point = project(sample);
+      if (!point) continue;
+      if (!bounds) {
+        bounds = { minLeft: point.leftPercent, maxLeft: point.leftPercent, minTop: point.topPercent, maxTop: point.topPercent };
+        continue;
+      }
+      bounds.minLeft = Math.min(bounds.minLeft, point.leftPercent);
+      bounds.maxLeft = Math.max(bounds.maxLeft, point.leftPercent);
+      bounds.minTop = Math.min(bounds.minTop, point.topPercent);
+      bounds.maxTop = Math.max(bounds.maxTop, point.topPercent);
+    }
+  }
+  return bounds;
+}
+
+/** Artwork percent per world yard along each artwork axis. */
+export interface MapProjectionScale {
+  left: number;
+  top: number;
+}
+
+// Both projections are axis-aligned (world Y moves left, world X moves top),
+// so one diagonal step measures both axes. Steps both ways so a point at the
+// artwork's edge, where projection clamps, still measures.
+export function projectionScale(
+  project: (sample: MapPositionSample) => MapPoint | null,
+  at: MapPositionSample,
+  stepYards = 10,
+): MapProjectionScale | null {
+  const origin = project(at);
+  if (!origin) return null;
+  let left = 0;
+  let top = 0;
+  for (const step of [stepYards, -stepYards]) {
+    const moved = project({ ...at, x: at.x + step, y: at.y + step });
+    if (!moved) continue;
+    left = Math.max(left, Math.abs(moved.leftPercent - origin.leftPercent) / stepYards);
+    top = Math.max(top, Math.abs(moved.topPercent - origin.topPercent) / stepYards);
+  }
+  return left > 0 && top > 0 ? { left, top } : null;
+}
+
+/**
+ * The visible part of the artwork: its centre in artwork fractions (0..1)
+ * and a zoom relative to the whole artwork fitting the view (1 = full map).
+ */
+export interface MapViewport {
+  centerX: number;
+  centerY: number;
+  zoom: number;
+}
+
+export const FULL_MAP_VIEWPORT: MapViewport = { centerX: 0.5, centerY: 0.5, zoom: 1 };
+export const MAX_MAP_ZOOM = 50;
+const FIT_PADDING = 0.15;
+const FIT_MIN_SPAN = 1 / MAX_MAP_ZOOM;
+
+export function clampViewport(viewport: MapViewport): MapViewport {
+  const zoom = Math.max(1, Math.min(MAX_MAP_ZOOM, viewport.zoom));
+  const half = 0.5 / zoom;
+  return {
+    centerX: Math.max(half, Math.min(1 - half, viewport.centerX)),
+    centerY: Math.max(half, Math.min(1 - half, viewport.centerY)),
+    zoom,
+  };
+}
+
+/**
+ * The smallest span, in yards across the view's longer axis, that the auto
+ * fit frames before padding. A five-player fight packed into ~20 yd would
+ * otherwise fit at the maximum zoom, a few blurry tiles with the boss tiny in
+ * the frame. 45 yd keeps a melee pack, its ranged and some room around them
+ * in view (≈ 58 yd with padding); manual zoom is not limited by it.
+ */
+export const AUTO_FIT_MIN_SPAN_YARDS = 45;
+
+export interface AutoFitOptions {
+  /** Smallest visible span in yards across the longer axis, before padding; needs `scale`. */
+  minSpanYards?: number;
+  /** Artwork percent per yard around the fight (projectionScale). */
+  scale?: MapProjectionScale | null;
+  /** Move the centre towards this point (the boss) as far as keeps `bounds` in view. */
+  centre?: MapPoint | null;
+}
+
+// Frames `bounds` plus padding in a view with the artwork's aspect ratio,
+// where a zoom of z shows 1/z of the artwork's width and of its height.
+// The bias towards `centre` never zooms out: it only uses the slack the
+// minimum span or the other axis leaves, keeping half the padding as margin.
+export function autoFitViewport(bounds: MapPointBounds, options: AutoFitOptions = {}): MapViewport {
+  const spanX = (bounds.maxLeft - bounds.minLeft) / 100;
+  const spanY = (bounds.maxTop - bounds.minTop) / 100;
+  // The longer visible axis in yards is the one with fewer percent per yard.
+  const minSpan = options.scale && options.minSpanYards
+    ? options.minSpanYards * Math.min(options.scale.left, options.scale.top) / 100
+    : 0;
+  const span = Math.max(FIT_MIN_SPAN, Math.max(minSpan, spanX, spanY) * (1 + FIT_PADDING * 2));
+  const centreAlong = (min: number, max: number, target: number | undefined) => {
+    const middle = (min + max) / 200;
+    if (target === undefined) return middle;
+    const slack = Math.max(0, (span - ((max - min) / 100) * (1 + FIT_PADDING)) / 2);
+    return Math.max(middle - slack, Math.min(middle + slack, target / 100));
+  };
+  return clampViewport({
+    centerX: centreAlong(bounds.minLeft, bounds.maxLeft, options.centre?.leftPercent),
+    centerY: centreAlong(bounds.minTop, bounds.maxTop, options.centre?.topPercent),
+    zoom: 1 / span,
+  });
+}
+
+export function fitViewportToBounds(bounds: MapPointBounds): MapViewport {
+  return autoFitViewport(bounds);
+}
+
+/** Zooms by `factor` keeping the artwork point under view fraction (`viewX`, `viewY`) fixed. */
+export function zoomViewportAt(viewport: MapViewport, factor: number, viewX: number, viewY: number): MapViewport {
+  const anchorX = viewport.centerX + (viewX - 0.5) / viewport.zoom;
+  const anchorY = viewport.centerY + (viewY - 0.5) / viewport.zoom;
+  const zoom = Math.max(1, Math.min(MAX_MAP_ZOOM, viewport.zoom * factor));
+  return clampViewport({
+    centerX: anchorX - (viewX - 0.5) / zoom,
+    centerY: anchorY - (viewY - 0.5) / zoom,
+    zoom,
+  });
+}
+
+/**
+ * How the Map panel frames its view. `viewport` null follows the default
+ * (the auto fit for one boss encounter, else the full map); Fit and Reset pin
+ * one, and a manual zoom or pan stores where the user left it. Once `manual`
+ * is set nothing re-frames until the selection changes or Fit / Reset is
+ * pressed. The views apply the framing only when `revision` changes, so
+ * replay ticks, filter changes and the user's own reports never move the
+ * camera; a view that mounts (2D <-> 3D, or after a loading state) starts
+ * from it.
+ */
+export interface MapFraming {
+  selectionKey: string;
+  revision: number;
+  viewport: MapViewport | null;
+  manual: boolean;
+  /** The default framing last applied, to re-fit when it changes before any manual input. */
+  defaultKey: string;
+}
+
+export const INITIAL_MAP_FRAMING: MapFraming = { selectionKey: "", revision: 0, viewport: null, manual: false, defaultKey: "" };
+
+function viewportKey(viewport: MapViewport): string {
+  return `${viewport.centerX.toFixed(5)},${viewport.centerY.toFixed(5)},${viewport.zoom.toFixed(4)}`;
+}
+
+/** The framing for this render: unchanged (same object) unless the selection or an untouched default changed. */
+export function reconcileMapFraming(framing: MapFraming, selectionKey: string, defaultViewport: MapViewport): MapFraming {
+  const defaultKey = viewportKey(defaultViewport);
+  if (framing.selectionKey !== selectionKey) {
+    return { selectionKey, revision: framing.revision + 1, viewport: null, manual: false, defaultKey };
+  }
+  if (!framing.manual && framing.viewport === null && framing.defaultKey !== defaultKey) {
+    return { ...framing, revision: framing.revision + 1, defaultKey };
+  }
+  return framing;
+}
+
+/** Fit / Reset: apply `viewport` now and leave manual mode. */
+export function pinMapFraming(framing: MapFraming, viewport: MapViewport): MapFraming {
+  return { ...framing, revision: framing.revision + 1, viewport, manual: false };
+}
+
+/** The user zoomed or panned to `viewport`; the views already show it, so the revision stays. */
+export function manualMapFraming(framing: MapFraming, viewport: MapViewport): MapFraming {
+  return { ...framing, viewport, manual: true };
+}
+
+/** How long a re-framing animates; instant with prefers-reduced-motion. */
+export const VIEW_TRANSITION_MS = 250;
+
+export function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+}
+
+/** The viewport `t` (0..1) of the way from `from` to `to`; zoom moves geometrically so it feels even. */
+export function interpolateViewport(from: MapViewport, to: MapViewport, t: number): MapViewport {
+  if (t >= 1) return to;
+  return {
+    centerX: from.centerX + (to.centerX - from.centerX) * t,
+    centerY: from.centerY + (to.centerY - from.centerY) * t,
+    zoom: from.zoom * (to.zoom / from.zoom) ** t,
+  };
+}
+
+/** Where an artwork point lands in a view showing `viewport`, in view percentages. */
+export function viewportPoint(point: MapPoint, viewport: MapViewport): MapPoint {
+  return {
+    leftPercent: ((point.leftPercent / 100 - viewport.centerX) * viewport.zoom + 0.5) * 100,
+    topPercent: ((point.topPercent / 100 - viewport.centerY) * viewport.zoom + 0.5) * 100,
   };
 }
