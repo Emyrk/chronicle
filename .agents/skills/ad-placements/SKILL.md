@@ -58,6 +58,7 @@ Use `railLayout="paired"` when a page renders rails on both sides. Single rails 
 - Mapping formats or placements to configured provider slot IDs.
 - Requesting and refreshing an ad safely.
 - Empty, blocked, or unfilled-ad behavior.
+- Reserving the 600px live target height required for rail unit creation.
 - Provider-specific markup and CSP-compatible attributes.
 
 If a proposed change makes a caller aware of a NitroPay site ID, `nitroAds`, consent API, `siteConfig.ads_enabled`, or the provider script URL, move that behavior into `AdSlot` or its Ads-directory runtime instead.

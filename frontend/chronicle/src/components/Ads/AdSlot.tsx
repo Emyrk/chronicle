@@ -117,7 +117,7 @@ export function AdSlot({
           className={cn(
             showPreview &&
               "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10",
-            showPreview && frameClasses[format],
+            (showPreview || format === "rail") && frameClasses[format],
           )}
         >
           {showPreview && (
