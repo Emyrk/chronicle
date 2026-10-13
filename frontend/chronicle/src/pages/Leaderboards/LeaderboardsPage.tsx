@@ -50,7 +50,7 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
           </div>
         </div>
 
-        <div className="mx-auto flex w-full max-w-[1800px] gap-6 px-3 py-4 sm:px-4 sm:py-8">
+        <div className="mx-auto flex w-full max-w-[1920px] gap-6 px-3 py-4 sm:px-4 sm:py-8">
           <div className="min-w-0 flex-1">
             {statisticsActive ? (
               <InstanceView instanceName={instance} />
@@ -66,7 +66,7 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
 
   // No instance selected — show the landing page
   return (
-    <div className="mx-auto w-full max-w-[1800px] px-4 py-8">
+    <div className="mx-auto w-full max-w-[1920px] px-4 py-8">
       {/* Tab bar for landing */}
       <div className="flex items-center gap-1 border-b mb-6">
         <TabButton
