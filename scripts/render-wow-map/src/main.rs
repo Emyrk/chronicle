@@ -102,6 +102,13 @@ fn triangle(points: [[f32; 3]; 3]) -> Triangle {
     }
 }
 
+fn wmo_local_to_world(point: [f32; 3], scale: f32) -> [f32; 3] {
+    // WMO model-space horizontal axes run opposite combat-log world X/Y. Keep
+    // the axes in order and negate both; swapping them rotates replay paths away
+    // from the geometry. Boss telemetry anchors validate this transform.
+    [-point[0] * scale, -point[1] * scale, point[2] * scale]
+}
+
 fn wmo_triangles(
     directory: &Path,
     placements_path: &Path,
@@ -149,19 +156,10 @@ fn wmo_triangles(
             let Some(c) = group.vertex_positions.get(indices[2] as usize) else {
                 continue;
             };
-            let convert = |point: [f32; 3]| {
-                // WMO model space is Z-up. The global-WMO placement used by these
-                // dungeons maps local Y to world X and local X to world Y.
-                [
-                    point[1] * placement.scale,
-                    point[0] * placement.scale,
-                    point[2] * placement.scale,
-                ]
-            };
             triangles.push(triangle([
-                convert([a.x, a.y, a.z]),
-                convert([b.x, b.y, b.z]),
-                convert([c.x, c.y, c.z]),
+                wmo_local_to_world([a.x, a.y, a.z], placement.scale),
+                wmo_local_to_world([b.x, b.y, b.z], placement.scale),
+                wmo_local_to_world([c.x, c.y, c.z], placement.scale),
             ]));
         }
     }
@@ -496,6 +494,14 @@ mod tests {
         let bounds = fitted_bounds(&triangles, 1200, 800).expect("valid bounds");
         let projected_aspect = (bounds.max_y - bounds.min_y) / (bounds.max_x - bounds.min_x);
         assert!((projected_aspect - 1.5).abs() < 0.0001);
+    }
+
+    #[test]
+    fn global_wmo_negates_model_xy_without_swapping_axes() {
+        assert_eq!(
+            wmo_local_to_world([12.0, -34.0, 5.0], 2.0),
+            [-24.0, 68.0, 10.0],
+        );
     }
 
     #[test]
