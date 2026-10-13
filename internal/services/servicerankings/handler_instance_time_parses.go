@@ -294,6 +294,7 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Log
 
 		scoreResult, scored := timeparsepolicy.ScoreTime(bossKillCohort, kill.DurationMs)
 		bossScore := chroniclesdk.BossKillTimeParse{
+			EncounterID:   kill.EncounterID,
 			EncounterName: kill.EncounterName,
 			DurationMs:    kill.DurationMs,
 			SampleSize:    scoreResult.SampleSize,
