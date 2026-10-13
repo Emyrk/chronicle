@@ -92,7 +92,14 @@ func NewIncantagos(id guid.GUID, all *characters.Characters) (characters.Charact
 }
 
 func NewKing(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
-	return characters.NewAdsGoWithBoss(59967,
+	if entry, ok := id.GetEntry(); !ok || entry != 59967 {
+		return nil, false
+	}
+
+	// King can stop producing direct combat events for more than the default
+	// inactivity timeout while the raid is still fighting his chess pieces.
+	common := characters.NewCommonCharacter(id, all).WithTimeout(90 * time.Second)
+	return characters.NewAdsGoWithBossCustomCharacter(common, all, 59967,
 		59972, // Pawn
 		49015, // Withering Pawn
 		59971, // Bishop
@@ -103,7 +110,7 @@ func NewKing(id guid.GUID, all *characters.Characters) (characters.Character, bo
 		49014, // "Malfunctioning Knight",
 		59969, // "Ghastly Horseman",
 		59953, // "Queen",
-	)(id, all)
+	), true
 }
 
 func NewSanvTasDal(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
