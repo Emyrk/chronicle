@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useQueryClient } from "@tanstack/react-query";
+import type { WoWSpell } from "@/api/wowdb";
 import { BOSS_MINI_SLUGS } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
 import type { MapHealthSample } from "./map.processor";
@@ -574,6 +576,28 @@ function BossMiniReplay({ playbackSpeed }: { playbackSpeed: number }) {
   );
 }
 
+// Seeds the spell lookups the cast icons use (the query key useSpellMeta and
+// useSpell share), so the story needs no backend. Starfire is left out and
+// falls back to the question mark.
+const SPELL_ICONS: Record<number, string> = {
+  585: "spell_holy_holysmite",
+  403: "spell_nature_lightning",
+  116: "spell_frost_frostbolt02",
+  686: "spell_shadow_shadowbolt",
+  2054: "spell_holy_heal",
+  2120: "spell_fire_selfdestruct",
+};
+
+function WithSpellIcons({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+  useState(() => {
+    for (const [id, icon] of Object.entries(SPELL_ICONS)) {
+      queryClient.setQueryData(["wowdb", "spell", id, "default"], { id: Number(id), spell_icon: { TextureFilename: icon } } as unknown as WoWSpell);
+    }
+  });
+  return children;
+}
+
 const meta = {
   title: "Instance/Map/MapView3D",
   component: SyntheticReplay,
@@ -625,4 +649,13 @@ export const BossFight25: Story = {
 export const BossMinis: Story = {
   args: { playbackSpeed: 1 },
   render: ({ playbackSpeed }) => <BossMiniReplay playbackSpeed={playbackSpeed} />,
+};
+
+/**
+ * Spell icons float above the selected players and the boss while they cast:
+ * held through a cast, briefly after instants; auto attacks show none.
+ */
+export const CastIcons: Story = {
+  args: { players: 10, playbackSpeed: 1, mutedEvery: 2, effects: true },
+  render: (args) => <WithSpellIcons><SyntheticReplay {...args} /></WithSpellIcons>,
 };

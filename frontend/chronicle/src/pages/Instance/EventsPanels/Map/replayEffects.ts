@@ -370,3 +370,87 @@ export function deriveCombatText(
   out.length = count;
   return out;
 }
+
+/** How long an instant cast's (or a finished cast's) icon stays up. */
+export const CAST_ICON_MS = 700;
+/** Icons shown side by side above one caster, at most. */
+export const MAX_CAST_ICONS_PER_UNIT = 2;
+/** Auto attack, Auto Shot and wand Shoot: repeating swings, not casts. */
+export const CAST_ICON_SKIP_SPELLS: ReadonlySet<number> = new Set([6603, 75, 5019]);
+
+export interface CastIcon {
+  caster: string;
+  spellId: number;
+  /** 0 at the cast start (or instant cast), approaching 1 as the icon expires. */
+  progress: number;
+  /** "casting" while a cast bar runs; "instant" after a cast goes off. */
+  phase: "casting" | "instant";
+}
+
+const showsCastIcon = (event: ReplayEffectEvent) =>
+  event.spellId != null && !CAST_ICON_SKIP_SPELLS.has(event.spellId);
+
+// Whether the caster's cast at `index` ended by `end`: their next cast start,
+// the same spell going off, or an interrupt.
+function castEndedBy(events: readonly ReplayEffectEvent[], index: number, end: number): boolean {
+  const cast = events[index];
+  for (let next = index + 1; next < end; next++) {
+    const event = events[next];
+    if (event.kind === "interrupt") {
+      if (event.target === cast.source) return true;
+      continue;
+    }
+    if (event.source !== cast.source || !showsCastIcon(event)) continue;
+    if (event.kind === "cast_start" || (event.kind === "cast_go" && event.spellId === cast.spellId)) return true;
+  }
+  return false;
+}
+
+/**
+ * Spell icons above `sources` while they cast, newest first: a cast with a
+ * cast time shows until it goes off, is interrupted or replaced (at most
+ * CAST_RING_MAX_MS), and every cast that goes off shows for CAST_ICON_MS.
+ * At most MAX_CAST_ICONS_PER_UNIT per caster and `max` in all. Like
+ * deriveCombatText, a pure function of the cursor; `out` and its objects
+ * are reused.
+ */
+export function deriveCastIcons(
+  fx: EncounterEffects,
+  cursorMs: number,
+  sources: ReadonlySet<string>,
+  max: number,
+  out: CastIcon[] = [],
+): CastIcon[] {
+  let count = 0;
+  const events = fx.events;
+  const [start, end] = eventWindow(events, cursorMs - CAST_RING_MAX_MS, cursorMs);
+  for (let index = end - 1; index >= start && count < max; index--) {
+    const event = events[index];
+    if (event.kind !== "cast_start" && event.kind !== "cast_go") continue;
+    if (!sources.has(event.source) || !showsCastIcon(event)) continue;
+    const ageMs = cursorMs - event.timestampMs;
+    let progress: number;
+    if (event.kind === "cast_go") {
+      if (ageMs >= CAST_ICON_MS) continue;
+      progress = ageMs / CAST_ICON_MS;
+    } else {
+      if (event.castTimeMs <= 0) continue;
+      const durationMs = Math.min(event.castTimeMs, CAST_RING_MAX_MS);
+      if (ageMs >= durationMs || castEndedBy(events, index, end)) continue;
+      progress = ageMs / durationMs;
+    }
+    let onCaster = 0;
+    for (let shown = 0; shown < count; shown++) {
+      if (out[shown].caster === event.source) onCaster++;
+    }
+    if (onCaster >= MAX_CAST_ICONS_PER_UNIT) continue;
+    const icon = out[count] ?? (out[count] = { caster: "", spellId: 0, progress: 0, phase: "instant" });
+    icon.caster = event.source;
+    icon.spellId = event.spellId!;
+    icon.progress = progress;
+    icon.phase = event.kind === "cast_start" ? "casting" : "instant";
+    count++;
+  }
+  out.length = count;
+  return out;
+}
