@@ -4,7 +4,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 	"github.com/Emyrk/chronicle/internal/bitmask"
 	"github.com/Gophercraft/core/format/dbc"
@@ -116,8 +115,8 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		AuraDescription_lang: def.AuraDescription_lang,
 
 		// === Display ===
-		SpellIcon:     dbcmem.GetSpellIcon(def.SpellIconID),
-		ActiveIcon:    dbcmem.GetSpellIcon(def.ActiveIconID),
+		SpellIcon:     SpellIcon{ID: def.SpellIconID},
+		ActiveIcon:    SpellIcon{ID: def.ActiveIconID},
 		SpellIconID_:  def.SpellIconID,
 		ActiveIconID_: def.ActiveIconID,
 
@@ -125,7 +124,7 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		MaxLevel:       def.MaxLevel,
 		BaseLevel:      def.BaseLevel,
 		SpellLevel:     def.SpellLevel,
-		Category:       dbcmem.GetSpellCategory(def.Category),
+		Category:       SpellCategory{ID: def.Category},
 		CategoryID_:    def.Category,
 		MaxTargetLevel: def.MaxTargetLevel,
 
@@ -148,7 +147,7 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		TargetAuraState:    AuraState(def.TargetAuraState),
 		MaxTargets:         def.MaxTargets,
 		TargetCreatureType: TargetCreatureType(def.TargetCreatureType),
-		SpellFocus:         dbcmem.GetSpellFocusObject(def.RequiresSpellFocus),
+		SpellFocus:         SpellFocusObject{ID: def.RequiresSpellFocus},
 		SpellFocusID_:      def.RequiresSpellFocus,
 
 		// === Resource Cost ===
@@ -159,7 +158,7 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		ManaPerSecond:    def.ManaPerSecond,
 
 		// === Timing ===
-		CastTime:          dbcmem.GetCastTime(def.CastingTimeIndex),
+		CastTime:          SpellCastTime{ID: def.CastingTimeIndex},
 		CastingTimeIndex_: def.CastingTimeIndex,
 		// DBC stores these as millisecond integers; scale to a real
 		// time.Duration so Go duration math (.Seconds(), etc.) is correct.
@@ -168,8 +167,8 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		StartRecoveryCategory: def.StartRecoveryCategory,
 		StartRecoveryTime:     time.Duration(def.StartRecoveryTime) * time.Millisecond,
 		CategoryRecoveryTime:  time.Duration(def.CategoryRecoveryTime) * time.Millisecond,
-		Range:                 dbcmem.GetSpellRange(def.RangeIndex),
-		Duration:              dbcmem.GetSpellDuration(def.DurationIndex),
+		Range:                 SpellRange{ID: def.RangeIndex},
+		Duration:              SpellDuration{ID: def.DurationIndex},
 		RangeIndex_:           def.RangeIndex,
 		DurationIndex_:        def.DurationIndex,
 
@@ -276,7 +275,7 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 			effect.EffectMechanic = def.EffectMechanic[i]
 		}
 		if i < len(def.EffectRadiusIndex) {
-			effect.EffectRadius = dbcmem.GetSpellRadius(def.EffectRadiusIndex[i])
+			effect.EffectRadius = SpellRadius{ID: def.EffectRadiusIndex[i]}
 			effect.EffectRadiusIndex = []int32{def.EffectRadiusIndex[i]}
 		}
 		if i < len(def.EffectAura) {

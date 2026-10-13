@@ -9,7 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,7 +78,7 @@ func testSpell(id chrondbc.SpellID) *chrondbc.Spell {
 func testSpellWithDuration(id chrondbc.SpellID, durationMS int32) *chrondbc.Spell {
 	return &chrondbc.Spell{
 		ID:       id,
-		Duration: dbcmem.SpellDuration{MaxDuration: durationMS},
+		Duration: chrondbc.SpellDuration{MaxDuration: durationMS},
 	}
 }
 

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/internal/bitmask"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/google/uuid"
@@ -165,15 +164,15 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 		AuraDescription_lang: i18n.Text{i18n.English: r.AuraDescription},
 
 		SpellIconID_:  r.SpellIconID,
-		SpellIcon:     dbcmem.SpellIcon{ID: r.SpellIconID},
+		SpellIcon:     chrondbc.SpellIcon{ID: r.SpellIconID},
 		ActiveIconID_: r.ActiveIconID,
-		ActiveIcon:    dbcmem.SpellIcon{ID: r.ActiveIconID},
+		ActiveIcon:    chrondbc.SpellIcon{ID: r.ActiveIconID},
 
 		MaxLevel:       r.MaxLevel,
 		BaseLevel:      r.BaseLevel,
 		SpellLevel:     r.SpellLevel,
 		CategoryID_:    r.Category,
-		Category:       dbcmem.SpellCategory{ID: r.Category},
+		Category:       chrondbc.SpellCategory{ID: r.Category},
 		MaxTargetLevel: r.MaxTargetLevel,
 
 		School:             chrondbc.School(r.School),
@@ -196,18 +195,18 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 		MaxTargets:         r.MaxTargets,
 		TargetCreatureType: chrondbc.TargetCreatureType(r.TargetCreatureType),
 		SpellFocusID_:      r.RequiresSpellFocus,
-		SpellFocus:         dbcmem.SpellFocusObject{ID: r.RequiresSpellFocus},
+		SpellFocus:         chrondbc.SpellFocusObject{ID: r.RequiresSpellFocus},
 
 		CastingTimeIndex_:     r.CastingTimeIndex,
-		CastTime:              dbcmem.SpellCastTime{ID: r.CastingTimeIndex},
+		CastTime:              chrondbc.SpellCastTime{ID: r.CastingTimeIndex},
 		RecoveryTime:          time.Duration(r.RecoveryTimeMs) * time.Millisecond,
 		StartRecoveryCategory: r.StartRecoveryCategory,
 		StartRecoveryTime:     time.Duration(r.StartRecoveryTimeMs) * time.Millisecond,
 		CategoryRecoveryTime:  time.Duration(r.CategoryRecoveryTimeMs) * time.Millisecond,
 		RangeIndex_:           r.RangeIndex,
-		Range:                 dbcmem.SpellRange{ID: r.RangeIndex},
+		Range:                 chrondbc.SpellRange{ID: r.RangeIndex},
 		DurationIndex_:        r.DurationIndex,
-		Duration:              dbcmem.SpellDuration{ID: r.DurationIndex},
+		Duration:              chrondbc.SpellDuration{ID: r.DurationIndex},
 
 		Targets:              chrondbc.TargetFlags(r.Targets),
 		SpellClassSet:        chrondbc.SpellClassSet(r.SpellClassSet),
@@ -265,25 +264,25 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 	// This is intentional — DB-backed spells should never silently fall
 	// back to compiled-in globals from a different server version.
 	if r.IconTexture != nil {
-		s.SpellIcon = dbcmem.SpellIcon{ID: r.SpellIconID, TextureFilename: *r.IconTexture}
+		s.SpellIcon = chrondbc.SpellIcon{ID: r.SpellIconID, TextureFilename: *r.IconTexture}
 	}
 	if r.ActiveIconTexture != nil {
-		s.ActiveIcon = dbcmem.SpellIcon{ID: r.ActiveIconID, TextureFilename: *r.ActiveIconTexture}
+		s.ActiveIcon = chrondbc.SpellIcon{ID: r.ActiveIconID, TextureFilename: *r.ActiveIconTexture}
 	}
 	if r.CtBase != nil {
-		s.CastTime = dbcmem.SpellCastTime{ID: r.CastingTimeIndex, Base: *r.CtBase, PerLevel: derefOr(r.CtPerLevel), Minimum: derefOr(r.CtMinimum)}
+		s.CastTime = chrondbc.SpellCastTime{ID: r.CastingTimeIndex, Base: *r.CtBase, PerLevel: derefOr(r.CtPerLevel), Minimum: derefOr(r.CtMinimum)}
 	}
 	if r.DurBase != nil {
-		s.Duration = dbcmem.SpellDuration{ID: r.DurationIndex, Duration: *r.DurBase, DurationPerLevel: derefOr(r.DurPerLevel), MaxDuration: derefOr(r.DurMax)}
+		s.Duration = chrondbc.SpellDuration{ID: r.DurationIndex, Duration: *r.DurBase, DurationPerLevel: derefOr(r.DurPerLevel), MaxDuration: derefOr(r.DurMax)}
 	}
 	if r.RangeMin != nil {
-		s.Range = dbcmem.SpellRange{ID: r.RangeIndex, RangeMin: *r.RangeMin, RangeMax: derefOrF(r.RangeMax), Flags: derefOr(r.RangeFlags), Name: derefOrS(r.RangeName)}
+		s.Range = chrondbc.SpellRange{ID: r.RangeIndex, RangeMin: *r.RangeMin, RangeMax: derefOrF(r.RangeMax), Flags: derefOr(r.RangeFlags), Name: derefOrS(r.RangeName)}
 	}
 	if r.CatName != nil || r.CatFlags != nil {
-		s.Category = dbcmem.SpellCategory{ID: r.Category, Flags: derefOr(r.CatFlags), UsesPerWeek: derefOr(r.CatUsesPerWeek), Name: derefOrS(r.CatName), MaxCharges: derefOr(r.CatMaxCharges), ChargeRecoveryTime: derefOr(r.CatChargeRecoveryTime), TypeMask: derefOr(r.CatTypeMask)}
+		s.Category = chrondbc.SpellCategory{ID: r.Category, Flags: derefOr(r.CatFlags), UsesPerWeek: derefOr(r.CatUsesPerWeek), Name: derefOrS(r.CatName), MaxCharges: derefOr(r.CatMaxCharges), ChargeRecoveryTime: derefOr(r.CatChargeRecoveryTime), TypeMask: derefOr(r.CatTypeMask)}
 	}
 	if r.FocusName != nil {
-		s.SpellFocus = dbcmem.SpellFocusObject{ID: r.RequiresSpellFocus, Name: *r.FocusName}
+		s.SpellFocus = chrondbc.SpellFocusObject{ID: r.RequiresSpellFocus, Name: *r.FocusName}
 	}
 	if r.DescVariables != nil {
 		s.DescriptionVariables = *r.DescVariables

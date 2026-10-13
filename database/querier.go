@@ -185,8 +185,6 @@ type sqlcQuerier interface {
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
-	// Canonical database-backed spell lookups. Each base spell row carries its
-	// independently ordered normalized components without multiplying child rows.
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
 	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
 	// Per-encounter kill aggregates for one character across all time.
@@ -678,10 +676,20 @@ type sqlcQuerier interface {
 	ListSnapshotMembersForInstance(ctx context.Context, arg ListSnapshotMembersForInstanceParams) ([]RankingSnapshotMember, error)
 	// List snapshot members for an instance, joining to encounter_dps_rankings for player name/role.
 	ListSnapshotMembersForInstanceWithNames(ctx context.Context, arg ListSnapshotMembersForInstanceWithNamesParams) ([]ListSnapshotMembersForInstanceWithNamesRow, error)
+	// Canonical database-backed spell lookups. Each base spell row carries its
+	// independently ordered normalized components without multiplying child rows.
+	ListSpellCastTimesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellCastTime, error)
+	ListSpellCategoriesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellCategory, error)
+	ListSpellDescriptionVariablesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellDescriptionVariable, error)
+	ListSpellDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellDuration, error)
 	ListSpellEffectsForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellEffectsForCheckRow, error)
+	ListSpellFocusObjectsByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellFocusObject, error)
 	// Read-only source rows used by the spell dataset integrity checker.
 	ListSpellIDsForCheck(ctx context.Context, datasetID uuid.UUID) ([]int32, error)
+	ListSpellIconsByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellIcon, error)
 	ListSpellPowersForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellPowersForCheckRow, error)
+	ListSpellRadiiByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellRadii, error)
+	ListSpellRangesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellRange, error)
 	ListSpellVariantsForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellVariantsForCheckRow, error)
 	ListTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)

@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
@@ -89,7 +88,7 @@ func legacySpellEffect(def *dbdefs.Ent_Spell, index int) SpellEffect {
 		EffectRealPointsPerLevel: floatAt(def.EffectRealPointsPerLevel, index),
 		EffectBasePoints:         intAt(def.EffectBasePoints, index),
 		EffectMechanic:           intAt(def.EffectMechanic, index),
-		EffectRadius:             dbcmem.GetSpellRadius(radiusIndex),
+		EffectRadius:             SpellRadius{ID: radiusIndex},
 		EffectRadiusIndex:        []int32{radiusIndex},
 		EffectAura:               AuraEffect(intAt(def.EffectAura, index)),
 		EffectAuraPeriod:         intAt(def.EffectAuraPeriod, index),

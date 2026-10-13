@@ -17124,7 +17124,6 @@ func (q *sqlQuerier) ClearSpellVariantsForDataset(ctx context.Context, datasetID
 }
 
 const getCanonicalSpellByID = `-- name: GetCanonicalSpellByID :one
-
 SELECT
   to_jsonb(s)::text AS spell_json,
   jsonb_build_object(
@@ -17203,8 +17202,6 @@ type GetCanonicalSpellByIDRow struct {
 	VariantsJson string `db:"variants_json" json:"variants_json"`
 }
 
-// Canonical database-backed spell lookups. Each base spell row carries its
-// independently ordered normalized components without multiplying child rows.
 func (q *sqlQuerier) GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error) {
 	row := q.db.QueryRow(ctx, getCanonicalSpellByID, arg.DatasetID, arg.SpellID)
 	var i GetCanonicalSpellByIDRow
@@ -17313,6 +17310,236 @@ func (q *sqlQuerier) GetCanonicalSpellsByName(ctx context.Context, arg GetCanoni
 			&i.EffectsJson,
 			&i.PowersJson,
 			&i.VariantsJson,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellCastTimesByDataset = `-- name: ListSpellCastTimesByDataset :many
+
+SELECT dataset_id, id, base, per_level, minimum FROM dbc_spell_cast_times WHERE dataset_id = $1
+`
+
+// Canonical database-backed spell lookups. Each base spell row carries its
+// independently ordered normalized components without multiplying child rows.
+func (q *sqlQuerier) ListSpellCastTimesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellCastTime, error) {
+	rows, err := q.db.Query(ctx, listSpellCastTimesByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DbcSpellCastTime
+	for rows.Next() {
+		var i DbcSpellCastTime
+		if err := rows.Scan(
+			&i.DatasetID,
+			&i.ID,
+			&i.Base,
+			&i.PerLevel,
+			&i.Minimum,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellCategoriesByDataset = `-- name: ListSpellCategoriesByDataset :many
+SELECT dataset_id, id, flags, uses_per_week, name, max_charges, charge_recovery_time, type_mask FROM dbc_spell_categories WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) ListSpellCategoriesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellCategory, error) {
+	rows, err := q.db.Query(ctx, listSpellCategoriesByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DbcSpellCategory
+	for rows.Next() {
+		var i DbcSpellCategory
+		if err := rows.Scan(
+			&i.DatasetID,
+			&i.ID,
+			&i.Flags,
+			&i.UsesPerWeek,
+			&i.Name,
+			&i.MaxCharges,
+			&i.ChargeRecoveryTime,
+			&i.TypeMask,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellDescriptionVariablesByDataset = `-- name: ListSpellDescriptionVariablesByDataset :many
+SELECT dataset_id, id, variables FROM dbc_spell_description_variables WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) ListSpellDescriptionVariablesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellDescriptionVariable, error) {
+	rows, err := q.db.Query(ctx, listSpellDescriptionVariablesByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DbcSpellDescriptionVariable
+	for rows.Next() {
+		var i DbcSpellDescriptionVariable
+		if err := rows.Scan(&i.DatasetID, &i.ID, &i.Variables); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellDurationsByDataset = `-- name: ListSpellDurationsByDataset :many
+SELECT dataset_id, id, duration, duration_per_level, max_duration FROM dbc_spell_durations WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) ListSpellDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellDuration, error) {
+	rows, err := q.db.Query(ctx, listSpellDurationsByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DbcSpellDuration
+	for rows.Next() {
+		var i DbcSpellDuration
+		if err := rows.Scan(
+			&i.DatasetID,
+			&i.ID,
+			&i.Duration,
+			&i.DurationPerLevel,
+			&i.MaxDuration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellFocusObjectsByDataset = `-- name: ListSpellFocusObjectsByDataset :many
+SELECT dataset_id, id, name FROM dbc_spell_focus_objects WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) ListSpellFocusObjectsByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellFocusObject, error) {
+	rows, err := q.db.Query(ctx, listSpellFocusObjectsByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DbcSpellFocusObject
+	for rows.Next() {
+		var i DbcSpellFocusObject
+		if err := rows.Scan(&i.DatasetID, &i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellIconsByDataset = `-- name: ListSpellIconsByDataset :many
+SELECT dataset_id, id, texture_filename FROM dbc_spell_icons WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) ListSpellIconsByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellIcon, error) {
+	rows, err := q.db.Query(ctx, listSpellIconsByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DbcSpellIcon
+	for rows.Next() {
+		var i DbcSpellIcon
+		if err := rows.Scan(&i.DatasetID, &i.ID, &i.TextureFilename); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellRadiiByDataset = `-- name: ListSpellRadiiByDataset :many
+SELECT dataset_id, id, radius, radius_per_level, radius_min, radius_max FROM dbc_spell_radii WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) ListSpellRadiiByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellRadii, error) {
+	rows, err := q.db.Query(ctx, listSpellRadiiByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DbcSpellRadii
+	for rows.Next() {
+		var i DbcSpellRadii
+		if err := rows.Scan(
+			&i.DatasetID,
+			&i.ID,
+			&i.Radius,
+			&i.RadiusPerLevel,
+			&i.RadiusMin,
+			&i.RadiusMax,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpellRangesByDataset = `-- name: ListSpellRangesByDataset :many
+SELECT dataset_id, id, range_min, range_max, flags, name FROM dbc_spell_ranges WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) ListSpellRangesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellRange, error) {
+	rows, err := q.db.Query(ctx, listSpellRangesByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DbcSpellRange
+	for rows.Next() {
+		var i DbcSpellRange
+		if err := rows.Scan(
+			&i.DatasetID,
+			&i.ID,
+			&i.RangeMin,
+			&i.RangeMax,
+			&i.Flags,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}

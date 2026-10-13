@@ -167,10 +167,6 @@ gen/db: $(DB_GEN_FILES)
 .PHONY: gen/db
 
 
-.PHONY: gen/static
-gen/static:
-	go generate ./database/gamedb/chrondbc/dbcmem
-
 # Icon pipeline: extract BLPs from WoW client, convert to WebP, generate manifest
 # Helper: run a command in nix-shell if cwebp/rclone are missing, plain shell otherwise.
 IMAGECACHE_NIX = frontend/imagecache/shell.nix

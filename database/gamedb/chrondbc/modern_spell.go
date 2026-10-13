@@ -1,7 +1,6 @@
 package chrondbc
 
 import (
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/google/uuid"
 )
 
@@ -14,26 +13,26 @@ type SpellEffect struct {
 	EffectIndex  int32     `json:"effect_index"`
 	SourceID     int32     `json:"source_id,omitempty"`
 
-	Effect                   Effect             `json:"effect"`
-	EffectDieSides           int32              `json:"effect_die_sides,omitempty"`
-	EffectRealPointsPerLevel float32            `json:"effect_real_points_per_level,omitempty"`
-	EffectBasePoints         int32              `json:"effect_base_points"`
-	EffectBasePointsF        *float32           `json:"effect_base_points_f,omitempty"`
-	EffectMechanic           int32              `json:"effect_mechanic,omitempty"`
-	EffectRadius             dbcmem.SpellRadius `json:"effect_radius"`
-	EffectRadiusIndex        []int32            `json:"effect_radius_index,omitempty"`
-	EffectAura               AuraEffect         `json:"effect_aura,omitempty"`
-	EffectAuraPeriod         int32              `json:"effect_aura_period,omitempty"`
-	EffectAmplitude          float32            `json:"effect_amplitude,omitempty"`
-	EffectChainTargets       int32              `json:"effect_chain_targets,omitempty"`
-	EffectItemType           ItemID             `json:"effect_item_type,omitempty"`
-	EffectMiscValue          []int32            `json:"effect_misc_value,omitempty"`
-	EffectTriggerSpell       SpellID            `json:"effect_trigger_spell,omitempty"`
-	EffectPointsPerCombo     float32            `json:"effect_points_per_combo,omitempty"`
-	EffectBaseDice           int32              `json:"effect_base_dice,omitempty"`
-	EffectDicePerLevel       int32              `json:"effect_dice_per_level,omitempty"`
-	EffectChainAmplitude     float32            `json:"effect_chain_amplitude,omitempty"`
-	ImplicitTarget           []int32            `json:"implicit_target,omitempty"`
+	Effect                   Effect      `json:"effect"`
+	EffectDieSides           int32       `json:"effect_die_sides,omitempty"`
+	EffectRealPointsPerLevel float32     `json:"effect_real_points_per_level,omitempty"`
+	EffectBasePoints         int32       `json:"effect_base_points"`
+	EffectBasePointsF        *float32    `json:"effect_base_points_f,omitempty"`
+	EffectMechanic           int32       `json:"effect_mechanic,omitempty"`
+	EffectRadius             SpellRadius `json:"effect_radius"`
+	EffectRadiusIndex        []int32     `json:"effect_radius_index,omitempty"`
+	EffectAura               AuraEffect  `json:"effect_aura,omitempty"`
+	EffectAuraPeriod         int32       `json:"effect_aura_period,omitempty"`
+	EffectAmplitude          float32     `json:"effect_amplitude,omitempty"`
+	EffectChainTargets       int32       `json:"effect_chain_targets,omitempty"`
+	EffectItemType           ItemID      `json:"effect_item_type,omitempty"`
+	EffectMiscValue          []int32     `json:"effect_misc_value,omitempty"`
+	EffectTriggerSpell       SpellID     `json:"effect_trigger_spell,omitempty"`
+	EffectPointsPerCombo     float32     `json:"effect_points_per_combo,omitempty"`
+	EffectBaseDice           int32       `json:"effect_base_dice,omitempty"`
+	EffectDicePerLevel       int32       `json:"effect_dice_per_level,omitempty"`
+	EffectChainAmplitude     float32     `json:"effect_chain_amplitude,omitempty"`
+	ImplicitTarget           []int32     `json:"implicit_target,omitempty"`
 
 	BonusCoefficientFromAP         float32 `json:"bonus_coefficient_from_ap,omitempty"`
 	Coefficient                    float32 `json:"coefficient,omitempty"`

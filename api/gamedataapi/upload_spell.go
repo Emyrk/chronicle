@@ -43,6 +43,14 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 
+	if err := h.hydrateLegacySpellMetadata(ctx, datasetID, canonicalSpells); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Failed to resolve spell metadata",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
 	flavor, err := h.flavorForDataset(ctx, datasetID)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{

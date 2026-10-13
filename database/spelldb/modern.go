@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -117,7 +116,7 @@ func getModernSpellEffects(ctx context.Context, pool *pgxpool.Pool, datasetID uu
 			return nil, err
 		}
 		if radius != nil && len(effect.EffectRadiusIndex) > 0 {
-			effect.EffectRadius = dbcmem.SpellRadius{
+			effect.EffectRadius = chrondbc.SpellRadius{
 				ID:             effect.EffectRadiusIndex[0],
 				Radius:         *radius,
 				RadiusPerLevel: derefOrF(radiusPerLevel),

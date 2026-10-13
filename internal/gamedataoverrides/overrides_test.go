@@ -5,7 +5,6 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +14,7 @@ func TestApplySpell(t *testing.T) {
 
 	berserk := &chrondbc.Spell{
 		ID:       45708,
-		Duration: dbcmem.SpellDuration{ID: 407, Duration: 100, MaxDuration: 100},
+		Duration: chrondbc.SpellDuration{ID: 407, Duration: 100, MaxDuration: 100},
 	}
 	ApplySpell(database.WoWFlavor{
 		database.FlavorVanilla,
@@ -27,14 +26,14 @@ func TestApplySpell(t *testing.T) {
 
 	vanilla := &chrondbc.Spell{
 		ID:       45708,
-		Duration: dbcmem.SpellDuration{ID: 407, Duration: 100, MaxDuration: 100},
+		Duration: chrondbc.SpellDuration{ID: 407, Duration: 100, MaxDuration: 100},
 	}
 	ApplySpell(database.WoWFlavor{database.FlavorVanilla}, vanilla)
 	require.Equal(t, int32(100), vanilla.Duration.MaxDuration)
 
 	otherSpell := &chrondbc.Spell{
 		ID:       45709,
-		Duration: dbcmem.SpellDuration{ID: 18, Duration: 20_000, MaxDuration: 20_000},
+		Duration: chrondbc.SpellDuration{ID: 18, Duration: 20_000, MaxDuration: 20_000},
 	}
 	ApplySpell(database.WoWFlavor{database.FlavorNightmareOfUrsol}, otherSpell)
 	require.Equal(t, int32(20_000), otherSpell.Duration.MaxDuration)
@@ -45,12 +44,12 @@ func TestApplySpellsLifeTapIcon(t *testing.T) {
 
 	cast := &chrondbc.Spell{
 		ID:           1454,
-		SpellIcon:    dbcmem.SpellIcon{ID: 208, TextureFilename: "Spell_Shadow_BurningSpirit"},
+		SpellIcon:    chrondbc.SpellIcon{ID: 208, TextureFilename: "Spell_Shadow_BurningSpirit"},
 		SpellIconID_: 208,
 	}
 	triggered := &chrondbc.Spell{
 		ID:           31818,
-		SpellIcon:    dbcmem.SpellIcon{ID: 206, TextureFilename: "Spell_Shadow_LifeDrain"},
+		SpellIcon:    chrondbc.SpellIcon{ID: 206, TextureFilename: "Spell_Shadow_LifeDrain"},
 		SpellIconID_: 206,
 	}
 
@@ -66,7 +65,7 @@ func TestApplySpellsBerserking(t *testing.T) {
 	cast := &chrondbc.Spell{
 		ID:               20554,
 		Description_lang: i18n.Text{i18n.English: "Increases attack and casting speed."},
-		SpellIcon:        dbcmem.SpellIcon{ID: 1661, TextureFilename: "Racial_Troll_Berserk"},
+		SpellIcon:        chrondbc.SpellIcon{ID: 1661, TextureFilename: "Racial_Troll_Berserk"},
 		SpellIconID_:     1661,
 	}
 	aura := &chrondbc.Spell{
@@ -95,7 +94,7 @@ func TestApplySpellsBloodFury(t *testing.T) {
 	cast := &chrondbc.Spell{
 		ID:               20572,
 		Description_lang: i18n.Text{i18n.English: "Increases attack power."},
-		SpellIcon:        dbcmem.SpellIcon{ID: 1662, TextureFilename: "Racial_Orc_BerserkerStrength"},
+		SpellIcon:        chrondbc.SpellIcon{ID: 1662, TextureFilename: "Racial_Orc_BerserkerStrength"},
 		SpellIconID_:     1662,
 	}
 	aura := &chrondbc.Spell{

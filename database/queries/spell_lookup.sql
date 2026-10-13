@@ -1,6 +1,30 @@
 -- Canonical database-backed spell lookups. Each base spell row carries its
 -- independently ordered normalized components without multiplying child rows.
 
+-- name: ListSpellCastTimesByDataset :many
+SELECT * FROM dbc_spell_cast_times WHERE dataset_id = $1;
+
+-- name: ListSpellDurationsByDataset :many
+SELECT * FROM dbc_spell_durations WHERE dataset_id = $1;
+
+-- name: ListSpellRangesByDataset :many
+SELECT * FROM dbc_spell_ranges WHERE dataset_id = $1;
+
+-- name: ListSpellIconsByDataset :many
+SELECT * FROM dbc_spell_icons WHERE dataset_id = $1;
+
+-- name: ListSpellCategoriesByDataset :many
+SELECT * FROM dbc_spell_categories WHERE dataset_id = $1;
+
+-- name: ListSpellRadiiByDataset :many
+SELECT * FROM dbc_spell_radii WHERE dataset_id = $1;
+
+-- name: ListSpellFocusObjectsByDataset :many
+SELECT * FROM dbc_spell_focus_objects WHERE dataset_id = $1;
+
+-- name: ListSpellDescriptionVariablesByDataset :many
+SELECT * FROM dbc_spell_description_variables WHERE dataset_id = $1;
+
 -- name: GetCanonicalSpellByID :one
 SELECT
   to_jsonb(s)::text AS spell_json,

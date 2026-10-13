@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,12 +12,12 @@ func TestDurationModifiersForSpellAndMaxAuraDuration(t *testing.T) {
 	t.Parallel()
 
 	spell := &Spell{
-		Duration:       dbcmem.SpellDuration{MaxDuration: 10_000},
+		Duration:       SpellDuration{MaxDuration: 10_000},
 		SpellClassSet:  8,
 		SpellClassMask: 0b11,
 	}
 	mods := &DurationModifierSet{
-		ByID: map[int32]dbcmem.DurationModifier{
+		ByID: map[int32]DurationModifier{
 			1: {SpellID: 1, Name: "Improved Duration", Percent: 10},
 			2: {SpellID: 2, Name: "Improved Duration", Percent: 20},
 			3: {SpellID: 3, Name: "Extended Duration", Flat: 2_000},
@@ -46,6 +45,6 @@ func TestDurationModifiersForSpellAndMaxAuraDuration(t *testing.T) {
 func TestMaxAuraDurationWithoutModifiers(t *testing.T) {
 	t.Parallel()
 
-	spell := &Spell{Duration: dbcmem.SpellDuration{MaxDuration: 10_000}}
+	spell := &Spell{Duration: SpellDuration{MaxDuration: 10_000}}
 	assert.Equal(t, 10*time.Second, MaxAuraDuration(spell, nil))
 }
