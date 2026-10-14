@@ -3,7 +3,7 @@ import { useSiteConfig } from "@/api/queries"
 import { cn } from "@/lib/utils"
 import { shouldShowAdPreview } from "./adPreview"
 import { adSizeLabel, adSizesForFormat, type AdFormat, type RailLayout } from "./adFormats"
-import { clearNitroPayAds, onNitroPayRendered, requestNitroPayAd, type NitroPayAd } from "./nitroPay"
+import { clearNitroPayAds, requestNitroPayAd, type NitroPayAd } from "./nitroPay"
 
 export type AdPlacement = `${string}-${string}`
 
@@ -73,14 +73,6 @@ export function AdSlot({
   const siteID = siteConfig?.ads_enabled ? siteConfig.nitropay_site_id : undefined
   const adID = `nitropay-${placement}`
   const wideRail = useMediaQuery(format === "rail" ? railLayoutQueries[railLayout] : undefined)
-  const renderKey = `${adID}:${format}:${wideRail}`
-  const [renderedKey, setRenderedKey] = useState<string>()
-  const showLabel = showPreview || renderedKey === renderKey
-
-  useEffect(() => {
-    if (!siteID || showPreview) return
-    return onNitroPayRendered(adID, () => setRenderedKey(renderKey))
-  }, [adID, renderKey, showPreview, siteID])
 
   useEffect(() => {
     if (!siteID || showPreview) return
@@ -117,11 +109,9 @@ export function AdSlot({
       data-ad-provider={showPreview ? "preview" : "nitropay"}
     >
       <div>
-        {showLabel && (
-          <div className="mb-1.5 text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
-            Advertisement
-          </div>
-        )}
+        <div className="mb-1.5 text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
+          Advertisement
+        </div>
         <div
           id={adID}
           className={cn(
