@@ -69,7 +69,7 @@ import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
 import { KillParseTooltip } from "./EncounterKillParse";
 import { useInstanceTimeParses } from "./Overview/overviewQueries";
-import { bossKillParsesByEncounter, killParseEdgeStyle } from "./Overview/encounterKillTimePopulation";
+import { bossKillParsesByEncounter, killParseEdgeStyle, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -457,6 +457,7 @@ function EncounterSidebar({
 }) {
   const timeParsesQuery = useInstanceTimeParses(instanceId);
   const killParses = bossKillParsesByEncounter(timeParsesQuery.data);
+  const scopedKillParses = scopedKillParsesByEncounter(timeParsesQuery.data);
   const lookbackDays = timeParsesQuery.data?.lookback_days;
   const nonWipeFilter = (e: Encounter) => {
     return includeWipes || (e.kill_type !== "wipe" && e.kill_type !== "reset");
@@ -660,7 +661,7 @@ function EncounterSidebar({
             const killParse = encounter.kill_type === "clean" && encounter.boss ? killParses?.get(encounter.id) : undefined;
             
             return (
-              <KillParseTooltip key={encounter.id} parse={killParse} lookbackDays={lookbackDays}>
+              <KillParseTooltip key={encounter.id} parses={killParse ? scopedKillParses?.get(encounter.id) : undefined} lookbackDays={lookbackDays}>
               <div
                 role="button"
                 tabIndex={0}
@@ -733,7 +734,7 @@ function EncounterSidebar({
               )}
               style={killParseEdgeStyle(killParse, isSelected)}
             >
-              <KillParseTooltip parse={killParse} lookbackDays={lookbackDays}>
+              <KillParseTooltip parses={killParse ? scopedKillParses?.get(encounter.id) : undefined} lookbackDays={lookbackDays}>
               <div
                 role="button"
                 tabIndex={0}

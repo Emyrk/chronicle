@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import type { BossKillTimeParse, SpeedrunCohortRun } from "@/api/typesGenerated";
 import { parseHexColor } from "../parseColors";
-import type { TimeParseScopeResult } from "./timeParseScope";
+import type { ScopedInstanceTimeParsesResponse, TimeParseScope, TimeParseScopeResult } from "./timeParseScope";
 
 /** A server-computed per-boss parse score ready for display. */
 export interface TimeBossParse {
@@ -45,6 +45,34 @@ export function bossKillParsesByEncounter(
 ): ReadonlyMap<string, BossKillTimeParse> | null {
   if (!timeParses?.available) return null;
   return new Map(timeParses.boss_kill_times.map((boss) => [boss.encounter_id, boss]));
+}
+
+/** One encounter's kill-time parse in each comparison scope. */
+export type ScopedKillParses = Partial<Record<TimeParseScope, BossKillTimeParse>>;
+
+/**
+ * Indexes boss kill-time parses for every scope by encounter ID. Falls back
+ * to the top-level server parses for older responses without scopes.
+ */
+export function scopedKillParsesByEncounter(
+  response: ScopedInstanceTimeParsesResponse | undefined,
+): ReadonlyMap<string, ScopedKillParses> | null {
+  if (!response?.available) return null;
+  const result = new Map<string, ScopedKillParses>();
+  const scopes: Record<TimeParseScope, TimeParseScopeResult | undefined> = {
+    server: response.scopes?.server ?? response,
+    realm: response.scopes?.realm,
+    guild: response.scopes?.guild,
+  };
+  for (const [scope, scopeResult] of Object.entries(scopes) as [TimeParseScope, TimeParseScopeResult | undefined][]) {
+    if (!scopeResult?.available) continue;
+    for (const boss of scopeResult.boss_kill_times) {
+      const entry = result.get(boss.encounter_id) ?? {};
+      entry[scope] = boss;
+      result.set(boss.encounter_id, entry);
+    }
+  }
+  return result;
 }
 
 export function scoredKillParse(parse: BossKillTimeParse | undefined): BossKillTimeParse | undefined {
