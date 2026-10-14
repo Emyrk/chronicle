@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/autostart"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/engine"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/store"
+	"github.com/Emyrk/chronicle/cmd/uploader/internal/update"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/wowdir"
 )
 
@@ -28,10 +30,12 @@ type app struct {
 	status engine.Status
 	items  menuItems
 	ready  bool
+
+	updateLink string
 }
 
 type menuItems struct {
-	status, folder, report, connect *systray.MenuItem
+	status, folder, report, connect, update *systray.MenuItem
 }
 
 func (a *app) runTray(ctx context.Context) error {
@@ -57,6 +61,8 @@ func (a *app) onReady(ctx context.Context) {
 	a.items.report.Disable()
 	a.items.connect = systray.AddMenuItem("Connect to Chronicle…", "")
 	a.items.connect.Hide()
+	a.items.update = systray.AddMenuItem("Update available", "")
+	a.items.update.Hide()
 	systray.AddSeparator()
 	choose := systray.AddMenuItem("Choose WoW folder…", "")
 	idle := systray.AddMenuItemCheckbox("Also upload when the log goes quiet", "", a.store.Get().UploadOnIdle)
@@ -71,6 +77,7 @@ func (a *app) onReady(ctx context.Context) {
 	a.renderFolder()
 
 	go a.engine.Run(ctx)
+	go a.checkUpdate(ctx)
 
 	go func() {
 		for {
@@ -88,6 +95,8 @@ func (a *app) onReady(ctx context.Context) {
 				// send the user to the site; the token is read from the
 				// keychain on every poll so a stored token takes effect.
 				openURL(a.server)
+			case <-a.items.update.ClickedCh:
+				openURL(a.updateURL())
 			case <-choose.ClickedCh:
 				a.chooseFolder()
 			case <-idle.ClickedCh:
@@ -112,6 +121,30 @@ func (a *app) onReady(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// checkUpdate looks for a newer release once at launch and, if there is one,
+// shows it in the tray. Failures are logged and otherwise ignored.
+func (a *app) checkUpdate(ctx context.Context) {
+	rel, ok, err := update.Latest(ctx, http.DefaultClient, update.DefaultURL)
+	if err != nil {
+		a.logger.Warn("update check", "err", err)
+		return
+	}
+	if !ok || !update.Newer(version, rel.Version) {
+		return
+	}
+	a.mu.Lock()
+	a.updateLink = rel.URL
+	a.mu.Unlock()
+	a.items.update.SetTitle("Update available: v" + rel.Version)
+	a.items.update.Show()
+}
+
+func (a *app) updateURL() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.updateLink
 }
 
 func (a *app) toggle(item *systray.MenuItem, on bool) {

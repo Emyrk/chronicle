@@ -25,6 +25,7 @@ import { AdminUsersOverview } from "./pages/Admin/AdminUsersOverview"
 import { AdminLogsPage } from "./pages/Admin/AdminLogsPage"
 import { AdminLeaderboardPage } from "./pages/Admin/AdminLeaderboardPage"
 import { PairPage } from "./pages/Pair"
+import { DownloadPage } from "./pages/Download"
 import { DeviceSettings } from "./pages/Settings/DeviceSettings"
 import { AdminSiteSettingsPage } from "./pages/Admin/AdminSiteSettingsPage"
 import { AdminStoragePage } from "./pages/Admin/AdminStoragePage"
@@ -127,6 +128,7 @@ function App() {
       <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/pair" element={<PairPage />} />
+      <Route path="/download" element={<DownloadPage />} />
       <Route path="/youtube-sync" element={<YouTubeSyncPage />} />
       <Route path="/youtube-sync-v2" element={<YouTubeSyncV2Page />} />
       <Route path="/youtube-sync-v3" element={<YouTubeSyncV3Page />} />
