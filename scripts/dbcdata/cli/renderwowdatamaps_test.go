@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -110,6 +111,71 @@ printf 'geometry' > "${output}"
 	require.Equal(t, "geometry", string(requireFile(t, outputPath)))
 	require.Contains(t, stderr.String(), "[map 2998 ADT 36,38 FileDataID 7288580] transient export failure")
 	require.Contains(t, stderr.String(), "[map 2998 ADT 36,38 FileDataID 7288580] retrying after export failure")
+}
+
+// Not parallel: this test deliberately keeps multiple fake exporter processes alive.
+func TestExportWowdataFilesSerializesPreparationAndOverlapsExports(t *testing.T) {
+	dir := t.TempDir()
+	leaderLock := filepath.Join(dir, "leader-lock")
+	leaderPreparing := filepath.Join(dir, "leader-preparing")
+	allowReady := filepath.Join(dir, "allow-ready")
+	leaderReady := filepath.Join(dir, "leader-ready")
+	followerStarted := filepath.Join(dir, "follower-started")
+	violation := filepath.Join(dir, "preparation-overlapped")
+	binary := filepath.Join(dir, "wowdata")
+	require.NoError(t, os.WriteFile(binary, []byte(fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+output=""
+while (($#)); do
+  if [[ "$1" == "--output" ]]; then
+    output="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+if mkdir %q 2>/dev/null; then
+  touch %q
+  while [[ ! -f %q ]]; do sleep 0.01; done
+  touch %q
+  printf 'prepare status=ready\n' >&2
+  while [[ ! -f %q ]]; do sleep 0.01; done
+else
+  touch %q
+  [[ -f %q ]] || touch %q
+  printf 'prepare status=ready\n' >&2
+fi
+printf 'geometry' > "$output"
+`, leaderLock, leaderPreparing, allowReady, leaderReady, followerStarted, followerStarted, leaderReady, violation)), 0o755))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	firstOutput := filepath.Join(dir, "first.wmo")
+	secondOutput := filepath.Join(dir, "second.wmo")
+	result := make(chan error, 1)
+	go func() {
+		result <- exportWowdataFiles(ctx, &bytes.Buffer{}, wowMapExtractOptions{WowdataBin: binary}, []wowdataFileExport{
+			{FileDataID: 101, Output: firstOutput, Label: "first"},
+			{FileDataID: 102, Output: secondOutput, Label: "second"},
+		}, 2)
+	}()
+
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(leaderPreparing)
+		return err == nil
+	}, time.Second, 10*time.Millisecond)
+	require.NoFileExists(t, followerStarted)
+	require.NoError(t, os.WriteFile(allowReady, nil, 0o644))
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		require.FailNow(t, "renderer exports did not overlap after preparation", ctx.Err().Error())
+	}
+	require.NoFileExists(t, violation)
+	require.FileExists(t, followerStarted)
+	require.Equal(t, "geometry", string(requireFile(t, firstOutput)))
+	require.Equal(t, "geometry", string(requireFile(t, secondOutput)))
 }
 
 func requireFile(t *testing.T, path string) []byte {

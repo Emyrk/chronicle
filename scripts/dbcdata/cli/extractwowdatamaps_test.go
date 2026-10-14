@@ -330,9 +330,23 @@ func TestWowdataPrepareWriterSignalsOnlyExactReadyLine(t *testing.T) {
 	require.Equal(t, "prepare target=remote\nprepare status=ready-extra\nprepare status=ready\n", destination.String())
 }
 
-func TestRunWowdataWithPrepareGateReleasesAfterEarlyExit(t *testing.T) {
+func TestRunWowdataWithPrepareGateHonorsCancellationWhileWaiting(t *testing.T) {
 	t.Parallel()
 
+	gate := newWowdataPrepareGate()
+	release, err := gate.acquire(context.Background())
+	require.NoError(t, err)
+	defer release()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd := exec.CommandContext(ctx, "unused")
+	err = runWowdataWithPrepareGate(ctx, cmd, &bytes.Buffer{}, gate)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+// Not parallel: concurrent execution of freshly written test scripts can return ETXTBSY on worktree filesystems.
+func TestRunWowdataWithPrepareGateReleasesAfterEarlyExit(t *testing.T) {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "wowdata")
 	require.NoError(t, os.WriteFile(binary, []byte("#!/usr/bin/env bash\nexit 1\n"), 0o755))
@@ -347,9 +361,8 @@ func TestRunWowdataWithPrepareGateReleasesAfterEarlyExit(t *testing.T) {
 	}
 }
 
+// Not parallel: this test deliberately keeps multiple fake exporter processes alive.
 func TestExportWowdataTexturesSerializesPreparationAndOverlapsExports(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "original"), 0o755))
 	leaderLock := filepath.Join(dir, "leader-lock")
