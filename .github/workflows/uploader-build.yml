@@ -1,0 +1,74 @@
+name: Uploader Build
+
+on:
+  pull_request:
+    paths:
+      - 'cmd/uploader/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/uploader-build.yml'
+  push:
+    branches: [main, develop, feature/forever-uploader]
+    paths:
+      - 'cmd/uploader/**'
+      - 'go.mod'
+      - 'go.sum'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Linux and Windows are pure Go (no cgo), so both cross-compile from Linux.
+  build-linux-windows:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: go build -o /dev/null ./cmd/uploader
+
+  # The macOS tray needs cgo (Cocoa), so it builds on a macOS runner. Apple
+  # Silicon runners build the amd64 binary with the same clang.
+  build-darwin:
+    name: Build (darwin/${{ matrix.goarch }})
+    runs-on: macos-14
+    strategy:
+      matrix:
+        goarch: [arm64, amd64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Build
+        env:
+          GOOS: darwin
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '1'
+        run: go build -o /dev/null ./cmd/uploader
+
+  test:
+    name: Test (uploader)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - run: go test -race ./cmd/uploader/...
