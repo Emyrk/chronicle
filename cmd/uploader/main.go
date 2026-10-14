@@ -96,7 +96,7 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	a := &app{server: tn.BaseURL, store: st, logger: logger, cancel: cancel}
+	a := &app{server: tn.BaseURL, layout: tn.Layout, store: st, logger: logger, cancel: cancel}
 	a.engine = engine.New(engine.Config{
 		Store:    st,
 		Installs: a.installs,
@@ -105,7 +105,7 @@ func run() error {
 			c := upload.Client{BaseURL: tn.BaseURL, Format: tn.Format, Flavor: tn.Flavor, Token: token}
 			return c.Upload(ctx, path, size)
 		},
-		Running:  watch.WoWRunning,
+		Running:  watch.NewGame(tn.Layout, nil).Running,
 		Notify:   notify,
 		OnStatus: a.onStatus,
 		Logger:   logger,
@@ -122,11 +122,11 @@ func run() error {
 // resolves, otherwise whatever is found in the standard locations.
 func (a *app) installs() []wowdir.Install {
 	if p := a.store.Get().WoWPath; p != "" {
-		if found, err := wowdir.Resolve(p); err == nil {
+		if found, err := wowdir.Resolve(p, a.layout); err == nil {
 			return found
 		}
 	}
-	return wowdir.Detect(wowdir.StandardRoots())
+	return wowdir.Detect(wowdir.StandardRoots(), a.layout)
 }
 
 func envOr(key, fallback string) string {
