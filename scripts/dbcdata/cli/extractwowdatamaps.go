@@ -632,6 +632,8 @@ feed:
 
 var errWowdataFileUnavailable = errors.New("wowdata file unavailable for locale")
 
+var wowdataTextureExportRetryDelays = []time.Duration{time.Second, 2 * time.Second}
+
 type wowdataErrorResponse struct {
 	Error struct {
 		Code    string `json:"code"`
@@ -640,30 +642,60 @@ type wowdataErrorResponse struct {
 }
 
 func exportWowdataTexture(ctx context.Context, stderr io.Writer, opts wowMapExtractOptions, fileDataID int32, output string) error {
+	return exportWowdataTextureWithRetries(ctx, stderr, opts, fileDataID, output, wowdataTextureExportRetryDelays)
+}
+
+func exportWowdataTextureWithRetries(
+	ctx context.Context,
+	stderr io.Writer,
+	opts wowMapExtractOptions,
+	fileDataID int32,
+	output string,
+	retryDelays []time.Duration,
+) error {
 	tmp := output + ".tmp"
-	_ = os.Remove(tmp)
 	args := []string{"icon", "export", "--file-data-id", fmt.Sprint(fileDataID), "--format", "webp", "--output", tmp}
 	args = append(args, wowdataTargetArgs(opts)...)
-	cmd := exec.CommandContext(ctx, opts.WowdataBin, args...)
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
+	for attempt := 0; attempt <= len(retryDelays); attempt++ {
 		_ = os.Remove(tmp)
+		cmd := exec.CommandContext(ctx, opts.WowdataBin, args...)
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = stderr
+		err := cmd.Run()
+		if err == nil {
+			if err := os.Rename(tmp, output); err != nil {
+				_ = os.Remove(tmp)
+				return fmt.Errorf("install texture FileDataID %d: %w", fileDataID, err)
+			}
+			return nil
+		}
+		_ = os.Remove(tmp)
+		if ctx.Err() != nil {
+			return fmt.Errorf("export texture FileDataID %d: %w", fileDataID, ctx.Err())
+		}
+
 		var response wowdataErrorResponse
-		if json.Unmarshal(stdout.Bytes(), &response) == nil && response.Error.Code == "not_found" {
+		_ = json.Unmarshal(stdout.Bytes(), &response)
+		if response.Error.Code == "not_found" {
 			return fmt.Errorf("%w: FileDataID %d: %s", errWowdataFileUnavailable, fileDataID, response.Error.Message)
 		}
 		if stdout.Len() > 0 {
 			_, _ = stderr.Write(stdout.Bytes())
 		}
-		return fmt.Errorf("export texture FileDataID %d: %w", fileDataID, err)
+		if response.Error.Code != "cache_lock_failed" || attempt == len(retryDelays) {
+			return fmt.Errorf("export texture FileDataID %d: %w", fileDataID, err)
+		}
+		_, _ = fmt.Fprintf(stderr, "retrying texture FileDataID %d after cache lock failure (%d/%d)\n", fileDataID, attempt+1, len(retryDelays))
+		timer := time.NewTimer(retryDelays[attempt])
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("export texture FileDataID %d: %w", fileDataID, ctx.Err())
+		case <-timer.C:
+		}
 	}
-	if err := os.Rename(tmp, output); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("install texture FileDataID %d: %w", fileDataID, err)
-	}
-	return nil
+	return fmt.Errorf("export texture FileDataID %d: retries exhausted", fileDataID)
 }
 
 func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManifest, []int32, error) {

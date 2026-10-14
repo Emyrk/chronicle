@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -335,6 +336,52 @@ exit 1
 	require.True(t, errors.Is(err, errWowdataFileUnavailable))
 	require.ErrorContains(t, err, "FileDataID 769212")
 	require.NoFileExists(t, output)
+}
+
+func TestExportWowdataTextureRetriesCacheLockFailure(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	calls := filepath.Join(dir, "calls")
+	binary := filepath.Join(dir, "wowdata")
+	require.NoError(t, os.WriteFile(binary, []byte(fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+count=0
+if [[ -f %q ]]; then
+  count=$(cat %q)
+fi
+count=$((count + 1))
+printf '%%s' "$count" > %q
+if [[ "$count" == "1" ]]; then
+  printf '%%s\n' '{"ok":false,"error":{"code":"cache_lock_failed","message":"timeout waiting for cache lock test.lock"}}'
+  exit 1
+fi
+while [[ "$#" -gt 0 ]]; do
+  if [[ "$1" == "--output" ]]; then
+    printf 'webp' > "$2"
+    exit 0
+  fi
+  shift
+done
+exit 2
+`, calls, calls, calls)), 0o755))
+
+	var stderr bytes.Buffer
+	output := filepath.Join(dir, "tile.webp")
+	err := exportWowdataTextureWithRetries(context.Background(), &stderr, wowMapExtractOptions{
+		WowdataBin: binary,
+		Source:     "remote",
+		Product:    "wow_classic_beta",
+		Build:      "1.60.1.70374",
+		Region:     "us",
+		Locale:     "enUS",
+	}, 447597, output, []time.Duration{0})
+	require.NoError(t, err)
+	require.FileExists(t, output)
+	data, err := os.ReadFile(calls)
+	require.NoError(t, err)
+	require.Equal(t, "2", string(data))
+	require.Contains(t, stderr.String(), "retrying texture FileDataID 447597 after cache lock failure (1/1)")
 }
 
 func TestPruneUnavailableWowMapTiles(t *testing.T) {
