@@ -38,6 +38,22 @@
           "opacity": 0.85
         }
       }
+    },
+    {
+      "mapID": 2999,
+      "name": "Ruins of Lordaeron",
+      "mesh": {
+        "path": "meshes/2999.glb",
+        "bounds": {
+          "minX": 1333.3337,
+          "maxX": 1900.0,
+          "minY": -33.3333,
+          "maxY": 500.0
+        },
+        "zMin": -13.6235,
+        "zMax": 195.9512,
+        "frame": "wow-yup-mirrored-x"
+      }
     }
   ]
 }

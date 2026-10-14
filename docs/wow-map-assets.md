@@ -91,6 +91,10 @@ The frontend treats `floors: []` plus a placeable `mesh` as "3D only": the Repla
 }
 ```
 
+### Terrain meshes
+
+Ruins of Lordaeron (map 2999, Forever) is the first terrain mesh: open sky over a ~570 × 530 yd walled city, exported with `--kind terrain` and published as a mesh-only instance like Ragefire Chasm. The manifest `bounds` are the exact POSITION extent of the GLB and roofs are kept (nothing is ceiling-culled), so a unit standing inside a building is probed onto its roof.
+
 ### Liquid colour
 
 The exporter's liquid planes (`liquid_*` nodes) are plain translucent blue. Where the dungeon's liquid is not water, add `liquid` to the mesh entry: `color` is a CSS hex colour (`#rrggbb`) and `opacity` a number in (0, 1]; the frontend sets both on the liquid materials when the mesh loads. Without `liquid` the GLB's own blue shows. The merge rejects any other shape (a named or short colour, an opacity of 0 or above 1, extra fields); the frontend ignores a malformed tint and keeps the mesh.
