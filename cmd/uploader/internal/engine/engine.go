@@ -20,7 +20,7 @@ import (
 type State int
 
 const (
-	// StateIdle: nothing is happening.
+	// StateIdle: waiting for WoW.
 	StateIdle State = iota
 	// StateNoLog: WoW is running but its combat log is not growing.
 	StateNoLog
@@ -84,6 +84,10 @@ type Engine struct {
 	uploadedUntil time.Time
 	now           time.Time // start of the current step
 	lastUploaded  Status
+	watching      map[string]bool // log files already announced
+	wowUp         bool
+	sessionStart  time.Time
+	lastSession   time.Duration                              // length of the most recent WoW session
 	wait          func(ctx context.Context, d time.Duration) // overridden in tests
 }
 
@@ -178,6 +182,16 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 		OnIdle:    e.cfg.Store.Get().UploadOnIdle,
 		IdleAfter: e.cfg.IdleAfter,
 	}
+	for _, f := range files {
+		if !e.watching[f.Path] {
+			if e.watching == nil {
+				e.watching = map[string]bool{}
+			}
+			e.watching[f.Path] = true
+			e.cfg.Logger.Info("watching", "file", f.Path)
+		}
+	}
+	e.trackSession(now, running)
 	queue, recording := e.tracker.Observe(now, files, running, manual, trig)
 
 	if manual && len(queue) == 0 {
@@ -206,6 +220,52 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 	e.setStatus(e.baseline(now, len(installs) > 0, running, recording, needAuth, rejected))
 }
 
+// trackSession logs WoW starting and exiting and remembers how long it ran.
+func (e *Engine) trackSession(now time.Time, running bool) {
+	switch {
+	case running && !e.wowUp:
+		e.sessionStart = now
+		e.cfg.Logger.Info("wow started")
+	case !running && e.wowUp:
+		e.lastSession = now.Sub(e.sessionStart)
+		e.cfg.Logger.Info("wow exited", "session", e.lastSession.Round(time.Minute))
+	}
+	e.wowUp = running
+}
+
+// sessionLength is the current session if WoW is running, else the last one.
+func (e *Engine) sessionLength() time.Duration {
+	if e.wowUp {
+		return e.now.Sub(e.sessionStart)
+	}
+	return e.lastSession
+}
+
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Minute)
+	h, m := int(d.Hours()), int(d.Minutes())%60
+	switch {
+	case h > 0 && m > 0:
+		return fmt.Sprintf("%dh %dm", h, m)
+	case h > 0:
+		return fmt.Sprintf("%dh", h)
+	}
+	return fmt.Sprintf("%dm", m)
+}
+
+func formatSize(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for v := n / unit; v >= unit; v /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGT"[exp])
+}
+
 // reconnectRecheck bounds how often a missing or rejected token is re-read
 // (it may have been written by another process).
 const reconnectRecheck = time.Minute
@@ -229,7 +289,7 @@ func (e *Engine) baseline(now time.Time, haveInstall, running, recording, needAu
 	case rejected:
 		return Status{State: StateReconnect, Detail: "Needs reconnect. Connect to Chronicle again.", ReportURL: last}
 	case needAuth:
-		return Status{State: StateReconnect, Detail: "Connect to Chronicle to upload your logs.", ReportURL: last}
+		return Status{State: StateReconnect, Detail: "Not connected. Connect to Chronicle to upload your logs.", ReportURL: last}
 	case now.Before(e.uploadedUntil):
 		return e.lastUploaded
 	case recording:
@@ -246,6 +306,7 @@ func (e *Engine) baseline(now time.Time, haveInstall, running, recording, needAu
 func (e *Engine) uploadOne(ctx context.Context, token string, f watch.File) bool {
 	log := e.cfg.Logger.With("file", f.Path, "size", f.Size)
 	delay := e.cfg.RetryBase
+	log.Info("uploading", "file", f.Path, "size", formatSize(f.Size))
 	for {
 		e.setStatus(Status{State: StateUploading, Detail: "Uploading your log…", ReportURL: e.status.ReportURL})
 		res, err := e.cfg.Upload(ctx, token, f.Path, f.Size)
@@ -296,6 +357,12 @@ func (e *Engine) finish(f watch.File, res upload.Result) {
 	title, detail := "Log uploaded", "Your log is on Chronicle."
 	if res.Duplicate {
 		title, detail = "Already uploaded", "This log was already on Chronicle."
+		e.cfg.Logger.Info("already uploaded →", "url", url)
+	} else {
+		e.cfg.Logger.Info("uploaded →", "url", url)
+		if d := e.sessionLength(); d >= time.Minute {
+			detail = fmt.Sprintf("Your %s session is on Chronicle.", formatDuration(d))
+		}
 	}
 	e.lastUploaded = Status{State: StateUploaded, Detail: detail, ReportURL: url}
 	e.uploadedUntil = e.now.Add(uploadedStickiness)
