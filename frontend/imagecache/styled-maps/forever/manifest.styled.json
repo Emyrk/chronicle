@@ -1,0 +1,23 @@
+{
+  "format": "chronicle-wow-map-art-v2",
+  "target": {
+    "product": "wow_classic_beta"
+  },
+  "instances": [
+    {
+      "mapID": 43,
+      "styled": {
+        "path": "render-styled/43-wailing-caverns-v2.jpeg",
+        "width": 1600,
+        "height": 1066,
+        "source": "hand-styled",
+        "bounds": {
+          "minX": -421.6594,
+          "maxX": 220.06552,
+          "minY": -396.9931,
+          "maxY": 565.59424
+        }
+      }
+    }
+  ]
+}

@@ -4,10 +4,13 @@ Chronicle publishes each dataset's map manifest beneath its configured icon base
 
 ```text
 <icon-base>/maps/manifest.json
-<icon-base>/maps/tiles/<tile-id>.webp
+<icon-base>/maps/manifest.original.json
+<icon-base>/maps/manifest.render.json
+<icon-base>/maps/manifest.styled.json
+<icon-base>/maps/original/<tile-id>.webp
 ```
 
-The frontend accepts legacy `chronicle-wow-map-art-v1` manifests and the Forever `chronicle-wow-map-art-v2` manifest. The latter uses `original/` for Blizzard tiles, `render/` for geometry, and `render-styled/` for hand-authored art. Generated manifests and tiles live under `frontend/imagecache/<server>/maps/`, are ignored by Git, and are published to object storage.
+The frontend accepts v1 published manifests during migration; all new imports use v2. `make maps` works for each `SERVER` and publishes native artwork under `original/`. Raw geometry and hand-authored art are independent optional layers under `render/` and `render-styled/`. The publisher merges their root-level source manifests into `manifest.json` after each job. Generated manifests and tiles live under `frontend/imagecache/<server>/maps/`, are ignored by Git, and are published to object storage.
 
 ## MPQ-era clients
 

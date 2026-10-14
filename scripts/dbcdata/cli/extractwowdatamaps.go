@@ -267,7 +267,7 @@ func ExtractWowdataMapsCmd() *serpent.Command {
 		Options: serpent.OptionSet{
 			DBCOption(&dbcPath),
 			ServerOption(&server),
-			{Name: "out", Description: "Output directory for manifest.json and map tiles.", Flag: "out", Value: serpent.StringOf(&opts.OutDir)},
+			{Name: "out", Description: "Output directory for manifest.original.json and map tiles.", Flag: "out", Value: serpent.StringOf(&opts.OutDir)},
 			{Name: "wowdata", Description: "Wowdata executable. A pinned build is provisioned when omitted.", Flag: "wowdata", Env: "WOWDATA_BIN", Default: wowdataDefaultBinary, Value: serpent.StringOf(&opts.WowdataBin)},
 			{Name: "source", Description: "Read CASC data from local client archives or Blizzard's CDN.", Flag: "source", Default: "remote", Value: serpent.StringOf(&opts.Source)},
 			{Name: "product", Description: "CASC product to extract.", Flag: "product", Default: "wow_classic_beta", Value: serpent.StringOf(&opts.Product)},
@@ -277,7 +277,7 @@ func ExtractWowdataMapsCmd() *serpent.Command {
 			{Name: "cache", Description: "Optional wowdata cache directory.", Flag: "cache", Env: "WOWDATA_CACHE", Value: serpent.StringOf(&opts.Cache)},
 			{Name: "reuse-manifest-url", Description: "Published manifest whose immutable tiles can be reused without downloading them again.", Flag: "reuse-manifest-url", Value: serpent.StringOf(&opts.ReuseManifestURL)},
 			{Name: "workers", Description: "Concurrent wowdata tile export processes.", Flag: "workers", Default: "4", Value: serpent.Int64Of(&opts.Workers)},
-			{Name: "metadata-only", Description: "Write manifest.json without downloading map tiles.", Flag: "metadata-only", Value: serpent.BoolOf(&opts.MetadataOnly)},
+			{Name: "metadata-only", Description: "Write manifest.original.json without downloading map tiles.", Flag: "metadata-only", Value: serpent.BoolOf(&opts.MetadataOnly)},
 		},
 		Handler: func(inv *serpent.Invocation) error {
 			if opts.OutDir == "" {
@@ -403,7 +403,7 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 		}
 		fileDataIDs = wowMapManifestFileDataIDs(manifest)
 	}
-	if err := writeWowMapManifest(filepath.Join(opts.OutDir, "manifest.json"), manifest); err != nil {
+	if err := writeWowMapManifest(filepath.Join(opts.OutDir, "manifest.original.json"), manifest); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "Wrote %d maps and %d instances referencing %d unique tiles to %s\n", len(manifest.Maps), len(manifest.Instances), len(fileDataIDs), opts.OutDir)
