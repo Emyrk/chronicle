@@ -76,6 +76,54 @@ Chronicle transforms raid logs into a live, interactive breakdown of everything 
 
 ---
 
+## Chronicle Uploader (automatic log upload)
+
+The Chronicle Uploader is a small helper that sits in your menu bar (Mac) or system tray (Windows/Linux)
+and uploads your World of Warcraft Forever combat log to Chronicle after you play. There is nothing to
+configure for most people.
+
+**Setting it up**
+
+1. Start the uploader. A coloured dot appears in your menu bar / system tray.
+2. If the dot is orange, choose **Connect to Chronicle…** and sign in.
+3. In game, type `/combatlog` once before you pull. The uploader cannot see your fights until you do.
+4. Play. When you quit WoW, the uploader sends your log and shows a notification. Choose **Open last report**
+   from the menu to see it.
+
+**What the dot means**
+
+| Dot    | Meaning                                                                    |
+| ------ | -------------------------------------------------------------------------- |
+| Grey   | Waiting for WoW                                                            |
+| Yellow | WoW is running but not logging. Type `/combatlog` in game                  |
+| Red    | Recording your combat log                                                  |
+| Blue   | Uploading (if you are offline it keeps trying until you are back)          |
+| Green  | Uploaded                                                                   |
+| Orange | Not connected to Chronicle                                                 |
+
+**Menu**
+
+- **Upload now** sends your latest log immediately.
+- **Choose WoW folder…** is only needed if WoW is installed somewhere unusual. Pick the World of Warcraft
+  folder (or the game's own folder, or the WoW app). The uploader looks in the usual places by itself.
+- **Also upload when the log goes quiet** uploads after 5 minutes without new combat, instead of only when you quit WoW.
+- **Start at login** launches the uploader when you log in to your computer.
+
+Uploading the same log twice is harmless: Chronicle tells you it already has it.
+
+**Building it**
+
+```bash
+# Windows and Linux (no C compiler needed)
+CGO_ENABLED=0 go build ./cmd/uploader
+# macOS (needs the Xcode command line tools)
+go build ./cmd/uploader
+```
+
+Until browser sign-in ships, developers can pass a session token with `--dev-token` (or `CHRONICLE_UPLOADER_TOKEN`);
+it is stored in the OS keychain. `--server` points the uploader at another Chronicle instance, and `--wow-path`
+sets the WoW folder.
+
 ## Development
 
 ### Full Docker Stack

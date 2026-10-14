@@ -1,0 +1,113 @@
+package upload_test
+
+import (
+	"compress/gzip"
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/Emyrk/chronicle/cmd/uploader/internal/upload"
+)
+
+func TestUpload(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "WoWCombatLog.txt")
+	require.NoError(t, os.WriteFile(path, []byte("1/1 20:00:00.000  COMBAT_LOG_VERSION,22\nmore bytes appended later"), 0o644))
+	const size = 42 // only this much is sent even though the file is larger
+
+	respond := func(status int, body string) (*upload.Client, *http.Request, *string) {
+		var gotReq http.Request
+		var gotBody string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotReq = *r.Clone(context.Background())
+			require.NoError(t, r.ParseMultipartForm(1<<20))
+			f, h, err := r.FormFile("combat_log")
+			require.NoError(t, err)
+			require.Equal(t, "WoWCombatLog.txt.gz", h.Filename)
+			zr, err := gzip.NewReader(f)
+			require.NoError(t, err)
+			b, err := io.ReadAll(zr)
+			require.NoError(t, err)
+			gotBody = string(b)
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(body))
+		}))
+		t.Cleanup(srv.Close)
+		return &upload.Client{BaseURL: srv.URL, Token: "tok"}, &gotReq, &gotBody
+	}
+
+	t.Run("created", func(t *testing.T) {
+		t.Parallel()
+		c, req, body := respond(201, `{"log_id":"abc","file_ids":[]}`)
+		res, err := c.Upload(context.Background(), path, size)
+		require.NoError(t, err)
+		require.Equal(t, c.BaseURL+"/logs/abc", res.ReportURL)
+		require.False(t, res.Duplicate)
+		require.Equal(t, "Bearer tok", req.Header.Get("Authorization"))
+		require.Equal(t, "/api/v1/raidlogs/logs/upload-v2", req.URL.Path)
+		require.Equal(t, "v22-cleu", req.URL.Query().Get("format"))
+		require.Equal(t, "vanilla,wow-forever", req.URL.Query().Get("flavor"))
+		require.Len(t, *body, size)
+	})
+
+	t.Run("server provided url wins", func(t *testing.T) {
+		t.Parallel()
+		c, _, _ := respond(200, `{"log_id":"abc","url":"/logs/abc?x=1"}`)
+		res, err := c.Upload(context.Background(), path, size)
+		require.NoError(t, err)
+		require.Equal(t, c.BaseURL+"/logs/abc?x=1", res.ReportURL)
+	})
+
+	t.Run("duplicate", func(t *testing.T) {
+		t.Parallel()
+		c, _, _ := respond(400, `{"message":"A log file with the same contents has already been uploaded by you","link":"/logs/file/deadbeef"}`)
+		res, err := c.Upload(context.Background(), path, size)
+		require.NoError(t, err)
+		require.True(t, res.Duplicate)
+		require.Equal(t, c.BaseURL+"/logs/file/deadbeef", res.ReportURL)
+	})
+
+	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+		c, _, _ := respond(401, `{"message":"nope"}`)
+		_, err := c.Upload(context.Background(), path, size)
+		require.ErrorIs(t, err, upload.ErrUnauthorized)
+		require.False(t, upload.Retryable(err))
+	})
+
+	t.Run("server error is retryable, bad request is not", func(t *testing.T) {
+		t.Parallel()
+		c, _, _ := respond(503, ``)
+		_, err := c.Upload(context.Background(), path, size)
+		require.True(t, upload.Retryable(err))
+
+		c, _, _ = respond(400, `{"message":"bad log"}`)
+		_, err = c.Upload(context.Background(), path, size)
+		require.Error(t, err)
+		require.False(t, upload.Retryable(err))
+	})
+
+	t.Run("offline is retryable", func(t *testing.T) {
+		t.Parallel()
+		srv := httptest.NewServer(http.NotFoundHandler())
+		url := srv.URL
+		srv.Close()
+		c := &upload.Client{BaseURL: url, Token: "tok"}
+		_, err := c.Upload(context.Background(), path, size)
+		require.Error(t, err)
+		require.True(t, upload.Retryable(err))
+	})
+
+	t.Run("no token", func(t *testing.T) {
+		t.Parallel()
+		c := &upload.Client{BaseURL: "http://127.0.0.1:1"}
+		_, err := c.Upload(context.Background(), path, size)
+		require.ErrorIs(t, err, upload.ErrUnauthorized)
+	})
+}

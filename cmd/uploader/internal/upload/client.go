@@ -1,0 +1,178 @@
+// Package upload sends combat logs to a Chronicle server.
+package upload
+
+import (
+	"compress/gzip"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/textproto"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+const (
+	uploadPath = "/api/v1/raidlogs/logs/upload-v2"
+	// The server does not sniff the log format or flavor; both are required.
+	uploadQuery = "format=v22-cleu&flavor=vanilla,wow-forever"
+)
+
+// ErrUnauthorized means the token is missing, expired or revoked.
+var ErrUnauthorized = errors.New("not signed in to Chronicle")
+
+// Error is a failed upload that came back from the server.
+type Error struct {
+	Status  int
+	Message string
+}
+
+func (e *Error) Error() string {
+	return fmt.Sprintf("upload failed (HTTP %d): %s", e.Status, e.Message)
+}
+
+// Retryable reports whether the same request may succeed later.
+func Retryable(err error) bool {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.Status >= 500 || e.Status == http.StatusTooManyRequests || e.Status == http.StatusRequestTimeout
+	}
+	// Anything that is not a server answer (DNS, connection reset, timeout) is
+	// a connectivity problem.
+	return !errors.Is(err, ErrUnauthorized) && !errors.Is(err, context.Canceled) && !errors.Is(err, os.ErrNotExist)
+}
+
+// Result is the outcome of one upload.
+type Result struct {
+	// ReportURL is where the log can be viewed.
+	ReportURL string
+	// Duplicate is true when the server already had this exact file.
+	Duplicate bool
+}
+
+// Client uploads logs.
+type Client struct {
+	// BaseURL is the Chronicle site, e.g. https://chronicleclassic.com.
+	BaseURL string
+	// Token returns the current bearer token ("" when signed out).
+	Token string
+	HTTP  *http.Client
+}
+
+type uploadResponse struct {
+	LogID string `json:"log_id"`
+	// URL is sent by servers that support idempotent re-upload; older ones
+	// only send log_id.
+	URL string `json:"url"`
+	// Message and Link come from error responses.
+	Message string `json:"message"`
+	Link    string `json:"link"`
+}
+
+// Upload gzips the first size bytes of path and posts them. Only size bytes are
+// read so the upload matches the size the caller recorded even while the
+// client keeps appending.
+func (c *Client) Upload(ctx context.Context, path string, size int64) (Result, error) {
+	if c.Token == "" {
+		return Result{}, ErrUnauthorized
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() { _ = f.Close() }()
+
+	pr, pw := io.Pipe()
+	mw := multipart.NewWriter(pw)
+	go func() {
+		_ = pw.CloseWithError(writeForm(mw, f, size, filepath.Base(path)))
+	}()
+
+	endpoint := strings.TrimRight(c.BaseURL, "/") + uploadPath + "?" + uploadQuery
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, pr)
+	if err != nil {
+		_ = pr.Close()
+		return Result{}, err
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+
+	httpc := c.HTTP
+	if httpc == nil {
+		httpc = &http.Client{Timeout: 30 * time.Minute}
+	}
+	resp, err := httpc.Do(req)
+	if err != nil {
+		_ = pr.CloseWithError(err)
+		return Result{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	var out uploadResponse
+	_ = json.Unmarshal(body, &out)
+
+	switch {
+	case resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK:
+		return Result{ReportURL: c.reportURL(out)}, nil
+	case resp.StatusCode == http.StatusUnauthorized:
+		return Result{}, ErrUnauthorized
+	case resp.StatusCode == http.StatusBadRequest && strings.Contains(out.Message, "already been uploaded"):
+		return Result{ReportURL: c.abs(out.Link), Duplicate: true}, nil
+	}
+	msg := out.Message
+	if msg == "" {
+		msg = http.StatusText(resp.StatusCode)
+	}
+	return Result{}, &Error{Status: resp.StatusCode, Message: msg}
+}
+
+func writeForm(mw *multipart.Writer, src io.Reader, size int64, name string) error {
+	// The ".gz" suffix is how the server knows the part is compressed.
+	h := textproto.MIMEHeader{}
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="combat_log"; filename="%s.gz"`, name))
+	h.Set("Content-Type", "application/gzip")
+	part, err := mw.CreatePart(h)
+	if err != nil {
+		return err
+	}
+	zw := gzip.NewWriter(part)
+	if _, err := io.Copy(zw, io.LimitReader(src, size)); err != nil {
+		return err
+	}
+	if err := zw.Close(); err != nil {
+		return err
+	}
+	return mw.Close()
+}
+
+func (c *Client) reportURL(r uploadResponse) string {
+	if r.URL != "" {
+		return c.abs(r.URL)
+	}
+	if r.LogID != "" {
+		return c.abs("/logs/" + r.LogID)
+	}
+	return ""
+}
+
+func (c *Client) abs(ref string) string {
+	if ref == "" {
+		return ""
+	}
+	base, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return ref
+	}
+	u, err := base.Parse(ref)
+	if err != nil {
+		return ref
+	}
+	return u.String()
+}
