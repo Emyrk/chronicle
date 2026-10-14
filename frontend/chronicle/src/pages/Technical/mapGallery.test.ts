@@ -146,7 +146,7 @@ describe("map gallery rendering model", () => {
 
 describe("mesh-only instances", () => {
   const mesh = {
-    path: "meshes/389.glb",
+    path: "3d/ragefire-chasm-open-top.glb",
     bounds: { minX: -416.2582, maxX: 102.9279, minY: -108.4728, maxY: 275.3513 },
     zMin: -66.1637,
     zMax: 59.4058,
@@ -165,7 +165,7 @@ describe("mesh-only instances", () => {
         instanceType: 1,
         directory: "WailingCaverns",
         floors: [{ floor: 1, width: 1002, height: 668, tileWidth: 256, tileHeight: 256, tiles: [{ row: 0, column: 0, fileDataID: 1, path: "original/1.webp" }] }],
-        mesh: { ...mesh, path: "meshes/43.glb", liquid: undefined },
+        mesh: { ...mesh, path: "3d/wailing-caverns-open-top.glb", liquid: undefined },
       },
     ],
   };

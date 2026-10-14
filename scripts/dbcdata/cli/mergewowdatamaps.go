@@ -178,7 +178,7 @@ func applyWowMapLayerEntry(kind string, entry wowMapLayerInstance, instance *wow
 		if mesh == nil || entry.Rendered != nil || entry.Styled != nil {
 			return fmt.Errorf("meshes map layer mapID %d must contain mesh only", entry.MapID)
 		}
-		if !validWowMapLayerPath(mesh.Path, "meshes/") || !strings.HasSuffix(mesh.Path, ".glb") ||
+		if !validWowMapLayerPath(mesh.Path, "3d/") || !strings.HasSuffix(mesh.Path, ".glb") ||
 			!(mesh.Bounds.MinX < mesh.Bounds.MaxX) || !(mesh.Bounds.MinY < mesh.Bounds.MaxY) || !(mesh.ZMin < mesh.ZMax) ||
 			mesh.Frame != wowMapMeshFrame {
 			return fmt.Errorf("invalid meshes map layer mesh for mapID %d", entry.MapID)

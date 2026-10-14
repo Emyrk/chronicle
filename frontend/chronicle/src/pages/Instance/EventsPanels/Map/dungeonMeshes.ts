@@ -10,12 +10,10 @@ import {
  * Real dungeon meshes for the 3D Replay Map: a glTF rendered from the game's
  * WMO, used as the ground instead of the flat map tiles. The map manifest
  * announces one per instance (`instances[].mesh`, published beside the tiles
- * under `<iconBaseUrl>/maps/meshes/`) together with the world bounds that
- * place it, so no artwork or rendered layer is needed. With
- * `VITE_DUNGEON_MESH_BASE` the file is read from that directory instead
- * (`.env.development` points `pnpm dev` and Storybook at
- * `public/dungeon-meshes`, which is gitignored: the files carry Blizzard
- * textures and never ship in the repo).
+ * under `<iconBaseUrl>/maps/3d/`) together with the world bounds that
+ * place it, so no artwork or rendered layer is needed. Dev, Storybook and
+ * production all read the icon CDN; the GLBs carry Blizzard textures and
+ * never ship in the repo.
  */
 
 /**
@@ -58,18 +56,9 @@ export function dungeonMeshLiquid(mesh: WowMapMeshInstance): WowMapMeshLiquid | 
   return liquid;
 }
 
-function stripTrailingSlash(url: string): string {
-  return url.replace(/\/+$/, "");
-}
-
-/** The URL of a mesh entry: its manifest path under the icon CDN, or its file in the override directory. */
-export function dungeonMeshUrl(
-  mesh: WowMapMeshInstance,
-  iconBaseUrl: string,
-  base: string | undefined = import.meta.env.VITE_DUNGEON_MESH_BASE as string | undefined,
-): string {
-  if (!base) return mapAssetUrl(iconBaseUrl, mesh.path);
-  return `${stripTrailingSlash(base)}/${mesh.path.slice(mesh.path.lastIndexOf("/") + 1)}`;
+/** The URL of a mesh entry: its manifest path under the icon CDN. */
+export function dungeonMeshUrl(mesh: WowMapMeshInstance, iconBaseUrl: string): string {
+  return mapAssetUrl(iconBaseUrl, mesh.path);
 }
 
 /**

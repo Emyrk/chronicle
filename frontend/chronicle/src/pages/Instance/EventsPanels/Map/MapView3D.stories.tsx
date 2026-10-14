@@ -229,7 +229,7 @@ const ENTRANCE_DISTANCE = 36;
 /**
  * Where the fight happens: the boss's world position and map, and the
  * entrance the raid walks in from, which also puts the tanks on that side.
- * The default is the synthetic [0, 100] world; RagefireMesh and RuinsMesh use real
+ * The default is the synthetic [0, 100] world; RuinsMesh use real
  * dungeon coordinates on the mesh.
  */
 interface FightWorld {
@@ -897,7 +897,7 @@ const KRESH_UNSELECTED = "0x0000120C006422B6";
 // manifest.meshes.json publishes it: bounds and z from the render pipeline's
 // height.json (see docs/wow-map-assets.md for the axis conversion).
 const WC_MESH: WowMapMeshInstance = {
-  path: "meshes/43.glb",
+  path: "3d/wailing-caverns-open-top.glb",
   bounds: { minX: -389.07001, maxX: 191.6667, minY: -370.83331, maxY: 538.3512 },
   zMin: -119.1605,
   zMax: 56.4689,
@@ -938,31 +938,7 @@ function KreshRealReplay({ selectPlayers, mesh = false }: { selectPlayers: boole
   );
 }
 
-// --- Ragefire Chasm: the BossFight group on the real mesh, at real coordinates. ---
-
-// `instances[].mesh` for Ragefire Chasm as frontend/imagecache/meshes/forever/
-// manifest.meshes.json publishes it. Vanilla RFC has no in-game dungeon map,
-// so the instance is mesh-only (`floors: []`) and its liquid is lava.
-const RFC_MESH: WowMapMeshInstance = {
-  path: "meshes/389.glb",
-  bounds: { minX: -416.2582, maxX: 102.9279, minY: -108.4728, maxY: 275.3513 },
-  zMin: -66.1637,
-  zMax: 59.4058,
-  frame: "wow-yup-mirrored-x",
-  liquid: { color: "#d66020", opacity: 0.85 },
-};
-const RFC_INSTANCE: WowMapInstance = { mapID: 389, name: "Ragefire Chasm", instanceType: 0, directory: "", floors: [], mesh: RFC_MESH };
-// Floor coordinates read off the mesh (its triangles rasterised top-down):
-// the flat shelf east of the big lava lake in Taragaman's chamber, z ≈ -24,
-// the lake 20 yd to the west (x < -222) and the raid walking in along the
-// ledge from the east. Taragaman the Hungerer has no boss miniature.
-const RFC_WORLD: FightWorld = {
-  mapId: 389,
-  boss: { x: -200, y: 88 },
-  entrance: { x: -164, y: 76 },
-  bossName: "Taragaman the Hungerer",
-  bossEntry: 11520,
-};
+// --- Mesh-only instances: the BossFight group on the real mesh, at real coordinates. ---
 // Synthetic timestamps are offsets from the pull; the sync clock wants dates.
 const MESH_FIGHT_PULL_MS = Date.parse("2026-10-14T20:00:00Z");
 
@@ -973,20 +949,18 @@ interface MeshFight {
   encounterId: string;
 }
 
-const RFC_FIGHT: MeshFight = { instance: RFC_INSTANCE, world: RFC_WORLD, encounterId: "rfc-taragaman" };
-
 // Ruins of Lordaeron (map 2999, Forever): the first terrain mesh, open sky.
-// Like RFC it is absent from the artwork manifest, so it is mesh-only; the
+// It is absent from the artwork manifest, so it is mesh-only; the
 // liquid keeps the GLB's translucent blue (lake and palace pools are water).
 const RUINS_MESH: WowMapMeshInstance = {
-  path: "meshes/2999.glb",
+  path: "3d/ruins-of-lordaeron-open-top.glb",
   bounds: { minX: 1333.3337, maxX: 1900.0, minY: -33.3333, maxY: 500.0 },
   zMin: -13.6235,
   zMax: 195.9512,
   frame: "wow-yup-mirrored-x",
 };
 const RUINS_INSTANCE: WowMapInstance = { mapID: 2999, name: "Ruins of Lordaeron", instanceType: 0, directory: "", floors: [], mesh: RUINS_MESH };
-// Floor read off the mesh like RFC: the flat paved courtyard west of the
+// Floor read off the mesh: the flat paved courtyard west of the
 // palace at z ≈ 61.6, clear of buildings within 40 yd of the boss; the raid
 // walks in from the west. The boss entry is a stand-in (no Ruins boss
 // miniature), the name is a placeholder.
@@ -1288,34 +1262,20 @@ export const KreshRealSelected: Story = {
 /**
  * The real Kresh kill with "3D map" on: the Wailing Caverns mesh replaces the
  * tiles and the raid stands on the cave floor at its real positions, with the
- * camera locked to the fight. Needs the local mesh (copy the GLB to
- * `public/dungeon-meshes/43.glb`; it is gitignored): without it the load fails
- * quietly and the story shows the tiles, as the panel does.
+ * camera locked to the fight. The mesh loads from the icon CDN
+ * (`forever/maps/3d/`); offline the load fails quietly and the story shows the
+ * tiles, as the panel does.
  */
 export const KreshRealMesh: Story = {
   render: () => <KreshRealReplay selectPlayers={false} mesh />,
 };
 
 /**
- * Ragefire Chasm, the first mesh-only instance: vanilla RFC has no in-game
- * dungeon map, so the manifest instance has `floors: []` and only a mesh, and
- * the scene stands on it from the start with no tiles to fall back on. The
- * BossFight group fights Taragaman on the flat shelf east of the lava lake in
- * his chamber, at real floor coordinates, and the lake is tinted lava by the
- * entry's `liquid`. Needs the local mesh (`public/dungeon-meshes/389.glb`,
- * gitignored); without it the units stand on an empty ground.
- */
-export const RagefireMesh: Story = {
-  args: { players: 10, playbackSpeed: 1 },
-  render: ({ players }) => <MeshFightReplay players={players} fight={RFC_FIGHT} />,
-};
-
-/**
  * Ruins of Lordaeron, the first terrain mesh: open sky, the walled city and
  * the palace, on a mesh-only instance (the liquid stays the GLB's blue). The
  * BossFight group fights on the courtyard west of the palace at real floor
- * coordinates. Needs the local mesh (`public/dungeon-meshes/2999.glb`,
- * gitignored); without it the units stand on an empty ground.
+ * coordinates. The mesh loads from the icon CDN (`forever/maps/3d/`); offline
+ * the units stand on an empty ground.
  */
 export const RuinsMesh: Story = {
   args: { players: 10, playbackSpeed: 1 },
