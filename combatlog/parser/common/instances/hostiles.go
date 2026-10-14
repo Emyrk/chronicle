@@ -2033,6 +2033,40 @@ func MaraudonHostiles() map[uint32]Identity {
 	return hostile
 }
 
+func RuinsOfLordaeronHostiles() map[uint32]Identity {
+	hostile := make(map[uint32]Identity)
+	LoadAdds(hostile, map[uint32]string{
+		250483: "Witherfang",
+		250484: "Spider",
+		250618: "Skeleton",
+		250620: "Shrieking Banshee",
+		250622: "Ragged Ghoul",
+		250624: "Skeletal Mage",
+		250625: "Broodling",
+		250626: "Skeletal Soldier",
+		250627: "Ghoul",
+		250629: "Stone Watcher",
+		250630: "Plague Ghoul",
+		250631: "The Abandoned",
+		250649: "Mindless Undead",
+		250654: "Ghostly Citizen",
+		250656: "Fallen Berserker",
+		250657: "Rath'mael",
+		250660: "The Baron",
+		250689: "Living Monstrosity",
+		250735: "Venom Lurker",
+		255109: "Flesh Golem",
+		255964: "Fallen Necromancer",
+		256035: "Viktor the Vile",
+		256040: "Deep Widow",
+		256097: "Bjork",
+	})
+	// TODO: Move bosses from LoadAdds to LoadBosses.
+	// LoadBosses(hostile, map[uint32]string{
+	// })
+	return hostile
+}
+
 func ExcavationSiteWetlandsHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
