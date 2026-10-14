@@ -276,7 +276,7 @@ func ExtractWowdataMapsCmd() *serpent.Command {
 			{Name: "locale", Description: "Data locale.", Flag: "locale", Env: "WOW_LOCALE", Default: "enUS", Value: serpent.StringOf(&opts.Locale)},
 			{Name: "cache", Description: "Optional wowdata cache directory.", Flag: "cache", Env: "WOWDATA_CACHE", Value: serpent.StringOf(&opts.Cache)},
 			{Name: "reuse-manifest-url", Description: "Published manifest whose immutable tiles can be reused without downloading them again.", Flag: "reuse-manifest-url", Value: serpent.StringOf(&opts.ReuseManifestURL)},
-			{Name: "workers", Description: "Concurrent wowdata tile export processes.", Flag: "workers", Default: "4", Value: serpent.Int64Of(&opts.Workers)},
+			{Name: "workers", Description: "Concurrent wowdata tile export processes; cache preparation is coordinated between workers.", Flag: "workers", Default: "4", Value: serpent.Int64Of(&opts.Workers)},
 			{Name: "metadata-only", Description: "Write manifest.original.json without downloading map tiles.", Flag: "metadata-only", Value: serpent.BoolOf(&opts.MetadataOnly)},
 		},
 		Handler: func(inv *serpent.Invocation) error {
@@ -544,6 +544,74 @@ func searchWowMapFiles(ctx context.Context, stderr io.Writer, opts wowMapExtract
 	return response.Data.Files, nil
 }
 
+type wowdataPrepareGate struct {
+	token chan struct{}
+}
+
+func newWowdataPrepareGate() *wowdataPrepareGate {
+	gate := &wowdataPrepareGate{token: make(chan struct{}, 1)}
+	gate.token <- struct{}{}
+	return gate
+}
+
+func (gate *wowdataPrepareGate) acquire(ctx context.Context) (func(), error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-gate.token:
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() { gate.token <- struct{}{} })
+	}, nil
+}
+
+type wowdataPrepareWriter struct {
+	destination io.Writer
+	onReady     func()
+	pending     []byte
+}
+
+func (writer *wowdataPrepareWriter) Write(data []byte) (int, error) {
+	n, err := writer.destination.Write(data)
+	writer.pending = append(writer.pending, data[:n]...)
+	for {
+		newline := bytes.IndexByte(writer.pending, '\n')
+		if newline < 0 {
+			break
+		}
+		writer.observeLine(writer.pending[:newline])
+		writer.pending = writer.pending[newline+1:]
+	}
+	return n, err
+}
+
+func (writer *wowdataPrepareWriter) Flush() {
+	if len(writer.pending) > 0 {
+		writer.observeLine(writer.pending)
+		writer.pending = nil
+	}
+}
+
+func (writer *wowdataPrepareWriter) observeLine(line []byte) {
+	if string(bytes.TrimSpace(line)) == "prepare status=ready" {
+		writer.onReady()
+	}
+}
+
+func runWowdataWithPrepareGate(ctx context.Context, cmd *exec.Cmd, stderr io.Writer, gate *wowdataPrepareGate) error {
+	release, err := gate.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	writer := &wowdataPrepareWriter{destination: stderr, onReady: release}
+	cmd.Stderr = writer
+	err = cmd.Run()
+	writer.Flush()
+	release()
+	return err
+}
+
 func exportWowdataTextures(
 	ctx context.Context,
 	stdout, stderr io.Writer,
@@ -564,6 +632,7 @@ func exportWowdataTextures(
 	var outputMu sync.Mutex
 	var firstErr error
 	completed := 0
+	prepareGate := newWowdataPrepareGate()
 
 	worker := func() {
 		defer workers.Done()
@@ -578,7 +647,7 @@ func exportWowdataTextures(
 
 			output := filepath.Join(opts.OutDir, "original", fmt.Sprintf("%d.webp", fileDataID))
 			var commandStderr bytes.Buffer
-			err := exportWowdataTexture(ctx, &commandStderr, opts, fileDataID, output)
+			err := exportWowdataTextureWithRetries(ctx, &commandStderr, opts, fileDataID, output, wowdataTextureExportRetryDelays, prepareGate)
 			if commandStderr.Len() > 0 {
 				outputMu.Lock()
 				_, _ = stderr.Write(commandStderr.Bytes())
@@ -642,7 +711,7 @@ type wowdataErrorResponse struct {
 }
 
 func exportWowdataTexture(ctx context.Context, stderr io.Writer, opts wowMapExtractOptions, fileDataID int32, output string) error {
-	return exportWowdataTextureWithRetries(ctx, stderr, opts, fileDataID, output, wowdataTextureExportRetryDelays)
+	return exportWowdataTextureWithRetries(ctx, stderr, opts, fileDataID, output, wowdataTextureExportRetryDelays, newWowdataPrepareGate())
 }
 
 func exportWowdataTextureWithRetries(
@@ -652,6 +721,7 @@ func exportWowdataTextureWithRetries(
 	fileDataID int32,
 	output string,
 	retryDelays []time.Duration,
+	prepareGate *wowdataPrepareGate,
 ) error {
 	tmp := output + ".tmp"
 	args := []string{"icon", "export", "--file-data-id", fmt.Sprint(fileDataID), "--format", "webp", "--output", tmp}
@@ -661,8 +731,7 @@ func exportWowdataTextureWithRetries(
 		cmd := exec.CommandContext(ctx, opts.WowdataBin, args...)
 		var stdout bytes.Buffer
 		cmd.Stdout = &stdout
-		cmd.Stderr = stderr
-		err := cmd.Run()
+		err := runWowdataWithPrepareGate(ctx, cmd, stderr, prepareGate)
 		if err == nil {
 			if err := os.Rename(tmp, output); err != nil {
 				_ = os.Remove(tmp)
