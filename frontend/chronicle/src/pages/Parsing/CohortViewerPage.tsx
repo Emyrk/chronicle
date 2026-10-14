@@ -44,8 +44,7 @@ export function CohortViewerPage() {
     [setSearchParams],
   );
 
-  // Snapshots and filters don't carry across populations, so switching view
-  // starts fresh.
+  // Cohort filters don't carry across populations, so switching view starts fresh.
   const setView = (next: CohortView) => setSearchParams(next === "boss" ? {} : { view: next });
   const active = VIEWS.find((v) => v.value === view) ?? VIEWS[0];
 
