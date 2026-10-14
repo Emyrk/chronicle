@@ -27,11 +27,6 @@ type sqlcQuerier interface {
 	// documentation; log_instances does not carry numeric version columns yet, so
 	// version filtering is the caller's responsibility if needed.
 	BatchInsertSnapshotMembersFromRankings(ctx context.Context, snapshotID uuid.UUID) error
-	// Populate clear-time members from eligible instance speedruns.
-	// Qualified complete runs only (duration_ms > 0). Duplicate groups collapsed
-	// to one representative instance (deterministic: canonical instance first,
-	// then earliest start, then smallest UUID).
-	BatchInsertTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) error
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -59,7 +54,7 @@ type sqlcQuerier interface {
 	// Return the number of members in a snapshot.
 	CountSnapshotMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
 	CountTimeParseBossKillMembershipCohort(ctx context.Context, snapshotID uuid.UUID) (int64, error)
-	CountTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
+	CountTimeParseClearTimeMembershipCohort(ctx context.Context, snapshotID uuid.UUID) (int64, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserGearLists(ctx context.Context, arg CountUserGearListsParams) (int64, error)
 	CountUserGearProgressions(ctx context.Context, arg CountUserGearProgressionsParams) (int64, error)
@@ -141,6 +136,12 @@ type sqlcQuerier interface {
 	DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error
 	DeleteTimeParseBossKillMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
 	DeleteTimeParseBossKillMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
+	// Event-date-backed storage for time-parse clear-time cohorts.
+	// Each logical member is stored once and snapshot lookback windows are applied
+	// at read time. Later uploads, corrections, and invalidations affect old parses.
+	DeleteTimeParseClearTimeMembershipSeries(ctx context.Context, arg DeleteTimeParseClearTimeMembershipSeriesParams) error
+	DeleteTimeParseClearTimeMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
+	DeleteTimeParseClearTimeMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
 	// Delete a time-parse snapshot by ID. Members are cascade-deleted.
 	DeleteTimeParseSnapshot(ctx context.Context, id uuid.UUID) error
 	// Bulk-delete time-parse snapshots by IDs. Members are cascade-deleted via FK.
@@ -404,12 +405,10 @@ type sqlcQuerier interface {
 	GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error)
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
 	// Clear-time cohort members for one bucket, fastest first, with the log and
-	// guild identity needed by the cohort viewer. Same membership as
-	// GetTimeParseSnapshotClearTimeCohort.
+	// guild identity needed by the cohort viewer. Uses the same dynamic membership
+	// as GetTimeParseClearTimeMembershipCohort.
 	GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error)
-	// All clear-time durations for an (instance_name, difficulty, max_players) bucket.
-	// Used to score a specific run's clear time against the population.
-	GetTimeParseSnapshotClearTimeCohort(ctx context.Context, arg GetTimeParseSnapshotClearTimeCohortParams) ([]int64, error)
+	GetTimeParseClearTimeMembershipCohort(ctx context.Context, arg GetTimeParseClearTimeMembershipCohortParams) ([]int64, error)
 	// Compute a combined source fingerprint covering both clear-time eligible
 	// speedruns and boss-kill eligible encounters. Changes in either source
 	// break the staleness guard so new boss encounters or reparses trigger
@@ -456,7 +455,7 @@ type sqlcQuerier interface {
 	// Returns the guild's single best full clear of each instance within the
 	// window, for the guild page "Best Performance" panel. @by_parse picks the
 	// winner by highest historical clear-time parse instead of fastest clear.
-	// Duplicate uploads collapse to one run (fastest duration per group). Includes
+	// Duplicate uploads collapse using the shared deterministic representative. Includes
 	// unqualified runs: qualification only affects cohort and leaderboard membership,
 	// not whether a completed clear can receive a time parse.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
@@ -714,8 +713,9 @@ type sqlcQuerier interface {
 	// sizes.
 	ListTimeParseBossKillCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListTimeParseBossKillCohortBucketsRow, error)
 	ListTimeParseBossKillMemberships(ctx context.Context, arg ListTimeParseBossKillMembershipsParams) ([]TimeParseBossKillMembership, error)
-	// Distinct clear-time buckets in a snapshot with their sample sizes.
+	// Distinct clear-time buckets in a snapshot's dynamic date window.
 	ListTimeParseClearTimeCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListTimeParseClearTimeCohortBucketsRow, error)
+	ListTimeParseClearTimeMemberships(ctx context.Context, arg ListTimeParseClearTimeMembershipsParams) ([]TimeParseClearTimeMembership, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
 	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
 	ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error)
@@ -811,6 +811,9 @@ type sqlcQuerier interface {
 	// run group touched by this log so lifecycle refreshes use the same representative
 	// selection as snapshot publication.
 	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, logGroupID uuid.UUID) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
+	// Recompute every duplicate run group touched by this log using the same
+	// representative selection as snapshot publication.
+	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, logGroupID uuid.UUID) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
 	RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error)
 	// Resolves the dataset for a realm. Precedence:
@@ -986,6 +989,9 @@ type sqlcQuerier interface {
 	// compact store. Missing rows may be temporary during a reparse and are removed
 	// only by lifecycle operations.
 	UpsertTimeParseBossKillMemberships(ctx context.Context, snapshotID uuid.UUID) error
+	// Snapshot publication writes the current window directly into the compact
+	// store. Missing rows are removed only by lifecycle operations.
+	UpsertTimeParseClearTimeMemberships(ctx context.Context, snapshotID uuid.UUID) error
 	UpsertUserActionBarSlots(ctx context.Context, arg UpsertUserActionBarSlotsParams) (UpsertUserActionBarSlotsRow, error)
 	UpsertUserCustomPanelInstallation(ctx context.Context, arg UpsertUserCustomPanelInstallationParams) (UserCustomPanelInstallation, error)
 	UpsertUserCustomPanelSettings(ctx context.Context, arg UpsertUserCustomPanelSettingsParams) (UserCustomPanelSetting, error)

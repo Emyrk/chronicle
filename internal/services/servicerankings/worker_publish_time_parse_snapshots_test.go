@@ -59,7 +59,7 @@ func insertTimeParseTenantRealm(t *testing.T, pool *pgxpool.Pool, name string) (
 
 	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
 	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "INSERT INTO tenants (id, slug, name) VALUES ($1, $2, $3)", tenantID, name, name)
+	_, err = conn.Exec(ctx, "INSERT INTO tenants (id, slug, name, include_in_all) VALUES ($1, $2, $3, true)", tenantID, name, name)
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, "INSERT INTO wow_servers (id, name, tenant_id) VALUES ($1, $2, $3)", serverID, name+"-server", tenantID)
 	require.NoError(t, err)
@@ -280,12 +280,12 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		require.NoError(t, err)
 
 		// Should have 5 clear-time members (not 6).
-		clearCount, err := store.CountTimeParseSnapshotClearTimeMembers(ctx, snap.ID)
+		clearCount, err := store.CountTimeParseClearTimeMembershipCohort(ctx, snap.ID)
 		require.NoError(t, err)
 		assert.Equal(t, int64(5), clearCount)
 
 		// Verify the fastest from the dup group was selected (300s = 300000ms).
-		cohort, err := store.GetTimeParseSnapshotClearTimeCohort(ctx, database.GetTimeParseSnapshotClearTimeCohortParams{
+		cohort, err := store.GetTimeParseClearTimeMembershipCohort(ctx, database.GetTimeParseClearTimeMembershipCohortParams{
 			SnapshotID:     snap.ID,
 			InstanceName:   "Molten Core",
 			DifficultyName: "Normal",
@@ -546,7 +546,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
-		clearCount1, err := store.CountTimeParseSnapshotClearTimeMembers(ctx, snap1.ID)
+		clearCount1, err := store.CountTimeParseClearTimeMembershipCohort(ctx, snap1.ID)
 		require.NoError(t, err)
 		assert.Equal(t, int64(5), clearCount1)
 
@@ -582,7 +582,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 			"fingerprint must detect duration change even when row_count and watermark are unchanged")
 
 		// The new snapshot should reflect the updated duration.
-		cohort, err := store.GetTimeParseSnapshotClearTimeCohort(ctx, database.GetTimeParseSnapshotClearTimeCohortParams{
+		cohort, err := store.GetTimeParseClearTimeMembershipCohort(ctx, database.GetTimeParseClearTimeMembershipCohortParams{
 			SnapshotID: snap2.ID, InstanceName: "Molten Core",
 			DifficultyName: "Normal", MaxPlayers: 40,
 		})
@@ -674,7 +674,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		assert.Equal(t, snap1.ID, snap2.ID, "second run with same cutoff should not create new snapshot")
 	})
 
-	t.Run("PublishedMembershipImmutability", func(t *testing.T) {
+	t.Run("LateHistoricalClearRefreshesPublishedCohort", func(t *testing.T) {
 		t.Parallel()
 		pool, store, realmID := setupTimeParseTest(t)
 		ctx := testutil.Context(t, testutil.WaitMedium)
@@ -698,30 +698,37 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		clearCount1, err := store.CountTimeParseSnapshotClearTimeMembers(ctx, snap.ID)
+		clearCount1, err := store.CountTimeParseClearTimeMembershipCohort(ctx, snap.ID)
 		require.NoError(t, err)
 
-		// Add more data after the snapshot.
+		// Add historical source data after publication, then run the same lifecycle
+		// refresh used after successful uploads. The old snapshot changes because
+		// membership is current-known and bounded dynamically by event start time.
 		for i := 0; i < 3; i++ {
-			insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+			instanceID := insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
 				instanceName: "Molten Core", difficultyName: "Normal", maxPlayers: 40,
 				qualified: true, durationMs: 700000 + int64(i*10000),
 				startTime: baseTime.Add(time.Duration(10+i) * time.Hour),
 			})
+			var logGroupID uuid.UUID
+			require.NoError(t, pool.QueryRow(ctx,
+				"SELECT log_group_id FROM log_instances WHERE id = $1", instanceID).Scan(&logGroupID))
+			refresh, refreshErr := store.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, logGroupID)
+			require.NoError(t, refreshErr)
+			assert.EqualValues(t, 1, refresh.UpsertedCount)
 		}
 
-		// Re-read member count — should be unchanged.
-		clearCount2, err := store.CountTimeParseSnapshotClearTimeMembers(ctx, snap.ID)
+		clearCount2, err := store.CountTimeParseClearTimeMembershipCohort(ctx, snap.ID)
 		require.NoError(t, err)
-		assert.Equal(t, clearCount1, clearCount2, "published snapshot membership must not change")
+		assert.Equal(t, clearCount1+2, clearCount2, "late uploads before the cutoff must affect the old cohort")
 
-		// The cohort durations should also be unchanged.
-		cohort, err := store.GetTimeParseSnapshotClearTimeCohort(ctx, database.GetTimeParseSnapshotClearTimeCohortParams{
+		// The cohort remains bounded by the snapshot cutoff.
+		cohort, err := store.GetTimeParseClearTimeMembershipCohort(ctx, database.GetTimeParseClearTimeMembershipCohortParams{
 			SnapshotID: snap.ID, InstanceName: "Molten Core",
 			DifficultyName: "Normal", MaxPlayers: 40,
 		})
 		require.NoError(t, err)
-		assert.Equal(t, int(clearCount1), len(cohort), "cohort size must match member count")
+		assert.Equal(t, int(clearCount2), len(cohort), "cohort size must match dynamic member count")
 	})
 
 	t.Run("PolicyVersionFilter", func(t *testing.T) {
@@ -756,6 +763,171 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		})
 		require.ErrorIs(t, err, pgx.ErrNoRows, "mismatched query_version should find nothing")
 	})
+}
+
+func TestTimeParseClearMembershipUsesStartDateBounds(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupTimeParseTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	firstCutoff := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	start := firstCutoff.Add(time.Minute)
+	secondCutoff := firstCutoff.Add(24 * time.Hour)
+
+	insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+		instanceName:   "Molten Core",
+		difficultyName: "Normal",
+		maxPlayers:     40,
+		qualified:      true,
+		durationMs:     1200000,
+		startTime:      start,
+	})
+
+	runTimeParseWorker(t, ctx, store, uuid.Nil, firstCutoff, 2)
+	firstSnapshot, err := store.GetPublishedTimeParseSnapshotForCutoff(ctx, database.GetPublishedTimeParseSnapshotForCutoffParams{
+		TenantID: uuid.Nil, LookbackDays: 2,
+		PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
+		Cutoff: database.Timestamptz(firstCutoff),
+	})
+	require.NoError(t, err)
+	firstCohort, err := store.GetTimeParseClearTimeMembershipCohort(ctx, database.GetTimeParseClearTimeMembershipCohortParams{
+		SnapshotID: firstSnapshot.ID, InstanceName: "Molten Core",
+		DifficultyName: "Normal", MaxPlayers: 40,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, firstCohort, "a run starting after the cutoff must not enter the earlier cohort")
+
+	runTimeParseWorker(t, ctx, store, uuid.Nil, secondCutoff, 2)
+	secondSnapshot, err := store.GetPublishedTimeParseSnapshotForCutoff(ctx, database.GetPublishedTimeParseSnapshotForCutoffParams{
+		TenantID: uuid.Nil, LookbackDays: 2,
+		PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
+		Cutoff: database.Timestamptz(secondCutoff),
+	})
+	require.NoError(t, err)
+	secondCohort, err := store.GetTimeParseClearTimeMembershipCohort(ctx, database.GetTimeParseClearTimeMembershipCohortParams{
+		SnapshotID: secondSnapshot.ID, InstanceName: "Molten Core",
+		DifficultyName: "Normal", MaxPlayers: 40,
+	})
+	require.NoError(t, err)
+	assert.Len(t, secondCohort, 1, "the run should enter the next start-date window")
+}
+
+func TestTimeParseMembershipRefreshTenantIsolation(t *testing.T) {
+	t.Parallel()
+
+	pool, store, _ := setupTimeParseTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	tenantA, realmA := insertTimeParseTenantRealm(t, pool, "refresh-tenant-a")
+	tenantB, _ := insertTimeParseTenantRealm(t, pool, "refresh-tenant-b")
+	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	instanceID := insertTimeParseInstance(t, pool, store, realmA, timeParseInstanceOpts{
+		instanceName: "Molten Core", difficultyName: "Normal", maxPlayers: 40,
+		qualified: true, durationMs: 600000, startTime: start,
+		encounters: []timeParseEncounterOpts{{
+			name: "Ragnaros", killType: database.KillTypeClean, boss: true,
+			startTime: start.Add(5 * time.Minute), endTime: start.Add(6 * time.Minute),
+		}},
+	})
+	cutoff := start.Add(24 * time.Hour)
+	for _, tenantID := range []uuid.UUID{tenantA, tenantB, uuid.Nil} {
+		runTimeParseWorker(t, ctx, store, tenantID, cutoff, 0)
+		clearSeries := database.DeleteTimeParseClearTimeMembershipSeriesParams{
+			TenantID: tenantID, PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
+		}
+		require.NoError(t, store.DeleteTimeParseClearTimeMembershipSeries(ctx, clearSeries))
+		bossSeries := database.DeleteTimeParseBossKillMembershipSeriesParams(clearSeries)
+		require.NoError(t, store.DeleteTimeParseBossKillMembershipSeries(ctx, bossSeries))
+	}
+
+	var logGroupID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT log_group_id FROM log_instances WHERE id = $1", instanceID).Scan(&logGroupID))
+	for _, foreignTenantID := range []uuid.UUID{tenantB, uuid.Nil} {
+		_, err := pool.Exec(ctx, `
+			INSERT INTO time_parse_clear_time_memberships (
+				tenant_id, policy_version, query_version, run_id, instance_id, log_group_id,
+				instance_name, difficulty_name, max_players, duration_ms, start_time
+			) VALUES ($1, $2, $3, $4, $4, $5, 'Molten Core', 'Normal', 40, 600000, $6)
+		`, foreignTenantID, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.SnapshotQueryVersion,
+			instanceID, logGroupID, start)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, `
+			INSERT INTO time_parse_boss_kill_memberships (
+				tenant_id, policy_version, query_version, run_id, encounter_name,
+				instance_id, log_group_id, instance_name, difficulty_name, max_players,
+				duration_ms, killed_at
+			) VALUES ($1, $2, $3, $4, 'Ragnaros', $4, $5, 'Molten Core', 'Normal', 40, 60000, $6)
+		`, foreignTenantID, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.SnapshotQueryVersion,
+			instanceID, logGroupID, start.Add(6*time.Minute))
+		require.NoError(t, err)
+	}
+
+	_, err := store.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, logGroupID)
+	require.NoError(t, err)
+	_, err = store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, logGroupID)
+	require.NoError(t, err)
+
+	for _, tenantID := range []uuid.UUID{tenantA, tenantB, uuid.Nil} {
+		clearRows, clearErr := store.ListTimeParseClearTimeMemberships(ctx, database.ListTimeParseClearTimeMembershipsParams{
+			TenantID: tenantID, PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
+		})
+		require.NoError(t, clearErr)
+		bossRows, bossErr := store.ListTimeParseBossKillMemberships(ctx, database.ListTimeParseBossKillMembershipsParams{
+			TenantID: tenantID, PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
+		})
+		require.NoError(t, bossErr)
+		if tenantID == tenantA {
+			require.Len(t, clearRows, 1)
+			require.Len(t, bossRows, 1)
+			assert.Equal(t, instanceID, clearRows[0].InstanceID)
+			assert.Equal(t, instanceID, bossRows[0].InstanceID)
+		} else {
+			assert.Empty(t, clearRows, "refresh must not upsert into a foreign tenant series")
+			assert.Empty(t, bossRows, "refresh must not upsert into a foreign tenant series")
+		}
+	}
+}
+
+func TestTimeParseClearMembershipLifecycle(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupTimeParseTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	instanceID := insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+		instanceName: "Molten Core", difficultyName: "Normal", maxPlayers: 40,
+		qualified: true, durationMs: 600000, startTime: start,
+	})
+	runTimeParseWorker(t, ctx, store, uuid.Nil, start.Add(24*time.Hour), 0)
+
+	series := database.ListTimeParseClearTimeMembershipsParams{
+		TenantID: uuid.Nil, PolicyVersion: int16(timeparsepolicy.PolicyVersion),
+		QueryVersion: timeparsepolicy.SnapshotQueryVersion,
+	}
+	memberships, err := store.ListTimeParseClearTimeMemberships(ctx, series)
+	require.NoError(t, err)
+	require.Len(t, memberships, 1)
+	membership := memberships[0]
+
+	_, err = pool.Exec(ctx, "UPDATE log_instances SET invalidated_at = now() WHERE id = $1", instanceID)
+	require.NoError(t, err)
+	refresh, err := store.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, membership.LogGroupID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, refresh.DeletedCount)
+	memberships, err = store.ListTimeParseClearTimeMemberships(ctx, series)
+	require.NoError(t, err)
+	assert.Empty(t, memberships)
+
+	_, err = pool.Exec(ctx, "UPDATE log_instances SET invalidated_at = NULL WHERE id = $1", instanceID)
+	require.NoError(t, err)
+	refresh, err = store.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, membership.LogGroupID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, refresh.UpsertedCount)
+
+	require.NoError(t, store.DeleteTimeParseClearTimeMembershipsByInstance(ctx, instanceID))
+	memberships, err = store.ListTimeParseClearTimeMemberships(ctx, series)
+	require.NoError(t, err)
+	assert.Empty(t, memberships)
 }
 
 func TestTimeParseBossKillMembershipUsesEncounterDateBounds(t *testing.T) {

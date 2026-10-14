@@ -838,10 +838,18 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	// Keep the compact current-known cohort synchronized after every successful
 	// parse. This also makes late historical uploads visible to older snapshots.
-	if result, err := db.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, job.Args.LogID); err != nil {
-		w.parent.logger.WarnContext(ctx, "failed to refresh time-parse memberships after parse", slog.Any("error", err))
+	if result, err := db.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, job.Args.LogID); err != nil {
+		w.parent.logger.WarnContext(ctx, "failed to refresh clear-time memberships after parse", slog.Any("error", err))
 	} else {
-		w.parent.logger.InfoContext(ctx, "refreshed time-parse memberships after parse",
+		w.parent.logger.InfoContext(ctx, "refreshed clear-time memberships after parse",
+			slog.Int64("upserted", result.UpsertedCount),
+			slog.Int64("deleted", result.DeletedCount),
+		)
+	}
+	if result, err := db.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, job.Args.LogID); err != nil {
+		w.parent.logger.WarnContext(ctx, "failed to refresh boss-kill memberships after parse", slog.Any("error", err))
+	} else {
+		w.parent.logger.InfoContext(ctx, "refreshed boss-kill memberships after parse",
 			slog.Int64("upserted", result.UpsertedCount),
 			slog.Int64("deleted", result.DeletedCount),
 		)

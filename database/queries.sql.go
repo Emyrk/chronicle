@@ -7059,9 +7059,23 @@ func (q *sqlQuerier) UpsertGuildPage(ctx context.Context, arg UpsertGuildPagePar
 }
 
 const guildBestRuns = `-- name: GuildBestRuns :many
-WITH clears AS (
+WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
-        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    WHERE li.invalidated_at IS NULL
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+), clears AS (
+    SELECT
+        representative.run_id,
         li.id AS instance_id,
         COALESCE(li.hashed_slug, '')::text AS instance_slug,
         sr.instance_name,
@@ -7070,8 +7084,9 @@ WITH clears AS (
         li.start_time AS instance_start_time,
         sr.ranked_duration_ms::bigint AS duration_ms,
         sr.ranked_completion_time::timestamptz AS completion_time
-    FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    FROM representative_instances representative
+    JOIN log_instances li ON li.id = representative.id
+    JOIN instance_speedruns sr ON sr.instance_id = representative.id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = $2::uuid
       AND sr.ranked_duration_ms > 0
@@ -7079,7 +7094,6 @@ WITH clears AS (
           WHEN $3::bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $3::int)
           ELSE true
       END
-    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.ranked_duration_ms ASC
 ), scored AS (
     SELECT
         c.run_id, c.instance_id, c.instance_slug, c.instance_name, c.difficulty_name, c.max_players, c.instance_start_time, c.duration_ms, c.completion_time,
@@ -7107,8 +7121,13 @@ WITH clears AS (
         SELECT
             COUNT(*)::bigint AS sample_size,
             COUNT(*) FILTER (WHERE member.duration_ms >= c.duration_ms)::bigint AS at_least_as_slow
-        FROM time_parse_clear_time_members member
-        WHERE member.snapshot_id = snapshot.id
+        FROM time_parse_clear_time_memberships member
+        JOIN time_parse_snapshots cohort_snapshot ON cohort_snapshot.id = snapshot.id
+        WHERE member.tenant_id = cohort_snapshot.tenant_id
+          AND member.policy_version = cohort_snapshot.policy_version
+          AND member.query_version = cohort_snapshot.query_version
+          AND member.start_time < cohort_snapshot.cutoff
+          AND (cohort_snapshot.window_start IS NULL OR member.start_time >= cohort_snapshot.window_start)
           AND member.instance_name = c.instance_name
           AND member.difficulty_name = c.difficulty_name
           AND member.max_players = c.max_players
@@ -7158,7 +7177,7 @@ type GuildBestRunsRow struct {
 // Returns the guild's single best full clear of each instance within the
 // window, for the guild page "Best Performance" panel. @by_parse picks the
 // winner by highest historical clear-time parse instead of fastest clear.
-// Duplicate uploads collapse to one run (fastest duration per group). Includes
+// Duplicate uploads collapse using the shared deterministic representative. Includes
 // unqualified runs: qualification only affects cohort and leaderboard membership,
 // not whether a completed clear can receive a time parse.
 // JOINs wow_server_realms so RLS tenant filtering cascades.
@@ -18799,6 +18818,24 @@ func (q *sqlQuerier) CountTimeParseBossKillMembershipCohort(ctx context.Context,
 	return count, err
 }
 
+const countTimeParseClearTimeMembershipCohort = `-- name: CountTimeParseClearTimeMembershipCohort :one
+SELECT COUNT(*)
+FROM time_parse_clear_time_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = $1
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.start_time < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.start_time >= snapshot.window_start)
+`
+
+func (q *sqlQuerier) CountTimeParseClearTimeMembershipCohort(ctx context.Context, snapshotID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countTimeParseClearTimeMembershipCohort, snapshotID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteTimeParseBossKillMembershipSeries = `-- name: DeleteTimeParseBossKillMembershipSeries :exec
 
 DELETE FROM time_parse_boss_kill_memberships
@@ -18838,6 +18875,48 @@ WHERE log_group_id = $1
 
 func (q *sqlQuerier) DeleteTimeParseBossKillMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteTimeParseBossKillMembershipsByLogGroup, logGroupID)
+	return err
+}
+
+const deleteTimeParseClearTimeMembershipSeries = `-- name: DeleteTimeParseClearTimeMembershipSeries :exec
+
+DELETE FROM time_parse_clear_time_memberships
+WHERE tenant_id = $1
+  AND policy_version = $2
+  AND query_version = $3
+`
+
+type DeleteTimeParseClearTimeMembershipSeriesParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+// Event-date-backed storage for time-parse clear-time cohorts.
+// Each logical member is stored once and snapshot lookback windows are applied
+// at read time. Later uploads, corrections, and invalidations affect old parses.
+func (q *sqlQuerier) DeleteTimeParseClearTimeMembershipSeries(ctx context.Context, arg DeleteTimeParseClearTimeMembershipSeriesParams) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseClearTimeMembershipSeries, arg.TenantID, arg.PolicyVersion, arg.QueryVersion)
+	return err
+}
+
+const deleteTimeParseClearTimeMembershipsByInstance = `-- name: DeleteTimeParseClearTimeMembershipsByInstance :exec
+DELETE FROM time_parse_clear_time_memberships
+WHERE instance_id = $1
+`
+
+func (q *sqlQuerier) DeleteTimeParseClearTimeMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseClearTimeMembershipsByInstance, instanceID)
+	return err
+}
+
+const deleteTimeParseClearTimeMembershipsByLogGroup = `-- name: DeleteTimeParseClearTimeMembershipsByLogGroup :exec
+DELETE FROM time_parse_clear_time_memberships
+WHERE log_group_id = $1
+`
+
+func (q *sqlQuerier) DeleteTimeParseClearTimeMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseClearTimeMembershipsByLogGroup, logGroupID)
 	return err
 }
 
@@ -18946,6 +19025,52 @@ func (q *sqlQuerier) GetTimeParseBossKillMembershipCohort(ctx context.Context, a
 		arg.SnapshotID,
 		arg.InstanceName,
 		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var duration_ms int64
+		if err := rows.Scan(&duration_ms); err != nil {
+			return nil, err
+		}
+		items = append(items, duration_ms)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTimeParseClearTimeMembershipCohort = `-- name: GetTimeParseClearTimeMembershipCohort :many
+SELECT membership.duration_ms
+FROM time_parse_clear_time_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = $1
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.start_time < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.start_time >= snapshot.window_start)
+  AND membership.instance_name = $2
+  AND membership.difficulty_name = $3
+  AND membership.max_players = $4
+`
+
+type GetTimeParseClearTimeMembershipCohortParams struct {
+	SnapshotID     uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) GetTimeParseClearTimeMembershipCohort(ctx context.Context, arg GetTimeParseClearTimeMembershipCohortParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, getTimeParseClearTimeMembershipCohort,
+		arg.SnapshotID,
+		arg.InstanceName,
 		arg.DifficultyName,
 		arg.MaxPlayers,
 	)
@@ -19120,6 +19245,54 @@ func (q *sqlQuerier) ListTimeParseBossKillMemberships(ctx context.Context, arg L
 	return items, nil
 }
 
+const listTimeParseClearTimeMemberships = `-- name: ListTimeParseClearTimeMemberships :many
+SELECT id, tenant_id, policy_version, query_version, run_id, instance_id, log_group_id, instance_name, difficulty_name, max_players, duration_ms, start_time
+FROM time_parse_clear_time_memberships
+WHERE tenant_id = $1
+  AND policy_version = $2
+  AND query_version = $3
+ORDER BY run_id
+`
+
+type ListTimeParseClearTimeMembershipsParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+func (q *sqlQuerier) ListTimeParseClearTimeMemberships(ctx context.Context, arg ListTimeParseClearTimeMembershipsParams) ([]TimeParseClearTimeMembership, error) {
+	rows, err := q.db.Query(ctx, listTimeParseClearTimeMemberships, arg.TenantID, arg.PolicyVersion, arg.QueryVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TimeParseClearTimeMembership
+	for rows.Next() {
+		var i TimeParseClearTimeMembership
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.RunID,
+			&i.InstanceID,
+			&i.LogGroupID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+			&i.StartTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const refreshTimeParseBossKillMembershipsForLogGroup = `-- name: RefreshTimeParseBossKillMembershipsForLogGroup :one
 WITH series AS MATERIALIZED (
     SELECT DISTINCT tenant_id, policy_version, query_version
@@ -19159,15 +19332,13 @@ current_members AS MATERIALIZED (
         instance.max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
         encounter.end_time AS killed_at,
-        server.tenant_id AS source_tenant_id,
-        (server.tenant_id IS NULL OR tenant.include_in_all) AS root_visible
+        server.tenant_id AS source_tenant_id
     FROM representative_instances representative
     JOIN log_instances instance ON instance.id = representative.id
     JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
     JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
     WHERE encounter.boss = true
       AND encounter.kill_type = 'clean'
       AND encounter.end_time > encounter.start_time
@@ -19192,8 +19363,10 @@ upserted AS (
         member.duration_ms, member.killed_at
     FROM series
     JOIN current_members member
-      ON series.tenant_id = member.source_tenant_id
-      OR (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid AND member.root_visible)
+      ON (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          AND member.source_tenant_id IS NULL)
+      OR (series.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+          AND member.source_tenant_id = series.tenant_id)
     ON CONFLICT (
         tenant_id, policy_version, query_version, run_id, encounter_name
     ) DO UPDATE SET
@@ -19214,6 +19387,10 @@ deleted AS (
           FROM current_members member
           WHERE member.run_id = membership.run_id
             AND member.encounter_name = membership.encounter_name
+            AND ((membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+                  AND member.source_tenant_id IS NULL)
+                 OR (membership.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+                     AND member.source_tenant_id = membership.tenant_id))
       )
     RETURNING 1
 )
@@ -19237,6 +19414,111 @@ func (q *sqlQuerier) RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.
 	return i, err
 }
 
+const refreshTimeParseClearTimeMembershipsForLogGroup = `-- name: RefreshTimeParseClearTimeMembershipsForLogGroup :one
+WITH series AS MATERIALIZED (
+    SELECT DISTINCT tenant_id, policy_version, query_version
+    FROM time_parse_snapshots
+    WHERE status = 'published'
+),
+affected_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    WHERE instance.log_group_id = $1
+),
+representative_instances AS MATERIALIZED (
+    SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
+        instance.id,
+        COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    JOIN affected_runs affected
+      ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
+    WHERE instance.invalidated_at IS NULL
+    ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = instance.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
+        (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
+        instance.start_time ASC,
+        instance.id ASC
+),
+current_members AS MATERIALIZED (
+    SELECT
+        representative.run_id,
+        speedrun.instance_id,
+        instance.log_group_id,
+        speedrun.instance_name,
+        instance.difficulty_name,
+        instance.max_players,
+        speedrun.ranked_duration_ms::bigint AS duration_ms,
+        speedrun.start_time::timestamptz AS start_time,
+        server.tenant_id AS source_tenant_id
+    FROM representative_instances representative
+    JOIN log_instances instance ON instance.id = representative.id
+    JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    WHERE speedrun.qualified = true
+      AND speedrun.ranked_duration_ms > 0
+),
+upserted AS (
+    INSERT INTO time_parse_clear_time_memberships (
+        tenant_id, policy_version, query_version, run_id,
+        instance_id, log_group_id, instance_name,
+        difficulty_name, max_players, duration_ms, start_time
+    )
+    SELECT
+        series.tenant_id, series.policy_version, series.query_version, member.run_id,
+        member.instance_id, member.log_group_id, member.instance_name,
+        member.difficulty_name, member.max_players, member.duration_ms, member.start_time
+    FROM series
+    JOIN current_members member
+      ON (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          AND member.source_tenant_id IS NULL)
+      OR (series.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+          AND member.source_tenant_id = series.tenant_id)
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id) DO UPDATE SET
+        instance_id = EXCLUDED.instance_id,
+        log_group_id = EXCLUDED.log_group_id,
+        instance_name = EXCLUDED.instance_name,
+        difficulty_name = EXCLUDED.difficulty_name,
+        max_players = EXCLUDED.max_players,
+        duration_ms = EXCLUDED.duration_ms,
+        start_time = EXCLUDED.start_time
+    RETURNING tenant_id, policy_version, query_version, run_id
+),
+deleted AS (
+    DELETE FROM time_parse_clear_time_memberships membership
+    WHERE membership.run_id IN (SELECT run_id FROM affected_runs)
+      AND NOT EXISTS (
+          SELECT 1 FROM current_members member
+          WHERE member.run_id = membership.run_id
+            AND ((membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+                  AND member.source_tenant_id IS NULL)
+                 OR (membership.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+                     AND member.source_tenant_id = membership.tenant_id))
+      )
+    RETURNING 1
+)
+SELECT
+    (SELECT COUNT(*) FROM upserted)::bigint AS upserted_count,
+    (SELECT COUNT(*) FROM deleted)::bigint AS deleted_count
+`
+
+type RefreshTimeParseClearTimeMembershipsForLogGroupRow struct {
+	UpsertedCount int64 `db:"upserted_count" json:"upserted_count"`
+	DeletedCount  int64 `db:"deleted_count" json:"deleted_count"`
+}
+
+// Recompute every duplicate run group touched by this log using the same
+// representative selection as snapshot publication.
+func (q *sqlQuerier) RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, logGroupID uuid.UUID) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error) {
+	row := q.db.QueryRow(ctx, refreshTimeParseClearTimeMembershipsForLogGroup, logGroupID)
+	var i RefreshTimeParseClearTimeMembershipsForLogGroupRow
+	err := row.Scan(&i.UpsertedCount, &i.DeletedCount)
+	return i, err
+}
+
 const upsertTimeParseBossKillMemberships = `-- name: UpsertTimeParseBossKillMemberships :exec
 WITH snapshot AS (
     SELECT
@@ -19255,11 +19537,11 @@ representative_instances AS (
     FROM log_instances instance
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
     CROSS JOIN snapshot
-    WHERE (server.tenant_id = snapshot.tenant_id
-           OR (snapshot.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE ((snapshot.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR (snapshot.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = snapshot.tenant_id))
       AND instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
@@ -19333,84 +19615,79 @@ func (q *sqlQuerier) UpsertTimeParseBossKillMemberships(ctx context.Context, sna
 	return err
 }
 
-const batchInsertTimeParseSnapshotClearTimeMembers = `-- name: BatchInsertTimeParseSnapshotClearTimeMembers :exec
+const upsertTimeParseClearTimeMemberships = `-- name: UpsertTimeParseClearTimeMemberships :exec
 WITH snapshot AS (
-    SELECT id, tenant_id, cutoff, window_start
-    FROM time_parse_snapshots WHERE id = $1
+    SELECT tenant_id, policy_version, query_version, cutoff, window_start
+    FROM time_parse_snapshots
+    WHERE time_parse_snapshots.id = $1
 ),
 representative_instances AS (
-    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
-        li.id,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
-    JOIN wow_server_realms realm ON realm.id = li.realm_id
+    SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
+        instance.id,
+        COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
-    CROSS JOIN snapshot s
-    WHERE server.tenant_id = s.tenant_id
-       OR (s.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
-           AND (server.tenant_id IS NULL OR tenant.include_in_all))
-    ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        -- Prefer the upload with the broadest boss-ranking coverage. The group
-        -- anchor is the first upload, but it may be truncated before the final boss.
+    CROSS JOIN snapshot
+    WHERE ((snapshot.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR (snapshot.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = snapshot.tenant_id))
+      AND instance.invalidated_at IS NULL
+    ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
          FROM encounter_dps_rankings coverage
-         WHERE coverage.instance_id = li.id
+         WHERE coverage.instance_id = instance.id
            AND coverage.encounter_id IS NOT NULL) DESC,
-        (li.id = li.duplicate_group_id) DESC NULLS LAST,
-        li.start_time ASC,
-        li.id ASC
+        (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
+        instance.start_time ASC,
+        instance.id ASC
 ),
-eligible AS (
-    SELECT DISTINCT ON (ri.run_id)
-        sr.instance_id,
-        ri.run_id,
-        sr.instance_name,
-        li.difficulty_name,
-        li.max_players,
-        sr.ranked_duration_ms::bigint AS duration_ms,
-        sr.ranked_start_time::timestamptz AS start_time
-    FROM instance_speedruns sr
-    JOIN representative_instances ri ON ri.id = sr.instance_id
-    JOIN log_instances li ON li.id = sr.instance_id
-    CROSS JOIN snapshot s
-    WHERE sr.qualified = true
-      AND sr.ranked_duration_ms > 0
-      AND sr.start_time < s.cutoff
-      AND (s.window_start IS NULL OR sr.start_time >= s.window_start)
-    ORDER BY ri.run_id, sr.ranked_duration_ms ASC, sr.start_time ASC, sr.instance_id ASC
+current_members AS (
+    SELECT
+        representative.run_id,
+        speedrun.instance_id,
+        instance.log_group_id,
+        speedrun.instance_name,
+        instance.difficulty_name,
+        instance.max_players,
+        speedrun.ranked_duration_ms::bigint AS duration_ms,
+        speedrun.start_time::timestamptz AS start_time
+    FROM representative_instances representative
+    JOIN log_instances instance ON instance.id = representative.id
+    JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
+    CROSS JOIN snapshot
+    WHERE speedrun.qualified = true
+      AND speedrun.ranked_duration_ms > 0
+      AND speedrun.start_time < snapshot.cutoff
+      AND (snapshot.window_start IS NULL OR speedrun.start_time >= snapshot.window_start)
 )
-INSERT INTO time_parse_clear_time_members (
-    snapshot_id, instance_id, run_id,
-    instance_name, difficulty_name, max_players,
-    duration_ms, start_time
+INSERT INTO time_parse_clear_time_memberships (
+    tenant_id, policy_version, query_version, run_id,
+    instance_id, log_group_id, instance_name,
+    difficulty_name, max_players, duration_ms, start_time
 )
 SELECT
-    $1, e.instance_id, e.run_id,
-    e.instance_name, e.difficulty_name, e.max_players,
-    e.duration_ms, e.start_time
-FROM eligible e
-ON CONFLICT (snapshot_id, instance_id) DO NOTHING
+    snapshot.tenant_id, snapshot.policy_version, snapshot.query_version, member.run_id,
+    member.instance_id, member.log_group_id, member.instance_name,
+    member.difficulty_name, member.max_players, member.duration_ms, member.start_time
+FROM snapshot
+CROSS JOIN current_members member
+ON CONFLICT (tenant_id, policy_version, query_version, run_id) DO UPDATE SET
+    instance_id = EXCLUDED.instance_id,
+    log_group_id = EXCLUDED.log_group_id,
+    instance_name = EXCLUDED.instance_name,
+    difficulty_name = EXCLUDED.difficulty_name,
+    max_players = EXCLUDED.max_players,
+    duration_ms = EXCLUDED.duration_ms,
+    start_time = EXCLUDED.start_time
 `
 
-// Populate clear-time members from eligible instance speedruns.
-// Qualified complete runs only (duration_ms > 0). Duplicate groups collapsed
-// to one representative instance (deterministic: canonical instance first,
-// then earliest start, then smallest UUID).
-func (q *sqlQuerier) BatchInsertTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, batchInsertTimeParseSnapshotClearTimeMembers, snapshotID)
+// Snapshot publication writes the current window directly into the compact
+// store. Missing rows are removed only by lifecycle operations.
+func (q *sqlQuerier) UpsertTimeParseClearTimeMemberships(ctx context.Context, snapshotID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, upsertTimeParseClearTimeMemberships, snapshotID)
 	return err
-}
-
-const countTimeParseSnapshotClearTimeMembers = `-- name: CountTimeParseSnapshotClearTimeMembers :one
-SELECT COUNT(*) FROM time_parse_clear_time_members WHERE snapshot_id = $1
-`
-
-func (q *sqlQuerier) CountTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countTimeParseSnapshotClearTimeMembers, snapshotID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }
 
 const deleteTimeParseSnapshot = `-- name: DeleteTimeParseSnapshot :exec
@@ -19681,20 +19958,25 @@ func (q *sqlQuerier) GetPublishedTimeParseSnapshotForCutoff(ctx context.Context,
 
 const getTimeParseClearTimeCohortEntries = `-- name: GetTimeParseClearTimeCohortEntries :many
 SELECT
-    tpctm.instance_id,
-    tpctm.duration_ms,
-    tpctm.start_time AS killed_at,
-    li.hashed_slug AS log_hashed_slug,
-    g.id AS guild_id,
-    g.name AS guild_name
-FROM time_parse_clear_time_members tpctm
-LEFT JOIN log_instances li ON li.id = tpctm.instance_id
-LEFT JOIN guilds g ON g.id = li.guild_id
-WHERE tpctm.snapshot_id = $1
-  AND tpctm.instance_name = $2
-  AND tpctm.difficulty_name = $3
-  AND tpctm.max_players = $4
-ORDER BY tpctm.duration_ms, tpctm.start_time
+    membership.instance_id,
+    membership.duration_ms,
+    membership.start_time AS killed_at,
+    instance.hashed_slug AS log_hashed_slug,
+    guild.id AS guild_id,
+    guild.name AS guild_name
+FROM time_parse_clear_time_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = $1
+LEFT JOIN log_instances instance ON instance.id = membership.instance_id
+LEFT JOIN guilds guild ON guild.id = instance.guild_id
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.start_time < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.start_time >= snapshot.window_start)
+  AND membership.instance_name = $2
+  AND membership.difficulty_name = $3
+  AND membership.max_players = $4
+ORDER BY membership.duration_ms, membership.start_time
 `
 
 type GetTimeParseClearTimeCohortEntriesParams struct {
@@ -19714,8 +19996,8 @@ type GetTimeParseClearTimeCohortEntriesRow struct {
 }
 
 // Clear-time cohort members for one bucket, fastest first, with the log and
-// guild identity needed by the cohort viewer. Same membership as
-// GetTimeParseSnapshotClearTimeCohort.
+// guild identity needed by the cohort viewer. Uses the same dynamic membership
+// as GetTimeParseClearTimeMembershipCohort.
 func (q *sqlQuerier) GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error) {
 	rows, err := q.db.Query(ctx, getTimeParseClearTimeCohortEntries,
 		arg.SnapshotID,
@@ -19748,50 +20030,6 @@ func (q *sqlQuerier) GetTimeParseClearTimeCohortEntries(ctx context.Context, arg
 	return items, nil
 }
 
-const getTimeParseSnapshotClearTimeCohort = `-- name: GetTimeParseSnapshotClearTimeCohort :many
-SELECT
-    tpctm.duration_ms
-FROM time_parse_clear_time_members tpctm
-WHERE tpctm.snapshot_id = $1
-  AND tpctm.instance_name = $2
-  AND tpctm.difficulty_name = $3
-  AND tpctm.max_players = $4
-`
-
-type GetTimeParseSnapshotClearTimeCohortParams struct {
-	SnapshotID     uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
-	InstanceName   string    `db:"instance_name" json:"instance_name"`
-	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16     `db:"max_players" json:"max_players"`
-}
-
-// All clear-time durations for an (instance_name, difficulty, max_players) bucket.
-// Used to score a specific run's clear time against the population.
-func (q *sqlQuerier) GetTimeParseSnapshotClearTimeCohort(ctx context.Context, arg GetTimeParseSnapshotClearTimeCohortParams) ([]int64, error) {
-	rows, err := q.db.Query(ctx, getTimeParseSnapshotClearTimeCohort,
-		arg.SnapshotID,
-		arg.InstanceName,
-		arg.DifficultyName,
-		arg.MaxPlayers,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []int64
-	for rows.Next() {
-		var duration_ms int64
-		if err := rows.Scan(&duration_ms); err != nil {
-			return nil, err
-		}
-		items = append(items, duration_ms)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getTimeParseSnapshotSourceStats = `-- name: GetTimeParseSnapshotSourceStats :one
 WITH clear_stats AS (
     SELECT
@@ -19812,10 +20050,11 @@ WITH clear_stats AS (
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_server_realms realm ON realm.id = li.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
-    WHERE (server.tenant_id = $1
-           OR ($1 = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE (($1::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR ($1::uuid <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = $1::uuid))
+      AND li.invalidated_at IS NULL
       AND sr.qualified = true
       AND sr.ranked_duration_ms > 0
       AND sr.start_time < $2
@@ -19843,10 +20082,10 @@ boss_stats AS (
     JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
     JOIN wow_server_realms realm ON realm.id = li.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
-    WHERE (server.tenant_id = $1
-           OR ($1 = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE (($1::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR ($1::uuid <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = $1::uuid))
       AND li.invalidated_at IS NULL
       AND lie.boss = true
       AND lie.kill_type = 'clean'
@@ -19863,7 +20102,7 @@ FROM clear_stats c, boss_stats b
 `
 
 type GetTimeParseSnapshotSourceStatsParams struct {
-	TenantID    uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
 	WindowStart pgtype.Timestamptz `db:"window_start" json:"window_start"`
 }
@@ -19951,7 +20190,15 @@ func (q *sqlQuerier) InsertTimeParseSnapshot(ctx context.Context, arg InsertTime
 
 const listAllTimeParseSnapshots = `-- name: ListAllTimeParseSnapshots :many
 SELECT tps.id, tps.tenant_id, tps.cutoff, tps.window_start, tps.lookback_days, tps.policy_version, tps.query_version, tps.status, tps.created_at, tps.published_at, tps.source_row_count, tps.source_watermark, tps.source_fingerprint,
-       (SELECT COUNT(*) FROM time_parse_clear_time_members WHERE snapshot_id = tps.id) AS clear_member_count,
+       (
+           SELECT COUNT(*)
+           FROM time_parse_clear_time_memberships membership
+           WHERE membership.tenant_id = tps.tenant_id
+             AND membership.policy_version = tps.policy_version
+             AND membership.query_version = tps.query_version
+             AND membership.start_time < tps.cutoff
+             AND (tps.window_start IS NULL OR membership.start_time >= tps.window_start)
+       ) AS clear_member_count,
        (
            SELECT COUNT(*)
            FROM time_parse_boss_kill_memberships membership
@@ -20082,14 +20329,19 @@ func (q *sqlQuerier) ListPublishedTimeParseSnapshots(ctx context.Context, arg Li
 
 const listTimeParseClearTimeCohortBuckets = `-- name: ListTimeParseClearTimeCohortBuckets :many
 SELECT
-    tpctm.instance_name,
-    tpctm.difficulty_name,
-    tpctm.max_players,
+    membership.instance_name,
+    membership.difficulty_name,
+    membership.max_players,
     COUNT(*)::bigint AS sample_size
-FROM time_parse_clear_time_members tpctm
-WHERE tpctm.snapshot_id = $1
-GROUP BY tpctm.instance_name, tpctm.difficulty_name, tpctm.max_players
-ORDER BY tpctm.instance_name, tpctm.difficulty_name, tpctm.max_players
+FROM time_parse_clear_time_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = $1
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.start_time < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.start_time >= snapshot.window_start)
+GROUP BY membership.instance_name, membership.difficulty_name, membership.max_players
+ORDER BY membership.instance_name, membership.difficulty_name, membership.max_players
 `
 
 type ListTimeParseClearTimeCohortBucketsRow struct {
@@ -20099,7 +20351,7 @@ type ListTimeParseClearTimeCohortBucketsRow struct {
 	SampleSize     int64  `db:"sample_size" json:"sample_size"`
 }
 
-// Distinct clear-time buckets in a snapshot with their sample sizes.
+// Distinct clear-time buckets in a snapshot's dynamic date window.
 func (q *sqlQuerier) ListTimeParseClearTimeCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListTimeParseClearTimeCohortBucketsRow, error) {
 	rows, err := q.db.Query(ctx, listTimeParseClearTimeCohortBuckets, snapshotID)
 	if err != nil {

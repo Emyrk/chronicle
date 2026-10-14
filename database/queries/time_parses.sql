@@ -68,72 +68,6 @@ WHERE tenant_id = @tenant_id
 ORDER BY published_at DESC
 LIMIT 1;
 
--- name: BatchInsertTimeParseSnapshotClearTimeMembers :exec
--- Populate clear-time members from eligible instance speedruns.
--- Qualified complete runs only (duration_ms > 0). Duplicate groups collapsed
--- to one representative instance (deterministic: canonical instance first,
--- then earliest start, then smallest UUID).
-WITH snapshot AS (
-    SELECT id, tenant_id, cutoff, window_start
-    FROM time_parse_snapshots WHERE id = @snapshot_id
-),
-representative_instances AS (
-    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
-        li.id,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
-    JOIN wow_server_realms realm ON realm.id = li.realm_id
-    JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
-    CROSS JOIN snapshot s
-    WHERE server.tenant_id = s.tenant_id
-       OR (s.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
-           AND (server.tenant_id IS NULL OR tenant.include_in_all))
-    ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        -- Prefer the upload with the broadest boss-ranking coverage. The group
-        -- anchor is the first upload, but it may be truncated before the final boss.
-        (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
-         WHERE coverage.instance_id = li.id
-           AND coverage.encounter_id IS NOT NULL) DESC,
-        (li.id = li.duplicate_group_id) DESC NULLS LAST,
-        li.start_time ASC,
-        li.id ASC
-),
-eligible AS (
-    SELECT DISTINCT ON (ri.run_id)
-        sr.instance_id,
-        ri.run_id,
-        sr.instance_name,
-        li.difficulty_name,
-        li.max_players,
-        sr.ranked_duration_ms::bigint AS duration_ms,
-        sr.ranked_start_time::timestamptz AS start_time
-    FROM instance_speedruns sr
-    JOIN representative_instances ri ON ri.id = sr.instance_id
-    JOIN log_instances li ON li.id = sr.instance_id
-    CROSS JOIN snapshot s
-    WHERE sr.qualified = true
-      AND sr.ranked_duration_ms > 0
-      AND sr.start_time < s.cutoff
-      AND (s.window_start IS NULL OR sr.start_time >= s.window_start)
-    ORDER BY ri.run_id, sr.ranked_duration_ms ASC, sr.start_time ASC, sr.instance_id ASC
-)
-INSERT INTO time_parse_clear_time_members (
-    snapshot_id, instance_id, run_id,
-    instance_name, difficulty_name, max_players,
-    duration_ms, start_time
-)
-SELECT
-    @snapshot_id, e.instance_id, e.run_id,
-    e.instance_name, e.difficulty_name, e.max_players,
-    e.duration_ms, e.start_time
-FROM eligible e
-ON CONFLICT (snapshot_id, instance_id) DO NOTHING;
-
--- name: CountTimeParseSnapshotClearTimeMembers :one
-SELECT COUNT(*) FROM time_parse_clear_time_members WHERE snapshot_id = @snapshot_id;
-
 -- name: GetTimeParseSnapshotSourceStats :one
 -- Compute a combined source fingerprint covering both clear-time eligible
 -- speedruns and boss-kill eligible encounters. Changes in either source
@@ -166,10 +100,11 @@ WITH clear_stats AS (
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_server_realms realm ON realm.id = li.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
-    WHERE (server.tenant_id = @tenant_id
-           OR (@tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE ((@tenant_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR (@tenant_id::uuid <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = @tenant_id::uuid))
+      AND li.invalidated_at IS NULL
       AND sr.qualified = true
       AND sr.ranked_duration_ms > 0
       AND sr.start_time < @cutoff
@@ -197,10 +132,10 @@ boss_stats AS (
     JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
     JOIN wow_server_realms realm ON realm.id = li.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
-    WHERE (server.tenant_id = @tenant_id
-           OR (@tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE ((@tenant_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR (@tenant_id::uuid <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = @tenant_id::uuid))
       AND li.invalidated_at IS NULL
       AND lie.boss = true
       AND lie.kill_type = 'clean'
@@ -215,17 +150,6 @@ SELECT
     ((c.fp + b.fp) % 4294967291)::bigint AS fingerprint
 FROM clear_stats c, boss_stats b;
 
--- name: GetTimeParseSnapshotClearTimeCohort :many
--- All clear-time durations for an (instance_name, difficulty, max_players) bucket.
--- Used to score a specific run's clear time against the population.
-SELECT
-    tpctm.duration_ms
-FROM time_parse_clear_time_members tpctm
-WHERE tpctm.snapshot_id = @snapshot_id
-  AND tpctm.instance_name = @instance_name
-  AND tpctm.difficulty_name = @difficulty_name
-  AND tpctm.max_players = @max_players;
-
 -- name: DeleteTimeParseSnapshot :exec
 -- Delete a time-parse snapshot by ID. Members are cascade-deleted.
 DELETE FROM time_parse_snapshots WHERE id = @id;
@@ -238,7 +162,15 @@ DELETE FROM time_parse_snapshots WHERE id = ANY(@ids::uuid[]);
 -- LEFT JOINs tenants to surface the tenant name (NULL for root scope).
 -- Includes separate clear-time and boss-kill member counts.
 SELECT tps.*,
-       (SELECT COUNT(*) FROM time_parse_clear_time_members WHERE snapshot_id = tps.id) AS clear_member_count,
+       (
+           SELECT COUNT(*)
+           FROM time_parse_clear_time_memberships membership
+           WHERE membership.tenant_id = tps.tenant_id
+             AND membership.policy_version = tps.policy_version
+             AND membership.query_version = tps.query_version
+             AND membership.start_time < tps.cutoff
+             AND (tps.window_start IS NULL OR membership.start_time >= tps.window_start)
+       ) AS clear_member_count,
        (
            SELECT COUNT(*)
            FROM time_parse_boss_kill_memberships membership
@@ -281,33 +213,43 @@ WHERE id = @id
   AND status = 'published';
 
 -- name: ListTimeParseClearTimeCohortBuckets :many
--- Distinct clear-time buckets in a snapshot with their sample sizes.
+-- Distinct clear-time buckets in a snapshot's dynamic date window.
 SELECT
-    tpctm.instance_name,
-    tpctm.difficulty_name,
-    tpctm.max_players,
+    membership.instance_name,
+    membership.difficulty_name,
+    membership.max_players,
     COUNT(*)::bigint AS sample_size
-FROM time_parse_clear_time_members tpctm
-WHERE tpctm.snapshot_id = @snapshot_id
-GROUP BY tpctm.instance_name, tpctm.difficulty_name, tpctm.max_players
-ORDER BY tpctm.instance_name, tpctm.difficulty_name, tpctm.max_players;
+FROM time_parse_clear_time_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = @snapshot_id
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.start_time < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.start_time >= snapshot.window_start)
+GROUP BY membership.instance_name, membership.difficulty_name, membership.max_players
+ORDER BY membership.instance_name, membership.difficulty_name, membership.max_players;
 
 -- name: GetTimeParseClearTimeCohortEntries :many
 -- Clear-time cohort members for one bucket, fastest first, with the log and
--- guild identity needed by the cohort viewer. Same membership as
--- GetTimeParseSnapshotClearTimeCohort.
+-- guild identity needed by the cohort viewer. Uses the same dynamic membership
+-- as GetTimeParseClearTimeMembershipCohort.
 SELECT
-    tpctm.instance_id,
-    tpctm.duration_ms,
-    tpctm.start_time AS killed_at,
-    li.hashed_slug AS log_hashed_slug,
-    g.id AS guild_id,
-    g.name AS guild_name
-FROM time_parse_clear_time_members tpctm
-LEFT JOIN log_instances li ON li.id = tpctm.instance_id
-LEFT JOIN guilds g ON g.id = li.guild_id
-WHERE tpctm.snapshot_id = @snapshot_id
-  AND tpctm.instance_name = @instance_name
-  AND tpctm.difficulty_name = @difficulty_name
-  AND tpctm.max_players = @max_players
-ORDER BY tpctm.duration_ms, tpctm.start_time;
+    membership.instance_id,
+    membership.duration_ms,
+    membership.start_time AS killed_at,
+    instance.hashed_slug AS log_hashed_slug,
+    guild.id AS guild_id,
+    guild.name AS guild_name
+FROM time_parse_clear_time_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = @snapshot_id
+LEFT JOIN log_instances instance ON instance.id = membership.instance_id
+LEFT JOIN guilds guild ON guild.id = instance.guild_id
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.start_time < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.start_time >= snapshot.window_start)
+  AND membership.instance_name = @instance_name
+  AND membership.difficulty_name = @difficulty_name
+  AND membership.max_players = @max_players
+ORDER BY membership.duration_ms, membership.start_time;

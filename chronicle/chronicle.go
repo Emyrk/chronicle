@@ -642,8 +642,11 @@ func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, 
 		return fmt.Errorf("invalidate log group: %w", err)
 	}
 
+	if err := c.Zed.DeleteTimeParseClearTimeMembershipsByLogGroup(ctx, logID); err != nil {
+		return fmt.Errorf("delete invalidated clear-time memberships: %w", err)
+	}
 	if err := c.Zed.DeleteTimeParseBossKillMembershipsByLogGroup(ctx, logID); err != nil {
-		return fmt.Errorf("delete invalidated time-parse memberships: %w", err)
+		return fmt.Errorf("delete invalidated boss-kill memberships: %w", err)
 	}
 
 	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
@@ -664,8 +667,11 @@ func (c *Chronicle) ClearWoWLogGroupInvalidation(ctx context.Context, logID uuid
 		return fmt.Errorf("clear log group invalidation: %w", err)
 	}
 
+	if _, err := c.Zed.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, logID); err != nil {
+		return fmt.Errorf("restore clear-time memberships after clearing invalidation: %w", err)
+	}
 	if _, err := c.Zed.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, logID); err != nil {
-		return fmt.Errorf("restore time-parse memberships after clearing invalidation: %w", err)
+		return fmt.Errorf("restore boss-kill memberships after clearing invalidation: %w", err)
 	}
 
 	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
@@ -729,8 +735,11 @@ func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID 
 		return fmt.Errorf("delete log instance: %w", err)
 	}
 
+	if err := c.Zed.DeleteTimeParseClearTimeMembershipsByInstance(ctx, instanceID); err != nil {
+		return fmt.Errorf("delete clear-time memberships for instance: %w", err)
+	}
 	if err := c.Zed.DeleteTimeParseBossKillMembershipsByInstance(ctx, instanceID); err != nil {
-		return fmt.Errorf("delete time-parse memberships for instance: %w", err)
+		return fmt.Errorf("delete boss-kill memberships for instance: %w", err)
 	}
 
 	err = c.Zed.PruneParsedInstanceFromLogOutput(ctx, database.PruneParsedInstanceFromLogOutputParams{

@@ -48,7 +48,7 @@ func getTimeParseCohortJSONWithContext(t *testing.T, ctx context.Context, router
 func TestTimeParseCohortViewerTenantIsolation(t *testing.T) {
 	t.Parallel()
 
-	pool, store, _ := setupTimeParseTest(t)
+	pool, store, rootRealm := setupTimeParseTest(t)
 	baseCtx := testutil.Context(t, testutil.WaitMedium)
 	baseTime := time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC)
 	cutoff := time.Date(2024, 8, 1, 0, 0, 0, 0, time.UTC)
@@ -76,8 +76,17 @@ func TestTimeParseCohortViewerTenantIsolation(t *testing.T) {
 
 	instanceA := insertRun(realmA, 30*time.Second)
 	instanceB := insertRun(realmB, 90*time.Second)
+	rootInstance := insertRun(rootRealm, 60*time.Second)
+	for _, tenantID := range []uuid.UUID{tenantA, tenantB, uuid.Nil} {
+		stats, err := store.GetTimeParseSnapshotSourceStats(baseCtx, database.GetTimeParseSnapshotSourceStatsParams{
+			TenantID: tenantID, Cutoff: database.Timestamptz(cutoff),
+		})
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), stats.RowCount, "source stats must include one clear and one boss from only the exact server tenant")
+	}
 	runTimeParseWorker(t, baseCtx, store, tenantA, cutoff, 0)
 	runTimeParseWorker(t, baseCtx, store, tenantB, cutoff, 0)
+	runTimeParseWorker(t, baseCtx, store, uuid.Nil, cutoff, 0)
 
 	router := timeParseCohortRouter(store)
 	type tenantExpectation struct {
@@ -88,6 +97,7 @@ func TestTimeParseCohortViewerTenantIsolation(t *testing.T) {
 	expectations := []tenantExpectation{
 		{tenantID: tenantA, instanceID: instanceA, durationMs: 30_000},
 		{tenantID: tenantB, instanceID: instanceB, durationMs: 90_000},
+		{tenantID: uuid.Nil, instanceID: rootInstance, durationMs: 60_000},
 	}
 
 	snapshotIDs := make(map[uuid.UUID]uuid.UUID, len(expectations))
