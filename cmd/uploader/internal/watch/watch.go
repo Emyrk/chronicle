@@ -69,6 +69,7 @@ type Trigger struct {
 type track struct {
 	size     int64
 	grew     time.Time // zero: unchanged since before we started watching
+	created  time.Time // zero: present when we started watching
 	uploaded int64     // size last uploaded, -1 for never
 	failed   int64     // size that failed permanently, -1 for none
 	queued   bool
@@ -109,6 +110,7 @@ func (t *Tracker) Observe(now time.Time, files []File, wowRunning, manual bool, 
 			tr = &track{size: f.Size, uploaded: -1, failed: -1}
 			if t.seeded {
 				tr.grew = now
+				tr.created = now
 			}
 			t.files[f.Path] = tr
 		case f.Size != tr.size:
@@ -141,6 +143,18 @@ func (t *Tracker) Observe(now time.Time, files []File, wowRunning, manual bool, 
 	t.seeded = true
 	t.recording = recording
 	return upload, recording
+}
+
+// CreatedSince reports whether a log file appeared after the helper started
+// watching and at or after since. A file that was already there is never
+// counted, so a leftover from an earlier session does not read as logging on.
+func (t *Tracker) CreatedSince(since time.Time) bool {
+	for _, tr := range t.files {
+		if !tr.created.IsZero() && !tr.created.Before(since) {
+			return true
+		}
+	}
+	return false
 }
 
 // MarkUploaded records that size bytes of path reached the server.
