@@ -15,6 +15,7 @@ import (
 type sqlcQuerier interface {
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
+	ActivateDiscordMembershipGrantCheckOnLogin(ctx context.Context, arg ActivateDiscordMembershipGrantCheckOnLoginParams) (ActivateDiscordMembershipGrantCheckOnLoginRow, error)
 	AddUserFavoriteGuild(ctx context.Context, arg AddUserFavoriteGuildParams) (pgtype.Bool, error)
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
@@ -35,12 +36,17 @@ type sqlcQuerier interface {
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
+	ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error)
+	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
 	// Canonical normalized rows produced by legacy Spell.dbc imports.
 	ClearSpellEffectsForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellPowersForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellVariantsForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearWoWLogGroupInvalidation(ctx context.Context, logGroupID uuid.UUID) error
+	CompleteDiscordMembershipGrantCheckError(ctx context.Context, arg CompleteDiscordMembershipGrantCheckErrorParams) (DiscordMembershipGrantCheck, error)
+	CompleteDiscordMembershipGrantCheckMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
+	CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
 	CopyLegacySpellPowers(ctx context.Context, arg []CopyLegacySpellPowersParams) *CopyLegacySpellPowersBatchResults
@@ -93,6 +99,7 @@ type sqlcQuerier interface {
 	DeleteDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDiscordAnnouncement(ctx context.Context, id uuid.UUID) error
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
+	DeleteDiscordMembershipGrantCheck(ctx context.Context, userID uuid.UUID) error
 	DeleteEmptyCooldownOverrides(ctx context.Context, datasetID uuid.UUID) error
 	DeleteExpiredGuildResourceVisitors(ctx context.Context) error
 	DeleteExpiredOAuthRelayCodes(ctx context.Context) (int64, error)
@@ -224,6 +231,7 @@ type sqlcQuerier interface {
 	// Discord raid-log announcements
 	GetDiscordAnnouncementSource(ctx context.Context, arg GetDiscordAnnouncementSourceParams) (GetDiscordAnnouncementSourceRow, error)
 	GetDiscordAnnouncementSourceBySlug(ctx context.Context, instanceSlug pgtype.Text) (GetDiscordAnnouncementSourceBySlugRow, error)
+	GetDiscordMembershipGrantCheckClaim(ctx context.Context, arg GetDiscordMembershipGrantCheckClaimParams) (DiscordMembershipGrantCheck, error)
 	GetDisplayInfoByID(ctx context.Context, arg GetDisplayInfoByIDParams) (WorldDisplayInfo, error)
 	GetEncounterPhasesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterPhase, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
@@ -504,6 +512,7 @@ type sqlcQuerier interface {
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
 	InsertDerivedConsumableBuffs(ctx context.Context, datasetID uuid.UUID) (int64, error)
 	InsertDerivedConsumables(ctx context.Context, datasetID uuid.UUID) (int64, error)
+	InsertDiscordMembershipGrantCheck(ctx context.Context, arg InsertDiscordMembershipGrantCheckParams) (DiscordMembershipGrantCheck, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
 	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
@@ -793,6 +802,7 @@ type sqlcQuerier interface {
 	RankingsSummaryMaxUpdatedAt(ctx context.Context, tenantID uuid.UUID) (pgtype.Timestamptz, error)
 	// Returns aggregate refresh metadata for one tenant's precomputed summaries.
 	RankingsSummaryStatus(ctx context.Context, tenantID uuid.UUID) (RankingsSummaryStatusRow, error)
+	ReactivateDiscordMembershipGrantCheck(ctx context.Context, arg ReactivateDiscordMembershipGrantCheckParams) (ReactivateDiscordMembershipGrantCheckRow, error)
 	RecordAuthzMigration(ctx context.Context, version int32) error
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
@@ -802,6 +812,7 @@ type sqlcQuerier interface {
 	// selection as snapshot publication.
 	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, logGroupID uuid.UUID) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
+	RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error)
 	// Resolves the dataset for a realm. Precedence:
 	//   server.default_dataset_id > tenant.default_dataset_id.
 	// The result is NULL when neither is set (and when the realm is unknown the
@@ -941,6 +952,9 @@ type sqlcQuerier interface {
 	UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDatasetTalentTreesParams) error
 	UpsertDiscordAnnouncement(ctx context.Context, arg UpsertDiscordAnnouncementParams) (GuildDiscordLogAnnouncement, error)
 	UpsertDiscordAnnouncementSource(ctx context.Context, arg UpsertDiscordAnnouncementSourceParams) (GuildDiscordLogAnnouncementSource, error)
+	UpsertDiscordMembershipGrantCheckError(ctx context.Context, arg UpsertDiscordMembershipGrantCheckErrorParams) (DiscordMembershipGrantCheck, error)
+	UpsertDiscordMembershipGrantCheckMember(ctx context.Context, arg UpsertDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
+	UpsertDiscordMembershipGrantCheckNonMember(ctx context.Context, arg UpsertDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
 	// Refreshes the rate-limit timestamp. Clears the cached response: it is
 	// stale once a new sync starts, and stays NULL if the sync fails.
 	UpsertExternalCharacterLinkSync(ctx context.Context, arg UpsertExternalCharacterLinkSyncParams) error
