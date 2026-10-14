@@ -67,6 +67,9 @@ import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
+import { EncounterKillIcon } from "./EncounterKillIcon";
+import { useInstanceTimeParses } from "./Overview/overviewQueries";
+import { bossKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -435,6 +438,7 @@ function EncounterSidebar({
   includeWipes,
   onIncludeWipesChange,
   instanceStartTime,
+  instanceId,
 }: {
   encounters: Encounter[];
   trashGroups: TrashGroup[];
@@ -449,7 +453,11 @@ function EncounterSidebar({
   includeWipes: boolean;
   onIncludeWipesChange: (value: boolean) => void;
   instanceStartTime: string;
+  instanceId: string;
 }) {
+  const timeParsesQuery = useInstanceTimeParses(instanceId);
+  const killParses = bossKillParsesByEncounter(timeParsesQuery.data);
+  const lookbackDays = timeParsesQuery.data?.lookback_days;
   const nonWipeFilter = (e: Encounter) => {
     return includeWipes || (e.kill_type !== "wipe" && e.kill_type !== "reset");
   };
@@ -671,8 +679,10 @@ function EncounterSidebar({
                   !encounter.boss && !isSelected && "text-muted-foreground"
                 )}
               >
-                {encounter.kill_type === "clean" ? (
-                  <CheckCircle className={cn("h-4 w-4 shrink-0", encounter.boss ? "text-green-500" : "text-green-500/60")} />
+                {encounter.kill_type === "clean" && encounter.boss ? (
+                  <EncounterKillIcon parses={killParses} encounterId={encounter.id} lookbackDays={lookbackDays} />
+                ) : encounter.kill_type === "clean" ? (
+                  <CheckCircle className="h-4 w-4 shrink-0 text-green-500/60" />
                 ) : encounter.kill_type === "partial" ? (
                   <AlertTriangle className={cn("h-4 w-4 shrink-0", encounter.boss ? "text-yellow-500" : "text-yellow-500/60")} />
                 ) : encounter.kill_type === "reset" ? (
@@ -736,7 +746,9 @@ function EncounterSidebar({
                   isWipeOrReset && !isSelected && "opacity-60",
                 )}
               >
-                {encounter.kill_type === "clean" ? (
+                {encounter.kill_type === "clean" && encounter.boss ? (
+                  <EncounterKillIcon parses={killParses} encounterId={encounter.id} lookbackDays={lookbackDays} />
+                ) : encounter.kill_type === "clean" ? (
                   <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
                 ) : encounter.kill_type === "partial" ? (
                   <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500" />
@@ -3694,6 +3706,7 @@ export function InstancePageView({
         
         {sidebarOpen && (
           <EncounterSidebar
+            instanceId={instance.id}
             onCollapse={() => setSidebarOpen(false)}
             encounters={instance.encounters}
             trashGroups={trashGroups}
