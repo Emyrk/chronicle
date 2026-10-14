@@ -251,7 +251,7 @@ loading-screens: loading-screens/legacy-extract
 endif
 
 WOWDATA_MAP_REUSE_MANIFEST ?= https://icons.chronicleclassic.com/forever/maps/manifest.json
-WOWDATA_MAP_WORKERS ?= 1
+WOWDATA_MAP_WORKERS ?= 4
 
 # WoW Forever UI map pipeline: extract DB2 metadata and WebP tiles, then upload
 # under https://icons.chronicleclassic.com/forever/maps/.

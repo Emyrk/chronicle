@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -214,13 +215,13 @@ printf '%s\n' '{"ok":true,"data":{"buildName":"1.60.1.70205"}}'
 	require.Equal(t, "1.60.1.70205", build)
 }
 
-func TestExtractWowdataMapsDefaultsToOneWorker(t *testing.T) {
+func TestExtractWowdataMapsDefaultsToFourWorkers(t *testing.T) {
 	t.Parallel()
 
 	cmd := ExtractWowdataMapsCmd()
 	for _, option := range cmd.Options {
 		if option.Flag == "workers" {
-			require.Equal(t, "1", option.Default)
+			require.Equal(t, "4", option.Default)
 			return
 		}
 	}
@@ -296,6 +297,121 @@ func TestWowMapInstanceFloorTilesByFileDataID(t *testing.T) {
 	}}})
 	require.Equal(t, []int32{769212, 769213}, floors[769212])
 	require.Equal(t, []int32{769212, 769213}, floors[769213])
+}
+
+func TestWowdataPrepareWriterSignalsOnlyExactReadyLine(t *testing.T) {
+	t.Parallel()
+
+	var destination bytes.Buffer
+	ready := make(chan struct{}, 1)
+	writer := &wowdataPrepareWriter{
+		destination: &destination,
+		onReady: func() {
+			select {
+			case ready <- struct{}{}:
+			default:
+			}
+		},
+	}
+	_, err := writer.Write([]byte("prepare target=remote\nprepare status=rea"))
+	require.NoError(t, err)
+	select {
+	case <-ready:
+		require.Fail(t, "partial line signaled readiness")
+	default:
+	}
+	_, err = writer.Write([]byte("dy-extra\nprepare status=ready\n"))
+	require.NoError(t, err)
+	select {
+	case <-ready:
+	default:
+		require.Fail(t, "exact ready line did not signal readiness")
+	}
+	require.Equal(t, "prepare target=remote\nprepare status=ready-extra\nprepare status=ready\n", destination.String())
+}
+
+func TestRunWowdataWithPrepareGateReleasesAfterEarlyExit(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "wowdata")
+	require.NoError(t, os.WriteFile(binary, []byte("#!/usr/bin/env bash\nexit 1\n"), 0o755))
+	gate := newWowdataPrepareGate()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for range 2 {
+		cmd := exec.CommandContext(ctx, binary)
+		err := runWowdataWithPrepareGate(ctx, cmd, &bytes.Buffer{}, gate)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, context.DeadlineExceeded)
+	}
+}
+
+func TestExportWowdataTexturesSerializesPreparationAndOverlapsExports(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "original"), 0o755))
+	leaderLock := filepath.Join(dir, "leader-lock")
+	leaderPreparing := filepath.Join(dir, "leader-preparing")
+	allowReady := filepath.Join(dir, "allow-ready")
+	leaderReady := filepath.Join(dir, "leader-ready")
+	followerStarted := filepath.Join(dir, "follower-started")
+	violation := filepath.Join(dir, "preparation-overlapped")
+	binary := filepath.Join(dir, "wowdata")
+	require.NoError(t, os.WriteFile(binary, []byte(fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+output=""
+while (($#)); do
+  if [[ "$1" == "--output" ]]; then
+    output="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+if mkdir %q 2>/dev/null; then
+  touch %q
+  while [[ ! -f %q ]]; do sleep 0.01; done
+  touch %q
+  printf 'prepare status=ready\n' >&2
+  while [[ ! -f %q ]]; do sleep 0.01; done
+else
+  touch %q
+  [[ -f %q ]] || touch %q
+  printf 'prepare status=ready\n' >&2
+fi
+printf 'webp' > "$output"
+`, leaderLock, leaderPreparing, allowReady, leaderReady, followerStarted, followerStarted, leaderReady, violation)), 0o755))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		_, err := exportWowdataTextures(
+			ctx, &bytes.Buffer{}, &bytes.Buffer{},
+			wowMapExtractOptions{WowdataBin: binary, OutDir: dir, Workers: 2},
+			[]int32{101, 102}, nil,
+		)
+		result <- err
+	}()
+
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(leaderPreparing)
+		return err == nil
+	}, time.Second, 10*time.Millisecond)
+	require.NoFileExists(t, followerStarted)
+	require.NoError(t, os.WriteFile(allowReady, nil, 0o644))
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		require.FailNow(t, "exports did not overlap after preparation", ctx.Err().Error())
+	}
+	require.NoFileExists(t, violation)
+	require.FileExists(t, followerStarted)
+	require.FileExists(t, filepath.Join(dir, "original", "101.webp"))
+	require.FileExists(t, filepath.Join(dir, "original", "102.webp"))
 }
 
 func TestExportWowdataTexturesSkipsUnavailableFloorSiblings(t *testing.T) {
@@ -388,7 +504,7 @@ exit 2
 		Build:      "1.60.1.70374",
 		Region:     "us",
 		Locale:     "enUS",
-	}, 447597, output, []time.Duration{0})
+	}, 447597, output, []time.Duration{0}, newWowdataPrepareGate())
 	require.NoError(t, err)
 	require.FileExists(t, output)
 	data, err := os.ReadFile(calls)

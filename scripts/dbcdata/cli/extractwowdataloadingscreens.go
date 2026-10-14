@@ -96,7 +96,7 @@ func ExtractWowdataLoadingScreensCmd() *serpent.Command {
 			{Name: "region", Description: "Blizzard region.", Flag: "region", Env: "WOW_REGION", Default: "us", Value: serpent.StringOf(&opts.Region)},
 			{Name: "locale", Description: "Data locale.", Flag: "locale", Env: "WOW_LOCALE", Default: "enUS", Value: serpent.StringOf(&opts.Locale)},
 			{Name: "cache", Description: "Optional wowdata cache directory.", Flag: "cache", Env: "WOWDATA_CACHE", Value: serpent.StringOf(&opts.Cache)},
-			{Name: "workers", Description: "Concurrent texture exports.", Flag: "workers", Default: "4", Value: serpent.Int64Of(&opts.Workers)},
+			{Name: "workers", Description: "Concurrent texture exports; cache preparation is coordinated between workers.", Flag: "workers", Default: "4", Value: serpent.Int64Of(&opts.Workers)},
 			{Name: "metadata-only", Description: "Write the manifest without exporting textures.", Flag: "metadata-only", Value: serpent.BoolOf(&opts.MetadataOnly)},
 		},
 		Handler: func(inv *serpent.Invocation) error {
@@ -282,6 +282,7 @@ func exportWowdataLoadingScreenTextures(ctx context.Context, stdout, stderr io.W
 	var outputMu sync.Mutex
 	var firstErr error
 	completed := 0
+	prepareGate := newWowdataPrepareGate()
 
 	worker := func() {
 		defer workers.Done()
@@ -294,7 +295,7 @@ func exportWowdataLoadingScreenTextures(ctx context.Context, stdout, stderr io.W
 			}
 			output := filepath.Join(opts.OutDir, "images", fmt.Sprintf("%d.webp", fileDataID))
 			var commandStderr bytes.Buffer
-			err := exportWowdataTexture(ctx, &commandStderr, opts.mapOptions(), fileDataID, output)
+			err := exportWowdataTextureWithRetries(ctx, &commandStderr, opts.mapOptions(), fileDataID, output, wowdataTextureExportRetryDelays, prepareGate)
 			if commandStderr.Len() > 0 {
 				outputMu.Lock()
 				_, _ = stderr.Write(commandStderr.Bytes())
