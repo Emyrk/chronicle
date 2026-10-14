@@ -35,12 +35,6 @@ declare global {
   }
 }
 
-interface NitroPayRenderedEventDetail {
-  adInfo?: {
-    adUnitCode?: string
-  }
-}
-
 let scriptPromise: Promise<void> | undefined
 let configuredSiteID: string | undefined
 
@@ -104,22 +98,6 @@ export async function requestNitroPayAd(
 
   if (!result) return []
   return Array.isArray(result) ? result : [result]
-}
-
-export function onNitroPayRendered(
-  id: string,
-  callback: () => void,
-  eventTarget: EventTarget = document,
-): () => void {
-  const handleRendered = (event: Event) => {
-    const detail = (event as CustomEvent<NitroPayRenderedEventDetail>).detail
-    if (detail?.adInfo?.adUnitCode === id) {
-      callback()
-    }
-  }
-
-  eventTarget.addEventListener("nitroAds.rendered", handleRendered)
-  return () => eventTarget.removeEventListener("nitroAds.rendered", handleRendered)
 }
 
 export function clearNitroPayAds(ads: NitroPayAd[]) {
