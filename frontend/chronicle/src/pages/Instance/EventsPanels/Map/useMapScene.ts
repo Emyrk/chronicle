@@ -12,7 +12,8 @@ import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import { isMeshOnlyInstance, placeableDungeonMesh } from "./dungeonMeshes";
-import type { MapPositionSample, MapResult } from "./map.processor";
+import { groupCentre, isStaleRunSample, mergeRunEncounters, runSignature } from "./wholeRun";
+import type { MapEncounterPositions, MapPositionSample, MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
 import {
@@ -60,6 +61,24 @@ function cachedFocusBounds(
   if (!byKey.has(key)) byKey.set(key, compute());
   return byKey.get(key) ?? null;
 }
+
+// The merged run is rebuilt only when more of the result has streamed in.
+const runCache = new WeakMap<Map<string, MapEncounterPositions>, { signature: string; run: MapEncounterPositions | null }>();
+
+function cachedRun(encounters: Map<string, MapEncounterPositions>): MapEncounterPositions | null {
+  const signature = runSignature(encounters);
+  const cached = runCache.get(encounters);
+  if (cached && cached.signature === signature) return cached.run;
+  const run = mergeRunEncounters(encounters);
+  runCache.set(encounters, { signature, run });
+  return run;
+}
+
+/** The follow camera frames this many yards across the longer axis. */
+const FOLLOW_SPAN_YARDS = 70;
+// The follow centre snaps to this grid (artwork fraction) so sub-pixel drift
+// does not re-frame the camera on every replay tick.
+const FOLLOW_GRID = 1 / 400;
 
 function useMapManifest(iconBaseUrl: string | undefined) {
   return useQuery({
@@ -151,6 +170,8 @@ export type MapScene =
   | { status: "message"; title: string; detail: string }
   | {
     status: "ready";
+    /** The scene replays the whole run: `autoFit` / `focusCentre` follow the party. */
+    wholeRun: boolean;
     encounterId: string;
     mapName: string;
     displayedMapId: number;
@@ -178,6 +199,9 @@ export type MapScene =
     mesh: WowMapMeshInstance | null;
     /** The instance has no map artwork, only `mesh`: the ground is always the mesh's extent and there is no 2D map. */
     meshOnly: boolean;
+    /** The run's first sample and last event, in whole-run mode. */
+    runStartMs: number | null;
+    runEndMs: number | null;
     /** Combat events for the replay effects layer. */
     effects: EncounterEffects;
     bossGuids: ReadonlySet<string>;
@@ -194,6 +218,12 @@ export interface MapSceneOptions {
    * placeable mesh the option does nothing.
    */
   rawDungeonProjection?: boolean;
+  /**
+   * Replay every processed encounter as one run: the camera follows the
+   * party's median position rather than a boss, and non-player units that
+   * stopped reporting drop off the map.
+   */
+  wholeRun?: boolean;
 }
 
 /**
@@ -206,22 +236,33 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const iconBaseUrl = props.context.instance.iconBaseUrl;
   const manifestQuery = useMapManifest(iconBaseUrl);
   const timestampMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : null;
+  const wholeRun = Boolean(options.wholeRun);
+  const resultSignature = wholeRun ? runSignature(props.result.encounters) : "";
   const encounter = useMemo(
-    () => selectMapEncounter(props.result.encounters, props.context.selectedEncounterIds, timestampMs),
-    [props.context.selectedEncounterIds, props.result.encounters, timestampMs],
+    () => wholeRun
+      ? cachedRun(props.result.encounters)
+      : selectMapEncounter(props.result.encounters, props.context.selectedEncounterIds, timestampMs),
+    // resultSignature: the run is re-merged as the result streams in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.context.selectedEncounterIds, props.result.encounters, timestampMs, wholeRun, resultSignature],
   );
   const cursorMs = timestampMs ?? encounter?.endMs ?? null;
   const visibleUnits = useMemo(() => {
     if (!encounter || cursorMs === null) return [];
     return Array.from(encounter.positionsByUnit.entries()).flatMap(([guid, positions]) => {
       const sample = latestPositionAt(positions, cursorMs);
-      return sample ? [{ guid, sample, positions }] : [];
+      if (!sample) return [];
+      // Across a run, trash that died or despawned must not linger at its last position.
+      if (wholeRun && !props.context.instance.players?.[guid] && isStaleRunSample(sample, cursorMs)) return [];
+      return [{ guid, sample, positions }];
     });
-  }, [cursorMs, encounter]);
+  }, [cursorMs, encounter, props.context.instance.players, wholeRun]);
   const mapId = dominantMapId(visibleUnits.map((unit) => unit.sample));
   const representativeSample = visibleUnits.find((unit) => unit.sample.mapId === mapId)?.sample;
-  const instanceEncounter = props.context.instance.encounters
-    .find((candidate) => candidate.id === encounter?.encounterId);
+  // A run has no single instance encounter: the first with a map stands in for artwork lookup.
+  const instanceEncounter = wholeRun
+    ? props.context.instance.encounters.find((candidate) => candidate.mapId)
+    : props.context.instance.encounters.find((candidate) => candidate.id === encounter?.encounterId);
   const encounterMapId = instanceEncounter?.mapId ?? 0;
   const artworkMapId = encounterMapId || mapId;
   const artwork = manifestQuery.data && artworkMapId !== null
@@ -278,7 +319,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       : null;
 
   const selectedPlayers = props.context.entitySelection.playerIds;
-  const bossGuids = new Set(instanceEncounter?.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id));
+  const bossGuids = new Set((wholeRun ? props.context.instance.encounters : instanceEncounter ? [instanceEncounter] : [])
+    .flatMap((candidate) => candidate.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id) ?? []));
   const markers = visibleUnits.flatMap(({ guid, sample, positions }): MapSceneMarker[] => {
     if (sample.mapId !== mapId) return [];
     const point = projectSample(sample);
@@ -317,7 +359,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
     : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${meshCanvas ? "mesh" : "calibrated"}`;
-  const focus = cachedFocusBounds(
+  // The run's camera follows the party, so the bounds scan of the whole run is skipped.
+  const focus = wholeRun ? null : cachedFocusBounds(
     encounter.positionsByUnit,
     `${mapId}|${projectionKey}|${[...bossGuids].join(",")}`,
     () => {
@@ -337,8 +380,24 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     },
   );
 
+  let followCentre: MapPoint | null = null;
+  let followViewport: MapViewport | null = null;
+  if (wholeRun) {
+    const centre = groupCentre(markers.filter((marker) => marker.kind === "player").map((marker) => marker.point));
+    const reference = markers.find((marker) => marker.kind === "player")?.sample;
+    if (centre && reference) {
+      const snap = (value: number) => Math.round(value / 100 / FOLLOW_GRID) * FOLLOW_GRID * 100;
+      followCentre = { leftPercent: snap(centre.leftPercent), topPercent: snap(centre.topPercent) };
+      followViewport = autoFitViewport(
+        { minLeft: followCentre.leftPercent, maxLeft: followCentre.leftPercent, minTop: followCentre.topPercent, maxTop: followCentre.topPercent },
+        { minSpanYards: FOLLOW_SPAN_YARDS, scale: projectionScale(projectSample, reference), centre: followCentre },
+      );
+    }
+  }
+
   return {
     status: "ready",
+    wholeRun,
     encounterId: encounter.encounterId,
     mapName: artwork.kind === "zone" ? artwork.map.name : artwork.instance.name,
     displayedMapId: artwork.kind === "instance" ? artwork.instance.mapID : mapId,
@@ -358,11 +417,15 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     markers,
     projectSample,
     focusBounds: focus?.bounds ?? null,
-    autoFit: focus?.autoFit ?? null,
-    focusCentre: focus?.centre ?? null,
+    autoFit: wholeRun ? followViewport : focus?.autoFit ?? null,
+    focusCentre: wholeRun ? followCentre : focus?.centre ?? null,
     mesh,
     meshOnly,
-    fitByDefault: props.context.selectedEncounterIds.length === 1 && Boolean(instanceEncounter?.boss),
+    fitByDefault: wholeRun
+      ? followViewport !== null
+      : props.context.selectedEncounterIds.length === 1 && Boolean(instanceEncounter?.boss),
+    runStartMs: wholeRun ? encounter.startMs : null,
+    runEndMs: wholeRun ? encounter.endMs : null,
     effects: encounter.effects,
     bossGuids,
     tankGuids: cachedTankGuids(encounter.effects, props.context.instance.players ?? {}),
