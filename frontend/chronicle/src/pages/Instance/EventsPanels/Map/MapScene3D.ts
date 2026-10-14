@@ -4,6 +4,26 @@ import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { MeshBVH } from "three-mesh-bvh";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
 import { bossMiniSlug, bossMiniUrl } from "./bossMinis";
+import {
+  AIM_AHEAD_FRACTION,
+  BOSS_ENGAGE_YARDS,
+  CINEMATIC_ELEVATION_DEG,
+  CINEMATIC_ELEVATION_STEP_DEG,
+  directorFrame,
+  DISTANCE_DEAD_ZONE,
+  DISTANCE_SMOOTH_SECONDS,
+  exceedsDeadZone,
+  frameDistance,
+  MAX_CINEMATIC_ELEVATION_DEG,
+  MIN_FRAME_RADIUS_YARDS,
+  smoothDamp,
+  STRAGGLER_CUTOFF_YARDS,
+  STRAGGLER_RELEASE_YARDS,
+  TARGET_DEAD_ZONE_FRACTION,
+  TARGET_SMOOTH_SECONDS,
+  type DampedValue,
+  type DirectorUnit,
+} from "./cameraDirector";
 import { clampToRadius, corsAssetUrl, dungeonMeshPlacement, FloorHeightCache } from "./dungeonMeshes";
 import { FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
@@ -142,6 +162,23 @@ const FLOOR_PROBE_HEIGHT = 100;
 // the rock between the camera and a sunken chamber hides less of the fight.
 const MESH_ANGLED_OFFSET = new THREE.Vector3(0, 1.6, 0.75);
 
+// --- Navigation feel (chronicle-1079) ---
+// OrbitControls' inertia: the camera coasts to a stop instead of snapping.
+const ORBIT_DAMPING = 0.08;
+const ORBIT_ROTATE_SPEED = 0.6;
+const ORBIT_ZOOM_SPEED = 0.9;
+const ORBIT_PAN_SPEED = 0.8;
+// A double-click eases the camera to what was clicked over this long.
+const DOUBLE_CLICK_MS = 450;
+// It halves the distance, but never dives closer than this (yards, mesh mode).
+const MIN_DOUBLE_CLICK_DISTANCE_YARDS = 10;
+// Shift+double-click pulls back instead.
+const DOUBLE_CLICK_OUT_FACTOR = 2;
+// A Director spring is settled once it is within this fraction of its goal.
+const DIRECTOR_SETTLED = 1e-3;
+// The longest step the Director's springs take, so a stalled tab does not jump.
+const DIRECTOR_MAX_STEP_SECONDS = 0.1;
+
 export type DungeonMeshState = "loading" | "ready" | "failed";
 
 export interface DungeonMeshRequest {
@@ -150,6 +187,16 @@ export interface DungeonMeshRequest {
   bounds: WowMapFloorBounds;
   /** Tint for the `liquid_*` planes (lava); null keeps the GLB's own water. */
   liquid?: WowMapMeshLiquid | null;
+}
+
+/**
+ * The cinematic camera is on (mesh mode only): it keeps the boss and the group
+ * framed itself, so viewport requests only re-engage it. Null hands the camera
+ * back to the viewport framing.
+ */
+export interface MapSceneDirector {
+  /** The hostile units that count as the fight's boss. */
+  bossGuids: ReadonlySet<string>;
 }
 
 /** The fight the mesh camera is locked to: its centre (artwork point) and Fit zoom. */
@@ -317,6 +364,46 @@ export class MapScene3D {
   private frame = 0;
   private disposed = false;
 
+  // --- Cinematic camera, "the Director" (chronicle-1079) ---
+  // On while the mesh shows and the framing is the default one: every frame it
+  // springs the camera toward a shot holding the boss and the group.
+  private director: MapSceneDirector | null = null;
+  // The user took the camera; a viewport request (Follow, encounter jump,
+  // selection) hands it back.
+  private directorPaused = false;
+  // A double-clicked unit the shot follows instead of the group.
+  private directorSubject: string | null = null;
+  // The springs are seeded and following; a re-engage while this is set is a
+  // no-op, so the whole run's per-tick follow requests do not restart them.
+  private directorRunning = false;
+  // Springs: the aim point, the distance and the elevation above the horizon.
+  private readonly directorX: DampedValue = { value: 0, velocity: 0 };
+  private readonly directorZ: DampedValue = { value: 0, velocity: 0 };
+  private readonly directorDistance: DampedValue = { value: 0, velocity: 0 };
+  private readonly directorElevation: DampedValue = { value: CINEMATIC_ELEVATION_DEG, velocity: 0 };
+  // The goal the springs chase; it only moves when the fit leaves the dead zone.
+  private readonly directorGoal = { x: 0, z: 0, distance: 0, seeded: false };
+  private directorAt = 0;
+  // Scratch for the Director's own maths; the effect layer owns `vector`.
+  private readonly directorVector = new THREE.Vector3();
+  private readonly directorFrom = new THREE.Vector3();
+  private readonly directorTo = new THREE.Vector3();
+  private readonly directorAim = new THREE.Vector3();
+  private readonly directorEye = new THREE.Vector3();
+  // Who the last frame held, for the straggler hysteresis.
+  private readonly directorInFrame = new Set<string>();
+  // Refilled per frame so the Director allocates nothing while it runs.
+  private readonly directorUnits: DirectorUnit[] = [];
+  // A double-click easing the camera to the point (and distance) clicked.
+  private cameraMove: {
+    from: THREE.Vector3;
+    to: THREE.Vector3;
+    fromDistance: number;
+    toDistance: number;
+    direction: THREE.Vector3;
+    start: number;
+  } | null = null;
+
   // Effects layer: pooled primitives, re-derived from the effect clock on
   // every rendered frame. Nothing here is allocated per frame.
   private effects: MapScene3DEffects | null = null;
@@ -397,6 +484,7 @@ export class MapScene3D {
     this.renderer.domElement.addEventListener("webglcontextlost", this.handleContextLost);
     this.renderer.domElement.addEventListener("pointermove", this.handlePointerMove);
     this.renderer.domElement.addEventListener("pointerleave", this.handlePointerLeave);
+    this.renderer.domElement.addEventListener("dblclick", this.handleDoubleClick);
     container.appendChild(this.renderer.domElement);
 
     this.textureLoader.setCrossOrigin("anonymous");
@@ -467,6 +555,14 @@ export class MapScene3D {
     this.controls.maxPolarAngle = Math.PI / 2 - 0.05;
     this.controls.minDistance = 1;
     this.controls.maxDistance = TILES_MAX_DISTANCE;
+    // Inertia on orbit and pan, and the wheel zooming toward the cursor rather
+    // than the orbit target; the render loop keeps ticking until it settles.
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = ORBIT_DAMPING;
+    this.controls.zoomToCursor = true;
+    this.controls.rotateSpeed = ORBIT_ROTATE_SPEED;
+    this.controls.zoomSpeed = ORBIT_ZOOM_SPEED;
+    this.controls.panSpeed = ORBIT_PAN_SPEED;
     this.controls.addEventListener("change", this.handleControlsChange);
     this.controls.addEventListener("start", this.handleControlsStart);
     this.controls.addEventListener("end", this.handleControlsEnd);
@@ -623,6 +719,8 @@ export class MapScene3D {
     const current = this.dungeonMesh?.url ?? this.dungeonMeshRequest?.url ?? null;
     if ((request?.url ?? null) === current) return;
     this.dungeonMeshRequest = null;
+    this.directorRunning = false;
+    this.directorSubject = null;
     if (this.dungeonMesh) {
       disposeDungeonMesh(this.dungeonMesh);
       this.scene.remove(this.dungeonMesh.group);
@@ -652,6 +750,10 @@ export class MapScene3D {
       this.applyGroundMode();
       this.viewAnimation = null;
       this.placeCamera(this.viewport, MESH_ANGLED_OFFSET.clone().normalize());
+      // The cinematic camera takes over from the Fit the mesh lands on, so it
+      // springs down to the low shot instead of jumping there.
+      this.directorRunning = false;
+      if (this.director) this.engageDirector();
       this.onDungeonMesh("ready");
     });
   }
@@ -667,10 +769,62 @@ export class MapScene3D {
   }
 
   /**
+   * Turns the cinematic camera on (the default framing) or off (the user
+   * pinned a viewport). It only drives the camera while the dungeon mesh
+   * shows; the tiles keep the viewport framing either way.
+   */
+  setDirector(director: MapSceneDirector | null) {
+    this.director = director;
+    if (!director) {
+      this.directorRunning = false;
+      return;
+    }
+    this.engageDirector();
+    this.requestRender();
+  }
+
+  // Hands the camera back to the Director, springing from wherever it is now.
+  // Already following: nothing to seed, or the springs would stutter.
+  private engageDirector() {
+    this.directorPaused = false;
+    this.cameraMove = null;
+    if (this.directorRunning) return;
+    this.directorRunning = true;
+    this.directorGoal.seeded = false;
+    this.directorInFrame.clear();
+    this.directorAt = 0;
+    const { target } = this.controls;
+    this.directorX.value = target.x;
+    this.directorZ.value = target.z;
+    this.directorX.velocity = 0;
+    this.directorZ.velocity = 0;
+    this.directorDistance.value = this.camera.position.distanceTo(target);
+    this.directorDistance.velocity = 0;
+    this.directorElevation.value = this.cameraElevationDeg();
+    this.directorElevation.velocity = 0;
+  }
+
+  /** Whether the Director is the one moving the camera right now. */
+  private directing(): boolean {
+    return this.director !== null && this.dungeonMesh !== null && !this.directorPaused && this.cameraMove === null;
+  }
+
+  /**
    * Frames `viewport` (artwork fractions) from the current viewing angle,
-   * easing there over `durationMs` when it is above zero.
+   * easing there over `durationMs` when it is above zero. While the Director
+   * has the camera the request only re-engages it: Follow, an encounter jump
+   * and a new selection all come through here.
    */
   setViewport(viewport: MapViewport, durationMs = 0) {
+    if (this.director && this.dungeonMesh) {
+      this.viewport = viewport;
+      this.viewAnimation = null;
+      // Back to the group: Follow and encounter jumps drop a followed unit.
+      this.directorSubject = null;
+      this.engageDirector();
+      this.requestRender();
+      return;
+    }
     const offset = this.camera.position.clone().sub(this.controls.target);
     const direction = offset.lengthSq() > 0 ? offset.normalize() : ANGLED_OFFSET.clone().normalize();
     const from = this.cameraViewport();
@@ -897,6 +1051,241 @@ export class MapScene3D {
     this.constraining = false;
   }
 
+  // The camera's elevation above the horizon, in degrees.
+  private cameraElevationDeg(): number {
+    const offset = this.directorVector.copy(this.camera.position).sub(this.controls.target);
+    return (Math.atan2(offset.y, Math.hypot(offset.x, offset.z)) * 180) / Math.PI;
+  }
+
+  // The compass direction the camera looks from; the Director keeps whatever
+  // the user last orbited to.
+  private cameraYaw(): number {
+    const offset = this.directorVector.copy(this.camera.position).sub(this.controls.target);
+    return Math.abs(offset.x) + Math.abs(offset.z) < 1e-6 ? 0 : Math.atan2(offset.x, offset.z);
+  }
+
+  // Puts the camera `distance` from (x, z) on the floor, `elevationDeg` above
+  // the horizon along `yaw`, and re-applies the mesh's floor and pan limits.
+  private placeDirectorCamera(x: number, z: number, distance: number, elevationDeg: number, yaw: number) {
+    const floor = this.floorHeights.heightAt("camera-target", x, z);
+    this.controls.target.set(x, floor, z);
+    const elevation = (elevationDeg * Math.PI) / 180;
+    this.camera.position.set(
+      x + Math.sin(yaw) * Math.cos(elevation) * distance,
+      floor + Math.sin(elevation) * distance,
+      z + Math.cos(yaw) * Math.cos(elevation) * distance,
+    );
+    this.controls.update();
+    this.constrainCamera();
+    this.updateUnitScale();
+  }
+
+  // Whether the cave stands between the two points (the camera's line to the fight).
+  private meshBlocks(from: THREE.Vector3, to: THREE.Vector3): boolean {
+    const mesh = this.dungeonMesh;
+    if (!mesh) return false;
+    for (const cave of mesh.caves) {
+      const origin = this.directorFrom.copy(from).applyMatrix4(cave.inverse);
+      const end = this.directorTo.copy(to).applyMatrix4(cave.inverse);
+      const length = origin.distanceTo(end);
+      if (length <= 1e-6) continue;
+      this.floorRay.origin.copy(origin);
+      this.floorRay.direction.copy(end).sub(origin).divideScalar(length);
+      const hit = cave.bvh.raycastFirst(this.floorRay, THREE.DoubleSide);
+      if (hit && hit.distance < length) return true;
+    }
+    return false;
+  }
+
+  // The lowest cinematic elevation with a clear line to the fight, climbing in
+  // steps when the cave blocks it; the shot shortens only if even the highest
+  // one is blocked.
+  private clearShot(x: number, z: number, distance: number, yaw: number): { elevation: number; distance: number } {
+    const mesh = this.dungeonMesh;
+    const floor = this.floorHeights.heightAt("director-shot", x, z);
+    // From the fight's own height, not the floor the ray would graze.
+    const from = this.directorAim.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * (mesh?.scale ?? 1), z);
+    for (let elevationDeg = CINEMATIC_ELEVATION_DEG; ; elevationDeg += CINEMATIC_ELEVATION_STEP_DEG) {
+      const capped = Math.min(elevationDeg, MAX_CINEMATIC_ELEVATION_DEG);
+      const elevation = (capped * Math.PI) / 180;
+      const to = this.directorEye.set(
+        x + Math.sin(yaw) * Math.cos(elevation) * distance,
+        floor + Math.sin(elevation) * distance,
+        z + Math.cos(yaw) * Math.cos(elevation) * distance,
+      );
+      if (!this.meshBlocks(from, to)) return { elevation: capped, distance };
+      if (capped >= MAX_CINEMATIC_ELEVATION_DEG) {
+        // Still blocked overhead: come in closer instead.
+        const shortened = Math.max(MIN_DOUBLE_CLICK_DISTANCE_YARDS * (mesh?.scale ?? 1), distance * 0.75);
+        return { elevation: capped, distance: shortened };
+      }
+    }
+  }
+
+  // Re-fills the pooled unit list the framing rule reads.
+  private readDirectorUnits(bossGuids: ReadonlySet<string>): DirectorUnit[] {
+    const units = this.directorUnits;
+    let count = 0;
+    for (const [guid, object] of this.units) {
+      const slot = (units[count] ??= { guid: "", x: 0, z: 0, player: false, boss: false, dead: false });
+      slot.guid = guid;
+      slot.x = object.base.x;
+      slot.z = object.base.z;
+      slot.player = object.kind === "player";
+      slot.boss = bossGuids.has(guid);
+      slot.dead = object.dead || object.health?.dead === true;
+      count++;
+    }
+    units.length = count;
+    return units;
+  }
+
+  /**
+   * One Director step: works out the shot that holds the boss and the group,
+   * moves the goal only when the fit leaves the dead zone, and springs the
+   * camera toward it. Returns whether the springs still need another frame.
+   */
+  private updateDirector(now: number): boolean {
+    const mesh = this.dungeonMesh;
+    const director = this.director;
+    if (!mesh || !director || !this.directing()) return false;
+    const frame = directorFrame(this.readDirectorUnits(director.bossGuids), this.directorInFrame, {
+      stragglerCutoff: STRAGGLER_CUTOFF_YARDS * mesh.scale,
+      stragglerRelease: STRAGGLER_RELEASE_YARDS * mesh.scale,
+      bossEngageDistance: BOSS_ENGAGE_YARDS * mesh.scale,
+      subjectGuid: this.directorSubject,
+    });
+    const dt = this.directorAt === 0 ? 1 / 60 : Math.min(DIRECTOR_MAX_STEP_SECONDS, (now - this.directorAt) / 1000);
+    this.directorAt = now;
+    if (!frame) return false;
+    this.directorInFrame.clear();
+    for (const guid of frame.guids) this.directorInFrame.add(guid);
+
+    const radius = Math.max(frame.radius, MIN_FRAME_RADIUS_YARDS * mesh.scale);
+    const yaw = this.cameraYaw();
+    // The aim point sits past the fight, away from the camera, so the fight
+    // reads below the centre line with the room above it.
+    const ahead = AIM_AHEAD_FRACTION * radius;
+    const aimX = frame.x - Math.sin(yaw) * ahead;
+    const aimZ = frame.z - Math.cos(yaw) * ahead;
+    const fitted = frameDistance(frame.radius, {
+      verticalFov: (this.camera.fov * Math.PI) / 180,
+      aspect: this.camera.aspect,
+      elevationDeg: this.directorElevation.value,
+      scale: mesh.scale,
+    });
+    const goal = this.directorGoal;
+    if (!goal.seeded) {
+      goal.x = aimX;
+      goal.z = aimZ;
+      goal.distance = fitted;
+      goal.seeded = true;
+    } else {
+      // Dead zones: a fight that stays put keeps the camera still.
+      if (Math.hypot(aimX - goal.x, aimZ - goal.z) > TARGET_DEAD_ZONE_FRACTION * radius) {
+        goal.x = aimX;
+        goal.z = aimZ;
+      }
+      if (exceedsDeadZone(goal.distance, fitted, DISTANCE_DEAD_ZONE)) goal.distance = fitted;
+    }
+    const shot = this.clearShot(goal.x, goal.z, goal.distance, yaw);
+
+    const x = smoothDamp(this.directorX, goal.x, TARGET_SMOOTH_SECONDS, dt);
+    const z = smoothDamp(this.directorZ, goal.z, TARGET_SMOOTH_SECONDS, dt);
+    const distance = smoothDamp(this.directorDistance, shot.distance, DISTANCE_SMOOTH_SECONDS, dt);
+    const elevation = smoothDamp(this.directorElevation, shot.elevation, TARGET_SMOOTH_SECONDS, dt);
+    this.placeDirectorCamera(x, z, distance, elevation, yaw);
+    const settled = Math.hypot(x - goal.x, z - goal.z) <= DIRECTOR_SETTLED * mesh.scale
+      && Math.abs(distance - shot.distance) <= DIRECTOR_SETTLED * mesh.scale
+      && Math.abs(elevation - shot.elevation) <= DIRECTOR_SETTLED;
+    return !settled;
+  }
+
+  // Steps a double-click move; returns whether it needs another frame.
+  private updateCameraMove(now: number): boolean {
+    const move = this.cameraMove;
+    if (!move) return false;
+    const t = Math.min(1, Math.max(0, (now - move.start) / DOUBLE_CLICK_MS));
+    // easeInOutCubic.
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+    const target = this.controls.target.copy(move.from).lerp(move.to, eased);
+    const distance = move.fromDistance + (move.toDistance - move.fromDistance) * eased;
+    this.camera.position.copy(move.direction).multiplyScalar(distance).add(target);
+    this.controls.update();
+    this.constrainCamera();
+    this.updateUnitScale();
+    if (t < 1) return true;
+    this.cameraMove = null;
+    return false;
+  }
+
+  // The scene point under the pointer: a unit's body, else the mesh floor or
+  // the ground plane. Null when the ray misses everything.
+  private pickScenePoint(event: MouseEvent): { point: THREE.Vector3; guid: string | null } | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.set(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const unitHit = this.raycaster.intersectObjects([...this.units.values()].map((unit) => unit.body), false)[0];
+    if (unitHit) {
+      const guid = (unitHit.object.userData.guid as string | undefined) ?? null;
+      const object = guid ? this.units.get(guid) : undefined;
+      return { point: (object?.base ?? unitHit.point).clone(), guid };
+    }
+    const mesh = this.dungeonMesh;
+    if (mesh) {
+      const hit = this.raycaster.intersectObject(mesh.group, true)[0];
+      return hit ? { point: hit.point.clone(), guid: null } : null;
+    }
+    // Tiles: the ground is the y = 0 plane.
+    const { origin, direction } = this.raycaster.ray;
+    if (direction.y >= -1e-6) return null;
+    const along = -origin.y / direction.y;
+    const point = new THREE.Vector3().copy(direction).multiplyScalar(along).add(origin);
+    const halfWidth = GROUND_WIDTH / 2;
+    const halfDepth = (GROUND_WIDTH * this.aspect) / 2;
+    if (Math.abs(point.x) > halfWidth || Math.abs(point.z) > halfDepth) return null;
+    return { point, guid: null };
+  }
+
+  /**
+   * Double-click: zoom in on what was clicked, keeping the current orbit
+   * direction. A unit hands the shot to the Director, which then follows it;
+   * the floor eases the camera there and leaves it to the user. Shift pulls
+   * back instead, and empty sky does nothing.
+   */
+  private readonly handleDoubleClick = (event: MouseEvent) => {
+    const hit = this.pickScenePoint(event);
+    if (!hit) return;
+    event.preventDefault();
+    if (hit.guid && this.director && this.dungeonMesh) {
+      this.directorSubject = hit.guid;
+      this.engageDirector();
+      this.requestRender();
+      return;
+    }
+    const { target } = this.controls;
+    const current = this.camera.position.distanceTo(target);
+    const closest = this.dungeonMesh
+      ? MIN_DOUBLE_CLICK_DISTANCE_YARDS * this.dungeonMesh.scale
+      : this.controls.minDistance;
+    const wanted = event.shiftKey ? current * DOUBLE_CLICK_OUT_FACTOR : Math.max(closest, current / 2);
+    this.directorPaused = true;
+    this.directorRunning = false;
+    this.viewAnimation = null;
+    this.cameraMove = {
+      from: target.clone(),
+      to: hit.point.clone(),
+      fromDistance: current,
+      toDistance: Math.min(this.controls.maxDistance, Math.max(this.controls.minDistance, wanted)),
+      direction: this.camera.position.clone().sub(target).normalize(),
+      start: performance.now(),
+    };
+    this.requestRender();
+  };
+
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
@@ -909,6 +1298,7 @@ export class MapScene3D {
     canvas.removeEventListener("webglcontextlost", this.handleContextLost);
     canvas.removeEventListener("pointermove", this.handlePointerMove);
     canvas.removeEventListener("pointerleave", this.handlePointerLeave);
+    canvas.removeEventListener("dblclick", this.handleDoubleClick);
     for (const guid of [...this.units.keys()]) this.removeUnit(guid);
     this.clearLabel();
     this.clearGround();
@@ -1697,9 +2087,15 @@ export class MapScene3D {
     this.requestRender();
   };
 
-  // The user took the camera: stop any re-framing in progress.
+  // The user took the camera: stop any re-framing in progress and pause the
+  // Director until a viewport request (Follow, a jump, a new selection)
+  // hands the camera back.
   private readonly handleControlsStart = () => {
     this.viewAnimation = null;
+    this.cameraMove = null;
+    this.directorPaused = true;
+    this.directorRunning = false;
+    this.directorSubject = null;
     this.gestureStart = this.cameraViewport();
   };
 
@@ -1736,10 +2132,16 @@ export class MapScene3D {
     this.frame = requestAnimationFrame((now) => {
       this.frame = 0;
       if (this.disposed) return;
-      // Only keeps a frame loop running while effects animate (playback);
-      // otherwise rendering stays on demand.
+      // Only keeps a frame loop running while something moves (playback
+      // effects, a re-framing, the Director, coasting damping); otherwise
+      // rendering stays on demand.
       const reframing = this.updateViewAnimation(now);
-      const animating = this.updateEffects(now) || reframing;
+      const moving = this.updateCameraMove(now);
+      const directing = this.updateDirector(now);
+      // Damping coasts the camera to a stop after a gesture; update() reports
+      // whether it is still moving, so the loop idles again once it settles.
+      const damping = this.controls.update();
+      const animating = this.updateEffects(now) || reframing || moving || directing || damping;
       this.updateBars();
       this.updateEffectHover();
       this.renderer.render(this.scene, this.camera);

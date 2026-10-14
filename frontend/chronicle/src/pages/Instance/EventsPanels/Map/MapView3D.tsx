@@ -14,6 +14,7 @@ import {
   type DungeonMeshState,
   type MapScene3DEffectHover,
   type MapScene3DUnit,
+  type MapSceneDirector,
   type MapSceneFocus,
 } from "./MapScene3D";
 import { DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, isBasicAttack, type CastIconMode, type EncounterEffects } from "./replayEffects";
@@ -43,6 +44,12 @@ export interface MapView3DProps {
   onDungeonMeshState?: (state: DungeonMeshState) => void;
   /** The fight the mesh camera is locked to (zoom and pan), or null for the whole map. */
   focus?: MapSceneFocus | null;
+  /**
+   * Hand the mesh camera to the cinematic Director, which keeps the boss and
+   * the group framed. Off once the user pins a framing (Fit, Reset, a pan or
+   * a zoom); Follow turns it back on.
+   */
+  cinematic?: boolean;
 }
 
 const SMOOTH_STORAGE_KEY = "chronicle.map.smooth3d";
@@ -150,6 +157,7 @@ export default function MapView3D({
   dungeonMesh = null,
   onDungeonMeshState,
   focus = null,
+  cinematic = false,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -204,6 +212,15 @@ export default function MapView3D({
     sceneRef.current?.setFocus(focus);
   }, [focus]);
 
+  // Keyed by the boss guids' string so replay ticks never re-engage the Director.
+  const bossKey = bossGuids ? [...bossGuids].join(",") : "";
+  const director = useMemo((): MapSceneDirector | null =>
+    cinematic ? { bossGuids: new Set(bossKey ? bossKey.split(",") : []) } : null,
+  [bossKey, cinematic]);
+  useEffect(() => {
+    sceneRef.current?.setDirector(director);
+  }, [director]);
+
   // The first request frames instantly; later ones (a new key) ease there.
   const appliedViewKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -243,7 +260,6 @@ export default function MapView3D({
   const selectedKey = markers.some((marker) => marker.muted)
     ? markers.filter((marker) => marker.kind === "player" && !marker.muted).map((marker) => marker.guid).join(",")
     : "";
-  const bossKey = bossGuids ? [...bossGuids].join(",") : "";
   const tankKey = tankGuids ? [...tankGuids].join(",") : "";
   const playerKey = markers.filter((marker) => marker.kind === "player").map((marker) => marker.guid).join(",");
   const effectOptions = useMemo(() => {
