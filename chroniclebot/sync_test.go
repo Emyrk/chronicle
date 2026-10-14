@@ -3,10 +3,21 @@ package chroniclebot
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
+	"time"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/testservices"
+	"github.com/Emyrk/chronicle/internal/storagegrants"
+	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/authzed/gochugaru/rel"
+	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -67,4 +78,110 @@ func TestEnsureProtectedTechnicalAdmin(t *testing.T) {
 		err := ensureProtectedTechnicalAdmin(context.Background(), zed, protectedTechnicalAdminDiscordID, uuid.New())
 		require.ErrorIs(t, err, writeErr)
 	})
+}
+
+func TestReconcileDiscordMembershipUsesSpiceDBRoleForGrant(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+	db := servicedbstore.DatabaseStore(broker)
+
+	userID := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{
+		ID:       userID,
+		Username: "discord-sync-" + uuid.NewString()[:8],
+		Email:    uuid.NewString() + "@example.com",
+	})
+	require.NoError(t, err)
+	discordID := uuid.NewString()
+	_, err = db.InsertUserAuth(ctx, database.InsertUserAuthParams{
+		ID:       uuid.New(),
+		LinkedID: discordID,
+		UserID:   userID,
+		Provider: "discord",
+	})
+	require.NoError(t, err)
+
+	checkedAt := time.Now().UTC().Round(time.Microsecond)
+	_, err = db.InsertDiscordMembershipGrantCheck(ctx, database.InsertDiscordMembershipGrantCheckParams{
+		UserID:      userID,
+		NextCheckAt: database.Timestamptz(checkedAt.Add(-time.Hour)),
+	})
+	require.NoError(t, err)
+	claims, err := db.ClaimDueDiscordMembershipGrantChecks(ctx, database.ClaimDueDiscordMembershipGrantChecksParams{
+		CheckTime:  database.Timestamptz(checkedAt),
+		LimitCount: 1,
+	})
+	require.NoError(t, err)
+	require.Len(t, claims, 1)
+
+	bot := &Bot{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config: Config{DB: db, Zed: zed},
+	}
+
+	err = bot.reconcileDiscordMembership(ctx, zed, userID, checkedAt, &discordgo.Member{}, claims[0].ClaimToken)
+	require.NoError(t, err)
+
+	roles, err := zed.UserChronicleRoles(ctx, userID)
+	require.NoError(t, err)
+	require.Contains(t, roles, "chronicle_guild_member")
+	grants, err := db.GetUserDataGrants(ctx, userID)
+	require.NoError(t, err)
+	require.Contains(t, grantSources(grants), storagegrants.DiscordMemberSource)
+
+	loginClaim, err := db.ActivateDiscordMembershipGrantCheckOnLogin(ctx, database.ActivateDiscordMembershipGrantCheckOnLoginParams{
+		UserID:    userID,
+		CheckTime: database.Timestamptz(checkedAt.Add(time.Hour)),
+	})
+	require.NoError(t, err)
+	err = bot.reconcileDiscordMembership(ctx, zed, userID, checkedAt.Add(2*time.Hour), nil, loginClaim.ClaimToken)
+	require.NoError(t, err)
+
+	roles, err = zed.UserChronicleRoles(ctx, userID)
+	require.NoError(t, err)
+	require.NotContains(t, roles, "chronicle_guild_member")
+	grants, err = db.GetUserDataGrants(ctx, userID)
+	require.NoError(t, err)
+	require.NotContains(t, grantSources(grants), storagegrants.DiscordMemberSource)
+}
+
+func TestPersistDiscordMembershipIgnoresStaleClaim(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	db, _ := dbtestutil.NewDB(t)
+
+	userID := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{
+		ID:       userID,
+		Username: "discord-stale-" + uuid.NewString()[:8],
+		Email:    uuid.NewString() + "@example.com",
+	})
+	require.NoError(t, err)
+	_, err = db.InsertDiscordMembershipGrantCheck(ctx, database.InsertDiscordMembershipGrantCheckParams{
+		UserID:      userID,
+		NextCheckAt: database.Timestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+
+	bot := &Bot{config: Config{DB: db}}
+	err = bot.persistDiscordMembership(ctx, userID, time.Now().UTC(), true, uuid.NullUUID{
+		UUID:  uuid.New(),
+		Valid: true,
+	})
+	require.NoError(t, err)
+
+	grants, err := db.GetUserDataGrants(ctx, userID)
+	require.NoError(t, err)
+	require.NotContains(t, grantSources(grants), storagegrants.DiscordMemberSource)
+}
+
+func grantSources(grants []database.DataGrant) []string {
+	sources := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		sources = append(sources, grant.Source)
+	}
+	return sources
 }

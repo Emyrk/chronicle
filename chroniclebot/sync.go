@@ -2,9 +2,11 @@ package chroniclebot
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
@@ -12,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/storagegrants"
 	"github.com/authzed/gochugaru/rel"
+	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -33,11 +36,24 @@ func ensureProtectedTechnicalAdmin(ctx context.Context, zed authz.Authorizer, di
 	return nil
 }
 
-// SyncDiscordUser manages only the chronicle_guild_member and supporter
-// relations for a user based on their Discord guild membership and roles.
-// All other roles are left untouched, except that the protected Discord user
-// is always granted technical_admin.
-func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorizer, discordID string, userID uuid.UUID) error {
+type discordSyncAuthorizer interface {
+	authz.DatabaseAuthorizer
+	UserChronicleRoles(ctx context.Context, user uuid.UUID) ([]string, error)
+}
+
+// SyncDiscordUser reconciles Discord membership into SpiceDB, then derives the
+// user's Discord membership storage grant from the resulting SpiceDB role.
+func (bot *Bot) SyncDiscordUser(ctx context.Context, zed discordSyncAuthorizer, discordID string, userID uuid.UUID) error {
+	return bot.syncDiscordUser(ctx, zed, discordID, userID, uuid.NullUUID{})
+}
+
+func (bot *Bot) syncDiscordUser(
+	ctx context.Context,
+	zed discordSyncAuthorizer,
+	discordID string,
+	userID uuid.UUID,
+	claimToken uuid.NullUUID,
+) error {
 	if bot.disabled {
 		return nil
 	}
@@ -49,31 +65,27 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 	checkedAt := time.Now().UTC()
 	member, err := bot.GetGuildMember(bot.ChronicleGuildID(), discordID)
 	if err != nil {
-		safeError := sanitizeMembershipError(err)
-		if _, dbErr := bot.config.DB.UpsertDiscordMembershipGrantCheckError(ctx, database.UpsertDiscordMembershipGrantCheckErrorParams{
-			UserID:    userID,
-			CheckedAt: database.Timestamptz(checkedAt),
-			LastError: pgtype.Text{String: safeError, Valid: true},
-		}); dbErr != nil {
-			return fmt.Errorf("record guild member fetch error: %w", dbErr)
-		}
-		bot.logger.Warn("discord membership sync suspended until next login",
-			slog.String("user_id", userID.String()),
-			slog.String("error", safeError),
-		)
-		return nil
+		return bot.recordDiscordMembershipError(ctx, userID, claimToken, checkedAt, err)
 	}
 
-	// --- chronicle_guild_member ---
-	// Targeted delete: remove only chronicle_guild_member for this user.
-	f := rel.NewFilter("chronicle", "chronicle", "chronicle_guild_member")
-	f.WithSubjectFilter("user", userID.String(), "")
-	if err := zed.Delete(ctx, rel.NewPreconditionedFilter(f)); err != nil {
+	return bot.reconcileDiscordMembership(ctx, zed, userID, checkedAt, member, claimToken)
+}
+
+func (bot *Bot) reconcileDiscordMembership(
+	ctx context.Context,
+	zed discordSyncAuthorizer,
+	userID uuid.UUID,
+	checkedAt time.Time,
+	member *discordgo.Member,
+	claimToken uuid.NullUUID,
+) error {
+	memberFilter := rel.NewFilter("chronicle", "chronicle", "chronicle_guild_member")
+	memberFilter.WithSubjectFilter("user", userID.String(), "")
+	if err := zed.Delete(ctx, rel.NewPreconditionedFilter(memberFilter)); err != nil {
 		return fmt.Errorf("delete chronicle_guild_member: %w", err)
 	}
 
 	if member != nil {
-		// User is in the guild — write chronicle_guild_member.
 		b := policy.New()
 		b.GlobalChronicle().Chronicle_guild_member(b.User(userID))
 		if _, err := zed.Write(ctx, *b.Txn()); err != nil {
@@ -81,11 +93,9 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 		}
 	}
 
-	// --- supporter ---
-	// Targeted delete: remove only supporter for this user.
-	f2 := rel.NewFilter("chronicle", "chronicle", "supporter")
-	f2.WithSubjectFilter("user", userID.String(), "")
-	if err := zed.Delete(ctx, rel.NewPreconditionedFilter(f2)); err != nil {
+	supporterFilter := rel.NewFilter("chronicle", "chronicle", "supporter")
+	supporterFilter.WithSubjectFilter("user", userID.String(), "")
+	if err := zed.Delete(ctx, rel.NewPreconditionedFilter(supporterFilter)); err != nil {
 		return fmt.Errorf("delete supporter: %w", err)
 	}
 
@@ -104,24 +114,115 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 				break
 			}
 		}
+	}
 
-		if _, err := zed.UpsertDataGrant(ctx, storagegrants.DiscordMemberStorageGrant(userID, checkedAt)); err != nil {
-			return fmt.Errorf("upsert discord member storage grant: %w", err)
+	roles, err := zed.UserChronicleRoles(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("read chronicle roles after discord sync: %w", err)
+	}
+	isMember := slices.Contains(roles, "chronicle_guild_member")
+
+	return bot.persistDiscordMembership(ctx, userID, checkedAt, isMember, claimToken)
+}
+
+var errStaleDiscordMembershipClaim = errors.New("stale discord membership claim")
+
+func (bot *Bot) persistDiscordMembership(
+	ctx context.Context,
+	userID uuid.UUID,
+	checkedAt time.Time,
+	isMember bool,
+	claimToken uuid.NullUUID,
+) error {
+	err := bot.config.DB.InTx(ctx, func(tx database.Store) error {
+		if isMember {
+			if claimToken.Valid {
+				if _, err := tx.CompleteDiscordMembershipGrantCheckMember(ctx, database.CompleteDiscordMembershipGrantCheckMemberParams{
+					CheckedAt:  database.Timestamptz(checkedAt),
+					UserID:     userID,
+					ClaimToken: claimToken,
+				}); err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						return errStaleDiscordMembershipClaim
+					}
+					return fmt.Errorf("complete discord member check: %w", err)
+				}
+			} else if _, err := tx.UpsertDiscordMembershipGrantCheckMember(ctx, database.UpsertDiscordMembershipGrantCheckMemberParams{
+				UserID:    userID,
+				CheckedAt: database.Timestamptz(checkedAt),
+			}); err != nil {
+				return fmt.Errorf("record discord member check: %w", err)
+			}
+
+			if _, err := tx.UpsertDataGrant(ctx, storagegrants.DiscordMemberStorageGrant(userID, checkedAt)); err != nil {
+				return fmt.Errorf("upsert discord member storage grant: %w", err)
+			}
+			return nil
 		}
-		if _, err := zed.UpsertDiscordMembershipGrantCheckMember(ctx, database.UpsertDiscordMembershipGrantCheckMemberParams{
+
+		if claimToken.Valid {
+			if _, err := tx.CompleteDiscordMembershipGrantCheckNonMember(ctx, database.CompleteDiscordMembershipGrantCheckNonMemberParams{
+				CheckedAt:  database.Timestamptz(checkedAt),
+				UserID:     userID,
+				ClaimToken: claimToken,
+			}); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return errStaleDiscordMembershipClaim
+				}
+				return fmt.Errorf("complete discord non-member check: %w", err)
+			}
+		} else if _, err := tx.UpsertDiscordMembershipGrantCheckNonMember(ctx, database.UpsertDiscordMembershipGrantCheckNonMemberParams{
 			UserID:    userID,
 			CheckedAt: database.Timestamptz(checkedAt),
 		}); err != nil {
-			return fmt.Errorf("record discord member check: %w", err)
+			return fmt.Errorf("record discord non-member check: %w", err)
+		}
+
+		if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{
+			UserID: userID,
+			Source: storagegrants.DiscordMemberSource,
+		}); err != nil {
+			return fmt.Errorf("delete discord member storage grant: %w", err)
 		}
 		return nil
+	}, nil)
+	if errors.Is(err, errStaleDiscordMembershipClaim) {
+		return nil
 	}
+	return err
+}
 
-	if _, err := zed.UpsertDiscordMembershipGrantCheckNonMember(ctx, database.UpsertDiscordMembershipGrantCheckNonMemberParams{
+func (bot *Bot) recordDiscordMembershipError(
+	ctx context.Context,
+	userID uuid.UUID,
+	claimToken uuid.NullUUID,
+	checkedAt time.Time,
+	fetchErr error,
+) error {
+	safeError := sanitizeMembershipError(fetchErr)
+	if claimToken.Valid {
+		if _, err := bot.config.DB.CompleteDiscordMembershipGrantCheckError(ctx, database.CompleteDiscordMembershipGrantCheckErrorParams{
+			CheckedAt:  database.Timestamptz(checkedAt),
+			LastError:  pgtype.Text{String: safeError, Valid: true},
+			UserID:     userID,
+			ClaimToken: claimToken,
+		}); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return fmt.Errorf("record claimed guild member fetch error: %w", err)
+		}
+	} else if _, err := bot.config.DB.UpsertDiscordMembershipGrantCheckError(ctx, database.UpsertDiscordMembershipGrantCheckErrorParams{
 		UserID:    userID,
 		CheckedAt: database.Timestamptz(checkedAt),
+		LastError: pgtype.Text{String: safeError, Valid: true},
 	}); err != nil {
-		return fmt.Errorf("record discord non-member check: %w", err)
+		return fmt.Errorf("record guild member fetch error: %w", err)
 	}
+
+	bot.logger.Warn("discord membership sync suspended until next login",
+		slog.String("user_id", userID.String()),
+		slog.String("error", safeError),
+	)
 	return nil
 }

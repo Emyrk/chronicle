@@ -109,6 +109,18 @@ func TestDiscordMembershipGrantChecks(t *testing.T) {
 	require.Len(t, claims, 1)
 	require.True(t, claims[0].ClaimToken.Valid)
 
+	_, err = db.UpsertDiscordMembershipGrantCheckMember(ctx, database.UpsertDiscordMembershipGrantCheckMemberParams{
+		UserID:    userID,
+		CheckedAt: database.Timestamptz(now),
+	})
+	require.NoError(t, err)
+	_, err = db.GetDiscordMembershipGrantCheckClaim(ctx, database.GetDiscordMembershipGrantCheckClaimParams{
+		UserID:     userID,
+		ClaimToken: claims[0].ClaimToken,
+		CheckTime:  database.Timestamptz(now),
+	})
+	require.NoError(t, err, "event-driven sync must preserve an active periodic claim")
+
 	_, err = db.CompleteDiscordMembershipGrantCheckError(ctx, database.CompleteDiscordMembershipGrantCheckErrorParams{
 		CheckedAt:  database.Timestamptz(now),
 		LastError:  pgtype.Text{String: "discord unavailable", Valid: true},

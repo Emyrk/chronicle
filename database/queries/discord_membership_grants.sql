@@ -168,8 +168,6 @@ ON CONFLICT (user_id) DO UPDATE SET
   last_outcome = 'member',
   last_error = NULL,
   suspended_until_login = FALSE,
-  claim_token = NULL,
-  claim_expires_at = NULL,
   updated_at = EXCLUDED.last_attempt_at
 RETURNING *;
 
@@ -198,8 +196,6 @@ ON CONFLICT (user_id) DO UPDATE SET
   last_outcome = 'non_member',
   last_error = NULL,
   suspended_until_login = FALSE,
-  claim_token = NULL,
-  claim_expires_at = NULL,
   updated_at = EXCLUDED.last_attempt_at
 RETURNING *;
 
@@ -225,8 +221,6 @@ ON CONFLICT (user_id) DO UPDATE SET
   last_outcome = 'error',
   last_error = EXCLUDED.last_error,
   suspended_until_login = TRUE,
-  claim_token = NULL,
-  claim_expires_at = NULL,
   updated_at = EXCLUDED.last_attempt_at
 RETURNING *;
 

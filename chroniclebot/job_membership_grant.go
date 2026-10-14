@@ -12,7 +12,6 @@ import (
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/storagegrants"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
@@ -123,10 +122,11 @@ func (w *WorkerDispatchDiscordMembershipGrantChecks) Work(ctx context.Context, _
 				oldestDue = row.NextCheckAt.Time
 			}
 			scheduledAt := now.Add(discordMembershipJitter(row.UserID, row.NextCheckAt.Time))
-			opts := ArgsCheckDiscordMembershipGrant{}.InsertOpts()
+			opts := ArgsSyncDiscordUser{}.InsertOpts()
+			opts.Priority = riverconst.PriorityLow
 			opts.ScheduledAt = scheduledAt
 			params = append(params, river.InsertManyParams{
-				Args: ArgsCheckDiscordMembershipGrant{
+				Args: ArgsSyncDiscordUser{
 					UserID:     row.UserID,
 					ClaimToken: row.ClaimToken.UUID,
 				},
@@ -182,85 +182,9 @@ func (b *Bot) NewWorkerCheckDiscordMembershipGrant() river.Worker[ArgsCheckDisco
 }
 
 func (w *WorkerCheckDiscordMembershipGrant) Work(ctx context.Context, job *river.Job[ArgsCheckDiscordMembershipGrant]) error {
-	if w.bot.disabled {
-		return nil
-	}
-
-	now := time.Now().UTC()
-	claimToken := uuid.NullUUID{UUID: job.Args.ClaimToken, Valid: true}
-	_, err := w.bot.config.DB.GetDiscordMembershipGrantCheckClaim(ctx, database.GetDiscordMembershipGrantCheckClaimParams{
-		UserID:     job.Args.UserID,
-		ClaimToken: claimToken,
-		CheckTime:  database.Timestamptz(now),
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("validate discord membership grant claim: %w", err)
-	}
-
-	link, err := w.bot.config.DB.GetUserAuthLinkByUserIDAndProvider(ctx, database.GetUserAuthLinkByUserIDAndProviderParams{
-		UserID:   job.Args.UserID,
-		Provider: "discord",
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		if err := w.bot.config.DB.DeleteDiscordMembershipGrantCheck(ctx, job.Args.UserID); err != nil {
-			return fmt.Errorf("delete unlinked discord membership check: %w", err)
-		}
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("load discord auth link: %w", err)
-	}
-
-	member, fetchErr := w.bot.GetGuildMember(w.bot.ChronicleGuildID(), link.LinkedID)
-	if fetchErr != nil {
-		safeError := sanitizeMembershipError(fetchErr)
-		_, err := w.bot.config.DB.CompleteDiscordMembershipGrantCheckError(ctx, database.CompleteDiscordMembershipGrantCheckErrorParams{
-			CheckedAt:  database.Timestamptz(now),
-			LastError:  pgtype.Text{String: safeError, Valid: true},
-			UserID:     job.Args.UserID,
-			ClaimToken: claimToken,
-		})
-		if err != nil {
-			return fmt.Errorf("record discord membership check error: %w", err)
-		}
-		_ = river.RecordOutput(ctx, map[string]any{"outcome": "error", "error": safeError})
-		return nil
-	}
-
-	if member == nil {
-		_, err := w.bot.config.DB.CompleteDiscordMembershipGrantCheckNonMember(ctx, database.CompleteDiscordMembershipGrantCheckNonMemberParams{
-			CheckedAt:  database.Timestamptz(now),
-			UserID:     job.Args.UserID,
-			ClaimToken: claimToken,
-		})
-		if err != nil {
-			return fmt.Errorf("record discord non-member check: %w", err)
-		}
-		_ = river.RecordOutput(ctx, map[string]any{"outcome": "non_member"})
-		return nil
-	}
-
-	err = w.bot.config.DB.InTx(ctx, func(tx database.Store) error {
-		if _, err := tx.CompleteDiscordMembershipGrantCheckMember(ctx, database.CompleteDiscordMembershipGrantCheckMemberParams{
-			CheckedAt:  database.Timestamptz(now),
-			UserID:     job.Args.UserID,
-			ClaimToken: claimToken,
-		}); err != nil {
-			return fmt.Errorf("complete discord member check: %w", err)
-		}
-		if _, err := tx.UpsertDataGrant(ctx, storagegrants.DiscordMemberStorageGrant(job.Args.UserID, now)); err != nil {
-			return fmt.Errorf("upsert discord membership storage grant: %w", err)
-		}
-		return nil
-	}, nil)
-	if err != nil {
-		return err
-	}
-	_ = river.RecordOutput(ctx, map[string]any{"outcome": "member"})
-	return nil
+	// Compatibility path for jobs queued before membership reconciliation moved
+	// into discord-sync-user.
+	return w.bot.syncClaimedDiscordUser(ctx, job.Args.UserID, job.Args.ClaimToken)
 }
 
 // ReactivateMembershipGrantCheckOnLogin claims an immediate membership check
@@ -286,7 +210,7 @@ func (b *Bot) ReactivateMembershipGrantCheckOnLogin(ctx context.Context, userID 
 		return fmt.Errorf("activated discord membership check without claim token")
 	}
 
-	_, err = b.queue.Insert(ctx, ArgsCheckDiscordMembershipGrant{
+	_, err = b.queue.Insert(ctx, ArgsSyncDiscordUser{
 		UserID:     userID,
 		ClaimToken: claim.ClaimToken.UUID,
 	}, nil)
