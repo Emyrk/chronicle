@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"fyne.io/systray"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/autostart"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/engine"
+	"github.com/Emyrk/chronicle/cmd/uploader/internal/pair"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/store"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/update"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/wowdir"
@@ -33,10 +35,13 @@ type app struct {
 	ready  bool
 
 	updateLink string
+	pairing    bool   // a pairing is in flight
+	account    string // device name when connected, "" otherwise
+	pairMsg    string // last pairing outcome, shown until the next attempt
 }
 
 type menuItems struct {
-	status, folder, report, connect, update *systray.MenuItem
+	status, folder, report, connect, disconnect, update *systray.MenuItem
 }
 
 func (a *app) runTray(ctx context.Context) error {
@@ -64,6 +69,8 @@ func (a *app) onReady(ctx context.Context) {
 	a.items.report.Disable()
 	a.items.connect = systray.AddMenuItem("Connect to Chronicle…", "")
 	a.items.connect.Hide()
+	a.items.disconnect = systray.AddMenuItem("Disconnect", "Forget this computer's Chronicle sign-in")
+	a.items.disconnect.Hide()
 	a.items.update = systray.AddMenuItem("Update available", "")
 	a.items.update.Hide()
 	systray.AddSeparator()
@@ -80,6 +87,7 @@ func (a *app) onReady(ctx context.Context) {
 	a.renderFolder()
 
 	go a.engine.Run(ctx)
+	go a.startup(ctx)
 	go a.checkUpdate(ctx)
 
 	go func() {
@@ -94,10 +102,9 @@ func (a *app) onReady(ctx context.Context) {
 					openURL(u)
 				}
 			case <-a.items.connect.ClickedCh:
-				// TODO(#999): start the browser pairing flow. Until it lands,
-				// send the user to the site; the token is read from the
-				// keychain on every poll so a stored token takes effect.
-				openURL(a.server)
+				go a.connect(ctx)
+			case <-a.items.disconnect.ClickedCh:
+				a.disconnect()
 			case <-a.items.update.ClickedCh:
 				openURL(a.updateURL())
 			case <-choose.ClickedCh:
@@ -206,10 +213,24 @@ func (a *app) render() {
 	if s.ReportURL != "" {
 		a.items.report.Enable()
 	}
-	if s.State == engine.StateReconnect {
-		a.items.connect.Show()
-	} else {
+	switch {
+	case a.pairing:
 		a.items.connect.Hide()
+		a.items.disconnect.Hide()
+	case s.State == engine.StateReconnect:
+		a.items.connect.Show()
+		a.items.disconnect.Hide()
+	default:
+		a.items.connect.Hide()
+		a.items.disconnect.Show()
+	}
+	switch {
+	case a.pairing:
+		a.items.status.SetTitle("Waiting for you to approve in your browser…")
+	case a.pairMsg != "":
+		a.items.status.SetTitle(a.pairMsg)
+	case a.account != "" && s.State != engine.StateReconnect:
+		a.items.status.SetTitle(s.Detail + " (Connected as " + a.account + ")")
 	}
 }
 
@@ -233,4 +254,100 @@ func (a *app) renderFolder() {
 		label = fmt.Sprintf("WoW folder: %s", filepath.Base(filepath.Dir(found[0].Dir)))
 	}
 	a.items.folder.SetTitle(label)
+}
+
+// startup shows the not-connected state once on a first launch, and looks up
+// the device name when a token is already stored. It never opens the browser.
+func (a *app) startup(ctx context.Context) {
+	token := store.Token()
+	if token == "" {
+		notify("Chronicle", "Not connected. Choose \"Connect to Chronicle…\" from the tray menu to start uploading.")
+		return
+	}
+	a.setAccount(ctx, token)
+}
+
+func (a *app) pairClient() *pair.Client { return &pair.Client{BaseURL: a.server} }
+
+func (a *app) setAccount(ctx context.Context, token string) {
+	name, err := a.pairClient().WhoAmI(ctx, token)
+	if err != nil {
+		// A rejected token is handled by the next upload; offline is fine.
+		a.logger.Warn("whoami", "err", err)
+		return
+	}
+	a.mu.Lock()
+	a.account = name
+	a.mu.Unlock()
+	a.render()
+}
+
+// connect runs the browser pairing flow.
+func (a *app) connect(ctx context.Context) {
+	a.mu.Lock()
+	if a.pairing {
+		a.mu.Unlock()
+		return
+	}
+	a.pairing = true
+	a.pairMsg = ""
+	a.mu.Unlock()
+	a.render()
+
+	msg := a.pair(ctx)
+
+	a.mu.Lock()
+	a.pairing = false
+	a.pairMsg = msg
+	a.mu.Unlock()
+	a.render()
+	a.engine.TokenChanged()
+}
+
+// pair returns a failure message, or "" when connected.
+func (a *app) pair(ctx context.Context) string {
+	c := a.pairClient()
+	host, _ := os.Hostname()
+	start, err := c.Start(ctx, strings.TrimSpace("Chronicle Uploader "+host))
+	if err != nil {
+		a.logger.Error("pair start", "err", err)
+		notify("Chronicle", "Couldn't reach Chronicle. Check your connection and try again.")
+		return "Couldn't reach Chronicle, try again"
+	}
+	openURL(start.VerifyURL)
+
+	outcome, token, err := c.Wait(ctx, start)
+	if err != nil {
+		a.logger.Warn("pair wait", "err", err)
+	}
+	switch {
+	case outcome == pair.Approved && err == nil:
+		if err := store.SaveToken(token); err != nil {
+			a.logger.Error("save token", "err", err)
+			notify("Chronicle", "Couldn't save the sign-in to your keychain.")
+			return "Couldn't save the sign-in"
+		}
+		a.setAccount(ctx, token)
+		notify("Chronicle", "Connected. Your logs will upload automatically.")
+		return ""
+	case outcome == pair.Denied:
+		notify("Chronicle", "Pairing denied.")
+		return "Pairing denied"
+	default:
+		notify("Chronicle", "Pairing expired, try again.")
+		return "Pairing expired, try again"
+	}
+}
+
+func (a *app) disconnect() {
+	if err := store.DeleteToken(); err != nil {
+		a.logger.Error("delete token", "err", err)
+		notify("Chronicle", "Couldn't remove the sign-in from your keychain.")
+		return
+	}
+	a.mu.Lock()
+	a.account = ""
+	a.pairMsg = ""
+	a.mu.Unlock()
+	a.engine.TokenChanged()
 }

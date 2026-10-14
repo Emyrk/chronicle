@@ -32,7 +32,10 @@ type harness struct {
 	statuses []engine.Status
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t *testing.T) *harness { return newHarnessToken(t, nil) }
+
+// newHarnessToken replaces the keychain read when tokenFn is non-nil.
+func newHarnessToken(t *testing.T, tokenFn func() string) *harness {
 	t.Helper()
 	dir := t.TempDir()
 	logDir := filepath.Join(dir, "_x_", "Logs")
@@ -45,7 +48,14 @@ func newHarness(t *testing.T) *harness {
 	h.e = engine.New(engine.Config{
 		Store:    st,
 		Installs: func() []wowdir.Install { return []wowdir.Install{{Dir: filepath.Dir(logDir), LogDir: logDir}} },
-		Token:    func() string { h.mu.Lock(); defer h.mu.Unlock(); return h.token },
+		Token: func() string {
+			if tokenFn != nil {
+				return tokenFn()
+			}
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			return h.token
+		},
 		Upload: func(context.Context, string, string, int64) (upload.Result, error) {
 			h.mu.Lock()
 			defer h.mu.Unlock()
@@ -130,6 +140,7 @@ func TestEngineReconnect(t *testing.T) {
 
 	// Signing in uploads the log that was waiting.
 	h.token = "fresh"
+	h.e.TokenChanged()
 	h.e.Step(ctx, t0.Add(5*time.Second), false)
 	require.Equal(t, 1, h.uploads)
 	require.Equal(t, engine.StateUploaded, h.statuses[len(h.statuses)-1].State)
@@ -145,6 +156,25 @@ func TestEngineRejectedToken(t *testing.T) {
 
 	h.e.Step(ctx, t0, false)
 	require.Equal(t, engine.StateReconnect, h.statuses[len(h.statuses)-1].State)
+	require.Contains(t, h.statuses[len(h.statuses)-1].Detail, "Needs reconnect")
 	h.e.Step(ctx, t0.Add(5*time.Second), false)
 	require.Equal(t, 1, h.uploads) // not hammered while the token is unchanged
+}
+
+func TestEngineTokenCached(t *testing.T) {
+	t.Parallel()
+	reads := 0
+	h := newHarnessToken(t, func() string { reads++; return "tok" })
+	h.running = false
+	ctx := context.Background()
+	t0 := time.Now()
+
+	for i := 0; i < 100; i++ {
+		h.e.Step(ctx, t0.Add(time.Duration(i)*5*time.Second), false)
+	}
+	require.Equal(t, 1, reads)
+
+	h.e.TokenChanged()
+	h.e.Step(ctx, t0.Add(time.Hour), false)
+	require.Equal(t, 2, reads)
 }

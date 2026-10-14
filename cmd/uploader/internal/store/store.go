@@ -108,3 +108,12 @@ func Token() string {
 func SaveToken(token string) error {
 	return keyring.Set(keyringService, keyringUser, token)
 }
+
+// DeleteToken removes the bearer token from the OS keychain.
+func DeleteToken() error {
+	err := keyring.Delete(keyringService, keyringUser)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return nil
+	}
+	return err
+}

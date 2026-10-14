@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/store"
@@ -47,7 +48,8 @@ type Config struct {
 	Store *store.Store
 	// Installs returns the flavor folders to watch right now.
 	Installs func() []wowdir.Install
-	// Token returns the current bearer token.
+	// Token reads the bearer token from the keychain. It is cached; call
+	// Engine.TokenChanged after storing or removing one.
 	Token func() string
 	// Upload sends size bytes of path.
 	Upload func(ctx context.Context, token, path string, size int64) (upload.Result, error)
@@ -71,9 +73,14 @@ type Engine struct {
 	cfg     Config
 	tracker *watch.Tracker
 	manual  chan struct{}
+	wake    chan struct{}
+	dirty   atomic.Bool // token changed behind our back; re-read it
 
 	status        Status
 	rejectedToken string
+	token         string // cached keychain value
+	tokenRead     time.Time
+	tokenLoaded   bool
 	uploadedUntil time.Time
 	now           time.Time // start of the current step
 	lastUploaded  Status
@@ -104,6 +111,7 @@ func New(cfg Config) *Engine {
 		cfg:     cfg,
 		tracker: watch.NewTracker(st.Uploaded),
 		manual:  make(chan struct{}, 1),
+		wake:    make(chan struct{}, 1),
 		status:  Status{ReportURL: st.LastReportURL},
 		wait: func(ctx context.Context, d time.Duration) {
 			t := time.NewTimer(d)
@@ -124,6 +132,17 @@ func (e *Engine) UploadNow() {
 	}
 }
 
+// TokenChanged tells the engine the stored token was replaced or removed. It
+// re-reads the token and re-evaluates now, without the "nothing new" notice of
+// UploadNow.
+func (e *Engine) TokenChanged() {
+	e.dirty.Store(true)
+	select {
+	case e.wake <- struct{}{}:
+	default:
+	}
+}
+
 // Run polls until ctx is done.
 func (e *Engine) Run(ctx context.Context) {
 	tick := time.NewTicker(e.cfg.Poll)
@@ -136,6 +155,7 @@ func (e *Engine) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
+		case <-e.wake:
 		case <-e.manual:
 			manual = true
 		}
@@ -168,7 +188,7 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 		e.cfg.Notify("Chronicle", msg)
 	}
 
-	token := e.cfg.Token()
+	token := e.currentToken(now)
 	needAuth := token == "" || token == e.rejectedToken
 	for _, f := range queue {
 		if needAuth {
@@ -182,12 +202,32 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 		}
 	}
 
-	e.setStatus(e.baseline(now, len(installs) > 0, running, recording, needAuth))
+	rejected := token != "" && token == e.rejectedToken
+	e.setStatus(e.baseline(now, len(installs) > 0, running, recording, needAuth, rejected))
 }
 
-func (e *Engine) baseline(now time.Time, haveInstall, running, recording, needAuth bool) Status {
+// reconnectRecheck bounds how often a missing or rejected token is re-read
+// (it may have been written by another process).
+const reconnectRecheck = time.Minute
+
+// currentToken returns the cached token. The keychain is only read at the
+// start, after TokenChanged, and at most once per reconnectRecheck while no
+// usable token is held; reading it can mean spawning a process.
+func (e *Engine) currentToken(now time.Time) string {
+	reconnect := e.token == "" || e.token == e.rejectedToken
+	if e.dirty.Swap(false) || !e.tokenLoaded || (reconnect && now.Sub(e.tokenRead) >= reconnectRecheck) {
+		e.token = e.cfg.Token()
+		e.tokenRead = now
+		e.tokenLoaded = true
+	}
+	return e.token
+}
+
+func (e *Engine) baseline(now time.Time, haveInstall, running, recording, needAuth, rejected bool) Status {
 	last := e.status.ReportURL
 	switch {
+	case rejected:
+		return Status{State: StateReconnect, Detail: "Needs reconnect. Connect to Chronicle again.", ReportURL: last}
 	case needAuth:
 		return Status{State: StateReconnect, Detail: "Connect to Chronicle to upload your logs.", ReportURL: last}
 	case now.Before(e.uploadedUntil):
