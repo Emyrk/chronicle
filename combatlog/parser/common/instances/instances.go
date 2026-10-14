@@ -446,6 +446,7 @@ var (
 	RuinsOfLordaeronFactory = &CommonFactory{
 		Name:      "Ruins Of Lordaeron",
 		ZoneNames: []string{"ruins of lordaeron"},
+		MapIDs:    []uint32{2999},
 		Hostiles:  FromMap(RuinsOfLordaeronHostiles()),
 	}
 
