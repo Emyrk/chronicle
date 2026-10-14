@@ -599,3 +599,15 @@ WHERE
   AND lf.created_at < NOW() - make_interval(hours => u.raw_log_retention_hours)
 LIMIT $1
 ;
+
+-- name: GetLogFileByOwnerHash :one
+SELECT * FROM log_file WHERE owner = $1 AND hash = $2;
+
+-- name: InsertLogGroupSource :exec
+-- Records the client-supplied source id (X-Chronicle-Source-Id) a log group was
+-- uploaded under, so a later upload of the same grown file can replace it.
+INSERT INTO log_group_sources(log_group_id, owner, source_id)
+VALUES ($1, $2, $3);
+
+-- name: GetLogGroupIDBySource :one
+SELECT log_group_id FROM log_group_sources WHERE owner = $1 AND source_id = $2;

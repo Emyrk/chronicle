@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -408,7 +409,29 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	meta.SourceID = r.Header.Get("X-Chronicle-Source-Id")
+	if len(meta.SourceID) > 256 {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "X-Chronicle-Source-Id is too long, maximum is 256 characters",
+		})
+		return
+	}
+
 	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, logType, uuid.Nil, meta)
+	var dup *chronicle.DuplicateUploadError
+	if errors.As(err, &dup) {
+		fileIDs := make([]uuid.UUID, 0, len(dup.Files))
+		for _, f := range dup.Files {
+			fileIDs = append(fileIDs, f.ID)
+		}
+		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.LogUploadResponse{
+			LogID:     dup.Group.ID,
+			Files:     fileIDs,
+			URL:       api.reportURL(r, dup.Group.ID),
+			Duplicate: true,
+		})
+		return
+	}
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -428,5 +451,23 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusCreated, chroniclesdk.LogUploadResponse{
 		LogID: group.ID,
 		Files: fileIDs,
+		URL:   api.reportURL(r, group.ID),
 	})
+}
+
+// reportURL returns the absolute link to a log's parsed report, using the host
+// the request arrived on so tenant subdomains are preserved.
+func (api *API) reportURL(r *http.Request, logID uuid.UUID) string {
+	path := "/logs/" + logID.String()
+	if r.Host == "" {
+		if api.Opts.AccessURL != nil {
+			return api.Opts.AccessURL.JoinPath(path).String()
+		}
+		return path
+	}
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host + path
 }

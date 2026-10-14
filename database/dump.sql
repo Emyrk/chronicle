@@ -1120,6 +1120,12 @@ CREATE TABLE leaderboard_version_requirements (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE log_group_sources (
+    log_group_id uuid NOT NULL,
+    owner uuid NOT NULL,
+    source_id text NOT NULL
+);
+
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
     unit_guid wow_guid NOT NULL,
@@ -2362,6 +2368,9 @@ ALTER TABLE ONLY leaderboard_version_requirements
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY log_group_sources
+    ADD CONSTRAINT log_group_sources_pkey PRIMARY KEY (log_group_id);
+
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_pkey PRIMARY KEY (encounter_id, unit_guid);
 
@@ -2622,6 +2631,8 @@ CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_a
 CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree (dataset_id, spell_id);
 
 CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash);
+
+CREATE UNIQUE INDEX log_group_sources_owner_source_id ON log_group_sources USING btree (owner, source_id);
 
 CREATE INDEX game_player_gear_history_player_time ON game_player_gear_history USING btree (realm_id, player_id, equipped_at DESC);
 
@@ -3096,6 +3107,12 @@ ALTER TABLE ONLY log_file
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_wow_log_id_fkey FOREIGN KEY (wow_log_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_group_sources
+    ADD CONSTRAINT log_group_sources_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_group_sources
+    ADD CONSTRAINT log_group_sources_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);
 
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;

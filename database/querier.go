@@ -239,6 +239,11 @@ type sqlcQuerier interface {
 	GetExternalAPICharacter(ctx context.Context, arg GetExternalAPICharacterParams) (GetExternalAPICharacterRow, error)
 	GetExternalCharacterLinkSync(ctx context.Context, arg GetExternalCharacterLinkSyncParams) (ExternalCharacterLinkSync, error)
 	GetFileByHash(ctx context.Context, hash string) (LogFile, error)
+	GetLogFileByOwnerHash(ctx context.Context, arg GetLogFileByOwnerHashParams) (LogFile, error)
+	GetLogGroupIDBySource(ctx context.Context, arg GetLogGroupIDBySourceParams) (uuid.UUID, error)
+	// Records the client-supplied source id (X-Chronicle-Source-Id) a log group was
+	// uploaded under, so a later upload of the same grown file can replace it.
+	InsertLogGroupSource(ctx context.Context, arg InsertLogGroupSourceParams) error
 	// Full page fetch with all tabs and panels
 	GetFullGuildPage(ctx context.Context, guildID uuid.UUID) (GetFullGuildPageRow, error)
 	GetGamePlayerByGUID(ctx context.Context, arg GetGamePlayerByGUIDParams) (GetGamePlayerByGUIDRow, error)

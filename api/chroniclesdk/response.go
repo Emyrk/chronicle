@@ -27,4 +27,9 @@ type Response struct {
 type LogUploadResponse struct {
 	LogID uuid.UUID   `json:"log_id"`
 	Files []uuid.UUID `json:"file_ids"`
+	// URL is the absolute link to the parsed report.
+	URL string `json:"url,omitempty"`
+	// Duplicate is true when a byte-identical file was already uploaded;
+	// LogID and Files then refer to the existing upload.
+	Duplicate bool `json:"duplicate,omitempty"`
 }
