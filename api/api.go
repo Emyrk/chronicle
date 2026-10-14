@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -44,6 +45,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/time/rate"
 )
 
 type Options struct {
@@ -206,6 +208,13 @@ func (api *API) Routes() chi.Router {
 			r.Get("/discovery", api.Discovery)
 			r.Get("/parser-version", api.ParserVersion)
 			r.Get("/notices/public", api.ListPublicTelemetryNotices)
+
+			// Device pairing for non-browser clients (the uploader). These are
+			// called by curl-like clients, so they cannot be browser-only.
+			r.With(newIPLimiter(rate.Every(time.Minute/pairStartPerMinute), pairStartPerMinute).middleware).
+				Post("/devices/pair/start", api.DevicePairStart)
+			r.With(newIPLimiter(rate.Limit(1), pairPollBurst).middleware).
+				Post("/devices/pair/poll", api.DevicePairPoll)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -219,11 +228,26 @@ func (api *API) Routes() chi.Router {
 			r.Post("/live-sessions/{code}/join", api.liveSessions.Join)
 			r.Get("/live-sessions/{code}/ws", api.liveSessions.WebSocket)
 
+			// Device-token scoped routes: only these (and upload-v2) accept a
+			// per-device upload token.
+			r.Group(func(r chi.Router) {
+				r.Use(
+					api.deviceTokenAuth,
+					api.Auth.Authenticated(false),
+				)
+				r.Get("/whoami/device", api.DeviceWhoAmI)
+			})
+
 			r.Group(func(r chi.Router) {
 				r.Use(
 					api.Auth.Authenticated(false),
 				)
 				r.Get("/whoami", api.WhoAmI)
+				r.Get("/devices/pair/{code}", api.DevicePairInfo)
+				r.Post("/devices/pair/{code}/approve", api.resolvePair("approved"))
+				r.Post("/devices/pair/{code}/deny", api.resolvePair("denied"))
+				r.Get("/me/devices", api.ListMyDevices)
+				r.Delete("/me/devices/{deviceID}", api.RevokeMyDevice)
 				r.Get("/whoami/dump", api.DumpToken)
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Post("/live-sessions", api.liveSessions.Create)
@@ -505,6 +529,15 @@ func (api *API) Routes() chi.Router {
 					r.Get("/recent", api.RecentInstances)
 					r.Get("/range", api.InstancesByTimeRange)
 					r.Route("/logs", func(r chi.Router) {
+						// upload-v2 also accepts per-device upload tokens.
+						r.Group(func(r chi.Router) {
+							r.Use(
+								api.deviceTokenAuth,
+								api.Auth.Authenticated(false),
+								httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanUpload_log_User),
+							)
+							r.Post("/upload-v2", api.WoWLogUploadV2)
+						})
 						r.Group(func(r chi.Router) {
 							r.Use(
 								api.Auth.Authenticated(false),
@@ -512,7 +545,6 @@ func (api *API) Routes() chi.Router {
 							r.Group(func(r chi.Router) {
 								r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanUpload_log_User))
 								r.Post("/upload", api.WoWLogUpload)
-								r.Post("/upload-v2", api.WoWLogUploadV2)
 							})
 							r.Get("/", api.WoWLogGroups)
 							r.Get("/by-file-hash/{file-hash}", api.WoWLogGroupByFile)

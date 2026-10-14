@@ -2652,6 +2652,255 @@ func (q *sqlQuerier) UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDat
 	return err
 }
 
+const deleteExpiredDevicePairings = `-- name: DeleteExpiredDevicePairings :execrows
+DELETE FROM device_pairings WHERE expires_at <= NOW() - interval '1 hour'
+`
+
+func (q *sqlQuerier) DeleteExpiredDevicePairings(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredDevicePairings)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getDevicePairingByDeviceCodeHash = `-- name: GetDevicePairingByDeviceCodeHash :one
+SELECT id, user_code, device_code_hash, device_name, status, user_id, expires_at, created_at FROM device_pairings WHERE device_code_hash = $1
+`
+
+func (q *sqlQuerier) GetDevicePairingByDeviceCodeHash(ctx context.Context, deviceCodeHash []byte) (DevicePairing, error) {
+	row := q.db.QueryRow(ctx, getDevicePairingByDeviceCodeHash, deviceCodeHash)
+	var i DevicePairing
+	err := row.Scan(
+		&i.ID,
+		&i.UserCode,
+		&i.DeviceCodeHash,
+		&i.DeviceName,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getDevicePairingByUserCode = `-- name: GetDevicePairingByUserCode :one
+SELECT id, user_code, device_code_hash, device_name, status, user_id, expires_at, created_at FROM device_pairings
+WHERE user_code = $1 AND expires_at > NOW()
+`
+
+func (q *sqlQuerier) GetDevicePairingByUserCode(ctx context.Context, userCode string) (DevicePairing, error) {
+	row := q.db.QueryRow(ctx, getDevicePairingByUserCode, userCode)
+	var i DevicePairing
+	err := row.Scan(
+		&i.ID,
+		&i.UserCode,
+		&i.DeviceCodeHash,
+		&i.DeviceName,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUploadDeviceByTokenHash = `-- name: GetUploadDeviceByTokenHash :one
+SELECT id, user_id, name, token_hash, created_at, last_used_at, revoked_at FROM upload_devices
+WHERE token_hash = $1 AND revoked_at IS NULL
+`
+
+func (q *sqlQuerier) GetUploadDeviceByTokenHash(ctx context.Context, tokenHash string) (UploadDevice, error) {
+	row := q.db.QueryRow(ctx, getUploadDeviceByTokenHash, tokenHash)
+	var i UploadDevice
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.TokenHash,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const insertDevicePairing = `-- name: InsertDevicePairing :one
+INSERT INTO device_pairings (user_code, device_code_hash, device_name, expires_at)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_code, device_code_hash, device_name, status, user_id, expires_at, created_at
+`
+
+type InsertDevicePairingParams struct {
+	UserCode       string             `db:"user_code" json:"user_code"`
+	DeviceCodeHash []byte             `db:"device_code_hash" json:"device_code_hash"`
+	DeviceName     string             `db:"device_name" json:"device_name"`
+	ExpiresAt      pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+func (q *sqlQuerier) InsertDevicePairing(ctx context.Context, arg InsertDevicePairingParams) (DevicePairing, error) {
+	row := q.db.QueryRow(ctx, insertDevicePairing,
+		arg.UserCode,
+		arg.DeviceCodeHash,
+		arg.DeviceName,
+		arg.ExpiresAt,
+	)
+	var i DevicePairing
+	err := row.Scan(
+		&i.ID,
+		&i.UserCode,
+		&i.DeviceCodeHash,
+		&i.DeviceName,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertUploadDevice = `-- name: InsertUploadDevice :one
+INSERT INTO upload_devices (user_id, name, token_hash)
+VALUES ($1, $2, $3)
+RETURNING id, user_id, name, token_hash, created_at, last_used_at, revoked_at
+`
+
+type InsertUploadDeviceParams struct {
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+	Name      string    `db:"name" json:"name"`
+	TokenHash string    `db:"token_hash" json:"token_hash"`
+}
+
+func (q *sqlQuerier) InsertUploadDevice(ctx context.Context, arg InsertUploadDeviceParams) (UploadDevice, error) {
+	row := q.db.QueryRow(ctx, insertUploadDevice, arg.UserID, arg.Name, arg.TokenHash)
+	var i UploadDevice
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.TokenHash,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const listUploadDevicesByUser = `-- name: ListUploadDevicesByUser :many
+SELECT id, user_id, name, token_hash, created_at, last_used_at, revoked_at FROM upload_devices
+WHERE user_id = $1 AND revoked_at IS NULL
+ORDER BY created_at DESC
+`
+
+func (q *sqlQuerier) ListUploadDevicesByUser(ctx context.Context, userID uuid.UUID) ([]UploadDevice, error) {
+	rows, err := q.db.Query(ctx, listUploadDevicesByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UploadDevice
+	for rows.Next() {
+		var i UploadDevice
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.TokenHash,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const redeemDevicePairing = `-- name: RedeemDevicePairing :one
+UPDATE device_pairings
+SET status = 'redeemed'
+WHERE id = $1 AND status = 'approved' AND expires_at > NOW()
+RETURNING id, user_code, device_code_hash, device_name, status, user_id, expires_at, created_at
+`
+
+// Single-use: flips approved -> redeemed exactly once.
+func (q *sqlQuerier) RedeemDevicePairing(ctx context.Context, id uuid.UUID) (DevicePairing, error) {
+	row := q.db.QueryRow(ctx, redeemDevicePairing, id)
+	var i DevicePairing
+	err := row.Scan(
+		&i.ID,
+		&i.UserCode,
+		&i.DeviceCodeHash,
+		&i.DeviceName,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const resolveDevicePairingByUserCode = `-- name: ResolveDevicePairingByUserCode :one
+UPDATE device_pairings
+SET status = $1, user_id = $2
+WHERE user_code = $3 AND status = 'pending' AND expires_at > NOW()
+RETURNING id, user_code, device_code_hash, device_name, status, user_id, expires_at, created_at
+`
+
+type ResolveDevicePairingByUserCodeParams struct {
+	Status   string        `db:"status" json:"status"`
+	UserID   uuid.NullUUID `db:"user_id" json:"user_id"`
+	UserCode string        `db:"user_code" json:"user_code"`
+}
+
+// Approve or deny a pending, unexpired pairing on behalf of a user.
+func (q *sqlQuerier) ResolveDevicePairingByUserCode(ctx context.Context, arg ResolveDevicePairingByUserCodeParams) (DevicePairing, error) {
+	row := q.db.QueryRow(ctx, resolveDevicePairingByUserCode, arg.Status, arg.UserID, arg.UserCode)
+	var i DevicePairing
+	err := row.Scan(
+		&i.ID,
+		&i.UserCode,
+		&i.DeviceCodeHash,
+		&i.DeviceName,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const revokeUploadDevice = `-- name: RevokeUploadDevice :execrows
+UPDATE upload_devices SET revoked_at = NOW()
+WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeUploadDeviceParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) RevokeUploadDevice(ctx context.Context, arg RevokeUploadDeviceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeUploadDevice, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const touchUploadDeviceLastUsed = `-- name: TouchUploadDeviceLastUsed :exec
+UPDATE upload_devices SET last_used_at = NOW() WHERE id = $1
+`
+
+func (q *sqlQuerier) TouchUploadDeviceLastUsed(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, touchUploadDeviceLastUsed, id)
+	return err
+}
+
 const claimDiscordAnnouncementDelivery = `-- name: ClaimDiscordAnnouncementDelivery :one
 UPDATE guild_discord_log_announcements
 SET delivery_attempted_at = NOW(),

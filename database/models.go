@@ -1333,6 +1333,17 @@ type DeploymentInfo struct {
 	DeploymentToken        pgtype.Text        `db:"deployment_token" json:"deployment_token"`
 }
 
+type DevicePairing struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	UserCode       string             `db:"user_code" json:"user_code"`
+	DeviceCodeHash []byte             `db:"device_code_hash" json:"device_code_hash"`
+	DeviceName     string             `db:"device_name" json:"device_name"`
+	Status         string             `db:"status" json:"status"`
+	UserID         uuid.NullUUID      `db:"user_id" json:"user_id"`
+	ExpiresAt      pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type EncounterDpsRanking struct {
 	ID              uuid.UUID          `db:"id" json:"id"`
 	EncounterID     uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
@@ -2168,6 +2179,16 @@ type TimeParseSnapshot struct {
 	SourceRowCount    int64              `db:"source_row_count" json:"source_row_count"`
 	SourceWatermark   pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
 	SourceFingerprint int64              `db:"source_fingerprint" json:"source_fingerprint"`
+}
+
+type UploadDevice struct {
+	ID         uuid.UUID          `db:"id" json:"id"`
+	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
+	Name       string             `db:"name" json:"name"`
+	TokenHash  string             `db:"token_hash" json:"token_hash"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	LastUsedAt pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
+	RevokedAt  pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
 }
 
 type User struct {

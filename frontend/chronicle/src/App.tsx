@@ -24,6 +24,8 @@ import { AdminLayout } from "./pages/Admin/AdminLayout"
 import { AdminUsersOverview } from "./pages/Admin/AdminUsersOverview"
 import { AdminLogsPage } from "./pages/Admin/AdminLogsPage"
 import { AdminLeaderboardPage } from "./pages/Admin/AdminLeaderboardPage"
+import { PairPage } from "./pages/Pair"
+import { DeviceSettings } from "./pages/Settings/DeviceSettings"
 import { AdminSiteSettingsPage } from "./pages/Admin/AdminSiteSettingsPage"
 import { AdminStoragePage } from "./pages/Admin/AdminStoragePage"
 import { AdminUsersPage } from "./pages/Admin/AdminUsersPage"
@@ -124,6 +126,7 @@ function App() {
       <NitroPayRuntime />
       <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/pair" element={<PairPage />} />
       <Route path="/youtube-sync" element={<YouTubeSyncPage />} />
       <Route path="/youtube-sync-v2" element={<YouTubeSyncV2Page />} />
       <Route path="/youtube-sync-v3" element={<YouTubeSyncV3Page />} />
@@ -247,6 +250,7 @@ function App() {
           <Route path="settings" element={<ProfileSettings />} />
           <Route path="characters" element={<CharacterSettings />} />
           <Route path="storage" element={<StorageSettings />} />
+          <Route path="devices" element={<DeviceSettings />} />
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="privacy" element={<PrivacySettings />} />
           <Route path="appearance" element={<AppearanceSettings />} />
