@@ -1696,19 +1696,6 @@ CREATE TABLE telemetry_notices (
     CONSTRAINT telemetry_notices_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
 );
 
-CREATE TABLE time_parse_boss_kill_members (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    snapshot_id uuid NOT NULL,
-    instance_id uuid NOT NULL,
-    run_id uuid NOT NULL,
-    instance_name text NOT NULL,
-    encounter_name text NOT NULL,
-    difficulty_name text DEFAULT ''::text NOT NULL,
-    max_players smallint DEFAULT 0 NOT NULL,
-    duration_ms bigint NOT NULL,
-    killed_at timestamp with time zone NOT NULL
-);
-
 CREATE TABLE time_parse_boss_kill_memberships (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
@@ -1723,18 +1710,6 @@ CREATE TABLE time_parse_boss_kill_memberships (
     max_players smallint DEFAULT 0 NOT NULL,
     duration_ms bigint NOT NULL,
     killed_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE time_parse_clear_time_members (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    snapshot_id uuid NOT NULL,
-    instance_id uuid NOT NULL,
-    run_id uuid NOT NULL,
-    instance_name text NOT NULL,
-    difficulty_name text DEFAULT ''::text NOT NULL,
-    max_players smallint DEFAULT 0 NOT NULL,
-    duration_ms bigint NOT NULL,
-    start_time timestamp with time zone NOT NULL
 );
 
 CREATE TABLE time_parse_clear_time_memberships (
@@ -2533,23 +2508,11 @@ ALTER TABLE ONLY tenants
 ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_slug_key UNIQUE (slug);
 
-ALTER TABLE ONLY time_parse_boss_kill_members
-    ADD CONSTRAINT time_parse_boss_kill_members_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY time_parse_boss_kill_members
-    ADD CONSTRAINT time_parse_boss_kill_members_snapshot_id_instance_id_encoun_key UNIQUE (snapshot_id, instance_id, encounter_name);
-
 ALTER TABLE ONLY time_parse_boss_kill_memberships
     ADD CONSTRAINT time_parse_boss_kill_membersh_tenant_id_policy_version_quer_key UNIQUE (tenant_id, policy_version, query_version, run_id, encounter_name);
 
 ALTER TABLE ONLY time_parse_boss_kill_memberships
     ADD CONSTRAINT time_parse_boss_kill_memberships_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY time_parse_clear_time_members
-    ADD CONSTRAINT time_parse_clear_time_members_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY time_parse_clear_time_members
-    ADD CONSTRAINT time_parse_clear_time_members_snapshot_id_instance_id_key UNIQUE (snapshot_id, instance_id);
 
 ALTER TABLE ONLY time_parse_clear_time_memberships
     ADD CONSTRAINT time_parse_clear_time_members_tenant_id_policy_version_quer_key UNIQUE (tenant_id, policy_version, query_version, run_id);
@@ -2821,15 +2784,11 @@ CREATE INDEX idx_tpbk_memberships_cohort ON time_parse_boss_kill_memberships USI
 
 CREATE INDEX idx_tpbk_memberships_log_group ON time_parse_boss_kill_memberships USING btree (log_group_id);
 
-CREATE INDEX idx_tpbkm_cohort ON time_parse_boss_kill_members USING btree (snapshot_id, instance_name, encounter_name, difficulty_name, max_players);
-
 CREATE INDEX idx_tpct_memberships_cohort ON time_parse_clear_time_memberships USING btree (tenant_id, policy_version, query_version, instance_name, difficulty_name, max_players, start_time);
 
 CREATE INDEX idx_tpct_memberships_instance ON time_parse_clear_time_memberships USING btree (instance_id);
 
 CREATE INDEX idx_tpct_memberships_log_group ON time_parse_clear_time_memberships USING btree (log_group_id);
-
-CREATE INDEX idx_tpctm_cohort ON time_parse_clear_time_members USING btree (snapshot_id, instance_name, difficulty_name, max_players);
 
 CREATE INDEX idx_tps_tenant_lookback ON time_parse_snapshots USING btree (tenant_id, lookback_days, published_at DESC NULLS LAST);
 
@@ -3276,14 +3235,8 @@ ALTER TABLE ONLY talent_builds
 ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_default_dataset_id_fkey FOREIGN KEY (default_dataset_id) REFERENCES datasets(id);
 
-ALTER TABLE ONLY time_parse_boss_kill_members
-    ADD CONSTRAINT time_parse_boss_kill_members_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES time_parse_snapshots(id) ON DELETE CASCADE;
-
 ALTER TABLE ONLY time_parse_boss_kill_memberships
     ADD CONSTRAINT time_parse_boss_kill_memberships_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY time_parse_clear_time_members
-    ADD CONSTRAINT time_parse_clear_time_members_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES time_parse_snapshots(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY time_parse_clear_time_memberships
     ADD CONSTRAINT time_parse_clear_time_memberships_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
