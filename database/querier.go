@@ -476,6 +476,7 @@ type sqlcQuerier interface {
 	// cannot fill the whole board.
 	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
+	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults

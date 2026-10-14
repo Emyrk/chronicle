@@ -73,6 +73,12 @@ WHERE tenant_id = @tenant_id
 ORDER BY computed_at DESC
 LIMIT 1;
 
+-- name: HasParseScoreResultsForTenantInstance :one
+SELECT EXISTS (
+    SELECT 1 FROM parse_score_results
+    WHERE tenant_id = @tenant_id AND instance_id = @instance_id
+);
+
 -- name: GetParseScoreReceiptForInstance :many
 -- Get all receipts for an instance (any snapshot).
 SELECT * FROM parse_score_receipts
@@ -302,6 +308,12 @@ WHERE li.start_time >= @repair_since
     FROM parse_score_receipts receipt
     WHERE receipt.tenant_id = @tenant_id
       AND receipt.instance_id = candidates.instance_id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM parse_score_results result
+    WHERE result.tenant_id = @tenant_id
+      AND result.instance_id = candidates.instance_id
   )
 ORDER BY li.start_time DESC NULLS LAST
 LIMIT @max_rows;

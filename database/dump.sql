@@ -1379,7 +1379,6 @@ CREATE TABLE parse_score_memberships (
     player_guid text NOT NULL,
     instance_id uuid NOT NULL,
     log_group_id uuid NOT NULL,
-    instance_name text NOT NULL,
     difficulty_name text DEFAULT ''::text NOT NULL,
     max_players smallint DEFAULT 0 NOT NULL,
     player_class text NOT NULL,
@@ -2801,7 +2800,7 @@ CREATE INDEX idx_log_instances_realm_id ON log_instances USING btree (realm_id);
 
 CREATE UNIQUE INDEX idx_mod_requests_pending ON application_modification_requests USING btree (application_id, type, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE ((status = 'pending'::text) AND (type <> ALL (ARRAY['server'::text, 'realm'::text])));
 
-CREATE INDEX idx_parse_score_memberships_cohort ON parse_score_memberships USING btree (tenant_id, policy_version, query_version, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, killed_at);
+CREATE INDEX idx_parse_score_memberships_cohort ON parse_score_memberships USING btree (tenant_id, policy_version, query_version, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, killed_at);
 
 CREATE INDEX idx_parse_score_memberships_instance ON parse_score_memberships USING btree (instance_id);
 

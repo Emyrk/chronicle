@@ -21,31 +21,6 @@ import (
 	"github.com/riverqueue/river/rivertype"
 )
 
-// RetryDelays defines the bounded retry schedule for missing-snapshot retries.
-// Attempt 0 = immediate, then +24h, +48h (72h total), +7d (10d total).
-var RetryDelays = []time.Duration{
-	0,                  // attempt 0: immediate
-	24 * time.Hour,     // attempt 1: +24h
-	48 * time.Hour,     // attempt 2: +48h (72h total)
-	7 * 24 * time.Hour, // attempt 3: +7d (10d total)
-}
-
-// MaxParseScoreAttempts is the number of scheduled attempts before we stop.
-const MaxParseScoreAttempts = 4
-
-// MissingSnapshotRetryWindow bounds retries for historical instances. Once an
-// instance is older than the full retry schedule, a future snapshot cannot
-// become its canonical historical snapshot without an explicit backfill.
-const MissingSnapshotRetryWindow = 10 * 24 * time.Hour
-
-const (
-	RetryReasonNoPublishedSnapshot      = "no_published_snapshot"
-	RetryReasonNoCompatibleSnapshot     = "no_compatible_snapshot"
-	RetryReasonNoSnapshotBeforeInstance = "no_snapshot_before_instance"
-	RetryReasonNoEligibleSnapshot       = "no_eligible_snapshot"
-	RetryReasonInstanceTooOld           = "instance_older_than_retry_window"
-)
-
 // RepairLookbackDays bounds automatic repair to recent instances. Older parse
 // history is preserved as-is when snapshots are deleted, and missing old
 // projections are not backfilled automatically.
@@ -90,6 +65,16 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 			return nil
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("get existing parse score receipt: %w", err)
+		}
+
+		hasResults, err := tx.HasParseScoreResultsForTenantInstance(ctx, database.HasParseScoreResultsForTenantInstanceParams{
+			TenantID: tenantID, InstanceID: instanceID,
+		})
+		if err != nil {
+			return fmt.Errorf("check existing parse score results: %w", err)
+		}
+		if hasResults {
+			return nil
 		}
 
 		inst, err := tx.GetLogInstanceForScoring(ctx, instanceID)
@@ -169,7 +154,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 						Metric: metric.name, TenantID: tenantID,
 						PolicyVersion: int16(parsepolicy.PolicyVersion), QueryVersion: int16(QueryVersion),
 						Cutoff: cutoffDB, WindowStart: windowStartDB, ExcludeRunID: inst.RunID,
-						InstanceName: inst.InstanceName, EncounterName: ranking.EncounterName,
+						EncounterName:  ranking.EncounterName,
 						DifficultyName: ranking.DifficultyName, MaxPlayers: ranking.MaxPlayers,
 						PlayerClass: ranking.PlayerClass, CohortMode: string(cohortMode),
 						PlayerSpec: ranking.PlayerSpec, PlayerSubSpec: ranking.PlayerSubSpec,
@@ -222,139 +207,6 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 		return nil
 	}, nil)
 }
-
-// diagnoseMissingSnapshot distinguishes the common reasons the canonical
-// scoring lookup returned no rows. Diagnostics are best-effort and must not
-// turn a missing snapshot into a failed River job.
-func (w *WorkerComputeParseScores) diagnoseMissingSnapshot(
-	ctx context.Context,
-	logger *slog.Logger,
-	tenantID uuid.UUID,
-	instanceStart pgtype.Timestamptz,
-) string {
-	if instanceStart.Valid {
-		_, err := w.Store.GetScoringSnapshotLatest(ctx, database.GetScoringSnapshotLatestParams{
-			TenantID:      tenantID,
-			LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-			PolicyVersion: int16(parsepolicy.PolicyVersion),
-			QueryVersion:  int16(QueryVersion),
-		})
-		if err == nil {
-			return RetryReasonNoSnapshotBeforeInstance
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			logger.Warn("failed to diagnose compatible parse snapshot", slog.Any("error", err))
-			return RetryReasonNoEligibleSnapshot
-		}
-	}
-
-	latest, err := w.Store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
-		TenantID:     tenantID,
-		LookbackDays: int32(parsepolicy.DefaultLookbackDays),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return RetryReasonNoPublishedSnapshot
-	}
-	if err != nil {
-		logger.Warn("failed to diagnose latest parse snapshot", slog.Any("error", err))
-		return RetryReasonNoEligibleSnapshot
-	}
-
-	logger.Info("latest parse snapshot is incompatible with scoring worker",
-		slog.Int("snapshot_policy_version", int(latest.PolicyVersion)),
-		slog.Int("snapshot_query_version", int(latest.QueryVersion)),
-		slog.Int("required_policy_version", int(parsepolicy.PolicyVersion)),
-		slog.Int("required_query_version", QueryVersion),
-	)
-	return RetryReasonNoCompatibleSnapshot
-}
-
-// handleNoSnapshot handles the case when no eligible published snapshot exists.
-// It schedules a retry job if the instance and attempt are within the bounded
-// retry limit. No receipt is created; only successful completions produce one.
-func (w *WorkerComputeParseScores) handleNoSnapshot(
-	ctx context.Context,
-	logger *slog.Logger,
-	instanceID, tenantID uuid.UUID,
-	instanceStart pgtype.Timestamptz,
-	attempt int,
-	reason string,
-) error {
-	now := time.Now()
-	if instanceStart.Valid && instanceStart.Time.Before(now.Add(-MissingSnapshotRetryWindow)) {
-		reason = RetryReasonInstanceTooOld
-		logger.Info("instance predates parse snapshot retry window, stopping retry chain",
-			slog.String("reason", reason),
-			slog.Time("instance_start", instanceStart.Time),
-			slog.Duration("retry_window", MissingSnapshotRetryWindow),
-		)
-		_ = river.RecordOutput(ctx, map[string]any{
-			"reason":         reason,
-			"instance_start": instanceStart.Time,
-			"retry_stopped":  true,
-		})
-		return nil
-	}
-
-	nextAttempt := attempt + 1
-	if nextAttempt >= MaxParseScoreAttempts {
-		logger.Warn("exhausted retry attempts for missing snapshot, stopping retry chain",
-			slog.Int("total_attempts", nextAttempt),
-			slog.String("reason", reason),
-		)
-		_ = river.RecordOutput(ctx, map[string]any{
-			"reason":        reason,
-			"retry_stopped": true,
-		})
-		// No receipt created. Daily repair will re-enqueue only when
-		// an eligible snapshot becomes available.
-		return nil
-	}
-
-	delay := RetryDelays[nextAttempt]
-	nextTime := now.Add(delay)
-
-	// Enqueue a follow-up job scheduled at the delay time.
-	if w.Queue == nil {
-		logger.Warn("no queue available, cannot schedule retry", slog.String("reason", reason))
-		return nil
-	}
-	_, err := w.Queue.Insert(ctx, parseargs.ArgsComputeParseScores{
-		InstanceID:  instanceID,
-		TenantID:    tenantID,
-		Attempt:     nextAttempt,
-		RetryReason: reason,
-	}, &river.InsertOpts{
-		ScheduledAt: nextTime,
-	})
-	if err != nil {
-		logger.Error("failed to enqueue retry job",
-			"error", err,
-			"next_attempt", nextAttempt,
-			"reason", reason,
-		)
-		// Don't fail the job; daily repair will catch it.
-		return nil
-	}
-
-	logger.Info("no snapshot available, scheduled retry",
-		slog.Int("next_attempt", nextAttempt),
-		slog.Time("scheduled_at", nextTime),
-		slog.String("reason", reason),
-	)
-	_ = river.RecordOutput(ctx, map[string]any{
-		"reason":          reason,
-		"next_attempt":    nextAttempt,
-		"scheduled_at":    nextTime,
-		"retry_scheduled": true,
-	})
-
-	return nil
-}
-
-// ---------------------------------------------------------------------------
-// ArgsDispatchParseScoreRepairs — daily tenant fan-out.
-// ---------------------------------------------------------------------------
 
 const KindDispatchParseScoreRepairs = "dispatch-parse-score-repairs"
 
@@ -499,7 +351,7 @@ func (w *WorkerRepairParseScores) Work(ctx context.Context, job *river.Job[ArgsR
 		_, iErr := w.Queue.Insert(ctx, parseargs.ArgsComputeParseScores{
 			InstanceID: m.InstanceID,
 			TenantID:   tenantID,
-			Attempt:    0, // Fresh attempt — repair found an eligible snapshot.
+			Attempt:    0, // Fresh repair attempt; retained for queued-job compatibility.
 		}, nil)
 		if iErr != nil {
 			w.Logger.Error("failed to enqueue repair job",

@@ -10659,20 +10659,26 @@ func (q *sqlQuerier) DeleteParseScoreMembershipsByLogGroup(ctx context.Context, 
 const getParseScoreMembershipCohort = `-- name: GetParseScoreMembershipCohort :many
 SELECT CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value
 FROM parse_score_memberships membership
-WHERE membership.tenant_id = $2
+WHERE (
+      ($2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = $2)
+      OR
+      ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND (
+          membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          OR EXISTS (SELECT 1 FROM tenants tenant WHERE tenant.id = membership.tenant_id AND tenant.include_in_all)
+      ))
+  )
   AND membership.policy_version = $3
   AND membership.query_version = $4
   AND membership.killed_at < $5
   AND ($6::timestamptz IS NULL OR membership.killed_at >= $6)
   AND membership.run_id <> $7
-  AND membership.instance_name = $8
-  AND membership.encounter_name = $9
-  AND membership.difficulty_name = $10
-  AND membership.max_players = $11
-  AND membership.player_class = $12
-  AND ($13::text <> 'spec' OR (
-      membership.player_spec = $14
-      AND membership.player_sub_spec = $15
+  AND membership.encounter_name = $8
+  AND membership.difficulty_name = $9
+  AND membership.max_players = $10
+  AND membership.player_class = $11
+  AND ($12::text <> 'spec' OR (
+      membership.player_spec = $13
+      AND membership.player_sub_spec = $14
       AND lower(btrim(membership.player_spec)) NOT IN ('', 'unknown')
   ))
   AND CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
@@ -10686,7 +10692,6 @@ type GetParseScoreMembershipCohortParams struct {
 	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
 	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
 	ExcludeRunID   uuid.UUID          `db:"exclude_run_id" json:"exclude_run_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
 	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16              `db:"max_players" json:"max_players"`
@@ -10705,7 +10710,6 @@ func (q *sqlQuerier) GetParseScoreMembershipCohort(ctx context.Context, arg GetP
 		arg.Cutoff,
 		arg.WindowStart,
 		arg.ExcludeRunID,
-		arg.InstanceName,
 		arg.EncounterName,
 		arg.DifficultyName,
 		arg.MaxPlayers,
@@ -10733,7 +10737,7 @@ func (q *sqlQuerier) GetParseScoreMembershipCohort(ctx context.Context, arg GetP
 }
 
 const listParseScoreMemberships = `-- name: ListParseScoreMemberships :many
-SELECT id, tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, instance_id, log_group_id, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, killed_at, dps, hps
+SELECT id, tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, instance_id, log_group_id, difficulty_name, max_players, player_class, player_spec, player_sub_spec, killed_at, dps, hps
 FROM parse_score_memberships
 WHERE tenant_id = $1
   AND policy_version = $2
@@ -10766,7 +10770,6 @@ func (q *sqlQuerier) ListParseScoreMemberships(ctx context.Context, arg ListPars
 			&i.PlayerGuid,
 			&i.InstanceID,
 			&i.LogGroupID,
-			&i.InstanceName,
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.PlayerClass,
@@ -10817,7 +10820,6 @@ current_members AS MATERIALIZED (
         ranking.player_guid,
         ranking.instance_id,
         instance.log_group_id,
-        ranking.instance_name,
         ranking.difficulty_name,
         ranking.max_players,
         ranking.player_class,
@@ -10841,13 +10843,13 @@ current_members AS MATERIALIZED (
 upserted AS (
     INSERT INTO parse_score_memberships (
         tenant_id, policy_version, query_version, run_id, encounter_name, player_guid,
-        instance_id, log_group_id, instance_name, difficulty_name, max_players,
+        instance_id, log_group_id, difficulty_name, max_players,
         player_class, player_spec, player_sub_spec, killed_at, dps, hps
     )
     SELECT
         member.tenant_id, $2, $3, member.run_id,
         member.encounter_name, member.player_guid, member.instance_id,
-        member.log_group_id, member.instance_name, member.difficulty_name,
+        member.log_group_id, member.difficulty_name,
         member.max_players, member.player_class, member.player_spec,
         member.player_sub_spec, member.killed_at, member.dps, member.hps
     FROM current_members member
@@ -10855,7 +10857,6 @@ upserted AS (
     DO UPDATE SET
         instance_id = EXCLUDED.instance_id,
         log_group_id = EXCLUDED.log_group_id,
-        instance_name = EXCLUDED.instance_name,
         difficulty_name = EXCLUDED.difficulty_name,
         max_players = EXCLUDED.max_players,
         player_class = EXCLUDED.player_class,
@@ -11408,6 +11409,25 @@ func (q *sqlQuerier) GetScoringSnapshotLatest(ctx context.Context, arg GetScorin
 	return i, err
 }
 
+const hasParseScoreResultsForTenantInstance = `-- name: HasParseScoreResultsForTenantInstance :one
+SELECT EXISTS (
+    SELECT 1 FROM parse_score_results
+    WHERE tenant_id = $1 AND instance_id = $2
+)
+`
+
+type HasParseScoreResultsForTenantInstanceParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+func (q *sqlQuerier) HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasParseScoreResultsForTenantInstance, arg.TenantID, arg.InstanceID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const insertParseScoreReceipt = `-- name: InsertParseScoreReceipt :one
 INSERT INTO parse_score_receipts (
     tenant_id, instance_id, snapshot_id,
@@ -11720,6 +11740,12 @@ WHERE li.start_time >= $1
     FROM parse_score_receipts receipt
     WHERE receipt.tenant_id = $2
       AND receipt.instance_id = candidates.instance_id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM parse_score_results result
+    WHERE result.tenant_id = $2
+      AND result.instance_id = candidates.instance_id
   )
 ORDER BY li.start_time DESC NULLS LAST
 LIMIT $3

@@ -394,7 +394,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 						Metric: string(metric), TenantID: tid,
 						PolicyVersion: int16(parsepolicy.PolicyVersion), QueryVersion: int16(QueryVersion),
 						Cutoff: cutoffDB, WindowStart: windowStartDB, ExcludeRunID: memberRow.RunID,
-						InstanceName: memberRow.InstanceName, EncounterName: encName,
+						EncounterName:  encName,
 						DifficultyName: memberRow.DifficultyName, MaxPlayers: memberRow.MaxPlayers,
 						PlayerClass: memberRow.PlayerClass, CohortMode: string(cohortMode),
 						PlayerSpec: p.spec, PlayerSubSpec: p.subSpec,

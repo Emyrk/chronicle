@@ -165,13 +165,13 @@ func (f parsesTestFixture) publishSnapshot(t *testing.T) database.RankingSnapsho
 	_, err = conn.Exec(ctx, `
 		INSERT INTO parse_score_memberships (
 			tenant_id, policy_version, query_version, run_id, encounter_name, player_guid,
-			instance_id, log_group_id, instance_name, difficulty_name, max_players,
+			instance_id, log_group_id, difficulty_name, max_players,
 			player_class, player_spec, player_sub_spec, killed_at, dps, hps
 		)
 		SELECT
 			'00000000-0000-0000-0000-000000000000'::uuid, $2, $3, gen_random_uuid(),
 			ranking.encounter_name, ranking.player_guid, ranking.instance_id, instance.log_group_id,
-			ranking.instance_name, ranking.difficulty_name, ranking.max_players, ranking.player_class,
+			ranking.difficulty_name, ranking.max_players, ranking.player_class,
 			ranking.player_spec, ranking.player_sub_spec, ranking.killed_at, ranking.dps, ranking.hps
 		FROM encounter_dps_rankings ranking
 		JOIN log_instances instance ON instance.id = ranking.instance_id

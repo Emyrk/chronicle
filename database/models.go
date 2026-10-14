@@ -1827,7 +1827,6 @@ type ParseScoreMembership struct {
 	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
 	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
 	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16              `db:"max_players" json:"max_players"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`

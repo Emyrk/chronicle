@@ -18,11 +18,9 @@ const KindComputeParseScores = "compute-parse-scores"
 type ArgsComputeParseScores struct {
 	InstanceID uuid.UUID `json:"instance_id"`
 	TenantID   uuid.UUID `json:"tenant_id"`
-	// Attempt tracks the retry iteration for bounded retry scheduling.
-	// 0 = initial, 1 = +24h, 2 = +48h (72h total), 3 = +7d (10d total).
-	Attempt int `json:"attempt"`
-	// RetryReason records why the preceding attempt could not compute scores.
-	// It is carried into scheduled jobs so River UI explains long delays.
+	// Attempt and RetryReason are retained to decode jobs queued before windowed
+	// scoring removed snapshot retry scheduling. They are otherwise ignored.
+	Attempt     int    `json:"attempt"`
 	RetryReason string `json:"retry_reason,omitempty"`
 }
 

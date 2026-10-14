@@ -37,7 +37,6 @@ current_members AS MATERIALIZED (
         ranking.player_guid,
         ranking.instance_id,
         instance.log_group_id,
-        ranking.instance_name,
         ranking.difficulty_name,
         ranking.max_players,
         ranking.player_class,
@@ -61,13 +60,13 @@ current_members AS MATERIALIZED (
 upserted AS (
     INSERT INTO parse_score_memberships (
         tenant_id, policy_version, query_version, run_id, encounter_name, player_guid,
-        instance_id, log_group_id, instance_name, difficulty_name, max_players,
+        instance_id, log_group_id, difficulty_name, max_players,
         player_class, player_spec, player_sub_spec, killed_at, dps, hps
     )
     SELECT
         member.tenant_id, @policy_version, @query_version, member.run_id,
         member.encounter_name, member.player_guid, member.instance_id,
-        member.log_group_id, member.instance_name, member.difficulty_name,
+        member.log_group_id, member.difficulty_name,
         member.max_players, member.player_class, member.player_spec,
         member.player_sub_spec, member.killed_at, member.dps, member.hps
     FROM current_members member
@@ -75,7 +74,6 @@ upserted AS (
     DO UPDATE SET
         instance_id = EXCLUDED.instance_id,
         log_group_id = EXCLUDED.log_group_id,
-        instance_name = EXCLUDED.instance_name,
         difficulty_name = EXCLUDED.difficulty_name,
         max_players = EXCLUDED.max_players,
         player_class = EXCLUDED.player_class,
@@ -108,13 +106,19 @@ SELECT
 -- name: GetParseScoreMembershipCohort :many
 SELECT CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value
 FROM parse_score_memberships membership
-WHERE membership.tenant_id = @tenant_id
+WHERE (
+      (@tenant_id::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = @tenant_id)
+      OR
+      (@tenant_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND (
+          membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          OR EXISTS (SELECT 1 FROM tenants tenant WHERE tenant.id = membership.tenant_id AND tenant.include_in_all)
+      ))
+  )
   AND membership.policy_version = @policy_version
   AND membership.query_version = @query_version
   AND membership.killed_at < @cutoff
   AND (@window_start::timestamptz IS NULL OR membership.killed_at >= @window_start)
   AND membership.run_id <> @exclude_run_id
-  AND membership.instance_name = @instance_name
   AND membership.encounter_name = @encounter_name
   AND membership.difficulty_name = @difficulty_name
   AND membership.max_players = @max_players
