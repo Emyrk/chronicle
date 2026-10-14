@@ -14,6 +14,17 @@ import (
 // which arrive as cross-site navigations without an Origin header.
 func BrowserOnly(accessURL *url.URL, allowedCrossSitePaths ...string) func(next http.Handler) http.Handler {
 	isDev := strings.Contains(accessURL.Host, "localhost") || strings.Contains(accessURL.String(), "192.168.1")
+	isSameOrigin := func(r *http.Request, origin string) bool {
+		parsed, err := url.Parse(origin)
+		if err != nil || parsed.User != nil || parsed.Host == "" {
+			return false
+		}
+		scheme := "http"
+		if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+			scheme = "https"
+		}
+		return strings.EqualFold(parsed.Scheme, scheme) && strings.EqualFold(parsed.Host, r.Host)
+	}
 	isAllowedCrossSitePath := func(path string) bool {
 		for _, allowedPath := range allowedCrossSitePaths {
 			if path == allowedPath {
@@ -44,8 +55,14 @@ func BrowserOnly(accessURL *url.URL, allowedCrossSitePaths ...string) func(next 
 				return
 			}
 			if site == "" || site == "cross-site" {
-				// TODO: Standardize this more
+				// WebSocket handshakes do not consistently include Fetch Metadata
+				// headers, so accept a verified same-origin Origin as a fallback.
 				origin := r.Header.Get("Origin")
+				if isSameOrigin(r, origin) {
+					next.ServeHTTP(w, r)
+					return
+				}
+				// TODO: Standardize this more
 				switch strings.TrimSuffix(origin, "/") {
 				case "https://jollygrin.github.io":
 				case "https://chronicleclassic.com":
