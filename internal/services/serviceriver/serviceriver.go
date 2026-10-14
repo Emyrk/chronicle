@@ -213,15 +213,6 @@ func (s *Service) Start(ctx context.Context) error {
 			&river.PeriodicJobOpts{RunOnStart: true},
 		),
 	)
-	q.AddPeriodicJob(
-		river.NewPeriodicJob(
-			river.PeriodicInterval(1*time.Hour),
-			func() (river.JobArgs, *river.InsertOpts) {
-				return servicerankings.ArgsPublishParseSnapshots{}, nil
-			},
-			&river.PeriodicJobOpts{RunOnStart: true},
-		),
-	)
 	// Daily bounded repair fan-out for root and every parse-enabled tenant.
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(

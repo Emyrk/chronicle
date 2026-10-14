@@ -13,6 +13,7 @@ import (
 )
 
 type sqlcQuerier interface {
+	AcquireParseScoreLock(ctx context.Context, lockKey string) error
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
 	AcquireTimeParseScoreLock(ctx context.Context, instanceID string) error
@@ -112,6 +113,9 @@ type sqlcQuerier interface {
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
 	DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error)
 	DeleteOrphanCustomPanelReleases(ctx context.Context) (int64, error)
+	DeleteParseScoreMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
+	// Compact current-known membership for DPS/HPS parse cohorts.
+	DeleteParseScoreMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
 	// Remove parse score results for a tenant+instance (before re-computation).
 	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
 	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
@@ -181,6 +185,7 @@ type sqlcQuerier interface {
 	// Item name/quality/icon/level are read from the snapshot jsonb itself,
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
+	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
 	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
@@ -309,6 +314,7 @@ type sqlcQuerier interface {
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
+	GetParseScoreMembershipCohort(ctx context.Context, arg GetParseScoreMembershipCohortParams) ([]float64, error)
 	// Get receipt by instance + snapshot.
 	GetParseScoreReceipt(ctx context.Context, arg GetParseScoreReceiptParams) (ParseScoreReceipt, error)
 	// Verify that a persisted projection completed successfully for this exact
@@ -525,6 +531,9 @@ type sqlcQuerier interface {
 	InsertUserAuthSession(ctx context.Context, arg InsertUserAuthSessionParams) (UserAuthSession, error)
 	InsertUserCharacterLink(ctx context.Context, arg InsertUserCharacterLinkParams) (UserCharacterLink, error)
 	InsertUserPassword(ctx context.Context, arg InsertUserPasswordParams) (UserPassword, error)
+	// New scoring contracts are identified by the target instance cutoff and do not
+	// require a ranking snapshot.
+	InsertWindowedParseScoreReceipt(ctx context.Context, arg InsertWindowedParseScoreReceiptParams) (ParseScoreReceipt, error)
 	InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGroupParams) (WoWLogGroup, error)
 	InsertWoWServer(ctx context.Context, arg InsertWoWServerParams) (WowServer, error)
 	InsertWoWServerRealm(ctx context.Context, arg InsertWoWServerRealmParams) (WowServerRealm, error)
@@ -607,6 +616,10 @@ type sqlcQuerier interface {
 	// old instances, snapshot deletion/rebuild, and policy/query changes.
 	// Returns at most @max_rows rows for bounded batch processing.
 	ListInstancesMissingParseReceipt(ctx context.Context, arg ListInstancesMissingParseReceiptParams) ([]ListInstancesMissingParseReceiptRow, error)
+	// Bound automatic repair to recent instances with no successful parse receipt at
+	// all. Legacy snapshot-backed receipts remain authoritative and are never
+	// selected merely because windowed scoring uses a newer query version.
+	ListInstancesMissingParseReceiptWindowed(ctx context.Context, arg ListInstancesMissingParseReceiptWindowedParams) ([]ListInstancesMissingParseReceiptWindowedRow, error)
 	// Repair query: resolve each visible instance's canonical historical snapshot,
 	// then return instances that lack a successful receipt for that exact tenant,
 	// snapshot, lookback, policy, and query contract. RLS on
@@ -620,6 +633,7 @@ type sqlcQuerier interface {
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
+	ListParseScoreMemberships(ctx context.Context, arg ListParseScoreMembershipsParams) ([]ParseScoreMembership, error)
 	// Read one persisted result per player and encounter for an exact completed
 	// snapshot contract. Results whose snapshot was deleted are intentionally not
 	// eligible because their receipt is deleted with the snapshot.
@@ -686,6 +700,7 @@ type sqlcQuerier interface {
 	ListUserPanelLayouts(ctx context.Context, userID uuid.NullUUID) ([]ListUserPanelLayoutsRow, error)
 	ListUserTalentBuilds(ctx context.Context, arg ListUserTalentBuildsParams) ([]UserTalentBuild, error)
 	ListVulnerabilitySpellsByDataset(ctx context.Context, arg ListVulnerabilitySpellsByDatasetParams) ([]ListVulnerabilitySpellsByDatasetRow, error)
+	ListWindowedParseScoreResultsForContract(ctx context.Context, arg ListWindowedParseScoreResultsForContractParams) ([]ParseScoreResult, error)
 	// Realms
 	ListWoWServerRealms(ctx context.Context, serverID uuid.UUID) ([]WowServerRealm, error)
 	// Servers
@@ -768,6 +783,7 @@ type sqlcQuerier interface {
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
 	RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error)
+	RefreshParseScoreMembershipsForLogGroup(ctx context.Context, arg RefreshParseScoreMembershipsForLogGroupParams) (RefreshParseScoreMembershipsForLogGroupRow, error)
 	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseBossKillMembershipsForLogGroupParams) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
 	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)

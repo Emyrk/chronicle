@@ -2,6 +2,7 @@ package servicerankings
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -53,7 +54,7 @@ const RepairLookbackDays = 30
 // QueryVersion is bumped when the SQL query semantics change (e.g. cohort
 // selection, snapshot membership filters). This is separate from PolicyVersion
 // which tracks scoring algorithm changes.
-const QueryVersion = 3
+const QueryVersion = parsepolicy.QueryVersion
 
 // WorkerComputeParseScores computes and persists parse scores for a single instance.
 type WorkerComputeParseScores struct {
@@ -70,259 +71,156 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 	if tenantID != uuid.Nil {
 		ctx = servicetenant.WithTenantID(ctx, tenantID)
 	}
-	attempt := job.Args.Attempt
 
 	logger := w.Logger.With(
 		slog.String("instance_id", instanceID.String()),
 		slog.String("tenant_id", tenantID.String()),
-		slog.Int("attempt", attempt),
-		slog.String("retry_reason", job.Args.RetryReason),
 	)
 
-	// Fetch instance metadata.
-	inst, err := w.Store.GetLogInstanceForScoring(ctx, instanceID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			logger.Warn("instance not found, cancelling job")
-			return river.JobCancel(fmt.Errorf("instance %s not found", instanceID))
+	return w.Store.InTx(ctx, func(tx database.Store) error {
+		if err := tx.AcquireParseScoreLock(ctx, instanceID.String()); err != nil {
+			return fmt.Errorf("acquire parse score lock: %w", err)
 		}
-		return fmt.Errorf("get instance: %w", err)
-	}
 
-	// Resolve the canonical historical snapshot: latest published cutoff
-	// <= instance start for this tenant, default lookback, AND matching
-	// current policy/query version. Version filtering is done in SQL so
-	// an incompatible newer snapshot cannot hide a compatible older one.
-	var snapshot database.RankingSnapshot
-	if inst.StartTime.Valid {
-		snapshot, err = w.Store.GetScoringSnapshotBefore(ctx, database.GetScoringSnapshotBeforeParams{
-			TenantID:      tenantID,
-			LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-			Before:        inst.StartTime,
-			PolicyVersion: int16(parsepolicy.PolicyVersion),
-			QueryVersion:  int16(QueryVersion),
-		})
-	} else {
-		snapshot, err = w.Store.GetScoringSnapshotLatest(ctx, database.GetScoringSnapshotLatestParams{
-			TenantID:      tenantID,
-			LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-			PolicyVersion: int16(parsepolicy.PolicyVersion),
-			QueryVersion:  int16(QueryVersion),
-		})
-	}
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			reason := w.diagnoseMissingSnapshot(ctx, logger, tenantID, inst.StartTime)
-			return w.handleNoSnapshot(ctx, logger, instanceID, tenantID, inst.StartTime, attempt, reason)
-		}
-		return fmt.Errorf("resolve snapshot: %w", err)
-	}
-
-	// Load the instance's ranking rows from encounter_dps_rankings.
-	rankings, err := w.Store.ListRankingsForInstance(ctx, instanceID)
-	if err != nil {
-		return fmt.Errorf("list rankings: %w", err)
-	}
-
-	sourceCount := len(rankings)
-
-	if sourceCount == 0 {
-		logger.Debug("no rankings for instance, writing empty receipt")
-		// Atomic: empty receipt in a transaction.
-		return w.Store.InTx(ctx, func(tx database.Store) error {
-			if _, err := tx.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
-				TenantID:      tenantID,
-				InstanceID:    instanceID,
-				SnapshotID:    snapshot.ID,
-				PolicyVersion: int16(parsepolicy.PolicyVersion),
-				QueryVersion:  int16(QueryVersion),
-				LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
-				SourceCount:   0,
-				ResultCount:   0,
-			}); err != nil {
-				return fmt.Errorf("insert empty receipt: %w", err)
-			}
+		// Any successful receipt, including a legacy snapshot-backed receipt, is
+		// authoritative. The membership cutover must not rewrite persisted history.
+		if _, err := tx.GetAnyParseScoreReceiptForTenantInstance(ctx, database.GetAnyParseScoreReceiptForTenantInstanceParams{
+			TenantID: tenantID, InstanceID: instanceID,
+		}); err == nil {
 			return nil
-		}, nil)
-	}
-
-	snapshotCohortMode := parsepolicy.CohortMode(snapshot.CohortMode)
-
-	// Compute and persist scores per encounter, per player, for BOTH DPS and HPS.
-	// Separate cohort cache keys per metric.
-	dpsCohortCache := make(map[string][]float64)
-	hpsCohortCache := make(map[string][]float64)
-	var scored int
-
-	// Build identity fields for results.
-	logGroupID := uuid.NullUUID{UUID: inst.LogGroupID, Valid: inst.LogGroupID != uuid.Nil}
-	guildID := inst.GuildID
-
-	scoringSnapshotID := uuid.NullUUID{UUID: snapshot.ID, Valid: true}
-
-	// Atomic transaction: delete old results + insert new results + receipt.
-	// Delete is scoped to (tenant_id, instance_id) so one tenant cannot
-	// erase another's projections.
-	txErr := w.Store.InTx(ctx, func(tx database.Store) error {
-		// Delete previous results for this tenant+instance inside the
-		// transaction so replacement is atomic.
-		if dErr := tx.DeleteParseScoreResultsForTenantInstance(ctx, database.DeleteParseScoreResultsForTenantInstanceParams{
-			TenantID:   tenantID,
-			InstanceID: instanceID,
-		}); dErr != nil {
-			return fmt.Errorf("delete old results: %w", dErr)
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("get existing parse score receipt: %w", err)
 		}
 
-		for _, r := range rankings {
-			// Score both DPS and HPS for each ranking row.
-			type metricEntry struct {
-				metric string
-				value  float64
-				cache  map[string][]float64
+		inst, err := tx.GetLogInstanceForScoring(ctx, instanceID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return river.JobCancel(fmt.Errorf("instance %s not found or invalidated", instanceID))
 			}
-			metrics := []metricEntry{
-				{"dps", r.Dps, dpsCohortCache},
-				{"hps", r.Hps, hpsCohortCache},
-			}
+			return fmt.Errorf("get instance: %w", err)
+		}
+		if !inst.StartTime.Valid {
+			return river.JobCancel(fmt.Errorf("instance %s has no start time", instanceID))
+		}
 
-			for _, m := range metrics {
-				if m.value <= 0 {
+		cohortMode := parsepolicy.CohortModeSpec
+		if tenantID != uuid.Nil {
+			tenant, tenantErr := tx.GetTenantByID(ctx, tenantID)
+			if tenantErr != nil {
+				return fmt.Errorf("get tenant parse config: %w", tenantErr)
+			}
+			if len(tenant.ParseConfig) > 0 {
+				var config struct {
+					CohortMode parsepolicy.CohortMode `json:"cohort_mode"`
+				}
+				if err := json.Unmarshal(tenant.ParseConfig, &config); err != nil {
+					return fmt.Errorf("decode tenant parse config: %w", err)
+				}
+				if config.CohortMode != "" {
+					cohortMode = config.CohortMode
+				}
+			}
+		}
+		if cohortMode == parsepolicy.CohortModeDisabled {
+			return river.JobCancel(fmt.Errorf("parse scoring disabled for tenant %s", tenantID))
+		}
+
+		cutoff := inst.StartTime.Time.UTC()
+		windowStart := cutoff.AddDate(0, 0, -int(parsepolicy.DefaultLookbackDays))
+		cutoffDB := pgtype.Timestamptz{Time: cutoff, Valid: true}
+		windowStartDB := pgtype.Timestamptz{Time: windowStart, Valid: true}
+
+		rankings, err := tx.ListRankingsForInstance(ctx, instanceID)
+		if err != nil {
+			return fmt.Errorf("list rankings: %w", err)
+		}
+		sourceCount := len(rankings)
+
+		if err := tx.DeleteParseScoreResultsForTenantInstance(ctx, database.DeleteParseScoreResultsForTenantInstanceParams{
+			TenantID: tenantID, InstanceID: instanceID,
+		}); err != nil {
+			return fmt.Errorf("delete incomplete results: %w", err)
+		}
+
+		dpsCohortCache := make(map[string][]float64)
+		hpsCohortCache := make(map[string][]float64)
+		logGroupID := uuid.NullUUID{UUID: inst.LogGroupID, Valid: inst.LogGroupID != uuid.Nil}
+		var scored int
+
+		for _, ranking := range rankings {
+			metrics := []struct {
+				name  string
+				value float64
+				cache map[string][]float64
+			}{
+				{name: "dps", value: ranking.Dps, cache: dpsCohortCache},
+				{name: "hps", value: ranking.Hps, cache: hpsCohortCache},
+			}
+			for _, metric := range metrics {
+				if metric.value <= 0 {
 					continue
 				}
-
-				// Build cohort key (separate per metric).
-				var playerSpec, playerSubSpec pgtype.Text
-				if snapshotCohortMode == parsepolicy.CohortModeSpec {
-					playerSpec = pgtype.Text{String: r.PlayerSpec, Valid: true}
-					playerSubSpec = pgtype.Text{String: r.PlayerSubSpec, Valid: true}
-				}
-
-				bucketKey := fmt.Sprintf("%s|%s|%d|%s|%s|%s",
-					r.EncounterName, r.DifficultyName, r.MaxPlayers,
-					r.PlayerClass, playerSpec.String, playerSubSpec.String)
-
-				cohort, cached := m.cache[bucketKey]
-				if !cached {
-					cohortRows, cErr := tx.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
-						Metric:         m.metric,
-						SnapshotID:     snapshot.ID,
-						EncounterName:  r.EncounterName,
-						DifficultyName: r.DifficultyName,
-						MaxPlayers:     r.MaxPlayers,
-						PlayerClass:    r.PlayerClass,
-						PlayerSpec:     playerSpec,
-						PlayerSubSpec:  playerSubSpec,
-					})
-					if cErr != nil {
-						return fmt.Errorf("load %s cohort for encounter %q: %w", m.metric, r.EncounterName, cErr)
-					}
-					cohort = make([]float64, 0, len(cohortRows))
-					for _, cr := range cohortRows {
-						if v, ok := toFloat64(cr.MetricValue); ok && v > 0 {
-							cohort = append(cohort, v)
-						}
-					}
-					m.cache[bucketKey] = cohort
-				}
-
-				scoreResult, ok := parsepolicy.Score(cohort, m.value)
-				status := string(scoreResult.Status)
+				key := fmt.Sprintf("%s|%s|%d|%s|%s|%s", ranking.EncounterName,
+					ranking.DifficultyName, ranking.MaxPlayers, ranking.PlayerClass,
+					ranking.PlayerSpec, ranking.PlayerSubSpec)
+				cohort, ok := metric.cache[key]
 				if !ok {
-					// Persist sample_too_small for complete accounting.
-					if scoreResult.Status == parsepolicy.StatusSampleTooSmall {
-						if iErr := tx.InsertParseScoreResult(ctx, database.InsertParseScoreResultParams{
-							TenantID:       tenantID,
-							InstanceID:     instanceID,
-							RunID:          inst.RunID,
-							SnapshotID:     scoringSnapshotID,
-							LogGroupID:     logGroupID,
-							GuildID:        guildID,
-							EncounterName:  r.EncounterName,
-							PlayerGuid:     r.PlayerGuid,
-							PlayerName:     r.PlayerName,
-							PlayerClass:    r.PlayerClass,
-							PlayerSpec:     r.PlayerSpec,
-							PlayerSubSpec:  r.PlayerSubSpec,
-							PlayerRole:     r.PlayerRole,
-							Metric:         m.metric,
-							MetricValue:    m.value,
-							PreciseScore:   0,
-							DisplayScore:   0,
-							Rank:           0,
-							SampleSize:     int32(scoreResult.SampleSize),
-							Status:         status,
-							InstanceName:   inst.InstanceName,
-							DifficultyName: inst.DifficultyName,
-							MaxPlayers:     int16(inst.MaxPlayers),
-							KilledAt:       r.KilledAt,
-						}); iErr != nil {
-							return fmt.Errorf("insert sample_too_small result: %w", iErr)
-						}
-						scored++
+					cohort, err = tx.GetParseScoreMembershipCohort(ctx, database.GetParseScoreMembershipCohortParams{
+						Metric: metric.name, TenantID: tenantID,
+						PolicyVersion: int16(parsepolicy.PolicyVersion), QueryVersion: int16(QueryVersion),
+						Cutoff: cutoffDB, WindowStart: windowStartDB, ExcludeRunID: inst.RunID,
+						InstanceName: inst.InstanceName, EncounterName: ranking.EncounterName,
+						DifficultyName: ranking.DifficultyName, MaxPlayers: ranking.MaxPlayers,
+						PlayerClass: ranking.PlayerClass, CohortMode: string(cohortMode),
+						PlayerSpec: ranking.PlayerSpec, PlayerSubSpec: ranking.PlayerSubSpec,
+					})
+					if err != nil {
+						return fmt.Errorf("load %s membership cohort for encounter %q: %w", metric.name, ranking.EncounterName, err)
 					}
-					continue
+					metric.cache[key] = cohort
 				}
 
-				if iErr := tx.InsertParseScoreResult(ctx, database.InsertParseScoreResultParams{
-					TenantID:       tenantID,
-					InstanceID:     instanceID,
-					RunID:          inst.RunID,
-					SnapshotID:     scoringSnapshotID,
-					LogGroupID:     logGroupID,
-					GuildID:        guildID,
-					EncounterName:  r.EncounterName,
-					PlayerGuid:     r.PlayerGuid,
-					PlayerName:     r.PlayerName,
-					PlayerClass:    r.PlayerClass,
-					PlayerSpec:     r.PlayerSpec,
-					PlayerSubSpec:  r.PlayerSubSpec,
-					PlayerRole:     r.PlayerRole,
-					Metric:         m.metric,
-					MetricValue:    m.value,
-					PreciseScore:   scoreResult.PreciseScore,
-					DisplayScore:   int16(scoreResult.DisplayScore),
-					Rank:           int32(scoreResult.Rank),
-					SampleSize:     int32(scoreResult.SampleSize),
-					Status:         status,
-					InstanceName:   inst.InstanceName,
-					DifficultyName: inst.DifficultyName,
-					MaxPlayers:     int16(inst.MaxPlayers),
-					KilledAt:       r.KilledAt,
-				}); iErr != nil {
-					return fmt.Errorf("insert score result: %w", iErr)
+				scoreResult, scoreOK := parsepolicy.Score(cohort, metric.value)
+				if !scoreOK && scoreResult.Status != parsepolicy.StatusSampleTooSmall {
+					continue
+				}
+				preciseScore := scoreResult.PreciseScore
+				displayScore := int16(scoreResult.DisplayScore)
+				rank := int32(scoreResult.Rank)
+				if !scoreOK {
+					preciseScore, displayScore, rank = 0, 0, 0
+				}
+				if err := tx.InsertParseScoreResult(ctx, database.InsertParseScoreResultParams{
+					TenantID: tenantID, InstanceID: instanceID, RunID: inst.RunID,
+					SnapshotID: uuid.NullUUID{}, LogGroupID: logGroupID, GuildID: inst.GuildID,
+					EncounterName: ranking.EncounterName, PlayerGuid: ranking.PlayerGuid,
+					PlayerName: ranking.PlayerName, PlayerClass: ranking.PlayerClass,
+					PlayerSpec: ranking.PlayerSpec, PlayerSubSpec: ranking.PlayerSubSpec,
+					PlayerRole: ranking.PlayerRole, Metric: metric.name, MetricValue: metric.value,
+					PreciseScore: preciseScore, DisplayScore: displayScore, Rank: rank,
+					SampleSize: int32(scoreResult.SampleSize), Status: string(scoreResult.Status),
+					InstanceName: inst.InstanceName, DifficultyName: inst.DifficultyName,
+					MaxPlayers: int16(inst.MaxPlayers), KilledAt: ranking.KilledAt,
+				}); err != nil {
+					return fmt.Errorf("insert %s score result: %w", metric.name, err)
 				}
 				scored++
 			}
 		}
 
-		// Receipt inside the same transaction: atomic with results.
-		if _, rErr := tx.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
-			TenantID:      tenantID,
-			InstanceID:    instanceID,
-			SnapshotID:    snapshot.ID,
-			PolicyVersion: int16(parsepolicy.PolicyVersion),
-			QueryVersion:  int16(QueryVersion),
-			LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
-			SourceCount:   int32(sourceCount),
-			ResultCount:   int32(scored),
-		}); rErr != nil {
-			return fmt.Errorf("insert receipt: %w", rErr)
+		if _, err := tx.InsertWindowedParseScoreReceipt(ctx, database.InsertWindowedParseScoreReceiptParams{
+			TenantID: tenantID, InstanceID: instanceID,
+			PolicyVersion: int16(parsepolicy.PolicyVersion), QueryVersion: int16(QueryVersion),
+			LookbackDays: int16(parsepolicy.DefaultLookbackDays), SourceCount: int32(sourceCount),
+			ResultCount: int32(scored), Cutoff: cutoffDB, WindowStart: windowStartDB,
+			CohortMode: pgtype.Text{String: string(cohortMode), Valid: true},
+		}); err != nil {
+			return fmt.Errorf("insert windowed parse score receipt: %w", err)
 		}
 
+		logger.Info("computed windowed parse scores", slog.Int("source_count", sourceCount), slog.Int("result_count", scored))
 		return nil
 	}, nil)
-
-	if txErr != nil {
-		return fmt.Errorf("scoring transaction: %w", txErr)
-	}
-
-	logger.Info("computed parse scores",
-		slog.Int("source_count", sourceCount),
-		slog.Int("result_count", scored),
-		slog.String("snapshot_id", snapshot.ID.String()),
-	)
-
-	return nil
 }
 
 // diagnoseMissingSnapshot distinguishes the common reasons the canonical
@@ -580,16 +478,12 @@ func (w *WorkerRepairParseScores) Work(ctx context.Context, job *river.Job[ArgsR
 		return nil
 	}
 
-	// Per-instance canonical repair resolves each recent instance's historical
-	// snapshot via a LATERAL join. Instances older than RepairLookbackDays or
-	// without an eligible snapshot are excluded.
-	missing, err := w.Store.ListInstancesMissingParseReceiptWithSnapshot(ctx, database.ListInstancesMissingParseReceiptWithSnapshotParams{
-		TenantID:      tenantID,
-		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(QueryVersion),
-		RepairSince:   pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -RepairLookbackDays), Valid: true},
-		MaxRows:       100,
+	// Only instances with no successful receipt are eligible. Legacy
+	// snapshot-backed receipts remain authoritative across the cutover.
+	missing, err := w.Store.ListInstancesMissingParseReceiptWindowed(ctx, database.ListInstancesMissingParseReceiptWindowedParams{
+		TenantID:    tenantID,
+		RepairSince: pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -RepairLookbackDays), Valid: true},
+		MaxRows:     100,
 	})
 	if err != nil {
 		return fmt.Errorf("list missing receipts: %w", err)

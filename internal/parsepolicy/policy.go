@@ -11,6 +11,9 @@ package parsepolicy
 // Snapshots record which version produced them so results are reproducible.
 const PolicyVersion = 1
 
+// QueryVersion is bumped when cohort membership or window selection changes.
+const QueryVersion = 4
+
 // Metric identifies what is being scored.
 type Metric string
 
@@ -60,8 +63,8 @@ const (
 type Status string
 
 const (
-	StatusOK            Status = "ok"
-	StatusLowConfidence Status = "low_confidence"
+	StatusOK             Status = "ok"
+	StatusLowConfidence  Status = "low_confidence"
 	StatusSampleTooSmall Status = "sample_too_small"
 )
 

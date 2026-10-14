@@ -1369,18 +1369,42 @@ CREATE TABLE oauth_relay_codes (
     CONSTRAINT oauth_relay_codes_code_hash_length CHECK ((octet_length(code_hash) = 32))
 );
 
+CREATE TABLE parse_score_memberships (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    policy_version smallint NOT NULL,
+    query_version smallint NOT NULL,
+    run_id uuid NOT NULL,
+    encounter_name text NOT NULL,
+    player_guid text NOT NULL,
+    instance_id uuid NOT NULL,
+    log_group_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    player_class text NOT NULL,
+    player_spec text NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL,
+    killed_at timestamp with time zone NOT NULL,
+    dps double precision NOT NULL,
+    hps double precision DEFAULT 0 NOT NULL
+);
+
 CREATE TABLE parse_score_receipts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
     instance_id uuid NOT NULL,
-    snapshot_id uuid NOT NULL,
+    snapshot_id uuid,
     policy_version smallint DEFAULT 1 NOT NULL,
     query_version smallint DEFAULT 1 NOT NULL,
     lookback_days smallint DEFAULT 60 NOT NULL,
     source_count integer DEFAULT 0 NOT NULL,
     result_count integer DEFAULT 0 NOT NULL,
     computed_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    cutoff timestamp with time zone,
+    window_start timestamp with time zone,
+    cohort_mode text
 );
 
 CREATE TABLE parse_score_results (
@@ -2444,11 +2468,14 @@ ALTER TABLE ONLY log_instances
 ALTER TABLE ONLY oauth_relay_codes
     ADD CONSTRAINT oauth_relay_codes_pkey PRIMARY KEY (code_hash);
 
-ALTER TABLE ONLY parse_score_receipts
-    ADD CONSTRAINT parse_score_receipts_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY parse_score_memberships
+    ADD CONSTRAINT parse_score_memberships_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY parse_score_memberships
+    ADD CONSTRAINT parse_score_memberships_tenant_id_policy_version_query_vers_key UNIQUE (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid);
 
 ALTER TABLE ONLY parse_score_receipts
-    ADD CONSTRAINT parse_score_receipts_tenant_id_instance_id_snapshot_id_look_key UNIQUE (tenant_id, instance_id, snapshot_id, lookback_days, policy_version, query_version);
+    ADD CONSTRAINT parse_score_receipts_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY parse_score_results
     ADD CONSTRAINT parse_score_results_pkey PRIMARY KEY (id);
@@ -2773,6 +2800,16 @@ CREATE INDEX idx_log_instances_logical_run ON log_instances USING btree (COALESC
 CREATE INDEX idx_log_instances_realm_id ON log_instances USING btree (realm_id);
 
 CREATE UNIQUE INDEX idx_mod_requests_pending ON application_modification_requests USING btree (application_id, type, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE ((status = 'pending'::text) AND (type <> ALL (ARRAY['server'::text, 'realm'::text])));
+
+CREATE INDEX idx_parse_score_memberships_cohort ON parse_score_memberships USING btree (tenant_id, policy_version, query_version, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, killed_at);
+
+CREATE INDEX idx_parse_score_memberships_instance ON parse_score_memberships USING btree (instance_id);
+
+CREATE INDEX idx_parse_score_memberships_log_group ON parse_score_memberships USING btree (log_group_id);
+
+CREATE UNIQUE INDEX idx_parse_score_receipts_legacy_contract ON parse_score_receipts USING btree (tenant_id, instance_id, snapshot_id, lookback_days, policy_version, query_version) WHERE (snapshot_id IS NOT NULL);
+
+CREATE UNIQUE INDEX idx_parse_score_receipts_window_contract ON parse_score_receipts USING btree (tenant_id, instance_id, lookback_days, policy_version, query_version) WHERE (snapshot_id IS NULL);
 
 CREATE INDEX idx_parse_score_results_instance_id ON parse_score_results USING btree (instance_id);
 
@@ -3195,6 +3232,12 @@ ALTER TABLE ONLY log_instances
 
 ALTER TABLE ONLY oauth_relay_codes
     ADD CONSTRAINT oauth_relay_codes_user_auth_session_id_fkey FOREIGN KEY (user_auth_session_id) REFERENCES user_auth_session(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY parse_score_memberships
+    ADD CONSTRAINT parse_score_memberships_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY parse_score_memberships
+    ADD CONSTRAINT parse_score_memberships_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY parse_score_receipts
     ADD CONSTRAINT parse_score_receipts_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;

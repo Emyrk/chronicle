@@ -1817,11 +1817,32 @@ type OauthRelayCode struct {
 	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type ParseScoreMembership struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	Dps            float64            `db:"dps" json:"dps"`
+	Hps            float64            `db:"hps" json:"hps"`
+}
+
 type ParseScoreReceipt struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
 	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
-	SnapshotID    uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+	SnapshotID    uuid.NullUUID      `db:"snapshot_id" json:"snapshot_id"`
 	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
 	QueryVersion  int16              `db:"query_version" json:"query_version"`
 	LookbackDays  int16              `db:"lookback_days" json:"lookback_days"`
@@ -1829,6 +1850,9 @@ type ParseScoreReceipt struct {
 	ResultCount   int32              `db:"result_count" json:"result_count"`
 	ComputedAt    pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	CohortMode    pgtype.Text        `db:"cohort_mode" json:"cohort_mode"`
 }
 
 type ParseScoreResult struct {
