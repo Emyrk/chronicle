@@ -6,12 +6,17 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
 // LiveLogName is the cumulative log WoW writes when combatLogUniqueFilename is
 // off, and the only file that is archived.
 const LiveLogName = "WoWCombatLog.txt"
+
+// archivePrefix starts the name of a log renamed by Archive. Such files match
+// the WoWCombatLog-*.txt pattern but are finished, so LogFiles skips them.
+const archivePrefix = "WoWCombatLog-uploaded-"
 
 // File is a combat log file and its size at the time of the poll.
 type File struct {
@@ -20,8 +25,8 @@ type File struct {
 }
 
 // LogFiles lists WoWCombatLog.txt and WoWCombatLog-*.txt (the latter is what
-// the combatLogUniqueFilename CVar produces) in each log directory. Sizes are
-// polled rather than watched: the client flushes in large batches and
+// the combatLogUniqueFilename CVar produces) in each log directory, except the
+// archives made by Archive. Sizes are polled rather than watched: the client flushes in large batches and
 // filesystem notifications are unreliable across OSes.
 func LogFiles(logDirs []string) []File {
 	var out []File
@@ -33,6 +38,9 @@ func LogFiles(logDirs []string) []File {
 		}
 		sort.Strings(paths)
 		for _, p := range paths {
+			if IsArchive(p) {
+				continue
+			}
 			size, err := fileSize(p)
 			if err != nil {
 				continue
@@ -41,6 +49,11 @@ func LogFiles(logDirs []string) []File {
 		}
 	}
 	return out
+}
+
+// IsArchive reports whether path is a log renamed by Archive.
+func IsArchive(path string) bool {
+	return strings.HasPrefix(filepath.Base(path), archivePrefix)
 }
 
 // Trigger configures which events queue a log for upload. A manual request is
@@ -182,7 +195,7 @@ func Archive(f File, now time.Time) (string, error) {
 	if size != f.Size {
 		return "", fmt.Errorf("%s changed since it was uploaded", f.Path)
 	}
-	to := filepath.Join(filepath.Dir(f.Path), "WoWCombatLog-uploaded-"+now.Format("20060102-150405")+".txt")
+	to := filepath.Join(filepath.Dir(f.Path), archivePrefix+now.Format("20060102-150405")+".txt")
 	if _, err := os.Lstat(to); err == nil {
 		return "", fmt.Errorf("%s already exists", to)
 	}
