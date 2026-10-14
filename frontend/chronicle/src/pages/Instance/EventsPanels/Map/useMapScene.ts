@@ -4,13 +4,16 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import {
   mapManifestUrl,
   isSupportedMapManifestFormat,
+  type WowMapFloorBounds,
   type WowMapInstanceFloor,
   type WowMapLayer,
   type WowMapManifest,
   type WowMapOverlay,
+  type WowMapRenderedInstance,
 } from "@/pages/Technical/mapGallery";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
+import type { DungeonMeshFrame } from "./dungeonMeshes";
 import type { MapPositionSample, MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
@@ -23,6 +26,7 @@ import {
   focusCentre,
   latestPositionAt,
   projectionScale,
+  renderedDungeonMapPoint,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   selectHealthBars,
@@ -37,6 +41,8 @@ import {
 interface MapFocus {
   bounds: MapPointBounds;
   autoFit: MapViewport;
+  /** The focus centre (median boss position) on the artwork, or null when no boss is known. */
+  centre: MapPoint | null;
 }
 
 // Fit bounds scan the encounter's whole track, so cache them per encounter
@@ -103,8 +109,14 @@ export interface MapSceneMarker {
 
 export interface MapSceneGround {
   iconBaseUrl: string;
-  canvas: WowMapLayer | WowMapInstanceFloor;
+  canvas: WowMapLayer | WowMapInstanceFloor | WowMapRenderedInstance;
   overlays?: WowMapOverlay[];
+}
+
+/** The world bounds a dungeon mesh is placed by, and which map image's projection they belong to. */
+export interface MapSceneMeshFrame {
+  bounds: WowMapFloorBounds;
+  frame: DungeonMeshFrame;
 }
 // Tanks by inferRoles over the encounter's own damage and heal events,
 // recomputed only when more events have streamed in.
@@ -156,8 +168,16 @@ export type MapScene =
     focusBounds: MapPointBounds | null;
     /** The auto-fit framing of `focusBounds`: a minimum span, centred on the boss when known. */
     autoFit: MapViewport | null;
+    /** The boss's median position on the artwork (what `autoFit` centres on), or null when no boss is known. */
+    focusCentre: MapPoint | null;
     /** Whether the view should start on `autoFit` (one boss encounter selected) rather than the full map. */
     fitByDefault: boolean;
+    /**
+     * How a real dungeon mesh lines up with this instance: the rendered map's
+     * bounds when it has one (the same WMO geometry as the mesh), else the
+     * artwork floor's bounds; null for zones and floors without bounds.
+     */
+    meshFrame: MapSceneMeshFrame | null;
     /** Combat events for the replay effects layer. */
     effects: EncounterEffects;
     bossGuids: ReadonlySet<string>;
@@ -165,12 +185,23 @@ export type MapScene =
     tankGuids: ReadonlySet<string>;
   };
 
+export interface MapSceneOptions {
+  /**
+   * Project dungeon positions with the pure world transform instead of the
+   * per-boss artwork calibration (Wailing Caverns): the 3D view's real
+   * dungeon mesh is true geometry, so calibrated points would land off it.
+   * When the instance has a rendered map, it becomes the canvas and the
+   * projection (`meshFrame`); otherwise the artwork floor's raw bounds do.
+   */
+  rawDungeonProjection?: boolean;
+}
+
 /**
  * Everything the Map panel's views share: the encounter at the replay cursor,
  * the artwork canvas and the projected unit markers. Both the 2D and 3D views
  * consume this so filters, selection, floor and cursor stay identical.
  */
-export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
+export function useMapScene(props: PanelRenderProps<MapResult>, options: MapSceneOptions = {}): MapScene {
   const sync = useSyncModeContextOptional();
   const iconBaseUrl = props.context.instance.iconBaseUrl;
   const manifestQuery = useMapManifest(iconBaseUrl);
@@ -217,11 +248,25 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
   const selectedFloor = artwork.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
-  const canvas = artwork.kind === "zone" ? zoneSelection?.layer : selectedFloor;
+  const renderedMap = artwork.kind === "instance" && artwork.instance.rendered
+    && artwork.instance.rendered.width > 0 && artwork.instance.rendered.height > 0
+    ? artwork.instance.rendered
+    : null;
+  const rawProjection = Boolean(options.rawDungeonProjection);
+  // The mesh frame: the rendered map is drawn from the mesh's own geometry.
+  const meshCanvas = rawProjection ? renderedMap : null;
+  const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? selectedFloor;
   if (!canvas) return { status: "message", title: "Map artwork unavailable", detail: "No renderable map layer was published." };
 
-  const dungeonBounds = artwork.kind === "instance" ? selectedFloor?.bounds ?? null : null;
-  const dungeonCalibration = artwork.kind === "instance" && encounter
+  const dungeonBounds = artwork.kind === "instance" ? meshCanvas?.bounds ?? selectedFloor?.bounds ?? null : null;
+  const meshFrame: MapSceneMeshFrame | null = artwork.kind !== "instance"
+    ? null
+    : renderedMap
+      ? { bounds: renderedMap.bounds, frame: "rendered" }
+      : selectedFloor?.bounds
+        ? { bounds: selectedFloor.bounds, frame: "artwork" }
+        : null;
+  const dungeonCalibration = artwork.kind === "instance" && encounter && !rawProjection
     ? resolveDungeonMapCalibration(
       artwork.instance.mapID,
       encounter,
@@ -229,13 +274,15 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     )
     : null;
   const overlayAvailable = Boolean(dungeonBounds)
-    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || dungeonCalibration !== null);
+    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || rawProjection || dungeonCalibration !== null);
   const projectSample = (sample: MapPositionSample): MapPoint | null => artwork.kind === "zone"
     ? zoneMapPoint(sample, artwork.assignment)
     : dungeonBounds && overlayAvailable
-      ? dungeonCalibration
-        ? calibratedDungeonMapPoint(sample, dungeonBounds, dungeonCalibration)
-        : dungeonMapPoint(sample, dungeonBounds)
+      ? meshCanvas
+        ? renderedDungeonMapPoint(sample, dungeonBounds)
+        : dungeonCalibration
+          ? calibratedDungeonMapPoint(sample, dungeonBounds, dungeonCalibration)
+          : dungeonMapPoint(sample, dungeonBounds)
       : null;
 
   const selectedPlayers = props.context.entitySelection.playerIds;
@@ -277,7 +324,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
   }
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
-    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}`;
+    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${meshCanvas ? "rendered" : rawProjection ? "raw" : "calibrated"}`;
   const focus = cachedFocusBounds(
     encounter.positionsByUnit,
     `${mapId}|${projectionKey}|${[...bossGuids].join(",")}`,
@@ -285,13 +332,15 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
       const bounds = unitFocusBounds(encounter.positionsByUnit, mapId, projectSample, bossGuids);
       const centre = focusCentre(encounter.positionsByUnit, mapId, bossGuids);
       if (!bounds || !centre) return null;
+      const centrePoint = centre.fromFocus ? projectSample(centre.sample) : null;
       return {
         bounds,
         autoFit: autoFitViewport(bounds, {
           minSpanYards: AUTO_FIT_MIN_SPAN_YARDS,
           scale: projectionScale(projectSample, centre.sample),
-          centre: centre.fromFocus ? projectSample(centre.sample) : null,
+          centre: centrePoint,
         }),
+        centre: centrePoint,
       };
     },
   );
@@ -318,6 +367,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     projectSample,
     focusBounds: focus?.bounds ?? null,
     autoFit: focus?.autoFit ?? null,
+    focusCentre: focus?.centre ?? null,
+    meshFrame,
     fitByDefault: props.context.selectedEncounterIds.length === 1 && Boolean(instanceEncounter?.boss),
     effects: encounter.effects,
     bossGuids,

@@ -6,9 +6,11 @@ import { kreshReal } from "./fixtures/kreshReal";
 import { loadMapFixture, type LoadedMapFixture } from "./fixtures/mapFixture";
 import type { WoWSpell } from "@/api/wowdb";
 import { BOSS_MINI_SLUGS } from "./bossMinis";
+import { dungeonMeshUrl } from "./dungeonMeshes";
 import type { MapPositionSample } from "./map.processor";
 import type { MapHealthSample } from "./map.processor";
 import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
+import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import MapView3D from "./MapView3D";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
@@ -773,10 +775,24 @@ function WithSpellIcons({ children }: { children: React.ReactNode }) {
 // SyncModeProvider drives the cursor from the pull to the kill on a loop.
 const KRESH_LOOP_PAUSE_MS = 1_000;
 
-function KreshRealPlayer({ fixture }: { fixture: LoadedMapFixture }) {
+function KreshRealPlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture; mesh?: boolean }) {
   const sync = useSyncModeContext();
   const { enabled, isPlaying, currentTimestamp, enable, setEncounterBounds, setTimestamp, play } = sync;
-  const scene = useMapScene(fixture.props);
+  // As Map.tsx does with "3D map" on: units project with the pure world
+  // transform once the mesh has loaded; the tiles (calibrated) stay otherwise.
+  const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
+  const scene = useMapScene(fixture.props, { rawDungeonProjection: mesh && meshState === "ready" });
+  const meshBounds = scene.status === "ready" ? scene.meshFrame?.bounds ?? null : null;
+  const meshFrameKind = scene.status === "ready" ? scene.meshFrame?.frame ?? null : null;
+  const meshUrl = mesh ? dungeonMeshUrl(kreshReal.encounter.mapId, kreshReal.instance.iconBaseUrl) : null;
+  const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
+    meshUrl && meshBounds && meshFrameKind ? { url: meshUrl, bounds: meshBounds, frame: meshFrameKind } : null,
+  [meshBounds, meshFrameKind, meshUrl]);
+  const focusCentre = scene.status === "ready" ? scene.focusCentre : null;
+  const fitZoom = scene.status === "ready" ? scene.autoFit?.zoom ?? null : null;
+  const focus = useMemo((): MapSceneFocus | null =>
+    focusCentre && fitZoom !== null ? { centre: focusCentre, zoom: fitZoom } : null,
+  [fitZoom, focusCentre]);
 
   useEffect(() => {
     enable();
@@ -818,12 +834,16 @@ function KreshRealPlayer({ fixture }: { fixture: LoadedMapFixture }) {
           bossGuids={scene.bossGuids}
           tankGuids={scene.tankGuids}
           onUnavailable={() => console.warn("WebGL unavailable")}
+          dungeonMesh={dungeonMesh}
+          onDungeonMeshState={setMeshState}
+          focus={focus}
         />
       ) : (
         <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
       )}
       <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
         {kreshReal.encounter.name} {elapsed.toFixed(1)}s
+        {dungeonMesh && meshState !== "ready" && <span className="ml-1.5 text-amber-200/80">cave {meshState}</span>}
       </div>
     </div>
   );
@@ -834,24 +854,47 @@ function KreshRealPlayer({ fixture }: { fixture: LoadedMapFixture }) {
 // see none, so no cast icons or spell names.
 const KRESH_UNSELECTED = "0x0000120C006422B6";
 
-function KreshRealReplay({ selectPlayers }: { selectPlayers: boolean }) {
+// `instances[].rendered` for Wailing Caverns from the Forever manifest (icons CDN, 2026-10-14).
+const WC_RENDERED = {
+  mapID: 43,
+  rendered: {
+    path: "renders/43-1.60.1.70338-69a73d7b527a.png",
+    width: 1200,
+    height: 800,
+    source: "wmo-geometry",
+    bounds: { minX: -421.6594, maxX: 220.06552, minY: -396.9931, maxY: 565.59424 },
+    triangles: 170179,
+  },
+};
+
+function KreshRealReplay({ selectPlayers, mesh = false }: { selectPlayers: boolean; mesh?: boolean }) {
   const [fixture] = useState(() => {
     const loaded = loadMapFixture(kreshReal, { selectPlayers });
     if (selectPlayers) (loaded.props.context.entitySelection.playerIds as Set<string>).delete(KRESH_UNSELECTED);
     return loaded;
   });
   // Seed the artwork manifest so the scene needs no fetch; only tiles and
-  // boss-mini textures load from the icon CDN.
+  // boss-mini textures load from the icon CDN. The mesh story adds the
+  // rendered Wailing Caverns map the Forever manifest publishes (the fixture
+  // predates it), which is the frame the mesh is placed by.
   const [queryClient] = useState(() => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(["wow-map-manifest", kreshReal.instance.iconBaseUrl], fixture.manifest);
+    const manifest = mesh
+      ? {
+        ...fixture.manifest,
+        instances: fixture.manifest.instances.map((instance) => (instance.mapID === WC_RENDERED.mapID
+          ? { ...instance, rendered: WC_RENDERED.rendered }
+          : instance)),
+      }
+      : fixture.manifest;
+    client.setQueryData(["wow-map-manifest", kreshReal.instance.iconBaseUrl], manifest);
     return client;
   });
   return (
     <QueryClientProvider client={queryClient}>
       <WithSpellIcons>
         <SyncModeProvider>
-          <KreshRealPlayer fixture={fixture} />
+          <KreshRealPlayer fixture={fixture} mesh={mesh} />
         </SyncModeProvider>
       </WithSpellIcons>
     </QueryClientProvider>
@@ -1051,6 +1094,17 @@ export const KreshReal: Story = {
  */
 export const KreshRealSelected: Story = {
   render: () => <KreshRealReplay selectPlayers />,
+};
+
+/**
+ * The real Kresh kill with "3D map" on: the Wailing Caverns mesh replaces the
+ * tiles and the raid stands on the cave floor at its real positions, with the
+ * camera locked to the fight. Needs the local mesh (copy the GLB to
+ * `public/dungeon-meshes/43.glb`; it is gitignored): without it the load fails
+ * quietly and the story shows the tiles, as the panel does.
+ */
+export const KreshRealMesh: Story = {
+  render: () => <KreshRealReplay selectPlayers={false} mesh />,
 };
 
 /**
