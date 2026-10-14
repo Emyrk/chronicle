@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
-import { Focus, Map as MapIcon, Maximize, Users } from "lucide-react";
+import { Crosshair, Focus, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
+import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
@@ -17,14 +18,11 @@ import {
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
 import { useMapScene } from "./useMapScene";
+import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
+
+export { mapPresentationForSelection };
 
 const MapView3D = lazy(() => import("./MapView3D"));
-
-export type MapPresentation = "replay-3d" | "overview-2d";
-
-export function mapPresentationForSelection(selectedEncounterCount: number): MapPresentation {
-  return selectedEncounterCount === 1 ? "replay-3d" : "overview-2d";
-}
 
 const MESH_STORAGE_KEY = "chronicle.map.mesh";
 
@@ -46,7 +44,14 @@ function storeMesh(on: boolean) {
 
 const framingButtonClass = "flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground";
 
-function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
+interface ReplayMapProps extends PanelRenderProps<MapResult> {
+  /** Replay the whole run instead of the one selected encounter. */
+  wholeRun?: boolean;
+  onExitWholeRun?: () => void;
+}
+
+function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }: ReplayMapProps) {
+  const sync = useSyncModeContextOptional();
   const [webglUnavailable, setWebglUnavailable] = useState(false);
   const show3D = !webglUnavailable;
   // "3D map": the real dungeon mesh as the ground. Units project onto it with
@@ -54,7 +59,7 @@ function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
   // load fails) the tiles and their calibration stay.
   const [meshOn, setMeshOn] = useState(readStoredMesh);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
-  const scene = useMapScene(props, { rawDungeonProjection: show3D && meshOn && meshState === "ready" });
+  const scene = useMapScene(props, { rawDungeonProjection: show3D && meshOn && meshState === "ready", wholeRun });
   const ready = scene.status === "ready" ? scene : null;
   // A mesh-only instance (no map artwork) has nothing but the mesh to show:
   // the switch is on and stays on.
@@ -92,6 +97,13 @@ function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
   if (scene.status === "message") return <MapMessage title={scene.title} detail={scene.detail} />;
 
   const applyFraming = (viewport: MapViewport) => setFraming(pinMapFraming(framing, viewport));
+  // Whole run: back to the default framing, which is the party-following one.
+  const followGroup = () => setFraming({ ...framing, viewport: null, manual: false, revision: framing.revision + 1 });
+  const following = scene.wholeRun && !framing.manual && framing.viewport === null;
+  const jumps = scene.wholeRun && scene.runStartMs !== null && scene.runEndMs !== null
+    ? encounterJumps(props.context.instance.encounters, props.result.encounters, scene.runStartMs, scene.runEndMs)
+    : [];
+  const jumpTo = (timestampMs: number) => sync?.setTimestamp(new Date(timestampMs));
   const toggleMesh = () => {
     const next = !meshOn;
     setMeshOn(next);
@@ -121,20 +133,40 @@ function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
               {scene.floors.map((floor) => <option key={floor} value={floor}>Floor {floor}</option>)}
             </select>
           )}
-          <button
-            type="button"
-            onClick={() => autoFit && applyFraming(autoFit)}
-            disabled={!autoFit}
-            title="Zoom to the boss area"
-            className={framingButtonClass}
-          >
-            <Focus className="h-3 w-3" />
-            Fit
-          </button>
+          {scene.wholeRun ? (
+            <button
+              type="button"
+              aria-pressed={following}
+              onClick={followGroup}
+              disabled={!autoFit}
+              title="Keep the camera on the group"
+              className={`${framingButtonClass} ${following ? "bg-primary/20 text-foreground" : ""}`}
+            >
+              <Crosshair className="h-3 w-3" />
+              Follow
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => autoFit && applyFraming(autoFit)}
+              disabled={!autoFit}
+              title="Zoom to the boss area"
+              className={framingButtonClass}
+            >
+              <Focus className="h-3 w-3" />
+              Fit
+            </button>
+          )}
           <button type="button" onClick={() => applyFraming(FULL_MAP_VIEWPORT)} title="Show the full map" className={framingButtonClass}>
             <Maximize className="h-3 w-3" />
             Reset
           </button>
+          {onExitWholeRun && (
+            <button type="button" onClick={onExitWholeRun} title="Back to the 2D route overview" className={framingButtonClass}>
+              <Route className="h-3 w-3" />
+              Overview
+            </button>
+          )}
           {show3D && meshUrl && (
             <button
               type="button"
@@ -178,6 +210,35 @@ function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
           </Suspense>
         )}
       </div>
+      {jumps.length > 0 && scene.runStartMs !== null && (
+        <div className="flex flex-col gap-1 px-1">
+          <div className="relative h-1.5 rounded bg-white/10" aria-hidden>
+            {jumps.map((jump) => (
+              <span key={jump.id} className="absolute top-0 h-full w-0.5 bg-amber-300/80" style={{ left: `${jump.fraction * 100}%` }} />
+            ))}
+            {scene.syncEnabled && scene.runEndMs !== null && (
+              <span
+                className="absolute top-[-1px] h-2 w-0.5 bg-foreground"
+                style={{ left: `${Math.min(100, Math.max(0, ((scene.cursorMs - scene.runStartMs) / Math.max(1, scene.runEndMs - scene.runStartMs)) * 100))}%` }}
+              />
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1" aria-label="Encounters">
+            {jumps.map((jump) => (
+              <button
+                key={jump.id}
+                type="button"
+                onClick={() => jumpTo(jump.timestampMs)}
+                disabled={!scene.syncEnabled}
+                title={scene.syncEnabled ? `Jump to ${jump.name}` : "Enable Replay to jump between encounters"}
+                className={framingButtonClass}
+              >
+                {jump.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {webglUnavailable && (
         <p className="px-1 text-[9px] text-amber-300/80">3D view needs WebGL, which this browser could not provide. Showing the replay map in 2D instead.</p>
       )}
@@ -191,10 +252,37 @@ function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
 }
 
 function MapContent(props: PanelRenderProps<MapResult>) {
-  const presentation = mapPresentationForSelection(props.context.selectedEncounterIds.length);
-  return presentation === "replay-3d"
-    ? <SingleEncounterReplayMap {...props} />
-    : <MapOverview2D {...props} />;
+  const [wholeRun, setWholeRun] = useState(false);
+  const selectedCount = props.context.selectedEncounterIds.length;
+  const presentation = mapPresentationForSelection(selectedCount, wholeRun);
+  if (presentation === "replay-3d" && selectedCount !== 1) {
+    return <SingleEncounterReplayMap {...props} wholeRun onExitWholeRun={() => setWholeRun(false)} />;
+  }
+  if (presentation === "replay-3d") return <SingleEncounterReplayMap {...props} />;
+  // With nothing selected there is no data to replay: take the run's encounters
+  // (what the page selects by default) so the processor has the whole run.
+  const startWholeRun = () => {
+    if (selectedCount === 0) {
+      const ids = props.context.instance.encounters
+        .filter((encounter) => encounter.kill_type !== "wipe" && encounter.kill_type !== "reset")
+        .map((encounter) => encounter.id);
+      props.context.onSelectEncounters?.(ids);
+    }
+    setWholeRun(true);
+  };
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex justify-end px-3 pt-2">
+        <button type="button" onClick={startWholeRun} title="Replay the whole run in 3D, the camera following the group" className={framingButtonClass}>
+          <Route className="h-3 w-3" />
+          Whole run
+        </button>
+      </div>
+      <div className="min-h-0 flex-1">
+        <MapOverview2D {...props} />
+      </div>
+    </div>
+  );
 }
 
 function MapMessage({ title, detail }: { title: string; detail: string }) {
