@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/zalando/go-keyring"
+
+	"github.com/Emyrk/chronicle/cmd/uploader/internal/tenant"
 )
 
 const keyringService = "chronicle-uploader"
@@ -16,6 +18,9 @@ const keyringUser = "default"
 
 // State is everything the uploader remembers between runs.
 type State struct {
+	// Tenant is the server chosen with --server or by pairing; empty means
+	// the default tenant.
+	Tenant tenant.Tenant `json:"tenant,omitempty"`
 	// WoWPath is the folder the user picked; empty means auto-detect.
 	WoWPath string `json:"wow_path,omitempty"`
 	// UploadOnIdle also uploads when the log goes quiet, not only on WoW exit.

@@ -39,7 +39,7 @@ func TestUpload(t *testing.T) {
 			_, _ = w.Write([]byte(body))
 		}))
 		t.Cleanup(srv.Close)
-		return &upload.Client{BaseURL: srv.URL, Token: "tok"}, &gotReq, &gotBody
+		return &upload.Client{BaseURL: srv.URL, Token: "tok", Format: "v22-cleu", Flavor: "vanilla,wow-forever"}, &gotReq, &gotBody
 	}
 
 	t.Run("created", func(t *testing.T) {

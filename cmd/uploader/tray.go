@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -55,6 +56,8 @@ func (a *app) onReady(ctx context.Context) {
 	a.items.status.Disable()
 	a.items.folder = systray.AddMenuItem("", "")
 	a.items.folder.Disable()
+	host := systray.AddMenuItem("Connected to "+a.serverHost(), a.server)
+	host.Disable()
 	systray.AddSeparator()
 	upload := systray.AddMenuItem("Upload now", "Upload your latest combat log")
 	a.items.report = systray.AddMenuItem("Open last report", "")
@@ -208,6 +211,14 @@ func (a *app) render() {
 	} else {
 		a.items.connect.Hide()
 	}
+}
+
+// serverHost is the tenant host shown in the menu so a wrong server is visible.
+func (a *app) serverHost() string {
+	if u, err := url.Parse(a.server); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return a.server
 }
 
 func (a *app) renderFolder() {
