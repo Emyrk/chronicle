@@ -1,48 +1,60 @@
--- name: GetTimeParseScoreReceiptForContract :one
-SELECT * FROM time_parse_score_receipts
+-- name: GetTimeParseScoreForContract :one
+SELECT * FROM time_parse_scores
 WHERE tenant_id = @tenant_id
   AND instance_id = @instance_id
   AND lookback_days = @lookback_days
   AND policy_version = @policy_version
   AND query_version = @query_version;
 
--- name: DeleteTimeParseScoreReceiptForContract :exec
-DELETE FROM time_parse_score_receipts
+-- name: DeleteTimeParseScoreForContract :exec
+DELETE FROM time_parse_scores
 WHERE tenant_id = @tenant_id
   AND instance_id = @instance_id
   AND lookback_days = @lookback_days
   AND policy_version = @policy_version
   AND query_version = @query_version;
 
--- name: InsertTimeParseScoreReceipt :one
-INSERT INTO time_parse_score_receipts (
+-- name: InsertTimeParseScore :one
+INSERT INTO time_parse_scores (
     tenant_id, instance_id, run_id, log_group_id, realm_id, guild_id,
-    cutoff, window_start, lookback_days, policy_version, query_version,
-    source_count, result_count, computed_at
+    clear_duration_ms,
+    clear_server_precise_score, clear_server_display_score, clear_server_rank,
+    clear_server_sample_size, clear_server_status,
+    clear_realm_precise_score, clear_realm_display_score, clear_realm_rank,
+    clear_realm_sample_size, clear_realm_status,
+    clear_guild_precise_score, clear_guild_display_score, clear_guild_rank,
+    clear_guild_sample_size, clear_guild_status,
+    cutoff, window_start, lookback_days, policy_version, query_version, computed_at
 ) VALUES (
     @tenant_id, @instance_id, @run_id, @log_group_id, @realm_id, @guild_id,
-    @cutoff, @window_start, @lookback_days, @policy_version, @query_version,
-    @source_count, @result_count, now()
+    @clear_duration_ms,
+    @clear_server_precise_score, @clear_server_display_score, @clear_server_rank,
+    @clear_server_sample_size, @clear_server_status,
+    @clear_realm_precise_score, @clear_realm_display_score, @clear_realm_rank,
+    @clear_realm_sample_size, @clear_realm_status,
+    @clear_guild_precise_score, @clear_guild_display_score, @clear_guild_rank,
+    @clear_guild_sample_size, @clear_guild_status,
+    @cutoff, @window_start, @lookback_days, @policy_version, @query_version, now()
 )
 RETURNING *;
 
--- name: InsertTimeParseScoreResult :exec
-INSERT INTO time_parse_score_results (
-    receipt_id, tenant_id, instance_id, run_id, log_group_id, realm_id, guild_id,
-    scope, metric_kind, encounter_id, encounter_name, duration_ms,
-    precise_score, display_score, rank, sample_size, status,
-    cutoff, window_start, lookback_days, policy_version, query_version, computed_at
+-- name: InsertTimeParseBossScore :exec
+INSERT INTO time_parse_boss_scores (
+    time_parse_score_id, encounter_id, encounter_name, duration_ms,
+    server_precise_score, server_display_score, server_rank, server_sample_size, server_status,
+    realm_precise_score, realm_display_score, realm_rank, realm_sample_size, realm_status,
+    guild_precise_score, guild_display_score, guild_rank, guild_sample_size, guild_status
 ) VALUES (
-    @receipt_id, @tenant_id, @instance_id, @run_id, @log_group_id, @realm_id, @guild_id,
-    @scope, @metric_kind, @encounter_id, @encounter_name, @duration_ms,
-    @precise_score, @display_score, @rank, @sample_size, @status,
-    @cutoff, @window_start, @lookback_days, @policy_version, @query_version, now()
+    @time_parse_score_id, @encounter_id, @encounter_name, @duration_ms,
+    @server_precise_score, @server_display_score, @server_rank, @server_sample_size, @server_status,
+    @realm_precise_score, @realm_display_score, @realm_rank, @realm_sample_size, @realm_status,
+    @guild_precise_score, @guild_display_score, @guild_rank, @guild_sample_size, @guild_status
 );
 
--- name: ListTimeParseScoreResultsForReceipt :many
-SELECT * FROM time_parse_score_results
-WHERE receipt_id = @receipt_id
-ORDER BY scope, metric_kind, encounter_name;
+-- name: ListTimeParseBossScoresForScore :many
+SELECT * FROM time_parse_boss_scores
+WHERE time_parse_score_id = @time_parse_score_id
+ORDER BY encounter_name;
 
 -- name: AcquireTimeParseScoreLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(@instance_id::text, 0));
@@ -54,6 +66,7 @@ SELECT
     instance.log_group_id,
     instance.realm_id,
     instance.guild_id,
+    instance.start_time,
     instance.name AS instance_name,
     instance.difficulty_name,
     instance.max_players
@@ -114,6 +127,7 @@ FROM log_instances instance
 JOIN wow_server_realms realm ON realm.id = instance.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE instance.invalidated_at IS NULL
+  AND instance.start_time IS NOT NULL
   AND (@all_tenants::boolean OR COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = @tenant_filter)
   AND (@started_after::timestamptz IS NULL OR instance.start_time >= @started_after)
   AND (@started_before::timestamptz IS NULL OR instance.start_time < @started_before)
@@ -135,12 +149,12 @@ WHERE instance.invalidated_at IS NULL
   AND (
       @force::boolean
       OR NOT EXISTS (
-          SELECT 1 FROM time_parse_score_receipts receipt
-          WHERE receipt.tenant_id = COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)
-            AND receipt.instance_id = instance.id
-            AND receipt.lookback_days = @lookback_days
-            AND receipt.policy_version = @policy_version
-            AND receipt.query_version = @query_version
+          SELECT 1 FROM time_parse_scores score
+          WHERE score.tenant_id = COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)
+            AND score.instance_id = instance.id
+            AND score.lookback_days = @lookback_days
+            AND score.policy_version = @policy_version
+            AND score.query_version = @query_version
       )
   )
 ORDER BY instance.start_time DESC NULLS LAST, instance.id
