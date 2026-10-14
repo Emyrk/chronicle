@@ -33,7 +33,6 @@ func RegisterVanillaPlus(r *Registry) {
 func RegisterWoWForever(r *Registry) {
 	r.RegisterEntry(FromCommonFactory(instances.RuinsOfLordaeronFactory))
 	r.RegisterEntry(FromCommonFactory(instances.ExcavationSiteWetlandsFactory))
-	r.RegisterEntry(FromCommonFactory(instances.RuinsOfLordaeronFactory))
 }
 
 func RegisterClassicEncounters(r *Registry) {

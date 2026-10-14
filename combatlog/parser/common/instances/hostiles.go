@@ -2058,11 +2058,12 @@ func RuinsOfLordaeronHostiles() map[uint32]Identity {
 	LoadBosses(hostile, map[uint32]string{
 		250483: "Witherfang",
 		250631: "The Abandoned",
-		250657: "Rath'Mael",
-		250660: "The Baron",
+		250657: "Rath'mael",
 		256035: "Viktor the Vile",
 		256097: "Bjork",
 	})
+	// The Butcher encounter is fought against a unit named "The Baron".
+	hostile[250660] = Identity{Affiliation: types.AffiliationHostile, Name: "The Baron", EncounterName: "The Butcher", Boss: true}
 	return hostile
 }
 
@@ -2093,39 +2094,5 @@ func ExcavationSiteWetlandsHostiles() map[uint32]Identity {
 		260325: "Shadetooth",
 		260326: "Relic Guardian",
 	})
-	return hostile
-}
-
-func RuinsOfLordaeronHostiles() map[uint32]Identity {
-	hostile := make(map[uint32]Identity)
-	LoadAdds(hostile, map[uint32]string{
-		250484: "Spider",
-		250618: "Skeleton",
-		250620: "Shrieking Banshee",
-		250622: "Ragged Ghoul",
-		250624: "Skeletal Mage",
-		250625: "Broodling",
-		250626: "Skeletal Soldier",
-		250627: "Ghoul",
-		250630: "Plague Ghoul",
-		250649: "Mindless Undead",
-		250654: "Ghostly Citizen",
-		250656: "Fallen Berserker",
-		250689: "Living Monstrosity",
-		250735: "Venom Lurker",
-		255109: "Flesh Golem",
-		255964: "Fallen Necromancer",
-		256040: "Deep Widow",
-	})
-
-	LoadBosses(hostile, map[uint32]string{
-		250483: "Witherfang",
-		250631: "The Abandoned",
-		250657: "Rath'mael",
-		256035: "Viktor the Vile",
-		256097: "Bjork",
-	})
-	// The Butcher encounter is fought against a unit named "The Baron".
-	hostile[250660] = Identity{Affiliation: types.AffiliationHostile, Name: "The Baron", EncounterName: "The Butcher", Boss: true}
 	return hostile
 }

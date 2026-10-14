@@ -94,31 +94,6 @@ func TestFlavoredDeadminesHostiles(t *testing.T) {
 	require.Equal(t, "Masterpiece Harvester", masterpieceHarvester.EncounterName)
 }
 
-func TestWoWForeverRuinsOfLordaeron(t *testing.T) {
-	t.Parallel()
-
-	vanilla := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla})
-	require.Nil(t, vanilla.EntryByName("Ruins Of Lordaeron"))
-
-	forever := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorWoWForever})
-	ruins := forever.EntryByName("Ruins Of Lordaeron")
-	require.NotNil(t, ruins)
-	require.Len(t, ruins.HostileEntries, 24)
-	for entryID, name := range map[uint32]string{
-		250483: "Witherfang",
-		250631: "The Abandoned",
-		250657: "Rath'Mael",
-		250660: "The Baron",
-		256035: "Viktor the Vile",
-		256097: "Bjork",
-	} {
-		boss := ruins.HostileEntries[entryID]
-		require.Equal(t, name, boss.Name)
-		require.True(t, boss.Boss)
-		require.Equal(t, name, boss.EncounterName)
-	}
-}
-
 func TestInstanceDetailsBossCount(t *testing.T) {
 	t.Parallel()
 
@@ -416,6 +391,8 @@ func TestWoWForeverRuinsOfLordaeron(t *testing.T) {
 			bosses = append(bosses, id.EncounterName)
 		}
 	}
+	require.Len(t, entry.HostileEntries, 24)
+	require.Equal(t, "Stone Watcher", entry.HostileEntries[250629].Name)
 	require.ElementsMatch(t, []string{"Witherfang", "The Butcher", "Viktor the Vile", "The Abandoned", "Bjork", "Rath'mael"}, bosses)
 
 	require.Nil(t, RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla}).EntryByName("Halls of Lordaeron"))
