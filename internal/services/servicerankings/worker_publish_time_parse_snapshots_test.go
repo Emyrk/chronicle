@@ -59,7 +59,7 @@ func insertTimeParseTenantRealm(t *testing.T, pool *pgxpool.Pool, name string) (
 
 	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
 	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "INSERT INTO tenants (id, slug, name) VALUES ($1, $2, $3)", tenantID, name, name)
+	_, err = conn.Exec(ctx, "INSERT INTO tenants (id, slug, name, include_in_all) VALUES ($1, $2, $3, true)", tenantID, name, name)
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, "INSERT INTO wow_servers (id, name, tenant_id) VALUES ($1, $2, $3)", serverID, name+"-server", tenantID)
 	require.NoError(t, err)
@@ -810,6 +810,82 @@ func TestTimeParseClearMembershipUsesStartDateBounds(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Len(t, secondCohort, 1, "the run should enter the next start-date window")
+}
+
+func TestTimeParseMembershipRefreshTenantIsolation(t *testing.T) {
+	t.Parallel()
+
+	pool, store, _ := setupTimeParseTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	tenantA, realmA := insertTimeParseTenantRealm(t, pool, "refresh-tenant-a")
+	tenantB, _ := insertTimeParseTenantRealm(t, pool, "refresh-tenant-b")
+	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	instanceID := insertTimeParseInstance(t, pool, store, realmA, timeParseInstanceOpts{
+		instanceName: "Molten Core", difficultyName: "Normal", maxPlayers: 40,
+		qualified: true, durationMs: 600000, startTime: start,
+		encounters: []timeParseEncounterOpts{{
+			name: "Ragnaros", killType: database.KillTypeClean, boss: true,
+			startTime: start.Add(5 * time.Minute), endTime: start.Add(6 * time.Minute),
+		}},
+	})
+	cutoff := start.Add(24 * time.Hour)
+	for _, tenantID := range []uuid.UUID{tenantA, tenantB, uuid.Nil} {
+		runTimeParseWorker(t, ctx, store, tenantID, cutoff, 0)
+		clearSeries := database.DeleteTimeParseClearTimeMembershipSeriesParams{
+			TenantID: tenantID, PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
+		}
+		require.NoError(t, store.DeleteTimeParseClearTimeMembershipSeries(ctx, clearSeries))
+		bossSeries := database.DeleteTimeParseBossKillMembershipSeriesParams(clearSeries)
+		require.NoError(t, store.DeleteTimeParseBossKillMembershipSeries(ctx, bossSeries))
+	}
+
+	var logGroupID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT log_group_id FROM log_instances WHERE id = $1", instanceID).Scan(&logGroupID))
+	for _, foreignTenantID := range []uuid.UUID{tenantB, uuid.Nil} {
+		_, err := pool.Exec(ctx, `
+			INSERT INTO time_parse_clear_time_memberships (
+				tenant_id, policy_version, query_version, run_id, instance_id, log_group_id,
+				instance_name, difficulty_name, max_players, duration_ms, start_time
+			) VALUES ($1, $2, $3, $4, $4, $5, 'Molten Core', 'Normal', 40, 600000, $6)
+		`, foreignTenantID, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.SnapshotQueryVersion,
+			instanceID, logGroupID, start)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, `
+			INSERT INTO time_parse_boss_kill_memberships (
+				tenant_id, policy_version, query_version, run_id, encounter_name,
+				instance_id, log_group_id, instance_name, difficulty_name, max_players,
+				duration_ms, killed_at
+			) VALUES ($1, $2, $3, $4, 'Ragnaros', $4, $5, 'Molten Core', 'Normal', 40, 60000, $6)
+		`, foreignTenantID, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.SnapshotQueryVersion,
+			instanceID, logGroupID, start.Add(6*time.Minute))
+		require.NoError(t, err)
+	}
+
+	_, err := store.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, logGroupID)
+	require.NoError(t, err)
+	_, err = store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, logGroupID)
+	require.NoError(t, err)
+
+	for _, tenantID := range []uuid.UUID{tenantA, tenantB, uuid.Nil} {
+		clearRows, clearErr := store.ListTimeParseClearTimeMemberships(ctx, database.ListTimeParseClearTimeMembershipsParams{
+			TenantID: tenantID, PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
+		})
+		require.NoError(t, clearErr)
+		bossRows, bossErr := store.ListTimeParseBossKillMemberships(ctx, database.ListTimeParseBossKillMembershipsParams{
+			TenantID: tenantID, PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
+		})
+		require.NoError(t, bossErr)
+		if tenantID == tenantA {
+			require.Len(t, clearRows, 1)
+			require.Len(t, bossRows, 1)
+			assert.Equal(t, instanceID, clearRows[0].InstanceID)
+			assert.Equal(t, instanceID, bossRows[0].InstanceID)
+		} else {
+			assert.Empty(t, clearRows, "refresh must not upsert into a foreign tenant series")
+			assert.Empty(t, bossRows, "refresh must not upsert into a foreign tenant series")
+		}
+	}
 }
 
 func TestTimeParseClearMembershipLifecycle(t *testing.T) {

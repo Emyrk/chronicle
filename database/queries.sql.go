@@ -19332,15 +19332,13 @@ current_members AS MATERIALIZED (
         instance.max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
         encounter.end_time AS killed_at,
-        server.tenant_id AS source_tenant_id,
-        (server.tenant_id IS NULL OR tenant.include_in_all) AS root_visible
+        server.tenant_id AS source_tenant_id
     FROM representative_instances representative
     JOIN log_instances instance ON instance.id = representative.id
     JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
     JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
     WHERE encounter.boss = true
       AND encounter.kill_type = 'clean'
       AND encounter.end_time > encounter.start_time
@@ -19365,8 +19363,10 @@ upserted AS (
         member.duration_ms, member.killed_at
     FROM series
     JOIN current_members member
-      ON series.tenant_id = member.source_tenant_id
-      OR (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid AND member.root_visible)
+      ON (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          AND member.source_tenant_id IS NULL)
+      OR (series.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+          AND member.source_tenant_id = series.tenant_id)
     ON CONFLICT (
         tenant_id, policy_version, query_version, run_id, encounter_name
     ) DO UPDATE SET
@@ -19387,6 +19387,10 @@ deleted AS (
           FROM current_members member
           WHERE member.run_id = membership.run_id
             AND member.encounter_name = membership.encounter_name
+            AND ((membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+                  AND member.source_tenant_id IS NULL)
+                 OR (membership.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+                     AND member.source_tenant_id = membership.tenant_id))
       )
     RETURNING 1
 )
@@ -19448,14 +19452,12 @@ current_members AS MATERIALIZED (
         instance.max_players,
         speedrun.ranked_duration_ms::bigint AS duration_ms,
         speedrun.start_time::timestamptz AS start_time,
-        server.tenant_id AS source_tenant_id,
-        (server.tenant_id IS NULL OR tenant.include_in_all) AS root_visible
+        server.tenant_id AS source_tenant_id
     FROM representative_instances representative
     JOIN log_instances instance ON instance.id = representative.id
     JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
     WHERE speedrun.qualified = true
       AND speedrun.ranked_duration_ms > 0
 ),
@@ -19471,8 +19473,10 @@ upserted AS (
         member.difficulty_name, member.max_players, member.duration_ms, member.start_time
     FROM series
     JOIN current_members member
-      ON series.tenant_id = member.source_tenant_id
-      OR (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid AND member.root_visible)
+      ON (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          AND member.source_tenant_id IS NULL)
+      OR (series.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+          AND member.source_tenant_id = series.tenant_id)
     ON CONFLICT (tenant_id, policy_version, query_version, run_id) DO UPDATE SET
         instance_id = EXCLUDED.instance_id,
         log_group_id = EXCLUDED.log_group_id,
@@ -19489,6 +19493,10 @@ deleted AS (
       AND NOT EXISTS (
           SELECT 1 FROM current_members member
           WHERE member.run_id = membership.run_id
+            AND ((membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+                  AND member.source_tenant_id IS NULL)
+                 OR (membership.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+                     AND member.source_tenant_id = membership.tenant_id))
       )
     RETURNING 1
 )
@@ -19529,11 +19537,11 @@ representative_instances AS (
     FROM log_instances instance
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
     CROSS JOIN snapshot
-    WHERE (server.tenant_id = snapshot.tenant_id
-           OR (snapshot.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE ((snapshot.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR (snapshot.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = snapshot.tenant_id))
       AND instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
@@ -19620,11 +19628,11 @@ representative_instances AS (
     FROM log_instances instance
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
     CROSS JOIN snapshot
-    WHERE (server.tenant_id = snapshot.tenant_id
-           OR (snapshot.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE ((snapshot.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR (snapshot.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = snapshot.tenant_id))
       AND instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
@@ -20042,10 +20050,10 @@ WITH clear_stats AS (
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_server_realms realm ON realm.id = li.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
-    WHERE (server.tenant_id = $1
-           OR ($1 = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE (($1::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR ($1::uuid <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = $1::uuid))
       AND li.invalidated_at IS NULL
       AND sr.qualified = true
       AND sr.ranked_duration_ms > 0
@@ -20074,10 +20082,10 @@ boss_stats AS (
     JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
     JOIN wow_server_realms realm ON realm.id = li.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
-    WHERE (server.tenant_id = $1
-           OR ($1 = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE (($1::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR ($1::uuid <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = $1::uuid))
       AND li.invalidated_at IS NULL
       AND lie.boss = true
       AND lie.kill_type = 'clean'
@@ -20094,7 +20102,7 @@ FROM clear_stats c, boss_stats b
 `
 
 type GetTimeParseSnapshotSourceStatsParams struct {
-	TenantID    uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
 	WindowStart pgtype.Timestamptz `db:"window_start" json:"window_start"`
 }

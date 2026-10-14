@@ -100,10 +100,10 @@ WITH clear_stats AS (
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_server_realms realm ON realm.id = li.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
-    WHERE (server.tenant_id = @tenant_id
-           OR (@tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE ((@tenant_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR (@tenant_id::uuid <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = @tenant_id::uuid))
       AND li.invalidated_at IS NULL
       AND sr.qualified = true
       AND sr.ranked_duration_ms > 0
@@ -132,10 +132,10 @@ boss_stats AS (
     JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
     JOIN wow_server_realms realm ON realm.id = li.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
-    WHERE (server.tenant_id = @tenant_id
-           OR (@tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
-               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+    WHERE ((@tenant_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+            AND server.tenant_id IS NULL)
+           OR (@tenant_id::uuid <> '00000000-0000-0000-0000-000000000000'::uuid
+               AND server.tenant_id = @tenant_id::uuid))
       AND li.invalidated_at IS NULL
       AND lie.boss = true
       AND lie.kill_type = 'clean'

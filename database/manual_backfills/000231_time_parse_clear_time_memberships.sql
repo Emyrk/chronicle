@@ -38,14 +38,12 @@ current_members AS MATERIALIZED (
         instance.max_players,
         speedrun.ranked_duration_ms::bigint AS duration_ms,
         speedrun.start_time::timestamptz AS start_time,
-        server.tenant_id AS source_tenant_id,
-        (server.tenant_id IS NULL OR tenant.include_in_all) AS root_visible
+        server.tenant_id AS source_tenant_id
     FROM representative_instances representative
     JOIN log_instances instance ON instance.id = representative.id
     JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
-    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
     WHERE speedrun.qualified = true
       AND speedrun.ranked_duration_ms > 0
 )
@@ -60,8 +58,10 @@ SELECT
     member.difficulty_name, member.max_players, member.duration_ms, member.start_time
 FROM series
 JOIN current_members member
-  ON series.tenant_id = member.source_tenant_id
-  OR (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid AND member.root_visible)
+  ON (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+      AND member.source_tenant_id IS NULL)
+  OR (series.tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+      AND member.source_tenant_id = series.tenant_id)
 ON CONFLICT (tenant_id, policy_version, query_version, run_id) DO UPDATE SET
     instance_id = EXCLUDED.instance_id,
     log_group_id = EXCLUDED.log_group_id,
