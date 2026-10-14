@@ -6225,35 +6225,6 @@ func (q *sqlQuerier) ListDistinctInstanceNames(ctx context.Context) ([]string, e
 	return items, nil
 }
 
-const updateLogFileAfterAppend = `-- name: UpdateLogFileAfterAppend :exec
-UPDATE log_file
-SET hash = $1,
-    size_bytes = $2,
-    compressed_size_bytes = $3,
-    content_encoding = $4,
-    updated_at = now()
-WHERE id = $5
-`
-
-type UpdateLogFileAfterAppendParams struct {
-	Hash                string      `db:"hash" json:"hash"`
-	SizeBytes           int64       `db:"size_bytes" json:"size_bytes"`
-	CompressedSizeBytes pgtype.Int8 `db:"compressed_size_bytes" json:"compressed_size_bytes"`
-	ContentEncoding     pgtype.Text `db:"content_encoding" json:"content_encoding"`
-	ID                  uuid.UUID   `db:"id" json:"id"`
-}
-
-func (q *sqlQuerier) UpdateLogFileAfterAppend(ctx context.Context, arg UpdateLogFileAfterAppendParams) error {
-	_, err := q.db.Exec(ctx, updateLogFileAfterAppend,
-		arg.Hash,
-		arg.SizeBytes,
-		arg.CompressedSizeBytes,
-		arg.ContentEncoding,
-		arg.ID,
-	)
-	return err
-}
-
 const updateWoWLogGroupFlavor = `-- name: UpdateWoWLogGroupFlavor :exec
 UPDATE wow_log_groups
 SET flavor = $1::text[]
@@ -9142,6 +9113,367 @@ func (q *sqlQuerier) TryAcquireAdvisoryLock(ctx context.Context, lockKey int64) 
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const addReadyLogFilePartSizes = `-- name: AddReadyLogFilePartSizes :exec
+UPDATE log_file
+SET size_bytes = size_bytes + $1,
+    compressed_size_bytes = CASE
+        WHEN compressed_size_bytes IS NULL THEN NULL
+        ELSE compressed_size_bytes + $2
+    END,
+    updated_at = now()
+WHERE id = $3
+`
+
+type AddReadyLogFilePartSizesParams struct {
+	SizeBytes           int64       `db:"size_bytes" json:"size_bytes"`
+	CompressedSizeBytes pgtype.Int8 `db:"compressed_size_bytes" json:"compressed_size_bytes"`
+	ID                  uuid.UUID   `db:"id" json:"id"`
+}
+
+// size_bytes is the logical uncompressed size. compressed_size_bytes remains
+// NULL when the base object is not compressed; hash continues to identify the
+// immutable base object, while each append part carries its own hash.
+func (q *sqlQuerier) AddReadyLogFilePartSizes(ctx context.Context, arg AddReadyLogFilePartSizesParams) error {
+	_, err := q.db.Exec(ctx, addReadyLogFilePartSizes, arg.SizeBytes, arg.CompressedSizeBytes, arg.ID)
+	return err
+}
+
+const expireStaleLogFileParts = `-- name: ExpireStaleLogFileParts :many
+UPDATE log_file_parts
+SET status = 'failed'
+WHERE log_file_id = $1
+  AND status = 'pending'
+  AND created_at < $2
+RETURNING id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at
+`
+
+type ExpireStaleLogFilePartsParams struct {
+	LogFileID   uuid.UUID          `db:"log_file_id" json:"log_file_id"`
+	StaleBefore pgtype.Timestamptz `db:"stale_before" json:"stale_before"`
+}
+
+func (q *sqlQuerier) ExpireStaleLogFileParts(ctx context.Context, arg ExpireStaleLogFilePartsParams) ([]LogFilePart, error) {
+	rows, err := q.db.Query(ctx, expireStaleLogFileParts, arg.LogFileID, arg.StaleBefore)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogFilePart
+	for rows.Next() {
+		var i LogFilePart
+		if err := rows.Scan(
+			&i.ID,
+			&i.LogFileID,
+			&i.Sequence,
+			&i.UploadID,
+			&i.ReservationID,
+			&i.SourceSequence,
+			&i.ObjectKey,
+			&i.Status,
+			&i.Hash,
+			&i.SizeBytes,
+			&i.CompressedSizeBytes,
+			&i.ContentEncoding,
+			&i.CreatedAt,
+			&i.FinalizedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const finalizeLogFilePart = `-- name: FinalizeLogFilePart :one
+UPDATE log_file_parts
+SET status = 'ready',
+    hash = $1,
+    size_bytes = $2,
+    compressed_size_bytes = $3,
+    content_encoding = $4,
+    finalized_at = now()
+WHERE id = $5
+  AND reservation_id = $6
+  AND status = 'pending'
+RETURNING id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at
+`
+
+type FinalizeLogFilePartParams struct {
+	Hash                pgtype.Text `db:"hash" json:"hash"`
+	SizeBytes           pgtype.Int8 `db:"size_bytes" json:"size_bytes"`
+	CompressedSizeBytes pgtype.Int8 `db:"compressed_size_bytes" json:"compressed_size_bytes"`
+	ContentEncoding     pgtype.Text `db:"content_encoding" json:"content_encoding"`
+	ID                  uuid.UUID   `db:"id" json:"id"`
+	ReservationID       uuid.UUID   `db:"reservation_id" json:"reservation_id"`
+}
+
+func (q *sqlQuerier) FinalizeLogFilePart(ctx context.Context, arg FinalizeLogFilePartParams) (LogFilePart, error) {
+	row := q.db.QueryRow(ctx, finalizeLogFilePart,
+		arg.Hash,
+		arg.SizeBytes,
+		arg.CompressedSizeBytes,
+		arg.ContentEncoding,
+		arg.ID,
+		arg.ReservationID,
+	)
+	var i LogFilePart
+	err := row.Scan(
+		&i.ID,
+		&i.LogFileID,
+		&i.Sequence,
+		&i.UploadID,
+		&i.ReservationID,
+		&i.SourceSequence,
+		&i.ObjectKey,
+		&i.Status,
+		&i.Hash,
+		&i.SizeBytes,
+		&i.CompressedSizeBytes,
+		&i.ContentEncoding,
+		&i.CreatedAt,
+		&i.FinalizedAt,
+	)
+	return i, err
+}
+
+const getLogFilePart = `-- name: GetLogFilePart :one
+SELECT id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at
+FROM log_file_parts
+WHERE id = $1
+`
+
+func (q *sqlQuerier) GetLogFilePart(ctx context.Context, id uuid.UUID) (LogFilePart, error) {
+	row := q.db.QueryRow(ctx, getLogFilePart, id)
+	var i LogFilePart
+	err := row.Scan(
+		&i.ID,
+		&i.LogFileID,
+		&i.Sequence,
+		&i.UploadID,
+		&i.ReservationID,
+		&i.SourceSequence,
+		&i.ObjectKey,
+		&i.Status,
+		&i.Hash,
+		&i.SizeBytes,
+		&i.CompressedSizeBytes,
+		&i.ContentEncoding,
+		&i.CreatedAt,
+		&i.FinalizedAt,
+	)
+	return i, err
+}
+
+const listLogFilePartsForDeletion = `-- name: ListLogFilePartsForDeletion :many
+SELECT id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at
+FROM log_file_parts
+WHERE log_file_id = $1
+ORDER BY sequence, id
+`
+
+func (q *sqlQuerier) ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error) {
+	rows, err := q.db.Query(ctx, listLogFilePartsForDeletion, logFileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogFilePart
+	for rows.Next() {
+		var i LogFilePart
+		if err := rows.Scan(
+			&i.ID,
+			&i.LogFileID,
+			&i.Sequence,
+			&i.UploadID,
+			&i.ReservationID,
+			&i.SourceSequence,
+			&i.ObjectKey,
+			&i.Status,
+			&i.Hash,
+			&i.SizeBytes,
+			&i.CompressedSizeBytes,
+			&i.ContentEncoding,
+			&i.CreatedAt,
+			&i.FinalizedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReadyLogFileParts = `-- name: ListReadyLogFileParts :many
+SELECT part.id, part.log_file_id, part.sequence, part.upload_id, part.reservation_id, part.source_sequence, part.object_key, part.status, part.hash, part.size_bytes, part.compressed_size_bytes, part.content_encoding, part.created_at, part.finalized_at
+FROM log_file_parts part
+WHERE part.log_file_id = $1
+  AND part.status = 'ready'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM log_file_parts earlier
+      WHERE earlier.log_file_id = part.log_file_id
+        AND (
+            earlier.source_sequence IS NULL,
+            COALESCE(earlier.source_sequence, earlier.sequence),
+            earlier.sequence
+        ) < (
+            part.source_sequence IS NULL,
+            COALESCE(part.source_sequence, part.sequence),
+            part.sequence
+        )
+        AND earlier.status = 'pending'
+  )
+ORDER BY part.source_sequence IS NULL,
+         COALESCE(part.source_sequence, part.sequence),
+         part.sequence,
+         part.id
+`
+
+func (q *sqlQuerier) ListReadyLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error) {
+	rows, err := q.db.Query(ctx, listReadyLogFileParts, logFileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogFilePart
+	for rows.Next() {
+		var i LogFilePart
+		if err := rows.Scan(
+			&i.ID,
+			&i.LogFileID,
+			&i.Sequence,
+			&i.UploadID,
+			&i.ReservationID,
+			&i.SourceSequence,
+			&i.ObjectKey,
+			&i.Status,
+			&i.Hash,
+			&i.SizeBytes,
+			&i.CompressedSizeBytes,
+			&i.ContentEncoding,
+			&i.CreatedAt,
+			&i.FinalizedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockLogFilePartSequence = `-- name: LockLogFilePartSequence :one
+SELECT log_file.id
+FROM log_file
+WHERE log_file.id = $1
+FOR UPDATE
+`
+
+func (q *sqlQuerier) LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLogFilePartSequence, logFileID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const markLogFilePartFailed = `-- name: MarkLogFilePartFailed :exec
+UPDATE log_file_parts
+SET status = 'failed'
+WHERE id = $1
+  AND reservation_id = $2
+  AND status = 'pending'
+`
+
+type MarkLogFilePartFailedParams struct {
+	ID            uuid.UUID `db:"id" json:"id"`
+	ReservationID uuid.UUID `db:"reservation_id" json:"reservation_id"`
+}
+
+func (q *sqlQuerier) MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error {
+	_, err := q.db.Exec(ctx, markLogFilePartFailed, arg.ID, arg.ReservationID)
+	return err
+}
+
+const reserveLogFilePart = `-- name: ReserveLogFilePart :one
+INSERT INTO log_file_parts (
+    id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status
+)
+VALUES (
+    $1,
+    $2,
+    (SELECT COALESCE(MAX(sequence), 0) + 1 FROM log_file_parts WHERE log_file_id = $2),
+    $3,
+    $4,
+    $5::bigint,
+    $6,
+    'pending'
+)
+ON CONFLICT (log_file_id, upload_id) DO UPDATE
+SET status = CASE
+        WHEN log_file_parts.status = 'failed' THEN 'pending'
+        ELSE log_file_parts.status
+    END,
+    reservation_id = CASE
+        WHEN log_file_parts.status = 'failed' THEN EXCLUDED.reservation_id
+        ELSE log_file_parts.reservation_id
+    END,
+    object_key = CASE
+        WHEN log_file_parts.status = 'failed' THEN EXCLUDED.object_key
+        ELSE log_file_parts.object_key
+    END,
+    created_at = CASE
+        WHEN log_file_parts.status = 'failed' THEN now()
+        ELSE log_file_parts.created_at
+    END
+RETURNING id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at
+`
+
+type ReserveLogFilePartParams struct {
+	PartID         uuid.UUID   `db:"part_id" json:"part_id"`
+	LogFileID      uuid.UUID   `db:"log_file_id" json:"log_file_id"`
+	UploadID       uuid.UUID   `db:"upload_id" json:"upload_id"`
+	ReservationID  uuid.UUID   `db:"reservation_id" json:"reservation_id"`
+	SourceSequence pgtype.Int8 `db:"source_sequence" json:"source_sequence"`
+	ObjectKey      string      `db:"object_key" json:"object_key"`
+}
+
+func (q *sqlQuerier) ReserveLogFilePart(ctx context.Context, arg ReserveLogFilePartParams) (LogFilePart, error) {
+	row := q.db.QueryRow(ctx, reserveLogFilePart,
+		arg.PartID,
+		arg.LogFileID,
+		arg.UploadID,
+		arg.ReservationID,
+		arg.SourceSequence,
+		arg.ObjectKey,
+	)
+	var i LogFilePart
+	err := row.Scan(
+		&i.ID,
+		&i.LogFileID,
+		&i.Sequence,
+		&i.UploadID,
+		&i.ReservationID,
+		&i.SourceSequence,
+		&i.ObjectKey,
+		&i.Status,
+		&i.Hash,
+		&i.SizeBytes,
+		&i.CompressedSizeBytes,
+		&i.ContentEncoding,
+		&i.CreatedAt,
+		&i.FinalizedAt,
+	)
+	return i, err
 }
 
 const getCharacterLoot = `-- name: GetCharacterLoot :many

@@ -2,9 +2,11 @@ package serviceazerothcore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
@@ -20,6 +22,25 @@ import (
 )
 
 const MaxLogFileSize = 250 * 1024 * 1024 // 250 MB
+
+func serverLogAppendMeta(header http.Header) (chronicle.ServerLogAppendMeta, error) {
+	meta := chronicle.ServerLogAppendMeta{}
+	if rawUploadID := header.Get("X-Chronicle-Upload-ID"); rawUploadID != "" {
+		uploadID, err := uuid.Parse(rawUploadID)
+		if err != nil {
+			return meta, errors.New("invalid X-Chronicle-Upload-ID header")
+		}
+		meta.UploadID = uploadID
+	}
+	if rawSequence := header.Get("X-Chronicle-Chunk-Sequence"); rawSequence != "" {
+		sequence, err := strconv.ParseInt(rawSequence, 10, 64)
+		if err != nil || sequence <= 0 {
+			return meta, errors.New("invalid X-Chronicle-Chunk-Sequence header")
+		}
+		meta.SourceSequence = pgtype.Int8{Int64: sequence, Valid: true}
+	}
+	return meta, nil
+}
 
 // authenticateUploadKey extracts the Bearer token from the request, looks up
 // the upload key by hash, and checks SpiceDB upload permission on the realm.
@@ -107,6 +128,11 @@ func (h *Handler) ServerLogUpload(w http.ResponseWriter, r *http.Request) {
 	instanceID := r.Header.Get("X-Chronicle-Instance-Id")
 	instanceName := r.Header.Get("X-Chronicle-Instance-Name")
 	instanceToken := r.Header.Get("X-Chronicle-Instance-Token")
+	appendMeta, err := serverLogAppendMeta(r.Header)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: err.Error()})
+		return
+	}
 	realmID := uuid.NullUUID{UUID: key.RealmID, Valid: key.RealmID != uuid.Nil}
 
 	if instanceID == "" || instanceName == "" || instanceToken == "" {
@@ -145,8 +171,12 @@ func (h *Handler) ServerLogUpload(w http.ResponseWriter, r *http.Request) {
 		RealmID:       realmID,
 	}); findErr == nil {
 		// Append to existing group
-		if appendErr := h.chronicle.AppendServerLog(ctx, existing, file, key.RealmID); appendErr != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+		if appendErr := h.chronicle.AppendServerLog(ctx, existing, file, key.RealmID, appendMeta); appendErr != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(appendErr, chronicle.ErrServerLogAppendInProgress) {
+				status = http.StatusConflict
+			}
+			httpapi.Write(ctx, w, status, chroniclesdk.Response{
 				Message: "Failed to append log to existing group",
 				Detail:  appendErr.Error(),
 			})

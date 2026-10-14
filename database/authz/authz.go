@@ -142,6 +142,13 @@ func (z *Authz) InTx(ctx context.Context, f func(tx *AuthzTX) error, opts *pgx.T
 	return nil
 }
 
+// PGXTx exposes the transaction used by this authorization-aware store for
+// libraries, such as River, that support atomic work on an existing pgx
+// transaction.
+func (z *AuthzTX) PGXTx() (pgx.Tx, bool) {
+	return database.PGXTx(z.tx)
+}
+
 func (z *AuthzTX) Ping(ctx context.Context) (time.Duration, error) { return z.parent.Ping(ctx) }
 
 func (z *AuthzTX) Close() error {

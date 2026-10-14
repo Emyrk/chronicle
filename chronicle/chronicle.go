@@ -463,93 +463,147 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 	return &group, dbFiles, nil
 }
 
-// AppendServerLog appends new (gzip-compressed) data to an existing log group's
-// file. Both the existing stored blob and newData are gzip streams; concatenating
-// them produces valid multistream gzip that Go's gzip.Reader reads transparently.
-// After appending, the file record is updated and a reparse is enqueued.
-func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, realmID uuid.UUID) error {
+var ErrServerLogAppendInProgress = errors.New("server log append with this upload ID is already in progress")
+
+type ServerLogAppendMeta struct {
+	UploadID       uuid.UUID
+	SourceSequence pgtype.Int8
+}
+
+// AppendServerLog stores each append as an immutable object part. PostgreSQL is
+// used only for short reservation/finalization transactions; no connection is
+// held while the object is uploaded.
+func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, realmID uuid.UUID, meta ServerLogAppendMeta) error {
 	files, err := c.Zed.GetWoWLogFilesByGroupID(ctx, group.ID)
 	if err != nil {
 		return fmt.Errorf("fetch log files for group %s: %w", group.ID, err)
 	}
-	if len(files) == 0 {
-		return fmt.Errorf("no files found for log group %s", group.ID)
+	if len(files) != 1 {
+		return fmt.Errorf("server log group %s requires exactly one logical file, found %d", group.ID, len(files))
 	}
 	file := files[0]
-
-	// Download existing file from storage
-	existing, err := c.Storage.DownloadFile(ctx, BucketRaidLogs, c.logPath(file.ID))
-	if err != nil {
-		return fmt.Errorf("download existing log file %s: %w", file.ID, err)
+	if meta.UploadID == uuid.Nil {
+		meta.UploadID = uuid.New()
+	}
+	if err := expireStaleLogFileParts(ctx, c.Zed, c.Storage, file.ID); err != nil {
+		return err
 	}
 
-	// If existing file is plaintext (uploaded before gzip was enabled),
-	// compress it so we can do multistream gzip concatenation.
-	isExistingGzip := file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip"
-	if !isExistingGzip {
-		var buf bytes.Buffer
-		gzw := gzip.NewWriter(&buf)
-		if _, err := gzw.Write(existing); err != nil {
-			return fmt.Errorf("compress existing plaintext log: %w", err)
+	partID := uuid.New()
+	reservationID := uuid.New()
+	objectKey := filepath.Join("logs", file.ID.String(), "parts", reservationID.String()+".gz")
+	var part database.LogFilePart
+	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if _, err := tx.LockLogFilePartSequence(ctx, file.ID); err != nil {
+			return fmt.Errorf("lock log file part sequence: %w", err)
 		}
-		if err := gzw.Close(); err != nil {
-			return fmt.Errorf("finalize gzip of existing log: %w", err)
+		var reserveErr error
+		part, reserveErr = tx.ReserveLogFilePart(ctx, database.ReserveLogFilePartParams{
+			PartID:         partID,
+			LogFileID:      file.ID,
+			UploadID:       meta.UploadID,
+			ReservationID:  reservationID,
+			SourceSequence: meta.SourceSequence,
+			ObjectKey:      objectKey,
+		})
+		return reserveErr
+	}, nil); err != nil {
+		return fmt.Errorf("reserve server log part: %w", err)
+	}
+	if part.Status == "ready" {
+		return nil
+	}
+	if part.ReservationID != reservationID {
+		return ErrServerLogAppendInProgress
+	}
+
+	finalized := false
+	uploaded := false
+	defer func() {
+		if finalized {
+			return
 		}
-		existing = buf.Bytes()
-	}
+		cleanupCtx := context.WithoutCancel(ctx)
+		_ = c.Zed.MarkLogFilePartFailed(cleanupCtx, database.MarkLogFilePartFailedParams{
+			ID:            part.ID,
+			ReservationID: reservationID,
+		})
+		current, err := c.Zed.GetLogFilePart(cleanupCtx, part.ID)
+		if err != nil {
+			// A commit error can be ambiguous. Never delete an object unless the
+			// database confirms that this reservation did not finalize.
+			return
+		}
+		if current.Status == "ready" && current.ReservationID == reservationID {
+			return
+		}
+		if uploaded {
+			if _, err := c.Storage.RemoveFile(cleanupCtx, BucketRaidLogs, []string{part.ObjectKey}); err != nil {
+				slog.WarnContext(cleanupCtx, "failed to remove unfinalized log file part", "error", err, "part_id", part.ID)
+			}
+		}
+	}()
 
-	// Read new gzip upload into memory
-	newBytes, err := io.ReadAll(newData)
+	compressed, err := io.ReadAll(newData)
 	if err != nil {
-		return fmt.Errorf("read new log data: %w", err)
+		return fmt.Errorf("read server log part: %w", err)
 	}
-
-	// Concatenate compressed blobs (valid multistream gzip)
-	combined := append(existing, newBytes...)
-
-	// Hash the compressed blob (that's what we store & deduplicate)
-	h := sha256.Sum256(combined)
-	newHash := hex.EncodeToString(h[:])
-
-	// Compute decompressed size for the DB record
-	gzr, err := gzip.NewReader(bytes.NewReader(combined))
+	gzr, err := gzip.NewReader(bytes.NewReader(compressed))
 	if err != nil {
-		return fmt.Errorf("open combined gzip for size calculation: %w", err)
+		return fmt.Errorf("open server log part gzip: %w", err)
 	}
 	decompressedSize, err := io.Copy(io.Discard, gzr)
 	_ = gzr.Close()
 	if err != nil {
-		return fmt.Errorf("calculate decompressed size: %w", err)
+		return fmt.Errorf("read server log part gzip: %w", err)
 	}
+	h := sha256.Sum256(compressed)
+	partHash := hex.EncodeToString(h[:])
+	compressedSize := int64(len(compressed))
 
-	// Re-upload combined file (overwrites existing key)
-	_, err = c.Storage.UploadFile(ctx, BucketRaidLogs, c.logPath(file.ID),
-		bytes.NewReader(combined), storage.FileOptions{
-			ContentType: ptr.Ref("application/gzip"),
+	if _, err := c.Storage.UploadFile(ctx, BucketRaidLogs, part.ObjectKey, bytes.NewReader(compressed),
+		storage.FileOptions{ContentType: ptr.Ref("application/gzip")}); err != nil {
+		return fmt.Errorf("upload server log part: %w", err)
+	}
+	uploaded = true
+
+	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		_, finalizeErr := tx.FinalizeLogFilePart(ctx, database.FinalizeLogFilePartParams{
+			ID:                  part.ID,
+			ReservationID:       reservationID,
+			Hash:                pgtype.Text{String: partHash, Valid: true},
+			SizeBytes:           database.Int8(&decompressedSize),
+			CompressedSizeBytes: database.Int8(&compressedSize),
+			ContentEncoding:     pgtype.Text{String: "gzip", Valid: true},
 		})
-	if err != nil {
-		return fmt.Errorf("re-upload combined log file: %w", err)
+		if errors.Is(finalizeErr, pgx.ErrNoRows) {
+			existing, getErr := tx.GetLogFilePart(ctx, part.ID)
+			if getErr == nil && existing.Status == "ready" && existing.ReservationID == reservationID {
+				return nil
+			}
+		}
+		if finalizeErr != nil {
+			return fmt.Errorf("finalize server log part: %w", finalizeErr)
+		}
+		if err := tx.AddReadyLogFilePartSizes(ctx, database.AddReadyLogFilePartSizesParams{
+			ID:                  file.ID,
+			SizeBytes:           decompressedSize,
+			CompressedSizeBytes: database.Int8(&compressedSize),
+		}); err != nil {
+			return fmt.Errorf("update logical log file sizes: %w", err)
+		}
+		pgxTx, ok := tx.PGXTx()
+		if !ok {
+			return errors.New("server log part transaction does not expose pgx transaction")
+		}
+		if _, err := c.enqueueReParseLog(ctx, tx, pgxTx, group.ID, false, false, realmID); err != nil {
+			return fmt.Errorf("enqueue reparse after server log part: %w", err)
+		}
+		return nil
+	}, nil); err != nil {
+		return err
 	}
-
-	// Update DB record with new hash, sizes, and encoding
-	compressedSize := int64(len(combined))
-	err = c.Zed.UpdateLogFileAfterAppend(ctx, database.UpdateLogFileAfterAppendParams{
-		ID:                  file.ID,
-		Hash:                newHash,
-		SizeBytes:           decompressedSize,
-		CompressedSizeBytes: database.Int8(&compressedSize),
-		ContentEncoding:     pgtype.Text{String: "gzip", Valid: true},
-	})
-	if err != nil {
-		return fmt.Errorf("update log file record after append: %w", err)
-	}
-
-	// Trigger reparse with the larger combined file
-	_, err = c.EnqueueReParseLog(ctx, group.ID, false, false, realmID)
-	if err != nil {
-		return fmt.Errorf("enqueue reparse after append: %w", err)
-	}
-
+	finalized = true
 	return nil
 }
 
@@ -852,6 +906,39 @@ func (c *Chronicle) refreshParseScoreMemberships(ctx context.Context, logGroupID
 	return err
 }
 
+// DownloadLogicalLogFile returns the base object plus all finalized append parts
+// as one logical download. Gzip members are concatenated without recompression.
+func (c *Chronicle) DownloadLogicalLogFile(ctx context.Context, file database.LogFile) ([]byte, bool, error) {
+	parts, err := listReadyLogFileParts(ctx, c.Zed, c.Storage, file.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	isGzip := file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip"
+	if !isGzip {
+		reader, err := loadRawLogFileWithParts(ctx, c.Storage, file, parts)
+		if err != nil {
+			return nil, false, err
+		}
+		contents, err := io.ReadAll(reader)
+		return contents, false, err
+	}
+
+	contents, err := c.Storage.DownloadFile(ctx, BucketRaidLogs, c.logPath(file.ID))
+	if err != nil {
+		return nil, true, fmt.Errorf("download base log object: %w", err)
+	}
+	var combined bytes.Buffer
+	_, _ = combined.Write(contents)
+	for _, part := range parts {
+		partBytes, err := c.Storage.DownloadFile(ctx, BucketRaidLogs, part.ObjectKey)
+		if err != nil {
+			return nil, true, fmt.Errorf("download log part %s: %w", part.ID, err)
+		}
+		_, _ = combined.Write(partBytes)
+	}
+	return combined.Bytes(), true, nil
+}
+
 func (c *Chronicle) RemoveWoWLogFilesFromStorage(ctx context.Context, logID uuid.UUID) error {
 	files, err := c.Zed.GetWoWLogFilesByGroupID(ctx, logID)
 	if err != nil {
@@ -859,9 +946,16 @@ func (c *Chronicle) RemoveWoWLogFilesFromStorage(ctx context.Context, logID uuid
 	}
 
 	for _, file := range files {
-		_, err := c.Storage.RemoveFile(ctx, BucketRaidLogs, []string{c.logPath(file.ID)})
+		paths := []string{c.logPath(file.ID)}
+		parts, err := c.Zed.ListLogFilePartsForDeletion(ctx, file.ID)
 		if err != nil {
-			return fmt.Errorf("remove file: %w", err)
+			return fmt.Errorf("fetch log file parts for deletion: %w", err)
+		}
+		for _, part := range parts {
+			paths = append(paths, part.ObjectKey)
+		}
+		if _, err := c.Storage.RemoveFile(ctx, BucketRaidLogs, paths); err != nil {
+			return fmt.Errorf("remove file objects: %w", err)
 		}
 	}
 	return nil

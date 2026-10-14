@@ -9,8 +9,10 @@ import (
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 )
@@ -138,8 +140,16 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 	return nil
 }
 
+type reparseMetadataStore interface {
+	RankingRunIdentitiesByLogGroupID(context.Context, uuid.UUID) ([]database.RankingRunIdentitiesByLogGroupIDRow, error)
+}
+
 func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
-	identities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logID)
+	return c.enqueueReParseLog(ctx, c.Zed, nil, logID, verbose, identityMode, realmID)
+}
+
+func (c *Chronicle) enqueueReParseLog(ctx context.Context, db reparseMetadataStore, tx pgx.Tx, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
+	identities, err := db.RankingRunIdentitiesByLogGroupID(ctx, logID)
 	if err != nil {
 		return nil, fmt.Errorf("load ranking run identities: %w", err)
 	}
@@ -152,18 +162,18 @@ func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verb
 	}
 
 	t := servicetenant.TenantIDFromContext(ctx)
-	res, err := c.queue.Insert(ctx, ArgsLogReparse{
+	args := ArgsLogReparse{
 		LogID:        logID,
 		RealmID:      realmID,
 		TenantID:     t,
 		Verbose:      verbose,
 		IdentityMode: identityMode,
-	}, &river.InsertOpts{
-		Tags:     []string{},
-		Metadata: metadata,
-	})
-
-	return res, err
+	}
+	opts := &river.InsertOpts{Tags: []string{}, Metadata: metadata}
+	if tx != nil {
+		return c.queue.InsertTx(ctx, tx, args, opts)
+	}
+	return c.queue.Insert(ctx, args, opts)
 }
 
 func (c *Chronicle) ListLogGroupJobs(ctx context.Context, groupID uuid.UUID) (*river.JobListResult, error) {

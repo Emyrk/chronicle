@@ -542,17 +542,6 @@ SELECT * FROM log_file WHERE hash = $1;
 -- name: GetLogFile :one
 SELECT * FROM log_file WHERE id = $1;
 
--- name: UpdateLogFileAfterAppend :exec
-UPDATE log_file
-SET hash = @hash,
-    size_bytes = @size_bytes,
-    compressed_size_bytes = @compressed_size_bytes,
-    content_encoding = @content_encoding,
-    updated_at = now()
-WHERE id = @id;
-
-
-
 -- name: GetWoWLogGroupByID :one
 SELECT
   sqlc.embed(wow_log_groups),
