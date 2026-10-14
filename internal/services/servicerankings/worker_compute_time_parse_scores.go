@@ -241,8 +241,20 @@ type ArgsBackfillTimeParseScores struct {
 
 func (ArgsBackfillTimeParseScores) Kind() string { return KindBackfillTimeParseScores }
 func (ArgsBackfillTimeParseScores) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{Queue: riverconst.QueueRankings, Priority: riverconst.PriorityLow, MaxAttempts: 3,
-		UniqueOpts: river.UniqueOpts{ByArgs: true, ByState: []rivertype.JobState{rivertype.JobStatePending, rivertype.JobStateAvailable, rivertype.JobStateRunning}}}
+	return river.InsertOpts{
+		Queue:       riverconst.QueueRankings,
+		Priority:    riverconst.PriorityLow,
+		MaxAttempts: 3,
+		UniqueOpts: river.UniqueOpts{
+			ByArgs: true,
+			ByState: []rivertype.JobState{
+				rivertype.JobStateScheduled,
+				rivertype.JobStatePending,
+				rivertype.JobStateAvailable,
+				rivertype.JobStateRunning,
+			},
+		},
+	}
 }
 
 type WorkerBackfillTimeParseScores struct {
