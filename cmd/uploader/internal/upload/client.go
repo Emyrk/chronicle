@@ -96,6 +96,9 @@ type Client struct {
 	// Token returns the current bearer token ("" when signed out).
 	Token string
 	HTTP  *http.Client
+	// Fast compresses at gzip.BestSpeed: ~3x the throughput of the default for a
+	// ratio that is irrelevant next to a frame hitch while the game runs.
+	Fast bool
 }
 
 type uploadResponse struct {
@@ -124,7 +127,7 @@ func (c *Client) Upload(ctx context.Context, path string, size int64) (Result, e
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
-		_ = pw.CloseWithError(writeForm(mw, f, size, filepath.Base(path)))
+		_ = pw.CloseWithError(writeForm(mw, f, size, filepath.Base(path), c.Fast))
 	}()
 
 	endpoint := strings.TrimRight(c.BaseURL, "/") + uploadPath + "?" + url.Values{"format": {c.Format}, "flavor": {c.Flavor}}.Encode()
@@ -169,7 +172,7 @@ func (c *Client) Upload(ctx context.Context, path string, size int64) (Result, e
 	return Result{}, &Error{Status: resp.StatusCode, Message: msg}
 }
 
-func writeForm(mw *multipart.Writer, src io.Reader, size int64, name string) error {
+func writeForm(mw *multipart.Writer, src io.Reader, size int64, name string, fast bool) error {
 	// The ".gz" suffix is how the server knows the part is compressed.
 	h := textproto.MIMEHeader{}
 	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="combat_log"; filename="%s.gz"`, name))
@@ -178,7 +181,14 @@ func writeForm(mw *multipart.Writer, src io.Reader, size int64, name string) err
 	if err != nil {
 		return err
 	}
-	zw := gzip.NewWriter(part)
+	level := gzip.DefaultCompression
+	if fast {
+		level = gzip.BestSpeed
+	}
+	zw, err := gzip.NewWriterLevel(part, level)
+	if err != nil {
+		return err
+	}
 	if _, err := io.Copy(zw, io.LimitReader(src, size)); err != nil {
 		return err
 	}

@@ -50,6 +50,9 @@ func run() error {
 	}
 	flag.Parse()
 
+	// Never compete with the game for CPU.
+	prioErr := lowerPriority()
+
 	dir, err := store.Dir()
 	if err != nil {
 		return fmt.Errorf("find config dir: %w", err)
@@ -91,6 +94,9 @@ func run() error {
 	if err := st.Update(func(s *store.State) { s.Tenant = tn }); err != nil {
 		return err
 	}
+	if prioErr != nil {
+		logger.Warn("could not lower process priority", "err", prioErr)
+	}
 	logger.Info("tenant", "base_url", tn.BaseURL, "format", tn.Format, "flavor", tn.Flavor)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -101,8 +107,8 @@ func run() error {
 		Store:    st,
 		Installs: a.installs,
 		Token:    store.Token,
-		Upload: func(ctx context.Context, token, path string, size int64) (upload.Result, error) {
-			c := upload.Client{BaseURL: tn.BaseURL, Format: tn.Format, Flavor: tn.Flavor, Token: token}
+		Upload: func(ctx context.Context, token, path string, size int64, fast bool) (upload.Result, error) {
+			c := upload.Client{BaseURL: tn.BaseURL, Format: tn.Format, Flavor: tn.Flavor, Token: token, Fast: fast}
 			return c.Upload(ctx, path, size)
 		},
 		Running:  watch.NewGame(tn.Layout, nil).Running,

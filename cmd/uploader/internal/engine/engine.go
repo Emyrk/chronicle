@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -51,8 +53,9 @@ type Config struct {
 	// Token reads the bearer token from the keychain. It is cached; call
 	// Engine.TokenChanged after storing or removing one.
 	Token func() string
-	// Upload sends size bytes of path.
-	Upload func(ctx context.Context, token, path string, size int64) (upload.Result, error)
+	// Upload sends size bytes of path. fast asks for the cheapest compression;
+	// it is set while WoW is running so the game never competes for CPU.
+	Upload func(ctx context.Context, token, path string, size int64, fast bool) (upload.Result, error)
 	// Running reports whether WoW is running.
 	Running func(ctx context.Context, installDirs []string) bool
 	// Notify shows a native notification.
@@ -66,6 +69,10 @@ type Config struct {
 	// RetryBase is the first offline retry delay; it doubles up to RetryMax.
 	RetryBase time.Duration // default 5s
 	RetryMax  time.Duration // default 5m
+	// ServerRetryFor bounds how long a log is retried against a server that
+	// keeps answering 5xx (waiting RetryMax between tries) before it is marked
+	// failed. Offline retries have no bound.
+	ServerRetryFor time.Duration // default 1h
 }
 
 // Engine is the uploader's brain. Create with New and call Run.
@@ -89,6 +96,20 @@ type Engine struct {
 	sessionStart  time.Time
 	lastSession   time.Duration                              // length of the most recent WoW session
 	wait          func(ctx context.Context, d time.Duration) // overridden in tests
+
+	// mu guards everything the poll loop and the upload worker share: tracker,
+	// status and the fields the worker reads (token, wowUp, now, ...).
+	mu         sync.Mutex
+	pending    []job
+	current    *job
+	kick       chan struct{} // wakes the worker when pending grows
+	workerOnce sync.Once
+}
+
+// job is one log waiting to be (or being) uploaded.
+type job struct {
+	path string
+	size int64
 }
 
 const uploadedStickiness = time.Minute
@@ -107,6 +128,9 @@ func New(cfg Config) *Engine {
 	if cfg.RetryMax == 0 {
 		cfg.RetryMax = 5 * time.Minute
 	}
+	if cfg.ServerRetryFor == 0 {
+		cfg.ServerRetryFor = time.Hour
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
@@ -116,6 +140,7 @@ func New(cfg Config) *Engine {
 		tracker: watch.NewTracker(st.Uploaded),
 		manual:  make(chan struct{}, 1),
 		wake:    make(chan struct{}, 1),
+		kick:    make(chan struct{}, 1),
 		status:  Status{ReportURL: st.LastReportURL},
 		wait: func(ctx context.Context, d time.Duration) {
 			t := time.NewTimer(d)
@@ -167,7 +192,7 @@ func (e *Engine) Run(ctx context.Context) {
 }
 
 func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
-	e.now = now
+	e.workerOnce.Do(func() { go e.worker(ctx) })
 	installs := e.cfg.Installs()
 	var logDirs, installDirs []string
 	for _, in := range installs {
@@ -191,8 +216,11 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 			e.cfg.Logger.Info("watching", "file", f.Path)
 		}
 	}
+	e.mu.Lock()
+	e.now = now
 	e.trackSession(now, running)
 	queue, recording := e.tracker.Observe(now, files, running, manual, trig)
+	e.mu.Unlock()
 
 	if manual && len(queue) == 0 {
 		msg := "Nothing new to upload."
@@ -202,20 +230,16 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 		e.cfg.Notify("Chronicle", msg)
 	}
 
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	token := e.currentToken(now)
 	needAuth := token == "" || token == e.rejectedToken
-	for _, f := range queue {
-		if needAuth {
-			break
-		}
-		if ctx.Err() != nil {
-			return
-		}
-		if !e.uploadOne(ctx, token, f) {
-			needAuth = true // rejected; keep the rest queued
-		}
+	if !needAuth {
+		e.enqueue(queue)
 	}
-
+	if e.busy() {
+		return // the worker owns the status until it is done
+	}
 	rejected := token != "" && token == e.rejectedToken
 	e.setStatus(e.baseline(now, len(installs) > 0, running, recording, needAuth, rejected))
 }
@@ -302,46 +326,164 @@ func (e *Engine) baseline(now time.Time, haveInstall, running, recording, needAu
 	return Status{State: StateIdle, Detail: "Waiting for WoW.", ReportURL: last}
 }
 
-// uploadOne returns false when the server rejected the token.
-func (e *Engine) uploadOne(ctx context.Context, token string, f watch.File) bool {
-	log := e.cfg.Logger.With("file", f.Path, "size", f.Size)
-	delay := e.cfg.RetryBase
-	log.Info("uploading", "file", f.Path, "size", formatSize(f.Size))
-	for {
-		e.setStatus(Status{State: StateUploading, Detail: "Uploading your log…", ReportURL: e.status.ReportURL})
-		res, err := e.cfg.Upload(ctx, token, f.Path, f.Size)
+// enqueue hands queue to the worker. Observe keeps returning a file until the
+// worker marks it, so a file that is already queued (or in flight at the same
+// size) is skipped. Callers hold e.mu.
+func (e *Engine) enqueue(queue []watch.File) {
+	for _, f := range queue {
 		switch {
-		case err == nil:
-			e.finish(f, res)
-			return true
-		case ctx.Err() != nil:
-			return true
-		case errors.Is(err, upload.ErrUnauthorized):
-			log.Warn("token rejected")
-			e.rejectedToken = token
-			e.cfg.Notify("Chronicle", "Chronicle needs you to sign in again.")
-			return false
-		case upload.Retryable(err):
-			log.Warn("upload failed, will retry", "err", err, "in", delay)
-			e.setStatus(Status{State: StateUploading, Detail: fmt.Sprintf("Can't reach Chronicle. Retrying in %s…", delay.Round(time.Second)), ReportURL: e.status.ReportURL})
-			e.wait(ctx, delay)
-			delay = min(delay*2, e.cfg.RetryMax)
+		case e.current != nil && e.current.path == f.Path && e.current.size == f.Size:
+		case e.replacePending(f):
 		default:
-			log.Error("upload failed", "err", err)
-			e.tracker.MarkFailed(f.Path, f.Size)
-			e.cfg.Notify("Chronicle upload failed", err.Error())
-			return true
+			e.pending = append(e.pending, job{path: f.Path, size: f.Size})
+		}
+	}
+	if len(e.pending) > 0 {
+		select {
+		case e.kick <- struct{}{}:
+		default:
 		}
 	}
 }
 
-func (e *Engine) finish(f watch.File, res upload.Result) {
-	e.tracker.MarkUploaded(f.Path, f.Size)
+// replacePending refreshes the size of an already queued path. Callers hold e.mu.
+func (e *Engine) replacePending(f watch.File) bool {
+	for i := range e.pending {
+		if e.pending[i].path == f.Path {
+			e.pending[i].size = f.Size
+			return true
+		}
+	}
+	return false
+}
+
+// busy reports whether the worker has anything queued or in flight. Callers
+// hold e.mu.
+func (e *Engine) busy() bool { return e.current != nil || len(e.pending) > 0 }
+
+// worker uploads queued logs one at a time so the poll loop never blocks.
+func (e *Engine) worker(ctx context.Context) {
+	for {
+		e.mu.Lock()
+		if len(e.pending) == 0 {
+			e.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return
+			case <-e.kick:
+			}
+			continue
+		}
+		j := e.pending[0]
+		e.pending = e.pending[1:]
+		e.current = &j
+		e.mu.Unlock()
+
+		rejected := e.uploadOne(ctx, j)
+
+		e.mu.Lock()
+		e.current = nil
+		if rejected {
+			// Still queued in the tracker; the poll loop re-enqueues them once
+			// there is a new token.
+			e.pending = nil
+		}
+		e.mu.Unlock()
+		if ctx.Err() != nil {
+			return
+		}
+		// Give the memory used by the gzip and transfer buffers back.
+		debug.FreeOSMemory()
+		select {
+		case e.wake <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// uploadOne sends one log, retrying as the failure allows. It returns true when
+// the server rejected the token.
+//
+// Connectivity errors are retried forever with a growing delay; a dial that
+// fails never starts compressing because the multipart pipe blocks until the
+// request is being written. A 5xx is retried every RetryMax for ServerRetryFor
+// and then marked failed. Any other 4xx fails at once.
+func (e *Engine) uploadOne(ctx context.Context, j job) (rejected bool) {
+	log := e.cfg.Logger.With("file", j.path, "size", j.size)
+	delay := e.cfg.RetryBase
+	var serverWaited time.Duration
+	log.Info("uploading", "file", j.path, "size", formatSize(j.size))
+	for {
+		e.mu.Lock()
+		token, fast := e.token, e.wowUp
+		if token == "" || token == e.rejectedToken {
+			// Signed out while retrying; the tracker still has it queued.
+			e.mu.Unlock()
+			return false
+		}
+		e.setStatus(Status{State: StateUploading, Detail: "Uploading your log…", ReportURL: e.status.ReportURL})
+		e.mu.Unlock()
+
+		res, err := e.cfg.Upload(ctx, token, j.path, j.size, fast)
+		var serverErr *upload.Error
+		switch {
+		case err == nil:
+			e.finish(j, res)
+			return false
+		case ctx.Err() != nil:
+			return false
+		case errors.Is(err, upload.ErrUnauthorized):
+			log.Warn("token rejected")
+			e.mu.Lock()
+			e.rejectedToken = token
+			e.mu.Unlock()
+			e.cfg.Notify("Chronicle", "Chronicle needs you to sign in again.")
+			return true
+		case errors.As(err, &serverErr) && upload.Retryable(err):
+			if serverWaited >= e.cfg.ServerRetryFor {
+				log.Error("giving up on server errors", "err", err, "waited", serverWaited)
+				e.fail(j, err)
+				return false
+			}
+			log.Warn("server error, will retry", "err", err, "in", e.cfg.RetryMax)
+			e.retryStatus(fmt.Sprintf("Chronicle is having trouble. Retrying in %s…", e.cfg.RetryMax.Round(time.Second)))
+			e.wait(ctx, e.cfg.RetryMax)
+			serverWaited += e.cfg.RetryMax
+		case upload.Retryable(err):
+			log.Warn("upload failed, will retry", "err", err, "in", delay)
+			e.retryStatus(fmt.Sprintf("Can't reach Chronicle. Retrying in %s…", delay.Round(time.Second)))
+			e.wait(ctx, delay)
+			delay = min(delay*2, e.cfg.RetryMax)
+		default:
+			log.Error("upload failed", "err", err)
+			e.fail(j, err)
+			return false
+		}
+	}
+}
+
+func (e *Engine) retryStatus(detail string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.setStatus(Status{State: StateUploading, Detail: detail, ReportURL: e.status.ReportURL})
+}
+
+// fail records a permanent failure and tells the user once.
+func (e *Engine) fail(j job, err error) {
+	e.mu.Lock()
+	e.tracker.MarkFailed(j.path, j.size)
+	e.mu.Unlock()
+	e.cfg.Notify("Chronicle upload failed", err.Error())
+}
+
+func (e *Engine) finish(f job, res upload.Result) {
+	e.mu.Lock()
+	e.tracker.MarkUploaded(f.path, f.size)
 	err := e.cfg.Store.Update(func(s *store.State) {
 		if s.Uploaded == nil {
 			s.Uploaded = map[string]int64{}
 		}
-		s.Uploaded[f.Path] = f.Size
+		s.Uploaded[f.path] = f.size
 		if res.ReportURL != "" {
 			s.LastReportURL = res.ReportURL
 		}
@@ -367,6 +509,7 @@ func (e *Engine) finish(f watch.File, res upload.Result) {
 	e.lastUploaded = Status{State: StateUploaded, Detail: detail, ReportURL: url}
 	e.uploadedUntil = e.now.Add(uploadedStickiness)
 	e.setStatus(e.lastUploaded)
+	e.mu.Unlock()
 	e.cfg.Notify(title, detail)
 }
 

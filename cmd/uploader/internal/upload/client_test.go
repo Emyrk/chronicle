@@ -111,3 +111,29 @@ func TestUpload(t *testing.T) {
 		require.ErrorIs(t, err, upload.ErrUnauthorized)
 	})
 }
+
+func TestUploadFast(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "WoWCombatLog.txt")
+	require.NoError(t, os.WriteFile(path, []byte("some combat"), 0o644))
+	// Byte 8 of a gzip stream is XFL: 4 is "fastest", 0 is the default level.
+	xfl := func(fast bool) byte {
+		var got byte
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			require.NoError(t, r.ParseMultipartForm(1<<20))
+			f, _, err := r.FormFile("combat_log")
+			require.NoError(t, err)
+			b, err := io.ReadAll(f)
+			require.NoError(t, err)
+			got = b[8]
+			w.WriteHeader(http.StatusCreated)
+		}))
+		defer srv.Close()
+		c := upload.Client{BaseURL: srv.URL, Token: "tok", Fast: fast}
+		_, err := c.Upload(context.Background(), path, 11)
+		require.NoError(t, err)
+		return got
+	}
+	require.Equal(t, byte(4), xfl(true))
+	require.Equal(t, byte(0), xfl(false))
+}
