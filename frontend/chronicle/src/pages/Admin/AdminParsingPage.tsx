@@ -1,13 +1,13 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
+  AdminBackfillTimeParseScoresResponse,
   AdminRankingsRefreshStatusResponse,
   AdminRefreshRankingsResponse,
   AdminSnapshotSummary,
-  AdminTimeParseSnapshotSummary,
   AdminTriggerSnapshotResponse,
 } from "@/api/typesGenerated";
-import { Loader2, Camera, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Camera, DatabaseZap, RefreshCw, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
@@ -35,46 +35,13 @@ function formatLookback(days: number) {
   return days === 0 ? "all-time" : `${days}d`;
 }
 
-// ── Tab types ───────────────────────────────────────────────────────────
-
-type TabKey = "dps-hps" | "time";
-
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "dps-hps", label: "DPS / HPS" },
-  { key: "time", label: "Clear / Kill Time" },
-];
-
 // ── Page shell ──────────────────────────────────────────────────────────
 
 export function AdminParsingPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>("dps-hps");
-
-  return (
-    <div className="space-y-4">
-      {/* Tab bar */}
-      <div className="flex gap-1 border-b border-zinc-800">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab.key
-                ? "border-blue-500 text-blue-400"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === "dps-hps" && <DpsHpsTab />}
-      {activeTab === "time" && <TimeParseTab />}
-    </div>
-  );
+  return <DpsHpsTab />;
 }
 
-// ── Snapshot creation controls (shared between tabs) ────────────────────
+// ── Ranking snapshot creation controls ──────────────────────────────────
 
 function SnapshotCreateControls({
   endpoint,
@@ -197,6 +164,180 @@ function SnapshotCreateControls({
             : "Failed to create snapshot"}
         </p>
       )}
+    </Card>
+  );
+}
+
+// ── Locked time-parse score backfill ────────────────────────────────────
+
+function TimeParseBackfillControls() {
+  const [tenantId, setTenantId] = useState("");
+  const [startedAfter, setStartedAfter] = useState("");
+  const [startedBefore, setStartedBefore] = useState("");
+  const [batchSize, setBatchSize] = useState(100);
+  const [force, setForce] = useState(false);
+
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/v1/admin/parses/time-scores/backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_id: tenantId.trim(),
+          started_after: startedAfter ? `${startedAfter}T00:00:00Z` : "",
+          started_before: startedBefore ? `${startedBefore}T00:00:00Z` : "",
+          batch_size: batchSize,
+          force,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          (body as Record<string, string>).detail ??
+            (body as Record<string, string>).message ??
+            "Failed to enqueue time parse backfill",
+        );
+      }
+      return res.json() as Promise<AdminBackfillTimeParseScoresResponse>;
+    },
+  });
+
+  const invalidDateRange =
+    startedAfter !== "" &&
+    startedBefore !== "" &&
+    startedAfter >= startedBefore;
+  const invalidBatchSize = batchSize < 1 || batchSize > 500;
+
+  const enqueue = () => {
+    if (
+      force &&
+      !window.confirm(
+        "Force recompute replaces existing locked scores in the selected range. Continue?",
+      )
+    ) {
+      return;
+    }
+    backfillMutation.mutate();
+  };
+
+  return (
+    <Card className="overflow-hidden border-amber-500/20 bg-gradient-to-br from-zinc-950 via-zinc-950 to-amber-950/20">
+      <div className="border-b border-amber-500/15 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <div className="rounded-md bg-amber-500/10 p-2 text-amber-400">
+            <DatabaseZap className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="font-semibold">Locked Time Parse Backfill</h3>
+            <p className="text-xs text-muted-foreground">
+              Dispatch historical clear and boss score jobs. Each run processes
+              one bounded batch.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4 p-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <label className="space-y-1 text-xs text-muted-foreground xl:col-span-2">
+            Tenant UUID
+            <input
+              type="text"
+              placeholder="Blank = all tenants"
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 font-mono text-sm text-foreground"
+              value={tenantId}
+              onChange={(event) => setTenantId(event.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Instance started on or after
+            <input
+              type="date"
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-foreground"
+              value={startedAfter}
+              onChange={(event) => setStartedAfter(event.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Instance started before
+            <input
+              type="date"
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-foreground"
+              value={startedBefore}
+              onChange={(event) => setStartedBefore(event.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Batch size
+            <input
+              type="number"
+              min={1}
+              max={500}
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-foreground"
+              value={batchSize}
+              onChange={(event) => setBatchSize(Number(event.target.value))}
+            />
+          </label>
+          <label className="flex items-center gap-2 self-end rounded border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={force}
+              onChange={(event) => setForce(event.target.checked)}
+              className="rounded border-zinc-700"
+            />
+            Force recompute existing scores
+          </label>
+          <div className="flex items-end">
+            <Button
+              className="w-full"
+              onClick={enqueue}
+              disabled={
+                backfillMutation.isPending || invalidDateRange || invalidBatchSize
+              }
+            >
+              {backfillMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <DatabaseZap className="mr-2 h-4 w-4" />
+              )}
+              Enqueue Backfill Batch
+            </Button>
+          </div>
+        </div>
+
+        {invalidDateRange && (
+          <p className="text-sm text-red-400">
+            The start date must be before the end date.
+          </p>
+        )}
+        {invalidBatchSize && (
+          <p className="text-sm text-red-400">
+            Batch size must be between 1 and 500.
+          </p>
+        )}
+        {backfillMutation.isSuccess && (
+          <div className="rounded border border-green-500/20 bg-green-500/5 px-3 py-2 text-sm text-green-400">
+            Dispatcher job{" "}
+            <span className="font-mono">#{backfillMutation.data.job_id}</span>{" "}
+            was enqueued in state{" "}
+            <span className="font-mono">{backfillMutation.data.job_state}</span>
+            . Run another batch after it completes if its River output reports
+            rerun=true.
+          </div>
+        )}
+        {backfillMutation.isError && (
+          <p className="rounded border border-red-500/20 bg-red-500/5 px-3 py-2 text-sm text-red-400">
+            {backfillMutation.error instanceof Error
+              ? backfillMutation.error.message
+              : "Failed to enqueue time parse backfill"}
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Blank tenant and date filters target all eligible history.
+          Missing-only runs skip existing scores. Every instance is scored at
+          its own start timestamp against the preceding 60 days of cohort data.
+        </p>
+      </div>
     </Card>
   );
 }
@@ -450,6 +591,8 @@ function DpsHpsTab() {
         </div>
       </Card>
 
+      <TimeParseBackfillControls />
+
       <SnapshotCreateControls
         endpoint="/api/v1/admin/parses/snapshot"
         queryKeyToInvalidate={["admin", "parses", "snapshots"]}
@@ -581,264 +724,6 @@ function DpsHpsTab() {
         ) : (
           <p className="text-sm text-muted-foreground text-center py-4">
             No snapshots found. Create one to get started.
-          </p>
-        )}
-        {(deleteMutation.isError || bulkDeleteMutation.isError) && (
-          <p className="text-sm text-red-500 mt-2">
-            {(deleteMutation.error ?? bulkDeleteMutation.error) instanceof Error
-              ? ((deleteMutation.error ?? bulkDeleteMutation.error) as Error).message
-              : "Failed to delete snapshot(s)"}
-          </p>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-// ── Clear / Kill Time Tab ───────────────────────────────────────────────
-
-function TimeParseTab() {
-  const queryClient = useQueryClient();
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  const {
-    data: snapshots,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: ["admin", "parses", "time-parse-snapshots"],
-    queryFn: async () => {
-      const res = await fetch("/api/v1/admin/parses/time-parse-snapshots");
-      if (!res.ok) throw new Error("Failed to fetch time-parse snapshots");
-      return res.json() as Promise<AdminTimeParseSnapshotSummary[]>;
-    },
-    retry: false,
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (snapshotId: string) => {
-      const res = await fetch(
-        `/api/v1/admin/parses/time-parse-snapshots/${snapshotId}`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(
-          (body as Record<string, string>).message ?? "Failed to delete snapshot",
-        );
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["admin", "parses", "time-parse-snapshots"],
-      });
-    },
-  });
-
-  const bulkDeleteMutation = useMutation({
-    mutationFn: async (ids: string[]) => {
-      const res = await fetch("/api/v1/admin/parses/time-parse-snapshots/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(
-          (body as Record<string, string>).message ?? "Failed to delete snapshots",
-        );
-      }
-    },
-    onSuccess: () => {
-      setSelectedIds(new Set());
-      queryClient.invalidateQueries({
-        queryKey: ["admin", "parses", "time-parse-snapshots"],
-      });
-    },
-  });
-
-  const allSelected = useMemo(
-    () =>
-      !!snapshots &&
-      snapshots.length > 0 &&
-      snapshots.every((s) => selectedIds.has(s.id)),
-    [snapshots, selectedIds],
-  );
-
-  const toggleAll = useCallback(() => {
-    if (!snapshots) return;
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(snapshots.map((s) => s.id)));
-    }
-  }, [snapshots, allSelected]);
-
-  const toggleOne = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  return (
-    <div className="space-y-4">
-      <SnapshotCreateControls
-        endpoint="/api/v1/admin/parses/time-parse-snapshot"
-        queryKeyToInvalidate={["admin", "parses", "time-parse-snapshots"]}
-        description="Trigger a clear/kill-time snapshot for a specific day. Populates clear-time and boss-kill cohorts for percentile scoring. No-op if that day's snapshot already exists."
-      />
-
-      <Card className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold">Time-Parse Snapshots</h3>
-          <div className="flex items-center gap-2">
-            {selectedIds.size > 0 && (
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={bulkDeleteMutation.isPending}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Delete ${selectedIds.size} time-parse snapshot(s)? Members will be cascade-deleted.`,
-                    )
-                  ) {
-                    bulkDeleteMutation.mutate([...selectedIds]);
-                  }
-                }}
-              >
-                {bulkDeleteMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                ) : (
-                  <Trash2 className="h-4 w-4 mr-1" />
-                )}
-                Delete Selected ({selectedIds.size})
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" onClick={() => refetch()}>
-              Refresh
-            </Button>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="flex justify-center py-4">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : isError ? (
-          <p className="text-sm text-red-500 text-center py-4">
-            {error instanceof Error ? error.message : "Failed to load snapshots"}
-          </p>
-        ) : snapshots && snapshots.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-800 text-muted-foreground text-left">
-                  <th className="py-2 pr-2 w-8">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={toggleAll}
-                      className="rounded border-zinc-700"
-                    />
-                  </th>
-                  <th className="py-2 pr-4">Tenant</th>
-                  <th className="py-2 pr-4">Cutoff</th>
-                  <th className="py-2 pr-4">Lookback</th>
-                  <th className="py-2 pr-4">Version</th>
-                  <th className="py-2 pr-4">Clears</th>
-                  <th className="py-2 pr-4">Bosses</th>
-                  <th className="py-2 pr-4">Src Rows</th>
-                  <th className="py-2 pr-4">Status</th>
-                  <th className="py-2 pr-4">Published</th>
-                  <th className="py-2 pr-4">Created</th>
-                  <th className="py-2 pr-4"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {snapshots.map((snap) => (
-                  <tr key={snap.id} className="border-b border-zinc-800/50">
-                    <td className="py-2 pr-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(snap.id)}
-                        onChange={() => toggleOne(snap.id)}
-                        className="rounded border-zinc-700"
-                      />
-                    </td>
-                    <td className="py-2 pr-4 text-xs">{snap.tenant_name}</td>
-                    <td className="py-2 pr-4 font-mono text-xs">
-                      {formatCutoffDate(snap.cutoff)}
-                    </td>
-                    <td className="py-2 pr-4 text-xs">
-                      {formatLookback(snap.lookback_days)}
-                    </td>
-                    <td className="py-2 pr-4">
-                      <span className="text-xs text-muted-foreground">
-                        p{snap.policy_version}/q{snap.query_version}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-4 font-mono text-xs">
-                      {snap.clear_member_count.toLocaleString()}
-                    </td>
-                    <td className="py-2 pr-4 font-mono text-xs">
-                      {snap.boss_member_count.toLocaleString()}
-                    </td>
-                    <td className="py-2 pr-4 font-mono text-xs">
-                      {snap.source_row_count.toLocaleString()}
-                    </td>
-                    <td className="py-2 pr-4">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                          snap.status === "published"
-                            ? "bg-green-500/10 text-green-400"
-                            : "bg-yellow-500/10 text-yellow-400"
-                        }`}
-                      >
-                        {snap.status}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-4 font-mono text-xs">
-                      {snap.published_at ? formatDate(snap.published_at) : "—"}
-                    </td>
-                    <td className="py-2 pr-4 font-mono text-xs">
-                      {formatDate(snap.created_at)}
-                    </td>
-                    <td className="py-2 pr-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                        disabled={deleteMutation.isPending}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Delete time-parse snapshot ${snap.id}? Members will be cascade-deleted.`,
-                            )
-                          ) {
-                            deleteMutation.mutate(snap.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No time-parse snapshots found. Create one to get started.
           </p>
         )}
         {(deleteMutation.isError || bulkDeleteMutation.isError) && (

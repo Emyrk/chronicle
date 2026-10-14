@@ -350,16 +350,13 @@ func (api *API) Routes() chi.Router {
 					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
 					r.Get("/rankings/status", api.AdminRankingsRefreshStatus)
 					r.Post("/rankings/refresh", api.AdminRefreshRankings)
+					r.Post("/time-scores/backfill", api.AdminBackfillTimeParseScores)
 					r.Post("/snapshot", api.AdminTriggerParseSnapshot)
 					r.Get("/snapshots", api.AdminListSnapshots)
 					r.Post("/snapshots/delete", api.AdminBulkDeleteSnapshots)
 					r.Delete("/snapshots/{snapshotID}", api.AdminDeleteSnapshot)
 
 					// Time-parse snapshot admin
-					r.Post("/time-parse-snapshot", api.AdminTriggerTimeParseSnapshot)
-					r.Get("/time-parse-snapshots", api.AdminListTimeParseSnapshots)
-					r.Post("/time-parse-snapshots/delete", api.AdminBulkDeleteTimeParseSnapshots)
-					r.Delete("/time-parse-snapshots/{snapshotID}", api.AdminDeleteTimeParseSnapshot)
 				})
 
 				// Tenant management — routes owned by servicetenant

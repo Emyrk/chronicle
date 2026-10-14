@@ -21,11 +21,34 @@ type Story = StoryObj<typeof meta>
 export const Rail: Story = {
   render: (args) => (
     <div className="min-h-screen bg-background px-6 py-8 text-foreground">
-      <div className="mx-auto flex max-w-[1800px] gap-6">
+      <div className="mx-auto flex max-w-[1920px] gap-6">
         <main className="min-w-0 flex-1">
           <div className="mb-6 border-b pb-3 text-lg font-semibold">Leaderboard</div>
           <div className="grid grid-cols-3 gap-4">
             {Array.from({ length: 9 }, (_, index) => (
+              <div key={index} className="h-32 rounded-xl border bg-card" />
+            ))}
+          </div>
+        </main>
+        <AdSlot {...args} />
+      </div>
+    </div>
+  ),
+}
+
+export const PairedRails: Story = {
+  args: {
+    placement: "recent-right-rail",
+    railLayout: "paired",
+  },
+  render: (args) => (
+    <div className="min-h-screen bg-background px-6 py-8 text-foreground">
+      <div className="mx-auto flex max-w-[2080px] gap-6">
+        <AdSlot {...args} placement="recent-left-rail" />
+        <main className="min-w-0 flex-1">
+          <div className="mb-6 border-b pb-3 text-lg font-semibold">Recent</div>
+          <div className="grid grid-cols-4 gap-4">
+            {Array.from({ length: 12 }, (_, index) => (
               <div key={index} className="h-32 rounded-xl border bg-card" />
             ))}
           </div>

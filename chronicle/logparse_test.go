@@ -31,6 +31,27 @@ func TestInitialLogCapabilities(t *testing.T) {
 	)
 }
 
+func TestObservedUnitTelemetryCapabilities(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name      string
+		resources bool
+		position  bool
+		want      []string
+	}{
+		{name: "none"},
+		{name: "resources", resources: true, want: []string{"unit-resources"}},
+		{name: "position", position: true, want: []string{"unit-position"}},
+		{name: "resources and position", resources: true, position: true, want: []string{"unit-resources", "unit-position"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, observedUnitTelemetryCapabilities(tt.resources, tt.position))
+		})
+	}
+}
+
 func TestShouldRecordDPSRankings(t *testing.T) {
 	t.Parallel()
 

@@ -20,14 +20,14 @@ test("wires the ads explanation page into routing and the production build", asy
   assert.match(adsHtml, /https:\/\/chronicleclassic\.com\/ads\//);
 });
 
-test("links the ads explanation from support and the landing footer", async () => {
+test("links the ads explanation from the landing footer, not the support page", async () => {
   const [supportPage, footer] = await Promise.all([
     read("src/components/SupportPage.tsx"),
     read("src/components/Footer.tsx"),
   ]);
 
-  assert.match(supportPage, /Chronicle runs limited advertising/);
-  assert.match(supportPage, /href="\/ads\/"/);
+  assert.doesNotMatch(supportPage, /Chronicle runs limited advertising/);
+  assert.doesNotMatch(supportPage, /href="\/ads\/"/);
   assert.match(footer, /Why Chronicle Runs Ads/);
 });
 

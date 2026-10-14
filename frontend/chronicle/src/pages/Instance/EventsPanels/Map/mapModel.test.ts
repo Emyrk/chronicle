@@ -51,7 +51,7 @@ const encounter: MapEncounterPositions = {
 };
 
 const manifest: WowMapManifest = {
-  format: "chronicle-wow-map-art-v1",
+  format: "chronicle-wow-map-art-v2",
   target: { product: "wow_classic_beta", build: "1.60.1.70205", region: "us", locale: "enUS" },
   maps: [{
     id: 947,
@@ -81,7 +81,7 @@ const manifest: WowMapManifest = {
         minScale: 1,
         maxScale: 2,
         additionalZoomSteps: 0,
-        tiles: [{ row: 0, column: 0, fileDataID: 2, path: "tiles/2.webp" }],
+        tiles: [{ row: 0, column: 0, fileDataID: 2, path: "original/2.webp" }],
       }],
     }],
   }, {
@@ -112,7 +112,7 @@ const manifest: WowMapManifest = {
         minScale: 1,
         maxScale: 2,
         additionalZoomSteps: 0,
-        tiles: [{ row: 0, column: 0, fileDataID: 1, path: "tiles/1.webp" }],
+        tiles: [{ row: 0, column: 0, fileDataID: 1, path: "original/1.webp" }],
       }],
     }],
   }],
@@ -194,6 +194,44 @@ describe("map replay model", () => {
       mapId: 0,
       facing: 0,
     })).toMatchObject({ kind: "zone", map: { name: "Tirisfal Glades" } });
+  });
+
+  it("uses a matching zone assignment when legacy instance artwork has no world bounds", () => {
+    const fallbackManifest: WowMapManifest = {
+      ...manifest,
+      maps: [...manifest.maps, {
+        id: 619,
+        name: "Zul'Gurub",
+        parentID: 0,
+        type: 3,
+        flags: 0,
+        assignments: [{
+          id: 619,
+          mapID: 309,
+          areaID: 1977,
+          orderIndex: 0,
+          region: [-12639.58, -2733.33, -1_000_000, -11225, -612.5, 1_000_000],
+          uiMin: [0, 0],
+          uiMax: [1, 1],
+        }],
+        art: manifest.maps[1].art,
+      }],
+      instances: [...(manifest.instances ?? []), {
+        mapID: 309,
+        name: "Zul'Gurub",
+        instanceType: 2,
+        directory: "zulgurub",
+        floors: [{ floor: 1, width: 1002, height: 668, tileWidth: 256, tileHeight: 256, tiles: [] }],
+      }],
+    };
+
+    expect(resolveMapArtwork(fallbackManifest, 309, {
+      timestampMs: 0,
+      x: -11693.7,
+      y: -1739.7,
+      mapId: 309,
+      facing: 0,
+    })).toMatchObject({ kind: "zone", map: { name: "Zul'Gurub" } });
   });
 
   it("converts world coordinates using UiMapAssignment axis order", () => {

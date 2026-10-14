@@ -1,6 +1,7 @@
 package servicerankings_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -88,12 +90,17 @@ func setupTimeParsesTest(t *testing.T) timeParsesTestFixture {
 // and returns the HTTP response and decoded body.
 func callTimeParses(t *testing.T, store database.Store, pathParam string) (*http.Response, chroniclesdk.InstanceTimeParsesResponse) {
 	t.Helper()
+	return callTimeParsesWithContext(t, context.Background(), store, pathParam, "")
+}
+
+func callTimeParsesWithContext(t *testing.T, ctx context.Context, store database.Store, pathParam, rawQuery string) (*http.Response, chroniclesdk.InstanceTimeParsesResponse) {
+	t.Helper()
 	svc := servicerankings.NewTestableService(store, slog.Default())
 
 	r := chi.NewRouter()
 	r.Get("/instances/{instanceID}/time-parses", svc.HandleInstanceTimeParses)
 
-	req := httptest.NewRequest("GET", "/instances/"+pathParam+"/time-parses", nil)
+	req := httptest.NewRequest("GET", "/instances/"+pathParam+"/time-parses"+rawQuery, nil).WithContext(ctx)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -109,15 +116,52 @@ func callTimeParses(t *testing.T, store database.Store, pathParam string) (*http
 	return resp, parsed
 }
 
+func TestHandleInstanceTimeParsesStrictTenantCohort(t *testing.T) {
+	t.Parallel()
+
+	pool, store, rootRealm := setupTimeParseTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	tenantA, realmA := insertTimeParseTenantRealm(t, pool, "instance-parse-tenant-a")
+	_, realmB := insertTimeParseTenantRealm(t, pool, "instance-parse-tenant-b")
+	start := time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC)
+
+	insertRun := func(realmID uuid.UUID, duration time.Duration) uuid.UUID {
+		return insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+			instanceName: "Molten Core", difficultyName: "Normal", maxPlayers: 40,
+			qualified: true, durationMs: duration.Milliseconds(), startTime: start,
+			encounters: []timeParseEncounterOpts{{
+				name: "Ragnaros", killType: database.KillTypeClean, boss: true,
+				startTime: start.Add(5 * time.Minute), endTime: start.Add(6 * time.Minute),
+			}},
+		})
+	}
+	instanceA := insertRun(realmA, 60*time.Minute)
+	insertRun(realmB, 90*time.Minute)
+	insertRun(rootRealm, 120*time.Minute)
+	runTimeParseWorker(t, ctx, store, tenantA)
+
+	resp, body := callTimeParsesWithContext(t, servicetenant.WithTenantID(ctx, tenantA), store,
+		instanceA.String(), "?timeframe=current&period=all")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.True(t, body.Available)
+	require.NotNil(t, body.ClearTime)
+	assert.Equal(t, 0, body.ClearTime.SampleSize)
+	require.Len(t, body.BossKillTimes, 1)
+	assert.Equal(t, 0, body.BossKillTimes[0].SampleSize)
+	require.Contains(t, body.Scopes, servicerankings.TimeParseScopeServer)
+	require.Contains(t, body.Scopes, servicerankings.TimeParseScopeRealm)
+	assert.Equal(t, body.ClearTime, body.Scopes[servicerankings.TimeParseScopeServer].ClearTime)
+	assert.Equal(t, "no_guild", body.Scopes[servicerankings.TimeParseScopeGuild].Reason)
+}
+
 func TestHandleInstanceTimeParses_UUIDPath(t *testing.T) {
 	t.Parallel()
 	f := setupTimeParsesTest(t)
 
 	resp, body := callTimeParses(t, f.store, f.instanceID.String())
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	// No snapshot exists, so the handler should return available=false, reason=no_snapshot.
 	assert.False(t, body.Available)
-	assert.Equal(t, "no_snapshot", body.Reason)
+	assert.Equal(t, "not_computed", body.Reason)
 }
 
 func TestHandleInstanceTimeParses_SlugPath(t *testing.T) {
@@ -126,9 +170,8 @@ func TestHandleInstanceTimeParses_SlugPath(t *testing.T) {
 
 	resp, body := callTimeParses(t, f.store, f.slug)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	// Same behaviour as UUID path: no snapshot → available=false.
 	assert.False(t, body.Available)
-	assert.Equal(t, "no_snapshot", body.Reason)
+	assert.Equal(t, "not_computed", body.Reason)
 }
 
 func TestHandleInstanceTimeParses_InvalidSlug(t *testing.T) {
@@ -145,6 +188,5 @@ func TestHandleInstanceTimeParses_MissingUUID(t *testing.T) {
 
 	// Valid UUID format but no matching instance.
 	resp, _ := callTimeParses(t, f.store, uuid.New().String())
-	// The handler falls through to GetLogInstanceStartTime which returns pgx.ErrNoRows → 404.
-	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }

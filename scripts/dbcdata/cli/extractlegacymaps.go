@@ -33,8 +33,8 @@ func ExtractLegacyMapsCmd() *serpent.Command {
 		Options: serpent.OptionSet{
 			DBCOption(&dbcPath),
 			ServerOption(&server),
-			{Name: "out", Description: "Output directory for manifest.json and map tiles.", Flag: "out", Value: serpent.StringOf(&outDir)},
-			{Name: "metadata-only", Description: "Write manifest.json without converting map tiles.", Flag: "metadata-only", Value: serpent.BoolOf(&metadataOnly)},
+			{Name: "out", Description: "Output directory for manifest.original.json and map tiles.", Flag: "out", Value: serpent.StringOf(&outDir)},
+			{Name: "metadata-only", Description: "Write manifest.original.json without converting map tiles.", Flag: "metadata-only", Value: serpent.BoolOf(&metadataOnly)},
 		},
 		Handler: func(inv *serpent.Invocation) error {
 			if outDir == "" {
@@ -130,13 +130,13 @@ func extractLegacyMaps(ctx context.Context, stdout io.Writer, client *dbcdb.WoWC
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(outDir, "tiles"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(outDir, "original"), 0o755); err != nil {
 		return fmt.Errorf("create legacy map output directory: %w", err)
 	}
 
 	fileDataIDs := wowMapManifestFileDataIDs(manifest)
 	if metadataOnly {
-		if err := writeWowMapManifest(filepath.Join(outDir, "manifest.json"), manifest); err != nil {
+		if err := writeWowMapManifest(filepath.Join(outDir, "manifest.original.json"), manifest); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprintf(stdout, "Wrote %d maps and %d instances referencing %d unique tiles to %s\n",
@@ -163,7 +163,7 @@ func extractLegacyMaps(ctx context.Context, stdout io.Writer, client *dbcdb.WoWC
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		output := filepath.Join(outDir, "tiles", fmt.Sprintf("%d.webp", fileDataID))
+		output := filepath.Join(outDir, "original", fmt.Sprintf("%d.webp", fileDataID))
 		if info, statErr := os.Stat(output); statErr == nil && info.Size() > 0 {
 			continue
 		}
@@ -210,7 +210,7 @@ func extractLegacyMaps(ctx context.Context, stdout io.Writer, client *dbcdb.WoWC
 		_, _ = fmt.Fprintf(stdout, "Skipped incomplete legacy map artwork %s\n", skipped)
 	}
 	fileDataIDs = wowMapManifestFileDataIDs(manifest)
-	if err := writeWowMapManifest(filepath.Join(outDir, "manifest.json"), manifest); err != nil {
+	if err := writeWowMapManifest(filepath.Join(outDir, "manifest.original.json"), manifest); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "Wrote %d maps and %d instances referencing %d unique tiles to %s\n",
@@ -346,6 +346,7 @@ func buildLegacyMapManifest(
 		}
 	}
 
+	// All servers publish the same v2 map manifest layout.
 	manifest := wowMapManifest{Format: wowMapManifestFormat, Target: target}
 	sourcePaths := make(map[int32]string)
 	for _, row := range areas {
@@ -426,7 +427,7 @@ func legacyMapTiles(resolveFile func(string) (string, bool), directory, texture 
 				return nil, false
 			}
 			tiles = append(tiles, wowMapTile{
-				Row: row, Column: column, FileDataID: id, Path: fmt.Sprintf("tiles/%d.webp", id),
+				Row: row, Column: column, FileDataID: id, Path: fmt.Sprintf("original/%d.webp", id),
 			})
 		}
 	}
@@ -512,7 +513,7 @@ func buildLegacyMapInstances(maps []wowdataMap, files []legacyMapFile) []wowMapI
 		}
 		asset.Floors[floor][tileIndex] = wowMapTile{
 			Row: (tileIndex - 1) / 4, Column: (tileIndex - 1) % 4,
-			FileDataID: file.FileDataID, Path: fmt.Sprintf("tiles/%d.webp", file.FileDataID),
+			FileDataID: file.FileDataID, Path: fmt.Sprintf("original/%d.webp", file.FileDataID),
 		}
 	}
 

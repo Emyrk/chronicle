@@ -57,6 +57,8 @@ func newTestCatalog() *testCatalog {
 		directSpells: map[chrondbc.SpellID][]int32{
 			17531: {13444},        // Restore Mana → Major Mana Potion
 			17534: {13446},        // Healing Potion (Major) → Major Healing Potion
+			17538: {13461},        // Greater Stoneshield Potion
+			17540: {13461},        // direct-use test spell
 			11730: {3928, 918123}, // ambiguous heal spell → two items
 		},
 	}
@@ -142,6 +144,36 @@ func TestDirectItemEvidence(t *testing.T) {
 	assert.Equal(t, ts.UnixMilli(), *ev.ConsumedAtUnixMs)
 	assert.Equal(t, ts.UnixMilli(), ev.ObservedAtUnixMs)
 	assert.False(t, ev.IsProjection)
+}
+
+func TestItemBackedProcIsNotDirectEvidence(t *testing.T) {
+	t.Parallel()
+
+	cat := newTestCatalog()
+	cat.items[9088] = true
+	cat.directSpells[11371] = []int32{9088} // Gift of Arthas item-use spell
+	tracker, col := newTrackerAndCollector(auras.New(nil), cat)
+	emitted := collectEmitted(col)
+
+	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	eid := uuid.New()
+	itemID := int32(9088)
+	player := testPlayerGUID()
+
+	col.FightStarted(eid, &messages.Damage{MessageBase: messages.Base(ts)})
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Damage{MessageBase: messages.Base(ts)}))
+
+	proc := &messages.SpellGo{
+		MessageBase: messages.Base(ts),
+		ItemID:      &itemID,
+		Caster:      player,
+		SpellData:   testSpell(11374), // triggered enemy debuff, not the use spell
+	}
+	tracker.Process(proc)
+	require.NoError(t, col.ProcessMessage(true, eid, proc))
+
+	assert.Zero(t, tracker.DirectEpisodeCount())
+	assert.Empty(t, *emitted)
 }
 
 func TestSpellGoWithoutItemIDNoEvidence(t *testing.T) {

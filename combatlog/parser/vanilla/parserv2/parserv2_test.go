@@ -14,7 +14,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
@@ -51,9 +50,9 @@ func testSpellDB(t *testing.T) gamedb.GameDB {
 }
 
 // testCase parses line and asserts result matches expected message
-func testCase[T messages.Message](t *testing.T, line string, expected T) {
+func testCase[T messages.Message](t *testing.T, wowDB gamedb.GameDB, line string, expected T) {
 	t.Helper()
-	testCaseWithDB[T](t, line, expected, testSpellDB(t))
+	testCaseWithDB(t, line, expected, wowDB)
 }
 
 // testCaseWithDB parses line with a GameDB and asserts result matches expected
@@ -94,10 +93,12 @@ func testCaseWithDB[T messages.Message](t *testing.T, line string, expected T, w
 func TestParserMessages(t *testing.T) {
 	t.Parallel()
 
+	wowDB := testSpellDB(t)
+
 	t.Run("Death", func(t *testing.T) {
 		t.Parallel()
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1771959313535|DEATH|0xF130002D9900DE15",
 			&messages.Slain{
 				MessageBase: messages.Base(time.UnixMilli(1771959313535)),
@@ -107,23 +108,45 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("Header", func(t *testing.T) {
-		t.Skip("now returns 2 messages")
 		t.Parallel()
-		ts := time.Date(2026, 2, 23, 18, 17, 5, 0, time.UTC)
 
-		testCase(t,
-			"0|HEADER|0x0000000000432A74|Nordanaar|Ragefire Chasm|0.5|1.5||1771083771|1.18.0|7234|Dec 19 2025|23.02.26 19:17:05|23.02.26 18:17:05|200",
-			&messages.Realm{
-				MessageBase: messages.Base(ts),
-				Info: realm.Info{
-					Seen:      ts,
-					Version:   "1.18.0",
-					Build:     7234,
-					BuildDate: "Dec 19 2025",
-					RealmName: "Nordanaar",
-				},
+		for _, tt := range []struct {
+			name              string
+			line              string
+			classicAPIVersion string
+		}{
+			{
+				name: "legacy",
+				line: "0|HEADER|0x0000000000432A74|Nordanaar|Ragefire Chasm|0.5|1.5||1771083771|1.18.0|7234|Dec 19 2025|23.02.26 19:17:05|23.02.26 18:17:05|200",
 			},
-		)
+			{
+				name:              "classic api and threat mode",
+				line:              "0|HEADER|0x0000000000432A74|Nordanaar|Zul'Gurub|0.38.4|1.5|2.0||1.18.0|7234|Dec 19 2025|23.02.26 19:17:05|23.02.26 18:17:05|200|1.2.3|query",
+				classicAPIVersion: "1.2.3",
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				parser, err := New(context.Background(), slog.Default(), strings.NewReader(tt.line), wowDB, nil)
+				require.NoError(t, err)
+				parsed, err := parser.Advance(context.Background())
+				require.NoError(t, err)
+				require.Len(t, parsed, 2)
+
+				realmMessage, ok := parsed[0].(*messages.Realm)
+				require.True(t, ok)
+				require.Equal(t, "Nordanaar", realmMessage.RealmName)
+
+				versionsMessage, ok := parsed[1].(*messages.Versions)
+				require.True(t, ok)
+				if tt.classicAPIVersion == "" {
+					require.NotContains(t, versionsMessage.Versions, "classicapi")
+				} else {
+					require.Equal(t, tt.classicAPIVersion, versionsMessage.Versions["classicapi"])
+				}
+			})
+		}
 	})
 
 	t.Run("Hemorrhage", func(t *testing.T) {
@@ -143,7 +166,7 @@ func TestParserMessages(t *testing.T) {
 				AuraCapStatus:   2,
 				EffectMiscValue: 1,
 			},
-			testSpellDB(t),
+			wowDB,
 		)
 
 		testCaseWithDB(t,
@@ -158,14 +181,14 @@ func TestParserMessages(t *testing.T) {
 				DurationMS:     20000,
 				AuraCapStatus:  0,
 			},
-			testSpellDB(t),
+			wowDB,
 		)
 	})
 
 	t.Run("SwingMiss", func(t *testing.T) {
 		t.Parallel()
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1771564197000|SWING|0x000000000001C7AC|0xF130002C3800949C|194|2|1|1|0|0|0   ",
 			&messages.Damage{
 				MessageBase: messages.Base(time.UnixMilli(1771564197000)),
@@ -183,7 +206,7 @@ func TestParserMessages(t *testing.T) {
 	t.Run("SwingCrit", func(t *testing.T) {
 		t.Parallel()
 		// SwingHitInfo=130 (HITINFO_AFFECTS_VICTIM | HITINFO_CRITICALHIT) + VictimState=1 = Crit
-		testCase(t,
+		testCase(t, wowDB,
 			"1771542038|SWING|0xF130002C3600BE05|0x000000000001C80A|100|130|1|0|0|0|0",
 			&messages.Damage{
 				MessageBase: messages.Base(time.UnixMilli(1771542038)),
@@ -202,7 +225,7 @@ func TestParserMessages(t *testing.T) {
 		t.Parallel()
 
 		// Format: timestamp|UNIT_INFO|guid|isPlayer|name|canCooperate|owner|buffs|level|challenges|maxHealth
-		testCase(t,
+		testCase(t, wowDB,
 			"1771563953000|UNIT_INFO|0x000000000001C80A|1|Priests|1|||60||3117",
 			&messages.Unit{
 				MessageBase: messages.Base(time.UnixMilli(1771563953000)),
@@ -222,10 +245,85 @@ func TestParserMessages(t *testing.T) {
 		)
 	})
 
+	t.Run("UnitState", func(t *testing.T) {
+		t.Parallel()
+
+		const timestamp = int64(1771563953000)
+		unit := guid.GUID(0x000000000001C80A)
+		parser, err := New(
+			context.Background(),
+			slog.Default(),
+			strings.NewReader("1771563953000|UNIT_STATE|0x000000000001C80A|2345|3117|72|100|3|309|12.5|34.75|8.25"),
+			&stubGameDB{},
+			nil,
+		)
+		require.NoError(t, err)
+
+		parsed, err := parser.Advance(context.Background())
+		require.NoError(t, err)
+		require.Len(t, parsed, 2)
+		require.Equal(t, &messages.UnitResources{
+			MessageBase:   messages.Base(time.UnixMilli(timestamp)),
+			Unit:          unit,
+			CurrentHealth: 2345,
+			MaximumHealth: 3117,
+			PowerType:     types.ResourceEnergy,
+			CurrentPower:  72,
+			MaximumPower:  100,
+		}, parsed[0])
+		require.Equal(t, &messages.UnitPosition{
+			MessageBase: messages.Base(time.UnixMilli(timestamp)),
+			Unit:        unit,
+			X:           12.5,
+			Y:           34.75,
+			MapID:       309,
+		}, parsed[1])
+		require.True(t, parser.SawUnitResources())
+		require.True(t, parser.SawUnitPosition())
+	})
+
+	t.Run("UnitStateWithoutPosition", func(t *testing.T) {
+		t.Parallel()
+
+		parser, err := New(
+			context.Background(),
+			slog.Default(),
+			strings.NewReader("1771563953000|UNIT_STATE|0x000000000001C80A|2345|3117|||||||"),
+			&stubGameDB{},
+			nil,
+		)
+		require.NoError(t, err)
+
+		parsed, err := parser.Advance(context.Background())
+		require.NoError(t, err)
+		require.Len(t, parsed, 1)
+		resources, ok := parsed[0].(*messages.UnitResources)
+		require.True(t, ok)
+		require.Equal(t, types.ResourceUnknown, resources.PowerType)
+		require.True(t, parser.SawUnitResources())
+		require.False(t, parser.SawUnitPosition())
+	})
+
+	t.Run("UnitStateRejectsMalformedPosition", func(t *testing.T) {
+		t.Parallel()
+
+		parser, err := New(
+			context.Background(),
+			slog.Default(),
+			strings.NewReader("1771563953000|UNIT_STATE|0x000000000001C80A|2345|3117|72|100|3|309|north|34.75|8.25"),
+			&stubGameDB{},
+			nil,
+		)
+		require.NoError(t, err)
+
+		_, err = parser.Advance(context.Background())
+		require.ErrorContains(t, err, `unit state: parse x "north"`)
+	})
+
 	t.Run("ZoneInfoEmptyInstanceID", func(t *testing.T) {
 		t.Parallel()
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1778208220441|ZONE_INFO|Tower of Karazhan||1|raid|0",
 			&messages.Zone{
 				MessageBase: messages.Base(time.UnixMilli(1778208220441)),
@@ -241,10 +339,30 @@ func TestParserMessages(t *testing.T) {
 		)
 	})
 
+	t.Run("ZoneInfoMapID", func(t *testing.T) {
+		t.Parallel()
+
+		testCase(t, wowDB,
+			"1778208220441|ZONE_INFO|Zul'Gurub||1|raid|0|309",
+			&messages.Zone{
+				MessageBase: messages.Base(time.UnixMilli(1778208220441)),
+				Zone: zone.Zone{
+					Seen:         time.UnixMilli(1778208220441),
+					Name:         "zul'gurub",
+					MapID:        309,
+					InstanceID:   0,
+					Ghost:        false,
+					InstanceType: "raid",
+					IsInstance:   true,
+				},
+			},
+		)
+	})
+
 	t.Run("Spell Go", func(t *testing.T) {
 		t.Parallel()
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1771770885937|SPELL_GO|0|15237|0x000000000001C80A|0x0000000000000000|256|0|1",
 			&messages.SpellGo{
 				MessageBase:      messages.Base(time.UnixMilli(1771770885937)),
@@ -263,7 +381,7 @@ func TestParserMessages(t *testing.T) {
 	t.Run("Spell Fail", func(t *testing.T) {
 		t.Parallel()
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1771770885937|SPELL_FAIL|0x000000000001C80A|15237",
 			&messages.SpellFail{
 				MessageBase:    messages.Base(time.UnixMilli(1771770885937)),
@@ -273,7 +391,7 @@ func TestParserMessages(t *testing.T) {
 			},
 		)
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1771770885937|SPELL_FAIL|0x000000000001C80A|15237|true",
 			&messages.SpellFail{
 				MessageBase:    messages.Base(time.UnixMilli(1771770885937)),
@@ -283,18 +401,18 @@ func TestParserMessages(t *testing.T) {
 			},
 		)
 
-		testCase[*messages.SpellFail](t,
+		testCase[*messages.SpellFail](t, wowDB,
 			"1771770885937|SPELL_FAIL|0x000000000001C80A|15237|false",
 			nil,
 		)
-		testCase[*messages.SpellFail](t,
+		testCase[*messages.SpellFail](t, wowDB,
 			"1771770885937|SPELL_FAIL|15237|false|35",
 			nil,
 		)
 	})
 
 	t.Run("Loot", func(t *testing.T) {
-		testCase(t,
+		testCase(t, wowDB,
 			"1775358110340|LOOT|Cielcin||cffffffff|Hitem:61760:0:0:0|h[Burnt Copy of \"Vorgendor\"]|h|r\n",
 			&messages.Loot{
 				MessageBase:  messages.Base(time.UnixMilli(1775358110340)),
@@ -306,7 +424,7 @@ func TestParserMessages(t *testing.T) {
 			},
 		)
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1775355374273|LOOT|Defen||cffffffff|Hitem:14047:0:0:0|h[Runecloth]|h|rx3",
 			&messages.Loot{
 				MessageBase:  messages.Base(time.UnixMilli(1775355374273)),
@@ -317,7 +435,7 @@ func TestParserMessages(t *testing.T) {
 				Quantity:     3,
 			})
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1775356811498|LOOT_TRADE|Jimmythehand trades item Bloodfang Spaulders to Eithinis.",
 			&messages.LootTrade{
 				MessageBase:    messages.Base(time.UnixMilli(1775356811498)),
@@ -330,7 +448,7 @@ func TestParserMessages(t *testing.T) {
 	//t.Run("MissPeriodicAoE", func(t *testing.T) {
 	//	t.Parallel()
 	//
-	//	testCase(t,
+	//	testCase(t, wowDB,
 	//		"1775497576300|MISS|0xF1300030B40BA62E|0x00000000005DCB3F|22275|2",
 	//		&messages.Damage{
 	//			MessageBase:     messages.Base(time.UnixMilli(1775497574472)),
@@ -353,7 +471,7 @@ func TestParserMessages(t *testing.T) {
 
 		// 1083 damage dealt, 1082 resisted → ~50% resist
 		// Format: ts|SPELL_DMG|target|caster|spellID|amount|blocked,absorbed,resisted|hitInfo|school|effects
-		testCase(t,
+		testCase(t, wowDB,
 			"1778212906931|SPELL_DMG|0x0000000000099515|0xF13000F1FF276A34|51099|1083|0,0,1082|0|6|2,0,0,0",
 			&messages.Damage{
 				MessageBase: messages.Base(time.UnixMilli(1778212906931)),

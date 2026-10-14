@@ -59,13 +59,12 @@ type Service struct {
 	// SnapshotTenantWorker publishes a snapshot for a single tenant+lookback.
 	SnapshotTenantWorker *WorkerPublishParseSnapshotTenant
 
-	// TimeParseSnapshotDispatchWorker fans out per-tenant time-parse snapshot jobs.
-	TimeParseSnapshotDispatchWorker *WorkerPublishTimeParseSnapshots
-	// TimeParseSnapshotTenantWorker publishes a time-parse snapshot for a single tenant+lookback.
-	TimeParseSnapshotTenantWorker *WorkerPublishTimeParseSnapshotTenant
-
 	// ComputeParseScoresWorker computes and persists per-instance parse scores.
 	ComputeParseScoresWorker *WorkerComputeParseScores
+	// ComputeTimeParseScoresWorker computes locked clear/boss duration parses.
+	ComputeTimeParseScoresWorker *WorkerComputeTimeParseScores
+	// BackfillTimeParseScoresWorker manually dispatches bounded historical repairs.
+	BackfillTimeParseScoresWorker *WorkerBackfillTimeParseScores
 	// RepairDispatchWorker fans daily repairs out across root and tenant scopes.
 	RepairDispatchWorker *WorkerDispatchParseScoreRepairs
 	// RepairParseScoresWorker dispatches bounded repair jobs for one tenant.
@@ -130,19 +129,16 @@ func (s *Service) Start(_ context.Context) error {
 		Logger: namedLogger,
 	}
 
-	s.TimeParseSnapshotDispatchWorker = &WorkerPublishTimeParseSnapshots{
+	s.ComputeParseScoresWorker = &WorkerComputeParseScores{
 		Store:  store,
 		Logger: namedLogger,
 		// Queue is set by serviceriver after queue creation.
 	}
-	s.TimeParseSnapshotTenantWorker = &WorkerPublishTimeParseSnapshotTenant{
-		Store:  store,
-		Logger: namedLogger,
+	s.ComputeTimeParseScoresWorker = &WorkerComputeTimeParseScores{
+		Store: store, Logger: namedLogger,
 	}
-
-	s.ComputeParseScoresWorker = &WorkerComputeParseScores{
-		Store:  store,
-		Logger: namedLogger,
+	s.BackfillTimeParseScoresWorker = &WorkerBackfillTimeParseScores{
+		Store: store, Logger: namedLogger,
 		// Queue is set by serviceriver after queue creation.
 	}
 	s.RepairDispatchWorker = &WorkerDispatchParseScoreRepairs{
@@ -216,6 +212,8 @@ func (s *Service) setupRoutes() {
 	// Cohort viewer (debugging/transparency)
 	s.router.Get("/snapshots", s.handleListSnapshots)
 	s.router.Get("/snapshots/{snapshotID}/cohort", s.handleSnapshotCohort)
+	s.router.Get("/time-parse-cohorts/buckets", s.handleTimeParseCohortBuckets)
+	s.router.Get("/time-parse-cohorts/cohort", s.handleTimeParseCohort)
 
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)

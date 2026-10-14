@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 interface Window {
+  sizes: () => void;
   __CHRONICLE_BLOG_FLAVOR__?: string[];
 }
 

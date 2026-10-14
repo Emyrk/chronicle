@@ -48,6 +48,27 @@ export interface AdminActiveCustomPanelsResponse {
     readonly installations: readonly AdminActiveCustomPanelInstallation[];
 }
 
+// From chroniclesdk/time_parses.go
+/**
+ * AdminBackfillTimeParseScoresRequest configures one bounded historical score dispatcher job.
+ */
+export interface AdminBackfillTimeParseScoresRequest {
+    readonly tenant_id?: string;
+    readonly started_after?: string;
+    readonly started_before?: string;
+    readonly batch_size?: number;
+    readonly force?: boolean;
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * AdminBackfillTimeParseScoresResponse identifies the enqueued dispatcher job.
+ */
+export interface AdminBackfillTimeParseScoresResponse {
+    readonly job_id: number;
+    readonly job_state: string;
+}
+
 // From chroniclesdk/user.go
 export interface AdminBulkDeleteResponse {
     readonly requested: number;
@@ -264,29 +285,6 @@ export interface AdminSnapshotSummary {
 
 // From chroniclesdk/rankings.go
 /**
- * AdminTimeParseSnapshotSummary is a time-parse snapshot listed in the admin tab.
- */
-export interface AdminTimeParseSnapshotSummary {
-    readonly id: string;
-    readonly tenant_id: string;
-    readonly tenant_name: string;
-    readonly cutoff: string;
-    readonly window_start: string | null;
-    readonly lookback_days: number;
-    readonly policy_version: number;
-    readonly query_version: number;
-    readonly clear_member_count: number;
-    readonly boss_member_count: number;
-    readonly status: string;
-    readonly source_row_count: number;
-    readonly source_watermark: string | null;
-    readonly source_fingerprint: number;
-    readonly published_at: string | null;
-    readonly created_at: string;
-}
-
-// From chroniclesdk/rankings.go
-/**
  * AdminTriggerSnapshotJobResult describes a single enqueued snapshot job.
  */
 export interface AdminTriggerSnapshotJobResult {
@@ -495,6 +493,7 @@ export interface AzerothCorePingResponse {
  * BossKillTimeParse is a per-boss kill-time parse.
  */
 export interface BossKillTimeParse {
+    readonly encounter_id: string;
     readonly encounter_name: string;
     readonly duration_ms: number;
     readonly precise_score: number;
@@ -2214,21 +2213,22 @@ export interface InstanceReport {
 
 // From chroniclesdk/time_parses.go
 /**
- * InstanceTimeParsesResponse contains time-based parse scores for a specific
- * instance. Clear time uses the published snapshot population, while boss kill
- * times use the current-known membership cohort bounded by the snapshot dates.
+ * InstanceTimeParsesResponse contains locked time-based parse scores for a
+ * specific instance, bounded by the reported UTC cutoff and lookback window.
  */
 export interface InstanceTimeParsesResponse {
     readonly available: boolean;
     readonly reason?: string;
-    readonly snapshot_id: string;
     readonly cutoff: string;
+    readonly window_start?: string;
     readonly lookback_days: number;
     /**
      * PolicyVersion and QueryVersion identify the scoring semantics used.
      */
     readonly policy_version: number;
     readonly query_version: number;
+    readonly computed_at: string;
+    readonly scopes: Record<string, TimeParseScopeResult>;
     /**
      * ClearTime is the instance's clear-time parse against the population.
      * Nil when the instance has no qualified clear.
@@ -3543,8 +3543,8 @@ export interface SiteConfig {
      */
     readonly client_uploads_disabled: boolean;
     /**
-     * AdsEnabled is true only when the resolved tenant opted into ads and the
-     * deployment configured both ads.txt and a NitroPay site ID.
+     * AdsEnabled is true only when the resolved tenant or root site opted into ads
+     * and the deployment configured both ads.txt and a NitroPay site ID.
      */
     readonly ads_enabled: boolean;
     /**
@@ -4009,6 +4009,83 @@ export interface TimeParseAverage {
 
 // From chroniclesdk/time_parses.go
 /**
+ * TimeParseCohortBucket is one comparable population in a time-parse
+ * snapshot. EncounterName is empty for clear-time buckets.
+ */
+export interface TimeParseCohortBucket {
+    readonly kind: TimeParseCohortKind;
+    readonly instance_name: string;
+    readonly encounter_name?: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly sample_size: number;
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseCohortBucketsResponse lists every bucket in a live date window.
+ */
+export interface TimeParseCohortBucketsResponse {
+    readonly cutoff: string;
+    readonly window_start?: string;
+    readonly lookback_days: number;
+    readonly buckets: readonly TimeParseCohortBucket[];
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseCohortEntry is one run in a time-parse cohort, scored against the
+ * rest of the cohort.
+ */
+export interface TimeParseCohortEntry {
+    readonly rank: number;
+    readonly duration_ms: number;
+    readonly precise_score: number;
+    readonly display_score: number;
+    readonly killed_at: string;
+    readonly instance_id: string;
+    readonly log_hashed_slug?: string;
+    readonly guild_id?: string;
+    readonly guild_name?: string;
+}
+
+// From chroniclesdk/time_parses.go
+export type TimeParseCohortKind = "boss_kill" | "clear_time";
+
+export const TimeParseCohortKinds: TimeParseCohortKind[] = ["boss_kill", "clear_time"];
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseCohortResponse is the full cohort for one bucket, fastest first.
+ */
+export interface TimeParseCohortResponse {
+    readonly cutoff: string;
+    readonly window_start?: string;
+    readonly lookback_days: number;
+    readonly kind: TimeParseCohortKind;
+    readonly instance_name: string;
+    readonly encounter_name?: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly sample_size: number;
+    readonly status: string;
+    readonly entries: readonly TimeParseCohortEntry[];
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseScopeResult is one locked server, realm, or guild result set.
+ */
+export interface TimeParseScopeResult {
+    readonly available: boolean;
+    readonly reason?: string;
+    readonly clear_time?: TimeParseScore;
+    readonly boss_kill_times: readonly BossKillTimeParse[];
+    readonly average_boss_kill_parse?: TimeParseAverage;
+}
+
+// From chroniclesdk/time_parses.go
+/**
  * TimeParseScore is a single time-based parse result.
  */
 export interface TimeParseScore {
@@ -4175,6 +4252,7 @@ export interface UpdateRegressionFixtureNoteRequest {
  */
 export interface UpdateSiteConfigRequest {
     readonly signups_enabled?: boolean;
+    readonly ads_enabled?: boolean;
     readonly disable_client_upload?: boolean;
     readonly branding?: Branding;
     readonly discoverable?: boolean;

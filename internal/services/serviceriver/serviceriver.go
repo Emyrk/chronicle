@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/retention"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
@@ -93,9 +94,23 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
-	riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
-	riverqueue.AddWorker(q, bot.NewWorkerNotifyApplication())
-	riverqueue.AddWorker(q, bot.NewWorkerAnnounceRaidLog())
+	if !bot.Disabled() {
+		bot.SetQueue(q)
+		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
+		riverqueue.AddWorker(q, bot.NewWorkerNotifyApplication())
+		riverqueue.AddWorker(q, bot.NewWorkerAnnounceRaidLog())
+		riverqueue.AddWorker(q, bot.NewWorkerDispatchDiscordMembershipGrantChecks())
+		riverqueue.AddWorker(q, bot.NewWorkerCheckDiscordMembershipGrant())
+		q.AddPeriodicJob(
+			river.NewPeriodicJob(
+				river.PeriodicInterval(time.Hour),
+				func() (river.JobArgs, *river.InsertOpts) {
+					return chroniclebot.ArgsDispatchDiscordMembershipGrantChecks{}, nil
+				},
+				&river.PeriodicJobOpts{RunOnStart: true},
+			),
+		)
+	}
 
 	// Register retention workers and periodic job.
 	ret := serviceretention.RetentionService(s.broker)
@@ -175,9 +190,9 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.SnapshotDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.SnapshotDispatchWorker)
 	riverqueue.AddWorker(q, rank.SnapshotTenantWorker)
-	rank.TimeParseSnapshotDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.TimeParseSnapshotDispatchWorker)
-	riverqueue.AddWorker(q, rank.TimeParseSnapshotTenantWorker)
+	riverqueue.AddWorker(q, rank.ComputeTimeParseScoresWorker)
+	rank.BackfillTimeParseScoresWorker.Queue = q
+	riverqueue.AddWorker(q, rank.BackfillTimeParseScoresWorker)
 	rank.ComputeParseScoresWorker.Queue = q
 	riverqueue.AddWorker(q, rank.ComputeParseScoresWorker)
 	rank.RepairDispatchWorker.Queue = q
@@ -194,24 +209,6 @@ func (s *Service) Start(ctx context.Context) error {
 			river.PeriodicInterval(1*time.Hour),
 			func() (river.JobArgs, *river.InsertOpts) {
 				return servicerankings.ArgsRefreshRankingsSummaries{}, nil
-			},
-			&river.PeriodicJobOpts{RunOnStart: true},
-		),
-	)
-	q.AddPeriodicJob(
-		river.NewPeriodicJob(
-			river.PeriodicInterval(1*time.Hour),
-			func() (river.JobArgs, *river.InsertOpts) {
-				return servicerankings.ArgsPublishParseSnapshots{}, nil
-			},
-			&river.PeriodicJobOpts{RunOnStart: true},
-		),
-	)
-	q.AddPeriodicJob(
-		river.NewPeriodicJob(
-			river.PeriodicInterval(1*time.Hour),
-			func() (river.JobArgs, *river.InsertOpts) {
-				return servicerankings.ArgsPublishTimeParseSnapshots{}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: true},
 		),
@@ -244,7 +241,6 @@ func (s *Service) Start(ctx context.Context) error {
 
 	s.Queues = q
 	chron.SetQueue(s.Queues)
-	bot.SetQueue(s.Queues)
 	return nil
 }
 

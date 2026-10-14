@@ -67,6 +67,9 @@ import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
+import { ClearParseBadge, KillParseTooltip } from "./EncounterKillParse";
+import { useInstanceTimeParses } from "./Overview/overviewQueries";
+import { bossKillParsesByEncounter, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -435,6 +438,7 @@ function EncounterSidebar({
   includeWipes,
   onIncludeWipesChange,
   instanceStartTime,
+  instanceId,
 }: {
   encounters: Encounter[];
   trashGroups: TrashGroup[];
@@ -449,7 +453,12 @@ function EncounterSidebar({
   includeWipes: boolean;
   onIncludeWipesChange: (value: boolean) => void;
   instanceStartTime: string;
+  instanceId: string;
 }) {
+  const timeParsesQuery = useInstanceTimeParses(instanceId);
+  const killParses = bossKillParsesByEncounter(timeParsesQuery.data);
+  const scopedKillParses = scopedKillParsesByEncounter(timeParsesQuery.data);
+  const lookbackDays = timeParsesQuery.data?.lookback_days;
   const nonWipeFilter = (e: Encounter) => {
     return includeWipes || (e.kill_type !== "wipe" && e.kill_type !== "reset");
   };
@@ -649,12 +658,13 @@ function EncounterSidebar({
           {chronologicalEncounters.map((encounter) => {
             const isSelected = selectedIds.includes(encounter.id);
             const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
+            const killParse = encounter.kill_type === "clean" && encounter.boss ? killParses?.get(encounter.id) : undefined;
             
             return (
+              <KillParseTooltip key={encounter.id} parses={killParse ? scopedKillParses?.get(encounter.id) : undefined} lookbackDays={lookbackDays}>
               <div
                 role="button"
                 tabIndex={0}
-                key={encounter.id}
                 onClick={(e) => handleClick(encounter.id, e)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -670,6 +680,7 @@ function EncounterSidebar({
                   isWipeOrReset && !isSelected && "opacity-60",
                   !encounter.boss && !isSelected && "text-muted-foreground"
                 )}
+                style={killParseEdgeStyle(killParse, isSelected)}
               >
                 {encounter.kill_type === "clean" ? (
                   <CheckCircle className={cn("h-4 w-4 shrink-0", encounter.boss ? "text-green-500" : "text-green-500/60")} />
@@ -699,6 +710,7 @@ function EncounterSidebar({
                   </button>
                 )}
               </div>
+              </KillParseTooltip>
             );
           })}
         </div>
@@ -709,6 +721,7 @@ function EncounterSidebar({
         {bossEncounters.map((encounter) => {
           const isSelected = selectedIds.includes(encounter.id);
           const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
+          const killParse = encounter.kill_type === "clean" ? killParses?.get(encounter.id) : undefined;
           const phases = [...(encounter.phases ?? [])].sort((a, b) => a.order - b.order);
           const showExpandedPhases = isSelected && phases.length > 0 && !multipleEncountersSelected;
 
@@ -719,7 +732,9 @@ function EncounterSidebar({
                 "rounded-md transition-all duration-150",
                 isSelected && "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm",
               )}
+              style={killParseEdgeStyle(killParse, isSelected)}
             >
+              <KillParseTooltip parses={killParse ? scopedKillParses?.get(encounter.id) : undefined} lookbackDays={lookbackDays}>
               <div
                 role="button"
                 tabIndex={0}
@@ -762,6 +777,7 @@ function EncounterSidebar({
                   </button>
                 )}
               </div>
+              </KillParseTooltip>
 
               {showExpandedPhases && (
                 <div className="flex gap-1.5 px-2 pb-2" aria-label="Apply encounter phase time range">
@@ -2043,6 +2059,7 @@ export function InstancePageView({
 }: InstancePageViewProps) {
   const timeRange = useTimeRangeContextOptional();
 
+  const instanceTimeParsesQuery = useInstanceTimeParses(instance.id);
   const { data: instanceSpeedrun } = useQuery({
     queryKey: ["instance-speedrun", instance.id],
     queryFn: async (): Promise<SpeedrunResult | null> => {
@@ -3361,6 +3378,10 @@ export function InstancePageView({
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
             {instance.name}
+            <ClearParseBadge
+              parses={scopedClearParses(instanceTimeParsesQuery.data)}
+              lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
+            />
             {instance.invalidatedAt && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -3694,6 +3715,7 @@ export function InstancePageView({
         
         {sidebarOpen && (
           <EncounterSidebar
+            instanceId={instance.id}
             onCollapse={() => setSidebarOpen(false)}
             encounters={instance.encounters}
             trashGroups={trashGroups}

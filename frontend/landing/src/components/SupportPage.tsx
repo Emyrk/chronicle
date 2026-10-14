@@ -4,7 +4,6 @@ import {
   BookOpen,
   ChevronDown,
   Coffee,
-  Coins,
   ExternalLink,
   ScrollText,
   ShieldCheck,
@@ -423,24 +422,6 @@ export function SupportPage() {
           </ol>
         </div>
       </details>
-
-      <aside className="mt-8 flex flex-col gap-4 rounded-xl border border-primary/30 bg-primary/[0.08] p-5 sm:flex-row sm:items-center sm:p-6">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary">
-          <Coins aria-hidden="true" className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="font-wow text-lg text-foreground">Chronicle runs limited advertising</h2>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Ads help cover hosting and infrastructure while Chronicle remains free and paywall-free. Community contributions offset those costs and reduce how much the project needs to rely on ads.
-          </p>
-        </div>
-        <a
-          href="/ads/"
-          className="shrink-0 self-start rounded-md border border-primary/40 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:border-primary hover:bg-primary/10 hover:text-foreground sm:self-center"
-        >
-          Why ads are run
-        </a>
-      </aside>
 
       <div className="mt-10 rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-2xl shadow-black/40">
         <div className="flex items-center gap-3 rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5">

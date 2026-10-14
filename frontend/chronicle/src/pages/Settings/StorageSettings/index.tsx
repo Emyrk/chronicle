@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
+import { DiscordGrantCallout } from "./DiscordGrantCallout";
+import { hasDiscordMemberGrant } from "./grantMath";
 import { LogsTable } from "./LogsTable";
 import { ParsedDataCard } from "./ParsedDataCard";
 import { RawStorageCard } from "./RawStorageCard";
@@ -48,10 +50,13 @@ export function StorageSettingsView({
       {storageLoading || !storage ? (
         <p className="text-sm text-muted-foreground">Loading storage information...</p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          <RawStorageCard storage={storage} />
-          <ParsedDataCard storage={storage} />
-        </div>
+        <>
+          {!hasDiscordMemberGrant(storage.grants) && <DiscordGrantCallout />}
+          <div className="grid gap-4 md:grid-cols-2">
+            <RawStorageCard storage={storage} />
+            <ParsedDataCard storage={storage} />
+          </div>
+        </>
       )}
 
       {logsLoading || !logs ? (

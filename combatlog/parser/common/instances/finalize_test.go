@@ -98,6 +98,81 @@ func startFinalizeTestFight(t *testing.T, h *Hookable, at time.Time) (guid.GUID,
 	return player, boss
 }
 
+func TestFightStartSplitterEndsOpenHostilePeriodAndAllowsRestart(t *testing.T) {
+	t.Parallel()
+
+	const (
+		trashEntry    uint32 = 900002
+		splitterEntry uint32 = 900003
+	)
+
+	hostiles := make(map[uint32]Identity)
+	LoadAdds(hostiles, map[uint32]string{trashEntry: "Lingering Trash"})
+	LoadBosses(hostiles, map[uint32]string{splitterEntry: "Fight Splitter"})
+	h := newFinalizeTestHookableWithHostiles(t, hostiles)
+	h.Characters = characters.NewCharacters(h.units, []characters.CharacterFactory{
+		func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+			entry, ok := id.GetEntry()
+			if !ok || entry != splitterEntry {
+				return nil, false
+			}
+			return characters.NewStartsNewFight(characters.NewCommonCharacter(id, all)), true
+		},
+	}, h.Identifier)
+
+	base := time.Date(2026, time.October, 14, 12, 0, 0, 0, time.UTC)
+	player := guid.GUID(1)
+	trash := creatureGUID(trashEntry, 1)
+	splitter := creatureGUID(splitterEntry, 1)
+
+	require.NoError(t, h.Process(&messages.Damage{
+		MessageBase: messages.Base(base),
+		Caster:      &player,
+		Target:      trash,
+		Amount:      1,
+	}))
+
+	splitAt := base.Add(time.Second)
+	require.NoError(t, h.Process(&messages.Damage{
+		MessageBase: messages.Base(splitAt),
+		Caster:      &player,
+		Target:      splitter,
+		Amount:      1,
+	}))
+
+	require.Len(t, h.completedFights, 1)
+	previousActivity := h.completedFights[0].Hostiles[trash].Activity
+	require.Len(t, previousActivity, 1)
+	require.Equal(t, splitAt, previousActivity[0].End.Timestamp.Date())
+	require.Equal(t, period.EndStateReset, previousActivity[0].EndState)
+
+	trashCharacter, ok := h.Characters.Get(trash)
+	require.True(t, ok)
+	trashPeriod, ok := trashCharacter.CurrentPeriod()
+	require.True(t, ok)
+	require.False(t, trashPeriod.IsActive())
+
+	require.True(t, h.currentFight.active())
+	require.Equal(t, splitAt, h.currentFight.Start.Timestamp.Date())
+	require.Contains(t, h.currentFight.ActiveHostiles, splitter)
+	require.NotContains(t, h.currentFight.ActiveHostiles, trash)
+
+	restartAt := splitAt.Add(time.Second)
+	require.NoError(t, h.Process(&messages.Damage{
+		MessageBase: messages.Base(restartAt),
+		Caster:      &player,
+		Target:      trash,
+		Amount:      1,
+	}))
+
+	require.Contains(t, h.currentFight.ActiveHostiles, trash)
+	require.Len(t, trashCharacter.Periods(), 2)
+	restartedPeriod, ok := trashCharacter.CurrentPeriod()
+	require.True(t, ok)
+	require.True(t, restartedPeriod.IsActive())
+	require.Equal(t, restartAt, restartedPeriod.Start.Timestamp.Date())
+}
+
 func indexOfCall(calls []string, want string) int {
 	for i, call := range calls {
 		if call == want {

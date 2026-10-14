@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Loader2, TriangleAlert } from "lucide-react";
+import { CircleHelp, Loader2, TriangleAlert } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import {
   HintTooltip,
@@ -13,9 +13,10 @@ import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import { parseBgColor, parseBorderColor, parseColor } from "../parseColors";
 import type { PopulationSelection } from "./populationSelectionState";
 import { useInstanceTimeParses, useSpeedrunPopulation } from "./overviewQueries";
+import { selectTimeParseScopeResult } from "./timeParseScope";
 import {
   buildEncounterKillTimeComparisonRows,
-  mapSnapshotBossParses,
+  mapTimeBossParses,
   resolveEncounterParseScore,
   summarizeEncounterKillTimes,
   type EncounterKillTimeSummary,
@@ -197,11 +198,12 @@ export function EncounterKillTimesPanel({
   const primarySummaries = summarizeEncounterKillTimes(primaryQuery.data?.runs ?? []);
   const comparisonSummaries = summarizeEncounterKillTimes(comparisonQuery.data?.runs ?? []);
   const rows = buildEncounterKillTimeComparisonRows(primarySummaries, comparisonSummaries);
-  const snapshotParses = mapSnapshotBossParses(timeParsesQuery.data);
-  const average = timeParsesQuery.data?.average_boss_kill_parse;
+  const selectedTimeParses = selectTimeParseScopeResult(timeParsesQuery.data, comparison);
+  const timeParses = mapTimeBossParses(selectedTimeParses);
+  const average = selectedTimeParses?.average_boss_kill_parse;
   const averageParse = average?.display_score ?? null;
   const killedBossCount = average?.killed ?? primarySummaries.size;
-  const availableParseCount = timeParsesQuery.data?.boss_kill_times
+  const availableParseCount = selectedTimeParses?.boss_kill_times
     .filter((parse) => parse.status !== "sample_too_small").length ?? 0;
   const incompleteAverage = average !== undefined && average.killed < average.selected;
   const specificRaidComparison = comparison?.kind === "instance";
@@ -213,7 +215,31 @@ export function EncounterKillTimesPanel({
       <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-5 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
+            <div className="flex items-center gap-1.5">
+              <HintTooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Why comparison and parse sample counts may differ"
+                    className="shrink-0 cursor-help text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  >
+                    <CircleHelp className="size-3.5" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  align="start"
+                  sideOffset={6}
+                  hideArrow
+                  className="w-72 rounded-lg border border-white/10 bg-popover p-3 text-foreground shadow-lg"
+                >
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    The chart uses the selected Overview comparison population. Parse scores use a separate date-bounded cohort of clean kills and exclude the current raid, so sample counts may differ.
+                  </p>
+                </TooltipContent>
+              </HintTooltip>
+              <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
+            </div>
             <p className="mt-0.5 text-[11px] leading-none text-muted-foreground">
               {!comparison
                 ? "Kill time and historical parse per boss"
@@ -309,7 +335,7 @@ export function EncounterKillTimesPanel({
                 <span className="text-right">Yours</span>
               </div>
               {[...primarySummaries].map(([encounterName, summary]) => {
-                const parseScore = resolveEncounterParseScore(snapshotParses, encounterName);
+                const parseScore = resolveEncounterParseScore(timeParses, encounterName);
                 return (
                   <EncounterRowTooltip
                     key={encounterName}
@@ -390,7 +416,7 @@ export function EncounterKillTimesPanel({
               <span className="text-right">Delta</span>
             </div>
             {rows.map(({ encounterName, primarySummary, comparisonSummary }) => {
-              const parseScore = resolveEncounterParseScore(snapshotParses, encounterName);
+              const parseScore = resolveEncounterParseScore(timeParses, encounterName);
               const primaryDurationMs = primarySummary?.median ?? null;
               const missing = primaryDurationMs === null;
               const delta = primaryDurationMs === null

@@ -22,20 +22,62 @@ INSERT INTO parse_score_receipts (
     policy_version, query_version, lookback_days,
     source_count, result_count, computed_at
 ) VALUES (
-    @tenant_id, @instance_id, @snapshot_id,
+    @tenant_id, @instance_id, @snapshot_id::uuid,
     @policy_version, @query_version, @lookback_days,
     @source_count, @result_count, now()
 )
-ON CONFLICT (tenant_id, instance_id, snapshot_id, lookback_days, policy_version, query_version) DO UPDATE SET
+ON CONFLICT (tenant_id, instance_id, snapshot_id, lookback_days, policy_version, query_version)
+WHERE snapshot_id IS NOT NULL
+DO UPDATE SET
     source_count   = EXCLUDED.source_count,
     result_count   = EXCLUDED.result_count,
     computed_at    = now()
 RETURNING *;
 
+-- name: InsertWindowedParseScoreReceipt :one
+-- New scoring contracts are identified by the target instance cutoff and do not
+-- require a ranking snapshot.
+INSERT INTO parse_score_receipts (
+    tenant_id, instance_id, snapshot_id,
+    policy_version, query_version, lookback_days,
+    source_count, result_count, cutoff, window_start, cohort_mode, computed_at
+) VALUES (
+    @tenant_id, @instance_id, NULL,
+    @policy_version, @query_version, @lookback_days,
+    @source_count, @result_count, @cutoff, @window_start, @cohort_mode, now()
+)
+ON CONFLICT (tenant_id, instance_id, lookback_days, policy_version, query_version)
+WHERE snapshot_id IS NULL
+DO UPDATE SET
+    source_count = EXCLUDED.source_count,
+    result_count = EXCLUDED.result_count,
+    cutoff = EXCLUDED.cutoff,
+    window_start = EXCLUDED.window_start,
+    cohort_mode = EXCLUDED.cohort_mode,
+    computed_at = now()
+RETURNING *;
+
+-- name: AcquireParseScoreLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended(@lock_key, 0));
+
 -- name: GetParseScoreReceipt :one
 -- Get receipt by instance + snapshot.
 SELECT * FROM parse_score_receipts
-WHERE instance_id = @instance_id AND snapshot_id = @snapshot_id;
+WHERE instance_id = @instance_id AND snapshot_id = @snapshot_id::uuid;
+
+-- name: GetAnyParseScoreReceiptForTenantInstance :one
+SELECT *
+FROM parse_score_receipts
+WHERE tenant_id = @tenant_id
+  AND instance_id = @instance_id
+ORDER BY computed_at DESC
+LIMIT 1;
+
+-- name: HasParseScoreResultsForTenantInstance :one
+SELECT EXISTS (
+    SELECT 1 FROM parse_score_results
+    WHERE tenant_id = @tenant_id AND instance_id = @instance_id
+);
 
 -- name: GetParseScoreReceiptForInstance :many
 -- Get all receipts for an instance (any snapshot).
@@ -51,7 +93,7 @@ SELECT *
 FROM parse_score_receipts
 WHERE tenant_id = @tenant_id
   AND instance_id = @instance_id
-  AND snapshot_id = @snapshot_id
+  AND snapshot_id = @snapshot_id::uuid
   AND lookback_days = @lookback_days
 ORDER BY computed_at DESC
 LIMIT 1;
@@ -65,7 +107,17 @@ SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
 FROM parse_score_results psr
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
-  AND psr.snapshot_id = @snapshot_id
+  AND psr.snapshot_id = @snapshot_id::uuid
+  AND psr.metric = @metric
+ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
+
+-- name: ListWindowedParseScoreResultsForContract :many
+SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+    psr.*
+FROM parse_score_results psr
+WHERE psr.tenant_id = @tenant_id
+  AND psr.instance_id = @instance_id
+  AND psr.snapshot_id IS NULL
   AND psr.metric = @metric
 ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
 
@@ -90,7 +142,7 @@ WHERE edr.encounter_id IS NOT NULL
   AND NOT EXISTS (
       SELECT 1 FROM parse_score_receipts psr
       WHERE psr.instance_id = edr.instance_id
-        AND psr.snapshot_id = @snapshot_id
+        AND psr.snapshot_id = @snapshot_id::uuid
         AND psr.policy_version = @policy_version
         AND psr.query_version = @query_version
   )
@@ -226,6 +278,43 @@ WHERE li.start_time >= @repair_since
       AND receipt.policy_version = @policy_version
       AND receipt.query_version = @query_version
 )
+ORDER BY li.start_time DESC NULLS LAST
+LIMIT @max_rows;
+
+-- name: ListInstancesMissingParseReceiptWindowed :many
+-- Bound automatic repair to recent instances with no successful parse receipt at
+-- all. Legacy snapshot-backed receipts remain authoritative and are never
+-- selected merely because windowed scoring uses a newer query version.
+SELECT
+    candidates.instance_id,
+    li.start_time,
+    COALESCE(li.duplicate_group_id, li.id) AS run_id,
+    li.name AS instance_name,
+    li.difficulty_name,
+    li.max_players,
+    li.log_group_id,
+    li.guild_id
+FROM (
+    SELECT DISTINCT edr.instance_id
+    FROM encounter_dps_rankings edr
+    WHERE edr.encounter_id IS NOT NULL
+      AND (edr.dps > 0 OR edr.hps > 0)
+) candidates
+JOIN log_instances li ON li.id = candidates.instance_id
+WHERE li.start_time >= @repair_since
+  AND li.invalidated_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM parse_score_receipts receipt
+    WHERE receipt.tenant_id = @tenant_id
+      AND receipt.instance_id = candidates.instance_id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM parse_score_results result
+    WHERE result.tenant_id = @tenant_id
+      AND result.instance_id = candidates.instance_id
+  )
 ORDER BY li.start_time DESC NULLS LAST
 LIMIT @max_rows;
 

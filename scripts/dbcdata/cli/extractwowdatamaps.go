@@ -22,7 +22,7 @@ import (
 	"github.com/coder/serpent"
 )
 
-const wowMapManifestFormat = "chronicle-wow-map-art-v1"
+const wowMapManifestFormat = "chronicle-wow-map-art-v2"
 
 type wowMapTarget struct {
 	Product string `json:"product"`
@@ -84,6 +84,7 @@ type wowMapInstance struct {
 	Directory    string                  `json:"directory"`
 	Floors       []wowMapInstanceFloor   `json:"floors"`
 	Rendered     *wowMapRenderedInstance `json:"rendered,omitempty"`
+	Styled       *wowMapRenderedInstance `json:"styled,omitempty"`
 }
 
 type wowMapRenderedInstance struct {
@@ -266,7 +267,7 @@ func ExtractWowdataMapsCmd() *serpent.Command {
 		Options: serpent.OptionSet{
 			DBCOption(&dbcPath),
 			ServerOption(&server),
-			{Name: "out", Description: "Output directory for manifest.json and map tiles.", Flag: "out", Value: serpent.StringOf(&opts.OutDir)},
+			{Name: "out", Description: "Output directory for manifest.original.json and map tiles.", Flag: "out", Value: serpent.StringOf(&opts.OutDir)},
 			{Name: "wowdata", Description: "Wowdata executable. A pinned build is provisioned when omitted.", Flag: "wowdata", Env: "WOWDATA_BIN", Default: wowdataDefaultBinary, Value: serpent.StringOf(&opts.WowdataBin)},
 			{Name: "source", Description: "Read CASC data from local client archives or Blizzard's CDN.", Flag: "source", Default: "remote", Value: serpent.StringOf(&opts.Source)},
 			{Name: "product", Description: "CASC product to extract.", Flag: "product", Default: "wow_classic_beta", Value: serpent.StringOf(&opts.Product)},
@@ -275,8 +276,8 @@ func ExtractWowdataMapsCmd() *serpent.Command {
 			{Name: "locale", Description: "Data locale.", Flag: "locale", Env: "WOW_LOCALE", Default: "enUS", Value: serpent.StringOf(&opts.Locale)},
 			{Name: "cache", Description: "Optional wowdata cache directory.", Flag: "cache", Env: "WOWDATA_CACHE", Value: serpent.StringOf(&opts.Cache)},
 			{Name: "reuse-manifest-url", Description: "Published manifest whose immutable tiles can be reused without downloading them again.", Flag: "reuse-manifest-url", Value: serpent.StringOf(&opts.ReuseManifestURL)},
-			{Name: "workers", Description: "Concurrent wowdata tile export processes.", Flag: "workers", Default: "4", Value: serpent.Int64Of(&opts.Workers)},
-			{Name: "metadata-only", Description: "Write manifest.json without downloading map tiles.", Flag: "metadata-only", Value: serpent.BoolOf(&opts.MetadataOnly)},
+			{Name: "workers", Description: "Concurrent wowdata tile export processes; cache preparation is coordinated between workers.", Flag: "workers", Default: "4", Value: serpent.Int64Of(&opts.Workers)},
+			{Name: "metadata-only", Description: "Write manifest.original.json without downloading map tiles.", Flag: "metadata-only", Value: serpent.BoolOf(&opts.MetadataOnly)},
 		},
 		Handler: func(inv *serpent.Invocation) error {
 			if opts.OutDir == "" {
@@ -359,7 +360,7 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(opts.OutDir, "tiles"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(opts.OutDir, "original"), 0o755); err != nil {
 		return fmt.Errorf("create map output directory: %w", err)
 	}
 	if !opts.MetadataOnly {
@@ -376,7 +377,7 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 		var exportIDs []int32
 		reused := 0
 		for _, fileDataID := range fileDataIDs {
-			output := filepath.Join(opts.OutDir, "tiles", fmt.Sprintf("%d.webp", fileDataID))
+			output := filepath.Join(opts.OutDir, "original", fmt.Sprintf("%d.webp", fileDataID))
 			if info, statErr := os.Stat(output); statErr == nil && info.Size() > 0 {
 				continue
 			}
@@ -402,7 +403,7 @@ func extractWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts wowM
 		}
 		fileDataIDs = wowMapManifestFileDataIDs(manifest)
 	}
-	if err := writeWowMapManifest(filepath.Join(opts.OutDir, "manifest.json"), manifest); err != nil {
+	if err := writeWowMapManifest(filepath.Join(opts.OutDir, "manifest.original.json"), manifest); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "Wrote %d maps and %d instances referencing %d unique tiles to %s\n", len(manifest.Maps), len(manifest.Instances), len(fileDataIDs), opts.OutDir)
@@ -543,6 +544,74 @@ func searchWowMapFiles(ctx context.Context, stderr io.Writer, opts wowMapExtract
 	return response.Data.Files, nil
 }
 
+type wowdataPrepareGate struct {
+	token chan struct{}
+}
+
+func newWowdataPrepareGate() *wowdataPrepareGate {
+	gate := &wowdataPrepareGate{token: make(chan struct{}, 1)}
+	gate.token <- struct{}{}
+	return gate
+}
+
+func (gate *wowdataPrepareGate) acquire(ctx context.Context) (func(), error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-gate.token:
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() { gate.token <- struct{}{} })
+	}, nil
+}
+
+type wowdataPrepareWriter struct {
+	destination io.Writer
+	onReady     func()
+	pending     []byte
+}
+
+func (writer *wowdataPrepareWriter) Write(data []byte) (int, error) {
+	n, err := writer.destination.Write(data)
+	writer.pending = append(writer.pending, data[:n]...)
+	for {
+		newline := bytes.IndexByte(writer.pending, '\n')
+		if newline < 0 {
+			break
+		}
+		writer.observeLine(writer.pending[:newline])
+		writer.pending = writer.pending[newline+1:]
+	}
+	return n, err
+}
+
+func (writer *wowdataPrepareWriter) Flush() {
+	if len(writer.pending) > 0 {
+		writer.observeLine(writer.pending)
+		writer.pending = nil
+	}
+}
+
+func (writer *wowdataPrepareWriter) observeLine(line []byte) {
+	if string(bytes.TrimSpace(line)) == "prepare status=ready" {
+		writer.onReady()
+	}
+}
+
+func runWowdataWithPrepareGate(ctx context.Context, cmd *exec.Cmd, stderr io.Writer, gate *wowdataPrepareGate) error {
+	release, err := gate.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	writer := &wowdataPrepareWriter{destination: stderr, onReady: release}
+	cmd.Stderr = writer
+	err = cmd.Run()
+	writer.Flush()
+	release()
+	return err
+}
+
 func exportWowdataTextures(
 	ctx context.Context,
 	stdout, stderr io.Writer,
@@ -563,6 +632,7 @@ func exportWowdataTextures(
 	var outputMu sync.Mutex
 	var firstErr error
 	completed := 0
+	prepareGate := newWowdataPrepareGate()
 
 	worker := func() {
 		defer workers.Done()
@@ -575,9 +645,9 @@ func exportWowdataTextures(
 				continue
 			}
 
-			output := filepath.Join(opts.OutDir, "tiles", fmt.Sprintf("%d.webp", fileDataID))
+			output := filepath.Join(opts.OutDir, "original", fmt.Sprintf("%d.webp", fileDataID))
 			var commandStderr bytes.Buffer
-			err := exportWowdataTexture(ctx, &commandStderr, opts, fileDataID, output)
+			err := exportWowdataTextureWithRetries(ctx, &commandStderr, opts, fileDataID, output, wowdataTextureExportRetryDelays, prepareGate)
 			if commandStderr.Len() > 0 {
 				outputMu.Lock()
 				_, _ = stderr.Write(commandStderr.Bytes())
@@ -631,6 +701,8 @@ feed:
 
 var errWowdataFileUnavailable = errors.New("wowdata file unavailable for locale")
 
+var wowdataTextureExportRetryDelays = []time.Duration{time.Second, 2 * time.Second}
+
 type wowdataErrorResponse struct {
 	Error struct {
 		Code    string `json:"code"`
@@ -639,30 +711,60 @@ type wowdataErrorResponse struct {
 }
 
 func exportWowdataTexture(ctx context.Context, stderr io.Writer, opts wowMapExtractOptions, fileDataID int32, output string) error {
+	return exportWowdataTextureWithRetries(ctx, stderr, opts, fileDataID, output, wowdataTextureExportRetryDelays, newWowdataPrepareGate())
+}
+
+func exportWowdataTextureWithRetries(
+	ctx context.Context,
+	stderr io.Writer,
+	opts wowMapExtractOptions,
+	fileDataID int32,
+	output string,
+	retryDelays []time.Duration,
+	prepareGate *wowdataPrepareGate,
+) error {
 	tmp := output + ".tmp"
-	_ = os.Remove(tmp)
 	args := []string{"icon", "export", "--file-data-id", fmt.Sprint(fileDataID), "--format", "webp", "--output", tmp}
 	args = append(args, wowdataTargetArgs(opts)...)
-	cmd := exec.CommandContext(ctx, opts.WowdataBin, args...)
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
+	for attempt := 0; attempt <= len(retryDelays); attempt++ {
 		_ = os.Remove(tmp)
+		cmd := exec.CommandContext(ctx, opts.WowdataBin, args...)
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+		err := runWowdataWithPrepareGate(ctx, cmd, stderr, prepareGate)
+		if err == nil {
+			if err := os.Rename(tmp, output); err != nil {
+				_ = os.Remove(tmp)
+				return fmt.Errorf("install texture FileDataID %d: %w", fileDataID, err)
+			}
+			return nil
+		}
+		_ = os.Remove(tmp)
+		if ctx.Err() != nil {
+			return fmt.Errorf("export texture FileDataID %d: %w", fileDataID, ctx.Err())
+		}
+
 		var response wowdataErrorResponse
-		if json.Unmarshal(stdout.Bytes(), &response) == nil && response.Error.Code == "not_found" {
+		_ = json.Unmarshal(stdout.Bytes(), &response)
+		if response.Error.Code == "not_found" {
 			return fmt.Errorf("%w: FileDataID %d: %s", errWowdataFileUnavailable, fileDataID, response.Error.Message)
 		}
 		if stdout.Len() > 0 {
 			_, _ = stderr.Write(stdout.Bytes())
 		}
-		return fmt.Errorf("export texture FileDataID %d: %w", fileDataID, err)
+		if response.Error.Code != "cache_lock_failed" || attempt == len(retryDelays) {
+			return fmt.Errorf("export texture FileDataID %d: %w", fileDataID, err)
+		}
+		_, _ = fmt.Fprintf(stderr, "retrying texture FileDataID %d after cache lock failure (%d/%d)\n", fileDataID, attempt+1, len(retryDelays))
+		timer := time.NewTimer(retryDelays[attempt])
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("export texture FileDataID %d: %w", fileDataID, ctx.Err())
+		case <-timer.C:
+		}
 	}
-	if err := os.Rename(tmp, output); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("install texture FileDataID %d: %w", fileDataID, err)
-	}
-	return nil
+	return fmt.Errorf("export texture FileDataID %d: retries exhausted", fileDataID)
 }
 
 func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManifest, []int32, error) {
@@ -691,7 +793,7 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 		key := [2]int32{tile.UiMapArtID, tile.LayerIndex}
 		tilesByArtAndLayer[key] = append(tilesByArtAndLayer[key], wowMapTile{
 			Row: tile.RowIndex, Column: tile.ColIndex, FileDataID: tile.FileDataID,
-			Path: fmt.Sprintf("tiles/%d.webp", tile.FileDataID),
+			Path: fmt.Sprintf("original/%d.webp", tile.FileDataID),
 		})
 	}
 	for key := range tilesByArtAndLayer {
@@ -713,7 +815,7 @@ func buildWowMapManifest(source wowMapSource, target wowMapTarget) (wowMapManife
 		}
 		overlayTilesByID[tile.WorldMapOverlayID] = append(overlayTilesByID[tile.WorldMapOverlayID], wowMapTile{
 			Row: tile.RowIndex, Column: tile.ColIndex, FileDataID: tile.FileDataID,
-			Path: fmt.Sprintf("tiles/%d.webp", tile.FileDataID),
+			Path: fmt.Sprintf("original/%d.webp", tile.FileDataID),
 		})
 	}
 	for id := range overlayTilesByID {
@@ -962,7 +1064,7 @@ func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstan
 			}
 			asset.Floors[floor][tileIndex] = wowMapTile{
 				Row: (tileIndex - 1) / 4, Column: (tileIndex - 1) % 4,
-				FileDataID: file.FileDataID, Path: fmt.Sprintf("tiles/%d.webp", file.FileDataID),
+				FileDataID: file.FileDataID, Path: fmt.Sprintf("original/%d.webp", file.FileDataID),
 			}
 			continue
 		}
@@ -978,7 +1080,7 @@ func buildWowMapInstances(maps []wowdataMap, files []wowdataFile) []wowMapInstan
 			minimapAssets[key] = asset
 		}
 		asset.Tiles[[2]int32{column, row}] = wowMapTile{
-			FileDataID: file.FileDataID, Path: fmt.Sprintf("tiles/%d.webp", file.FileDataID),
+			FileDataID: file.FileDataID, Path: fmt.Sprintf("original/%d.webp", file.FileDataID),
 		}
 	}
 

@@ -13,8 +13,11 @@ import (
 )
 
 type sqlcQuerier interface {
+	AcquireParseScoreLock(ctx context.Context, lockKey string) error
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
+	AcquireTimeParseScoreLock(ctx context.Context, instanceID string) error
+	ActivateDiscordMembershipGrantCheckOnLogin(ctx context.Context, arg ActivateDiscordMembershipGrantCheckOnLoginParams) (ActivateDiscordMembershipGrantCheckOnLoginRow, error)
 	AddUserFavoriteGuild(ctx context.Context, arg AddUserFavoriteGuildParams) (pgtype.Bool, error)
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
@@ -26,26 +29,21 @@ type sqlcQuerier interface {
 	// documentation; log_instances does not carry numeric version columns yet, so
 	// version filtering is the caller's responsibility if needed.
 	BatchInsertSnapshotMembersFromRankings(ctx context.Context, snapshotID uuid.UUID) error
-	// Populate boss-kill members from eligible encounter kill times.
-	// Clean boss kills from cohort-eligible runs (partial or complete).
-	// Duplicate groups collapsed per encounter to fastest.
-	BatchInsertTimeParseSnapshotBossKillMembers(ctx context.Context, snapshotID uuid.UUID) error
-	// Populate clear-time members from eligible instance speedruns.
-	// Qualified complete runs only (duration_ms > 0). Duplicate groups collapsed
-	// to one representative instance (deterministic: canonical instance first,
-	// then earliest start, then smallest UUID).
-	BatchInsertTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) error
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
+	ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error)
+	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
 	// Canonical normalized rows produced by legacy Spell.dbc imports.
 	ClearSpellEffectsForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellPowersForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellVariantsForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearWoWLogGroupInvalidation(ctx context.Context, logGroupID uuid.UUID) error
-	CompareTimeParseBossKillMembershipSnapshot(ctx context.Context, snapshotID uuid.UUID) (CompareTimeParseBossKillMembershipSnapshotRow, error)
+	CompleteDiscordMembershipGrantCheckError(ctx context.Context, arg CompleteDiscordMembershipGrantCheckErrorParams) (DiscordMembershipGrantCheck, error)
+	CompleteDiscordMembershipGrantCheckMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
+	CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
 	CopyLegacySpellPowers(ctx context.Context, arg []CopyLegacySpellPowersParams) *CopyLegacySpellPowersBatchResults
@@ -57,8 +55,6 @@ type sqlcQuerier interface {
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
 	// Return the number of members in a snapshot.
 	CountSnapshotMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
-	CountTimeParseSnapshotBossKillMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
-	CountTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserGearLists(ctx context.Context, arg CountUserGearListsParams) (int64, error)
 	CountUserGearProgressions(ctx context.Context, arg CountUserGearProgressionsParams) (int64, error)
@@ -98,6 +94,7 @@ type sqlcQuerier interface {
 	DeleteDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDiscordAnnouncement(ctx context.Context, id uuid.UUID) error
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
+	DeleteDiscordMembershipGrantCheck(ctx context.Context, userID uuid.UUID) error
 	DeleteEmptyCooldownOverrides(ctx context.Context, datasetID uuid.UUID) error
 	DeleteExpiredDevicePairings(ctx context.Context) (int64, error)
 	DeleteExpiredGuildResourceVisitors(ctx context.Context) error
@@ -117,6 +114,9 @@ type sqlcQuerier interface {
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
 	DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error)
 	DeleteOrphanCustomPanelReleases(ctx context.Context) (int64, error)
+	DeleteParseScoreMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
+	// Compact current-known membership for DPS/HPS parse cohorts.
+	DeleteParseScoreMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
 	// Remove parse score results for a tenant+instance (before re-computation).
 	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
 	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
@@ -134,16 +134,17 @@ type sqlcQuerier interface {
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
-	// Event-date-backed storage for time-parse boss-kill cohorts.
-	// Each logical member is stored once and snapshot lookback windows are applied
-	// at read time. Later uploads and corrections intentionally affect old parses.
 	DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error
 	DeleteTimeParseBossKillMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
 	DeleteTimeParseBossKillMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
-	// Delete a time-parse snapshot by ID. Members are cascade-deleted.
-	DeleteTimeParseSnapshot(ctx context.Context, id uuid.UUID) error
-	// Bulk-delete time-parse snapshots by IDs. Members are cascade-deleted via FK.
-	DeleteTimeParseSnapshots(ctx context.Context, ids []uuid.UUID) error
+	// Current-known storage for time-parse clear-time and boss-kill cohorts.
+	// Each logical run is stored once per tenant and scoring version. Date windows
+	// are applied at read time so late uploads, corrections, and invalidations are
+	// reflected immediately.
+	DeleteTimeParseClearTimeMembershipSeries(ctx context.Context, arg DeleteTimeParseClearTimeMembershipSeriesParams) error
+	DeleteTimeParseClearTimeMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
+	DeleteTimeParseClearTimeMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
+	DeleteTimeParseScoreForContract(ctx context.Context, arg DeleteTimeParseScoreForContractParams) error
 	DeleteUploadKey(ctx context.Context, id uuid.UUID) error
 	DeleteUserCharacterLink(ctx context.Context, arg DeleteUserCharacterLinkParams) (UserCharacterLink, error)
 	DeleteUserCharacterLinksByUserAndSource(ctx context.Context, arg DeleteUserCharacterLinksByUserAndSourceParams) ([]UserCharacterLink, error)
@@ -185,6 +186,7 @@ type sqlcQuerier interface {
 	// Item name/quality/icon/level are read from the snapshot jsonb itself,
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
+	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
 	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
@@ -232,6 +234,7 @@ type sqlcQuerier interface {
 	// Discord raid-log announcements
 	GetDiscordAnnouncementSource(ctx context.Context, arg GetDiscordAnnouncementSourceParams) (GetDiscordAnnouncementSourceRow, error)
 	GetDiscordAnnouncementSourceBySlug(ctx context.Context, instanceSlug pgtype.Text) (GetDiscordAnnouncementSourceBySlugRow, error)
+	GetDiscordMembershipGrantCheckClaim(ctx context.Context, arg GetDiscordMembershipGrantCheckClaimParams) (DiscordMembershipGrantCheck, error)
 	GetDisplayInfoByID(ctx context.Context, arg GetDisplayInfoByIDParams) (WorldDisplayInfo, error)
 	GetEncounterPhasesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterPhase, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
@@ -242,11 +245,6 @@ type sqlcQuerier interface {
 	GetExternalAPICharacter(ctx context.Context, arg GetExternalAPICharacterParams) (GetExternalAPICharacterRow, error)
 	GetExternalCharacterLinkSync(ctx context.Context, arg GetExternalCharacterLinkSyncParams) (ExternalCharacterLinkSync, error)
 	GetFileByHash(ctx context.Context, hash string) (LogFile, error)
-	GetLogFileByOwnerHash(ctx context.Context, arg GetLogFileByOwnerHashParams) (LogFile, error)
-	GetLogGroupIDBySource(ctx context.Context, arg GetLogGroupIDBySourceParams) (uuid.UUID, error)
-	// Records the client-supplied source id (X-Chronicle-Source-Id) a log group was
-	// uploaded under, so a later upload of the same grown file can replace it.
-	InsertLogGroupSource(ctx context.Context, arg InsertLogGroupSourceParams) error
 	// Full page fetch with all tabs and panels
 	GetFullGuildPage(ctx context.Context, guildID uuid.UUID) (GetFullGuildPageRow, error)
 	GetGamePlayerByGUID(ctx context.Context, arg GetGamePlayerByGUIDParams) (GetGamePlayerByGUIDRow, error)
@@ -304,21 +302,16 @@ type sqlcQuerier interface {
 	// Return the most recently published snapshot matching the full key dimensions
 	// used by the staleness guard (tenant, lookback, cohort_mode, policy_version, query_version).
 	GetLatestPublishedSnapshotForGuard(ctx context.Context, arg GetLatestPublishedSnapshotForGuardParams) (RankingSnapshot, error)
-	// Most recently published time-parse snapshot for a tenant+lookback+versions.
-	GetLatestPublishedTimeParseSnapshot(ctx context.Context, arg GetLatestPublishedTimeParseSnapshotParams) (TimeParseSnapshot, error)
-	// Latest published time-parse snapshot whose cutoff <= given timestamp.
-	// Used for canonical parse resolution (day-of-raid snapshot).
-	GetLatestPublishedTimeParseSnapshotBefore(ctx context.Context, arg GetLatestPublishedTimeParseSnapshotBeforeParams) (TimeParseSnapshot, error)
-	// Most recently published snapshot matching the full key dimensions (staleness guard).
-	GetLatestPublishedTimeParseSnapshotForGuard(ctx context.Context, arg GetLatestPublishedTimeParseSnapshotForGuardParams) (TimeParseSnapshot, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
+	GetLogFileByOwnerHash(ctx context.Context, arg GetLogFileByOwnerHashParams) (LogFile, error)
+	GetLogGroupIDBySource(ctx context.Context, arg GetLogGroupIDBySourceParams) (uuid.UUID, error)
 	GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg GetLogGroupInstanceIDByOrdinalParams) (uuid.UUID, error)
 	GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error)
 	// Fetch instance metadata needed for parse scoring.
 	GetLogInstanceForScoring(ctx context.Context, id uuid.UUID) (GetLogInstanceForScoringRow, error)
-	// Return the instance name, difficulty, and max_players for time-parse scoring.
+	// Return the cohort dimensions and logical run identity for live time parsing.
 	GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUID) (GetLogInstanceForTimeParseRow, error)
 	// Return the start_time for a log instance. Used by the parses handler
 	// to resolve which snapshot cutoff applies to the instance.
@@ -326,6 +319,7 @@ type sqlcQuerier interface {
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
+	GetParseScoreMembershipCohort(ctx context.Context, arg GetParseScoreMembershipCohortParams) ([]float64, error)
 	// Get receipt by instance + snapshot.
 	GetParseScoreReceipt(ctx context.Context, arg GetParseScoreReceiptParams) (ParseScoreReceipt, error)
 	// Verify that a persisted projection completed successfully for this exact
@@ -342,9 +336,6 @@ type sqlcQuerier interface {
 	// Check if a published snapshot already exists for this exact cutoff+key.
 	// Used by the idempotency guard (one snapshot per day per key).
 	GetPublishedSnapshotForCutoff(ctx context.Context, arg GetPublishedSnapshotForCutoffParams) (RankingSnapshot, error)
-	// Check if a published time-parse snapshot exists for this exact cutoff+key.
-	// Used by the idempotency guard.
-	GetPublishedTimeParseSnapshotForCutoff(ctx context.Context, arg GetPublishedTimeParseSnapshotForCutoffParams) (TimeParseSnapshot, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	GetRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Returns all realm IDs that have an applicable retention policy
@@ -357,6 +348,8 @@ type sqlcQuerier interface {
 	// Returns the realm-specific policy if it exists, otherwise the server-level policy.
 	GetRetentionPolicyForRealm(ctx context.Context, realmID uuid.NullUUID) (RetentionPolicy, error)
 	GetRetentionRulesByPolicy(ctx context.Context, policyID uuid.UUID) ([]RetentionRule, error)
+	GetScopedTimeParseBossKillCohort(ctx context.Context, arg GetScopedTimeParseBossKillCohortParams) ([]int64, error)
+	GetScopedTimeParseClearTimeCohort(ctx context.Context, arg GetScopedTimeParseClearTimeCohortParams) ([]int64, error)
 	// Return the latest published snapshot whose cutoff <= the given timestamp,
 	// matching the current policy_version and query_version.
 	// This prevents an incompatible newer snapshot from hiding a compatible older one.
@@ -401,26 +394,12 @@ type sqlcQuerier interface {
 	// Tenant queries. These run with AdminBypass context since the tenants table
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
 	GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Tenant, error)
+	GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error)
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
-	// All boss-kill durations for an (instance_name, encounter, difficulty, max_players) bucket.
-	// Used to score a specific boss kill time against the population.
-	GetTimeParseSnapshotBossKillCohort(ctx context.Context, arg GetTimeParseSnapshotBossKillCohortParams) ([]int64, error)
-	// All clear-time durations for an (instance_name, difficulty, max_players) bucket.
-	// Used to score a specific run's clear time against the population.
-	GetTimeParseSnapshotClearTimeCohort(ctx context.Context, arg GetTimeParseSnapshotClearTimeCohortParams) ([]int64, error)
-	// Compute a combined source fingerprint covering both clear-time eligible
-	// speedruns and boss-kill eligible encounters. Changes in either source
-	// break the staleness guard so new boss encounters or reparses trigger
-	// publication.
-	// The fingerprint hashes every membership-affecting column via
-	// hashtextextended (seed 0 for clears, seed 1 for bosses), sums via
-	// numeric to avoid bigint overflow, then reduces modulo a large prime.
-	// The two sub-fingerprints are added modulo the same prime so identical
-	// content in both populations does not cancel out.
-	// Empty populations produce fingerprint = 0 (COALESCE of empty SUM).
-	// Compatible with PostgreSQL 13+ (no bit_xor aggregate required).
-	// IMPORTANT: keep WHERE clauses in sync with the corresponding BatchInsert queries.
-	GetTimeParseSnapshotSourceStats(ctx context.Context, arg GetTimeParseSnapshotSourceStatsParams) (GetTimeParseSnapshotSourceStatsRow, error)
+	GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error)
+	GetTimeParseClearTimeMembershipCohort(ctx context.Context, arg GetTimeParseClearTimeMembershipCohortParams) ([]int64, error)
+	GetTimeParseScoreForContract(ctx context.Context, arg GetTimeParseScoreForContractParams) (TimeParseScore, error)
+	GetTimeParseScoringInstance(ctx context.Context, arg GetTimeParseScoringInstanceParams) (GetTimeParseScoringInstanceRow, error)
 	GetUploadDeviceByTokenHash(ctx context.Context, tokenHash string) (UploadDevice, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)
 	GetUploadKeyByHash(ctx context.Context, secretHash string) (GetUploadKeyByHashRow, error)
@@ -455,7 +434,7 @@ type sqlcQuerier interface {
 	// Returns the guild's single best full clear of each instance within the
 	// window, for the guild page "Best Performance" panel. @by_parse picks the
 	// winner by highest historical clear-time parse instead of fastest clear.
-	// Duplicate uploads collapse to one run (fastest duration per group). Includes
+	// Duplicate uploads collapse using the shared deterministic representative. Includes
 	// unqualified runs: qualification only affects cohort and leaderboard membership,
 	// not whether a completed clear can receive a time parse.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
@@ -503,6 +482,7 @@ type sqlcQuerier interface {
 	// cannot fill the whole board.
 	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
+	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
@@ -512,6 +492,7 @@ type sqlcQuerier interface {
 	InsertDerivedConsumableBuffs(ctx context.Context, datasetID uuid.UUID) (int64, error)
 	InsertDerivedConsumables(ctx context.Context, datasetID uuid.UUID) (int64, error)
 	InsertDevicePairing(ctx context.Context, arg InsertDevicePairingParams) (DevicePairing, error)
+	InsertDiscordMembershipGrantCheck(ctx context.Context, arg InsertDiscordMembershipGrantCheckParams) (DiscordMembershipGrantCheck, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
 	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
@@ -525,6 +506,9 @@ type sqlcQuerier interface {
 	InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error
 	InsertInstanceUnits(ctx context.Context, arg []InsertInstanceUnitsParams) *InsertInstanceUnitsBatchResults
 	InsertLogFile(ctx context.Context, arg InsertLogFileParams) (LogFile, error)
+	// Records the client-supplied source id (X-Chronicle-Source-Id) a log group was
+	// uploaded under, so a later upload of the same grown file can replace it.
+	InsertLogGroupSource(ctx context.Context, arg InsertLogGroupSourceParams) error
 	InsertLogInstanceEvents(ctx context.Context, arg []InsertLogInstanceEventsParams) *InsertLogInstanceEventsBatchResults
 	// Modification Requests
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)
@@ -549,8 +533,8 @@ type sqlcQuerier interface {
 	InsertStampedYoutubeVideo(ctx context.Context, arg InsertStampedYoutubeVideoParams) error
 	InsertTelemetryNotice(ctx context.Context, arg InsertTelemetryNoticeParams) error
 	InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error)
-	// Create a new pending time-parse snapshot for a tenant+lookback.
-	InsertTimeParseSnapshot(ctx context.Context, arg InsertTimeParseSnapshotParams) (TimeParseSnapshot, error)
+	InsertTimeParseBossScore(ctx context.Context, arg InsertTimeParseBossScoreParams) error
+	InsertTimeParseScore(ctx context.Context, arg InsertTimeParseScoreParams) (TimeParseScore, error)
 	InsertUploadDevice(ctx context.Context, arg InsertUploadDeviceParams) (UploadDevice, error)
 	// Upload Keys
 	InsertUploadKey(ctx context.Context, arg InsertUploadKeyParams) (WowServerUploadKey, error)
@@ -559,6 +543,9 @@ type sqlcQuerier interface {
 	InsertUserAuthSession(ctx context.Context, arg InsertUserAuthSessionParams) (UserAuthSession, error)
 	InsertUserCharacterLink(ctx context.Context, arg InsertUserCharacterLinkParams) (UserCharacterLink, error)
 	InsertUserPassword(ctx context.Context, arg InsertUserPasswordParams) (UserPassword, error)
+	// New scoring contracts are identified by the target instance cutoff and do not
+	// require a ranking snapshot.
+	InsertWindowedParseScoreReceipt(ctx context.Context, arg InsertWindowedParseScoreReceiptParams) (ParseScoreReceipt, error)
 	InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGroupParams) (WoWLogGroup, error)
 	InsertWoWServer(ctx context.Context, arg InsertWoWServerParams) (WowServer, error)
 	InsertWoWServerRealm(ctx context.Context, arg InsertWoWServerRealmParams) (WowServerRealm, error)
@@ -592,10 +579,6 @@ type sqlcQuerier interface {
 	// Admin view: list all snapshots across tenants, most recent first.
 	// LEFT JOINs tenants to surface the tenant name (NULL for root scope).
 	ListAllSnapshots(ctx context.Context) ([]ListAllSnapshotsRow, error)
-	// Admin view: list all time-parse snapshots across tenants, most recent first.
-	// LEFT JOINs tenants to surface the tenant name (NULL for root scope).
-	// Includes separate clear-time and boss-kill member counts.
-	ListAllTimeParseSnapshots(ctx context.Context) ([]ListAllTimeParseSnapshotsRow, error)
 	ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error)
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
@@ -645,6 +628,10 @@ type sqlcQuerier interface {
 	// old instances, snapshot deletion/rebuild, and policy/query changes.
 	// Returns at most @max_rows rows for bounded batch processing.
 	ListInstancesMissingParseReceipt(ctx context.Context, arg ListInstancesMissingParseReceiptParams) ([]ListInstancesMissingParseReceiptRow, error)
+	// Bound automatic repair to recent instances with no successful parse receipt at
+	// all. Legacy snapshot-backed receipts remain authoritative and are never
+	// selected merely because windowed scoring uses a newer query version.
+	ListInstancesMissingParseReceiptWindowed(ctx context.Context, arg ListInstancesMissingParseReceiptWindowedParams) ([]ListInstancesMissingParseReceiptWindowedRow, error)
 	// Repair query: resolve each visible instance's canonical historical snapshot,
 	// then return instances that lack a successful receipt for that exact tenant,
 	// snapshot, lookback, policy, and query contract. RLS on
@@ -653,10 +640,12 @@ type sqlcQuerier interface {
 	// window are excluded, so daily repair neither restarts exhausted retry chains
 	// nor rewrites long-term parse history.
 	ListInstancesMissingParseReceiptWithSnapshot(ctx context.Context, arg ListInstancesMissingParseReceiptWithSnapshotParams) ([]ListInstancesMissingParseReceiptWithSnapshotRow, error)
+	ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error)
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
+	ListParseScoreMemberships(ctx context.Context, arg ListParseScoreMembershipsParams) ([]ParseScoreMembership, error)
 	// Read one persisted result per player and encounter for an exact completed
 	// snapshot contract. Results whose snapshot was deleted are intentionally not
 	// eligible because their receipt is deleted with the snapshot.
@@ -664,7 +653,6 @@ type sqlcQuerier interface {
 	// Return published snapshots for a tenant, most recent first. member_count is
 	// persisted at publication time so this list never scans snapshot members.
 	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]RankingSnapshot, error)
-	ListPublishedTimeParseSnapshotsForMembershipBackfill(ctx context.Context, arg ListPublishedTimeParseSnapshotsForMembershipBackfillParams) ([]TimeParseSnapshot, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
 	// Used by the parses handler to get the viewed instance's own metric values
@@ -707,7 +695,16 @@ type sqlcQuerier interface {
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
 	ListTenantsByDataset(ctx context.Context, defaultDatasetID uuid.NullUUID) ([]ListTenantsByDatasetRow, error)
+	ListTimeParseBossKillCohortBuckets(ctx context.Context, arg ListTimeParseBossKillCohortBucketsParams) ([]ListTimeParseBossKillCohortBucketsRow, error)
 	ListTimeParseBossKillMemberships(ctx context.Context, arg ListTimeParseBossKillMembershipsParams) ([]TimeParseBossKillMembership, error)
+	ListTimeParseBossScoresForScore(ctx context.Context, timeParseScoreID uuid.UUID) ([]TimeParseBossScore, error)
+	ListTimeParseClearTimeCohortBuckets(ctx context.Context, arg ListTimeParseClearTimeCohortBucketsParams) ([]ListTimeParseClearTimeCohortBucketsRow, error)
+	ListTimeParseClearTimeMemberships(ctx context.Context, arg ListTimeParseClearTimeMembershipsParams) ([]TimeParseClearTimeMembership, error)
+	// Locate surviving uploads for a logical run before deleting one instance so
+	// compact memberships can elect a new representative afterward.
+	ListTimeParseReplacementLogGroups(ctx context.Context, arg ListTimeParseReplacementLogGroupsParams) ([]uuid.UUID, error)
+	// Locate surviving uploads for logical runs whose source log group is deleted.
+	ListTimeParseReplacementLogGroupsForDeletedLogGroup(ctx context.Context, arg ListTimeParseReplacementLogGroupsForDeletedLogGroupParams) ([]uuid.UUID, error)
 	ListUploadDevicesByUser(ctx context.Context, userID uuid.UUID) ([]UploadDevice, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
 	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
@@ -716,6 +713,7 @@ type sqlcQuerier interface {
 	ListUserPanelLayouts(ctx context.Context, userID uuid.NullUUID) ([]ListUserPanelLayoutsRow, error)
 	ListUserTalentBuilds(ctx context.Context, arg ListUserTalentBuildsParams) ([]UserTalentBuild, error)
 	ListVulnerabilitySpellsByDataset(ctx context.Context, arg ListVulnerabilitySpellsByDatasetParams) ([]ListVulnerabilitySpellsByDatasetRow, error)
+	ListWindowedParseScoreResultsForContract(ctx context.Context, arg ListWindowedParseScoreResultsForContractParams) ([]ParseScoreResult, error)
 	// Realms
 	ListWoWServerRealms(ctx context.Context, serverID uuid.UUID) ([]WowServerRealm, error)
 	// Servers
@@ -732,8 +730,6 @@ type sqlcQuerier interface {
 	// Transition a pending snapshot to published and persist its exact member count.
 	// Idempotent on already-published snapshots.
 	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
-	// Transition a pending time-parse snapshot to published. Idempotent on already-published.
-	PublishTimeParseSnapshot(ctx context.Context, id uuid.UUID) (TimeParseSnapshot, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
@@ -795,17 +791,18 @@ type sqlcQuerier interface {
 	RankingsSummaryMaxUpdatedAt(ctx context.Context, tenantID uuid.UUID) (pgtype.Timestamptz, error)
 	// Returns aggregate refresh metadata for one tenant's precomputed summaries.
 	RankingsSummaryStatus(ctx context.Context, tenantID uuid.UUID) (RankingsSummaryStatusRow, error)
+	ReactivateDiscordMembershipGrantCheck(ctx context.Context, arg ReactivateDiscordMembershipGrantCheckParams) (ReactivateDiscordMembershipGrantCheckRow, error)
 	RecordAuthzMigration(ctx context.Context, version int32) error
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
 	// Single-use: flips approved -> redeemed exactly once.
 	RedeemDevicePairing(ctx context.Context, id uuid.UUID) (DevicePairing, error)
 	RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error)
-	// Run only after a replacement parse has committed or invalidation was cleared.
-	// It upserts the current members first, then removes obsolete members from the
-	// same source log group. Failed/in-progress reparses never call this query.
-	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, logGroupID uuid.UUID) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
+	RefreshParseScoreMembershipsForLogGroup(ctx context.Context, arg RefreshParseScoreMembershipsForLogGroupParams) (RefreshParseScoreMembershipsForLogGroupRow, error)
+	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseBossKillMembershipsForLogGroupParams) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
+	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
+	RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error)
 	// Resolves the dataset for a realm. Precedence:
 	//   server.default_dataset_id > tenant.default_dataset_id.
 	// The result is NULL when neither is set (and when the realm is unknown the
@@ -949,6 +946,9 @@ type sqlcQuerier interface {
 	UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDatasetTalentTreesParams) error
 	UpsertDiscordAnnouncement(ctx context.Context, arg UpsertDiscordAnnouncementParams) (GuildDiscordLogAnnouncement, error)
 	UpsertDiscordAnnouncementSource(ctx context.Context, arg UpsertDiscordAnnouncementSourceParams) (GuildDiscordLogAnnouncementSource, error)
+	UpsertDiscordMembershipGrantCheckError(ctx context.Context, arg UpsertDiscordMembershipGrantCheckErrorParams) (DiscordMembershipGrantCheck, error)
+	UpsertDiscordMembershipGrantCheckMember(ctx context.Context, arg UpsertDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
+	UpsertDiscordMembershipGrantCheckNonMember(ctx context.Context, arg UpsertDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
 	// Refreshes the rate-limit timestamp. Clears the cached response: it is
 	// stale once a new sync starts, and stays NULL if the sync fails.
 	UpsertExternalCharacterLinkSync(ctx context.Context, arg UpsertExternalCharacterLinkSyncParams) error
@@ -976,9 +976,6 @@ type sqlcQuerier interface {
 	// Insert a unique talent build, returning its ID. If the build already exists,
 	// return the existing row's ID.
 	UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error)
-	// Routine snapshot publication is deliberately upsert-only. Missing rows may
-	// be temporary during a reparse and are removed only by lifecycle operations.
-	UpsertTimeParseBossKillMemberships(ctx context.Context, snapshotID uuid.UUID) error
 	UpsertUserActionBarSlots(ctx context.Context, arg UpsertUserActionBarSlotsParams) (UpsertUserActionBarSlotsRow, error)
 	UpsertUserCustomPanelInstallation(ctx context.Context, arg UpsertUserCustomPanelInstallationParams) (UserCustomPanelInstallation, error)
 	UpsertUserCustomPanelSettings(ctx context.Context, arg UpsertUserCustomPanelSettingsParams) (UserCustomPanelSetting, error)

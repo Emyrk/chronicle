@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -82,7 +84,7 @@ func TestBuildWowMapManifest(t *testing.T) {
 		manifest.Maps[0].Art[0].Overlays[0].Tiles[0].FileDataID,
 		manifest.Maps[0].Art[0].Overlays[0].Tiles[1].FileDataID,
 	})
-	require.Equal(t, "tiles/10.webp", manifest.Maps[0].Art[0].Layers[0].Tiles[0].Path)
+	require.Equal(t, "original/10.webp", manifest.Maps[0].Art[0].Layers[0].Tiles[0].Path)
 }
 
 func TestBuildWowMapInstances(t *testing.T) {
@@ -118,9 +120,9 @@ func TestBuildWowMapInstances(t *testing.T) {
 	require.Equal(t, int32(1792), instances[0].Floors[0].Width)
 	require.Equal(t, int32(1792), instances[0].Floors[0].Height)
 	require.Equal(t, []wowMapTile{
-		{Row: 0, Column: 0, FileDataID: 400, Path: "tiles/400.webp"},
-		{Row: 3, Column: 3, FileDataID: 401, Path: "tiles/401.webp"},
-		{Row: 6, Column: 6, FileDataID: 402, Path: "tiles/402.webp"},
+		{Row: 0, Column: 0, FileDataID: 400, Path: "original/400.webp"},
+		{Row: 3, Column: 3, FileDataID: 401, Path: "original/401.webp"},
+		{Row: 6, Column: 6, FileDataID: 402, Path: "original/402.webp"},
 	}, instances[0].Floors[0].Tiles)
 	require.Equal(t, &wowMapFloorBounds{
 		MinX: -4266.666666666667,
@@ -213,6 +215,19 @@ printf '%s\n' '{"ok":true,"data":{"buildName":"1.60.1.70205"}}'
 	require.Equal(t, "1.60.1.70205", build)
 }
 
+func TestExtractWowdataMapsDefaultsToFourWorkers(t *testing.T) {
+	t.Parallel()
+
+	cmd := ExtractWowdataMapsCmd()
+	for _, option := range cmd.Options {
+		if option.Flag == "workers" {
+			require.Equal(t, "4", option.Default)
+			return
+		}
+	}
+	require.Fail(t, "workers option not found")
+}
+
 func TestWowdataTargetArgs(t *testing.T) {
 	t.Parallel()
 
@@ -284,11 +299,139 @@ func TestWowMapInstanceFloorTilesByFileDataID(t *testing.T) {
 	require.Equal(t, []int32{769212, 769213}, floors[769213])
 }
 
+func TestWowdataPrepareWriterSignalsOnlyExactReadyLine(t *testing.T) {
+	t.Parallel()
+
+	var destination bytes.Buffer
+	ready := make(chan struct{}, 1)
+	writer := &wowdataPrepareWriter{
+		destination: &destination,
+		onReady: func() {
+			select {
+			case ready <- struct{}{}:
+			default:
+			}
+		},
+	}
+	_, err := writer.Write([]byte("prepare target=remote\nprepare status=rea"))
+	require.NoError(t, err)
+	select {
+	case <-ready:
+		require.Fail(t, "partial line signaled readiness")
+	default:
+	}
+	_, err = writer.Write([]byte("dy-extra\nprepare status=ready\n"))
+	require.NoError(t, err)
+	select {
+	case <-ready:
+	default:
+		require.Fail(t, "exact ready line did not signal readiness")
+	}
+	require.Equal(t, "prepare target=remote\nprepare status=ready-extra\nprepare status=ready\n", destination.String())
+}
+
+func TestRunWowdataWithPrepareGateHonorsCancellationWhileWaiting(t *testing.T) {
+	t.Parallel()
+
+	gate := newWowdataPrepareGate()
+	release, err := gate.acquire(context.Background())
+	require.NoError(t, err)
+	defer release()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd := exec.CommandContext(ctx, "unused")
+	err = runWowdataWithPrepareGate(ctx, cmd, &bytes.Buffer{}, gate)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+// Not parallel: concurrent execution of freshly written test scripts can return ETXTBSY on worktree filesystems.
+func TestRunWowdataWithPrepareGateReleasesAfterEarlyExit(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "wowdata")
+	require.NoError(t, os.WriteFile(binary, []byte("#!/usr/bin/env bash\nexit 1\n"), 0o755))
+	gate := newWowdataPrepareGate()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for range 2 {
+		cmd := exec.CommandContext(ctx, binary)
+		err := runWowdataWithPrepareGate(ctx, cmd, &bytes.Buffer{}, gate)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, context.DeadlineExceeded)
+	}
+}
+
+// Not parallel: this test deliberately keeps multiple fake exporter processes alive.
+func TestExportWowdataTexturesSerializesPreparationAndOverlapsExports(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "original"), 0o755))
+	leaderLock := filepath.Join(dir, "leader-lock")
+	leaderPreparing := filepath.Join(dir, "leader-preparing")
+	allowReady := filepath.Join(dir, "allow-ready")
+	leaderReady := filepath.Join(dir, "leader-ready")
+	followerStarted := filepath.Join(dir, "follower-started")
+	violation := filepath.Join(dir, "preparation-overlapped")
+	binary := filepath.Join(dir, "wowdata")
+	require.NoError(t, os.WriteFile(binary, []byte(fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+output=""
+while (($#)); do
+  if [[ "$1" == "--output" ]]; then
+    output="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+if mkdir %q 2>/dev/null; then
+  touch %q
+  while [[ ! -f %q ]]; do sleep 0.01; done
+  touch %q
+  printf 'prepare status=ready\n' >&2
+  while [[ ! -f %q ]]; do sleep 0.01; done
+else
+  touch %q
+  [[ -f %q ]] || touch %q
+  printf 'prepare status=ready\n' >&2
+fi
+printf 'webp' > "$output"
+`, leaderLock, leaderPreparing, allowReady, leaderReady, followerStarted, followerStarted, leaderReady, violation)), 0o755))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		_, err := exportWowdataTextures(
+			ctx, &bytes.Buffer{}, &bytes.Buffer{},
+			wowMapExtractOptions{WowdataBin: binary, OutDir: dir, Workers: 2},
+			[]int32{101, 102}, nil,
+		)
+		result <- err
+	}()
+
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(leaderPreparing)
+		return err == nil
+	}, time.Second, 10*time.Millisecond)
+	require.NoFileExists(t, followerStarted)
+	require.NoError(t, os.WriteFile(allowReady, nil, 0o644))
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		require.FailNow(t, "exports did not overlap after preparation", ctx.Err().Error())
+	}
+	require.NoFileExists(t, violation)
+	require.FileExists(t, followerStarted)
+	require.FileExists(t, filepath.Join(dir, "original", "101.webp"))
+	require.FileExists(t, filepath.Join(dir, "original", "102.webp"))
+}
+
 func TestExportWowdataTexturesSkipsUnavailableFloorSiblings(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "tiles"), 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "original"), 0o755))
 	calls := filepath.Join(dir, "calls")
 	binary := filepath.Join(dir, "wowdata")
 	require.NoError(t, os.WriteFile(binary, []byte(fmt.Sprintf(`#!/usr/bin/env bash
@@ -335,6 +478,52 @@ exit 1
 	require.True(t, errors.Is(err, errWowdataFileUnavailable))
 	require.ErrorContains(t, err, "FileDataID 769212")
 	require.NoFileExists(t, output)
+}
+
+func TestExportWowdataTextureRetriesCacheLockFailure(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	calls := filepath.Join(dir, "calls")
+	binary := filepath.Join(dir, "wowdata")
+	require.NoError(t, os.WriteFile(binary, []byte(fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+count=0
+if [[ -f %q ]]; then
+  count=$(cat %q)
+fi
+count=$((count + 1))
+printf '%%s' "$count" > %q
+if [[ "$count" == "1" ]]; then
+  printf '%%s\n' '{"ok":false,"error":{"code":"cache_lock_failed","message":"timeout waiting for cache lock test.lock"}}'
+  exit 1
+fi
+while [[ "$#" -gt 0 ]]; do
+  if [[ "$1" == "--output" ]]; then
+    printf 'webp' > "$2"
+    exit 0
+  fi
+  shift
+done
+exit 2
+`, calls, calls, calls)), 0o755))
+
+	var stderr bytes.Buffer
+	output := filepath.Join(dir, "tile.webp")
+	err := exportWowdataTextureWithRetries(context.Background(), &stderr, wowMapExtractOptions{
+		WowdataBin: binary,
+		Source:     "remote",
+		Product:    "wow_classic_beta",
+		Build:      "1.60.1.70374",
+		Region:     "us",
+		Locale:     "enUS",
+	}, 447597, output, []time.Duration{0}, newWowdataPrepareGate())
+	require.NoError(t, err)
+	require.FileExists(t, output)
+	data, err := os.ReadFile(calls)
+	require.NoError(t, err)
+	require.Equal(t, "2", string(data))
+	require.Contains(t, stderr.String(), "retrying texture FileDataID 447597 after cache lock failure (1/1)")
 }
 
 func TestPruneUnavailableWowMapTiles(t *testing.T) {

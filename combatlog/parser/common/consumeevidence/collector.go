@@ -146,8 +146,7 @@ func (c *Collector) ProcessMessage(active bool, _ uuid.UUID, m messages.Message)
 	// cast evidence when ItemID is absent.
 	if sg, ok := m.(*messages.SpellGo); ok {
 		if sg.ItemID != nil {
-			catalog := c.shared.Catalog()
-			if catalog == nil || catalog.IsConsumableItem(*sg.ItemID) {
+			if c.shared.isDirectConsumableUse(sg) {
 				c.emitDirectEvidence(sg)
 			}
 		} else {

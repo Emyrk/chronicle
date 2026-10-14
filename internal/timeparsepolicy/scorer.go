@@ -70,6 +70,49 @@ func ScoreTime(cohort []int64, durationMs int64) (ScoreResult, bool) {
 	}, true
 }
 
+// ScoreCohort scores every member of cohort against the cohort itself.
+// Results are aligned with cohort and match calling ScoreTime(cohort, v) for
+// each v, but the cohort is sorted once. Returns ok=false when the cohort is
+// too small (< MinSampleForParse); members with a duration <= 0 get a zero
+// result.
+func ScoreCohort(cohort []int64) ([]ScoreResult, bool) {
+	n := len(cohort)
+	results := make([]ScoreResult, n)
+	if n < MinSampleForParse {
+		for i := range results {
+			results[i] = ScoreResult{SampleSize: n, Status: StatusSampleTooSmall}
+		}
+		return results, false
+	}
+
+	sorted := make([]int64, n)
+	copy(sorted, cohort)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+
+	status := StatusOK
+	if n < MinSampleForConfidence {
+		status = StatusLowConfidence
+	}
+
+	for i, durationMs := range cohort {
+		if durationMs <= 0 {
+			continue
+		}
+		// Index of the first value >= durationMs: everything from there on is
+		// at least as slow, and it is also the count of strictly faster values.
+		firstAtLeast := sort.Search(n, func(j int) bool { return sorted[j] >= durationMs })
+		precise := float64(n-firstAtLeast) / float64(n) * 100.0
+		results[i] = ScoreResult{
+			PreciseScore: precise,
+			DisplayScore: roundDisplay(precise),
+			Rank:         firstAtLeast + 1,
+			SampleSize:   n,
+			Status:       status,
+		}
+	}
+	return results, true
+}
+
 // roundDisplay converts a precise 0–100 score to a display integer.
 func roundDisplay(score float64) int {
 	d := int(math.Round(score))

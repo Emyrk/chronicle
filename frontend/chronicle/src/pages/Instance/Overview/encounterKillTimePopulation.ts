@@ -1,23 +1,26 @@
-import type { InstanceTimeParsesResponse, SpeedrunCohortRun } from "@/api/typesGenerated";
+import type { CSSProperties } from "react";
+import type { BossKillTimeParse, SpeedrunCohortRun, TimeParseScore } from "@/api/typesGenerated";
+import { parseHexColor } from "../parseColors";
+import type { ScopedInstanceTimeParsesResponse, TimeParseScope, TimeParseScopeResult } from "./timeParseScope";
 
 /** A server-computed per-boss parse score ready for display. */
-export interface SnapshotBossParse {
+export interface TimeBossParse {
   displayScore: number;
   sampleSize: number;
   status: string;
 }
 
 /**
- * Maps snapshot API boss_kill_times[] to a lookup by encounter name.
- * Returns null when the snapshot is unavailable (loading, no_snapshot, disabled).
+ * Maps time-parse API boss_kill_times[] to a lookup by encounter name.
+ * Returns null when time parses are unavailable (loading or disabled).
  * Individual entries with status "sample_too_small" get a null displayScore
  * so the badge renders "—" consistently with existing behavior.
  */
-export function mapSnapshotBossParses(
-  timeParses: InstanceTimeParsesResponse | undefined,
-): ReadonlyMap<string, SnapshotBossParse | null> | null {
+export function mapTimeBossParses(
+  timeParses: TimeParseScopeResult | undefined,
+): ReadonlyMap<string, TimeBossParse | null> | null {
   if (!timeParses?.available) return null;
-  const result = new Map<string, SnapshotBossParse | null>();
+  const result = new Map<string, TimeBossParse | null>();
   for (const boss of timeParses.boss_kill_times) {
     if (boss.status === "sample_too_small") {
       result.set(boss.encounter_name, null);
@@ -33,20 +36,92 @@ export function mapSnapshotBossParses(
 }
 
 /**
+ * Indexes boss kill-time parses by encounter ID. Returns null when the
+ * time parses are unavailable (loading or disabled) so callers can
+ * fall back to the plain kill icon.
+ */
+export function bossKillParsesByEncounter(
+  timeParses: TimeParseScopeResult | undefined,
+): ReadonlyMap<string, BossKillTimeParse> | null {
+  if (!timeParses?.available) return null;
+  return new Map(timeParses.boss_kill_times.map((boss) => [boss.encounter_id, boss]));
+}
+
+/** One encounter's kill-time parse in each comparison scope. */
+export type ScopedKillParses = Partial<Record<TimeParseScope, BossKillTimeParse>>;
+
+/**
+ * Indexes boss kill-time parses for every scope by encounter ID. Falls back
+ * to the top-level server parses for older responses without scopes.
+ */
+export function scopedKillParsesByEncounter(
+  response: ScopedInstanceTimeParsesResponse | undefined,
+): ReadonlyMap<string, ScopedKillParses> | null {
+  if (!response?.available) return null;
+  const result = new Map<string, ScopedKillParses>();
+  const scopes: Record<TimeParseScope, TimeParseScopeResult | undefined> = {
+    server: response.scopes?.server ?? response,
+    realm: response.scopes?.realm,
+    guild: response.scopes?.guild,
+  };
+  for (const [scope, scopeResult] of Object.entries(scopes) as [TimeParseScope, TimeParseScopeResult | undefined][]) {
+    if (!scopeResult?.available) continue;
+    for (const boss of scopeResult.boss_kill_times) {
+      const entry = result.get(boss.encounter_id) ?? {};
+      entry[scope] = boss;
+      result.set(boss.encounter_id, entry);
+    }
+  }
+  return result;
+}
+
+/** The instance clear-time parse in each comparison scope. */
+export function scopedClearParses(
+  response: ScopedInstanceTimeParsesResponse | undefined,
+): Partial<Record<TimeParseScope, TimeParseScore>> | null {
+  if (!response?.available) return null;
+  const server = response.scopes?.server ?? response;
+  return {
+    server: server.available ? server.clear_time : undefined,
+    realm: response.scopes?.realm?.available ? response.scopes.realm.clear_time : undefined,
+    guild: response.scopes?.guild?.available ? response.scopes.guild.clear_time : undefined,
+  };
+}
+
+export function scoredKillParse<T extends TimeParseScore>(parse: T | undefined): T | undefined {
+  return parse && parse.status !== "sample_too_small" ? parse : undefined;
+}
+
+/**
+ * Left-edge accent colored by the server kill-time parse. Selected rows
+ * already draw a left border, so recolor it; otherwise draw an inset bar
+ * that does not shift row layout.
+ */
+export function killParseEdgeStyle(
+  parse: BossKillTimeParse | undefined,
+  isSelected: boolean,
+): CSSProperties | undefined {
+  const scored = scoredKillParse(parse);
+  if (!scored) return undefined;
+  const color = parseHexColor(scored.display_score);
+  return isSelected ? { borderLeftColor: color } : { boxShadow: `inset 3px 0 0 ${color}` };
+}
+
+/**
  * Resolves the display parse score for a single encounter row.
- * Returns a number when a valid snapshot score exists, or null when:
- * - snapshot is not available (snapshotParses is null)
- * - boss is missing from the snapshot
+ * Returns a number when a valid time-parse score exists, or null when:
+ * - time parses are not available (timeParses is null)
+ * - boss is missing from the response
  * - sample is too small (entry is null)
  *
  * Never falls back to client-side cohort percentiles.
  */
 export function resolveEncounterParseScore(
-  snapshotParses: ReadonlyMap<string, SnapshotBossParse | null> | null,
+  timeParses: ReadonlyMap<string, TimeBossParse | null> | null,
   encounterName: string,
 ): number | null {
-  if (!snapshotParses) return null;
-  const entry = snapshotParses.get(encounterName);
+  if (!timeParses) return null;
+  const entry = timeParses.get(encounterName);
   if (entry === undefined || entry === null) return null;
   return entry.displayScore;
 }
@@ -140,4 +215,25 @@ export function averageKillTimePercentile(percentiles: readonly (number | null)[
   const available = percentiles.filter((percentile): percentile is number => percentile !== null);
   if (available.length === 0) return null;
   return Math.round(available.reduce((sum, percentile) => sum + percentile, 0) / available.length);
+}
+
+export type ScopedParses = Partial<Record<TimeParseScope, TimeParseScore>>;
+
+/**
+ * Builds the tooltip rows. Realm is a subset of server, so a matching sample
+ * size means both are the same population and only "Server" is shown.
+ */
+export function parseScopeRows(parses: ScopedParses): { label: string; parse: TimeParseScore }[] {
+  const server = scoredKillParse(parses.server);
+  const realm = scoredKillParse(parses.realm);
+  const guild = scoredKillParse(parses.guild);
+  const rows: { label: string; parse: TimeParseScore }[] = [];
+  if (server) rows.push({ label: "Server", parse: server });
+  if (realm && realm.sample_size !== server?.sample_size) rows.push({ label: "Realm", parse: realm });
+  if (guild) rows.push({ label: "Guild", parse: guild });
+  return rows;
+}
+
+export function hasScopedParse(parses: ScopedParses | null | undefined): boolean {
+  return parses ? parseScopeRows(parses).length > 0 : false;
 }

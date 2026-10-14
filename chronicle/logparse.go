@@ -38,10 +38,12 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/database/jsontransform"
 	"github.com/Emyrk/chronicle/internal/guildrenames"
+	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
+	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/Emyrk/chronicle/internal/wowspec"
 	"github.com/google/uuid"
@@ -836,15 +838,40 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
 	}
 
-	if job.Args.Replacement {
-		if result, err := db.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, job.Args.LogID); err != nil {
-			w.parent.logger.WarnContext(ctx, "failed to refresh time-parse memberships after replacement parse", slog.Any("error", err))
-		} else {
-			w.parent.logger.InfoContext(ctx, "refreshed time-parse memberships after replacement parse",
-				slog.Int64("upserted", result.UpsertedCount),
-				slog.Int64("deleted", result.DeletedCount),
-			)
-		}
+	// Keep compact current-known cohorts synchronized after every successful
+	// parse so live windows immediately include late historical uploads.
+	parseMembershipsRefreshed := true
+	if result, err := db.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
+		LogGroupID: job.Args.LogID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
+	}); err != nil {
+		parseMembershipsRefreshed = false
+		w.parent.logger.WarnContext(ctx, "failed to refresh DPS/HPS parse memberships after parse", slog.Any("error", err))
+	} else {
+		w.parent.logger.InfoContext(ctx, "refreshed DPS/HPS parse memberships after parse",
+			slog.Int64("upserted", result.UpsertedCount), slog.Int64("deleted", result.DeletedCount))
+	}
+	timeParseMembershipsRefreshed := true
+	if result, err := db.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
+		LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	}); err != nil {
+		timeParseMembershipsRefreshed = false
+		w.parent.logger.WarnContext(ctx, "failed to refresh clear-time memberships after parse", slog.Any("error", err))
+	} else {
+		w.parent.logger.InfoContext(ctx, "refreshed clear-time memberships after parse",
+			slog.Int64("upserted", result.UpsertedCount),
+			slog.Int64("deleted", result.DeletedCount),
+		)
+	}
+	if result, err := db.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
+		LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	}); err != nil {
+		timeParseMembershipsRefreshed = false
+		w.parent.logger.WarnContext(ctx, "failed to refresh boss-kill memberships after parse", slog.Any("error", err))
+	} else {
+		w.parent.logger.InfoContext(ctx, "refreshed boss-kill memberships after parse",
+			slog.Int64("upserted", result.UpsertedCount),
+			slog.Int64("deleted", result.DeletedCount),
+		)
 	}
 
 	if refreshIDs := rankingRunRefresh.Complete(); len(refreshIDs) > 0 {
@@ -857,15 +884,31 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	// Fire-and-forget: scoring failure doesn't fail the parse, but log errors.
 	if !invalidLog && w.parent.queue != nil {
 		for _, inst := range jobOut.Instances {
-			_, enqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
-				InstanceID: inst.ID,
-				TenantID:   job.Args.TenantID,
-			}, nil)
+			var enqErr error
+			if parseMembershipsRefreshed {
+				_, enqErr = w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
+					InstanceID: inst.ID,
+					TenantID:   job.Args.TenantID,
+				}, nil)
+			}
 			if enqErr != nil {
 				w.parent.logger.Error("failed to enqueue parse score computation",
 					slog.String("instance_id", inst.ID.String()),
 					slog.Any("error", enqErr),
 				)
+			}
+			if timeParseMembershipsRefreshed {
+				_, timeEnqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeTimeParseScores{
+					InstanceID: inst.ID,
+					TenantID:   job.Args.TenantID,
+					Force:      true,
+				}, nil)
+				if timeEnqErr != nil {
+					w.parent.logger.Error("failed to enqueue time parse score computation",
+						slog.String("instance_id", inst.ID.String()),
+						slog.Any("error", timeEnqErr),
+					)
+				}
 			}
 		}
 	}

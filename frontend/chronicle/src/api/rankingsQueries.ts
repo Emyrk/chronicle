@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import type {
   RankingsInstanceSummary,
   RankingsEncounterSummary,
@@ -9,6 +9,9 @@ import type {
   KillTimeLeaderboardResponse,
   InstanceParsesResponse,
   SnapshotSummary,
+  TimeParseCohortBucketsResponse,
+  TimeParseCohortKind,
+  TimeParseCohortResponse,
   CohortDebugResponse,
   CharacterParseHistoryResponse,
   CharacterPerformanceResponse,
@@ -381,3 +384,54 @@ export function useInstanceParses(params: {
   });
 }
 
+
+export type TimeParseCohortPeriod = "30d" | "60d" | "90d" | "180d" | "all";
+
+export function useTimeParseCohortBuckets(date: string, period: TimeParseCohortPeriod) {
+  const searchParams = new URLSearchParams({ date, period });
+
+  return useQuery({
+    queryKey: ["rankings", "time-parse-cohort-buckets", date, period],
+    queryFn: () =>
+      fetchJSON<TimeParseCohortBucketsResponse>(
+        `/api/v1/rankings/time-parse-cohorts/buckets?${searchParams.toString()}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: !!date,
+  });
+}
+
+export function useTimeParseCohort(params: {
+  date: string;
+  period: TimeParseCohortPeriod;
+  kind: TimeParseCohortKind;
+  instanceName: string;
+  encounterName: string;
+  difficulty: string;
+  maxPlayers: number | undefined;
+}) {
+  const searchParams = new URLSearchParams({
+    date: params.date,
+    period: params.period,
+    kind: params.kind,
+    instance_name: params.instanceName,
+    difficulty: params.difficulty,
+    max_players: String(params.maxPlayers ?? ""),
+  });
+  if (params.kind === "boss_kill") searchParams.set("encounter_name", params.encounterName);
+
+  return useQuery({
+    queryKey: ["rankings", "time-parse-cohort", params],
+    queryFn: () =>
+      fetchJSON<TimeParseCohortResponse>(
+        `/api/v1/rankings/time-parse-cohorts/cohort?${searchParams.toString()}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    placeholderData: keepPreviousData,
+    enabled:
+      !!params.date &&
+      !!params.instanceName &&
+      params.maxPlayers !== undefined &&
+      (params.kind === "clear_time" || !!params.encounterName),
+  });
+}

@@ -43,17 +43,17 @@ var renderedWowMapSpecs = []renderedWowMapSpec{
 }
 
 // RenderWowdataMapsCmd generates coordinate-faithful instance maps from WMO or
-// ADT geometry, then attaches their immutable assets to an existing map manifest.
+// ADT geometry, then writes a separate sparse raw-render manifest.
 func RenderWowdataMapsCmd() *serpent.Command {
 	var opts renderWowdataMapsOptions
 	var dbcPath, server string
 	return &serpent.Command{
 		Use:   "render-wowdata-maps",
-		Short: "Render coordinate-faithful instance maps and update a map manifest.",
+		Short: "Render coordinate-faithful instance maps into a separate manifest.",
 		Options: serpent.OptionSet{
 			DBCOption(&dbcPath),
 			ServerOption(&server),
-			{Name: "manifest", Description: "Existing map manifest to update.", Flag: "manifest", Value: serpent.StringOf(&opts.ManifestPath)},
+			{Name: "manifest", Description: "Original map manifest to read.", Flag: "manifest", Value: serpent.StringOf(&opts.ManifestPath)},
 			{Name: "renderer-manifest", Description: "Cargo manifest for the geometry renderer.", Flag: "renderer-manifest", Default: defaultWowMapRendererManifest, Value: serpent.StringOf(&opts.RendererManifest)},
 			{Name: "wowdata", Description: "Wowdata executable. A pinned build is provisioned when omitted.", Flag: "wowdata", Env: "WOWDATA_BIN", Default: wowdataDefaultBinary, Value: serpent.StringOf(&opts.WowdataBin)},
 			{Name: "source", Description: "Read CASC data from local client archives or Blizzard's CDN.", Flag: "source", Default: "remote", Value: serpent.StringOf(&opts.Source)},
@@ -99,9 +99,9 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 	if manifest.Format != wowMapManifestFormat {
 		return fmt.Errorf("unsupported map manifest format %q", manifest.Format)
 	}
-	clearRenderedWowMapInstances(&manifest)
+	renderManifest := wowMapManifest{Format: manifest.Format, Target: manifest.Target}
 	outDir := filepath.Dir(opts.ManifestPath)
-	if err := os.MkdirAll(filepath.Join(outDir, "renders"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(outDir, "render"), 0o755); err != nil {
 		return fmt.Errorf("create rendered map directory: %w", err)
 	}
 
@@ -121,9 +121,11 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 			return fmt.Errorf("render map %d: %w", spec.MapID, err)
 		}
 		found := false
-		for index := range manifest.Instances {
-			if manifest.Instances[index].MapID == spec.MapID {
-				manifest.Instances[index].Rendered = rendered
+		for _, instance := range manifest.Instances {
+			if instance.MapID == spec.MapID {
+				renderManifest.Instances = append(renderManifest.Instances, wowMapInstance{
+					MapID: spec.MapID, Rendered: rendered,
+				})
 				found = true
 				break
 			}
@@ -132,16 +134,17 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 			return fmt.Errorf("map manifest has no instance record for map %d", spec.MapID)
 		}
 	}
-	if err := writeWowMapManifest(opts.ManifestPath, manifest); err != nil {
+	if err := writeWowMapManifest(filepath.Join(outDir, "manifest.rendered.json"), renderManifest); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(stdout, "Attached %d rendered instance maps to %s\n", len(renderedWowMapSpecs), opts.ManifestPath)
+	_, _ = fmt.Fprintf(stdout, "Wrote %d rendered instance maps to %s\n", len(renderedWowMapSpecs), filepath.Join(outDir, "manifest.rendered.json"))
 	return nil
 }
 
 func clearRenderedWowMapInstances(manifest *wowMapManifest) {
 	for index := range manifest.Instances {
 		manifest.Instances[index].Rendered = nil
+		manifest.Instances[index].Styled = nil
 	}
 }
 
@@ -149,7 +152,7 @@ func renderedWowMapAssetPath(mapID int32, build string, data []byte) string {
 	buildName := regexp.MustCompile(`[^A-Za-z0-9._-]+`).ReplaceAllString(build, "-")
 	digest := sha256.Sum256(data)
 	name := fmt.Sprintf("%d-%s-%x.png", mapID, buildName, digest[:6])
-	return filepath.ToSlash(filepath.Join("renders", name))
+	return filepath.ToSlash(filepath.Join("render", name))
 }
 
 func renderWowdataMap(
@@ -390,13 +393,28 @@ func exportWowdataFileWithRetries(
 	logMutex *sync.Mutex,
 	retryDelays []time.Duration,
 ) error {
+	return exportWowdataFileWithRetriesAndGate(
+		ctx, stderr, target, fileDataID, output, label, logMutex, retryDelays, newWowdataPrepareGate(),
+	)
+}
+
+func exportWowdataFileWithRetriesAndGate(
+	ctx context.Context,
+	stderr io.Writer,
+	target wowMapExtractOptions,
+	fileDataID int32,
+	output string,
+	label string,
+	logMutex *sync.Mutex,
+	retryDelays []time.Duration,
+	prepareGate *wowdataPrepareGate,
+) error {
 	args := append([]string{"file", "export", "--file-data-id", fmt.Sprint(fileDataID), "--output", output}, wowdataTargetArgs(target)...)
 	var lastErr error
 	for attempt := 0; attempt <= len(retryDelays); attempt++ {
 		cmd := exec.CommandContext(ctx, target.WowdataBin, args...)
 		logWriter := &prefixedLineWriter{destination: stderr, mutex: logMutex, prefix: label}
-		cmd.Stderr = logWriter
-		err := cmd.Run()
+		err := runWowdataWithPrepareGate(ctx, cmd, logWriter, prepareGate)
 		_ = logWriter.Flush()
 		if err == nil {
 			return nil
@@ -437,11 +455,12 @@ func exportWowdataFiles(ctx context.Context, stderr io.Writer, target wowMapExtr
 	var mu sync.Mutex
 	var logMutex sync.Mutex
 	var firstErr error
+	prepareGate := newWowdataPrepareGate()
 	worker := func() {
 		defer wait.Done()
 		for file := range jobs {
-			if err := exportWowdataFileWithRetries(
-				ctx, stderr, target, file.FileDataID, file.Output, file.Label, &logMutex, wowdataExportRetryDelays,
+			if err := exportWowdataFileWithRetriesAndGate(
+				ctx, stderr, target, file.FileDataID, file.Output, file.Label, &logMutex, wowdataExportRetryDelays, prepareGate,
 			); err != nil {
 				mu.Lock()
 				if firstErr == nil {
