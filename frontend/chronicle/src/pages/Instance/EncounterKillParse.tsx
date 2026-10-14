@@ -108,7 +108,7 @@ export function ClearParseBadge({
       <TooltipTrigger asChild>
         <div
           className={cn(
-            "cursor-help rounded-full border px-2",
+            "cursor-help rounded-md border px-2 py-0.5 text-base leading-tight",
             parseBorderColor(score),
             parseBgColor(score),
           )}

@@ -3378,6 +3378,10 @@ export function InstancePageView({
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
             {instance.name}
+            <ClearParseBadge
+              parses={scopedClearParses(instanceTimeParsesQuery.data)}
+              lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
+            />
             {instance.invalidatedAt && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -3484,10 +3488,6 @@ export function InstancePageView({
         {/* Row 3: Duration stats + action buttons (desktop) */}
         <div className="flex items-center justify-between mt-1">
           <div className="flex items-center gap-4 text-muted-foreground text-sm">
-            <ClearParseBadge
-              parses={scopedClearParses(instanceTimeParsesQuery.data)}
-              lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
-            />
             {elapsedDurationMs !== null && (
               <Tooltip>
                 <TooltipTrigger asChild>
