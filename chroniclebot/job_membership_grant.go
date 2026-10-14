@@ -263,10 +263,9 @@ func (w *WorkerCheckDiscordMembershipGrant) Work(ctx context.Context, job *river
 	return nil
 }
 
-// ReactivateMembershipGrantCheckOnLogin resumes a check that was suspended by
-// an earlier Discord error. New Discord-linked users are also claimed for an
-// immediate first check. Enqueue failures leave the row suspended so a later
-// login can try again.
+// ReactivateMembershipGrantCheckOnLogin claims an immediate membership check
+// after Discord login unless another check is already in flight. Enqueue
+// failures leave the row suspended so a later login can try again.
 func (b *Bot) ReactivateMembershipGrantCheckOnLogin(ctx context.Context, userID uuid.UUID) error {
 	if b.disabled || b.queue == nil {
 		return nil
