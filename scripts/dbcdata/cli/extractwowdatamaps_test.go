@@ -214,6 +214,19 @@ printf '%s\n' '{"ok":true,"data":{"buildName":"1.60.1.70205"}}'
 	require.Equal(t, "1.60.1.70205", build)
 }
 
+func TestExtractWowdataMapsDefaultsToOneWorker(t *testing.T) {
+	t.Parallel()
+
+	cmd := ExtractWowdataMapsCmd()
+	for _, option := range cmd.Options {
+		if option.Flag == "workers" {
+			require.Equal(t, "1", option.Default)
+			return
+		}
+	}
+	require.Fail(t, "workers option not found")
+}
+
 func TestWowdataTargetArgs(t *testing.T) {
 	t.Parallel()
 

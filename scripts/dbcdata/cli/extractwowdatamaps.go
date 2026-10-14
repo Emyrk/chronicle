@@ -276,7 +276,7 @@ func ExtractWowdataMapsCmd() *serpent.Command {
 			{Name: "locale", Description: "Data locale.", Flag: "locale", Env: "WOW_LOCALE", Default: "enUS", Value: serpent.StringOf(&opts.Locale)},
 			{Name: "cache", Description: "Optional wowdata cache directory.", Flag: "cache", Env: "WOWDATA_CACHE", Value: serpent.StringOf(&opts.Cache)},
 			{Name: "reuse-manifest-url", Description: "Published manifest whose immutable tiles can be reused without downloading them again.", Flag: "reuse-manifest-url", Value: serpent.StringOf(&opts.ReuseManifestURL)},
-			{Name: "workers", Description: "Concurrent wowdata tile export processes.", Flag: "workers", Default: "4", Value: serpent.Int64Of(&opts.Workers)},
+			{Name: "workers", Description: "Wowdata tile export processes; values above one may contend on cache preparation.", Flag: "workers", Default: "1", Value: serpent.Int64Of(&opts.Workers)},
 			{Name: "metadata-only", Description: "Write manifest.original.json without downloading map tiles.", Flag: "metadata-only", Value: serpent.BoolOf(&opts.MetadataOnly)},
 		},
 		Handler: func(inv *serpent.Invocation) error {
