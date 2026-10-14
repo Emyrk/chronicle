@@ -196,6 +196,44 @@ describe("map replay model", () => {
     })).toMatchObject({ kind: "zone", map: { name: "Tirisfal Glades" } });
   });
 
+  it("uses a matching zone assignment when legacy instance artwork has no world bounds", () => {
+    const fallbackManifest: WowMapManifest = {
+      ...manifest,
+      maps: [...manifest.maps, {
+        id: 619,
+        name: "Zul'Gurub",
+        parentID: 0,
+        type: 3,
+        flags: 0,
+        assignments: [{
+          id: 619,
+          mapID: 309,
+          areaID: 1977,
+          orderIndex: 0,
+          region: [-12639.58, -2733.33, -1_000_000, -11225, -612.5, 1_000_000],
+          uiMin: [0, 0],
+          uiMax: [1, 1],
+        }],
+        art: manifest.maps[1].art,
+      }],
+      instances: [...(manifest.instances ?? []), {
+        mapID: 309,
+        name: "Zul'Gurub",
+        instanceType: 2,
+        directory: "zulgurub",
+        floors: [{ floor: 1, width: 1002, height: 668, tileWidth: 256, tileHeight: 256, tiles: [] }],
+      }],
+    };
+
+    expect(resolveMapArtwork(fallbackManifest, 309, {
+      timestampMs: 0,
+      x: -11693.7,
+      y: -1739.7,
+      mapId: 309,
+      facing: 0,
+    })).toMatchObject({ kind: "zone", map: { name: "Zul'Gurub" } });
+  });
+
   it("converts world coordinates using UiMapAssignment axis order", () => {
     const assignment = manifest.maps[1].assignments![0];
     expect(zoneMapPoint({ timestampMs: 0, x: 3837, y: 3033, mapId: 0, facing: 0 }, assignment)).toEqual({
