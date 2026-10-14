@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Loader2, TriangleAlert } from "lucide-react";
+import { CircleHelp, Loader2, TriangleAlert } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import {
   HintTooltip,
@@ -215,7 +215,31 @@ export function EncounterKillTimesPanel({
       <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-5 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
+            <div className="flex items-center gap-1.5">
+              <HintTooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Why comparison and parse sample counts may differ"
+                    className="shrink-0 cursor-help text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  >
+                    <CircleHelp className="size-3.5" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  align="start"
+                  sideOffset={6}
+                  hideArrow
+                  className="w-72 rounded-lg border border-white/10 bg-popover p-3 text-foreground shadow-lg"
+                >
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    The chart uses the selected Overview comparison population. Parse scores use a separate date-bounded cohort of clean kills and exclude the current raid, so sample counts may differ.
+                  </p>
+                </TooltipContent>
+              </HintTooltip>
+              <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
+            </div>
             <p className="mt-0.5 text-[11px] leading-none text-muted-foreground">
               {!comparison
                 ? "Kill time and historical parse per boss"
