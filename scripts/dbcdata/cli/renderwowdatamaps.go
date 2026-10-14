@@ -43,17 +43,17 @@ var renderedWowMapSpecs = []renderedWowMapSpec{
 }
 
 // RenderWowdataMapsCmd generates coordinate-faithful instance maps from WMO or
-// ADT geometry, then attaches their immutable assets to an existing map manifest.
+// ADT geometry, then writes a separate sparse raw-render manifest.
 func RenderWowdataMapsCmd() *serpent.Command {
 	var opts renderWowdataMapsOptions
 	var dbcPath, server string
 	return &serpent.Command{
 		Use:   "render-wowdata-maps",
-		Short: "Render coordinate-faithful instance maps and update a map manifest.",
+		Short: "Render coordinate-faithful instance maps into a separate manifest.",
 		Options: serpent.OptionSet{
 			DBCOption(&dbcPath),
 			ServerOption(&server),
-			{Name: "manifest", Description: "Existing map manifest to update.", Flag: "manifest", Value: serpent.StringOf(&opts.ManifestPath)},
+			{Name: "manifest", Description: "Original map manifest to read.", Flag: "manifest", Value: serpent.StringOf(&opts.ManifestPath)},
 			{Name: "renderer-manifest", Description: "Cargo manifest for the geometry renderer.", Flag: "renderer-manifest", Default: defaultWowMapRendererManifest, Value: serpent.StringOf(&opts.RendererManifest)},
 			{Name: "wowdata", Description: "Wowdata executable. A pinned build is provisioned when omitted.", Flag: "wowdata", Env: "WOWDATA_BIN", Default: wowdataDefaultBinary, Value: serpent.StringOf(&opts.WowdataBin)},
 			{Name: "source", Description: "Read CASC data from local client archives or Blizzard's CDN.", Flag: "source", Default: "remote", Value: serpent.StringOf(&opts.Source)},
@@ -99,7 +99,7 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 	if manifest.Format != wowMapManifestFormat {
 		return fmt.Errorf("unsupported map manifest format %q", manifest.Format)
 	}
-	clearRenderedWowMapInstances(&manifest)
+	renderManifest := wowMapManifest{Format: manifest.Format, Target: manifest.Target}
 	outDir := filepath.Dir(opts.ManifestPath)
 	if err := os.MkdirAll(filepath.Join(outDir, "render"), 0o755); err != nil {
 		return fmt.Errorf("create rendered map directory: %w", err)
@@ -121,10 +121,11 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 			return fmt.Errorf("render map %d: %w", spec.MapID, err)
 		}
 		found := false
-		for index := range manifest.Instances {
-			if manifest.Instances[index].MapID == spec.MapID {
-				manifest.Instances[index].Rendered = rendered
-				manifest.Instances[index].Styled = styledWowMapInstance(spec.MapID, rendered)
+		for _, instance := range manifest.Instances {
+			if instance.MapID == spec.MapID {
+				renderManifest.Instances = append(renderManifest.Instances, wowMapInstance{
+					MapID: spec.MapID, Rendered: rendered,
+				})
 				found = true
 				break
 			}
@@ -133,10 +134,10 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 			return fmt.Errorf("map manifest has no instance record for map %d", spec.MapID)
 		}
 	}
-	if err := writeWowMapManifest(opts.ManifestPath, manifest); err != nil {
+	if err := writeWowMapManifest(filepath.Join(outDir, "manifest.rendered.json"), renderManifest); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(stdout, "Attached %d rendered instance maps to %s\n", len(renderedWowMapSpecs), opts.ManifestPath)
+	_, _ = fmt.Fprintf(stdout, "Wrote %d rendered instance maps to %s\n", len(renderedWowMapSpecs), filepath.Join(outDir, "manifest.rendered.json"))
 	return nil
 }
 
@@ -144,18 +145,6 @@ func clearRenderedWowMapInstances(manifest *wowMapManifest) {
 	for index := range manifest.Instances {
 		manifest.Instances[index].Rendered = nil
 		manifest.Instances[index].Styled = nil
-	}
-}
-
-// The hand-authored image uses the raw geometry projection and is published independently.
-func styledWowMapInstance(mapID int32, rendered *wowMapRenderedInstance) *wowMapRenderedInstance {
-	if mapID != 43 || rendered == nil {
-		return nil
-	}
-	return &wowMapRenderedInstance{
-		Path:  "render-styled/43-wailing-caverns-v2.jpeg",
-		Width: 1600, Height: 1066, Source: "hand-styled",
-		Bounds: rendered.Bounds,
 	}
 }
 

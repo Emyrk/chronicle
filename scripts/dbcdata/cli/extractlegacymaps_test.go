@@ -65,7 +65,7 @@ func TestBuildLegacyMapManifest(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Len(t, manifest.Maps, 1)
-	require.Equal(t, "chronicle-wow-map-art-v1", manifest.Format)
+	require.Equal(t, wowMapManifestFormat, manifest.Format)
 	require.Equal(t, "Durotar", manifest.Maps[0].Name)
 	require.InDeltaSlice(t, []float64{-1716.67, -7250, -1000000, 1808.33, -1962.5, 1000000}, manifest.Maps[0].Assignments[0].Region[:], 0.001)
 	require.Len(t, manifest.Maps[0].Art[0].Layers[0].Tiles, 12)

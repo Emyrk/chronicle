@@ -268,7 +268,7 @@ maps/forever-extract:
 define render-forever-maps
 	go run ./scripts/dbcdata render-wowdata-maps \
 		--server=forever \
-		--manifest=frontend/imagecache/forever/maps/manifest.json \
+		--manifest=frontend/imagecache/forever/maps/manifest.original.json \
 		$(if $(WOWDATA_BIN),--wowdata="$(WOWDATA_BIN)") \
 		$(if $(WOWDATA_CACHE),--cache="$(WOWDATA_CACHE)") \
 		--workers="$(WOWDATA_MAP_WORKERS)"
@@ -285,10 +285,24 @@ maps/forever-render:
 maps/forever-render-upload: maps/forever-render
 	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh)
 
+# Source layers are independently uploadable for every SERVER; the upload
+# script refreshes the merged public manifest after each layer publication.
+.PHONY: maps/render-upload maps/styled-upload
+maps/render-upload:
+	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh)
+
+maps/styled-upload:
+	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=styled ./upload-maps-r2.sh)
+
 # Hand-authored styled maps are checked into Git and published independently.
 .PHONY: maps/forever-styled-upload
-maps/forever-styled-upload:
-	$(call run-imagecache,R2_PATH=forever/maps MAPS_UPLOAD_MODE=styled ./upload-maps-r2.sh)
+maps/forever-styled-upload: SERVER=forever
+maps/forever-styled-upload: maps/styled-upload
+
+# Publish native artwork without regenerating geometry or styled assets.
+.PHONY: maps/forever-original-upload
+maps/forever-original-upload: maps/forever-extract
+	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps MAPS_UPLOAD_MODE=original ./upload-maps-r2.sh)
 
 # The full publishing pipeline refreshes artwork before rendering instances.
 .PHONY: maps/forever-build
@@ -297,7 +311,7 @@ maps/forever-build: maps/forever-extract
 
 .PHONY: maps/forever-upload
 maps/forever-upload: maps/forever-build
-	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps ./upload-maps-r2.sh)
+	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps MAPS_UPLOAD_MODE=all ./upload-maps-r2.sh)
 
 .PHONY: maps/forever
 maps/forever: maps/forever-upload
@@ -311,7 +325,7 @@ maps/legacy-extract:
 
 .PHONY: maps/legacy-upload
 maps/legacy-upload: maps/legacy-extract
-	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=legacy ./upload-maps-r2.sh)
+	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=original ./upload-maps-r2.sh)
 
 .PHONY: maps/legacy
 maps/legacy: maps/legacy-upload
