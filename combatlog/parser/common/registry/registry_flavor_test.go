@@ -101,9 +101,19 @@ func TestWoWForeverRuinsOfLordaeron(t *testing.T) {
 	ruins := forever.EntryByName("Ruins Of Lordaeron")
 	require.NotNil(t, ruins)
 	require.Len(t, ruins.HostileEntries, 24)
-	require.Equal(t, "Witherfang", ruins.HostileEntries[250483].Name)
-	require.Equal(t, "Bjork", ruins.HostileEntries[256097].Name)
-	require.False(t, ruins.HostileEntries[250483].Boss)
+	for entryID, name := range map[uint32]string{
+		250483: "Witherfang",
+		250631: "The Abandoned",
+		250657: "Rath'Mael",
+		250660: "The Baron",
+		256035: "Viktor the Vile",
+		256097: "Bjork",
+	} {
+		boss := ruins.HostileEntries[entryID]
+		require.Equal(t, name, boss.Name)
+		require.True(t, boss.Boss)
+		require.Equal(t, name, boss.EncounterName)
+	}
 }
 
 func TestInstanceDetailsBossCount(t *testing.T) {
