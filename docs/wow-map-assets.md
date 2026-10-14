@@ -5,7 +5,7 @@ Chronicle publishes each dataset's map manifest beneath its configured icon base
 ```text
 <icon-base>/maps/manifest.json
 <icon-base>/maps/manifest.original.json
-<icon-base>/maps/manifest.render.json
+<icon-base>/maps/manifest.rendered.json
 <icon-base>/maps/manifest.styled.json
 <icon-base>/maps/original/<tile-id>.webp
 ```

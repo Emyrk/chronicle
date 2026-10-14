@@ -113,7 +113,7 @@ The output layout for every server is:
 ```text
 <icon-base>/maps/
 ├── manifest.original.json   # native artwork; updated by make maps
-├── manifest.render.json     # raw geometry, when available
+├── manifest.rendered.json     # raw geometry, when available
 ├── manifest.styled.json     # hand-authored art, when available
 ├── manifest.json            # merged public manifest, uploaded last
 ├── original/<FileDataID>.webp
@@ -131,7 +131,7 @@ To regenerate only the Wailing Caverns render using the existing local manifest,
 make maps/forever-render
 ```
 
-This updates `frontend/imagecache/forever/maps/render/` and writes `manifest.render.json` without touching the native manifest. The native `manifest.original.json` must exist locally first.
+This updates `frontend/imagecache/forever/maps/render/` and writes `manifest.rendered.json` without touching the native manifest. The native `manifest.original.json` must exist locally first.
 
 To publish only the raw render or the native artwork:
 

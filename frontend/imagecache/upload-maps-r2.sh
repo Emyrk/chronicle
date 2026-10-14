@@ -27,7 +27,7 @@ case "${MAPS_UPLOAD_MODE}" in
     }
     ;;
   rendered)
-    [[ -s "${MAPS_DIR}/manifest.render.json" && -d "${MAPS_DIR}/render" ]] || {
+    [[ -s "${MAPS_DIR}/manifest.rendered.json" && -d "${MAPS_DIR}/render" ]] || {
       echo "Error: render manifest or assets are missing from ${MAPS_DIR}" >&2; exit 1;
     }
     ;;
@@ -41,7 +41,7 @@ if ! command -v rclone >/dev/null 2>&1; then
   exit 1
 fi
 if [[ "${MAPS_UPLOAD_MODE}" == "all" ]]; then
-  [[ -s "${MAPS_DIR}/manifest.render.json" && -d "${MAPS_DIR}/render" ]] || {
+  [[ -s "${MAPS_DIR}/manifest.rendered.json" && -d "${MAPS_DIR}/render" ]] || {
     echo "Error: full map upload requires a render manifest and assets" >&2; exit 1;
   }
 fi
@@ -61,7 +61,7 @@ if [[ "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "rendered" ]]; 
     --include '*.png' \
     --header-upload "Cache-Control: public, max-age=31536000, immutable" \
     --header-upload "Content-Type: image/png" --transfers 8 --checkers 8 --progress --verbose
-  rclone copyto "${MAPS_DIR}/manifest.render.json" "${remote}/manifest.render.json" \
+  rclone copyto "${MAPS_DIR}/manifest.rendered.json" "${remote}/manifest.rendered.json" \
     --header-upload "Cache-Control: public, max-age=3600" \
     --header-upload "Content-Type: application/json" --verbose
 fi
@@ -81,12 +81,12 @@ fi
 listing="$(rclone lsf "${remote}/" --files-only)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
-for layer in original render styled; do
+for layer in original rendered styled; do
   local_source="${MAPS_DIR}/manifest.${layer}.json"
   if [[ "${MAPS_UPLOAD_MODE}" == "styled" && "${layer}" == "styled" ]]; then
     cp "${styled_source}" "${tmp}/manifest.${layer}.json"
   elif [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "original" ) && "${layer}" == "original" ]] ||
-       [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "rendered" ) && "${layer}" == "render" ]]; then
+       [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "rendered" ) && "${layer}" == "rendered" ]]; then
     cp "${local_source}" "${tmp}/manifest.${layer}.json"
   elif printf '%s\n' "${listing}" | grep -Fxq "manifest.${layer}.json"; then
     rclone copyto "${remote}/manifest.${layer}.json" "${tmp}/manifest.${layer}.json"
@@ -97,7 +97,7 @@ done
 # then writes the complete root manifest atomically. Never publish a partial one.
 go run ../../scripts/dbcdata merge-wowdata-maps \
   --original="${tmp}/manifest.original.json" \
-  --render="${tmp}/manifest.render.json" \
+  --render="${tmp}/manifest.rendered.json" \
   --styled="${tmp}/manifest.styled.json" \
   --out="${MAPS_DIR}/manifest.json"
 rclone copyto "${MAPS_DIR}/manifest.json" "${remote}/manifest.json" \

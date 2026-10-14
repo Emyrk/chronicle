@@ -285,11 +285,19 @@ maps/forever-render:
 maps/forever-render-upload: maps/forever-render
 	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh)
 
+# Source layers are independently uploadable for every SERVER; the upload
+# script refreshes the merged public manifest after each layer publication.
+.PHONY: maps/render-upload maps/styled-upload
+maps/render-upload:
+	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh)
+
+maps/styled-upload:
+	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=styled ./upload-maps-r2.sh)
+
 # Hand-authored styled maps are checked into Git and published independently.
 .PHONY: maps/forever-styled-upload
 maps/forever-styled-upload: SERVER=forever
-maps/forever-styled-upload:
-	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps MAPS_UPLOAD_MODE=styled ./upload-maps-r2.sh)
+maps/forever-styled-upload: maps/styled-upload
 
 # Publish native artwork without regenerating geometry or styled assets.
 .PHONY: maps/forever-original-upload

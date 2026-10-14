@@ -134,10 +134,10 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 			return fmt.Errorf("map manifest has no instance record for map %d", spec.MapID)
 		}
 	}
-	if err := writeWowMapManifest(filepath.Join(outDir, "manifest.render.json"), renderManifest); err != nil {
+	if err := writeWowMapManifest(filepath.Join(outDir, "manifest.rendered.json"), renderManifest); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(stdout, "Wrote %d rendered instance maps to %s\n", len(renderedWowMapSpecs), filepath.Join(outDir, "manifest.render.json"))
+	_, _ = fmt.Fprintf(stdout, "Wrote %d rendered instance maps to %s\n", len(renderedWowMapSpecs), filepath.Join(outDir, "manifest.rendered.json"))
 	return nil
 }
 

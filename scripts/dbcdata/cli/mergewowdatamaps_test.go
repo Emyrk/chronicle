@@ -34,7 +34,7 @@ func TestMergeWowdataMaps(t *testing.T) {
 			dir := t.TempDir()
 			origPath := filepath.Join(dir, "manifest.original.json")
 			require.NoError(t, writeWowMapManifest(origPath, original))
-			renderPath, styledPath := filepath.Join(dir, "manifest.render.json"), filepath.Join(dir, "manifest.styled.json")
+			renderPath, styledPath := filepath.Join(dir, "manifest.rendered.json"), filepath.Join(dir, "manifest.styled.json")
 			if tc.render {
 				writeMapLayerTest(t, renderPath, wowMapLayer{Format: wowMapManifestFormat, Target: target, Instances: []wowMapLayerInstance{{MapID: 43, Rendered: rendered}}})
 			}
