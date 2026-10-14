@@ -67,9 +67,9 @@ import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
-import { KillParseTooltip, ParseScopesTooltip } from "./EncounterKillParse";
+import { KillParseTooltip } from "./EncounterKillParse";
 import { useInstanceTimeParses } from "./Overview/overviewQueries";
-import { bossKillParsesByEncounter, hasScopedParse, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
+import { bossKillParsesByEncounter, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -1472,10 +1472,6 @@ function EncounterDetail({
     return Math.max(...endTimes) - Math.min(...startTimes);
   }, [encounters]);
   
-  const timeParsesQuery = useInstanceTimeParses(instance.id);
-  const clearParses = scopedClearParses(timeParsesQuery.data);
-  const clearDurationMs = clearParses?.server?.duration_ms ?? clearParses?.realm?.duration_ms;
-
   const selectedEncounterIDs = useMemo(() => encounters.map((e) => e.id), [encounters]);
 
   // Defer entity selection for panels so the chip UI updates immediately
@@ -1601,28 +1597,7 @@ function EncounterDetail({
               }
             </TooltipContent>
           </Tooltip>
-          {elapsedTimeMs !== null && hasScopedParse(clearParses) && (
-            <ParseScopesTooltip
-              title="Clear time parse"
-              unit="clears"
-              parses={clearParses}
-              lookbackDays={timeParsesQuery.data?.lookback_days}
-              side="bottom"
-              footer={
-                <>
-                  {clearDurationMs !== undefined && <>Full clear in {formatDurationMs(clearDurationMs)}. </>}
-                  Elapsed is first encounter start to last encounter end.
-                </>
-              }
-            >
-              <div className="flex items-center gap-1.5">
-                <Clock className="h-4 w-4" />
-                <span>{formatDurationMs(elapsedTimeMs)}</span>
-                <span className="text-xs opacity-60">elapsed</span>
-              </div>
-            </ParseScopesTooltip>
-          )}
-          {elapsedTimeMs !== null && !hasScopedParse(clearParses) && (
+          {elapsedTimeMs !== null && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-1.5">
@@ -2084,6 +2059,7 @@ export function InstancePageView({
 }: InstancePageViewProps) {
   const timeRange = useTimeRangeContextOptional();
 
+  const instanceTimeParsesQuery = useInstanceTimeParses(instance.id);
   const { data: instanceSpeedrun } = useQuery({
     queryKey: ["instance-speedrun", instance.id],
     queryFn: async (): Promise<SpeedrunResult | null> => {
@@ -3526,6 +3502,8 @@ export function InstancePageView({
                     elapsedDurationMs={elapsedDurationMs}
                     rankedDurationMs={instanceSpeedrun?.ranked_duration_ms}
                     bossToBossDurationMs={instanceSpeedrun?.boss_to_boss_duration_ms}
+                    clearParses={scopedClearParses(instanceTimeParsesQuery.data)}
+                    lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
                   />
                 </TooltipContent>
               </Tooltip>

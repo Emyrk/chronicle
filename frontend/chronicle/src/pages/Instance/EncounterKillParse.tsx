@@ -2,7 +2,7 @@ import type { TimeParseScore } from "@/api/typesGenerated";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { parseColor, parseHexColor } from "./parseColors";
-import { parseScopeRows, type ScopedParses } from "./Overview/encounterKillTimePopulation";
+import { hasScopedParse, parseScopeRows, type ScopedParses } from "./Overview/encounterKillTimePopulation";
 
 function ParseScopeRow({ label, parse, unit }: { label: string; parse: TimeParseScore; unit: string }) {
   const color = parseHexColor(parse.display_score);
@@ -33,55 +33,37 @@ function ParseScopeRow({ label, parse, unit }: { label: string; parse: TimeParse
   );
 }
 
-/**
- * Wraps a trigger with a per-scope time parse tooltip. Renders the trigger
- * unchanged when no scope has a score.
- */
-export function ParseScopesTooltip({
+/** Header plus one score card per scope. Renders nothing when no scope has a score. */
+export function ParseScopeList({
   title,
   unit,
   parses,
   lookbackDays,
-  side = "right",
-  footer,
-  children,
 }: {
   title: string;
   unit: string;
   parses: ScopedParses | null | undefined;
   lookbackDays: number | undefined;
-  side?: "right" | "bottom";
-  footer?: React.ReactNode;
-  children: React.ReactElement;
 }) {
   const rows = parses ? parseScopeRows(parses) : [];
-  if (rows.length === 0) return children;
-
+  if (rows.length === 0) return null;
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent
-        side={side}
-        sideOffset={8}
-        hideArrow
-        className="w-56 rounded-lg border border-white/10 bg-popover p-0 text-foreground shadow-lg"
-      >
-        <div className="flex items-baseline justify-between border-b border-white/10 px-3 py-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</span>
-          {lookbackDays ? <span className="text-[10px] text-muted-foreground">Last {lookbackDays} days</span> : null}
-        </div>
-        <div className="space-y-3 px-3 py-2.5">
-          {rows.map((row) => <ParseScopeRow key={row.label} unit={unit} {...row} />)}
-        </div>
-        {footer && (
-          <div className="border-t border-white/10 px-3 py-2 text-[10px] text-muted-foreground">{footer}</div>
-        )}
-      </TooltipContent>
-    </Tooltip>
+    <>
+      <div className="flex items-baseline justify-between border-b border-white/10 px-3 py-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</span>
+        {lookbackDays ? <span className="text-[10px] text-muted-foreground">Last {lookbackDays} days</span> : null}
+      </div>
+      <div className="space-y-3 px-3 py-2.5">
+        {rows.map((row) => <ParseScopeRow key={row.label} unit={unit} {...row} />)}
+      </div>
+    </>
   );
 }
 
-/** Kill-time parse tooltip for an encounter row. */
+/**
+ * Wraps an encounter row with a kill-time parse tooltip. Renders the row
+ * unchanged when no scope has a score.
+ */
 export function KillParseTooltip({
   parses,
   lookbackDays,
@@ -91,9 +73,18 @@ export function KillParseTooltip({
   lookbackDays: number | undefined;
   children: React.ReactElement;
 }) {
+  if (!hasScopedParse(parses)) return children;
   return (
-    <ParseScopesTooltip title="Kill time parse" unit="kills" parses={parses} lookbackDays={lookbackDays}>
-      {children}
-    </ParseScopesTooltip>
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent
+        side="right"
+        sideOffset={8}
+        hideArrow
+        className="w-56 rounded-lg border border-white/10 bg-popover p-0 text-foreground shadow-lg"
+      >
+        <ParseScopeList title="Kill time parse" unit="kills" parses={parses} lookbackDays={lookbackDays} />
+      </TooltipContent>
+    </Tooltip>
   );
 }
