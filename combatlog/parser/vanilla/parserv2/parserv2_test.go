@@ -224,6 +224,81 @@ func TestParserMessages(t *testing.T) {
 		)
 	})
 
+	t.Run("UnitState", func(t *testing.T) {
+		t.Parallel()
+
+		const timestamp = int64(1771563953000)
+		unit := guid.GUID(0x000000000001C80A)
+		parser, err := New(
+			context.Background(),
+			slog.Default(),
+			strings.NewReader("1771563953000|UNIT_STATE|0x000000000001C80A|2345|3117|72|100|3|309|12.5|34.75|8.25"),
+			&stubGameDB{},
+			nil,
+		)
+		require.NoError(t, err)
+
+		parsed, err := parser.Advance(context.Background())
+		require.NoError(t, err)
+		require.Len(t, parsed, 2)
+		require.Equal(t, &messages.UnitResources{
+			MessageBase:   messages.Base(time.UnixMilli(timestamp)),
+			Unit:          unit,
+			CurrentHealth: 2345,
+			MaximumHealth: 3117,
+			PowerType:     types.ResourceEnergy,
+			CurrentPower:  72,
+			MaximumPower:  100,
+		}, parsed[0])
+		require.Equal(t, &messages.UnitPosition{
+			MessageBase: messages.Base(time.UnixMilli(timestamp)),
+			Unit:        unit,
+			X:           12.5,
+			Y:           34.75,
+			MapID:       309,
+		}, parsed[1])
+		require.True(t, parser.SawUnitResources())
+		require.True(t, parser.SawUnitPosition())
+	})
+
+	t.Run("UnitStateWithoutPosition", func(t *testing.T) {
+		t.Parallel()
+
+		parser, err := New(
+			context.Background(),
+			slog.Default(),
+			strings.NewReader("1771563953000|UNIT_STATE|0x000000000001C80A|2345|3117|||||||"),
+			&stubGameDB{},
+			nil,
+		)
+		require.NoError(t, err)
+
+		parsed, err := parser.Advance(context.Background())
+		require.NoError(t, err)
+		require.Len(t, parsed, 1)
+		resources, ok := parsed[0].(*messages.UnitResources)
+		require.True(t, ok)
+		require.Equal(t, types.ResourceUnknown, resources.PowerType)
+		require.True(t, parser.SawUnitResources())
+		require.False(t, parser.SawUnitPosition())
+	})
+
+	t.Run("UnitStateRejectsMalformedPosition", func(t *testing.T) {
+		t.Parallel()
+
+		parser, err := New(
+			context.Background(),
+			slog.Default(),
+			strings.NewReader("1771563953000|UNIT_STATE|0x000000000001C80A|2345|3117|72|100|3|309|north|34.75|8.25"),
+			&stubGameDB{},
+			nil,
+		)
+		require.NoError(t, err)
+
+		_, err = parser.Advance(context.Background())
+		require.ErrorContains(t, err, `unit state: parse x "north"`)
+	})
+
 	t.Run("ZoneInfoEmptyInstanceID", func(t *testing.T) {
 		t.Parallel()
 

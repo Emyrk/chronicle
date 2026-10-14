@@ -433,6 +433,127 @@ func (p *Parser) unitInfo(ctx context.Context, ts time.Time, m *Matched) ([]mess
 	})
 }
 
+func (p *Parser) unitState(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
+	unit := m.Guid()
+	healthRaw := m.String()
+	maximumHealthRaw := m.String()
+	powerRaw := m.String()
+	maximumPowerRaw := m.String()
+	powerTypeRaw := m.String()
+	mapIDRaw := m.String()
+	xRaw := m.String()
+	yRaw := m.String()
+	zRaw := m.String()
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+	if m.Remain() != 0 {
+		return nil, fmt.Errorf("unit state: unexpected extra fields")
+	}
+
+	currentHealth, hasCurrentHealth, err := parseOptionalInt64("current health", healthRaw)
+	if err != nil {
+		return nil, err
+	}
+	maximumHealth, hasMaximumHealth, err := parseOptionalInt64("maximum health", maximumHealthRaw)
+	if err != nil {
+		return nil, err
+	}
+	currentPower, _, err := parseOptionalInt32("current power", powerRaw)
+	if err != nil {
+		return nil, err
+	}
+	maximumPower, _, err := parseOptionalInt32("maximum power", maximumPowerRaw)
+	if err != nil {
+		return nil, err
+	}
+	powerType, hasPowerType, err := parseOptionalInt32("power type", powerTypeRaw)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]messages.Message, 0, 2)
+	if hasCurrentHealth && hasMaximumHealth {
+		resource := types.ResourceUnknown
+		if hasPowerType {
+			resource = PowerTypeResource(powerType)
+		}
+		result = append(result, &messages.UnitResources{
+			MessageBase:   messages.Base(ts),
+			Unit:          unit,
+			CurrentHealth: currentHealth,
+			MaximumHealth: maximumHealth,
+			PowerType:     resource,
+			CurrentPower:  currentPower,
+			MaximumPower:  maximumPower,
+		})
+		p.sawUnitResources = true
+	}
+
+	mapID, _, err := parseOptionalInt32("map ID", mapIDRaw)
+	if err != nil {
+		return nil, err
+	}
+	x, hasX, err := parseOptionalFloat64("x", xRaw)
+	if err != nil {
+		return nil, err
+	}
+	y, hasY, err := parseOptionalFloat64("y", yRaw)
+	if err != nil {
+		return nil, err
+	}
+	// Chronicle's position event is two-dimensional. Validate z from the addon
+	// payload so malformed UNIT_STATE lines still fail consistently, then discard it.
+	if _, _, err := parseOptionalFloat64("z", zRaw); err != nil {
+		return nil, err
+	}
+	if hasX && hasY {
+		result = append(result, &messages.UnitPosition{
+			MessageBase: messages.Base(ts),
+			Unit:        unit,
+			X:           x,
+			Y:           y,
+			MapID:       mapID,
+		})
+		p.sawUnitPosition = true
+	}
+
+	return result, nil
+}
+
+func parseOptionalInt64(name, raw string) (int64, bool, error) {
+	if raw == "" {
+		return 0, false, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("unit state: parse %s %q: %w", name, raw, err)
+	}
+	return value, true, nil
+}
+
+func parseOptionalInt32(name, raw string) (int32, bool, error) {
+	value, present, err := parseOptionalInt64(name, raw)
+	if err != nil {
+		return 0, false, err
+	}
+	if value < -1<<31 || value > 1<<31-1 {
+		return 0, false, fmt.Errorf("unit state: parse %s %q: value out of int32 range", name, raw)
+	}
+	return int32(value), present, nil
+}
+
+func parseOptionalFloat64(name, raw string) (float64, bool, error) {
+	if raw == "" {
+		return 0, false, nil
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("unit state: parse %s %q: %w", name, raw, err)
+	}
+	return value, true, nil
+}
+
 var (
 	talentsSupported = semver.MustParse("0.19")
 )
