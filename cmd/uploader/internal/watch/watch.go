@@ -2,7 +2,6 @@
 package watch
 
 import (
-	"os"
 	"path/filepath"
 	"sort"
 	"time"
@@ -28,11 +27,11 @@ func LogFiles(logDirs []string) []File {
 		}
 		sort.Strings(paths)
 		for _, p := range paths {
-			fi, err := os.Stat(p)
-			if err != nil || fi.IsDir() {
+			size, err := fileSize(p)
+			if err != nil {
 				continue
 			}
-			out = append(out, File{Path: p, Size: fi.Size()})
+			out = append(out, File{Path: p, Size: size})
 		}
 	}
 	return out

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"fyne.io/systray"
 	"github.com/ncruces/zenity"
@@ -135,8 +136,24 @@ func (a *app) onReady(ctx context.Context) {
 
 // checkUpdate looks for a newer release once at launch and, if there is one,
 // shows it in the tray. Failures are logged and otherwise ignored.
+// checkUpdate checks at launch and then once a day. Later checks are
+// conditional GETs, so an unchanged release list costs one tiny request.
 func (a *app) checkUpdate(ctx context.Context) {
-	rel, ok, err := update.Latest(ctx, http.DefaultClient, update.DefaultURL)
+	checker := &update.Checker{Client: http.DefaultClient, URL: update.DefaultURL}
+	t := time.NewTicker(24 * time.Hour)
+	defer t.Stop()
+	for {
+		a.checkUpdateOnce(ctx, checker)
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+func (a *app) checkUpdateOnce(ctx context.Context, checker *update.Checker) {
+	rel, ok, err := checker.Check(ctx)
 	if err != nil {
 		a.logger.Warn("update check", "err", err)
 		return
