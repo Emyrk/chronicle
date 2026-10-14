@@ -1,6 +1,6 @@
 ---
 name: forever-map-assets
-description: Extracts, validates, maintains, and publishes WoW Forever UI map artwork and coordinate manifests. Use when running the maps Make target, updating the Forever map DB2 pipeline, changing its manifest, or checking icons.chronicleclassic.com/forever/maps assets.
+description: Extracts, validates, merges, and publishes Chronicle map artwork for Forever and legacy WoW servers. Use when changing map extraction, source manifests, styled or rendered layers, map Make targets, or per-server icons.chronicleclassic.com map assets.
 metadata:
   type: workflow
   binding: advisory
@@ -8,57 +8,44 @@ metadata:
 
 # Forever map assets
 
-Maintain Chronicle's WoW Forever UI map export. The public entry point is `make maps`; implementation lives in `scripts/dbcdata/cli/extractwowdatamaps.go`, `frontend/imagecache/upload-maps-r2.sh`, and the map targets in `Makefile`.
-
-## Quick start
-
-Publish the latest map dataset:
-
-```bash
-make maps
-```
-
-This resolves Blizzard's `latest` build once, extracts map metadata and missing WebP tiles, then uploads them under `https://icons.chronicleclassic.com/forever/maps/`.
-
-Do not run the publishing target merely to inspect a change. Use the checks below first.
+Maintain the server-aware WoW map export. `SERVER=forever make maps` extracts Forever native UI art, renders configured geometry, and uploads both; `SERVER=turtle make maps` (likewise `azerothcore` or `tbc`) extracts and uploads legacy native art. Plain `make maps` uses the Makefile's default `SERVER`, **not** necessarily Forever. Do not publish merely to inspect a change.
 
 ## Workflow
 
-1. Generate and inspect metadata without downloading or uploading tiles:
+1. Inspect native metadata without downloading or uploading tiles:
 
    ```bash
    out="$(mktemp -d)"
    go run ./scripts/dbcdata extract-wowdata-maps --metadata-only --out="$out"
-   jq '{format, target, maps: (.maps | length), overlays: ([.maps[].art[].overlays[]?] | length), instances: (.instances | length)}' "$out/manifest.json"
+   jq '{format, target, maps: (.maps | length), overlays: ([.maps[].art[].overlays[]?] | length), instances: (.instances | length)}' "$out/manifest.original.json"
+   # For legacy clients: go run ./scripts/dbcdata extract-legacy-maps --server=turtle --metadata-only --out="$out"
    ```
 
-2. Run the focused automated checks after changing extraction or manifest behavior:
+2. Validate changes before publishing:
 
    ```bash
-   go test ./scripts/dbcdata/cli ./scripts/dbcdata
-   golangci-lint run ./scripts/dbcdata/...
-   bash -n frontend/imagecache/upload-maps-r2.sh
+   go test ./scripts/dbcdata/cli ./scripts/dbcdata ./database/gamedb/dbcdb
+   golangci-lint run ./scripts/dbcdata/... ./database/gamedb/dbcdb/...
+   bash -n frontend/imagecache/upload-maps-r2.sh frontend/imagecache/tests/upload-maps-r2.test.sh
+   bash frontend/imagecache/tests/upload-maps-r2.test.sh
+   make -n SERVER=forever maps
+   make -n SERVER=turtle maps
    git diff --check
    ```
 
-3. Inspect Make expansion without publishing:
-
-   ```bash
-   make -n maps
-   ```
-
-4. Run `make maps` only when the user intends to publish assets and R2 credentials are configured.
+3. Publish only when requested, with the relevant `SERVER`, client/wowdata dependencies, and R2 credentials configured. Use `make maps/<server>` or `SERVER=<server> make maps` for a full import. Forever layer-specific targets: `maps/forever-original-upload` (extract native only), `maps/forever-render-upload` (rerender using local original manifest), `maps/forever-styled-upload` (Git-tracked artwork only). `maps/render-upload` and `maps/styled-upload` publish **existing** corresponding inputs for `SERVER`; they do not generate them. Legacy `make maps` publishes native art only.
 
 ## Maintenance map
 
-- `scripts/dbcdata/cli/extractwowdatamaps.go`: DB2 row types, manifest format, build resolution, tile export, and deterministic ordering.
-- `scripts/dbcdata/cli/extractwowdatamaps_test.go`: manifest joins, ordering, build resolution, and output tests.
-- `scripts/dbcdata/main.go`: command registration.
-- `frontend/imagecache/upload-maps-r2.sh`: R2 paths, content types, and cache headers.
-- `Makefile`: `maps`, `maps/forever`, extract, and upload entry points.
-- `frontend/chronicle/src/pages/Technical/MapGalleryPage.tsx`: `/technical/maps` consumer using the selected dataset's icon base URL.
-- `frontend/chronicle/src/pages/Technical/mapGallery.ts`: frontend manifest contract, asset URLs, ordering, and tile positioning.
-- `docs/wow-forever-game-data.md`: operator documentation and public URL layout.
+- `scripts/dbcdata/cli/extractwowdatamaps.go`: Forever DB2 metadata, exact build resolution, native WebP export, deterministic ordering.
+- `scripts/dbcdata/cli/extractlegacymaps.go`: MPQ-era DBC/listfile artwork extraction for legacy servers.
+- `scripts/dbcdata/cli/renderwowdatamaps.go`: geometry PNGs and sparse rendered manifest; requires the local native manifest and a Rust/Cargo toolchain.
+- `scripts/dbcdata/cli/mergewowdatamaps.go`: layer validation and merge; `scripts/dbcdata/main.go` registers commands.
+- `frontend/imagecache/upload-maps-r2.sh`: all-server R2 publication and merge order; `frontend/imagecache/tests/upload-maps-r2.test.sh` exercises layer isolation with mock rclone.
+- `Makefile`: server dispatch and extract/render/upload targets.
+- `frontend/chronicle/src/pages/Technical/mapGallery.ts`: frontend manifest format, URLs, gallery entries; `MapGalleryPage.tsx` consumes them.
+- `frontend/chronicle/src/pages/Instance/EventsPanels/Map/MapOverview2D.tsx`: styled/raw/original map choices and route overlay.
+- `docs/wow-map-assets.md` and `docs/wow-forever-game-data.md`: operator documentation and rollout guidance.
 
 ## Data model
 
@@ -103,23 +90,60 @@ WOWDATA_BUILD=1.60.1.70205 make maps/forever-extract
 
 Do not update a hard-coded default when Forever releases a new build; the default is intentionally `latest`.
 
-## Publishing contract
+## Manifest and publishing contract
 
-The stable public layout is:
+All new imports use `chronicle-wow-map-art-v2`. Each server has four **root-level** JSON files beneath `<server>/maps/` (the frontend reads only the last one):
 
 ```text
-forever/maps/manifest.json
-forever/maps/tiles/<FileDataID>.webp
+manifest.original.json       # authoritative native map, tile, instance and target metadata
+manifest.rendered.json       # optional sparse instances: [{mapID, rendered: {...}}]
+manifest.styled.json         # optional sparse instances: [{mapID, styled: {...}}]
+manifest.json                # merged public manifest; never hand-edit
+original/<FileDataID>.webp   # native tiles and floors
+render/<mapID>-<build>-<digest>.png # generated geometry
+render-styled/<name>.jpeg    # hand-authored art (PNG/WebP also supported)
 ```
 
-Tiles use `Cache-Control: public, max-age=31536000, immutable`. The manifest uses a short cache because its stable URL advances to the newly extracted build. Preserve `Content-Type: image/webp` for tiles and `application/json` for the manifest.
+For example, a sparse styled source manifest is shaped like:
 
-Before changing paths, cache headers, or the manifest format, check all consumers and coordinate the rollout. If the manifest contract changes incompatibly, introduce a new format version rather than silently changing `chronicle-wow-map-art-v1`.
+```json
+{
+  "format": "chronicle-wow-map-art-v2",
+  "target": { "product": "wow_classic_beta" },
+  "instances": [{
+    "mapID": 43,
+    "styled": {
+      "path": "render-styled/43-wailing-caverns-v2.jpeg",
+      "width": 1600,
+      "height": 1066,
+      "source": "hand-styled",
+      "bounds": { "minX": -421.6594, "maxX": 220.06552, "minY": -396.9931, "maxY": 565.59424 }
+    }
+  }]
+}
+```
+
+The first three JSON files each carry `format`, `target`, and `instances`; the original also carries `maps`. Optional layers attach by instance `mapID` and must not replace original maps or instance metadata. Rendered targets must match the original product, build, region, and locale exactly; styled targets specify the same product only so hand-authored art survives new builds. Each sparse entry has only its matching `rendered` or `styled` field, with an asset `path`, positive `width`/`height`, and any applicable `source` and `bounds` metadata. Styled bounds must be calibrated to the raw projection for route overlays; do not assume that different image dimensions imply different world bounds. The hand-authored Forever Wailing Caverns JPEG and its source JSON live in `frontend/imagecache/styled-maps/forever/` and **are committed**; generated files under `frontend/imagecache/<server>/maps/` are not.
+
+The merger accepts a required v2 `--original`, optional `--render` (filename `manifest.rendered.json`) and `--styled`, and `--out`. Missing optional files are allowed; an existing malformed or incompatible layer is not. It rejects unknown sparse fields, duplicate/unknown IDs, wrong layer fields, incompatible targets, unsafe asset paths, and invalid dimensions. Example for locally present layers:
+
+```bash
+go run ./scripts/dbcdata merge-wowdata-maps \
+  --original=frontend/imagecache/forever/maps/manifest.original.json \
+  --render=frontend/imagecache/forever/maps/manifest.rendered.json \
+  --styled=frontend/imagecache/styled-maps/forever/manifest.styled.json \
+  --out=/tmp/forever-map-manifest.json
+```
+
+`frontend/imagecache/upload-maps-r2.sh` handles `MAPS_UPLOAD_MODE=all|original|rendered|styled` for the selected `MAPS_DIR`, `SERVER`, `R2_REMOTE`, `R2_BUCKET`, and `R2_PATH`. It gathers updated source JSON locally and unchanged source JSON from R2, validates the complete merge **before any remote writes**, uploads only the selected layer's assets and source manifest, and uploads the merged `manifest.json` **last**. A rendered or styled upload needs the native source manifest already on R2 (even if a local copy exists); a native upload supplies it locally. Do not delete old R2 objects as part of normal publication; when moving v1 URLs (`tiles/`, `renders/`) to v2 (`original/`, `render/`), verify the new assets resolve before removing old ones. The frontend accepts published v1 manifests during rollout. An incompatible future format needs a new format version and coordinated consumer update.
+
+JSON manifests have `Content-Type: application/json` and `Cache-Control: public, max-age=3600`; native WebP tiles have `image/webp`, rendered PNGs have `image/png`, and artwork assets are immutable for one year. The uploader accepts styled JPEG, PNG, or WebP files. Preserve paths, content types, and caching unless consumers and rollout are checked.
 
 ## Self-check
 
-- `make maps` expands to the complete Forever extract-and-upload pipeline.
-- `--build latest` resolves to an exact build in command output and `manifest.json`.
-- Metadata extraction returns at least one map, one explored overlay, one complete instance floor, and their referenced tiles.
-- A sampled exported tile starts with RIFF bytes and contains `WEBP` at bytes 8 through 11.
-- No credentials, generated tiles, temporary manifests, or R2 configuration are committed.
+- Dry-run `SERVER=forever` and at least one legacy `SERVER` Make route; neither command should publish.
+- Forever `--build latest` resolves once to an exact build recorded in `manifest.original.json`, never the literal `latest`.
+- Metadata extraction includes a map, explored overlay, complete available instance floor, and referenced tiles; a sampled exported tile has RIFF bytes and `WEBP` at offsets 8–11.
+- `--reuse-manifest-url` skips locally downloading already-published v2 tile IDs; it does **not** copy them into the output tree. For a fresh export after an R2 purge, run `WOWDATA_MAP_REUSE_MANIFEST= SERVER=forever make maps` to download and upload all tiles.
+- A layer-only publication leaves other source layers intact and publishes the merged root manifest last; an invalid source layer must fail before any remote writes.
+- No credentials, generated tiles/manifests, or R2 configuration are committed. The hand-authored styled image and its source manifest are the deliberate exception.
