@@ -188,6 +188,42 @@ func (c *Characters) ExplicitEncounterActive() bool {
 	return c.explicitEncounter
 }
 
+// EndActive ends the active periods for the selected characters and immediately
+// notifies character hooks about the activity changes.
+func (c *Characters) EndActive(reason string, m messages.Message, endState period.EndState, ids ...guid.GUID) bool {
+	for _, id := range ids {
+		char, ok := c.Get(id)
+		if !ok || !char.IsActive() {
+			continue
+		}
+		ender, ok := char.(interface {
+			End(string, messages.Message, period.EndState)
+		})
+		if !ok {
+			continue
+		}
+		ender.End(reason, m, endState)
+		c.All.Touch(id, m.Date())
+	}
+	return c.notifyActivityChanged(m)
+}
+
+func (c *Characters) notifyActivityChanged(m messages.Message) bool {
+	if len(c.activityChanged) == 0 {
+		return false
+	}
+
+	list := make([]Character, 0, len(c.activityChanged))
+	for char := range c.activityChanged {
+		list = append(list, char)
+	}
+	for _, hook := range c.hooks {
+		hook.ActivityChange(m, list...)
+	}
+	c.activityChanged = nil
+	return true
+}
+
 // TODO: Maybe a "synthetic" boolean should exist on message base. This would
 // allow inserting custom messages for totems/pets that indicate their death/recall.
 // This would have to be returned here to be added to the message stream.
@@ -230,21 +266,7 @@ func (c *Characters) Process(m messages.Message) (bool, error) {
 		return nil
 	})
 
-	// Final boolean value
-	if len(c.activityChanged) == 0 {
-		return false, forAllErr
-	}
-
-	var list []Character
-	for char := range c.activityChanged {
-		list = append(list, char)
-	}
-	for _, hook := range c.hooks {
-		hook.ActivityChange(m, list...)
-	}
-	c.activityChanged = nil
-
-	return true, forAllErr
+	return c.notifyActivityChanged(m), forAllErr
 }
 
 // processNewCharacters adds any missing characters to the full character list.
