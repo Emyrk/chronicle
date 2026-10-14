@@ -300,12 +300,17 @@ maps/forever-styled-upload: SERVER=forever
 maps/forever-styled-upload: maps/styled-upload
 
 # Dungeon meshes: the tracked manifest.meshes.json plus the untracked GLBs
-# beside it (see docs/wow-map-assets.md), published independently.
-.PHONY: maps/meshes-upload maps/forever-meshes-upload
+# beside it (see docs/wow-map-assets.md), published independently under 3d/.
+# maps/forever-meshes-manifest-upload publishes the manifest layer only.
+.PHONY: maps/meshes-upload maps/forever-meshes-upload maps/meshes-manifest-upload maps/forever-meshes-manifest-upload
 maps/meshes-upload:
 	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=meshes ./upload-maps-r2.sh)
 maps/forever-meshes-upload: SERVER=forever
 maps/forever-meshes-upload: maps/meshes-upload
+maps/meshes-manifest-upload:
+	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=meshes-manifest ./upload-maps-r2.sh)
+maps/forever-meshes-manifest-upload: SERVER=forever
+maps/forever-meshes-manifest-upload: maps/meshes-manifest-upload
 
 # Publish native artwork without regenerating geometry or styled assets.
 .PHONY: maps/forever-original-upload

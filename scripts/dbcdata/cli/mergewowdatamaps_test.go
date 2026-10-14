@@ -19,7 +19,7 @@ func TestMergeWowdataMaps(t *testing.T) {
 	}
 	rendered := &wowMapRenderedInstance{Path: "render/43.png", Width: 1200, Height: 800, Source: "wmo", Bounds: wowMapFloorBounds{MinX: 1, MaxX: 2}}
 	styled := &wowMapRenderedInstance{Path: "render-styled/43.jpeg", Width: 1600, Height: 1066, Source: "hand-styled", Bounds: rendered.Bounds}
-	mesh := &wowMapMeshInstance{Path: "meshes/43.glb", Bounds: wowMapFloorBounds{MinX: -389.07, MaxX: 191.667, MinY: -370.833, MaxY: 538.351}, ZMin: -119.16, ZMax: 56.469, Frame: wowMapMeshFrame}
+	mesh := &wowMapMeshInstance{Path: "3d/wailing-caverns-open-top.glb", Bounds: wowMapFloorBounds{MinX: -389.07, MaxX: 191.667, MinY: -370.833, MaxY: 538.351}, ZMin: -119.16, ZMax: 56.469, Frame: wowMapMeshFrame}
 
 	for _, tc := range []struct {
 		name                   string
@@ -153,7 +153,7 @@ func TestMergeWowdataMapsStyledValidation(t *testing.T) {
 func TestMergeWowdataMapsMeshValidation(t *testing.T) {
 	t.Parallel()
 	target := wowMapTarget{Product: "wow_classic_beta", Build: "1.2.3", Region: "us", Locale: "enUS"}
-	good := wowMapMeshInstance{Path: "meshes/43.glb", Bounds: wowMapFloorBounds{MinX: -389.07, MaxX: 191.667, MinY: -370.833, MaxY: 538.351}, ZMin: -119.16, ZMax: 56.469, Frame: wowMapMeshFrame}
+	good := wowMapMeshInstance{Path: "3d/wailing-caverns-open-top.glb", Bounds: wowMapFloorBounds{MinX: -389.07, MaxX: 191.667, MinY: -370.833, MaxY: 538.351}, ZMin: -119.16, ZMax: 56.469, Frame: wowMapMeshFrame}
 	layerOf := func(mesh wowMapMeshInstance) wowMapLayer {
 		return wowMapLayer{Format: wowMapManifestFormat, Target: wowMapTarget{Product: target.Product}, Instances: []wowMapLayerInstance{{MapID: 43, Mesh: &mesh}}}
 	}
@@ -172,8 +172,8 @@ func TestMergeWowdataMapsMeshValidation(t *testing.T) {
 		{name: "no mesh", layer: wowMapLayer{Format: wowMapManifestFormat, Target: wowMapTarget{Product: target.Product}, Instances: []wowMapLayerInstance{{MapID: 43}}}, want: "must contain mesh only"},
 		{name: "with rendered", layer: wowMapLayer{Format: wowMapManifestFormat, Target: wowMapTarget{Product: target.Product}, Instances: []wowMapLayerInstance{{MapID: 43, Mesh: &good, Rendered: &wowMapRenderedInstance{Path: "render/43.png", Width: 2, Height: 2}}}}, want: "must contain mesh only"},
 		{name: "wrong prefix", layer: with(func(mesh *wowMapMeshInstance) { mesh.Path = "render/43.glb" }), want: "invalid meshes"},
-		{name: "traversal path", layer: with(func(mesh *wowMapMeshInstance) { mesh.Path = "meshes/../43.glb" }), want: "invalid meshes"},
-		{name: "not a glb", layer: with(func(mesh *wowMapMeshInstance) { mesh.Path = "meshes/43.gltf" }), want: "invalid meshes"},
+		{name: "traversal path", layer: with(func(mesh *wowMapMeshInstance) { mesh.Path = "3d/../43.glb" }), want: "invalid meshes"},
+		{name: "not a glb", layer: with(func(mesh *wowMapMeshInstance) { mesh.Path = "3d/43.gltf" }), want: "invalid meshes"},
 		{name: "flat x bounds", layer: with(func(mesh *wowMapMeshInstance) { mesh.Bounds.MaxX = mesh.Bounds.MinX }), want: "invalid meshes"},
 		{name: "inverted y bounds", layer: with(func(mesh *wowMapMeshInstance) {
 			mesh.Bounds.MinY, mesh.Bounds.MaxY = mesh.Bounds.MaxY, mesh.Bounds.MinY
@@ -215,9 +215,9 @@ func TestMergeWowdataMapsMeshOnlyInstance(t *testing.T) {
 		Format: wowMapManifestFormat, Target: target,
 		Instances: []wowMapInstance{{MapID: 43, Name: "Wailing Caverns", Directory: "WailingCaverns", Floors: []wowMapInstanceFloor{{Floor: 1, Width: 1002, Tiles: []wowMapTile{{Path: "original/1.webp"}}}}}},
 	}
-	wcMesh := &wowMapMeshInstance{Path: "meshes/43.glb", Bounds: wowMapFloorBounds{MinX: -389.07, MaxX: 191.667, MinY: -370.833, MaxY: 538.351}, ZMin: -119.16, ZMax: 56.469, Frame: wowMapMeshFrame}
+	wcMesh := &wowMapMeshInstance{Path: "3d/wailing-caverns-open-top.glb", Bounds: wowMapFloorBounds{MinX: -389.07, MaxX: 191.667, MinY: -370.833, MaxY: 538.351}, ZMin: -119.16, ZMax: 56.469, Frame: wowMapMeshFrame}
 	rfcMesh := &wowMapMeshInstance{
-		Path: "meshes/389.glb", Bounds: wowMapFloorBounds{MinX: -416.2582, MaxX: 102.9279, MinY: -108.4728, MaxY: 275.3513}, ZMin: -66.1637, ZMax: 59.4058, Frame: wowMapMeshFrame,
+		Path: "3d/ragefire-chasm-open-top.glb", Bounds: wowMapFloorBounds{MinX: -416.2582, MaxX: 102.9279, MinY: -108.4728, MaxY: 275.3513}, ZMin: -66.1637, ZMax: 59.4058, Frame: wowMapMeshFrame,
 		Liquid: &wowMapMeshLiquid{Color: "#d66020", Opacity: 0.85},
 	}
 	productOnly := wowMapTarget{Product: target.Product}
@@ -257,14 +257,14 @@ func TestMergeWowdataMapsMeshOnlyInstance(t *testing.T) {
 		{name: "name required when creating", layer: &wowMapLayer{Format: wowMapManifestFormat, Target: productOnly, Instances: []wowMapLayerInstance{{MapID: 389, Mesh: rfcMesh}}}, want: "mapID 389 has no instance in the original manifest and no name"},
 		{name: "mesh-only still needs a mesh", layer: &wowMapLayer{Format: wowMapManifestFormat, Target: productOnly, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Ragefire Chasm"}}}, want: "must contain mesh only"},
 		{name: "mesh-only rejects artwork", layer: &wowMapLayer{Format: wowMapManifestFormat, Target: productOnly, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Ragefire Chasm", Mesh: rfcMesh, Styled: &wowMapRenderedInstance{Path: "render-styled/389.jpeg", Width: 2, Height: 2}}}}, want: "must contain mesh only"},
-		{name: "mesh-only validates the mesh", layer: &wowMapLayer{Format: wowMapManifestFormat, Target: productOnly, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Ragefire Chasm", Mesh: &wowMapMeshInstance{Path: "meshes/389.glb", Frame: wowMapMeshFrame}}}}, want: "invalid meshes map layer mesh for mapID 389"},
+		{name: "mesh-only validates the mesh", layer: &wowMapLayer{Format: wowMapManifestFormat, Target: productOnly, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Ragefire Chasm", Mesh: &wowMapMeshInstance{Path: "3d/ragefire-chasm-open-top.glb", Frame: wowMapMeshFrame}}}}, want: "invalid meshes map layer mesh for mapID 389"},
 		{name: "liquid colour without hash", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "d66020", Opacity: 0.85}), want: "invalid meshes map layer liquid for mapID 389"},
 		{name: "liquid colour short", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "#d60", Opacity: 0.85}), want: "invalid meshes map layer liquid"},
 		{name: "liquid colour named", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "orange", Opacity: 0.85}), want: "invalid meshes map layer liquid"},
 		{name: "liquid opacity zero", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "#d66020"}), want: "invalid meshes map layer liquid"},
 		{name: "liquid opacity above one", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "#d66020", Opacity: 1.5}), want: "invalid meshes map layer liquid"},
-		{name: "liquid extraneous field", raw: `{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta"},"instances":[{"mapID":389,"name":"Ragefire Chasm","mesh":{"path":"meshes/389.glb","bounds":{"minX":-416,"maxX":102,"minY":-108,"maxY":275},"zMin":-66,"zMax":59,"frame":"wow-yup-mirrored-x","liquid":{"color":"#d66020","opacity":0.85,"glow":true}}}]}`, want: "decode meshes"},
-		{name: "floors on a layer entry", raw: `{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta"},"instances":[{"mapID":389,"name":"Ragefire Chasm","floors":[],"mesh":{"path":"meshes/389.glb","bounds":{"minX":-416,"maxX":102,"minY":-108,"maxY":275},"zMin":-66,"zMax":59,"frame":"wow-yup-mirrored-x"}}]}`, want: "decode meshes"},
+		{name: "liquid extraneous field", raw: `{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta"},"instances":[{"mapID":389,"name":"Ragefire Chasm","mesh":{"path":"3d/ragefire-chasm-open-top.glb","bounds":{"minX":-416,"maxX":102,"minY":-108,"maxY":275},"zMin":-66,"zMax":59,"frame":"wow-yup-mirrored-x","liquid":{"color":"#d66020","opacity":0.85,"glow":true}}}]}`, want: "decode meshes"},
+		{name: "floors on a layer entry", raw: `{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta"},"instances":[{"mapID":389,"name":"Ragefire Chasm","floors":[],"mesh":{"path":"3d/ragefire-chasm-open-top.glb","bounds":{"minX":-416,"maxX":102,"minY":-108,"maxY":275},"zMin":-66,"zMax":59,"frame":"wow-yup-mirrored-x"}}]}`, want: "decode meshes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -289,7 +289,7 @@ func TestMergeWowdataMapsMeshOnlyInstance(t *testing.T) {
 }
 
 func liquidLayerTest(target wowMapTarget, liquid wowMapMeshLiquid) *wowMapLayer {
-	mesh := &wowMapMeshInstance{Path: "meshes/389.glb", Bounds: wowMapFloorBounds{MinX: -416.2582, MaxX: 102.9279, MinY: -108.4728, MaxY: 275.3513}, ZMin: -66.1637, ZMax: 59.4058, Frame: wowMapMeshFrame, Liquid: &liquid}
+	mesh := &wowMapMeshInstance{Path: "3d/ragefire-chasm-open-top.glb", Bounds: wowMapFloorBounds{MinX: -416.2582, MaxX: 102.9279, MinY: -108.4728, MaxY: 275.3513}, ZMin: -66.1637, ZMax: 59.4058, Frame: wowMapMeshFrame, Liquid: &liquid}
 	return &wowMapLayer{Format: wowMapManifestFormat, Target: target, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Ragefire Chasm", Mesh: mesh}}}
 }
 

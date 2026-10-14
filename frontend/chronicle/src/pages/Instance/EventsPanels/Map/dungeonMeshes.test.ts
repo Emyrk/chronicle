@@ -16,7 +16,7 @@ import { mapPointToScene, renderedDungeonMapPoint } from "./mapModel";
 // Wailing Caverns `instances[].mesh` as manifest.meshes.json publishes it:
 // the mesh's own world-axis extent, from the render pipeline's height.json.
 const WC_MESH: WowMapMeshInstance = {
-  path: "meshes/43.glb",
+  path: "3d/wailing-caverns-open-top.glb",
   bounds: { minX: -389.07001, maxX: 191.6667, minY: -370.83331, maxY: 538.3512 },
   zMin: -119.1605,
   zMax: 56.4689,
@@ -36,7 +36,7 @@ const WORLD_POINTS = [
 // Ragefire Chasm as manifest.meshes.json publishes it: a mesh-only instance
 // (vanilla RFC has no in-game dungeon map) whose liquid is lava.
 const RFC_MESH: WowMapMeshInstance = {
-  path: "meshes/389.glb",
+  path: "3d/ragefire-chasm-open-top.glb",
   bounds: { minX: -416.2582, maxX: 102.9279, minY: -108.4728, maxY: 275.3513 },
   zMin: -66.1637,
   zMax: 59.4058,
@@ -94,13 +94,8 @@ describe("placeableDungeonMesh", () => {
 });
 
 describe("dungeonMeshUrl", () => {
-  it("resolves the manifest path under the icon CDN's maps by default", () => {
-    expect(dungeonMeshUrl(WC_MESH, "https://icons.example.com/forever/", undefined)).toBe("https://icons.example.com/forever/maps/meshes/43.glb");
-  });
-
-  it("reads the file from the override directory when set", () => {
-    expect(dungeonMeshUrl(WC_MESH, "https://icons.example.com/forever", "/dungeon-meshes/")).toBe("/dungeon-meshes/43.glb");
-    expect(dungeonMeshUrl(WC_MESH, "https://icons.example.com/forever", "http://localhost:8080/meshes")).toBe("http://localhost:8080/meshes/43.glb");
+  it("resolves the manifest path under the icon CDN's maps", () => {
+    expect(dungeonMeshUrl(WC_MESH, "https://icons.example.com/forever/")).toBe("https://icons.example.com/forever/maps/3d/wailing-caverns-open-top.glb");
   });
 });
 
@@ -111,10 +106,10 @@ describe("corsAssetUrl", () => {
   });
 
   it("leaves relative and same-origin URLs alone", () => {
-    expect(corsAssetUrl("/dungeon-meshes/43.glb", "http://localhost:5173")).toBe("/dungeon-meshes/43.glb");
-    expect(corsAssetUrl("http://localhost:5173/dungeon-meshes/43.glb", "http://localhost:5173")).toBe("http://localhost:5173/dungeon-meshes/43.glb");
+    expect(corsAssetUrl("/3d/wailing-caverns-open-top.glb", "http://localhost:5173")).toBe("/3d/wailing-caverns-open-top.glb");
+    expect(corsAssetUrl("http://localhost:5173/3d/wailing-caverns-open-top.glb", "http://localhost:5173")).toBe("http://localhost:5173/3d/wailing-caverns-open-top.glb");
     expect(corsAssetUrl("http://localhost:51730/x.glb", "http://localhost:5173")).toBe("http://localhost:51730/x.glb?cors");
-    expect(corsAssetUrl("/dungeon-meshes/43.glb", undefined)).toBe("/dungeon-meshes/43.glb");
+    expect(corsAssetUrl("/3d/wailing-caverns-open-top.glb", undefined)).toBe("/3d/wailing-caverns-open-top.glb");
   });
 });
 

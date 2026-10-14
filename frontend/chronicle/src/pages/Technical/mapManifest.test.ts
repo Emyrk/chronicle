@@ -3,14 +3,14 @@ import type { WowMapManifest } from "./mapGallery";
 import { applyMapManifestMeshLayer, fetchMapManifest, type WowMapMeshLayer } from "./mapManifest";
 
 const mesh = {
-  path: "meshes/389.glb",
+  path: "3d/ragefire-chasm-open-top.glb",
   bounds: { minX: -416.2582, maxX: 102.9279, minY: -108.4728, maxY: 275.3513 },
   zMin: -66.1637,
   zMax: 59.4058,
   frame: "wow-yup-mirrored-x",
   liquid: { color: "#d66020", opacity: 0.85 },
 };
-const wcMesh = { ...mesh, path: "meshes/43.glb", liquid: undefined };
+const wcMesh = { ...mesh, path: "3d/wailing-caverns-open-top.glb", liquid: undefined };
 const manifest: WowMapManifest = {
   format: "chronicle-wow-map-art-v2",
   target: { product: "wow_classic_beta", build: "1.60.1.70205", region: "us", locale: "enUS" },

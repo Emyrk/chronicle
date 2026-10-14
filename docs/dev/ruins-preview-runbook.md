@@ -150,16 +150,14 @@ so run it in Linux from a `git archive`:
 
 ```bash
 FE=frontend/chronicle
-mkdir -p $FE/public/dungeon-meshes $FE/public/dev-manifest
-cp ~/git/warcraft/rendered-maps/maps/ruins-of-lordaeron/renders/v007-glb/ruins-of-lordaeron-open-top.glb \
-   $FE/public/dungeon-meshes/2999.glb
+mkdir -p $FE/public/dev-manifest
 cat > $FE/public/dev-manifest/forever.meshes.json <<'EOF'
 {
   "format": "chronicle-wow-map-art-v2",
   "target": { "product": "wow_classic_beta" },
   "instances": [
     { "mapID": 2999, "name": "Ruins of Lordaeron",
-      "mesh": { "path": "meshes/2999.glb",
+      "mesh": { "path": "3d/ruins-of-lordaeron-open-top.glb",
                 "bounds": { "minX": 1333.3337, "maxX": 1900.0, "minY": -33.3333, "maxY": 500.0 },
                 "zMin": -13.6235, "zMax": 195.9512, "frame": "wow-yup-mirrored-x" } }
   ]
@@ -171,7 +169,6 @@ docker run -d --name ruins-vite -p 5175:5173 --add-host=host.docker.internal:hos
 docker exec ruins-vite mkdir -p /src
 git archive HEAD frontend | docker exec -i ruins-vite tar -x -C /src
 docker cp $FE/public/dev-manifest ruins-vite:/src/$FE/public/
-docker cp $FE/public/dungeon-meshes ruins-vite:/src/$FE/public/
 docker exec -d -e HOST=http://host.docker.internal:4999 -e SERVER=forever ruins-vite bash -c \
   'cd /src/frontend/chronicle && corepack enable && corepack prepare pnpm@10.9.0 --activate \
    && pnpm install --frozen-lockfile > /tmp/install.log 2>&1 \
@@ -179,10 +176,11 @@ docker exec -d -e HOST=http://host.docker.internal:4999 -e SERVER=forever ruins-
 ```
 
 The install takes a minute or two; `docker exec ruins-vite tail /tmp/vite.log`
-shows when Vite is ready. `.env.development` already sets
-`VITE_DUNGEON_MESH_BASE` and `VITE_MAP_MANIFEST_OVERLAY`, which read the two
-gitignored files above. The overlay's `target.product` must match the prod
-Forever manifest (`wow_classic_beta`).
+shows when Vite is ready. The GLB is read from the icon CDN
+(`forever/maps/3d/`); nothing is copied into `public/`. `.env.development`
+already sets `VITE_MAP_MANIFEST_OVERLAY`, which reads the gitignored overlay
+above (until the published manifest carries the `mesh` entries). The overlay's
+`target.product` must match the prod Forever manifest (`wow_classic_beta`).
 
 ## 7. Open it
 

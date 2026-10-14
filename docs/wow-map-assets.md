@@ -9,7 +9,7 @@ Chronicle publishes each dataset's map manifest beneath its configured icon base
 <icon-base>/maps/manifest.styled.json
 <icon-base>/maps/manifest.meshes.json
 <icon-base>/maps/original/<tile-id>.webp
-<icon-base>/maps/meshes/<map-id>.glb
+<icon-base>/maps/3d/<slug>-open-top.glb
 ```
 
 The frontend accepts v1 published manifests during migration; all new imports use v2. `make maps` works for each `SERVER` and publishes native artwork under `original/`. Raw geometry, hand-authored art and dungeon meshes are independent optional layers under `render/`, `render-styled/` and `meshes/`. The publisher merges their root-level source manifests into `manifest.json` after each job. Generated manifests and tiles live under `frontend/imagecache/<server>/maps/`, are ignored by Git, and are published to object storage.
@@ -53,13 +53,13 @@ SERVER=forever make maps
 
 ## Dungeon meshes
 
-The Replay Map's "3D map" toggle stands the units on the dungeon's real geometry instead of the flat tiles. The mesh is a glTF binary served from the icon CDN under `meshes/<map-id>.glb`, announced by an additive `instances[].mesh` entry in `manifest.json`:
+The Replay Map's "3D map" toggle stands the units on the dungeon's real geometry instead of the flat tiles. The mesh is a glTF binary served from the icon CDN under `3d/<slug>-open-top.glb`, announced by an additive `instances[].mesh` entry in `manifest.json`:
 
 ```json
 {
   "mapID": 43,
   "mesh": {
-    "path": "meshes/43.glb",
+    "path": "3d/wailing-caverns-open-top.glb",
     "bounds": { "minX": -389.07001, "maxX": 191.6667, "minY": -370.83331, "maxY": 538.3512 },
     "zMin": -119.1605,
     "zMax": 56.4689,
@@ -72,7 +72,7 @@ The Replay Map's "3D map" toggle stands the units on the dungeon's real geometry
 
 ### Mesh-only instances
 
-Some dungeons have no in-game map at all (vanilla Ragefire Chasm, map 389), so the original manifest has no `instances[]` entry for them. A `meshes` layer entry whose `mapID` is unknown to the original then creates a *mesh-only* instance, `{ "mapID", "name", "floors": [], "mesh" }`, taking its `name` from the layer entry (required in that case; for an existing instance the original's name wins and the entry's `name` is ignored). The entry may still carry nothing but `mesh` (and `name`); floors, `rendered` or `styled` are rejected, as is any layer other than `meshes` naming an unknown map.
+Some dungeons have no in-game map at all (vanilla Ragefire Chasm, map 389, whose mesh is not published at the moment; Ruins of Lordaeron, map 2999, is mesh-only today), so the original manifest has no `instances[]` entry for them. A `meshes` layer entry whose `mapID` is unknown to the original then creates a *mesh-only* instance, `{ "mapID", "name", "floors": [], "mesh" }`, taking its `name` from the layer entry (required in that case; for an existing instance the original's name wins and the entry's `name` is ignored). The entry may still carry nothing but `mesh` (and `name`); floors, `rendered` or `styled` are rejected, as is any layer other than `meshes` naming an unknown map.
 
 The frontend treats `floors: []` plus a placeable `mesh` as "3D only": the Replay Map opens with the "3D map" switch on (and disabled, there is nothing else to show), the mesh's extent is the ground from the first frame, the floor selector is hidden, and the 2D paths (the multi-encounter route overview and the WebGL-unavailable fallback) show "No map artwork for this instance" instead of tiles. The map gallery lists the instance with a text card. No per-boss artwork calibration applies, since there is no artwork.
 
@@ -81,7 +81,7 @@ The frontend treats `floors: []` plus a placeable `mesh` as "3D only": the Repla
   "mapID": 389,
   "name": "Ragefire Chasm",
   "mesh": {
-    "path": "meshes/389.glb",
+    "path": "3d/ragefire-chasm-open-top.glb",
     "bounds": { "minX": -416.2582, "maxX": 102.9279, "minY": -108.4728, "maxY": 275.3513 },
     "zMin": -66.1637,
     "zMax": 59.4058,
@@ -120,19 +120,21 @@ Check the result against the GLB before publishing: read the `POSITION` accessor
 
 The GLBs carry Blizzard textures and never enter Git; only the source manifest is tracked.
 
-1. Copy the GLB to `frontend/imagecache/meshes/<server>/<map-id>.glb` (the directory ignores `*.glb`).
+1. Copy the GLB to `frontend/imagecache/meshes/<server>/<slug>-open-top.glb` (the directory ignores `*.glb`); the manifest `path` is `3d/<that file name>`.
 2. Add the instance to `frontend/imagecache/meshes/<server>/manifest.meshes.json`: format `chronicle-wow-map-art-v2`, a product-only `target` (meshes are geometry, carried across builds like styled art), and one `mesh` entry per map ID as above. The map ID must exist in the published original manifest.
 3. Publish the layer. The script refuses to run if any announced GLB is missing beside the manifest, and the merge rejects a bad path, degenerate bounds or an unknown frame before anything is uploaded:
 
 ```bash
 make maps/forever-meshes-upload
+# manifest layer only, when the GLBs are already in the bucket:
+make maps/forever-meshes-manifest-upload
 # or, from frontend/imagecache with rclone credentials in .envrc:
 MAPS_UPLOAD_MODE=meshes SERVER=forever MAPS_DIR=forever/maps R2_PATH=forever/maps ./upload-maps-r2.sh
 ```
 
 GLBs upload with `Content-Type: model/gltf-binary` and a one-year immutable cache, so a changed mesh needs a new file name (and manifest path), not an overwrite. `MESHES_DIR` overrides the source directory.
 
-For local development, `VITE_DUNGEON_MESH_BASE` (set to `/dungeon-meshes` in `.env.development`) makes the frontend read `<base>/<file>` for the manifest's file name instead of the CDN, so `frontend/chronicle/public/dungeon-meshes/43.glb` serves the Wailing Caverns entry under `pnpm dev` and Storybook.
+Dev, Storybook and production all read the GLBs from the icon CDN (`forever/maps/3d/`); nothing is copied into `public/`.
 
 ### Trying a mesh before it is on the CDN (dev manifest overlay)
 
@@ -142,13 +144,12 @@ For local development, `VITE_DUNGEON_MESH_BASE` (set to `/dungeon-meshes` in `.e
 
 ```bash
 cd frontend/chronicle
-mkdir -p public/dungeon-meshes public/dev-manifest
-cp <render>/ragefire-chasm-open-top.glb public/dungeon-meshes/389.glb
+mkdir -p public/dev-manifest
 cp ../imagecache/meshes/forever/manifest.meshes.json public/dev-manifest/forever.meshes.json
 HOST=https://forever.chronicleclassic.com pnpm dev
 ```
 
-The live page then shows the 3D map for a Ragefire Chasm log and lists the instance under Technical → Maps, with the GLB read from `public/dungeon-meshes/`. Stories seed their manifest directly and do not use the overlay.
+The live page then shows the 3D map for a Wailing Caverns or Ruins of Lordaeron log and lists the instances under Technical → Maps, with the GLBs read from the CDN. The overlay is only needed until the published `manifest.json` carries the `mesh` entries. Stories seed their manifest directly and do not use the overlay.
 
 ### CORS
 
