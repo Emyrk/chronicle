@@ -1727,6 +1727,54 @@ CREATE TABLE time_parse_clear_time_memberships (
     start_time timestamp with time zone NOT NULL
 );
 
+CREATE TABLE time_parse_score_receipts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    log_group_id uuid,
+    realm_id uuid NOT NULL,
+    guild_id uuid,
+    cutoff timestamp with time zone NOT NULL,
+    window_start timestamp with time zone NOT NULL,
+    lookback_days smallint NOT NULL,
+    policy_version smallint NOT NULL,
+    query_version smallint NOT NULL,
+    source_count integer DEFAULT 0 NOT NULL,
+    result_count integer DEFAULT 0 NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE time_parse_score_results (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    receipt_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    log_group_id uuid,
+    realm_id uuid NOT NULL,
+    guild_id uuid,
+    scope text NOT NULL,
+    metric_kind text NOT NULL,
+    encounter_id uuid,
+    encounter_name text DEFAULT ''::text NOT NULL,
+    duration_ms bigint NOT NULL,
+    precise_score double precision NOT NULL,
+    display_score smallint NOT NULL,
+    rank integer NOT NULL,
+    sample_size integer NOT NULL,
+    status text NOT NULL,
+    cutoff timestamp with time zone NOT NULL,
+    window_start timestamp with time zone NOT NULL,
+    lookback_days smallint NOT NULL,
+    policy_version smallint NOT NULL,
+    query_version smallint NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT time_parse_score_results_check CHECK ((((metric_kind = 'clear_time'::text) AND (encounter_id IS NULL) AND (encounter_name = ''::text)) OR ((metric_kind = 'boss_kill'::text) AND (encounter_id IS NOT NULL) AND (encounter_name <> ''::text)))),
+    CONSTRAINT time_parse_score_results_metric_kind_check CHECK ((metric_kind = ANY (ARRAY['clear_time'::text, 'boss_kill'::text]))),
+    CONSTRAINT time_parse_score_results_scope_check CHECK ((scope = ANY (ARRAY['server'::text, 'realm'::text, 'guild'::text])))
+);
+
 CREATE TABLE user_action_bar_slots (
     user_id uuid NOT NULL,
     slot_1 uuid,
@@ -2502,6 +2550,15 @@ ALTER TABLE ONLY time_parse_clear_time_memberships
 ALTER TABLE ONLY time_parse_clear_time_memberships
     ADD CONSTRAINT time_parse_clear_time_memberships_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY time_parse_score_receipts
+    ADD CONSTRAINT time_parse_score_receipts_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY time_parse_score_receipts
+    ADD CONSTRAINT time_parse_score_receipts_tenant_id_instance_id_lookback_da_key UNIQUE (tenant_id, instance_id, lookback_days, policy_version, query_version);
+
+ALTER TABLE ONLY time_parse_score_results
+    ADD CONSTRAINT time_parse_score_results_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY user_action_bar_slots
     ADD CONSTRAINT user_action_bar_slots_pkey PRIMARY KEY (user_id);
 
@@ -2758,6 +2815,16 @@ CREATE INDEX idx_tb_class_spec ON talent_builds USING btree (player_class, spec)
 CREATE INDEX idx_tb_sub_spec ON talent_builds USING btree (sub_spec) WHERE (sub_spec IS NOT NULL);
 
 CREATE UNIQUE INDEX idx_tenants_name_unique ON tenants USING btree (lower(name));
+
+CREATE INDEX idx_time_parse_score_receipts_contract ON time_parse_score_receipts USING btree (tenant_id, instance_id, policy_version, query_version, lookback_days);
+
+CREATE INDEX idx_time_parse_score_receipts_missing ON time_parse_score_receipts USING btree (tenant_id, policy_version, query_version, lookback_days, instance_id);
+
+CREATE UNIQUE INDEX idx_time_parse_score_results_boss_unique ON time_parse_score_results USING btree (receipt_id, scope, metric_kind, encounter_id) WHERE (encounter_id IS NOT NULL);
+
+CREATE UNIQUE INDEX idx_time_parse_score_results_clear_unique ON time_parse_score_results USING btree (receipt_id, scope, metric_kind) WHERE (encounter_id IS NULL);
+
+CREATE INDEX idx_time_parse_score_results_instance ON time_parse_score_results USING btree (tenant_id, instance_id, scope, metric_kind);
 
 CREATE INDEX idx_tpbk_memberships_cohort ON time_parse_boss_kill_memberships USING btree (tenant_id, policy_version, query_version, instance_name, encounter_name, difficulty_name, max_players, killed_at);
 
@@ -3213,6 +3280,33 @@ ALTER TABLE ONLY time_parse_boss_kill_memberships
 
 ALTER TABLE ONLY time_parse_clear_time_memberships
     ADD CONSTRAINT time_parse_clear_time_memberships_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY time_parse_score_receipts
+    ADD CONSTRAINT time_parse_score_receipts_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY time_parse_score_receipts
+    ADD CONSTRAINT time_parse_score_receipts_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY time_parse_score_receipts
+    ADD CONSTRAINT time_parse_score_receipts_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY time_parse_score_receipts
+    ADD CONSTRAINT time_parse_score_receipts_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY time_parse_score_results
+    ADD CONSTRAINT time_parse_score_results_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY time_parse_score_results
+    ADD CONSTRAINT time_parse_score_results_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY time_parse_score_results
+    ADD CONSTRAINT time_parse_score_results_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY time_parse_score_results
+    ADD CONSTRAINT time_parse_score_results_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY time_parse_score_results
+    ADD CONSTRAINT time_parse_score_results_receipt_id_fkey FOREIGN KEY (receipt_id) REFERENCES time_parse_score_receipts(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_action_bar_slots
     ADD CONSTRAINT user_action_bar_slots_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

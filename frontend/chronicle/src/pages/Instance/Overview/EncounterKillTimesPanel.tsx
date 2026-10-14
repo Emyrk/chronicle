@@ -13,6 +13,7 @@ import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import { parseBgColor, parseBorderColor, parseColor } from "../parseColors";
 import type { PopulationSelection } from "./populationSelectionState";
 import { useInstanceTimeParses, useSpeedrunPopulation } from "./overviewQueries";
+import { selectTimeParseScopeResult } from "./timeParseScope";
 import {
   buildEncounterKillTimeComparisonRows,
   mapTimeBossParses,
@@ -197,11 +198,12 @@ export function EncounterKillTimesPanel({
   const primarySummaries = summarizeEncounterKillTimes(primaryQuery.data?.runs ?? []);
   const comparisonSummaries = summarizeEncounterKillTimes(comparisonQuery.data?.runs ?? []);
   const rows = buildEncounterKillTimeComparisonRows(primarySummaries, comparisonSummaries);
-  const timeParses = mapTimeBossParses(timeParsesQuery.data);
-  const average = timeParsesQuery.data?.average_boss_kill_parse;
+  const selectedTimeParses = selectTimeParseScopeResult(timeParsesQuery.data, comparison);
+  const timeParses = mapTimeBossParses(selectedTimeParses);
+  const average = selectedTimeParses?.average_boss_kill_parse;
   const averageParse = average?.display_score ?? null;
   const killedBossCount = average?.killed ?? primarySummaries.size;
-  const availableParseCount = timeParsesQuery.data?.boss_kill_times
+  const availableParseCount = selectedTimeParses?.boss_kill_times
     .filter((parse) => parse.status !== "sample_too_small").length ?? 0;
   const incompleteAverage = average !== undefined && average.killed < average.selected;
   const specificRaidComparison = comparison?.kind === "instance";

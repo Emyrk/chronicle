@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
-import type { BossKillTimeParse, InstanceTimeParsesResponse, SpeedrunCohortRun } from "@/api/typesGenerated";
+import type { BossKillTimeParse, SpeedrunCohortRun } from "@/api/typesGenerated";
 import { parseHexColor } from "../parseColors";
+import type { TimeParseScopeResult } from "./timeParseScope";
 
 /** A server-computed per-boss parse score ready for display. */
 export interface TimeBossParse {
@@ -16,7 +17,7 @@ export interface TimeBossParse {
  * so the badge renders "—" consistently with existing behavior.
  */
 export function mapTimeBossParses(
-  timeParses: InstanceTimeParsesResponse | undefined,
+  timeParses: TimeParseScopeResult | undefined,
 ): ReadonlyMap<string, TimeBossParse | null> | null {
   if (!timeParses?.available) return null;
   const result = new Map<string, TimeBossParse | null>();
@@ -40,7 +41,7 @@ export function mapTimeBossParses(
  * fall back to the plain kill icon.
  */
 export function bossKillParsesByEncounter(
-  timeParses: InstanceTimeParsesResponse | undefined,
+  timeParses: TimeParseScopeResult | undefined,
 ): ReadonlyMap<string, BossKillTimeParse> | null {
   if (!timeParses?.available) return null;
   return new Map(timeParses.boss_kill_times.map((boss) => [boss.encounter_id, boss]));

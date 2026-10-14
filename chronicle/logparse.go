@@ -839,9 +839,11 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	// Keep the compact current-known cohort synchronized after every successful
 	// parse so live windows immediately include late historical uploads.
+	timeParseMembershipsRefreshed := true
 	if result, err := db.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
 		LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 	}); err != nil {
+		timeParseMembershipsRefreshed = false
 		w.parent.logger.WarnContext(ctx, "failed to refresh clear-time memberships after parse", slog.Any("error", err))
 	} else {
 		w.parent.logger.InfoContext(ctx, "refreshed clear-time memberships after parse",
@@ -852,6 +854,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	if result, err := db.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
 		LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 	}); err != nil {
+		timeParseMembershipsRefreshed = false
 		w.parent.logger.WarnContext(ctx, "failed to refresh boss-kill memberships after parse", slog.Any("error", err))
 	} else {
 		w.parent.logger.InfoContext(ctx, "refreshed boss-kill memberships after parse",
@@ -879,6 +882,19 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					slog.String("instance_id", inst.ID.String()),
 					slog.Any("error", enqErr),
 				)
+			}
+			if timeParseMembershipsRefreshed {
+				_, timeEnqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeTimeParseScores{
+					InstanceID: inst.ID,
+					TenantID:   job.Args.TenantID,
+					Force:      true,
+				}, nil)
+				if timeEnqErr != nil {
+					w.parent.logger.Error("failed to enqueue time parse score computation",
+						slog.String("instance_id", inst.ID.String()),
+						slog.Any("error", timeEnqErr),
+					)
+				}
 			}
 		}
 	}

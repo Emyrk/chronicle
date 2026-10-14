@@ -2141,6 +2141,8 @@ export interface InstanceTimeParsesResponse {
      */
     readonly policy_version: number;
     readonly query_version: number;
+    readonly computed_at: string;
+    readonly scopes: Record<string, TimeParseScopeResult>;
     /**
      * ClearTime is the instance's clear-time parse against the population.
      * Nil when the instance has no qualified clear.
@@ -3980,6 +3982,18 @@ export interface TimeParseCohortResponse {
     readonly sample_size: number;
     readonly status: string;
     readonly entries: readonly TimeParseCohortEntry[];
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseScopeResult is one locked server, realm, or guild result set.
+ */
+export interface TimeParseScopeResult {
+    readonly available: boolean;
+    readonly reason?: string;
+    readonly clear_time?: TimeParseScore;
+    readonly boss_kill_times: readonly BossKillTimeParse[];
+    readonly average_boss_kill_parse?: TimeParseAverage;
 }
 
 // From chroniclesdk/time_parses.go

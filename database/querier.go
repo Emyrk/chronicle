@@ -15,6 +15,7 @@ import (
 type sqlcQuerier interface {
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
+	AcquireTimeParseScoreLock(ctx context.Context, instanceID string) error
 	ActivateDiscordMembershipGrantCheckOnLogin(ctx context.Context, arg ActivateDiscordMembershipGrantCheckOnLoginParams) (ActivateDiscordMembershipGrantCheckOnLoginRow, error)
 	AddUserFavoriteGuild(ctx context.Context, arg AddUserFavoriteGuildParams) (pgtype.Bool, error)
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
@@ -138,6 +139,7 @@ type sqlcQuerier interface {
 	DeleteTimeParseClearTimeMembershipSeries(ctx context.Context, arg DeleteTimeParseClearTimeMembershipSeriesParams) error
 	DeleteTimeParseClearTimeMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
 	DeleteTimeParseClearTimeMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
+	DeleteTimeParseScoreReceiptForContract(ctx context.Context, arg DeleteTimeParseScoreReceiptForContractParams) error
 	DeleteUploadKey(ctx context.Context, id uuid.UUID) error
 	DeleteUserCharacterLink(ctx context.Context, arg DeleteUserCharacterLinkParams) (UserCharacterLink, error)
 	DeleteUserCharacterLinksByUserAndSource(ctx context.Context, arg DeleteUserCharacterLinksByUserAndSourceParams) ([]UserCharacterLink, error)
@@ -335,6 +337,8 @@ type sqlcQuerier interface {
 	// Returns the realm-specific policy if it exists, otherwise the server-level policy.
 	GetRetentionPolicyForRealm(ctx context.Context, realmID uuid.NullUUID) (RetentionPolicy, error)
 	GetRetentionRulesByPolicy(ctx context.Context, policyID uuid.UUID) ([]RetentionRule, error)
+	GetScopedTimeParseBossKillCohort(ctx context.Context, arg GetScopedTimeParseBossKillCohortParams) ([]int64, error)
+	GetScopedTimeParseClearTimeCohort(ctx context.Context, arg GetScopedTimeParseClearTimeCohortParams) ([]int64, error)
 	// Return the latest published snapshot whose cutoff <= the given timestamp,
 	// matching the current policy_version and query_version.
 	// This prevents an incompatible newer snapshot from hiding a compatible older one.
@@ -383,6 +387,8 @@ type sqlcQuerier interface {
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
 	GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error)
 	GetTimeParseClearTimeMembershipCohort(ctx context.Context, arg GetTimeParseClearTimeMembershipCohortParams) ([]int64, error)
+	GetTimeParseScoreReceiptForContract(ctx context.Context, arg GetTimeParseScoreReceiptForContractParams) (TimeParseScoreReceipt, error)
+	GetTimeParseScoringInstance(ctx context.Context, arg GetTimeParseScoringInstanceParams) (GetTimeParseScoringInstanceRow, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)
 	GetUploadKeyByHash(ctx context.Context, secretHash string) (GetUploadKeyByHashRow, error)
 	GetUserActionBarSlots(ctx context.Context, userID uuid.UUID) (GetUserActionBarSlotsRow, error)
@@ -510,6 +516,8 @@ type sqlcQuerier interface {
 	InsertStampedYoutubeVideo(ctx context.Context, arg InsertStampedYoutubeVideoParams) error
 	InsertTelemetryNotice(ctx context.Context, arg InsertTelemetryNoticeParams) error
 	InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error)
+	InsertTimeParseScoreReceipt(ctx context.Context, arg InsertTimeParseScoreReceiptParams) (TimeParseScoreReceipt, error)
+	InsertTimeParseScoreResult(ctx context.Context, arg InsertTimeParseScoreResultParams) error
 	// Upload Keys
 	InsertUploadKey(ctx context.Context, arg InsertUploadKeyParams) (WowServerUploadKey, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
@@ -607,6 +615,7 @@ type sqlcQuerier interface {
 	// window are excluded, so daily repair neither restarts exhausted retry chains
 	// nor rewrites long-term parse history.
 	ListInstancesMissingParseReceiptWithSnapshot(ctx context.Context, arg ListInstancesMissingParseReceiptWithSnapshotParams) ([]ListInstancesMissingParseReceiptWithSnapshotRow, error)
+	ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error)
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
@@ -669,6 +678,7 @@ type sqlcQuerier interface {
 	ListTimeParseReplacementLogGroups(ctx context.Context, arg ListTimeParseReplacementLogGroupsParams) ([]uuid.UUID, error)
 	// Locate surviving uploads for logical runs whose source log group is deleted.
 	ListTimeParseReplacementLogGroupsForDeletedLogGroup(ctx context.Context, arg ListTimeParseReplacementLogGroupsForDeletedLogGroupParams) ([]uuid.UUID, error)
+	ListTimeParseScoreResultsForReceipt(ctx context.Context, receiptID uuid.UUID) ([]TimeParseScoreResult, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
 	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
 	ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error)

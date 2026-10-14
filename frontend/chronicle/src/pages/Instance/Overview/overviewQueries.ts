@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import type {
   InstanceOverviewMetrics,
-  InstanceTimeParsesResponse,
   SpeedrunCohortOverviewMetrics,
   SpeedrunCohortResponse,
   SpeedrunCohortRun,
   SpeedrunResult,
 } from "@/api/typesGenerated";
 import type { PopulationSelection } from "./populationSelectionState";
+import type { ScopedInstanceTimeParsesResponse } from "./timeParseScope";
 
 export interface OverviewMetricsCoverage {
   eligibleRuns: number;
@@ -124,13 +124,13 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
 export function useInstanceTimeParses(instanceId: string | undefined) {
   return useQuery({
     queryKey: ["rankings", "time-parses", instanceId] as const,
-    queryFn: async (): Promise<InstanceTimeParsesResponse> => {
+    queryFn: async (): Promise<ScopedInstanceTimeParsesResponse> => {
       if (!instanceId) throw new Error("No instance ID");
       const response = await fetch(
         `/api/v1/rankings/instances/${encodeURIComponent(instanceId)}/time-parses`,
       );
       if (!response.ok) throw new Error("Unable to load time parses");
-      return response.json() as Promise<InstanceTimeParsesResponse>;
+      return response.json() as Promise<ScopedInstanceTimeParsesResponse>;
     },
     staleTime: 0,
     retry: false,
