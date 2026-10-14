@@ -52,7 +52,7 @@ func TestGameEnumeratesOnlyWithoutKnownPid(t *testing.T) {
 		require.True(t, g.Running(ctx, nil))
 	}
 	require.Equal(t, 1, fp.lists, "a live pid is polled, not enumerated")
-	require.Equal(t, 5, fp.exists)
+	require.Equal(t, 6, fp.exists, "one confirmation of the candidate, then one check per poll")
 
 	fp.table = fp.table[:1] // the game dies
 	require.True(t, g.Running(ctx, nil), "first miss is debounced")
@@ -71,6 +71,21 @@ func TestGameDropsPidThatChangedIdentity(t *testing.T) {
 	fp.table = []watch.Process{{PID: wowProc.PID, Name: "notepad.exe"}}
 	require.True(t, g.Running(ctx, nil), "first miss is debounced")
 	require.False(t, g.Running(ctx, nil), "pid 42 is no longer the game")
+}
+
+// The macOS kernel truncates comm to 16 bytes, so the client is listed as
+// "World of Warcraf". It must still match, and the pid must stay the game
+// when polled under that same truncated name.
+func TestGameMatchesTruncatedClientName(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fp := &fakeProcs{table: []watch.Process{{PID: 7, Name: "World of Warcraf"}}}
+	g := watch.NewGame(tenant.DefaultLayout, fp)
+
+	require.True(t, g.Running(ctx, nil))
+	require.True(t, g.Running(ctx, nil))
+	require.Equal(t, 1, fp.lists, "the second poll is by pid, under the truncated name")
+	require.Equal(t, 2, fp.exists, "one confirmation of the candidate, then one check per poll")
 }
 
 // A single missed poll must not look like WoW exiting.

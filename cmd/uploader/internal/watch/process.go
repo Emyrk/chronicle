@@ -97,7 +97,7 @@ func (g *Game) find(ctx context.Context, installDirs []string) (Process, bool) {
 		return Process{}, false
 	}
 	for _, p := range procs {
-		if g.matchName(p.Name) {
+		if g.matchName(p.Name) && g.alive(ctx, p) {
 			return p, true
 		}
 	}
@@ -122,12 +122,19 @@ func (g *Game) find(ctx context.Context, installDirs []string) (Process, bool) {
 			continue
 		}
 		g.rejected[p.PID] = true
-		if exe, err := g.procs.Exe(ctx, p.PID); err == nil && underAny(exe, installDirs) {
+		if exe, err := g.procs.Exe(ctx, p.PID); err == nil && underAny(exe, installDirs) && g.alive(ctx, p) {
 			delete(g.rejected, p.PID)
 			return p, true
 		}
 	}
 	return Process{}, false
+}
+
+// alive confirms a candidate from the snapshot is a live client, not a zombie
+// the table still lists. It costs one per-pid call, and only for candidates.
+func (g *Game) alive(ctx context.Context, p Process) bool {
+	ok, err := g.procs.Exists(ctx, p.PID, p.Name)
+	return err == nil && ok
 }
 
 // matchName matches a client name. The kernel truncates process names to 15

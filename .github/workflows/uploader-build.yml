@@ -70,6 +70,12 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '1'
         run: go build -o /dev/null ./cmd/uploader
+      - name: Test
+        # Native only: the darwin-only tests run here, not on the Linux job.
+        if: matrix.goarch == 'arm64'
+        env:
+          CGO_ENABLED: '1'
+        run: go test -race -count=1 ./cmd/uploader/...
 
   test:
     name: Test (uploader)
