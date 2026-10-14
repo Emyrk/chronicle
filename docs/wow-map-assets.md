@@ -70,6 +70,31 @@ The Replay Map's "3D map" toggle stands the units on the dungeon's real geometry
 
 `bounds` is the mesh's extent in world coordinates (`minX..maxX` world X, `minY..maxY` world Y) and `zMin`/`zMax` its height range. The frontend places the mesh and projects unit positions from these bounds alone, so an instance needs neither tile artwork nor a rendered layer for the toggle. `frame` names the glTF axis convention and must be `wow-yup-mirrored-x`: Y-up with X mirrored, glTF `(x, y, z) = (-wow_x, wow_z, wow_y)`, the only frame the frontend places. An instance without a `mesh` entry shows no toggle and requests nothing.
 
+### Mesh-only instances
+
+Some dungeons have no in-game map at all (vanilla Ragefire Chasm, map 389), so the original manifest has no `instances[]` entry for them. A `meshes` layer entry whose `mapID` is unknown to the original then creates a *mesh-only* instance, `{ "mapID", "name", "floors": [], "mesh" }`, taking its `name` from the layer entry (required in that case; for an existing instance the original's name wins and the entry's `name` is ignored). The entry may still carry nothing but `mesh` (and `name`); floors, `rendered` or `styled` are rejected, as is any layer other than `meshes` naming an unknown map.
+
+The frontend treats `floors: []` plus a placeable `mesh` as "3D only": the Replay Map opens with the "3D map" switch on (and disabled, there is nothing else to show), the mesh's extent is the ground from the first frame, the floor selector is hidden, and the 2D paths (the multi-encounter route overview and the WebGL-unavailable fallback) show "No map artwork for this instance" instead of tiles. The map gallery lists the instance with a text card. No per-boss artwork calibration applies, since there is no artwork.
+
+```json
+{
+  "mapID": 389,
+  "name": "Ragefire Chasm",
+  "mesh": {
+    "path": "meshes/389.glb",
+    "bounds": { "minX": -416.2582, "maxX": 102.9279, "minY": -108.4728, "maxY": 275.3513 },
+    "zMin": -66.1637,
+    "zMax": 59.4058,
+    "frame": "wow-yup-mirrored-x",
+    "liquid": { "color": "#d66020", "opacity": 0.85 }
+  }
+}
+```
+
+### Liquid colour
+
+The exporter's liquid planes (`liquid_*` nodes) are plain translucent blue. Where the dungeon's liquid is not water, add `liquid` to the mesh entry: `color` is a CSS hex colour (`#rrggbb`) and `opacity` a number in (0, 1]; the frontend sets both on the liquid materials when the mesh loads. Without `liquid` the GLB's own blue shows. The merge rejects any other shape (a named or short colour, an opacity of 0 or above 1, extra fields); the frontend ignores a malformed tint and keeps the mesh.
+
 ### Where the GLB comes from
 
 Meshes are produced outside this repository by the `rendered-maps` pipeline (`render_set.py <slug> glb --glb`), which writes `<slug>-open-top.glb` (the WMO with ceilings culled, Blizzard textures embedded, glTF Y-up, centred) and `height.json` beside it. The frontend zeroes the GLB's centring node translations, so the file is used as exported.
@@ -104,6 +129,22 @@ MAPS_UPLOAD_MODE=meshes SERVER=forever MAPS_DIR=forever/maps R2_PATH=forever/map
 GLBs upload with `Content-Type: model/gltf-binary` and a one-year immutable cache, so a changed mesh needs a new file name (and manifest path), not an overwrite. `MESHES_DIR` overrides the source directory.
 
 For local development, `VITE_DUNGEON_MESH_BASE` (set to `/dungeon-meshes` in `.env.development`) makes the frontend read `<base>/<file>` for the manifest's file name instead of the CDN, so `frontend/chronicle/public/dungeon-meshes/43.glb` serves the Wailing Caverns entry under `pnpm dev` and Storybook.
+
+### Trying a mesh before it is on the CDN (dev manifest overlay)
+
+`VITE_MAP_MANIFEST_OVERLAY` names a URL of a meshes layer in the `manifest.meshes.json` shape that the frontend merges over the fetched map manifest, client-side, with the publisher's rules: `chronicle-wow-map-art-v2`, a product-only `target` matching the manifest, one entry per `mapID` carrying only `mesh` (and `name`); an entry for an existing instance attaches the mesh, one for an unknown `mapID` creates a mesh-only instance. A bad overlay fails the manifest load with the reason, rather than being skipped. It is read only in development builds (`import.meta.env.DEV`); production never looks at it.
+
+`.env.development` sets it to `/dev-manifest/forever.meshes.json`, served from the gitignored `frontend/chronicle/public/dev-manifest/`:
+
+```bash
+cd frontend/chronicle
+mkdir -p public/dungeon-meshes public/dev-manifest
+cp <render>/ragefire-chasm-open-top.glb public/dungeon-meshes/389.glb
+cp ../imagecache/meshes/forever/manifest.meshes.json public/dev-manifest/forever.meshes.json
+HOST=https://forever.chronicleclassic.com pnpm dev
+```
+
+The live page then shows the 3D map for a Ragefire Chasm log and lists the instance under Technical → Maps, with the GLB read from `public/dungeon-meshes/`. Stories seed their manifest directly and do not use the overlay.
 
 ### CORS
 

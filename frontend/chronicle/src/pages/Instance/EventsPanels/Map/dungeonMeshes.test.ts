@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
-import type { WowMapFloorBounds, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
+import type { WowMapFloorBounds, WowMapInstance, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import {
   clampToRadius,
   corsAssetUrl,
+  dungeonMeshLiquid,
   dungeonMeshPlacement,
   dungeonMeshUrl,
   FloorHeightCache,
+  isMeshOnlyInstance,
   placeableDungeonMesh,
 } from "./dungeonMeshes";
 import { mapPointToScene, renderedDungeonMapPoint } from "./mapModel";
@@ -30,6 +32,52 @@ const WORLD_POINTS = [
   { x: 150, y: -300, z: 20 },
   { x: 0, y: 0, z: 0 },
 ];
+
+// Ragefire Chasm as manifest.meshes.json publishes it: a mesh-only instance
+// (vanilla RFC has no in-game dungeon map) whose liquid is lava.
+const RFC_MESH: WowMapMeshInstance = {
+  path: "meshes/389.glb",
+  bounds: { minX: -416.2582, maxX: 102.9279, minY: -108.4728, maxY: 275.3513 },
+  zMin: -66.1637,
+  zMax: 59.4058,
+  frame: "wow-yup-mirrored-x",
+  liquid: { color: "#d66020", opacity: 0.85 },
+};
+const RFC_INSTANCE: WowMapInstance = { mapID: 389, name: "Ragefire Chasm", instanceType: 0, directory: "", floors: [], mesh: RFC_MESH };
+const WC_FLOOR = { floor: 1, width: 1002, height: 668, tileWidth: 256, tileHeight: 256, tiles: [] };
+
+describe("isMeshOnlyInstance", () => {
+  it("is true only for an instance with no artwork and a placeable mesh", () => {
+    expect(isMeshOnlyInstance(RFC_INSTANCE)).toBe(true);
+    expect(isMeshOnlyInstance({ ...RFC_INSTANCE, floors: [WC_FLOOR] })).toBe(false);
+    expect(isMeshOnlyInstance({ ...RFC_INSTANCE, rendered: { path: "render/389.png", width: 2, height: 2, source: "wmo", bounds: RFC_MESH.bounds } })).toBe(false);
+    expect(isMeshOnlyInstance({ ...RFC_INSTANCE, mesh: undefined })).toBe(false);
+    expect(isMeshOnlyInstance({ ...RFC_INSTANCE, mesh: { ...RFC_MESH, frame: "wow-yup" } })).toBe(false);
+  });
+});
+
+describe("dungeonMeshLiquid", () => {
+  it("returns a well-formed tint and null for none or a malformed one", () => {
+    expect(dungeonMeshLiquid(RFC_MESH)).toEqual({ color: "#d66020", opacity: 0.85 });
+    expect(dungeonMeshLiquid({ ...RFC_MESH, liquid: { color: "#D66020", opacity: 1 } })).toEqual({ color: "#D66020", opacity: 1 });
+    expect(dungeonMeshLiquid(WC_MESH)).toBeNull();
+    for (const liquid of [
+      { color: "d66020", opacity: 0.85 },
+      { color: "#d60", opacity: 0.85 },
+      { color: "orange", opacity: 0.85 },
+      { color: "#d66020", opacity: 0 },
+      { color: "#d66020", opacity: 1.5 },
+      { color: "#d66020", opacity: Number.NaN },
+      { color: "#d66020", opacity: "0.85" as unknown as number },
+    ]) {
+      expect(dungeonMeshLiquid({ ...RFC_MESH, liquid }), JSON.stringify(liquid)).toBeNull();
+    }
+  });
+
+  it("does not stop the mesh being placed", () => {
+    expect(placeableDungeonMesh({ ...RFC_MESH, liquid: { color: "orange", opacity: 2 } })).not.toBeNull();
+  });
+});
 
 describe("placeableDungeonMesh", () => {
   it("accepts the published entry", () => {

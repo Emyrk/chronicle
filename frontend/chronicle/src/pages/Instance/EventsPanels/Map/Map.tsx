@@ -2,7 +2,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Focus, Map as MapIcon, Maximize, Users } from "lucide-react";
 import type { PanelDefinition, PanelRenderProps } from "../types";
-import { dungeonMeshUrl } from "./dungeonMeshes";
+import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
 import { MapOverview2D } from "./MapOverview2D";
 import {
@@ -54,16 +54,19 @@ function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
   // load fails) the tiles and their calibration stay.
   const [meshOn, setMeshOn] = useState(readStoredMesh);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
-  const meshWanted = show3D && meshOn;
-  const scene = useMapScene(props, { rawDungeonProjection: meshWanted && meshState === "ready" });
+  const scene = useMapScene(props, { rawDungeonProjection: show3D && meshOn && meshState === "ready" });
   const ready = scene.status === "ready" ? scene : null;
+  // A mesh-only instance (no map artwork) has nothing but the mesh to show:
+  // the switch is on and stays on.
+  const meshOnly = ready?.meshOnly ?? false;
+  const meshWanted = show3D && (meshOn || meshOnly);
   const iconBaseUrl = props.context.instance.iconBaseUrl;
   // The manifest's mesh entry (one object per cached manifest, not rebuilt
   // per render) keys the request: a changed entry re-requests the mesh.
   const mesh = ready?.mesh ?? null;
   const meshUrl = mesh && iconBaseUrl ? dungeonMeshUrl(mesh, iconBaseUrl) : null;
   const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
-    meshWanted && mesh && meshUrl ? { url: meshUrl, bounds: mesh.bounds } : null,
+    meshWanted && mesh && meshUrl ? { url: meshUrl, bounds: mesh.bounds, liquid: dungeonMeshLiquid(mesh) } : null,
   [mesh, meshUrl, meshWanted]);
   const focusCentre = ready?.focusCentre ?? null;
   const fitZoom = ready?.fitByDefault ? ready.autoFit?.zoom ?? null : null;
@@ -135,10 +138,13 @@ function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
           {show3D && meshUrl && (
             <button
               type="button"
-              aria-pressed={meshOn}
+              aria-pressed={meshWanted}
+              disabled={meshOnly}
               onClick={toggleMesh}
-              title="Stand the units on the real dungeon mesh instead of the map tiles"
-              className={`${framingButtonClass} ${meshOn ? "bg-primary/20 text-foreground" : ""}`}
+              title={meshOnly
+                ? "This instance has no map artwork; the real dungeon mesh is all there is to show"
+                : "Stand the units on the real dungeon mesh instead of the map tiles"}
+              className={`${framingButtonClass} ${meshWanted ? "bg-primary/20 text-foreground disabled:opacity-100" : ""}`}
             >
               3D map
               {dungeonMesh && meshState === "loading" && <span className="font-normal text-muted-foreground">loading cave…</span>}
@@ -147,7 +153,10 @@ function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-black/70">
-        {!show3D ? view2D : (
+        {!show3D ? (meshOnly
+          ? <MapMessage title="No map artwork for this instance" detail={`${scene.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
+          : view2D
+        ) : (
           <Suspense fallback={<MapMessage title="Loading 3D view" detail="Fetching the 3D renderer…" />}>
             <MapView3D
               ground={scene.ground}

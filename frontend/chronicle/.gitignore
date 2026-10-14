@@ -28,3 +28,6 @@ storybook-static
 
 # Local dungeon meshes (Blizzard textures, never committed)
 public/dungeon-meshes/
+
+# Local dev-only map manifest overlay (VITE_MAP_MANIFEST_OVERLAY)
+public/dev-manifest/

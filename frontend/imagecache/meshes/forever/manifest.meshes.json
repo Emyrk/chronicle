@@ -18,6 +18,26 @@
         "zMax": 56.4689,
         "frame": "wow-yup-mirrored-x"
       }
+    },
+    {
+      "mapID": 389,
+      "name": "Ragefire Chasm",
+      "mesh": {
+        "path": "meshes/389.glb",
+        "bounds": {
+          "minX": -416.2582,
+          "maxX": 102.9279,
+          "minY": -108.4728,
+          "maxY": 275.3513
+        },
+        "zMin": -66.1637,
+        "zMax": 59.4058,
+        "frame": "wow-yup-mirrored-x",
+        "liquid": {
+          "color": "#d66020",
+          "opacity": 0.85
+        }
+      }
     }
   ]
 }

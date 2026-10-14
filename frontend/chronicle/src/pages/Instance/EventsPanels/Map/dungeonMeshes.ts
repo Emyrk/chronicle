@@ -1,4 +1,10 @@
-import { mapAssetUrl, type WowMapFloorBounds, type WowMapMeshInstance } from "@/pages/Technical/mapGallery";
+import {
+  mapAssetUrl,
+  type WowMapFloorBounds,
+  type WowMapInstance,
+  type WowMapMeshInstance,
+  type WowMapMeshLiquid,
+} from "@/pages/Technical/mapGallery";
 
 /**
  * Real dungeon meshes for the 3D Replay Map: a glTF rendered from the game's
@@ -27,6 +33,29 @@ export function placeableDungeonMesh(mesh: WowMapMeshInstance | undefined): WowM
   const { bounds } = mesh;
   if (!(bounds.maxX > bounds.minX) || !(bounds.maxY > bounds.minY)) return null;
   return mesh;
+}
+
+/**
+ * A mesh-only instance has no map artwork (vanilla Ragefire Chasm has no
+ * in-game dungeon map), only a placeable mesh: the Replay Map has nothing but
+ * the "3D map" to show and the 2D views have no tiles to draw.
+ */
+export function isMeshOnlyInstance(instance: WowMapInstance): boolean {
+  return instance.floors.length === 0 && !instance.rendered && !instance.styled && placeableDungeonMesh(instance.mesh) !== null;
+}
+
+const LIQUID_COLOR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * The entry's liquid tint when it is well-formed (a `#rrggbb` colour and an
+ * opacity in (0, 1]), else null: the GLB's own translucent water then shows,
+ * as it does for an entry without `liquid`.
+ */
+export function dungeonMeshLiquid(mesh: WowMapMeshInstance): WowMapMeshLiquid | null {
+  const liquid = mesh.liquid;
+  if (!liquid || typeof liquid.color !== "string" || !LIQUID_COLOR.test(liquid.color)) return null;
+  if (typeof liquid.opacity !== "number" || !(liquid.opacity > 0) || liquid.opacity > 1) return null;
+  return liquid;
 }
 
 function stripTrailingSlash(url: string): string {
