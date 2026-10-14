@@ -51,9 +51,9 @@ func testSpellDB(t *testing.T) gamedb.GameDB {
 }
 
 // testCase parses line and asserts result matches expected message
-func testCase[T messages.Message](t *testing.T, line string, expected T) {
+func testCase[T messages.Message](t *testing.T, wowDB gamedb.GameDB, line string, expected T) {
 	t.Helper()
-	testCaseWithDB[T](t, line, expected, testSpellDB(t))
+	testCaseWithDB(t, line, expected, wowDB)
 }
 
 // testCaseWithDB parses line with a GameDB and asserts result matches expected
@@ -94,10 +94,12 @@ func testCaseWithDB[T messages.Message](t *testing.T, line string, expected T, w
 func TestParserMessages(t *testing.T) {
 	t.Parallel()
 
+	wowDB := testSpellDB(t)
+
 	t.Run("Death", func(t *testing.T) {
 		t.Parallel()
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1771959313535|DEATH|0xF130002D9900DE15",
 			&messages.Slain{
 				MessageBase: messages.Base(time.UnixMilli(1771959313535)),
@@ -111,7 +113,7 @@ func TestParserMessages(t *testing.T) {
 		t.Parallel()
 		ts := time.Date(2026, 2, 23, 18, 17, 5, 0, time.UTC)
 
-		testCase(t,
+		testCase(t, wowDB,
 			"0|HEADER|0x0000000000432A74|Nordanaar|Ragefire Chasm|0.5|1.5||1771083771|1.18.0|7234|Dec 19 2025|23.02.26 19:17:05|23.02.26 18:17:05|200",
 			&messages.Realm{
 				MessageBase: messages.Base(ts),
@@ -143,7 +145,7 @@ func TestParserMessages(t *testing.T) {
 				AuraCapStatus:   2,
 				EffectMiscValue: 1,
 			},
-			testSpellDB(t),
+			wowDB,
 		)
 
 		testCaseWithDB(t,
@@ -158,14 +160,14 @@ func TestParserMessages(t *testing.T) {
 				DurationMS:     20000,
 				AuraCapStatus:  0,
 			},
-			testSpellDB(t),
+			wowDB,
 		)
 	})
 
 	t.Run("SwingMiss", func(t *testing.T) {
 		t.Parallel()
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1771564197000|SWING|0x000000000001C7AC|0xF130002C3800949C|194|2|1|1|0|0|0   ",
 			&messages.Damage{
 				MessageBase: messages.Base(time.UnixMilli(1771564197000)),
@@ -183,7 +185,7 @@ func TestParserMessages(t *testing.T) {
 	t.Run("SwingCrit", func(t *testing.T) {
 		t.Parallel()
 		// SwingHitInfo=130 (HITINFO_AFFECTS_VICTIM | HITINFO_CRITICALHIT) + VictimState=1 = Crit
-		testCase(t,
+		testCase(t, wowDB,
 			"1771542038|SWING|0xF130002C3600BE05|0x000000000001C80A|100|130|1|0|0|0|0",
 			&messages.Damage{
 				MessageBase: messages.Base(time.UnixMilli(1771542038)),
@@ -202,7 +204,7 @@ func TestParserMessages(t *testing.T) {
 		t.Parallel()
 
 		// Format: timestamp|UNIT_INFO|guid|isPlayer|name|canCooperate|owner|buffs|level|challenges|maxHealth
-		testCase(t,
+		testCase(t, wowDB,
 			"1771563953000|UNIT_INFO|0x000000000001C80A|1|Priests|1|||60||3117",
 			&messages.Unit{
 				MessageBase: messages.Base(time.UnixMilli(1771563953000)),
@@ -225,7 +227,7 @@ func TestParserMessages(t *testing.T) {
 	t.Run("ZoneInfoEmptyInstanceID", func(t *testing.T) {
 		t.Parallel()
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1778208220441|ZONE_INFO|Tower of Karazhan||1|raid|0",
 			&messages.Zone{
 				MessageBase: messages.Base(time.UnixMilli(1778208220441)),
@@ -244,7 +246,7 @@ func TestParserMessages(t *testing.T) {
 	t.Run("Spell Go", func(t *testing.T) {
 		t.Parallel()
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1771770885937|SPELL_GO|0|15237|0x000000000001C80A|0x0000000000000000|256|0|1",
 			&messages.SpellGo{
 				MessageBase:      messages.Base(time.UnixMilli(1771770885937)),
@@ -263,7 +265,7 @@ func TestParserMessages(t *testing.T) {
 	t.Run("Spell Fail", func(t *testing.T) {
 		t.Parallel()
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1771770885937|SPELL_FAIL|0x000000000001C80A|15237",
 			&messages.SpellFail{
 				MessageBase:    messages.Base(time.UnixMilli(1771770885937)),
@@ -273,7 +275,7 @@ func TestParserMessages(t *testing.T) {
 			},
 		)
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1771770885937|SPELL_FAIL|0x000000000001C80A|15237|true",
 			&messages.SpellFail{
 				MessageBase:    messages.Base(time.UnixMilli(1771770885937)),
@@ -283,18 +285,18 @@ func TestParserMessages(t *testing.T) {
 			},
 		)
 
-		testCase[*messages.SpellFail](t,
+		testCase[*messages.SpellFail](t, wowDB,
 			"1771770885937|SPELL_FAIL|0x000000000001C80A|15237|false",
 			nil,
 		)
-		testCase[*messages.SpellFail](t,
+		testCase[*messages.SpellFail](t, wowDB,
 			"1771770885937|SPELL_FAIL|15237|false|35",
 			nil,
 		)
 	})
 
 	t.Run("Loot", func(t *testing.T) {
-		testCase(t,
+		testCase(t, wowDB,
 			"1775358110340|LOOT|Cielcin||cffffffff|Hitem:61760:0:0:0|h[Burnt Copy of \"Vorgendor\"]|h|r\n",
 			&messages.Loot{
 				MessageBase:  messages.Base(time.UnixMilli(1775358110340)),
@@ -306,7 +308,7 @@ func TestParserMessages(t *testing.T) {
 			},
 		)
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1775355374273|LOOT|Defen||cffffffff|Hitem:14047:0:0:0|h[Runecloth]|h|rx3",
 			&messages.Loot{
 				MessageBase:  messages.Base(time.UnixMilli(1775355374273)),
@@ -317,7 +319,7 @@ func TestParserMessages(t *testing.T) {
 				Quantity:     3,
 			})
 
-		testCase(t,
+		testCase(t, wowDB,
 			"1775356811498|LOOT_TRADE|Jimmythehand trades item Bloodfang Spaulders to Eithinis.",
 			&messages.LootTrade{
 				MessageBase:    messages.Base(time.UnixMilli(1775356811498)),
@@ -330,7 +332,7 @@ func TestParserMessages(t *testing.T) {
 	//t.Run("MissPeriodicAoE", func(t *testing.T) {
 	//	t.Parallel()
 	//
-	//	testCase(t,
+	//	testCase(t, wowDB,
 	//		"1775497576300|MISS|0xF1300030B40BA62E|0x00000000005DCB3F|22275|2",
 	//		&messages.Damage{
 	//			MessageBase:     messages.Base(time.UnixMilli(1775497574472)),
@@ -353,7 +355,7 @@ func TestParserMessages(t *testing.T) {
 
 		// 1083 damage dealt, 1082 resisted → ~50% resist
 		// Format: ts|SPELL_DMG|target|caster|spellID|amount|blocked,absorbed,resisted|hitInfo|school|effects
-		testCase(t,
+		testCase(t, wowDB,
 			"1778212906931|SPELL_DMG|0x0000000000099515|0xF13000F1FF276A34|51099|1083|0,0,1082|0|6|2,0,0,0",
 			&messages.Damage{
 				MessageBase: messages.Base(time.UnixMilli(1778212906931)),
