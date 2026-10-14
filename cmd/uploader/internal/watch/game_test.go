@@ -52,7 +52,7 @@ func TestGameEnumeratesOnlyWithoutKnownPid(t *testing.T) {
 		require.True(t, g.Running(ctx, nil))
 	}
 	require.Equal(t, 1, fp.lists, "a live pid is polled, not enumerated")
-	require.Equal(t, 5, fp.exists)
+	require.Equal(t, 6, fp.exists, "one confirmation of the candidate, then one check per poll")
 
 	fp.table = fp.table[:1] // the game dies
 	require.True(t, g.Running(ctx, nil), "first miss is debounced")
@@ -85,7 +85,7 @@ func TestGameMatchesTruncatedClientName(t *testing.T) {
 	require.True(t, g.Running(ctx, nil))
 	require.True(t, g.Running(ctx, nil))
 	require.Equal(t, 1, fp.lists, "the second poll is by pid, under the truncated name")
-	require.Equal(t, 1, fp.exists)
+	require.Equal(t, 2, fp.exists, "one confirmation of the candidate, then one check per poll")
 }
 
 // A single missed poll must not look like WoW exiting.
