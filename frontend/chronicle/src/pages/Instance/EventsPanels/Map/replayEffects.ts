@@ -502,6 +502,42 @@ export function deriveCombatText(
 export const CAST_ICON_MS = 900;
 /** Icons shown side by side above one caster, at most. */
 export const MAX_CAST_ICONS_PER_UNIT = 2;
+/** Groups up to this size get cast icons over every player by default. */
+export const SMALL_GROUP_MAX_PLAYERS = 10;
+export type CastIconMode = "off" | "selected" | "all";
+
+/**
+ * Casters that get a cast icon: bosses plus the players the mode picks.
+ * "all" is every player; "selected" is the selection (none selected = bosses
+ * only); "off" shows nothing.
+ */
+export function castIconGuidSet(
+  mode: CastIconMode,
+  players: readonly string[],
+  selected: ReadonlySet<string> | null,
+  bosses: ReadonlySet<string> | null,
+): Set<string> | null {
+  if (mode === "off") return null;
+  const out = new Set<string>(bosses ?? []);
+  const casters = mode === "all" ? players : selected ?? [];
+  for (const guid of casters) out.add(guid);
+  return out.size > 0 ? out : null;
+}
+
+/**
+ * The stored "selected" mode widens to every player when nothing is selected
+ * and the group is small (a dungeon); raids keep selected + bosses.
+ */
+export function effectiveCastIconGuids(
+  mode: CastIconMode,
+  players: readonly string[],
+  selected: ReadonlySet<string> | null,
+  bosses: ReadonlySet<string> | null,
+): Set<string> | null {
+  const widen = mode === "selected" && !selected && players.length <= SMALL_GROUP_MAX_PLAYERS;
+  return castIconGuidSet(widen ? "all" : mode, players, selected, bosses);
+}
+
 /** Auto attack, Auto Shot and wand Shoot: repeating swings, not casts. */
 export const BASIC_ATTACK_SPELL_IDS: ReadonlySet<number> = new Set([6603, 75, 5019]);
 // Exact (trimmed, lowercased) names only: "Attack Power" must not match.
