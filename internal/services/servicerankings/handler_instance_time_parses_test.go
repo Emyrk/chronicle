@@ -138,7 +138,7 @@ func TestHandleInstanceTimeParsesStrictTenantCohort(t *testing.T) {
 	instanceA := insertRun(realmA, 60*time.Minute)
 	insertRun(realmB, 90*time.Minute)
 	insertRun(rootRealm, 120*time.Minute)
-	runTimeParseWorker(t, ctx, store, tenantA, start.Add(24*time.Hour), 0)
+	runTimeParseWorker(t, ctx, store, tenantA)
 
 	resp, body := callTimeParsesWithContext(t, servicetenant.WithTenantID(ctx, tenantA), store,
 		instanceA.String(), "?timeframe=current&period=all")

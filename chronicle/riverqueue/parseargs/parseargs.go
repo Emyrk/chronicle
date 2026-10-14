@@ -37,9 +37,6 @@ type ArgsComputeTimeParseScores struct {
 	InstanceID uuid.UUID `json:"instance_id"`
 	TenantID   uuid.UUID `json:"tenant_id"`
 	Force      bool      `json:"force,omitempty"`
-	// CutoffDate optionally locks scoring to YYYY-MM-DD at 00:00 UTC.
-	// Empty uses the computation day's UTC boundary.
-	CutoffDate string `json:"cutoff_date,omitempty"`
 }
 
 func (ArgsComputeTimeParseScores) Kind() string { return KindComputeTimeParseScores }

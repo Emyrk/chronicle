@@ -48,6 +48,27 @@ export interface AdminActiveCustomPanelsResponse {
     readonly installations: readonly AdminActiveCustomPanelInstallation[];
 }
 
+// From chroniclesdk/time_parses.go
+/**
+ * AdminBackfillTimeParseScoresRequest configures one bounded historical score dispatcher job.
+ */
+export interface AdminBackfillTimeParseScoresRequest {
+    readonly tenant_id?: string;
+    readonly started_after?: string;
+    readonly started_before?: string;
+    readonly batch_size?: number;
+    readonly force?: boolean;
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * AdminBackfillTimeParseScoresResponse identifies the enqueued dispatcher job.
+ */
+export interface AdminBackfillTimeParseScoresResponse {
+    readonly job_id: number;
+    readonly job_state: string;
+}
+
 // From chroniclesdk/user.go
 export interface AdminBulkDeleteResponse {
     readonly requested: number;
@@ -2127,7 +2148,7 @@ export interface InstanceReport {
 
 // From chroniclesdk/time_parses.go
 /**
- * InstanceTimeParsesResponse contains live time-based parse scores for a
+ * InstanceTimeParsesResponse contains locked time-based parse scores for a
  * specific instance, bounded by the reported UTC cutoff and lookback window.
  */
 export interface InstanceTimeParsesResponse {
