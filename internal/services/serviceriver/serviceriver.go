@@ -187,9 +187,6 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.SummaryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.SummaryDispatchWorker)
 	riverqueue.AddWorker(q, rank.SummaryTenantWorker)
-	rank.SnapshotDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.SnapshotDispatchWorker)
-	riverqueue.AddWorker(q, rank.SnapshotTenantWorker)
 	riverqueue.AddWorker(q, rank.ComputeTimeParseScoresWorker)
 	rank.BackfillTimeParseScoresWorker.Queue = q
 	riverqueue.AddWorker(q, rank.BackfillTimeParseScoresWorker)

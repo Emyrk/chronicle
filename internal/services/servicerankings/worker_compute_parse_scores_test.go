@@ -45,7 +45,7 @@ func newSingleConnectionPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func TestWorkerComputeParseScores_NoSnapshot(t *testing.T) {
+func TestWorkerComputeParseScores_EmptyCohort(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
@@ -60,7 +60,7 @@ func TestWorkerComputeParseScores_NoSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	conn.Release()
 
-	// No snapshot exists. Worker should handle gracefully.
+	// An empty membership cohort still produces a durable result contract.
 	worker := &servicerankings.WorkerComputeParseScores{
 		Store:  store,
 		Logger: slog.Default(),
@@ -87,7 +87,7 @@ func TestWorkerComputeParseScores_NoSnapshot(t *testing.T) {
 	assert.False(t, receipts[0].SnapshotID.Valid)
 }
 
-func TestWorkerComputeParseScores_AttemptThreeRecordsMissingSnapshotReason(t *testing.T) {
+func TestWorkerComputeParseScores_DoesNotScheduleLegacyRetries(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
@@ -124,7 +124,7 @@ func TestWorkerComputeParseScores_AttemptThreeRecordsMissingSnapshotReason(t *te
 	assert.False(t, receipts[0].SnapshotID.Valid)
 }
 
-func TestWorkerComputeParseScores_OldInstanceDoesNotRetryMissingSnapshot(t *testing.T) {
+func TestWorkerComputeParseScores_OldInstanceDoesNotScheduleLegacyRetries(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
@@ -157,10 +157,10 @@ func TestWorkerComputeParseScores_OldInstanceDoesNotRetryMissingSnapshot(t *test
 		WHERE kind = $1 AND args->>'instance_id' = $2`,
 		parseargs.KindComputeParseScores, f.instanceID.String()).Scan(&count)
 	require.NoError(t, err)
-	assert.Zero(t, count, "old instances cannot gain an eligible historical snapshot without a backfill")
+	assert.Zero(t, count, "windowed scoring does not schedule legacy snapshot retries")
 }
 
-func TestWorkerComputeParseScores_WithSnapshot(t *testing.T) {
+func TestWorkerComputeParseScores_WithMemberships(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
@@ -200,7 +200,7 @@ func TestWorkerComputeParseScores_WithSnapshot(t *testing.T) {
 			float64(500+i*100), float64(50+i*20), now.Add(-4*time.Hour))
 	}
 
-	// Populate snapshot from rankings.
+	// Populate scoring memberships from rankings.
 	refreshScoringMemberships(t, ctx, store, f.logGroupID)
 
 	// Run the worker.
@@ -547,258 +547,6 @@ func TestComputeCharacterScore(t *testing.T) {
 	}
 }
 
-func TestListInstancesMissingParseReceipt(t *testing.T) {
-	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitMedium)
-
-	pool, _ := dbtestutil.NewPGXPool(t)
-	store := database.New(pool)
-
-	f := setupScoringFixture(t, pool, store)
-
-	conn, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-	require.NoError(t, err)
-	conn.Release()
-
-	snapshot := createPublishedSnapshot(t, ctx, store)
-	now := time.Now()
-
-	// Insert a ranking row for the instance.
-	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
-		1000.0, 0, now.Add(-time.Hour))
-
-	// Instance should appear as missing receipt.
-	missing, err := store.ListInstancesMissingParseReceipt(ctx, database.ListInstancesMissingParseReceiptParams{
-		SnapshotID:    snapshot.ID,
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(servicerankings.QueryVersion),
-		MaxRows:       100,
-	})
-	require.NoError(t, err)
-	assert.Len(t, missing, 1)
-	assert.Equal(t, f.instanceID, missing[0].InstanceID)
-
-	// Create receipt for that snapshot.
-	_, err = store.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
-		TenantID:      uuid.Nil,
-		InstanceID:    f.instanceID,
-		SnapshotID:    snapshot.ID,
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(servicerankings.QueryVersion),
-		LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
-		SourceCount:   1,
-		ResultCount:   1,
-	})
-	require.NoError(t, err)
-
-	// Should no longer be missing.
-	missing, err = store.ListInstancesMissingParseReceipt(ctx, database.ListInstancesMissingParseReceiptParams{
-		SnapshotID:    snapshot.ID,
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(servicerankings.QueryVersion),
-		MaxRows:       100,
-	})
-	require.NoError(t, err)
-	assert.Empty(t, missing)
-}
-
-func TestListInstancesMissingParseReceiptWithSnapshot_PerInstanceResolution(t *testing.T) {
-	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitMedium)
-
-	pool, _ := dbtestutil.NewPGXPool(t)
-	store := database.New(pool)
-
-	f := setupScoringFixture(t, pool, store)
-
-	conn, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-	require.NoError(t, err)
-	conn.Release()
-
-	snapshot := createPublishedSnapshot(t, ctx, store)
-	now := time.Now()
-
-	// Insert a ranking row for the instance.
-	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
-		1000.0, 0, now.Add(-time.Hour))
-
-	// LATERAL join should resolve snapshot per instance.
-	missing, err := store.ListInstancesMissingParseReceiptWithSnapshot(ctx, database.ListInstancesMissingParseReceiptWithSnapshotParams{
-		TenantID:      uuid.Nil,
-		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(servicerankings.QueryVersion),
-		RepairSince:   database.Timestamptz(now.AddDate(0, 0, -servicerankings.RepairLookbackDays)),
-		MaxRows:       100,
-	})
-	require.NoError(t, err)
-	assert.Len(t, missing, 1)
-	assert.Equal(t, f.instanceID, missing[0].InstanceID)
-	assert.Equal(t, snapshot.ID, missing[0].SnapshotID)
-}
-
-func TestListInstancesMissingParseReceiptWithSnapshot_NoEligibleSnapshot(t *testing.T) {
-	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitMedium)
-
-	pool, _ := dbtestutil.NewPGXPool(t)
-	store := database.New(pool)
-
-	f := setupScoringFixture(t, pool, store)
-
-	conn, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-	require.NoError(t, err)
-	conn.Release()
-
-	now := time.Now()
-	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
-		1000.0, 0, now.Add(-time.Hour))
-
-	// No snapshot exists at all — LATERAL join excludes the instance.
-	missing, err := store.ListInstancesMissingParseReceiptWithSnapshot(ctx, database.ListInstancesMissingParseReceiptWithSnapshotParams{
-		TenantID:      uuid.Nil,
-		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(servicerankings.QueryVersion),
-		RepairSince:   database.Timestamptz(now.AddDate(0, 0, -servicerankings.RepairLookbackDays)),
-		MaxRows:       100,
-	})
-	require.NoError(t, err)
-	assert.Empty(t, missing, "no snapshot → instance must not be returned")
-}
-
-func TestListInstancesMissingParseReceiptWithSnapshot_IgnoresOldInstances(t *testing.T) {
-	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitMedium)
-
-	pool, _ := dbtestutil.NewPGXPool(t)
-	store := database.New(pool)
-	f := setupScoringFixture(t, pool, store)
-
-	conn, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-	require.NoError(t, err)
-
-	now := time.Now()
-	oldStart := now.AddDate(0, 0, -(servicerankings.RepairLookbackDays + 1))
-	_, err = conn.Exec(ctx, "UPDATE log_instances SET start_time = $2 WHERE id = $1", f.instanceID, oldStart)
-	require.NoError(t, err)
-	conn.Release()
-
-	snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-		TenantID:      uuid.Nil,
-		Cutoff:        database.Timestamptz(oldStart.Add(-time.Hour)),
-		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-		CohortMode:    string(parsepolicy.CohortModeSpec),
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(servicerankings.QueryVersion),
-	})
-	require.NoError(t, err)
-	_, err = store.PublishRankingSnapshot(ctx, snapshot.ID)
-	require.NoError(t, err)
-
-	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
-		1000.0, 0, oldStart.Add(time.Hour))
-
-	missing, err := store.ListInstancesMissingParseReceiptWithSnapshot(ctx, database.ListInstancesMissingParseReceiptWithSnapshotParams{
-		TenantID:      uuid.Nil,
-		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(servicerankings.QueryVersion),
-		RepairSince:   database.Timestamptz(now.AddDate(0, 0, -servicerankings.RepairLookbackDays)),
-		MaxRows:       100,
-	})
-	require.NoError(t, err)
-	assert.Empty(t, missing, "instances older than the 30-day repair window must be ignored")
-}
-
-func TestWorkerComputeParseScores_IncompatibleSnapshotFallback(t *testing.T) {
-	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitMedium)
-
-	pool, _ := dbtestutil.NewPGXPool(t)
-	store := database.New(pool)
-
-	f := setupScoringFixture(t, pool, store)
-
-	conn, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-	require.NoError(t, err)
-	conn.Release()
-
-	now := time.Now()
-
-	// Create a compatible snapshot (current versions).
-
-	// Create an incompatible newer snapshot (higher query version) by
-	// directly inserting via SQL to bypass normal helpers.
-	incompatID := uuid.New()
-	incompatConn, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-	_, err = incompatConn.Exec(ctx,
-		`INSERT INTO ranking_snapshots (id, tenant_id, cutoff, lookback_days, cohort_mode,
-			policy_version, query_version, status, published_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, 'published', now())`,
-		incompatID, uuid.Nil,
-		now.Add(-100*time.Minute),
-		parsepolicy.DefaultLookbackDays,
-		string(parsepolicy.CohortModeSpec),
-		parsepolicy.PolicyVersion,
-		servicerankings.QueryVersion+99, // incompatible query version
-	)
-	incompatConn.Release()
-	require.NoError(t, err)
-
-	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
-		1000.0, 0, now.Add(-time.Hour))
-
-	// Insert cohort.
-	for i := range 10 {
-		otherInstID := uuid.New()
-		otherConn, acqErr := pool.Acquire(ctx)
-		require.NoError(t, acqErr)
-		_, err = otherConn.Exec(ctx,
-			`INSERT INTO log_instances (id, realm_id, log_group_id, name, capabilities, start_time)
-			 SELECT $1, $2, (SELECT id FROM wow_log_groups LIMIT 1), $3, '{}', $4`,
-			otherInstID, f.realmID, "Molten Core", now.Add(-5*time.Hour))
-		otherConn.Release()
-		require.NoError(t, err)
-		insertRanking(t, ctx, store, otherInstID, f.realmID,
-			fmt.Sprintf("Player-1234-%04d", i+10),
-			fmt.Sprintf("CohortPlayer%d", i),
-			float64(500+i*100), 0, now.Add(-4*time.Hour))
-	}
-	refreshScoringMemberships(t, ctx, store, f.logGroupID)
-
-	// Worker should skip the incompatible snapshot and use the compatible one.
-	worker := &servicerankings.WorkerComputeParseScores{
-		Store:  store,
-		Logger: slog.Default(),
-	}
-	job := &river.Job[parseargs.ArgsComputeParseScores]{
-		JobRow: nil,
-		Args: parseargs.ArgsComputeParseScores{
-			InstanceID: f.instanceID,
-			TenantID:   uuid.Nil,
-		},
-	}
-	err = worker.Work(ctx, job)
-	require.NoError(t, err)
-
-	// Receipt should be for the compatible snapshot.
-	receipt, err := store.GetAnyParseScoreReceiptForTenantInstance(ctx, database.GetAnyParseScoreReceiptForTenantInstanceParams{TenantID: uuid.Nil, InstanceID: f.instanceID})
-	require.NoError(t, err)
-	assert.False(t, receipt.SnapshotID.Valid, "snapshot versions do not affect windowed scoring")
-}
-
 func TestWorkerComputeParseScores_TenantIsolation(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
@@ -814,7 +562,7 @@ func TestWorkerComputeParseScores_TenantIsolation(t *testing.T) {
 	require.NoError(t, err)
 	conn.Release()
 
-	snapshot := createPublishedSnapshot(t, ctx, store)
+	legacySnapshotID := uuid.New()
 	now := time.Now()
 
 	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
@@ -844,7 +592,7 @@ func TestWorkerComputeParseScores_TenantIsolation(t *testing.T) {
 		TenantID:      otherTenantID,
 		InstanceID:    f.instanceID,
 		RunID:         f.instanceID,
-		SnapshotID:    uuid.NullUUID{UUID: snapshot.ID, Valid: true},
+		SnapshotID:    uuid.NullUUID{UUID: legacySnapshotID, Valid: true},
 		EncounterName: "Ragnaros",
 		PlayerGuid:    "Player-1234-9999",
 		Metric:        "dps",
@@ -886,99 +634,6 @@ func TestWorkerComputeParseScores_TenantIsolation(t *testing.T) {
 	assert.True(t, hasOtherTenant, "other tenant's results must not be deleted by tenant uuid.Nil recompute")
 }
 
-func TestSnapshotDeletionPreservesResultsAndDeletesReceipt(t *testing.T) {
-	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitMedium)
-
-	pool, _ := dbtestutil.NewPGXPool(t)
-	store := database.New(pool)
-
-	f := setupScoringFixture(t, pool, store)
-
-	conn, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-	require.NoError(t, err)
-	conn.Release()
-
-	snapshot := createPublishedSnapshot(t, ctx, store)
-
-	// Insert a result and receipt.
-	err = store.InsertParseScoreResult(ctx, database.InsertParseScoreResultParams{
-		TenantID:      uuid.Nil,
-		InstanceID:    f.instanceID,
-		RunID:         f.instanceID,
-		SnapshotID:    uuid.NullUUID{UUID: snapshot.ID, Valid: true},
-		EncounterName: "Ragnaros",
-		PlayerGuid:    "Player-1234-0001",
-		Metric:        "dps",
-		MetricValue:   1000,
-		PreciseScore:  80,
-		DisplayScore:  80,
-		Rank:          1,
-		SampleSize:    10,
-		Status:        "ok",
-		InstanceName:  "Molten Core",
-	})
-	require.NoError(t, err)
-
-	_, err = store.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
-		TenantID:      uuid.Nil,
-		InstanceID:    f.instanceID,
-		SnapshotID:    snapshot.ID,
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(servicerankings.QueryVersion),
-		LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
-		SourceCount:   1,
-		ResultCount:   1,
-	})
-	require.NoError(t, err)
-
-	// Delete the snapshot. Results retain their historical score with a NULL
-	// snapshot reference, while the receipt is removed to make recent data repairable.
-	conn2, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-	_, err = conn2.Exec(ctx, "DELETE FROM ranking_snapshots WHERE id = $1", snapshot.ID)
-	conn2.Release()
-	require.NoError(t, err)
-
-	// Results should remain, but no longer reference the deleted snapshot.
-	results, err := store.GetParseScoreResultsForInstance(ctx, f.instanceID)
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	assert.False(t, results[0].SnapshotID.Valid)
-
-	// Receipts are gone, but orphaned legacy results make the instance ineligible
-	// for repair and prevent the worker from rewriting historical scores.
-	receipts, err := store.GetParseScoreReceiptForInstance(ctx, f.instanceID)
-	require.NoError(t, err)
-	assert.Empty(t, receipts)
-
-	missing, err := store.ListInstancesMissingParseReceiptWindowed(ctx, database.ListInstancesMissingParseReceiptWindowedParams{
-		TenantID: uuid.Nil, RepairSince: database.Timestamptz(time.Now().AddDate(0, 0, -servicerankings.RepairLookbackDays)), MaxRows: 100,
-	})
-	require.NoError(t, err)
-	assert.Empty(t, missing)
-
-	worker := &servicerankings.WorkerComputeParseScores{Store: store, Logger: slog.Default()}
-	require.NoError(t, worker.Work(ctx, &river.Job[parseargs.ArgsComputeParseScores]{Args: parseargs.ArgsComputeParseScores{
-		InstanceID: f.instanceID, TenantID: uuid.Nil,
-	}}))
-
-	results, err = store.GetParseScoreResultsForInstance(ctx, f.instanceID)
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	assert.Equal(t, 80.0, results[0].PreciseScore)
-	assert.False(t, results[0].SnapshotID.Valid)
-	receipts, err = store.GetParseScoreReceiptForInstance(ctx, f.instanceID)
-	require.NoError(t, err)
-	assert.Empty(t, receipts)
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 func TestWorkerComputeParseScores_PreservesLegacyReceipt(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
@@ -992,12 +647,17 @@ func TestWorkerComputeParseScores_PreservesLegacyReceipt(t *testing.T) {
 	require.NoError(t, err)
 	conn.Release()
 
-	snapshot := createPublishedSnapshot(t, ctx, store)
-	legacy, err := store.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
-		TenantID: uuid.Nil, InstanceID: fixture.instanceID, SnapshotID: snapshot.ID,
-		PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: int16(servicerankings.QueryVersion - 1),
-		LookbackDays: int16(parsepolicy.DefaultLookbackDays), SourceCount: 1, ResultCount: 1,
-	})
+	legacyID := uuid.New()
+	legacySnapshotID := uuid.New()
+	cutoff := time.Now().Add(-2 * time.Hour)
+	_, err = pool.Exec(ctx, `
+		INSERT INTO parse_score_receipts (
+			id, tenant_id, instance_id, snapshot_id, policy_version, query_version,
+			lookback_days, source_count, result_count, cutoff, window_start, cohort_mode
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, 1, $8, $9, $10)`,
+		legacyID, uuid.Nil, fixture.instanceID, legacySnapshotID, parsepolicy.PolicyVersion,
+		servicerankings.QueryVersion-1, parsepolicy.DefaultLookbackDays, cutoff,
+		cutoff.AddDate(0, 0, -int(parsepolicy.DefaultLookbackDays)), string(parsepolicy.CohortModeSpec))
 	require.NoError(t, err)
 
 	worker := &servicerankings.WorkerComputeParseScores{Store: store, Logger: slog.Default()}
@@ -1008,7 +668,7 @@ func TestWorkerComputeParseScores_PreservesLegacyReceipt(t *testing.T) {
 	receipts, err := store.GetParseScoreReceiptForInstance(ctx, fixture.instanceID)
 	require.NoError(t, err)
 	require.Len(t, receipts, 1)
-	assert.Equal(t, legacy.ID, receipts[0].ID, "cutover must not replace a legacy successful receipt")
+	assert.Equal(t, legacyID, receipts[0].ID, "cutover must not replace a legacy successful receipt")
 }
 
 func TestWorkerComputeParseScores_WindowedMemberships(t *testing.T) {
@@ -1215,24 +875,6 @@ func setupParseScoreQueueForTest(t *testing.T, pool *pgxpool.Pool) *riverqueue.Q
 	require.NoError(t, q.Start(ctx))
 	t.Cleanup(func() { _ = q.Stop(context.Background()) })
 	return q
-}
-
-func createPublishedSnapshot(t *testing.T, ctx context.Context, store database.Store) database.RankingSnapshot {
-	t.Helper()
-	cutoff := time.Now().Add(-150 * time.Minute)
-	snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-		TenantID:       uuid.Nil,
-		Cutoff:         pgtype.Timestamptz{Time: cutoff, Valid: true},
-		LookbackDays:   int32(parsepolicy.DefaultLookbackDays),
-		CohortMode:     string(parsepolicy.CohortModeSpec),
-		PolicyVersion:  int16(parsepolicy.PolicyVersion),
-		QueryVersion:   int16(servicerankings.QueryVersion),
-		SourceRowCount: 0,
-	})
-	require.NoError(t, err)
-	snapshot, err = store.PublishRankingSnapshot(ctx, snapshot.ID)
-	require.NoError(t, err)
-	return snapshot
 }
 
 func insertRanking(t *testing.T, ctx context.Context, store database.Store,

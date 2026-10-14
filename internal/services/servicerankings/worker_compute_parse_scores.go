@@ -198,7 +198,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 			PolicyVersion: int16(parsepolicy.PolicyVersion), QueryVersion: int16(QueryVersion),
 			LookbackDays: int16(parsepolicy.DefaultLookbackDays), SourceCount: int32(sourceCount),
 			ResultCount: int32(scored), Cutoff: cutoffDB, WindowStart: windowStartDB,
-			CohortMode: pgtype.Text{String: string(cohortMode), Valid: true},
+			CohortMode: string(cohortMode),
 		}); err != nil {
 			return fmt.Errorf("insert windowed parse score receipt: %w", err)
 		}

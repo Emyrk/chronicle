@@ -39,8 +39,8 @@ type Tenant struct {
 // ParseConfig holds tenant-level parse scoring settings, stored as JSONB.
 type ParseConfig struct {
 	// CohortMode controls the parse scoring mode: "spec" (default), "class",
-	// or "disabled". When disabled, no snapshots are created and the instance
-	// parses endpoint returns available=false.
+	// or "disabled". When disabled, the instance parses endpoint returns
+	// available=false.
 	CohortMode string `json:"cohort_mode,omitempty"`
 	// DefaultLookbackDays is the default lookback window (60 = last 60 days; 0 = all-time).
 	DefaultLookbackDays int `json:"default_lookback_days,omitempty"`
@@ -48,8 +48,6 @@ type ParseConfig struct {
 	AllowedLookbackDays []int `json:"allowed_lookback_days,omitempty"`
 	// EnabledMetrics lists active metric names (e.g. "dps", "hps").
 	EnabledMetrics []string `json:"enabled_metrics,omitempty"`
-	// SnapshotCadence is the publication interval description (e.g. "6h", "daily").
-	SnapshotCadence string `json:"snapshot_cadence,omitempty"`
 }
 
 // Branding holds the visual identity for a tenant subdomain or the primary domain.

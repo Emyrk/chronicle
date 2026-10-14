@@ -22,13 +22,6 @@ type sqlcQuerier interface {
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
-	// Populate a pending snapshot's members from eligible encounter_dps_rankings rows.
-	// Boss kills only (encounter_id IS NOT NULL), deduplicated by duplicate group
-	// using one representative instance per duplicate group, bounded by the snapshot's cutoff and optional window_start.
-	// Note: parser/addon version requirement values are stored on the snapshot for
-	// documentation; log_instances does not carry numeric version columns yet, so
-	// version filtering is the caller's responsibility if needed.
-	BatchInsertSnapshotMembersFromRankings(ctx context.Context, snapshotID uuid.UUID) error
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -53,8 +46,6 @@ type sqlcQuerier interface {
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
-	// Return the number of members in a snapshot.
-	CountSnapshotMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserGearLists(ctx context.Context, arg CountUserGearListsParams) (int64, error)
 	CountUserGearProgressions(ctx context.Context, arg CountUserGearProgressionsParams) (int64, error)
@@ -120,14 +111,6 @@ type sqlcQuerier interface {
 	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
 	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
 	DeleteRaidCompositionByID(ctx context.Context, id uuid.UUID) (int64, error)
-	// Delete a snapshot by ID. Members are cascade-deleted via the FK
-	// ranking_snapshot_members.snapshot_id → ranking_snapshots.id ON DELETE CASCADE
-	// (migration 000143). Deleting a day's snapshot makes raids from that day
-	// resolve to the previous snapshot (or show no parses if none), and allows
-	// re-backfilling that day since the idempotency guard checks status='published'.
-	DeleteRankingSnapshot(ctx context.Context, id uuid.UUID) error
-	// Bulk-delete snapshots by IDs. Members are cascade-deleted via FK.
-	DeleteRankingSnapshots(ctx context.Context, ids []uuid.UUID) error
 	DeleteRegressionFixture(ctx context.Context, id uuid.UUID) error
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
@@ -290,15 +273,6 @@ type sqlcQuerier interface {
 	GetItemTemplateMetadataBatch(ctx context.Context, arg GetItemTemplateMetadataBatchParams) ([]GetItemTemplateMetadataBatchRow, error)
 	GetItemTemplatesByEntries(ctx context.Context, arg GetItemTemplatesByEntriesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
-	// Return the most recently published snapshot for a tenant+lookback.
-	GetLatestPublishedSnapshot(ctx context.Context, arg GetLatestPublishedSnapshotParams) (RankingSnapshot, error)
-	// Return the latest published snapshot whose cutoff <= the given timestamp.
-	// Used for canonical parse resolution: a raid compares against the snapshot
-	// whose cutoff is at or before the instance's start time.
-	GetLatestPublishedSnapshotBefore(ctx context.Context, arg GetLatestPublishedSnapshotBeforeParams) (RankingSnapshot, error)
-	// Return the most recently published snapshot matching the full key dimensions
-	// used by the staleness guard (tenant, lookback, cohort_mode, policy_version, query_version).
-	GetLatestPublishedSnapshotForGuard(ctx context.Context, arg GetLatestPublishedSnapshotForGuardParams) (RankingSnapshot, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
@@ -315,12 +289,6 @@ type sqlcQuerier interface {
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
 	GetParseScoreMembershipCohort(ctx context.Context, arg GetParseScoreMembershipCohortParams) ([]float64, error)
-	// Get receipt by instance + snapshot.
-	GetParseScoreReceipt(ctx context.Context, arg GetParseScoreReceiptParams) (ParseScoreReceipt, error)
-	// Verify that a persisted projection completed successfully for this exact
-	// tenant, instance, snapshot, and lookback. Receipts only exist for
-	// successfully committed runs, so existence is the success signal.
-	GetParseScoreReceiptForContract(ctx context.Context, arg GetParseScoreReceiptForContractParams) (ParseScoreReceipt, error)
 	// Get all receipts for an instance (any snapshot).
 	GetParseScoreReceiptForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreReceipt, error)
 	// Read deduplicated parse score results for an instance.
@@ -328,11 +296,7 @@ type sqlcQuerier interface {
 	GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResult, error)
 	GetParsedBytesByOwner(ctx context.Context, owner uuid.UUID) (GetParsedBytesByOwnerRow, error)
 	GetPlayerGearHistory(ctx context.Context, arg GetPlayerGearHistoryParams) ([]GetPlayerGearHistoryRow, error)
-	// Check if a published snapshot already exists for this exact cutoff+key.
-	// Used by the idempotency guard (one snapshot per day per key).
-	GetPublishedSnapshotForCutoff(ctx context.Context, arg GetPublishedSnapshotForCutoffParams) (RankingSnapshot, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
-	GetRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
 	GetRealmsWithRetentionPolicies(ctx context.Context) ([]uuid.UUID, error)
@@ -345,45 +309,12 @@ type sqlcQuerier interface {
 	GetRetentionRulesByPolicy(ctx context.Context, policyID uuid.UUID) ([]RetentionRule, error)
 	GetScopedTimeParseBossKillCohort(ctx context.Context, arg GetScopedTimeParseBossKillCohortParams) ([]int64, error)
 	GetScopedTimeParseClearTimeCohort(ctx context.Context, arg GetScopedTimeParseClearTimeCohortParams) ([]int64, error)
-	// Return the latest published snapshot whose cutoff <= the given timestamp,
-	// matching the current policy_version and query_version.
-	// This prevents an incompatible newer snapshot from hiding a compatible older one.
-	GetScoringSnapshotBefore(ctx context.Context, arg GetScoringSnapshotBeforeParams) (RankingSnapshot, error)
-	// Return the latest published snapshot matching the current policy_version and
-	// query_version. Used when instance has no start_time.
-	GetScoringSnapshotLatest(ctx context.Context, arg GetScoringSnapshotLatestParams) (RankingSnapshot, error)
 	GetServerApplicationByID(ctx context.Context, id uuid.UUID) (GetServerApplicationByIDRow, error)
 	GetServerUploadMetaRealmID(ctx context.Context, logGroupID uuid.UUID) (uuid.NullUUID, error)
 	GetServersForWorld(ctx context.Context, worldID uuid.UUID) ([]WowServer, error)
 	GetSharedViewByCode(ctx context.Context, code string) (SharedView, error)
 	GetSharedViewByInstanceAndHash(ctx context.Context, arg GetSharedViewByInstanceAndHashParams) (SharedView, error)
 	GetSiteConfig(ctx context.Context) (SiteConfig, error)
-	// Extended version of GetSnapshotCohortValues that includes identity fields
-	// for debugging/transparency. Joins to encounter_dps_rankings for player_name
-	// and log_hashed_slug.
-	GetSnapshotCohortDebug(ctx context.Context, arg GetSnapshotCohortDebugParams) ([]GetSnapshotCohortDebugRow, error)
-	// Per-boss cohort: ALL eligible kill metric values within a
-	// (snapshot, encounter, difficulty, max_players, class/spec) bucket.
-	// Each snapshot member row represents one kill (duplicate-group copies of the
-	// same raid are already collapsed to the best copy at insertion time by
-	// BatchInsertSnapshotMembersFromRankings). A player with N separate raids
-	// contributes N datapoints.
-	//
-	// Rationale: small servers have few players per spec; best-per-player caps the
-	// cohort at player count and ratchets upward over time (players only improve
-	// their best), inflating difficulty. All-kills cohorts grow with raid activity
-	// (20 shamans × 5 raids = 100 datapoints) and keep typical performances in the
-	// distribution. This matches Warcraft Logs' documented semantics: parses
-	// compare against all logged kills; best-vs-best is reserved for
-	// rankings/leaderboards (future #181).
-	//
-	// Pass @metric = 'dps' or 'hps' to select the value column.
-	GetSnapshotCohortValues(ctx context.Context, arg GetSnapshotCohortValuesParams) ([]GetSnapshotCohortValuesRow, error)
-	// Compute the eligible row count and max(created_at) for the same eligibility
-	// filter as BatchInsertSnapshotMembersFromRankings. Used by the staleness guard
-	// to skip redundant snapshot publication when source data is unchanged.
-	// IMPORTANT: keep the WHERE clause in sync with BatchInsertSnapshotMembersFromRankings.
-	GetSnapshotSourceStats(ctx context.Context, arg GetSnapshotSourceStatsParams) (GetSnapshotSourceStatsRow, error)
 	GetSpellItemEnchantmentByID(ctx context.Context, arg GetSpellItemEnchantmentByIDParams) (DbcSpellItemEnchantment, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error)
 	// Tenant queries. These run with AdminBypass context since the tenants table
@@ -503,18 +434,10 @@ type sqlcQuerier interface {
 	// Modification Requests
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)
 	InsertOAuthRelayCode(ctx context.Context, arg InsertOAuthRelayCodeParams) error
-	// Insert a successful computation receipt. Receipt existence = fully committed success.
-	// On conflict (same tenant+instance+snapshot+lookback+policy+query), update counts
-	// to reflect re-computation (idempotent upsert).
-	InsertParseScoreReceipt(ctx context.Context, arg InsertParseScoreReceiptParams) (ParseScoreReceipt, error)
 	// Persist a single parse score result for an instance+encounter+player+metric.
 	// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
 	InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error
 	InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error
-	// Create a new pending snapshot for a tenant+lookback.
-	InsertRankingSnapshot(ctx context.Context, arg InsertRankingSnapshotParams) (RankingSnapshot, error)
-	// Insert a single snapshot member (caller batches in a transaction).
-	InsertRankingSnapshotMember(ctx context.Context, arg InsertRankingSnapshotMemberParams) error
 	InsertRegressionFixture(ctx context.Context, arg InsertRegressionFixtureParams) (RegressionFixture, error)
 	InsertRegressionSnapshot(ctx context.Context, arg InsertRegressionSnapshotParams) (RegressionSnapshot, error)
 	// Server Applications
@@ -565,9 +488,6 @@ type sqlcQuerier interface {
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
 	ListAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationsByDatasetRow, error)
 	ListAllRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error)
-	// Admin view: list all snapshots across tenants, most recent first.
-	// LEFT JOINs tenants to surface the tenant name (NULL for root scope).
-	ListAllSnapshots(ctx context.Context) ([]ListAllSnapshotsRow, error)
 	ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error)
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
@@ -585,9 +505,6 @@ type sqlcQuerier interface {
 	ListDatasets(ctx context.Context) ([]Dataset, error)
 	ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error)
 	ListDiscordAnnouncementSources(ctx context.Context, announcementID uuid.UUID) ([]GuildDiscordLogAnnouncementSource, error)
-	// Return distinct (encounter_name, player_class, player_spec, player_sub_spec,
-	// difficulty_name, max_players) combinations available in a snapshot.
-	ListDistinctCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListDistinctCohortBucketsRow, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
 	ListExternalAPICharacterLogs(ctx context.Context, arg ListExternalAPICharacterLogsParams) ([]ListExternalAPICharacterLogsRow, error)
 	// Returns the logs excluded by duplicate-group deduplication for each selected
@@ -612,36 +529,22 @@ type sqlcQuerier interface {
 	ListInstancesByParserVersion(ctx context.Context, parserVersion string) ([]ListInstancesByParserVersionRow, error)
 	ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error)
 	ListInstancesForDiscordAnnouncement(ctx context.Context, runID uuid.UUID) ([]ListInstancesForDiscordAnnouncementRow, error)
-	// Repair query: find instances that have ranking data (boss kills) but lack
-	// a receipt for the given snapshot. This catches instances with no receipt at all,
-	// old instances, snapshot deletion/rebuild, and policy/query changes.
-	// Returns at most @max_rows rows for bounded batch processing.
-	ListInstancesMissingParseReceipt(ctx context.Context, arg ListInstancesMissingParseReceiptParams) ([]ListInstancesMissingParseReceiptRow, error)
 	// Bound automatic repair to recent instances with no successful parse receipt at
 	// all. Legacy snapshot-backed receipts remain authoritative and are never
 	// selected merely because windowed scoring uses a newer query version.
 	ListInstancesMissingParseReceiptWindowed(ctx context.Context, arg ListInstancesMissingParseReceiptWindowedParams) ([]ListInstancesMissingParseReceiptWindowedRow, error)
-	// Repair query: resolve each visible instance's canonical historical snapshot,
-	// then return instances that lack a successful receipt for that exact tenant,
-	// snapshot, lookback, policy, and query contract. RLS on
-	// encounter_dps_rankings scopes candidates to the worker's tenant context.
-	// Instances without an eligible snapshot and instances older than the repair
-	// window are excluded, so daily repair neither restarts exhausted retry chains
-	// nor rewrites long-term parse history.
-	ListInstancesMissingParseReceiptWithSnapshot(ctx context.Context, arg ListInstancesMissingParseReceiptWithSnapshotParams) ([]ListInstancesMissingParseReceiptWithSnapshotRow, error)
 	ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error)
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
 	ListParseScoreMemberships(ctx context.Context, arg ListParseScoreMembershipsParams) ([]ParseScoreMembership, error)
-	// Read one persisted result per player and encounter for an exact completed
-	// snapshot contract. Results whose snapshot was deleted are intentionally not
-	// eligible because their receipt is deleted with the snapshot.
+	// Read one persisted legacy result per player and encounter for the snapshot ID
+	// retained as opaque provenance on its successful receipt.
 	ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResult, error)
-	// Return published snapshots for a tenant, most recent first. member_count is
-	// persisted at publication time so this list never scans snapshot members.
-	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]RankingSnapshot, error)
+	// Receipt-less results are authoritative historical data. Read them without
+	// joining snapshot tables or score memberships so they can never be recomputed.
+	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
 	// Used by the parses handler to get the viewed instance's own metric values
@@ -658,12 +561,6 @@ type sqlcQuerier interface {
 	ListRegressionSnapshots(ctx context.Context, arg ListRegressionSnapshotsParams) ([]ListRegressionSnapshotsRow, error)
 	ListResolvedItemPrices(ctx context.Context, arg ListResolvedItemPricesParams) ([]ListResolvedItemPricesRow, error)
 	ListServerApplications(ctx context.Context) ([]ListServerApplicationsRow, error)
-	// List a player's member entries across a snapshot (for history/best parses).
-	ListSnapshotMembersByPlayerGUID(ctx context.Context, arg ListSnapshotMembersByPlayerGUIDParams) ([]RankingSnapshotMember, error)
-	// List all snapshot members from a given instance.
-	ListSnapshotMembersForInstance(ctx context.Context, arg ListSnapshotMembersForInstanceParams) ([]RankingSnapshotMember, error)
-	// List snapshot members for an instance, joining to encounter_dps_rankings for player name/role.
-	ListSnapshotMembersForInstanceWithNames(ctx context.Context, arg ListSnapshotMembersForInstanceWithNamesParams) ([]ListSnapshotMembersForInstanceWithNamesRow, error)
 	// Canonical database-backed spell lookups. Each base spell row carries its
 	// independently ordered normalized components without multiplying child rows.
 	ListSpellCastTimesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellCastTime, error)
@@ -715,9 +612,6 @@ type sqlcQuerier interface {
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
 	PruneStaleRankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) (int64, error)
-	// Transition a pending snapshot to published and persist its exact member count.
-	// Idempotent on already-published snapshots.
-	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)

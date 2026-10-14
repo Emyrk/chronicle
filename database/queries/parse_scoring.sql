@@ -13,27 +13,6 @@ INSERT INTO parse_score_results (
     @instance_name, @difficulty_name, @max_players, @killed_at
 );
 
--- name: InsertParseScoreReceipt :one
--- Insert a successful computation receipt. Receipt existence = fully committed success.
--- On conflict (same tenant+instance+snapshot+lookback+policy+query), update counts
--- to reflect re-computation (idempotent upsert).
-INSERT INTO parse_score_receipts (
-    tenant_id, instance_id, snapshot_id,
-    policy_version, query_version, lookback_days,
-    source_count, result_count, computed_at
-) VALUES (
-    @tenant_id, @instance_id, @snapshot_id::uuid,
-    @policy_version, @query_version, @lookback_days,
-    @source_count, @result_count, now()
-)
-ON CONFLICT (tenant_id, instance_id, snapshot_id, lookback_days, policy_version, query_version)
-WHERE snapshot_id IS NOT NULL
-DO UPDATE SET
-    source_count   = EXCLUDED.source_count,
-    result_count   = EXCLUDED.result_count,
-    computed_at    = now()
-RETURNING *;
-
 -- name: InsertWindowedParseScoreReceipt :one
 -- New scoring contracts are identified by the target instance cutoff and do not
 -- require a ranking snapshot.
@@ -60,11 +39,6 @@ RETURNING *;
 -- name: AcquireParseScoreLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(@lock_key, 0));
 
--- name: GetParseScoreReceipt :one
--- Get receipt by instance + snapshot.
-SELECT * FROM parse_score_receipts
-WHERE instance_id = @instance_id AND snapshot_id = @snapshot_id::uuid;
-
 -- name: GetAnyParseScoreReceiptForTenantInstance :one
 SELECT *
 FROM parse_score_receipts
@@ -85,23 +59,9 @@ SELECT * FROM parse_score_receipts
 WHERE instance_id = @instance_id
 ORDER BY computed_at DESC;
 
--- name: GetParseScoreReceiptForContract :one
--- Verify that a persisted projection completed successfully for this exact
--- tenant, instance, snapshot, and lookback. Receipts only exist for
--- successfully committed runs, so existence is the success signal.
-SELECT *
-FROM parse_score_receipts
-WHERE tenant_id = @tenant_id
-  AND instance_id = @instance_id
-  AND snapshot_id = @snapshot_id::uuid
-  AND lookback_days = @lookback_days
-ORDER BY computed_at DESC
-LIMIT 1;
-
 -- name: ListParseScoreResultsForContract :many
--- Read one persisted result per player and encounter for an exact completed
--- snapshot contract. Results whose snapshot was deleted are intentionally not
--- eligible because their receipt is deleted with the snapshot.
+-- Read one persisted legacy result per player and encounter for the snapshot ID
+-- retained as opaque provenance on its successful receipt.
 SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
@@ -121,33 +81,16 @@ WHERE psr.tenant_id = @tenant_id
   AND psr.metric = @metric
 ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
 
--- name: ListInstancesMissingParseReceipt :many
--- Repair query: find instances that have ranking data (boss kills) but lack
--- a receipt for the given snapshot. This catches instances with no receipt at all,
--- old instances, snapshot deletion/rebuild, and policy/query changes.
--- Returns at most @max_rows rows for bounded batch processing.
-SELECT DISTINCT
-    edr.instance_id,
-    li.start_time,
-    COALESCE(li.duplicate_group_id, li.id) AS run_id,
-    li.name AS instance_name,
-    li.difficulty_name,
-    li.max_players,
-    li.log_group_id,
-    li.guild_id
-FROM encounter_dps_rankings edr
-JOIN log_instances li ON li.id = edr.instance_id
-WHERE edr.encounter_id IS NOT NULL
-  AND (edr.dps > 0 OR edr.hps > 0)
-  AND NOT EXISTS (
-      SELECT 1 FROM parse_score_receipts psr
-      WHERE psr.instance_id = edr.instance_id
-        AND psr.snapshot_id = @snapshot_id::uuid
-        AND psr.policy_version = @policy_version
-        AND psr.query_version = @query_version
-  )
-ORDER BY li.start_time DESC NULLS LAST
-LIMIT @max_rows;
+-- name: ListPersistedParseScoreResultsForInstance :many
+-- Receipt-less results are authoritative historical data. Read them without
+-- joining snapshot tables or score memberships so they can never be recomputed.
+SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+    psr.*
+FROM parse_score_results psr
+WHERE psr.tenant_id = @tenant_id
+  AND psr.instance_id = @instance_id
+  AND psr.metric = @metric
+ORDER BY psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC;
 
 -- name: GetParseScoreResultsForInstance :many
 -- Read deduplicated parse score results for an instance.
@@ -201,85 +144,6 @@ WHERE psr.tenant_id = @tenant_id
   AND psr.status IN ('ok', 'low_confidence')
   AND psr.killed_at >= @since
 ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC;
-
--- name: GetScoringSnapshotBefore :one
--- Return the latest published snapshot whose cutoff <= the given timestamp,
--- matching the current policy_version and query_version.
--- This prevents an incompatible newer snapshot from hiding a compatible older one.
-SELECT *
-FROM ranking_snapshots
-WHERE tenant_id = @tenant_id
-  AND lookback_days = @lookback_days
-  AND status = 'published'
-  AND cutoff <= @before
-  AND policy_version = @policy_version
-  AND query_version = @query_version
-ORDER BY cutoff DESC
-LIMIT 1;
-
--- name: GetScoringSnapshotLatest :one
--- Return the latest published snapshot matching the current policy_version and
--- query_version. Used when instance has no start_time.
-SELECT *
-FROM ranking_snapshots
-WHERE tenant_id = @tenant_id
-  AND lookback_days = @lookback_days
-  AND status = 'published'
-  AND policy_version = @policy_version
-  AND query_version = @query_version
-ORDER BY published_at DESC
-LIMIT 1;
-
--- name: ListInstancesMissingParseReceiptWithSnapshot :many
--- Repair query: resolve each visible instance's canonical historical snapshot,
--- then return instances that lack a successful receipt for that exact tenant,
--- snapshot, lookback, policy, and query contract. RLS on
--- encounter_dps_rankings scopes candidates to the worker's tenant context.
--- Instances without an eligible snapshot and instances older than the repair
--- window are excluded, so daily repair neither restarts exhausted retry chains
--- nor rewrites long-term parse history.
-SELECT
-    candidates.instance_id,
-    li.start_time,
-    COALESCE(li.duplicate_group_id, li.id) AS run_id,
-    li.name AS instance_name,
-    li.difficulty_name,
-    li.max_players,
-    li.log_group_id,
-    li.guild_id,
-    snap.id AS snapshot_id
-FROM (
-    SELECT DISTINCT edr.instance_id
-    FROM encounter_dps_rankings edr
-    WHERE edr.encounter_id IS NOT NULL
-      AND (edr.dps > 0 OR edr.hps > 0)
-) candidates
-JOIN log_instances li ON li.id = candidates.instance_id
-JOIN LATERAL (
-    SELECT rs.id
-    FROM ranking_snapshots rs
-    WHERE rs.tenant_id = @tenant_id
-      AND rs.lookback_days = @lookback_days
-      AND rs.status = 'published'
-      AND rs.policy_version = @policy_version
-      AND rs.query_version = @query_version
-      AND (li.start_time IS NULL OR rs.cutoff <= li.start_time)
-    ORDER BY rs.cutoff DESC
-    LIMIT 1
-) snap ON true
-WHERE li.start_time >= @repair_since
-  AND NOT EXISTS (
-    SELECT 1
-    FROM parse_score_receipts receipt
-    WHERE receipt.tenant_id = @tenant_id
-      AND receipt.instance_id = candidates.instance_id
-      AND receipt.snapshot_id = snap.id
-      AND receipt.lookback_days = @lookback_days
-      AND receipt.policy_version = @policy_version
-      AND receipt.query_version = @query_version
-)
-ORDER BY li.start_time DESC NULLS LAST
-LIMIT @max_rows;
 
 -- name: ListInstancesMissingParseReceiptWindowed :many
 -- Bound automatic repair to recent instances with no successful parse receipt at

@@ -1,6 +1,7 @@
 package servicerankings_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -21,11 +22,20 @@ import (
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type noMembershipCohortStore struct {
+	database.Store
+	queries int
+}
+
+func (s *noMembershipCohortStore) GetParseScoreMembershipCohort(context.Context, database.GetParseScoreMembershipCohortParams) ([]float64, error) {
+	s.queries++
+	return nil, fmt.Errorf("membership cohort query must not run")
+}
 
 // parsesTestFixture holds state for instance parses handler tests.
 type parsesTestFixture struct {
@@ -141,25 +151,15 @@ func (f parsesTestFixture) insertTestRanking(t *testing.T, opts struct {
 	require.NoError(t, err)
 }
 
-// publishSnapshot creates and publishes a snapshot for the test fixture.
-func (f parsesTestFixture) publishSnapshot(t *testing.T) database.RankingSnapshot {
+// publishSnapshot refreshes the current membership rows and returns an opaque
+// legacy snapshot provenance ID for persisted-result tests.
+type legacySnapshotRef struct {
+	ID uuid.UUID
+}
+
+func (f parsesTestFixture) publishSnapshot(t *testing.T) legacySnapshotRef {
 	t.Helper()
 	ctx := testutil.Context(t, testutil.WaitShort)
-
-	cutoff := pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}
-	snap, err := f.store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-		TenantID:      uuid.Nil,
-		Cutoff:        cutoff,
-		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-		CohortMode:    string(parsepolicy.CohortModeSpec),
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  1,
-	})
-	require.NoError(t, err)
-
-	err = f.store.BatchInsertSnapshotMembersFromRankings(ctx, snap.ID)
-	require.NoError(t, err)
-
 	conn, err := f.pool.Acquire(ctx)
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, `
@@ -175,13 +175,12 @@ func (f parsesTestFixture) publishSnapshot(t *testing.T) database.RankingSnapsho
 			ranking.player_spec, ranking.player_sub_spec, ranking.killed_at, ranking.dps, ranking.hps
 		FROM encounter_dps_rankings ranking
 		JOIN log_instances instance ON instance.id = ranking.instance_id
-		WHERE ranking.instance_id = $1`, f.instanceID, parsepolicy.PolicyVersion, parsepolicy.QueryVersion)
+		WHERE ranking.instance_id = $1
+		ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid)
+		DO NOTHING`, f.instanceID, parsepolicy.PolicyVersion, parsepolicy.QueryVersion)
 	conn.Release()
 	require.NoError(t, err)
-
-	snap, err = f.store.PublishRankingSnapshot(ctx, snap.ID)
-	require.NoError(t, err)
-	return snap
+	return legacySnapshotRef{ID: uuid.New()}
 }
 
 func (f parsesTestFixture) setPlayerSubSpec(t *testing.T, playerGUID, subSpec string) {
@@ -278,16 +277,15 @@ func (f parsesTestFixture) insertPersistedParseReceipt(
 ) {
 	t.Helper()
 	ctx := testutil.Context(t, testutil.WaitShort)
-	_, err := f.store.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
-		TenantID:      tenantID,
-		InstanceID:    f.instanceID,
-		SnapshotID:    snapshotID,
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(servicerankings.QueryVersion),
-		LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
-		SourceCount:   resultCount,
-		ResultCount:   resultCount,
-	})
+	cutoff := time.Now().UTC().Add(-time.Hour)
+	_, err := f.pool.Exec(ctx, `
+		INSERT INTO parse_score_receipts (
+			tenant_id, instance_id, snapshot_id, policy_version, query_version,
+			lookback_days, source_count, result_count, cutoff, window_start, cohort_mode
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10)`,
+		tenantID, f.instanceID, snapshotID, parsepolicy.PolicyVersion, servicerankings.QueryVersion,
+		parsepolicy.DefaultLookbackDays, resultCount, cutoff,
+		cutoff.AddDate(0, 0, -int(parsepolicy.DefaultLookbackDays)), string(parsepolicy.CohortModeSpec))
 	require.NoError(t, err)
 }
 
@@ -415,7 +413,7 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		}
 	})
 
-	t.Run("MissingReceiptFallsBackToOnDemand", func(t *testing.T) {
+	t.Run("MissingReceiptServesOrphanedPersistedResults", func(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
@@ -423,15 +421,25 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		snapshot := f.publishSnapshot(t)
 		persistedResult(f, t, uuid.NullUUID{UUID: snapshot.ID, Valid: true}, uuid.Nil, "Ragnaros", "dps", 99)
 
-		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
+		guardedStore := &noMembershipCohortStore{Store: f.store}
+		svc := servicerankings.NewTestableParsesService(guardedStore, slog.Default())
+		router := chi.NewRouter()
+		router.Get("/instances/{instanceID}/parses", svc.HandleInstanceParses)
+		req := httptest.NewRequest("GET", "/instances/"+f.instanceID.String()+"/parses?encounter_names=Ragnaros&metric=dps", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		var response chroniclesdk.InstanceParsesResponse
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
 		require.Len(t, response.Players, 1)
 		require.Len(t, response.Players[0].Bosses, 1)
 		assert.Equal(t, "Bear", response.Players[0].PlayerSubSpec)
-		assert.Equal(t, 0, response.Players[0].Bosses[0].DisplayScore)
-		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), response.Players[0].Bosses[0].Status)
+		assert.Equal(t, 99, response.Players[0].Bosses[0].DisplayScore)
+		assert.Equal(t, string(parsepolicy.StatusOK), response.Players[0].Bosses[0].Status)
+		assert.Zero(t, guardedStore.queries, "orphaned persisted results must not query memberships")
 	})
 
-	t.Run("IncompletePersistedRowsFallBackToOnDemand", func(t *testing.T) {
+	t.Run("IncompleteReceiptFallsBackToOnDemand", func(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
@@ -439,6 +447,7 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 1)
 
 		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
+		require.True(t, response.Available)
 		require.Len(t, response.Players, 1)
 		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), response.Players[0].Bosses[0].Status)
 	})
@@ -463,20 +472,6 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		defaultSnapshot := f.publishSnapshot(t)
 		persistedResult(f, t, uuid.NullUUID{UUID: defaultSnapshot.ID, Valid: true}, uuid.Nil, "Ragnaros", "dps", 99)
 		f.insertPersistedParseReceipt(t, uuid.Nil, defaultSnapshot.ID, 1)
-
-		ctx := testutil.Context(t, testutil.WaitShort)
-		shortSnapshot, err := f.store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-			TenantID:      uuid.Nil,
-			Cutoff:        pgtype.Timestamptz{Time: time.Now().Add(2 * time.Hour), Valid: true},
-			LookbackDays:  int32(parsepolicy.Lookback30Days),
-			CohortMode:    string(parsepolicy.CohortModeSpec),
-			PolicyVersion: int16(parsepolicy.PolicyVersion),
-			QueryVersion:  int16(servicerankings.QueryVersion),
-		})
-		require.NoError(t, err)
-		require.NoError(t, f.store.BatchInsertSnapshotMembersFromRankings(ctx, shortSnapshot.ID))
-		_, err = f.store.PublishRankingSnapshot(ctx, shortSnapshot.ID)
-		require.NoError(t, err)
 
 		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps&period=30d")
 		require.Len(t, response.Players, 1)
@@ -961,320 +956,4 @@ func TestHandleInstanceParses_DisabledTenant(t *testing.T) {
 	assert.False(t, resp.Available, "expected available=false for disabled tenant")
 	assert.Equal(t, "disabled", resp.Reason)
 	assert.Empty(t, resp.Players)
-}
-
-func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
-	t.Parallel()
-
-	t.Run("UsesSnapshotMatchingInstanceStartTime", func(t *testing.T) {
-		t.Parallel()
-		pool, _ := dbtestutil.NewPGXPool(t)
-		store := database.New(pool)
-		ctx := testutil.Context(t, testutil.WaitShort)
-
-		serverID := uuid.New()
-		realmID := uuid.New()
-		conn, err := pool.Acquire(ctx)
-		require.NoError(t, err)
-		_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-		require.NoError(t, err)
-		_, err = conn.Exec(ctx, "INSERT INTO wow_servers (id, name) VALUES ($1, $2)", serverID, "test-server")
-		require.NoError(t, err)
-		_, err = conn.Exec(ctx, "INSERT INTO wow_server_realms (id, server_id, name) VALUES ($1, $2, $3)", realmID, serverID, "test-realm")
-		require.NoError(t, err)
-		conn.Release()
-
-		userID := uuid.New()
-		_, err = store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "u"})
-		require.NoError(t, err)
-
-		logGroupID := uuid.New()
-		now := time.Now()
-		_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
-			ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
-			CreatedAt: database.Timestamptz(now), UpdatedAt: database.Timestamptz(now),
-		})
-		require.NoError(t, err)
-		err = store.InsertParsedLogGroup(ctx, logGroupID)
-		require.NoError(t, err)
-
-		// Instance with start_time on July 10.
-		instanceID := uuid.New()
-		instanceStart := time.Date(2024, 7, 10, 14, 30, 0, 0, time.UTC)
-		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
-			ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
-			Name: "Molten Core", Capabilities: []string{},
-		})
-		require.NoError(t, err)
-		// Set start_time directly.
-		conn2, err := pool.Acquire(ctx)
-		require.NoError(t, err)
-		_, err = conn2.Exec(ctx, "UPDATE log_instances SET start_time = $1 WHERE id = $2", instanceStart, instanceID)
-		require.NoError(t, err)
-		conn2.Release()
-
-		// Insert a ranking for this instance (the July 10 raid).
-		encID := uuid.New()
-		_, err = store.InsertEncounter(ctx, database.InsertEncounterParams{
-			ID: encID, InstanceID: instanceID, Name: "Ragnaros",
-			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
-			StartTime: database.Timestamptz(instanceStart),
-			EndTime:   database.Timestamptz(instanceStart.Add(5 * time.Minute)),
-		})
-		require.NoError(t, err)
-
-		// Player1 does 700 DPS — above the cohort max of 500, should score 100.
-		err = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
-			EncounterID:    uuid.NullUUID{UUID: encID, Valid: true},
-			InstanceID:     instanceID,
-			EncounterName:  "Ragnaros",
-			InstanceName:   "Molten Core",
-			PlayerGuid:     "P-1",
-			PlayerName:     "Player1",
-			PlayerClass:    "WARRIOR",
-			PlayerSpec:     "Arms",
-			DifficultyName: "Normal",
-			MaxPlayers:     40,
-			RealmID:        realmID,
-			RealmName:      "test-realm",
-			DamageDone:     210000,
-			DurationSecs:   300,
-			Dps:            700,
-			KilledAt:       database.Timestamptz(instanceStart.Add(5 * time.Minute)),
-			LogHashedSlug:  "slug-test-1",
-		})
-		require.NoError(t, err)
-
-		// Insert 6 cohort rankings BEFORE the cutoff (July 9) so the
-		// day-10 snapshot has a meaningful cohort.
-		// These will be members of the day-10 snapshot; Player1's raid will NOT.
-		beforeCutoff := time.Date(2024, 7, 9, 12, 0, 0, 0, time.UTC)
-		for i, dps := range []float64{100, 200, 300, 400, 500} {
-			cohortInstanceID := uuid.New()
-			cohortLGID := uuid.New()
-			cohortUserID := uuid.New()
-			_, err = store.InsertUser(ctx, database.InsertUserParams{
-				ID: cohortUserID, Username: fmt.Sprintf("cohort-u-%d", i),
-			})
-			require.NoError(t, err)
-			_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
-				ID: cohortLGID, Owner: cohortUserID, LogType: database.LogTypeV1,
-				CreatedAt: database.Timestamptz(now), UpdatedAt: database.Timestamptz(now),
-			})
-			require.NoError(t, err)
-			err = store.InsertParsedLogGroup(ctx, cohortLGID)
-			require.NoError(t, err)
-			_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
-				ID: cohortInstanceID, RealmID: realmID, LogGroupID: cohortLGID,
-				Name: "Molten Core", Capabilities: []string{},
-			})
-			require.NoError(t, err)
-			cohortEncID := uuid.New()
-			_, err = store.InsertEncounter(ctx, database.InsertEncounterParams{
-				ID: cohortEncID, InstanceID: cohortInstanceID, Name: "Ragnaros",
-				KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
-				StartTime: database.Timestamptz(beforeCutoff),
-				EndTime:   database.Timestamptz(beforeCutoff.Add(5 * time.Minute)),
-			})
-			require.NoError(t, err)
-			err = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
-				EncounterID:    uuid.NullUUID{UUID: cohortEncID, Valid: true},
-				InstanceID:     cohortInstanceID,
-				EncounterName:  "Ragnaros",
-				InstanceName:   "Molten Core",
-				PlayerGuid:     fmt.Sprintf("P-cohort-%d", i),
-				PlayerName:     fmt.Sprintf("Cohort%d", i),
-				PlayerClass:    "WARRIOR",
-				PlayerSpec:     "Arms",
-				DifficultyName: "Normal",
-				MaxPlayers:     40,
-				RealmID:        realmID,
-				RealmName:      "test-realm",
-				DamageDone:     int64(dps * 300),
-				DurationSecs:   300,
-				Dps:            dps,
-				KilledAt:       database.Timestamptz(beforeCutoff.Add(time.Duration(i) * time.Minute)),
-				LogHashedSlug:  fmt.Sprintf("slug-cohort-%d", i),
-			})
-			require.NoError(t, err)
-			_, err = store.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
-				LogGroupID: cohortLGID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
-			})
-			require.NoError(t, err)
-		}
-
-		// Create two snapshots:
-		// July 10 00:00 UTC (cutoff <= instance start → should be used)
-		// July 11 00:00 UTC (cutoff > instance start → should NOT be used for historical)
-		cutoffDay10 := time.Date(2024, 7, 10, 0, 0, 0, 0, time.UTC)
-		cutoffDay11 := time.Date(2024, 7, 11, 0, 0, 0, 0, time.UTC)
-
-		for _, cutoff := range []time.Time{cutoffDay10, cutoffDay11} {
-			snap, sErr := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-				TenantID:      uuid.Nil,
-				Cutoff:        pgtype.Timestamptz{Time: cutoff, Valid: true},
-				LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-				CohortMode:    string(parsepolicy.CohortModeSpec),
-				PolicyVersion: int16(parsepolicy.PolicyVersion),
-				QueryVersion:  1,
-			})
-			require.NoError(t, sErr)
-
-			sErr = store.BatchInsertSnapshotMembersFromRankings(ctx, snap.ID)
-			require.NoError(t, sErr)
-
-			_, sErr = store.PublishRankingSnapshot(ctx, snap.ID)
-			require.NoError(t, sErr)
-		}
-
-		svc := newTestService(t, store)
-		r := chi.NewRouter()
-		r.Get("/instances/{instanceID}/parses", svc.HandleInstanceParses)
-
-		req := httptest.NewRequest("GET", "/instances/"+instanceID.String()+"/parses?encounter_names=Ragnaros&metric=dps", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		require.Equal(t, http.StatusOK, w.Code)
-		var resp chroniclesdk.InstanceParsesResponse
-		require.NoError(t, json.Unmarshal(readAll(t, w.Body), &resp))
-
-		assert.True(t, resp.Available)
-		// Windowed scoring uses the exact instance start time as its cutoff.
-		assert.Equal(t, instanceStart, resp.Cutoff.UTC())
-
-		// The raid's own players must be returned even though the raid is
-		// NOT a member of its own canonical snapshot (killed_at >= cutoff).
-		require.NotEmpty(t, resp.Players, "historical players must not be empty")
-
-		var player1 *chroniclesdk.InstanceParsePlayer
-		for i := range resp.Players {
-			if resp.Players[i].PlayerGUID == "P-1" {
-				player1 = &resp.Players[i]
-				break
-			}
-		}
-		require.NotNil(t, player1, "Player1 must be in response")
-		require.Len(t, player1.Bosses, 1)
-
-		// Player1's 700 DPS is above the frozen cohort max (500) → score 100.
-		assert.Equal(t, 100, player1.Bosses[0].DisplayScore,
-			"value above cohort max should score 100")
-		assert.Greater(t, player1.Bosses[0].SampleSize, 0, "sample size must be > 0")
-	})
-
-	t.Run("RunsPredatingAllSnapshotsGetNoParses", func(t *testing.T) {
-		t.Parallel()
-		pool, _ := dbtestutil.NewPGXPool(t)
-		store := database.New(pool)
-		ctx := testutil.Context(t, testutil.WaitShort)
-
-		serverID := uuid.New()
-		realmID := uuid.New()
-		conn, err := pool.Acquire(ctx)
-		require.NoError(t, err)
-		_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
-		require.NoError(t, err)
-		_, err = conn.Exec(ctx, "INSERT INTO wow_servers (id, name) VALUES ($1, $2)", serverID, "test-server")
-		require.NoError(t, err)
-		_, err = conn.Exec(ctx, "INSERT INTO wow_server_realms (id, server_id, name) VALUES ($1, $2, $3)", realmID, serverID, "test-realm")
-		require.NoError(t, err)
-		conn.Release()
-
-		userID := uuid.New()
-		_, err = store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "u"})
-		require.NoError(t, err)
-
-		logGroupID := uuid.New()
-		now := time.Now()
-		_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
-			ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
-			CreatedAt: database.Timestamptz(now), UpdatedAt: database.Timestamptz(now),
-		})
-		require.NoError(t, err)
-		err = store.InsertParsedLogGroup(ctx, logGroupID)
-		require.NoError(t, err)
-
-		// Instance from January 2024 (predates all snapshots).
-		instanceID := uuid.New()
-		instanceStart := time.Date(2024, 1, 5, 10, 0, 0, 0, time.UTC)
-		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
-			ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
-			Name: "Molten Core", Capabilities: []string{},
-		})
-		require.NoError(t, err)
-		conn2, err := pool.Acquire(ctx)
-		require.NoError(t, err)
-		_, err = conn2.Exec(ctx, "UPDATE log_instances SET start_time = $1 WHERE id = $2", instanceStart, instanceID)
-		require.NoError(t, err)
-		conn2.Release()
-
-		// Insert ranking.
-		encID := uuid.New()
-		_, err = store.InsertEncounter(ctx, database.InsertEncounterParams{
-			ID: encID, InstanceID: instanceID, Name: "Ragnaros",
-			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
-			StartTime: database.Timestamptz(instanceStart),
-			EndTime:   database.Timestamptz(instanceStart.Add(5 * time.Minute)),
-		})
-		require.NoError(t, err)
-
-		err = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
-			EncounterID:    uuid.NullUUID{UUID: encID, Valid: true},
-			InstanceID:     instanceID,
-			EncounterName:  "Ragnaros",
-			InstanceName:   "Molten Core",
-			PlayerGuid:     "P-1",
-			PlayerName:     "Player1",
-			PlayerClass:    "WARRIOR",
-			PlayerSpec:     "Arms",
-			DifficultyName: "Normal",
-			MaxPlayers:     40,
-			RealmID:        realmID,
-			RealmName:      "test-realm",
-			DamageDone:     30000,
-			DurationSecs:   300,
-			Dps:            100,
-			KilledAt:       database.Timestamptz(instanceStart.Add(5 * time.Minute)),
-			LogHashedSlug:  "slug-test-2",
-		})
-		require.NoError(t, err)
-
-		// Snapshots only from July 2024 (after the instance).
-		cutoffJuly := time.Date(2024, 7, 10, 0, 0, 0, 0, time.UTC)
-		snap, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-			TenantID:      uuid.Nil,
-			Cutoff:        pgtype.Timestamptz{Time: cutoffJuly, Valid: true},
-			LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-			CohortMode:    string(parsepolicy.CohortModeSpec),
-			PolicyVersion: int16(parsepolicy.PolicyVersion),
-			QueryVersion:  1,
-		})
-		require.NoError(t, err)
-		err = store.BatchInsertSnapshotMembersFromRankings(ctx, snap.ID)
-		require.NoError(t, err)
-		_, err = store.PublishRankingSnapshot(ctx, snap.ID)
-		require.NoError(t, err)
-
-		svc := newTestService(t, store)
-		r := chi.NewRouter()
-		r.Get("/instances/{instanceID}/parses", svc.HandleInstanceParses)
-
-		req := httptest.NewRequest("GET", "/instances/"+instanceID.String()+"/parses?encounter_names=Ragnaros&metric=dps", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		require.Equal(t, http.StatusOK, w.Code)
-		var resp chroniclesdk.InstanceParsesResponse
-		require.NoError(t, json.Unmarshal(readAll(t, w.Body), &resp))
-
-		// Snapshot publication dates no longer gate historical availability.
-		// With no eligible membership cohort, the target row is returned as
-		// sample_too_small against its exact historical window.
-		assert.True(t, resp.Available)
-		require.Len(t, resp.Players, 1)
-		require.Len(t, resp.Players[0].Bosses, 1)
-		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), resp.Players[0].Bosses[0].Status)
-		_ = cutoffJuly
-	})
 }
