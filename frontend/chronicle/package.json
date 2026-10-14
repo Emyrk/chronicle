@@ -56,7 +56,8 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18",
-    "three": "^0.183.2"
+    "three": "^0.183.2",
+    "three-mesh-bvh": "0.9.16"
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^4.1.3",

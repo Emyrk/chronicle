@@ -7,7 +7,15 @@ import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import type { MapPositionSample } from "./map.processor";
 import { interpolatedPositionAt, prefersReducedMotion, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
-import { MAX_EFFECT_PRIMITIVES, MapScene3D, type MapScene3DEffectHover, type MapScene3DUnit } from "./MapScene3D";
+import {
+  MAX_EFFECT_PRIMITIVES,
+  MapScene3D,
+  type DungeonMeshRequest,
+  type DungeonMeshState,
+  type MapScene3DEffectHover,
+  type MapScene3DUnit,
+  type MapSceneFocus,
+} from "./MapScene3D";
 import { DEFAULT_EFFECT_OPTIONS, isBasicAttack, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
@@ -29,6 +37,12 @@ export interface MapView3DProps {
   tankGuids?: ReadonlySet<string>;
   /** Called when WebGL cannot be created or the context is lost. */
   onUnavailable: () => void;
+  /** The real dungeon mesh to stand the units on instead of the tiles ("3D map"), or null for the tiles. */
+  dungeonMesh?: DungeonMeshRequest | null;
+  /** Reports the mesh load: loading, ready, or failed (the tiles stay). */
+  onDungeonMeshState?: (state: DungeonMeshState) => void;
+  /** The fight the mesh camera is locked to (zoom and pan), or null for the whole map. */
+  focus?: MapSceneFocus | null;
 }
 
 const SMOOTH_STORAGE_KEY = "chronicle.map.smooth3d";
@@ -123,11 +137,15 @@ export default function MapView3D({
   bossGuids,
   tankGuids,
   onUnavailable,
+  dungeonMesh = null,
+  onDungeonMeshState,
+  focus = null,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
   const onUnavailableRef = useRef(onUnavailable);
   const onUserViewportRef = useRef(onUserViewport);
+  const onDungeonMeshStateRef = useRef(onDungeonMeshState);
   const colorCacheRef = useRef(new Map<string, string>());
   const [smooth, setSmooth] = useState(readStoredSmooth);
   const smoothMs = useSmoothReplayTime(cursorMs, playing && smooth, playbackSpeed);
@@ -138,7 +156,8 @@ export default function MapView3D({
   useEffect(() => {
     onUnavailableRef.current = onUnavailable;
     onUserViewportRef.current = onUserViewport;
-  }, [onUnavailable, onUserViewport]);
+    onDungeonMeshStateRef.current = onDungeonMeshState;
+  }, [onDungeonMeshState, onUnavailable, onUserViewport]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -150,6 +169,7 @@ export default function MapView3D({
         () => onUnavailableRef.current(),
         setEffectHover,
         (viewport) => onUserViewportRef.current?.(viewport),
+        (state) => onDungeonMeshStateRef.current?.(state),
       );
     } catch {
       onUnavailableRef.current();
@@ -165,6 +185,14 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setGround(ground);
   }, [ground]);
+
+  useEffect(() => {
+    sceneRef.current?.setDungeonMesh(dungeonMesh);
+  }, [dungeonMesh]);
+
+  useEffect(() => {
+    sceneRef.current?.setFocus(focus);
+  }, [focus]);
 
   // The first request frames instantly; later ones (a new key) ease there.
   const appliedViewKeyRef = useRef<string | null>(null);
