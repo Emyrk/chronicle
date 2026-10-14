@@ -1,4 +1,4 @@
-import type { InstanceTimeParsesResponse, SpeedrunCohortRun } from "@/api/typesGenerated";
+import type { BossKillTimeParse, InstanceTimeParsesResponse, SpeedrunCohortRun } from "@/api/typesGenerated";
 
 /** A server-computed per-boss parse score ready for display. */
 export interface SnapshotBossParse {
@@ -30,6 +30,18 @@ export function mapSnapshotBossParses(
     }
   }
   return result;
+}
+
+/**
+ * Indexes boss kill-time parses by encounter ID. Returns null when the
+ * snapshot is unavailable (loading, no snapshot, disabled) so callers can
+ * fall back to the plain kill icon.
+ */
+export function bossKillParsesByEncounter(
+  timeParses: InstanceTimeParsesResponse | undefined,
+): ReadonlyMap<string, BossKillTimeParse> | null {
+  if (!timeParses?.available) return null;
+  return new Map(timeParses.boss_kill_times.map((boss) => [boss.encounter_id, boss]));
 }
 
 /**
