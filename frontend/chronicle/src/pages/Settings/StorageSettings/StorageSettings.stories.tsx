@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { MemoryRouter } from "react-router-dom";
+import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import { StorageSettingsView } from "./index";
 import type { UserStorageInfo, WoWLogGroup, WoWLogFile, WoWParsedLogJobOutput } from "@/api/queries";
 
@@ -234,7 +235,9 @@ const meta: Meta<typeof StorageSettingsView> = {
   decorators: [
     (Story) => (
       <MemoryRouter>
-        <Story />
+        <TooltipProvider>
+          <Story />
+        </TooltipProvider>
       </MemoryRouter>
     ),
   ],
@@ -261,5 +264,24 @@ export const Loading: Story = {
 export const Empty: Story = {
   args: {
     logs: [],
+  },
+};
+
+export const WithDiscordGrant: Story = {
+  args: {
+    storage: {
+      ...mockStorage,
+      grants: [
+        ...mockStorage.grants,
+        {
+          id: "grant-discord",
+          source: "discord-member",
+          storage_bytes: 50_000_000,
+          description: "Discord server membership",
+          created_at: "2026-09-20T00:00:00Z",
+          expires_at: "2026-10-04T00:00:00Z",
+        },
+      ],
+    },
   },
 };

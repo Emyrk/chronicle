@@ -14,6 +14,13 @@ export function splitGrants(grants: readonly DataGrant[]): { permanent: DataGran
   return { permanent, expiring };
 }
 
+// Mirrors storagegrants.DiscordMemberSource.
+const DISCORD_MEMBER_SOURCE = "discord-member";
+
+export function hasDiscordMemberGrant(grants: readonly DataGrant[]): boolean {
+  return grants.some((g) => g.source === DISCORD_MEMBER_SOURCE);
+}
+
 export function sumBytes(grants: readonly DataGrant[]): number {
   return grants.reduce((sum, g) => sum + g.storage_bytes, 0);
 }

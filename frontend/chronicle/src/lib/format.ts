@@ -9,10 +9,10 @@ export function formatNumber(value: number, decimals:number = 0): string {
   return value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: decimals });
 }
 
-/** Formats a byte count as a human-readable string (B/KB/MB/GB/TB). */
+/** Formats a byte count with decimal units (B/KB/MB/GB/TB). */
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
-  const k = 1024;
+  const k = 1000;
   const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
@@ -37,6 +37,7 @@ export function formatExpirationDate(dateStr: string): string {
 /** Human-readable labels for known data-grant sources; falls back to title-casing. */
 export const SOURCE_LABELS: Record<string, string> = {
   base: "Base Allocation",
+  "discord-member": "Discord Member Bonus",
   support: "Supporter Bonus",
   "alpha-tester": "Alpha Tester Reward",
   "beta-tester": "Beta Tester Reward",
