@@ -99,6 +99,7 @@ type sqlcQuerier interface {
 	DeleteDiscordAnnouncement(ctx context.Context, id uuid.UUID) error
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
 	DeleteEmptyCooldownOverrides(ctx context.Context, datasetID uuid.UUID) error
+	DeleteExpiredDevicePairings(ctx context.Context) (int64, error)
 	DeleteExpiredGuildResourceVisitors(ctx context.Context) error
 	DeleteExpiredOAuthRelayCodes(ctx context.Context) (int64, error)
 	DeleteGearList(ctx context.Context, arg DeleteGearListParams) (int64, error)
@@ -224,6 +225,8 @@ type sqlcQuerier interface {
 	GetDatasetImportSummary(ctx context.Context, datasetID uuid.UUID) (GetDatasetImportSummaryRow, error)
 	GetDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) ([]byte, error)
 	GetDeploymentInfo(ctx context.Context) (DeploymentInfo, error)
+	GetDevicePairingByDeviceCodeHash(ctx context.Context, deviceCodeHash []byte) (DevicePairing, error)
+	GetDevicePairingByUserCode(ctx context.Context, userCode string) (DevicePairing, error)
 	GetDiscordAnnouncement(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
 	GetDiscordAnnouncementByRun(ctx context.Context, arg GetDiscordAnnouncementByRunParams) (GuildDiscordLogAnnouncement, error)
 	// Discord raid-log announcements
@@ -418,6 +421,7 @@ type sqlcQuerier interface {
 	// Compatible with PostgreSQL 13+ (no bit_xor aggregate required).
 	// IMPORTANT: keep WHERE clauses in sync with the corresponding BatchInsert queries.
 	GetTimeParseSnapshotSourceStats(ctx context.Context, arg GetTimeParseSnapshotSourceStatsParams) (GetTimeParseSnapshotSourceStatsRow, error)
+	GetUploadDeviceByTokenHash(ctx context.Context, tokenHash string) (UploadDevice, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)
 	GetUploadKeyByHash(ctx context.Context, secretHash string) (GetUploadKeyByHashRow, error)
 	GetUserActionBarSlots(ctx context.Context, userID uuid.UUID) (GetUserActionBarSlotsRow, error)
@@ -507,6 +511,7 @@ type sqlcQuerier interface {
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
 	InsertDerivedConsumableBuffs(ctx context.Context, datasetID uuid.UUID) (int64, error)
 	InsertDerivedConsumables(ctx context.Context, datasetID uuid.UUID) (int64, error)
+	InsertDevicePairing(ctx context.Context, arg InsertDevicePairingParams) (DevicePairing, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
 	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
@@ -546,6 +551,7 @@ type sqlcQuerier interface {
 	InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error)
 	// Create a new pending time-parse snapshot for a tenant+lookback.
 	InsertTimeParseSnapshot(ctx context.Context, arg InsertTimeParseSnapshotParams) (TimeParseSnapshot, error)
+	InsertUploadDevice(ctx context.Context, arg InsertUploadDeviceParams) (UploadDevice, error)
 	// Upload Keys
 	InsertUploadKey(ctx context.Context, arg InsertUploadKeyParams) (WowServerUploadKey, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
@@ -702,6 +708,7 @@ type sqlcQuerier interface {
 	// or via a server they own (wow_servers.default_dataset_id).
 	ListTenantsByDataset(ctx context.Context, defaultDatasetID uuid.NullUUID) ([]ListTenantsByDatasetRow, error)
 	ListTimeParseBossKillMemberships(ctx context.Context, arg ListTimeParseBossKillMembershipsParams) ([]TimeParseBossKillMembership, error)
+	ListUploadDevicesByUser(ctx context.Context, userID uuid.UUID) ([]UploadDevice, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
 	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
 	ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error)
@@ -791,6 +798,8 @@ type sqlcQuerier interface {
 	RecordAuthzMigration(ctx context.Context, version int32) error
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
+	// Single-use: flips approved -> redeemed exactly once.
+	RedeemDevicePairing(ctx context.Context, id uuid.UUID) (DevicePairing, error)
 	RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error)
 	// Run only after a replacement parse has committed or invalidation was cleared.
 	// It upserts the current members first, then removes obsolete members from the
@@ -807,6 +816,8 @@ type sqlcQuerier interface {
 	// tenant's additive flavor tags. Dataset selection uses the same precedence as
 	// ResolveDatasetByRealm; tenant tags augment rather than replace dataset tags.
 	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error)
+	// Approve or deny a pending, unexpired pairing on behalf of a user.
+	ResolveDevicePairingByUserCode(ctx context.Context, arg ResolveDevicePairingByUserCodeParams) (DevicePairing, error)
 	ResolveExternalAPIRealm(ctx context.Context, arg ResolveExternalAPIRealmParams) (ResolveExternalAPIRealmRow, error)
 	ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error)
 	// Returns log groups that have been parsed and still have raw files on storage.
@@ -814,6 +825,7 @@ type sqlcQuerier interface {
 	// major.minor.patch comparison. The caller deduplicates rows by log group and
 	// applies its own distinct log-group limit.
 	ResyncCandidateLogGroups(ctx context.Context) ([]ResyncCandidateLogGroupsRow, error)
+	RevokeUploadDevice(ctx context.Context, arg RevokeUploadDeviceParams) (int64, error)
 	SearchCreatureTemplates(ctx context.Context, arg SearchCreatureTemplatesParams) ([]SearchCreatureTemplatesRow, error)
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
 	SearchItemSets(ctx context.Context, arg SearchItemSetsParams) ([]SearchItemSetsRow, error)
@@ -882,6 +894,7 @@ type sqlcQuerier interface {
 	// time window. Used by the discovery endpoint to surface activity metrics.
 	TenantDiscoveryStats(ctx context.Context, since pgtype.Timestamptz) ([]TenantDiscoveryStatsRow, error)
 	TouchLogInstanceRankingSource(ctx context.Context, instanceID uuid.UUID) error
+	TouchUploadDeviceLastUsed(ctx context.Context, id uuid.UUID) error
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
 	TryAcquireAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)

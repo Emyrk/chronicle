@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { iconListUrl } from "@/config/iconUrl";
 import { toast } from "sonner";
-import { Blocks, HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star } from "lucide-react";
+import { Blocks, HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star, Laptop } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -157,6 +157,7 @@ const allTabs: Tab[] = [
   { path: "/account/settings", label: "Profile", icon: User },
   { path: "/account/characters", label: "Characters", icon: Swords },
   { path: "/account/storage", label: "Storage", icon: HardDrive },
+  { path: "/account/devices", label: "Devices", icon: Laptop },
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
