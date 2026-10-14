@@ -25,6 +25,9 @@ type State struct {
 	WoWPath string `json:"wow_path,omitempty"`
 	// UploadOnIdle also uploads when the log goes quiet, not only on WoW exit.
 	UploadOnIdle bool `json:"upload_on_idle,omitempty"`
+	// KeepLog turns off renaming the combat log after it was uploaded. The
+	// zero value archives, which is the default.
+	KeepLog bool `json:"keep_log,omitempty"`
 	// Uploaded maps a log path to the size that has been uploaded.
 	Uploaded map[string]int64 `json:"uploaded,omitempty"`
 	// LastReportURL is the most recent report, for the tray menu.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -101,6 +102,7 @@ type Engine struct {
 	// status and the fields the worker reads (token, wowUp, now, ...).
 	mu         sync.Mutex
 	pending    []job
+	archiveQ   []watch.File // fully uploaded logs for the worker to rename
 	current    *job
 	kick       chan struct{} // wakes the worker when pending grows
 	workerOnce sync.Once
@@ -202,9 +204,10 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 
 	files := watch.LogFiles(logDirs)
 	running := e.cfg.Running(ctx, installDirs)
+	st := e.cfg.Store.Get()
 	trig := watch.Trigger{
 		OnExit:    true,
-		OnIdle:    e.cfg.Store.Get().UploadOnIdle,
+		OnIdle:    st.UploadOnIdle,
 		IdleAfter: e.cfg.IdleAfter,
 	}
 	for _, f := range files {
@@ -220,6 +223,9 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 	e.now = now
 	e.trackSession(now, running)
 	queue, recording := e.tracker.Observe(now, files, running, manual, trig)
+	if !st.KeepLog {
+		e.queueArchive(files, running)
+	}
 	e.mu.Unlock()
 
 	if manual && len(queue) == 0 {
@@ -346,6 +352,54 @@ func (e *Engine) enqueue(queue []watch.File) {
 	}
 }
 
+// queueArchive asks the worker to rename logs that are fully uploaded, once
+// this poll found WoW not running. step never renames anything itself. Callers
+// hold e.mu.
+func (e *Engine) queueArchive(files []watch.File, running bool) {
+	for _, f := range e.tracker.Archivable(files, running) {
+		if !slices.Contains(e.archiveQ, f) {
+			e.archiveQ = append(e.archiveQ, f)
+		}
+	}
+	if len(e.archiveQ) > 0 {
+		select {
+		case e.kick <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// archive renames the queued logs. The worker calls it only when no upload is
+// pending, holding e.mu so a poll cannot interleave. A log is skipped unless
+// the latest poll still says WoW is not running and the tracker still has all
+// of its bytes uploaded; the poll loop queues it again later if so.
+func (e *Engine) archive() {
+	q := e.archiveQ
+	e.archiveQ = nil
+	for _, f := range q {
+		if len(e.tracker.Archivable([]watch.File{f}, e.wowUp)) == 0 {
+			continue
+		}
+		to, err := watch.Archive(f, e.now)
+		if err != nil {
+			e.cfg.Logger.Warn("archiving log", "file", f.Path, "err", err)
+			continue
+		}
+		e.tracker.MarkArchived(f.Path, to)
+		err = e.cfg.Store.Update(func(s *store.State) {
+			delete(s.Uploaded, f.Path)
+			if s.Uploaded == nil {
+				s.Uploaded = map[string]int64{}
+			}
+			s.Uploaded[to] = f.Size
+		})
+		if err != nil {
+			e.cfg.Logger.Warn("saving state", "err", err)
+		}
+		e.cfg.Logger.Info("archived log", "from", f.Path, "to", to)
+	}
+}
+
 // replacePending refreshes the size of an already queued path. Callers hold e.mu.
 func (e *Engine) replacePending(f watch.File) bool {
 	for i := range e.pending {
@@ -365,6 +419,9 @@ func (e *Engine) busy() bool { return e.current != nil || len(e.pending) > 0 }
 func (e *Engine) worker(ctx context.Context) {
 	for {
 		e.mu.Lock()
+		if len(e.pending) == 0 && len(e.archiveQ) > 0 {
+			e.archive()
+		}
 		if len(e.pending) == 0 {
 			e.mu.Unlock()
 			select {

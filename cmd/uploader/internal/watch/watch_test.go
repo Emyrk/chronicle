@@ -106,6 +106,73 @@ func TestTracker(t *testing.T) {
 	})
 }
 
+func TestTrackerArchive(t *testing.T) {
+	t.Parallel()
+	t0 := time.Date(2026, 1, 1, 20, 0, 0, 0, time.UTC)
+	exitOnly := watch.Trigger{OnExit: true, IdleAfter: 5 * time.Minute}
+	live := func(size int64) []watch.File {
+		return []watch.File{{Path: filepath.Join("Logs", watch.LiveLogName), Size: size}}
+	}
+	uploaded := func(t *testing.T, size int64) *watch.Tracker {
+		tr := watch.NewTracker(nil)
+		up, _ := tr.Observe(t0, live(size), false, false, exitOnly)
+		require.Len(t, up, 1)
+		tr.MarkUploaded(up[0].Path, size)
+		return tr
+	}
+
+	t.Run("archived once uploaded and WoW is not running", func(t *testing.T) {
+		t.Parallel()
+		tr := uploaded(t, 100)
+		require.Equal(t, live(100), tr.Archivable(live(100), false))
+	})
+
+	t.Run("deferred while WoW is running", func(t *testing.T) {
+		t.Parallel()
+		tr := uploaded(t, 100)
+		require.Empty(t, tr.Archivable(live(100), true))
+		require.Len(t, tr.Archivable(live(100), false), 1) // the next not-running poll
+	})
+
+	t.Run("not archived with unuploaded bytes or before upload", func(t *testing.T) {
+		t.Parallel()
+		tr := uploaded(t, 100)
+		require.Empty(t, tr.Archivable(live(150), false))
+		fresh := watch.NewTracker(nil)
+		fresh.Observe(t0, live(100), true, false, exitOnly)
+		require.Empty(t, fresh.Archivable(live(100), false))
+	})
+
+	t.Run("renamed log is not re-queued and a new log starts fresh", func(t *testing.T) {
+		t.Parallel()
+		tr := uploaded(t, 100)
+		to := filepath.Join("Logs", "WoWCombatLog-uploaded-20260101-210000.txt")
+		tr.MarkArchived(live(100)[0].Path, to)
+		files := append(live(10), watch.File{Path: to, Size: 100})
+		up, _ := tr.Observe(t0.Add(time.Minute), files, false, true, exitOnly)
+		require.Empty(t, tr.Archivable([]watch.File{{Path: to, Size: 100}}, false)) // archives are not archived again
+		require.Equal(t, live(10), up)                                              // only the new log
+	})
+}
+
+func TestArchive(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, watch.LiveLogName)
+	require.NoError(t, os.WriteFile(path, []byte("12345"), 0o644))
+	now := time.Date(2026, 1, 1, 21, 0, 0, 0, time.UTC)
+
+	_, err := watch.Archive(watch.File{Path: path, Size: 3}, now)
+	require.Error(t, err) // grew since it was uploaded
+	require.FileExists(t, path)
+
+	to, err := watch.Archive(watch.File{Path: path, Size: 5}, now)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(dir, "WoWCombatLog-uploaded-20260101-210000.txt"), to)
+	require.FileExists(t, to)
+	require.NoFileExists(t, path)
+}
+
 // The log is appended to by another process that keeps it open; polling must
 // see the new size each time (on Windows this needs a handle-based stat).
 func TestLogFilesSeesGrowth(t *testing.T) {
