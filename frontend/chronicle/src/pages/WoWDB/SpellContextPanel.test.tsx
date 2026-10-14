@@ -31,6 +31,7 @@ describe("SpellContextPanel", () => {
           numericContextFields: ["spirit", "shadowSpellPower"],
           usesGender: false,
           conditionalSpellIds: [18182, 18183],
+          conditionalAuraIds: [],
           referencedSpellIds: [18182, 18183],
           descriptionVariables: ["mult", "tap2", "tap1"],
           unsupportedVariables: [],

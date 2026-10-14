@@ -82,6 +82,7 @@ documented grammar). Supported escapes:
 | Variable | Meaning |
 | --- | --- |
 | `$s1`, `$s2`, `$s3` | Effect value (single or `min to max` range) |
+| `$w1`, `$w2`, `$w3` | Runtime aura effect value supplied through tooltip context |
 | `$m1` / `$M1` | Minimum / maximum effect value, including modern variance |
 | `$o1`/`$o2`/`$o3` | Periodic total over the spell duration |
 | `$d`, `$dN` | Duration |
@@ -92,6 +93,8 @@ documented grammar). Supported escapes:
 | `$NNNNs1` | Cross-spell reference (e.g. `$23455s1`) |
 | `$*N;s1`, `$/N;s1` | Multiply / divide a value |
 | `${expr}` | Inline arithmetic (variables resolve first, then evaluate) |
+| `$?sID[known][unknown]` | Branch on whether a spell is known |
+| `$?aID[active][inactive]` | Branch on whether an aura is active |
 | `$lsingular:plural;` | Pluralization (uses the most recent number) |
 | `$gmale:female;` | Gender (defaults to male — no caster gender at tooltip time) |
 

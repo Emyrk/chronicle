@@ -10,6 +10,7 @@ export interface SpellTooltipRequirements {
   numericContextFields: SpellTooltipNumericContextField[];
   usesGender: boolean;
   conditionalSpellIds: number[];
+  conditionalAuraIds: number[];
   referencedSpellIds: number[];
   descriptionVariables: string[];
   unsupportedVariables: string[];
@@ -38,6 +39,7 @@ const STANDARD_LOCAL_VARIABLES = new Set([
   "l",
   "g",
   "bc",
+  "w",
 ]);
 
 /** Identify the external character and spell context used by a spell tooltip. */
@@ -53,6 +55,7 @@ export function getSpellTooltipRequirements(
   const visitedDescVars = new Set<string>();
   const numericFields = new Set<SpellTooltipNumericContextField>();
   const conditionalSpellIds = new Set<number>();
+  const conditionalAuraIds = new Set<number>();
   const referencedSpellIds = new Set<number>();
   const unsupportedVariables = new Set<string>();
   let usesGender = false;
@@ -70,6 +73,9 @@ export function getSpellTooltipRequirements(
 
     for (const match of text.matchAll(/\$\?s(\d+)/g)) {
       conditionalSpellIds.add(Number(match[1]));
+    }
+    for (const match of text.matchAll(/\$\?a(\d+)/g)) {
+      conditionalAuraIds.add(Number(match[1]));
     }
 
     for (const match of text.matchAll(/\$(\d+)[a-zA-Z](?:\d+)?/g)) {
@@ -100,6 +106,7 @@ export function getSpellTooltipRequirements(
     numericContextFields: [...numericFields],
     usesGender,
     conditionalSpellIds: [...conditionalSpellIds].sort((a, b) => a - b),
+    conditionalAuraIds: [...conditionalAuraIds].sort((a, b) => a - b),
     referencedSpellIds: [...referencedSpellIds].sort((a, b) => a - b),
     descriptionVariables: [...visitedDescVars],
     unsupportedVariables: [...unsupportedVariables].sort(),
