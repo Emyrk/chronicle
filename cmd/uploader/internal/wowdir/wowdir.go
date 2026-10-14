@@ -9,11 +9,9 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-)
 
-// flavorInfo is the marker file the Blizzard client writes into every flavor
-// folder (_retail_, _classic_, _classic_beta_, ...).
-const flavorInfo = ".flavor.info"
+	"github.com/Emyrk/chronicle/cmd/uploader/internal/tenant"
+)
 
 // ErrNotFound is returned when no flavor folder can be found at a path.
 var ErrNotFound = errors.New("no World of Warcraft install found")
@@ -24,12 +22,12 @@ type Install struct {
 	Flavor string
 	// Dir is the flavor folder.
 	Dir string
-	// LogDir is where the client writes combat logs: <Dir>/Logs.
+	// LogDir is where the client writes combat logs: <Dir>/<layout.LogDir>.
 	LogDir string
 }
 
-func newInstall(dir string) Install {
-	return Install{Flavor: filepath.Base(dir), Dir: dir, LogDir: filepath.Join(dir, "Logs")}
+func newInstall(dir string, l tenant.Layout) Install {
+	return Install{Flavor: filepath.Base(dir), Dir: dir, LogDir: filepath.Join(dir, filepath.FromSlash(l.LogDir))}
 }
 
 // StandardRoots lists the places WoW is commonly installed on this OS.
@@ -77,11 +75,11 @@ func StandardRoots() []string {
 }
 
 // Detect scans install roots for flavor folders.
-func Detect(roots []string) []Install {
+func Detect(roots []string, l tenant.Layout) []Install {
 	var out []Install
 	seen := map[string]bool{}
 	for _, root := range roots {
-		for _, inst := range scan(root) {
+		for _, inst := range scan(root, l) {
 			if !seen[inst.Dir] {
 				seen[inst.Dir] = true
 				out = append(out, inst)
@@ -94,7 +92,7 @@ func Detect(roots []string) []Install {
 // Resolve normalises a user-chosen path to the flavor folders it refers to.
 // The path may be an install root, a flavor folder, a flavor's Logs folder, an
 // application bundle (.app), or the game executable itself.
-func Resolve(path string) ([]Install, error) {
+func Resolve(path string, l tenant.Layout) ([]Install, error) {
 	path = filepath.Clean(path)
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -107,15 +105,15 @@ func Resolve(path string) ([]Install, error) {
 	dir := path
 	if !fi.IsDir() {
 		dir, climb = filepath.Dir(path), 5
-	} else if strings.Contains(strings.ToLower(path), ".app") || strings.EqualFold(filepath.Base(path), "Logs") {
+	} else if strings.Contains(strings.ToLower(path), ".app") || strings.EqualFold(filepath.Base(path), filepath.Base(filepath.FromSlash(l.LogDir))) {
 		climb = 5
 	}
 
 	for {
-		if exists(filepath.Join(dir, flavorInfo)) {
-			return []Install{newInstall(dir)}, nil
+		if exists(filepath.Join(dir, l.FlavorMarker)) {
+			return []Install{newInstall(dir, l)}, nil
 		}
-		if found := scan(dir); len(found) > 0 {
+		if found := scan(dir, l); len(found) > 0 {
 			return found, nil
 		}
 		parent := filepath.Dir(dir)
@@ -127,7 +125,7 @@ func Resolve(path string) ([]Install, error) {
 }
 
 // scan returns the flavor folders directly inside root.
-func scan(root string) []Install {
+func scan(root string, l tenant.Layout) []Install {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil
@@ -135,12 +133,12 @@ func scan(root string) []Install {
 	var out []Install
 	for _, e := range entries {
 		name := e.Name()
-		if !e.IsDir() || !strings.HasPrefix(name, "_") || !strings.HasSuffix(name, "_") {
+		if !e.IsDir() || !strings.HasPrefix(name, l.FlavorAffix) || !strings.HasSuffix(name, l.FlavorAffix) {
 			continue
 		}
 		dir := filepath.Join(root, name)
-		if exists(filepath.Join(dir, flavorInfo)) {
-			out = append(out, newInstall(dir))
+		if exists(filepath.Join(dir, l.FlavorMarker)) {
+			out = append(out, newInstall(dir, l))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Dir < out[j].Dir })

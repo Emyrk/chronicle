@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/cmd/uploader/internal/tenant"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/wowdir"
 )
 
@@ -28,7 +29,7 @@ func fakeInstall(t *testing.T, flavors ...string) string {
 func TestDetect(t *testing.T) {
 	t.Parallel()
 	root := fakeInstall(t, "_classic_beta_")
-	got := wowdir.Detect([]string{filepath.Join(t.TempDir(), "missing"), root})
+	got := wowdir.Detect([]string{filepath.Join(t.TempDir(), "missing"), root}, tenant.DefaultLayout)
 	require.Len(t, got, 1)
 	require.Equal(t, "_classic_beta_", got[0].Flavor)
 	require.Equal(t, filepath.Join(root, "_classic_beta_", "Logs"), got[0].LogDir)
@@ -52,7 +53,7 @@ func TestResolve(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, err := wowdir.Resolve(path)
+			got, err := wowdir.Resolve(path, tenant.DefaultLayout)
 			require.NoError(t, err)
 			require.Len(t, got, 1)
 			require.Equal(t, flavor, got[0].Dir)
@@ -63,8 +64,8 @@ func TestResolve(t *testing.T) {
 
 func TestResolveNotFound(t *testing.T) {
 	t.Parallel()
-	_, err := wowdir.Resolve(t.TempDir())
+	_, err := wowdir.Resolve(t.TempDir(), tenant.DefaultLayout)
 	require.ErrorIs(t, err, wowdir.ErrNotFound)
-	_, err = wowdir.Resolve(filepath.Join(t.TempDir(), "nope"))
+	_, err = wowdir.Resolve(filepath.Join(t.TempDir(), "nope"), tenant.DefaultLayout)
 	require.Error(t, err)
 }

@@ -18,3 +18,10 @@ func TestResolve(t *testing.T) {
 	// A saved tenant sticks without flags.
 	require.Equal(t, custom, tenant.Resolve(custom, ""))
 }
+
+// A tenant saved before layouts existed keeps working.
+func TestResolveBackfillsLayout(t *testing.T) {
+	t.Parallel()
+	got := tenant.Resolve(tenant.Tenant{BaseURL: "https://old.example"}, "")
+	require.Equal(t, tenant.DefaultLayout, got.Layout)
+}

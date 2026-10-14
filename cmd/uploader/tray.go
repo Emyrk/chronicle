@@ -19,12 +19,14 @@ import (
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/engine"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/pair"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/store"
+	"github.com/Emyrk/chronicle/cmd/uploader/internal/tenant"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/update"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/wowdir"
 )
 
 type app struct {
 	server string
+	layout tenant.Layout
 	store  *store.Store
 	logger *slog.Logger
 	engine *engine.Engine
@@ -193,7 +195,7 @@ func (a *app) chooseFolder() {
 		}
 		return
 	}
-	if _, err := wowdir.Resolve(path); err != nil {
+	if _, err := wowdir.Resolve(path, a.layout); err != nil {
 		notify("Chronicle", "That doesn't look like a World of Warcraft folder.")
 		return
 	}
