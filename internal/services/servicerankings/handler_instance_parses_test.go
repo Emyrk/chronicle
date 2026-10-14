@@ -75,6 +75,7 @@ func setupParsesTest(t *testing.T) parsesTestFixture {
 	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
 		ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
 		Name: "Molten Core", Capabilities: []string{},
+		StartTime: database.Timestamptz(now.Add(time.Hour)),
 	})
 	require.NoError(t, err)
 
@@ -157,6 +158,25 @@ func (f parsesTestFixture) publishSnapshot(t *testing.T) database.RankingSnapsho
 	require.NoError(t, err)
 
 	err = f.store.BatchInsertSnapshotMembersFromRankings(ctx, snap.ID)
+	require.NoError(t, err)
+
+	conn, err := f.pool.Acquire(ctx)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `
+		INSERT INTO parse_score_memberships (
+			tenant_id, policy_version, query_version, run_id, encounter_name, player_guid,
+			instance_id, log_group_id, instance_name, difficulty_name, max_players,
+			player_class, player_spec, player_sub_spec, killed_at, dps, hps
+		)
+		SELECT
+			'00000000-0000-0000-0000-000000000000'::uuid, $2, $3, gen_random_uuid(),
+			ranking.encounter_name, ranking.player_guid, ranking.instance_id, instance.log_group_id,
+			ranking.instance_name, ranking.difficulty_name, ranking.max_players, ranking.player_class,
+			ranking.player_spec, ranking.player_sub_spec, ranking.killed_at, ranking.dps, ranking.hps
+		FROM encounter_dps_rankings ranking
+		JOIN log_instances instance ON instance.id = ranking.instance_id
+		WHERE ranking.instance_id = $1`, f.instanceID, parsepolicy.PolicyVersion, parsepolicy.QueryVersion)
+	conn.Release()
 	require.NoError(t, err)
 
 	snap, err = f.store.PublishRankingSnapshot(ctx, snap.ID)
@@ -503,7 +523,7 @@ func TestHandleInstanceParses(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 		var resp chroniclesdk.InstanceParsesResponse
 		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
-		assert.False(t, resp.Available)
+		assert.True(t, resp.Available)
 		assert.Empty(t, resp.Players)
 	})
 
@@ -511,7 +531,7 @@ func TestHandleInstanceParses(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 
-		baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+		baseTime := time.Now().Add(-time.Hour)
 		// Insert 6 players on Ragnaros (above MinSampleForParse=5).
 		for i, dps := range []float64{100, 200, 300, 400, 500, 600} {
 			f.insertTestRanking(t, struct {
@@ -578,7 +598,7 @@ func TestHandleInstanceParses(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 
-		baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+		baseTime := time.Now().Add(-time.Hour)
 		for i, hps := range []float64{50, 100, 150, 200, 250} {
 			f.insertTestRanking(t, struct {
 				encounterName  string
@@ -640,7 +660,7 @@ func TestHandleInstanceParses(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 
-		baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+		baseTime := time.Now().Add(-time.Hour)
 
 		// Insert 6 players on Boss1 and Boss2.
 		for i, dps := range []float64{100, 200, 300, 400, 500, 600} {
@@ -703,7 +723,7 @@ func TestHandleInstanceParses(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 
-		baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+		baseTime := time.Now().Add(-time.Hour)
 		// Insert 5 known-spec players + 1 unknown-spec player.
 		for i := 0; i < 5; i++ {
 			f.insertTestRanking(t, struct {
@@ -787,7 +807,7 @@ func TestHandleInstanceParses(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 
-		baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+		baseTime := time.Now().Add(-time.Hour)
 		// Insert only 3 players (below MinSampleForParse=5).
 		for i, dps := range []float64{100, 200, 300} {
 			f.insertTestRanking(t, struct {
@@ -842,7 +862,7 @@ func TestHandleInstanceParses(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 
-		baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+		baseTime := time.Now().Add(-time.Hour)
 		for i, dps := range []float64{100, 200, 300, 400, 500} {
 			f.insertTestRanking(t, struct {
 				encounterName  string
@@ -1077,6 +1097,10 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 				LogHashedSlug:  fmt.Sprintf("slug-cohort-%d", i),
 			})
 			require.NoError(t, err)
+			_, err = store.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
+				LogGroupID: cohortLGID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
+			})
+			require.NoError(t, err)
 		}
 
 		// Create two snapshots:
@@ -1116,8 +1140,8 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 		require.NoError(t, json.Unmarshal(readAll(t, w.Body), &resp))
 
 		assert.True(t, resp.Available)
-		// Should use the July 10 snapshot (cutoff <= instance start).
-		assert.Equal(t, cutoffDay10, resp.Cutoff.UTC())
+		// Windowed scoring uses the exact instance start time as its cutoff.
+		assert.Equal(t, instanceStart, resp.Cutoff.UTC())
 
 		// The raid's own players must be returned even though the raid is
 		// NOT a member of its own canonical snapshot (killed_at >= cutoff).
@@ -1244,11 +1268,13 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 		var resp chroniclesdk.InstanceParsesResponse
 		require.NoError(t, json.Unmarshal(readAll(t, w.Body), &resp))
 
-		// Runs predating all snapshots intentionally get no parses: there is
-		// no honest historical dataset for them, and comparing an old raid
-		// against current data would be misleading.
-		assert.False(t, resp.Available)
-		assert.Equal(t, "no_snapshot", resp.Reason)
-		_ = cutoffJuly // snapshot exists but postdates the run; must not be used
+		// Snapshot publication dates no longer gate historical availability.
+		// With no eligible membership cohort, the target row is returned as
+		// sample_too_small against its exact historical window.
+		assert.True(t, resp.Available)
+		require.Len(t, resp.Players, 1)
+		require.Len(t, resp.Players[0].Bosses, 1)
+		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), resp.Players[0].Bosses[0].Status)
+		_ = cutoffJuly
 	})
 }
