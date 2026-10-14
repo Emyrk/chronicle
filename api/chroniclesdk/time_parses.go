@@ -44,13 +44,14 @@ type TimeParseScore struct {
 
 // BossKillTimeParse is a per-boss kill-time parse.
 type BossKillTimeParse struct {
-	EncounterName string  `json:"encounter_name"`
-	DurationMs    int64   `json:"duration_ms"`
-	PreciseScore  float64 `json:"precise_score"`
-	DisplayScore  int     `json:"display_score"`
-	Rank          int     `json:"rank"`
-	SampleSize    int     `json:"sample_size"`
-	Status        string  `json:"status"`
+	EncounterID   uuid.UUID `json:"encounter_id"`
+	EncounterName string    `json:"encounter_name"`
+	DurationMs    int64     `json:"duration_ms"`
+	PreciseScore  float64   `json:"precise_score"`
+	DisplayScore  int       `json:"display_score"`
+	Rank          int       `json:"rank"`
+	SampleSize    int       `json:"sample_size"`
+	Status        string    `json:"status"`
 }
 
 // TimeParseAverage is the average across per-boss time parses.
