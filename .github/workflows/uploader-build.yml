@@ -109,12 +109,20 @@ jobs:
         with:
           version: '~> v2'
           args: release --clean --skip=publish --config .goreleaser.uploader.yaml
+      - name: Collect assets and checksum
+        # The windows "binary" archive is not a file in dist/ under its release
+        # name, so copy it there; then checksum every shipped file.
+        run: |
+          cp "$(find dist -name chronicle-uploader.exe -print -quit)" dist/Chronicle-Uploader-windows-amd64.exe
+          cd dist
+          shasum -a 256 Chronicle-Uploader-macos.zip Chronicle-Uploader-windows-amd64.exe Chronicle-Uploader-linux-amd64.tar.gz > checksums.txt
+          shasum -a 256 -c checksums.txt
       - uses: actions/upload-artifact@v4
         with:
           name: chronicle-uploader
           path: |
             dist/Chronicle-Uploader-macos.zip
-            dist/Chronicle-Uploader-windows-amd64
+            dist/Chronicle-Uploader-windows-amd64.exe
             dist/Chronicle-Uploader-linux-amd64.tar.gz
             dist/checksums.txt
       - name: Publish release
@@ -126,6 +134,6 @@ jobs:
             --title "Chronicle Uploader ${GITHUB_REF_NAME#uploader/}" \
             --generate-notes \
             dist/Chronicle-Uploader-macos.zip \
-            dist/Chronicle-Uploader-windows-amd64 \
+            dist/Chronicle-Uploader-windows-amd64.exe \
             dist/Chronicle-Uploader-linux-amd64.tar.gz \
             dist/checksums.txt

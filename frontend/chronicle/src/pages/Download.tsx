@@ -17,7 +17,7 @@ const API_URL = "https://api.github.com/repos/Emyrk/chronicle/releases?per_page=
 // File names are fixed by .goreleaser.uploader.yaml.
 const ASSETS: Asset[] = [
   { os: "mac", name: "Chronicle-Uploader-macos.zip", label: "macOS (Apple silicon & Intel)", note: "Unzip and drag to Applications." },
-  { os: "windows", name: "Chronicle-Uploader-windows-amd64", label: "Windows (64-bit)", note: "A single .exe, no installer." },
+  { os: "windows", name: "Chronicle-Uploader-windows-amd64.exe", label: "Windows (64-bit)", note: "A single .exe, no installer." },
   { os: "linux", name: "Chronicle-Uploader-linux-amd64.tar.gz", label: "Linux (64-bit)", note: "Extract and run." },
 ];
 

@@ -51,8 +51,10 @@ archives:
     name_template: Chronicle-Uploader-linux-amd64
     files: [none*]
 
+# checksums.txt is written by the workflow after every asset exists: the macOS
+# zip is made by a post-hook, after goreleaser's own checksum step would run.
 checksum:
-  name_template: checksums.txt
+  disable: true
 
 release:
   disable: true

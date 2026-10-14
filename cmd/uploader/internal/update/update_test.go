@@ -34,3 +34,28 @@ func TestLatest(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, update.Release{Version: "0.2.0", URL: "https://example/r"}, rel)
 }
+
+func TestCheckerConditionalGET(t *testing.T) {
+	t.Parallel()
+	var full, notModified int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") == `"v1"` {
+			notModified++
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		full++
+		w.Header().Set("ETag", `"v1"`)
+		_, _ = w.Write([]byte(`[{"tag_name":"uploader/v0.2.0","html_url":"u"}]`))
+	}))
+	t.Cleanup(srv.Close)
+	c := &update.Checker{Client: srv.Client(), URL: srv.URL}
+	for i := 0; i < 2; i++ {
+		rel, ok, err := c.Check(context.Background())
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.Equal(t, "0.2.0", rel.Version)
+	}
+	require.Equal(t, 1, full)
+	require.Equal(t, 1, notModified)
+}

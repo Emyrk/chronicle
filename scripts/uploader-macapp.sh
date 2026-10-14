@@ -6,7 +6,8 @@ bin="$1" version="$2" out="$3"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 app="$work/Chronicle Uploader.app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp "$(dirname "$0")/../cmd/uploader/packaging/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 cp "$bin" "$app/Contents/MacOS/chronicle-uploader"
 chmod +x "$app/Contents/MacOS/chronicle-uploader"
 cat > "$app/Contents/Info.plist" <<PLIST
@@ -17,6 +18,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>Chronicle Uploader</string>
   <key>CFBundleIdentifier</key><string>com.chronicleclassic.uploader</string>
   <key>CFBundleExecutable</key><string>chronicle-uploader</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>${version}</string>
   <key>CFBundleVersion</key><string>${version}</string>

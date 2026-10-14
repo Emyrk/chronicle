@@ -30,35 +30,78 @@ type ghRelease struct {
 	Prerelease bool   `json:"prerelease"`
 }
 
+// Checker re-checks the release list cheaply: after the first fetch it sends
+// If-None-Match, and GitHub answers 304 (not counted against the rate limit)
+// while nothing has been published.
+type Checker struct {
+	Client *http.Client
+	URL    string
+
+	etag string
+	rel  Release
+	ok   bool
+}
+
+// Check returns the newest uploader release, reusing the previous answer when
+// the server reports it unchanged.
+func (c *Checker) Check(ctx context.Context) (Release, bool, error) {
+	rel, ok, etag, err := latest(ctx, c.Client, c.URL, c.etag)
+	if err != nil {
+		return Release{}, false, err
+	}
+	if etag == "" { // 304: keep the cached answer
+		return c.rel, c.ok, nil
+	}
+	c.etag, c.rel, c.ok = etag, rel, ok
+	return rel, ok, nil
+}
+
 // Latest returns the newest uploader release listed at url. Releases are
 // returned newest first by GitHub.
 func Latest(ctx context.Context, client *http.Client, url string) (Release, bool, error) {
+	rel, ok, _, err := latest(ctx, client, url, "")
+	return rel, ok, err
+}
+
+// latest returns an empty etag when the server answered 304 to the given etag.
+func latest(ctx context.Context, client *http.Client, url, etag string) (Release, bool, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return Release{}, false, err
+		return Release{}, false, "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
 	res, err := client.Do(req)
 	if err != nil {
-		return Release{}, false, err
+		return Release{}, false, "", err
 	}
 	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode == http.StatusNotModified && etag != "" {
+		return Release{}, false, "", nil
+	}
 	if res.StatusCode != http.StatusOK {
-		return Release{}, false, fmt.Errorf("github releases: %s", res.Status)
+		return Release{}, false, "", fmt.Errorf("github releases: %s", res.Status)
 	}
 	var rels []ghRelease
 	if err := json.NewDecoder(res.Body).Decode(&rels); err != nil {
-		return Release{}, false, err
+		return Release{}, false, "", err
+	}
+	// Servers without an ETag still need a non-empty marker to be cached.
+	tag := res.Header.Get("ETag")
+	if tag == "" {
+		tag = "-"
 	}
 	for _, r := range rels {
 		if r.Draft || r.Prerelease || !strings.HasPrefix(r.TagName, TagPrefix) {
 			continue
 		}
-		return Release{Version: strings.TrimPrefix(r.TagName, TagPrefix), URL: r.HTMLURL}, true, nil
+		return Release{Version: strings.TrimPrefix(r.TagName, TagPrefix), URL: r.HTMLURL}, true, tag, nil
 	}
-	return Release{}, false, nil
+	return Release{}, false, tag, nil
 }
 
 // Newer reports whether latest is a higher x.y.z than current. Unparseable

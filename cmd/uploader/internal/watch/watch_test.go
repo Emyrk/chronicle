@@ -105,3 +105,22 @@ func TestTracker(t *testing.T) {
 		require.Len(t, up, 1) // manual still works
 	})
 }
+
+// The log is appended to by another process that keeps it open; polling must
+// see the new size each time (on Windows this needs a handle-based stat).
+func TestLogFilesSeesGrowth(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "WoWCombatLog.txt"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = f.Close() })
+	total := 0
+	for _, n := range []int{5, 7, 100} {
+		_, err = f.Write(make([]byte, n))
+		require.NoError(t, err)
+		total += n
+		files := watch.LogFiles([]string{dir})
+		require.Len(t, files, 1)
+		require.EqualValues(t, total, files[0].Size)
+	}
+}
