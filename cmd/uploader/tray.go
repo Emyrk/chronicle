@@ -301,7 +301,7 @@ func (a *app) connect(ctx context.Context) {
 	a.pairMsg = msg
 	a.mu.Unlock()
 	a.render()
-	a.engine.Wake()
+	a.engine.TokenChanged()
 }
 
 // pair returns a failure message, or "" when connected.
@@ -349,5 +349,5 @@ func (a *app) disconnect() {
 	a.account = ""
 	a.pairMsg = ""
 	a.mu.Unlock()
-	a.engine.Wake()
+	a.engine.TokenChanged()
 }
