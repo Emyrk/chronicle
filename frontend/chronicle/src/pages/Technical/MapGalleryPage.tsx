@@ -18,32 +18,49 @@ import {
   mapManifestUrl,
   overlayTilePlacement,
   tilePlacement,
-  isSupportedMapManifestFormat,
   type MapGalleryItem,
-  type WowMapManifest,
+  type WowMapMeshInstance,
 } from "./mapGallery";
+import { fetchMapManifest } from "./mapManifest";
+
+// A mesh-only instance has no image; its card and modal show the mesh's
+// world extent in yards (width along world Y, height along world X, as the
+// Replay Map lays the ground out).
+function meshExtent(mesh: WowMapMeshInstance): { width: number; height: number } {
+  return { width: Math.round(mesh.bounds.maxY - mesh.bounds.minY), height: Math.round(mesh.bounds.maxX - mesh.bounds.minX) };
+}
+
+function galleryCanvasSize(item: MapGalleryItem): { width: number; height: number } {
+  return item.kind === "zone" ? item.layer : item.kind === "instance" ? item.floor : item.kind === "mesh" ? meshExtent(item.mesh) : item.rendered;
+}
 
 function useMapManifest(iconBaseUrl: string | undefined) {
   return useQuery({
     queryKey: ["wow-map-manifest", iconBaseUrl],
     enabled: Boolean(iconBaseUrl),
     staleTime: 60 * 60 * 1000,
-    queryFn: async () => {
-      const response = await fetch(mapManifestUrl(iconBaseUrl!));
-      if (!response.ok) {
-        throw new Error(`Map manifest request failed with ${response.status}`);
-      }
-      const manifest = await response.json() as WowMapManifest;
-      if (!isSupportedMapManifestFormat(manifest.format)) {
-        throw new Error(`Unsupported map manifest format: ${manifest.format || "missing"}`);
-      }
-      return manifest;
-    },
+    queryFn: () => fetchMapManifest(iconBaseUrl!),
   });
 }
 
 function MapArtwork({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: string }) {
   const name = item.kind === "zone" ? item.map.name : item.instance.name;
+  if (item.kind === "mesh") {
+    const extent = meshExtent(item.mesh);
+    return (
+      <div
+        className="relative flex w-full items-center justify-center overflow-hidden bg-[#11100d]"
+        style={{ aspectRatio: `${extent.width} / ${extent.height}` }}
+        role="img"
+        aria-label={`${name} 3D mesh only, no map artwork`}
+      >
+        <div className="px-4 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-amber-200/45">
+          <div>No map artwork · 3D mesh only</div>
+          <div className="mt-1 normal-case tracking-normal text-muted-foreground">{item.mesh.path}</div>
+        </div>
+      </div>
+    );
+  }
   if ((item.kind === "rendered" || item.kind === "styled")) {
     return (
       <div
@@ -110,7 +127,7 @@ function MapCard({
 }) {
   const assignment = item.kind === "zone" ? item.map.assignments?.[0] : undefined;
   const name = item.kind === "zone" ? (item.map.name || `Map ${item.map.id}`) : item.instance.name;
-  const canvas = item.kind === "zone" ? item.layer : item.kind === "instance" ? item.floor : item.rendered;
+  const canvas = galleryCanvasSize(item);
 
   return (
     <Card className="group relative gap-0 overflow-hidden border-amber-950/40 bg-[#171611] py-0 shadow-[0_18px_45px_-30px_rgba(0,0,0,0.9)] transition-transform duration-200 hover:-translate-y-0.5 hover:border-amber-800/50">
@@ -144,7 +161,8 @@ function MapCard({
           </p>
         </div>
         <div className="shrink-0 text-right font-mono text-[9px] uppercase leading-4 tracking-wider text-muted-foreground">
-          <div>{canvas.width}×{canvas.height}</div>
+          <div>{canvas.width}×{canvas.height}{item.kind === "mesh" ? " yd" : ""}</div>
+          {item.kind === "mesh" && <div>3D mesh only</div>}
           {item.kind === "zone" && (item.art.phaseID !== 0 || item.layer.index !== 0) && (
             <div>phase {item.art.phaseID} · layer {item.layer.index}</div>
           )}
@@ -169,12 +187,14 @@ function MapModal({
   if (!item || !iconBaseUrl) return null;
 
   const name = item.kind === "zone" ? (item.map.name || `Map ${item.map.id}`) : item.instance.name;
-  const canvas = item.kind === "zone" ? item.layer : item.kind === "instance" ? item.floor : item.rendered;
+  const canvas = galleryCanvasSize(item);
   const description = item.kind === "zone"
     ? `UI map ${item.map.id}${item.art.phaseID !== 0 || item.layer.index !== 0 ? `, phase ${item.art.phaseID}, layer ${item.layer.index}` : ""}`
     : item.kind === "instance"
       ? `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, art floor ${item.floor.floor}`
-      : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, ${item.kind === "styled" ? "stylized render" : `generated from ${item.rendered.source}`}`;
+      : item.kind === "mesh"
+        ? `Dungeon, world ${item.instance.mapID}, no map artwork, 3D mesh only (${item.mesh.path})`
+        : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, ${item.kind === "styled" ? "stylized render" : `generated from ${item.rendered.source}`}`;
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
@@ -182,7 +202,7 @@ function MapModal({
         <DialogHeader className="border-b border-amber-950/50 bg-[#171611] px-5 py-4 pr-12">
           <DialogTitle className="font-serif text-xl tracking-wide text-amber-50">{name}</DialogTitle>
           <DialogDescription className="font-mono text-[10px] uppercase tracking-[0.14em] text-amber-200/50">
-            {description} · {canvas.width}×{canvas.height}
+            {description} · {canvas.width}×{canvas.height}{item.kind === "mesh" ? " yd" : ""}
           </DialogDescription>
         </DialogHeader>
         <div className="styled-scrollbar max-h-[calc(94vh-5rem)] overflow-auto bg-black/70 p-2 sm:p-4">

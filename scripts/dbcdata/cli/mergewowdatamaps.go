@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/coder/serpent"
@@ -22,7 +23,11 @@ type wowMapLayer struct {
 }
 
 type wowMapLayerInstance struct {
-	MapID    int32                   `json:"mapID"`
+	MapID int32 `json:"mapID"`
+	// Name is required only when a meshes layer creates a mesh-only instance
+	// for a mapID the original manifest has no instance for (a dungeon
+	// without in-game map artwork); the original's name wins otherwise.
+	Name     string                  `json:"name,omitempty"`
 	Rendered *wowMapRenderedInstance `json:"rendered,omitempty"`
 	Styled   *wowMapRenderedInstance `json:"styled,omitempty"`
 	Mesh     *wowMapMeshInstance     `json:"mesh,omitempty"`
@@ -73,7 +78,7 @@ func mergeWowdataMaps(originalPath, renderPath, styledPath, meshesPath, outPath 
 		}
 		mapIDs[record.ID] = struct{}{}
 	}
-	instances := make(map[int32]*wowMapInstance, len(manifest.Instances))
+	instances := make(map[int32]int, len(manifest.Instances))
 	for i := range manifest.Instances {
 		instance := &manifest.Instances[i]
 		if _, exists := instances[instance.MapID]; exists {
@@ -82,10 +87,10 @@ func mergeWowdataMaps(originalPath, renderPath, styledPath, meshesPath, outPath 
 		// The original manifest owns metadata, not rendered artwork. This also
 		// makes rerunning a merge independent of any stale original overlays.
 		instance.Rendered, instance.Styled, instance.Mesh = nil, nil, nil
-		instances[instance.MapID] = instance
+		instances[instance.MapID] = i
 	}
 	for _, layer := range []struct{ kind, file string }{{"render", renderPath}, {"styled", styledPath}, {"meshes", meshesPath}} {
-		if err := mergeWowMapLayer(layer.file, layer.kind, manifest.Target, instances); err != nil {
+		if err := mergeWowMapLayer(layer.file, layer.kind, &manifest, instances); err != nil {
 			return err
 		}
 	}
@@ -108,7 +113,10 @@ func decodeWowMapJSON(data []byte, value any) error {
 	return nil
 }
 
-func mergeWowMapLayer(file, kind string, target wowMapTarget, instances map[int32]*wowMapInstance) error {
+// mergeWowMapLayer applies a layer file to manifest.Instances, indexed by
+// mapID in instances. A meshes layer may add a mesh-only instance for a
+// mapID the original lacks; every other layer needs an existing instance.
+func mergeWowMapLayer(file, kind string, manifest *wowMapManifest, instances map[int32]int) error {
 	if file == "" {
 		return nil
 	}
@@ -128,6 +136,7 @@ func mergeWowMapLayer(file, kind string, target wowMapTarget, instances map[int3
 	}
 	// Rendered geometry is drawn for one build; styled art and meshes are
 	// published per product and carried across builds.
+	target := manifest.Target
 	if kind == "render" && layer.Target != target || kind != "render" && (layer.Target.Product != target.Product || layer.Target.Build != "" || layer.Target.Region != "" || layer.Target.Locale != "") {
 		return fmt.Errorf("%s map layer target does not match original", kind)
 	}
@@ -137,16 +146,29 @@ func mergeWowMapLayer(file, kind string, target wowMapTarget, instances map[int3
 			return fmt.Errorf("duplicate %s map layer mapID %d", kind, entry.MapID)
 		}
 		seen[entry.MapID] = struct{}{}
-		instance := instances[entry.MapID]
-		if instance == nil {
-			return fmt.Errorf("unknown %s map layer mapID %d", kind, entry.MapID)
+		index, known := instances[entry.MapID]
+		if !known {
+			if kind != "meshes" {
+				return fmt.Errorf("unknown %s map layer mapID %d", kind, entry.MapID)
+			}
+			if entry.Name == "" {
+				return fmt.Errorf("meshes map layer mapID %d has no instance in the original manifest and no name", entry.MapID)
+			}
+			// Mesh-only instance: a dungeon without in-game map artwork, so
+			// no floors; the mesh is all the frontend has to show.
+			index = len(manifest.Instances)
+			manifest.Instances = append(manifest.Instances, wowMapInstance{MapID: entry.MapID, Name: entry.Name, Floors: []wowMapInstanceFloor{}})
+			instances[entry.MapID] = index
 		}
-		if err := applyWowMapLayerEntry(kind, entry, instance); err != nil {
+		if err := applyWowMapLayerEntry(kind, entry, &manifest.Instances[index]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
+
+// wowMapMeshLiquidColor is the only colour syntax the frontend applies.
+var wowMapMeshLiquidColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 // applyWowMapLayerEntry copies the one artwork a layer of `kind` may carry
 // for an instance onto it, after checking its path and metadata.
@@ -160,6 +182,9 @@ func applyWowMapLayerEntry(kind string, entry wowMapLayerInstance, instance *wow
 			!(mesh.Bounds.MinX < mesh.Bounds.MaxX) || !(mesh.Bounds.MinY < mesh.Bounds.MaxY) || !(mesh.ZMin < mesh.ZMax) ||
 			mesh.Frame != wowMapMeshFrame {
 			return fmt.Errorf("invalid meshes map layer mesh for mapID %d", entry.MapID)
+		}
+		if liquid := mesh.Liquid; liquid != nil && (!wowMapMeshLiquidColor.MatchString(liquid.Color) || !(liquid.Opacity > 0) || liquid.Opacity > 1) {
+			return fmt.Errorf("invalid meshes map layer liquid for mapID %d", entry.MapID)
 		}
 		instance.Mesh = mesh
 		return nil

@@ -205,6 +205,94 @@ func TestMergeWowdataMapsMeshValidation(t *testing.T) {
 	require.Nil(t, merged.Instances[0].Mesh)
 }
 
+// A meshes layer entry for a mapID the original has no instance for creates a
+// mesh-only instance (name from the layer, no floors); an existing instance
+// still only gets the mesh, keeping its own name.
+func TestMergeWowdataMapsMeshOnlyInstance(t *testing.T) {
+	t.Parallel()
+	target := wowMapTarget{Product: "wow_classic_beta", Build: "1.2.3", Region: "us", Locale: "enUS"}
+	original := wowMapManifest{
+		Format: wowMapManifestFormat, Target: target,
+		Instances: []wowMapInstance{{MapID: 43, Name: "Wailing Caverns", Directory: "WailingCaverns", Floors: []wowMapInstanceFloor{{Floor: 1, Width: 1002, Tiles: []wowMapTile{{Path: "original/1.webp"}}}}}},
+	}
+	wcMesh := &wowMapMeshInstance{Path: "meshes/43.glb", Bounds: wowMapFloorBounds{MinX: -389.07, MaxX: 191.667, MinY: -370.833, MaxY: 538.351}, ZMin: -119.16, ZMax: 56.469, Frame: wowMapMeshFrame}
+	rfcMesh := &wowMapMeshInstance{
+		Path: "meshes/389.glb", Bounds: wowMapFloorBounds{MinX: -416.2582, MaxX: 102.9279, MinY: -108.4728, MaxY: 275.3513}, ZMin: -66.1637, ZMax: 59.4058, Frame: wowMapMeshFrame,
+		Liquid: &wowMapMeshLiquid{Color: "#d66020", Opacity: 0.85},
+	}
+	productOnly := wowMapTarget{Product: target.Product}
+
+	dir := t.TempDir()
+	origPath, meshesPath, out := filepath.Join(dir, "original.json"), filepath.Join(dir, "meshes.json"), filepath.Join(dir, "out.json")
+	require.NoError(t, writeWowMapManifest(origPath, original))
+	writeMapLayerTest(t, meshesPath, wowMapLayer{Format: wowMapManifestFormat, Target: productOnly, Instances: []wowMapLayerInstance{
+		{MapID: 43, Name: "Renamed Caverns", Mesh: wcMesh},
+		{MapID: 389, Name: "Ragefire Chasm", Mesh: rfcMesh},
+	}})
+	require.NoError(t, mergeWowdataMaps(origPath, "", "", meshesPath, out))
+	data, err := os.ReadFile(out)
+	require.NoError(t, err)
+	var merged wowMapManifest
+	require.NoError(t, json.Unmarshal(data, &merged))
+	require.Len(t, merged.Instances, 2)
+	require.Equal(t, "Wailing Caverns", merged.Instances[0].Name, "the original owns an existing instance's metadata")
+	require.Equal(t, original.Instances[0].Floors, merged.Instances[0].Floors)
+	require.Equal(t, wcMesh, merged.Instances[0].Mesh)
+	require.Equal(t, wowMapInstance{MapID: 389, Name: "Ragefire Chasm", Floors: []wowMapInstanceFloor{}, Mesh: rfcMesh}, merged.Instances[1])
+	require.Contains(t, string(data), `"floors": []`, "a mesh-only instance publishes an empty floor list, not null")
+
+	// Merging the same layer over the merged output again changes nothing:
+	// the created instance is now an existing one and only gets the mesh.
+	require.NoError(t, mergeWowdataMaps(out, "", "", meshesPath, filepath.Join(dir, "again.json")))
+	again, err := os.ReadFile(filepath.Join(dir, "again.json"))
+	require.NoError(t, err)
+	require.JSONEq(t, string(data), string(again))
+
+	for _, tc := range []struct {
+		name  string
+		layer *wowMapLayer
+		raw   string
+		want  string
+	}{
+		{name: "name required when creating", layer: &wowMapLayer{Format: wowMapManifestFormat, Target: productOnly, Instances: []wowMapLayerInstance{{MapID: 389, Mesh: rfcMesh}}}, want: "mapID 389 has no instance in the original manifest and no name"},
+		{name: "mesh-only still needs a mesh", layer: &wowMapLayer{Format: wowMapManifestFormat, Target: productOnly, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Ragefire Chasm"}}}, want: "must contain mesh only"},
+		{name: "mesh-only rejects artwork", layer: &wowMapLayer{Format: wowMapManifestFormat, Target: productOnly, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Ragefire Chasm", Mesh: rfcMesh, Styled: &wowMapRenderedInstance{Path: "render-styled/389.jpeg", Width: 2, Height: 2}}}}, want: "must contain mesh only"},
+		{name: "mesh-only validates the mesh", layer: &wowMapLayer{Format: wowMapManifestFormat, Target: productOnly, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Ragefire Chasm", Mesh: &wowMapMeshInstance{Path: "meshes/389.glb", Frame: wowMapMeshFrame}}}}, want: "invalid meshes map layer mesh for mapID 389"},
+		{name: "liquid colour without hash", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "d66020", Opacity: 0.85}), want: "invalid meshes map layer liquid for mapID 389"},
+		{name: "liquid colour short", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "#d60", Opacity: 0.85}), want: "invalid meshes map layer liquid"},
+		{name: "liquid colour named", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "orange", Opacity: 0.85}), want: "invalid meshes map layer liquid"},
+		{name: "liquid opacity zero", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "#d66020"}), want: "invalid meshes map layer liquid"},
+		{name: "liquid opacity above one", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "#d66020", Opacity: 1.5}), want: "invalid meshes map layer liquid"},
+		{name: "liquid extraneous field", raw: `{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta"},"instances":[{"mapID":389,"name":"Ragefire Chasm","mesh":{"path":"meshes/389.glb","bounds":{"minX":-416,"maxX":102,"minY":-108,"maxY":275},"zMin":-66,"zMax":59,"frame":"wow-yup-mirrored-x","liquid":{"color":"#d66020","opacity":0.85,"glow":true}}}]}`, want: "decode meshes"},
+		{name: "floors on a layer entry", raw: `{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta"},"instances":[{"mapID":389,"name":"Ragefire Chasm","floors":[],"mesh":{"path":"meshes/389.glb","bounds":{"minX":-416,"maxX":102,"minY":-108,"maxY":275},"zMin":-66,"zMax":59,"frame":"wow-yup-mirrored-x"}}]}`, want: "decode meshes"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			origPath, meshesPath, out := filepath.Join(dir, "original.json"), filepath.Join(dir, "meshes.json"), filepath.Join(dir, "out.json")
+			require.NoError(t, writeWowMapManifest(origPath, original))
+			if tc.layer != nil {
+				writeMapLayerTest(t, meshesPath, *tc.layer)
+			} else {
+				require.NoError(t, os.WriteFile(meshesPath, []byte(tc.raw), 0o644))
+			}
+			require.ErrorContains(t, mergeWowdataMaps(origPath, "", "", meshesPath, out), tc.want)
+			_, err := os.Stat(out)
+			require.ErrorIs(t, err, os.ErrNotExist)
+		})
+	}
+
+	// Only the meshes layer may create an instance.
+	renderPath := filepath.Join(dir, "render.json")
+	writeMapLayerTest(t, renderPath, wowMapLayer{Format: wowMapManifestFormat, Target: target, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Ragefire Chasm", Rendered: &wowMapRenderedInstance{Path: "render/389.png", Width: 2, Height: 2}}}})
+	require.ErrorContains(t, mergeWowdataMaps(origPath, renderPath, "", "", filepath.Join(dir, "render-out.json")), "unknown render map layer mapID 389")
+}
+
+func liquidLayerTest(target wowMapTarget, liquid wowMapMeshLiquid) *wowMapLayer {
+	mesh := &wowMapMeshInstance{Path: "meshes/389.glb", Bounds: wowMapFloorBounds{MinX: -416.2582, MaxX: 102.9279, MinY: -108.4728, MaxY: 275.3513}, ZMin: -66.1637, ZMax: 59.4058, Frame: wowMapMeshFrame, Liquid: &liquid}
+	return &wowMapLayer{Format: wowMapManifestFormat, Target: target, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Ragefire Chasm", Mesh: mesh}}}
+}
+
 func writeMapLayerTest(t *testing.T, file string, layer wowMapLayer) {
 	t.Helper()
 	data, err := json.Marshal(layer)

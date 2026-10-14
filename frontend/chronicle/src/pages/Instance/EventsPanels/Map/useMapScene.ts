@@ -1,19 +1,17 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
-import {
-  mapManifestUrl,
-  isSupportedMapManifestFormat,
-  type WowMapInstanceFloor,
-  type WowMapLayer,
-  type WowMapManifest,
-  type WowMapMeshInstance,
-  type WowMapOverlay,
-  type WowMapRenderedInstance,
+import type {
+  WowMapInstanceFloor,
+  WowMapLayer,
+  WowMapMeshInstance,
+  WowMapOverlay,
+  WowMapRenderedInstance,
 } from "@/pages/Technical/mapGallery";
+import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
-import { placeableDungeonMesh } from "./dungeonMeshes";
+import { isMeshOnlyInstance, placeableDungeonMesh } from "./dungeonMeshes";
 import type { MapPositionSample, MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
@@ -68,15 +66,7 @@ function useMapManifest(iconBaseUrl: string | undefined) {
     queryKey: ["wow-map-manifest", iconBaseUrl],
     enabled: Boolean(iconBaseUrl),
     staleTime: 60 * 60 * 1000,
-    queryFn: async () => {
-      const response = await fetch(mapManifestUrl(iconBaseUrl!));
-      if (!response.ok) throw new Error(`Map manifest request failed with ${response.status}`);
-      const manifest = await response.json() as WowMapManifest;
-      if (!isSupportedMapManifestFormat(manifest.format)) {
-        throw new Error(`Unsupported map manifest format: ${manifest.format || "missing"}`);
-      }
-      return manifest;
-    },
+    queryFn: () => fetchMapManifest(iconBaseUrl!),
   });
 }
 
@@ -186,6 +176,8 @@ export type MapScene =
     fitByDefault: boolean;
     /** The instance's real dungeon mesh from the manifest (`instances[].mesh`), when the scene can place it. */
     mesh: WowMapMeshInstance | null;
+    /** The instance has no map artwork, only `mesh`: the ground is always the mesh's extent and there is no 2D map. */
+    meshOnly: boolean;
     /** Combat events for the replay effects layer. */
     effects: EncounterEffects;
     bossGuids: ReadonlySet<string>;
@@ -257,7 +249,10 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
   const mesh = artwork.kind === "instance" ? placeableDungeonMesh(artwork.instance.mesh) : null;
-  const rawProjection = Boolean(options.rawDungeonProjection) && mesh !== null;
+  // A mesh-only instance has no floor to fall back on, so its mesh is the
+  // canvas from the start (while the mesh loads too), not only once asked.
+  const meshOnly = artwork.kind === "instance" && isMeshOnlyInstance(artwork.instance);
+  const rawProjection = (Boolean(options.rawDungeonProjection) || meshOnly) && mesh !== null;
   const meshCanvas = rawProjection && mesh ? dungeonMeshCanvas(mesh) : null;
   const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? selectedFloor;
   if (!canvas) return { status: "message", title: "Map artwork unavailable", detail: "No renderable map layer was published." };
@@ -366,6 +361,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     autoFit: focus?.autoFit ?? null,
     focusCentre: focus?.centre ?? null,
     mesh,
+    meshOnly,
     fitByDefault: props.context.selectedEncounterIds.length === 1 && Boolean(instanceEncounter?.boss),
     effects: encounter.effects,
     bossGuids,

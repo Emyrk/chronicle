@@ -101,6 +101,15 @@ type wowMapMeshInstance struct {
 	ZMin   float64           `json:"zMin"`
 	ZMax   float64           `json:"zMax"`
 	Frame  string            `json:"frame"`
+	// Liquid tints the mesh's `liquid_*` planes (lava, slime); absent, the
+	// frontend keeps the GLB's own translucent water.
+	Liquid *wowMapMeshLiquid `json:"liquid,omitempty"`
+}
+
+// wowMapMeshLiquid is a CSS hex colour (#rrggbb) and an opacity in (0, 1].
+type wowMapMeshLiquid struct {
+	Color   string  `json:"color"`
+	Opacity float64 `json:"opacity"`
 }
 
 type wowMapRenderedInstance struct {

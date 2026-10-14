@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { MeshBVH } from "three-mesh-bvh";
-import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer } from "@/pages/Technical/mapGallery";
+import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
 import { bossMiniSlug, bossMiniUrl } from "./bossMinis";
 import { clampToRadius, corsAssetUrl, dungeonMeshPlacement, FloorHeightCache } from "./dungeonMeshes";
 import { FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
@@ -148,6 +148,8 @@ export interface DungeonMeshRequest {
   url: string;
   /** The mesh entry's world-axis bounds: the ground the units project onto, which places the mesh under them. */
   bounds: WowMapFloorBounds;
+  /** Tint for the `liquid_*` planes (lava); null keeps the GLB's own water. */
+  liquid?: WowMapMeshLiquid | null;
 }
 
 /** The fight the mesh camera is locked to: its centre (artwork point) and Fit zoom. */
@@ -795,10 +797,15 @@ export class MapScene3D {
         if (!mesh.isMesh) return;
         const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         if (isLiquid(mesh, gltf.scene)) {
-          // Water planes: translucent, drawn after the cave without writing depth.
+          // Water planes: translucent, drawn after the cave without writing
+          // depth; tinted when the entry says the liquid is not water.
           for (const material of materials) {
             material.transparent = true;
             material.depthWrite = false;
+            if (request.liquid && "color" in material && material.color instanceof THREE.Color) {
+              material.color.set(request.liquid.color);
+              material.opacity = request.liquid.opacity;
+            }
           }
           mesh.renderOrder = 1;
           return;
