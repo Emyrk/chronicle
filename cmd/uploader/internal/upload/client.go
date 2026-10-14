@@ -20,9 +20,39 @@ import (
 
 const (
 	uploadPath = "/api/v1/raidlogs/logs/upload-v2"
-	// The server does not sniff the log format or flavor; both are required.
-	uploadQuery = "format=v22-cleu&flavor=vanilla,wow-forever"
+	probePath  = "/api/v1/whoami/dump"
 )
+
+// Ping checks that baseURL serves the Chronicle API. Without credentials the
+// probe endpoint answers 400; a landing page answers 404 or 405.
+func Ping(ctx context.Context, httpc *http.Client, baseURL string) error {
+	if httpc == nil {
+		httpc = &http.Client{Timeout: 15 * time.Second}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+probePath, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := httpc.Do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		return &NotChronicleError{BaseURL: baseURL, Status: resp.StatusCode}
+	}
+	return nil
+}
+
+// NotChronicleError means the host is up but is not a Chronicle API.
+type NotChronicleError struct {
+	BaseURL string
+	Status  int
+}
+
+func (e *NotChronicleError) Error() string {
+	return fmt.Sprintf("server %s does not look like a Chronicle API (HTTP %d)", e.BaseURL, e.Status)
+}
 
 // ErrUnauthorized means the token is missing, expired or revoked.
 var ErrUnauthorized = errors.New("not signed in to Chronicle")
@@ -58,8 +88,11 @@ type Result struct {
 
 // Client uploads logs.
 type Client struct {
-	// BaseURL is the Chronicle site, e.g. https://chronicleclassic.com.
+	// BaseURL is the tenant's Chronicle site.
 	BaseURL string
+	// Format and Flavor are the tenant's upload-v2 parameters. The server
+	// does not sniff them; both are required.
+	Format, Flavor string
 	// Token returns the current bearer token ("" when signed out).
 	Token string
 	HTTP  *http.Client
@@ -94,7 +127,7 @@ func (c *Client) Upload(ctx context.Context, path string, size int64) (Result, e
 		_ = pw.CloseWithError(writeForm(mw, f, size, filepath.Base(path)))
 	}()
 
-	endpoint := strings.TrimRight(c.BaseURL, "/") + uploadPath + "?" + uploadQuery
+	endpoint := strings.TrimRight(c.BaseURL, "/") + uploadPath + "?" + url.Values{"format": {c.Format}, "flavor": {c.Flavor}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, pr)
 	if err != nil {
 		_ = pr.Close()
@@ -125,6 +158,9 @@ func (c *Client) Upload(ctx context.Context, path string, size int64) (Result, e
 		return Result{}, ErrUnauthorized
 	case resp.StatusCode == http.StatusBadRequest && strings.Contains(out.Message, "already been uploaded"):
 		return Result{ReportURL: c.abs(out.Link), Duplicate: true}, nil
+	}
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		return Result{}, &NotChronicleError{BaseURL: c.BaseURL, Status: resp.StatusCode}
 	}
 	msg := out.Message
 	if msg == "" {

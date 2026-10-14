@@ -14,12 +14,11 @@ import (
 
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/engine"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/store"
+	"github.com/Emyrk/chronicle/cmd/uploader/internal/tenant"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/upload"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/watch"
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/wowdir"
 )
-
-const defaultServer = "https://chronicleclassic.com"
 
 // version is set at release time with -ldflags "-X main.version=...".
 var version = "dev"
@@ -33,7 +32,7 @@ func main() {
 
 func run() error {
 	var (
-		server   = flag.String("server", envOr("CHRONICLE_URL", defaultServer), "Chronicle server URL")
+		server   = flag.String("server", envOr("CHRONICLE_URL", ""), "Chronicle server URL; remembered for later launches")
 		wowPath  = flag.String("wow-path", "", "WoW folder, flavor folder or executable (overrides the saved choice)")
 		devToken = flag.String("dev-token", os.Getenv("CHRONICLE_UPLOADER_TOKEN"), "development only: session JWT to store in the keychain until browser pairing lands")
 	)
@@ -71,16 +70,22 @@ func run() error {
 		}
 	}
 
+	tn := tenant.Resolve(st.Get().Tenant, *server)
+	if err := st.Update(func(s *store.State) { s.Tenant = tn }); err != nil {
+		return err
+	}
+	logger.Info("tenant", "base_url", tn.BaseURL, "format", tn.Format, "flavor", tn.Flavor)
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	a := &app{server: *server, store: st, logger: logger, cancel: cancel}
+	a := &app{server: tn.BaseURL, store: st, logger: logger, cancel: cancel}
 	a.engine = engine.New(engine.Config{
 		Store:    st,
 		Installs: a.installs,
 		Token:    store.Token,
 		Upload: func(ctx context.Context, token, path string, size int64) (upload.Result, error) {
-			c := upload.Client{BaseURL: *server, Token: token}
+			c := upload.Client{BaseURL: tn.BaseURL, Format: tn.Format, Flavor: tn.Flavor, Token: token}
 			return c.Upload(ctx, path, size)
 		},
 		Running:  watch.WoWRunning,
@@ -88,6 +93,11 @@ func run() error {
 		OnStatus: a.onStatus,
 		Logger:   logger,
 	})
+	go func() {
+		if err := upload.Ping(ctx, nil, tn.BaseURL); err != nil {
+			logger.Error("server check failed", "err", err)
+		}
+	}()
 	return a.runTray(ctx)
 }
 
