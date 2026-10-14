@@ -7,12 +7,21 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/uploader-build.yml'
+      - '.goreleaser.uploader.yaml'
+      - 'scripts/uploader-macapp.sh'
   push:
     branches: [main, develop, feature/forever-uploader]
     paths:
       - 'cmd/uploader/**'
       - 'go.mod'
       - 'go.sum'
+    tags: ['uploader/v*']
+  # Cut an unsigned build from any branch without tagging: Actions > Uploader
+  # Build > Run workflow. The assets are attached to the run as an artifact.
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -72,3 +81,51 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
       - run: go test -race ./cmd/uploader/...
+
+  # Packages macOS (universal .app in a .zip), Windows and Linux. Runs on
+  # macOS because the darwin tray needs cgo; windows/linux cross-compile.
+  # Tags publish a GitHub Release; manual runs upload an artifact instead.
+  package:
+    name: Package
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/uploader/v')
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Tag for goreleaser
+        # goreleaser needs a plain semver tag; this one stays local.
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/uploader/v* ]]; then
+            git tag "v${GITHUB_REF_NAME#uploader/v}"
+          else
+            git tag "v0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          fi
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean --skip=publish --config .goreleaser.uploader.yaml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chronicle-uploader
+          path: |
+            dist/Chronicle-Uploader-macos.zip
+            dist/Chronicle-Uploader-windows-amd64
+            dist/Chronicle-Uploader-linux-amd64.tar.gz
+            dist/checksums.txt
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/uploader/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Chronicle Uploader ${GITHUB_REF_NAME#uploader/}" \
+            --generate-notes \
+            dist/Chronicle-Uploader-macos.zip \
+            dist/Chronicle-Uploader-windows-amd64 \
+            dist/Chronicle-Uploader-linux-amd64.tar.gz \
+            dist/checksums.txt

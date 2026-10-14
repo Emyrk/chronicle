@@ -1,0 +1,61 @@
+# Builds cmd/uploader for macOS, Windows and Linux. Run on a macOS runner: the
+# darwin tray needs cgo, while windows/linux are pure Go and cross-compile.
+# Releases are cut by pushing a tag like uploader/v0.1.0 (see
+# .github/workflows/uploader-build.yml). Unsigned in v1.
+version: 2
+project_name: chronicle-uploader
+
+# goreleaser only builds and packages (--skip=publish); the workflow attaches
+# the assets to the "uploader/vX.Y.Z" release, since OSS goreleaser can't parse
+# a prefixed tag.
+builds:
+  - id: darwin
+    main: ./cmd/uploader
+    binary: chronicle-uploader
+    goos: [darwin]
+    goarch: [arm64, amd64]
+    env: [CGO_ENABLED=1]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+  - id: windows
+    main: ./cmd/uploader
+    binary: chronicle-uploader
+    goos: [windows]
+    goarch: [amd64]
+    env: [CGO_ENABLED=0]
+    # windowsgui: no console window behind the tray icon.
+    ldflags: ["-s -w -H=windowsgui -X main.version={{ .Version }}"]
+  - id: linux
+    main: ./cmd/uploader
+    binary: chronicle-uploader
+    goos: [linux]
+    goarch: [amd64]
+    env: [CGO_ENABLED=0]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+
+universal_binaries:
+  - ids: [darwin]
+    replace: true
+    name_template: chronicle-uploader
+    hooks:
+      post:
+        - cmd: scripts/uploader-macapp.sh "{{ .Path }}" "{{ .Version }}" "dist/Chronicle-Uploader-macos.zip"
+
+archives:
+  - id: windows
+    ids: [windows]
+    formats: [binary]
+    name_template: Chronicle-Uploader-windows-amd64
+  - id: linux
+    ids: [linux]
+    formats: [tar.gz]
+    name_template: Chronicle-Uploader-linux-amd64
+    files: [none*]
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  disable: true
+
+changelog:
+  disable: true

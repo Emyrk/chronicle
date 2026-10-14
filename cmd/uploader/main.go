@@ -21,6 +21,9 @@ import (
 
 const defaultServer = "https://chronicleclassic.com"
 
+// version is set at release time with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
