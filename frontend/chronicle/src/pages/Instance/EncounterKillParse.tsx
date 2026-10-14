@@ -108,12 +108,12 @@ export function ClearParseBadge({
       <TooltipTrigger asChild>
         <div
           className={cn(
-            "flex cursor-help items-center gap-1.5 rounded-full border px-2 py-0.5",
+            "flex cursor-help items-baseline gap-1.5 rounded-full border px-2",
             parseBorderColor(score),
             parseBgColor(score),
           )}
         >
-          <span className={cn("font-mono text-sm font-bold leading-none tabular-nums", parseColor(score))}>{score}</span>
+          <span className={cn("font-semibold tabular-nums", parseColor(score))}>{score}</span>
           <span className="text-xs opacity-60">clear</span>
         </div>
       </TooltipTrigger>
