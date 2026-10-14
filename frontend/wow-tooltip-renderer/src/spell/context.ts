@@ -8,11 +8,15 @@ export interface SpellTooltipContext {
   holySpellPower?: number;
   gender?: "male" | "female";
   knownSpellIds?: ReadonlySet<number>;
+  /** Auras active on the unit whose runtime tooltip is being rendered. */
+  activeAuraIds?: ReadonlySet<number>;
+  /** Runtime aura effect values used by $w1, $w2, and so on. */
+  auraEffectValues?: readonly number[];
 }
 
 export type SpellTooltipNumericContextField = Exclude<
   keyof SpellTooltipContext,
-  "gender" | "knownSpellIds"
+  "gender" | "knownSpellIds" | "activeAuraIds" | "auraEffectValues"
 >;
 
 export const SPELL_TOOLTIP_CONTEXT_VARIABLES: Readonly<

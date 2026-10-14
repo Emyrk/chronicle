@@ -152,6 +152,62 @@ describe("resolveSpellDescription — variable types", () => {
   });
 });
 
+describe("resolveSpellDescription — aura runtime context", () => {
+  it("uses the false branch for aura conditionals without active-aura context", () => {
+    const spell = makeSpell();
+
+    expect(
+      resolveSpellDescription(
+        spell,
+        "Benefits: $?a1230587[Mana Well: Restores $w1 Mana. ][]",
+      ),
+    ).toBe("Benefits: ");
+  });
+
+  it("collapses WoW Forever camp benefits to safe static text", () => {
+    const spell = makeSpell();
+    const template = [
+      "Gained the following camp benefits: ",
+      "$?a1229451[Tent: You received rest experience. ][]",
+      "$?a1230587[Mana Well: Restores $w1 Mana. ][]",
+      "$?a1230653[Enchanted Lute: Armor +$w1, stats +$w2, resistances +$w3. ][]",
+    ].join("");
+
+    expect(resolveSpellDescription(spell, template)).toBe(
+      "Gained the following camp benefits: ",
+    );
+  });
+
+  it("uses the true branch for active auras and resolves runtime aura values", () => {
+    const spell = makeSpell();
+
+    expect(
+      resolveSpellDescription(
+        spell,
+        "Benefits: $?a1230653[Lute: Armor +$w1, stats +$w2, resistances +$w3. ][]",
+        undefined,
+        {
+          activeAuraIds: new Set([1230653]),
+          auraEffectValues: [120, 8, 15],
+        },
+      ),
+    ).toBe("Benefits: Lute: Armor +120, stats +8, resistances +15. ");
+  });
+
+  it("keeps $w placeholders visible when runtime aura values are unavailable", () => {
+    const spell = makeSpell();
+
+    expect(
+      resolveSpellDescription(
+        spell,
+        "$?a1230587[Mana Well: Restores $w1 Mana. ][]",
+        undefined,
+        { activeAuraIds: new Set([1230587]) },
+      ),
+    ).toBe("Mana Well: Restores $w1 Mana. ");
+  });
+});
+
 describe("resolveSpellDescription — canonical effects", () => {
   it("preserves legacy tooltip parity through canonical difficulty-zero effects", () => {
     const spell = makeSpell({

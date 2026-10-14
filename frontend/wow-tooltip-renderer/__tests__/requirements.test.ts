@@ -20,8 +20,27 @@ describe("getSpellTooltipRequirements", () => {
       numericContextFields: ["spirit", "shadowSpellPower"],
       usesGender: false,
       conditionalSpellIds: [18182, 18183],
+      conditionalAuraIds: [],
       referencedSpellIds: [18182, 18183],
       descriptionVariables: ["mult", "tap2", "tap1"],
+      unsupportedVariables: [],
+    });
+  });
+
+  it("reports aura conditionals and recognizes runtime aura values", () => {
+    const spell = makeSpell({
+      description: {
+        "0": "$?a1230587[Mana Well restores $w1 Mana.][]",
+      },
+    });
+
+    expect(getSpellTooltipRequirements(spell)).toEqual({
+      numericContextFields: [],
+      usesGender: false,
+      conditionalSpellIds: [],
+      conditionalAuraIds: [1230587],
+      referencedSpellIds: [],
+      descriptionVariables: [],
       unsupportedVariables: [],
     });
   });
@@ -42,6 +61,7 @@ describe("getSpellTooltipRequirements", () => {
       ],
       usesGender: true,
       conditionalSpellIds: [],
+      conditionalAuraIds: [],
       referencedSpellIds: [],
       descriptionVariables: [],
       unsupportedVariables: ["$F"],
