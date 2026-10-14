@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -215,6 +216,16 @@ func refreshTimeParseMemberships(t *testing.T, ctx context.Context, store databa
 		_, err = store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{LogGroupID: group.WoWLogGroup.ID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
 		require.NoError(t, err)
 	}
+}
+
+func TestArgsBackfillTimeParseScoresUniqueStates(t *testing.T) {
+	t.Parallel()
+
+	states := servicerankings.ArgsBackfillTimeParseScores{}.InsertOpts().UniqueOpts.ByState
+	assert.Contains(t, states, rivertype.JobStateScheduled)
+	assert.Contains(t, states, rivertype.JobStatePending)
+	assert.Contains(t, states, rivertype.JobStateAvailable)
+	assert.Contains(t, states, rivertype.JobStateRunning)
 }
 
 func TestWorkerBackfillTimeParseScoresMissingOnlyBatchAndTenant(t *testing.T) {
