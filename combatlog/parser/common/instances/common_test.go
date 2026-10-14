@@ -27,6 +27,12 @@ func TestWailingCavernsFactoryMatchesMapID(t *testing.T) {
 	require.True(t, WailingCavernsFactory.MatchZone(zone.Zone{Name: "unexpected localized name", MapID: 43}))
 }
 
+func TestRuinsOfLordaeronFactoryMatchesMapID(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, RuinsOfLordaeronFactory.MatchZone(zone.Zone{Name: "unexpected localized name", MapID: 2999}))
+}
+
 func TestTempleOfAhnQirajFactoryMatchZoneAliases(t *testing.T) {
 	t.Parallel()
 
