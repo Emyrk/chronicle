@@ -27,11 +27,11 @@ func (f *fakeProcs) List(context.Context) ([]watch.Process, error) {
 
 func (f *fakeProcs) Exe(context.Context, int32) (string, error) { return "", nil }
 
-func (f *fakeProcs) Exists(_ context.Context, pid int32) (bool, error) {
+func (f *fakeProcs) Exists(_ context.Context, pid int32, name string) (bool, error) {
 	f.exists++
 	for _, p := range f.table {
 		if p.PID == pid {
-			return true, nil
+			return p.Name == name, nil
 		}
 	}
 	return false, nil
@@ -58,6 +58,19 @@ func TestGameEnumeratesOnlyWithoutKnownPid(t *testing.T) {
 	require.True(t, g.Running(ctx, nil), "first miss is debounced")
 	require.Equal(t, 2, fp.lists, "a dead pid triggers one enumeration")
 	require.False(t, g.Running(ctx, nil), "second miss is an exit")
+}
+
+// A recycled pid (or a zombie that stopped being the client) is not the game.
+func TestGameDropsPidThatChangedIdentity(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fp := &fakeProcs{table: []watch.Process{wowProc}}
+	g := watch.NewGame(tenant.DefaultLayout, fp)
+	require.True(t, g.Running(ctx, nil))
+
+	fp.table = []watch.Process{{PID: wowProc.PID, Name: "notepad.exe"}}
+	require.True(t, g.Running(ctx, nil), "first miss is debounced")
+	require.False(t, g.Running(ctx, nil), "pid 42 is no longer the game")
 }
 
 // A single missed poll must not look like WoW exiting.
