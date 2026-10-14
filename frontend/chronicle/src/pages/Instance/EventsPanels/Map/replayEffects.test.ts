@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  effectiveCastIconGuids,
   addEffectEvent,
   BEAM_MS,
   CAST_ICON_MS,
@@ -593,5 +594,31 @@ describe("basic attacks and cast parity", () => {
     // Heal numbers are kept.
     const heals = effects(event(1_000, "heal", "mage", "tank", { spellName: "Heal", amount: 500 }));
     expect(deriveCombatText(heals, 1_100, everyone, new Set(["tank"]), new Set(["mage"]), options, 8)).toMatchObject([{ text: "+500" }]);
+  });
+});
+
+describe("castIconGuidSet", () => {
+  const players = ["p1", "p2", "p3"];
+  const bosses = new Set(["boss"]);
+  const big = Array.from({ length: 11 }, (_, i) => `r${i}`);
+
+  it("shows everyone in a small group with nothing selected", () => {
+    expect(effectiveCastIconGuids("selected", players, null, bosses)).toEqual(new Set(["p1", "p2", "p3", "boss"]));
+  });
+  it("shows only the selection plus bosses when players are selected", () => {
+    expect(effectiveCastIconGuids("selected", players, new Set(["p2"]), bosses)).toEqual(new Set(["p2", "boss"]));
+  });
+  it("keeps selected + bosses only in groups over 10", () => {
+    expect(effectiveCastIconGuids("selected", big, null, bosses)).toEqual(new Set(["boss"]));
+    expect(effectiveCastIconGuids("selected", big, new Set(["r1"]), bosses)).toEqual(new Set(["r1", "boss"]));
+  });
+  it("treats exactly 10 players as small", () => {
+    expect(effectiveCastIconGuids("selected", big.slice(0, 10), null, null)?.size).toBe(10);
+  });
+  it("All overrides group size and selection", () => {
+    expect(effectiveCastIconGuids("all", big, new Set(["r1"]), bosses)?.size).toBe(12);
+  });
+  it("Off shows nothing", () => {
+    expect(effectiveCastIconGuids("off", players, null, bosses)).toBeNull();
   });
 });

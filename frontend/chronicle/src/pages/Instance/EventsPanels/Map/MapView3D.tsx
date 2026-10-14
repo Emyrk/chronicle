@@ -16,7 +16,7 @@ import {
   type MapScene3DUnit,
   type MapSceneFocus,
 } from "./MapScene3D";
-import { DEFAULT_EFFECT_OPTIONS, isBasicAttack, type EncounterEffects } from "./replayEffects";
+import { DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, isBasicAttack, type CastIconMode, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 
@@ -56,7 +56,9 @@ interface EffectSettings {
   onlySelected: boolean;
   maxEffects: number;
   bars: boolean;
-  casts: boolean;
+  /** Legacy boolean from before castMode; false migrates to "off". */
+  casts?: boolean;
+  castMode: CastIconMode;
 }
 
 const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
@@ -67,8 +69,14 @@ const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   onlySelected: false,
   maxEffects: MAX_EFFECT_PRIMITIVES,
   bars: true,
-  casts: true,
+  castMode: "selected",
 };
+
+const CAST_MODES: { value: CastIconMode; label: string; title: string }[] = [
+  { value: "off", label: "Off", title: "No cast icons" },
+  { value: "selected", label: "Selected", title: "Cast icons over selected players and bosses; with nothing selected, over everyone in groups of 10 or fewer" },
+  { value: "all", label: "All", title: "Cast icons over every player and boss" },
+];
 
 const DENSITY_OPTIONS = [16, 32, MAX_EFFECT_PRIMITIVES];
 
@@ -76,6 +84,8 @@ function readStoredEffectSettings(): EffectSettings {
   try {
     const stored = JSON.parse(localStorage.getItem(EFFECTS_STORAGE_KEY) ?? "{}") as Partial<EffectSettings>;
     const settings = { ...DEFAULT_EFFECT_SETTINGS, ...stored };
+    if (!stored.castMode && stored.casts === false) settings.castMode = "off";
+    if (!CAST_MODES.some((mode) => mode.value === settings.castMode)) settings.castMode = "selected";
     if (!DENSITY_OPTIONS.includes(settings.maxEffects)) settings.maxEffects = MAX_EFFECT_PRIMITIVES;
     return settings;
   } catch {
@@ -235,7 +245,9 @@ export default function MapView3D({
     : "";
   const bossKey = bossGuids ? [...bossGuids].join(",") : "";
   const tankKey = tankGuids ? [...tankGuids].join(",") : "";
+  const playerKey = markers.filter((marker) => marker.kind === "player").map((marker) => marker.guid).join(",");
   const effectOptions = useMemo(() => {
+    const players = playerKey ? playerKey.split(",") : [];
     const selected = selectedKey ? new Set(selectedKey.split(",")) : null;
     const tanks = tankKey ? tankKey.split(",") : [];
     const bosses = bossKey ? new Set(bossKey.split(",")) : null;
@@ -245,7 +257,7 @@ export default function MapView3D({
     return {
       selected,
       bosses,
-      castIconGuids: selectedAndBosses.size > 0 ? selectedAndBosses : null,
+      castIconGuids: effectiveCastIconGuids(effectSettings.castMode, players, selected, bosses),
       healText: healText.size > 0 ? healText : null,
       ...DEFAULT_EFFECT_OPTIONS,
       filterGuids: effectSettings.onlySelected ? selected : null,
@@ -255,10 +267,10 @@ export default function MapView3D({
       showHeals: effectSettings.heals,
       showOverheal: effectSettings.overheal,
     };
-  }, [bossKey, effectSettings, selectedKey, tankKey]);
+  }, [bossKey, effectSettings, playerKey, selectedKey, tankKey]);
 
-  // Spell icons float over selected players and bosses while they cast.
-  const castGuids = effectSettings.enabled && effectSettings.casts ? effectOptions.castIconGuids : null;
+  // Spell icons float over the mode-picked players and bosses while they cast.
+  const castGuids = effectSettings.enabled ? effectOptions.castIconGuids : null;
   const castSpellIds = useMemo(() => {
     if (!effects || !castGuids) return [];
     const ids = new Set<number>();
@@ -337,9 +349,14 @@ export default function MapView3D({
             <button type="button" aria-pressed={effectSettings.onlySelected} onClick={() => updateEffectSettings({ onlySelected: !effectSettings.onlySelected })} title="Only show effects involving the selected players" className={toggleClass(effectSettings.onlySelected)}>
               Only selected
             </button>
-            <button type="button" aria-pressed={effectSettings.casts} onClick={() => updateEffectSettings({ casts: !effectSettings.casts })} title="Spell icons above selected players and bosses while they cast" className={toggleClass(effectSettings.casts)}>
-              Casts
-            </button>
+            <span role="group" aria-label="Cast icons" className="flex items-center gap-0.5">
+              <span className="text-muted-foreground">Casts</span>
+              {CAST_MODES.map((mode) => (
+                <button key={mode.value} type="button" aria-pressed={effectSettings.castMode === mode.value} onClick={() => updateEffectSettings({ castMode: mode.value })} title={mode.title} className={toggleClass(effectSettings.castMode === mode.value)}>
+                  {mode.label}
+                </button>
+              ))}
+            </span>
             <select
               aria-label="Effect density"
               title="Maximum effects drawn at once"
