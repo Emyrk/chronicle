@@ -30,6 +30,7 @@ import (
 	"github.com/Emyrk/chronicle/database/pubsub"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/cleanup"
+	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/dustin/go-humanize"
@@ -643,6 +644,9 @@ func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, 
 		return fmt.Errorf("invalidate log group: %w", err)
 	}
 
+	if err := c.Zed.DeleteParseScoreMembershipsByLogGroup(ctx, logID); err != nil {
+		return fmt.Errorf("delete invalidated DPS/HPS parse memberships: %w", err)
+	}
 	if err := c.Zed.DeleteTimeParseClearTimeMembershipsByLogGroup(ctx, logID); err != nil {
 		return fmt.Errorf("delete invalidated clear-time memberships: %w", err)
 	}
@@ -661,6 +665,9 @@ func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, 
 		return fmt.Errorf("load time-parse replacement log groups: %w", err)
 	}
 	for _, replacementLogGroup := range replacementLogGroups {
+		if refreshErr := c.refreshParseScoreMemberships(ctx, replacementLogGroup); refreshErr != nil {
+			return fmt.Errorf("refresh DPS/HPS parse memberships for replacement log group: %w", refreshErr)
+		}
 		if _, refreshErr := c.Zed.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
 			LogGroupID: replacementLogGroup, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 		}); refreshErr != nil {
@@ -691,6 +698,9 @@ func (c *Chronicle) ClearWoWLogGroupInvalidation(ctx context.Context, logID uuid
 		return fmt.Errorf("clear log group invalidation: %w", err)
 	}
 
+	if err := c.refreshParseScoreMemberships(ctx, logID); err != nil {
+		return fmt.Errorf("restore DPS/HPS parse memberships after clearing invalidation: %w", err)
+	}
 	if _, err := c.Zed.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
 		LogGroupID: logID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 	}); err != nil {
@@ -734,6 +744,9 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 		return fmt.Errorf("delete log group: %w", err)
 	}
 	for _, replacementLogGroup := range replacementLogGroups {
+		if refreshErr := c.refreshParseScoreMemberships(ctx, replacementLogGroup); refreshErr != nil {
+			return fmt.Errorf("refresh DPS/HPS parse memberships for replacement log group: %w", refreshErr)
+		}
 		if _, refreshErr := c.Zed.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
 			LogGroupID: replacementLogGroup, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 		}); refreshErr != nil {
@@ -803,6 +816,9 @@ func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID 
 	}
 
 	for _, replacementLogGroup := range replacementLogGroups {
+		if refreshErr := c.refreshParseScoreMemberships(ctx, replacementLogGroup); refreshErr != nil {
+			return fmt.Errorf("refresh DPS/HPS parse memberships for replacement log group: %w", refreshErr)
+		}
 		if _, refreshErr := c.Zed.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
 			LogGroupID: replacementLogGroup, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 		}); refreshErr != nil {
@@ -827,6 +843,13 @@ func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID 
 	}
 
 	return nil
+}
+
+func (c *Chronicle) refreshParseScoreMemberships(ctx context.Context, logGroupID uuid.UUID) error {
+	_, err := c.Zed.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
+		LogGroupID: logGroupID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
+	})
+	return err
 }
 
 func (c *Chronicle) RemoveWoWLogFilesFromStorage(ctx context.Context, logID uuid.UUID) error {

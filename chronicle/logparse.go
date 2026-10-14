@@ -38,6 +38,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/database/jsontransform"
 	"github.com/Emyrk/chronicle/internal/guildrenames"
+	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -837,8 +838,18 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
 	}
 
-	// Keep the compact current-known cohort synchronized after every successful
+	// Keep compact current-known cohorts synchronized after every successful
 	// parse so live windows immediately include late historical uploads.
+	parseMembershipsRefreshed := true
+	if result, err := db.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
+		LogGroupID: job.Args.LogID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
+	}); err != nil {
+		parseMembershipsRefreshed = false
+		w.parent.logger.WarnContext(ctx, "failed to refresh DPS/HPS parse memberships after parse", slog.Any("error", err))
+	} else {
+		w.parent.logger.InfoContext(ctx, "refreshed DPS/HPS parse memberships after parse",
+			slog.Int64("upserted", result.UpsertedCount), slog.Int64("deleted", result.DeletedCount))
+	}
 	timeParseMembershipsRefreshed := true
 	if result, err := db.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
 		LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
@@ -873,10 +884,13 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	// Fire-and-forget: scoring failure doesn't fail the parse, but log errors.
 	if !invalidLog && w.parent.queue != nil {
 		for _, inst := range jobOut.Instances {
-			_, enqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
-				InstanceID: inst.ID,
-				TenantID:   job.Args.TenantID,
-			}, nil)
+			var enqErr error
+			if parseMembershipsRefreshed {
+				_, enqErr = w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
+					InstanceID: inst.ID,
+					TenantID:   job.Args.TenantID,
+				}, nil)
+			}
 			if enqErr != nil {
 				w.parent.logger.Error("failed to enqueue parse score computation",
 					slog.String("instance_id", inst.ID.String()),
