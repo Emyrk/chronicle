@@ -109,6 +109,8 @@ function makeTimeParsesResponse(
     lookback_days: 60,
     policy_version: 1,
     query_version: 1,
+    computed_at: "2026-07-01T00:00:00Z",
+    scopes: {},
     boss_kill_times: [],
     ...overrides,
   };

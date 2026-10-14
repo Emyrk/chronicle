@@ -9,14 +9,11 @@ import {
 import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import { parseBgColor, parseBorderColor, parseColor } from "../parseColors";
-import { useSpeedrunPopulation } from "./overviewQueries";
+import { useInstanceTimeParses, useSpeedrunPopulation } from "./overviewQueries";
 import type { PopulationSelection } from "./populationSelectionState";
 import { summarizeComparisonRaids, summarizePrimaryRaid } from "./raidSummary";
-import {
-  clearTimeParse,
-  summarizeClearTimes,
-  type ClearTimeSummary,
-} from "./clearTimePopulation";
+import { summarizeClearTimes, type ClearTimeSummary } from "./clearTimePopulation";
+import { selectTimeParseScopeResult } from "./timeParseScope";
 
 interface MetricCellProps {
   label: string;
@@ -25,21 +22,29 @@ interface MetricCellProps {
   comparisonLabel: string;
   formatValue: (value: number) => string;
   formatDelta: (value: number) => string;
+  showParseBadge?: boolean;
   parseScore?: number | null;
+  parseSampleSize?: number;
+  parseUnavailableReason?: string;
   parseDistribution?: ClearTimeSummary | null;
 }
 
-function ParseDistribution({
+function ClearTimeParseBadge({
   score,
   primaryValue,
+  sampleSize,
+  unavailableReason,
   summary,
 }: {
-  score: number;
-  primaryValue: number;
-  summary: ClearTimeSummary;
+  score: number | null;
+  primaryValue: number | null;
+  sampleSize?: number;
+  unavailableReason?: string;
+  summary?: ClearTimeSummary | null;
 }) {
-  const domainMin = Math.min(summary.min, primaryValue);
-  const domainMax = Math.max(summary.max, primaryValue);
+  const hasDistribution = summary !== null && summary !== undefined && primaryValue !== null;
+  const domainMin = hasDistribution ? Math.min(summary.min, primaryValue) : 0;
+  const domainMax = hasDistribution ? Math.max(summary.max, primaryValue) : 0;
   const span = Math.max(domainMax - domainMin, 1);
   const position = (value: number) => `${((value - domainMin) / span) * 100}%`;
 
@@ -52,13 +57,14 @@ function ParseDistribution({
             "rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold",
             "cursor-help transition duration-150 hover:-translate-y-px hover:brightness-125",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-1 focus-visible:ring-offset-card",
-            parseColor(score),
-            parseBgColor(score),
-            parseBorderColor(score),
+            score === null && "border-zinc-400/30 bg-zinc-400/10 text-zinc-500",
+            score !== null && parseColor(score),
+            score !== null && parseBgColor(score),
+            score !== null && parseBorderColor(score),
           )}
-          aria-label={`Clear-time parse ${score}. Show comparison distribution.`}
+          aria-label={score === null ? "Clear-time parse unavailable. Show details." : `Clear-time parse ${score}. Show details.`}
         >
-          {score}
+          {score ?? "—"}
         </button>
       </TooltipTrigger>
       <TooltipContent
@@ -70,71 +76,80 @@ function ParseDistribution({
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold text-foreground">Clear-time parse</p>
+            <p className="text-xs font-semibold text-foreground">
+              {score === null ? "Clear-time parse unavailable" : "Clear-time parse"}
+            </p>
             <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-              Faster than or equal to {score}% of {summary.count.toLocaleString()} qualified clears.
+              {score === null
+                ? unavailableReason ?? "No persisted score is available for this population."
+                : `Faster than or equal to ${score}% of ${(sampleSize ?? 0).toLocaleString()} qualified clears.`}
             </p>
           </div>
           <span
             className={cn(
               "rounded border px-2 py-0.5 font-mono text-xs font-bold",
-              parseColor(score),
-              parseBgColor(score),
-              parseBorderColor(score),
+              score === null && "border-zinc-400/30 bg-zinc-400/10 text-zinc-500",
+              score !== null && parseColor(score),
+              score !== null && parseBgColor(score),
+              score !== null && parseBorderColor(score),
             )}
           >
-            {score}
+            {score ?? "—"}
           </span>
         </div>
 
-        <div className="mt-3 rounded-lg border border-white/5 bg-black/20 px-3 pb-2.5 pt-2">
-          <div className="mb-2 flex items-center justify-between text-[9px] uppercase tracking-[0.12em] text-muted-foreground/70">
-            <span>Clear-time distribution</span>
-            <span>Lower is better</span>
-          </div>
-          <div className="relative h-8" aria-hidden>
-            <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border/80" />
-            <div
-              className="absolute top-1/2 h-px -translate-y-1/2 bg-muted-foreground/70"
-              style={{ left: position(summary.min), width: `calc(${position(summary.max)} - ${position(summary.min)})` }}
-            />
-            <div
-              className="absolute top-1/2 h-3.5 -translate-y-1/2 rounded-sm border border-muted-foreground/50 bg-muted-foreground/30"
-              style={{ left: position(summary.q1), width: `calc(${position(summary.q3)} - ${position(summary.q1)})` }}
-            />
-            <div
-              className="absolute top-1/2 h-5 w-px -translate-y-1/2 bg-foreground/80"
-              style={{ left: position(summary.median) }}
-            />
-            <div
-              className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-primary-foreground/70 bg-primary shadow-[0_0_0_2px_rgba(0,0,0,0.75),0_0_7px_color-mix(in_oklab,var(--primary)_55%,transparent)]"
-              style={{ left: position(primaryValue) }}
-            />
-          </div>
-          <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
-            <span>{formatClearDuration(domainMin)}</span>
-            <span>{formatClearDuration(domainMax)}</span>
-          </div>
-        </div>
+        {hasDistribution && (
+          <>
+            <div className="mt-3 rounded-lg border border-white/5 bg-black/20 px-3 pb-2.5 pt-2">
+              <div className="mb-2 flex items-center justify-between text-[9px] uppercase tracking-[0.12em] text-muted-foreground/70">
+                <span>Selected comparison distribution</span>
+                <span>Lower is better</span>
+              </div>
+              <div className="relative h-8" aria-hidden>
+                <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border/80" />
+                <div
+                  className="absolute top-1/2 h-px -translate-y-1/2 bg-muted-foreground/70"
+                  style={{ left: position(summary.min), width: `calc(${position(summary.max)} - ${position(summary.min)})` }}
+                />
+                <div
+                  className="absolute top-1/2 h-3.5 -translate-y-1/2 rounded-sm border border-muted-foreground/50 bg-muted-foreground/30"
+                  style={{ left: position(summary.q1), width: `calc(${position(summary.q3)} - ${position(summary.q1)})` }}
+                />
+                <div
+                  className="absolute top-1/2 h-5 w-px -translate-y-1/2 bg-foreground/80"
+                  style={{ left: position(summary.median) }}
+                />
+                <div
+                  className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-primary-foreground/70 bg-primary shadow-[0_0_0_2px_rgba(0,0,0,0.75),0_0_7px_color-mix(in_oklab,var(--primary)_55%,transparent)]"
+                  style={{ left: position(primaryValue) }}
+                />
+              </div>
+              <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
+                <span>{formatClearDuration(domainMin)}</span>
+                <span>{formatClearDuration(domainMax)}</span>
+              </div>
+            </div>
 
-        <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-          <span className="text-muted-foreground">Your clear</span>
-          <span className="text-right font-mono font-semibold text-foreground">{formatClearDuration(primaryValue)}</span>
-          <span className="text-muted-foreground">Comparison median</span>
-          <span className="text-right font-mono">{formatClearDuration(summary.median)}</span>
-          <span className="text-muted-foreground">Top 25%</span>
-          <span className="text-right font-mono">{formatClearDuration(summary.q1)}</span>
-          <span className="text-muted-foreground">Fastest</span>
-          <span className="text-right font-mono">{formatClearDuration(summary.min)}</span>
-        </div>
-        <div className="mt-2 flex items-center gap-3 border-t border-white/5 pt-2 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="size-2 rotate-45 bg-primary" /> Your clear
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-4 rounded-sm bg-muted-foreground/40" /> Middle 50%
-          </span>
-        </div>
+            <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+              <span className="text-muted-foreground">Your clear</span>
+              <span className="text-right font-mono font-semibold text-foreground">{formatClearDuration(primaryValue)}</span>
+              <span className="text-muted-foreground">Comparison median</span>
+              <span className="text-right font-mono">{formatClearDuration(summary.median)}</span>
+              <span className="text-muted-foreground">Top 25%</span>
+              <span className="text-right font-mono">{formatClearDuration(summary.q1)}</span>
+              <span className="text-muted-foreground">Fastest</span>
+              <span className="text-right font-mono">{formatClearDuration(summary.min)}</span>
+            </div>
+            <div className="mt-2 flex items-center gap-3 border-t border-white/5 pt-2 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rotate-45 bg-primary" /> Your clear
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-4 rounded-sm bg-muted-foreground/40" /> Middle 50%
+              </span>
+            </div>
+          </>
+        )}
       </TooltipContent>
     </Tooltip>
   );
@@ -147,7 +162,10 @@ function MetricCell({
   comparisonLabel,
   formatValue,
   formatDelta,
-  parseScore,
+  showParseBadge = false,
+  parseScore = null,
+  parseSampleSize,
+  parseUnavailableReason,
   parseDistribution,
 }: MetricCellProps) {
   const delta = value !== null && comparisonValue !== null ? value - comparisonValue : null;
@@ -156,8 +174,14 @@ function MetricCell({
     <div className="group min-w-0 border-t px-5 py-4 transition-colors hover:bg-muted/10 sm:border-l sm:border-t-0 sm:first:border-l-0">
       <div className="flex items-center gap-2">
         <p className="text-xs text-muted-foreground transition-colors group-hover:text-foreground/75">{label}</p>
-        {parseScore !== null && parseScore !== undefined && value !== null && parseDistribution && (
-          <ParseDistribution score={parseScore} primaryValue={value} summary={parseDistribution} />
+        {showParseBadge && (
+          <ClearTimeParseBadge
+            score={parseScore}
+            primaryValue={value}
+            sampleSize={parseSampleSize}
+            unavailableReason={parseUnavailableReason}
+            summary={parseDistribution}
+          />
         )}
       </div>
       <div className="mt-1 flex min-w-0 items-baseline gap-2">
@@ -195,17 +219,29 @@ export function RaidSummaryStrip({
 }) {
   const primaryQuery = useSpeedrunPopulation(primary);
   const comparisonQuery = useSpeedrunPopulation(comparison);
+  const timeParsesQuery = useInstanceTimeParses(
+    primary.kind === "instance" ? primary.instanceId : undefined,
+  );
   const primarySummary = summarizePrimaryRaid(primaryQuery.data?.runs[0]);
   const comparisonRuns = comparisonQuery.data?.runs ?? [];
   const comparisonSummary = comparison
     ? summarizeComparisonRaids(comparisonRuns)
     : null;
-  // Clear-time parse is computed against the selected comparison cohort so
-  // it updates with the population selector. No comparison → no parse.
-  const clearTimeParseScore = comparison
-    ? clearTimeParse(primaryQuery.data?.runs[0], comparisonRuns)
-    : null;
-  const clearTimeDistribution = comparison
+  const selectedTimeParses = selectTimeParseScopeResult(timeParsesQuery.data, comparison);
+  const clearTimeParse = selectedTimeParses?.available ? selectedTimeParses.clear_time : undefined;
+  const clearTimeParseScore = clearTimeParse?.status === "sample_too_small"
+    ? null
+    : clearTimeParse?.display_score ?? null;
+  const clearTimeParseUnavailableReason = !selectedTimeParses
+    ? "No persisted score is available for this population."
+    : !selectedTimeParses.available
+      ? selectedTimeParses.reason ?? "Time parses are unavailable for this population."
+      : clearTimeParse?.status === "sample_too_small"
+        ? `The selected population has only ${clearTimeParse.sample_size.toLocaleString()} eligible clears, which is too small to score.`
+        : !clearTimeParse
+          ? "This raid does not have a qualified clear-time parse."
+          : undefined;
+  const clearTimeDistribution = comparison?.kind === "cohort"
     ? summarizeClearTimes(comparisonRuns)
     : null;
   const comparisonLabel = comparison?.kind === "instance" ? "Other raid" : "Comparison avg";
@@ -249,7 +285,10 @@ export function RaidSummaryStrip({
               comparisonLabel={comparisonLabel}
               formatValue={formatClearDuration}
               formatDelta={formatDurationDelta}
+              showParseBadge={timeParsesQuery.isSuccess}
               parseScore={clearTimeParseScore}
+              parseSampleSize={clearTimeParse?.sample_size}
+              parseUnavailableReason={clearTimeParseUnavailableReason}
               parseDistribution={clearTimeDistribution}
             />
             <MetricCell

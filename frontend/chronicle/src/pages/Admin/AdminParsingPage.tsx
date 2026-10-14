@@ -1,12 +1,13 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
+  AdminBackfillTimeParseScoresResponse,
   AdminRankingsRefreshStatusResponse,
   AdminRefreshRankingsResponse,
   AdminSnapshotSummary,
   AdminTriggerSnapshotResponse,
 } from "@/api/typesGenerated";
-import { Loader2, Camera, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Camera, DatabaseZap, RefreshCw, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
@@ -163,6 +164,180 @@ function SnapshotCreateControls({
             : "Failed to create snapshot"}
         </p>
       )}
+    </Card>
+  );
+}
+
+// ── Locked time-parse score backfill ────────────────────────────────────
+
+function TimeParseBackfillControls() {
+  const [tenantId, setTenantId] = useState("");
+  const [startedAfter, setStartedAfter] = useState("");
+  const [startedBefore, setStartedBefore] = useState("");
+  const [batchSize, setBatchSize] = useState(100);
+  const [force, setForce] = useState(false);
+
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/v1/admin/parses/time-scores/backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_id: tenantId.trim(),
+          started_after: startedAfter ? `${startedAfter}T00:00:00Z` : "",
+          started_before: startedBefore ? `${startedBefore}T00:00:00Z` : "",
+          batch_size: batchSize,
+          force,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          (body as Record<string, string>).detail ??
+            (body as Record<string, string>).message ??
+            "Failed to enqueue time parse backfill",
+        );
+      }
+      return res.json() as Promise<AdminBackfillTimeParseScoresResponse>;
+    },
+  });
+
+  const invalidDateRange =
+    startedAfter !== "" &&
+    startedBefore !== "" &&
+    startedAfter >= startedBefore;
+  const invalidBatchSize = batchSize < 1 || batchSize > 500;
+
+  const enqueue = () => {
+    if (
+      force &&
+      !window.confirm(
+        "Force recompute replaces existing locked scores in the selected range. Continue?",
+      )
+    ) {
+      return;
+    }
+    backfillMutation.mutate();
+  };
+
+  return (
+    <Card className="overflow-hidden border-amber-500/20 bg-gradient-to-br from-zinc-950 via-zinc-950 to-amber-950/20">
+      <div className="border-b border-amber-500/15 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <div className="rounded-md bg-amber-500/10 p-2 text-amber-400">
+            <DatabaseZap className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="font-semibold">Locked Time Parse Backfill</h3>
+            <p className="text-xs text-muted-foreground">
+              Dispatch historical clear and boss score jobs. Each run processes
+              one bounded batch.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4 p-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <label className="space-y-1 text-xs text-muted-foreground xl:col-span-2">
+            Tenant UUID
+            <input
+              type="text"
+              placeholder="Blank = all tenants"
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 font-mono text-sm text-foreground"
+              value={tenantId}
+              onChange={(event) => setTenantId(event.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Instance started on or after
+            <input
+              type="date"
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-foreground"
+              value={startedAfter}
+              onChange={(event) => setStartedAfter(event.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Instance started before
+            <input
+              type="date"
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-foreground"
+              value={startedBefore}
+              onChange={(event) => setStartedBefore(event.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Batch size
+            <input
+              type="number"
+              min={1}
+              max={500}
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-foreground"
+              value={batchSize}
+              onChange={(event) => setBatchSize(Number(event.target.value))}
+            />
+          </label>
+          <label className="flex items-center gap-2 self-end rounded border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={force}
+              onChange={(event) => setForce(event.target.checked)}
+              className="rounded border-zinc-700"
+            />
+            Force recompute existing scores
+          </label>
+          <div className="flex items-end">
+            <Button
+              className="w-full"
+              onClick={enqueue}
+              disabled={
+                backfillMutation.isPending || invalidDateRange || invalidBatchSize
+              }
+            >
+              {backfillMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <DatabaseZap className="mr-2 h-4 w-4" />
+              )}
+              Enqueue Backfill Batch
+            </Button>
+          </div>
+        </div>
+
+        {invalidDateRange && (
+          <p className="text-sm text-red-400">
+            The start date must be before the end date.
+          </p>
+        )}
+        {invalidBatchSize && (
+          <p className="text-sm text-red-400">
+            Batch size must be between 1 and 500.
+          </p>
+        )}
+        {backfillMutation.isSuccess && (
+          <div className="rounded border border-green-500/20 bg-green-500/5 px-3 py-2 text-sm text-green-400">
+            Dispatcher job{" "}
+            <span className="font-mono">#{backfillMutation.data.job_id}</span>{" "}
+            was enqueued in state{" "}
+            <span className="font-mono">{backfillMutation.data.job_state}</span>
+            . Run another batch after it completes if its River output reports
+            rerun=true.
+          </div>
+        )}
+        {backfillMutation.isError && (
+          <p className="rounded border border-red-500/20 bg-red-500/5 px-3 py-2 text-sm text-red-400">
+            {backfillMutation.error instanceof Error
+              ? backfillMutation.error.message
+              : "Failed to enqueue time parse backfill"}
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Blank tenant and date filters target all eligible history.
+          Missing-only runs skip existing scores. Every instance is scored at
+          its own start timestamp against the preceding 60 days of cohort data.
+        </p>
+      </div>
     </Card>
   );
 }
@@ -415,6 +590,8 @@ function DpsHpsTab() {
           )}
         </div>
       </Card>
+
+      <TimeParseBackfillControls />
 
       <SnapshotCreateControls
         endpoint="/api/v1/admin/parses/snapshot"

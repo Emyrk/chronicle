@@ -706,6 +706,12 @@ func (h *Hookable) splitFightOnCharacterStart(m messages.Message) error {
 			continue
 		}
 
+		activeHostiles := make([]guid.GUID, 0, len(h.currentFight.ActiveHostiles))
+		for hostileID := range h.currentFight.ActiveHostiles {
+			activeHostiles = append(activeHostiles, hostileID)
+		}
+		h.Characters.EndActive("new fight started", m, period.EndStateReset, activeHostiles...)
+
 		for _, hook := range h.hooks {
 			hook.FightEnded(h.currentFight.EncounterID, m)
 		}

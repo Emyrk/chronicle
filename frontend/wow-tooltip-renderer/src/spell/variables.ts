@@ -59,6 +59,11 @@ export function resolveVariable(
     const type = rawType.toLowerCase();
     const index = parseInt(indexedMatch[2], 10) - 1; // 1-indexed -> 0-indexed
 
+    if (type === "w") {
+      const value = context.auraEffectValues?.[index];
+      return value === undefined ? variable : String(value);
+    }
+
     switch (type) {
       case "s": // Effect value (base + die/variance range)
         return formatValue(

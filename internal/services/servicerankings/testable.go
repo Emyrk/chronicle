@@ -36,7 +36,7 @@ func (ts *TestableService) HandleSnapshotCohort(w http.ResponseWriter, r *http.R
 
 // HandleInstanceTimeParses exposes the instance time-parses handler for tests.
 func (ts *TestableService) HandleInstanceTimeParses(w http.ResponseWriter, r *http.Request) {
-	handleInstanceTimeParsesWithStore(ts.store, ts.logger, w, r)
+	handleInstanceTimeParsesWithStore(ts.store, w, r)
 }
 
 // HandleTimeParseCohortBuckets exposes the time-parse cohort buckets handler for tests.

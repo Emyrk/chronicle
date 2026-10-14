@@ -323,7 +323,6 @@ export function resolveMapArtwork(
     candidate.mapID === mapId
       || (mapId === 0 && normalizedInstanceName !== "" && normalizedMapName(candidate.name) === normalizedInstanceName),
   );
-  if (instance) return { kind: "instance", instance };
 
   const zoneCandidates = manifest.maps.flatMap((map) => {
     if (!map.art?.some((art) => art.layers.some((layer) => layer.tiles.length > 0))) return [];
@@ -331,10 +330,24 @@ export function resolveMapArtwork(
       .filter((assignment) => assignment.mapID === mapId && (!sample || assignmentContains(assignment, sample)))
       .map((assignment) => ({ kind: "zone" as const, map, assignment }));
   });
-  if (zoneCandidates.length > 0) {
-    return zoneCandidates.reduce((best, candidate) =>
-      assignmentArea(candidate.assignment) < assignmentArea(best.assignment) ? candidate : best);
-  }
+  const zone = zoneCandidates.length > 0
+    ? zoneCandidates.reduce((best, candidate) =>
+      assignmentArea(candidate.assignment) < assignmentArea(best.assignment) ? candidate : best)
+    : null;
+
+  // Several legacy instance floors publish artwork without the world bounds
+  // needed to place telemetry. Prefer the matching zone assignment when it
+  // can project the sample. Wailing Caverns is the exception because its
+  // original floor is projected through boss calibration below.
+  const instanceHasProjection = instance && (
+    instance.mapID === 43
+      || Boolean(instance.rendered?.bounds)
+      || Boolean(instance.styled?.bounds)
+      || instance.floors.some((floor) => Boolean(floor.bounds))
+  );
+  if (instance && (!sample || instanceHasProjection || !zone)) return { kind: "instance", instance };
+  if (zone) return zone;
+  if (instance) return { kind: "instance", instance };
 
   const map = manifest.maps.find((candidate) => candidate.id === mapId);
   const assignment = map?.assignments?.[0];

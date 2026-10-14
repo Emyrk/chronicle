@@ -25,6 +25,8 @@ func TestBrowserOnly(t *testing.T) {
 		name                  string
 		accessURL             *url.URL
 		path                  string
+		host                  string
+		forwardedProto        string
 		secFetch              string
 		origin                string
 		allowedCrossSitePaths []string
@@ -39,6 +41,8 @@ func TestBrowserOnly(t *testing.T) {
 		{name: "prod callback without browser header rejected", accessURL: prodURL, path: "/api/v1/discord-integration/callback", allowedCrossSitePaths: []string{"/api/v1/discord-integration/callback"}, wantStatus: http.StatusForbidden},
 		{name: "prod cross-site similar callback rejected", accessURL: prodURL, path: "/api/v1/discord-integration/callback/other", secFetch: "cross-site", allowedCrossSitePaths: []string{"/api/v1/discord-integration/callback"}, wantStatus: http.StatusForbidden},
 		{name: "prod cross-site rejected", accessURL: prodURL, path: "/api/v1/whoami", secFetch: "cross-site", wantStatus: http.StatusForbidden},
+		{name: "prod missing fetch metadata with same tenant origin allowed", accessURL: prodURL, path: "/api/v1/live-sessions/ROOM/ws", host: "forever.chronicleclassic.com", forwardedProto: "https", origin: "https://forever.chronicleclassic.com", wantStatus: http.StatusOK},
+		{name: "prod missing fetch metadata with mismatched scheme rejected", accessURL: prodURL, path: "/api/v1/live-sessions/ROOM/ws", host: "forever.chronicleclassic.com", forwardedProto: "https", origin: "http://forever.chronicleclassic.com", wantStatus: http.StatusForbidden},
 		{name: "prod missing header rejected", accessURL: prodURL, path: "/api/v1/whoami", wantStatus: http.StatusForbidden},
 		{name: "dev missing header allowed", accessURL: devURL, path: "/api/v1/whoami", wantStatus: http.StatusOK},
 	}
@@ -49,6 +53,12 @@ func TestBrowserOnly(t *testing.T) {
 
 			handler := httpmw.BrowserOnly(tc.accessURL, tc.allowedCrossSitePaths...)(ok)
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			if tc.host != "" {
+				req.Host = tc.host
+			}
+			if tc.forwardedProto != "" {
+				req.Header.Set("X-Forwarded-Proto", tc.forwardedProto)
+			}
 			if tc.secFetch != "" {
 				req.Header.Set("Sec-Fetch-Site", tc.secFetch)
 			}

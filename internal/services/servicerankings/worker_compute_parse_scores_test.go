@@ -2,8 +2,6 @@ package servicerankings_test
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -47,28 +45,6 @@ func newSingleConnectionPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-type cohortErrorStore struct {
-	database.Store
-	err error
-}
-
-func (s cohortErrorStore) InTx(
-	ctx context.Context,
-	f func(database.Store) error,
-	opts *pgx.TxOptions,
-) error {
-	return s.Store.InTx(ctx, func(tx database.Store) error {
-		return f(cohortErrorStore{Store: tx, err: s.err})
-	}, opts)
-}
-
-func (s cohortErrorStore) GetSnapshotCohortValues(
-	context.Context,
-	database.GetSnapshotCohortValuesParams,
-) ([]database.GetSnapshotCohortValuesRow, error) {
-	return nil, s.err
-}
-
 func TestWorkerComputeParseScores_NoSnapshot(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
@@ -103,10 +79,12 @@ func TestWorkerComputeParseScores_NoSnapshot(t *testing.T) {
 	err = worker.Work(ctx, job)
 	require.NoError(t, err)
 
-	// No receipt should exist — receipt = success only.
+	// Snapshot publication is no longer required. Even an empty source writes a
+	// successful windowed receipt.
 	receipts, err := store.GetParseScoreReceiptForInstance(ctx, f.instanceID)
 	require.NoError(t, err)
-	assert.Empty(t, receipts, "exhausted no-snapshot should NOT create a receipt")
+	require.Len(t, receipts, 1)
+	assert.False(t, receipts[0].SnapshotID.Valid)
 }
 
 func TestWorkerComputeParseScores_AttemptThreeRecordsMissingSnapshotReason(t *testing.T) {
@@ -133,21 +111,17 @@ func TestWorkerComputeParseScores_AttemptThreeRecordsMissingSnapshotReason(t *te
 	})
 	require.NoError(t, err)
 
-	var rawArgs []byte
-	var scheduledAt time.Time
+	var count int
 	err = pool.QueryRow(ctx, `
-		SELECT args, scheduled_at
-		FROM river_job
-		WHERE kind = $1 AND args->>'instance_id' = $2
-		ORDER BY id DESC
-		LIMIT 1`, parseargs.KindComputeParseScores, f.instanceID.String()).Scan(&rawArgs, &scheduledAt)
+		SELECT COUNT(*) FROM river_job
+		WHERE kind = $1 AND args->>'instance_id' = $2`,
+		parseargs.KindComputeParseScores, f.instanceID.String()).Scan(&count)
 	require.NoError(t, err)
-
-	var args parseargs.ArgsComputeParseScores
-	require.NoError(t, json.Unmarshal(rawArgs, &args))
-	assert.Equal(t, 3, args.Attempt)
-	assert.Equal(t, servicerankings.RetryReasonNoPublishedSnapshot, args.RetryReason)
-	assert.WithinDuration(t, time.Now().Add(7*24*time.Hour), scheduledAt, 5*time.Second)
+	assert.Zero(t, count, "windowed scoring does not schedule snapshot retries")
+	receipts, err := store.GetParseScoreReceiptForInstance(ctx, f.instanceID)
+	require.NoError(t, err)
+	require.Len(t, receipts, 1)
+	assert.False(t, receipts[0].SnapshotID.Valid)
 }
 
 func TestWorkerComputeParseScores_OldInstanceDoesNotRetryMissingSnapshot(t *testing.T) {
@@ -160,7 +134,7 @@ func TestWorkerComputeParseScores_OldInstanceDoesNotRetryMissingSnapshot(t *test
 	q := setupParseScoreQueueForTest(t, pool)
 
 	_, err := pool.Exec(ctx, `UPDATE log_instances SET start_time = $1 WHERE id = $2`,
-		time.Now().Add(-servicerankings.MissingSnapshotRetryWindow-time.Hour), f.instanceID)
+		time.Now().Add(-10*24*time.Hour-time.Hour), f.instanceID)
 	require.NoError(t, err)
 
 	worker := &servicerankings.WorkerComputeParseScores{
@@ -203,8 +177,6 @@ func TestWorkerComputeParseScores_WithSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	conn.Release()
 
-	snapshot := createPublishedSnapshot(t, ctx, store)
-
 	now := time.Now()
 
 	// Insert the test instance's ranking (DPS=1000, HPS=200).
@@ -229,8 +201,7 @@ func TestWorkerComputeParseScores_WithSnapshot(t *testing.T) {
 	}
 
 	// Populate snapshot from rankings.
-	err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
-	require.NoError(t, err)
+	refreshScoringMemberships(t, ctx, store, f.logGroupID)
 
 	// Run the worker.
 	worker := &servicerankings.WorkerComputeParseScores{
@@ -272,10 +243,7 @@ func TestWorkerComputeParseScores_WithSnapshot(t *testing.T) {
 	assert.True(t, hasHPS, "should have HPS results")
 
 	// Verify receipt was created (success = receipt exists).
-	receipt, err := store.GetParseScoreReceipt(ctx, database.GetParseScoreReceiptParams{
-		InstanceID: f.instanceID,
-		SnapshotID: snapshot.ID,
-	})
+	receipt, err := store.GetAnyParseScoreReceiptForTenantInstance(ctx, database.GetAnyParseScoreReceiptForTenantInstanceParams{TenantID: uuid.Nil, InstanceID: f.instanceID})
 	require.NoError(t, err)
 	assert.Equal(t, int16(parsepolicy.PolicyVersion), receipt.PolicyVersion)
 	assert.Equal(t, int16(servicerankings.QueryVersion), receipt.QueryVersion)
@@ -297,7 +265,6 @@ func TestWorkerComputeParseScores_Atomicity(t *testing.T) {
 	require.NoError(t, err)
 	conn.Release()
 
-	snapshot := createPublishedSnapshot(t, ctx, store)
 	now := time.Now()
 
 	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
@@ -319,8 +286,7 @@ func TestWorkerComputeParseScores_Atomicity(t *testing.T) {
 			fmt.Sprintf("CohortPlayer%d", i),
 			float64(500+i*100), 0, now.Add(-4*time.Hour))
 	}
-	err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
-	require.NoError(t, err)
+	refreshScoringMemberships(t, ctx, store, f.logGroupID)
 
 	// Run worker successfully.
 	worker := &servicerankings.WorkerComputeParseScores{
@@ -342,15 +308,12 @@ func TestWorkerComputeParseScores_Atomicity(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, results)
 
-	receipt, err := store.GetParseScoreReceipt(ctx, database.GetParseScoreReceiptParams{
-		InstanceID: f.instanceID,
-		SnapshotID: snapshot.ID,
-	})
+	receipt, err := store.GetAnyParseScoreReceiptForTenantInstance(ctx, database.GetAnyParseScoreReceiptForTenantInstanceParams{TenantID: uuid.Nil, InstanceID: f.instanceID})
 	require.NoError(t, err)
 	assert.Equal(t, int32(len(results)), receipt.ResultCount)
 }
 
-func TestWorkerComputeParseScores_CohortErrorRollsBack(t *testing.T) {
+func TestWorkerComputeParseScores_ExistingResultsSkipRecompute(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
@@ -364,7 +327,6 @@ func TestWorkerComputeParseScores_CohortErrorRollsBack(t *testing.T) {
 	require.NoError(t, err)
 	conn.Release()
 
-	snapshot := createPublishedSnapshot(t, ctx, store)
 	now := time.Now()
 	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
 		1000.0, 0, now.Add(-time.Hour))
@@ -381,7 +343,7 @@ func TestWorkerComputeParseScores_CohortErrorRollsBack(t *testing.T) {
 			fmt.Sprintf("CohortPlayer%d", i),
 			float64(500+i*100), 0, now.Add(-4*time.Hour))
 	}
-	require.NoError(t, store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID))
+	refreshScoringMemberships(t, ctx, store, f.logGroupID)
 
 	job := &river.Job[parseargs.ArgsComputeParseScores]{
 		Args: parseargs.ArgsComputeParseScores{
@@ -399,29 +361,19 @@ func TestWorkerComputeParseScores_CohortErrorRollsBack(t *testing.T) {
 	// Simulate a missing receipt while retaining the last complete projection.
 	_, err = pool.Exec(ctx, `DELETE FROM parse_score_receipts WHERE instance_id = $1`, f.instanceID)
 	require.NoError(t, err)
-	_, err = store.GetParseScoreReceipt(ctx, database.GetParseScoreReceiptParams{
-		InstanceID: f.instanceID,
-		SnapshotID: snapshot.ID,
-	})
+	_, err = store.GetAnyParseScoreReceiptForTenantInstance(ctx, database.GetAnyParseScoreReceiptForTenantInstanceParams{TenantID: uuid.Nil, InstanceID: f.instanceID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
-	cohortErr := errors.New("cohort query failed")
-	failingWorker := &servicerankings.WorkerComputeParseScores{
-		Store:  cohortErrorStore{Store: store, err: cohortErr},
-		Logger: slog.Default(),
-	}
-	err = failingWorker.Work(ctx, job)
-	require.ErrorIs(t, err, cohortErr)
+	// A missing receipt does not make an existing projection safe to rewrite.
+	err = worker.Work(ctx, job)
+	require.NoError(t, err)
 
 	after, err := store.GetParseScoreResultsForInstance(ctx, f.instanceID)
 	require.NoError(t, err)
-	assert.Equal(t, before, after, "failed recompute must preserve the previous complete results")
+	assert.Equal(t, before, after, "existing results must prevent recomputation")
 
-	_, err = store.GetParseScoreReceipt(ctx, database.GetParseScoreReceiptParams{
-		InstanceID: f.instanceID,
-		SnapshotID: snapshot.ID,
-	})
-	require.ErrorIs(t, err, pgx.ErrNoRows, "failed recompute must not create a success receipt")
+	_, err = store.GetAnyParseScoreReceiptForTenantInstance(ctx, database.GetAnyParseScoreReceiptForTenantInstanceParams{TenantID: uuid.Nil, InstanceID: f.instanceID})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "preservation guard must not create a replacement receipt")
 }
 
 func TestWorkerComputeParseScores_Idempotency(t *testing.T) {
@@ -439,7 +391,6 @@ func TestWorkerComputeParseScores_Idempotency(t *testing.T) {
 	require.NoError(t, err)
 	conn.Release()
 
-	snapshot := createPublishedSnapshot(t, ctx, store)
 	now := time.Now()
 
 	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
@@ -460,8 +411,7 @@ func TestWorkerComputeParseScores_Idempotency(t *testing.T) {
 			fmt.Sprintf("CohortPlayer%d", i),
 			float64(500+i*100), 0, now.Add(-4*time.Hour))
 	}
-	err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
-	require.NoError(t, err)
+	refreshScoringMemberships(t, ctx, store, f.logGroupID)
 
 	worker := &servicerankings.WorkerComputeParseScores{
 		Store:  store,
@@ -487,32 +437,10 @@ func TestWorkerComputeParseScores_Idempotency(t *testing.T) {
 	assert.NotEmpty(t, results)
 
 	// Receipt should still exist (ON CONFLICT UPDATE).
-	receipt, err := store.GetParseScoreReceipt(ctx, database.GetParseScoreReceiptParams{
-		InstanceID: f.instanceID,
-		SnapshotID: snapshot.ID,
-	})
+	receipt, err := store.GetAnyParseScoreReceiptForTenantInstance(ctx, database.GetAnyParseScoreReceiptForTenantInstanceParams{TenantID: uuid.Nil, InstanceID: f.instanceID})
 	require.NoError(t, err)
+	assert.False(t, receipt.SnapshotID.Valid)
 	assert.NotZero(t, receipt.ComputedAt)
-}
-
-func TestWorkerComputeParseScores_RetryTimings(t *testing.T) {
-	t.Parallel()
-
-	// Validate retry schedule without wall-clock sleeps.
-	assert.Equal(t, 4, servicerankings.MaxParseScoreAttempts)
-	assert.Len(t, servicerankings.RetryDelays, servicerankings.MaxParseScoreAttempts)
-
-	assert.Equal(t, time.Duration(0), servicerankings.RetryDelays[0])
-	assert.Equal(t, 24*time.Hour, servicerankings.RetryDelays[1])
-	assert.Equal(t, 48*time.Hour, servicerankings.RetryDelays[2])
-	assert.Equal(t, 7*24*time.Hour, servicerankings.RetryDelays[3])
-
-	// Total time covered: 0 + 24 + 48 + 168 = 240h = 10 days.
-	totalHours := 0.0
-	for _, d := range servicerankings.RetryDelays {
-		totalHours += d.Hours()
-	}
-	assert.InDelta(t, 240.0, totalHours, 0.01)
 }
 
 func TestComputeCharacterScore(t *testing.T) {
@@ -809,7 +737,6 @@ func TestWorkerComputeParseScores_IncompatibleSnapshotFallback(t *testing.T) {
 	now := time.Now()
 
 	// Create a compatible snapshot (current versions).
-	compatSnapshot := createPublishedSnapshot(t, ctx, store)
 
 	// Create an incompatible newer snapshot (higher query version) by
 	// directly inserting via SQL to bypass normal helpers.
@@ -849,8 +776,7 @@ func TestWorkerComputeParseScores_IncompatibleSnapshotFallback(t *testing.T) {
 			fmt.Sprintf("CohortPlayer%d", i),
 			float64(500+i*100), 0, now.Add(-4*time.Hour))
 	}
-	err = store.BatchInsertSnapshotMembersFromRankings(ctx, compatSnapshot.ID)
-	require.NoError(t, err)
+	refreshScoringMemberships(t, ctx, store, f.logGroupID)
 
 	// Worker should skip the incompatible snapshot and use the compatible one.
 	worker := &servicerankings.WorkerComputeParseScores{
@@ -868,12 +794,9 @@ func TestWorkerComputeParseScores_IncompatibleSnapshotFallback(t *testing.T) {
 	require.NoError(t, err)
 
 	// Receipt should be for the compatible snapshot.
-	receipt, err := store.GetParseScoreReceipt(ctx, database.GetParseScoreReceiptParams{
-		InstanceID: f.instanceID,
-		SnapshotID: compatSnapshot.ID,
-	})
+	receipt, err := store.GetAnyParseScoreReceiptForTenantInstance(ctx, database.GetAnyParseScoreReceiptForTenantInstanceParams{TenantID: uuid.Nil, InstanceID: f.instanceID})
 	require.NoError(t, err)
-	assert.Equal(t, compatSnapshot.ID, receipt.SnapshotID, "must use the compatible snapshot, not the newer incompatible one")
+	assert.False(t, receipt.SnapshotID.Valid, "snapshot versions do not affect windowed scoring")
 }
 
 func TestWorkerComputeParseScores_TenantIsolation(t *testing.T) {
@@ -913,8 +836,7 @@ func TestWorkerComputeParseScores_TenantIsolation(t *testing.T) {
 			fmt.Sprintf("CohortPlayer%d", i),
 			float64(500+i*100), 0, now.Add(-4*time.Hour))
 	}
-	err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
-	require.NoError(t, err)
+	refreshScoringMemberships(t, ctx, store, f.logGroupID)
 
 	// Insert a result for a DIFFERENT tenant on the same instance.
 	otherTenantID := uuid.New()
@@ -1026,8 +948,29 @@ func TestSnapshotDeletionPreservesResultsAndDeletesReceipt(t *testing.T) {
 	require.Len(t, results, 1)
 	assert.False(t, results[0].SnapshotID.Valid)
 
-	// Receipts should be gone so recent instances can be repaired.
+	// Receipts are gone, but orphaned legacy results make the instance ineligible
+	// for repair and prevent the worker from rewriting historical scores.
 	receipts, err := store.GetParseScoreReceiptForInstance(ctx, f.instanceID)
+	require.NoError(t, err)
+	assert.Empty(t, receipts)
+
+	missing, err := store.ListInstancesMissingParseReceiptWindowed(ctx, database.ListInstancesMissingParseReceiptWindowedParams{
+		TenantID: uuid.Nil, RepairSince: database.Timestamptz(time.Now().AddDate(0, 0, -servicerankings.RepairLookbackDays)), MaxRows: 100,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, missing)
+
+	worker := &servicerankings.WorkerComputeParseScores{Store: store, Logger: slog.Default()}
+	require.NoError(t, worker.Work(ctx, &river.Job[parseargs.ArgsComputeParseScores]{Args: parseargs.ArgsComputeParseScores{
+		InstanceID: f.instanceID, TenantID: uuid.Nil,
+	}}))
+
+	results, err = store.GetParseScoreResultsForInstance(ctx, f.instanceID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, 80.0, results[0].PreciseScore)
+	assert.False(t, results[0].SnapshotID.Valid)
+	receipts, err = store.GetParseScoreReceiptForInstance(ctx, f.instanceID)
 	require.NoError(t, err)
 	assert.Empty(t, receipts)
 }
@@ -1036,9 +979,175 @@ func TestSnapshotDeletionPreservesResultsAndDeletesReceipt(t *testing.T) {
 // Helpers
 // ---------------------------------------------------------------------------
 
+func TestWorkerComputeParseScores_PreservesLegacyReceipt(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	fixture := setupScoringFixture(t, pool, store)
+
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+	conn.Release()
+
+	snapshot := createPublishedSnapshot(t, ctx, store)
+	legacy, err := store.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
+		TenantID: uuid.Nil, InstanceID: fixture.instanceID, SnapshotID: snapshot.ID,
+		PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: int16(servicerankings.QueryVersion - 1),
+		LookbackDays: int16(parsepolicy.DefaultLookbackDays), SourceCount: 1, ResultCount: 1,
+	})
+	require.NoError(t, err)
+
+	worker := &servicerankings.WorkerComputeParseScores{Store: store, Logger: slog.Default()}
+	require.NoError(t, worker.Work(ctx, &river.Job[parseargs.ArgsComputeParseScores]{Args: parseargs.ArgsComputeParseScores{
+		InstanceID: fixture.instanceID, TenantID: uuid.Nil,
+	}}))
+
+	receipts, err := store.GetParseScoreReceiptForInstance(ctx, fixture.instanceID)
+	require.NoError(t, err)
+	require.Len(t, receipts, 1)
+	assert.Equal(t, legacy.ID, receipts[0].ID, "cutover must not replace a legacy successful receipt")
+}
+
+func TestWorkerComputeParseScores_WindowedMemberships(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	fixture := setupScoringFixture(t, pool, store)
+
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+	conn.Release()
+
+	target, err := store.GetLogInstanceForScoring(ctx, fixture.instanceID)
+	require.NoError(t, err)
+	cutoff := target.StartTime.Time
+	windowStart := cutoff.AddDate(0, 0, -int(parsepolicy.DefaultLookbackDays))
+
+	insertRanking(t, ctx, store, fixture.instanceID, fixture.realmID, "Player-target", "Target", 1500, 0, cutoff)
+	for i, killedAt := range []time.Time{
+		windowStart,
+		windowStart.Add(time.Hour),
+		cutoff.Add(-3 * time.Hour),
+		cutoff.Add(-2 * time.Hour),
+		cutoff.Add(-time.Hour),
+		cutoff, // exclusive upper boundary
+	} {
+		instanceID := uuid.New()
+		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: instanceID, RealmID: fixture.realmID, LogGroupID: fixture.logGroupID,
+			Name: "Molten Core", Capabilities: []string{}, StartTime: database.Timestamptz(killedAt.Add(-time.Hour)),
+		})
+		require.NoError(t, err)
+		insertRanking(t, ctx, store, instanceID, fixture.realmID, fmt.Sprintf("Player-%d", i), fmt.Sprintf("Player %d", i), float64(1000+i*100), 0, killedAt)
+	}
+
+	_, err = pool.Exec(ctx, `UPDATE encounter_dps_rankings SET instance_name = 'MC Alias' WHERE id = (SELECT id FROM encounter_dps_rankings WHERE instance_id <> $1 ORDER BY id LIMIT 1)`, fixture.instanceID)
+	require.NoError(t, err)
+
+	refresh := database.RefreshParseScoreMembershipsForLogGroupParams{
+		LogGroupID: fixture.logGroupID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
+	}
+	first, err := store.RefreshParseScoreMembershipsForLogGroup(ctx, refresh)
+	require.NoError(t, err)
+	second, err := store.RefreshParseScoreMembershipsForLogGroup(ctx, refresh)
+	require.NoError(t, err)
+	assert.Equal(t, first.UpsertedCount, second.UpsertedCount)
+	members, err := store.ListParseScoreMemberships(ctx, database.ListParseScoreMembershipsParams{
+		TenantID: uuid.Nil, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	assert.Len(t, members, 7, "refresh remains idempotent")
+
+	worker := &servicerankings.WorkerComputeParseScores{Store: store, Logger: slog.Default()}
+	require.NoError(t, worker.Work(ctx, &river.Job[parseargs.ArgsComputeParseScores]{Args: parseargs.ArgsComputeParseScores{
+		InstanceID: fixture.instanceID, TenantID: uuid.Nil,
+	}}))
+
+	receipt, err := store.GetAnyParseScoreReceiptForTenantInstance(ctx, database.GetAnyParseScoreReceiptForTenantInstanceParams{
+		TenantID: uuid.Nil, InstanceID: fixture.instanceID,
+	})
+	require.NoError(t, err)
+	assert.False(t, receipt.SnapshotID.Valid, "new scores do not require ranking snapshots")
+	assert.Equal(t, cutoff.UTC(), receipt.Cutoff.Time.UTC())
+	results, err := store.ListWindowedParseScoreResultsForContract(ctx, database.ListWindowedParseScoreResultsForContractParams{
+		TenantID: uuid.Nil, InstanceID: fixture.instanceID, Metric: "dps",
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, int32(5), results[0].SampleSize, "instance-name aliases share the same encounter/difficulty/size/class/spec cohort")
+}
+
+func TestGetParseScoreMembershipCohort_TenantVisibility(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	fixture := setupScoringFixture(t, pool, store)
+
+	included, err := store.InsertTenant(ctx, database.InsertTenantParams{
+		ID: uuid.New(), Name: "included", IncludeInAll: true, AvailableFormats: []string{},
+	})
+	require.NoError(t, err)
+	excluded, err := store.InsertTenant(ctx, database.InsertTenantParams{
+		ID: uuid.New(), Name: "excluded", IncludeInAll: false, AvailableFormats: []string{},
+	})
+	require.NoError(t, err)
+
+	for i, row := range []struct {
+		tenantID uuid.UUID
+		dps      float64
+	}{
+		{tenantID: uuid.Nil, dps: 100},
+		{tenantID: included.ID, dps: 200},
+		{tenantID: excluded.ID, dps: 300},
+	} {
+		_, err = pool.Exec(ctx, `
+			INSERT INTO parse_score_memberships (
+				tenant_id, policy_version, query_version, run_id, encounter_name, player_guid,
+				instance_id, log_group_id, difficulty_name, max_players,
+				player_class, player_spec, player_sub_spec, killed_at, dps, hps
+			) VALUES ($1, $2, $3, $4, 'Ragnaros', $5, $6, $7, 'Normal', 40,
+				'Warrior', 'Fury', '', $8, $9, 0)`,
+			row.tenantID, parsepolicy.PolicyVersion, parsepolicy.QueryVersion, uuid.New(),
+			fmt.Sprintf("Player-%d", i), fixture.instanceID, fixture.logGroupID, time.Now().Add(-time.Hour), row.dps)
+		require.NoError(t, err)
+	}
+
+	query := func(tenantID uuid.UUID) []float64 {
+		values, queryErr := store.GetParseScoreMembershipCohort(ctx, database.GetParseScoreMembershipCohortParams{
+			Metric: "dps", TenantID: tenantID, PolicyVersion: parsepolicy.PolicyVersion,
+			QueryVersion: parsepolicy.QueryVersion, Cutoff: database.Timestamptz(time.Now()),
+			ExcludeRunID: uuid.New(), EncounterName: "Ragnaros", DifficultyName: "Normal",
+			MaxPlayers: 40, PlayerClass: "Warrior", CohortMode: string(parsepolicy.CohortModeSpec),
+			PlayerSpec: "Fury", PlayerSubSpec: "",
+		})
+		require.NoError(t, queryErr)
+		return values
+	}
+
+	assert.ElementsMatch(t, []float64{100, 200}, query(uuid.Nil), "root includes untenanted and include_in_all memberships only")
+	assert.Equal(t, []float64{200}, query(included.ID), "tenant scoring uses exact membership")
+	assert.Equal(t, []float64{300}, query(excluded.ID), "excluded tenant remains isolated from root and other tenants")
+}
+
+func refreshScoringMemberships(t *testing.T, ctx context.Context, store database.Store, logGroupID uuid.UUID) {
+	t.Helper()
+	_, err := store.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
+		LogGroupID: logGroupID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+}
+
 type scoringFixture struct {
 	realmID    uuid.UUID
 	instanceID uuid.UUID
+	logGroupID uuid.UUID
 }
 
 func setupScoringFixture(t *testing.T, pool *pgxpool.Pool, store database.Store) scoringFixture {
@@ -1082,7 +1191,7 @@ func setupScoringFixture(t *testing.T, pool *pgxpool.Pool, store database.Store)
 	})
 	require.NoError(t, err)
 
-	return scoringFixture{realmID: realmID, instanceID: instanceID}
+	return scoringFixture{realmID: realmID, instanceID: instanceID, logGroupID: logGroupID}
 }
 
 func setupParseScoreQueueForTest(t *testing.T, pool *pgxpool.Pool) *riverqueue.Queues {
@@ -1095,6 +1204,10 @@ func setupParseScoreQueueForTest(t *testing.T, pool *pgxpool.Pool) *riverqueue.Q
 	})
 	require.NoError(t, err)
 	riverqueue.AddWorker(q, &servicerankings.WorkerComputeParseScores{
+		Store:  database.New(pool),
+		Logger: slog.Default(),
+	})
+	riverqueue.AddWorker(q, &servicerankings.WorkerComputeTimeParseScores{
 		Store:  database.New(pool),
 		Logger: slog.Default(),
 	})

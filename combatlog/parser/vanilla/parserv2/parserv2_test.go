@@ -14,7 +14,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
@@ -109,23 +108,45 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("Header", func(t *testing.T) {
-		t.Skip("now returns 2 messages")
 		t.Parallel()
-		ts := time.Date(2026, 2, 23, 18, 17, 5, 0, time.UTC)
 
-		testCase(t, wowDB,
-			"0|HEADER|0x0000000000432A74|Nordanaar|Ragefire Chasm|0.5|1.5||1771083771|1.18.0|7234|Dec 19 2025|23.02.26 19:17:05|23.02.26 18:17:05|200",
-			&messages.Realm{
-				MessageBase: messages.Base(ts),
-				Info: realm.Info{
-					Seen:      ts,
-					Version:   "1.18.0",
-					Build:     7234,
-					BuildDate: "Dec 19 2025",
-					RealmName: "Nordanaar",
-				},
+		for _, tt := range []struct {
+			name              string
+			line              string
+			classicAPIVersion string
+		}{
+			{
+				name: "legacy",
+				line: "0|HEADER|0x0000000000432A74|Nordanaar|Ragefire Chasm|0.5|1.5||1771083771|1.18.0|7234|Dec 19 2025|23.02.26 19:17:05|23.02.26 18:17:05|200",
 			},
-		)
+			{
+				name:              "classic api and threat mode",
+				line:              "0|HEADER|0x0000000000432A74|Nordanaar|Zul'Gurub|0.38.4|1.5|2.0||1.18.0|7234|Dec 19 2025|23.02.26 19:17:05|23.02.26 18:17:05|200|1.2.3|query",
+				classicAPIVersion: "1.2.3",
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				parser, err := New(context.Background(), slog.Default(), strings.NewReader(tt.line), wowDB, nil)
+				require.NoError(t, err)
+				parsed, err := parser.Advance(context.Background())
+				require.NoError(t, err)
+				require.Len(t, parsed, 2)
+
+				realmMessage, ok := parsed[0].(*messages.Realm)
+				require.True(t, ok)
+				require.Equal(t, "Nordanaar", realmMessage.RealmName)
+
+				versionsMessage, ok := parsed[1].(*messages.Versions)
+				require.True(t, ok)
+				if tt.classicAPIVersion == "" {
+					require.NotContains(t, versionsMessage.Versions, "classicapi")
+				} else {
+					require.Equal(t, tt.classicAPIVersion, versionsMessage.Versions["classicapi"])
+				}
+			})
+		}
 	})
 
 	t.Run("Hemorrhage", func(t *testing.T) {
@@ -224,6 +245,81 @@ func TestParserMessages(t *testing.T) {
 		)
 	})
 
+	t.Run("UnitState", func(t *testing.T) {
+		t.Parallel()
+
+		const timestamp = int64(1771563953000)
+		unit := guid.GUID(0x000000000001C80A)
+		parser, err := New(
+			context.Background(),
+			slog.Default(),
+			strings.NewReader("1771563953000|UNIT_STATE|0x000000000001C80A|2345|3117|72|100|3|309|12.5|34.75|8.25"),
+			&stubGameDB{},
+			nil,
+		)
+		require.NoError(t, err)
+
+		parsed, err := parser.Advance(context.Background())
+		require.NoError(t, err)
+		require.Len(t, parsed, 2)
+		require.Equal(t, &messages.UnitResources{
+			MessageBase:   messages.Base(time.UnixMilli(timestamp)),
+			Unit:          unit,
+			CurrentHealth: 2345,
+			MaximumHealth: 3117,
+			PowerType:     types.ResourceEnergy,
+			CurrentPower:  72,
+			MaximumPower:  100,
+		}, parsed[0])
+		require.Equal(t, &messages.UnitPosition{
+			MessageBase: messages.Base(time.UnixMilli(timestamp)),
+			Unit:        unit,
+			X:           12.5,
+			Y:           34.75,
+			MapID:       309,
+		}, parsed[1])
+		require.True(t, parser.SawUnitResources())
+		require.True(t, parser.SawUnitPosition())
+	})
+
+	t.Run("UnitStateWithoutPosition", func(t *testing.T) {
+		t.Parallel()
+
+		parser, err := New(
+			context.Background(),
+			slog.Default(),
+			strings.NewReader("1771563953000|UNIT_STATE|0x000000000001C80A|2345|3117|||||||"),
+			&stubGameDB{},
+			nil,
+		)
+		require.NoError(t, err)
+
+		parsed, err := parser.Advance(context.Background())
+		require.NoError(t, err)
+		require.Len(t, parsed, 1)
+		resources, ok := parsed[0].(*messages.UnitResources)
+		require.True(t, ok)
+		require.Equal(t, types.ResourceUnknown, resources.PowerType)
+		require.True(t, parser.SawUnitResources())
+		require.False(t, parser.SawUnitPosition())
+	})
+
+	t.Run("UnitStateRejectsMalformedPosition", func(t *testing.T) {
+		t.Parallel()
+
+		parser, err := New(
+			context.Background(),
+			slog.Default(),
+			strings.NewReader("1771563953000|UNIT_STATE|0x000000000001C80A|2345|3117|72|100|3|309|north|34.75|8.25"),
+			&stubGameDB{},
+			nil,
+		)
+		require.NoError(t, err)
+
+		_, err = parser.Advance(context.Background())
+		require.ErrorContains(t, err, `unit state: parse x "north"`)
+	})
+
 	t.Run("ZoneInfoEmptyInstanceID", func(t *testing.T) {
 		t.Parallel()
 
@@ -234,6 +330,26 @@ func TestParserMessages(t *testing.T) {
 				Zone: zone.Zone{
 					Seen:         time.UnixMilli(1778208220441),
 					Name:         "tower of karazhan",
+					InstanceID:   0,
+					Ghost:        false,
+					InstanceType: "raid",
+					IsInstance:   true,
+				},
+			},
+		)
+	})
+
+	t.Run("ZoneInfoMapID", func(t *testing.T) {
+		t.Parallel()
+
+		testCase(t, wowDB,
+			"1778208220441|ZONE_INFO|Zul'Gurub||1|raid|0|309",
+			&messages.Zone{
+				MessageBase: messages.Base(time.UnixMilli(1778208220441)),
+				Zone: zone.Zone{
+					Seen:         time.UnixMilli(1778208220441),
+					Name:         "zul'gurub",
+					MapID:        309,
 					InstanceID:   0,
 					Ghost:        false,
 					InstanceType: "raid",

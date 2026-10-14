@@ -2,17 +2,21 @@ package servicerankings_test
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/parseargs"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,6 +80,7 @@ type timeParseInstanceOpts struct {
 	durationMs     int64
 	startTime      time.Time
 	encounters     []timeParseEncounterOpts
+	guildID        uuid.NullUUID
 	// duplicateGroupID if set, links this instance to a duplicate group.
 	duplicateGroupID uuid.NullUUID
 }
@@ -115,6 +120,7 @@ func insertTimeParseInstance(t *testing.T, pool *pgxpool.Pool, store database.St
 		RealmID:        realmID,
 		LogGroupID:     logGroupID,
 		Name:           opts.instanceName,
+		GuildID:        opts.guildID,
 		Capabilities:   []string{},
 		StartTime:      database.Timestamptz(opts.startTime),
 		EndTime:        database.Timestamptz(completionTime),
@@ -137,6 +143,7 @@ func insertTimeParseInstance(t *testing.T, pool *pgxpool.Pool, store database.St
 		InstanceID:   instanceID,
 		InstanceName: opts.instanceName,
 		RealmID:      realmID,
+		GuildID:      opts.guildID,
 		Qualified:    opts.qualified,
 		StartTime:    database.Timestamptz(opts.startTime),
 		CompletionTime: pgtype.Timestamptz{
@@ -174,8 +181,8 @@ func insertTimeParseInstance(t *testing.T, pool *pgxpool.Pool, store database.St
 	return instanceID
 }
 
-// runTimeParseWorker refreshes current-known memberships for every test log.
-func runTimeParseWorker(t *testing.T, ctx context.Context, store database.Store, _ uuid.UUID, _ time.Time, _ int32) {
+// runTimeParseWorker refreshes memberships and computes locked scores.
+func runTimeParseWorker(t *testing.T, ctx context.Context, store database.Store, tenantID uuid.UUID) {
 	t.Helper()
 	groups, err := store.ListAllWoWLogGroupsWithOwner(ctx)
 	require.NoError(t, err)
@@ -187,6 +194,22 @@ func runTimeParseWorker(t *testing.T, ctx context.Context, store database.Store,
 		_, err = store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
 			LogGroupID: group.WoWLogGroup.ID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 		})
+		require.NoError(t, err)
+	}
+	instances := map[uuid.UUID]struct{}{}
+	clears, err := store.ListTimeParseClearTimeMemberships(ctx, database.ListTimeParseClearTimeMembershipsParams{TenantID: tenantID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
+	require.NoError(t, err)
+	for _, row := range clears {
+		instances[row.InstanceID] = struct{}{}
+	}
+	bosses, err := store.ListTimeParseBossKillMemberships(ctx, database.ListTimeParseBossKillMembershipsParams{TenantID: tenantID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
+	require.NoError(t, err)
+	for _, row := range bosses {
+		instances[row.InstanceID] = struct{}{}
+	}
+	worker := &servicerankings.WorkerComputeTimeParseScores{Store: store, Logger: slog.Default()}
+	for instanceID := range instances {
+		err = worker.Work(ctx, &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: instanceID, TenantID: tenantID, Force: true}})
 		require.NoError(t, err)
 	}
 }

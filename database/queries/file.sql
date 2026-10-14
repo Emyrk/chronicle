@@ -389,6 +389,10 @@ deleted_parse_receipts AS (
   DELETE FROM parse_score_receipts
   WHERE instance_id IN (SELECT id FROM invalidated_instances)
 ),
+deleted_time_parse_scores AS (
+  DELETE FROM time_parse_scores
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+),
 deleted_speedruns AS (
   DELETE FROM instance_speedruns
   WHERE instance_id IN (SELECT id FROM invalidated_instances)

@@ -21,8 +21,8 @@ import { parseDescriptionVariables } from "./descriptionVariables.js";
 //                    gender | descVar | localVar)
 //   arithMod = ('*' | '/') DIGITS ';' varRef          -- $*8;s1, $/1000;s1
 //   inlineExpr = '{' (literal | escape)* '}'           -- ${$m1*3}, ${5*$AR*0.01}
-//   conditional = '?s' DIGITS '[' template ']' '[' template ']'
-//                                                         -- $?s123[known][unknown]
+//   conditional = '?' ('s'|'a') DIGITS '[' template ']' '[' template ']'
+//                      -- $?s123[known][unknown], $?a123[active][inactive]
 //   crossRef = DIGITS varRef                           -- $23455s1  (optionally -$...)
 //   plural   = 'l' TEXT ':' TEXT ';'                   -- $lpoint:points;  (lowercase l only)
 //   gender   = ('g'|'G') TEXT ':' TEXT ';'             -- $ghe:she;
@@ -41,12 +41,13 @@ import { parseDescriptionVariables } from "./descriptionVariables.js";
 //     diagnosis); a preceding '-' is preserved in that case.
 //   - Inline expressions resolve their inner variables first, then evaluate; if
 //     evaluation fails the (partially resolved) `${...}` text is kept verbatim.
-//   - Spell-known conditionals use the unknown branch unless knownSpellIds is supplied.
+//   - Spell-known and aura-active conditionals use the negative branch unless their
+//     corresponding runtime ID set is supplied.
 
 // Arithmetic modifiers: $*N;var or $/N;var, with optional cross-spell ref: $/10;23690s1
 const RE_ARITH_MUL = /^\$\*(\d+);(\d+)?([a-zA-Z])(\d+)?/;
 const RE_ARITH_DIV = /^\$\/(\d+);(\d+)?([a-zA-Z])(\d+)?/;
-const RE_CONDITIONAL = /^\$\?s(\d+)/;
+const RE_CONDITIONAL = /^\$\?([sa])(\d+)/;
 const RE_CROSSREF = /^\$(\d+)([a-zA-Z])(\d+)?/;
 const RE_PLURAL = /^\$l([^:]+):([^;]+);/; // lowercase $l only
 const RE_GENDER = /^\$g([^:]+):([^;]+);/i; // $g / $G
@@ -89,6 +90,7 @@ function parseInlineExpression(input: string): ParsedSection | null {
 }
 
 interface ParsedConditional {
+  type: "s" | "a";
   spellId: number;
   whenTrue: string;
   whenFalse: string;
@@ -106,7 +108,8 @@ function parseConditional(input: string): ParsedConditional | null {
   if (!whenFalse) return null;
 
   return {
-    spellId: parseInt(match[1], 10),
+    type: match[1] as "s" | "a",
+    spellId: parseInt(match[2], 10),
     whenTrue: whenTrue.content,
     whenFalse: whenFalse.content,
     end: whenFalse.end,
@@ -257,13 +260,14 @@ function resolveSpellDescriptionInternal(
       continue;
     }
 
-    // $?sNNNN[known][unknown] — select using the supplied spellbook context.
-    // Static tooltips preserve the historical behavior and use the unknown branch.
+    // $?sNNNN[known][unknown] and $?aNNNN[active][inactive] select using
+    // supplied runtime context. Static tooltips use the negative branch.
     const conditional = parseConditional(rest);
     if (conditional) {
-      const branch = context.knownSpellIds?.has(conditional.spellId)
-        ? conditional.whenTrue
-        : conditional.whenFalse;
+      const matches = conditional.type === "s"
+        ? context.knownSpellIds?.has(conditional.spellId)
+        : context.activeAuraIds?.has(conditional.spellId);
+      const branch = matches ? conditional.whenTrue : conditional.whenFalse;
       append(
         resolveSpellDescriptionInternal(
           spell,

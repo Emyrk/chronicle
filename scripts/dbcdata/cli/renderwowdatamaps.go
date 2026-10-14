@@ -394,13 +394,28 @@ func exportWowdataFileWithRetries(
 	logMutex *sync.Mutex,
 	retryDelays []time.Duration,
 ) error {
+	return exportWowdataFileWithRetriesAndGate(
+		ctx, stderr, target, fileDataID, output, label, logMutex, retryDelays, newWowdataPrepareGate(),
+	)
+}
+
+func exportWowdataFileWithRetriesAndGate(
+	ctx context.Context,
+	stderr io.Writer,
+	target wowMapExtractOptions,
+	fileDataID int32,
+	output string,
+	label string,
+	logMutex *sync.Mutex,
+	retryDelays []time.Duration,
+	prepareGate *wowdataPrepareGate,
+) error {
 	args := append([]string{"file", "export", "--file-data-id", fmt.Sprint(fileDataID), "--output", output}, wowdataTargetArgs(target)...)
 	var lastErr error
 	for attempt := 0; attempt <= len(retryDelays); attempt++ {
 		cmd := exec.CommandContext(ctx, target.WowdataBin, args...)
 		logWriter := &prefixedLineWriter{destination: stderr, mutex: logMutex, prefix: label}
-		cmd.Stderr = logWriter
-		err := cmd.Run()
+		err := runWowdataWithPrepareGate(ctx, cmd, logWriter, prepareGate)
 		_ = logWriter.Flush()
 		if err == nil {
 			return nil
@@ -441,11 +456,12 @@ func exportWowdataFiles(ctx context.Context, stderr io.Writer, target wowMapExtr
 	var mu sync.Mutex
 	var logMutex sync.Mutex
 	var firstErr error
+	prepareGate := newWowdataPrepareGate()
 	worker := func() {
 		defer wait.Done()
 		for file := range jobs {
-			if err := exportWowdataFileWithRetries(
-				ctx, stderr, target, file.FileDataID, file.Output, file.Label, &logMutex, wowdataExportRetryDelays,
+			if err := exportWowdataFileWithRetriesAndGate(
+				ctx, stderr, target, file.FileDataID, file.Output, file.Label, &logMutex, wowdataExportRetryDelays, prepareGate,
 			); err != nil {
 				mu.Lock()
 				if firstErr == nil {

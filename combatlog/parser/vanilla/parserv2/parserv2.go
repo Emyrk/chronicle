@@ -27,8 +27,10 @@ type Parser struct {
 	synthetics  *synthetic.Synthetic
 	itemFetcher gamedb.GearResolver
 
-	gameVersions *gameversions.GameVersion
-	sawRaidGroup bool
+	gameVersions     *gameversions.GameVersion
+	sawRaidGroup     bool
+	sawUnitResources bool
+	sawUnitPosition  bool
 
 	lineParseDur  time.Duration
 	syntheticsDur time.Duration
@@ -54,6 +56,16 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 // SawRaidGroup reports whether the companion addon emitted a valid raid layout.
 func (p *Parser) SawRaidGroup() bool {
 	return p.sawRaidGroup
+}
+
+// SawUnitResources reports whether the companion addon emitted resource telemetry.
+func (p *Parser) SawUnitResources() bool {
+	return p.sawUnitResources
+}
+
+// SawUnitPosition reports whether the companion addon emitted position telemetry.
+func (p *Parser) SawUnitPosition() bool {
+	return p.sawUnitPosition
 }
 
 func (p *Parser) DetailedTimes() map[string]time.Duration {
@@ -122,6 +134,8 @@ func (p *Parser) advance(ctx context.Context) (_ []messages.Message, final error
 		return p.raidComposition(ctx, ts, m)
 	case "UNIT_INFO":
 		return p.unitInfo(ctx, ts, m)
+	case "UNIT_STATE":
+		return p.unitState(ctx, ts, m)
 	case "COMBATANT_TRANSMOG":
 		return p.combatantTransmog(ctx, ts, m)
 	case "COMBATANT_INFO":

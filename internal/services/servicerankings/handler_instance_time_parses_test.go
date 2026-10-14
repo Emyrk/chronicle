@@ -138,7 +138,7 @@ func TestHandleInstanceTimeParsesStrictTenantCohort(t *testing.T) {
 	instanceA := insertRun(realmA, 60*time.Minute)
 	insertRun(realmB, 90*time.Minute)
 	insertRun(rootRealm, 120*time.Minute)
-	runTimeParseWorker(t, ctx, store, tenantA, start.Add(24*time.Hour), 0)
+	runTimeParseWorker(t, ctx, store, tenantA)
 
 	resp, body := callTimeParsesWithContext(t, servicetenant.WithTenantID(ctx, tenantA), store,
 		instanceA.String(), "?timeframe=current&period=all")
@@ -148,6 +148,10 @@ func TestHandleInstanceTimeParsesStrictTenantCohort(t *testing.T) {
 	assert.Equal(t, 0, body.ClearTime.SampleSize)
 	require.Len(t, body.BossKillTimes, 1)
 	assert.Equal(t, 0, body.BossKillTimes[0].SampleSize)
+	require.Contains(t, body.Scopes, servicerankings.TimeParseScopeServer)
+	require.Contains(t, body.Scopes, servicerankings.TimeParseScopeRealm)
+	assert.Equal(t, body.ClearTime, body.Scopes[servicerankings.TimeParseScopeServer].ClearTime)
+	assert.Equal(t, "no_guild", body.Scopes[servicerankings.TimeParseScopeGuild].Reason)
 }
 
 func TestHandleInstanceTimeParses_UUIDPath(t *testing.T) {
@@ -157,7 +161,7 @@ func TestHandleInstanceTimeParses_UUIDPath(t *testing.T) {
 	resp, body := callTimeParses(t, f.store, f.instanceID.String())
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.False(t, body.Available)
-	assert.Equal(t, "no_speedrun", body.Reason)
+	assert.Equal(t, "not_computed", body.Reason)
 }
 
 func TestHandleInstanceTimeParses_SlugPath(t *testing.T) {
@@ -167,7 +171,7 @@ func TestHandleInstanceTimeParses_SlugPath(t *testing.T) {
 	resp, body := callTimeParses(t, f.store, f.slug)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.False(t, body.Available)
-	assert.Equal(t, "no_speedrun", body.Reason)
+	assert.Equal(t, "not_computed", body.Reason)
 }
 
 func TestHandleInstanceTimeParses_InvalidSlug(t *testing.T) {

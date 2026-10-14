@@ -197,6 +197,11 @@ func (w *WorkerLogParse) parseCombatLog(
 			logCapabilities = append(logCapabilities, "raidgroup")
 		}
 
+		logCapabilities = append(logCapabilities, observedUnitTelemetryCapabilities(
+			p.SawUnitResources(),
+			p.SawUnitPosition(),
+		)...)
+
 	case database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
 		logCapabilities = append(logCapabilities, "interrupt")
 		loadStart := time.Now()
@@ -352,6 +357,17 @@ func initialLogCapabilities(logFormat database.LogFormat) []string {
 	capabilities := []string{"overheal", "absorb"}
 	if logFormat == database.LogFormatV22Cleu {
 		capabilities = append(capabilities, "unit-resources", "unit-position")
+	}
+	return capabilities
+}
+
+func observedUnitTelemetryCapabilities(resources, position bool) []string {
+	var capabilities []string
+	if resources {
+		capabilities = append(capabilities, "unit-resources")
+	}
+	if position {
+		capabilities = append(capabilities, "unit-position")
 	}
 	return capabilities
 }

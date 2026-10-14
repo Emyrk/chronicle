@@ -67,9 +67,9 @@ import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
-import { KillParseTooltip } from "./EncounterKillParse";
+import { ClearParseBadge, KillParseTooltip } from "./EncounterKillParse";
 import { useInstanceTimeParses } from "./Overview/overviewQueries";
-import { bossKillParsesByEncounter, killParseEdgeStyle } from "./Overview/encounterKillTimePopulation";
+import { bossKillParsesByEncounter, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -457,6 +457,7 @@ function EncounterSidebar({
 }) {
   const timeParsesQuery = useInstanceTimeParses(instanceId);
   const killParses = bossKillParsesByEncounter(timeParsesQuery.data);
+  const scopedKillParses = scopedKillParsesByEncounter(timeParsesQuery.data);
   const lookbackDays = timeParsesQuery.data?.lookback_days;
   const nonWipeFilter = (e: Encounter) => {
     return includeWipes || (e.kill_type !== "wipe" && e.kill_type !== "reset");
@@ -660,7 +661,7 @@ function EncounterSidebar({
             const killParse = encounter.kill_type === "clean" && encounter.boss ? killParses?.get(encounter.id) : undefined;
             
             return (
-              <KillParseTooltip key={encounter.id} parse={killParse} lookbackDays={lookbackDays}>
+              <KillParseTooltip key={encounter.id} parses={killParse ? scopedKillParses?.get(encounter.id) : undefined} lookbackDays={lookbackDays}>
               <div
                 role="button"
                 tabIndex={0}
@@ -733,7 +734,7 @@ function EncounterSidebar({
               )}
               style={killParseEdgeStyle(killParse, isSelected)}
             >
-              <KillParseTooltip parse={killParse} lookbackDays={lookbackDays}>
+              <KillParseTooltip parses={killParse ? scopedKillParses?.get(encounter.id) : undefined} lookbackDays={lookbackDays}>
               <div
                 role="button"
                 tabIndex={0}
@@ -2058,6 +2059,7 @@ export function InstancePageView({
 }: InstancePageViewProps) {
   const timeRange = useTimeRangeContextOptional();
 
+  const instanceTimeParsesQuery = useInstanceTimeParses(instance.id);
   const { data: instanceSpeedrun } = useQuery({
     queryKey: ["instance-speedrun", instance.id],
     queryFn: async (): Promise<SpeedrunResult | null> => {
@@ -3376,6 +3378,10 @@ export function InstancePageView({
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
             {instance.name}
+            <ClearParseBadge
+              parses={scopedClearParses(instanceTimeParsesQuery.data)}
+              lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
+            />
             {instance.invalidatedAt && (
               <Tooltip>
                 <TooltipTrigger asChild>

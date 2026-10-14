@@ -34,7 +34,7 @@ describe("AdSlot", () => {
       />,
     )
 
-    expect(markup).toContain("Advertisement")
+    expect(markup).toContain(">Advertisement</div>")
     expect(markup).toContain("160 × 600")
     expect(markup).not.toContain("300 × 600")
     expect(markup).toContain("2xl:block")

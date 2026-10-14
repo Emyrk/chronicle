@@ -260,6 +260,7 @@ SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = @snapshot_id;
 -- snapshot it scores against, e.g. historical canonical snapshots).
 SELECT
     edr.id,
+    COALESCE(li.duplicate_group_id, li.id) AS run_id,
     edr.encounter_name,
     edr.instance_name,
     edr.player_guid,
@@ -279,6 +280,7 @@ SELECT
     edr.dps,
     edr.hps
 FROM encounter_dps_rankings edr
+JOIN log_instances li ON li.id = edr.instance_id
 WHERE edr.instance_id = @instance_id
   AND edr.encounter_id IS NOT NULL  -- boss kills only
 ORDER BY edr.encounter_name, edr.dps DESC;
