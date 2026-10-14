@@ -2595,6 +2595,8 @@ export interface LogParseReport {
 export interface LogUploadResponse {
     readonly log_id: string;
     readonly file_ids: readonly string[];
+    readonly url?: string;
+    readonly duplicate?: boolean;
 }
 
 // From chroniclesdk/server_application.go

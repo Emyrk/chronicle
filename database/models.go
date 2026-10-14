@@ -1628,6 +1628,12 @@ type LeaderboardVersionRequirement struct {
 	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type LogGroupSource struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Owner      uuid.UUID `db:"owner" json:"owner"`
+	SourceID   string    `db:"source_id" json:"source_id"`
+}
+
 type LogFile struct {
 	ID       uuid.UUID `db:"id" json:"id"`
 	Owner    uuid.UUID `db:"owner" json:"owner"`

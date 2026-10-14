@@ -22834,3 +22834,65 @@ func (q *sqlQuerier) UnassignWorldFromServer(ctx context.Context, arg UnassignWo
 	_, err := q.db.Exec(ctx, unassignWorldFromServer, arg.ServerID, arg.WorldID)
 	return err
 }
+
+const getLogFileByOwnerHash = `-- name: GetLogFileByOwnerHash :one
+SELECT id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at, storage_deleted_at, compressed_size_bytes, content_encoding FROM log_file WHERE owner = $1 AND hash = $2
+`
+
+type GetLogFileByOwnerHashParams struct {
+	Owner uuid.UUID `db:"owner" json:"owner"`
+	Hash  string    `db:"hash" json:"hash"`
+}
+
+func (q *sqlQuerier) GetLogFileByOwnerHash(ctx context.Context, arg GetLogFileByOwnerHashParams) (LogFile, error) {
+	row := q.db.QueryRow(ctx, getLogFileByOwnerHash, arg.Owner, arg.Hash)
+	var i LogFile
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.WowLogID,
+		&i.Hash,
+		&i.SizeBytes,
+		&i.MimeType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.StorageDeletedAt,
+		&i.CompressedSizeBytes,
+		&i.ContentEncoding,
+	)
+	return i, err
+}
+
+const getLogGroupIDBySource = `-- name: GetLogGroupIDBySource :one
+SELECT log_group_id FROM log_group_sources WHERE owner = $1 AND source_id = $2
+`
+
+type GetLogGroupIDBySourceParams struct {
+	Owner    uuid.UUID `db:"owner" json:"owner"`
+	SourceID string    `db:"source_id" json:"source_id"`
+}
+
+func (q *sqlQuerier) GetLogGroupIDBySource(ctx context.Context, arg GetLogGroupIDBySourceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getLogGroupIDBySource, arg.Owner, arg.SourceID)
+	var log_group_id uuid.UUID
+	err := row.Scan(&log_group_id)
+	return log_group_id, err
+}
+
+const insertLogGroupSource = `-- name: InsertLogGroupSource :exec
+INSERT INTO log_group_sources(log_group_id, owner, source_id)
+VALUES ($1, $2, $3)
+`
+
+type InsertLogGroupSourceParams struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Owner      uuid.UUID `db:"owner" json:"owner"`
+	SourceID   string    `db:"source_id" json:"source_id"`
+}
+
+// Records the client-supplied source id (X-Chronicle-Source-Id) a log group was
+// uploaded under, so a later upload of the same grown file can replace it.
+func (q *sqlQuerier) InsertLogGroupSource(ctx context.Context, arg InsertLogGroupSourceParams) error {
+	_, err := q.db.Exec(ctx, insertLogGroupSource, arg.LogGroupID, arg.Owner, arg.SourceID)
+	return err
+}
