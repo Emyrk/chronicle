@@ -24,7 +24,8 @@ const (
 )
 
 // Ping checks that baseURL serves the Chronicle API. Without credentials the
-// probe endpoint answers 400; a landing page answers 404 or 405.
+// probe endpoint answers 400, 401 or 403 depending on the deployment; a landing
+// page answers 404 or 405.
 func Ping(ctx context.Context, httpc *http.Client, baseURL string) error {
 	if httpc == nil {
 		httpc = &http.Client{Timeout: 15 * time.Second}
@@ -38,7 +39,9 @@ func Ping(ctx context.Context, httpc *http.Client, baseURL string) error {
 		return err
 	}
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
+	switch resp.StatusCode {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden:
+	default:
 		return &NotChronicleError{BaseURL: baseURL, Status: resp.StatusCode}
 	}
 	return nil

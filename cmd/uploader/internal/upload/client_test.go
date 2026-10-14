@@ -137,3 +137,18 @@ func TestUploadFast(t *testing.T) {
 	require.Equal(t, byte(4), xfl(true))
 	require.Equal(t, byte(0), xfl(false))
 }
+
+func TestPing(t *testing.T) {
+	t.Parallel()
+	for status, ok := range map[int]bool{400: true, 401: true, 403: true, 404: false, 405: false, 503: false} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+		t.Cleanup(srv.Close)
+		err := upload.Ping(context.Background(), nil, srv.URL)
+		if ok {
+			require.NoError(t, err, "HTTP %d", status)
+			continue
+		}
+		var nc *upload.NotChronicleError
+		require.ErrorAs(t, err, &nc, "HTTP %d", status)
+	}
+}

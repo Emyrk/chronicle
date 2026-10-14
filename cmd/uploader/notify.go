@@ -1,16 +1,24 @@
 package main
 
 import (
+	"context"
 	"os/exec"
 	"runtime"
+	"time"
 
 	"github.com/ncruces/zenity"
 )
 
+// notifyTimeout bounds how long a notification may take to show. A stuck
+// notification service must not block the upload worker or the poll loop.
+const notifyTimeout = 15 * time.Second
+
 // notify shows a native notification. Clicking it does nothing; the report is
 // reachable from the tray menu.
 func notify(title, message string) {
-	_ = zenity.Notify(message, zenity.Title(title))
+	ctx, cancel := context.WithTimeout(context.Background(), notifyTimeout)
+	defer cancel()
+	_ = zenity.Notify(message, zenity.Title(title), zenity.Context(ctx))
 }
 
 // openURL opens a link in the user's browser.

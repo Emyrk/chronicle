@@ -14,11 +14,11 @@ import (
 func TestLogFiles(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	for _, n := range []string{"WoWCombatLog.txt", "WoWCombatLog-101525_120000.txt", "WoWChatLog.txt", "other.txt"} {
+	for _, n := range []string{"WoWCombatLog.txt", "WoWCombatLog-101525_120000.txt", "WoWChatLog.txt", "other.txt", "WoWCombatLog-uploaded-20260101-210000.txt"} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o644))
 	}
 	got := watch.LogFiles([]string{dir, filepath.Join(dir, "missing")})
-	require.Len(t, got, 2)
+	require.Len(t, got, 2) // archives (-uploaded-) are ignored
 	require.Equal(t, int64(1), got[0].Size)
 }
 

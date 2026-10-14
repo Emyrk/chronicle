@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"runtime/debug"
 	"slices"
 	"sync"
@@ -100,12 +101,15 @@ type Engine struct {
 
 	// mu guards everything the poll loop and the upload worker share: tracker,
 	// status and the fields the worker reads (token, wowUp, now, ...).
-	mu         sync.Mutex
-	pending    []job
-	archiveQ   []watch.File // fully uploaded logs for the worker to rename
-	current    *job
-	kick       chan struct{} // wakes the worker when pending grows
-	workerOnce sync.Once
+	mu       sync.Mutex
+	pending  []job
+	archiveQ []watch.File // fully uploaded logs for the worker to rename
+	// archiveFailed holds the size at which renaming a live log failed. Such a
+	// log is not queued again until its size changes. Guarded by mu.
+	archiveFailed map[string]int64
+	current       *job
+	kick          chan struct{} // wakes the worker when pending grows
+	workerOnce    sync.Once
 }
 
 // job is one log waiting to be (or being) uploaded.
@@ -136,7 +140,7 @@ func New(cfg Config) *Engine {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
-	st := cfg.Store.Get()
+	st := pruneUploaded(cfg.Store, cfg.Logger)
 	return &Engine{
 		cfg:     cfg,
 		tracker: watch.NewTracker(st.Uploaded),
@@ -153,6 +157,32 @@ func New(cfg Config) *Engine {
 			}
 		},
 	}
+}
+
+// pruneUploaded forgets uploaded logs that are gone or are archives, so the
+// state file and the tracker do not grow with every session. Archives are not
+// watched, and a log that no longer exists will never be seen again.
+func pruneUploaded(s *store.Store, log *slog.Logger) store.State {
+	st := s.Get()
+	var stale []string
+	for p := range st.Uploaded {
+		if _, err := os.Stat(p); err != nil || watch.IsArchive(p) {
+			stale = append(stale, p)
+		}
+	}
+	if len(stale) == 0 {
+		return st
+	}
+	err := s.Update(func(s *store.State) {
+		for _, p := range stale {
+			delete(s.Uploaded, p)
+		}
+	})
+	if err != nil {
+		log.Warn("saving state", "err", err)
+	}
+	log.Info("forgot uploaded logs that are gone", "count", len(stale))
+	return s.Get()
 }
 
 // UploadNow asks for an upload of every log that has new data.
@@ -357,6 +387,10 @@ func (e *Engine) enqueue(queue []watch.File) {
 // hold e.mu.
 func (e *Engine) queueArchive(files []watch.File, running bool) {
 	for _, f := range e.tracker.Archivable(files, running) {
+		if size, ok := e.archiveFailed[f.Path]; ok && size == f.Size {
+			e.cfg.Logger.Debug("not archiving log, rename failed at this size", "file", f.Path)
+			continue
+		}
 		if !slices.Contains(e.archiveQ, f) {
 			e.archiveQ = append(e.archiveQ, f)
 		}
@@ -382,16 +416,19 @@ func (e *Engine) archive() {
 		}
 		to, err := watch.Archive(f, e.now)
 		if err != nil {
+			// Retrying every poll would not help (read-only directory, file held
+			// open); wait for the log to change.
+			if e.archiveFailed == nil {
+				e.archiveFailed = map[string]int64{}
+			}
+			e.archiveFailed[f.Path] = f.Size
 			e.cfg.Logger.Warn("archiving log", "file", f.Path, "err", err)
 			continue
 		}
+		delete(e.archiveFailed, f.Path)
 		e.tracker.MarkArchived(f.Path, to)
 		err = e.cfg.Store.Update(func(s *store.State) {
-			delete(s.Uploaded, f.Path)
-			if s.Uploaded == nil {
-				s.Uploaded = map[string]int64{}
-			}
-			s.Uploaded[to] = f.Size
+			delete(s.Uploaded, f.Path) // the archive is not watched, so not tracked
 		})
 		if err != nil {
 			e.cfg.Logger.Warn("saving state", "err", err)

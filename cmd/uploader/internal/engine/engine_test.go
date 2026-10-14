@@ -3,9 +3,12 @@ package engine_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,6 +41,11 @@ func newHarness(t testing.TB) *harness { return newHarnessToken(t, nil) }
 
 // newHarnessToken replaces the keychain read when tokenFn is non-nil.
 func newHarnessToken(t testing.TB, tokenFn func() string) *harness {
+	return newHarnessLogger(t, tokenFn, nil)
+}
+
+// newHarnessLogger also sets the engine's logger when logger is non-nil.
+func newHarnessLogger(t testing.TB, tokenFn func() string, logger *slog.Logger) *harness {
 	t.Helper()
 	dir := t.TempDir()
 	logDir := filepath.Join(dir, "_x_", "Logs")
@@ -49,6 +57,7 @@ func newHarnessToken(t testing.TB, tokenFn func() string) *harness {
 	h.st = st
 	h.e = engine.New(engine.Config{
 		Store:    st,
+		Logger:   logger,
 		Installs: func() []wowdir.Install { return []wowdir.Install{{Dir: filepath.Dir(logDir), LogDir: logDir}} },
 		Token: func() string {
 			if tokenFn != nil {
@@ -273,7 +282,7 @@ func TestEngineArchivesAfterExitUpload(t *testing.T) {
 	archives, err := filepath.Glob(filepath.Join(dir, "WoWCombatLog-uploaded-*.txt"))
 	require.NoError(t, err)
 	require.Len(t, archives, 1)
-	require.Equal(t, int64(len("some combat")), h.st.Get().Uploaded[archives[0]])
+	require.NotContains(t, h.st.Get().Uploaded, archives[0]) // archives are not tracked
 	require.NotContains(t, h.st.Get().Uploaded, h.logPath)
 
 	// The next session's log is uploaded on its own; the archive is not re-sent.
@@ -300,4 +309,59 @@ func TestEngineKeepLog(t *testing.T) {
 	h.step(t, t0.Add(5*time.Second), false)
 	require.Equal(t, 1, h.uploads)
 	require.FileExists(t, h.logPath)
+}
+
+// warnCounter counts records at Warn and above.
+type warnCounter struct {
+	slog.Handler
+	warns *atomic.Int32
+}
+
+func (w warnCounter) Enabled(context.Context, slog.Level) bool { return true }
+func (w warnCounter) Handle(_ context.Context, r slog.Record) error {
+	if r.Level >= slog.LevelWarn {
+		w.warns.Add(1)
+	}
+	return nil
+}
+func (w warnCounter) WithAttrs([]slog.Attr) slog.Handler { return w }
+func (w warnCounter) WithGroup(string) slog.Handler      { return w }
+
+func TestEngineArchiveFailureNotRetried(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("cannot make a directory read-only for this user")
+	}
+	var warns atomic.Int32
+	h := newHarnessLogger(t, nil, slog.New(warnCounter{Handler: slog.DiscardHandler, warns: &warns}))
+	require.NoError(t, h.st.Update(func(s *store.State) { s.UploadOnIdle = true }))
+	t0 := time.Now()
+	dir := filepath.Dir(h.logPath)
+
+	h.mu.Lock()
+	h.running = false
+	h.mu.Unlock()
+	h.step(t, t0, false) // uploads on exit
+	require.Equal(t, 1, h.uploads)
+
+	require.NoError(t, os.Chmod(dir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	for i := 1; i <= 100; i++ {
+		h.step(t, t0.Add(time.Duration(i)*5*time.Second), false)
+	}
+	require.FileExists(t, h.logPath)
+	require.LessOrEqual(t, warns.Load(), int32(1))
+
+	// Writable again, but the log is the same size: it is not tried again.
+	require.NoError(t, os.Chmod(dir, 0o755))
+	h.step(t, t0.Add(time.Hour), false)
+	require.FileExists(t, h.logPath)
+
+	// Once the log changes it is uploaded and archived as usual.
+	require.NoError(t, os.WriteFile(h.logPath, []byte("some combat and more"), 0o644))
+	h.step(t, t0.Add(2*time.Hour), false)               // sees the growth
+	h.step(t, t0.Add(3*time.Hour), false)               // idle for longer than IdleAfter
+	h.step(t, t0.Add(3*time.Hour+5*time.Second), false) // archives
+	require.Equal(t, 2, h.uploads)
+	require.NoFileExists(t, h.logPath)
 }
