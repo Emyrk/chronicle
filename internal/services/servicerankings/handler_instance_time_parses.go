@@ -28,7 +28,7 @@ type timeParsesQuerier interface {
 	GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUID) (database.GetLogInstanceForTimeParseRow, error)
 	GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (database.GetInstanceSpeedrunRow, error)
 	GetInstanceCleanEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]database.GetInstanceCleanEncounterKillTimesRow, error)
-	GetTimeParseSnapshotClearTimeCohort(ctx context.Context, arg database.GetTimeParseSnapshotClearTimeCohortParams) ([]int64, error)
+	GetTimeParseClearTimeMembershipCohort(ctx context.Context, arg database.GetTimeParseClearTimeMembershipCohortParams) ([]int64, error)
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg database.GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
 }
@@ -239,7 +239,7 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Log
 	// not whether a full clear can receive a parse score.
 	clearDurationMs := speedrun.RankedDurationMs.Int64
 	if speedrun.RankedDurationMs.Valid && clearDurationMs > 0 {
-		cohort, cErr := store.GetTimeParseSnapshotClearTimeCohort(ctx, database.GetTimeParseSnapshotClearTimeCohortParams{
+		cohort, cErr := store.GetTimeParseClearTimeMembershipCohort(ctx, database.GetTimeParseClearTimeMembershipCohortParams{
 			SnapshotID:     snapshot.ID,
 			InstanceName:   speedrun.InstanceName,
 			DifficultyName: instInfo.DifficultyName,

@@ -468,11 +468,13 @@ func TestGuildBestRuns(t *testing.T) {
 
 		for _, duration := range durations {
 			_, err = f.pool.Exec(ctx, `
-				INSERT INTO time_parse_clear_time_members (
-					snapshot_id, instance_id, run_id, instance_name,
+				INSERT INTO time_parse_clear_time_memberships (
+					tenant_id, policy_version, query_version, run_id,
+					instance_id, log_group_id, instance_name,
 					difficulty_name, max_players, duration_ms, start_time
-				) VALUES ($1, $2, $3, 'Molten Core', 'Normal', 40, $4, $5)
-			`, snapshot.ID, uuid.New(), uuid.New(), duration.Milliseconds(), cutoff.Add(-time.Hour))
+				) VALUES ($1, $2, $3, $4, $5, $6, 'Molten Core', 'Normal', 40, $7, $8)
+			`, uuid.Nil, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.SnapshotQueryVersion,
+				uuid.New(), uuid.New(), f.logGroupID, duration.Milliseconds(), cutoff.Add(-time.Hour))
 			require.NoError(t, err)
 		}
 

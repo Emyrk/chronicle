@@ -264,9 +264,10 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 			return fmt.Errorf("insert time-parse snapshot: %w", err)
 		}
 
-		// 2. Populate clear-time members.
-		if err := tx.BatchInsertTimeParseSnapshotClearTimeMembers(ctx, snap.ID); err != nil {
-			return fmt.Errorf("batch insert clear-time members: %w", err)
+		// 2. Upsert the compact event-date clear-time membership store directly
+		// from eligible source runs. Missing rows are removed by lifecycle operations.
+		if err := tx.UpsertTimeParseClearTimeMemberships(ctx, snap.ID); err != nil {
+			return fmt.Errorf("upsert clear-time memberships: %w", err)
 		}
 
 		// 3. Upsert the compact event-date boss-kill membership store directly
@@ -277,7 +278,7 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 		}
 
 		// 4. Count members in this snapshot's date window.
-		clearCount, err = tx.CountTimeParseSnapshotClearTimeMembers(ctx, snap.ID)
+		clearCount, err = tx.CountTimeParseClearTimeMembershipCohort(ctx, snap.ID)
 		if err != nil {
 			return fmt.Errorf("count clear-time members: %w", err)
 		}

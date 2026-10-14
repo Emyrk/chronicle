@@ -1,3 +1,209 @@
+-- Event-date-backed storage for time-parse clear-time cohorts.
+-- Each logical member is stored once and snapshot lookback windows are applied
+-- at read time. Later uploads, corrections, and invalidations affect old parses.
+
+-- name: DeleteTimeParseClearTimeMembershipSeries :exec
+DELETE FROM time_parse_clear_time_memberships
+WHERE tenant_id = @tenant_id
+  AND policy_version = @policy_version
+  AND query_version = @query_version;
+
+-- name: DeleteTimeParseClearTimeMembershipsByLogGroup :exec
+DELETE FROM time_parse_clear_time_memberships
+WHERE log_group_id = @log_group_id;
+
+-- name: DeleteTimeParseClearTimeMembershipsByInstance :exec
+DELETE FROM time_parse_clear_time_memberships
+WHERE instance_id = @instance_id;
+
+-- name: RefreshTimeParseClearTimeMembershipsForLogGroup :one
+-- Recompute every duplicate run group touched by this log using the same
+-- representative selection as snapshot publication.
+WITH series AS MATERIALIZED (
+    SELECT DISTINCT tenant_id, policy_version, query_version
+    FROM time_parse_snapshots
+    WHERE status = 'published'
+),
+affected_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    WHERE instance.log_group_id = @log_group_id
+),
+representative_instances AS MATERIALIZED (
+    SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
+        instance.id,
+        COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    JOIN affected_runs affected
+      ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
+    WHERE instance.invalidated_at IS NULL
+    ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = instance.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
+        (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
+        instance.start_time ASC,
+        instance.id ASC
+),
+current_members AS MATERIALIZED (
+    SELECT
+        representative.run_id,
+        speedrun.instance_id,
+        instance.log_group_id,
+        speedrun.instance_name,
+        instance.difficulty_name,
+        instance.max_players,
+        speedrun.ranked_duration_ms::bigint AS duration_ms,
+        speedrun.start_time::timestamptz AS start_time,
+        server.tenant_id AS source_tenant_id,
+        (server.tenant_id IS NULL OR tenant.include_in_all) AS root_visible
+    FROM representative_instances representative
+    JOIN log_instances instance ON instance.id = representative.id
+    JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    WHERE speedrun.qualified = true
+      AND speedrun.ranked_duration_ms > 0
+),
+upserted AS (
+    INSERT INTO time_parse_clear_time_memberships (
+        tenant_id, policy_version, query_version, run_id,
+        instance_id, log_group_id, instance_name,
+        difficulty_name, max_players, duration_ms, start_time
+    )
+    SELECT
+        series.tenant_id, series.policy_version, series.query_version, member.run_id,
+        member.instance_id, member.log_group_id, member.instance_name,
+        member.difficulty_name, member.max_players, member.duration_ms, member.start_time
+    FROM series
+    JOIN current_members member
+      ON series.tenant_id = member.source_tenant_id
+      OR (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid AND member.root_visible)
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id) DO UPDATE SET
+        instance_id = EXCLUDED.instance_id,
+        log_group_id = EXCLUDED.log_group_id,
+        instance_name = EXCLUDED.instance_name,
+        difficulty_name = EXCLUDED.difficulty_name,
+        max_players = EXCLUDED.max_players,
+        duration_ms = EXCLUDED.duration_ms,
+        start_time = EXCLUDED.start_time
+    RETURNING tenant_id, policy_version, query_version, run_id
+),
+deleted AS (
+    DELETE FROM time_parse_clear_time_memberships membership
+    WHERE membership.run_id IN (SELECT run_id FROM affected_runs)
+      AND NOT EXISTS (
+          SELECT 1 FROM current_members member
+          WHERE member.run_id = membership.run_id
+      )
+    RETURNING 1
+)
+SELECT
+    (SELECT COUNT(*) FROM upserted)::bigint AS upserted_count,
+    (SELECT COUNT(*) FROM deleted)::bigint AS deleted_count;
+
+-- name: UpsertTimeParseClearTimeMemberships :exec
+-- Snapshot publication writes the current window directly into the compact
+-- store. Missing rows are removed only by lifecycle operations.
+WITH snapshot AS (
+    SELECT tenant_id, policy_version, query_version, cutoff, window_start
+    FROM time_parse_snapshots
+    WHERE time_parse_snapshots.id = @snapshot_id
+),
+representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
+        instance.id,
+        COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    CROSS JOIN snapshot
+    WHERE (server.tenant_id = snapshot.tenant_id
+           OR (snapshot.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+      AND instance.invalidated_at IS NULL
+    ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = instance.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
+        (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
+        instance.start_time ASC,
+        instance.id ASC
+),
+current_members AS (
+    SELECT
+        representative.run_id,
+        speedrun.instance_id,
+        instance.log_group_id,
+        speedrun.instance_name,
+        instance.difficulty_name,
+        instance.max_players,
+        speedrun.ranked_duration_ms::bigint AS duration_ms,
+        speedrun.start_time::timestamptz AS start_time
+    FROM representative_instances representative
+    JOIN log_instances instance ON instance.id = representative.id
+    JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
+    CROSS JOIN snapshot
+    WHERE speedrun.qualified = true
+      AND speedrun.ranked_duration_ms > 0
+      AND speedrun.start_time < snapshot.cutoff
+      AND (snapshot.window_start IS NULL OR speedrun.start_time >= snapshot.window_start)
+)
+INSERT INTO time_parse_clear_time_memberships (
+    tenant_id, policy_version, query_version, run_id,
+    instance_id, log_group_id, instance_name,
+    difficulty_name, max_players, duration_ms, start_time
+)
+SELECT
+    snapshot.tenant_id, snapshot.policy_version, snapshot.query_version, member.run_id,
+    member.instance_id, member.log_group_id, member.instance_name,
+    member.difficulty_name, member.max_players, member.duration_ms, member.start_time
+FROM snapshot
+CROSS JOIN current_members member
+ON CONFLICT (tenant_id, policy_version, query_version, run_id) DO UPDATE SET
+    instance_id = EXCLUDED.instance_id,
+    log_group_id = EXCLUDED.log_group_id,
+    instance_name = EXCLUDED.instance_name,
+    difficulty_name = EXCLUDED.difficulty_name,
+    max_players = EXCLUDED.max_players,
+    duration_ms = EXCLUDED.duration_ms,
+    start_time = EXCLUDED.start_time;
+
+-- name: CountTimeParseClearTimeMembershipCohort :one
+SELECT COUNT(*)
+FROM time_parse_clear_time_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = @snapshot_id
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.start_time < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.start_time >= snapshot.window_start);
+
+-- name: GetTimeParseClearTimeMembershipCohort :many
+SELECT membership.duration_ms
+FROM time_parse_clear_time_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = @snapshot_id
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.start_time < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.start_time >= snapshot.window_start)
+  AND membership.instance_name = @instance_name
+  AND membership.difficulty_name = @difficulty_name
+  AND membership.max_players = @max_players;
+
+-- name: ListTimeParseClearTimeMemberships :many
+SELECT *
+FROM time_parse_clear_time_memberships
+WHERE tenant_id = @tenant_id
+  AND policy_version = @policy_version
+  AND query_version = @query_version
+ORDER BY run_id;
+
 -- Event-date-backed storage for time-parse boss-kill cohorts.
 -- Each logical member is stored once and snapshot lookback windows are applied
 -- at read time. Later uploads and corrections intentionally affect old parses.

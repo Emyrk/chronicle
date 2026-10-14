@@ -172,13 +172,27 @@ LIMIT @row_limit;
 -- Returns the guild's single best full clear of each instance within the
 -- window, for the guild page "Best Performance" panel. @by_parse picks the
 -- winner by highest historical clear-time parse instead of fastest clear.
--- Duplicate uploads collapse to one run (fastest duration per group). Includes
+-- Duplicate uploads collapse using the shared deterministic representative. Includes
 -- unqualified runs: qualification only affects cohort and leaderboard membership,
 -- not whether a completed clear can receive a time parse.
 -- JOINs wow_server_realms so RLS tenant filtering cascades.
-WITH clears AS (
+WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
-        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    WHERE li.invalidated_at IS NULL
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+), clears AS (
+    SELECT
+        representative.run_id,
         li.id AS instance_id,
         COALESCE(li.hashed_slug, '')::text AS instance_slug,
         sr.instance_name,
@@ -187,8 +201,9 @@ WITH clears AS (
         li.start_time AS instance_start_time,
         sr.ranked_duration_ms::bigint AS duration_ms,
         sr.ranked_completion_time::timestamptz AS completion_time
-    FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    FROM representative_instances representative
+    JOIN log_instances li ON li.id = representative.id
+    JOIN instance_speedruns sr ON sr.instance_id = representative.id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id::uuid
       AND sr.ranked_duration_ms > 0
@@ -196,7 +211,6 @@ WITH clears AS (
           WHEN @since_days::bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => @since_days::int)
           ELSE true
       END
-    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.ranked_duration_ms ASC
 ), scored AS (
     SELECT
         c.*,
@@ -224,8 +238,13 @@ WITH clears AS (
         SELECT
             COUNT(*)::bigint AS sample_size,
             COUNT(*) FILTER (WHERE member.duration_ms >= c.duration_ms)::bigint AS at_least_as_slow
-        FROM time_parse_clear_time_members member
-        WHERE member.snapshot_id = snapshot.id
+        FROM time_parse_clear_time_memberships member
+        JOIN time_parse_snapshots cohort_snapshot ON cohort_snapshot.id = snapshot.id
+        WHERE member.tenant_id = cohort_snapshot.tenant_id
+          AND member.policy_version = cohort_snapshot.policy_version
+          AND member.query_version = cohort_snapshot.query_version
+          AND member.start_time < cohort_snapshot.cutoff
+          AND (cohort_snapshot.window_start IS NULL OR member.start_time >= cohort_snapshot.window_start)
           AND member.instance_name = c.instance_name
           AND member.difficulty_name = c.difficulty_name
           AND member.max_players = c.max_players

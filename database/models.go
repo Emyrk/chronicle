@@ -2164,6 +2164,21 @@ type TimeParseClearTimeMember struct {
 	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
 }
 
+type TimeParseClearTimeMembership struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	DurationMs     int64              `db:"duration_ms" json:"duration_ms"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+}
+
 type TimeParseSnapshot struct {
 	ID                uuid.UUID          `db:"id" json:"id"`
 	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
