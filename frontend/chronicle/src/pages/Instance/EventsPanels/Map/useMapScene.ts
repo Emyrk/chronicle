@@ -37,6 +37,8 @@ import {
 interface MapFocus {
   bounds: MapPointBounds;
   autoFit: MapViewport;
+  /** The focus centre (median boss position) on the artwork, or null when no boss is known. */
+  centre: MapPoint | null;
 }
 
 // Fit bounds scan the encounter's whole track, so cache them per encounter
@@ -156,6 +158,8 @@ export type MapScene =
     focusBounds: MapPointBounds | null;
     /** The auto-fit framing of `focusBounds`: a minimum span, centred on the boss when known. */
     autoFit: MapViewport | null;
+    /** The boss's median position on the artwork (what `autoFit` centres on), or null when no boss is known. */
+    focusCentre: MapPoint | null;
     /** Whether the view should start on `autoFit` (one boss encounter selected) rather than the full map. */
     fitByDefault: boolean;
     /** Combat events for the replay effects layer. */
@@ -165,12 +169,21 @@ export type MapScene =
     tankGuids: ReadonlySet<string>;
   };
 
+export interface MapSceneOptions {
+  /**
+   * Project dungeon positions with the pure world transform instead of the
+   * per-boss artwork calibration (Wailing Caverns): the 3D view's real
+   * dungeon mesh is true geometry, so calibrated points would land off it.
+   */
+  rawDungeonProjection?: boolean;
+}
+
 /**
  * Everything the Map panel's views share: the encounter at the replay cursor,
  * the artwork canvas and the projected unit markers. Both the 2D and 3D views
  * consume this so filters, selection, floor and cursor stay identical.
  */
-export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
+export function useMapScene(props: PanelRenderProps<MapResult>, options: MapSceneOptions = {}): MapScene {
   const sync = useSyncModeContextOptional();
   const iconBaseUrl = props.context.instance.iconBaseUrl;
   const manifestQuery = useMapManifest(iconBaseUrl);
@@ -221,7 +234,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
   if (!canvas) return { status: "message", title: "Map artwork unavailable", detail: "No renderable map layer was published." };
 
   const dungeonBounds = artwork.kind === "instance" ? selectedFloor?.bounds ?? null : null;
-  const dungeonCalibration = artwork.kind === "instance" && encounter
+  const rawProjection = Boolean(options.rawDungeonProjection);
+  const dungeonCalibration = artwork.kind === "instance" && encounter && !rawProjection
     ? resolveDungeonMapCalibration(
       artwork.instance.mapID,
       encounter,
@@ -229,7 +243,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     )
     : null;
   const overlayAvailable = Boolean(dungeonBounds)
-    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || dungeonCalibration !== null);
+    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || rawProjection || dungeonCalibration !== null);
   const projectSample = (sample: MapPositionSample): MapPoint | null => artwork.kind === "zone"
     ? zoneMapPoint(sample, artwork.assignment)
     : dungeonBounds && overlayAvailable
@@ -277,7 +291,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
   }
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
-    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}`;
+    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${rawProjection ? "raw" : "calibrated"}`;
   const focus = cachedFocusBounds(
     encounter.positionsByUnit,
     `${mapId}|${projectionKey}|${[...bossGuids].join(",")}`,
@@ -285,13 +299,15 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
       const bounds = unitFocusBounds(encounter.positionsByUnit, mapId, projectSample, bossGuids);
       const centre = focusCentre(encounter.positionsByUnit, mapId, bossGuids);
       if (!bounds || !centre) return null;
+      const centrePoint = centre.fromFocus ? projectSample(centre.sample) : null;
       return {
         bounds,
         autoFit: autoFitViewport(bounds, {
           minSpanYards: AUTO_FIT_MIN_SPAN_YARDS,
           scale: projectionScale(projectSample, centre.sample),
-          centre: centre.fromFocus ? projectSample(centre.sample) : null,
+          centre: centrePoint,
         }),
+        centre: centrePoint,
       };
     },
   );
@@ -318,6 +334,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     projectSample,
     focusBounds: focus?.bounds ?? null,
     autoFit: focus?.autoFit ?? null,
+    focusCentre: focus?.centre ?? null,
     fitByDefault: props.context.selectedEncounterIds.length === 1 && Boolean(instanceEncounter?.boss),
     effects: encounter.effects,
     bossGuids,
