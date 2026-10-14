@@ -6,6 +6,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -22,6 +23,9 @@ import (
 
 // version is set at release time with -ldflags "-X main.version=...".
 var version = "dev"
+
+// maxLogSize is when uploader.log is rotated at.
+const maxLogSize = 4 << 20
 
 func main() {
 	if err := run(); err != nil {
@@ -60,9 +64,14 @@ func run() error {
 
 	// There is no terminal for a tray app; log to a file.
 	var logger *slog.Logger
-	if lf, err := os.OpenFile(filepath.Join(dir, "uploader.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+	if lf, err := openRotating(filepath.Join(dir, "uploader.log"), maxLogSize); err == nil {
 		defer func() { _ = lf.Close() }()
-		logger = slog.New(slog.NewTextHandler(lf, nil))
+		var w io.Writer = lf
+		// Also log to the terminal when started from one.
+		if fi, err := os.Stderr.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
+			w = io.MultiWriter(lf, os.Stderr)
+		}
+		logger = slog.New(slog.NewTextHandler(w, nil))
 	} else {
 		logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
 	}

@@ -85,21 +85,21 @@ configure for most people.
 **Setting it up**
 
 1. Start the uploader. A coloured dot appears in your menu bar / system tray.
-2. If the dot is orange, choose **Connect to Chronicle…** and sign in.
+2. If the dot is yellow, choose **Connect to Chronicle…** and sign in.
 3. In game, type `/combatlog` once before you pull. The uploader cannot see your fights until you do.
 4. Play. When you quit WoW, the uploader sends your log and shows a notification. Choose **Open last report**
    from the menu to see it.
 
 **What the dot means**
 
-| Dot    | Meaning                                                                    |
-| ------ | -------------------------------------------------------------------------- |
-| Grey   | Waiting for WoW                                                            |
-| Yellow | WoW is running but not logging. Type `/combatlog` in game                  |
-| Red    | Recording your combat log                                                  |
-| Blue   | Uploading (if you are offline it keeps trying until you are back)          |
-| Green  | Uploaded                                                                   |
-| Orange | Not connected to Chronicle                                                 |
+| Dot            | Meaning                                                                    |
+| -------------- | -------------------------------------------------------------------------- |
+| Grey           | Waiting for WoW                                                            |
+| Red            | WoW is running but not logging. Type `/combatlog` in game                  |
+| Green          | Recording your combat log                                                  |
+| Blue           | Uploading (if you are offline it keeps trying until you are back)          |
+| Green + check  | Uploaded                                                                   |
+| Yellow         | Not connected to Chronicle (or it needs reconnecting)                      |
 
 **Menu**
 
