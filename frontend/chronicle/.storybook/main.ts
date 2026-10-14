@@ -14,5 +14,7 @@ const config: StorybookConfig = {
     "@storybook/addon-themes"
   ],
   "framework": "@storybook/react-vite",
+  // Boss minis and local dungeon meshes, as `pnpm dev` serves them.
+  "staticDirs": ["../public"],
 };
 export default config;

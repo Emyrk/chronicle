@@ -25,3 +25,6 @@ dist-ssr
 
 *storybook.log
 storybook-static
+
+# Local dungeon meshes (Blizzard textures, never committed)
+public/dungeon-meshes/
