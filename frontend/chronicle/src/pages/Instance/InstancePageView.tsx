@@ -67,6 +67,9 @@ import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
+import { EncounterKillTime } from "./EncounterKillTime";
+import { useInstanceTimeParses } from "./Overview/overviewQueries";
+import { bossKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -435,6 +438,7 @@ function EncounterSidebar({
   includeWipes,
   onIncludeWipesChange,
   instanceStartTime,
+  instanceId,
 }: {
   encounters: Encounter[];
   trashGroups: TrashGroup[];
@@ -449,7 +453,11 @@ function EncounterSidebar({
   includeWipes: boolean;
   onIncludeWipesChange: (value: boolean) => void;
   instanceStartTime: string;
+  instanceId: string;
 }) {
+  const timeParsesQuery = useInstanceTimeParses(instanceId);
+  const killParses = bossKillParsesByEncounter(timeParsesQuery.data);
+  const lookbackDays = timeParsesQuery.data?.lookback_days;
   const nonWipeFilter = (e: Encounter) => {
     return includeWipes || (e.kill_type !== "wipe" && e.kill_type !== "reset");
   };
@@ -683,9 +691,15 @@ function EncounterSidebar({
                 <span className="truncate flex-1">
                   {encounter.boss ? encounter.name : <span className="italic">{encounter.name}</span>}
                 </span>
-                <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
-                  {formatEncounterTime(encounter)}
-                </span>
+                {encounter.kill_type === "clean" && encounter.boss ? (
+                  <EncounterKillTime parses={timeDisplay === "duration" ? killParses : null} encounterId={encounter.id} lookbackDays={lookbackDays} isSelected={isSelected}>
+                    {formatEncounterTime(encounter)}
+                  </EncounterKillTime>
+                ) : (
+                  <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
+                    {formatEncounterTime(encounter)}
+                  </span>
+                )}
                 {isDebug && (
                   <button
                     onClick={(e) => {
@@ -746,9 +760,15 @@ function EncounterSidebar({
                   <Skull className="h-4 w-4 shrink-0 text-red-500" />
                 )}
                 <span className={cn("truncate flex-1", isSelected && "font-semibold")}>{encounter.name}</span>
-                <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
-                  {formatEncounterTime(encounter)}
-                </span>
+                {encounter.kill_type === "clean" && encounter.boss ? (
+                  <EncounterKillTime parses={timeDisplay === "duration" ? killParses : null} encounterId={encounter.id} lookbackDays={lookbackDays} isSelected={isSelected}>
+                    {formatEncounterTime(encounter)}
+                  </EncounterKillTime>
+                ) : (
+                  <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
+                    {formatEncounterTime(encounter)}
+                  </span>
+                )}
                 {isDebug && (
                   <button
                     onClick={(e) => {
@@ -3694,6 +3714,7 @@ export function InstancePageView({
         
         {sidebarOpen && (
           <EncounterSidebar
+            instanceId={instance.id}
             onCollapse={() => setSidebarOpen(false)}
             encounters={instance.encounters}
             trashGroups={trashGroups}
