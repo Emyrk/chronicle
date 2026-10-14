@@ -33,7 +33,29 @@ Maintain the server-aware WoW map export. `SERVER=forever make maps` extracts Fo
    git diff --check
    ```
 
-3. Publish only when requested, with the relevant `SERVER`, client/wowdata dependencies, and R2 credentials configured. Use `make maps/<server>` or `SERVER=<server> make maps` for a full import. Forever layer-specific targets: `maps/forever-original-upload` (extract native only), `maps/forever-render-upload` (rerender using local original manifest), `maps/forever-styled-upload` (Git-tracked artwork only). `maps/render-upload` and `maps/styled-upload` publish **existing** corresponding inputs for `SERVER`; they do not generate them. Legacy `make maps` publishes native art only.
+3. Publish only when requested, with the relevant `SERVER`, client/wowdata dependencies, and R2 credentials configured. Use the target inventory below; legacy full imports publish native art only.
+4. After a successful upload, verify the merged manifest and referenced assets on R2 (the public URL may serve a cached manifest for up to an hour). Then reclaim disk space occupied by generated client-derived map data with `make clean-maps`. This removes **every** `frontend/imagecache/<server>/maps/` directory, not the WoW client installation or Git-tracked styled inputs. If another server's generated output must remain available for a later upload, remove only the verified server's generated `maps/` directory instead. Never clean after a failed or unverified upload: the local manifest and assets may be needed for retry, and `--reuse-manifest-url` does not restore reused tiles to disk.
+
+## Make target inventory
+
+| Target | Action |
+| --- | --- |
+| `SERVER=<server> make maps` | Dispatch to Forever's full pipeline or a legacy native import; default `SERVER` is `azerothcore`. |
+| `make maps/forever`, `make maps/forever-upload` | Extract Forever native art, render geometry, then upload both layers and merge. |
+| `make maps/forever-build` | Extract and render Forever assets locally without uploading. |
+| `make maps/forever-extract` | Extract Forever native tiles and `manifest.original.json` locally. |
+| `make maps/forever-render` | Render geometry locally from an existing original manifest; no extraction or upload. |
+| `make maps/forever-render-upload` | Render Forever geometry and upload only that layer. |
+| `make maps/forever-original-upload` | Extract and upload only Forever native art. |
+| `make maps/forever-styled-upload` | Upload Git-tracked Forever styled art and manifest without extracting. |
+| `SERVER=<server> make maps/render-upload` | Upload already-rendered assets for that server; does not render. |
+| `SERVER=<server> make maps/styled-upload` | Upload already-styled assets for that server; does not create them. |
+| `SERVER=<legacy-server> make maps/legacy`, `maps/legacy-upload` | Extract and upload legacy native art; requires a legacy `SERVER`. |
+| `SERVER=<legacy-server> make maps/legacy-extract` | Extract legacy native art locally without uploading. |
+| `make maps/turtle`, `make maps/azerothcore`, `make maps/tbc` | Legacy server-specific full extract-and-upload aliases. |
+| `make clean-maps` | Remove generated map directories for **all** servers; run only after verifying uploads. |
+
+A dedicated Go maps command could eventually own extract/render/validate/merge/upload/verify/cleanup sequencing, leaving Make targets as thin compatibility aliases. This is a **proposal**, not an existing command: keep current Make and uploader behavior until an operator approves that refactor, including its R2 credential handling, per-layer publishing, error recovery, and tests. In particular, never make cleanup unconditional on an upload command's exit status alone.
 
 ## Maintenance map
 
