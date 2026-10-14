@@ -46,6 +46,30 @@ if [[ "${MAPS_UPLOAD_MODE}" == "all" ]]; then
   }
 fi
 
+# Validate and merge all source manifests before modifying remote objects.
+# A transport/auth failure cannot masquerade as an absent optional layer.
+listing="$(rclone lsf "${remote}/" --files-only)"
+tmp="$(mktemp -d)"
+trap 'rm -rf "${tmp}"' EXIT
+for layer in original rendered styled; do
+  local_source="${MAPS_DIR}/manifest.${layer}.json"
+  if [[ "${MAPS_UPLOAD_MODE}" == "styled" && "${layer}" == "styled" ]]; then
+    cp "${styled_source}" "${tmp}/manifest.${layer}.json"
+  elif [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "original" ) && "${layer}" == "original" ]] ||
+       [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "rendered" ) && "${layer}" == "rendered" ]]; then
+    cp "${local_source}" "${tmp}/manifest.${layer}.json"
+  elif printf '%s\n' "${listing}" | grep -Fxq "manifest.${layer}.json"; then
+    rclone copyto "${remote}/manifest.${layer}.json" "${tmp}/manifest.${layer}.json"
+  fi
+done
+
+# Validate original metadata, optional layers and target compatibility before upload.
+go run ../../scripts/dbcdata merge-wowdata-maps \
+  --original="${tmp}/manifest.original.json" \
+  --render="${tmp}/manifest.rendered.json" \
+  --styled="${tmp}/manifest.styled.json" \
+  --out="${MAPS_DIR}/manifest.json"
+
 if [[ "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "original" ]]; then
   rclone copy "${MAPS_DIR}/original" "${remote}/original/" \
     --include '*.webp' \
@@ -76,30 +100,6 @@ if [[ "${MAPS_UPLOAD_MODE}" == "styled" ]]; then
     --header-upload "Content-Type: application/json" --verbose
 fi
 
-# List the remote first so a transport/auth failure cannot masquerade as an
-# optional absent layer. Local manifests from this run always win over remote.
-listing="$(rclone lsf "${remote}/" --files-only)"
-tmp="$(mktemp -d)"
-trap 'rm -rf "${tmp}"' EXIT
-for layer in original rendered styled; do
-  local_source="${MAPS_DIR}/manifest.${layer}.json"
-  if [[ "${MAPS_UPLOAD_MODE}" == "styled" && "${layer}" == "styled" ]]; then
-    cp "${styled_source}" "${tmp}/manifest.${layer}.json"
-  elif [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "original" ) && "${layer}" == "original" ]] ||
-       [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "rendered" ) && "${layer}" == "rendered" ]]; then
-    cp "${local_source}" "${tmp}/manifest.${layer}.json"
-  elif printf '%s\n' "${listing}" | grep -Fxq "manifest.${layer}.json"; then
-    rclone copyto "${remote}/manifest.${layer}.json" "${tmp}/manifest.${layer}.json"
-  fi
-done
-
-# This command validates the original, source layers, and target compatibility,
-# then writes the complete root manifest atomically. Never publish a partial one.
-go run ../../scripts/dbcdata merge-wowdata-maps \
-  --original="${tmp}/manifest.original.json" \
-  --render="${tmp}/manifest.rendered.json" \
-  --styled="${tmp}/manifest.styled.json" \
-  --out="${MAPS_DIR}/manifest.json"
 rclone copyto "${MAPS_DIR}/manifest.json" "${remote}/manifest.json" \
   --header-upload "Cache-Control: public, max-age=3600" \
   --header-upload "Content-Type: application/json" --verbose

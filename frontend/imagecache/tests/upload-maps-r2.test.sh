@@ -4,7 +4,7 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
-mkdir -p "${tmp}/bin" "${tmp}/maps/original" "${tmp}/maps/render"
+mkdir -p "${tmp}/bin" "${tmp}/maps/original" "${tmp}/maps/render" "${tmp}/remote" "${tmp}/remote-turtle"
 cat > "${tmp}/bin/rclone" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -63,6 +63,7 @@ if MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh >"${tmp}/failure.log" 2>&1; the
   exit 1
 fi
 [[ "$before" == "$(sha256sum "$MOCK_MAP_REMOTE/manifest.json")" ]]
+jq -e '.instances[0].rendered.path == "render/43.png"' "$MOCK_MAP_REMOTE/manifest.rendered.json" >/dev/null
 export R2_PATH=turtle/maps SERVER=turtle MAPS_DIR="${tmp}/turtle-maps" MOCK_MAP_REMOTE="${tmp}/remote-turtle"
 mkdir -p "${MAPS_DIR}/original"
 printf 'legacy tile' > "${MAPS_DIR}/original/2.webp"
