@@ -3323,16 +3323,17 @@ VALUES (
   $2::TIMESTAMPTZ + INTERVAL '24 hours'
 )
 ON CONFLICT (user_id) DO UPDATE SET
+  next_check_at = LEAST(
+    discord_membership_grant_checks.next_check_at,
+    $2::TIMESTAMPTZ
+  ),
   suspended_until_login = FALSE,
   last_error = NULL,
   claim_token = gen_random_uuid(),
   claim_expires_at = $2::TIMESTAMPTZ + INTERVAL '24 hours',
   updated_at = $2::TIMESTAMPTZ
-WHERE discord_membership_grant_checks.suspended_until_login = TRUE
-  AND (
-    discord_membership_grant_checks.claim_token IS NULL
-    OR discord_membership_grant_checks.claim_expires_at <= $2::TIMESTAMPTZ
-  )
+WHERE discord_membership_grant_checks.claim_token IS NULL
+  OR discord_membership_grant_checks.claim_expires_at <= $2::TIMESTAMPTZ
 RETURNING user_id, claim_token, next_check_at
 `
 

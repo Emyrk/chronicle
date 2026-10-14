@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"database/sql"
 	"testing"
 	"time"
 
@@ -12,6 +13,59 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
+
+func TestActivateDiscordMembershipGrantCheckOnLoginRechecksKnownNonMember(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	db, _ := dbtestutil.NewDB(t)
+
+	userID := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{
+		ID:       userID,
+		Username: "discord-recheck-" + uuid.NewString()[:8],
+		Email:    uuid.NewString() + "@example.com",
+	})
+	require.NoError(t, err)
+	_, err = db.InsertUserAuth(ctx, database.InsertUserAuthParams{
+		ID:       uuid.New(),
+		LinkedID: uuid.NewString(),
+		UserID:   userID,
+		Provider: "discord",
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Round(time.Microsecond)
+	_, err = db.InsertDiscordMembershipGrantCheck(ctx, database.InsertDiscordMembershipGrantCheckParams{
+		UserID:      userID,
+		NextCheckAt: database.Timestamptz(now.Add(-time.Hour)),
+	})
+	require.NoError(t, err)
+	claims, err := db.ClaimDueDiscordMembershipGrantChecks(ctx, database.ClaimDueDiscordMembershipGrantChecksParams{
+		CheckTime:  database.Timestamptz(now),
+		LimitCount: 1,
+	})
+	require.NoError(t, err)
+	require.Len(t, claims, 1)
+	_, err = db.CompleteDiscordMembershipGrantCheckNonMember(ctx, database.CompleteDiscordMembershipGrantCheckNonMemberParams{
+		CheckedAt:  database.Timestamptz(now),
+		UserID:     userID,
+		ClaimToken: claims[0].ClaimToken,
+	})
+	require.NoError(t, err)
+
+	loginClaim, err := db.ActivateDiscordMembershipGrantCheckOnLogin(ctx, database.ActivateDiscordMembershipGrantCheckOnLoginParams{
+		UserID:    userID,
+		CheckTime: database.Timestamptz(now.Add(time.Hour)),
+	})
+	require.NoError(t, err)
+	require.True(t, loginClaim.ClaimToken.Valid)
+
+	_, err = db.ActivateDiscordMembershipGrantCheckOnLogin(ctx, database.ActivateDiscordMembershipGrantCheckOnLoginParams{
+		UserID:    userID,
+		CheckTime: database.Timestamptz(now.Add(2 * time.Hour)),
+	})
+	require.ErrorIs(t, err, sql.ErrNoRows)
+}
 
 func TestDiscordMembershipGrantChecks(t *testing.T) {
 	t.Parallel()
