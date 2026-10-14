@@ -4,7 +4,7 @@ import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { MeshBVH } from "three-mesh-bvh";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer } from "@/pages/Technical/mapGallery";
 import { bossMiniSlug, bossMiniUrl } from "./bossMinis";
-import { clampToRadius, corsAssetUrl, dungeonMeshPlacement, FloorHeightCache, type DungeonMeshFrame } from "./dungeonMeshes";
+import { clampToRadius, corsAssetUrl, dungeonMeshPlacement, FloorHeightCache } from "./dungeonMeshes";
 import { FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   DEFAULT_EFFECT_OPTIONS,
@@ -146,10 +146,8 @@ export type DungeonMeshState = "loading" | "ready" | "failed";
 
 export interface DungeonMeshRequest {
   url: string;
-  /** The map image's world bounds, which place the mesh under the units' projection onto it. */
+  /** The mesh entry's world-axis bounds: the ground the units project onto, which places the mesh under them. */
   bounds: WowMapFloorBounds;
-  /** Which projection `bounds` belong to: the rendered instance map or the Blizzard artwork floor. */
-  frame: DungeonMeshFrame;
 }
 
 /** The fight the mesh camera is locked to: its centre (artwork point) and Fit zoom. */
@@ -784,7 +782,7 @@ export class MapScene3D {
       const [loader, { MeshBVH }] = await Promise.all([this.gltfLoader, import("three-mesh-bvh")]);
       const gltf = await loader.loadAsync(corsAssetUrl(request.url));
       for (const node of gltf.scene.children) node.position.set(0, 0, 0);
-      const placement = dungeonMeshPlacement(request.bounds, GROUND_WIDTH, request.frame);
+      const placement = dungeonMeshPlacement(request.bounds, GROUND_WIDTH);
       const group = new THREE.Group();
       group.rotation.y = placement.rotationY;
       group.scale.setScalar(placement.scale);

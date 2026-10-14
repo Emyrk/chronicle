@@ -145,6 +145,7 @@ func clearRenderedWowMapInstances(manifest *wowMapManifest) {
 	for index := range manifest.Instances {
 		manifest.Instances[index].Rendered = nil
 		manifest.Instances[index].Styled = nil
+		manifest.Instances[index].Mesh = nil
 	}
 }
 

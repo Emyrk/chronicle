@@ -1,38 +1,46 @@
-import type { WowMapFloorBounds } from "@/pages/Technical/mapGallery";
+import { mapAssetUrl, type WowMapFloorBounds, type WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 
 /**
  * Real dungeon meshes for the 3D Replay Map: a glTF rendered from the game's
- * WMO, used as the ground instead of the flat map tiles. Served from the icon
- * CDN next to the tiles (`<iconBaseUrl>/maps/meshes/<mapId>.glb`) or, with
- * `VITE_DUNGEON_MESH_BASE`, from a local directory (`.env.development` points
- * `pnpm dev` and Storybook at `public/dungeon-meshes`, which is gitignored:
- * the files carry Blizzard textures and never ship in the repo).
+ * WMO, used as the ground instead of the flat map tiles. The map manifest
+ * announces one per instance (`instances[].mesh`, published beside the tiles
+ * under `<iconBaseUrl>/maps/meshes/`) together with the world bounds that
+ * place it, so no artwork or rendered layer is needed. With
+ * `VITE_DUNGEON_MESH_BASE` the file is read from that directory instead
+ * (`.env.development` points `pnpm dev` and Storybook at
+ * `public/dungeon-meshes`, which is gitignored: the files carry Blizzard
+ * textures and never ship in the repo).
  */
 
-/** Map ids with a mesh, and the file that holds it. */
-export const DUNGEON_MESH_FILES: ReadonlyMap<number, string> = new Map([
-  // Wailing Caverns
-  [43, "43.glb"],
-]);
+/**
+ * The one glTF axis convention the scene places: Y-up with X mirrored,
+ * `(x, y, z) = (-wow_x, wow_z, wow_y)`. Checked against the Kresh log: his
+ * pool's water plane sits under his position in this frame, and the player
+ * left at the entrance has floor beneath him; the mirror-free alternative
+ * `(wow_x, wow_z, -wow_y)` puts both off the mesh.
+ */
+export const DUNGEON_MESH_FRAME = "wow-yup-mirrored-x";
 
-export function hasDungeonMesh(mapId: number): boolean {
-  return DUNGEON_MESH_FILES.has(mapId);
+/** The manifest's mesh entry when the scene can place it, else null. */
+export function placeableDungeonMesh(mesh: WowMapMeshInstance | undefined): WowMapMeshInstance | null {
+  if (!mesh || !mesh.path || mesh.frame !== DUNGEON_MESH_FRAME) return null;
+  const { bounds } = mesh;
+  if (!(bounds.maxX > bounds.minX) || !(bounds.maxY > bounds.minY)) return null;
+  return mesh;
 }
 
 function stripTrailingSlash(url: string): string {
   return url.replace(/\/+$/, "");
 }
 
-/** The mesh URL for `mapId`, or null when it has none. */
+/** The URL of a mesh entry: its manifest path under the icon CDN, or its file in the override directory. */
 export function dungeonMeshUrl(
-  mapId: number,
+  mesh: WowMapMeshInstance,
   iconBaseUrl: string,
   base: string | undefined = import.meta.env.VITE_DUNGEON_MESH_BASE as string | undefined,
-): string | null {
-  const file = DUNGEON_MESH_FILES.get(mapId);
-  if (!file) return null;
-  const directory = base ? stripTrailingSlash(base) : `${stripTrailingSlash(iconBaseUrl)}/maps/meshes`;
-  return `${directory}/${file}`;
+): string {
+  if (!base) return mapAssetUrl(iconBaseUrl, mesh.path);
+  return `${stripTrailingSlash(base)}/${mesh.path.slice(mesh.path.lastIndexOf("/") + 1)}`;
 }
 
 /**
@@ -49,28 +57,15 @@ export function corsAssetUrl(url: string, origin: string | undefined = globalThi
 }
 
 /**
- * How a mesh in raw WoW coordinates lands in the scene. The meshes are glTF
- * Y-up with `(x, y, z) = (-wow_x, wow_z, wow_y)` (checked against the Kresh
- * log: his pool's water plane sits under his position in this frame, and the
- * player left at the entrance has floor beneath him; the mirror-free
- * alternative `(wow_x, wow_z, -wow_y)` puts both off the mesh). The ground is
- * the map image `width` wide with the frame's projection + `mapPointToScene`
- * placing world points on it. That composition is linear: world Y runs along
- * -x and world X along -z at one uniform scale, so the mesh needs a quarter
- * turn about Y, that scale, and the translation that puts the bounds' centre
- * at the origin. Scene y stays `scale * wow_z`.
- *
- * Two frames exist. The `rendered` instance map (manifest `instances[].rendered`,
- * drawn from the same WMO geometry as the mesh) has bounds in world axes and
- * projects with `renderedDungeonMapPoint`: `bounds.minY..maxY` spans the
- * image's width and `bounds.minX..maxX` its height. The Blizzard `artwork`
- * floor projects with `dungeonMapPoint`, whose DungeonMap bounds are swapped:
- * `bounds.minX..maxX` spans the image's width but measures world Y. Both give
- * the same scene axes, so the rendered frame is the artwork formula with the
- * bounds' axes exchanged.
+ * How a mesh in raw WoW coordinates (`DUNGEON_MESH_FRAME`) lands in the
+ * scene. `bounds` are the mesh entry's world-axis bounds, which also form the
+ * ground the units project onto with `renderedDungeonMapPoint`: world Y spans
+ * the ground's `width` and world X its depth, both descending from the
+ * top-left. That composition is linear: world Y runs along -x and world X
+ * along -z at one uniform scale, so the mesh needs a quarter turn about Y,
+ * that scale, and the translation that puts the bounds' centre at the
+ * origin. Scene y stays `scale * wow_z`.
  */
-export type DungeonMeshFrame = "rendered" | "artwork";
-
 export interface DungeonMeshPlacement {
   /** Scene units per yard. */
   scale: number;
@@ -79,17 +74,13 @@ export interface DungeonMeshPlacement {
   z: number;
 }
 
-export function dungeonMeshPlacement(bounds: WowMapFloorBounds, width: number, frame: DungeonMeshFrame = "artwork"): DungeonMeshPlacement {
-  // Bounds along the image's width (world Y) and height (world X).
-  const [acrossMin, acrossMax, downMin, downMax] = frame === "rendered"
-    ? [bounds.minY, bounds.maxY, bounds.minX, bounds.maxX]
-    : [bounds.minX, bounds.maxX, bounds.minY, bounds.maxY];
-  const scale = width / (acrossMax - acrossMin);
+export function dungeonMeshPlacement(bounds: WowMapFloorBounds, width: number): DungeonMeshPlacement {
+  const scale = width / (bounds.maxY - bounds.minY);
   return {
     scale,
     rotationY: -Math.PI / 2,
-    x: scale * ((acrossMax + acrossMin) / 2),
-    z: scale * ((downMax + downMin) / 2),
+    x: scale * ((bounds.maxY + bounds.minY) / 2),
+    z: scale * ((bounds.maxX + bounds.minX) / 2),
   };
 }
 

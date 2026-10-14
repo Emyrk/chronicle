@@ -5,6 +5,7 @@ import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
 import { kreshReal } from "./fixtures/kreshReal";
 import { loadMapFixture, type LoadedMapFixture } from "./fixtures/mapFixture";
 import type { WoWSpell } from "@/api/wowdb";
+import type { WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import { BOSS_MINI_SLUGS } from "./bossMinis";
 import { dungeonMeshUrl } from "./dungeonMeshes";
 import type { MapPositionSample } from "./map.processor";
@@ -782,12 +783,11 @@ function KreshRealPlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture;
   // transform once the mesh has loaded; the tiles (calibrated) stay otherwise.
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
   const scene = useMapScene(fixture.props, { rawDungeonProjection: mesh && meshState === "ready" });
-  const meshBounds = scene.status === "ready" ? scene.meshFrame?.bounds ?? null : null;
-  const meshFrameKind = scene.status === "ready" ? scene.meshFrame?.frame ?? null : null;
-  const meshUrl = mesh ? dungeonMeshUrl(kreshReal.encounter.mapId, kreshReal.instance.iconBaseUrl) : null;
+  const meshEntry = mesh && scene.status === "ready" ? scene.mesh : null;
+  const meshUrl = meshEntry ? dungeonMeshUrl(meshEntry, kreshReal.instance.iconBaseUrl) : null;
   const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
-    meshUrl && meshBounds && meshFrameKind ? { url: meshUrl, bounds: meshBounds, frame: meshFrameKind } : null,
-  [meshBounds, meshFrameKind, meshUrl]);
+    meshEntry && meshUrl ? { url: meshUrl, bounds: meshEntry.bounds } : null,
+  [meshEntry, meshUrl]);
   const focusCentre = scene.status === "ready" ? scene.focusCentre : null;
   const fitZoom = scene.status === "ready" ? scene.autoFit?.zoom ?? null : null;
   const focus = useMemo((): MapSceneFocus | null =>
@@ -854,17 +854,15 @@ function KreshRealPlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture;
 // see none, so no cast icons or spell names.
 const KRESH_UNSELECTED = "0x0000120C006422B6";
 
-// `instances[].rendered` for Wailing Caverns from the Forever manifest (icons CDN, 2026-10-14).
-const WC_RENDERED = {
-  mapID: 43,
-  rendered: {
-    path: "renders/43-1.60.1.70338-69a73d7b527a.png",
-    width: 1200,
-    height: 800,
-    source: "wmo-geometry",
-    bounds: { minX: -421.6594, maxX: 220.06552, minY: -396.9931, maxY: 565.59424 },
-    triangles: 170179,
-  },
+// `instances[].mesh` for Wailing Caverns as frontend/imagecache/meshes/forever/
+// manifest.meshes.json publishes it: bounds and z from the render pipeline's
+// height.json (see docs/wow-map-assets.md for the axis conversion).
+const WC_MESH: WowMapMeshInstance = {
+  path: "meshes/43.glb",
+  bounds: { minX: -389.07001, maxX: 191.6667, minY: -370.83331, maxY: 538.3512 },
+  zMin: -119.1605,
+  zMax: 56.4689,
+  frame: "wow-yup-mirrored-x",
 };
 
 function KreshRealReplay({ selectPlayers, mesh = false }: { selectPlayers: boolean; mesh?: boolean }) {
@@ -875,15 +873,15 @@ function KreshRealReplay({ selectPlayers, mesh = false }: { selectPlayers: boole
   });
   // Seed the artwork manifest so the scene needs no fetch; only tiles and
   // boss-mini textures load from the icon CDN. The mesh story adds the
-  // rendered Wailing Caverns map the Forever manifest publishes (the fixture
-  // predates it), which is the frame the mesh is placed by.
+  // Wailing Caverns mesh entry the published manifest carries (the fixture
+  // predates it): the toggle and the mesh's placement come from it alone.
   const [queryClient] = useState(() => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const manifest = mesh
       ? {
         ...fixture.manifest,
-        instances: fixture.manifest.instances.map((instance) => (instance.mapID === WC_RENDERED.mapID
-          ? { ...instance, rendered: WC_RENDERED.rendered }
+        instances: fixture.manifest.instances.map((instance) => (instance.mapID === kreshReal.encounter.mapId
+          ? { ...instance, mesh: WC_MESH }
           : instance)),
       }
       : fixture.manifest;
