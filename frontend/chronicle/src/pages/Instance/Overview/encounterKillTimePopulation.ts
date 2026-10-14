@@ -1,4 +1,6 @@
+import type { CSSProperties } from "react";
 import type { BossKillTimeParse, InstanceTimeParsesResponse, SpeedrunCohortRun } from "@/api/typesGenerated";
+import { parseHexColor } from "../parseColors";
 
 /** A server-computed per-boss parse score ready for display. */
 export interface SnapshotBossParse {
@@ -42,6 +44,25 @@ export function bossKillParsesByEncounter(
 ): ReadonlyMap<string, BossKillTimeParse> | null {
   if (!timeParses?.available) return null;
   return new Map(timeParses.boss_kill_times.map((boss) => [boss.encounter_id, boss]));
+}
+
+export function scoredKillParse(parse: BossKillTimeParse | undefined): BossKillTimeParse | undefined {
+  return parse && parse.status !== "sample_too_small" ? parse : undefined;
+}
+
+/**
+ * Left-edge accent colored by the server kill-time parse. Selected rows
+ * already draw a left border, so recolor it; otherwise draw an inset bar
+ * that does not shift row layout.
+ */
+export function killParseEdgeStyle(
+  parse: BossKillTimeParse | undefined,
+  isSelected: boolean,
+): CSSProperties | undefined {
+  const scored = scoredKillParse(parse);
+  if (!scored) return undefined;
+  const color = parseHexColor(scored.display_score);
+  return isSelected ? { borderLeftColor: color } : { boxShadow: `inset 3px 0 0 ${color}` };
 }
 
 /**

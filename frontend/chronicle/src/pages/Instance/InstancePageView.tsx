@@ -67,9 +67,9 @@ import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
-import { EncounterKillIcon } from "./EncounterKillIcon";
+import { KillParseTooltip } from "./EncounterKillParse";
 import { useInstanceTimeParses } from "./Overview/overviewQueries";
-import { bossKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
+import { bossKillParsesByEncounter, killParseEdgeStyle } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -657,12 +657,13 @@ function EncounterSidebar({
           {chronologicalEncounters.map((encounter) => {
             const isSelected = selectedIds.includes(encounter.id);
             const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
+            const killParse = encounter.kill_type === "clean" && encounter.boss ? killParses?.get(encounter.id) : undefined;
             
             return (
+              <KillParseTooltip key={encounter.id} parse={killParse} lookbackDays={lookbackDays}>
               <div
                 role="button"
                 tabIndex={0}
-                key={encounter.id}
                 onClick={(e) => handleClick(encounter.id, e)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -678,11 +679,10 @@ function EncounterSidebar({
                   isWipeOrReset && !isSelected && "opacity-60",
                   !encounter.boss && !isSelected && "text-muted-foreground"
                 )}
+                style={killParseEdgeStyle(killParse, isSelected)}
               >
-                {encounter.kill_type === "clean" && encounter.boss ? (
-                  <EncounterKillIcon parses={killParses} encounterId={encounter.id} lookbackDays={lookbackDays} />
-                ) : encounter.kill_type === "clean" ? (
-                  <CheckCircle className="h-4 w-4 shrink-0 text-green-500/60" />
+                {encounter.kill_type === "clean" ? (
+                  <CheckCircle className={cn("h-4 w-4 shrink-0", encounter.boss ? "text-green-500" : "text-green-500/60")} />
                 ) : encounter.kill_type === "partial" ? (
                   <AlertTriangle className={cn("h-4 w-4 shrink-0", encounter.boss ? "text-yellow-500" : "text-yellow-500/60")} />
                 ) : encounter.kill_type === "reset" ? (
@@ -709,6 +709,7 @@ function EncounterSidebar({
                   </button>
                 )}
               </div>
+              </KillParseTooltip>
             );
           })}
         </div>
@@ -719,6 +720,7 @@ function EncounterSidebar({
         {bossEncounters.map((encounter) => {
           const isSelected = selectedIds.includes(encounter.id);
           const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
+          const killParse = encounter.kill_type === "clean" ? killParses?.get(encounter.id) : undefined;
           const phases = [...(encounter.phases ?? [])].sort((a, b) => a.order - b.order);
           const showExpandedPhases = isSelected && phases.length > 0 && !multipleEncountersSelected;
 
@@ -729,7 +731,9 @@ function EncounterSidebar({
                 "rounded-md transition-all duration-150",
                 isSelected && "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm",
               )}
+              style={killParseEdgeStyle(killParse, isSelected)}
             >
+              <KillParseTooltip parse={killParse} lookbackDays={lookbackDays}>
               <div
                 role="button"
                 tabIndex={0}
@@ -746,9 +750,7 @@ function EncounterSidebar({
                   isWipeOrReset && !isSelected && "opacity-60",
                 )}
               >
-                {encounter.kill_type === "clean" && encounter.boss ? (
-                  <EncounterKillIcon parses={killParses} encounterId={encounter.id} lookbackDays={lookbackDays} />
-                ) : encounter.kill_type === "clean" ? (
+                {encounter.kill_type === "clean" ? (
                   <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
                 ) : encounter.kill_type === "partial" ? (
                   <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500" />
@@ -774,6 +776,7 @@ function EncounterSidebar({
                   </button>
                 )}
               </div>
+              </KillParseTooltip>
 
               {showExpandedPhases && (
                 <div className="flex gap-1.5 px-2 pb-2" aria-label="Apply encounter phase time range">
