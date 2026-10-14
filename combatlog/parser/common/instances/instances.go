@@ -443,6 +443,12 @@ var (
 		Hostiles:  FromMap(MaraudonHostiles()),
 	}
 
+	RuinsOfLordaeronFactory = &CommonFactory{
+		Name:      "Ruins Of Lordaeron",
+		ZoneNames: []string{"ruins of lordaeron"},
+		Hostiles:  FromMap(RuinsOfLordaeronHostiles()),
+	}
+
 	ExcavationSiteWetlandsFactory = &CommonFactory{
 		Name:      "Excavation Site: Wetlands",
 		ZoneNames: []string{"excavation site: wetlands"},
