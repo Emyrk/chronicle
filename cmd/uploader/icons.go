@@ -13,6 +13,7 @@ import (
 var stateColors = map[engine.State]color.NRGBA{
 	engine.StateIdle:      {0x8a, 0x8f, 0x98, 0xff}, // grey: waiting for WoW
 	engine.StateNoLog:     {0xe5, 0x48, 0x4d, 0xff}, // red: WoW running, not logging
+	engine.StateWaiting:   {0xf9, 0x73, 0x16, 0xff}, // orange: logging on, waiting for a fight
 	engine.StateRecording: {0x22, 0xc5, 0x5e, 0xff}, // green: recording
 	engine.StateUploading: {0x3b, 0x82, 0xf6, 0xff}, // blue: uploading
 	engine.StateUploaded:  {0x22, 0xc5, 0x5e, 0xff}, // green + check: uploaded

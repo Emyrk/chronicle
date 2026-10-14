@@ -28,6 +28,8 @@ const (
 	StateIdle State = iota
 	// StateNoLog: WoW is running but its combat log is not growing.
 	StateNoLog
+	// StateWaiting: a combat log was created this session but has not grown yet.
+	StateWaiting
 	// StateRecording: the combat log is growing.
 	StateRecording
 	// StateUploading: a log is being sent (or waiting to retry offline).
@@ -253,6 +255,7 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 	e.now = now
 	e.trackSession(now, running)
 	queue, recording := e.tracker.Observe(now, files, running, manual, trig)
+	logging := running && e.tracker.CreatedSince(e.sessionStart)
 	if !st.KeepLog {
 		e.queueArchive(files, running)
 	}
@@ -277,7 +280,7 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 		return // the worker owns the status until it is done
 	}
 	rejected := token != "" && token == e.rejectedToken
-	e.setStatus(e.baseline(now, len(installs) > 0, running, recording, needAuth, rejected))
+	e.setStatus(e.baseline(now, len(installs) > 0, running, recording, logging, needAuth, rejected))
 }
 
 // trackSession logs WoW starting and exiting and remembers how long it ran.
@@ -343,7 +346,7 @@ func (e *Engine) currentToken(now time.Time) string {
 	return e.token
 }
 
-func (e *Engine) baseline(now time.Time, haveInstall, running, recording, needAuth, rejected bool) Status {
+func (e *Engine) baseline(now time.Time, haveInstall, running, recording, logging, needAuth, rejected bool) Status {
 	last := e.status.ReportURL
 	switch {
 	case rejected:
@@ -354,8 +357,10 @@ func (e *Engine) baseline(now time.Time, haveInstall, running, recording, needAu
 		return e.lastUploaded
 	case recording:
 		return Status{State: StateRecording, Detail: "Recording your combat log.", ReportURL: last}
+	case running && logging:
+		return Status{State: StateWaiting, Detail: "Combat logging is on. Waiting for your first fight.", ReportURL: last}
 	case running:
-		return Status{State: StateNoLog, Detail: "WoW is running but not logging. Type /combatlog in game.", ReportURL: last}
+		return Status{State: StateNoLog, Detail: "Not logging yet. Type /combatlog in game, then fight something — the dot turns green after your first combat.", ReportURL: last}
 	case !haveInstall:
 		return Status{State: StateIdle, Detail: "Can't find WoW. Choose its folder from the menu.", ReportURL: last}
 	}

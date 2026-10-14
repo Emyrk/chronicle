@@ -365,3 +365,27 @@ func TestEngineArchiveFailureNotRetried(t *testing.T) {
 	require.Equal(t, 2, h.uploads)
 	require.NoFileExists(t, h.logPath)
 }
+
+func TestEngineWaitsForFirstFightAfterNewLog(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	t0 := time.Now()
+	last := func() engine.State { return h.statuses[len(h.statuses)-1].State }
+
+	// The log present before WoW started does not mean logging is on.
+	h.step(t, t0, false)
+	require.Equal(t, engine.StateNoLog, last())
+	h.step(t, t0.Add(5*time.Second), false)
+	require.Equal(t, engine.StateNoLog, last())
+
+	// /combatlog creates a new, empty file.
+	fresh := filepath.Join(filepath.Dir(h.logPath), "WoWCombatLog-101426_120000.txt")
+	require.NoError(t, os.WriteFile(fresh, nil, 0o644))
+	h.step(t, t0.Add(10*time.Second), false)
+	require.Equal(t, engine.StateWaiting, last())
+
+	// The first fight flushes events.
+	require.NoError(t, os.WriteFile(fresh, []byte("first fight"), 0o644))
+	h.step(t, t0.Add(15*time.Second), false)
+	require.Equal(t, engine.StateRecording, last())
+}

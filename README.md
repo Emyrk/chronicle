@@ -95,7 +95,8 @@ configure for most people.
 | Dot            | Meaning                                                                    |
 | -------------- | -------------------------------------------------------------------------- |
 | Grey           | Waiting for WoW                                                            |
-| Red            | WoW is running but not logging. Type `/combatlog` in game                  |
+| Red            | Not logging yet. Type `/combatlog` in game, then fight something           |
+| Orange         | Combat logging is on. Waiting for your first fight                         |
 | Green          | Recording your combat log                                                  |
 | Blue           | Uploading (if you are offline it keeps trying until you are back)          |
 | Green + check  | Uploaded                                                                   |
