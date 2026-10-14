@@ -19,8 +19,8 @@ import (
 type timeParsesQuerier interface {
 	InstanceBySlug(context.Context, pgtype.Text) (database.LogInstancesGuild, error)
 	GetTenantByID(context.Context, uuid.UUID) (database.Tenant, error)
-	GetTimeParseScoreReceiptForContract(context.Context, database.GetTimeParseScoreReceiptForContractParams) (database.TimeParseScoreReceipt, error)
-	ListTimeParseScoreResultsForReceipt(context.Context, uuid.UUID) ([]database.TimeParseScoreResult, error)
+	GetTimeParseScoreForContract(context.Context, database.GetTimeParseScoreForContractParams) (database.TimeParseScore, error)
+	ListTimeParseBossScoresForScore(context.Context, uuid.UUID) ([]database.TimeParseBossScore, error)
 }
 
 func (s *Service) handleInstanceTimeParses(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +47,7 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, w http.ResponseW
 			return
 		}
 	}
-	receipt, err := store.GetTimeParseScoreReceiptForContract(ctx, database.GetTimeParseScoreReceiptForContractParams{
+	score, err := store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{
 		TenantID: tenantID, InstanceID: instanceID, LookbackDays: TimeParseScoreLookbackDays,
 		PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.QueryVersion,
 	})
@@ -56,12 +56,12 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, w http.ResponseW
 		return
 	}
 	if err != nil {
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to load time parse receipt", Detail: err.Error()}})
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to load time parse score", Detail: err.Error()}})
 		return
 	}
-	rows, err := store.ListTimeParseScoreResultsForReceipt(ctx, receipt.ID)
+	bossRows, err := store.ListTimeParseBossScoresForScore(ctx, score.ID)
 	if err != nil {
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to load time parse scores", Detail: err.Error()}})
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to load time parse boss scores", Detail: err.Error()}})
 		return
 	}
 	scopes := map[string]chroniclesdk.TimeParseScopeResult{
@@ -69,28 +69,46 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, w http.ResponseW
 		TimeParseScopeRealm:  {Reason: "no_time_data", BossKillTimes: []chroniclesdk.BossKillTimeParse{}},
 		TimeParseScopeGuild:  {Reason: "no_guild", BossKillTimes: []chroniclesdk.BossKillTimeParse{}},
 	}
-	if receipt.GuildID.Valid {
+	if score.GuildID.Valid {
 		scopes[TimeParseScopeGuild] = chroniclesdk.TimeParseScopeResult{Reason: "no_time_data", BossKillTimes: []chroniclesdk.BossKillTimeParse{}}
 	}
-	precise := make(map[string][]float64)
-	for _, row := range rows {
-		scope := scopes[row.Scope]
+	setClear := func(scopeName string, precise pgtype.Float8, display pgtype.Int2, rank pgtype.Int4, sampleSize pgtype.Int4, status pgtype.Text) {
+		if !score.ClearDurationMs.Valid || !status.Valid {
+			return
+		}
+		scope := scopes[scopeName]
 		scope.Available = true
 		scope.Reason = ""
-		score := chroniclesdk.TimeParseScore{DurationMs: row.DurationMs, PreciseScore: row.PreciseScore, DisplayScore: int(row.DisplayScore), Rank: int(row.Rank), SampleSize: int(row.SampleSize), Status: row.Status}
-		if row.MetricKind == "clear_time" {
-			scope.ClearTime = &score
-		} else if row.EncounterID.Valid {
-			scope.BossKillTimes = append(scope.BossKillTimes, chroniclesdk.BossKillTimeParse{
-				EncounterID: row.EncounterID.UUID, EncounterName: row.EncounterName,
-				DurationMs: row.DurationMs, PreciseScore: row.PreciseScore, DisplayScore: int(row.DisplayScore),
-				Rank: int(row.Rank), SampleSize: int(row.SampleSize), Status: row.Status,
-			})
-			if row.Status != string(timeparsepolicy.StatusSampleTooSmall) {
-				precise[row.Scope] = append(precise[row.Scope], row.PreciseScore)
-			}
+		scope.ClearTime = &chroniclesdk.TimeParseScore{
+			DurationMs: score.ClearDurationMs.Int64, PreciseScore: precise.Float64, DisplayScore: int(display.Int16),
+			Rank: int(rank.Int32), SampleSize: int(sampleSize.Int32), Status: status.String,
 		}
-		scopes[row.Scope] = scope
+		scopes[scopeName] = scope
+	}
+	setClear(TimeParseScopeServer, score.ClearServerPreciseScore, score.ClearServerDisplayScore, score.ClearServerRank, score.ClearServerSampleSize, score.ClearServerStatus)
+	setClear(TimeParseScopeRealm, score.ClearRealmPreciseScore, score.ClearRealmDisplayScore, score.ClearRealmRank, score.ClearRealmSampleSize, score.ClearRealmStatus)
+	setClear(TimeParseScopeGuild, score.ClearGuildPreciseScore, score.ClearGuildDisplayScore, score.ClearGuildRank, score.ClearGuildSampleSize, score.ClearGuildStatus)
+
+	precise := make(map[string][]float64)
+	appendBoss := func(scopeName string, row database.TimeParseBossScore, preciseScore float64, displayScore int16, rank int32, sampleSize int32, status string) {
+		scope := scopes[scopeName]
+		scope.Available = true
+		scope.Reason = ""
+		scope.BossKillTimes = append(scope.BossKillTimes, chroniclesdk.BossKillTimeParse{
+			EncounterID: row.EncounterID, EncounterName: row.EncounterName, DurationMs: row.DurationMs,
+			PreciseScore: preciseScore, DisplayScore: int(displayScore), Rank: int(rank), SampleSize: int(sampleSize), Status: status,
+		})
+		if status != string(timeparsepolicy.StatusSampleTooSmall) {
+			precise[scopeName] = append(precise[scopeName], preciseScore)
+		}
+		scopes[scopeName] = scope
+	}
+	for _, row := range bossRows {
+		appendBoss(TimeParseScopeServer, row, row.ServerPreciseScore, row.ServerDisplayScore, row.ServerRank, row.ServerSampleSize, row.ServerStatus)
+		appendBoss(TimeParseScopeRealm, row, row.RealmPreciseScore, row.RealmDisplayScore, row.RealmRank, row.RealmSampleSize, row.RealmStatus)
+		if row.GuildStatus.Valid {
+			appendBoss(TimeParseScopeGuild, row, row.GuildPreciseScore.Float64, row.GuildDisplayScore.Int16, row.GuildRank.Int32, row.GuildSampleSize.Int32, row.GuildStatus.String)
+		}
 	}
 	for name, scope := range scopes {
 		if average, ok := timeparsepolicy.AverageParse(precise[name], len(scope.BossKillTimes)); ok {
@@ -100,9 +118,9 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, w http.ResponseW
 	}
 	server := scopes[TimeParseScopeServer]
 	resp := chroniclesdk.InstanceTimeParsesResponse{
-		Available: server.Available, Reason: server.Reason, Cutoff: receipt.Cutoff.Time,
-		WindowStart: &receipt.WindowStart.Time, LookbackDays: int32(receipt.LookbackDays),
-		PolicyVersion: receipt.PolicyVersion, QueryVersion: receipt.QueryVersion, ComputedAt: receipt.ComputedAt.Time,
+		Available: true, Cutoff: score.Cutoff.Time,
+		WindowStart: &score.WindowStart.Time, LookbackDays: int32(score.LookbackDays),
+		PolicyVersion: score.PolicyVersion, QueryVersion: score.QueryVersion, ComputedAt: score.ComputedAt.Time,
 		Scopes: scopes, ClearTime: server.ClearTime, BossKillTimes: server.BossKillTimes, AverageBossKillParse: server.AverageBossKillParse,
 	}
 	httpapi.Write(ctx, w, http.StatusOK, resp)
