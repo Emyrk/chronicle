@@ -43,6 +43,17 @@ func (p *Parser) header(ctx context.Context, ts time.Time, m *Matched) ([]messag
 	localTimeStr := m.String()
 	utcTimeStr := m.String()
 
+	var classicAPIVersion string
+	if m.Remain() > 0 {
+		m.skip() // combat log range
+	}
+	if m.Remain() > 0 {
+		classicAPIVersion = m.String()
+	}
+	if m.Remain() > 0 {
+		m.skip() // threat mode
+	}
+
 	// TODO: If ts is 0, set to utc time
 
 	var _ = zoneName
@@ -87,6 +98,9 @@ func (p *Parser) header(ctx context.Context, ts time.Time, m *Matched) ([]messag
 	}
 	if xp3Version != "" {
 		versions["xp3"] = xp3Version
+	}
+	if classicAPIVersion != "" {
+		versions["classicapi"] = classicAPIVersion
 	}
 	if wowVersion != "" {
 		versions["wow_client"] = wowVersion
@@ -363,6 +377,10 @@ func (p *Parser) zoneInfo(ctx context.Context, ts time.Time, m *Matched) ([]mess
 	inInstance := m.Int64() == 1
 	instanceType := m.String() // none, party, raid, pvp
 	isGhost := m.Int64() == 1
+	var mapID uint32
+	if m.Remain() > 0 {
+		mapID = m.OptionalUint32()
+	}
 
 	if err := m.Error(); err != nil {
 		return nil, err
@@ -374,6 +392,7 @@ func (p *Parser) zoneInfo(ctx context.Context, ts time.Time, m *Matched) ([]mess
 			Seen: ts,
 			// For some reason, a zone name came across as all caps once.
 			Name:         strings.ToLower(name),
+			MapID:        mapID,
 			InstanceID:   instanceID,
 			Ghost:        isGhost,
 			InstanceType: instanceType,
