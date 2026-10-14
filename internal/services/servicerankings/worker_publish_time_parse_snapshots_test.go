@@ -39,9 +39,36 @@ func setupTimeParseTest(t *testing.T) (*pgxpool.Pool, database.Store, uuid.UUID)
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, "INSERT INTO wow_server_realms (id, server_id, name) VALUES ($1, $2, $3)", realmID, serverID, "test-realm")
 	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "RESET app.tenant_bypass")
+	require.NoError(t, err)
 	conn.Release()
 
 	return pool, store, realmID
+}
+
+func insertTimeParseTenantRealm(t *testing.T, pool *pgxpool.Pool, name string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+
+	ctx := testutil.Context(t, testutil.WaitShort)
+	tenantID := uuid.New()
+	serverID := uuid.New()
+	realmID := uuid.New()
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "INSERT INTO tenants (id, slug, name) VALUES ($1, $2, $3)", tenantID, name, name)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "INSERT INTO wow_servers (id, name, tenant_id) VALUES ($1, $2, $3)", serverID, name+"-server", tenantID)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "INSERT INTO wow_server_realms (id, server_id, name) VALUES ($1, $2, $3)", realmID, serverID, name+"-realm")
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "RESET app.tenant_bypass")
+	require.NoError(t, err)
+
+	return tenantID, realmID
 }
 
 // insertTimeParseInstance creates a log_instance, an instance_speedrun, and
@@ -199,7 +226,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 			Cutoff:        database.Timestamptz(cutoff),
 			LookbackDays:  0,
 			PolicyVersion: int16(timeparsepolicy.PolicyVersion),
-			QueryVersion:  1,
+			QueryVersion:  timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "pending", snap.Status)
@@ -209,7 +236,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 			TenantID:      uuid.Nil,
 			LookbackDays:  0,
 			PolicyVersion: int16(timeparsepolicy.PolicyVersion),
-			QueryVersion:  1,
+			QueryVersion:  timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.ErrorIs(t, err, pgx.ErrNoRows)
 	})
@@ -248,7 +275,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 
 		snap, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 
@@ -316,7 +343,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 
 		snap, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 
@@ -377,7 +404,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 
 		snap, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 
@@ -419,7 +446,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 
 		snap1, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 		bossCount1, err := store.CountTimeParseBossKillMembershipCohort(ctx, snap1.ID)
@@ -459,7 +486,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 
 		snap2, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 		assert.NotEqual(t, snap1.ID, snap2.ID, "new snapshot should be published after boss source change")
@@ -516,7 +543,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 
 		snap1, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 		clearCount1, err := store.CountTimeParseSnapshotClearTimeMembers(ctx, snap1.ID)
@@ -548,7 +575,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 
 		snap2, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 		assert.NotEqual(t, snap1.ID, snap2.ID,
@@ -596,7 +623,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		beforeTime := pgtype.Timestamptz{Time: cutoff1.Add(time.Second), Valid: true}
 		snap, err := store.GetLatestPublishedTimeParseSnapshotBefore(ctx, database.GetLatestPublishedTimeParseSnapshotBeforeParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 			Before: beforeTime,
 		})
 		require.NoError(t, err)
@@ -606,7 +633,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		beforeTime2 := pgtype.Timestamptz{Time: cutoff2.Add(time.Second), Valid: true}
 		snap2, err := store.GetLatestPublishedTimeParseSnapshotBefore(ctx, database.GetLatestPublishedTimeParseSnapshotBeforeParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 			Before: beforeTime2,
 		})
 		require.NoError(t, err)
@@ -633,14 +660,14 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		runTimeParseWorker(t, ctx, store, uuid.Nil, cutoff, 0)
 		snap1, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 
 		runTimeParseWorker(t, ctx, store, uuid.Nil, cutoff, 0)
 		snap2, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 
@@ -667,7 +694,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 
 		snap, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 
@@ -718,7 +745,7 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		// Query with a different policy_version should return no rows.
 		_, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: int16(timeparsepolicy.PolicyVersion) + 1, QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion) + 1, QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.ErrorIs(t, err, pgx.ErrNoRows, "mismatched policy_version should find nothing")
 

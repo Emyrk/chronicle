@@ -66,11 +66,16 @@ current_members AS MATERIALIZED (
         instance.difficulty_name,
         instance.max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
-        encounter.end_time AS killed_at
+        encounter.end_time AS killed_at,
+        server.tenant_id AS source_tenant_id,
+        (server.tenant_id IS NULL OR tenant.include_in_all) AS root_visible
     FROM representative_instances representative
     JOIN log_instances instance ON instance.id = representative.id
     JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
     JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
     WHERE encounter.boss = true
       AND encounter.kill_type = 'clean'
       AND encounter.end_time > encounter.start_time
@@ -94,7 +99,9 @@ upserted AS (
         member.difficulty_name, member.max_players,
         member.duration_ms, member.killed_at
     FROM series
-    CROSS JOIN current_members member
+    JOIN current_members member
+      ON series.tenant_id = member.source_tenant_id
+      OR (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid AND member.root_visible)
     ON CONFLICT (
         tenant_id, policy_version, query_version, run_id, encounter_name
     ) DO UPDATE SET
@@ -141,7 +148,14 @@ representative_instances AS (
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
     FROM log_instances instance
-    WHERE instance.invalidated_at IS NULL
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    CROSS JOIN snapshot
+    WHERE (server.tenant_id = snapshot.tenant_id
+           OR (snapshot.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+      AND instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.

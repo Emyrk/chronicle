@@ -74,7 +74,7 @@ LIMIT 1;
 -- to one representative instance (deterministic: canonical instance first,
 -- then earliest start, then smallest UUID).
 WITH snapshot AS (
-    SELECT id, cutoff, window_start
+    SELECT id, tenant_id, cutoff, window_start
     FROM time_parse_snapshots WHERE id = @snapshot_id
 ),
 representative_instances AS (
@@ -82,6 +82,13 @@ representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
+    JOIN wow_server_realms realm ON realm.id = li.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    CROSS JOIN snapshot s
+    WHERE server.tenant_id = s.tenant_id
+       OR (s.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+           AND (server.tenant_id IS NULL OR tenant.include_in_all))
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -157,7 +164,13 @@ WITH clear_stats AS (
         )::numeric) % 4294967291, 0)::bigint AS fp
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
-    WHERE sr.qualified = true
+    JOIN wow_server_realms realm ON realm.id = li.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    WHERE (server.tenant_id = @tenant_id
+           OR (@tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+      AND sr.qualified = true
       AND sr.ranked_duration_ms > 0
       AND sr.start_time < @cutoff
       AND (@window_start::timestamptz IS NULL OR sr.start_time >= @window_start)
@@ -182,7 +195,13 @@ boss_stats AS (
     FROM log_instance_encounters lie
     JOIN log_instances li ON li.id = lie.instance_id
     JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
-    WHERE li.invalidated_at IS NULL
+    JOIN wow_server_realms realm ON realm.id = li.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    WHERE (server.tenant_id = @tenant_id
+           OR (@tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+      AND li.invalidated_at IS NULL
       AND lie.boss = true
       AND lie.kill_type = 'clean'
       AND lie.end_time > lie.start_time
