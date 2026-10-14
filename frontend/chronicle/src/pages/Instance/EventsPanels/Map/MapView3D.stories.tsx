@@ -229,7 +229,7 @@ const ENTRANCE_DISTANCE = 36;
 /**
  * Where the fight happens: the boss's world position and map, and the
  * entrance the raid walks in from, which also puts the tanks on that side.
- * The default is the synthetic [0, 100] world; RagefireMesh uses real
+ * The default is the synthetic [0, 100] world; RagefireMesh and RuinsMesh use real
  * dungeon coordinates on the mesh.
  */
 interface FightWorld {
@@ -963,26 +963,58 @@ const RFC_WORLD: FightWorld = {
   bossName: "Taragaman the Hungerer",
   bossEntry: 11520,
 };
-const RFC_ENCOUNTER_ID = "rfc-taragaman";
 // Synthetic timestamps are offsets from the pull; the sync clock wants dates.
-const RFC_PULL_MS = Date.parse("2026-10-14T20:00:00Z");
+const MESH_FIGHT_PULL_MS = Date.parse("2026-10-14T20:00:00Z");
+
+/** A BossFight on a mesh-only instance: where it happens and what to call it. */
+interface MeshFight {
+  instance: WowMapInstance;
+  world: FightWorld;
+  encounterId: string;
+}
+
+const RFC_FIGHT: MeshFight = { instance: RFC_INSTANCE, world: RFC_WORLD, encounterId: "rfc-taragaman" };
+
+// Ruins of Lordaeron (map 2999, Forever): the first terrain mesh, open sky.
+// Like RFC it is absent from the artwork manifest, so it is mesh-only; the
+// liquid keeps the GLB's translucent blue (lake and palace pools are water).
+const RUINS_MESH: WowMapMeshInstance = {
+  path: "meshes/2999.glb",
+  bounds: { minX: 1333.3337, maxX: 1900.0, minY: -33.3333, maxY: 500.0 },
+  zMin: -13.6235,
+  zMax: 195.9512,
+  frame: "wow-yup-mirrored-x",
+};
+const RUINS_INSTANCE: WowMapInstance = { mapID: 2999, name: "Ruins of Lordaeron", instanceType: 0, directory: "", floors: [], mesh: RUINS_MESH };
+// Floor read off the mesh like RFC: the flat paved courtyard west of the
+// palace at z ≈ 61.6, clear of buildings within 40 yd of the boss; the raid
+// walks in from the west. The boss entry is a stand-in (no Ruins boss
+// miniature), the name is a placeholder.
+const RUINS_WORLD: FightWorld = {
+  mapId: 2999,
+  boss: { x: 1460, y: 270 },
+  entrance: { x: 1424, y: 270 },
+  bossName: "Courtyard Boss",
+  bossEntry: 0,
+};
+const RUINS_FIGHT: MeshFight = { instance: RUINS_INSTANCE, world: RUINS_WORLD, encounterId: "ruins-courtyard" };
 
 /**
- * The BossFight encounter in Ragefire Chasm, in the shape capture-kresh-fixture
+ * The BossFight encounter on a mesh-only instance, in the shape capture-kresh-fixture
  * produces, so it runs through the production useMapScene like the real log:
  * the mesh-only instance resolves from the (seeded) manifest, its mesh extent
  * is the ground and the units project with the pure world transform.
  */
-function ragefireFixture(players: number): LoadedMapFixture {
-  const units = bossFightUnits(players, RFC_WORLD);
-  const shift = <T extends { timestampMs: number }>(samples: T[]): T[] => samples.map((sample) => ({ ...sample, timestampMs: sample.timestampMs + RFC_PULL_MS }));
+function meshFightFixture(players: number, { instance, world, encounterId }: MeshFight): LoadedMapFixture {
+  const units = bossFightUnits(players, world);
+  const shift = <T extends { timestampMs: number }>(samples: T[]): T[] => samples.map((sample) => ({ ...sample, timestampMs: sample.timestampMs + MESH_FIGHT_PULL_MS }));
   const effects = createEncounterEffects();
-  for (const event of bossFightEffects(players).events) addEffectEvent(effects, { ...event, timestampMs: event.timestampMs + RFC_PULL_MS });
-  const startMs = RFC_PULL_MS;
-  const endMs = RFC_PULL_MS + FIGHT_MS;
+  for (const event of bossFightEffects(players).events) addEffectEvent(effects, { ...event, timestampMs: event.timestampMs + MESH_FIGHT_PULL_MS });
+  const startMs = MESH_FIGHT_PULL_MS;
+  const endMs = MESH_FIGHT_PULL_MS + FIGHT_MS;
   const result: MapResult = {
-    encounters: new Map([[RFC_ENCOUNTER_ID, {
-      encounterId: RFC_ENCOUNTER_ID,
+    encounters: new Map([[encounterId, {
+      encounterId,
       startMs,
       endMs,
       positionsByUnit: new Map(units.map((unit) => [unit.guid, shift(unit.positions)])),
@@ -996,31 +1028,31 @@ function ragefireFixture(players: number): LoadedMapFixture {
     return [member.guid, { name: `${member.cls[0].toUpperCase()}${member.cls.slice(1)} ${n}`, class: member.cls.toUpperCase() as WoWHeroClasses, race: "Unknown" as const, level: 60 }];
   }));
   const encounter = {
-    id: RFC_ENCOUNTER_ID,
-    name: RFC_WORLD.bossName,
+    id: encounterId,
+    name: world.bossName,
     boss: true,
-    mapId: RFC_WORLD.mapId,
+    mapId: world.mapId,
     kill_type: "clean" as KillType,
     start_time: new Date(startMs).toISOString(),
     end_time: new Date(endMs).toISOString(),
-    enemies: [{ id: "Boss", name: RFC_WORLD.bossName, boss: true, damageTaken: 0, damageDone: 0, periods: [] }],
+    enemies: [{ id: "Boss", name: world.bossName, boss: true, damageTaken: 0, damageDone: 0, periods: [] }],
   };
   const context: PanelContext = {
     instance: {
-      id: "rfc-synthetic",
-      name: "Ragefire Chasm",
+      id: `${encounterId}-synthetic`,
+      name: instance.name,
       iconBaseUrl: kreshReal.instance.iconBaseUrl,
       startTime: encounter.start_time,
       endTime: encounter.end_time,
       capabilities: ["unit-position"],
       players: roster,
-      units: { Boss: { name: RFC_WORLD.bossName, entry: RFC_WORLD.bossEntry } } as Record<string, InstanceUnit>,
+      units: { Boss: { name: world.bossName, entry: world.bossEntry } } as Record<string, InstanceUnit>,
       encounters: [encounter],
     },
-    selectedEncounterIds: [RFC_ENCOUNTER_ID],
+    selectedEncounterIds: [encounterId],
     entitySelection: { enemyIds: new Set(), playerIds: new Set() },
   };
-  const manifest: WowMapManifest = { ...kreshReal.manifest, instances: [RFC_INSTANCE] };
+  const manifest: WowMapManifest = { ...kreshReal.manifest, instances: [instance] };
   return {
     props: {
       result,
@@ -1040,8 +1072,8 @@ function ragefireFixture(players: number): LoadedMapFixture {
   };
 }
 
-function RagefireMeshReplay({ players }: { players: number }) {
-  const [fixture] = useState(() => ragefireFixture(players));
+function MeshFightReplay({ players, fight }: { players: number; fight: MeshFight }) {
+  const [fixture] = useState(() => meshFightFixture(players, fight));
   const [queryClient] = useState(() => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(["wow-map-manifest", fixture.props.context.instance.iconBaseUrl], fixture.manifest);
@@ -1275,7 +1307,19 @@ export const KreshRealMesh: Story = {
  */
 export const RagefireMesh: Story = {
   args: { players: 10, playbackSpeed: 1 },
-  render: ({ players }) => <RagefireMeshReplay players={players} />,
+  render: ({ players }) => <MeshFightReplay players={players} fight={RFC_FIGHT} />,
+};
+
+/**
+ * Ruins of Lordaeron, the first terrain mesh: open sky, the walled city and
+ * the palace, on a mesh-only instance (the liquid stays the GLB's blue). The
+ * BossFight group fights on the courtyard west of the palace at real floor
+ * coordinates. Needs the local mesh (`public/dungeon-meshes/2999.glb`,
+ * gitignored); without it the units stand on an empty ground.
+ */
+export const RuinsMesh: Story = {
+  args: { players: 10, playbackSpeed: 1 },
+  render: ({ players }) => <MeshFightReplay players={players} fight={RUINS_FIGHT} />,
 };
 
 /**
