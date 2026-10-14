@@ -120,9 +120,15 @@ CGO_ENABLED=0 go build ./cmd/uploader
 go build ./cmd/uploader
 ```
 
-Until browser sign-in ships, developers can pass a session token with `--dev-token` (or `CHRONICLE_UPLOADER_TOKEN`);
-it is stored in the OS keychain. `--server` points the uploader at another Chronicle instance, and `--wow-path`
-sets the WoW folder.
+**Connecting**
+
+Choose **Connect to Chronicle…** from the tray menu. Your browser opens a Chronicle page showing a pairing code;
+sign in if needed and press **Approve**. The tray then shows *Connected*, and the uploader keeps a per-device
+upload token in your OS keychain. You can revoke the device any time under Settings → Devices, after which the
+tray shows *Needs reconnect*. **Disconnect** removes the token from this computer.
+
+`--server` points the uploader at another Chronicle instance, and `--wow-path` sets the WoW folder.
+Developers can skip pairing by setting `CHRONICLE_UPLOADER_TOKEN` (hidden `--dev-token` flag).
 
 ## Development
 

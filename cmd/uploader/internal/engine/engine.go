@@ -71,6 +71,7 @@ type Engine struct {
 	cfg     Config
 	tracker *watch.Tracker
 	manual  chan struct{}
+	wake    chan struct{}
 
 	status        Status
 	rejectedToken string
@@ -104,6 +105,7 @@ func New(cfg Config) *Engine {
 		cfg:     cfg,
 		tracker: watch.NewTracker(st.Uploaded),
 		manual:  make(chan struct{}, 1),
+		wake:    make(chan struct{}, 1),
 		status:  Status{ReportURL: st.LastReportURL},
 		wait: func(ctx context.Context, d time.Duration) {
 			t := time.NewTimer(d)
@@ -124,6 +126,15 @@ func (e *Engine) UploadNow() {
 	}
 }
 
+// Wake re-evaluates now, without the "nothing new" notice of UploadNow. Call it
+// after the token changes.
+func (e *Engine) Wake() {
+	select {
+	case e.wake <- struct{}{}:
+	default:
+	}
+}
+
 // Run polls until ctx is done.
 func (e *Engine) Run(ctx context.Context) {
 	tick := time.NewTicker(e.cfg.Poll)
@@ -136,6 +147,7 @@ func (e *Engine) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
+		case <-e.wake:
 		case <-e.manual:
 			manual = true
 		}
@@ -182,12 +194,15 @@ func (e *Engine) step(ctx context.Context, now time.Time, manual bool) {
 		}
 	}
 
-	e.setStatus(e.baseline(now, len(installs) > 0, running, recording, needAuth))
+	rejected := token != "" && token == e.rejectedToken
+	e.setStatus(e.baseline(now, len(installs) > 0, running, recording, needAuth, rejected))
 }
 
-func (e *Engine) baseline(now time.Time, haveInstall, running, recording, needAuth bool) Status {
+func (e *Engine) baseline(now time.Time, haveInstall, running, recording, needAuth, rejected bool) Status {
 	last := e.status.ReportURL
 	switch {
+	case rejected:
+		return Status{State: StateReconnect, Detail: "Needs reconnect. Connect to Chronicle again.", ReportURL: last}
 	case needAuth:
 		return Status{State: StateReconnect, Detail: "Connect to Chronicle to upload your logs.", ReportURL: last}
 	case now.Before(e.uploadedUntil):

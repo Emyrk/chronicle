@@ -34,8 +34,16 @@ func run() error {
 	var (
 		server   = flag.String("server", envOr("CHRONICLE_URL", ""), "Chronicle server URL; remembered for later launches")
 		wowPath  = flag.String("wow-path", "", "WoW folder, flavor folder or executable (overrides the saved choice)")
-		devToken = flag.String("dev-token", os.Getenv("CHRONICLE_UPLOADER_TOKEN"), "development only: session JWT to store in the keychain until browser pairing lands")
+		devToken = flag.String("dev-token", os.Getenv("CHRONICLE_UPLOADER_TOKEN"), "development only: token to store in the keychain instead of pairing (prefer CHRONICLE_UPLOADER_TOKEN; argv is visible to other processes)")
 	)
+	flag.Usage = func() {
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		flag.VisitAll(func(f *flag.Flag) {
+			if f.Name != "dev-token" { // hidden dev escape hatch
+				_, _ = fmt.Fprintf(flag.CommandLine.Output(), "  -%s\n    \t%s\n", f.Name, f.Usage)
+			}
+		})
+	}
 	flag.Parse()
 
 	dir, err := store.Dir()

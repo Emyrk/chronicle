@@ -145,6 +145,7 @@ func TestEngineRejectedToken(t *testing.T) {
 
 	h.e.Step(ctx, t0, false)
 	require.Equal(t, engine.StateReconnect, h.statuses[len(h.statuses)-1].State)
+	require.Contains(t, h.statuses[len(h.statuses)-1].Detail, "Needs reconnect")
 	h.e.Step(ctx, t0.Add(5*time.Second), false)
 	require.Equal(t, 1, h.uploads) // not hammered while the token is unchanged
 }
