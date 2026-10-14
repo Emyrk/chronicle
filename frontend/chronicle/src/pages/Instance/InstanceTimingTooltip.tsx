@@ -1,6 +1,4 @@
 import { Clock } from "lucide-react";
-import { ParseScopeList } from "./EncounterKillParse";
-import { hasScopedParse, type ScopedParses } from "./Overview/encounterKillTimePopulation";
 
 function formatDurationMs(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -41,14 +39,10 @@ export function InstanceTimingTooltip({
   elapsedDurationMs,
   rankedDurationMs,
   bossToBossDurationMs,
-  clearParses,
-  lookbackDays,
 }: {
   elapsedDurationMs: number;
   rankedDurationMs?: number;
   bossToBossDurationMs?: number;
-  clearParses?: ScopedParses | null;
-  lookbackDays?: number;
 }) {
   return (
     <div className="w-80 space-y-3 py-1 text-left">
@@ -70,11 +64,6 @@ export function InstanceTimingTooltip({
           durationMs={bossToBossDurationMs}
           description="From the first required boss pull to the final required boss encounter end."
         />
-      )}
-      {hasScopedParse(clearParses) && (
-        <div className="-mx-3 -mb-4 border-t border-white/10">
-          <ParseScopeList title="Clear time parse" unit="clears" parses={clearParses} lookbackDays={lookbackDays} />
-        </div>
       )}
     </div>
   );

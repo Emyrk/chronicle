@@ -67,7 +67,7 @@ import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
-import { KillParseTooltip } from "./EncounterKillParse";
+import { ClearParseBadge, KillParseTooltip } from "./EncounterKillParse";
 import { useInstanceTimeParses } from "./Overview/overviewQueries";
 import { bossKillParsesByEncounter, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
@@ -3502,8 +3502,6 @@ export function InstancePageView({
                     elapsedDurationMs={elapsedDurationMs}
                     rankedDurationMs={instanceSpeedrun?.ranked_duration_ms}
                     bossToBossDurationMs={instanceSpeedrun?.boss_to_boss_duration_ms}
-                    clearParses={scopedClearParses(instanceTimeParsesQuery.data)}
-                    lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
                   />
                 </TooltipContent>
               </Tooltip>
@@ -3526,6 +3524,10 @@ export function InstancePageView({
                 </TooltipContent>
               </Tooltip>
             )}
+            <ClearParseBadge
+              parses={scopedClearParses(instanceTimeParsesQuery.data)}
+              lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
+            />
           </div>
           {isMobile && instance.maxPlayers != null && instance.maxPlayers > 0 && (
             <div className="flex items-center gap-1.5 shrink-0">

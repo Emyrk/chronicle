@@ -1,7 +1,7 @@
 import type { TimeParseScore } from "@/api/typesGenerated";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
-import { parseColor, parseHexColor } from "./parseColors";
+import { parseBgColor, parseBorderColor, parseColor, parseHexColor } from "./parseColors";
 import { hasScopedParse, parseScopeRows, type ScopedParses } from "./Overview/encounterKillTimePopulation";
 
 function ParseScopeRow({ label, parse, unit }: { label: string; parse: TimeParseScore; unit: string }) {
@@ -84,6 +84,46 @@ export function KillParseTooltip({
         className="w-56 rounded-lg border border-white/10 bg-popover p-0 text-foreground shadow-lg"
       >
         <ParseScopeList title="Kill time parse" unit="kills" parses={parses} lookbackDays={lookbackDays} />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * Pill showing the instance clear-time parse, colored by the first scored
+ * scope (server unless missing). Hover shows every scope.
+ */
+export function ClearParseBadge({
+  parses,
+  lookbackDays,
+}: {
+  parses: ScopedParses | null | undefined;
+  lookbackDays: number | undefined;
+}) {
+  const primary = parses ? parseScopeRows(parses)[0] : undefined;
+  if (!primary) return null;
+  const score = primary.parse.display_score;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={cn(
+            "flex cursor-help items-center gap-1.5 rounded-full border px-2 py-0.5",
+            parseBorderColor(score),
+            parseBgColor(score),
+          )}
+        >
+          <span className={cn("font-mono text-sm font-bold leading-none tabular-nums", parseColor(score))}>{score}</span>
+          <span className="text-xs opacity-60">clear</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        sideOffset={6}
+        hideArrow
+        className="w-56 rounded-lg border border-white/10 bg-popover p-0 text-foreground shadow-lg"
+      >
+        <ParseScopeList title="Clear time parse" unit="clears" parses={parses} lookbackDays={lookbackDays} />
       </TooltipContent>
     </Tooltip>
   );
