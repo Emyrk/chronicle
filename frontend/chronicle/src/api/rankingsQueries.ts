@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import type {
   RankingsInstanceSummary,
   RankingsEncounterSummary,
@@ -9,6 +9,10 @@ import type {
   KillTimeLeaderboardResponse,
   InstanceParsesResponse,
   SnapshotSummary,
+  TimeParseCohortBucketsResponse,
+  TimeParseCohortKind,
+  TimeParseCohortResponse,
+  TimeParseSnapshotSummary,
   CohortDebugResponse,
   CharacterParseHistoryResponse,
   CharacterPerformanceResponse,
@@ -381,3 +385,55 @@ export function useInstanceParses(params: {
   });
 }
 
+
+export function useTimeParseSnapshots() {
+  return useQuery({
+    queryKey: ["rankings", "time-parse-snapshots"],
+    queryFn: () => fetchJSON<TimeParseSnapshotSummary[]>("/api/v1/rankings/time-parse-snapshots"),
+    staleTime: RANKINGS_STALE_TIME,
+  });
+}
+
+export function useTimeParseCohortBuckets(snapshotId: string) {
+  return useQuery({
+    queryKey: ["rankings", "time-parse-cohort-buckets", snapshotId],
+    queryFn: () =>
+      fetchJSON<TimeParseCohortBucketsResponse>(
+        `/api/v1/rankings/time-parse-snapshots/${encodeURIComponent(snapshotId)}/buckets`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: !!snapshotId,
+  });
+}
+
+export function useTimeParseCohort(params: {
+  snapshotId: string;
+  kind: TimeParseCohortKind;
+  instanceName: string;
+  encounterName: string;
+  difficulty: string;
+  maxPlayers: number | undefined;
+}) {
+  const searchParams = new URLSearchParams({
+    kind: params.kind,
+    instance_name: params.instanceName,
+    difficulty: params.difficulty,
+    max_players: String(params.maxPlayers ?? ""),
+  });
+  if (params.kind === "boss_kill") searchParams.set("encounter_name", params.encounterName);
+
+  return useQuery({
+    queryKey: ["rankings", "time-parse-cohort", params],
+    queryFn: () =>
+      fetchJSON<TimeParseCohortResponse>(
+        `/api/v1/rankings/time-parse-snapshots/${encodeURIComponent(params.snapshotId)}/cohort?${searchParams.toString()}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    placeholderData: keepPreviousData,
+    enabled:
+      !!params.snapshotId &&
+      !!params.instanceName &&
+      params.maxPlayers !== undefined &&
+      (params.kind === "clear_time" || !!params.encounterName),
+  });
+}

@@ -329,6 +329,8 @@ type sqlcQuerier interface {
 	// Check if a published snapshot already exists for this exact cutoff+key.
 	// Used by the idempotency guard (one snapshot per day per key).
 	GetPublishedSnapshotForCutoff(ctx context.Context, arg GetPublishedSnapshotForCutoffParams) (RankingSnapshot, error)
+	// A published time-parse snapshot, scoped to the caller's tenant.
+	GetPublishedTimeParseSnapshotByID(ctx context.Context, arg GetPublishedTimeParseSnapshotByIDParams) (TimeParseSnapshot, error)
 	// Check if a published time-parse snapshot exists for this exact cutoff+key.
 	// Used by the idempotency guard.
 	GetPublishedTimeParseSnapshotForCutoff(ctx context.Context, arg GetPublishedTimeParseSnapshotForCutoffParams) (TimeParseSnapshot, error)
@@ -388,7 +390,15 @@ type sqlcQuerier interface {
 	// Tenant queries. These run with AdminBypass context since the tenants table
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
 	GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Tenant, error)
+	// Boss-kill cohort members for one bucket, fastest first, with the log and
+	// guild identity needed by the cohort viewer. Same membership as
+	// GetTimeParseBossKillMembershipCohort.
+	GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error)
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
+	// Clear-time cohort members for one bucket, fastest first, with the log and
+	// guild identity needed by the cohort viewer. Same membership as
+	// GetTimeParseSnapshotClearTimeCohort.
+	GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error)
 	// All clear-time durations for an (instance_name, difficulty, max_players) bucket.
 	// Used to score a specific run's clear time against the population.
 	GetTimeParseSnapshotClearTimeCohort(ctx context.Context, arg GetTimeParseSnapshotClearTimeCohortParams) ([]int64, error)
@@ -645,6 +655,9 @@ type sqlcQuerier interface {
 	// Return published snapshots for a tenant, most recent first. member_count is
 	// persisted at publication time so this list never scans snapshot members.
 	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]RankingSnapshot, error)
+	// Published time-parse snapshots for a tenant and scoring version, newest
+	// first. Backs the public cohort viewer's snapshot picker.
+	ListPublishedTimeParseSnapshots(ctx context.Context, arg ListPublishedTimeParseSnapshotsParams) ([]TimeParseSnapshot, error)
 	ListPublishedTimeParseSnapshotsForMembershipBackfill(ctx context.Context, arg ListPublishedTimeParseSnapshotsForMembershipBackfillParams) ([]TimeParseSnapshot, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
@@ -688,7 +701,12 @@ type sqlcQuerier interface {
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
 	ListTenantsByDataset(ctx context.Context, defaultDatasetID uuid.NullUUID) ([]ListTenantsByDatasetRow, error)
+	// Distinct boss-kill buckets in a snapshot's date window with their sample
+	// sizes.
+	ListTimeParseBossKillCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListTimeParseBossKillCohortBucketsRow, error)
 	ListTimeParseBossKillMemberships(ctx context.Context, arg ListTimeParseBossKillMembershipsParams) ([]TimeParseBossKillMembership, error)
+	// Distinct clear-time buckets in a snapshot with their sample sizes.
+	ListTimeParseClearTimeCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListTimeParseClearTimeCohortBucketsRow, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
 	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
 	ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error)

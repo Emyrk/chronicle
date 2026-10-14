@@ -3943,6 +3943,67 @@ export interface TimeParseAverage {
 
 // From chroniclesdk/time_parses.go
 /**
+ * TimeParseCohortBucket is one comparable population in a time-parse
+ * snapshot. EncounterName is empty for clear-time buckets.
+ */
+export interface TimeParseCohortBucket {
+    readonly kind: TimeParseCohortKind;
+    readonly instance_name: string;
+    readonly encounter_name?: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly sample_size: number;
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseCohortBucketsResponse lists every bucket available in a snapshot.
+ */
+export interface TimeParseCohortBucketsResponse {
+    readonly snapshot_id: string;
+    readonly buckets: readonly TimeParseCohortBucket[];
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseCohortEntry is one run in a time-parse cohort, scored against the
+ * rest of the cohort.
+ */
+export interface TimeParseCohortEntry {
+    readonly rank: number;
+    readonly duration_ms: number;
+    readonly precise_score: number;
+    readonly display_score: number;
+    readonly killed_at: string;
+    readonly instance_id: string;
+    readonly log_hashed_slug?: string;
+    readonly guild_id?: string;
+    readonly guild_name?: string;
+}
+
+// From chroniclesdk/time_parses.go
+export type TimeParseCohortKind = "boss_kill" | "clear_time";
+
+export const TimeParseCohortKinds: TimeParseCohortKind[] = ["boss_kill", "clear_time"];
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseCohortResponse is the full cohort for one bucket, fastest first.
+ */
+export interface TimeParseCohortResponse {
+    readonly snapshot_id: string;
+    readonly kind: TimeParseCohortKind;
+    readonly instance_name: string;
+    readonly encounter_name?: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly sample_size: number;
+    readonly status: string;
+    readonly entries: readonly TimeParseCohortEntry[];
+}
+
+// From chroniclesdk/time_parses.go
+/**
  * TimeParseScore is a single time-based parse result.
  */
 export interface TimeParseScore {
@@ -3952,6 +4013,19 @@ export interface TimeParseScore {
     readonly rank: number;
     readonly sample_size: number;
     readonly status: string;
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseSnapshotSummary is a published time-parse snapshot for the cohort
+ * viewer's snapshot picker.
+ */
+export interface TimeParseSnapshotSummary {
+    readonly id: string;
+    readonly cutoff: string;
+    readonly window_start?: string;
+    readonly lookback_days: number;
+    readonly published_at: string;
 }
 
 // From chroniclesdk/user.go

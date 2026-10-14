@@ -18248,6 +18248,83 @@ func (q *sqlQuerier) DeleteTimeParseBossKillMembershipsByLogGroup(ctx context.Co
 	return err
 }
 
+const getTimeParseBossKillCohortEntries = `-- name: GetTimeParseBossKillCohortEntries :many
+SELECT
+    membership.instance_id,
+    membership.duration_ms,
+    membership.killed_at,
+    li.hashed_slug AS log_hashed_slug,
+    g.id AS guild_id,
+    g.name AS guild_name
+FROM time_parse_boss_kill_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = $1
+LEFT JOIN log_instances li ON li.id = membership.instance_id
+LEFT JOIN guilds g ON g.id = li.guild_id
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.killed_at < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.killed_at >= snapshot.window_start)
+  AND membership.instance_name = $2
+  AND membership.encounter_name = $3
+  AND membership.difficulty_name = $4
+  AND membership.max_players = $5
+ORDER BY membership.duration_ms, membership.killed_at
+`
+
+type GetTimeParseBossKillCohortEntriesParams struct {
+	SnapshotID     uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+}
+
+type GetTimeParseBossKillCohortEntriesRow struct {
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	DurationMs    int64              `db:"duration_ms" json:"duration_ms"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	LogHashedSlug pgtype.Text        `db:"log_hashed_slug" json:"log_hashed_slug"`
+	GuildID       uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName     pgtype.Text        `db:"guild_name" json:"guild_name"`
+}
+
+// Boss-kill cohort members for one bucket, fastest first, with the log and
+// guild identity needed by the cohort viewer. Same membership as
+// GetTimeParseBossKillMembershipCohort.
+func (q *sqlQuerier) GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error) {
+	rows, err := q.db.Query(ctx, getTimeParseBossKillCohortEntries,
+		arg.SnapshotID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTimeParseBossKillCohortEntriesRow
+	for rows.Next() {
+		var i GetTimeParseBossKillCohortEntriesRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.DurationMs,
+			&i.KilledAt,
+			&i.LogHashedSlug,
+			&i.GuildID,
+			&i.GuildName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTimeParseBossKillMembershipCohort = `-- name: GetTimeParseBossKillMembershipCohort :many
 SELECT membership.duration_ms
 FROM time_parse_boss_kill_memberships membership
@@ -18336,6 +18413,60 @@ func (q *sqlQuerier) ListPublishedTimeParseSnapshotsForMembershipBackfill(ctx co
 			&i.SourceRowCount,
 			&i.SourceWatermark,
 			&i.SourceFingerprint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseBossKillCohortBuckets = `-- name: ListTimeParseBossKillCohortBuckets :many
+SELECT
+    membership.instance_name,
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    COUNT(*)::bigint AS sample_size
+FROM time_parse_boss_kill_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = $1
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.killed_at < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.killed_at >= snapshot.window_start)
+GROUP BY membership.instance_name, membership.encounter_name, membership.difficulty_name, membership.max_players
+ORDER BY membership.instance_name, membership.encounter_name, membership.difficulty_name, membership.max_players
+`
+
+type ListTimeParseBossKillCohortBucketsRow struct {
+	InstanceName   string `db:"instance_name" json:"instance_name"`
+	EncounterName  string `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	SampleSize     int64  `db:"sample_size" json:"sample_size"`
+}
+
+// Distinct boss-kill buckets in a snapshot's date window with their sample
+// sizes.
+func (q *sqlQuerier) ListTimeParseBossKillCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListTimeParseBossKillCohortBucketsRow, error) {
+	rows, err := q.db.Query(ctx, listTimeParseBossKillCohortBuckets, snapshotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTimeParseBossKillCohortBucketsRow
+	for rows.Next() {
+		var i ListTimeParseBossKillCohortBucketsRow
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.SampleSize,
 		); err != nil {
 			return nil, err
 		}
@@ -18850,6 +18981,41 @@ func (q *sqlQuerier) GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUI
 	return i, err
 }
 
+const getPublishedTimeParseSnapshotByID = `-- name: GetPublishedTimeParseSnapshotByID :one
+SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark, source_fingerprint
+FROM time_parse_snapshots
+WHERE id = $1
+  AND tenant_id = $2
+  AND status = 'published'
+`
+
+type GetPublishedTimeParseSnapshotByIDParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+// A published time-parse snapshot, scoped to the caller's tenant.
+func (q *sqlQuerier) GetPublishedTimeParseSnapshotByID(ctx context.Context, arg GetPublishedTimeParseSnapshotByIDParams) (TimeParseSnapshot, error) {
+	row := q.db.QueryRow(ctx, getPublishedTimeParseSnapshotByID, arg.ID, arg.TenantID)
+	var i TimeParseSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
+		&i.SourceFingerprint,
+	)
+	return i, err
+}
+
 const getPublishedTimeParseSnapshotForCutoff = `-- name: GetPublishedTimeParseSnapshotForCutoff :one
 SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark, source_fingerprint
 FROM time_parse_snapshots
@@ -18897,6 +19063,75 @@ func (q *sqlQuerier) GetPublishedTimeParseSnapshotForCutoff(ctx context.Context,
 		&i.SourceFingerprint,
 	)
 	return i, err
+}
+
+const getTimeParseClearTimeCohortEntries = `-- name: GetTimeParseClearTimeCohortEntries :many
+SELECT
+    tpctm.instance_id,
+    tpctm.duration_ms,
+    tpctm.start_time AS killed_at,
+    li.hashed_slug AS log_hashed_slug,
+    g.id AS guild_id,
+    g.name AS guild_name
+FROM time_parse_clear_time_members tpctm
+LEFT JOIN log_instances li ON li.id = tpctm.instance_id
+LEFT JOIN guilds g ON g.id = li.guild_id
+WHERE tpctm.snapshot_id = $1
+  AND tpctm.instance_name = $2
+  AND tpctm.difficulty_name = $3
+  AND tpctm.max_players = $4
+ORDER BY tpctm.duration_ms, tpctm.start_time
+`
+
+type GetTimeParseClearTimeCohortEntriesParams struct {
+	SnapshotID     uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+}
+
+type GetTimeParseClearTimeCohortEntriesRow struct {
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	DurationMs    int64              `db:"duration_ms" json:"duration_ms"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	LogHashedSlug pgtype.Text        `db:"log_hashed_slug" json:"log_hashed_slug"`
+	GuildID       uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName     pgtype.Text        `db:"guild_name" json:"guild_name"`
+}
+
+// Clear-time cohort members for one bucket, fastest first, with the log and
+// guild identity needed by the cohort viewer. Same membership as
+// GetTimeParseSnapshotClearTimeCohort.
+func (q *sqlQuerier) GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error) {
+	rows, err := q.db.Query(ctx, getTimeParseClearTimeCohortEntries,
+		arg.SnapshotID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTimeParseClearTimeCohortEntriesRow
+	for rows.Next() {
+		var i GetTimeParseClearTimeCohortEntriesRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.DurationMs,
+			&i.KilledAt,
+			&i.LogHashedSlug,
+			&i.GuildID,
+			&i.GuildName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTimeParseSnapshotClearTimeCohort = `-- name: GetTimeParseSnapshotClearTimeCohort :many
@@ -19154,6 +19389,104 @@ func (q *sqlQuerier) ListAllTimeParseSnapshots(ctx context.Context) ([]ListAllTi
 			&i.ClearMemberCount,
 			&i.BossMemberCount,
 			&i.TenantName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPublishedTimeParseSnapshots = `-- name: ListPublishedTimeParseSnapshots :many
+SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark, source_fingerprint
+FROM time_parse_snapshots
+WHERE tenant_id = $1
+  AND policy_version = $2
+  AND query_version = $3
+  AND status = 'published'
+ORDER BY published_at DESC
+LIMIT 50
+`
+
+type ListPublishedTimeParseSnapshotsParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+// Published time-parse snapshots for a tenant and scoring version, newest
+// first. Backs the public cohort viewer's snapshot picker.
+func (q *sqlQuerier) ListPublishedTimeParseSnapshots(ctx context.Context, arg ListPublishedTimeParseSnapshotsParams) ([]TimeParseSnapshot, error) {
+	rows, err := q.db.Query(ctx, listPublishedTimeParseSnapshots, arg.TenantID, arg.PolicyVersion, arg.QueryVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TimeParseSnapshot
+	for rows.Next() {
+		var i TimeParseSnapshot
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Cutoff,
+			&i.WindowStart,
+			&i.LookbackDays,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.Status,
+			&i.CreatedAt,
+			&i.PublishedAt,
+			&i.SourceRowCount,
+			&i.SourceWatermark,
+			&i.SourceFingerprint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseClearTimeCohortBuckets = `-- name: ListTimeParseClearTimeCohortBuckets :many
+SELECT
+    tpctm.instance_name,
+    tpctm.difficulty_name,
+    tpctm.max_players,
+    COUNT(*)::bigint AS sample_size
+FROM time_parse_clear_time_members tpctm
+WHERE tpctm.snapshot_id = $1
+GROUP BY tpctm.instance_name, tpctm.difficulty_name, tpctm.max_players
+ORDER BY tpctm.instance_name, tpctm.difficulty_name, tpctm.max_players
+`
+
+type ListTimeParseClearTimeCohortBucketsRow struct {
+	InstanceName   string `db:"instance_name" json:"instance_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	SampleSize     int64  `db:"sample_size" json:"sample_size"`
+}
+
+// Distinct clear-time buckets in a snapshot with their sample sizes.
+func (q *sqlQuerier) ListTimeParseClearTimeCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListTimeParseClearTimeCohortBucketsRow, error) {
+	rows, err := q.db.Query(ctx, listTimeParseClearTimeCohortBuckets, snapshotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTimeParseClearTimeCohortBucketsRow
+	for rows.Next() {
+		var i ListTimeParseClearTimeCohortBucketsRow
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.SampleSize,
 		); err != nil {
 			return nil, err
 		}

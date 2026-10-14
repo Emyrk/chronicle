@@ -1,38 +1,32 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useSnapshotsList, useSnapshotCohort } from "@/api/rankingsQueries";
-import { parseColor, parseBgColor } from "@/pages/Instance/parseColors";
-import type { CohortBucket } from "@/api/typesGenerated";
+import { cn } from "@/lib/utils";
+import { PlayerCohortView } from "./cohort/PlayerCohortView";
+import { TimeCohortView } from "./cohort/TimeCohortView";
 
-function formatDate(d: string | Date): string {
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+type CohortView = "boss" | "clear" | "players";
+
+const VIEWS: { value: CohortView; label: string; description: string }[] = [
+  { value: "boss", label: "Boss kill times", description: "Every clean kill of one boss, scored by how fast it died." },
+  { value: "clear", label: "Clear times", description: "Every full clear of one instance, scored by total clear time." },
+  { value: "players", label: "Player DPS / HPS", description: "Every player in one encounter and class, scored by DPS or HPS." },
+];
 
 export function CohortViewerPage() {
-  const { data: snapshots, isLoading: snapshotsLoading } = useSnapshotsList();
-
   // All selections live in the URL so a cohort view can be linked/shared,
-  // e.g. /parsing/cohorts?snapshot=...&encounter=Ragnaros&class=WARRIOR&metric=hps
+  // e.g. /parsing/cohorts?view=boss&instance=Molten+Core&encounter=Ragnaros
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedSnapshotId = searchParams.get("snapshot") ?? "";
-  const encounterName = searchParams.get("encounter") ?? "";
-  const playerClass = searchParams.get("class") ?? "";
-  const playerSpec = searchParams.get("spec") ?? "";
-  const playerSubSpec = searchParams.get("sub_spec") ?? "";
-  const difficulty = searchParams.get("difficulty") ?? "";
-  const maxPlayersRaw = Number(searchParams.get("max_players") ?? "");
-  const maxPlayers = Number.isFinite(maxPlayersRaw) && maxPlayersRaw > 0 ? maxPlayersRaw : undefined;
-  const metric: "dps" | "hps" = searchParams.get("metric") === "hps" ? "hps" : "dps";
+  // Links from before the time views existed carry player filters but no view.
+  const requestedView = searchParams.get("view");
+  const view: CohortView =
+    requestedView === "boss" || requestedView === "clear" || requestedView === "players"
+      ? requestedView
+      : searchParams.has("class")
+        ? "players"
+        : "boss";
 
-  // Apply several param changes at once (dropdowns cascade: picking a
-  // snapshot resets encounter/class/spec, etc.). Empty values delete the
-  // param to keep URLs short. replace avoids history spam while clicking
-  // through dropdowns.
+  // Apply several param changes at once. Empty values delete the param to
+  // keep URLs short; replace avoids history spam while clicking through.
   const updateParams = useCallback(
     (changes: Record<string, string>) => {
       setSearchParams(
@@ -50,342 +44,56 @@ export function CohortViewerPage() {
     [setSearchParams],
   );
 
-  const setPlayerSpec = (v: string) => updateParams({ spec: v, sub_spec: "" });
-  const setPlayerSubSpec = (v: string) => updateParams({ sub_spec: v });
-  const setDifficulty = (v: string) => updateParams({ difficulty: v });
-  const setMaxPlayers = (v: number | undefined) => updateParams({ max_players: v ? String(v) : "" });
-  const setMetric = (v: "dps" | "hps") => updateParams({ metric: v === "dps" ? "" : v });
-
-  const { data: cohort, isLoading: cohortLoading } = useSnapshotCohort({
-    snapshotId: selectedSnapshotId,
-    encounter_name: encounterName || undefined,
-    class: playerClass || undefined,
-    spec: playerSpec || undefined,
-    sub_spec: playerSubSpec || undefined,
-    difficulty: difficulty,
-    max_players: maxPlayers,
-    metric,
-  });
-
-  // Derive filter options from buckets.
-  const buckets = useMemo(() => cohort?.buckets ?? [], [cohort?.buckets]);
-
-  const encounters = useMemo(
-    () => [...new Set(buckets.map((b: CohortBucket) => b.encounter_name))].sort(),
-    [buckets],
-  );
-
-  const classes = useMemo(() => {
-    const filtered = encounterName
-      ? buckets.filter((b: CohortBucket) => b.encounter_name === encounterName)
-      : buckets;
-    return [...new Set(filtered.map((b: CohortBucket) => b.player_class))].sort();
-  }, [buckets, encounterName]);
-
-  const specs = useMemo(() => {
-    const filtered = buckets.filter(
-      (b: CohortBucket) =>
-        (!encounterName || b.encounter_name === encounterName) &&
-        (!playerClass || b.player_class === playerClass),
-    );
-    return [...new Set(filtered.map((b: CohortBucket) => b.player_spec).filter(Boolean))].sort();
-  }, [buckets, encounterName, playerClass]);
-
-  const subSpecs = useMemo(() => {
-    const filtered = buckets.filter(
-      (b: CohortBucket) =>
-        (!encounterName || b.encounter_name === encounterName) &&
-        (!playerClass || b.player_class === playerClass) &&
-        (!playerSpec || b.player_spec === playerSpec),
-    );
-    return [...new Set(filtered.map((b: CohortBucket) => b.player_sub_spec).filter(Boolean))].sort();
-  }, [buckets, encounterName, playerClass, playerSpec]);
-
-  const difficulties = useMemo(() => {
-    return [...new Set(buckets.map((b: CohortBucket) => b.difficulty_name))].sort();
-  }, [buckets]);
-
-  const maxPlayerOptions = useMemo(() => {
-    return [...new Set(buckets.map((b: CohortBucket) => b.max_players))].sort((a, b) => a - b);
-  }, [buckets]);
-
-  // When snapshot changes and we have buckets from a previous query, auto-select first encounter.
-  // Use the buckets-driven approach: once the user picks a snapshot, the first cohort request
-  // will return buckets and we drive the dropdowns from there.
+  // Snapshots and filters don't carry across populations, so switching view
+  // starts fresh.
+  const setView = (next: CohortView) => setSearchParams(next === "boss" ? {} : { view: next });
+  const active = VIEWS.find((v) => v.value === view) ?? VIEWS[0];
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl">
-      <div className="mb-6">
-        <Link to="/parsing" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Back to How Parses Work
-        </Link>
+    <div className="container mx-auto max-w-6xl px-4 py-8">
+      <Link to="/parsing" className="text-sm text-muted-foreground hover:text-foreground">
+        ← How parses work
+      </Link>
+
+      <div className="mt-4 mb-6">
+        <h1 className="text-3xl font-bold">Cohort Viewer</h1>
+        <p className="mt-1 text-muted-foreground">
+          The raw populations behind parse scores. Pick a cohort to see every run in it and what each parse takes.
+        </p>
       </div>
 
-      <h1 className="text-3xl font-bold mb-2">Cohort Viewer</h1>
-      <p className="text-muted-foreground mb-8">
-        Browse the raw data behind parse scores. Select a snapshot and filters to see the cohort
-        values and computed scores.
-      </p>
-
-      {/* Snapshot selector */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <div>
-          <label className="block text-sm font-medium mb-1">Snapshot</label>
-          {snapshotsLoading ? (
-            <div className="text-muted-foreground text-sm">Loading snapshots…</div>
-          ) : !snapshots?.length ? (
-            <div className="text-muted-foreground text-sm">No published snapshots available.</div>
-          ) : (
-            <select
-              className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-              value={selectedSnapshotId}
-              onChange={(e) =>
-                updateParams({ snapshot: e.target.value, encounter: "", class: "", spec: "", sub_spec: "" })
-              }
-            >
-              <option value="">Select a snapshot…</option>
-              {snapshots.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {formatDate(s.cutoff)} — {s.lookback_days === 0 ? "all-time" : `${s.lookback_days}d`}{" "}
-                  ({s.cohort_mode}) · {s.member_count.toLocaleString()} members
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Encounter</label>
-          <select
-            className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-            value={encounterName}
-            onChange={(e) => updateParams({ encounter: e.target.value, class: "", spec: "", sub_spec: "" })}
-            disabled={!selectedSnapshotId}
-          >
-            <option value="">{encounters.length ? "Select encounter…" : "Load a snapshot first"}</option>
-            {encounters.map((e) => (
-              <option key={e} value={e}>
-                {e}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Class</label>
-          <select
-            className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-            value={playerClass}
-            onChange={(e) => updateParams({ class: e.target.value, spec: "", sub_spec: "" })}
-            disabled={!encounterName}
-          >
-            <option value="">{classes.length ? "Select class…" : "Select encounter first"}</option>
-            {classes.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Spec (optional)</label>
-          <select
-            className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-            value={playerSpec}
-            onChange={(e) => setPlayerSpec(e.target.value)}
-            disabled={!playerClass}
-          >
-            <option value="">All specs</option>
-            {specs.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {subSpecs.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium mb-1">Sub-spec</label>
-            <select
-              className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-              value={playerSubSpec}
-              onChange={(e) => setPlayerSubSpec(e.target.value)}
-              disabled={!playerSpec}
-            >
-              <option value="">All sub-specs</option>
-              {subSpecs.map((subSpec) => (
-                <option key={subSpec} value={subSpec}>
-                  {subSpec}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {difficulties.length > 1 && (
-          <div>
-            <label className="block text-sm font-medium mb-1">Difficulty</label>
-            <select
-              className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value)}
-            >
-              {difficulties.map((d) => (
-                <option key={d} value={d}>
-                  {d || "(default)"}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {maxPlayerOptions.length > 1 && (
-          <div>
-            <label className="block text-sm font-medium mb-1">Max Players</label>
-            <select
-              className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
-              value={maxPlayers ?? ""}
-              onChange={(e) =>
-                setMaxPlayers(e.target.value ? Number(e.target.value) : undefined)
-              }
-            >
-              {maxPlayerOptions.map((mp) => (
-                <option key={mp} value={mp}>
-                  {mp || "(default)"}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Metric</label>
-          <div className="flex gap-2">
+      <div className="mb-5 border-b border-border">
+        <div role="tablist" aria-label="Cohort type" className="styled-scrollbar -mb-px flex gap-1 overflow-x-auto">
+          {VIEWS.map((option) => (
             <button
-              className={`flex-1 rounded border px-3 py-2 text-sm ${
-                metric === "dps"
-                  ? "border-blue-500 bg-blue-500/10 text-blue-400"
-                  : "border-border bg-background text-muted-foreground"
-              }`}
-              onClick={() => setMetric("dps")}
+              key={option.value}
+              type="button"
+              role="tab"
+              aria-selected={view === option.value}
+              onClick={() => setView(option.value)}
+              className={cn(
+                "whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                view === option.value
+                  ? "border-primary font-medium text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
             >
-              DPS
+              {option.label}
             </button>
-            <button
-              className={`flex-1 rounded border px-3 py-2 text-sm ${
-                metric === "hps"
-                  ? "border-green-500 bg-green-500/10 text-green-400"
-                  : "border-border bg-background text-muted-foreground"
-              }`}
-              onClick={() => setMetric("hps")}
-            >
-              HPS
-            </button>
-          </div>
+          ))}
         </div>
       </div>
+      <p className="mb-4 text-sm text-muted-foreground">{active.description}</p>
 
-      {/* Content area */}
-      {!selectedSnapshotId && (
-        <div className="text-center py-16 text-muted-foreground">
-          Select a snapshot to begin browsing cohort data.
-        </div>
-      )}
-
-      {selectedSnapshotId && !encounterName && !cohortLoading && (
-        <div className="text-center py-16 text-muted-foreground">
-          Select an encounter to begin, then choose a class to view the cohort.
-        </div>
-      )}
-
-      {cohortLoading && (
-        <div className="text-center py-16 text-muted-foreground">Loading cohort data…</div>
-      )}
-
-      {cohort && !cohortLoading && (
-        <>
-          {/* Summary line */}
-          <div className="mb-4 p-4 bg-muted/30 rounded-lg flex flex-wrap gap-x-6 gap-y-1 text-sm">
-            <span>
-              <strong>{cohort.total_kills}</strong> kills in cohort
-            </span>
-            {cohort.total_kills > 0 && (
-              <>
-                <span>
-                  Min: <strong>{cohort.min_value.toFixed(1)}</strong>
-                </span>
-                <span>
-                  Median: <strong>{cohort.median_value.toFixed(1)}</strong>
-                </span>
-                <span>
-                  Max: <strong>{cohort.max_value.toFixed(1)}</strong>
-                </span>
-              </>
-            )}
-          </div>
-
-          {cohort.entries.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No data for this bucket. Try different filters.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="px-3 py-2 w-12">#</th>
-                    <th className="px-3 py-2">Player</th>
-                    <th className="px-3 py-2 text-right">
-                      {metric.toUpperCase()}
-                    </th>
-                    <th className="px-3 py-2 text-center w-24">Parse</th>
-                    <th className="px-3 py-2">Killed</th>
-                    <th className="px-3 py-2 w-12">Log</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cohort.entries.map((entry) => (
-                    <tr
-                      key={`${entry.player_guid}-${entry.killed_at}`}
-                      className="border-b border-border/50 hover:bg-muted/20"
-                    >
-                      <td className="px-3 py-2 text-muted-foreground tabular-nums">
-                        {entry.rank}
-                      </td>
-                      <td className="px-3 py-2">{entry.player_name}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {entry.metric_value.toFixed(1)}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <span
-                          className={`inline-block rounded px-2 py-0.5 text-xs font-semibold tabular-nums ${parseColor(entry.display_score)} ${parseBgColor(entry.display_score)}`}
-                        >
-                          {entry.display_score}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-muted-foreground">
-                        {formatDate(entry.killed_at)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {entry.log_hashed_slug && (
-                          <Link
-                            to={`/instances/${entry.log_hashed_slug}`}
-                            className="text-blue-400 hover:text-blue-300"
-                            title="View log"
-                          >
-                            →
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+      {view === "players" ? (
+        <PlayerCohortView params={searchParams} updateParams={updateParams} />
+      ) : (
+        <TimeCohortView
+          key={view}
+          kind={view === "boss" ? "boss_kill" : "clear_time"}
+          params={searchParams}
+          updateParams={updateParams}
+        />
       )}
     </div>
   );
