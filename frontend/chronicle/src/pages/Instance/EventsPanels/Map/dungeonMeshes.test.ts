@@ -1,23 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
-import type { WowMapFloorBounds } from "@/pages/Technical/mapGallery";
+import type { WowMapFloorBounds, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import {
   clampToRadius,
   corsAssetUrl,
   dungeonMeshPlacement,
   dungeonMeshUrl,
   FloorHeightCache,
-  hasDungeonMesh,
+  placeableDungeonMesh,
 } from "./dungeonMeshes";
-import { dungeonMapPoint, mapPointToScene, renderedDungeonMapPoint } from "./mapModel";
+import { mapPointToScene, renderedDungeonMapPoint } from "./mapModel";
 
-// Wailing Caverns floor 1 (1002 x 668 px).
-const WC_BOUNDS: WowMapFloorBounds = { minX: -375.946, maxX: 560.529, minY: -410.146, maxY: 214.170 };
-const WC_ASPECT = 668 / 1002;
-// Wailing Caverns `instances[].rendered` (1200 x 800 px) from the Forever
-// manifest: drawn from the same WMO geometry as the mesh, bounds in world axes.
-const WC_RENDERED_BOUNDS: WowMapFloorBounds = { minX: -421.6594, maxX: 220.06552, minY: -396.9931, maxY: 565.59424 };
-const WC_RENDERED_ASPECT = 800 / 1200;
+// Wailing Caverns `instances[].mesh` as manifest.meshes.json publishes it:
+// the mesh's own world-axis extent, from the render pipeline's height.json.
+const WC_MESH: WowMapMeshInstance = {
+  path: "meshes/43.glb",
+  bounds: { minX: -389.07001, maxX: 191.6667, minY: -370.83331, maxY: 538.3512 },
+  zMin: -119.1605,
+  zMax: 56.4689,
+  frame: "wow-yup-mirrored-x",
+};
+// The ground the mesh entry defines: width spans world Y, height world X.
+const WC_MESH_ASPECT = (WC_MESH.bounds.maxX - WC_MESH.bounds.minX) / (WC_MESH.bounds.maxY - WC_MESH.bounds.minY);
 const GROUND_WIDTH = 100;
 // Kresh's pool, the entrance, and a point near the artwork's far corner.
 const WORLD_POINTS = [
@@ -27,21 +31,28 @@ const WORLD_POINTS = [
   { x: 0, y: 0, z: 0 },
 ];
 
+describe("placeableDungeonMesh", () => {
+  it("accepts the published entry", () => {
+    expect(placeableDungeonMesh(WC_MESH)).toBe(WC_MESH);
+  });
+
+  it("rejects a missing entry, an unknown frame and flat bounds", () => {
+    expect(placeableDungeonMesh(undefined)).toBeNull();
+    expect(placeableDungeonMesh({ ...WC_MESH, frame: "wow-yup" })).toBeNull();
+    expect(placeableDungeonMesh({ ...WC_MESH, path: "" })).toBeNull();
+    expect(placeableDungeonMesh({ ...WC_MESH, bounds: { ...WC_MESH.bounds, maxX: WC_MESH.bounds.minX } })).toBeNull();
+    expect(placeableDungeonMesh({ ...WC_MESH, bounds: { ...WC_MESH.bounds, minY: WC_MESH.bounds.maxY + 1 } })).toBeNull();
+  });
+});
+
 describe("dungeonMeshUrl", () => {
-  it("resolves to the icon CDN next to the tiles by default", () => {
-    expect(dungeonMeshUrl(43, "https://icons.example.com/forever/", undefined)).toBe("https://icons.example.com/forever/maps/meshes/43.glb");
+  it("resolves the manifest path under the icon CDN's maps by default", () => {
+    expect(dungeonMeshUrl(WC_MESH, "https://icons.example.com/forever/", undefined)).toBe("https://icons.example.com/forever/maps/meshes/43.glb");
   });
 
-  it("uses the base override when set", () => {
-    expect(dungeonMeshUrl(43, "https://icons.example.com/forever", "/dungeon-meshes/")).toBe("/dungeon-meshes/43.glb");
-    expect(dungeonMeshUrl(43, "https://icons.example.com/forever", "http://localhost:8080/meshes")).toBe("http://localhost:8080/meshes/43.glb");
-  });
-
-  it("has no mesh for other maps", () => {
-    expect(dungeonMeshUrl(36, "https://icons.example.com/forever", undefined)).toBeNull();
-    expect(dungeonMeshUrl(36, "https://icons.example.com/forever", "/dungeon-meshes")).toBeNull();
-    expect(hasDungeonMesh(43)).toBe(true);
-    expect(hasDungeonMesh(36)).toBe(false);
+  it("reads the file from the override directory when set", () => {
+    expect(dungeonMeshUrl(WC_MESH, "https://icons.example.com/forever", "/dungeon-meshes/")).toBe("/dungeon-meshes/43.glb");
+    expect(dungeonMeshUrl(WC_MESH, "https://icons.example.com/forever", "http://localhost:8080/meshes")).toBe("http://localhost:8080/meshes/43.glb");
   });
 });
 
@@ -61,8 +72,8 @@ describe("corsAssetUrl", () => {
 
 describe("dungeonMeshPlacement", () => {
   // A mesh group with the placement applied, as MapScene3D builds it.
-  function placedMatrix(bounds: WowMapFloorBounds, frame: "rendered" | "artwork" = "artwork"): THREE.Matrix4 {
-    const placement = dungeonMeshPlacement(bounds, GROUND_WIDTH, frame);
+  function placedMatrix(bounds: WowMapFloorBounds): THREE.Matrix4 {
+    const placement = dungeonMeshPlacement(bounds, GROUND_WIDTH);
     const group = new THREE.Group();
     group.rotation.y = placement.rotationY;
     group.scale.setScalar(placement.scale);
@@ -71,56 +82,31 @@ describe("dungeonMeshPlacement", () => {
     return group.matrix;
   }
 
-  it("matches the artwork projection for the Wailing Caverns floor", () => {
-    const matrix = placedMatrix(WC_BOUNDS);
-    const { scale } = dungeonMeshPlacement(WC_BOUNDS, GROUND_WIDTH);
-    expect(scale).toBeCloseTo(100 / (WC_BOUNDS.maxX - WC_BOUNDS.minX), 6);
-    // The artwork's vertical axis gives the same yards-per-unit to 4 decimals.
-    expect(scale).toBeCloseTo((100 * WC_ASPECT) / (WC_BOUNDS.maxY - WC_BOUNDS.minY), 4);
-    for (const world of WORLD_POINTS) {
-      const point = dungeonMapPoint({ timestampMs: 0, x: world.x, y: world.y, mapId: 43, facing: 0 }, WC_BOUNDS)!;
-      const expected = mapPointToScene(point, WC_ASPECT, GROUND_WIDTH);
-      // glTF Y-up form of the same world point, run through the group.
-      const gltf = new THREE.Vector3(-world.x, world.z, world.y).applyMatrix4(matrix);
-      expect(gltf.x).toBeCloseTo(expected.x, 3);
-      expect(gltf.z).toBeCloseTo(expected.z, 3);
-      expect(gltf.y).toBeCloseTo(scale * world.z, 6);
-    }
-  });
-
-  it("matches the rendered projection for the Wailing Caverns render", () => {
-    const matrix = placedMatrix(WC_RENDERED_BOUNDS, "rendered");
-    const { scale, rotationY } = dungeonMeshPlacement(WC_RENDERED_BOUNDS, GROUND_WIDTH, "rendered");
-    // The render's width spans world Y; its height spans world X at the same
-    // yards per unit (the image is coordinate-faithful), so the frame stays
-    // uniform and the same quarter turn applies.
-    expect(scale).toBeCloseTo(100 / (WC_RENDERED_BOUNDS.maxY - WC_RENDERED_BOUNDS.minY), 6);
-    expect(scale).toBeCloseTo((100 * WC_RENDERED_ASPECT) / (WC_RENDERED_BOUNDS.maxX - WC_RENDERED_BOUNDS.minX), 5);
+  it("matches the units' projection onto the mesh entry's bounds", () => {
+    const matrix = placedMatrix(WC_MESH.bounds);
+    const { scale, rotationY } = dungeonMeshPlacement(WC_MESH.bounds, GROUND_WIDTH);
+    // The ground's width spans world Y and its height world X at the same
+    // yards per unit, so the frame is uniform and a quarter turn applies.
+    expect(scale).toBeCloseTo(100 / (WC_MESH.bounds.maxY - WC_MESH.bounds.minY), 6);
+    expect(scale).toBeCloseTo((100 * WC_MESH_ASPECT) / (WC_MESH.bounds.maxX - WC_MESH.bounds.minX), 6);
     expect(rotationY).toBe(-Math.PI / 2);
     for (const world of WORLD_POINTS) {
-      const point = renderedDungeonMapPoint({ timestampMs: 0, x: world.x, y: world.y, mapId: 43, facing: 0 }, WC_RENDERED_BOUNDS)!;
-      const expected = mapPointToScene(point, WC_RENDERED_ASPECT, GROUND_WIDTH);
+      const point = renderedDungeonMapPoint({ timestampMs: 0, x: world.x, y: world.y, mapId: 43, facing: 0 }, WC_MESH.bounds)!;
+      const expected = mapPointToScene(point, WC_MESH_ASPECT, GROUND_WIDTH);
+      // glTF form of the same world point (DUNGEON_MESH_FRAME), run through the group.
       const gltf = new THREE.Vector3(-world.x, world.z, world.y).applyMatrix4(matrix);
       expect(gltf.x).toBeCloseTo(expected.x, 3);
       expect(gltf.z).toBeCloseTo(expected.z, 3);
       expect(gltf.y).toBeCloseTo(scale * world.z, 6);
     }
-    // The rendered bounds centre lands on the origin too.
-    const centre = new THREE.Vector3(
-      -(WC_RENDERED_BOUNDS.maxX + WC_RENDERED_BOUNDS.minX) / 2,
-      0,
-      (WC_RENDERED_BOUNDS.maxY + WC_RENDERED_BOUNDS.minY) / 2,
-    ).applyMatrix4(matrix);
-    expect(centre.x).toBeCloseTo(0, 6);
-    expect(centre.z).toBeCloseTo(0, 6);
   });
 
   it("centres the bounds on the origin", () => {
-    const matrix = placedMatrix(WC_BOUNDS);
+    const matrix = placedMatrix(WC_MESH.bounds);
     const centre = new THREE.Vector3(
-      -(WC_BOUNDS.maxY + WC_BOUNDS.minY) / 2,
+      -(WC_MESH.bounds.maxX + WC_MESH.bounds.minX) / 2,
       0,
-      (WC_BOUNDS.maxX + WC_BOUNDS.minX) / 2,
+      (WC_MESH.bounds.maxY + WC_MESH.bounds.minY) / 2,
     ).applyMatrix4(matrix);
     expect(centre.x).toBeCloseTo(0, 6);
     expect(centre.z).toBeCloseTo(0, 6);

@@ -115,13 +115,15 @@ The output layout for every server is:
 ├── manifest.original.json   # native artwork; updated by make maps
 ├── manifest.rendered.json     # raw geometry, when available
 ├── manifest.styled.json     # hand-authored art, when available
+├── manifest.meshes.json     # dungeon meshes, when available
 ├── manifest.json            # merged public manifest, uploaded last
 ├── original/<FileDataID>.webp
 ├── render/<MapID>-<build>-<digest>.png
-└── render-styled/<image>.jpeg
+├── render-styled/<image>.jpeg
+└── meshes/<map-id>.glb
 ```
 
-All source manifests use `chronicle-wow-map-art-v2`. The native manifest owns map hierarchy, tile art and the raw world-coordinate assignments. The render and styled manifests contain only their own instance layers keyed by world map ID. After each upload, the publisher fetches the other source manifests, validates their identities and joins them into `manifest.json`. A missing optional layer is allowed; malformed or incompatible layers fail without replacing the public manifest. Source manifests stay at the root for inspection. Generated assets live under ignored `frontend/imagecache/<server>/maps/`; hand-authored images and their source manifest are tracked under `frontend/imagecache/styled-maps/<server>/`.
+All source manifests use `chronicle-wow-map-art-v2`. The native manifest owns map hierarchy, tile art and the raw world-coordinate assignments. The render, styled and mesh manifests contain only their own instance layers keyed by world map ID. After each upload, the publisher fetches the other source manifests, validates their identities and joins them into `manifest.json`. A missing optional layer is allowed; malformed or incompatible layers fail without replacing the public manifest. Source manifests stay at the root for inspection. Generated assets live under ignored `frontend/imagecache/<server>/maps/`; hand-authored images and their source manifest are tracked under `frontend/imagecache/styled-maps/<server>/`; dungeon mesh manifests are tracked under `frontend/imagecache/meshes/<server>/` beside their untracked GLBs (see [WoW map assets](wow-map-assets.md#dungeon-meshes)).
 
 The generated-map stage invokes the checked-in Rust renderer through Cargo, so the publishing host needs a current Rust toolchain in addition to the existing `wowdata`, image-conversion, and R2 tools.
 

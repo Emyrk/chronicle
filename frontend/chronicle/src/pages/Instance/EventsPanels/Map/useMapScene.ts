@@ -4,16 +4,16 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import {
   mapManifestUrl,
   isSupportedMapManifestFormat,
-  type WowMapFloorBounds,
   type WowMapInstanceFloor,
   type WowMapLayer,
   type WowMapManifest,
+  type WowMapMeshInstance,
   type WowMapOverlay,
   type WowMapRenderedInstance,
 } from "@/pages/Technical/mapGallery";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
-import type { DungeonMeshFrame } from "./dungeonMeshes";
+import { placeableDungeonMesh } from "./dungeonMeshes";
 import type { MapPositionSample, MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
@@ -113,10 +113,22 @@ export interface MapSceneGround {
   overlays?: WowMapOverlay[];
 }
 
-/** The world bounds a dungeon mesh is placed by, and which map image's projection they belong to. */
-export interface MapSceneMeshFrame {
-  bounds: WowMapFloorBounds;
-  frame: DungeonMeshFrame;
+/**
+ * The ground while the dungeon mesh stands in for the tiles: no image (the
+ * scene hides the tiles), just the mesh's world extent as a canvas, so markers,
+ * fit and the camera keep the mesh's aspect. Its width spans world Y and its
+ * height world X, as `renderedDungeonMapPoint` projects.
+ */
+function dungeonMeshCanvas(mesh: WowMapMeshInstance): WowMapInstanceFloor {
+  return {
+    floor: 0,
+    width: mesh.bounds.maxY - mesh.bounds.minY,
+    height: mesh.bounds.maxX - mesh.bounds.minX,
+    tileWidth: 0,
+    tileHeight: 0,
+    bounds: mesh.bounds,
+    tiles: [],
+  };
 }
 // Tanks by inferRoles over the encounter's own damage and heal events,
 // recomputed only when more events have streamed in.
@@ -172,12 +184,8 @@ export type MapScene =
     focusCentre: MapPoint | null;
     /** Whether the view should start on `autoFit` (one boss encounter selected) rather than the full map. */
     fitByDefault: boolean;
-    /**
-     * How a real dungeon mesh lines up with this instance: the rendered map's
-     * bounds when it has one (the same WMO geometry as the mesh), else the
-     * artwork floor's bounds; null for zones and floors without bounds.
-     */
-    meshFrame: MapSceneMeshFrame | null;
+    /** The instance's real dungeon mesh from the manifest (`instances[].mesh`), when the scene can place it. */
+    mesh: WowMapMeshInstance | null;
     /** Combat events for the replay effects layer. */
     effects: EncounterEffects;
     bossGuids: ReadonlySet<string>;
@@ -190,8 +198,8 @@ export interface MapSceneOptions {
    * Project dungeon positions with the pure world transform instead of the
    * per-boss artwork calibration (Wailing Caverns): the 3D view's real
    * dungeon mesh is true geometry, so calibrated points would land off it.
-   * When the instance has a rendered map, it becomes the canvas and the
-   * projection (`meshFrame`); otherwise the artwork floor's raw bounds do.
+   * The mesh entry's bounds become the canvas and the projection; without a
+   * placeable mesh the option does nothing.
    */
   rawDungeonProjection?: boolean;
 }
@@ -248,24 +256,13 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const selectedFloor = artwork.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
-  const renderedMap = artwork.kind === "instance" && artwork.instance.rendered
-    && artwork.instance.rendered.width > 0 && artwork.instance.rendered.height > 0
-    ? artwork.instance.rendered
-    : null;
-  const rawProjection = Boolean(options.rawDungeonProjection);
-  // The mesh frame: the rendered map is drawn from the mesh's own geometry.
-  const meshCanvas = rawProjection ? renderedMap : null;
+  const mesh = artwork.kind === "instance" ? placeableDungeonMesh(artwork.instance.mesh) : null;
+  const rawProjection = Boolean(options.rawDungeonProjection) && mesh !== null;
+  const meshCanvas = rawProjection && mesh ? dungeonMeshCanvas(mesh) : null;
   const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? selectedFloor;
   if (!canvas) return { status: "message", title: "Map artwork unavailable", detail: "No renderable map layer was published." };
 
   const dungeonBounds = artwork.kind === "instance" ? meshCanvas?.bounds ?? selectedFloor?.bounds ?? null : null;
-  const meshFrame: MapSceneMeshFrame | null = artwork.kind !== "instance"
-    ? null
-    : renderedMap
-      ? { bounds: renderedMap.bounds, frame: "rendered" }
-      : selectedFloor?.bounds
-        ? { bounds: selectedFloor.bounds, frame: "artwork" }
-        : null;
   const dungeonCalibration = artwork.kind === "instance" && encounter && !rawProjection
     ? resolveDungeonMapCalibration(
       artwork.instance.mapID,
@@ -324,7 +321,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   }
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
-    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${meshCanvas ? "rendered" : rawProjection ? "raw" : "calibrated"}`;
+    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${meshCanvas ? "mesh" : "calibrated"}`;
   const focus = cachedFocusBounds(
     encounter.positionsByUnit,
     `${mapId}|${projectionKey}|${[...bossGuids].join(",")}`,
@@ -368,7 +365,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     focusBounds: focus?.bounds ?? null,
     autoFit: focus?.autoFit ?? null,
     focusCentre: focus?.centre ?? null,
-    meshFrame,
+    mesh,
     fitByDefault: props.context.selectedEncounterIds.length === 1 && Boolean(instanceEncounter?.boss),
     effects: encounter.effects,
     bossGuids,

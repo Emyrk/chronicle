@@ -20,6 +20,10 @@ MAPS_UPLOAD_MODE="${MAPS_UPLOAD_MODE:-all}"
 remote="${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}"
 styled_dir="${SCRIPT_DIR}/styled-maps/${SERVER:-forever}"
 styled_source="${styled_dir}/manifest.styled.json"
+# Dungeon meshes: the tracked manifest.meshes.json next to untracked GLBs
+# (Blizzard textures never enter Git), published under meshes/.
+MESHES_DIR="${MESHES_DIR:-${SCRIPT_DIR}/meshes/${SERVER:-forever}}"
+meshes_source="${MESHES_DIR}/manifest.meshes.json"
 case "${MAPS_UPLOAD_MODE}" in
   all|original)
     [[ -s "${MAPS_DIR}/manifest.original.json" && -d "${MAPS_DIR}/original" ]] || {
@@ -34,7 +38,16 @@ case "${MAPS_UPLOAD_MODE}" in
   styled)
     [[ -s "${styled_source}" ]] || { echo "Error: styled manifest is missing: ${styled_source}" >&2; exit 1; }
     ;;
-  *) echo "Error: MAPS_UPLOAD_MODE must be all, original, rendered or styled" >&2; exit 1 ;;
+  meshes)
+    [[ -s "${meshes_source}" ]] || { echo "Error: mesh manifest is missing: ${meshes_source}" >&2; exit 1; }
+    # Every announced GLB must be beside the manifest, or the published entry would 404.
+    while IFS= read -r mesh_path; do
+      [[ -s "${MESHES_DIR}/${mesh_path#meshes/}" ]] || {
+        echo "Error: mesh asset is missing: ${MESHES_DIR}/${mesh_path#meshes/}" >&2; exit 1;
+      }
+    done < <(grep -o '"path" *: *"meshes/[^"]*"' "${meshes_source}" | sed -E 's/.*"(meshes\/[^"]*)"$/\1/')
+    ;;
+  *) echo "Error: MAPS_UPLOAD_MODE must be all, original, rendered, styled or meshes" >&2; exit 1 ;;
 esac
 if ! command -v rclone >/dev/null 2>&1; then
   echo "Error: rclone not found. Install it first." >&2
@@ -51,10 +64,12 @@ fi
 listing="$(rclone lsf "${remote}/" --files-only)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
-for layer in original rendered styled; do
+for layer in original rendered styled meshes; do
   local_source="${MAPS_DIR}/manifest.${layer}.json"
   if [[ "${MAPS_UPLOAD_MODE}" == "styled" && "${layer}" == "styled" ]]; then
     cp "${styled_source}" "${tmp}/manifest.${layer}.json"
+  elif [[ "${MAPS_UPLOAD_MODE}" == "meshes" && "${layer}" == "meshes" ]]; then
+    cp "${meshes_source}" "${tmp}/manifest.${layer}.json"
   elif [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "original" ) && "${layer}" == "original" ]] ||
        [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "rendered" ) && "${layer}" == "rendered" ]]; then
     cp "${local_source}" "${tmp}/manifest.${layer}.json"
@@ -64,10 +79,13 @@ for layer in original rendered styled; do
 done
 
 # Validate original metadata, optional layers and target compatibility before upload.
+# Layers sourced outside MAPS_DIR (styled, meshes) may run on a checkout that never generated it.
+mkdir -p "${MAPS_DIR}"
 go run ../../scripts/dbcdata merge-wowdata-maps \
   --original="${tmp}/manifest.original.json" \
   --render="${tmp}/manifest.rendered.json" \
   --styled="${tmp}/manifest.styled.json" \
+  --meshes="${tmp}/manifest.meshes.json" \
   --out="${MAPS_DIR}/manifest.json"
 
 if [[ "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "original" ]]; then
@@ -96,6 +114,16 @@ if [[ "${MAPS_UPLOAD_MODE}" == "styled" ]]; then
     --include '*.jpeg' --include '*.png' --include '*.webp' \
     --header-upload "Cache-Control: public, max-age=31536000, immutable" --verbose
   rclone copyto "${styled_source}" "${remote}/manifest.styled.json" \
+    --header-upload "Cache-Control: public, max-age=3600" \
+    --header-upload "Content-Type: application/json" --verbose
+fi
+
+if [[ "${MAPS_UPLOAD_MODE}" == "meshes" ]]; then
+  rclone copy "${MESHES_DIR}" "${remote}/meshes/" \
+    --include '*.glb' \
+    --header-upload "Cache-Control: public, max-age=31536000, immutable" \
+    --header-upload "Content-Type: model/gltf-binary" --transfers 4 --checkers 4 --progress --verbose
+  rclone copyto "${meshes_source}" "${remote}/manifest.meshes.json" \
     --header-upload "Cache-Control: public, max-age=3600" \
     --header-upload "Content-Type: application/json" --verbose
 fi

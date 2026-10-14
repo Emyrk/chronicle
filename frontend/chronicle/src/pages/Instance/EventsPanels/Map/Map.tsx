@@ -50,23 +50,21 @@ function SingleEncounterReplayMap(props: PanelRenderProps<MapResult>) {
   const [webglUnavailable, setWebglUnavailable] = useState(false);
   const show3D = !webglUnavailable;
   // "3D map": the real dungeon mesh as the ground. Units project onto it with
-  // the mesh frame (rendered map, else raw artwork bounds) only once it has
-  // loaded; until then (and when the load fails) the tiles and their
-  // calibration stay.
+  // the mesh entry's bounds only once it has loaded; until then (and when the
+  // load fails) the tiles and their calibration stay.
   const [meshOn, setMeshOn] = useState(readStoredMesh);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
   const meshWanted = show3D && meshOn;
   const scene = useMapScene(props, { rawDungeonProjection: meshWanted && meshState === "ready" });
   const ready = scene.status === "ready" ? scene : null;
   const iconBaseUrl = props.context.instance.iconBaseUrl;
-  const meshUrl = ready && iconBaseUrl ? dungeonMeshUrl(ready.displayedMapId, iconBaseUrl) : null;
-  // Keyed on the manifest's bounds object and the frame kind, not the frame
-  // wrapper (new every render): a changed request re-requests the mesh.
-  const meshBounds = ready?.meshFrame?.bounds ?? null;
-  const meshFrameKind = ready?.meshFrame?.frame ?? null;
+  // The manifest's mesh entry (one object per cached manifest, not rebuilt
+  // per render) keys the request: a changed entry re-requests the mesh.
+  const mesh = ready?.mesh ?? null;
+  const meshUrl = mesh && iconBaseUrl ? dungeonMeshUrl(mesh, iconBaseUrl) : null;
   const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
-    meshWanted && meshUrl && meshBounds && meshFrameKind ? { url: meshUrl, bounds: meshBounds, frame: meshFrameKind } : null,
-  [meshBounds, meshFrameKind, meshUrl, meshWanted]);
+    meshWanted && mesh && meshUrl ? { url: meshUrl, bounds: mesh.bounds } : null,
+  [mesh, meshUrl, meshWanted]);
   const focusCentre = ready?.focusCentre ?? null;
   const fitZoom = ready?.fitByDefault ? ready.autoFit?.zoom ?? null : null;
   const focus = useMemo((): MapSceneFocus | null =>

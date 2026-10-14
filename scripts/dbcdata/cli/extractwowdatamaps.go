@@ -85,6 +85,22 @@ type wowMapInstance struct {
 	Floors       []wowMapInstanceFloor   `json:"floors"`
 	Rendered     *wowMapRenderedInstance `json:"rendered,omitempty"`
 	Styled       *wowMapRenderedInstance `json:"styled,omitempty"`
+	Mesh         *wowMapMeshInstance     `json:"mesh,omitempty"`
+}
+
+// wowMapMeshFrame is the only glTF axis convention the frontend places:
+// Y-up with X mirrored, glTF (x, y, z) = (-wow_x, wow_z, wow_y).
+const wowMapMeshFrame = "wow-yup-mirrored-x"
+
+// wowMapMeshInstance announces a dungeon's 3D mesh (a glTF binary under
+// meshes/) with the world extent that places it, so the frontend needs no
+// artwork or rendered layer to use it.
+type wowMapMeshInstance struct {
+	Path   string            `json:"path"`
+	Bounds wowMapFloorBounds `json:"bounds"`
+	ZMin   float64           `json:"zMin"`
+	ZMax   float64           `json:"zMax"`
+	Frame  string            `json:"frame"`
 }
 
 type wowMapRenderedInstance struct {

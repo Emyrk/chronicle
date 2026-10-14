@@ -1,0 +1,23 @@
+{
+  "format": "chronicle-wow-map-art-v2",
+  "target": {
+    "product": "wow_classic_beta"
+  },
+  "instances": [
+    {
+      "mapID": 43,
+      "mesh": {
+        "path": "meshes/43.glb",
+        "bounds": {
+          "minX": -389.07001,
+          "maxX": 191.6667,
+          "minY": -370.83331,
+          "maxY": 538.3512
+        },
+        "zMin": -119.1605,
+        "zMax": 56.4689,
+        "frame": "wow-yup-mirrored-x"
+      }
+    }
+  ]
+}

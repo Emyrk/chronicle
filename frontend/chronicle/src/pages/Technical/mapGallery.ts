@@ -64,6 +64,18 @@ export interface WowMapInstance {
   floors: WowMapInstanceFloor[];
   rendered?: WowMapRenderedInstance;
   styled?: WowMapRenderedInstance;
+  mesh?: WowMapMeshInstance;
+}
+
+/** A dungeon's 3D mesh (glTF binary under `meshes/`) for the Replay Map, placed by its own world extent. */
+export interface WowMapMeshInstance {
+  path: string;
+  /** World-axis bounds of the mesh: `minX..maxX` is world X, `minY..maxY` world Y. */
+  bounds: WowMapFloorBounds;
+  zMin: number;
+  zMax: number;
+  /** The glTF axis convention; see `DUNGEON_MESH_FRAME`. */
+  frame: string;
 }
 
 export interface WowMapRenderedInstance {
