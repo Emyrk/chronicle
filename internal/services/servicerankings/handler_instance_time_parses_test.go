@@ -145,9 +145,9 @@ func TestHandleInstanceTimeParsesStrictTenantCohort(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.True(t, body.Available)
 	require.NotNil(t, body.ClearTime)
-	assert.Equal(t, 1, body.ClearTime.SampleSize)
+	assert.Equal(t, 0, body.ClearTime.SampleSize)
 	require.Len(t, body.BossKillTimes, 1)
-	assert.Equal(t, 1, body.BossKillTimes[0].SampleSize)
+	assert.Equal(t, 0, body.BossKillTimes[0].SampleSize)
 }
 
 func TestHandleInstanceTimeParses_UUIDPath(t *testing.T) {
@@ -156,9 +156,8 @@ func TestHandleInstanceTimeParses_UUIDPath(t *testing.T) {
 
 	resp, body := callTimeParses(t, f.store, f.instanceID.String())
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	// No snapshot exists, so the handler should return available=false, reason=no_snapshot.
 	assert.False(t, body.Available)
-	assert.Equal(t, "no_snapshot", body.Reason)
+	assert.Equal(t, "no_speedrun", body.Reason)
 }
 
 func TestHandleInstanceTimeParses_SlugPath(t *testing.T) {
@@ -167,9 +166,8 @@ func TestHandleInstanceTimeParses_SlugPath(t *testing.T) {
 
 	resp, body := callTimeParses(t, f.store, f.slug)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	// Same behaviour as UUID path: no snapshot → available=false.
 	assert.False(t, body.Available)
-	assert.Equal(t, "no_snapshot", body.Reason)
+	assert.Equal(t, "no_speedrun", body.Reason)
 }
 
 func TestHandleInstanceTimeParses_InvalidSlug(t *testing.T) {
@@ -186,6 +184,5 @@ func TestHandleInstanceTimeParses_MissingUUID(t *testing.T) {
 
 	// Valid UUID format but no matching instance.
 	resp, _ := callTimeParses(t, f.store, uuid.New().String())
-	// The handler falls through to GetLogInstanceStartTime which returns pgx.ErrNoRows → 404.
-	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }

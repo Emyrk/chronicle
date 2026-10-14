@@ -15,7 +15,7 @@ import type { PopulationSelection } from "./populationSelectionState";
 import { useInstanceTimeParses, useSpeedrunPopulation } from "./overviewQueries";
 import {
   buildEncounterKillTimeComparisonRows,
-  mapSnapshotBossParses,
+  mapTimeBossParses,
   resolveEncounterParseScore,
   summarizeEncounterKillTimes,
   type EncounterKillTimeSummary,
@@ -197,7 +197,7 @@ export function EncounterKillTimesPanel({
   const primarySummaries = summarizeEncounterKillTimes(primaryQuery.data?.runs ?? []);
   const comparisonSummaries = summarizeEncounterKillTimes(comparisonQuery.data?.runs ?? []);
   const rows = buildEncounterKillTimeComparisonRows(primarySummaries, comparisonSummaries);
-  const snapshotParses = mapSnapshotBossParses(timeParsesQuery.data);
+  const timeParses = mapTimeBossParses(timeParsesQuery.data);
   const average = timeParsesQuery.data?.average_boss_kill_parse;
   const averageParse = average?.display_score ?? null;
   const killedBossCount = average?.killed ?? primarySummaries.size;
@@ -309,7 +309,7 @@ export function EncounterKillTimesPanel({
                 <span className="text-right">Yours</span>
               </div>
               {[...primarySummaries].map(([encounterName, summary]) => {
-                const parseScore = resolveEncounterParseScore(snapshotParses, encounterName);
+                const parseScore = resolveEncounterParseScore(timeParses, encounterName);
                 return (
                   <EncounterRowTooltip
                     key={encounterName}
@@ -390,7 +390,7 @@ export function EncounterKillTimesPanel({
               <span className="text-right">Delta</span>
             </div>
             {rows.map(({ encounterName, primarySummary, comparisonSummary }) => {
-              const parseScore = resolveEncounterParseScore(snapshotParses, encounterName);
+              const parseScore = resolveEncounterParseScore(timeParses, encounterName);
               const primaryDurationMs = primarySummary?.median ?? null;
               const missing = primaryDurationMs === null;
               const delta = primaryDurationMs === null

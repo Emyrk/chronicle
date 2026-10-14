@@ -51,8 +51,6 @@ const (
 	CheckTopicLength                                      CheckConstraint = "topic_length"                                          // river_notification
 	CheckSharedViewsPayloadMax10Kb                        CheckConstraint = "shared_views_payload_max_10kb"                         // shared_views
 	CheckSiteConfigIDCheck                                CheckConstraint = "site_config_id_check"                                  // site_config
-	CheckTimeParseSnapshotsCheck                          CheckConstraint = "time_parse_snapshots_check"                            // time_parse_snapshots
-	CheckTimeParseSnapshotsStatusCheck                    CheckConstraint = "time_parse_snapshots_status_check"                     // time_parse_snapshots
 	CheckUserPanelLayoutsPayloadSizeChk                   CheckConstraint = "user_panel_layouts_payload_size_chk"                   // user_panel_layouts
 	CheckUserPanelLayoutsTitleFormatChk                   CheckConstraint = "user_panel_layouts_title_format_chk"                   // user_panel_layouts
 	CheckUserTalentBuildsBuildLengthChk                   CheckConstraint = "user_talent_builds_build_length_chk"                   // user_talent_builds

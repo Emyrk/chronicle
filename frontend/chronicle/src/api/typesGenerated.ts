@@ -264,29 +264,6 @@ export interface AdminSnapshotSummary {
 
 // From chroniclesdk/rankings.go
 /**
- * AdminTimeParseSnapshotSummary is a time-parse snapshot listed in the admin tab.
- */
-export interface AdminTimeParseSnapshotSummary {
-    readonly id: string;
-    readonly tenant_id: string;
-    readonly tenant_name: string;
-    readonly cutoff: string;
-    readonly window_start: string | null;
-    readonly lookback_days: number;
-    readonly policy_version: number;
-    readonly query_version: number;
-    readonly clear_member_count: number;
-    readonly boss_member_count: number;
-    readonly status: string;
-    readonly source_row_count: number;
-    readonly source_watermark: string | null;
-    readonly source_fingerprint: number;
-    readonly published_at: string | null;
-    readonly created_at: string;
-}
-
-// From chroniclesdk/rankings.go
-/**
  * AdminTriggerSnapshotJobResult describes a single enqueued snapshot job.
  */
 export interface AdminTriggerSnapshotJobResult {
@@ -2150,15 +2127,14 @@ export interface InstanceReport {
 
 // From chroniclesdk/time_parses.go
 /**
- * InstanceTimeParsesResponse contains time-based parse scores for a specific
- * instance. Clear time uses the published snapshot population, while boss kill
- * times use the current-known membership cohort bounded by the snapshot dates.
+ * InstanceTimeParsesResponse contains live time-based parse scores for a
+ * specific instance, bounded by the reported UTC cutoff and lookback window.
  */
 export interface InstanceTimeParsesResponse {
     readonly available: boolean;
     readonly reason?: string;
-    readonly snapshot_id: string;
     readonly cutoff: string;
+    readonly window_start?: string;
     readonly lookback_days: number;
     /**
      * PolicyVersion and QueryVersion identify the scoring semantics used.
@@ -3957,10 +3933,12 @@ export interface TimeParseCohortBucket {
 
 // From chroniclesdk/time_parses.go
 /**
- * TimeParseCohortBucketsResponse lists every bucket available in a snapshot.
+ * TimeParseCohortBucketsResponse lists every bucket in a live date window.
  */
 export interface TimeParseCohortBucketsResponse {
-    readonly snapshot_id: string;
+    readonly cutoff: string;
+    readonly window_start?: string;
+    readonly lookback_days: number;
     readonly buckets: readonly TimeParseCohortBucket[];
 }
 
@@ -3991,7 +3969,9 @@ export const TimeParseCohortKinds: TimeParseCohortKind[] = ["boss_kill", "clear_
  * TimeParseCohortResponse is the full cohort for one bucket, fastest first.
  */
 export interface TimeParseCohortResponse {
-    readonly snapshot_id: string;
+    readonly cutoff: string;
+    readonly window_start?: string;
+    readonly lookback_days: number;
     readonly kind: TimeParseCohortKind;
     readonly instance_name: string;
     readonly encounter_name?: string;
@@ -4013,19 +3993,6 @@ export interface TimeParseScore {
     readonly rank: number;
     readonly sample_size: number;
     readonly status: string;
-}
-
-// From chroniclesdk/time_parses.go
-/**
- * TimeParseSnapshotSummary is a published time-parse snapshot for the cohort
- * viewer's snapshot picker.
- */
-export interface TimeParseSnapshotSummary {
-    readonly id: string;
-    readonly cutoff: string;
-    readonly window_start?: string;
-    readonly lookback_days: number;
-    readonly published_at: string;
 }
 
 // From chroniclesdk/user.go

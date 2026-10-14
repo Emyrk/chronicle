@@ -1,22 +1,33 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useTimeParseCohort, useTimeParseCohortBuckets, useTimeParseSnapshots } from "@/api/rankingsQueries";
-import type { TimeParseCohortBucket, TimeParseCohortKind, TimeParseSnapshotSummary } from "@/api/typesGenerated";
+import {
+  useTimeParseCohort,
+  useTimeParseCohortBuckets,
+  type TimeParseCohortPeriod,
+} from "@/api/rankingsQueries";
+import type { TimeParseCohortBucket, TimeParseCohortKind } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
 import { ChoiceChips, CohortMessage, CohortSummaryStrip, FilterSelect, type SelectOption } from "./CohortChrome";
 import { CohortDistribution } from "./CohortDistribution";
 import { CohortTable, type CohortTableRow } from "./CohortTable";
 import { formatClock, summarizeCohort, tierCutoffs } from "./cohortStats";
 
-/** Matches parsepolicy.DefaultLookbackDays, the window instance pages score against. */
-const DEFAULT_LOOKBACK_DAYS = 60;
+const DEFAULT_PERIOD: TimeParseCohortPeriod = "60d";
+const PERIOD_OPTIONS: readonly SelectOption[] = [
+  { value: "30d", label: "30 days" },
+  { value: "60d", label: "60 days" },
+  { value: "90d", label: "90 days" },
+  { value: "180d", label: "180 days" },
+  { value: "all", label: "All time" },
+];
+const PERIODS = new Set(PERIOD_OPTIONS.map((option) => option.value));
 
 export type UpdateParams = (changes: Record<string, string>) => void;
 
-function snapshotLabel(snapshot: TimeParseSnapshotSummary): string {
-  const date = new Date(snapshot.cutoff).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
-  const window = snapshot.lookback_days === 0 ? "all time" : `${snapshot.lookback_days} days`;
-  return `${date} · ${window}`;
+function isUTCDate(value: string | null): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function sizeKey(bucket: TimeParseCohortBucket): string {
@@ -39,10 +50,7 @@ function formatGap(ms: number): string {
   return ms === 0 ? "—" : `+${formatClock(ms)}`;
 }
 
-/**
- * Cohort viewer for kill-time parses: every boss kill (or full clear) in one
- * bucket of a time-parse snapshot, scored against the rest.
- */
+/** Cohort viewer for live kill-time parses in a selected UTC date window. */
 export function TimeCohortView({
   kind,
   params,
@@ -53,15 +61,28 @@ export function TimeCohortView({
   updateParams: UpdateParams;
 }) {
   const isBoss = kind === "boss_kill";
-  const snapshotsQuery = useTimeParseSnapshots();
-  const snapshots = useMemo(() => snapshotsQuery.data ?? [], [snapshotsQuery.data]);
-  const defaultSnapshot = snapshots.find((s) => s.lookback_days === DEFAULT_LOOKBACK_DAYS) ?? snapshots[0];
-  const snapshotId = params.get("snapshot") ?? defaultSnapshot?.id ?? "";
+  const defaultDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const requestedDate = params.get("date");
+  const date = isUTCDate(requestedDate) ? requestedDate : defaultDate;
+  const requestedPeriod = params.get("period");
+  const period: TimeParseCohortPeriod = PERIODS.has(requestedPeriod ?? "")
+    ? (requestedPeriod as TimeParseCohortPeriod)
+    : DEFAULT_PERIOD;
   const instanceName = params.get("instance") ?? "";
   const encounterName = isBoss ? (params.get("encounter") ?? "") : "";
   const highlight = params.get("highlight") ?? "";
 
-  const bucketsQuery = useTimeParseCohortBuckets(snapshotId);
+  // Materialize defaults in the URL so today's default remains the same when
+  // the view is copied or revisited later. Also clean up legacy snapshot links.
+  useEffect(() => {
+    const changes: Record<string, string> = {};
+    if (requestedDate !== date) changes.date = date;
+    if (requestedPeriod !== period) changes.period = period;
+    if (params.has("snapshot")) changes.snapshot = "";
+    if (Object.keys(changes).length > 0) updateParams(changes);
+  }, [date, params, period, requestedDate, requestedPeriod, updateParams]);
+
+  const bucketsQuery = useTimeParseCohortBuckets(date, period);
   const buckets = useMemo(
     () => (bucketsQuery.data?.buckets ?? []).filter((bucket) => bucket.kind === kind),
     [bucketsQuery.data, kind],
@@ -85,7 +106,8 @@ export function TimeCohortView({
   const selectedSize = sizeBuckets.find((b) => sizeKey(b) === requestedSize) ?? sizeBuckets[0];
 
   const cohortQuery = useTimeParseCohort({
-    snapshotId,
+    date,
+    period,
     kind,
     instanceName,
     encounterName,
@@ -123,17 +145,32 @@ export function TimeCohortView({
 
   const toOptions = (totals: Map<string, number>): SelectOption[] =>
     [...totals.keys()].sort().map((name) => ({ value: name, label: name }));
+  const resetCohortSelection = {
+    instance: "",
+    encounter: "",
+    difficulty: "",
+    max_players: "",
+    highlight: "",
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
+        <label className="flex w-44 min-w-[9rem] flex-col gap-1">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Cutoff date (UTC)</span>
+          <input
+            type="date"
+            value={date}
+            onChange={(event) => updateParams({ date: event.target.value, ...resetCohortSelection })}
+            className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm text-foreground transition-colors hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          />
+        </label>
         <FilterSelect
-          label="Snapshot"
-          value={snapshotId}
-          options={snapshots.map((s) => ({ value: s.id, label: snapshotLabel(s) }))}
-          onChange={(value) => updateParams({ snapshot: value })}
-          placeholder={snapshots.length ? undefined : snapshotsQuery.isLoading ? "Loading…" : "No snapshots"}
-          className="w-52"
+          label="Window"
+          value={period}
+          options={PERIOD_OPTIONS}
+          onChange={(value) => updateParams({ period: value, ...resetCohortSelection })}
+          className="w-36"
         />
         <FilterSelect
           label="Instance"
@@ -169,10 +206,8 @@ export function TimeCohortView({
         )}
       </div>
 
-      {snapshotsQuery.isError || bucketsQuery.isError ? (
-        <CohortMessage>Couldn't load time-parse snapshots.</CohortMessage>
-      ) : !snapshotsQuery.isLoading && snapshots.length === 0 ? (
-        <CohortMessage>No time-parse snapshots have been published yet.</CohortMessage>
+      {bucketsQuery.isError ? (
+        <CohortMessage>Couldn't load time-parse cohorts.</CohortMessage>
       ) : !instanceName ? (
         buckets.length > 0 ? (
           <ChoiceChips
@@ -181,7 +216,7 @@ export function TimeCohortView({
             onChoose={(value) => updateParams({ instance: value })}
           />
         ) : (
-          <CohortMessage>{bucketsQuery.isLoading || snapshotsQuery.isLoading ? "Loading…" : "This snapshot has no runs."}</CohortMessage>
+          <CohortMessage>{bucketsQuery.isLoading ? "Loading…" : "No runs in this date window."}</CohortMessage>
         )
       ) : isBoss && !encounterName ? (
         <ChoiceChips

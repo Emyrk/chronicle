@@ -12,7 +12,6 @@ import type {
   TimeParseCohortBucketsResponse,
   TimeParseCohortKind,
   TimeParseCohortResponse,
-  TimeParseSnapshotSummary,
   CohortDebugResponse,
   CharacterParseHistoryResponse,
   CharacterPerformanceResponse,
@@ -386,28 +385,25 @@ export function useInstanceParses(params: {
 }
 
 
-export function useTimeParseSnapshots() {
-  return useQuery({
-    queryKey: ["rankings", "time-parse-snapshots"],
-    queryFn: () => fetchJSON<TimeParseSnapshotSummary[]>("/api/v1/rankings/time-parse-snapshots"),
-    staleTime: RANKINGS_STALE_TIME,
-  });
-}
+export type TimeParseCohortPeriod = "30d" | "60d" | "90d" | "180d" | "all";
 
-export function useTimeParseCohortBuckets(snapshotId: string) {
+export function useTimeParseCohortBuckets(date: string, period: TimeParseCohortPeriod) {
+  const searchParams = new URLSearchParams({ date, period });
+
   return useQuery({
-    queryKey: ["rankings", "time-parse-cohort-buckets", snapshotId],
+    queryKey: ["rankings", "time-parse-cohort-buckets", date, period],
     queryFn: () =>
       fetchJSON<TimeParseCohortBucketsResponse>(
-        `/api/v1/rankings/time-parse-snapshots/${encodeURIComponent(snapshotId)}/buckets`,
+        `/api/v1/rankings/time-parse-cohorts/buckets?${searchParams.toString()}`,
       ),
     staleTime: RANKINGS_STALE_TIME,
-    enabled: !!snapshotId,
+    enabled: !!date,
   });
 }
 
 export function useTimeParseCohort(params: {
-  snapshotId: string;
+  date: string;
+  period: TimeParseCohortPeriod;
   kind: TimeParseCohortKind;
   instanceName: string;
   encounterName: string;
@@ -415,6 +411,8 @@ export function useTimeParseCohort(params: {
   maxPlayers: number | undefined;
 }) {
   const searchParams = new URLSearchParams({
+    date: params.date,
+    period: params.period,
     kind: params.kind,
     instance_name: params.instanceName,
     difficulty: params.difficulty,
@@ -426,12 +424,12 @@ export function useTimeParseCohort(params: {
     queryKey: ["rankings", "time-parse-cohort", params],
     queryFn: () =>
       fetchJSON<TimeParseCohortResponse>(
-        `/api/v1/rankings/time-parse-snapshots/${encodeURIComponent(params.snapshotId)}/cohort?${searchParams.toString()}`,
+        `/api/v1/rankings/time-parse-cohorts/cohort?${searchParams.toString()}`,
       ),
     staleTime: RANKINGS_STALE_TIME,
     placeholderData: keepPreviousData,
     enabled:
-      !!params.snapshotId &&
+      !!params.date &&
       !!params.instanceName &&
       params.maxPlayers !== undefined &&
       (params.kind === "clear_time" || !!params.encounterName),

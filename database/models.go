@@ -2123,19 +2123,6 @@ type Tenant struct {
 	AdsEnabled          bool               `db:"ads_enabled" json:"ads_enabled"`
 }
 
-type TimeParseBossKillMember struct {
-	ID             uuid.UUID          `db:"id" json:"id"`
-	SnapshotID     uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
-	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
-	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	DurationMs     int64              `db:"duration_ms" json:"duration_ms"`
-	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
-}
-
 type TimeParseBossKillMembership struct {
 	ID             uuid.UUID          `db:"id" json:"id"`
 	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
@@ -2152,18 +2139,6 @@ type TimeParseBossKillMembership struct {
 	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 }
 
-type TimeParseClearTimeMember struct {
-	ID             uuid.UUID          `db:"id" json:"id"`
-	SnapshotID     uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
-	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
-	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	DurationMs     int64              `db:"duration_ms" json:"duration_ms"`
-	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
-}
-
 type TimeParseClearTimeMembership struct {
 	ID             uuid.UUID          `db:"id" json:"id"`
 	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
@@ -2177,22 +2152,6 @@ type TimeParseClearTimeMembership struct {
 	MaxPlayers     int16              `db:"max_players" json:"max_players"`
 	DurationMs     int64              `db:"duration_ms" json:"duration_ms"`
 	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
-}
-
-type TimeParseSnapshot struct {
-	ID                uuid.UUID          `db:"id" json:"id"`
-	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	Cutoff            pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
-	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
-	LookbackDays      int32              `db:"lookback_days" json:"lookback_days"`
-	PolicyVersion     int16              `db:"policy_version" json:"policy_version"`
-	QueryVersion      int16              `db:"query_version" json:"query_version"`
-	Status            string             `db:"status" json:"status"`
-	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	PublishedAt       pgtype.Timestamptz `db:"published_at" json:"published_at"`
-	SourceRowCount    int64              `db:"source_row_count" json:"source_row_count"`
-	SourceWatermark   pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
-	SourceFingerprint int64              `db:"source_fingerprint" json:"source_fingerprint"`
 }
 
 type User struct {

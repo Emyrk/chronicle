@@ -5,7 +5,7 @@ import {
   bossKillParsesByEncounter,
   buildEncounterKillTimeComparisonRows,
   killTimePercentile,
-  mapSnapshotBossParses,
+  mapTimeBossParses,
   resolveEncounterParseScore,
   summarizeEncounterKillTimes,
 } from "./encounterKillTimePopulation";
@@ -97,7 +97,7 @@ describe("averageKillTimePercentile", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Snapshot-backed parse mapping
+// Live time-parse mapping
 // ---------------------------------------------------------------------------
 
 function makeTimeParsesResponse(
@@ -105,7 +105,6 @@ function makeTimeParsesResponse(
 ): InstanceTimeParsesResponse {
   return {
     available: true,
-    snapshot_id: "00000000-0000-0000-0000-000000000001",
     cutoff: "2026-07-01T00:00:00Z",
     lookback_days: 60,
     policy_version: 1,
@@ -116,7 +115,7 @@ function makeTimeParsesResponse(
 }
 
 describe("bossKillParsesByEncounter", () => {
-  it("returns null when snapshot is unavailable", () => {
+  it("returns null when time parses are unavailable", () => {
     expect(bossKillParsesByEncounter(undefined)).toBeNull();
     expect(bossKillParsesByEncounter(makeTimeParsesResponse({ available: false }))).toBeNull();
   });
@@ -135,10 +134,10 @@ describe("bossKillParsesByEncounter", () => {
   });
 });
 
-describe("mapSnapshotBossParses", () => {
-  it("returns null when snapshot is unavailable", () => {
-    expect(mapSnapshotBossParses(undefined)).toBeNull();
-    expect(mapSnapshotBossParses(makeTimeParsesResponse({ available: false }))).toBeNull();
+describe("mapTimeBossParses", () => {
+  it("returns null when time parses are unavailable", () => {
+    expect(mapTimeBossParses(undefined)).toBeNull();
+    expect(mapTimeBossParses(makeTimeParsesResponse({ available: false }))).toBeNull();
   });
 
   it("maps scored bosses by encounter name", () => {
@@ -149,7 +148,7 @@ describe("mapSnapshotBossParses", () => {
       ],
     });
 
-    const result = mapSnapshotBossParses(resp);
+    const result = mapTimeBossParses(resp);
     expect(result).not.toBeNull();
     expect(result!.get("Lucifron")).toEqual({ displayScore: 86, sampleSize: 50, status: "scored" });
     expect(result!.get("Magmadar")).toEqual({ displayScore: 72, sampleSize: 50, status: "scored" });
@@ -162,42 +161,42 @@ describe("mapSnapshotBossParses", () => {
       ],
     });
 
-    const result = mapSnapshotBossParses(resp);
+    const result = mapTimeBossParses(resp);
     expect(result).not.toBeNull();
     expect(result!.get("Lucifron")).toBeNull();
   });
 });
 
 describe("resolveEncounterParseScore", () => {
-  it("returns display score when snapshot has a scored boss", () => {
-    const snapshotParses = new Map([
+  it("returns display score when time-parse response has a scored boss", () => {
+    const timeParses = new Map([
       ["Lucifron", { displayScore: 86, sampleSize: 50, status: "scored" }],
     ]);
-    expect(resolveEncounterParseScore(snapshotParses, "Lucifron")).toBe(86);
+    expect(resolveEncounterParseScore(timeParses, "Lucifron")).toBe(86);
   });
 
-  it("returns null when snapshot is null (unavailable)", () => {
+  it("returns null when time parses are null (unavailable)", () => {
     expect(resolveEncounterParseScore(null, "Lucifron")).toBeNull();
   });
 
-  it("returns null when boss is missing from snapshot", () => {
-    const snapshotParses = new Map([
+  it("returns null when boss is missing from time parses", () => {
+    const timeParses = new Map([
       ["Magmadar", { displayScore: 72, sampleSize: 50, status: "scored" }],
     ]);
-    expect(resolveEncounterParseScore(snapshotParses, "Lucifron")).toBeNull();
+    expect(resolveEncounterParseScore(timeParses, "Lucifron")).toBeNull();
   });
 
   it("returns null when boss entry is null (sample_too_small)", () => {
-    const snapshotParses = new Map<string, { displayScore: number; sampleSize: number; status: string } | null>([
+    const timeParses = new Map<string, { displayScore: number; sampleSize: number; status: string } | null>([
       ["Lucifron", null],
     ]);
-    expect(resolveEncounterParseScore(snapshotParses, "Lucifron")).toBeNull();
+    expect(resolveEncounterParseScore(timeParses, "Lucifron")).toBeNull();
   });
 
-  it("uses snapshot scores instead of client-side cohort percentiles", () => {
+  it("uses server scores instead of client-side cohort percentiles", () => {
     // Simulate: client-side cohort would calculate percentile = 60,
-    // but snapshot says display_score = 92. The snapshot should win.
-    const snapshotParses = new Map([
+    // but the API says display_score = 92. The API score should win.
+    const timeParses = new Map([
       ["Lucifron", { displayScore: 92, sampleSize: 100, status: "scored" }],
     ]);
 
@@ -205,7 +204,7 @@ describe("resolveEncounterParseScore", () => {
     const clientSidePercentile = killTimePercentile(250_000, [100_000, 200_000, 300_000, 400_000, 500_000]);
     expect(clientSidePercentile).toBe(60); // Client would say 60
 
-    // Snapshot wins — resolveEncounterParseScore returns the snapshot score
-    expect(resolveEncounterParseScore(snapshotParses, "Lucifron")).toBe(92);
+    // The API score wins — resolveEncounterParseScore returns it
+    expect(resolveEncounterParseScore(timeParses, "Lucifron")).toBe(92);
   });
 });
