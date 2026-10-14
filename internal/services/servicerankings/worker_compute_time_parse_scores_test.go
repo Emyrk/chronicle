@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/parseargs"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/google/uuid"
@@ -34,59 +35,60 @@ func TestWorkerComputeTimeParseScoresScopesAndLocking(t *testing.T) {
 	_, err = pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1,$2,'Guild One'),($3,$2,'Guild Two')", guild1, realmID, guild2)
 	require.NoError(t, err)
 	start := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
-	encounter := func() []timeParseEncounterOpts {
-		return []timeParseEncounterOpts{{name: "Ragnaros", killType: database.KillTypeClean, boss: true, startTime: start.Add(time.Hour), endTime: start.Add(2 * time.Hour)}}
+	insert := func(realm uuid.UUID, guild uuid.NullUUID, duration time.Duration, runStart time.Time) uuid.UUID {
+		encounters := []timeParseEncounterOpts{{name: "Ragnaros", killType: database.KillTypeClean, boss: true, startTime: runStart.Add(time.Hour), endTime: runStart.Add(2 * time.Hour)}}
+		return insertTimeParseInstance(t, pool, store, realm, timeParseInstanceOpts{instanceName: "Molten Core", difficultyName: "Normal", maxPlayers: 40, qualified: true, durationMs: duration.Milliseconds(), startTime: runStart, guildID: guild, encounters: encounters})
 	}
-	insert := func(realm uuid.UUID, guild uuid.NullUUID, duration time.Duration) uuid.UUID {
-		return insertTimeParseInstance(t, pool, store, realm, timeParseInstanceOpts{instanceName: "Molten Core", difficultyName: "Normal", maxPlayers: 40, qualified: true, durationMs: duration.Milliseconds(), startTime: start, guildID: guild, encounters: encounter()})
-	}
-	target := insert(realmID, uuid.NullUUID{UUID: guild1, Valid: true}, 50*time.Minute)
+	target := insert(realmID, uuid.NullUUID{UUID: guild1, Valid: true}, 50*time.Minute, start)
 	for i := 0; i < 5; i++ {
-		insert(realmID, uuid.NullUUID{UUID: guild1, Valid: true}, time.Duration(100+i*5)*time.Minute)
-	}
-	for i := 0; i < 5; i++ {
-		insert(realmID, uuid.NullUUID{UUID: guild2, Valid: true}, time.Duration(10+i*5)*time.Minute)
+		runStart := start.AddDate(0, 0, -(i + 1))
+		insert(realmID, uuid.NullUUID{UUID: guild1, Valid: true}, time.Duration(100+i*5)*time.Minute, runStart)
 	}
 	for i := 0; i < 5; i++ {
-		insert(realm2, uuid.NullUUID{}, time.Duration(20+i*5)*time.Minute)
+		runStart := start.AddDate(0, 0, -(i + 1))
+		insert(realmID, uuid.NullUUID{UUID: guild2, Valid: true}, time.Duration(10+i*5)*time.Minute, runStart)
 	}
+	for i := 0; i < 5; i++ {
+		runStart := start.AddDate(0, 0, -(i + 1))
+		insert(realm2, uuid.NullUUID{}, time.Duration(20+i*5)*time.Minute, runStart)
+	}
+	insert(realm2, uuid.NullUUID{}, 5*time.Minute, start.AddDate(0, 0, -61))
+	insert(realm2, uuid.NullUUID{}, 5*time.Minute, start.Add(time.Hour))
 
 	refreshTimeParseMemberships(t, ctx, store)
 	worker := &servicerankings.WorkerComputeTimeParseScores{Store: store, Logger: slog.Default()}
-	job := &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: target, TenantID: tenantID, Force: true, CutoffDate: "2026-10-14"}}
+	job := &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: target, TenantID: tenantID, Force: true}}
 	require.NoError(t, worker.Work(ctx, job))
-	receipt, err := store.GetTimeParseScoreReceiptForContract(ctx, database.GetTimeParseScoreReceiptForContractParams{TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
+	score, err := store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
 	require.NoError(t, err)
-	rows, err := store.ListTimeParseScoreResultsForReceipt(ctx, receipt.ID)
+	assert.True(t, score.Cutoff.Time.Equal(start))
+	assert.True(t, score.WindowStart.Time.Equal(start.AddDate(0, 0, -int(servicerankings.TimeParseScoreLookbackDays))))
+	rows, err := store.ListTimeParseBossScoresForScore(ctx, score.ID)
 	require.NoError(t, err)
-	require.Len(t, rows, 6)
-	clearSamples := map[string]int32{}
-	clearScores := map[string]int16{}
-	for _, row := range rows {
-		if row.MetricKind == "clear_time" {
-			clearSamples[row.Scope], clearScores[row.Scope] = row.SampleSize, row.DisplayScore
-		}
-	}
-	assert.Equal(t, int32(15), clearSamples[servicerankings.TimeParseScopeServer])
-	assert.Equal(t, int32(10), clearSamples[servicerankings.TimeParseScopeRealm])
-	assert.Equal(t, int32(5), clearSamples[servicerankings.TimeParseScopeGuild])
-	assert.Greater(t, clearScores[servicerankings.TimeParseScopeGuild], clearScores[servicerankings.TimeParseScopeRealm])
-	assert.Greater(t, clearScores[servicerankings.TimeParseScopeRealm], clearScores[servicerankings.TimeParseScopeServer])
+	require.Len(t, rows, 1)
+	assert.Equal(t, int32(15), score.ClearServerSampleSize.Int32)
+	assert.Equal(t, int32(10), score.ClearRealmSampleSize.Int32)
+	assert.Equal(t, int32(5), score.ClearGuildSampleSize.Int32)
+	assert.Greater(t, score.ClearGuildDisplayScore.Int16, score.ClearRealmDisplayScore.Int16)
+	assert.Greater(t, score.ClearRealmDisplayScore.Int16, score.ClearServerDisplayScore.Int16)
+	assert.Equal(t, int32(15), rows[0].ServerSampleSize)
+	assert.Equal(t, int32(10), rows[0].RealmSampleSize)
+	assert.Equal(t, int32(5), rows[0].GuildSampleSize.Int32)
 
-	insert(realm2, uuid.NullUUID{}, 200*time.Minute)
+	insert(realm2, uuid.NullUUID{}, 200*time.Minute, start.Add(-24*time.Hour))
 	refreshTimeParseMemberships(t, ctx, store)
-	// Missing-only work is locked and leaves the successful receipt untouched.
+	// Missing-only work is locked and leaves the successful score untouched.
 	job.Args.Force = false
 	require.NoError(t, worker.Work(ctx, job))
-	locked, err := store.GetTimeParseScoreReceiptForContract(ctx, database.GetTimeParseScoreReceiptForContractParams{TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
+	locked, err := store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
 	require.NoError(t, err)
-	assert.Equal(t, receipt.ID, locked.ID)
+	assert.Equal(t, score.ID, locked.ID)
 
 	job.Args.Force = true
 	require.NoError(t, worker.Work(ctx, job))
-	replaced, err := store.GetTimeParseScoreReceiptForContract(ctx, database.GetTimeParseScoreReceiptForContractParams{TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
+	replaced, err := store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
 	require.NoError(t, err)
-	assert.NotEqual(t, receipt.ID, replaced.ID)
+	assert.NotEqual(t, score.ID, replaced.ID)
 }
 
 func TestWorkerComputeTimeParseScoresPersistsSampleTooSmall(t *testing.T) {
@@ -98,16 +100,16 @@ func TestWorkerComputeTimeParseScoresPersistsSampleTooSmall(t *testing.T) {
 	target := insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{instanceName: "Onyxia's Lair", difficultyName: "Normal", maxPlayers: 40, qualified: true, durationMs: int64(time.Hour / time.Millisecond), startTime: start})
 	refreshTimeParseMemberships(t, ctx, store)
 	worker := &servicerankings.WorkerComputeTimeParseScores{Store: store, Logger: slog.Default()}
-	require.NoError(t, worker.Work(ctx, &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: target, TenantID: tenantID, Force: true, CutoffDate: "2026-10-14"}}))
-	receipt, err := store.GetTimeParseScoreReceiptForContract(ctx, database.GetTimeParseScoreReceiptForContractParams{TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
+	require.NoError(t, worker.Work(ctx, &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: target, TenantID: tenantID, Force: true}}))
+	score, err := store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
 	require.NoError(t, err)
-	rows, err := store.ListTimeParseScoreResultsForReceipt(ctx, receipt.ID)
+	rows, err := store.ListTimeParseBossScoresForScore(ctx, score.ID)
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
-	for _, row := range rows {
-		assert.Equal(t, string(timeparsepolicy.StatusSampleTooSmall), row.Status)
-		assert.Zero(t, row.SampleSize)
-	}
+	assert.Empty(t, rows)
+	assert.Equal(t, string(timeparsepolicy.StatusSampleTooSmall), score.ClearServerStatus.String)
+	assert.Equal(t, string(timeparsepolicy.StatusSampleTooSmall), score.ClearRealmStatus.String)
+	assert.Zero(t, score.ClearServerSampleSize.Int32)
+	assert.Zero(t, score.ClearRealmSampleSize.Int32)
 }
 
 func TestWorkerComputeTimeParseScoresRejectsMismatchedTenant(t *testing.T) {
@@ -125,10 +127,10 @@ func TestWorkerComputeTimeParseScoresRejectsMismatchedTenant(t *testing.T) {
 
 	worker := &servicerankings.WorkerComputeTimeParseScores{Store: store, Logger: slog.Default()}
 	err := worker.Work(ctx, &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{
-		InstanceID: target, TenantID: otherTenantID, Force: true, CutoffDate: "2026-10-14",
+		InstanceID: target, TenantID: otherTenantID, Force: true,
 	}})
 	require.ErrorContains(t, err, "outside tenant")
-	_, err = store.GetTimeParseScoreReceiptForContract(ctx, database.GetTimeParseScoreReceiptForContractParams{
+	_, err = store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{
 		TenantID: otherTenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays,
 		PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 	})
@@ -148,7 +150,7 @@ func TestWorkerComputeTimeParseScoresSerializesConcurrentReplacement(t *testing.
 	refreshTimeParseMemberships(t, ctx, store)
 
 	worker := &servicerankings.WorkerComputeTimeParseScores{Store: store, Logger: slog.Default()}
-	args := parseargs.ArgsComputeTimeParseScores{InstanceID: target, TenantID: tenantID, Force: true, CutoffDate: "2026-10-14"}
+	args := parseargs.ArgsComputeTimeParseScores{InstanceID: target, TenantID: tenantID, Force: true}
 	var group errgroup.Group
 	for range 2 {
 		group.Go(func() error {
@@ -157,14 +159,17 @@ func TestWorkerComputeTimeParseScoresSerializesConcurrentReplacement(t *testing.
 	}
 	require.NoError(t, group.Wait())
 
-	receipt, err := store.GetTimeParseScoreReceiptForContract(ctx, database.GetTimeParseScoreReceiptForContractParams{
+	score, err := store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{
 		TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays,
 		PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 	})
 	require.NoError(t, err)
-	rows, err := store.ListTimeParseScoreResultsForReceipt(ctx, receipt.ID)
+	rows, err := store.ListTimeParseBossScoresForScore(ctx, score.ID)
 	require.NoError(t, err)
-	assert.Equal(t, int(receipt.ResultCount), len(rows))
+	assert.Empty(t, rows)
+	var scoreCount int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM time_parse_scores WHERE tenant_id = $1 AND instance_id = $2", tenantID, target).Scan(&scoreCount))
+	assert.Equal(t, 1, scoreCount)
 }
 
 func TestWorkerComputeTimeParseScoresSkipsUnqualifiedClear(t *testing.T) {
@@ -181,18 +186,23 @@ func TestWorkerComputeTimeParseScoresSkipsUnqualifiedClear(t *testing.T) {
 
 	worker := &servicerankings.WorkerComputeTimeParseScores{Store: store, Logger: slog.Default()}
 	require.NoError(t, worker.Work(ctx, &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{
-		InstanceID: target, TenantID: tenantID, Force: true, CutoffDate: "2026-10-14",
+		InstanceID: target, TenantID: tenantID, Force: true,
 	}}))
-	receipt, err := store.GetTimeParseScoreReceiptForContract(ctx, database.GetTimeParseScoreReceiptForContractParams{
+	score, err := store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{
 		TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays,
 		PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 	})
 	require.NoError(t, err)
-	rows, err := store.ListTimeParseScoreResultsForReceipt(ctx, receipt.ID)
+	rows, err := store.ListTimeParseBossScoresForScore(ctx, score.ID)
 	require.NoError(t, err)
 	assert.Empty(t, rows)
-	assert.Zero(t, receipt.SourceCount)
-	assert.Zero(t, receipt.ResultCount)
+	resp, body := callTimeParsesWithContext(t, servicetenant.WithTenantID(ctx, tenantID), store, target.String(), "")
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.True(t, body.Available)
+	assert.Equal(t, "no_time_data", body.Scopes[servicerankings.TimeParseScopeServer].Reason)
+	assert.False(t, score.ClearDurationMs.Valid)
+	assert.False(t, score.ClearServerStatus.Valid)
+	assert.False(t, score.ClearRealmStatus.Valid)
 }
 
 func refreshTimeParseMemberships(t *testing.T, ctx context.Context, store database.Store) {
@@ -221,11 +231,11 @@ func TestWorkerBackfillTimeParseScoresMissingOnlyBatchAndTenant(t *testing.T) {
 	_ = makeRun(otherRealm)
 	refreshTimeParseMemberships(t, ctx, store)
 	compute := &servicerankings.WorkerComputeTimeParseScores{Store: store, Logger: slog.Default()}
-	require.NoError(t, compute.Work(ctx, &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: first, TenantID: tenantID, Force: true, CutoffDate: "2026-10-14"}}))
+	require.NoError(t, compute.Work(ctx, &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: first, TenantID: tenantID, Force: true}}))
 
 	q := setupParseScoreQueueForTest(t, pool)
 	worker := &servicerankings.WorkerBackfillTimeParseScores{Store: store, Queue: q, Logger: slog.Default()}
-	require.NoError(t, worker.Work(ctx, &river.Job[servicerankings.ArgsBackfillTimeParseScores]{Args: servicerankings.ArgsBackfillTimeParseScores{TenantID: &tenantID, BatchSize: 1, CutoffDate: "2026-10-14"}}))
+	require.NoError(t, worker.Work(ctx, &river.Job[servicerankings.ArgsBackfillTimeParseScores]{Args: servicerankings.ArgsBackfillTimeParseScores{TenantID: &tenantID, BatchSize: 1}}))
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM river_job WHERE kind = $1 AND args->>'tenant_id' = $2`, parseargs.KindComputeTimeParseScores, tenantID.String()).Scan(&count))
 	assert.Equal(t, 1, count)

@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// InstanceTimeParsesResponse contains live time-based parse scores for a
+// InstanceTimeParsesResponse contains locked time-based parse scores for a
 // specific instance, bounded by the reported UTC cutoff and lookback window.
 type InstanceTimeParsesResponse struct {
 	Available    bool       `json:"available"`
@@ -71,6 +71,21 @@ type TimeParseAverage struct {
 	DisplayScore int     `json:"display_score"`
 	Killed       int     `json:"killed"`
 	Selected     int     `json:"selected"`
+}
+
+// AdminBackfillTimeParseScoresRequest configures one bounded historical score dispatcher job.
+type AdminBackfillTimeParseScoresRequest struct {
+	TenantID      string `json:"tenant_id,omitempty"`
+	StartedAfter  string `json:"started_after,omitempty"`
+	StartedBefore string `json:"started_before,omitempty"`
+	BatchSize     int32  `json:"batch_size,omitempty"`
+	Force         bool   `json:"force,omitempty"`
+}
+
+// AdminBackfillTimeParseScoresResponse identifies the enqueued dispatcher job.
+type AdminBackfillTimeParseScoresResponse struct {
+	JobID    int64  `json:"job_id"`
+	JobState string `json:"job_state"`
 }
 
 // TimeParseCohortKind selects which time-parse population a cohort viewer

@@ -34,28 +34,11 @@ type WorkerComputeTimeParseScores struct {
 	Logger *slog.Logger
 }
 
-func lockedTimeParseCutoff(value string, now time.Time) (time.Time, error) {
-	if value == "" {
-		now = now.UTC()
-		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), nil
-	}
-	parsed, err := time.Parse("2006-01-02", value)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("cutoff_date must use YYYY-MM-DD: %w", err)
-	}
-	return parsed.UTC(), nil
-}
-
 func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[parseargs.ArgsComputeTimeParseScores]) error {
 	args := job.Args
 	if args.TenantID != uuid.Nil {
 		ctx = servicetenant.WithTenantID(ctx, args.TenantID)
 	}
-	cutoff, err := lockedTimeParseCutoff(args.CutoffDate, time.Now())
-	if err != nil {
-		return river.JobCancel(err)
-	}
-	windowStart := cutoff.AddDate(0, 0, -int(TimeParseScoreLookbackDays))
 	policyVersion := int16(timeparsepolicy.PolicyVersion)
 	queryVersion := timeparsepolicy.QueryVersion
 
@@ -64,7 +47,7 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 			return fmt.Errorf("acquire time parse score lock: %w", err)
 		}
 		if !args.Force {
-			_, err = tx.GetTimeParseScoreReceiptForContract(ctx, database.GetTimeParseScoreReceiptForContractParams{
+			_, err := tx.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{
 				TenantID: args.TenantID, InstanceID: args.InstanceID, LookbackDays: TimeParseScoreLookbackDays,
 				PolicyVersion: policyVersion, QueryVersion: queryVersion,
 			})
@@ -72,7 +55,7 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 				return nil
 			}
 			if !errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("get existing time parse receipt: %w", err)
+				return fmt.Errorf("get existing time parse score: %w", err)
 			}
 		}
 
@@ -85,6 +68,11 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 			}
 			return fmt.Errorf("get time parse scoring instance: %w", err)
 		}
+		if !instance.StartTime.Valid {
+			return river.JobCancel(fmt.Errorf("instance %s has no start time", args.InstanceID))
+		}
+		cutoff := instance.StartTime.Time.UTC()
+		windowStart := cutoff.AddDate(0, 0, -int(TimeParseScoreLookbackDays))
 		speedrun, speedrunErr := tx.GetInstanceSpeedrun(ctx, args.InstanceID)
 		if speedrunErr != nil && !errors.Is(speedrunErr, pgx.ErrNoRows) {
 			return fmt.Errorf("get instance speedrun: %w", speedrunErr)
@@ -94,25 +82,50 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 			return fmt.Errorf("get boss kill times: %w", err)
 		}
 
-		type scoreRow struct {
-			scope, metricKind, encounterName string
-			encounterID                      uuid.NullUUID
-			duration                         int64
-			result                           timeparsepolicy.ScoreResult
+		type scopedScoreResults struct {
+			server timeparsepolicy.ScoreResult
+			realm  timeparsepolicy.ScoreResult
+			guild  *timeparsepolicy.ScoreResult
 		}
+		type bossScoreRow struct {
+			encounterID   uuid.UUID
+			encounterName string
+			duration      int64
+			results       scopedScoreResults
+		}
+		setScopeResult := func(results *scopedScoreResults, scope string, result timeparsepolicy.ScoreResult) {
+			switch scope {
+			case TimeParseScopeServer:
+				results.server = result
+			case TimeParseScopeRealm:
+				results.realm = result
+			case TimeParseScopeGuild:
+				results.guild = &result
+			}
+		}
+
 		scopes := []string{TimeParseScopeServer, TimeParseScopeRealm}
 		if instance.GuildID.Valid {
 			scopes = append(scopes, TimeParseScopeGuild)
 		}
-		rows := make([]scoreRow, 0, len(scopes)*(len(bossKills)+1))
+		bossRows := make([]bossScoreRow, 0, len(bossKills))
+		for _, kill := range bossKills {
+			if kill.DurationMs > 0 {
+				bossRows = append(bossRows, bossScoreRow{encounterID: kill.EncounterID, encounterName: kill.EncounterName, duration: kill.DurationMs})
+			}
+		}
 		cutoffDB := pgtype.Timestamptz{Time: cutoff, Valid: true}
 		windowDB := pgtype.Timestamptz{Time: windowStart, Valid: true}
 		guildFilter := uuid.Nil
 		if instance.GuildID.Valid {
 			guildFilter = instance.GuildID.UUID
 		}
+		var clearResults *scopedScoreResults
+		if speedrunErr == nil && speedrun.Qualified && speedrun.RankedDurationMs.Valid && speedrun.RankedDurationMs.Int64 > 0 {
+			clearResults = &scopedScoreResults{}
+		}
 		for _, scope := range scopes {
-			if speedrunErr == nil && speedrun.Qualified && speedrun.RankedDurationMs.Valid && speedrun.RankedDurationMs.Int64 > 0 {
+			if clearResults != nil {
 				cohort, cohortErr := tx.GetScopedTimeParseClearTimeCohort(ctx, database.GetScopedTimeParseClearTimeCohortParams{
 					TenantID: args.TenantID, PolicyVersion: policyVersion, QueryVersion: queryVersion,
 					Cutoff: cutoffDB, WindowStart: windowDB, ExcludeRunID: instance.RunID,
@@ -123,65 +136,92 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 					return fmt.Errorf("load %s clear cohort: %w", scope, cohortErr)
 				}
 				result, _ := timeparsepolicy.ScoreTime(cohort, speedrun.RankedDurationMs.Int64)
-				rows = append(rows, scoreRow{scope: scope, metricKind: "clear_time", duration: speedrun.RankedDurationMs.Int64, result: result})
+				setScopeResult(clearResults, scope, result)
 			}
-			for _, kill := range bossKills {
-				if kill.DurationMs <= 0 {
-					continue
-				}
+			for index := range bossRows {
+				row := &bossRows[index]
 				cohort, cohortErr := tx.GetScopedTimeParseBossKillCohort(ctx, database.GetScopedTimeParseBossKillCohortParams{
 					TenantID: args.TenantID, PolicyVersion: policyVersion, QueryVersion: queryVersion,
 					Cutoff: cutoffDB, WindowStart: windowDB, ExcludeRunID: instance.RunID,
-					InstanceName: instance.InstanceName, EncounterName: kill.EncounterName,
+					InstanceName: instance.InstanceName, EncounterName: row.encounterName,
 					DifficultyName: instance.DifficultyName, MaxPlayers: int16(instance.MaxPlayers),
 					Scope: scope, RealmID: instance.RealmID, GuildID: guildFilter,
 				})
 				if cohortErr != nil {
-					return fmt.Errorf("load %s boss cohort %q: %w", scope, kill.EncounterName, cohortErr)
+					return fmt.Errorf("load %s boss cohort %q: %w", scope, row.encounterName, cohortErr)
 				}
-				result, _ := timeparsepolicy.ScoreTime(cohort, kill.DurationMs)
-				rows = append(rows, scoreRow{scope: scope, metricKind: "boss_kill", encounterID: uuid.NullUUID{UUID: kill.EncounterID, Valid: true}, encounterName: kill.EncounterName, duration: kill.DurationMs, result: result})
+				result, _ := timeparsepolicy.ScoreTime(cohort, row.duration)
+				setScopeResult(&row.results, scope, result)
 			}
 		}
 
-		if err := tx.DeleteTimeParseScoreReceiptForContract(ctx, database.DeleteTimeParseScoreReceiptForContractParams{
+		if err := tx.DeleteTimeParseScoreForContract(ctx, database.DeleteTimeParseScoreForContractParams{
 			TenantID: args.TenantID, InstanceID: args.InstanceID, LookbackDays: TimeParseScoreLookbackDays,
 			PolicyVersion: policyVersion, QueryVersion: queryVersion,
 		}); err != nil {
-			return fmt.Errorf("delete old time parse receipt: %w", err)
+			return fmt.Errorf("delete old time parse score: %w", err)
 		}
-		receipt, err := tx.InsertTimeParseScoreReceipt(ctx, database.InsertTimeParseScoreReceiptParams{
+		clearDuration := pgtype.Int8{}
+		clearServer, clearRealm, clearGuild := nullableLockedScore(nil), nullableLockedScore(nil), nullableLockedScore(nil)
+		if clearResults != nil {
+			clearDuration = pgtype.Int8{Int64: speedrun.RankedDurationMs.Int64, Valid: true}
+			clearServer = nullableLockedScore(&clearResults.server)
+			clearRealm = nullableLockedScore(&clearResults.realm)
+			clearGuild = nullableLockedScore(clearResults.guild)
+		}
+		score, err := tx.InsertTimeParseScore(ctx, database.InsertTimeParseScoreParams{
 			TenantID: args.TenantID, InstanceID: args.InstanceID, RunID: instance.RunID,
-			LogGroupID: uuid.NullUUID{UUID: instance.LogGroupID, Valid: true}, RealmID: instance.RealmID,
-			GuildID: instance.GuildID, Cutoff: cutoffDB, WindowStart: windowDB,
-			LookbackDays: TimeParseScoreLookbackDays, PolicyVersion: policyVersion, QueryVersion: queryVersion,
-			SourceCount: int32(len(bossKills)) + boolInt32(speedrunErr == nil && speedrun.Qualified), ResultCount: int32(len(rows)),
+			LogGroupID: uuid.NullUUID{UUID: instance.LogGroupID, Valid: true}, RealmID: instance.RealmID, GuildID: instance.GuildID,
+			ClearDurationMs:         clearDuration,
+			ClearServerPreciseScore: clearServer.precise, ClearServerDisplayScore: clearServer.display,
+			ClearServerRank: clearServer.rank, ClearServerSampleSize: clearServer.sampleSize, ClearServerStatus: clearServer.status,
+			ClearRealmPreciseScore: clearRealm.precise, ClearRealmDisplayScore: clearRealm.display,
+			ClearRealmRank: clearRealm.rank, ClearRealmSampleSize: clearRealm.sampleSize, ClearRealmStatus: clearRealm.status,
+			ClearGuildPreciseScore: clearGuild.precise, ClearGuildDisplayScore: clearGuild.display,
+			ClearGuildRank: clearGuild.rank, ClearGuildSampleSize: clearGuild.sampleSize, ClearGuildStatus: clearGuild.status,
+			Cutoff: cutoffDB, WindowStart: windowDB, LookbackDays: TimeParseScoreLookbackDays,
+			PolicyVersion: policyVersion, QueryVersion: queryVersion,
 		})
 		if err != nil {
-			return fmt.Errorf("insert time parse receipt: %w", err)
+			return fmt.Errorf("insert time parse score: %w", err)
 		}
-		for _, row := range rows {
-			if err := tx.InsertTimeParseScoreResult(ctx, database.InsertTimeParseScoreResultParams{
-				ReceiptID: receipt.ID, TenantID: args.TenantID, InstanceID: args.InstanceID, RunID: instance.RunID,
-				LogGroupID: uuid.NullUUID{UUID: instance.LogGroupID, Valid: true}, RealmID: instance.RealmID, GuildID: instance.GuildID,
-				Scope: row.scope, MetricKind: row.metricKind, EncounterID: row.encounterID, EncounterName: row.encounterName,
-				DurationMs: row.duration, PreciseScore: row.result.PreciseScore, DisplayScore: int16(row.result.DisplayScore),
-				Rank: int32(row.result.Rank), SampleSize: int32(row.result.SampleSize), Status: string(row.result.Status),
-				Cutoff: cutoffDB, WindowStart: windowDB, LookbackDays: TimeParseScoreLookbackDays,
-				PolicyVersion: policyVersion, QueryVersion: queryVersion,
+		for _, row := range bossRows {
+			guild := nullableLockedScore(row.results.guild)
+			if err := tx.InsertTimeParseBossScore(ctx, database.InsertTimeParseBossScoreParams{
+				TimeParseScoreID: score.ID, EncounterID: row.encounterID, EncounterName: row.encounterName, DurationMs: row.duration,
+				ServerPreciseScore: row.results.server.PreciseScore, ServerDisplayScore: int16(row.results.server.DisplayScore),
+				ServerRank: int32(row.results.server.Rank), ServerSampleSize: int32(row.results.server.SampleSize), ServerStatus: string(row.results.server.Status),
+				RealmPreciseScore: row.results.realm.PreciseScore, RealmDisplayScore: int16(row.results.realm.DisplayScore),
+				RealmRank: int32(row.results.realm.Rank), RealmSampleSize: int32(row.results.realm.SampleSize), RealmStatus: string(row.results.realm.Status),
+				GuildPreciseScore: guild.precise, GuildDisplayScore: guild.display, GuildRank: guild.rank,
+				GuildSampleSize: guild.sampleSize, GuildStatus: guild.status,
 			}); err != nil {
-				return fmt.Errorf("insert time parse score: %w", err)
+				return fmt.Errorf("insert time parse boss score: %w", err)
 			}
 		}
 		return nil
 	}, nil)
 }
 
-func boolInt32(value bool) int32 {
-	if value {
-		return 1
+type nullableScoreColumns struct {
+	precise    pgtype.Float8
+	display    pgtype.Int2
+	rank       pgtype.Int4
+	sampleSize pgtype.Int4
+	status     pgtype.Text
+}
+
+func nullableLockedScore(result *timeparsepolicy.ScoreResult) nullableScoreColumns {
+	if result == nil {
+		return nullableScoreColumns{}
 	}
-	return 0
+	return nullableScoreColumns{
+		precise:    pgtype.Float8{Float64: result.PreciseScore, Valid: true},
+		display:    pgtype.Int2{Int16: int16(result.DisplayScore), Valid: true},
+		rank:       pgtype.Int4{Int32: int32(result.Rank), Valid: true},
+		sampleSize: pgtype.Int4{Int32: int32(result.SampleSize), Valid: true},
+		status:     pgtype.Text{String: string(result.Status), Valid: true},
+	}
 }
 
 const KindBackfillTimeParseScores = "backfill-time-parse-scores"
@@ -189,12 +229,12 @@ const KindBackfillTimeParseScores = "backfill-time-parse-scores"
 // Manually enqueue from River UI with kind "backfill-time-parse-scores" and
 // args {} to dispatch the next 100 missing historical instances across all
 // tenants. Optional args: tenant_id, started_after/started_before (RFC3339),
-// cutoff_date (YYYY-MM-DD), batch_size (max 500), and force.
+// batch_size (max 500), and force. Each instance uses its own start time as
+// the scoring cutoff, with the preceding 60 days as its cohort window.
 type ArgsBackfillTimeParseScores struct {
 	TenantID      *uuid.UUID `json:"tenant_id,omitempty"`
 	StartedAfter  string     `json:"started_after,omitempty"`
 	StartedBefore string     `json:"started_before,omitempty"`
-	CutoffDate    string     `json:"cutoff_date,omitempty"`
 	BatchSize     int32      `json:"batch_size,omitempty"`
 	Force         bool       `json:"force,omitempty"`
 }
@@ -262,7 +302,7 @@ func (w *WorkerBackfillTimeParseScores) Work(ctx context.Context, job *river.Job
 			tenantID = candidate.TenantID.UUID
 		}
 		_, insertErr := w.Queue.Insert(ctx, parseargs.ArgsComputeTimeParseScores{
-			InstanceID: candidate.InstanceID, TenantID: tenantID, Force: job.Args.Force, CutoffDate: job.Args.CutoffDate,
+			InstanceID: candidate.InstanceID, TenantID: tenantID, Force: job.Args.Force,
 		}, nil)
 		if insertErr != nil {
 			w.Logger.Error("enqueue time parse backfill instance", "instance_id", candidate.InstanceID, "error", insertErr)

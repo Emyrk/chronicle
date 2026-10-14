@@ -182,7 +182,7 @@ func insertTimeParseInstance(t *testing.T, pool *pgxpool.Pool, store database.St
 }
 
 // runTimeParseWorker refreshes memberships and computes locked scores.
-func runTimeParseWorker(t *testing.T, ctx context.Context, store database.Store, tenantID uuid.UUID, cutoff time.Time, _ int32) {
+func runTimeParseWorker(t *testing.T, ctx context.Context, store database.Store, tenantID uuid.UUID) {
 	t.Helper()
 	groups, err := store.ListAllWoWLogGroupsWithOwner(ctx)
 	require.NoError(t, err)
@@ -209,7 +209,7 @@ func runTimeParseWorker(t *testing.T, ctx context.Context, store database.Store,
 	}
 	worker := &servicerankings.WorkerComputeTimeParseScores{Store: store, Logger: slog.Default()}
 	for instanceID := range instances {
-		err = worker.Work(ctx, &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: instanceID, TenantID: tenantID, Force: true, CutoffDate: cutoff.UTC().Format("2006-01-02")}})
+		err = worker.Work(ctx, &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: instanceID, TenantID: tenantID, Force: true}})
 		require.NoError(t, err)
 	}
 }
