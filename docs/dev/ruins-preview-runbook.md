@@ -84,6 +84,50 @@ UPDATE wow_servers SET default_dataset_id=(SELECT id FROM datasets WHERE slug='f
 
 No restart needed.
 
+## 4b. Game data (spells, classes)
+
+Without game data the parser stores no spell for any cast
+(`wotlk.Parser.lookupSpell` returns nil on a miss), so cast icons show "?" /
+"Spell 0" and every player class is `UNKNOWN` (class is read from the first
+cast spell's `spell_class_set`).
+
+The proper fix is a WoW Forever game-data snapshot imported with
+`go run ./scripts/dbcdata import-wowdata --snapshot ... --api-url ...`
+(`docs/wow-forever-game-data.md`). The `wowdata` extractor that command
+builds (`github.com/Follen/wowdata`) is gone from GitHub, so on a machine
+without a prebuilt binary the import cannot run. **A Forever game-data
+snapshot from Emyrk replaces this whole section**: import it into the
+`forever` dataset instead of seeding.
+
+Until then, seed only the spells this log uses from prod's spell API:
+
+```bash
+python3 docs/dev/ruins-preview-seed-spells.py \
+  ~/git/warcraft/forever-logs/2026-10-14-halls-of-lordaeron-full-run.txt \
+  | docker exec -i chronicle-postgres psql -U postgres -d chronicle_ruins
+```
+
+(about 550 spells, under a minute). Then:
+
+1. **Restart the backend** (step 2). Spells sit in an in-memory LRU, so rows
+   inserted after a lookup are not seen until restart.
+2. **Reparse** the log; do not re-upload (the same file hash is refused). The
+   dev user is an admin. Every reparse replaces the instance, so the id in
+   step 3's query changes:
+
+   ```bash
+   G=$(docker exec chronicle-postgres psql -U postgres -d chronicle_ruins -At \
+         -c "select id from wow_log_groups limit 1")
+   curl -s -b /tmp/jar "${H[@]}" -H "Content-Type: application/json" \
+     -X POST localhost:4000/api/v1/admin/logs/reparse -d "{\"log_ids\":[\"$G\"]}"
+   ```
+
+Check: `select name, class from log_instance_players` shows real classes
+(Jolly SHAMAN, Ragebar PALADIN, Skooma WARLOCK, Moon/Aelynda DRUID).
+
+The seed fills only name, icon id, school and class set; spell tooltips and
+icons still come from prod through the router.
+
 ## 5. Split router (:4999)
 
 ```bash
@@ -92,7 +136,9 @@ node docs/dev/ruins-preview-router.mjs
 
 `/api/v1/raidlogs/logs`, `/api/v1/raidlogs/instances` and `/auth/` go to
 localhost:4000; everything else (game data, icons, rankings, site-config) goes
-to https://forever.chronicleclassic.com with browser-looking headers. Its
+to https://forever.chronicleclassic.com with browser-looking headers. The
+router drops the `dataset_id` query parameter on those requests: the page
+sends the local scratch dataset's uuid, which prod answers with 404. Its
 site-config response gets `access_url` rewritten to the Vite origin and
 `tenant` nulled (the local run is untenanted, and the page's tenant gate would
 otherwise say "recorded on a different server").
@@ -157,4 +203,4 @@ make services-down   # optional; keeps the volume, so the run survives
 ```
 
 The uploaded run lives in the `chronicle_ruins` database and survives a
-restart; steps 3 and 4 are only needed once.
+restart; steps 3, 4 and 4b are only needed once.

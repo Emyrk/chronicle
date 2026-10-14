@@ -49,6 +49,12 @@ http.createServer((req, res) => {
     console.log("LOCAL", req.method, req.url);
     return forward(req, res, { mod: http, options: { ...base, ...LOCAL, headers } });
   }
+  // The page passes the local scratch dataset's uuid (?dataset_id=...), which
+  // prod does not know and answers 404 ("spell not found"). Prod serves its own
+  // dataset by default, so drop the parameter.
+  const url = new URL(req.url, "http://router");
+  url.searchParams.delete("dataset_id");
+  base.path = url.pathname + url.search;
   const headers = {
     ...req.headers,
     host: PROD,
@@ -70,6 +76,6 @@ http.createServer((req, res) => {
         return Buffer.from(JSON.stringify(cfg));
       }
     : undefined;
-  console.log("PROD ", req.method, req.url);
+  console.log("PROD ", req.method, base.path);
   forward(req, res, { mod: https, options: { ...base, host: PROD, port: 443, headers }, rewrite });
 }).listen(PORT, () => console.log(`router :${PORT} -> local :4000 (raidlogs/auth) | https://${PROD}`));
