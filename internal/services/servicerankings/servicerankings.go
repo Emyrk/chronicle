@@ -216,6 +216,9 @@ func (s *Service) setupRoutes() {
 	// Cohort viewer (debugging/transparency)
 	s.router.Get("/snapshots", s.handleListSnapshots)
 	s.router.Get("/snapshots/{snapshotID}/cohort", s.handleSnapshotCohort)
+	s.router.Get("/time-parse-snapshots", s.handleListTimeParseSnapshots)
+	s.router.Get("/time-parse-snapshots/{snapshotID}/buckets", s.handleTimeParseCohortBuckets)
+	s.router.Get("/time-parse-snapshots/{snapshotID}/cohort", s.handleTimeParseCohort)
 
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)

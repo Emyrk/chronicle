@@ -240,3 +240,55 @@ LIMIT 100;
 SELECT li.name AS instance_name, li.difficulty_name, li.max_players
 FROM log_instances li
 WHERE li.id = @id;
+
+-- name: ListPublishedTimeParseSnapshots :many
+-- Published time-parse snapshots for a tenant and scoring version, newest
+-- first. Backs the public cohort viewer's snapshot picker.
+SELECT *
+FROM time_parse_snapshots
+WHERE tenant_id = @tenant_id
+  AND policy_version = @policy_version
+  AND query_version = @query_version
+  AND status = 'published'
+ORDER BY published_at DESC
+LIMIT 50;
+
+-- name: GetPublishedTimeParseSnapshotByID :one
+-- A published time-parse snapshot, scoped to the caller's tenant.
+SELECT *
+FROM time_parse_snapshots
+WHERE id = @id
+  AND tenant_id = @tenant_id
+  AND status = 'published';
+
+-- name: ListTimeParseClearTimeCohortBuckets :many
+-- Distinct clear-time buckets in a snapshot with their sample sizes.
+SELECT
+    tpctm.instance_name,
+    tpctm.difficulty_name,
+    tpctm.max_players,
+    COUNT(*)::bigint AS sample_size
+FROM time_parse_clear_time_members tpctm
+WHERE tpctm.snapshot_id = @snapshot_id
+GROUP BY tpctm.instance_name, tpctm.difficulty_name, tpctm.max_players
+ORDER BY tpctm.instance_name, tpctm.difficulty_name, tpctm.max_players;
+
+-- name: GetTimeParseClearTimeCohortEntries :many
+-- Clear-time cohort members for one bucket, fastest first, with the log and
+-- guild identity needed by the cohort viewer. Same membership as
+-- GetTimeParseSnapshotClearTimeCohort.
+SELECT
+    tpctm.instance_id,
+    tpctm.duration_ms,
+    tpctm.start_time AS killed_at,
+    li.hashed_slug AS log_hashed_slug,
+    g.id AS guild_id,
+    g.name AS guild_name
+FROM time_parse_clear_time_members tpctm
+LEFT JOIN log_instances li ON li.id = tpctm.instance_id
+LEFT JOIN guilds g ON g.id = li.guild_id
+WHERE tpctm.snapshot_id = @snapshot_id
+  AND tpctm.instance_name = @instance_name
+  AND tpctm.difficulty_name = @difficulty_name
+  AND tpctm.max_players = @max_players
+ORDER BY tpctm.duration_ms, tpctm.start_time;

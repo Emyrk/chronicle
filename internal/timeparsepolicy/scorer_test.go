@@ -143,3 +143,24 @@ func TestAverageParse(t *testing.T) {
 	_, ok = AverageParse([]float64{}, 3)
 	require.False(t, ok)
 }
+
+func TestScoreCohort_MatchesScoreTime(t *testing.T) {
+	t.Parallel()
+	for _, cohort := range [][]int64{
+		{500, 100, 300, 300, 200, 400, 300},
+		{100, 100, 100, 100, 100},
+		make([]int64, 0),
+		{900, 800, 700},
+		{250, 150, 0, 350, 450, 550},
+	} {
+		results, ok := ScoreCohort(cohort)
+		require.Len(t, results, len(cohort))
+		for i, v := range cohort {
+			want, wantOK := ScoreTime(cohort, v)
+			assert.Equal(t, wantOK, ok && v > 0, "cohort %v value %d", cohort, v)
+			if wantOK || v > 0 {
+				assert.Equal(t, want, results[i], "cohort %v value %d", cohort, v)
+			}
+		}
+	}
+}

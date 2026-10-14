@@ -236,3 +236,48 @@ WHERE tenant_id = @tenant_id
   AND policy_version = @policy_version
   AND query_version = @query_version
 ORDER BY run_id, encounter_name;
+
+-- name: ListTimeParseBossKillCohortBuckets :many
+-- Distinct boss-kill buckets in a snapshot's date window with their sample
+-- sizes.
+SELECT
+    membership.instance_name,
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    COUNT(*)::bigint AS sample_size
+FROM time_parse_boss_kill_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = @snapshot_id
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.killed_at < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.killed_at >= snapshot.window_start)
+GROUP BY membership.instance_name, membership.encounter_name, membership.difficulty_name, membership.max_players
+ORDER BY membership.instance_name, membership.encounter_name, membership.difficulty_name, membership.max_players;
+
+-- name: GetTimeParseBossKillCohortEntries :many
+-- Boss-kill cohort members for one bucket, fastest first, with the log and
+-- guild identity needed by the cohort viewer. Same membership as
+-- GetTimeParseBossKillMembershipCohort.
+SELECT
+    membership.instance_id,
+    membership.duration_ms,
+    membership.killed_at,
+    li.hashed_slug AS log_hashed_slug,
+    g.id AS guild_id,
+    g.name AS guild_name
+FROM time_parse_boss_kill_memberships membership
+JOIN time_parse_snapshots snapshot ON snapshot.id = @snapshot_id
+LEFT JOIN log_instances li ON li.id = membership.instance_id
+LEFT JOIN guilds g ON g.id = li.guild_id
+WHERE membership.tenant_id = snapshot.tenant_id
+  AND membership.policy_version = snapshot.policy_version
+  AND membership.query_version = snapshot.query_version
+  AND membership.killed_at < snapshot.cutoff
+  AND (snapshot.window_start IS NULL OR membership.killed_at >= snapshot.window_start)
+  AND membership.instance_name = @instance_name
+  AND membership.encounter_name = @encounter_name
+  AND membership.difficulty_name = @difficulty_name
+  AND membership.max_players = @max_players
+ORDER BY membership.duration_ms, membership.killed_at;
