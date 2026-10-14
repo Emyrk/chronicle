@@ -18565,11 +18565,16 @@ current_members AS MATERIALIZED (
         instance.difficulty_name,
         instance.max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
-        encounter.end_time AS killed_at
+        encounter.end_time AS killed_at,
+        server.tenant_id AS source_tenant_id,
+        (server.tenant_id IS NULL OR tenant.include_in_all) AS root_visible
     FROM representative_instances representative
     JOIN log_instances instance ON instance.id = representative.id
     JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
     JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
     WHERE encounter.boss = true
       AND encounter.kill_type = 'clean'
       AND encounter.end_time > encounter.start_time
@@ -18593,7 +18598,9 @@ upserted AS (
         member.difficulty_name, member.max_players,
         member.duration_ms, member.killed_at
     FROM series
-    CROSS JOIN current_members member
+    JOIN current_members member
+      ON series.tenant_id = member.source_tenant_id
+      OR (series.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid AND member.root_visible)
     ON CONFLICT (
         tenant_id, policy_version, query_version, run_id, encounter_name
     ) DO UPDATE SET
@@ -18653,7 +18660,14 @@ representative_instances AS (
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
     FROM log_instances instance
-    WHERE instance.invalidated_at IS NULL
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    CROSS JOIN snapshot
+    WHERE (server.tenant_id = snapshot.tenant_id
+           OR (snapshot.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+      AND instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -18728,7 +18742,7 @@ func (q *sqlQuerier) UpsertTimeParseBossKillMemberships(ctx context.Context, sna
 
 const batchInsertTimeParseSnapshotClearTimeMembers = `-- name: BatchInsertTimeParseSnapshotClearTimeMembers :exec
 WITH snapshot AS (
-    SELECT id, cutoff, window_start
+    SELECT id, tenant_id, cutoff, window_start
     FROM time_parse_snapshots WHERE id = $1
 ),
 representative_instances AS (
@@ -18736,6 +18750,13 @@ representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
+    JOIN wow_server_realms realm ON realm.id = li.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    CROSS JOIN snapshot s
+    WHERE server.tenant_id = s.tenant_id
+       OR (s.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+           AND (server.tenant_id IS NULL OR tenant.include_in_all))
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
@@ -19196,10 +19217,16 @@ WITH clear_stats AS (
         )::numeric) % 4294967291, 0)::bigint AS fp
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
-    WHERE sr.qualified = true
+    JOIN wow_server_realms realm ON realm.id = li.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    WHERE (server.tenant_id = $1
+           OR ($1 = '00000000-0000-0000-0000-000000000000'::uuid
+               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+      AND sr.qualified = true
       AND sr.ranked_duration_ms > 0
-      AND sr.start_time < $1
-      AND ($2::timestamptz IS NULL OR sr.start_time >= $2)
+      AND sr.start_time < $2
+      AND ($3::timestamptz IS NULL OR sr.start_time >= $3)
 ),
 boss_stats AS (
     SELECT
@@ -19221,13 +19248,19 @@ boss_stats AS (
     FROM log_instance_encounters lie
     JOIN log_instances li ON li.id = lie.instance_id
     JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
-    WHERE li.invalidated_at IS NULL
+    JOIN wow_server_realms realm ON realm.id = li.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    WHERE (server.tenant_id = $1
+           OR ($1 = '00000000-0000-0000-0000-000000000000'::uuid
+               AND (server.tenant_id IS NULL OR tenant.include_in_all)))
+      AND li.invalidated_at IS NULL
       AND lie.boss = true
       AND lie.kill_type = 'clean'
       AND lie.end_time > lie.start_time
       AND (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint > 0
-      AND lie.end_time < $1
-      AND ($2::timestamptz IS NULL OR lie.end_time >= $2)
+      AND lie.end_time < $2
+      AND ($3::timestamptz IS NULL OR lie.end_time >= $3)
 )
 SELECT
     (COALESCE(c.cnt, 0) + COALESCE(b.cnt, 0))::bigint AS row_count,
@@ -19237,6 +19270,7 @@ FROM clear_stats c, boss_stats b
 `
 
 type GetTimeParseSnapshotSourceStatsParams struct {
+	TenantID    uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
 	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
 	WindowStart pgtype.Timestamptz `db:"window_start" json:"window_start"`
 }
@@ -19260,7 +19294,7 @@ type GetTimeParseSnapshotSourceStatsRow struct {
 // Compatible with PostgreSQL 13+ (no bit_xor aggregate required).
 // IMPORTANT: keep WHERE clauses in sync with the corresponding publication queries.
 func (q *sqlQuerier) GetTimeParseSnapshotSourceStats(ctx context.Context, arg GetTimeParseSnapshotSourceStatsParams) (GetTimeParseSnapshotSourceStatsRow, error) {
-	row := q.db.QueryRow(ctx, getTimeParseSnapshotSourceStats, arg.Cutoff, arg.WindowStart)
+	row := q.db.QueryRow(ctx, getTimeParseSnapshotSourceStats, arg.TenantID, arg.Cutoff, arg.WindowStart)
 	var i GetTimeParseSnapshotSourceStatsRow
 	err := row.Scan(&i.RowCount, &i.Watermark, &i.Fingerprint)
 	return i, err

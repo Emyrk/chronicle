@@ -1,6 +1,7 @@
 package servicerankings_test
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -29,12 +31,91 @@ func timeParseCohortRouter(store database.Store) http.Handler {
 
 func getTimeParseCohortJSON(t *testing.T, router http.Handler, path string, out any) int {
 	t.Helper()
+	return getTimeParseCohortJSONWithContext(t, context.Background(), router, path, out)
+}
+
+func getTimeParseCohortJSONWithContext(t *testing.T, ctx context.Context, router http.Handler, path string, out any) int {
+	t.Helper()
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	req := httptest.NewRequest(http.MethodGet, path, nil).WithContext(ctx)
+	router.ServeHTTP(rec, req)
 	if rec.Code == http.StatusOK && out != nil {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), out))
 	}
 	return rec.Code
+}
+
+func TestTimeParseCohortViewerTenantIsolation(t *testing.T) {
+	t.Parallel()
+
+	pool, store, _ := setupTimeParseTest(t)
+	baseCtx := testutil.Context(t, testutil.WaitMedium)
+	baseTime := time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC)
+	cutoff := time.Date(2024, 8, 1, 0, 0, 0, 0, time.UTC)
+
+	tenantA, realmA := insertTimeParseTenantRealm(t, pool, "tenant-a")
+	tenantB, realmB := insertTimeParseTenantRealm(t, pool, "tenant-b")
+
+	insertRun := func(realmID uuid.UUID, duration time.Duration) uuid.UUID {
+		return insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+			instanceName:   "Molten Core",
+			difficultyName: "Normal",
+			maxPlayers:     40,
+			qualified:      true,
+			durationMs:     duration.Milliseconds() + int64((10 * time.Minute).Milliseconds()),
+			startTime:      baseTime,
+			encounters: []timeParseEncounterOpts{{
+				name:      "Gehennas",
+				killType:  database.KillTypeClean,
+				boss:      true,
+				startTime: baseTime.Add(10 * time.Minute),
+				endTime:   baseTime.Add(10*time.Minute + duration),
+			}},
+		})
+	}
+
+	instanceA := insertRun(realmA, 30*time.Second)
+	instanceB := insertRun(realmB, 90*time.Second)
+	runTimeParseWorker(t, baseCtx, store, tenantA, cutoff, 0)
+	runTimeParseWorker(t, baseCtx, store, tenantB, cutoff, 0)
+
+	router := timeParseCohortRouter(store)
+	type tenantExpectation struct {
+		tenantID   uuid.UUID
+		instanceID uuid.UUID
+		durationMs int64
+	}
+	expectations := []tenantExpectation{
+		{tenantID: tenantA, instanceID: instanceA, durationMs: 30_000},
+		{tenantID: tenantB, instanceID: instanceB, durationMs: 90_000},
+	}
+
+	snapshotIDs := make(map[uuid.UUID]uuid.UUID, len(expectations))
+	for _, expectation := range expectations {
+		ctx := servicetenant.WithTenantID(baseCtx, expectation.tenantID)
+		var snapshots []chroniclesdk.TimeParseSnapshotSummary
+		require.Equal(t, http.StatusOK, getTimeParseCohortJSONWithContext(t, ctx, router, "/time-parse-snapshots", &snapshots))
+		require.Len(t, snapshots, 1)
+		snapshotIDs[expectation.tenantID] = snapshots[0].ID
+
+		snapshotPath := "/time-parse-snapshots/" + snapshots[0].ID.String()
+		for _, cohortPath := range []string{
+			"/cohort?kind=boss_kill&instance_name=Molten+Core&encounter_name=Gehennas&difficulty=Normal&max_players=40",
+			"/cohort?kind=clear_time&instance_name=Molten+Core&difficulty=Normal&max_players=40",
+		} {
+			var response chroniclesdk.TimeParseCohortResponse
+			require.Equal(t, http.StatusOK, getTimeParseCohortJSONWithContext(t, ctx, router, snapshotPath+cohortPath, &response))
+			require.Len(t, response.Entries, 1)
+			assert.Equal(t, expectation.instanceID, response.Entries[0].InstanceID)
+			if response.Kind == chroniclesdk.TimeParseCohortKindBossKill {
+				assert.Equal(t, expectation.durationMs, response.Entries[0].DurationMs)
+			}
+		}
+	}
+
+	ctxA := servicetenant.WithTenantID(baseCtx, tenantA)
+	foreignPath := "/time-parse-snapshots/" + snapshotIDs[tenantB].String() + "/buckets"
+	assert.Equal(t, http.StatusNotFound, getTimeParseCohortJSONWithContext(t, ctxA, router, foreignPath, nil))
 }
 
 func TestTimeParseCohortViewer(t *testing.T) {

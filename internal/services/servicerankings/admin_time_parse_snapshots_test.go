@@ -6,6 +6,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -122,7 +123,7 @@ func TestDeleteTimeParseSnapshot(t *testing.T) {
 
 		snap, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
 			TenantID: uuid.Nil, LookbackDays: 0,
-			PolicyVersion: 1, QueryVersion: 1,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		})
 		require.NoError(t, err)
 
@@ -130,7 +131,7 @@ func TestDeleteTimeParseSnapshot(t *testing.T) {
 		require.NoError(t, err)
 		assert.Greater(t, clearCount, int64(0), "should have clear-time members before delete")
 		series := database.ListTimeParseBossKillMembershipsParams{
-			TenantID: uuid.Nil, PolicyVersion: 1, QueryVersion: 1,
+			TenantID: uuid.Nil, PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.SnapshotQueryVersion,
 		}
 		memberships, err := store.ListTimeParseBossKillMemberships(ctx, series)
 		require.NoError(t, err)

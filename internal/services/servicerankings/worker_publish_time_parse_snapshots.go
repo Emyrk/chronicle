@@ -209,6 +209,7 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 
 	// Source stats for staleness guard.
 	sourceStats, err := w.Store.GetTimeParseSnapshotSourceStats(ctx, database.GetTimeParseSnapshotSourceStatsParams{
+		TenantID:    uuid.NullUUID{UUID: args.TenantID, Valid: true},
 		Cutoff:      cutoff,
 		WindowStart: windowStart,
 	})
