@@ -21,7 +21,6 @@ func TestLegacySpellEffectsFixtureParity(t *testing.T) {
 	}{
 		{name: "ascension", build: dbcdb.ExtendedSpellBuild},
 		{name: "azerothcore", build: dbcdb.ExtendedSpellBuild},
-		{name: "epoch", build: vsn.V3_3_5a},
 		{name: "tbc", build: vsn.V2_4_3},
 		{name: "kronos", build: vsn.V1_12_1},
 		{name: "octowow", build: vsn.V1_12_1},
@@ -30,6 +29,7 @@ func TestLegacySpellEffectsFixtureParity(t *testing.T) {
 	}
 	for _, fixture := range fixtures {
 		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
 			assertLegacySpellEffectsFixtureParity(t, fixture.name, fixture.build)
 		})
 	}

@@ -14,7 +14,7 @@ Read this document before changing spell parsing, storage, conversion, or API be
 
 All legacy `Spell.dbc` imports persist the converted effects, power, and difficulty-zero variant in normalized storage while retaining only non-component base fields in `dbc_spells`. The fixed effect slots and scalar power projection were removed in the next major schema version; existing installations must reimport every spell dataset before upgrading.
 
-The field counts above come from the checked-in DBC headers. The legacy effect-parity test covers Ascension, AzerothCore, Epoch, TBC 2.4.3, Kronos, OctoWoW, Turtle, and VanillaPlus.
+The field counts above come from the checked-in DBC headers. The legacy effect-parity test covers Ascension, AzerothCore, TBC 2.4.3, Kronos, OctoWoW, Turtle, and VanillaPlus.
 
 ## Effects and indexing
 
