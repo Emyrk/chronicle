@@ -90,6 +90,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   // Both views take the same request, so toggling 2D <-> 3D keeps the framing.
   const view: MapViewRequest = { viewport: framing.viewport ?? defaultViewport, key: String(framing.revision) };
 
+  // The cinematic camera has the mesh view whenever the framing is the default
+  // one: the user has not pinned a Fit / Reset and has not panned or zoomed.
+  const cinematic = !framing.manual && framing.viewport === null;
   const handleUserViewport = useCallback((viewport: MapViewport) => {
     setFraming((current) => manualMapFraming(current, viewport));
   }, []);
@@ -97,9 +100,13 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   if (scene.status === "message") return <MapMessage title={scene.title} detail={scene.detail} />;
 
   const applyFraming = (viewport: MapViewport) => setFraming(pinMapFraming(framing, viewport));
-  // Whole run: back to the default framing, which is the party-following one.
+  // Back to the default framing: the cinematic camera on the mesh, the
+  // party-following one across a whole run.
   const followGroup = () => setFraming({ ...framing, viewport: null, manual: false, revision: framing.revision + 1 });
-  const following = scene.wholeRun && !framing.manual && framing.viewport === null;
+  // Follow stands in for Fit while the camera can follow: across a run, and on
+  // the mesh, where the Director frames the boss and the group itself.
+  const canFollow = scene.wholeRun || (show3D && meshWanted && meshState === "ready");
+  const following = canFollow && cinematic;
   const jumps = scene.wholeRun && scene.runStartMs !== null && scene.runEndMs !== null
     ? encounterJumps(props.context.instance.encounters, props.result.encounters, scene.runStartMs, scene.runEndMs)
     : [];
@@ -133,13 +140,13 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               {scene.floors.map((floor) => <option key={floor} value={floor}>Floor {floor}</option>)}
             </select>
           )}
-          {scene.wholeRun ? (
+          {canFollow ? (
             <button
               type="button"
               aria-pressed={following}
               onClick={followGroup}
-              disabled={!autoFit}
-              title="Keep the camera on the group"
+              disabled={scene.wholeRun && !autoFit}
+              title="Keep the camera on the boss and the group"
               className={`${framingButtonClass} ${following ? "bg-primary/20 text-foreground" : ""}`}
             >
               <Crosshair className="h-3 w-3" />
@@ -206,6 +213,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               dungeonMesh={dungeonMesh}
               onDungeonMeshState={setMeshState}
               focus={focus}
+              cinematic={cinematic}
             />
           </Suspense>
         )}
