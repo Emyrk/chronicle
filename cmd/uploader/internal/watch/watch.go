@@ -2,10 +2,16 @@
 package watch
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"time"
 )
+
+// LiveLogName is the cumulative log WoW writes when combatLogUniqueFilename is
+// off, and the only file that is archived.
+const LiveLogName = "WoWCombatLog.txt"
 
 // File is a combat log file and its size at the time of the poll.
 type File struct {
@@ -21,7 +27,7 @@ func LogFiles(logDirs []string) []File {
 	var out []File
 	for _, dir := range logDirs {
 		var paths []string
-		for _, pattern := range []string{"WoWCombatLog.txt", "WoWCombatLog-*.txt"} {
+		for _, pattern := range []string{LiveLogName, "WoWCombatLog-*.txt"} {
 			matches, _ := filepath.Glob(filepath.Join(dir, pattern))
 			paths = append(paths, matches...)
 		}
@@ -137,4 +143,48 @@ func (t *Tracker) MarkFailed(path string, size int64) {
 	if tr := t.files[path]; tr != nil {
 		tr.failed, tr.queued = size, false
 	}
+}
+
+// Archivable returns the live logs in files that are fully uploaded and can be
+// archived: all of their current bytes were uploaded and WoW is not running
+// (it holds the file open, and a rename mid-session would split the log).
+func (t *Tracker) Archivable(files []File, wowRunning bool) []File {
+	if wowRunning {
+		return nil
+	}
+	var out []File
+	for _, f := range files {
+		tr := t.files[f.Path]
+		if filepath.Base(f.Path) == LiveLogName && tr != nil && f.Size > 0 && tr.uploaded == f.Size {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// MarkArchived moves from's upload state to to, so the renamed file is not
+// uploaded again and a new log at from starts fresh.
+func (t *Tracker) MarkArchived(from, to string) {
+	if tr := t.files[from]; tr != nil {
+		delete(t.files, from)
+		t.files[to] = tr
+	}
+}
+
+// Archive renames f next to itself as WoWCombatLog-uploaded-<timestamp>.txt and
+// returns the new path. It refuses if the file changed since f was observed or
+// the name is taken.
+func Archive(f File, now time.Time) (string, error) {
+	size, err := fileSize(f.Path)
+	if err != nil {
+		return "", err
+	}
+	if size != f.Size {
+		return "", fmt.Errorf("%s changed since it was uploaded", f.Path)
+	}
+	to := filepath.Join(filepath.Dir(f.Path), "WoWCombatLog-uploaded-"+now.Format("20060102-150405")+".txt")
+	if _, err := os.Lstat(to); err == nil {
+		return "", fmt.Errorf("%s already exists", to)
+	}
+	return to, os.Rename(f.Path, to)
 }

@@ -245,3 +245,59 @@ func TestEngineStepDoesNotWaitForUpload(t *testing.T) {
 	require.Equal(t, engine.StateUploaded, last.State)
 	require.Equal(t, "Your 10m session is on Chronicle.", last.Detail)
 }
+
+func TestEngineArchivesAfterExitUpload(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	t0 := time.Now()
+	dir := filepath.Dir(h.logPath)
+
+	h.mu.Lock()
+	h.running = false
+	h.mu.Unlock()
+	h.step(t, t0, false)
+	require.Equal(t, 1, h.uploads)
+	require.FileExists(t, h.logPath) // archived from the next poll, not inline
+
+	h.mu.Lock()
+	h.running = true // the game came back before that poll
+	h.mu.Unlock()
+	h.step(t, t0.Add(5*time.Second), false)
+	require.FileExists(t, h.logPath)
+
+	h.mu.Lock()
+	h.running = false
+	h.mu.Unlock()
+	h.step(t, t0.Add(10*time.Second), false)
+	require.NoFileExists(t, h.logPath)
+	archives, err := filepath.Glob(filepath.Join(dir, "WoWCombatLog-uploaded-*.txt"))
+	require.NoError(t, err)
+	require.Len(t, archives, 1)
+	require.Equal(t, int64(len("some combat")), h.st.Get().Uploaded[archives[0]])
+	require.NotContains(t, h.st.Get().Uploaded, h.logPath)
+
+	// The next session's log is uploaded on its own; the archive is not re-sent.
+	require.NoError(t, os.WriteFile(h.logPath, []byte("next"), 0o644))
+	h.mu.Lock()
+	h.running = true
+	h.mu.Unlock()
+	h.step(t, t0.Add(15*time.Second), false)
+	h.mu.Lock()
+	h.running = false
+	h.mu.Unlock()
+	h.step(t, t0.Add(20*time.Second), false)
+	require.Equal(t, 2, h.uploads)
+}
+
+func TestEngineKeepLog(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.running = false
+	require.NoError(t, h.st.Update(func(s *store.State) { s.KeepLog = true }))
+	t0 := time.Now()
+
+	h.step(t, t0, false)
+	h.step(t, t0.Add(5*time.Second), false)
+	require.Equal(t, 1, h.uploads)
+	require.FileExists(t, h.logPath)
+}
