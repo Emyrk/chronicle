@@ -1098,6 +1098,10 @@ func setupParseScoreQueueForTest(t *testing.T, pool *pgxpool.Pool) *riverqueue.Q
 		Store:  database.New(pool),
 		Logger: slog.Default(),
 	})
+	riverqueue.AddWorker(q, &servicerankings.WorkerComputeTimeParseScores{
+		Store:  database.New(pool),
+		Logger: slog.Default(),
+	})
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{MaxWorkers: 1})
 	require.NoError(t, q.Start(ctx))
 	t.Cleanup(func() { _ = q.Stop(context.Background()) })

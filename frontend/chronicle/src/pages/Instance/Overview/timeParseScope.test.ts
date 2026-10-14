@@ -31,6 +31,7 @@ function response(
     lookback_days: 60,
     policy_version: 1,
     query_version: 1,
+    computed_at: "2026-10-01T00:00:00Z",
     boss_kill_times: [],
     clear_time: scopeResult(91).clear_time,
     scopes,

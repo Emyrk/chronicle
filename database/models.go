@@ -2154,6 +2154,51 @@ type TimeParseClearTimeMembership struct {
 	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
 }
 
+type TimeParseScoreReceipt struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	LogGroupID    uuid.NullUUID      `db:"log_group_id" json:"log_group_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	LookbackDays  int16              `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	SourceCount   int32              `db:"source_count" json:"source_count"`
+	ResultCount   int32              `db:"result_count" json:"result_count"`
+	ComputedAt    pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
+type TimeParseScoreResult struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	ReceiptID     uuid.UUID          `db:"receipt_id" json:"receipt_id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	LogGroupID    uuid.NullUUID      `db:"log_group_id" json:"log_group_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	Scope         string             `db:"scope" json:"scope"`
+	MetricKind    string             `db:"metric_kind" json:"metric_kind"`
+	EncounterID   uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	DurationMs    int64              `db:"duration_ms" json:"duration_ms"`
+	PreciseScore  float64            `db:"precise_score" json:"precise_score"`
+	DisplayScore  int16              `db:"display_score" json:"display_score"`
+	Rank          int32              `db:"rank" json:"rank"`
+	SampleSize    int32              `db:"sample_size" json:"sample_size"`
+	Status        string             `db:"status" json:"status"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	LookbackDays  int16              `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	ComputedAt    pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
 type User struct {
 	ID                     uuid.UUID          `db:"id" json:"id"`
 	Username               string             `db:"username" json:"username"`

@@ -3,9 +3,7 @@ package servicerankings
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -19,128 +17,97 @@ import (
 )
 
 type timeParsesQuerier interface {
-	InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (database.LogInstancesGuild, error)
-	GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUID) (database.GetLogInstanceForTimeParseRow, error)
-	GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (database.GetInstanceSpeedrunRow, error)
-	GetInstanceCleanEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]database.GetInstanceCleanEncounterKillTimesRow, error)
-	GetTimeParseClearTimeMembershipCohort(ctx context.Context, arg database.GetTimeParseClearTimeMembershipCohortParams) ([]int64, error)
-	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg database.GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
-	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
+	InstanceBySlug(context.Context, pgtype.Text) (database.LogInstancesGuild, error)
+	GetTenantByID(context.Context, uuid.UUID) (database.Tenant, error)
+	GetTimeParseScoreReceiptForContract(context.Context, database.GetTimeParseScoreReceiptForContractParams) (database.TimeParseScoreReceipt, error)
+	ListTimeParseScoreResultsForReceipt(context.Context, uuid.UUID) ([]database.TimeParseScoreResult, error)
 }
 
 func (s *Service) handleInstanceTimeParses(w http.ResponseWriter, r *http.Request) {
-	handleInstanceTimeParsesWithStore(s.store, s.logger, w, r)
+	handleInstanceTimeParsesWithStore(s.store, w, r)
 }
 
-func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Logger, w http.ResponseWriter, r *http.Request) {
+func handleInstanceTimeParsesWithStore(store timeParsesQuerier, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	instanceIDText := chi.URLParam(r, "instanceID")
 	instanceID, err := uuid.Parse(instanceIDText)
 	if err != nil {
-		inst, slugErr := store.InstanceBySlug(ctx, pgtype.Text{String: instanceIDText, Valid: true})
+		instance, slugErr := store.InstanceBySlug(ctx, pgtype.Text{String: instanceIDText, Valid: true})
 		if slugErr != nil {
 			httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Instance not found"})
 			return
 		}
-		instanceID = inst.ID
+		instanceID = instance.ID
 	}
-
-	window, err := parseLiveTimeParseWindow(r.URL.Query(), false, time.Now())
-	if err != nil {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid time-parse window", Detail: err.Error()})
-		return
-	}
-
 	tenantID := servicetenant.TenantIDFromContext(ctx)
 	if tenantID != uuid.Nil {
 		tenant, tenantErr := store.GetTenantByID(ctx, tenantID)
 		if tenantErr == nil && len(tenant.ParseConfig) > 0 && isParseDisabled(tenant.ParseConfig) {
-			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceTimeParsesResponse{Available: false, Reason: "disabled", BossKillTimes: []chroniclesdk.BossKillTimeParse{}})
+			httpapi.Write(ctx, w, http.StatusOK, unavailableTimeParses("disabled"))
 			return
 		}
 	}
-
-	speedrun, err := store.GetInstanceSpeedrun(ctx, instanceID)
+	receipt, err := store.GetTimeParseScoreReceiptForContract(ctx, database.GetTimeParseScoreReceiptForContractParams{
+		TenantID: tenantID, InstanceID: instanceID, LookbackDays: TimeParseScoreLookbackDays,
+		PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: timeparsepolicy.QueryVersion,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceTimeParsesResponse{Available: false, Reason: "no_speedrun", BossKillTimes: []chroniclesdk.BossKillTimeParse{}})
+		httpapi.Write(ctx, w, http.StatusOK, unavailableTimeParses("not_computed"))
 		return
 	}
 	if err != nil {
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch speedrun", Detail: err.Error()}})
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to load time parse receipt", Detail: err.Error()}})
 		return
 	}
-
-	instInfo, err := store.GetLogInstanceForTimeParse(ctx, instanceID)
+	rows, err := store.ListTimeParseScoreResultsForReceipt(ctx, receipt.ID)
 	if err != nil {
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch instance info", Detail: err.Error()}})
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to load time parse scores", Detail: err.Error()}})
 		return
 	}
-	encounterKills, err := store.GetInstanceCleanEncounterKillTimes(ctx, instanceID)
-	if err != nil {
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch encounter kill times", Detail: err.Error()}})
-		return
+	scopes := map[string]chroniclesdk.TimeParseScopeResult{
+		TimeParseScopeServer: {Reason: "no_time_data", BossKillTimes: []chroniclesdk.BossKillTimeParse{}},
+		TimeParseScopeRealm:  {Reason: "no_time_data", BossKillTimes: []chroniclesdk.BossKillTimeParse{}},
+		TimeParseScopeGuild:  {Reason: "no_guild", BossKillTimes: []chroniclesdk.BossKillTimeParse{}},
 	}
-
-	policyVersion := int16(timeparsepolicy.PolicyVersion)
-	queryVersion := timeparsepolicy.QueryVersion
-	cutoff := pgtype.Timestamptz{Time: window.Cutoff, Valid: true}
-	excludeRunID := instInfo.RunID
+	if receipt.GuildID.Valid {
+		scopes[TimeParseScopeGuild] = chroniclesdk.TimeParseScopeResult{Reason: "no_time_data", BossKillTimes: []chroniclesdk.BossKillTimeParse{}}
+	}
+	precise := make(map[string][]float64)
+	for _, row := range rows {
+		scope := scopes[row.Scope]
+		scope.Available = true
+		scope.Reason = ""
+		score := chroniclesdk.TimeParseScore{DurationMs: row.DurationMs, PreciseScore: row.PreciseScore, DisplayScore: int(row.DisplayScore), Rank: int(row.Rank), SampleSize: int(row.SampleSize), Status: row.Status}
+		if row.MetricKind == "clear_time" {
+			scope.ClearTime = &score
+		} else if row.EncounterID.Valid {
+			scope.BossKillTimes = append(scope.BossKillTimes, chroniclesdk.BossKillTimeParse{
+				EncounterID: row.EncounterID.UUID, EncounterName: row.EncounterName,
+				DurationMs: row.DurationMs, PreciseScore: row.PreciseScore, DisplayScore: int(row.DisplayScore),
+				Rank: int(row.Rank), SampleSize: int(row.SampleSize), Status: row.Status,
+			})
+			if row.Status != string(timeparsepolicy.StatusSampleTooSmall) {
+				precise[row.Scope] = append(precise[row.Scope], row.PreciseScore)
+			}
+		}
+		scopes[row.Scope] = scope
+	}
+	for name, scope := range scopes {
+		if average, ok := timeparsepolicy.AverageParse(precise[name], len(scope.BossKillTimes)); ok {
+			scope.AverageBossKillParse = &chroniclesdk.TimeParseAverage{PreciseScore: average.PreciseScore, DisplayScore: average.DisplayScore, Killed: average.Killed, Selected: average.Selected}
+			scopes[name] = scope
+		}
+	}
+	server := scopes[TimeParseScopeServer]
 	resp := chroniclesdk.InstanceTimeParsesResponse{
-		Available: true, Cutoff: window.Cutoff, WindowStart: window.windowStartPtr(),
-		LookbackDays: window.LookbackDays, PolicyVersion: policyVersion, QueryVersion: queryVersion,
-		BossKillTimes: make([]chroniclesdk.BossKillTimeParse, 0, len(encounterKills)),
-	}
-
-	clearDurationMs := speedrun.RankedDurationMs.Int64
-	if speedrun.RankedDurationMs.Valid && clearDurationMs > 0 {
-		cohort, cohortErr := store.GetTimeParseClearTimeMembershipCohort(ctx, database.GetTimeParseClearTimeMembershipCohortParams{
-			TenantID: tenantID, PolicyVersion: policyVersion, QueryVersion: queryVersion,
-			Cutoff: cutoff, WindowStart: window.WindowStart, ExcludeRunID: excludeRunID,
-			InstanceName: speedrun.InstanceName, DifficultyName: instInfo.DifficultyName, MaxPlayers: int16(instInfo.MaxPlayers),
-		})
-		if cohortErr != nil {
-			logger.Error("failed to load clear-time cohort", "instance_id", instanceID, "error", cohortErr)
-		} else {
-			result, scored := timeparsepolicy.ScoreTime(cohort, clearDurationMs)
-			score := &chroniclesdk.TimeParseScore{DurationMs: clearDurationMs, SampleSize: result.SampleSize, Status: string(result.Status)}
-			if scored {
-				score.PreciseScore, score.DisplayScore, score.Rank = result.PreciseScore, result.DisplayScore, result.Rank
-			}
-			if len(cohort) < timeparsepolicy.MinSampleForParse {
-				score.SampleSize = len(cohort)
-			}
-			resp.ClearTime = score
-		}
-	}
-
-	preciseScores := make([]float64, 0, len(encounterKills))
-	for _, kill := range encounterKills {
-		if kill.DurationMs <= 0 {
-			continue
-		}
-		cohort, cohortErr := store.GetTimeParseBossKillMembershipCohort(ctx, database.GetTimeParseBossKillMembershipCohortParams{
-			TenantID: tenantID, PolicyVersion: policyVersion, QueryVersion: queryVersion,
-			Cutoff: cutoff, WindowStart: window.WindowStart, ExcludeRunID: excludeRunID,
-			InstanceName: speedrun.InstanceName, EncounterName: kill.EncounterName,
-			DifficultyName: instInfo.DifficultyName, MaxPlayers: int16(instInfo.MaxPlayers),
-		})
-		if cohortErr != nil {
-			logger.Error("failed to load boss-kill cohort", "instance_id", instanceID, "encounter", kill.EncounterName, "error", cohortErr)
-			continue
-		}
-		result, scored := timeparsepolicy.ScoreTime(cohort, kill.DurationMs)
-		score := chroniclesdk.BossKillTimeParse{EncounterID: kill.EncounterID, EncounterName: kill.EncounterName, DurationMs: kill.DurationMs, SampleSize: result.SampleSize, Status: string(result.Status)}
-		if scored {
-			score.PreciseScore, score.DisplayScore, score.Rank = result.PreciseScore, result.DisplayScore, result.Rank
-			preciseScores = append(preciseScores, result.PreciseScore)
-		}
-		if len(cohort) < timeparsepolicy.MinSampleForParse {
-			score.SampleSize = len(cohort)
-		}
-		resp.BossKillTimes = append(resp.BossKillTimes, score)
-	}
-	if average, ok := timeparsepolicy.AverageParse(preciseScores, len(encounterKills)); ok {
-		resp.AverageBossKillParse = &chroniclesdk.TimeParseAverage{PreciseScore: average.PreciseScore, DisplayScore: average.DisplayScore, Killed: average.Killed, Selected: average.Selected}
+		Available: server.Available, Reason: server.Reason, Cutoff: receipt.Cutoff.Time,
+		WindowStart: &receipt.WindowStart.Time, LookbackDays: int32(receipt.LookbackDays),
+		PolicyVersion: receipt.PolicyVersion, QueryVersion: receipt.QueryVersion, ComputedAt: receipt.ComputedAt.Time,
+		Scopes: scopes, ClearTime: server.ClearTime, BossKillTimes: server.BossKillTimes, AverageBossKillParse: server.AverageBossKillParse,
 	}
 	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
+func unavailableTimeParses(reason string) chroniclesdk.InstanceTimeParsesResponse {
+	return chroniclesdk.InstanceTimeParsesResponse{Available: false, Reason: reason, BossKillTimes: []chroniclesdk.BossKillTimeParse{}, Scopes: map[string]chroniclesdk.TimeParseScopeResult{}}
 }

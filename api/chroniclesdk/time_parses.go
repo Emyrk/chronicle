@@ -19,6 +19,9 @@ type InstanceTimeParsesResponse struct {
 	PolicyVersion int16 `json:"policy_version"`
 	QueryVersion  int16 `json:"query_version"`
 
+	ComputedAt time.Time                       `json:"computed_at"`
+	Scopes     map[string]TimeParseScopeResult `json:"scopes"`
+
 	// ClearTime is the instance's clear-time parse against the population.
 	// Nil when the instance has no qualified clear.
 	ClearTime *TimeParseScore `json:"clear_time,omitempty"`
@@ -29,6 +32,15 @@ type InstanceTimeParsesResponse struct {
 	// AverageBossKillParse is the arithmetic mean of available per-boss
 	// precise scores. Nil when no bosses are scored.
 	AverageBossKillParse *TimeParseAverage `json:"average_boss_kill_parse,omitempty"`
+}
+
+// TimeParseScopeResult is one locked server, realm, or guild result set.
+type TimeParseScopeResult struct {
+	Available            bool                `json:"available"`
+	Reason               string              `json:"reason,omitempty"`
+	ClearTime            *TimeParseScore     `json:"clear_time,omitempty"`
+	BossKillTimes        []BossKillTimeParse `json:"boss_kill_times"`
+	AverageBossKillParse *TimeParseAverage   `json:"average_boss_kill_parse,omitempty"`
 }
 
 // TimeParseScore is a single time-based parse result.

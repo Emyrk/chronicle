@@ -1,27 +1,18 @@
 import type {
   InstanceTimeParsesResponse,
-  TimeParseAverage,
-  TimeParseScore,
-  BossKillTimeParse,
+  TimeParseScopeResult,
 } from "@/api/typesGenerated";
 import type { PopulationSelection } from "./populationSelectionState";
 
 export type TimeParseScope = "server" | "realm" | "guild";
 
-/** The persisted parse payload for one comparison scope. */
-export interface TimeParseScopeResult {
-  readonly available: boolean;
-  readonly reason?: string;
-  readonly clear_time?: TimeParseScore;
-  readonly boss_kill_times: readonly BossKillTimeParse[];
-  readonly average_boss_kill_parse?: TimeParseAverage;
-}
+export type { TimeParseScopeResult } from "@/api/typesGenerated";
 
 /**
- * Transitional response shape while the generated SDK gains scoped results.
- * The top-level fields remain the server-scope compatibility payload.
+ * Allows the server-scope compatibility fallback while older cached responses
+ * without the new scopes field age out.
  */
-export type ScopedInstanceTimeParsesResponse = InstanceTimeParsesResponse & {
+export type ScopedInstanceTimeParsesResponse = Omit<InstanceTimeParsesResponse, "scopes"> & {
   readonly scopes?: Readonly<Record<string, TimeParseScopeResult>>;
 };
 
