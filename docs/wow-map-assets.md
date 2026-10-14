@@ -7,6 +7,8 @@ Chronicle publishes each dataset's map manifest beneath its configured icon base
 <icon-base>/maps/manifest.original.json
 <icon-base>/maps/manifest.rendered.json
 <icon-base>/maps/manifest.styled.json
+<icon-base>/maps/manifest.renders.json
+<icon-base>/maps/manifest.3d.json
 <icon-base>/maps/original/<tile-id>.webp
 ```
 
@@ -48,6 +50,17 @@ WoW Forever and current Blizzard Classic products use `extract-wowdata-maps`. Se
 ```bash
 SERVER=forever make maps
 ```
+
+## Manually uploaded Forever maps
+
+The tracked source files `frontend/imagecache/map-layers/forever/manifest.renders.json` and `manifest.3d.json` register existing assets under `forever/maps/renders/*.png` and `forever/maps/3d/*.glb`, respectively. They attach by world `mapID` (Wailing Caverns 43, Ragefire Chasm 389, Ruins of Lordaeron 2999). If the native manifest has no instance for that ID, either manual layer creates a named dungeon with `floors: []`; the other layer may then decorate it. Both manual source files include the same `name` for each map ID, and conflicting names are rejected. Native instance metadata takes precedence when it exists. Add or replace an entry in the relevant source file without deleting the other entries, then publish just that source manifest and a new merged `manifest.json`:
+
+```bash
+SERVER=forever make maps/renders-upload
+SERVER=forever make maps/3d-upload
+```
+
+These commands **do not upload images or GLBs**: verify the corresponding R2 objects already exist and have the correct MIME/CORS settings before publishing. They require a v2 `manifest.original.json` on R2 for target and native map metadata, but the native manifest need not contain RFC or Ruins of Lordaeron. The merger rejects unnamed manual-only instances, incompatible products, and invalid asset paths. Publish the v2 native layer before attempting these layer-only uploads. The new merged `instances[].renders` records path and image dimensions, and `instances[]["3d"]` records the GLB path. Both are catalog metadata for now, not replay inputs: the PNGs lack calibrated world bounds, and GLB placement/frame data has not been established. The generated `render/` layer and hand-styled `render-styled/` layer remain independent.
 
 ## Cleaning generated maps
 

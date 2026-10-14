@@ -294,6 +294,14 @@ maps/render-upload:
 maps/styled-upload:
 	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=styled ./upload-maps-r2.sh)
 
+# Register manually uploaded artwork and GLBs without regenerating or uploading assets.
+.PHONY: maps/renders-upload maps/3d-upload
+maps/renders-upload:
+	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=renders ./upload-maps-r2.sh)
+
+maps/3d-upload:
+	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=3d ./upload-maps-r2.sh)
+
 # Hand-authored styled maps are checked into Git and published independently.
 .PHONY: maps/forever-styled-upload
 maps/forever-styled-upload: SERVER=forever

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/coder/serpent"
@@ -23,33 +24,42 @@ type wowMapLayer struct {
 
 type wowMapLayerInstance struct {
 	MapID    int32                   `json:"mapID"`
+	Name     string                  `json:"name,omitempty"`
 	Rendered *wowMapRenderedInstance `json:"rendered,omitempty"`
 	Styled   *wowMapRenderedInstance `json:"styled,omitempty"`
+	Renders  *wowMapManualRender     `json:"renders,omitempty"`
+	Model3D  *wowMap3DAsset          `json:"3d,omitempty"`
 }
 
 // MergeWowdataMapsCmd joins independently generated instance artwork with
 // the original, authoritative map manifest.
 func MergeWowdataMapsCmd() *serpent.Command {
-	var original, render, styled, out string
+	var original, render, styled, renders, model3d, out string
 	return &serpent.Command{
 		Use:   "merge-wowdata-maps",
-		Short: "Merge original, rendered and styled map manifests.",
+		Short: "Merge native, generated, and manually uploaded map layers.",
 		Options: serpent.OptionSet{
 			{Name: "original", Description: "Original map manifest (required).", Flag: "original", Value: serpent.StringOf(&original)},
 			{Name: "render", Description: "Optional rendered map layer.", Flag: "render", Value: serpent.StringOf(&render)},
 			{Name: "styled", Description: "Optional styled map layer.", Flag: "styled", Value: serpent.StringOf(&styled)},
+			{Name: "renders", Description: "Optional manually uploaded 2D render layer.", Flag: "renders", Value: serpent.StringOf(&renders)},
+			{Name: "3d", Description: "Optional manually uploaded 3D model layer.", Flag: "3d", Value: serpent.StringOf(&model3d)},
 			{Name: "out", Description: "Output merged manifest path.", Flag: "out", Value: serpent.StringOf(&out)},
 		},
 		Handler: func(_ *serpent.Invocation) error {
 			if original == "" || out == "" {
 				return fmt.Errorf("--original and --out are required")
 			}
-			return mergeWowdataMaps(original, render, styled, out)
+			return mergeWowdataMapsWithManual(original, render, styled, renders, model3d, out)
 		},
 	}
 }
 
 func mergeWowdataMaps(originalPath, renderPath, styledPath, outPath string) error {
+	return mergeWowdataMapsWithManual(originalPath, renderPath, styledPath, "", "", outPath)
+}
+
+func mergeWowdataMapsWithManual(originalPath, renderPath, styledPath, rendersPath, model3dPath, outPath string) error {
 	data, err := os.ReadFile(originalPath)
 	if err != nil {
 		return fmt.Errorf("read original map manifest: %w", err)
@@ -80,13 +90,29 @@ func mergeWowdataMaps(originalPath, renderPath, styledPath, outPath string) erro
 		// The original manifest owns metadata, not rendered artwork. This also
 		// makes rerunning a merge independent of any stale original overlays.
 		instance.Rendered, instance.Styled = nil, nil
+		instance.Renders, instance.Model3D = nil, nil
 		instances[instance.MapID] = instance
 	}
-	if err := mergeWowMapLayer(renderPath, "render", manifest.Target, instances); err != nil {
+	created := make(map[int32]*wowMapInstance)
+	if err := mergeWowMapLayer(renderPath, "render", manifest.Target, instances, created); err != nil {
 		return err
 	}
-	if err := mergeWowMapLayer(styledPath, "styled", manifest.Target, instances); err != nil {
+	if err := mergeWowMapLayer(styledPath, "styled", manifest.Target, instances, created); err != nil {
 		return err
+	}
+	if err := mergeWowMapLayer(rendersPath, "renders", manifest.Target, instances, created); err != nil {
+		return err
+	}
+	if err := mergeWowMapLayer(model3dPath, "3d", manifest.Target, instances, created); err != nil {
+		return err
+	}
+	ids := make([]int32, 0, len(created))
+	for id := range created {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	for _, id := range ids {
+		manifest.Instances = append(manifest.Instances, *created[id])
 	}
 	return writeWowMapManifest(outPath, manifest)
 }
@@ -107,7 +133,7 @@ func decodeWowMapJSON(data []byte, value any) error {
 	return nil
 }
 
-func mergeWowMapLayer(file, kind string, target wowMapTarget, instances map[int32]*wowMapInstance) error {
+func mergeWowMapLayer(file, kind string, target wowMapTarget, instances, created map[int32]*wowMapInstance) error {
 	if file == "" {
 		return nil
 	}
@@ -125,7 +151,7 @@ func mergeWowMapLayer(file, kind string, target wowMapTarget, instances map[int3
 	if layer.Format != wowMapManifestFormat {
 		return fmt.Errorf("unsupported %s map layer format %q", kind, layer.Format)
 	}
-	if kind == "render" && layer.Target != target || kind == "styled" && (layer.Target.Product != target.Product || layer.Target.Build != "" || layer.Target.Region != "" || layer.Target.Locale != "") {
+	if kind == "render" && layer.Target != target || kind != "render" && (layer.Target.Product != target.Product || layer.Target.Build != "" || layer.Target.Region != "" || layer.Target.Locale != "") {
 		return fmt.Errorf("%s map layer target does not match original", kind)
 	}
 	seen := make(map[int32]struct{}, len(layer.Instances))
@@ -136,32 +162,66 @@ func mergeWowMapLayer(file, kind string, target wowMapTarget, instances map[int3
 		seen[entry.MapID] = struct{}{}
 		instance := instances[entry.MapID]
 		if instance == nil {
-			return fmt.Errorf("unknown %s map layer mapID %d", kind, entry.MapID)
-		}
-		var artwork *wowMapRenderedInstance
-		if kind == "render" {
-			if entry.Rendered == nil || entry.Styled != nil {
-				return fmt.Errorf("render map layer mapID %d must contain rendered only", entry.MapID)
+			if kind != "renders" && kind != "3d" {
+				return fmt.Errorf("unknown %s map layer mapID %d", kind, entry.MapID)
 			}
-			artwork = entry.Rendered
-		} else {
-			if entry.Styled == nil || entry.Rendered != nil {
-				return fmt.Errorf("styled map layer mapID %d must contain styled only", entry.MapID)
+			if entry.MapID <= 0 || strings.TrimSpace(entry.Name) == "" {
+				return fmt.Errorf("%s map layer mapID %d needs a positive mapID and name to create an instance", kind, entry.MapID)
 			}
-			artwork = entry.Styled
+			instance = &wowMapInstance{MapID: entry.MapID, Name: entry.Name, InstanceType: 1, Floors: []wowMapInstanceFloor{}}
+			instances[entry.MapID] = instance
+			created[entry.MapID] = instance
+		} else if created[entry.MapID] != nil && entry.Name != "" && entry.Name != instance.Name {
+			return fmt.Errorf("conflicting names for manually created instance mapID %d", entry.MapID)
 		}
-		prefix := kind + "/"
-		if kind == "styled" {
-			prefix = "render-styled/"
+		fields := 0
+		for _, present := range []bool{entry.Rendered != nil, entry.Styled != nil, entry.Renders != nil, entry.Model3D != nil} {
+			if present {
+				fields++
+			}
 		}
-		if !strings.HasPrefix(artwork.Path, prefix) || path.Clean(artwork.Path) != artwork.Path || strings.Contains(artwork.Path, "\\") || strings.Contains(artwork.Path, "//") || artwork.Width <= 0 || artwork.Height <= 0 {
-			return fmt.Errorf("invalid %s map layer artwork for mapID %d", kind, entry.MapID)
+		if fields != 1 {
+			return fmt.Errorf("%s map layer mapID %d must contain only its own artwork", kind, entry.MapID)
 		}
-		if kind == "render" {
-			instance.Rendered = artwork
-		} else {
-			instance.Styled = artwork
+		switch kind {
+		case "render", "styled":
+			artwork := entry.Rendered
+			prefix := "render/"
+			if kind == "styled" {
+				artwork, prefix = entry.Styled, "render-styled/"
+			}
+			if artwork == nil {
+				return fmt.Errorf("%s map layer mapID %d must contain %s only", kind, entry.MapID, kind)
+			}
+			if !validWowMapAssetPath(artwork.Path, prefix) || artwork.Width <= 0 || artwork.Height <= 0 {
+				return fmt.Errorf("invalid %s map layer artwork for mapID %d", kind, entry.MapID)
+			}
+			if kind == "render" {
+				instance.Rendered = artwork
+			} else {
+				instance.Styled = artwork
+			}
+		case "renders":
+			artwork := entry.Renders
+			if artwork == nil || !validWowMapAssetPath(artwork.Path, "renders/") || !strings.HasSuffix(artwork.Path, ".png") || artwork.Width <= 0 || artwork.Height <= 0 {
+				return fmt.Errorf("invalid renders map layer artwork for mapID %d", entry.MapID)
+			}
+			instance.Renders = artwork
+		case "3d":
+			asset := entry.Model3D
+			if asset == nil || !validWowMapAssetPath(asset.Path, "3d/") || !strings.HasSuffix(asset.Path, ".glb") {
+				return fmt.Errorf("invalid 3d map layer artwork for mapID %d", entry.MapID)
+			}
+			instance.Model3D = asset
+		default:
+			return fmt.Errorf("unsupported map layer %q", kind)
 		}
 	}
 	return nil
+}
+
+func validWowMapAssetPath(assetPath, prefix string) bool {
+	return strings.HasPrefix(assetPath, prefix) && len(assetPath) > len(prefix) &&
+		path.Clean(assetPath) == assetPath && !strings.Contains(assetPath, "\\") &&
+		!strings.Contains(assetPath, "//")
 }

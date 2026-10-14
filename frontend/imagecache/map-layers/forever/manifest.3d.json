@@ -1,0 +1,29 @@
+{
+  "format": "chronicle-wow-map-art-v2",
+  "target": {
+    "product": "wow_classic_beta"
+  },
+  "instances": [
+    {
+      "mapID": 389,
+      "3d": {
+        "path": "3d/ragefire-chasm-open-top.glb"
+      },
+      "name": "Ragefire Chasm"
+    },
+    {
+      "mapID": 2999,
+      "3d": {
+        "path": "3d/ruins-of-lordaeron-open-top.glb"
+      },
+      "name": "Ruins of Lordaeron"
+    },
+    {
+      "mapID": 43,
+      "3d": {
+        "path": "3d/wailing-caverns-open-top.glb"
+      },
+      "name": "Wailing Caverns"
+    }
+  ]
+}

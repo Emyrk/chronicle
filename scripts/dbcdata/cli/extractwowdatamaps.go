@@ -85,6 +85,21 @@ type wowMapInstance struct {
 	Floors       []wowMapInstanceFloor   `json:"floors"`
 	Rendered     *wowMapRenderedInstance `json:"rendered,omitempty"`
 	Styled       *wowMapRenderedInstance `json:"styled,omitempty"`
+	Renders      *wowMapManualRender     `json:"renders,omitempty"`
+	Model3D      *wowMap3DAsset          `json:"3d,omitempty"`
+}
+
+// Manually published assets can be registered without regenerating native maps.
+// Bounds are optional until the artwork is calibrated for replay overlays.
+type wowMapManualRender struct {
+	Path   string             `json:"path"`
+	Width  int32              `json:"width"`
+	Height int32              `json:"height"`
+	Bounds *wowMapFloorBounds `json:"bounds,omitempty"`
+}
+
+type wowMap3DAsset struct {
+	Path string `json:"path"`
 }
 
 type wowMapRenderedInstance struct {
