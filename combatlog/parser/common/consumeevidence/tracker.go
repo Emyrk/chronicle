@@ -58,7 +58,7 @@ func (t *Tracker) Process(m messages.Message, active ...bool) {
 	}
 
 	var direct *directEpisode
-	if sg, ok := m.(*messages.SpellGo); ok && sg.ItemID != nil {
+	if sg, ok := m.(*messages.SpellGo); ok && t.isDirectConsumableUse(sg) {
 		direct = t.recordDirectEpisode(sg)
 	}
 	if auraMsg, ok := m.(*messages.Aura); ok && auraMsg.State == 1 && auraMsg.IsBuff {
@@ -67,6 +67,33 @@ func (t *Tracker) Process(m messages.Message, active ...bool) {
 	if !inCombat {
 		t.recordPreCombatEvidence(m, direct)
 	}
+}
+
+// isDirectConsumableUse distinguishes the item's actual use spell from later
+// proc spells that still carry the originating item ID in addon logs.
+func (t *Tracker) isDirectConsumableUse(sg *messages.SpellGo) bool {
+	if sg.ItemID == nil {
+		return false
+	}
+	if t.catalog == nil {
+		return true
+	}
+	if !t.catalog.IsConsumableItem(*sg.ItemID) {
+		return false
+	}
+	if sg.SpellData == nil {
+		return true
+	}
+	candidateItems, ok := t.catalog.IsConsumableDirectSpell(chrondbc.SpellID(sg.SpellData.ID))
+	if !ok {
+		return false
+	}
+	for _, itemID := range candidateItems {
+		if itemID == *sg.ItemID {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *Tracker) recordDirectEpisode(sg *messages.SpellGo) *directEpisode {
