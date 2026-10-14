@@ -67,9 +67,9 @@ import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
-import { KillParseTooltip } from "./EncounterKillParse";
+import { KillParseTooltip, ParseScopesTooltip } from "./EncounterKillParse";
 import { useInstanceTimeParses } from "./Overview/overviewQueries";
-import { bossKillParsesByEncounter, killParseEdgeStyle, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
+import { bossKillParsesByEncounter, hasScopedParse, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -1472,6 +1472,10 @@ function EncounterDetail({
     return Math.max(...endTimes) - Math.min(...startTimes);
   }, [encounters]);
   
+  const timeParsesQuery = useInstanceTimeParses(instance.id);
+  const clearParses = scopedClearParses(timeParsesQuery.data);
+  const clearDurationMs = clearParses?.server?.duration_ms ?? clearParses?.realm?.duration_ms;
+
   const selectedEncounterIDs = useMemo(() => encounters.map((e) => e.id), [encounters]);
 
   // Defer entity selection for panels so the chip UI updates immediately
@@ -1597,7 +1601,28 @@ function EncounterDetail({
               }
             </TooltipContent>
           </Tooltip>
-          {elapsedTimeMs !== null && (
+          {elapsedTimeMs !== null && hasScopedParse(clearParses) && (
+            <ParseScopesTooltip
+              title="Clear time parse"
+              unit="clears"
+              parses={clearParses}
+              lookbackDays={timeParsesQuery.data?.lookback_days}
+              side="bottom"
+              footer={
+                <>
+                  {clearDurationMs !== undefined && <>Full clear in {formatDurationMs(clearDurationMs)}. </>}
+                  Elapsed is first encounter start to last encounter end.
+                </>
+              }
+            >
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-4 w-4" />
+                <span>{formatDurationMs(elapsedTimeMs)}</span>
+                <span className="text-xs opacity-60">elapsed</span>
+              </div>
+            </ParseScopesTooltip>
+          )}
+          {elapsedTimeMs !== null && !hasScopedParse(clearParses) && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-1.5">

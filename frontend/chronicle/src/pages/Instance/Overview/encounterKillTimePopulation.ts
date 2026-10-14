@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { BossKillTimeParse, SpeedrunCohortRun } from "@/api/typesGenerated";
+import type { BossKillTimeParse, SpeedrunCohortRun, TimeParseScore } from "@/api/typesGenerated";
 import { parseHexColor } from "../parseColors";
 import type { ScopedInstanceTimeParsesResponse, TimeParseScope, TimeParseScopeResult } from "./timeParseScope";
 
@@ -75,7 +75,20 @@ export function scopedKillParsesByEncounter(
   return result;
 }
 
-export function scoredKillParse(parse: BossKillTimeParse | undefined): BossKillTimeParse | undefined {
+/** The instance clear-time parse in each comparison scope. */
+export function scopedClearParses(
+  response: ScopedInstanceTimeParsesResponse | undefined,
+): Partial<Record<TimeParseScope, TimeParseScore>> | null {
+  if (!response?.available) return null;
+  const server = response.scopes?.server ?? response;
+  return {
+    server: server.available ? server.clear_time : undefined,
+    realm: response.scopes?.realm?.available ? response.scopes.realm.clear_time : undefined,
+    guild: response.scopes?.guild?.available ? response.scopes.guild.clear_time : undefined,
+  };
+}
+
+export function scoredKillParse<T extends TimeParseScore>(parse: T | undefined): T | undefined {
   return parse && parse.status !== "sample_too_small" ? parse : undefined;
 }
 
@@ -202,4 +215,25 @@ export function averageKillTimePercentile(percentiles: readonly (number | null)[
   const available = percentiles.filter((percentile): percentile is number => percentile !== null);
   if (available.length === 0) return null;
   return Math.round(available.reduce((sum, percentile) => sum + percentile, 0) / available.length);
+}
+
+export type ScopedParses = Partial<Record<TimeParseScope, TimeParseScore>>;
+
+/**
+ * Builds the tooltip rows. Realm is a subset of server, so a matching sample
+ * size means both are the same population and only "Server" is shown.
+ */
+export function parseScopeRows(parses: ScopedParses): { label: string; parse: TimeParseScore }[] {
+  const server = scoredKillParse(parses.server);
+  const realm = scoredKillParse(parses.realm);
+  const guild = scoredKillParse(parses.guild);
+  const rows: { label: string; parse: TimeParseScore }[] = [];
+  if (server) rows.push({ label: "Server", parse: server });
+  if (realm && realm.sample_size !== server?.sample_size) rows.push({ label: "Realm", parse: realm });
+  if (guild) rows.push({ label: "Guild", parse: guild });
+  return rows;
+}
+
+export function hasScopedParse(parses: ScopedParses | null | undefined): boolean {
+  return parses ? parseScopeRows(parses).length > 0 : false;
 }
