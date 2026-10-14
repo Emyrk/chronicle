@@ -1,10 +1,13 @@
 package registry
 
 import (
+	"context"
+	"log/slog"
 	"slices"
 	"testing"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
@@ -358,4 +361,37 @@ func instanceDetailByName(t *testing.T, reg *Registry, name string) InstanceDeta
 
 func intPtr(value int) *int {
 	return &value
+}
+
+func TestWoWForeverRuinsOfLordaeron(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorWoWForever}
+	reg := RegistryForFlavor(slog.New(slog.DiscardHandler), flavor)
+
+	entry := reg.EntryByName("Halls of Lordaeron")
+	require.NotNil(t, entry)
+
+	// The combat log reports the dungeon as "Ruins of Lordaeron" (map 2999).
+	for _, z := range []zone.Zone{
+		{Name: "Ruins of Lordaeron"},
+		{Name: "Unknown", MapID: 2999},
+	} {
+		inst := reg.GetInstance(context.Background(), false, z, nil, flavor)
+		require.NotNilf(t, inst, "zone %q map %d should match", z.Name, z.MapID)
+		require.Equal(t, "Halls of Lordaeron", inst.Name())
+	}
+
+	detail := instanceDetailByName(t, reg, "Halls of Lordaeron")
+	require.Equal(t, instances.InstanceCategoryDungeon, detail.Category)
+
+	var bosses []string
+	for _, id := range instances.RuinsOfLordaeronHostiles() {
+		if id.Boss {
+			bosses = append(bosses, id.EncounterName)
+		}
+	}
+	require.ElementsMatch(t, []string{"Witherfang", "The Butcher", "Viktor the Vile", "The Abandoned", "Bjork", "Rath'mael"}, bosses)
+
+	require.Nil(t, RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla}).EntryByName("Halls of Lordaeron"))
 }
