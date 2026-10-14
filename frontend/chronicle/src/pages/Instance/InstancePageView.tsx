@@ -3484,6 +3484,10 @@ export function InstancePageView({
         {/* Row 3: Duration stats + action buttons (desktop) */}
         <div className="flex items-center justify-between mt-1">
           <div className="flex items-center gap-4 text-muted-foreground text-sm">
+            <ClearParseBadge
+              parses={scopedClearParses(instanceTimeParsesQuery.data)}
+              lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
+            />
             {elapsedDurationMs !== null && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -3524,10 +3528,6 @@ export function InstancePageView({
                 </TooltipContent>
               </Tooltip>
             )}
-            <ClearParseBadge
-              parses={scopedClearParses(instanceTimeParsesQuery.data)}
-              lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
-            />
           </div>
           {isMobile && instance.maxPlayers != null && instance.maxPlayers > 0 && (
             <div className="flex items-center gap-1.5 shrink-0">
