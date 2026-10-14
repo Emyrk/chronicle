@@ -42,6 +42,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
+	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/Emyrk/chronicle/internal/wowspec"
 	"github.com/google/uuid"
@@ -837,8 +838,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	}
 
 	// Keep the compact current-known cohort synchronized after every successful
-	// parse. This also makes late historical uploads visible to older snapshots.
-	if result, err := db.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, job.Args.LogID); err != nil {
+	// parse so live windows immediately include late historical uploads.
+	if result, err := db.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
+		LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	}); err != nil {
 		w.parent.logger.WarnContext(ctx, "failed to refresh clear-time memberships after parse", slog.Any("error", err))
 	} else {
 		w.parent.logger.InfoContext(ctx, "refreshed clear-time memberships after parse",
@@ -846,7 +849,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			slog.Int64("deleted", result.DeletedCount),
 		)
 	}
-	if result, err := db.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, job.Args.LogID); err != nil {
+	if result, err := db.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
+		LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	}); err != nil {
 		w.parent.logger.WarnContext(ctx, "failed to refresh boss-kill memberships after parse", slog.Any("error", err))
 	} else {
 		w.parent.logger.InfoContext(ctx, "refreshed boss-kill memberships after parse",

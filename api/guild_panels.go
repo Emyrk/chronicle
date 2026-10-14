@@ -177,7 +177,7 @@ func (api *API) GuildBestRuns(w http.ResponseWriter, r *http.Request) {
 		ByParse:        r.URL.Query().Get("by") == "parse",
 		LookbackDays:   lookbackDays,
 		PolicyVersion:  int16(timeparsepolicy.PolicyVersion),
-		QueryVersion:   timeparsepolicy.SnapshotQueryVersion,
+		QueryVersion:   timeparsepolicy.QueryVersion,
 		MinParseSample: timeparsepolicy.MinSampleForParse,
 	})
 	if err != nil {

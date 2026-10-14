@@ -1,3 +1,6 @@
+-- PRE-REMOVAL ONLY: run before migrations 000232 and 000233. Those migrations
+-- permanently remove the snapshot and legacy member tables used for verification.
+
 -- Run only after migration 000231 and the matching application code are deployed.
 -- This is intentionally out of band. It scans all current instances, speedruns,
 -- and encounter ranking coverage, so review EXPLAIN output and production row

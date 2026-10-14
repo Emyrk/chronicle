@@ -6,15 +6,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// InstanceTimeParsesResponse contains time-based parse scores for a specific
-// instance. Clear time uses the published snapshot population, while boss kill
-// times use the current-known membership cohort bounded by the snapshot dates.
+// InstanceTimeParsesResponse contains live time-based parse scores for a
+// specific instance, bounded by the reported UTC cutoff and lookback window.
 type InstanceTimeParsesResponse struct {
-	Available    bool      `json:"available"`
-	Reason       string    `json:"reason,omitempty"`
-	SnapshotID   uuid.UUID `json:"snapshot_id"`
-	Cutoff       time.Time `json:"cutoff"`
-	LookbackDays int32     `json:"lookback_days"`
+	Available    bool       `json:"available"`
+	Reason       string     `json:"reason,omitempty"`
+	Cutoff       time.Time  `json:"cutoff"`
+	WindowStart  *time.Time `json:"window_start,omitempty"`
+	LookbackDays int32      `json:"lookback_days"`
 
 	// PolicyVersion and QueryVersion identify the scoring semantics used.
 	PolicyVersion int16 `json:"policy_version"`
@@ -71,16 +70,6 @@ const (
 	TimeParseCohortKindClearTime TimeParseCohortKind = "clear_time"
 )
 
-// TimeParseSnapshotSummary is a published time-parse snapshot for the cohort
-// viewer's snapshot picker.
-type TimeParseSnapshotSummary struct {
-	ID           uuid.UUID  `json:"id"`
-	Cutoff       time.Time  `json:"cutoff"`
-	WindowStart  *time.Time `json:"window_start,omitempty"`
-	LookbackDays int32      `json:"lookback_days"`
-	PublishedAt  time.Time  `json:"published_at"`
-}
-
 // TimeParseCohortBucket is one comparable population in a time-parse
 // snapshot. EncounterName is empty for clear-time buckets.
 type TimeParseCohortBucket struct {
@@ -92,10 +81,12 @@ type TimeParseCohortBucket struct {
 	SampleSize     int64               `json:"sample_size"`
 }
 
-// TimeParseCohortBucketsResponse lists every bucket available in a snapshot.
+// TimeParseCohortBucketsResponse lists every bucket in a live date window.
 type TimeParseCohortBucketsResponse struct {
-	SnapshotID uuid.UUID               `json:"snapshot_id"`
-	Buckets    []TimeParseCohortBucket `json:"buckets"`
+	Cutoff       time.Time               `json:"cutoff"`
+	WindowStart  *time.Time              `json:"window_start,omitempty"`
+	LookbackDays int32                   `json:"lookback_days"`
+	Buckets      []TimeParseCohortBucket `json:"buckets"`
 }
 
 // TimeParseCohortEntry is one run in a time-parse cohort, scored against the
@@ -114,7 +105,9 @@ type TimeParseCohortEntry struct {
 
 // TimeParseCohortResponse is the full cohort for one bucket, fastest first.
 type TimeParseCohortResponse struct {
-	SnapshotID     uuid.UUID              `json:"snapshot_id"`
+	Cutoff         time.Time              `json:"cutoff"`
+	WindowStart    *time.Time             `json:"window_start,omitempty"`
+	LookbackDays   int32                  `json:"lookback_days"`
 	Kind           TimeParseCohortKind    `json:"kind"`
 	InstanceName   string                 `json:"instance_name"`
 	EncounterName  string                 `json:"encounter_name,omitempty"`

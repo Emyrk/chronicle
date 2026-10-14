@@ -454,56 +454,43 @@ func TestGuildBestRuns(t *testing.T) {
 
 	foreignTenantID := uuid.New()
 
-	insertTimeParseSnapshot := func(cutoff time.Time, foreignDurations []time.Duration, durations ...time.Duration) {
+	insertTimeParseCohort := func(memberDate time.Time, foreignDurations []time.Duration, durations ...time.Duration) {
 		t.Helper()
 
-		snapshot, err := f.store.InsertTimeParseSnapshot(ctx, database.InsertTimeParseSnapshotParams{
-			TenantID:          uuid.Nil,
-			Cutoff:            database.Timestamptz(cutoff),
-			LookbackDays:      90,
-			PolicyVersion:     int16(timeparsepolicy.PolicyVersion),
-			QueryVersion:      timeparsepolicy.SnapshotQueryVersion,
-			SourceRowCount:    int64(len(durations)),
-			SourceFingerprint: int64(len(durations)),
-		})
-		require.NoError(t, err)
-
 		for _, duration := range durations {
-			_, err = f.pool.Exec(ctx, `
+			_, err := f.pool.Exec(ctx, `
 				INSERT INTO time_parse_clear_time_memberships (
 					tenant_id, policy_version, query_version, run_id,
 					instance_id, log_group_id, instance_name,
 					difficulty_name, max_players, duration_ms, start_time
 				) VALUES ($1, $2, $3, $4, $5, $6, 'Molten Core', 'Normal', 40, $7, $8)
-			`, uuid.Nil, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.SnapshotQueryVersion,
-				uuid.New(), uuid.New(), f.logGroupID, duration.Milliseconds(), cutoff.Add(-time.Hour))
+			`, uuid.Nil, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.QueryVersion,
+				uuid.New(), uuid.New(), f.logGroupID, duration.Milliseconds(), memberDate)
 			require.NoError(t, err)
 		}
 
 		for _, duration := range foreignDurations {
-			_, err = f.pool.Exec(ctx, `
+			_, err := f.pool.Exec(ctx, `
 				INSERT INTO time_parse_clear_time_memberships (
 					tenant_id, policy_version, query_version, run_id,
 					instance_id, log_group_id, instance_name,
 					difficulty_name, max_players, duration_ms, start_time
 				) VALUES ($1, $2, $3, $4, $5, $6, 'Molten Core', 'Normal', 40, $7, $8)
-			`, foreignTenantID, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.SnapshotQueryVersion,
-				uuid.New(), uuid.New(), f.logGroupID, duration.Milliseconds(), cutoff.Add(-time.Hour))
+			`, foreignTenantID, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.QueryVersion,
+				uuid.New(), uuid.New(), f.logGroupID, duration.Milliseconds(), memberDate)
 			require.NoError(t, err)
 		}
 
-		_, err = f.store.PublishTimeParseSnapshot(ctx, snapshot.ID)
-		require.NoError(t, err)
 	}
 
-	// Molten Core: run A is slower but had a 100 clear-time parse against its
-	// historical cohort; run B is faster but had a 20 clear-time parse.
+	// Molten Core: run A is slower but scores 100 against the live rows available
+	// before it; run B is faster but sees both earlier populations and scores lower.
 	runA := insertClear("Molten Core", now.Add(-30*24*time.Hour), 70*time.Minute, uuid.Nil)
 	runB := insertClear("Molten Core", now.Add(-20*24*time.Hour), 50*time.Minute, uuid.Nil)
-	insertTimeParseSnapshot(now.Add(-31*24*time.Hour),
+	insertTimeParseCohort(now.Add(-31*24*time.Hour),
 		[]time.Duration{time.Minute, 2 * time.Minute, 3 * time.Minute, 4 * time.Minute, 5 * time.Minute},
 		80*time.Minute, 85*time.Minute, 90*time.Minute, 95*time.Minute, 100*time.Minute)
-	insertTimeParseSnapshot(now.Add(-21*24*time.Hour),
+	insertTimeParseCohort(now.Add(-21*24*time.Hour),
 		[]time.Duration{100 * time.Minute, 101 * time.Minute, 102 * time.Minute, 103 * time.Minute, 104 * time.Minute},
 		30*time.Minute, 35*time.Minute, 40*time.Minute, 45*time.Minute, 50*time.Minute)
 	// Player parses are intentionally opposite to the time parses. They must not
@@ -533,7 +520,7 @@ func TestGuildBestRuns(t *testing.T) {
 		SinceDays:      90,
 		LookbackDays:   90,
 		PolicyVersion:  int16(timeparsepolicy.PolicyVersion),
-		QueryVersion:   timeparsepolicy.SnapshotQueryVersion,
+		QueryVersion:   timeparsepolicy.QueryVersion,
 		MinParseSample: timeparsepolicy.MinSampleForParse,
 	}
 	rows, err := f.store.GuildBestRuns(ctx, params)

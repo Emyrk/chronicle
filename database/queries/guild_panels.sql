@@ -222,29 +222,17 @@ WITH representative_instances AS (
         COALESCE(cohort.sample_size, 0)::bigint AS parse_sample_size
     FROM clears c
     LEFT JOIN LATERAL (
-        SELECT tps.id
-        FROM time_parse_snapshots tps
-        WHERE @by_parse::boolean
-          AND tps.tenant_id = @tenant_id
-          AND tps.lookback_days = @lookback_days::int
-          AND tps.policy_version = @policy_version::smallint
-          AND tps.query_version = @query_version::smallint
-          AND tps.status = 'published'
-          AND tps.cutoff <= c.instance_start_time
-        ORDER BY tps.cutoff DESC
-        LIMIT 1
-    ) snapshot ON true
-    LEFT JOIN LATERAL (
         SELECT
             COUNT(*)::bigint AS sample_size,
             COUNT(*) FILTER (WHERE member.duration_ms >= c.duration_ms)::bigint AS at_least_as_slow
         FROM time_parse_clear_time_memberships member
-        JOIN time_parse_snapshots cohort_snapshot ON cohort_snapshot.id = snapshot.id
-        WHERE member.tenant_id = cohort_snapshot.tenant_id
-          AND member.policy_version = cohort_snapshot.policy_version
-          AND member.query_version = cohort_snapshot.query_version
-          AND member.start_time < cohort_snapshot.cutoff
-          AND (cohort_snapshot.window_start IS NULL OR member.start_time >= cohort_snapshot.window_start)
+        WHERE @by_parse::boolean
+          AND member.tenant_id = @tenant_id
+          AND member.policy_version = @policy_version::smallint
+          AND member.query_version = @query_version::smallint
+          AND member.run_id <> c.run_id
+          AND member.start_time < c.instance_start_time
+          AND (@lookback_days::int = 0 OR member.start_time >= c.instance_start_time - make_interval(days => @lookback_days::int))
           AND member.instance_name = c.instance_name
           AND member.difficulty_name = c.difficulty_name
           AND member.max_players = c.max_players

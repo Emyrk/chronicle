@@ -3,14 +3,13 @@ package servicerankings
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/go-chi/chi/v5"
@@ -19,12 +18,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// timeParsesQuerier is the database subset used by the time-parses handler.
 type timeParsesQuerier interface {
 	InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (database.LogInstancesGuild, error)
-	GetLatestPublishedTimeParseSnapshot(ctx context.Context, arg database.GetLatestPublishedTimeParseSnapshotParams) (database.TimeParseSnapshot, error)
-	GetLatestPublishedTimeParseSnapshotBefore(ctx context.Context, arg database.GetLatestPublishedTimeParseSnapshotBeforeParams) (database.TimeParseSnapshot, error)
-	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUID) (database.GetLogInstanceForTimeParseRow, error)
 	GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (database.GetInstanceSpeedrunRow, error)
 	GetInstanceCleanEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]database.GetInstanceCleanEncounterKillTimesRow, error)
@@ -33,297 +28,119 @@ type timeParsesQuerier interface {
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
 }
 
-// handleInstanceTimeParses returns time-based parse scores for an instance.
-//
-//	GET /instances/{instanceID}/time-parses?period=60d&timeframe=historical
 func (s *Service) handleInstanceTimeParses(w http.ResponseWriter, r *http.Request) {
 	handleInstanceTimeParsesWithStore(s.store, s.logger, w, r)
 }
 
 func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Logger, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	q := r.URL.Query()
-
-	instanceIDStr := chi.URLParam(r, "instanceID")
-	instanceID, err := uuid.Parse(instanceIDStr)
+	instanceIDText := chi.URLParam(r, "instanceID")
+	instanceID, err := uuid.Parse(instanceIDText)
 	if err != nil {
-		// Not a UUID — try resolving as a hashed slug.
-		inst, slugErr := store.InstanceBySlug(ctx, pgtype.Text{String: instanceIDStr, Valid: true})
+		inst, slugErr := store.InstanceBySlug(ctx, pgtype.Text{String: instanceIDText, Valid: true})
 		if slugErr != nil {
-			httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
-				Message: "Instance not found",
-			})
+			httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Instance not found"})
 			return
 		}
 		instanceID = inst.ID
 	}
 
-	// Parse period (lookback days).
-	lookbackDays := parsepolicy.DefaultLookbackDays
-	if v := q.Get("period"); v != "" {
-		switch v {
-		case "30d":
-			lookbackDays = parsepolicy.Lookback30Days
-		case "60d":
-			lookbackDays = parsepolicy.Lookback60Days
-		case "90d":
-			lookbackDays = parsepolicy.Lookback90Days
-		case "180d":
-			lookbackDays = parsepolicy.Lookback180Days
-		case "all":
-			lookbackDays = parsepolicy.LookbackAllTime
-		default:
-			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-				Message: "Invalid period",
-				Detail:  fmt.Sprintf("period must be one of: 30d, 60d, 90d, 180d, all; got %q", v),
-			})
-			return
-		}
-	}
-
-	// Parse timeframe.
-	timeframe := q.Get("timeframe")
-	switch timeframe {
-	case "":
-		timeframe = "historical"
-	case "historical", "current":
-	default:
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-			Message: "Invalid timeframe",
-			Detail:  fmt.Sprintf("timeframe must be historical or current; got %q", timeframe),
-		})
+	window, err := parseLiveTimeParseWindow(r.URL.Query(), false, time.Now())
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid time-parse window", Detail: err.Error()})
 		return
 	}
 
-	tid := servicetenant.TenantIDFromContext(ctx)
-
-	// Check tenant parse config.
-	if tid != uuid.Nil {
-		tenant, tErr := store.GetTenantByID(ctx, tid)
-		if tErr == nil && len(tenant.ParseConfig) > 0 {
-			if isParseDisabled(tenant.ParseConfig) {
-				httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceTimeParsesResponse{
-					Available:     false,
-					Reason:        "disabled",
-					BossKillTimes: []chroniclesdk.BossKillTimeParse{},
-				})
-				return
-			}
+	tenantID := servicetenant.TenantIDFromContext(ctx)
+	if tenantID != uuid.Nil {
+		tenant, tenantErr := store.GetTenantByID(ctx, tenantID)
+		if tenantErr == nil && len(tenant.ParseConfig) > 0 && isParseDisabled(tenant.ParseConfig) {
+			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceTimeParsesResponse{Available: false, Reason: "disabled", BossKillTimes: []chroniclesdk.BossKillTimeParse{}})
+			return
 		}
 	}
 
-	// Resolve snapshot — always filter to the current policy+query version
-	// so old-policy snapshots are never selected.
-	policyVer := int16(timeparsepolicy.PolicyVersion)
-	queryVer := timeparsepolicy.SnapshotQueryVersion
-
-	var snapshot database.TimeParseSnapshot
-	switch timeframe {
-	case "current":
-		snapshot, err = store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
-			TenantID:      tid,
-			LookbackDays:  int32(lookbackDays),
-			PolicyVersion: policyVer,
-			QueryVersion:  queryVer,
-		})
-	default: // "historical"
-		startTime, stErr := store.GetLogInstanceStartTime(ctx, instanceID)
-		if stErr != nil {
-			if errors.Is(stErr, pgx.ErrNoRows) {
-				httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
-					Message: "Instance not found",
-				})
-				return
-			}
-			httpapi.HandleResponseError(ctx, w, stErr, httpapi.APIError{
-				Response: chroniclesdk.Response{
-					Message: "Failed to fetch instance",
-					Detail:  stErr.Error(),
-				},
-			})
-			return
-		}
-
-		if startTime.Valid {
-			snapshot, err = store.GetLatestPublishedTimeParseSnapshotBefore(ctx, database.GetLatestPublishedTimeParseSnapshotBeforeParams{
-				TenantID:      tid,
-				LookbackDays:  int32(lookbackDays),
-				PolicyVersion: policyVer,
-				QueryVersion:  queryVer,
-				Before:        startTime,
-			})
-		} else {
-			snapshot, err = store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
-				TenantID:      tid,
-				LookbackDays:  int32(lookbackDays),
-				PolicyVersion: policyVer,
-				QueryVersion:  queryVer,
-			})
-		}
+	speedrun, err := store.GetInstanceSpeedrun(ctx, instanceID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceTimeParsesResponse{Available: false, Reason: "no_speedrun", BossKillTimes: []chroniclesdk.BossKillTimeParse{}})
+		return
 	}
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceTimeParsesResponse{
-				Available:     false,
-				Reason:        "no_snapshot",
-				BossKillTimes: []chroniclesdk.BossKillTimeParse{},
-			})
-			return
-		}
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
-			Response: chroniclesdk.Response{
-				Message: "Failed to fetch time-parse snapshot",
-				Detail:  err.Error(),
-			},
-		})
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch speedrun", Detail: err.Error()}})
 		return
 	}
 
-	// Get the instance's speedrun data.
-	speedrun, sErr := store.GetInstanceSpeedrun(ctx, instanceID)
-	if sErr != nil {
-		if errors.Is(sErr, pgx.ErrNoRows) {
-			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceTimeParsesResponse{
-				Available:     false,
-				Reason:        "no_speedrun",
-				BossKillTimes: []chroniclesdk.BossKillTimeParse{},
-			})
-			return
-		}
-		httpapi.HandleResponseError(ctx, w, sErr, httpapi.APIError{
-			Response: chroniclesdk.Response{
-				Message: "Failed to fetch speedrun",
-				Detail:  sErr.Error(),
-			},
-		})
+	instInfo, err := store.GetLogInstanceForTimeParse(ctx, instanceID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch instance info", Detail: err.Error()}})
+		return
+	}
+	encounterKills, err := store.GetInstanceCleanEncounterKillTimes(ctx, instanceID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch encounter kill times", Detail: err.Error()}})
 		return
 	}
 
-	// Get instance cohort dimensions (difficulty, max_players).
-	instInfo, iErr := store.GetLogInstanceForTimeParse(ctx, instanceID)
-	if iErr != nil {
-		httpapi.HandleResponseError(ctx, w, iErr, httpapi.APIError{
-			Response: chroniclesdk.Response{
-				Message: "Failed to fetch instance info",
-				Detail:  iErr.Error(),
-			},
-		})
-		return
-	}
-
-	// Get the instance's clean encounter kill times only — partial kills are
-	// excluded because the snapshot cohort contains only clean kills.
-	encounterKills, eErr := store.GetInstanceCleanEncounterKillTimes(ctx, instanceID)
-	if eErr != nil {
-		httpapi.HandleResponseError(ctx, w, eErr, httpapi.APIError{
-			Response: chroniclesdk.Response{
-				Message: "Failed to fetch encounter kill times",
-				Detail:  eErr.Error(),
-			},
-		})
-		return
-	}
-
+	policyVersion := int16(timeparsepolicy.PolicyVersion)
+	queryVersion := timeparsepolicy.QueryVersion
+	cutoff := pgtype.Timestamptz{Time: window.Cutoff, Valid: true}
+	excludeRunID := instInfo.RunID
 	resp := chroniclesdk.InstanceTimeParsesResponse{
-		Available:     true,
-		SnapshotID:    snapshot.ID,
-		Cutoff:        snapshot.Cutoff.Time,
-		LookbackDays:  snapshot.LookbackDays,
-		PolicyVersion: snapshot.PolicyVersion,
-		QueryVersion:  snapshot.QueryVersion,
+		Available: true, Cutoff: window.Cutoff, WindowStart: window.windowStartPtr(),
+		LookbackDays: window.LookbackDays, PolicyVersion: policyVersion, QueryVersion: queryVersion,
 		BossKillTimes: make([]chroniclesdk.BossKillTimeParse, 0, len(encounterKills)),
 	}
 
-	// Score every complete clear against the qualified clear-time cohort.
-	// Qualification controls cohort membership and public leaderboard eligibility,
-	// not whether a full clear can receive a parse score.
 	clearDurationMs := speedrun.RankedDurationMs.Int64
 	if speedrun.RankedDurationMs.Valid && clearDurationMs > 0 {
-		cohort, cErr := store.GetTimeParseClearTimeMembershipCohort(ctx, database.GetTimeParseClearTimeMembershipCohortParams{
-			SnapshotID:     snapshot.ID,
-			InstanceName:   speedrun.InstanceName,
-			DifficultyName: instInfo.DifficultyName,
-			MaxPlayers:     int16(instInfo.MaxPlayers),
+		cohort, cohortErr := store.GetTimeParseClearTimeMembershipCohort(ctx, database.GetTimeParseClearTimeMembershipCohortParams{
+			TenantID: tenantID, PolicyVersion: policyVersion, QueryVersion: queryVersion,
+			Cutoff: cutoff, WindowStart: window.WindowStart, ExcludeRunID: excludeRunID,
+			InstanceName: speedrun.InstanceName, DifficultyName: instInfo.DifficultyName, MaxPlayers: int16(instInfo.MaxPlayers),
 		})
-		if cErr != nil {
-			logger.Error("failed to load clear-time cohort",
-				"instance_id", instanceID,
-				"error", cErr,
-			)
+		if cohortErr != nil {
+			logger.Error("failed to load clear-time cohort", "instance_id", instanceID, "error", cohortErr)
 		} else {
-			scoreResult, scored := timeparsepolicy.ScoreTime(cohort, clearDurationMs)
-			clearScore := &chroniclesdk.TimeParseScore{
-				DurationMs: clearDurationMs,
-				SampleSize: scoreResult.SampleSize,
-				Status:     string(scoreResult.Status),
-			}
+			result, scored := timeparsepolicy.ScoreTime(cohort, clearDurationMs)
+			score := &chroniclesdk.TimeParseScore{DurationMs: clearDurationMs, SampleSize: result.SampleSize, Status: string(result.Status)}
 			if scored {
-				clearScore.PreciseScore = scoreResult.PreciseScore
-				clearScore.DisplayScore = scoreResult.DisplayScore
-				clearScore.Rank = scoreResult.Rank
+				score.PreciseScore, score.DisplayScore, score.Rank = result.PreciseScore, result.DisplayScore, result.Rank
 			}
 			if len(cohort) < timeparsepolicy.MinSampleForParse {
-				clearScore.SampleSize = len(cohort)
+				score.SampleSize = len(cohort)
 			}
-			resp.ClearTime = clearScore
+			resp.ClearTime = score
 		}
 	}
 
-	// Score each boss kill time.
-	var preciseScores []float64
+	preciseScores := make([]float64, 0, len(encounterKills))
 	for _, kill := range encounterKills {
 		if kill.DurationMs <= 0 {
 			continue
 		}
-
-		bossKillCohort, cErr := store.GetTimeParseBossKillMembershipCohort(ctx, database.GetTimeParseBossKillMembershipCohortParams{
-			SnapshotID:     snapshot.ID,
-			InstanceName:   speedrun.InstanceName,
-			EncounterName:  kill.EncounterName,
-			DifficultyName: instInfo.DifficultyName,
-			MaxPlayers:     int16(instInfo.MaxPlayers),
+		cohort, cohortErr := store.GetTimeParseBossKillMembershipCohort(ctx, database.GetTimeParseBossKillMembershipCohortParams{
+			TenantID: tenantID, PolicyVersion: policyVersion, QueryVersion: queryVersion,
+			Cutoff: cutoff, WindowStart: window.WindowStart, ExcludeRunID: excludeRunID,
+			InstanceName: speedrun.InstanceName, EncounterName: kill.EncounterName,
+			DifficultyName: instInfo.DifficultyName, MaxPlayers: int16(instInfo.MaxPlayers),
 		})
-		if cErr != nil {
-			logger.Error("failed to load boss-kill cohort",
-				"instance_id", instanceID,
-				"encounter", kill.EncounterName,
-				"error", cErr,
-			)
+		if cohortErr != nil {
+			logger.Error("failed to load boss-kill cohort", "instance_id", instanceID, "encounter", kill.EncounterName, "error", cohortErr)
 			continue
 		}
-
-		scoreResult, scored := timeparsepolicy.ScoreTime(bossKillCohort, kill.DurationMs)
-		bossScore := chroniclesdk.BossKillTimeParse{
-			EncounterID:   kill.EncounterID,
-			EncounterName: kill.EncounterName,
-			DurationMs:    kill.DurationMs,
-			SampleSize:    scoreResult.SampleSize,
-			Status:        string(scoreResult.Status),
-		}
+		result, scored := timeparsepolicy.ScoreTime(cohort, kill.DurationMs)
+		score := chroniclesdk.BossKillTimeParse{EncounterID: kill.EncounterID, EncounterName: kill.EncounterName, DurationMs: kill.DurationMs, SampleSize: result.SampleSize, Status: string(result.Status)}
 		if scored {
-			bossScore.PreciseScore = scoreResult.PreciseScore
-			bossScore.DisplayScore = scoreResult.DisplayScore
-			bossScore.Rank = scoreResult.Rank
-			preciseScores = append(preciseScores, scoreResult.PreciseScore)
+			score.PreciseScore, score.DisplayScore, score.Rank = result.PreciseScore, result.DisplayScore, result.Rank
+			preciseScores = append(preciseScores, result.PreciseScore)
 		}
-		if len(bossKillCohort) < timeparsepolicy.MinSampleForParse {
-			bossScore.SampleSize = len(bossKillCohort)
+		if len(cohort) < timeparsepolicy.MinSampleForParse {
+			score.SampleSize = len(cohort)
 		}
-		resp.BossKillTimes = append(resp.BossKillTimes, bossScore)
+		resp.BossKillTimes = append(resp.BossKillTimes, score)
 	}
-
-	// Compute average boss kill parse.
-	if len(preciseScores) > 0 {
-		avg, ok := timeparsepolicy.AverageParse(preciseScores, len(encounterKills))
-		if ok {
-			resp.AverageBossKillParse = &chroniclesdk.TimeParseAverage{
-				PreciseScore: avg.PreciseScore,
-				DisplayScore: avg.DisplayScore,
-				Killed:       avg.Killed,
-				Selected:     avg.Selected,
-			}
-		}
+	if average, ok := timeparsepolicy.AverageParse(preciseScores, len(encounterKills)); ok {
+		resp.AverageBossKillParse = &chroniclesdk.TimeParseAverage{PreciseScore: average.PreciseScore, DisplayScore: average.DisplayScore, Killed: average.Killed, Selected: average.Selected}
 	}
-
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }

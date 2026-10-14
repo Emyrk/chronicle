@@ -3,23 +3,23 @@ import type { BossKillTimeParse, InstanceTimeParsesResponse, SpeedrunCohortRun }
 import { parseHexColor } from "../parseColors";
 
 /** A server-computed per-boss parse score ready for display. */
-export interface SnapshotBossParse {
+export interface TimeBossParse {
   displayScore: number;
   sampleSize: number;
   status: string;
 }
 
 /**
- * Maps snapshot API boss_kill_times[] to a lookup by encounter name.
- * Returns null when the snapshot is unavailable (loading, no_snapshot, disabled).
+ * Maps time-parse API boss_kill_times[] to a lookup by encounter name.
+ * Returns null when time parses are unavailable (loading or disabled).
  * Individual entries with status "sample_too_small" get a null displayScore
  * so the badge renders "—" consistently with existing behavior.
  */
-export function mapSnapshotBossParses(
+export function mapTimeBossParses(
   timeParses: InstanceTimeParsesResponse | undefined,
-): ReadonlyMap<string, SnapshotBossParse | null> | null {
+): ReadonlyMap<string, TimeBossParse | null> | null {
   if (!timeParses?.available) return null;
-  const result = new Map<string, SnapshotBossParse | null>();
+  const result = new Map<string, TimeBossParse | null>();
   for (const boss of timeParses.boss_kill_times) {
     if (boss.status === "sample_too_small") {
       result.set(boss.encounter_name, null);
@@ -36,7 +36,7 @@ export function mapSnapshotBossParses(
 
 /**
  * Indexes boss kill-time parses by encounter ID. Returns null when the
- * snapshot is unavailable (loading, no snapshot, disabled) so callers can
+ * time parses are unavailable (loading or disabled) so callers can
  * fall back to the plain kill icon.
  */
 export function bossKillParsesByEncounter(
@@ -67,19 +67,19 @@ export function killParseEdgeStyle(
 
 /**
  * Resolves the display parse score for a single encounter row.
- * Returns a number when a valid snapshot score exists, or null when:
- * - snapshot is not available (snapshotParses is null)
- * - boss is missing from the snapshot
+ * Returns a number when a valid time-parse score exists, or null when:
+ * - time parses are not available (timeParses is null)
+ * - boss is missing from the response
  * - sample is too small (entry is null)
  *
  * Never falls back to client-side cohort percentiles.
  */
 export function resolveEncounterParseScore(
-  snapshotParses: ReadonlyMap<string, SnapshotBossParse | null> | null,
+  timeParses: ReadonlyMap<string, TimeBossParse | null> | null,
   encounterName: string,
 ): number | null {
-  if (!snapshotParses) return null;
-  const entry = snapshotParses.get(encounterName);
+  if (!timeParses) return null;
+  const entry = timeParses.get(encounterName);
   if (entry === undefined || entry === null) return null;
   return entry.displayScore;
 }

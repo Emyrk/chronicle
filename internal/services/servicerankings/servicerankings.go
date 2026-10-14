@@ -59,11 +59,6 @@ type Service struct {
 	// SnapshotTenantWorker publishes a snapshot for a single tenant+lookback.
 	SnapshotTenantWorker *WorkerPublishParseSnapshotTenant
 
-	// TimeParseSnapshotDispatchWorker fans out per-tenant time-parse snapshot jobs.
-	TimeParseSnapshotDispatchWorker *WorkerPublishTimeParseSnapshots
-	// TimeParseSnapshotTenantWorker publishes a time-parse snapshot for a single tenant+lookback.
-	TimeParseSnapshotTenantWorker *WorkerPublishTimeParseSnapshotTenant
-
 	// ComputeParseScoresWorker computes and persists per-instance parse scores.
 	ComputeParseScoresWorker *WorkerComputeParseScores
 	// RepairDispatchWorker fans daily repairs out across root and tenant scopes.
@@ -126,16 +121,6 @@ func (s *Service) Start(_ context.Context) error {
 		// Queue is set by serviceriver after queue creation.
 	}
 	s.SnapshotTenantWorker = &WorkerPublishParseSnapshotTenant{
-		Store:  store,
-		Logger: namedLogger,
-	}
-
-	s.TimeParseSnapshotDispatchWorker = &WorkerPublishTimeParseSnapshots{
-		Store:  store,
-		Logger: namedLogger,
-		// Queue is set by serviceriver after queue creation.
-	}
-	s.TimeParseSnapshotTenantWorker = &WorkerPublishTimeParseSnapshotTenant{
 		Store:  store,
 		Logger: namedLogger,
 	}
@@ -216,9 +201,8 @@ func (s *Service) setupRoutes() {
 	// Cohort viewer (debugging/transparency)
 	s.router.Get("/snapshots", s.handleListSnapshots)
 	s.router.Get("/snapshots/{snapshotID}/cohort", s.handleSnapshotCohort)
-	s.router.Get("/time-parse-snapshots", s.handleListTimeParseSnapshots)
-	s.router.Get("/time-parse-snapshots/{snapshotID}/buckets", s.handleTimeParseCohortBuckets)
-	s.router.Get("/time-parse-snapshots/{snapshotID}/cohort", s.handleTimeParseCohort)
+	s.router.Get("/time-parse-cohorts/buckets", s.handleTimeParseCohortBuckets)
+	s.router.Get("/time-parse-cohorts/cohort", s.handleTimeParseCohort)
 
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)
