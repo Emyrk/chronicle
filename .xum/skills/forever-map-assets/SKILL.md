@@ -1,6 +1,6 @@
 ---
 name: forever-map-assets
-description: Extracts, validates, merges, and publishes Chronicle map artwork for Forever and legacy WoW servers. Use when changing map extraction, source manifests, styled or rendered layers, map Make targets, or per-server icons.chronicleclassic.com map assets.
+description: Extracts, validates, merges, and publishes Chronicle map artwork for Forever and legacy WoW servers. Use when changing native map extraction, renders, meshes, styled layers, source manifests, map Make targets, or per-server icons.chronicleclassic.com assets.
 metadata:
   type: workflow
   binding: advisory
@@ -21,7 +21,7 @@ The frontend reads `<icon-base>/maps/manifest.json`, merged from root-level `man
 | `frontend/imagecache/meshes/<server>/manifest.meshes.json` | `mesh: {path,bounds,zMin,zMax,frame,liquid?}` | `3d/*.glb` | Placeable replay model; derive and verify coordinates against actual GLB. |
 | `frontend/imagecache/styled-maps/<server>/manifest.styled.json` | `styled: {path,width,height,source,bounds}` | `render-styled/*` | Hand-styled image with calibrated overlay bounds. |
 
-There is **no** public `rendered` or path-only `3d` layer. Do not infer 2D PNG bounds from mesh bounds or image dimensions. Uncalibrated images must not place route or player markers. `frame` for meshes is `wow-yup-mirrored-x`; check the renderer's `height.json` and GLB POSITION extents before publishing. See `docs/wow-map-assets.md` for calibration and exporter details.
+There is **no** public `rendered` or path-only `3d` layer. The standalone `render-wowdata-maps` CLI may generate local `manifest.generated-renders.json` and `renders/` PNGs, but `make maps` does not publish them or replace the tracked manual source. Do not infer 2D PNG bounds from mesh bounds or image dimensions. Uncalibrated images must not place route or player markers. `frame` for meshes is `wow-yup-mirrored-x`; check the renderer's `height.json` and GLB POSITION extents before publishing. See `docs/wow-map-assets.md` for calibration and exporter details.
 
 ## Procedure
 

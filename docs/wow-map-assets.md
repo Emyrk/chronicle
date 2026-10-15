@@ -75,7 +75,7 @@ The Replay Map's "3D map" toggle stands the units on the dungeon's real geometry
 
 Some dungeons have no native floor artwork (Ragefire Chasm, map 389, and Ruins of Lordaeron, map 2999), so the original manifest has no `instances[]` entry for them. A `meshes` layer entry whose `mapID` is unknown to the original then creates a floorless instance, `{ "mapID", "name", "floors": [], "mesh" }`, taking its `name` from the layer entry (required in that case; for an existing instance the original's name wins and the entry's `name` is ignored). The entry may still carry nothing but `mesh` (and `name`); floors, `renders` or `styled` are rejected; the `renders` layer may also create named floorless instances.
 
-The frontend treats `floors: []` plus a placeable `mesh` (but no wired 2D artwork) as "3D only": the Replay Map opens with the "3D map" switch on (and disabled, there is nothing else to show), the mesh's extent is the ground from the first frame, the floor selector is hidden, and the 2D paths (the multi-encounter route overview and the WebGL-unavailable fallback) show "No map artwork for this instance" instead of tiles. The map gallery lists the instance with a text card. No per-boss artwork calibration applies, since there is no artwork.
+A floorless instance with a placeable `mesh` uses the mesh extent for single-encounter 3D replay, including when a manual PNG exists. Its `renders` PNG is available in the 2D overview; without calibrated image bounds, the overview does not place route or player markers. A floorless instance without a render remains 3D-only, with no 2D artwork or floor selector.
 
 Do not copy mesh bounds from examples or the 2D PNG: derive and verify them from each actual GLB before adding its `mesh` entry.
 
