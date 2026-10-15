@@ -62,6 +62,10 @@ SERVER=forever make maps/3d-upload
 
 These commands **do not upload images or GLBs**: verify the corresponding R2 objects already exist and have the correct MIME/CORS settings before publishing. They require a v2 `manifest.original.json` on R2 for target and native map metadata, but the native manifest need not contain RFC or Ruins of Lordaeron. The merger rejects unnamed manual-only instances, incompatible products, and invalid asset paths. Publish the v2 native layer before attempting these layer-only uploads. The new merged `instances[].renders` records path and image dimensions, and `instances[]["3d"]` records the GLB path. Both are catalog metadata for now, not replay inputs: the PNGs lack calibrated world bounds, and GLB placement/frame data has not been established. The generated `render/` layer and hand-styled `render-styled/` layer remain independent.
 
+## Forever v1 compatibility migration
+
+The first v2 native source was derived from the previously published v1 `manifest.json` without re-extracting its tiles. It preserves native map/instance metadata and its `tiles/` paths (whose R2 objects remain available); a subsequent full native extraction will replace them with `original/` paths. The pre-migration manifest is backed up at `forever/maps/backups/manifest-v1-pre-manual-layers.json`. Its Wailing Caverns `rendered` reference pointed to an object that was no longer on R2, so that stale entry was omitted rather than carried into v2. A future raw render can be generated and published with `make maps/forever-render-upload` after a compatible local native manifest has been produced. Do not delete the legacy `tiles/` objects while the public manifest still references them.
+
 ## Cleaning generated maps
 
 Map manifests and WebP tiles are generated files. They are ignored by Git and can be removed at any time:
