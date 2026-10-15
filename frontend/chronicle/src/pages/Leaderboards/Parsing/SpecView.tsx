@@ -9,6 +9,7 @@ import { formatMetric, summarizeCohort, tierCutoffs } from "@/pages/Parsing/coho
 import { selectPlayerSubSpec } from "@/pages/Parsing/cohort/playerCohortState"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { ClassSpecFilter } from "@/pages/Rankings/ClassSpecFilter"
+import { specializationIconUrl } from "@/config/specializationIcon"
 import type { ParsingMetric } from "./parsingState"
 import { classSpecOptions, spreadCutoff, type SpreadDifficultyOption } from "./spreadBands"
 
@@ -113,9 +114,15 @@ export function SpecView({
       </div>
 
       {!ready ? (
-        <p className="rounded-xl border bg-card py-10 text-center text-sm text-muted-foreground">
-          Pick a class{specMode ? " and spec" : ""} to see what each parse takes on every {instanceName} boss.
-        </p>
+        <SpecPicker
+          options={options}
+          bossSpreads={bossSpreads}
+          boss={boss}
+          instanceName={instanceName}
+          specMode={specMode}
+          playerClass={playerClass}
+          onPick={(cls, spec) => onSelectSpec({ class: cls, spec, sub_spec: "" })}
+        />
       ) : (
         <>
           <section className="space-y-3 rounded-xl border bg-card p-3 sm:p-5">
@@ -209,5 +216,94 @@ export function SpecView({
         </>
       )}
     </div>
+  )
+}
+
+function killCount(count: number): string {
+  return `${count.toLocaleString()} kill${count === 1 ? "" : "s"}`
+}
+
+/**
+ * Empty-state picker: every class/spec with kills on the boss as a card,
+ * limited to the selected class once one is chosen.
+ */
+function SpecPicker({
+  options,
+  bossSpreads,
+  boss,
+  instanceName,
+  specMode,
+  playerClass,
+  onPick,
+}: {
+  options: ReturnType<typeof classSpecOptions>
+  bossSpreads: readonly ParseScoreSpread[]
+  boss: string
+  instanceName: string
+  specMode: boolean
+  playerClass: string
+  onPick: (playerClass: string, playerSpec: string) => void
+}) {
+  const kills = (cls: string, spec?: string) =>
+    bossSpreads
+      .filter((s) => s.player_class === cls && (spec === undefined || (s.player_spec ?? "") === spec))
+      .reduce((sum, s) => sum + s.sample_size, 0)
+  const groups = options
+    .filter((option) => !playerClass || option.player_class === playerClass)
+    .sort((a, b) => (CLASS_DISPLAY[a.player_class] ?? a.player_class).localeCompare(CLASS_DISPLAY[b.player_class] ?? b.player_class))
+
+  return (
+    <section className="rounded-xl border bg-card p-3 sm:p-5">
+      <h2 className="mb-3 text-sm text-muted-foreground">
+        Pick a {specMode ? "spec" : "class"} to see what each parse takes on every {instanceName} boss.
+      </h2>
+      {groups.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">No kills on {boss} yet.</p>
+      ) : (
+        <div className="space-y-4">
+          {groups.map((group) => {
+            const color = CLASS_CSS_VAR[group.player_class]
+            const className = CLASS_DISPLAY[group.player_class] ?? group.player_class
+            const cards = specMode
+              ? group.specs.map((spec) => ({ spec: spec.spec, label: spec.spec, icon: specializationIconUrl(group.player_class, spec.spec) }))
+              : [{ spec: "", label: className, icon: `/c/icons/class_${group.player_class.toLowerCase()}.png` }]
+            return (
+              <div key={group.player_class}>
+                {specMode && !playerClass && (
+                  <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color }}>
+                    {className}
+                  </h3>
+                )}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {cards.map((card) => (
+                    <button
+                      key={card.spec || group.player_class}
+                      type="button"
+                      onClick={() => onPick(group.player_class, card.spec)}
+                      className="flex items-center gap-2.5 rounded-lg border border-white/10 px-3 py-2.5 text-left transition-colors hover:border-white/25 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                    >
+                      <img
+                        src={card.icon}
+                        alt=""
+                        className="h-8 w-8 shrink-0 rounded"
+                        onError={(e) => { e.currentTarget.src = `/c/icons/class_${group.player_class.toLowerCase()}.png` }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium" style={{ color }}>
+                          {card.label}
+                        </span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {killCount(kills(group.player_class, specMode ? card.spec : undefined))} on {boss}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </section>
   )
 }
