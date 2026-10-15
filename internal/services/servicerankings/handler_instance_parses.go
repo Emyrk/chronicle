@@ -270,6 +270,9 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				return
 			}
 			persistedPlayers, complete := buildPersistedInstanceParsePlayers(rankings, persisted, encounterNames, metric, receiptMode)
+			if len(persisted) == 0 {
+				complete = false
+			}
 			if complete {
 				httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
 					Available: true, SnapshotID: receiptSnapshotID, Cutoff: receiptCutoff,
@@ -278,6 +281,12 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				})
 				return
 			}
+			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
+				Available: false, Reason: "persisted_results_incomplete", SnapshotID: receiptSnapshotID, Cutoff: receiptCutoff,
+				LookbackDays: int32(receipt.LookbackDays), CohortMode: string(receiptMode),
+				SelectedEncounters: encounterNames, Metric: string(metric), Players: []chroniclesdk.InstanceParsePlayer{},
+			})
+			return
 		} else if !errors.Is(receiptErr, pgx.ErrNoRows) {
 			httpapi.HandleResponseError(ctx, w, receiptErr, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch parse score receipt", Detail: receiptErr.Error()}})
 			return

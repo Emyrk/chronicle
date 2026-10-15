@@ -297,8 +297,29 @@ func requestInstanceParses(
 ) chroniclesdk.InstanceParsesResponse {
 	t.Helper()
 	svc := newTestService(t, store)
+	return requestInstanceParsesWithHandler(t, svc.HandleInstanceParses, instanceID, query)
+}
+
+func requestGuardedInstanceParses(
+	t *testing.T,
+	store *noMembershipCohortStore,
+	instanceID uuid.UUID,
+	query string,
+) chroniclesdk.InstanceParsesResponse {
+	t.Helper()
+	svc := servicerankings.NewTestableParsesService(store, slog.Default())
+	return requestInstanceParsesWithHandler(t, svc.HandleInstanceParses, instanceID, query)
+}
+
+func requestInstanceParsesWithHandler(
+	t *testing.T,
+	handler http.HandlerFunc,
+	instanceID uuid.UUID,
+	query string,
+) chroniclesdk.InstanceParsesResponse {
+	t.Helper()
 	r := chi.NewRouter()
-	r.Get("/instances/{instanceID}/parses", svc.HandleInstanceParses)
+	r.Get("/instances/{instanceID}/parses", handler)
 
 	req := httptest.NewRequest("GET", "/instances/"+instanceID.String()+"/parses"+query, nil)
 	w := httptest.NewRecorder()
@@ -439,17 +460,37 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		assert.Zero(t, guardedStore.queries, "orphaned persisted results must not query memberships")
 	})
 
-	t.Run("IncompleteReceiptFallsBackToOnDemand", func(t *testing.T) {
+	t.Run("ReceiptWithNoRowsDoesNotRecalculate", func(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
 		snapshot := f.publishSnapshot(t)
 		f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 1)
 
-		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
-		require.True(t, response.Available)
-		require.Len(t, response.Players, 1)
-		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), response.Players[0].Bosses[0].Status)
+		guardedStore := &noMembershipCohortStore{Store: f.store}
+		response := requestGuardedInstanceParses(t, guardedStore, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
+		assert.False(t, response.Available)
+		assert.Equal(t, "persisted_results_incomplete", response.Reason)
+		assert.Empty(t, response.Players)
+		assert.Zero(t, guardedStore.queries, "authoritative receipts must not query memberships")
+	})
+
+	t.Run("ReceiptWithIncompleteRowsDoesNotRecalculate", func(t *testing.T) {
+		t.Parallel()
+		f := setupParsesTest(t)
+		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
+		f.insertSimpleRanking(t, "Golemagg", "Player-persisted", 900, 0)
+		snapshot := f.publishSnapshot(t)
+		snapshotID := uuid.NullUUID{UUID: snapshot.ID, Valid: true}
+		persistedResult(f, t, snapshotID, uuid.Nil, "Ragnaros", "dps", 90)
+		f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 2)
+
+		guardedStore := &noMembershipCohortStore{Store: f.store}
+		response := requestGuardedInstanceParses(t, guardedStore, f.instanceID, "?encounter_names=Ragnaros,Golemagg&metric=dps")
+		assert.False(t, response.Available)
+		assert.Equal(t, "persisted_results_incomplete", response.Reason)
+		assert.Empty(t, response.Players)
+		assert.Zero(t, guardedStore.queries, "authoritative receipts must not query memberships")
 	})
 
 	t.Run("CurrentTimeframeIgnoresPersistedProjection", func(t *testing.T) {
