@@ -1,0 +1,35 @@
+{
+  "format": "chronicle-wow-map-art-v2",
+  "target": {
+    "product": "wow_classic_beta"
+  },
+  "instances": [
+    {
+      "mapID": 389,
+      "renders": {
+        "path": "renders/RFC-shaded.png",
+        "width": 1774,
+        "height": 2400
+      },
+      "name": "Ragefire Chasm"
+    },
+    {
+      "mapID": 2999,
+      "renders": {
+        "path": "renders/RoL-shaded-aligned.png",
+        "width": 1024,
+        "height": 1024
+      },
+      "name": "Ruins of Lordaeron"
+    },
+    {
+      "mapID": 43,
+      "renders": {
+        "path": "renders/WC-shaded-water.png",
+        "width": 2400,
+        "height": 1533
+      },
+      "name": "Wailing Caverns"
+    }
+  ]
+}

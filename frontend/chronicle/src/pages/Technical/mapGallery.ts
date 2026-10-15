@@ -64,6 +64,8 @@ export interface WowMapInstance {
   floors: WowMapInstanceFloor[];
   rendered?: WowMapRenderedInstance;
   styled?: WowMapRenderedInstance;
+  renders?: WowMapManualRender;
+  "3d"?: WowMap3DAsset;
   mesh?: WowMapMeshInstance;
 }
 
@@ -85,6 +87,18 @@ export interface WowMapMeshLiquid {
   color: string;
   /** 0 < opacity <= 1. */
   opacity: number;
+}
+
+// Catalog entries for manually published assets; replay placement is not yet calibrated.
+export interface WowMapManualRender {
+  path: string;
+  width: number;
+  height: number;
+  bounds?: WowMapFloorBounds;
+}
+
+export interface WowMap3DAsset {
+  path: string;
 }
 
 export interface WowMapRenderedInstance {

@@ -86,6 +86,20 @@ type wowMapInstance struct {
 	Rendered     *wowMapRenderedInstance `json:"rendered,omitempty"`
 	Styled       *wowMapRenderedInstance `json:"styled,omitempty"`
 	Mesh         *wowMapMeshInstance     `json:"mesh,omitempty"`
+	Renders      *wowMapManualRender     `json:"renders,omitempty"`
+	Model3D      *wowMap3DAsset          `json:"3d,omitempty"`
+}
+
+// Manually published assets may be listed before their replay placement is calibrated.
+type wowMapManualRender struct {
+	Path   string             `json:"path"`
+	Width  int32              `json:"width"`
+	Height int32              `json:"height"`
+	Bounds *wowMapFloorBounds `json:"bounds,omitempty"`
+}
+
+type wowMap3DAsset struct {
+	Path string `json:"path"`
 }
 
 // wowMapMeshFrame is the only glTF axis convention the frontend places:

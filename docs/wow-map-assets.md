@@ -8,11 +8,13 @@ Chronicle publishes each dataset's map manifest beneath its configured icon base
 <icon-base>/maps/manifest.rendered.json
 <icon-base>/maps/manifest.styled.json
 <icon-base>/maps/manifest.meshes.json
+<icon-base>/maps/manifest.renders.json
+<icon-base>/maps/manifest.3d.json
 <icon-base>/maps/original/<tile-id>.webp
 <icon-base>/maps/3d/<slug>-open-top.glb
 ```
 
-The frontend accepts v1 published manifests during migration; all new imports use v2. `make maps` works for each `SERVER` and publishes native artwork under `original/`. Raw geometry, hand-authored art and dungeon meshes are independent optional layers under `render/`, `render-styled/` and `meshes/`. The publisher merges their root-level source manifests into `manifest.json` after each job. Generated manifests and tiles live under `frontend/imagecache/<server>/maps/`, are ignored by Git, and are published to object storage.
+The frontend accepts v1 published manifests during migration; all new imports use v2. `make maps` works for each `SERVER` and publishes native artwork under `original/`. Raw geometry, hand-authored art and dungeon meshes are independent optional layers under `render/`, `render-styled/` and `3d/`. The publisher merges their root-level source manifests into `manifest.json` after each job. Generated manifests and tiles live under `frontend/imagecache/<server>/maps/`, are ignored by Git, and are published to object storage.
 
 ## MPQ-era clients
 
@@ -72,9 +74,9 @@ The Replay Map's "3D map" toggle stands the units on the dungeon's real geometry
 
 ### Mesh-only instances
 
-Some dungeons have no in-game map at all (vanilla Ragefire Chasm, map 389, whose mesh is not published at the moment; Ruins of Lordaeron, map 2999, is mesh-only today), so the original manifest has no `instances[]` entry for them. A `meshes` layer entry whose `mapID` is unknown to the original then creates a *mesh-only* instance, `{ "mapID", "name", "floors": [], "mesh" }`, taking its `name` from the layer entry (required in that case; for an existing instance the original's name wins and the entry's `name` is ignored). The entry may still carry nothing but `mesh` (and `name`); floors, `rendered` or `styled` are rejected, as is any layer other than `meshes` naming an unknown map.
+Some dungeons have no native floor artwork (Ragefire Chasm, map 389, and Ruins of Lordaeron, map 2999), so the original manifest has no `instances[]` entry for them. A `meshes` layer entry whose `mapID` is unknown to the original then creates a floorless instance, `{ "mapID", "name", "floors": [], "mesh" }`, taking its `name` from the layer entry (required in that case; for an existing instance the original's name wins and the entry's `name` is ignored). The entry may still carry nothing but `mesh` (and `name`); floors, `rendered` or `styled` are rejected, while manual `renders` and `3d` layers may also create named floorless instances.
 
-The frontend treats `floors: []` plus a placeable `mesh` as "3D only": the Replay Map opens with the "3D map" switch on (and disabled, there is nothing else to show), the mesh's extent is the ground from the first frame, the floor selector is hidden, and the 2D paths (the multi-encounter route overview and the WebGL-unavailable fallback) show "No map artwork for this instance" instead of tiles. The map gallery lists the instance with a text card. No per-boss artwork calibration applies, since there is no artwork.
+The frontend treats `floors: []` plus a placeable `mesh` (but no wired 2D artwork) as "3D only": the Replay Map opens with the "3D map" switch on (and disabled, there is nothing else to show), the mesh's extent is the ground from the first frame, the floor selector is hidden, and the 2D paths (the multi-encounter route overview and the WebGL-unavailable fallback) show "No map artwork for this instance" instead of tiles. The map gallery lists the instance with a text card. No per-boss artwork calibration applies, since there is no artwork.
 
 ```json
 {
@@ -93,7 +95,7 @@ The frontend treats `floors: []` plus a placeable `mesh` as "3D only": the Repla
 
 ### Terrain meshes
 
-Ruins of Lordaeron (map 2999, Forever) is the first terrain mesh: open sky over a ~570 × 530 yd walled city, exported with `--kind terrain` and published as a mesh-only instance like Ragefire Chasm. The manifest `bounds` are the exact POSITION extent of the GLB and roofs are kept (nothing is ceiling-culled), so a unit standing inside a building is probed onto its roof.
+Ruins of Lordaeron (map 2999, Forever) is a terrain mesh: open sky over a ~570 × 530 yd walled city, exported with `--kind terrain` and published as a floorless instance. The manifest `bounds` are the exact POSITION extent of the GLB and roofs are kept (nothing is ceiling-culled), so a unit standing inside a building is probed onto its roof.
 
 ### Liquid colour
 
@@ -121,7 +123,7 @@ Check the result against the GLB before publishing: read the `POSITION` accessor
 The GLBs carry Blizzard textures and never enter Git; only the source manifest is tracked.
 
 1. Copy the GLB to `frontend/imagecache/meshes/<server>/<slug>-open-top.glb` (the directory ignores `*.glb`); the manifest `path` is `3d/<that file name>`.
-2. Add the instance to `frontend/imagecache/meshes/<server>/manifest.meshes.json`: format `chronicle-wow-map-art-v2`, a product-only `target` (meshes are geometry, carried across builds like styled art), and one `mesh` entry per map ID as above. The map ID must exist in the published original manifest.
+2. Add the instance to `frontend/imagecache/meshes/<server>/manifest.meshes.json`: format `chronicle-wow-map-art-v2`, a product-only `target` (meshes are geometry, carried across builds like styled art), and one `mesh` entry per map ID as above. A missing native instance may instead be created by this meshes layer when its entry supplies a name.
 3. Publish the layer. The script refuses to run if any announced GLB is missing beside the manifest, and the merge rejects a bad path, degenerate bounds or an unknown frame before anything is uploaded:
 
 ```bash
@@ -154,6 +156,21 @@ The live page then shows the 3D map for a Wailing Caverns or Ruins of Lordaeron 
 ### CORS
 
 The icon CDN applies its CORS policy per request origin, not per object or content type: a request with an allowlisted `Origin` for any key under `forever/maps/`, including a `.glb` that does not exist yet, answers with `Access-Control-Allow-Origin` and `Vary: Origin`. Nothing extra needs to be set on the R2 bucket for meshes. The frontend still appends `?cors` to cross-origin texture and mesh URLs, because a response cached without `Origin` carries no CORS headers.
+
+## Manually uploaded Forever maps
+
+The tracked source files `frontend/imagecache/map-layers/forever/manifest.renders.json` and `manifest.3d.json` register existing assets under `forever/maps/renders/*.png` and `forever/maps/3d/*.glb`, respectively. They attach by world `mapID` (Wailing Caverns 43, Ragefire Chasm 389, Ruins of Lordaeron 2999). If the native manifest has no instance for that ID, either manual layer creates a named dungeon with `floors: []`; the other layer may then decorate it. Both manual source files include the same `name` for each map ID, and conflicting names are rejected. Native instance metadata takes precedence when it exists. Add or replace an entry in the relevant source file without deleting the other entries, then publish just that source manifest and a new merged `manifest.json`:
+
+```bash
+SERVER=forever make maps/renders-upload
+SERVER=forever make maps/3d-upload
+```
+
+These commands **do not upload images or GLBs**: verify the corresponding R2 objects already exist and have the correct MIME/CORS settings before publishing. They require a v2 `manifest.original.json` on R2 for target and native map metadata, but the native manifest need not contain RFC or Ruins of Lordaeron. The merger rejects unnamed manual-only instances, incompatible products, and invalid asset paths. Publish the v2 native layer before attempting these layer-only uploads. The new merged `instances[].renders` records path and image dimensions, and `instances[]["3d"]` records the GLB path. Both are catalog metadata for now, not replay inputs: the PNGs lack calibrated world bounds, and GLB placement/frame data has not been established. The generated `render/` layer and hand-styled `render-styled/` layer remain independent.
+
+## Forever v1 compatibility migration
+
+The first v2 native source was derived from the previously published v1 `manifest.json` without re-extracting its tiles. It preserves native map/instance metadata and its `tiles/` paths (whose R2 objects remain available); a subsequent full native extraction will replace them with `original/` paths. The pre-migration manifest is backed up at `forever/maps/backups/manifest-v1-pre-manual-layers.json`. Its Wailing Caverns `rendered` reference pointed to an object that was no longer on R2, so that stale entry was omitted rather than carried into v2. A future raw render can be generated and published with `make maps/forever-render-upload` after a compatible local native manifest has been produced. Do not delete the legacy `tiles/` objects while the public manifest still references them.
 
 ## Cleaning generated maps
 
