@@ -16,7 +16,7 @@ import (
 func TestWorkerRefreshRankingsSummaryTenant_PrunesStaleSummaryWhenRowCountUnchanged(t *testing.T) {
 	t.Parallel()
 
-	pool, store, realmID := setupSnapshotTest(t)
+	pool, store, realmID := setupRankingsTest(t)
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
 	insertRankingRow(t, pool, store, realmID, rankingOpts{

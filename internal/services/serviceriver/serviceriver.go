@@ -185,11 +185,12 @@ func (s *Service) Start(ctx context.Context) error {
 	// Register rankings summary refresh workers and periodic job (hourly).
 	rank := servicerankings.Rankings(s.broker)
 	rank.SummaryDispatchWorker.Queue = q
+	// Drain snapshot publication jobs queued by pre-removal deployments. These
+	// compatibility workers are no-ops and can be removed after old jobs expire.
+	riverqueue.AddWorker(q, &servicerankings.WorkerRetiredPublishParseSnapshots{})
+	riverqueue.AddWorker(q, &servicerankings.WorkerRetiredPublishParseSnapshotTenant{})
 	riverqueue.AddWorker(q, rank.SummaryDispatchWorker)
 	riverqueue.AddWorker(q, rank.SummaryTenantWorker)
-	rank.SnapshotDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.SnapshotDispatchWorker)
-	riverqueue.AddWorker(q, rank.SnapshotTenantWorker)
 	riverqueue.AddWorker(q, rank.ComputeTimeParseScoresWorker)
 	rank.BackfillTimeParseScoresWorker.Queue = q
 	riverqueue.AddWorker(q, rank.BackfillTimeParseScoresWorker)

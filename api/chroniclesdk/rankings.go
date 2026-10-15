@@ -181,15 +181,14 @@ func TopPlayersFromJSON(data json.RawMessage) []RankingsInstanceTopPlayer {
 
 // InstanceParsesResponse is the top-level response for the instance parses endpoint.
 type InstanceParsesResponse struct {
-	// Available is false when no published snapshot exists yet or parses
-	// are disabled for this tenant.
+	// Available is false when parses are disabled or persisted historical data is incomplete.
 	Available bool `json:"available"`
 
-	// Reason explains why parses are unavailable (e.g. "disabled", "no_snapshot").
+	// Reason explains why parses are unavailable (for example "disabled").
 	// Empty when Available is true.
 	Reason string `json:"reason,omitempty"`
 
-	// Snapshot metadata (zero values when Available=false).
+	// Persisted scoring contract metadata (zero values when unavailable).
 	SnapshotID   uuid.UUID `json:"snapshot_id"`
 	Cutoff       time.Time `json:"cutoff"`
 	LookbackDays int32     `json:"lookback_days"`
@@ -248,38 +247,6 @@ type InstanceParseAverage struct {
 	Selected     int     `json:"selected"`
 }
 
-// AdminTriggerSnapshotRequest is the request body for the admin parse snapshot trigger.
-type AdminTriggerSnapshotRequest struct {
-	// TenantID scopes the snapshot to a specific tenant. Empty = root/all-time scope.
-	// Ignored when AllTenants is true.
-	TenantID string `json:"tenant_id"`
-	// AllTenants enqueues one job per non-disabled tenant (plus root), each
-	// using the tenant's own ParseConfig lookback windows. When true, TenantID
-	// is ignored and LookbackDays serves as the default for tenants without
-	// explicit AllowedLookbackDays.
-	AllTenants bool `json:"all_tenants"`
-	// LookbackDays overrides the default lookback window. 0 = all-time.
-	LookbackDays int32 `json:"lookback_days"`
-	// Day is the snapshot cutoff date as YYYY-MM-DD. Empty = today.
-	// The snapshot window is [cutoff - lookback, cutoff), so a backfilled
-	// July 1 snapshot contains only pre-July-1 kills even if run today.
-	Day string `json:"day"`
-}
-
-// AdminTriggerSnapshotJobResult describes a single enqueued snapshot job.
-type AdminTriggerSnapshotJobResult struct {
-	TenantID     string `json:"tenant_id"`
-	LookbackDays int32  `json:"lookback_days"`
-	JobID        int64  `json:"job_id"`
-	JobState     string `json:"job_state"`
-}
-
-// AdminTriggerSnapshotResponse is returned when snapshot publication jobs are enqueued.
-type AdminTriggerSnapshotResponse struct {
-	// Jobs lists every enqueued job. For single-tenant requests this has one entry.
-	Jobs []AdminTriggerSnapshotJobResult `json:"jobs"`
-}
-
 // AdminRankingsRefreshTenantStatus describes rankings summary freshness for one tenant.
 type AdminRankingsRefreshTenantStatus struct {
 	TenantID            uuid.UUID  `json:"tenant_id"`
@@ -309,80 +276,4 @@ type AdminRefreshRankingsJob struct {
 // AdminRefreshRankingsResponse is returned when summary refresh jobs are enqueued.
 type AdminRefreshRankingsResponse struct {
 	Jobs []AdminRefreshRankingsJob `json:"jobs"`
-}
-
-// AdminSnapshotSummary is a snapshot listed in the admin parsing tab.
-type AdminSnapshotSummary struct {
-	ID            uuid.UUID  `json:"id"`
-	TenantID      uuid.UUID  `json:"tenant_id"`
-	TenantName    string     `json:"tenant_name"`
-	Cutoff        time.Time  `json:"cutoff"`
-	LookbackDays  int32      `json:"lookback_days"`
-	CohortMode    string     `json:"cohort_mode"`
-	PolicyVersion int16      `json:"policy_version"`
-	QueryVersion  int16      `json:"query_version"`
-	Status        string     `json:"status"`
-	PublishedAt   *time.Time `json:"published_at"`
-	CreatedAt     time.Time  `json:"created_at"`
-}
-
-// AdminBulkDeleteSnapshotsRequest is the request body for bulk snapshot deletion.
-type AdminBulkDeleteSnapshotsRequest struct {
-	IDs []uuid.UUID `json:"ids"`
-}
-
-// AdminBulkDeleteSnapshotsResponse is the response for bulk snapshot deletion.
-type AdminBulkDeleteSnapshotsResponse struct {
-	Deleted int `json:"deleted"`
-}
-
-// ── Cohort Viewer (debugging) ────────────────────────────────────────────
-
-// SnapshotSummary is a published snapshot listed for the cohort viewer.
-type SnapshotSummary struct {
-	ID            uuid.UUID `json:"id"`
-	Cutoff        time.Time `json:"cutoff"`
-	LookbackDays  int32     `json:"lookback_days"`
-	CohortMode    string    `json:"cohort_mode"`
-	PolicyVersion int16     `json:"policy_version"`
-	MemberCount   int64     `json:"member_count"`
-	PublishedAt   time.Time `json:"published_at"`
-}
-
-// CohortBucket describes one available (encounter, class, spec, difficulty, max_players) combination.
-type CohortBucket struct {
-	EncounterName  string `json:"encounter_name"`
-	PlayerClass    string `json:"player_class"`
-	PlayerSpec     string `json:"player_spec"`
-	PlayerSubSpec  string `json:"player_sub_spec,omitempty"`
-	DifficultyName string `json:"difficulty_name"`
-	MaxPlayers     int16  `json:"max_players"`
-}
-
-// CohortDebugEntry is a single datapoint in the cohort debug view.
-type CohortDebugEntry struct {
-	Rank          int       `json:"rank"`
-	PlayerName    string    `json:"player_name"`
-	PlayerGUID    string    `json:"player_guid"`
-	MetricValue   float64   `json:"metric_value"`
-	DisplayScore  int       `json:"display_score"`
-	PreciseScore  float64   `json:"precise_score"`
-	KilledAt      time.Time `json:"killed_at"`
-	LogHashedSlug string    `json:"log_hashed_slug"`
-}
-
-// CohortDebugResponse is the response for the cohort debug endpoint.
-type CohortDebugResponse struct {
-	SnapshotID    uuid.UUID          `json:"snapshot_id"`
-	EncounterName string             `json:"encounter_name"`
-	PlayerClass   string             `json:"player_class"`
-	PlayerSpec    string             `json:"player_spec"`
-	PlayerSubSpec string             `json:"player_sub_spec,omitempty"`
-	Metric        string             `json:"metric"`
-	TotalKills    int                `json:"total_kills"`
-	MinValue      float64            `json:"min_value"`
-	MaxValue      float64            `json:"max_value"`
-	MedianValue   float64            `json:"median_value"`
-	Entries       []CohortDebugEntry `json:"entries"`
-	Buckets       []CohortBucket     `json:"buckets"`
 }

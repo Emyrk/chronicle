@@ -1401,9 +1401,9 @@ CREATE TABLE parse_score_receipts (
     result_count integer DEFAULT 0 NOT NULL,
     computed_at timestamp with time zone DEFAULT now() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    cutoff timestamp with time zone,
+    cutoff timestamp with time zone NOT NULL,
     window_start timestamp with time zone,
-    cohort_mode text
+    cohort_mode text NOT NULL
 );
 
 CREATE TABLE parse_score_results (
@@ -1470,51 +1470,6 @@ CREATE TABLE ranking_runs (
     source_updated_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
-
-CREATE TABLE ranking_snapshot_members (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    snapshot_id uuid NOT NULL,
-    ranking_id uuid NOT NULL,
-    instance_id uuid NOT NULL,
-    run_id uuid NOT NULL,
-    instance_name text NOT NULL,
-    encounter_name text NOT NULL,
-    player_guid text NOT NULL,
-    player_class text NOT NULL,
-    player_spec text NOT NULL,
-    difficulty_name text DEFAULT ''::text NOT NULL,
-    max_players smallint DEFAULT 0 NOT NULL,
-    killed_at timestamp with time zone NOT NULL,
-    created_at_ranking timestamp with time zone NOT NULL,
-    damage_done bigint NOT NULL,
-    healing_done bigint DEFAULT 0 NOT NULL,
-    absorbed_done bigint DEFAULT 0 NOT NULL,
-    duration_secs double precision NOT NULL,
-    dps double precision NOT NULL,
-    hps double precision DEFAULT 0 NOT NULL,
-    player_sub_spec text DEFAULT ''::text NOT NULL
-);
-
-CREATE TABLE ranking_snapshots (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
-    cutoff timestamp with time zone NOT NULL,
-    window_start timestamp with time zone,
-    lookback_days integer DEFAULT 0 NOT NULL,
-    cohort_mode text DEFAULT 'spec'::text NOT NULL,
-    policy_version smallint DEFAULT 1 NOT NULL,
-    query_version smallint DEFAULT 1 NOT NULL,
-    min_parser_version_num bigint DEFAULT 0 NOT NULL,
-    min_addon_version_num bigint DEFAULT 0 NOT NULL,
-    status text DEFAULT 'pending'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    published_at timestamp with time zone,
-    source_row_count bigint DEFAULT 0 NOT NULL,
-    source_watermark timestamp with time zone,
-    member_count bigint DEFAULT 0 NOT NULL
-);
-
-COMMENT ON COLUMN ranking_snapshots.member_count IS 'Exact number of ranking_snapshot_members rows captured when the snapshot is published';
 
 CREATE TABLE rankings_instance_summaries (
     instance_name text NOT NULL,
@@ -2488,15 +2443,6 @@ ALTER TABLE ONLY raid_compositions
 ALTER TABLE ONLY ranking_runs
     ADD CONSTRAINT ranking_runs_pkey PRIMARY KEY (run_id);
 
-ALTER TABLE ONLY ranking_snapshot_members
-    ADD CONSTRAINT ranking_snapshot_members_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY ranking_snapshot_members
-    ADD CONSTRAINT ranking_snapshot_members_snapshot_id_ranking_id_key UNIQUE (snapshot_id, ranking_id);
-
-ALTER TABLE ONLY ranking_snapshots
-    ADD CONSTRAINT ranking_snapshots_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY rankings_instance_summaries
     ADD CONSTRAINT rankings_instance_summaries_pkey PRIMARY KEY (instance_name, difficulty_name, max_players, tenant_id);
 
@@ -2830,21 +2776,7 @@ CREATE INDEX idx_psreceipt_snapshot ON parse_score_receipts USING btree (snapsho
 
 CREATE INDEX idx_psreceipt_tenant ON parse_score_receipts USING btree (tenant_id);
 
-CREATE INDEX idx_ranking_snapshot_members_ranking_id ON ranking_snapshot_members USING btree (ranking_id);
-
 CREATE INDEX idx_regression_snapshots_fixture ON regression_snapshots USING btree (fixture_id, created_at DESC);
-
-CREATE INDEX idx_rs_tenant_lookback ON ranking_snapshots USING btree (tenant_id, lookback_days, published_at DESC NULLS LAST);
-
-CREATE INDEX idx_rs_tenant_status ON ranking_snapshots USING btree (tenant_id, status);
-
-CREATE INDEX idx_rsm_cohort_class ON ranking_snapshot_members USING btree (snapshot_id, encounter_name, difficulty_name, max_players, player_class);
-
-CREATE INDEX idx_rsm_cohort_spec ON ranking_snapshot_members USING btree (snapshot_id, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec);
-
-CREATE INDEX idx_rsm_instance ON ranking_snapshot_members USING btree (snapshot_id, instance_id);
-
-CREATE INDEX idx_rsm_player ON ranking_snapshot_members USING btree (snapshot_id, player_guid);
 
 CREATE INDEX idx_server_upload_meta_lookup ON server_upload_meta USING btree (instance_id, instance_name, realm_id);
 
@@ -2913,8 +2845,6 @@ CREATE INDEX ranking_runs_instance_filter_idx ON ranking_runs USING btree (insta
 CREATE INDEX ranking_runs_realm_end_time_idx ON ranking_runs USING btree (realm_id, end_time DESC);
 
 CREATE UNIQUE INDEX ranking_runs_representative_instance_idx ON ranking_runs USING btree (representative_instance_id);
-
-CREATE UNIQUE INDEX ranking_snapshots_published_key_idx ON ranking_snapshots USING btree (tenant_id, cutoff, lookback_days, cohort_mode, policy_version, query_version) WHERE (status = 'published'::text);
 
 CREATE INDEX river_job_args_index ON river_job USING gin (args);
 
@@ -3241,9 +3171,6 @@ ALTER TABLE ONLY parse_score_memberships
 ALTER TABLE ONLY parse_score_receipts
     ADD CONSTRAINT parse_score_receipts_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
 
-ALTER TABLE ONLY parse_score_receipts
-    ADD CONSTRAINT parse_score_receipts_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE CASCADE;
-
 ALTER TABLE ONLY parse_score_results
     ADD CONSTRAINT parse_score_results_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE SET NULL;
 
@@ -3252,9 +3179,6 @@ ALTER TABLE ONLY parse_score_results
 
 ALTER TABLE ONLY parse_score_results
     ADD CONSTRAINT parse_score_results_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY parse_score_results
-    ADD CONSTRAINT parse_score_results_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_id_fkey FOREIGN KEY (id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
@@ -3270,12 +3194,6 @@ ALTER TABLE ONLY ranking_runs
 
 ALTER TABLE ONLY ranking_runs
     ADD CONSTRAINT ranking_runs_representative_instance_id_fkey FOREIGN KEY (representative_instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY ranking_snapshot_members
-    ADD CONSTRAINT ranking_snapshot_members_ranking_id_fkey FOREIGN KEY (ranking_id) REFERENCES encounter_dps_rankings(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY ranking_snapshot_members
-    ADD CONSTRAINT ranking_snapshot_members_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY regression_fixtures
     ADD CONSTRAINT regression_fixtures_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;

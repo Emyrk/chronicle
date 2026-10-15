@@ -54,11 +54,6 @@ type Service struct {
 	// SummaryTenantWorker refreshes summaries for a single tenant.
 	SummaryTenantWorker *WorkerRefreshRankingsSummaryTenant
 
-	// SnapshotDispatchWorker fans out per-tenant snapshot publication jobs.
-	SnapshotDispatchWorker *WorkerPublishParseSnapshots
-	// SnapshotTenantWorker publishes a snapshot for a single tenant+lookback.
-	SnapshotTenantWorker *WorkerPublishParseSnapshotTenant
-
 	// ComputeParseScoresWorker computes and persists per-instance parse scores.
 	ComputeParseScoresWorker *WorkerComputeParseScores
 	// ComputeTimeParseScoresWorker computes locked clear/boss duration parses.
@@ -119,16 +114,6 @@ func (s *Service) Start(_ context.Context) error {
 		Store:  store,
 		Logger: namedLogger,
 	}
-	s.SnapshotDispatchWorker = &WorkerPublishParseSnapshots{
-		Store:  store,
-		Logger: namedLogger,
-		// Queue is set by serviceriver after queue creation.
-	}
-	s.SnapshotTenantWorker = &WorkerPublishParseSnapshotTenant{
-		Store:  store,
-		Logger: namedLogger,
-	}
-
 	s.ComputeParseScoresWorker = &WorkerComputeParseScores{
 		Store:  store,
 		Logger: namedLogger,
@@ -210,8 +195,6 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/characters/{playerGUID}/encounters", s.handleCharacterEncounterStats)
 
 	// Cohort viewer (debugging/transparency)
-	s.router.Get("/snapshots", s.handleListSnapshots)
-	s.router.Get("/snapshots/{snapshotID}/cohort", s.handleSnapshotCohort)
 	s.router.Get("/time-parse-cohorts/buckets", s.handleTimeParseCohortBuckets)
 	s.router.Get("/time-parse-cohorts/cohort", s.handleTimeParseCohort)
 

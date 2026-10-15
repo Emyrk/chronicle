@@ -76,22 +76,6 @@ export interface AdminBulkDeleteResponse {
     readonly failed: readonly AdminBulkLogFailure[];
 }
 
-// From chroniclesdk/rankings.go
-/**
- * AdminBulkDeleteSnapshotsRequest is the request body for bulk snapshot deletion.
- */
-export interface AdminBulkDeleteSnapshotsRequest {
-    readonly ids: readonly string[];
-}
-
-// From chroniclesdk/rankings.go
-/**
- * AdminBulkDeleteSnapshotsResponse is the response for bulk snapshot deletion.
- */
-export interface AdminBulkDeleteSnapshotsResponse {
-    readonly deleted: number;
-}
-
 // From chroniclesdk/user.go
 export interface AdminBulkLogFailure {
     readonly log_group_id: string;
@@ -263,75 +247,6 @@ export interface AdminSetUserRetentionRequest {
      * 0 means keep forever (sets NULL in DB).
      */
     readonly raw_log_retention_hours: number;
-}
-
-// From chroniclesdk/rankings.go
-/**
- * AdminSnapshotSummary is a snapshot listed in the admin parsing tab.
- */
-export interface AdminSnapshotSummary {
-    readonly id: string;
-    readonly tenant_id: string;
-    readonly tenant_name: string;
-    readonly cutoff: string;
-    readonly lookback_days: number;
-    readonly cohort_mode: string;
-    readonly policy_version: number;
-    readonly query_version: number;
-    readonly status: string;
-    readonly published_at: string | null;
-    readonly created_at: string;
-}
-
-// From chroniclesdk/rankings.go
-/**
- * AdminTriggerSnapshotJobResult describes a single enqueued snapshot job.
- */
-export interface AdminTriggerSnapshotJobResult {
-    readonly tenant_id: string;
-    readonly lookback_days: number;
-    readonly job_id: number;
-    readonly job_state: string;
-}
-
-// From chroniclesdk/rankings.go
-/**
- * AdminTriggerSnapshotRequest is the request body for the admin parse snapshot trigger.
- */
-export interface AdminTriggerSnapshotRequest {
-    /**
-     * TenantID scopes the snapshot to a specific tenant. Empty = root/all-time scope.
-     * Ignored when AllTenants is true.
-     */
-    readonly tenant_id: string;
-    /**
-     * AllTenants enqueues one job per non-disabled tenant (plus root), each
-     * using the tenant's own ParseConfig lookback windows. When true, TenantID
-     * is ignored and LookbackDays serves as the default for tenants without
-     * explicit AllowedLookbackDays.
-     */
-    readonly all_tenants: boolean;
-    /**
-     * LookbackDays overrides the default lookback window. 0 = all-time.
-     */
-    readonly lookback_days: number;
-    /**
-     * Day is the snapshot cutoff date as YYYY-MM-DD. Empty = today.
-     * The snapshot window is [cutoff - lookback, cutoff), so a backfilled
-     * July 1 snapshot contains only pre-July-1 kills even if run today.
-     */
-    readonly day: string;
-}
-
-// From chroniclesdk/rankings.go
-/**
- * AdminTriggerSnapshotResponse is returned when snapshot publication jobs are enqueued.
- */
-export interface AdminTriggerSnapshotResponse {
-    /**
-     * Jobs lists every enqueued job. For single-tenant requests this has one entry.
-     */
-    readonly jobs: readonly AdminTriggerSnapshotJobResult[];
 }
 
 // From chroniclesdk/user.go
@@ -677,53 +592,6 @@ export interface ClassBuffIgnorePolicy {
     readonly dataset_id: string;
     readonly spell_name: string;
     readonly ignored: boolean;
-}
-
-// From chroniclesdk/rankings.go
-/**
- * CohortBucket describes one available (encounter, class, spec, difficulty, max_players) combination.
- */
-export interface CohortBucket {
-    readonly encounter_name: string;
-    readonly player_class: string;
-    readonly player_spec: string;
-    readonly player_sub_spec?: string;
-    readonly difficulty_name: string;
-    readonly max_players: number;
-}
-
-// From chroniclesdk/rankings.go
-/**
- * CohortDebugEntry is a single datapoint in the cohort debug view.
- */
-export interface CohortDebugEntry {
-    readonly rank: number;
-    readonly player_name: string;
-    readonly player_guid: string;
-    readonly metric_value: number;
-    readonly display_score: number;
-    readonly precise_score: number;
-    readonly killed_at: string;
-    readonly log_hashed_slug: string;
-}
-
-// From chroniclesdk/rankings.go
-/**
- * CohortDebugResponse is the response for the cohort debug endpoint.
- */
-export interface CohortDebugResponse {
-    readonly snapshot_id: string;
-    readonly encounter_name: string;
-    readonly player_class: string;
-    readonly player_spec: string;
-    readonly player_sub_spec?: string;
-    readonly metric: string;
-    readonly total_kills: number;
-    readonly min_value: number;
-    readonly max_value: number;
-    readonly median_value: number;
-    readonly entries: readonly CohortDebugEntry[];
-    readonly buckets: readonly CohortBucket[];
 }
 
 // From chroniclesdk/consumables.go
@@ -2036,17 +1904,16 @@ export interface InstanceParsePlayer {
  */
 export interface InstanceParsesResponse {
     /**
-     * Available is false when no published snapshot exists yet or parses
-     * are disabled for this tenant.
+     * Available is false when parses are disabled or persisted historical data is incomplete.
      */
     readonly available: boolean;
     /**
-     * Reason explains why parses are unavailable (e.g. "disabled", "no_snapshot").
+     * Reason explains why parses are unavailable (for example "disabled").
      * Empty when Available is true.
      */
     readonly reason?: string;
     /**
-     * Snapshot metadata (zero values when Available=false).
+     * Persisted scoring contract metadata (zero values when unavailable).
      */
     readonly snapshot_id: string;
     readonly cutoff: string;
@@ -2663,8 +2530,8 @@ export interface OverviewIncomingDamageAbility {
 export interface ParseConfig {
     /**
      * CohortMode controls the parse scoring mode: "spec" (default), "class",
-     * or "disabled". When disabled, no snapshots are created and the instance
-     * parses endpoint returns available=false.
+     * or "disabled". When disabled, the instance parses endpoint returns
+     * available=false.
      */
     readonly cohort_mode?: string;
     /**
@@ -2679,10 +2546,6 @@ export interface ParseConfig {
      * EnabledMetrics lists active metric names (e.g. "dps", "hps").
      */
     readonly enabled_metrics?: readonly string[];
-    /**
-     * SnapshotCadence is the publication interval description (e.g. "6h", "daily").
-     */
-    readonly snapshot_cadence?: string;
 }
 
 // From chroniclesdk/parser_version.go
@@ -3545,20 +3408,6 @@ export interface SiteStats {
 // From chroniclesdk/server_application.go
 export interface SlugPayload {
     readonly slug: string;
-}
-
-// From chroniclesdk/rankings.go
-/**
- * SnapshotSummary is a published snapshot listed for the cohort viewer.
- */
-export interface SnapshotSummary {
-    readonly id: string;
-    readonly cutoff: string;
-    readonly lookback_days: number;
-    readonly cohort_mode: string;
-    readonly policy_version: number;
-    readonly member_count: number;
-    readonly published_at: string;
 }
 
 // From chroniclesdk/constants.go

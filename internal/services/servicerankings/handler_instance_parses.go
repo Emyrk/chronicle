@@ -28,15 +28,14 @@ import (
 // full authz.Authz wrapper (which requires SpiceDB).
 type parsesQuerier interface {
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
-	GetLatestPublishedSnapshot(ctx context.Context, arg database.GetLatestPublishedSnapshotParams) (database.RankingSnapshot, error)
-	GetLatestPublishedSnapshotBefore(ctx context.Context, arg database.GetLatestPublishedSnapshotBeforeParams) (database.RankingSnapshot, error)
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]database.ListRankingsForInstanceRow, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg database.GetAnyParseScoreReceiptForTenantInstanceParams) (database.ParseScoreReceipt, error)
-	GetRankingSnapshot(ctx context.Context, id uuid.UUID) (database.RankingSnapshot, error)
+	HasParseScoreResultsForTenantInstance(ctx context.Context, arg database.HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	ListParseScoreResultsForContract(ctx context.Context, arg database.ListParseScoreResultsForContractParams) ([]database.ParseScoreResult, error)
 	ListWindowedParseScoreResultsForContract(ctx context.Context, arg database.ListWindowedParseScoreResultsForContractParams) ([]database.ParseScoreResult, error)
+	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg database.ListPersistedParseScoreResultsForInstanceParams) ([]database.ParseScoreResult, error)
 	GetParseScoreMembershipCohort(ctx context.Context, arg database.GetParseScoreMembershipCohortParams) ([]float64, error)
 }
 
@@ -248,21 +247,12 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			receiptMode := cohortMode
 			receiptCutoff := cutoff
 			receiptSnapshotID := uuid.Nil
-			if receipt.CohortMode.Valid {
-				receiptMode = parsepolicy.CohortMode(receipt.CohortMode.String)
-			}
+			receiptMode = parsepolicy.CohortMode(receipt.CohortMode)
 			if receipt.Cutoff.Valid {
 				receiptCutoff = receipt.Cutoff.Time
 			}
 			if receipt.SnapshotID.Valid {
 				receiptSnapshotID = receipt.SnapshotID.UUID
-				legacySnapshot, snapshotErr := store.GetRankingSnapshot(ctx, receipt.SnapshotID.UUID)
-				if snapshotErr != nil {
-					httpapi.HandleResponseError(ctx, w, snapshotErr, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch legacy parse snapshot", Detail: snapshotErr.Error()}})
-					return
-				}
-				receiptMode = parsepolicy.CohortMode(legacySnapshot.CohortMode)
-				receiptCutoff = legacySnapshot.Cutoff.Time
 			}
 			var persisted []database.ParseScoreResult
 			var persistedErr error
@@ -280,6 +270,9 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				return
 			}
 			persistedPlayers, complete := buildPersistedInstanceParsePlayers(rankings, persisted, encounterNames, metric, receiptMode)
+			if len(persisted) == 0 {
+				complete = false
+			}
 			if complete {
 				httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
 					Available: true, SnapshotID: receiptSnapshotID, Cutoff: receiptCutoff,
@@ -288,10 +281,47 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				})
 				return
 			}
+			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
+				Available: false, Reason: "persisted_results_incomplete", SnapshotID: receiptSnapshotID, Cutoff: receiptCutoff,
+				LookbackDays: int32(receipt.LookbackDays), CohortMode: string(receiptMode),
+				SelectedEncounters: encounterNames, Metric: string(metric), Players: []chroniclesdk.InstanceParsePlayer{},
+			})
+			return
 		} else if !errors.Is(receiptErr, pgx.ErrNoRows) {
 			httpapi.HandleResponseError(ctx, w, receiptErr, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch parse score receipt", Detail: receiptErr.Error()}})
 			return
 		}
+
+		hasPersisted, persistedCheckErr := store.HasParseScoreResultsForTenantInstance(ctx, database.HasParseScoreResultsForTenantInstanceParams{
+			TenantID: tid, InstanceID: instanceID,
+		})
+		if persistedCheckErr != nil {
+			httpapi.HandleResponseError(ctx, w, persistedCheckErr, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to check persisted instance parses", Detail: persistedCheckErr.Error()}})
+			return
+		}
+		if hasPersisted {
+			persisted, persistedErr := store.ListPersistedParseScoreResultsForInstance(ctx, database.ListPersistedParseScoreResultsForInstanceParams{
+				TenantID: tid, InstanceID: instanceID, Metric: string(metric),
+			})
+			if persistedErr != nil {
+				httpapi.HandleResponseError(ctx, w, persistedErr, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch orphaned persisted instance parses", Detail: persistedErr.Error()}})
+				return
+			}
+			persistedPlayers, complete := buildPersistedInstanceParsePlayers(rankings, persisted, encounterNames, metric, cohortMode)
+			if complete {
+				httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
+					Available: true, Cutoff: cutoff, LookbackDays: int32(lookbackDays), CohortMode: string(cohortMode),
+					SelectedEncounters: encounterNames, Metric: string(metric), Players: persistedPlayers,
+				})
+				return
+			}
+			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
+				Available: false, Reason: "persisted_results_incomplete", LookbackDays: int32(lookbackDays),
+				SelectedEncounters: encounterNames, Metric: string(metric), Players: []chroniclesdk.InstanceParsePlayer{},
+			})
+			return
+		}
+
 	}
 
 	// Group ranking rows by player GUID for on-demand fallback.

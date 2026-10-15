@@ -19,19 +19,24 @@ func NewTestableService(store database.Store, logger *slog.Logger) *TestableServ
 	return &TestableService{store: store, logger: logger}
 }
 
-// HandleInstanceParses exposes the instance parses handler for tests.
-func (ts *TestableService) HandleInstanceParses(w http.ResponseWriter, r *http.Request) {
+// TestableParsesService exposes only the instance parses handler and accepts its
+// narrow query interface so tests can assert that retired fallback queries are not used.
+type TestableParsesService struct {
+	store  parsesQuerier
+	logger *slog.Logger
+}
+
+func NewTestableParsesService(store parsesQuerier, logger *slog.Logger) *TestableParsesService {
+	return &TestableParsesService{store: store, logger: logger}
+}
+
+func (ts *TestableParsesService) HandleInstanceParses(w http.ResponseWriter, r *http.Request) {
 	handleInstanceParsesWithStore(ts.store, ts.logger, w, r)
 }
 
-// HandleListSnapshots exposes the list snapshots handler for tests.
-func (ts *TestableService) HandleListSnapshots(w http.ResponseWriter, r *http.Request) {
-	handleListSnapshotsWithStore(ts.store, w, r)
-}
-
-// HandleSnapshotCohort exposes the snapshot cohort debug handler for tests.
-func (ts *TestableService) HandleSnapshotCohort(w http.ResponseWriter, r *http.Request) {
-	handleSnapshotCohortWithStore(ts.store, w, r)
+// HandleInstanceParses exposes the instance parses handler for tests.
+func (ts *TestableService) HandleInstanceParses(w http.ResponseWriter, r *http.Request) {
+	handleInstanceParsesWithStore(ts.store, ts.logger, w, r)
 }
 
 // HandleInstanceTimeParses exposes the instance time-parses handler for tests.
