@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 )
 
 type deviceAuthorizationResponse struct {
@@ -276,6 +277,66 @@ func TestCleanupExpiredOAuthSessions(t *testing.T) {
 	tokens, err := db.DeleteExpiredOAuthTokenSessions(ctx)
 	require.NoError(t, err)
 	require.Zero(t, tokens)
+}
+
+func TestDeviceAuthorizationWithGoOAuthClient(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	db, _ := dbtestutil.NewDB(t)
+	service := &Service{}
+	require.NoError(t, service.configure(ctx, db, "https://chronicle.example"))
+
+	userID := uuid.New()
+	service.SetBrowserAuth(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
+
+	server := httptest.NewServer(service)
+	t.Cleanup(server.Close)
+	config := &oauth2.Config{
+		ClientID: ClientID,
+		Scopes:   []string{ScopeAll},
+		Endpoint: oauth2.Endpoint{
+			DeviceAuthURL: server.URL + "/device/authorize",
+			TokenURL:      server.URL + "/token",
+			AuthStyle:     oauth2.AuthStyleInParams,
+		},
+	}
+
+	device, err := config.DeviceAuth(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, device.DeviceCode)
+	require.NotEmpty(t, device.UserCode)
+
+	approval, err := http.PostForm(server.URL+"/device", url.Values{
+		"user_code": {device.UserCode},
+		"decision":  {"approve"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, approval.StatusCode)
+	require.NoError(t, approval.Body.Close())
+
+	// The production response asks clients to poll every five seconds. Reduce
+	// only the test client's delay so the interoperability test stays fast.
+	device.Interval = 1
+	token, err := config.DeviceAccessToken(ctx, device)
+	require.NoError(t, err)
+	require.True(t, token.Valid())
+	require.NotEmpty(t, token.RefreshToken)
+	assertBearerIdentity(t, service, token.AccessToken, userID, http.StatusNoContent)
+
+	oldAccessToken := token.AccessToken
+	oldRefreshToken := token.RefreshToken
+	token.Expiry = time.Now().Add(-time.Minute)
+	rotated, err := config.TokenSource(ctx, token).Token()
+	require.NoError(t, err)
+	require.NotEqual(t, oldAccessToken, rotated.AccessToken)
+	require.NotEqual(t, oldRefreshToken, rotated.RefreshToken)
+	assertBearerIdentity(t, service, oldAccessToken, userID, http.StatusUnauthorized)
+	assertBearerIdentity(t, service, rotated.AccessToken, userID, http.StatusNoContent)
 }
 
 func TestDeviceAuthorizationRejectsOtherScopesAndClients(t *testing.T) {
