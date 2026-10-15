@@ -43,13 +43,13 @@ var renderedWowMapSpecs = []renderedWowMapSpec{
 }
 
 // RenderWowdataMapsCmd generates coordinate-faithful instance maps from WMO or
-// ADT geometry, then writes a separate sparse raw-render manifest.
+// ADT geometry, then writes a separate local renders layer (not the hand-authored source).
 func RenderWowdataMapsCmd() *serpent.Command {
 	var opts renderWowdataMapsOptions
 	var dbcPath, server string
 	return &serpent.Command{
 		Use:   "render-wowdata-maps",
-		Short: "Render coordinate-faithful instance maps into a separate manifest.",
+		Short: "Render coordinate-faithful instance maps into a local renders layer.",
 		Options: serpent.OptionSet{
 			DBCOption(&dbcPath),
 			ServerOption(&server),
@@ -99,9 +99,24 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 	if manifest.Format != wowMapManifestFormat {
 		return fmt.Errorf("unsupported map manifest format %q", manifest.Format)
 	}
-	renderManifest := wowMapManifest{Format: manifest.Format, Target: manifest.Target}
+	if manifest.Target.Product == "" {
+		return fmt.Errorf("map manifest has no target product")
+	}
+	for _, spec := range renderedWowMapSpecs {
+		found := false
+		for _, instance := range manifest.Instances {
+			if instance.MapID == spec.MapID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("map manifest has no instance record for map %d", spec.MapID)
+		}
+	}
+	renderManifest := wowMapLayer{Format: manifest.Format, Target: wowMapTarget{Product: manifest.Target.Product}}
 	outDir := filepath.Dir(opts.ManifestPath)
-	if err := os.MkdirAll(filepath.Join(outDir, "render"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(outDir, "renders"), 0o755); err != nil {
 		return fmt.Errorf("create rendered map directory: %w", err)
 	}
 
@@ -120,40 +135,27 @@ func renderWowdataMaps(ctx context.Context, stdout, stderr io.Writer, opts rende
 		if err != nil {
 			return fmt.Errorf("render map %d: %w", spec.MapID, err)
 		}
-		found := false
 		for _, instance := range manifest.Instances {
 			if instance.MapID == spec.MapID {
-				renderManifest.Instances = append(renderManifest.Instances, wowMapInstance{
-					MapID: spec.MapID, Rendered: rendered,
+				renderManifest.Instances = append(renderManifest.Instances, wowMapLayerInstance{
+					MapID: spec.MapID, Name: instance.Name, Renders: rendered,
 				})
-				found = true
 				break
 			}
 		}
-		if !found {
-			return fmt.Errorf("map manifest has no instance record for map %d", spec.MapID)
-		}
 	}
-	if err := writeWowMapManifest(filepath.Join(outDir, "manifest.rendered.json"), renderManifest); err != nil {
+	if err := writeWowMapLayer(filepath.Join(outDir, "manifest.generated-renders.json"), renderManifest); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(stdout, "Wrote %d rendered instance maps to %s\n", len(renderedWowMapSpecs), filepath.Join(outDir, "manifest.rendered.json"))
+	_, _ = fmt.Fprintf(stdout, "Wrote %d rendered instance maps to %s\n", len(renderedWowMapSpecs), filepath.Join(outDir, "manifest.generated-renders.json"))
 	return nil
-}
-
-func clearRenderedWowMapInstances(manifest *wowMapManifest) {
-	for index := range manifest.Instances {
-		manifest.Instances[index].Rendered = nil
-		manifest.Instances[index].Styled = nil
-		manifest.Instances[index].Mesh = nil
-	}
 }
 
 func renderedWowMapAssetPath(mapID int32, build string, data []byte) string {
 	buildName := regexp.MustCompile(`[^A-Za-z0-9._-]+`).ReplaceAllString(build, "-")
 	digest := sha256.Sum256(data)
 	name := fmt.Sprintf("%d-%s-%x.png", mapID, buildName, digest[:6])
-	return filepath.ToSlash(filepath.Join("render", name))
+	return filepath.ToSlash(filepath.Join("renders", name))
 }
 
 func renderWowdataMap(
@@ -163,7 +165,7 @@ func renderWowdataMap(
 	opts renderWowdataMapsOptions,
 	spec renderedWowMapSpec,
 	outDir string,
-) (*wowMapRenderedInstance, error) {
+) (*wowMapManualRender, error) {
 	wdtFileDataID, err := readWowMapWDTFileDataID(ctx, stderr, target, spec.MapID)
 	if err != nil {
 		return nil, err
@@ -294,9 +296,8 @@ func renderWowdataMap(
 	if err := json.Unmarshal(metadataData, &metadata); err != nil {
 		return nil, fmt.Errorf("decode renderer metadata: %w", err)
 	}
-	return &wowMapRenderedInstance{
-		Path: assetRelativePath, Width: metadata.Width, Height: metadata.Height,
-		Source: metadata.Source, Bounds: metadata.Bounds, Triangles: metadata.Triangles,
+	return &wowMapManualRender{
+		Path: assetRelativePath, Width: metadata.Width, Height: metadata.Height, Bounds: &metadata.Bounds,
 	}, nil
 }
 

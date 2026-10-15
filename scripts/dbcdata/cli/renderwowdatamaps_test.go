@@ -25,26 +25,28 @@ func wowTestChunk(tag string, payload []byte) []byte {
 	return data
 }
 
-func TestClearRenderedWowMapInstances(t *testing.T) {
-	t.Parallel()
-
-	manifest := wowMapManifest{Instances: []wowMapInstance{
-		{MapID: 43, Rendered: &wowMapRenderedInstance{Path: "render/43.png"}, Styled: &wowMapRenderedInstance{Path: "render-styled/43.jpeg"}},
-		{MapID: 2998, Rendered: &wowMapRenderedInstance{Path: "render/2998.png"}},
-	}}
-	clearRenderedWowMapInstances(&manifest)
-	require.Nil(t, manifest.Instances[0].Rendered)
-	require.Nil(t, manifest.Instances[0].Styled)
-	require.Nil(t, manifest.Instances[1].Rendered)
-}
-
 func TestRenderedWowMapAssetPathIncludesContentDigest(t *testing.T) {
 	t.Parallel()
 
 	first := renderedWowMapAssetPath(43, "1.60.1.70338", []byte("first render"))
 	second := renderedWowMapAssetPath(43, "1.60.1.70338", []byte("second render"))
-	require.Regexp(t, `^render/43-1\.60\.1\.70338-[0-9a-f]{12}\.png$`, first)
+	require.Regexp(t, `^renders/43-1\.60\.1\.70338-[0-9a-f]{12}\.png$`, first)
 	require.NotEqual(t, first, second)
+}
+
+func TestGeneratedRendersLayerMatchesMerger(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	original := filepath.Join(dir, "manifest.original.json")
+	generated := filepath.Join(dir, "manifest.generated-renders.json")
+	out := filepath.Join(dir, "manifest.json")
+	target := wowMapTarget{Product: "wow_classic_beta", Build: "1.2.3", Region: "us", Locale: "enUS"}
+	require.NoError(t, writeWowMapManifest(original, wowMapManifest{Format: wowMapManifestFormat, Target: target, Instances: []wowMapInstance{{MapID: 43, Name: "Wailing Caverns"}}}))
+	asset := &wowMapManualRender{Path: renderedWowMapAssetPath(43, target.Build, []byte("png")), Width: 1200, Height: 800}
+	require.NoError(t, writeWowMapLayer(generated, wowMapLayer{Format: wowMapManifestFormat, Target: wowMapTarget{Product: target.Product}, Instances: []wowMapLayerInstance{{MapID: 43, Name: "Wailing Caverns", Renders: asset}}}))
+	require.NoError(t, mergeWowdataMaps(original, "", "", generated, out))
+	require.Contains(t, string(requireFile(t, out)), `"renders": {`)
+	require.NotContains(t, string(requireFile(t, out)), `"rendered":`)
 }
 
 func TestPrefixedLineWriterBuffersPartialLines(t *testing.T) {
