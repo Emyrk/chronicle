@@ -112,7 +112,7 @@ Each namespace must already contain `<namespace>/maps/manifest.original.json`. T
 
 Selecting a map opens a draft-aware preview workbench:
 
-- **Original** assembles the native `manifest.original.json` floor tiles into the complete client map and provides a floor selector.
+- **Original** assembles the native `manifest.original.json` floor tiles into the complete client map and provides a floor selector. Both current `original/` paths and migrated legacy `tiles/` paths are supported.
 - **Rendered** switches between the manual PNG, generated render, and styled artwork when those layers exist.
 - **3D model** loads the draft or published GLB in an orbit, pan, and zoom viewer powered by Google's pinned `<model-viewer>` web component.
 

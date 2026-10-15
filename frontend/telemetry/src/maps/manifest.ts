@@ -437,7 +437,7 @@ export function parseMapLayer(value: unknown): MapLayerManifest {
 }
 
 export function isPreviewableMapAssetPath(assetPath: string): boolean {
-  return ["original/", "render/", "render-styled/", "renders/", "3d/"].some((prefix) => validAssetPath(assetPath, prefix));
+  return ["original/", "tiles/", "render/", "render-styled/", "renders/", "3d/"].some((prefix) => validAssetPath(assetPath, prefix));
 }
 
 function validAssetPath(assetPath: string, prefix: string): boolean {

@@ -132,6 +132,7 @@ test("requires exactly the artwork field belonging to the layer", () => {
 test("allows only clean preview asset paths from known map layers", () => {
   for (const path of [
     "original/123.webp",
+    "tiles/7474519.webp",
     "render/43-build-digest.png",
     "render-styled/wailing-caverns.jpeg",
     "renders/wailing-caverns.png",
