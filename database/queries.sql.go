@@ -5071,6 +5071,37 @@ func (q *sqlQuerier) GetLogFileByOwnerHash(ctx context.Context, arg GetLogFileBy
 	return i, err
 }
 
+const getLogGroupBySource = `-- name: GetLogGroupBySource :one
+SELECT
+  s.log_group_id,
+  COALESCE(MAX(f.size_bytes), 0)::bigint AS size_bytes
+FROM log_group_sources s
+LEFT JOIN log_file f ON f.wow_log_id = s.log_group_id
+WHERE s.owner = $1 AND s.source_id = $2
+GROUP BY s.log_group_id
+`
+
+type GetLogGroupBySourceParams struct {
+	Owner    uuid.UUID `db:"owner" json:"owner"`
+	SourceID string    `db:"source_id" json:"source_id"`
+}
+
+type GetLogGroupBySourceRow struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	SizeBytes  int64     `db:"size_bytes" json:"size_bytes"`
+}
+
+// Answers "do you already have this source id?" before a client sends a body:
+// the owner's group for the source id plus the largest file the server holds
+// for it. A source-keyed group has exactly one file, replaced in place as the
+// log grows (see UpdateLogFileAfterAppend), so the max is that file's size.
+func (q *sqlQuerier) GetLogGroupBySource(ctx context.Context, arg GetLogGroupBySourceParams) (GetLogGroupBySourceRow, error) {
+	row := q.db.QueryRow(ctx, getLogGroupBySource, arg.Owner, arg.SourceID)
+	var i GetLogGroupBySourceRow
+	err := row.Scan(&i.LogGroupID, &i.SizeBytes)
+	return i, err
+}
+
 const getLogGroupIDBySource = `-- name: GetLogGroupIDBySource :one
 SELECT log_group_id FROM log_group_sources WHERE owner = $1 AND source_id = $2
 `

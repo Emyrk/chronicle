@@ -111,9 +111,13 @@ func run() error {
 			c := upload.Client{BaseURL: tn.BaseURL, Format: tn.Format, Flavor: tn.Flavor, Token: token, Fast: fast}
 			return c.Upload(ctx, path, sourceID, size)
 		},
-		// Lookup stays unset: there is no cheap "do you have this source id?"
-		// route yet (#1112). A log the ledger does not know is uploaded, and
-		// the server's duplicate answer recovers the report link.
+		// Lookup is the pre-flight check for a log this machine's ledger has
+		// never seen. A server without the route answers 404, which reads as
+		// "has nothing", and the log is uploaded as before.
+		Lookup: func(ctx context.Context, token, sourceID string) (upload.Have, error) {
+			c := upload.Client{BaseURL: tn.BaseURL, Token: token}
+			return c.Have(ctx, sourceID)
+		},
 		Running:  watch.NewGame(tn.Layout, nil).Running,
 		Notify:   notify,
 		OnStatus: a.onStatus,

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -20,6 +22,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -115,6 +118,51 @@ func (api *API) WoWLogGroupByFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
+// WoWLogGroupBySource answers the uploader's pre-flight check: what the caller
+// has already uploaded under a content-keyed source id (the
+// X-Chronicle-Source-Id of upload-v2), without the body being sent first. A
+// client that learns the server already holds at least as many bytes as it was
+// about to send can skip the upload entirely and keep the existing report link.
+//
+// The lookup is scoped to the caller, so it says nothing about other owners'
+// logs; an id the caller has never uploaded under is a 404. It accepts the
+// uploader's device token, like upload-v2 itself.
+func (api *API) WoWLogGroupBySource(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	sourceID := chi.URLParam(r, "source-id")
+	notFound := func() {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
+			Message: "No log has been uploaded under that source id.",
+		})
+	}
+	// An id longer than upload-v2 accepts can never have been stored, so it is
+	// answered like any other id the caller has not uploaded under.
+	if sourceID == "" || len(sourceID) > maxSourceIDLen {
+		notFound()
+		return
+	}
+
+	owner := chronauth.MustAuthenticatedClaims(ctx).Subject
+	row, err := api.Opts.Zed.GetLogGroupBySource(ctx, database.GetLogGroupBySourceParams{
+		Owner:    owner,
+		SourceID: sourceID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			notFound()
+			return
+		}
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.LogSourceResponse{
+		LogID: row.LogGroupID,
+		Size:  row.SizeBytes,
+		URL:   api.reportURL(r, row.LogGroupID),
+	})
 }
 
 func (api *API) WoWLogGroup(w http.ResponseWriter, r *http.Request) {

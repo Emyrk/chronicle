@@ -20,6 +20,9 @@ import (
 
 const (
 	uploadPath = "/api/v1/raidlogs/logs/upload-v2"
+	// sourcePath answers what the signed-in owner already holds under a source
+	// id, before any body is sent. The source id is appended to it.
+	sourcePath = "/api/v1/raidlogs/logs/by-source-id/"
 	probePath  = "/api/v1/whoami/dump"
 	// sourceHeader carries the content-keyed id of the log (see Identify).
 	// A server that already has a group for it replaces that group rather
@@ -183,6 +186,66 @@ func (c *Client) Upload(ctx context.Context, path, sourceID string, size int64) 
 		msg = http.StatusText(resp.StatusCode)
 	}
 	return Result{}, &Error{Status: resp.StatusCode, Message: msg}
+}
+
+type sourceResponse struct {
+	// Size is how many bytes of the source the server holds.
+	Size int64 `json:"size"`
+	// URL is the report of the group it holds for the id.
+	URL string `json:"url"`
+	// Message comes from error responses.
+	Message string `json:"message"`
+}
+
+// Have asks the server what it already holds of sourceID, without sending the
+// log. It is the pre-flight check that lets a fresh install (or a second PC)
+// skip a body Chronicle already has.
+//
+// A server that holds nothing for the id answers 404, which is a zero Have and
+// no error; so does a server too old to know the route. Anything else is an
+// error, and the caller should fall back to uploading.
+func (c *Client) Have(ctx context.Context, sourceID string) (Have, error) {
+	if c.Token == "" {
+		return Have{}, ErrUnauthorized
+	}
+	if sourceID == "" {
+		return Have{}, nil
+	}
+
+	endpoint := strings.TrimRight(c.BaseURL, "/") + sourcePath + url.PathEscape(sourceID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return Have{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+
+	httpc := c.HTTP
+	if httpc == nil {
+		httpc = &http.Client{Timeout: 30 * time.Second}
+	}
+	resp, err := httpc.Do(req)
+	if err != nil {
+		return Have{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	var out sourceResponse
+	_ = json.Unmarshal(body, &out)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return Have{Size: out.Size, ReportURL: c.abs(out.URL)}, nil
+	case http.StatusNotFound, http.StatusMethodNotAllowed:
+		return Have{}, nil
+	case http.StatusUnauthorized:
+		return Have{}, ErrUnauthorized
+	}
+	msg := out.Message
+	if msg == "" {
+		msg = http.StatusText(resp.StatusCode)
+	}
+	return Have{}, &Error{Status: resp.StatusCode, Message: msg}
 }
 
 func writeForm(mw *multipart.Writer, src io.Reader, size int64, name string, fast bool) error {
