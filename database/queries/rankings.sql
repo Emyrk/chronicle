@@ -402,11 +402,17 @@ deduped AS (
     ORDER BY edr.player_guid, edr.encounter_name, ri.run_id,
         (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
--- Encounter counts are computed per realm: different realms (servers) can
--- record different encounter names for the same instance, so requiring the
--- union across realms would exclude every run when multiple realms are shown.
+-- Explicit encounter selections define the required run coverage. Without an
+-- explicit selection, compute coverage per realm because different realms can
+-- record different encounter names for the same instance.
 realm_encounter_counts AS (
-    SELECT d.realm_id, COUNT(DISTINCT d.encounter_name) AS encounter_count
+    SELECT
+        d.realm_id,
+        CASE
+            WHEN cardinality(@encounter_names :: text[]) > 0
+                THEN cardinality(@encounter_names :: text[])::bigint
+            ELSE COUNT(DISTINCT d.encounter_name)
+        END AS encounter_count
     FROM deduped d
     GROUP BY d.realm_id
 ),
@@ -605,11 +611,17 @@ deduped AS (
     ORDER BY edr.player_guid, edr.encounter_name, ri.run_id,
         (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
--- Encounter counts are computed per realm: different realms (servers) can
--- record different encounter names for the same instance, so requiring the
--- union across realms would exclude every run when multiple realms are shown.
+-- Explicit encounter selections define the required run coverage. Without an
+-- explicit selection, compute coverage per realm because different realms can
+-- record different encounter names for the same instance.
 realm_encounter_counts AS (
-    SELECT d.realm_id, COUNT(DISTINCT d.encounter_name) AS encounter_count
+    SELECT
+        d.realm_id,
+        CASE
+            WHEN cardinality(@encounter_names :: text[]) > 0
+                THEN cardinality(@encounter_names :: text[])::bigint
+            ELSE COUNT(DISTINCT d.encounter_name)
+        END AS encounter_count
     FROM deduped d
     GROUP BY d.realm_id
 ),

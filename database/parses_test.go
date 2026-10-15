@@ -262,7 +262,8 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 
 	canonicalID := uuid.New()
 	duplicateID := uuid.New()
-	for _, instanceID := range []uuid.UUID{canonicalID, duplicateID} {
+	incompleteID := uuid.New()
+	for _, instanceID := range []uuid.UUID{canonicalID, duplicateID, incompleteID} {
 		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
 			ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
 			Name: "Molten Core", Capabilities: []string{},
@@ -304,6 +305,10 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	insertEncounterRanking(duplicateID, "Lucifron", "PRIEST", "Holy", "Bear", 900, baseTime)
 	insertEncounterRanking(duplicateID, "Magmadar", "PRIEST", "Holy", "Bear", 900, baseTime.Add(time.Minute))
 	insertEncounterRanking(duplicateID, "Ragnaros", "PRIEST", "Holy", "Bear", 900, baseTime.Add(2*time.Minute))
+	// A separate truncated run has higher per-encounter HPS, but must not rank
+	// when the query explicitly requires all three encounters.
+	insertEncounterRanking(incompleteID, "Lucifron", "PRIEST", "Holy", "Bear", 2000, baseTime)
+	insertEncounterRanking(incompleteID, "Magmadar", "PRIEST", "Holy", "Bear", 2000, baseTime.Add(time.Minute))
 
 	equivalenceParams := database.RankingsLeaderboardParams{
 		Metric: "hps", QueryLimit: 10,
@@ -374,6 +379,7 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 
 	canonicalID := uuid.New()
 	duplicateID := uuid.New()
+	incompleteID := uuid.New()
 	unrelatedID := uuid.New()
 	for _, instance := range []struct {
 		id   uuid.UUID
@@ -381,6 +387,7 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 	}{
 		{id: canonicalID, name: "Molten Core"},
 		{id: duplicateID, name: "Molten Core"},
+		{id: incompleteID, name: "Molten Core"},
 		{id: unrelatedID, name: "Blackwing Lair"},
 	} {
 		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
@@ -417,11 +424,14 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 	}
 
 	// The canonical upload is truncated, so only the complete duplicate should
-	// contribute to the Molten Core distribution. The unrelated instance ensures
-	// instance-scoped representative selection preserves query results.
+	// contribute to the Molten Core distribution. The separate incomplete run
+	// verifies explicit encounter selections require every requested encounter.
+	// The unrelated instance ensures instance-scoped representative selection
+	// preserves query results.
 	insertEncounterRanking(canonicalID, "Molten Core", "Lucifron", 100, baseTime)
 	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", 900, baseTime)
 	insertEncounterRanking(duplicateID, "Molten Core", "Magmadar", 900, baseTime.Add(time.Minute))
+	insertEncounterRanking(incompleteID, "Molten Core", "Lucifron", 2000, baseTime)
 	insertEncounterRanking(unrelatedID, "Blackwing Lair", "Razorgore", 5000, baseTime)
 
 	rows, err := store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{

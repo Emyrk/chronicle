@@ -13278,7 +13278,13 @@ deduped AS (
         (CASE WHEN $9 :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 realm_encounter_counts AS (
-    SELECT d.realm_id, COUNT(DISTINCT d.encounter_name) AS encounter_count
+    SELECT
+        d.realm_id,
+        CASE
+            WHEN cardinality($3 :: text[]) > 0
+                THEN cardinality($3 :: text[])::bigint
+            ELSE COUNT(DISTINCT d.encounter_name)
+        END AS encounter_count
     FROM deduped d
     GROUP BY d.realm_id
 ),
@@ -13358,9 +13364,9 @@ type RankingsBoxPlotStatsRow struct {
 // Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
 // DPS is aggregated per run (sum damage / sum duration across encounters in one
 // instance run), so each run is one data point. Matches leaderboard aggregation.
-// Encounter counts are computed per realm: different realms (servers) can
-// record different encounter names for the same instance, so requiring the
-// union across realms would exclude every run when multiple realms are shown.
+// Explicit encounter selections define the required run coverage. Without an
+// explicit selection, compute coverage per realm because different realms can
+// record different encounter names for the same instance.
 // Aggregate per player per run: sum damage/duration across encounters in one run.
 // Each run becomes one data point for percentile computation.
 // Only include runs where the player completed ALL encounters as the same spec.
@@ -13961,7 +13967,13 @@ deduped AS (
         (CASE WHEN $1 :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 realm_encounter_counts AS (
-    SELECT d.realm_id, COUNT(DISTINCT d.encounter_name) AS encounter_count
+    SELECT
+        d.realm_id,
+        CASE
+            WHEN cardinality($9 :: text[]) > 0
+                THEN cardinality($9 :: text[])::bigint
+            ELSE COUNT(DISTINCT d.encounter_name)
+        END AS encounter_count
     FROM deduped d
     GROUP BY d.realm_id
 ),
@@ -14103,9 +14115,9 @@ type RankingsLeaderboardRow struct {
 // Within a run, damage and duration are summed across encounters to get run DPS.
 // Each player appears once with their highest-DPS run.
 // Deduplicates by (player, encounter, duplicate_group) before aggregating.
-// Encounter counts are computed per realm: different realms (servers) can
-// record different encounter names for the same instance, so requiring the
-// union across realms would exclude every run when multiple realms are shown.
+// Explicit encounter selections define the required run coverage. Without an
+// explicit selection, compute coverage per realm because different realms can
+// record different encounter names for the same instance.
 // Step 1: aggregate per player per run (sum encounters within a single instance run).
 // Step 2: pick each player's best run.
 func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error) {
