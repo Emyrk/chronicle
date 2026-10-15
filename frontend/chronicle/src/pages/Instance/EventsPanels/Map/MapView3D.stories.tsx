@@ -8,7 +8,7 @@ import type { InstanceUnit, KillType, WoWHeroClasses } from "@/api/typesGenerate
 import type { WoWSpell } from "@/api/wowdb";
 import type { WowMapInstance, WowMapManifest, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import type { PanelContext } from "../types";
-import { BOSS_MINI_SLUGS } from "./bossMinis";
+import { BOSS_MINI_SLUGS, bossMiniUrl } from "./bossMinis";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import type { MapHealthSample, MapPositionSample, MapResult } from "./map.processor";
 import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
@@ -679,6 +679,7 @@ function HealReplay({ playbackSpeed }: { playbackSpeed: number }) {
 // circle so its facing turns; they take turns being hit and one dies at 20 s.
 // Bosses whose model is missing from public/boss-minis show the box marker.
 const BOSS_ENTRIES = [...BOSS_MINI_SLUGS.keys()];
+const STORY_MINIATURE_URLS: ReadonlyMap<number, string> = new Map(BOSS_ENTRIES.map((entry) => [entry, bossMiniUrl(entry)!]));
 const BOSS_MINI_VIEW = { viewport: { centerX: 0.5, centerY: 0.5, zoom: 3 }, key: "boss-minis" };
 
 function bossMiniMarkers(cursorMs: number, fx: EncounterEffects): MapSceneMarker[] {
@@ -737,6 +738,7 @@ function BossMiniReplay({ playbackSpeed }: { playbackSpeed: number }) {
         playbackSpeed={playbackSpeed}
         view={BOSS_MINI_VIEW}
         effects={fx}
+        miniatureUrls={STORY_MINIATURE_URLS}
         onUnavailable={() => console.warn("WebGL unavailable")}
       />
     </div>
@@ -872,6 +874,7 @@ function FixturePlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture; m
           effects={scene.effects}
           bossGuids={scene.bossGuids}
           tankGuids={scene.tankGuids}
+          miniatureUrls={STORY_MINIATURE_URLS}
           onUnavailable={() => console.warn("WebGL unavailable")}
           dungeonMesh={dungeonMesh}
           onDungeonMeshState={setMeshState}
