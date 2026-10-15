@@ -1,7 +1,6 @@
 import { useMemo } from "react"
 import { ChevronDown } from "lucide-react"
 import type { ParseScoreSpread } from "@/api/typesGenerated"
-import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox"
 import {
   DropdownMenu,
@@ -71,76 +70,83 @@ export function SpreadsView({
         {classes.map(([playerClass, classSpreads]) => {
           const shown = classSpreads.filter((s) => !isHidden(hidden, playerClass, s.player_spec ?? "", s.player_sub_spec ?? "")).length
           const state = shown === 0 ? "hidden" : shown < classSpreads.length ? "partial" : "shown"
+          const className = CLASS_DISPLAY[playerClass] ?? playerClass
+          const classSpecKeys = classSpreads.map(specKeyOf)
           return (
-            <button
+            // Split chip: the name toggles the whole class, the chevron picks specs.
+            <div
               key={playerClass}
-              type="button"
-              aria-pressed={state !== "hidden"}
-              title={state === "hidden" ? `Show ${CLASS_DISPLAY[playerClass]}` : `Hide ${CLASS_DISPLAY[playerClass]}`}
-              onClick={() => {
-                // A partly hidden class becomes fully shown; otherwise toggle the class.
-                const withoutSpecs = new Set([...hidden].filter((key) => !key.startsWith(`${playerClass}:`)))
-                if (state === "shown") withoutSpecs.add(playerClass)
-                else withoutSpecs.delete(playerClass)
-                onHiddenChange([...withoutSpecs].sort().join(","))
-              }}
               className={cn(
-                "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-all",
-                state === "hidden"
-                  ? "border-transparent opacity-35 hover:opacity-60"
-                  : "border-white/10 text-foreground hover:bg-white/5",
+                "flex items-stretch rounded-md border text-xs font-medium transition-all",
+                state === "hidden" ? "border-white/10 opacity-40 hover:opacity-70" : "border-white/10 text-foreground",
                 state === "partial" && "border-dashed",
               )}
               style={state === "shown" ? { borderColor: CLASS_CSS_VAR[playerClass] } : undefined}
             >
-              <img
-                src={`/c/icons/class_${playerClass.toLowerCase()}.png`}
-                alt=""
-                className="h-4 w-4"
-                onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
-              />
-              {CLASS_DISPLAY[playerClass] ?? playerClass}
-            </button>
-          )
-        })}
-
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2.5 text-xs">
-              Specs
-              <ChevronDown className="h-3 w-3 opacity-50" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="styled-scrollbar max-h-[60vh] overflow-y-auto">
-            {classes.map(([playerClass, classSpreads]) => {
-              const classSpecKeys = classSpreads.map(specKeyOf)
-              return (
-                <div key={playerClass}>
+              <button
+                type="button"
+                aria-pressed={state !== "hidden"}
+                title={state === "hidden" ? `Show ${className}` : `Hide ${className}`}
+                onClick={() => {
+                  // A partly hidden class becomes fully shown; otherwise toggle the class.
+                  const withoutSpecs = new Set([...hidden].filter((key) => !key.startsWith(`${playerClass}:`)))
+                  if (state === "shown") withoutSpecs.add(playerClass)
+                  else withoutSpecs.delete(playerClass)
+                  onHiddenChange([...withoutSpecs].sort().join(","))
+                }}
+                className="flex items-center gap-1.5 rounded-l-md py-1 pr-1.5 pl-2 hover:bg-white/5"
+              >
+                <img
+                  src={`/c/icons/class_${playerClass.toLowerCase()}.png`}
+                  alt=""
+                  className="h-4 w-4"
+                  onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
+                />
+                {className}
+                {state === "partial" && (
+                  <span className="text-[10px] font-normal text-muted-foreground">
+                    {shown}/{classSpreads.length}
+                  </span>
+                )}
+              </button>
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Choose ${className} specs`}
+                    title={`Choose ${className} specs`}
+                    className="flex items-center rounded-r-md border-l border-white/10 px-1 text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-44">
                   <DropdownMenuLabel className="text-xs" style={{ color: CLASS_CSS_VAR[playerClass] }}>
-                    {CLASS_DISPLAY[playerClass] ?? playerClass}
+                    {className} specs
                   </DropdownMenuLabel>
                   {classSpreads.map((spread) => {
                     const key = specKeyOf(spread)
-                    const shown = !isHidden(hidden, playerClass, spread.player_spec ?? "", spread.player_sub_spec ?? "")
+                    const specShown = !isHidden(hidden, playerClass, spread.player_spec ?? "", spread.player_sub_spec ?? "")
                     return (
                       <DropdownMenuItem
                         key={key}
-                        className="gap-2 pl-4 text-xs"
+                        className="gap-2 text-xs"
                         onSelect={(e) => {
                           e.preventDefault()
-                          onHiddenChange(setSpecHidden(hidden, classSpecKeys, playerClass, key, shown))
+                          onHiddenChange(setSpecHidden(hidden, classSpecKeys, playerClass, key, specShown))
                         }}
                       >
-                        <Checkbox checked={shown} className="pointer-events-none" />
-                        {spreadSpecLabel(spread) || CLASS_DISPLAY[playerClass]}
+                        <Checkbox checked={specShown} className="pointer-events-none" />
+                        <span className="flex-1">{spreadSpecLabel(spread) || className}</span>
+                        {offRole.has(key) && <span className="text-[10px] text-muted-foreground">off-role</span>}
                       </DropdownMenuItem>
                     )
                   })}
-                </div>
-              )
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )
+        })}
 
         {offRole.size > 0 && (
           <button
