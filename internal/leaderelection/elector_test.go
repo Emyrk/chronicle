@@ -37,13 +37,14 @@ func (c *testCallbacks) stop(context.Context) error {
 func newTestElector(t *testing.T, pool Pool, lockKey int64, callbacks *testCallbacks) *Elector {
 	t.Helper()
 	elector, err := New(Options{
-		Name:           "test",
-		LockKey:        lockKey,
-		Pool:           pool,
-		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Registerer:     prometheus.NewRegistry(),
-		RetryInterval:  10 * time.Millisecond,
-		HealthInterval: 20 * time.Millisecond,
+		Name:          "test",
+		LockKey:       lockKey,
+		Pool:          pool,
+		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Registerer:    prometheus.NewRegistry(),
+		RetryInterval: 10 * time.Millisecond,
+		// Keep health checks out of setup assertions; tests here exercise election and failover.
+		HealthInterval: 5 * time.Second,
 		Jitter:         func(d time.Duration) time.Duration { return d },
 	}, Callbacks{Start: callbacks.start, Stop: callbacks.stop})
 	require.NoError(t, err)
