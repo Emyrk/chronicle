@@ -23,6 +23,8 @@ type parseScoreCohortQuerier interface {
 	GetTenantByID(context.Context, uuid.UUID) (database.Tenant, error)
 	ListParseScoreCohortBuckets(context.Context, database.ListParseScoreCohortBucketsParams) ([]database.ListParseScoreCohortBucketsRow, error)
 	GetParseScoreCohortEntries(context.Context, database.GetParseScoreCohortEntriesParams) ([]database.GetParseScoreCohortEntriesRow, error)
+	ListParseScoreSpreadValues(context.Context, database.ListParseScoreSpreadValuesParams) ([]database.ListParseScoreSpreadValuesRow, error)
+	ListTenants(context.Context) ([]database.Tenant, error)
 }
 
 func resolveParseCohortMode(ctx context.Context, store parseScoreCohortQuerier) (parsepolicy.CohortMode, error) {

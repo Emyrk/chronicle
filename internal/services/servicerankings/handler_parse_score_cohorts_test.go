@@ -276,3 +276,69 @@ func TestParseScoreCohorts_TenantVisibilityAndModes(t *testing.T) {
 	assert.Equal(t, "disabled", disabledBuckets.Reason)
 	assert.Empty(t, disabledBuckets.Buckets)
 }
+
+func callParseScoreSpreads(t *testing.T, svc *servicerankings.TestableService, query string) chroniclesdk.ParseScoreSpreadsResponse {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/parse-score-cohorts/spreads?"+query, nil)
+	w := httptest.NewRecorder()
+	svc.HandleParseScoreSpreads(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var response chroniclesdk.ParseScoreSpreadsResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+	return response
+}
+
+func TestParseScoreSpreads_MatchCohortScores(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupRankingsTest(t)
+	svc := servicerankings.NewTestableService(store, nil)
+	killedAt := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
+
+	for i := 1; i <= 6; i++ {
+		insertCohortMembership(t, pool, store, realmID, cohortMembership{
+			tenantID: uuid.Nil, killedAt: killedAt, dps: float64(i * 100), hps: 1,
+			playerClass: "WARRIOR", playerSpec: "Fury", playerSubSpec: "Dual Wield", difficulty: "Mythic", maxPlayers: 40,
+			playerGUID: cohortGUID(3000 + i),
+		})
+	}
+	insertCohortMembership(t, pool, store, realmID, cohortMembership{
+		tenantID: uuid.Nil, killedAt: killedAt, dps: 2000, hps: 1, playerClass: "MAGE", playerSpec: "Fire",
+		difficulty: "Mythic", maxPlayers: 40, playerGUID: cohortGUID(3100),
+	})
+	insertCohortMembership(t, pool, store, realmID, cohortMembership{
+		tenantID: uuid.Nil, killedAt: killedAt, dps: 3000, hps: 1, playerClass: "WARRIOR", playerSpec: "Unknown",
+		difficulty: "Mythic", maxPlayers: 40, playerGUID: cohortGUID(3101),
+	})
+
+	spreads := callParseScoreSpreads(t, svc, "date=2026-10-15&metric=dps&encounter_name=Ragnaros")
+	require.True(t, spreads.Available)
+	require.Len(t, spreads.Spreads, 2, "unknown specs are excluded")
+	assert.Equal(t, "MAGE", spreads.Spreads[0].PlayerClass, "sorted by median, best first")
+
+	fury := spreads.Spreads[1]
+	assert.Equal(t, "WARRIOR", fury.PlayerClass)
+	assert.Equal(t, "Dual Wield", fury.PlayerSubSpec)
+	assert.Equal(t, 6, fury.SampleSize)
+	assert.Equal(t, 100.0, fury.Min)
+	assert.Equal(t, 350.0, fury.Median)
+	assert.Equal(t, 600.0, fury.Max)
+
+	// Each tier cutoff is the weakest value the cohort viewer scores at or above it.
+	cohort := callParseScoreCohort(t, svc, uuid.Nil,
+		"date=2026-10-15&metric=dps&encounter_name=Ragnaros&class=WARRIOR&spec=Fury&sub_spec=Dual+Wield&difficulty=Mythic&max_players=40")
+	assert.Equal(t, cohort.Status, fury.Status)
+	for _, cutoff := range fury.Cutoffs {
+		var want *float64
+		for _, entry := range cohort.Entries {
+			if entry.DisplayScore >= cutoff.Floor && (want == nil || entry.MetricValue < *want) {
+				value := entry.MetricValue
+				want = &value
+			}
+		}
+		assert.Equal(t, want, cutoff.Value, "floor %d", cutoff.Floor)
+	}
+
+	narrowed := callParseScoreSpreads(t, svc, "date=2026-10-15&metric=dps&encounter_name=Ragnaros&encounter_name=Onyxia&class=Warrior&spec=Fury")
+	require.Len(t, narrowed.Spreads, 1)
+	assert.Equal(t, "Fury", narrowed.Spreads[0].PlayerSpec)
+}

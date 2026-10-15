@@ -63,3 +63,8 @@ func (ts *TestableService) HandleTimeParseCohortBuckets(w http.ResponseWriter, r
 func (ts *TestableService) HandleTimeParseCohort(w http.ResponseWriter, r *http.Request) {
 	handleTimeParseCohortWithStore(ts.store, w, r)
 }
+
+// HandleParseScoreSpreads exposes the DPS/HPS parse spread handler for tests.
+func (ts *TestableService) HandleParseScoreSpreads(w http.ResponseWriter, r *http.Request) {
+	handleParseScoreSpreadsWithStore(ts.store, w, r)
+}
