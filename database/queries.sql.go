@@ -10998,6 +10998,102 @@ func (q *sqlQuerier) ListParseScoreMemberships(ctx context.Context, arg ListPars
 	return items, nil
 }
 
+const listParseScoreSpreadValues = `-- name: ListParseScoreSpreadValues :many
+SELECT
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    membership.player_class,
+    CASE WHEN $1::text = 'spec' THEN membership.player_spec ELSE '' END::text AS player_spec,
+    CASE WHEN $1::text = 'spec' THEN membership.player_sub_spec ELSE '' END::text AS player_sub_spec,
+    membership.run_id,
+    CASE WHEN $2::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value
+FROM parse_score_memberships membership
+WHERE membership.tenant_id = ANY($3::uuid[])
+  AND membership.policy_version = $4
+  AND membership.query_version = $5
+  AND membership.killed_at < $6
+  AND ($7::timestamptz IS NULL OR membership.killed_at >= $7)
+  AND membership.encounter_name = ANY($8::text[])
+  AND ($9::text = '' OR membership.player_class = $9)
+  AND ($1::text <> 'spec' OR (
+      lower(btrim(membership.player_spec)) NOT IN ('', 'unknown')
+      AND ($10::text = '' OR membership.player_spec = $10)
+  ))
+  AND CASE WHEN $2::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
+`
+
+type ListParseScoreSpreadValuesParams struct {
+	CohortMode     string             `db:"cohort_mode" json:"cohort_mode"`
+	Metric         string             `db:"metric" json:"metric"`
+	TenantIds      []uuid.UUID        `db:"tenant_ids" json:"tenant_ids"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	EncounterNames []string           `db:"encounter_names" json:"encounter_names"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+}
+
+type ListParseScoreSpreadValuesRow struct {
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+	RunID          uuid.UUID `db:"run_id" json:"run_id"`
+	MetricValue    float64   `db:"metric_value" json:"metric_value"`
+}
+
+// Metric values for every exact DPS/HPS cohort on the given encounters, used
+// to summarize parse spreads without fetching per-player names. Empty
+// player_class/player_spec match every class/spec.
+// tenant_ids is resolved by the caller (the default tenant also sees
+// include_in_all tenants) so it is a plain index condition; an OR across
+// tenant rules, or an array built in SQL, leaves the planner scanning every
+// membership row instead of seeking by encounter.
+func (q *sqlQuerier) ListParseScoreSpreadValues(ctx context.Context, arg ListParseScoreSpreadValuesParams) ([]ListParseScoreSpreadValuesRow, error) {
+	rows, err := q.db.Query(ctx, listParseScoreSpreadValues,
+		arg.CohortMode,
+		arg.Metric,
+		arg.TenantIds,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.EncounterNames,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListParseScoreSpreadValuesRow
+	for rows.Next() {
+		var i ListParseScoreSpreadValuesRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.RunID,
+			&i.MetricValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const refreshParseScoreMembershipsForLogGroup = `-- name: RefreshParseScoreMembershipsForLogGroup :one
 WITH affected_runs AS MATERIALIZED (
     SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id

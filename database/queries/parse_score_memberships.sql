@@ -213,6 +213,37 @@ WHERE (
   AND CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
 ORDER BY metric_value DESC, membership.killed_at, membership.id;
 
+-- name: ListParseScoreSpreadValues :many
+-- Metric values for every exact DPS/HPS cohort on the given encounters, used
+-- to summarize parse spreads without fetching per-player names. Empty
+-- player_class/player_spec match every class/spec.
+SELECT
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    membership.player_class,
+    CASE WHEN @cohort_mode::text = 'spec' THEN membership.player_spec ELSE '' END::text AS player_spec,
+    CASE WHEN @cohort_mode::text = 'spec' THEN membership.player_sub_spec ELSE '' END::text AS player_sub_spec,
+    membership.run_id,
+    CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value
+FROM parse_score_memberships membership
+-- tenant_ids is resolved by the caller (the default tenant also sees
+-- include_in_all tenants) so it is a plain index condition; an OR across
+-- tenant rules, or an array built in SQL, leaves the planner scanning every
+-- membership row instead of seeking by encounter.
+WHERE membership.tenant_id = ANY(@tenant_ids::uuid[])
+  AND membership.policy_version = @policy_version
+  AND membership.query_version = @query_version
+  AND membership.killed_at < @cutoff
+  AND (@window_start::timestamptz IS NULL OR membership.killed_at >= @window_start)
+  AND membership.encounter_name = ANY(@encounter_names::text[])
+  AND (@player_class::text = '' OR membership.player_class = @player_class)
+  AND (@cohort_mode::text <> 'spec' OR (
+      lower(btrim(membership.player_spec)) NOT IN ('', 'unknown')
+      AND (@player_spec::text = '' OR membership.player_spec = @player_spec)
+  ))
+  AND CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END > 0;
+
 -- name: ListParseScoreMemberships :many
 SELECT *
 FROM parse_score_memberships

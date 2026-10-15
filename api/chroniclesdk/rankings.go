@@ -288,6 +288,41 @@ type ParseScoreCohortBucketsResponse struct {
 	Buckets      []ParseScoreCohortBucket `json:"buckets"`
 }
 
+// ParseScoreTierCutoff is the weakest metric value that still reaches a parse
+// tier. Value is nil when no kill in the cohort reaches the tier.
+type ParseScoreTierCutoff struct {
+	Floor int      `json:"floor"`
+	Value *float64 `json:"value"`
+}
+
+// ParseScoreSpread summarizes one exact DPS/HPS cohort for public parse pages.
+type ParseScoreSpread struct {
+	EncounterName  string                 `json:"encounter_name"`
+	DifficultyName string                 `json:"difficulty_name"`
+	MaxPlayers     int16                  `json:"max_players"`
+	PlayerClass    string                 `json:"player_class"`
+	PlayerSpec     string                 `json:"player_spec,omitempty"`
+	PlayerSubSpec  string                 `json:"player_sub_spec,omitempty"`
+	SampleSize     int                    `json:"sample_size"`
+	Status         string                 `json:"status"`
+	Min            float64                `json:"min"`
+	Median         float64                `json:"median"`
+	Max            float64                `json:"max"`
+	Cutoffs        []ParseScoreTierCutoff `json:"cutoffs"`
+}
+
+// ParseScoreSpreadsResponse lists cohort spreads for the requested encounters.
+type ParseScoreSpreadsResponse struct {
+	Available    bool               `json:"available"`
+	Reason       string             `json:"reason,omitempty"`
+	Cutoff       time.Time          `json:"cutoff"`
+	WindowStart  *time.Time         `json:"window_start,omitempty"`
+	LookbackDays int32              `json:"lookback_days"`
+	CohortMode   string             `json:"cohort_mode"`
+	Metric       string             `json:"metric"`
+	Spreads      []ParseScoreSpread `json:"spreads"`
+}
+
 // ParseScoreCohortEntry is one membership row scored against its exact live cohort.
 type ParseScoreCohortEntry struct {
 	Rank          int       `json:"rank"`

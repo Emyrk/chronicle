@@ -544,6 +544,14 @@ type sqlcQuerier interface {
 	// Read one persisted legacy result per player and encounter for the snapshot ID
 	// retained as opaque provenance on its successful receipt.
 	ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResult, error)
+	// Metric values for every exact DPS/HPS cohort on the given encounters, used
+	// to summarize parse spreads without fetching per-player names. Empty
+	// player_class/player_spec match every class/spec.
+	// tenant_ids is resolved by the caller (the default tenant also sees
+	// include_in_all tenants) so it is a plain index condition; an OR across
+	// tenant rules, or an array built in SQL, leaves the planner scanning every
+	// membership row instead of seeking by encounter.
+	ListParseScoreSpreadValues(ctx context.Context, arg ListParseScoreSpreadValuesParams) ([]ListParseScoreSpreadValuesRow, error)
 	// Receipt-less results are authoritative historical data. Read them without
 	// joining snapshot tables or score memberships so they can never be recomputed.
 	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error)

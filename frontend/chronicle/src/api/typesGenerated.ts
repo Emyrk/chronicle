@@ -2642,6 +2642,50 @@ export interface ParseScoreCohortResponse {
     readonly entries: readonly ParseScoreCohortEntry[];
 }
 
+// From chroniclesdk/rankings.go
+/**
+ * ParseScoreSpread summarizes one exact DPS/HPS cohort for public parse pages.
+ */
+export interface ParseScoreSpread {
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec?: string;
+    readonly player_sub_spec?: string;
+    readonly sample_size: number;
+    readonly status: string;
+    readonly min: number;
+    readonly median: number;
+    readonly max: number;
+    readonly cutoffs: readonly ParseScoreTierCutoff[];
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * ParseScoreSpreadsResponse lists cohort spreads for the requested encounters.
+ */
+export interface ParseScoreSpreadsResponse {
+    readonly available: boolean;
+    readonly reason?: string;
+    readonly cutoff: string;
+    readonly window_start?: string;
+    readonly lookback_days: number;
+    readonly cohort_mode: string;
+    readonly metric: string;
+    readonly spreads: readonly ParseScoreSpread[];
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * ParseScoreTierCutoff is the weakest metric value that still reaches a parse
+ * tier. Value is nil when no kill in the cohort reaches the tier.
+ */
+export interface ParseScoreTierCutoff {
+    readonly floor: number;
+    readonly value: number | null;
+}
+
 // From chroniclesdk/parser_version.go
 /**
  * ParserVersionResponse is returned by GET /api/v1/parser-version.
