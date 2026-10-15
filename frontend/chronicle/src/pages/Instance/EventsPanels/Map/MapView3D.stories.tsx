@@ -8,7 +8,7 @@ import type { InstanceUnit, KillType, WoWHeroClasses } from "@/api/typesGenerate
 import type { WoWSpell } from "@/api/wowdb";
 import type { WowMapInstance, WowMapManifest, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import type { PanelContext } from "../types";
-import { BOSS_MINI_SLUGS, fetchMiniatureUrls } from "./bossMinis";
+import { fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import type { MapHealthSample, MapPositionSample, MapResult } from "./map.processor";
 import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
@@ -675,11 +675,21 @@ function HealReplay({ playbackSpeed }: { playbackSpeed: number }) {
   );
 }
 
-// Every Wailing Caverns boss on a ring with a health bar, each walking a small
-// circle so its facing turns; they take turns being hit and one dies at 20 s.
-// Models come from the shared manifest, with bundled boss files as fallbacks.
-const BOSS_ENTRIES = [...BOSS_MINI_SLUGS.keys()];
-const BOSS_MINI_VIEW = { viewport: { centerX: 0.5, centerY: 0.5, zoom: 3 }, key: "boss-minis" };
+// Every published Wailing Caverns boss on a ring with a health bar, each
+// walking a small circle so its facing turns; one dies at 20 s.
+const STORY_BOSSES = [
+  { entry: 3671, name: "Lady Anacondra" },
+  { entry: 3670, name: "Lord Pythas" },
+  { entry: 3669, name: "Lord Cobrahn" },
+  { entry: 3653, name: "Kresh" },
+  { entry: 3674, name: "Skum" },
+  { entry: 3673, name: "Lord Serpentis" },
+  { entry: 5775, name: "Verdan the Everliving" },
+  { entry: 3654, name: "Mutanus the Devourer" },
+  { entry: 5912, name: "Deviate Faerie Dragon" },
+] as const;
+const BOSS_ENTRIES = STORY_BOSSES.map(({ entry }) => entry);
+const BOSS_MINI_VIEW = { viewport: { centerX: 0.5, centerY: 0.5, zoom: 3 }, key: "manifest-miniatures" };
 
 function useStoryMiniatureUrls(): ReadonlyMap<number, string> | undefined {
   return useQuery({
@@ -700,7 +710,7 @@ function bossMiniMarkers(cursorMs: number, fx: EncounterEffects): MapSceneMarker
     return [{
       guid: `Boss-${entry}`,
       health: { current: 100 - index * 9, max: 100, absorb: 0, dead: isDeadAt(fx, `Boss-${entry}`, cursorMs) },
-      name: BOSS_MINI_SLUGS.get(entry)!,
+      name: STORY_BOSSES[index]!.name,
       kind: "hostile",
       color: "#fb7185",
       entry,

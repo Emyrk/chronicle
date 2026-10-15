@@ -232,8 +232,8 @@ export interface MapScene3DUnit {
   name: string;
   /** Health bar to draw, or null for none. */
   health: MapUnitHealth | null;
-  /** Published model first, optional bundled compatibility model second. */
-  miniatureUrls: readonly string[];
+  /** Published model URL from the shared miniature manifest. */
+  miniatureUrl: string | undefined;
 }
 
 interface BossMini {
@@ -263,8 +263,8 @@ interface UnitObject {
   /** Replayed position; lunges offset `group.position` from it. */
   base: THREE.Vector3;
   health: MapUnitHealth | null;
-  /** Stable key for the candidate miniature URLs; the primitive shows until one loads. */
-  miniatureKey: string | undefined;
+  /** Published miniature URL; the primitive shows until it loads. */
+  miniatureUrl: string | undefined;
   barHeight: number;
   labelHeight: number;
   deadLift: number;
@@ -661,8 +661,7 @@ export class MapScene3D {
     for (const unit of units) {
       seen.add(unit.guid);
       let object = this.units.get(unit.guid);
-      const miniatureKey = unit.miniatureUrls.length > 0 ? unit.miniatureUrls.join("\n") : undefined;
-      if (object && (object.kind !== unit.kind || object.miniatureKey !== miniatureKey)) {
+      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl)) {
         this.removeUnit(unit.guid);
         object = undefined;
       }
@@ -903,7 +902,7 @@ export class MapScene3D {
 
   // Bosses stand larger than players on the mesh; everything else shares unitScale.
   private scaleOf(object: UnitObject): number {
-    return this.dungeonMesh && object.miniatureKey ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
+    return this.dungeonMesh && object.miniatureUrl ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
   }
 
   // The ground height under a unit: the mesh floor while it shows, else 0.
@@ -1353,25 +1352,25 @@ export class MapScene3D {
       dead: false,
       base: new THREE.Vector3(),
       health: unit.health,
-      miniatureKey: unit.miniatureUrls.length > 0 ? unit.miniatureUrls.join("\n") : undefined,
+      miniatureUrl: unit.miniatureUrl,
       barHeight: BAR_HEIGHT,
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
     };
     group.scale.setScalar(this.scaleOf(object));
     this.units.set(unit.guid, object);
-    if (object.miniatureKey) {
-      const mini = this.requestBossMini(object.miniatureKey, unit.miniatureUrls);
+    if (object.miniatureUrl) {
+      const mini = this.requestBossMini(object.miniatureUrl);
       if (mini) this.applyBossMini(object, mini);
     }
     return object;
   }
 
-  // Returns the first available candidate if loaded, starting the ordered fallback load on first use.
-  private requestBossMini(key: string, urls: readonly string[]): BossMini | null {
-    if (this.bossMinis.has(key)) return this.bossMinis.get(key) ?? null;
-    this.bossMinis.set(key, null);
-    void this.loadBossMini(urls).then((mini) => {
+  // Returns the published miniature if loaded, starting its load on first use.
+  private requestBossMini(url: string): BossMini | null {
+    if (this.bossMinis.has(url)) return this.bossMinis.get(url) ?? null;
+    this.bossMinis.set(url, null);
+    void this.loadBossMiniCandidate(corsAssetUrl(url)).then((mini) => {
       if (!mini) return;
       if (this.disposed) {
         mini.geometry.dispose();
@@ -1379,9 +1378,9 @@ export class MapScene3D {
         mini.material?.dispose();
         return;
       }
-      this.bossMinis.set(key, mini);
+      this.bossMinis.set(url, mini);
       for (const object of this.units.values()) {
-        if (object.miniatureKey === key) this.applyBossMini(object, mini);
+        if (object.miniatureUrl === url) this.applyBossMini(object, mini);
       }
       this.updateLabel();
       this.requestRender();
@@ -1389,17 +1388,8 @@ export class MapScene3D {
     return null;
   }
 
-  private async loadBossMini(urls: readonly string[]): Promise<BossMini | null> {
-    for (const url of urls) {
-      const mini = await this.loadBossMiniCandidate(corsAssetUrl(url));
-      if (mini) return mini;
-    }
-    return null;
-  }
-
-  // Loads a mini's first mesh as plain float geometry, sized and turned to
-  // face -z, keeping its material only if it has a base-colour texture.
-  // Resolves null on any failure so the next candidate can be tried.
+  // Loads a published mini's first mesh as plain float geometry, sized and
+  // turned to face -z, keeping its material only if it has a base-colour texture.
   private async loadBossMiniCandidate(url: string): Promise<BossMini | null> {
     try {
       this.gltfLoader ??= createGltfLoader();
@@ -1437,7 +1427,8 @@ export class MapScene3D {
         // Lying down turns -z into +y, so the back of the model rests on the ground.
         deadLift: -box.min.z,
       };
-    } catch {
+    } catch (error) {
+      console.error("Failed to load published miniature", url, error);
       return null;
     }
   }

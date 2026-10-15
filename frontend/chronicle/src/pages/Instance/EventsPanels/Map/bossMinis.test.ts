@@ -1,45 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  BOSS_MINI_SLUGS,
   MINIATURE_MANIFEST_FORMAT,
-  bossMiniSlug,
-  bossMiniUrl,
   fetchMiniatureManifest,
   fetchMiniatureUrls,
   miniatureAssetUrl,
   miniatureManifestUrl,
-  miniatureUrlCandidates,
+  miniatureUrl,
   parseMiniatureManifest,
 } from "./bossMinis";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("bossMinis", () => {
-  it("maps each Wailing Caverns boss entry to its model file", () => {
-    expect(Object.fromEntries(BOSS_MINI_SLUGS)).toEqual({
-      3671: "lady-anacondra",
-      3670: "lord-pythas",
-      3669: "lord-cobrahn",
-      3653: "kresh",
-      3674: "skum",
-      3673: "lord-serpentis",
-      5775: "verdan-the-everliving",
-      3654: "mutanus-the-devourer",
-      5912: "deviate-faerie-dragon",
-    });
-  });
-
-  it("returns nothing for other or missing entries", () => {
-    expect(bossMiniSlug(undefined)).toBeUndefined();
-    expect(bossMiniSlug(11502)).toBeUndefined();
-    expect(bossMiniUrl(11502)).toBeUndefined();
-  });
-
-  it("builds model URLs under the base URL", () => {
-    expect(bossMiniUrl(3654, "/boss-minis")).toBe("/boss-minis/mutanus-the-devourer.glb");
-    expect(bossMiniUrl(3653, "https://cdn.example/minis/")).toBe("https://cdn.example/minis/kresh.glb");
-  });
-
   it("parses the shared miniature registry and builds root-CDN URLs", () => {
     const manifest = parseMiniatureManifest({
       format: MINIATURE_MANIFEST_FORMAT,
@@ -90,15 +62,15 @@ describe("bossMinis", () => {
     expect(fetchMock).toHaveBeenCalledWith("https://icons.example/root/miniatures/manifest.json");
   });
 
-  it("prefers the published model and keeps the bundled model as a fallback", () => {
-    const published = new Map([[3653, "https://icons.example/miniatures/kresh.glb"], [11502, "https://icons.example/miniatures/ragnaros.glb"]]);
-    expect(miniatureUrlCandidates(3653, published, "/boss-minis")).toEqual([
-      "https://icons.example/miniatures/kresh.glb",
-      "/boss-minis/kresh.glb",
+  it("uses only models published by the manifest", () => {
+    const published = new Map([
+      [3653, "https://icons.example/miniatures/kresh.glb"],
+      [11502, "https://icons.example/miniatures/ragnaros.glb"],
     ]);
-    expect(miniatureUrlCandidates(11502, published, "/boss-minis")).toEqual([
-      "https://icons.example/miniatures/ragnaros.glb",
-    ]);
-    expect(miniatureUrlCandidates(999, published, "/boss-minis")).toEqual([]);
+    expect(miniatureUrl(3653, published)).toBe("https://icons.example/miniatures/kresh.glb");
+    expect(miniatureUrl(11502, published)).toBe("https://icons.example/miniatures/ragnaros.glb");
+    expect(miniatureUrl(999, published)).toBeUndefined();
+    expect(miniatureUrl(undefined, published)).toBeUndefined();
+    expect(miniatureUrl(3653, undefined)).toBeUndefined();
   });
 });

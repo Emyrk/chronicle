@@ -5,7 +5,7 @@ import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
-import { miniatureUrlCandidates } from "./bossMinis";
+import { miniatureUrl } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
 import { interpolatedPositionAt, prefersReducedMotion, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import {
@@ -37,7 +37,7 @@ export interface MapView3DProps {
   bossGuids?: ReadonlySet<string>;
   /** Tanks: their heals are kept when effects are capped and float numbers. */
   tankGuids?: ReadonlySet<string>;
-  /** Published entry-ID miniature URLs. Bundled boss models remain fallbacks. */
+  /** Published entry-ID miniature URLs from the shared manifest. */
   miniatureUrls?: ReadonlyMap<number, string>;
   /** Called when WebGL cannot be created or the context is lost. */
   onUnavailable: () => void;
@@ -244,6 +244,7 @@ export default function MapView3D({
         ? interpolatedPositionAt(marker.positions, smoothMs) ?? marker.sample
         : marker.sample;
       const point = sample === marker.sample ? marker.point : projectSample(sample) ?? marker.point;
+      const modelUrl = miniatureUrl(marker.entry, miniatureUrls);
       return [{
         guid: marker.guid,
         point,
@@ -253,7 +254,7 @@ export default function MapView3D({
         muted: marker.muted,
         name: marker.name,
         health: showBars ? marker.health : null,
-        miniatureUrls: miniatureUrlCandidates(marker.entry, miniatureUrls),
+        miniatureUrl: modelUrl,
       }];
     });
     scene.setUnits(units);
