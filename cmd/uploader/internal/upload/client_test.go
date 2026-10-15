@@ -45,7 +45,7 @@ func TestUpload(t *testing.T) {
 	t.Run("created", func(t *testing.T) {
 		t.Parallel()
 		c, req, body := respond(201, `{"log_id":"abc","file_ids":[]}`)
-		res, err := c.Upload(context.Background(), path, size)
+		res, err := c.Upload(context.Background(), path, "chr1-11-abcd", size)
 		require.NoError(t, err)
 		require.Equal(t, c.BaseURL+"/logs/abc", res.ReportURL)
 		require.False(t, res.Duplicate)
@@ -53,21 +53,39 @@ func TestUpload(t *testing.T) {
 		require.Equal(t, "/api/v1/raidlogs/logs/upload-v2", req.URL.Path)
 		require.Equal(t, "v22-cleu", req.URL.Query().Get("format"))
 		require.Equal(t, "vanilla,wow-forever", req.URL.Query().Get("flavor"))
+		require.Equal(t, "chr1-11-abcd", req.Header.Get("X-Chronicle-Source-Id"))
 		require.Len(t, *body, size)
 	})
 
 	t.Run("server provided url wins", func(t *testing.T) {
 		t.Parallel()
 		c, _, _ := respond(200, `{"log_id":"abc","url":"/logs/abc?x=1"}`)
-		res, err := c.Upload(context.Background(), path, size)
+		res, err := c.Upload(context.Background(), path, "", size)
 		require.NoError(t, err)
 		require.Equal(t, c.BaseURL+"/logs/abc?x=1", res.ReportURL)
+	})
+
+	t.Run("no source id sends no header", func(t *testing.T) {
+		t.Parallel()
+		c, req, _ := respond(201, `{"log_id":"abc"}`)
+		_, err := c.Upload(context.Background(), path, "", size)
+		require.NoError(t, err)
+		require.Empty(t, req.Header.Values("X-Chronicle-Source-Id"))
+	})
+
+	t.Run("duplicate in a 200", func(t *testing.T) {
+		t.Parallel()
+		c, _, _ := respond(200, `{"log_id":"abc","url":"/logs/abc","duplicate":true}`)
+		res, err := c.Upload(context.Background(), path, "chr1-11-abcd", size)
+		require.NoError(t, err)
+		require.True(t, res.Duplicate)
+		require.Equal(t, c.BaseURL+"/logs/abc", res.ReportURL)
 	})
 
 	t.Run("duplicate", func(t *testing.T) {
 		t.Parallel()
 		c, _, _ := respond(400, `{"message":"A log file with the same contents has already been uploaded by you","link":"/logs/file/deadbeef"}`)
-		res, err := c.Upload(context.Background(), path, size)
+		res, err := c.Upload(context.Background(), path, "", size)
 		require.NoError(t, err)
 		require.True(t, res.Duplicate)
 		require.Equal(t, c.BaseURL+"/logs/file/deadbeef", res.ReportURL)
@@ -76,7 +94,7 @@ func TestUpload(t *testing.T) {
 	t.Run("unauthorized", func(t *testing.T) {
 		t.Parallel()
 		c, _, _ := respond(401, `{"message":"nope"}`)
-		_, err := c.Upload(context.Background(), path, size)
+		_, err := c.Upload(context.Background(), path, "", size)
 		require.ErrorIs(t, err, upload.ErrUnauthorized)
 		require.False(t, upload.Retryable(err))
 	})
@@ -84,11 +102,11 @@ func TestUpload(t *testing.T) {
 	t.Run("server error is retryable, bad request is not", func(t *testing.T) {
 		t.Parallel()
 		c, _, _ := respond(503, ``)
-		_, err := c.Upload(context.Background(), path, size)
+		_, err := c.Upload(context.Background(), path, "", size)
 		require.True(t, upload.Retryable(err))
 
 		c, _, _ = respond(400, `{"message":"bad log"}`)
-		_, err = c.Upload(context.Background(), path, size)
+		_, err = c.Upload(context.Background(), path, "", size)
 		require.Error(t, err)
 		require.False(t, upload.Retryable(err))
 	})
@@ -99,7 +117,7 @@ func TestUpload(t *testing.T) {
 		url := srv.URL
 		srv.Close()
 		c := &upload.Client{BaseURL: url, Token: "tok"}
-		_, err := c.Upload(context.Background(), path, size)
+		_, err := c.Upload(context.Background(), path, "", size)
 		require.Error(t, err)
 		require.True(t, upload.Retryable(err))
 	})
@@ -107,7 +125,7 @@ func TestUpload(t *testing.T) {
 	t.Run("no token", func(t *testing.T) {
 		t.Parallel()
 		c := &upload.Client{BaseURL: "http://127.0.0.1:1"}
-		_, err := c.Upload(context.Background(), path, size)
+		_, err := c.Upload(context.Background(), path, "", size)
 		require.ErrorIs(t, err, upload.ErrUnauthorized)
 	})
 }
@@ -130,7 +148,7 @@ func TestUploadFast(t *testing.T) {
 		}))
 		defer srv.Close()
 		c := upload.Client{BaseURL: srv.URL, Token: "tok", Fast: fast}
-		_, err := c.Upload(context.Background(), path, 11)
+		_, err := c.Upload(context.Background(), path, "", 11)
 		require.NoError(t, err)
 		return got
 	}

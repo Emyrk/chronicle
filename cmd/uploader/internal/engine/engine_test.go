@@ -31,7 +31,9 @@ type harness struct {
 	results  []error // consumed one per Upload call
 	res      upload.Result
 	uploads  int
+	sources  []string      // the source id of each Upload call
 	fast     []bool        // the fast flag of each Upload call
+	lookups  int           // pre-flight source lookups made
 	gate     chan struct{} // when set, Upload blocks until it is closed
 	notified []string
 	statuses []engine.Status
@@ -46,6 +48,12 @@ func newHarnessToken(t testing.TB, tokenFn func() string) *harness {
 
 // newHarnessLogger also sets the engine's logger when logger is non-nil.
 func newHarnessLogger(t testing.TB, tokenFn func() string, logger *slog.Logger) *harness {
+	return newHarnessLookup(t, tokenFn, logger, nil)
+}
+
+// newHarnessLookup also wires the pre-flight source lookup when lookup is
+// non-nil; nil leaves Config.Lookup unset, as the real uploader does.
+func newHarnessLookup(t testing.TB, tokenFn func() string, logger *slog.Logger, lookup func(sourceID string) (upload.Have, error)) *harness {
 	t.Helper()
 	dir := t.TempDir()
 	logDir := filepath.Join(dir, "_x_", "Logs")
@@ -55,6 +63,15 @@ func newHarnessLogger(t testing.TB, tokenFn func() string, logger *slog.Logger) 
 	st, err := store.Open(filepath.Join(dir, "state.json"))
 	require.NoError(t, err)
 	h.st = st
+	var lookupFn func(context.Context, string, string) (upload.Have, error)
+	if lookup != nil {
+		lookupFn = func(_ context.Context, _, sourceID string) (upload.Have, error) {
+			h.mu.Lock()
+			h.lookups++
+			h.mu.Unlock()
+			return lookup(sourceID)
+		}
+	}
 	h.e = engine.New(engine.Config{
 		Store:    st,
 		Logger:   logger,
@@ -67,9 +84,11 @@ func newHarnessLogger(t testing.TB, tokenFn func() string, logger *slog.Logger) 
 			defer h.mu.Unlock()
 			return h.token
 		},
-		Upload: func(_ context.Context, _, _ string, _ int64, fast bool) (upload.Result, error) {
+		Lookup: lookupFn,
+		Upload: func(_ context.Context, _, _, sourceID string, _ int64, fast bool) (upload.Result, error) {
 			h.mu.Lock()
 			h.uploads++
+			h.sources = append(h.sources, sourceID)
 			h.fast = append(h.fast, fast)
 			gate := h.gate
 			var err error

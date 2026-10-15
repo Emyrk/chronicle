@@ -21,6 +21,10 @@ import (
 const (
 	uploadPath = "/api/v1/raidlogs/logs/upload-v2"
 	probePath  = "/api/v1/whoami/dump"
+	// sourceHeader carries the content-keyed id of the log (see Identify).
+	// A server that already has a group for it replaces that group rather
+	// than creating a second one.
+	sourceHeader = "X-Chronicle-Source-Id"
 )
 
 // Ping checks that baseURL serves the Chronicle API. Without credentials the
@@ -106,6 +110,9 @@ type Client struct {
 
 type uploadResponse struct {
 	LogID string `json:"log_id"`
+	// Duplicate is sent by servers that answer 200 for a file they already
+	// have instead of rejecting it.
+	Duplicate bool `json:"duplicate"`
 	// URL is sent by servers that support idempotent re-upload; older ones
 	// only send log_id.
 	URL string `json:"url"`
@@ -114,10 +121,10 @@ type uploadResponse struct {
 	Link    string `json:"link"`
 }
 
-// Upload gzips the first size bytes of path and posts them. Only size bytes are
-// read so the upload matches the size the caller recorded even while the
-// client keeps appending.
-func (c *Client) Upload(ctx context.Context, path string, size int64) (Result, error) {
+// Upload gzips the first size bytes of path and posts them under sourceID (see
+// Identify; "" sends no source id). Only size bytes are read so the upload
+// matches the size the caller recorded even while the client keeps appending.
+func (c *Client) Upload(ctx context.Context, path, sourceID string, size int64) (Result, error) {
 	if c.Token == "" {
 		return Result{}, ErrUnauthorized
 	}
@@ -141,6 +148,9 @@ func (c *Client) Upload(ctx context.Context, path string, size int64) (Result, e
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+c.Token)
+	if sourceID != "" {
+		req.Header.Set(sourceHeader, sourceID)
+	}
 
 	httpc := c.HTTP
 	if httpc == nil {
@@ -159,7 +169,7 @@ func (c *Client) Upload(ctx context.Context, path string, size int64) (Result, e
 
 	switch {
 	case resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK:
-		return Result{ReportURL: c.reportURL(out)}, nil
+		return Result{ReportURL: c.reportURL(out), Duplicate: out.Duplicate}, nil
 	case resp.StatusCode == http.StatusUnauthorized:
 		return Result{}, ErrUnauthorized
 	case resp.StatusCode == http.StatusBadRequest && strings.Contains(out.Message, "already been uploaded"):

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/zalando/go-keyring"
 
@@ -30,8 +31,46 @@ type State struct {
 	KeepLog bool `json:"keep_log,omitempty"`
 	// Uploaded maps a log path to the size that has been uploaded.
 	Uploaded map[string]int64 `json:"uploaded,omitempty"`
+	// Logs is the upload ledger: it maps a log's content-keyed source id
+	// (upload.Identify) to what Chronicle has of it. Unlike Uploaded, which is
+	// keyed by path and forgotten when the file is renamed or moved, the ledger
+	// is what keeps a log the server already has from being sent again.
+	Logs map[string]Log `json:"logs,omitempty"`
 	// LastReportURL is the most recent report, for the tray menu.
 	LastReportURL string `json:"last_report_url,omitempty"`
+}
+
+// Log is one entry of the upload ledger.
+type Log struct {
+	// Size is how many bytes of the log reached the server.
+	Size int64 `json:"size"`
+	// ReportURL is where it can be viewed.
+	ReportURL string `json:"report_url,omitempty"`
+	// At is when the entry was last written. The oldest entries are dropped
+	// once the ledger is full.
+	At time.Time `json:"at"`
+}
+
+// LedgerMax bounds the ledger: one entry is kept per log file ever uploaded,
+// which is a handful per play session, so the state file cannot grow forever.
+const LedgerMax = 1000
+
+// RecordLog adds or replaces the ledger entry for a source id, dropping the
+// oldest entries once the ledger is full.
+func (s *State) RecordLog(id string, l Log) {
+	if s.Logs == nil {
+		s.Logs = map[string]Log{}
+	}
+	s.Logs[id] = l
+	for len(s.Logs) > LedgerMax {
+		oldest, at := "", time.Time{}
+		for k, v := range s.Logs {
+			if oldest == "" || v.At.Before(at) {
+				oldest, at = k, v.At
+			}
+		}
+		delete(s.Logs, oldest)
+	}
 }
 
 // Store is a JSON file on disk.
@@ -75,6 +114,10 @@ func (s *Store) Get() State {
 	cp.Uploaded = make(map[string]int64, len(s.st.Uploaded))
 	for k, v := range s.st.Uploaded {
 		cp.Uploaded[k] = v
+	}
+	cp.Logs = make(map[string]Log, len(s.st.Logs))
+	for k, v := range s.st.Logs {
+		cp.Logs[k] = v
 	}
 	return cp
 }
