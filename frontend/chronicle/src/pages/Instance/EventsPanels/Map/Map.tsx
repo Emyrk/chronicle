@@ -1,10 +1,8 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Crosshair, Focus, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
-import { fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
 import { MapOverview2D } from "./MapOverview2D";
@@ -59,12 +57,6 @@ interface ReplayMapProps extends PanelRenderProps<MapResult> {
 
 function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }: ReplayMapProps) {
   const sync = useSyncModeContextOptional();
-  const miniatureQuery = useQuery({
-    queryKey: ["unit-miniatures"],
-    staleTime: 60 * 60 * 1000,
-    retry: false,
-    queryFn: () => fetchMiniatureUrls(),
-  });
   const [webglUnavailable, setWebglUnavailable] = useState(false);
   const show3D = !webglUnavailable;
   // "3D map": the real dungeon mesh as the ground. Units project onto it with
@@ -223,7 +215,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               effects={scene.effects}
               bossGuids={scene.bossGuids}
               tankGuids={scene.tankGuids}
-              miniatureUrls={miniatureQuery.data}
               onUnavailable={() => setWebglUnavailable(true)}
               dungeonMesh={dungeonMesh}
               onDungeonMeshState={setMeshState}

@@ -112,7 +112,7 @@ export interface MapSceneMarker {
   name: string;
   /** Health bar at the cursor, or null when the unit has none or it was decluttered. */
   health: MapUnitHealth | null;
-  /** Creature entry used by the shared miniature registry (hostiles, pets, totems, etc.). */
+  /** NPC entry of a hostile unit, for its boss miniature. */
   entry?: number;
 }
 
@@ -342,7 +342,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       muted: Boolean(player) && selectedPlayers.size > 0 && !selectedPlayers.has(guid),
       name: player?.name ?? metadata?.name ?? guid,
       health: null,
-      entry: metadata?.entry,
+      entry: kind === "hostile" ? metadata?.entry : undefined,
     }];
   });
   const bars = selectHealthBars(markers.map((marker) => marker.guid), encounter.healthByUnit, cursorMs, bossGuids, selectedPlayers);

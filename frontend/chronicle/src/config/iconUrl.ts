@@ -1,5 +1,5 @@
 const SERVER_NAME = import.meta.env.VITE_SERVER_NAME ?? "turtle";
-export const ICON_CDN = "https://icons.chronicleclassic.com";
+const ICON_CDN = "https://icons.chronicleclassic.com";
 
 /** Default base URL for icon assets (compiled-in server identity) */
 export const ICON_BASE_URL = `${ICON_CDN}/${SERVER_NAME}`;
