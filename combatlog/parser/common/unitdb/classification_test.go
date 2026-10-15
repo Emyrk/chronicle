@@ -268,6 +268,34 @@ func TestUpdate_PossessionControllerNotPersistedAsOwner(t *testing.T) {
 	assert.Nil(t, info.Owner, "possession controller must not become a permanent owner")
 }
 
+func TestUpdate_PossessionDoesNotPersistTemporaryAffiliation(t *testing.T) {
+	t.Parallel()
+
+	playerGUID := mustGUID("0x0000000000000001")
+	mobGUID := mustGUID("0x0030000000000002")
+	now := time.Now()
+
+	units := unitdb.New()
+	units.Update(unitinfo.Info{
+		Guid:         mobGUID,
+		Name:         "Razorgore the Untamed",
+		CanCooperate: false,
+	})
+	units.SetPossessed(mobGUID, playerGUID, makeSpell("Possess"), now, 0)
+
+	// UNIT_INFO reflects temporary control as both player ownership and friendly
+	// affiliation. Neither value should replace the unit's permanent identity.
+	units.Update(unitinfo.Info{
+		Guid:         mobGUID,
+		Name:         "Razorgore the Untamed",
+		Owner:        &playerGUID,
+		CanCooperate: true,
+	})
+
+	units.ClearPossessed(mobGUID)
+	assert.Equal(t, unitdb.AffiliationHostile, units.Classify(mobGUID).Affiliation)
+}
+
 func TestProcessMessage_NewOwner(t *testing.T) {
 	t.Parallel()
 

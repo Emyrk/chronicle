@@ -254,6 +254,12 @@ func (us *Units) Update(u unitinfo.Info) {
 		}
 	}
 
+	if _, possessed := us.Possessed[u.Guid]; possessed && exists {
+		// UNIT_INFO reflects temporary control in CanCooperate. Keep the unit's
+		// permanent affiliation so it reverts correctly when possession ends.
+		u.CanCooperate = existing.CanCooperate
+	}
+
 	if u.Guid.IsPet() && u.Owner == nil && existing.Owner != nil {
 		// For some reason, a pet has been recorded not having an owner in a `UNIT_INFO` message.
 		// This bug might exist for things like totems as well, I am not sure.
