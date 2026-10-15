@@ -2,4 +2,4 @@
 
 package main
 
-func platformIcon(pngData []byte, _ int) []byte { return pngData }
+func platformIcon(imgs []sizedPNG) []byte { return imgs[len(imgs)-1].data }

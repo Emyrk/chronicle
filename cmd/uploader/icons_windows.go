@@ -7,15 +7,21 @@ import (
 	"encoding/binary"
 )
 
-// platformIcon wraps the PNG in an ICO container, which is what the Windows
+// platformIcon wraps the PNGs in an ICO container, which is what the Windows
 // tray requires.
-func platformIcon(pngData []byte, size int) []byte {
+func platformIcon(imgs []sizedPNG) []byte {
 	var b bytes.Buffer
-	_ = binary.Write(&b, binary.LittleEndian, []uint16{0, 1, 1}) // reserved, type=icon, count
-	b.Write([]byte{byte(size), byte(size), 0, 0})                // w, h, palette, reserved
-	_ = binary.Write(&b, binary.LittleEndian, []uint16{1, 32})   // planes, bpp
-	_ = binary.Write(&b, binary.LittleEndian, uint32(len(pngData)))
-	_ = binary.Write(&b, binary.LittleEndian, uint32(22)) // data offset: 6 + 16
-	b.Write(pngData)
+	_ = binary.Write(&b, binary.LittleEndian, []uint16{0, 1, uint16(len(imgs))}) // reserved, type=icon, count
+	offset := 6 + 16*len(imgs)
+	for _, img := range imgs {
+		b.Write([]byte{byte(img.size), byte(img.size), 0, 0})      // w, h, palette, reserved
+		_ = binary.Write(&b, binary.LittleEndian, []uint16{1, 32}) // planes, bpp
+		_ = binary.Write(&b, binary.LittleEndian, uint32(len(img.data)))
+		_ = binary.Write(&b, binary.LittleEndian, uint32(offset))
+		offset += len(img.data)
+	}
+	for _, img := range imgs {
+		b.Write(img.data)
+	}
 	return b.Bytes()
 }

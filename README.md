@@ -90,7 +90,9 @@ configure for most people.
 4. Play. When you quit WoW, the uploader sends your log and shows a notification. Choose **Open last report**
    from the menu to see it.
 
-**What the dot means**
+**What the icon means**
+
+The stone glyph is the app; the small dot in its corner is the state.
 
 | Dot            | Meaning                                                                    |
 | -------------- | -------------------------------------------------------------------------- |
@@ -99,7 +101,7 @@ configure for most people.
 | Orange         | Combat logging is on. Waiting for your first fight                         |
 | Green          | Recording your combat log                                                  |
 | Blue           | Uploading (if you are offline it keeps trying until you are back)          |
-| Green + check  | Uploaded                                                                   |
+| Green          | Uploaded (the menu line and the notification say "Uploaded")               |
 | Yellow         | Not connected to Chronicle (or it needs reconnecting)                      |
 
 **Menu**

@@ -418,3 +418,9 @@ docs:
 .PHONY: landing
 landing:
 	cd frontend/landing && pnpm install && pnpm build
+
+# Re-render the uploader tray PNGs and app icon from the stone SVG master.
+# Output is deterministic, so a second run changes nothing.
+.PHONY: uploader/icons
+uploader/icons:
+	go run ./scripts/uploader-icon cmd/uploader/packaging/stone.svg cmd/uploader/icons cmd/uploader/packaging/AppIcon.icns
