@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { WowMapManualRender } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 import {
   clampMapCamera,
@@ -6,6 +7,7 @@ import {
   fitMapCameraToPoints,
   fitMapCanvasRect,
   fitMapViewport,
+  overviewDungeonCanvas,
   pointInMapViewport,
   projectDungeonMapPoint,
   selectMapJourneyEncounters,
@@ -115,6 +117,21 @@ describe("map route overview model", () => {
       "transit",
       "two",
     ]);
+  });
+
+  it("prefers manual renders but never borrows calibration from styled or native artwork", () => {
+    const floor = { floor: 1, width: 100, height: 80, tileWidth: 50, tileHeight: 40, tiles: [], bounds: { minX: 0, maxX: 10, minY: 0, maxY: 20 } };
+    const styled = { path: "styled/map.jpeg", width: 200, height: 160, source: "hand-styled", bounds: floor.bounds };
+    const renders: WowMapManualRender = { path: "renders/map.png", width: 300, height: 240 };
+    const instance = { mapID: 230, name: "Blackrock Depths", instanceType: 1, directory: "", floors: [floor], styled, renders };
+    const defaultCanvas = overviewDungeonCanvas(instance, floor, "renders");
+    expect(defaultCanvas).toEqual({ canvas: renders, source: "renders" });
+    expect(defaultCanvas.canvas?.bounds).toBeUndefined();
+    expect(overviewDungeonCanvas(instance, floor, "styled")).toEqual({ canvas: styled, source: "styled" });
+    expect(overviewDungeonCanvas(instance, floor, "art")).toEqual({ canvas: floor, source: "art" });
+    expect(overviewDungeonCanvas({ ...instance, renders: { ...renders, bounds: floor.bounds } }, floor, "renders").canvas?.bounds).toEqual(floor.bounds);
+    expect(overviewDungeonCanvas({ ...instance, renders: undefined }, floor, "renders")).toEqual({ canvas: styled, source: "styled" });
+    expect(overviewDungeonCanvas({ ...instance, styled: undefined, renders: undefined }, floor, "renders")).toEqual({ canvas: floor, source: "art" });
   });
 
   it("projects rendered geometry from ordinary world X/Y bounds", () => {

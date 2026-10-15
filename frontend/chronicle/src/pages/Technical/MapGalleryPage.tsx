@@ -31,7 +31,7 @@ function meshExtent(mesh: WowMapMeshInstance): { width: number; height: number }
 }
 
 function galleryCanvasSize(item: MapGalleryItem): { width: number; height: number } {
-  return item.kind === "zone" ? item.layer : item.kind === "instance" ? item.floor : item.kind === "mesh" ? meshExtent(item.mesh) : item.rendered;
+  return item.kind === "zone" ? item.layer : item.kind === "instance" ? item.floor : item.kind === "mesh" ? meshExtent(item.mesh) : item.kind === "renders" ? item.render : item.rendered;
 }
 
 function useMapManifest(iconBaseUrl: string | undefined) {
@@ -61,16 +61,17 @@ function MapArtwork({ item, iconBaseUrl }: { item: MapGalleryItem; iconBaseUrl: 
       </div>
     );
   }
-  if ((item.kind === "rendered" || item.kind === "styled")) {
+  if (item.kind === "renders" || item.kind === "styled") {
+    const image = item.kind === "renders" ? item.render : item.rendered;
     return (
       <div
         className="relative w-full overflow-hidden bg-[#11100d]"
-        style={{ aspectRatio: `${item.rendered.width} / ${item.rendered.height}` }}
+        style={{ aspectRatio: `${image.width} / ${image.height}` }}
         role="img"
         aria-label={`${name} ${item.kind === "styled" ? "stylized" : "rendered"} map`}
       >
         <img
-          src={mapAssetUrl(iconBaseUrl, item.rendered.path)}
+          src={mapAssetUrl(iconBaseUrl, image.path)}
           alt=""
           loading="lazy"
           decoding="async"
@@ -156,7 +157,7 @@ function MapCard({
             {item.kind === "zone"
               ? `UI map ${item.map.id}`
               : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"} · world ${item.instance.mapID}`}
-            {(item.kind === "rendered" || item.kind === "styled") ? ` · ${item.rendered.source}` : ""}
+            {item.kind === "styled" ? ` · ${item.rendered.source}` : item.kind === "renders" ? " · manual render" : ""}
             {assignment ? ` · world ${assignment.mapID}` : ""}
           </p>
         </div>
@@ -167,7 +168,7 @@ function MapCard({
             <div>phase {item.art.phaseID} · layer {item.layer.index}</div>
           )}
           {item.kind === "instance" && <div>art floor {item.floor.floor}</div>}
-          {item.kind === "rendered" && <div>{item.rendered.triangles?.toLocaleString() ?? "generated"} triangles</div>}
+          {item.kind === "renders" && <div>{item.render.bounds ? "calibrated" : "uncalibrated"} render</div>}
           {item.kind === "styled" && <div>stylized art</div>}
         </div>
       </div>
@@ -194,7 +195,7 @@ function MapModal({
       ? `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, art floor ${item.floor.floor}`
       : item.kind === "mesh"
         ? `Dungeon, world ${item.instance.mapID}, no map artwork, 3D mesh only (${item.mesh.path})`
-        : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, ${item.kind === "styled" ? "stylized render" : `generated from ${item.rendered.source}`}`;
+        : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, ${item.kind === "styled" ? "stylized render" : `manual render (${item.render.bounds ? "calibrated" : "uncalibrated"})`}`;
 
   return (
     <Dialog open onOpenChange={onOpenChange}>

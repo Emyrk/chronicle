@@ -312,6 +312,23 @@ function normalizedMapName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
+export type OverviewMapSource = "renders" | "styled" | "art";
+
+/** Choose 2D artwork without borrowing calibration from a different image. */
+export function overviewDungeonCanvas(
+  instance: WowMapInstance,
+  floor: WowMapInstance["floors"][number] | undefined,
+  source: OverviewMapSource,
+) {
+  const render = instance.renders && instance.renders.width > 0 && instance.renders.height > 0 ? instance.renders : undefined;
+  const styled = instance.styled && instance.styled.width > 0 && instance.styled.height > 0 ? instance.styled : undefined;
+  if (source === "art" && floor) return { canvas: floor, source: "art" as const };
+  if (source === "styled" && styled) return { canvas: styled, source: "styled" as const };
+  if (render) return { canvas: render, source: "renders" as const };
+  if (styled) return { canvas: styled, source: "styled" as const };
+  return { canvas: floor, source: "art" as const };
+}
+
 export function resolveMapArtwork(
   manifest: WowMapManifest,
   mapId: number,
@@ -341,7 +358,7 @@ export function resolveMapArtwork(
   // original floor is projected through boss calibration below.
   const instanceHasProjection = instance && (
     instance.mapID === 43
-      || Boolean(instance.rendered?.bounds)
+      || Boolean(instance.renders?.bounds)
       || Boolean(instance.styled?.bounds)
       || instance.floors.some((floor) => Boolean(floor.bounds))
   );

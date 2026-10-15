@@ -50,7 +50,7 @@ describe("isMeshOnlyInstance", () => {
   it("is true only for an instance with no artwork and a placeable mesh", () => {
     expect(isMeshOnlyInstance(RFC_INSTANCE)).toBe(true);
     expect(isMeshOnlyInstance({ ...RFC_INSTANCE, floors: [WC_FLOOR] })).toBe(false);
-    expect(isMeshOnlyInstance({ ...RFC_INSTANCE, rendered: { path: "render/389.png", width: 2, height: 2, source: "wmo", bounds: RFC_MESH.bounds } })).toBe(false);
+    expect(isMeshOnlyInstance({ ...RFC_INSTANCE, renders: { path: "renders/389.png", width: 2, height: 2 } })).toBe(false);
     expect(isMeshOnlyInstance({ ...RFC_INSTANCE, mesh: undefined })).toBe(false);
     expect(isMeshOnlyInstance({ ...RFC_INSTANCE, mesh: { ...RFC_MESH, frame: "wow-yup" } })).toBe(false);
   });

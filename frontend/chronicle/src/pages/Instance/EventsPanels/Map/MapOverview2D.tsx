@@ -8,6 +8,7 @@ import {
   tilePlacement,
   type WowMapInstanceFloor,
   type WowMapLayer,
+  type WowMapManualRender,
   type WowMapRenderedInstance,
   type WowMapOverlay,
 } from "@/pages/Technical/mapGallery";
@@ -23,6 +24,7 @@ import {
   fitMapCanvasRect,
   fitMapViewport,
   pointInMapViewport,
+  overviewDungeonCanvas,
   projectDungeonMapPoint,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
@@ -82,11 +84,11 @@ function MapBackground({
   iconBaseUrl,
   overlays,
 }: {
-  canvas: WowMapLayer | WowMapInstanceFloor | WowMapRenderedInstance;
+  canvas: WowMapLayer | WowMapInstanceFloor | WowMapRenderedInstance | WowMapManualRender;
   iconBaseUrl: string;
   overlays?: WowMapOverlay[];
 }) {
-  if ("source" in canvas) {
+  if ("path" in canvas) {
     return (
       <img
         src={mapAssetUrl(iconBaseUrl, canvas.path)}
@@ -346,13 +348,12 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
     ? resolveMapArtwork(manifestQuery.data, artworkMapId, representativeSample, props.context.instance.name)
     : null;
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
-  const [mapSource, setMapSource] = useState<"styled" | "rendered" | "art">("styled");
+  const [mapSource, setMapSource] = useState<"styled" | "renders" | "art">("renders");
 
   const zoneSelection = artwork?.kind === "zone"
     ? artwork.map.art?.flatMap((art) => art.layers.map((layer) => ({ art, layer })))
       .find(({ layer }) => layer.width > 0 && layer.height > 0 && layer.tiles.length > 0)
     : undefined;
-  const availableRenderedMap = artwork?.kind === "instance" ? artwork.instance.rendered : undefined;
   const selectedFloorNumber = artwork?.kind === "instance"
     && artwork.instance.floors.some((floor) => floor.floor === floorNumber)
     ? floorNumber
@@ -360,12 +361,13 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
   const selectedFloor = artwork?.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
-  const styledMap = availableRenderedMap && artwork?.kind === "instance" ? artwork.instance.styled : undefined;
-  const renderedMap = mapSource === "art" && selectedFloor
-    ? undefined
-    : mapSource === "styled" && styledMap ? styledMap : availableRenderedMap;
-  const canvas = artwork?.kind === "zone" ? zoneSelection?.layer : renderedMap ?? selectedFloor;
-  const dungeonBounds = artwork?.kind === "instance" ? renderedMap?.bounds ?? selectedFloor?.bounds ?? null : null;
+  const instanceCanvas = artwork?.kind === "instance"
+    ? overviewDungeonCanvas(artwork.instance, selectedFloor, mapSource)
+    : null;
+  const canvas = artwork?.kind === "zone" ? zoneSelection?.layer : instanceCanvas?.canvas;
+  // Image bounds belong to that image alone; never substitute floor or mesh bounds.
+  const dungeonBounds = artwork?.kind === "instance" ? instanceCanvas?.canvas?.bounds ?? null : null;
+  const imageProjection = instanceCanvas?.source !== "art";
 
   const mapCanvasRect = useMemo(() => fitMapCanvasRect(
     mapShellSize,
@@ -376,8 +378,8 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
     if (!artwork || sample.mapId !== mapId) return null;
     if (artwork.kind === "zone") return zoneMapPoint(sample, artwork.assignment);
     if (!dungeonBounds) return null;
-    return projectDungeonMapPoint(sample, dungeonBounds, artwork.instance.mapID, calibration, Boolean(renderedMap));
-  }, [artwork, dungeonBounds, mapId, renderedMap]);
+    return projectDungeonMapPoint(sample, dungeonBounds, artwork.instance.mapID, calibration, imageProjection);
+  }, [artwork, dungeonBounds, imageProjection, mapId]);
 
   const journeyRoutes = useMemo<EncounterRoute[]>(() => {
     if (!artwork || selectedEncounters.length === 0) return [];
@@ -385,7 +387,7 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
     return selectMapJourneyEncounters(props.result.encounters, props.context.selectedEncounterIds).flatMap((positions) => {
       const encounter = props.context.instance.encounters.find((candidate) => candidate.id === positions.encounterId);
       if (!encounter) return [];
-      const calibration = artwork.kind === "instance" && !renderedMap
+      const calibration = artwork.kind === "instance" && !imageProjection
         ? resolveDungeonMapCalibration(
           artwork.instance.mapID,
           positions,
@@ -410,7 +412,7 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
     props.context.instance.units,
     props.context.selectedEncounterIds,
     props.result.encounters,
-    renderedMap,
+    imageProjection,
     selectedEncounters,
   ]);
   const routes = journeyRoutes.filter((route) => route.selected);
@@ -418,7 +420,7 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
   // while telemetry is still loading, so observe only once the shell actually exists.
   const showMap = Boolean(iconBaseUrl && !manifestQuery.isLoading && !props.loading
     && !manifestQuery.error && selectedEncounters.length > 0 && representativeSamples.length > 0
-    && mapId !== null && artwork && canvas && routes.length > 0);
+    && mapId !== null && artwork && canvas);
   useLayoutEffect(() => {
     const shell = mapShellRef.current;
     if (!shell || !canvas || !showMap) return;
@@ -469,7 +471,6 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
     return <MapMessage title="No map artwork for this instance" detail={`${artwork.instance.name} has no 2D map; it is 3D only. Select a single encounter to open its 3D Replay Map.`} />;
   }
   if (!canvas) return <MapMessage title="Map assets unavailable" detail="No renderable map layer was published." />;
-  if (routes.length === 0) return <MapMessage title="Route unavailable" detail="The selected encounters do not contain player positions that can be projected onto this map." />;
 
   const mapName = artwork.kind === "zone" ? artwork.map.name : artwork.instance.name;
   const displayedMapId = artwork.kind === "instance" ? artwork.instance.mapID : mapId;
@@ -482,21 +483,21 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
           <span className="ml-1.5 font-mono">world {displayedMapId}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {availableRenderedMap && (
+          {artwork.kind === "instance" && [artwork.instance.renders, artwork.instance.styled, selectedFloor].filter(Boolean).length > 1 && (
             <select
               aria-label="Map source"
-              value={renderedMap === styledMap && styledMap ? "styled" : renderedMap ? "rendered" : "art"}
-              onChange={(event) => setMapSource(event.target.value as "styled" | "rendered" | "art")}
+              value={instanceCanvas?.source}
+              onChange={(event) => setMapSource(event.target.value as "styled" | "renders" | "art")}
               className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground [color-scheme:dark]"
             >
-              {styledMap && <option value="styled">Stylized</option>}
-              <option value="rendered">Raw render</option>
+              {artwork.instance.renders && <option value="renders">Raw render</option>}
+              {artwork.instance.styled && <option value="styled">Stylized</option>}
               {selectedFloor && <option value="art">Original artwork</option>}
             </select>
           )}
           <span>{Math.round(mapScale * camera.scale * 100)}%</span>
           <span>{routes.length} encounters</span>
-          {artwork.kind === "instance" && !renderedMap && artwork.instance.floors.length > 1 && (
+          {artwork.kind === "instance" && !imageProjection && artwork.instance.floors.length > 1 && (
             <select
               aria-label="Map floor"
               value={selectedFloorNumber ?? ""}
@@ -619,14 +620,18 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
             </button>
           )}
         </div>
-        <RouteLegend
+        {routes.length > 0 && <RouteLegend
           routes={routes}
           onHoverEncounter={setHoveredEncounterId}
           onFocusEncounter={focusEncounter}
-        />
+        />}
       </div>
       <p className="px-1 text-[9px] text-muted-foreground">
-        Colored lines show selected encounters. Muted gray lines and small dots retain unselected fights. Dashed lines mark remaining telemetry gaps.
+        {routes.length > 0
+          ? "Colored lines show selected encounters. Muted gray lines and small dots retain unselected fights. Dashed lines mark remaining telemetry gaps."
+          : !dungeonBounds && imageProjection
+            ? "This render has no calibrated bounds; routes and positions cannot be placed on it. Choose another map source to view them."
+            : "The selected encounters have no positions that can be projected onto this map."}
       </p>
     </div>
   );

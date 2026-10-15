@@ -292,7 +292,9 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const mesh = artwork.kind === "instance" ? placeableDungeonMesh(artwork.instance.mesh) : null;
   // A mesh-only instance has no floor to fall back on, so its mesh is the
   // canvas from the start (while the mesh loads too), not only once asked.
-  const meshOnly = artwork.kind === "instance" && isMeshOnlyInstance(artwork.instance);
+  // Replay uses native floors or the mesh, never an uncalibrated manual image.
+  // Without a floor, keep the mesh available even when a 2D render exists.
+  const meshOnly = artwork.kind === "instance" && (isMeshOnlyInstance(artwork.instance) || (!selectedFloor && mesh !== null));
   const rawProjection = (Boolean(options.rawDungeonProjection) || meshOnly) && mesh !== null;
   const meshCanvas = rawProjection && mesh ? dungeonMeshCanvas(mesh) : null;
   const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? selectedFloor;

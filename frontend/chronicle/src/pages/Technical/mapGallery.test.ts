@@ -105,13 +105,10 @@ describe("map gallery rendering model", () => {
         name: "Blackrock Depths",
         instanceType: 1,
         directory: "blackrockdepths",
-        rendered: {
-          path: "render/230-build.png",
+        renders: {
+          path: "renders/230-manual.png",
           width: 1200,
           height: 800,
-          source: "wmo-geometry",
-          bounds: { minX: -10, maxX: 20, minY: -30, maxY: 40 },
-          triangles: 1234,
         },
         styled: {
           path: "render-styled/230-v1.jpeg",
@@ -135,7 +132,7 @@ describe("map gallery rendering model", () => {
 
     expect(items.map((item) => item.key)).toEqual([
       "instance-230-1",
-      "rendered-230",
+      "renders-230",
       "styled-230",
       "zone-1411-0-2169-0",
       "zone-1411-1-2170-1",
@@ -174,6 +171,14 @@ describe("mesh-only instances", () => {
     const items = mapGalleryItems(manifest);
     expect(items.map((item) => item.key)).toEqual(["mesh-389", "instance-43-1"]);
     expect(items[0]).toMatchObject({ kind: "mesh", instance: { name: "Ragefire Chasm" }, mesh });
+  });
+
+  it("lists a manual render instead of a mesh-only card when both are present", () => {
+    const renders = { path: "renders/rfc.png", width: 800, height: 600 };
+    expect(mapGalleryItems({
+      ...manifest,
+      instances: [{ ...manifest.instances![0], renders }],
+    })).toMatchObject([{ kind: "renders", render: renders }]);
   });
 
   it("lists nothing for an instance with neither artwork nor mesh", () => {

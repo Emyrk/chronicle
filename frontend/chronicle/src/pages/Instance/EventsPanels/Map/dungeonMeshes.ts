@@ -39,7 +39,7 @@ export function placeableDungeonMesh(mesh: WowMapMeshInstance | undefined): WowM
  * the "3D map" to show and the 2D views have no tiles to draw.
  */
 export function isMeshOnlyInstance(instance: WowMapInstance): boolean {
-  return instance.floors.length === 0 && !instance.rendered && !instance.styled && placeableDungeonMesh(instance.mesh) !== null;
+  return instance.floors.length === 0 && !instance.renders && !instance.styled && placeableDungeonMesh(instance.mesh) !== null;
 }
 
 const LIQUID_COLOR = /^#[0-9a-f]{6}$/i;

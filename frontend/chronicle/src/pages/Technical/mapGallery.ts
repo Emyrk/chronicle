@@ -62,10 +62,8 @@ export interface WowMapInstance {
   instanceType: number;
   directory: string;
   floors: WowMapInstanceFloor[];
-  rendered?: WowMapRenderedInstance;
   styled?: WowMapRenderedInstance;
   renders?: WowMapManualRender;
-  "3d"?: WowMap3DAsset;
   mesh?: WowMapMeshInstance;
 }
 
@@ -89,16 +87,12 @@ export interface WowMapMeshLiquid {
   opacity: number;
 }
 
-// Catalog entries for manually published assets; replay placement is not yet calibrated.
+// Manually published 2D images. Only explicitly calibrated bounds permit position overlays.
 export interface WowMapManualRender {
   path: string;
   width: number;
   height: number;
   bounds?: WowMapFloorBounds;
-}
-
-export interface WowMap3DAsset {
-  path: string;
 }
 
 export interface WowMapRenderedInstance {
@@ -161,10 +155,10 @@ export type MapGalleryItem =
     floor: WowMapInstanceFloor;
   }
   | {
-    kind: "rendered";
+    kind: "renders";
     key: string;
     instance: WowMapInstance;
-    rendered: WowMapRenderedInstance;
+    render: WowMapManualRender;
   }
   | {
     kind: "styled";
@@ -239,12 +233,12 @@ export function mapGalleryItems(manifest: WowMapManifest): MapGalleryItem[] {
         instance,
         floor,
       })),
-    ...(instance.rendered && instance.rendered.width > 0 && instance.rendered.height > 0
+    ...(instance.renders && instance.renders.width > 0 && instance.renders.height > 0
       ? [{
-          kind: "rendered" as const,
-          key: `rendered-${instance.mapID}`,
+          kind: "renders" as const,
+          key: `renders-${instance.mapID}`,
           instance,
-          rendered: instance.rendered,
+          render: instance.renders,
         }]
       : []),
     ...(instance.styled && instance.styled.width > 0 && instance.styled.height > 0
@@ -257,7 +251,7 @@ export function mapGalleryItems(manifest: WowMapManifest): MapGalleryItem[] {
       : []),
     // An instance with artwork is listed by it; one with only a mesh (a
     // dungeon without an in-game map) still gets a card.
-    ...(instance.mesh && instance.floors.length === 0 && !instance.rendered && !instance.styled
+    ...(instance.mesh && instance.floors.length === 0 && !instance.renders && !instance.styled
       ? [{
           kind: "mesh" as const,
           key: `mesh-${instance.mapID}`,
