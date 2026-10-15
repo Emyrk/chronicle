@@ -200,6 +200,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/parse-score-cohorts/spreads", s.handleParseScoreSpreads)
 	s.router.Get("/time-parse-cohorts/buckets", s.handleTimeParseCohortBuckets)
 	s.router.Get("/time-parse-cohorts/cohort", s.handleTimeParseCohort)
+	s.router.Get("/time-parse-cohorts/spreads", s.handleTimeParseSpreads)
 
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)

@@ -18651,6 +18651,71 @@ func (q *sqlQuerier) ListTimeParseBossKillMemberships(ctx context.Context, arg L
 	return items, nil
 }
 
+const listTimeParseBossKillSpreadValues = `-- name: ListTimeParseBossKillSpreadValues :many
+SELECT
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    membership.duration_ms
+FROM time_parse_boss_kill_memberships membership
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.instance_name = $4
+  AND membership.killed_at < $5
+  AND ($6::timestamptz IS NULL OR membership.killed_at >= $6)
+`
+
+type ListTimeParseBossKillSpreadValuesParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+}
+
+type ListTimeParseBossKillSpreadValuesRow struct {
+	EncounterName  string `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	DurationMs     int64  `db:"duration_ms" json:"duration_ms"`
+}
+
+// Kill durations for every boss-kill cohort in one instance, used to
+// summarize kill-time parse spreads without per-kill guild lookups.
+func (q *sqlQuerier) ListTimeParseBossKillSpreadValues(ctx context.Context, arg ListTimeParseBossKillSpreadValuesParams) ([]ListTimeParseBossKillSpreadValuesRow, error) {
+	rows, err := q.db.Query(ctx, listTimeParseBossKillSpreadValues,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.InstanceName,
+		arg.Cutoff,
+		arg.WindowStart,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTimeParseBossKillSpreadValuesRow
+	for rows.Next() {
+		var i ListTimeParseBossKillSpreadValuesRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTimeParseClearTimeCohortBuckets = `-- name: ListTimeParseClearTimeCohortBuckets :many
 SELECT
     membership.instance_name,
@@ -18750,6 +18815,63 @@ func (q *sqlQuerier) ListTimeParseClearTimeMemberships(ctx context.Context, arg 
 			&i.DurationMs,
 			&i.StartTime,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseClearTimeSpreadValues = `-- name: ListTimeParseClearTimeSpreadValues :many
+SELECT
+    membership.difficulty_name,
+    membership.max_players,
+    membership.duration_ms
+FROM time_parse_clear_time_memberships membership
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.instance_name = $4
+  AND membership.start_time < $5
+  AND ($6::timestamptz IS NULL OR membership.start_time >= $6)
+`
+
+type ListTimeParseClearTimeSpreadValuesParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+}
+
+type ListTimeParseClearTimeSpreadValuesRow struct {
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	DurationMs     int64  `db:"duration_ms" json:"duration_ms"`
+}
+
+// Full-clear durations for every clear-time cohort in one instance.
+func (q *sqlQuerier) ListTimeParseClearTimeSpreadValues(ctx context.Context, arg ListTimeParseClearTimeSpreadValuesParams) ([]ListTimeParseClearTimeSpreadValuesRow, error) {
+	rows, err := q.db.Query(ctx, listTimeParseClearTimeSpreadValues,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.InstanceName,
+		arg.Cutoff,
+		arg.WindowStart,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTimeParseClearTimeSpreadValuesRow
+	for rows.Next() {
+		var i ListTimeParseClearTimeSpreadValuesRow
+		if err := rows.Scan(&i.DifficultyName, &i.MaxPlayers, &i.DurationMs); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

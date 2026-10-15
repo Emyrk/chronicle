@@ -309,3 +309,33 @@ WHERE membership.tenant_id = @tenant_id
   AND membership.difficulty_name = @difficulty_name
   AND membership.max_players = @max_players
 ORDER BY membership.duration_ms, membership.start_time;
+
+-- name: ListTimeParseBossKillSpreadValues :many
+-- Kill durations for every boss-kill cohort in one instance, used to
+-- summarize kill-time parse spreads without per-kill guild lookups.
+SELECT
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    membership.duration_ms
+FROM time_parse_boss_kill_memberships membership
+WHERE membership.tenant_id = @tenant_id
+  AND membership.policy_version = @policy_version
+  AND membership.query_version = @query_version
+  AND membership.instance_name = @instance_name
+  AND membership.killed_at < @cutoff
+  AND (@window_start::timestamptz IS NULL OR membership.killed_at >= @window_start);
+
+-- name: ListTimeParseClearTimeSpreadValues :many
+-- Full-clear durations for every clear-time cohort in one instance.
+SELECT
+    membership.difficulty_name,
+    membership.max_players,
+    membership.duration_ms
+FROM time_parse_clear_time_memberships membership
+WHERE membership.tenant_id = @tenant_id
+  AND membership.policy_version = @policy_version
+  AND membership.query_version = @query_version
+  AND membership.instance_name = @instance_name
+  AND membership.start_time < @cutoff
+  AND (@window_start::timestamptz IS NULL OR membership.start_time >= @window_start);

@@ -593,9 +593,14 @@ type sqlcQuerier interface {
 	ListTenantsByDataset(ctx context.Context, defaultDatasetID uuid.NullUUID) ([]ListTenantsByDatasetRow, error)
 	ListTimeParseBossKillCohortBuckets(ctx context.Context, arg ListTimeParseBossKillCohortBucketsParams) ([]ListTimeParseBossKillCohortBucketsRow, error)
 	ListTimeParseBossKillMemberships(ctx context.Context, arg ListTimeParseBossKillMembershipsParams) ([]TimeParseBossKillMembership, error)
+	// Kill durations for every boss-kill cohort in one instance, used to
+	// summarize kill-time parse spreads without per-kill guild lookups.
+	ListTimeParseBossKillSpreadValues(ctx context.Context, arg ListTimeParseBossKillSpreadValuesParams) ([]ListTimeParseBossKillSpreadValuesRow, error)
 	ListTimeParseBossScoresForScore(ctx context.Context, timeParseScoreID uuid.UUID) ([]TimeParseBossScore, error)
 	ListTimeParseClearTimeCohortBuckets(ctx context.Context, arg ListTimeParseClearTimeCohortBucketsParams) ([]ListTimeParseClearTimeCohortBucketsRow, error)
 	ListTimeParseClearTimeMemberships(ctx context.Context, arg ListTimeParseClearTimeMembershipsParams) ([]TimeParseClearTimeMembership, error)
+	// Full-clear durations for every clear-time cohort in one instance.
+	ListTimeParseClearTimeSpreadValues(ctx context.Context, arg ListTimeParseClearTimeSpreadValuesParams) ([]ListTimeParseClearTimeSpreadValuesRow, error)
 	// Locate surviving uploads for a logical run before deleting one instance so
 	// compact memberships can elect a new representative afterward.
 	ListTimeParseReplacementLogGroups(ctx context.Context, arg ListTimeParseReplacementLogGroupsParams) ([]uuid.UUID, error)
