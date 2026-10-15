@@ -16,3 +16,7 @@ binding = "DB"
 database_name = "chronicle-telemetry"
 database_id = "e4641bcd-c96b-465d-a47c-d92d5dbd54e2"
 migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "MAPS"
+bucket_name = "icons"

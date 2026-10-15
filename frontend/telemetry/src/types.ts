@@ -21,6 +21,7 @@ export interface TelemetryReport {
 
 export interface Env {
   DB: D1Database;
+  MAPS: R2Bucket;
   GA4_PROPERTY_ID?: string;
   GOOGLE_CLIENT_EMAIL?: string;
   GOOGLE_PRIVATE_KEY?: string;
