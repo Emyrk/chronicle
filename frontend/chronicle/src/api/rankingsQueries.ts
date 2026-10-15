@@ -10,6 +10,7 @@ import type {
   InstanceParsesResponse,
   ParseScoreCohortBucketsResponse,
   ParseScoreCohortResponse,
+  ParseScoreSpreadsResponse,
   TimeParseCohortBucketsResponse,
   TimeParseCohortKind,
   TimeParseCohortResponse,
@@ -361,6 +362,33 @@ export function useParseScoreCohortBuckets(
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: !!date,
+  });
+}
+
+/**
+ * Parse spreads (tier cutoffs per exact cohort) for public parse pages.
+ * Always the live 60-day window ending today.
+ */
+export function useParseScoreSpreads(params: {
+  metric: "dps" | "hps";
+  encounterNames: readonly string[];
+  playerClass?: string;
+  playerSpec?: string;
+}, enabled = true) {
+  const searchParams = new URLSearchParams({ metric: params.metric, period: "60d" });
+  for (const name of params.encounterNames) searchParams.append("encounter_name", name);
+  if (params.playerClass) searchParams.set("class", params.playerClass);
+  if (params.playerSpec) searchParams.set("spec", params.playerSpec);
+
+  return useQuery({
+    queryKey: ["rankings", "parse-score-spreads", params],
+    queryFn: () =>
+      fetchJSON<ParseScoreSpreadsResponse>(
+        `/api/v1/rankings/parse-score-cohorts/spreads?${searchParams.toString()}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    placeholderData: keepPreviousData,
+    enabled: enabled && params.encounterNames.length > 0,
   });
 }
 

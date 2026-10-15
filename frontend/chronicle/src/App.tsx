@@ -150,6 +150,7 @@ function App() {
         <Route path="/leaderboards" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/leaderboards/statistics" element={<LeaderboardsPage mode="statistics" />} />
         <Route path="/leaderboards/speedruns" element={<LeaderboardsPage mode="speedruns" />} />
+        <Route path="/leaderboards/parsing" element={<LeaderboardsPage mode="parsing" />} />
         <Route path="/leaderboard" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/rankings" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/apply" element={<ApplyPage />} />
