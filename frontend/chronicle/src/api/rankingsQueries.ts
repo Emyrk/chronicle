@@ -255,6 +255,21 @@ export function useRankingsKillTimes(instanceName: string, period?: string, enab
   });
 }
 
+/** Box plot stats on qualified full clears; empty when there are none. */
+export function useRankingsClearTimes(instanceName: string, period?: string, enabled = true) {
+  const searchParams = new URLSearchParams();
+  searchParams.set("instance_name", instanceName);
+  if (period) searchParams.set("period", period);
+
+  return useQuery({
+    queryKey: ["rankings", "clear-times", instanceName, period],
+    queryFn: () =>
+      fetchJSON<RankingsKillTimeStats[]>(`/api/v1/rankings/clear-times?${searchParams.toString()}`),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: enabled && !!instanceName,
+  });
+}
+
 export function useRankingsSuccessRates(
   instanceName: string,
   period?: string,

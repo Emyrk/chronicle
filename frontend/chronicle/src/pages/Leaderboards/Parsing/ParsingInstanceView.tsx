@@ -172,6 +172,21 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
     <>
       <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Encounters</h3>
       <div className="mt-3 space-y-4">
+        {view === "times" && timeSpreads.some((s) => s.kind === "clear_time") && (
+          <button
+            type="button"
+            onClick={() => update({ clear: "1" })}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-all duration-150",
+              params.get("clear") === "1"
+                ? "border-l-3 border-l-primary-foreground/70 bg-primary-darker text-primary-foreground shadow-sm"
+                : "hover:translate-x-0.5 hover:bg-accent/50",
+            )}
+          >
+            <Timer className="h-4 w-4 shrink-0 text-green-500" />
+            <span className="flex-1 truncate font-medium">Full clear</span>
+          </button>
+        )}
         {sections.map((section) => (
           <div key={section.kind}>
             <h4 className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
