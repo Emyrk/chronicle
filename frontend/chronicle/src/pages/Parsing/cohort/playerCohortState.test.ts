@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ParseScoreCohortBucket } from "@/api/typesGenerated";
 import {
   DEFAULT_SUB_SPEC_VALUE,
+  playerCohortBucketMatchesSubSpec,
   playerCohortSizeKey,
   selectPlayerCohortSize,
   selectPlayerSubSpec,
@@ -30,6 +31,15 @@ describe("selectPlayerSubSpec", () => {
       showControl: true,
     });
     expect(selectPlayerSubSpec(["Dual Wield", ""], "").selected).toBe("");
+  });
+});
+
+describe("playerCohortBucketMatchesSubSpec", () => {
+  it("treats an omitted empty sub-spec as the default bucket", () => {
+    const defaultBucket = bucket("", 0);
+    expect(defaultBucket.player_sub_spec).toBeUndefined();
+    expect(playerCohortBucketMatchesSubSpec(defaultBucket, "")).toBe(true);
+    expect(playerCohortBucketMatchesSubSpec(defaultBucket, "Dual Wield")).toBe(false);
   });
 });
 

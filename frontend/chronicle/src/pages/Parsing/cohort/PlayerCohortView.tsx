@@ -19,6 +19,7 @@ import { CohortTable, type CohortTableRow } from "./CohortTable";
 import { formatMetric, summarizeCohort, tierCutoffs } from "./cohortStats";
 import {
   DEFAULT_SUB_SPEC_VALUE,
+  playerCohortBucketMatchesSubSpec,
   playerCohortSizeKey,
   selectPlayerCohortSize,
   selectPlayerSubSpec,
@@ -131,7 +132,8 @@ export function PlayerCohortView({ params, updateParams }: { params: URLSearchPa
           (bucket) =>
             bucket.encounter_name === encounterName &&
             bucket.player_class === playerClass &&
-            (!specMode || (bucket.player_spec === playerSpec && bucket.player_sub_spec === selectedSubSpec)),
+            (!specMode ||
+              (bucket.player_spec === playerSpec && playerCohortBucketMatchesSubSpec(bucket, selectedSubSpec))),
         )
         .sort((a, b) => b.sample_size - a.sample_size),
     [buckets, encounterName, playerClass, playerSpec, selectedSubSpec, specMode],
