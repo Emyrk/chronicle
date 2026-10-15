@@ -49,10 +49,10 @@
 .shot{height:128px;background:#15110e;border-radius:10px;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:0 16px;overflow:hidden}
 .shotLabel{font-size:11px;color:#8d7f6c;text-transform:uppercase;letter-spacing:.12em}
 .bar{height:30px;background:#0b0908;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:0 12px;border:1px solid #2a221c;font-size:12px;color:#f3f4f6;font-weight:700}
-.menu{width:236px;max-width:100%;margin:0 auto;background:#2c2622;border:1px solid #4a3f36;border-radius:9px;padding:6px;font-size:12px;color:#efe6d6;box-shadow:0 10px 28px rgba(0,0,0,.5)}
-.menu div{padding:5px 10px}
+.menu{width:236px;max-width:100%;margin:0 auto;background:#2c2622;border:1px solid #4a3f36;border-radius:9px;padding:4px;font-size:12px;line-height:1.2;color:#efe6d6;box-shadow:0 10px 28px rgba(0,0,0,.5)}
+.menu div{padding:3px 10px}
 .menu .dim{color:#9a8d7b}
-.menu .sep{height:1px;padding:0;background:#4a3f36;margin:4px 6px}
+.menu .sep{height:1px;padding:0;background:#4a3f36;margin:2px 6px}
 .menu .hot{background:#f08a3e;color:#1b1714;border-radius:6px;font-weight:700}
 .chat{background:rgba(0,0,0,.55);border:1px solid #3a3a3a;border-radius:4px;padding:8px 10px;display:flex;flex-direction:column;gap:5px;font-size:12px}
 .chatInput{display:flex;align-items:center;color:#fff;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px}
