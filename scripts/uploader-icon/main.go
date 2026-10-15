@@ -13,9 +13,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hash/adler32"
+	"hash/crc32"
 	"image"
 	"image/color"
-	"image/png"
 	"log"
 	"math"
 	"os"
@@ -231,15 +232,50 @@ func (s *stone) appIcon(size int) *image.NRGBA {
 	return img
 }
 
-func encode(img image.Image) []byte {
-	// Stored (uncompressed) zlib blocks: deflate output differs between Go
-	// versions, which would make regeneration a non-no-op.
-	var buf bytes.Buffer
-	enc := png.Encoder{CompressionLevel: png.NoCompression}
-	if err := enc.Encode(&buf, img); err != nil {
-		log.Fatal(err)
+// encode writes img as an 8-bit RGBA PNG with every byte hand-framed (filter 0,
+// one IDAT of stored deflate blocks), so output does not depend on the Go
+// version's image/png or compress/zlib.
+func encode(img *image.NRGBA) []byte {
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	raw := make([]byte, 0, h*(1+4*w))
+	for y := 0; y < h; y++ {
+		raw = append(raw, 0) // filter: none
+		raw = append(raw, img.Pix[y*img.Stride:y*img.Stride+4*w]...)
 	}
-	return buf.Bytes()
+
+	// zlib: header, stored blocks (<= 65535 bytes), adler32.
+	z := []byte{0x78, 0x01}
+	for off := 0; ; {
+		n := min(len(raw)-off, 65535)
+		final := byte(0)
+		if off+n == len(raw) {
+			final = 1
+		}
+		z = append(z, final, byte(n), byte(n>>8), ^byte(n), ^byte(n>>8))
+		z = append(z, raw[off:off+n]...)
+		off += n
+		if final == 1 {
+			break
+		}
+	}
+	z = binary.BigEndian.AppendUint32(z, adler32.Checksum(raw))
+
+	var out bytes.Buffer
+	out.WriteString("\x89PNG\r\n\x1a\n")
+	chunk := func(typ string, data []byte) {
+		_ = binary.Write(&out, binary.BigEndian, uint32(len(data)))
+		start := out.Len()
+		out.WriteString(typ)
+		out.Write(data)
+		_ = binary.Write(&out, binary.BigEndian, crc32.ChecksumIEEE(out.Bytes()[start:]))
+	}
+	ihdr := binary.BigEndian.AppendUint32(nil, uint32(w))
+	ihdr = binary.BigEndian.AppendUint32(ihdr, uint32(h))
+	ihdr = append(ihdr, 8, 6, 0, 0, 0) // 8-bit, RGBA, deflate, filter 0, no interlace
+	chunk("IHDR", ihdr)
+	chunk("IDAT", z)
+	chunk("IEND", nil)
+	return out.Bytes()
 }
 
 func main() {
