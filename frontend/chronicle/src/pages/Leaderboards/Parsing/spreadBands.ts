@@ -152,3 +152,31 @@ export function timeBands(spread: TimeParseSpread): SpreadBand[] {
   bands.push({ floor: 0, start, end: spread.max_ms })
   return bands.filter((band) => band.end > band.start)
 }
+
+/**
+ * Shared axis for kill-time rows as a ratio of each row's median (1 = the
+ * median). Rows of very different lengths line up at their medians, so the
+ * bars show how much faster than typical each tier is. Spans just past the
+ * fastest 99+ cutoff to a little past the slowest 25+ cutoff, clamped to
+ * 0.2×–3×.
+ */
+export function relativeTimeScale(spreads: readonly TimeParseSpread[], targetTicks = 8): SpreadScale {
+  const rows = spreads.filter((s) => s.median_ms > 0 && s.status !== "sample_too_small")
+  if (rows.length === 0) return { min: 0.5, max: 1.5, ticks: [0.5, 1, 1.5] }
+  // Fit the 99+ cutoffs; the few fastest kills beyond them clip at the edge.
+  const lo = Math.max(0.2, Math.min(...rows.map((s) => (timeCutoff(s, 99) ?? s.min_ms) / s.median_ms)) * 0.9)
+  const hi = Math.min(3, Math.max(...rows.map((s) => (timeCutoff(s, 25) ?? s.max_ms) / s.median_ms)) * 1.1)
+  const step = niceStep((hi - lo) / targetTicks, false)
+  const min = Math.floor(lo / step) * step
+  const max = Math.max(1 + step, Math.ceil(hi / step) * step)
+  const ticks: number[] = []
+  for (let tick = min; tick <= max + step / 2; tick += step) ticks.push(Math.round(tick * 1000) / 1000)
+  return { min, max, ticks }
+}
+
+/** Axis label for a ratio of the median: "−40%", "median", "+20%". */
+export function relativeTickLabel(ratio: number): string {
+  const percent = Math.round((ratio - 1) * 100)
+  if (percent === 0) return "median"
+  return percent < 0 ? `−${-percent}%` : `+${percent}%`
+}

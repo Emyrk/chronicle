@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest"
 import type { ParseScoreSpread } from "@/api/typesGenerated"
-import { difficultyLabel, offRoleKeys, selectSpreadDifficulty, spreadBands, spreadDifficulties, spreadScale, timeBands } from "./spreadBands"
+import {
+  difficultyLabel,
+  offRoleKeys,
+  relativeTickLabel,
+  relativeTimeScale,
+  selectSpreadDifficulty,
+  spreadBands,
+  spreadDifficulties,
+  spreadScale,
+  timeBands,
+} from "./spreadBands"
 
 function spread(cutoffs: Record<number, number | null>): ParseScoreSpread {
   return {
@@ -116,5 +126,25 @@ describe("timeBands", () => {
       { floor: 25, start: 70_000, end: 90_000 },
       { floor: 0, start: 90_000, end: 150_000 },
     ])
+  })
+})
+
+describe("relativeTimeScale", () => {
+  const base = { kind: "boss_kill" as const, difficulty_name: "", max_players: 0, sample_size: 50, status: "ok" }
+  it("spans every row relative to its median", () => {
+    const scale = relativeTimeScale([
+      { ...base, min_ms: 30_000, median_ms: 60_000, max_ms: 300_000, cutoffs: [{ floor: 25, duration_ms: 75_000 }] },
+      { ...base, min_ms: 3_000_000, median_ms: 4_000_000, max_ms: 9_000_000, cutoffs: [{ floor: 25, duration_ms: 5_000_000 }] },
+    ])
+    expect(scale.min).toBeLessThanOrEqual(0.5)
+    expect(scale.max).toBeGreaterThanOrEqual(1.25 * 1.1)
+    expect(scale.max).toBeLessThan(2)
+    expect(scale.ticks).toContain(1)
+  })
+
+  it("labels ticks against the median", () => {
+    expect(relativeTickLabel(1)).toBe("median")
+    expect(relativeTickLabel(0.6)).toBe("−40%")
+    expect(relativeTickLabel(1.2)).toBe("+20%")
   })
 })

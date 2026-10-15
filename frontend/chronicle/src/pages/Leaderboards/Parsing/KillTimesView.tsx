@@ -6,7 +6,14 @@ import { parseHexColor } from "@/pages/Instance/parseColors"
 import { CohortSummaryStrip } from "@/pages/Parsing/cohort/CohortChrome"
 import { CohortDistribution } from "@/pages/Parsing/cohort/CohortDistribution"
 import { formatClock, summarizeCohort, tierCutoffs } from "@/pages/Parsing/cohort/cohortStats"
-import { timeBands, timeCutoff, type SpreadDifficultyOption } from "./spreadBands"
+import {
+  relativeTickLabel,
+  relativeTimeScale,
+  timeBands,
+  timeCutoff,
+  type SpreadDifficultyOption,
+  type SpreadScale,
+} from "./spreadBands"
 
 const COLUMN_FLOORS = [50, 75, 95, 99] as const
 const FULL_CLEAR = "Full clear"
@@ -54,6 +61,7 @@ export function KillTimesView({
     })),
   ]
   const selectedClear = showClear && !!clear
+  const scale = useMemo(() => relativeTimeScale(spreads), [spreads])
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
   const cohortQuery = useTimeParseCohort({
@@ -76,7 +84,7 @@ export function KillTimesView({
       <section className="rounded-xl border bg-card p-3 sm:p-5">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-medium text-muted-foreground">Kill time needed for each parse</h2>
-          <span className="text-xs text-muted-foreground/70">Each row on its own scale · faster on the left</span>
+          <span className="text-xs text-muted-foreground/70">Relative to each encounter's median · faster on the left</span>
         </div>
         {loading && spreads.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
@@ -97,8 +105,34 @@ export function KillTimesView({
               <div className="hidden w-12 shrink-0 text-right sm:block">Kills</div>
             </div>
             {rows.map((row) => (
-              <KillTimeRow key={row.name} {...row} isClear={row.name === FULL_CLEAR} />
+              <KillTimeRow key={row.name} {...row} scale={scale} isClear={row.name === FULL_CLEAR} />
             ))}
+            {/* Shared relative axis, aligned with the bar column. */}
+            <div className="flex items-center gap-3 px-1 pt-1">
+              <div className="w-28 shrink-0 sm:w-44" />
+              <div className="relative h-6 flex-1 border-t border-border/60">
+                {scale.ticks.map((tick, i) => (
+                  <span
+                    key={tick}
+                    className={cn(
+                      "absolute top-0 flex flex-col font-mono text-[10px] tabular-nums",
+                      tick === 1 ? "text-foreground" : "text-muted-foreground/70",
+                      i === 0 ? "items-start" : i === scale.ticks.length - 1 ? "-translate-x-full items-end" : "-translate-x-1/2 items-center",
+                      tick !== 1 && i !== 0 && i !== scale.ticks.length - 1 && "hidden sm:flex",
+                    )}
+                    style={{ left: `${((tick - scale.min) / (scale.max - scale.min)) * 100}%` }}
+                  >
+                    <span className="h-1.5 w-px bg-border" />
+                    <span className="mt-0.5">{relativeTickLabel(tick)}</span>
+                  </span>
+                ))}
+              </div>
+              {COLUMN_FLOORS.map((floor) => (
+                <div key={floor} className="hidden w-16 shrink-0 md:block" />
+              ))}
+              <div className="w-16 shrink-0 md:hidden" />
+              <div className="hidden w-12 shrink-0 sm:block" />
+            </div>
           </div>
         )}
       </section>
@@ -145,22 +179,21 @@ function KillTimeRow({
   spread,
   selected,
   isClear,
+  scale,
   onClick,
 }: {
   name: string
   spread: TimeParseSpread | undefined
   selected: boolean
   isClear: boolean
+  scale: SpreadScale
   onClick: () => void
 }) {
   const scored = !!spread && spread.status !== "sample_too_small"
-  // Clip the slow tail so one long kill doesn't flatten the row.
-  const slowest25 = spread ? timeCutoff(spread, 25) : null
-  const domainStart = spread?.min_ms ?? 0
-  const domainEnd = spread
-    ? Math.max(domainStart + 1, slowest25 !== null ? Math.min(spread.max_ms, slowest25 + (slowest25 - domainStart) * 0.5) : spread.max_ms)
-    : 1
-  const pct = (v: number) => `${((Math.min(domainEnd, Math.max(domainStart, v)) - domainStart) / (domainEnd - domainStart)) * 100}%`
+  // Position by ratio to this row's median, clipped to the shared axis.
+  const median = spread && spread.median_ms > 0 ? spread.median_ms : 1
+  const pct = (v: number) =>
+    `${((Math.min(scale.max, Math.max(scale.min, v / median)) - scale.min) / (scale.max - scale.min)) * 100}%`
   const bands = spread ? timeBands(spread) : []
   const value = (floor: number) => {
     const cutoff = spread ? timeCutoff(spread, floor) : null
@@ -182,6 +215,7 @@ function KillTimeRow({
         {name}
       </span>
       <span className={cn("relative h-5 flex-1", !scored && "opacity-40")}>
+        {spread && <span className="absolute -top-0.5 -bottom-0.5 z-10 w-px bg-foreground/40" style={{ left: pct(median) }} />}
         {bands.map((band) => {
           // The fastest outliers (100) and slow tail (0-24) are whiskers.
           const whisker = scored && (band.floor === 0 || band.floor === 100)
