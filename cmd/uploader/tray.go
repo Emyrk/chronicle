@@ -231,7 +231,7 @@ func (a *app) render() {
 		return
 	}
 	s := a.status
-	systray.SetIcon(trayIcon(s.State))
+	setTrayIcon(trayIcon(s.State))
 	systray.SetTooltip("Chronicle Uploader: " + s.Detail)
 	a.items.status.SetTitle(s.Detail)
 	if s.ReportURL != "" {
