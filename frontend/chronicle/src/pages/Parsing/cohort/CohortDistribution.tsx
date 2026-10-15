@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { parseHexColor } from "@/pages/Instance/parseColors";
-import { buildHistogram, PARSE_TIERS, type CohortDirection, type HistogramBin, type ScoredValue } from "./cohortStats";
+import { buildHistogram, outlierZoomRange, PARSE_TIERS, type CohortDirection, type HistogramBin, type ScoredValue } from "./cohortStats";
 
 const HEIGHT = 200;
 const MARGIN = { top: 16, right: 12, bottom: 28, left: 36 };
@@ -70,8 +70,15 @@ export function CohortDistribution({
   const [hovered, setHovered] = useState<number | null>(null);
 
   // Zoom is tied to the values it was made on, so new data starts unzoomed.
-  const [zoomState, setZoomState] = useState<{ values: readonly ScoredValue[]; lo: number; hi: number } | null>(null);
-  const zoom = zoomState?.values === values ? zoomState : null;
+  // The viewer's zoom (or explicit reset, range null) applies only to the
+  // values it was made on; otherwise extreme outliers are zoomed past.
+  const [zoomState, setZoomState] = useState<{
+    values: readonly ScoredValue[];
+    range: { lo: number; hi: number } | null;
+  } | null>(null);
+  const autoZoom = useMemo(() => outlierZoomRange(values.map((v) => v.value)), [values]);
+  const zoom = zoomState?.values === values ? zoomState.range : autoZoom;
+  const autoZoomed = zoomState?.values !== values && !!autoZoom;
   const shown = useMemo(
     () => (zoom ? values.filter((v) => v.value >= zoom.lo && v.value <= zoom.hi) : values),
     [values, zoom],
@@ -111,7 +118,7 @@ export function CohortDistribution({
       const hi = MARGIN.left + plotWidth - right < MIN_DRAG_PX ? domainEnd : valueAt(right);
       // Zoom only when the range holds enough kills to be worth a histogram.
       if (shown.filter((v) => v.value >= lo && v.value <= hi).length >= 2) {
-        setZoomState({ values, lo, hi });
+        setZoomState({ values, range: { lo, hi } });
         setHovered(null);
       }
     }
@@ -126,15 +133,16 @@ export function CohortDistribution({
           {zoom ? (
             <>
               <span className="tabular-nums">
-                {formatValue(zoom.lo)} – {formatValue(zoom.hi)}
-                {values.length > shown.length && ` · ${values.length - shown.length} ${unitLabel} outside`}
+                {autoZoomed
+                  ? `${values.length - shown.length} extreme outlier${values.length - shown.length === 1 ? "" : "s"} hidden`
+                  : `${formatValue(zoom.lo)} – ${formatValue(zoom.hi)}${values.length > shown.length ? ` · ${values.length - shown.length} ${unitLabel} outside` : ""}`}
               </span>
               <button
                 type="button"
-                onClick={() => setZoomState(null)}
+                onClick={() => setZoomState({ values, range: null })}
                 className="rounded border border-white/10 px-1.5 py-0.5 text-foreground hover:bg-white/5"
               >
-                Reset zoom
+                {autoZoomed ? "Show all" : "Reset zoom"}
               </button>
             </>
           ) : (
@@ -266,7 +274,7 @@ export function CohortDistribution({
           time={time}
           width={width}
           zoom={zoom}
-          onZoom={(lo, hi) => setZoomState({ values, lo, hi })}
+          onZoom={(lo, hi) => setZoomState({ values, range: { lo, hi } })}
         />
       )}
 
