@@ -116,7 +116,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
             <h1>Map foundry</h1>
             <p>Stage manual PNG renders and calibrated GLB meshes, inspect the manifests, then publish the reader manifest last.</p>
           </div>
-          <div class="header-actions"><a class="back" href="/internal">← Telemetry</a></div>
+          <div class="header-actions"><a class="back" href="/internal">← Telemetry</a><a class="back" href="/internal/miniatures">Miniature foundry →</a></div>
         </header>
 
         <section class="toolbar">

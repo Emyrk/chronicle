@@ -30,6 +30,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         h1 { margin:6px 0 3px; font-size:clamp(28px,4vw,44px); letter-spacing:-.045em; }
         header p { margin:7px 0 0; color:var(--muted); font-size:13px; }
         a { color:var(--blue); text-decoration:none; }
+        .header-actions { display:flex; gap:8px; align-items:center; }
         button,input,textarea { font:inherit; }
         button { border:1px solid var(--line); border-radius:6px; padding:9px 12px; color:var(--text); background:#242a25; cursor:pointer; font-size:12px; font-weight:700; }
         button:hover:not(:disabled) { border-color:#69756c; background:#2c342e; }
@@ -83,14 +84,14 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         .empty-editor { min-height:600px; display:grid; place-items:center; color:var(--muted); text-align:center; }
         .empty-editor strong { display:block; margin-bottom:6px; color:#c8cec9; }
         @media (max-width:980px) { .workspace,.editor-grid { grid-template-columns:1fr; } .model-list { min-height:0; max-height:330px; } }
-        @media (max-width:620px) { main { width:min(100% - 20px,1480px); } header { align-items:flex-start; flex-direction:column; } .toolbar { grid-template-columns:1fr; } .toolbar-actions { width:100%; } .toolbar-actions button { flex:1; } }
+        @media (max-width:620px) { main { width:min(100% - 20px,1480px); } header { align-items:flex-start; flex-direction:column; } .header-actions,.toolbar-actions { width:100%; } .toolbar { grid-template-columns:1fr; } .toolbar-actions button { flex:1; } }
       </style>`}
     </head>
     <body>
       <main>
         <header>
           <div><div class="eyebrow">Shared creature tokens</div><h1>Miniature foundry</h1><p>Map many creature entries to one reusable GLB, shared by every Chronicle server.</p></div>
-          <a class="back" href="/internal">← Telemetry</a>
+          <div class="header-actions"><a class="back" href="/internal">← Telemetry</a><a class="back" href="/internal/maps">Map foundry →</a></div>
         </header>
         <section class="toolbar">
           <input id="search" type="search" aria-label="Search miniatures" placeholder="Search name, path, or entry ID" />
