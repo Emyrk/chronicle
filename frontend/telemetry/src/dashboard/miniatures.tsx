@@ -150,7 +150,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           renderJSON();
         }
         function renderJSON(){const pre=document.getElementById('json');if(pre&&state)pre.textContent=JSON.stringify(state.draft,null,2);}
-        function remove(){const item=current();if(!item)return;state.draft.miniatures=items().filter(candidate=>candidate!==item);selected=items()[0]?.path||null;markDirty();renderList();renderEditor();}
+        function remove(){const item=current();if(!item)return;if(!confirm('Remove "'+(item.name||'this model')+'" from the draft? The uploaded GLB will remain in R2 until cleaned up separately.'))return;state.draft.miniatures=items().filter(candidate=>candidate!==item);selected=items()[0]?.path||null;markDirty();renderList();renderEditor();}
         async function upload(file){
           if(!file||!state)return;syncEditor();const item=current();if(!item)return;setBusy(true);setStatus('Uploading '+file.name+'…');
           try{const data=new FormData();data.append('file',file);const response=await fetch('/internal/api/v1/miniatures/assets',{method:'POST',body:data});const result=await response.json();if(!response.ok)throw new Error(result.error||'Upload failed');item.path=result.path;selected=result.path;dirty=true;setStatus('GLB uploaded. Save the draft to register it.');renderList();renderEditor();}
