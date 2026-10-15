@@ -23,6 +23,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicegithub"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicemail"
+	"github.com/Emyrk/chronicle/internal/services/serviceoauth"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/servicepprof"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
@@ -71,6 +72,7 @@ func ServerCmd() *serpent.Command {
 		servicegithub.New(srvs),
 		serviceexternalapi.New(srvs),
 		servicestripecli.New(srvs),
+		serviceoauth.New(srvs),
 		apiService,
 	)
 	if err != nil {

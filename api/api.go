@@ -63,6 +63,7 @@ type Options struct {
 	Assets                http.Handler
 	InternalGameData      http.Handler
 	ExternalAPI           http.Handler
+	OAuth                 http.Handler
 	Rankings              http.Handler
 	Mailer                *chroniclemail.Mailer
 	ItemPricing           *itempricing.Service
@@ -203,6 +204,9 @@ func (api *API) Routes() chi.Router {
 
 	if api.Opts.ExternalAPI != nil {
 		r.Mount(ExternalAPIPath, api.Opts.ExternalAPI)
+	}
+	if api.Opts.OAuth != nil {
+		r.Mount("/oauth", api.Opts.OAuth)
 	}
 
 	r.Route("/api/v1", func(r chi.Router) {

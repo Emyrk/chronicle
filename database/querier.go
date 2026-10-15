@@ -68,6 +68,8 @@ type sqlcQuerier interface {
 	CreateGuildDiscordInstallState(ctx context.Context, arg CreateGuildDiscordInstallStateParams) (GuildDiscordInstallState, error)
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
+	CreateOAuthDeviceSession(ctx context.Context, arg CreateOAuthDeviceSessionParams) error
+	CreateOAuthTokenSession(ctx context.Context, arg CreateOAuthTokenSessionParams) error
 	CreateRaidComposition(ctx context.Context, arg CreateRaidCompositionParams) (RaidComposition, error)
 	CreateSharedView(ctx context.Context, arg CreateSharedViewParams) (SharedView, error)
 	CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error)
@@ -104,6 +106,7 @@ type sqlcQuerier interface {
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
+	DeleteOAuthTokenSession(ctx context.Context, arg DeleteOAuthTokenSessionParams) error
 	DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error)
 	DeleteOrphanCustomPanelReleases(ctx context.Context) (int64, error)
 	DeleteParseScoreMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
@@ -293,6 +296,9 @@ type sqlcQuerier interface {
 	// to resolve which snapshot cutoff applies to the instance.
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
+	GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error)
+	GetOAuthTokenSession(ctx context.Context, arg GetOAuthTokenSessionParams) ([]byte, error)
+	GetOrCreateOAuthServerSecret(ctx context.Context, secret []byte) ([]byte, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
 	GetParseScoreCohortEntries(ctx context.Context, arg GetParseScoreCohortEntriesParams) ([]GetParseScoreCohortEntriesRow, error)
@@ -490,6 +496,7 @@ type sqlcQuerier interface {
 	// realm, or guild. Duplicate uploads are collapsed without reducing to one run per guild.
 	InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error)
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
+	InvalidateOAuthDeviceSession(ctx context.Context, deviceSignature string) error
 	InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWoWLogGroupParams) error
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
@@ -737,6 +744,8 @@ type sqlcQuerier interface {
 	// major.minor.patch comparison. The caller deduplicates rows by log group and
 	// applies its own distinct log-group limit.
 	ResyncCandidateLogGroups(ctx context.Context) ([]ResyncCandidateLogGroupsRow, error)
+	RevokeOAuthTokenSessions(ctx context.Context, arg RevokeOAuthTokenSessionsParams) (int64, error)
+	RotateOAuthRefreshToken(ctx context.Context, arg RotateOAuthRefreshTokenParams) error
 	SearchCreatureTemplates(ctx context.Context, arg SearchCreatureTemplatesParams) ([]SearchCreatureTemplatesRow, error)
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
 	SearchItemSets(ctx context.Context, arg SearchItemSetsParams) ([]SearchItemSetsRow, error)
@@ -825,6 +834,7 @@ type sqlcQuerier interface {
 	UpdateLogFileAfterAppend(ctx context.Context, arg UpdateLogFileAfterAppendParams) error
 	UpdateModificationRequestPayload(ctx context.Context, arg UpdateModificationRequestPayloadParams) error
 	UpdateModificationRequestStatus(ctx context.Context, arg UpdateModificationRequestStatusParams) error
+	UpdateOAuthDeviceSessionByUserSignature(ctx context.Context, arg UpdateOAuthDeviceSessionByUserSignatureParams) (string, error)
 	// Ownership is NOT filtered here: SpiceDB gates edit access so granted
 	// editors can update too. Handlers must check the edit permission first.
 	UpdateRaidCompositionByID(ctx context.Context, arg UpdateRaidCompositionByIDParams) (RaidComposition, error)
