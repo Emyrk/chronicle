@@ -8,6 +8,8 @@ import type {
   RankingsSuccessRate,
   KillTimeLeaderboardResponse,
   InstanceParsesResponse,
+  ParseScoreCohortBucketsResponse,
+  ParseScoreCohortResponse,
   TimeParseCohortBucketsResponse,
   TimeParseCohortKind,
   TimeParseCohortResponse,
@@ -343,6 +345,65 @@ export function useInstanceParses(params: {
 
 
 export type TimeParseCohortPeriod = "30d" | "60d" | "90d" | "180d" | "all";
+
+export function useParseScoreCohortBuckets(
+  date: string,
+  period: TimeParseCohortPeriod,
+  metric: "dps" | "hps",
+) {
+  const searchParams = new URLSearchParams({ date, period, metric });
+
+  return useQuery({
+    queryKey: ["rankings", "parse-score-cohort-buckets", date, period, metric],
+    queryFn: () =>
+      fetchJSON<ParseScoreCohortBucketsResponse>(
+        `/api/v1/rankings/parse-score-cohorts/buckets?${searchParams.toString()}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: !!date,
+  });
+}
+
+export function useParseScoreCohort(params: {
+  date: string;
+  period: TimeParseCohortPeriod;
+  metric: "dps" | "hps";
+  encounterName: string;
+  playerClass: string;
+  playerSpec: string;
+  playerSubSpec: string;
+  difficulty: string;
+  maxPlayers: number | undefined;
+  cohortMode: string;
+}) {
+  const searchParams = new URLSearchParams({
+    date: params.date,
+    period: params.period,
+    metric: params.metric,
+    encounter_name: params.encounterName,
+    class: params.playerClass,
+    difficulty: params.difficulty,
+    max_players: String(params.maxPlayers ?? ""),
+  });
+  if (params.playerSpec) searchParams.set("spec", params.playerSpec);
+  if (params.playerSubSpec) searchParams.set("sub_spec", params.playerSubSpec);
+
+  return useQuery({
+    queryKey: ["rankings", "parse-score-cohort", params],
+    queryFn: () =>
+      fetchJSON<ParseScoreCohortResponse>(
+        `/api/v1/rankings/parse-score-cohorts/cohort?${searchParams.toString()}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    placeholderData: keepPreviousData,
+    enabled:
+      !!params.date &&
+      !!params.encounterName &&
+      !!params.playerClass &&
+      params.maxPlayers !== undefined &&
+      (params.cohortMode !== "spec" || !!params.playerSpec),
+  });
+}
 
 export function useTimeParseCohortBuckets(date: string, period: TimeParseCohortPeriod) {
   const searchParams = new URLSearchParams({ date, period });

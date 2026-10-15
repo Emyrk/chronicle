@@ -195,6 +195,8 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/characters/{playerGUID}/encounters", s.handleCharacterEncounterStats)
 
 	// Cohort viewer (debugging/transparency)
+	s.router.Get("/parse-score-cohorts/buckets", s.handleParseScoreCohortBuckets)
+	s.router.Get("/parse-score-cohorts/cohort", s.handleParseScoreCohort)
 	s.router.Get("/time-parse-cohorts/buckets", s.handleTimeParseCohortBuckets)
 	s.router.Get("/time-parse-cohorts/cohort", s.handleTimeParseCohort)
 

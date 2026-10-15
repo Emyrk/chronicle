@@ -247,6 +247,82 @@ type InstanceParseAverage struct {
 	Selected     int     `json:"selected"`
 }
 
+// ParseScoreCohortBucketsRequest selects the live DPS/HPS cohort window.
+type ParseScoreCohortBucketsRequest struct {
+	Date   string `json:"date,omitempty"`
+	Period string `json:"period,omitempty"`
+	Metric string `json:"metric,omitempty"`
+}
+
+// ParseScoreCohortRequest selects one exact live DPS/HPS cohort bucket.
+type ParseScoreCohortRequest struct {
+	ParseScoreCohortBucketsRequest
+	EncounterName  string `json:"encounter_name"`
+	DifficultyName string `json:"difficulty"`
+	MaxPlayers     int16  `json:"max_players"`
+	PlayerClass    string `json:"class"`
+	PlayerSpec     string `json:"spec,omitempty"`
+	PlayerSubSpec  string `json:"sub_spec,omitempty"`
+}
+
+// ParseScoreCohortBucket is one comparable membership-backed player population.
+type ParseScoreCohortBucket struct {
+	EncounterName  string `json:"encounter_name"`
+	DifficultyName string `json:"difficulty_name"`
+	MaxPlayers     int16  `json:"max_players"`
+	PlayerClass    string `json:"player_class"`
+	PlayerSpec     string `json:"player_spec,omitempty"`
+	PlayerSubSpec  string `json:"player_sub_spec,omitempty"`
+	SampleSize     int64  `json:"sample_size"`
+}
+
+// ParseScoreCohortBucketsResponse lists live membership-backed DPS/HPS buckets.
+type ParseScoreCohortBucketsResponse struct {
+	Available    bool                     `json:"available"`
+	Reason       string                   `json:"reason,omitempty"`
+	Cutoff       time.Time                `json:"cutoff"`
+	WindowStart  *time.Time               `json:"window_start,omitempty"`
+	LookbackDays int32                    `json:"lookback_days"`
+	CohortMode   string                   `json:"cohort_mode"`
+	Metric       string                   `json:"metric"`
+	Buckets      []ParseScoreCohortBucket `json:"buckets"`
+}
+
+// ParseScoreCohortEntry is one membership row scored against its exact live cohort.
+type ParseScoreCohortEntry struct {
+	Rank          int       `json:"rank"`
+	PlayerGUID    string    `json:"player_guid"`
+	PlayerName    string    `json:"player_name"`
+	MetricValue   float64   `json:"metric_value"`
+	PreciseScore  float64   `json:"precise_score"`
+	DisplayScore  int       `json:"display_score"`
+	Status        string    `json:"status"`
+	KilledAt      time.Time `json:"killed_at"`
+	RunID         uuid.UUID `json:"run_id"`
+	InstanceID    uuid.UUID `json:"instance_id"`
+	LogHashedSlug string    `json:"log_hashed_slug,omitempty"`
+}
+
+// ParseScoreCohortResponse is one exact membership-backed DPS/HPS cohort.
+type ParseScoreCohortResponse struct {
+	Available      bool                    `json:"available"`
+	Reason         string                  `json:"reason,omitempty"`
+	Cutoff         time.Time               `json:"cutoff"`
+	WindowStart    *time.Time              `json:"window_start,omitempty"`
+	LookbackDays   int32                   `json:"lookback_days"`
+	CohortMode     string                  `json:"cohort_mode"`
+	Metric         string                  `json:"metric"`
+	EncounterName  string                  `json:"encounter_name"`
+	DifficultyName string                  `json:"difficulty_name"`
+	MaxPlayers     int16                   `json:"max_players"`
+	PlayerClass    string                  `json:"player_class"`
+	PlayerSpec     string                  `json:"player_spec,omitempty"`
+	PlayerSubSpec  string                  `json:"player_sub_spec,omitempty"`
+	SampleSize     int                     `json:"sample_size"`
+	Status         string                  `json:"status"`
+	Entries        []ParseScoreCohortEntry `json:"entries"`
+}
+
 // AdminRankingsRefreshTenantStatus describes rankings summary freshness for one tenant.
 type AdminRankingsRefreshTenantStatus struct {
 	TenantID            uuid.UUID  `json:"tenant_id"`

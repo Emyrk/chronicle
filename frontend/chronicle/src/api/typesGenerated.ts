@@ -2548,6 +2548,99 @@ export interface ParseConfig {
     readonly enabled_metrics?: readonly string[];
 }
 
+// From chroniclesdk/rankings.go
+/**
+ * ParseScoreCohortBucket is one comparable membership-backed player population.
+ */
+export interface ParseScoreCohortBucket {
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec?: string;
+    readonly player_sub_spec?: string;
+    readonly sample_size: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * ParseScoreCohortBucketsRequest selects the live DPS/HPS cohort window.
+ */
+export interface ParseScoreCohortBucketsRequest {
+    readonly date?: string;
+    readonly period?: string;
+    readonly metric?: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * ParseScoreCohortBucketsResponse lists live membership-backed DPS/HPS buckets.
+ */
+export interface ParseScoreCohortBucketsResponse {
+    readonly available: boolean;
+    readonly reason?: string;
+    readonly cutoff: string;
+    readonly window_start?: string;
+    readonly lookback_days: number;
+    readonly cohort_mode: string;
+    readonly metric: string;
+    readonly buckets: readonly ParseScoreCohortBucket[];
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * ParseScoreCohortEntry is one membership row scored against its exact live cohort.
+ */
+export interface ParseScoreCohortEntry {
+    readonly rank: number;
+    readonly player_guid: string;
+    readonly player_name: string;
+    readonly metric_value: number;
+    readonly precise_score: number;
+    readonly display_score: number;
+    readonly status: string;
+    readonly killed_at: string;
+    readonly run_id: string;
+    readonly instance_id: string;
+    readonly log_hashed_slug?: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * ParseScoreCohortRequest selects one exact live DPS/HPS cohort bucket.
+ */
+export interface ParseScoreCohortRequest extends ParseScoreCohortBucketsRequest {
+    readonly encounter_name: string;
+    readonly difficulty: string;
+    readonly max_players: number;
+    readonly class: string;
+    readonly spec?: string;
+    readonly sub_spec?: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * ParseScoreCohortResponse is one exact membership-backed DPS/HPS cohort.
+ */
+export interface ParseScoreCohortResponse {
+    readonly available: boolean;
+    readonly reason?: string;
+    readonly cutoff: string;
+    readonly window_start?: string;
+    readonly lookback_days: number;
+    readonly cohort_mode: string;
+    readonly metric: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec?: string;
+    readonly player_sub_spec?: string;
+    readonly sample_size: number;
+    readonly status: string;
+    readonly entries: readonly ParseScoreCohortEntry[];
+}
+
 // From chroniclesdk/parser_version.go
 /**
  * ParserVersionResponse is returned by GET /api/v1/parser-version.

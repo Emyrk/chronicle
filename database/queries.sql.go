@@ -10656,6 +10656,127 @@ func (q *sqlQuerier) DeleteParseScoreMembershipsByLogGroup(ctx context.Context, 
 	return err
 }
 
+const getParseScoreCohortEntries = `-- name: GetParseScoreCohortEntries :many
+SELECT
+    membership.run_id,
+    membership.instance_id,
+    membership.player_guid,
+    COALESCE(player.player_name, '')::text AS player_name,
+    CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value,
+    membership.killed_at,
+    instance.hashed_slug AS log_hashed_slug
+FROM parse_score_memberships membership
+JOIN log_instances instance ON instance.id = membership.instance_id
+LEFT JOIN LATERAL (
+    SELECT candidate.player_name
+    FROM (
+        SELECT instance_player.name::text AS player_name, 0 AS source_order
+        FROM log_instance_players instance_player
+        WHERE instance_player.instance_id = membership.instance_id
+          AND instance_player.unit_guid::text = membership.player_guid
+        UNION ALL
+        SELECT ranking.player_name::text AS player_name, 1 AS source_order
+        FROM encounter_dps_rankings ranking
+        WHERE ranking.instance_id = membership.instance_id
+          AND ranking.encounter_name = membership.encounter_name
+          AND ranking.player_guid = membership.player_guid
+    ) candidate
+    ORDER BY candidate.source_order, candidate.player_name
+    LIMIT 1
+) player ON true
+WHERE (
+      ($2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = $2)
+      OR
+      ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND (
+          membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          OR EXISTS (SELECT 1 FROM tenants tenant WHERE tenant.id = membership.tenant_id AND tenant.include_in_all)
+      ))
+  )
+  AND membership.policy_version = $3
+  AND membership.query_version = $4
+  AND membership.killed_at < $5
+  AND ($6::timestamptz IS NULL OR membership.killed_at >= $6)
+  AND membership.encounter_name = $7
+  AND membership.difficulty_name = $8
+  AND membership.max_players = $9
+  AND membership.player_class = $10
+  AND ($11::text <> 'spec' OR (
+      membership.player_spec = $12
+      AND membership.player_sub_spec = $13
+      AND lower(btrim(membership.player_spec)) NOT IN ('', 'unknown')
+  ))
+  AND CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
+ORDER BY metric_value DESC, membership.killed_at, membership.id
+`
+
+type GetParseScoreCohortEntriesParams struct {
+	Metric         string             `db:"metric" json:"metric"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	CohortMode     string             `db:"cohort_mode" json:"cohort_mode"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+type GetParseScoreCohortEntriesRow struct {
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	PlayerName    string             `db:"player_name" json:"player_name"`
+	MetricValue   float64            `db:"metric_value" json:"metric_value"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	LogHashedSlug pgtype.Text        `db:"log_hashed_slug" json:"log_hashed_slug"`
+}
+
+func (q *sqlQuerier) GetParseScoreCohortEntries(ctx context.Context, arg GetParseScoreCohortEntriesParams) ([]GetParseScoreCohortEntriesRow, error) {
+	rows, err := q.db.Query(ctx, getParseScoreCohortEntries,
+		arg.Metric,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.CohortMode,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetParseScoreCohortEntriesRow
+	for rows.Next() {
+		var i GetParseScoreCohortEntriesRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.InstanceID,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.MetricValue,
+			&i.KilledAt,
+			&i.LogHashedSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getParseScoreMembershipCohort = `-- name: GetParseScoreMembershipCohort :many
 SELECT CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value
 FROM parse_score_memberships membership
@@ -10729,6 +10850,94 @@ func (q *sqlQuerier) GetParseScoreMembershipCohort(ctx context.Context, arg GetP
 			return nil, err
 		}
 		items = append(items, metric_value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listParseScoreCohortBuckets = `-- name: ListParseScoreCohortBuckets :many
+SELECT
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    membership.player_class,
+    CASE WHEN $1::text = 'spec' THEN membership.player_spec ELSE '' END::text AS player_spec,
+    CASE WHEN $1::text = 'spec' THEN membership.player_sub_spec ELSE '' END::text AS player_sub_spec,
+    COUNT(*)::bigint AS sample_size
+FROM parse_score_memberships membership
+WHERE (
+      ($2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = $2)
+      OR
+      ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND (
+          membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          OR EXISTS (SELECT 1 FROM tenants tenant WHERE tenant.id = membership.tenant_id AND tenant.include_in_all)
+      ))
+  )
+  AND membership.policy_version = $3
+  AND membership.query_version = $4
+  AND membership.killed_at < $5
+  AND ($6::timestamptz IS NULL OR membership.killed_at >= $6)
+  AND CASE WHEN $7::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
+  AND ($1::text <> 'spec' OR lower(btrim(membership.player_spec)) NOT IN ('', 'unknown'))
+GROUP BY membership.encounter_name, membership.difficulty_name, membership.max_players,
+         membership.player_class,
+         CASE WHEN $1::text = 'spec' THEN membership.player_spec ELSE '' END,
+         CASE WHEN $1::text = 'spec' THEN membership.player_sub_spec ELSE '' END
+ORDER BY membership.encounter_name, membership.player_class, player_spec, player_sub_spec,
+         membership.difficulty_name, membership.max_players
+`
+
+type ListParseScoreCohortBucketsParams struct {
+	CohortMode    string             `db:"cohort_mode" json:"cohort_mode"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	Metric        string             `db:"metric" json:"metric"`
+}
+
+type ListParseScoreCohortBucketsRow struct {
+	EncounterName  string `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	PlayerClass    string `db:"player_class" json:"player_class"`
+	PlayerSpec     string `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string `db:"player_sub_spec" json:"player_sub_spec"`
+	SampleSize     int64  `db:"sample_size" json:"sample_size"`
+}
+
+func (q *sqlQuerier) ListParseScoreCohortBuckets(ctx context.Context, arg ListParseScoreCohortBucketsParams) ([]ListParseScoreCohortBucketsRow, error) {
+	rows, err := q.db.Query(ctx, listParseScoreCohortBuckets,
+		arg.CohortMode,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.Metric,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListParseScoreCohortBucketsRow
+	for rows.Next() {
+		var i ListParseScoreCohortBucketsRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.SampleSize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
