@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { parseHexColor } from "@/pages/Instance/parseColors";
-import { buildHistogram, PARSE_TIERS, type CohortDirection, type HistogramBin, type ScoredValue } from "./cohortStats";
+import { buildHistogram, outlierZoomRange, PARSE_TIERS, type CohortDirection, type HistogramBin, type ScoredValue } from "./cohortStats";
 
 const HEIGHT = 200;
 const MARGIN = { top: 16, right: 12, bottom: 28, left: 36 };
@@ -37,9 +38,14 @@ function useWidth() {
   return [ref, width] as const;
 }
 
+/** Pointer travel (px) before a press counts as a zoom drag, not a click. */
+const MIN_DRAG_PX = 6;
+
 /**
  * Histogram of a cohort with each bar stacked by parse tier (worst at the
- * base). An optional highlighted value draws a marker for one run.
+ * base). An optional highlighted value draws a marker for one run. Dragging
+ * across the plot zooms into that range and re-bins it, so a few far
+ * outliers don't squash the bulk of the cohort into one wide bar.
  */
 export function CohortDistribution({
   values,
@@ -63,8 +69,24 @@ export function CohortDistribution({
   const [containerRef, width] = useWidth();
   const [hovered, setHovered] = useState<number | null>(null);
 
+  // Zoom is tied to the values it was made on, so new data starts unzoomed.
+  // The viewer's zoom (or explicit reset, range null) applies only to the
+  // values it was made on; otherwise extreme outliers are zoomed past.
+  const [zoomState, setZoomState] = useState<{
+    values: readonly ScoredValue[];
+    range: { lo: number; hi: number } | null;
+  } | null>(null);
+  const autoZoom = useMemo(() => outlierZoomRange(values.map((v) => v.value)), [values]);
+  const zoom = zoomState?.values === values ? zoomState.range : autoZoom;
+  const autoZoomed = zoomState?.values !== values && !!autoZoom;
+  const shown = useMemo(
+    () => (zoom ? values.filter((v) => v.value >= zoom.lo && v.value <= zoom.hi) : values),
+    [values, zoom],
+  );
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+
   const targetBins = width > 0 && width < 520 ? 14 : 28;
-  const bins = useMemo(() => buildHistogram(values, { time, targetBins }), [values, time, targetBins]);
+  const bins = useMemo(() => buildHistogram(shown, { time, targetBins }), [shown, time, targetBins]);
 
   const plotWidth = Math.max(0, width - MARGIN.left - MARGIN.right);
   const plotHeight = HEIGHT - MARGIN.top - MARGIN.bottom;
@@ -82,17 +104,73 @@ export function CohortDistribution({
 
   const hoveredBin = hovered === null ? null : bins[hovered];
 
+  const plotX = (event: React.PointerEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return Math.min(MARGIN.left + plotWidth, Math.max(MARGIN.left, event.clientX - rect.left));
+  };
+  const valueAt = (px: number) => domainStart + ((px - MARGIN.left) / Math.max(plotWidth, 1)) * (domainEnd - domainStart);
+  const finishDrag = () => {
+    if (drag && Math.abs(drag.to - drag.from) >= MIN_DRAG_PX) {
+      // Ends released near a plot edge snap to it, so nothing is clipped by a pixel.
+      const left = Math.min(drag.from, drag.to);
+      const right = Math.max(drag.from, drag.to);
+      const lo = left - MARGIN.left < MIN_DRAG_PX ? domainStart : valueAt(left);
+      const hi = MARGIN.left + plotWidth - right < MIN_DRAG_PX ? domainEnd : valueAt(right);
+      // Zoom only when the range holds enough kills to be worth a histogram.
+      if (shown.filter((v) => v.value >= lo && v.value <= hi).length >= 2) {
+        setZoomState({ values, range: { lo, hi } });
+        setHovered(null);
+      }
+    }
+    setDrag(null);
+  };
+
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <span className="text-sm font-medium text-foreground">Distribution</span>
-        <span className="text-xs text-muted-foreground">
-          {direction === "lower" ? "Faster runs on the left" : "Higher values on the right"}
+        <span className="flex items-center gap-3 text-xs text-muted-foreground">
+          {zoom ? (
+            <>
+              <span className="tabular-nums">
+                {autoZoomed
+                  ? `${values.length - shown.length} extreme outlier${values.length - shown.length === 1 ? "" : "s"} hidden`
+                  : `${formatValue(zoom.lo)} – ${formatValue(zoom.hi)}${values.length > shown.length ? ` · ${values.length - shown.length} ${unitLabel} outside` : ""}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomState({ values, range: null })}
+                className="rounded border border-white/10 px-1.5 py-0.5 text-foreground hover:bg-white/5"
+              >
+                {autoZoomed ? "Show all" : "Reset zoom"}
+              </button>
+            </>
+          ) : (
+            <span>
+              {direction === "lower" ? "Faster runs on the left" : "Higher values on the right"}
+              <span className="hidden sm:inline"> · drag to zoom</span>
+            </span>
+          )}
         </span>
       </div>
       <div ref={containerRef} className="relative" onPointerLeave={() => setHovered(null)}>
         {width > 0 && (
-          <svg width={width} height={HEIGHT} role="img" aria-label={`Distribution of ${values.length} ${unitLabel} by parse tier`}>
+          <svg
+            width={width}
+            height={HEIGHT}
+            role="img"
+            aria-label={`Distribution of ${shown.length} ${unitLabel} by parse tier`}
+            className="cursor-crosshair touch-pan-y select-none"
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              const px = plotX(event);
+              setDrag({ from: px, to: px });
+            }}
+            onPointerMove={(event) => drag && setDrag({ ...drag, to: plotX(event) })}
+            onPointerUp={finishDrag}
+            onPointerCancel={() => setDrag(null)}
+          >
             {[0, yMax / 2, yMax].map((tick) => (
               <g key={tick}>
                 <line x1={MARGIN.left} x2={width - MARGIN.right} y1={y(tick)} y2={y(tick)} className="stroke-border" strokeWidth={1} />
@@ -148,6 +226,18 @@ export function CohortDistribution({
               </g>
             )}
 
+            {drag && Math.abs(drag.to - drag.from) >= MIN_DRAG_PX && (
+              <rect
+                x={Math.min(drag.from, drag.to)}
+                y={MARGIN.top}
+                width={Math.abs(drag.to - drag.from)}
+                height={plotHeight}
+                className="fill-primary/15 stroke-primary/60"
+                strokeWidth={1}
+                pointerEvents="none"
+              />
+            )}
+
             {bins.map((bin, binIndex) => (
               <rect
                 key={bin.start}
@@ -159,7 +249,7 @@ export function CohortDistribution({
                 tabIndex={bin.total > 0 ? 0 : -1}
                 aria-label={`${formatValue(bin.start)} to ${formatValue(bin.end)}: ${bin.total} ${unitLabel}`}
                 className="focus:outline-none"
-                onPointerEnter={() => setHovered(binIndex)}
+                onPointerEnter={() => !drag && setHovered(binIndex)}
                 onFocus={() => setHovered(binIndex)}
                 onBlur={() => setHovered(null)}
               />
@@ -167,7 +257,7 @@ export function CohortDistribution({
           </svg>
         )}
 
-        {hoveredBin && hovered !== null && hoveredBin.total > 0 && (
+        {!drag && hoveredBin && hovered !== null && hoveredBin.total > 0 && (
           <BinTooltip
             bin={hoveredBin}
             left={MARGIN.left + hovered * slot + slot / 2}
@@ -178,6 +268,16 @@ export function CohortDistribution({
         )}
       </div>
 
+      {zoom && width > 0 && (
+        <ZoomOverview
+          values={values}
+          time={time}
+          width={width}
+          zoom={zoom}
+          onZoom={(lo, hi) => setZoomState({ values, range: { lo, hi } })}
+        />
+      )}
+
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span>Parse</span>
         {presentTiers.map((tier) => (
@@ -187,6 +287,155 @@ export function CohortDistribution({
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+const OVERVIEW_HEIGHT = 40;
+const OVERVIEW_EDGE_PX = 6;
+
+type OverviewDrag =
+  | { mode: "pan"; startPx: number; lo: number; hi: number }
+  | { mode: "left" | "right"; lo: number; hi: number }
+  | { mode: "select"; from: number; to: number };
+
+/**
+ * Mini histogram of the whole cohort shown under a zoomed chart. The zoomed
+ * range is a window over it: drag the window to pan, its edges to resize,
+ * elsewhere to select a new range, or click outside it to center it there.
+ */
+function ZoomOverview({
+  values,
+  time,
+  width,
+  zoom,
+  onZoom,
+}: {
+  values: readonly ScoredValue[];
+  time: boolean;
+  width: number;
+  zoom: { lo: number; hi: number };
+  onZoom: (lo: number, hi: number) => void;
+}) {
+  const bins = useMemo(() => buildHistogram(values, { time, targetBins: 80 }), [values, time]);
+  const [drag, setDrag] = useState<OverviewDrag | null>(null);
+  const plotWidth = Math.max(1, width - MARGIN.left - MARGIN.right);
+  const start = bins[0]?.start ?? 0;
+  const end = bins[bins.length - 1]?.end ?? 1;
+  const span = Math.max(end - start, Number.EPSILON);
+  const yMax = Math.max(1, ...bins.map((bin) => bin.total));
+  const toPx = (value: number) => MARGIN.left + ((value - start) / span) * plotWidth;
+  const toValue = (px: number) => start + ((px - MARGIN.left) / plotWidth) * span;
+  const clampPx = (px: number) => Math.min(MARGIN.left + plotWidth, Math.max(MARGIN.left, px));
+  const slot = plotWidth / Math.max(bins.length, 1);
+
+  // Live window while dragging; committed to the chart as it moves.
+  const range =
+    drag?.mode === "select"
+      ? { lo: toValue(Math.min(drag.from, drag.to)), hi: toValue(Math.max(drag.from, drag.to)) }
+      : zoom;
+  const left = toPx(range.lo);
+  const right = toPx(range.hi);
+
+  const pointerPx = (event: React.PointerEvent<SVGSVGElement>) =>
+    clampPx(event.clientX - event.currentTarget.getBoundingClientRect().left);
+  const commit = (lo: number, hi: number) => onZoom(Math.max(start, lo), Math.min(end, hi));
+
+  return (
+    <div className="mt-2">
+      <svg
+        width={width}
+        height={OVERVIEW_HEIGHT}
+        role="img"
+        aria-label="Whole cohort with the zoomed range highlighted"
+        className="touch-pan-y select-none"
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          const px = pointerPx(event);
+          if (Math.abs(px - left) <= OVERVIEW_EDGE_PX) setDrag({ mode: "left", ...zoom });
+          else if (Math.abs(px - right) <= OVERVIEW_EDGE_PX) setDrag({ mode: "right", ...zoom });
+          else if (px > left && px < right) setDrag({ mode: "pan", startPx: px, ...zoom });
+          else setDrag({ mode: "select", from: px, to: px });
+        }}
+        onPointerMove={(event) => {
+          if (!drag) return;
+          const px = pointerPx(event);
+          if (drag.mode === "select") {
+            setDrag({ ...drag, to: px });
+          } else if (drag.mode === "pan") {
+            const width = drag.hi - drag.lo;
+            const lo = Math.min(end - width, Math.max(start, drag.lo + toValue(px) - toValue(drag.startPx)));
+            commit(lo, lo + width);
+          } else if (drag.mode === "left") {
+            commit(Math.min(toValue(px), zoom.hi - span / 200), zoom.hi);
+          } else {
+            commit(zoom.lo, Math.max(toValue(px), zoom.lo + span / 200));
+          }
+        }}
+        onPointerUp={() => {
+          if (drag?.mode === "select") {
+            if (Math.abs(drag.to - drag.from) >= MIN_DRAG_PX) {
+              commit(toValue(Math.min(drag.from, drag.to)), toValue(Math.max(drag.from, drag.to)));
+            } else {
+              // A click outside the window centers it there.
+              const half = (zoom.hi - zoom.lo) / 2;
+              const center = Math.min(end - half, Math.max(start + half, toValue(drag.from)));
+              commit(center - half, center + half);
+            }
+          }
+          setDrag(null);
+        }}
+        onPointerCancel={() => setDrag(null)}
+      >
+        <line
+          x1={MARGIN.left}
+          x2={MARGIN.left + plotWidth}
+          y1={OVERVIEW_HEIGHT - 0.5}
+          y2={OVERVIEW_HEIGHT - 0.5}
+          className="stroke-border"
+        />
+        {bins.map((bin, index) => {
+          if (bin.total === 0) return null;
+          // Color each mini bar by its most common tier.
+          const tier = bin.tierCounts.indexOf(Math.max(...bin.tierCounts));
+          const height = Math.max(1.5, Math.sqrt(bin.total / yMax) * (OVERVIEW_HEIGHT - 4));
+          return (
+            <rect
+              key={bin.start}
+              x={MARGIN.left + index * slot + 0.5}
+              y={OVERVIEW_HEIGHT - height}
+              width={Math.max(1, slot - 1)}
+              height={height}
+              fill={parseHexColor(PARSE_TIERS[tier].floor)}
+              opacity={0.85}
+            />
+          );
+        })}
+        {/* Dim everything outside the window. */}
+        <rect x={MARGIN.left} y={0} width={Math.max(0, left - MARGIN.left)} height={OVERVIEW_HEIGHT} className="fill-card" opacity={0.7} />
+        <rect x={right} y={0} width={Math.max(0, MARGIN.left + plotWidth - right)} height={OVERVIEW_HEIGHT} className="fill-card" opacity={0.7} />
+        <rect
+          x={left}
+          y={0.5}
+          width={Math.max(2, right - left)}
+          height={OVERVIEW_HEIGHT - 1}
+          rx={3}
+          className={cn("fill-primary/10 stroke-primary", drag?.mode === "pan" ? "cursor-grabbing" : "cursor-grab")}
+          strokeWidth={1.5}
+        />
+        {[left, right].map((px, i) => (
+          <rect
+            key={i}
+            x={px - 2}
+            y={OVERVIEW_HEIGHT / 2 - 7}
+            width={4}
+            height={14}
+            rx={2}
+            className="cursor-ew-resize fill-primary"
+          />
+        ))}
+      </svg>
     </div>
   );
 }

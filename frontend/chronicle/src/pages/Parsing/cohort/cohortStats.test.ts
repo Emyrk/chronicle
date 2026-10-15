@@ -3,6 +3,7 @@ import {
   buildHistogram,
   formatClock,
   niceStep,
+  outlierZoomRange,
   parseTierIndex,
   summarizeCohort,
   tierCutoffs,
@@ -109,5 +110,22 @@ describe("formatClock", () => {
   it("formats minutes and hours", () => {
     expect(formatClock(95_000)).toBe("1:35");
     expect(formatClock(3_725_000)).toBe("1:02:05");
+  });
+});
+
+describe("outlierZoomRange", () => {
+  const bulk = Array.from({ length: 100 }, (_, i) => 3600 + i * 30);
+
+  it("zooms past a few extreme values", () => {
+    const range = outlierZoomRange([...bulk, 600_000, 700_000]);
+    expect(range).not.toBeNull();
+    expect(range!.lo).toBe(3600);
+    expect(range!.hi).toBeLessThan(20_000);
+  });
+
+  it("leaves ordinary spreads alone", () => {
+    expect(outlierZoomRange(bulk)).toBeNull();
+    expect(outlierZoomRange([...bulk, 9_000])).toBeNull();
+    expect(outlierZoomRange([1, 2, 1000])).toBeNull();
   });
 });

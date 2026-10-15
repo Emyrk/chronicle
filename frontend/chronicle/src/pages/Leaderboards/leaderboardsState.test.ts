@@ -49,3 +49,23 @@ describe("leaderboard routes", () => {
     )
   })
 })
+
+describe("parsing tab routes", () => {
+  it("only carries the instance into and out of parsing", () => {
+    const stats = new URLSearchParams("instance=Molten+Core&metric=hps&period=7d&class=Mage")
+    expect(leaderboardsModeTarget("parsing", stats, "statistics")).toBe(
+      "/leaderboards/parsing?instance=Molten+Core",
+    )
+
+    const parsing = new URLSearchParams("instance=Molten+Core&metric=hps&period=60d&encounter=Ragnaros")
+    expect(leaderboardsModeTarget("statistics", parsing, "parsing")).toBe(
+      "/leaderboards/statistics?instance=Molten+Core",
+    )
+    expect(leaderboardsModeTarget("parsing", parsing, "parsing")).toBe(
+      "/leaderboards/parsing?instance=Molten+Core&metric=hps&period=60d&encounter=Ragnaros",
+    )
+    expect(leaderboardsModeTarget("speedruns", new URLSearchParams("metric=hps"), "parsing")).toBe(
+      "/leaderboards/speedruns",
+    )
+  })
+})

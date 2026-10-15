@@ -10,6 +10,8 @@ import type {
   InstanceParsesResponse,
   ParseScoreCohortBucketsResponse,
   ParseScoreCohortResponse,
+  ParseScoreSpreadsResponse,
+  TimeParseSpreadsResponse,
   TimeParseCohortBucketsResponse,
   TimeParseCohortKind,
   TimeParseCohortResponse,
@@ -253,6 +255,21 @@ export function useRankingsKillTimes(instanceName: string, period?: string, enab
   });
 }
 
+/** Box plot stats on qualified full clears; empty when there are none. */
+export function useRankingsClearTimes(instanceName: string, period?: string, enabled = true) {
+  const searchParams = new URLSearchParams();
+  searchParams.set("instance_name", instanceName);
+  if (period) searchParams.set("period", period);
+
+  return useQuery({
+    queryKey: ["rankings", "clear-times", instanceName, period],
+    queryFn: () =>
+      fetchJSON<RankingsKillTimeStats[]>(`/api/v1/rankings/clear-times?${searchParams.toString()}`),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: enabled && !!instanceName,
+  });
+}
+
 export function useRankingsSuccessRates(
   instanceName: string,
   period?: string,
@@ -364,6 +381,33 @@ export function useParseScoreCohortBuckets(
   });
 }
 
+/**
+ * Parse spreads (tier cutoffs per exact cohort) for public parse pages.
+ * Always the live 60-day window ending today.
+ */
+export function useParseScoreSpreads(params: {
+  metric: "dps" | "hps";
+  encounterNames: readonly string[];
+  playerClass?: string;
+  playerSpec?: string;
+}, enabled = true) {
+  const searchParams = new URLSearchParams({ metric: params.metric, period: "60d" });
+  for (const name of params.encounterNames) searchParams.append("encounter_name", name);
+  if (params.playerClass) searchParams.set("class", params.playerClass);
+  if (params.playerSpec) searchParams.set("spec", params.playerSpec);
+
+  return useQuery({
+    queryKey: ["rankings", "parse-score-spreads", params],
+    queryFn: () =>
+      fetchJSON<ParseScoreSpreadsResponse>(
+        `/api/v1/rankings/parse-score-cohorts/spreads?${searchParams.toString()}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    placeholderData: keepPreviousData,
+    enabled: enabled && params.encounterNames.length > 0,
+  });
+}
+
 export function useParseScoreCohort(params: {
   date: string;
   period: TimeParseCohortPeriod;
@@ -416,6 +460,23 @@ export function useTimeParseCohortBuckets(date: string, period: TimeParseCohortP
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: !!date,
+  });
+}
+
+/**
+ * Kill-time and clear-time parse spreads for one instance. Always the live
+ * 60-day window ending today.
+ */
+export function useTimeParseSpreads(instanceName: string, enabled = true) {
+  const searchParams = new URLSearchParams({ instance_name: instanceName, period: "60d" });
+  return useQuery({
+    queryKey: ["rankings", "time-parse-spreads", instanceName],
+    queryFn: () =>
+      fetchJSON<TimeParseSpreadsResponse>(
+        `/api/v1/rankings/time-parse-cohorts/spreads?${searchParams.toString()}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: enabled && !!instanceName,
   });
 }
 

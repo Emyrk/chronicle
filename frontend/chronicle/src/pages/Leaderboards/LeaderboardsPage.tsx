@@ -2,7 +2,8 @@ import { Link, Navigate, useSearchParams } from "react-router-dom"
 import { RankingsLanding } from "../Rankings/RankingsLanding"
 import { InstanceView } from "../Rankings/InstanceView"
 import { SpeedrunLeaderboard } from "../Leaderboard/SpeedrunLeaderboard"
-import { Swords, Timer } from "lucide-react"
+import { BarChart3, Swords, Timer } from "lucide-react"
+import { ParsingInstanceView } from "./Parsing/ParsingInstanceView"
 import { AdSlot } from "../../components/Ads/AdSlot"
 import {
   leaderboardsModeTarget,
@@ -17,12 +18,13 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
   const speedrunsVisible = supportsSpeedruns(instance)
   const statisticsActive = mode === "statistics"
 
-  if (!statisticsActive && !speedrunsVisible) {
+  if (mode === "speedruns" && !speedrunsVisible) {
     return <Navigate to={leaderboardsModeTarget("statistics", params)} replace />
   }
 
-  const statisticsTarget = leaderboardsModeTarget("statistics", params)
-  const speedrunsTarget = leaderboardsModeTarget("speedruns", params)
+  const statisticsTarget = leaderboardsModeTarget("statistics", params, mode)
+  const speedrunsTarget = leaderboardsModeTarget("speedruns", params, mode)
+  const parsingTarget = leaderboardsModeTarget("parsing", params, mode)
 
   // If an instance is selected, show the tabbed detail view
   if (instance) {
@@ -40,12 +42,18 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
               />
               {speedrunsVisible && (
                 <TabButton
-                  active={!statisticsActive}
+                  active={mode === "speedruns"}
                   to={speedrunsTarget}
                   icon={<Timer className="h-4 w-4" />}
                   label="Speedruns"
                 />
               )}
+              <TabButton
+                active={mode === "parsing"}
+                to={parsingTarget}
+                icon={<BarChart3 className="h-4 w-4" />}
+                label="Parsing"
+              />
             </div>
           </div>
         </div>
@@ -54,6 +62,8 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
           <div className="min-w-0 flex-1">
             {statisticsActive ? (
               <InstanceView instanceName={instance} />
+            ) : mode === "parsing" ? (
+              <ParsingInstanceView key={instance} instanceName={instance} />
             ) : (
               <SpeedrunLeaderboard overrideInstance={instance} />
             )}
@@ -76,17 +86,23 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
           label="Statistics"
         />
         <TabButton
-          active={!statisticsActive}
+          active={mode === "speedruns"}
           to={speedrunsTarget}
           icon={<Timer className="h-4 w-4" />}
           label="Speedruns"
+        />
+        <TabButton
+          active={mode === "parsing"}
+          to={parsingTarget}
+          icon={<BarChart3 className="h-4 w-4" />}
+          label="Parsing"
         />
       </div>
 
       <div className="flex gap-6">
         <div className="min-w-0 flex-1">
-          {statisticsActive ? (
-            <RankingsLanding />
+          {mode !== "speedruns" ? (
+            <RankingsLanding showTopPlayers={mode !== "parsing"} />
           ) : (
             <SpeedrunLeaderboard />
           )}

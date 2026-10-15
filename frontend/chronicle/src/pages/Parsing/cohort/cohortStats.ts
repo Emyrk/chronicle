@@ -155,3 +155,28 @@ export function formatMetric(value: number): string {
   }
   return value.toFixed(1);
 }
+
+/**
+ * Range to zoom to by default when a few extreme values would squash the
+ * histogram: the Q1 − 3×IQR … Q3 + 3×IQR fence, clamped to the data. Returns
+ * null when nothing is outside the fence or the outliers take up less than
+ * half the full range, so typical cohorts show unzoomed.
+ */
+export function outlierZoomRange(values: readonly number[]): { lo: number; hi: number } | null {
+  if (values.length < 8) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const quantile = (p: number) => {
+    const i = (sorted.length - 1) * p;
+    const lo = Math.floor(i);
+    return sorted[lo] + (sorted[Math.ceil(i)] - sorted[lo]) * (i - lo);
+  };
+  const q1 = quantile(0.25);
+  const q3 = quantile(0.75);
+  const iqr = q3 - q1;
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  const lo = Math.max(min, q1 - 3 * iqr);
+  const hi = Math.min(max, q3 + 3 * iqr);
+  if (iqr <= 0 || hi - lo <= 0 || max - min <= 2 * (hi - lo)) return null;
+  return { lo, hi };
+}
