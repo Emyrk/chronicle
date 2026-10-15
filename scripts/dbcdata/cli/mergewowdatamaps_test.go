@@ -139,6 +139,98 @@ func TestMergeWowdataMapsStyledValidation(t *testing.T) {
 	}
 }
 
+func TestMergeWowdataMapsManualLayers(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	target := wowMapTarget{Product: "wow_classic_beta", Build: "1.2.3", Region: "us", Locale: "enUS"}
+	original := filepath.Join(dir, "original.json")
+	renders := filepath.Join(dir, "renders.json")
+	model3d := filepath.Join(dir, "3d.json")
+	out := filepath.Join(dir, "manifest.json")
+	require.NoError(t, writeWowMapManifest(original, wowMapManifest{
+		Format: wowMapManifestFormat, Target: target,
+		Instances: []wowMapInstance{{MapID: 43, Name: "Wailing Caverns", Floors: []wowMapInstanceFloor{{Floor: 1}}}},
+	}))
+	manualTarget := wowMapTarget{Product: target.Product}
+	writeMapLayerTest(t, renders, wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{
+		{MapID: 43, Name: "Wailing Caverns", Renders: &wowMapManualRender{Path: "renders/WC-shaded-water.png", Width: 2400, Height: 1533}},
+		{MapID: 2999, Name: "Ruins of Lordaeron", Renders: &wowMapManualRender{Path: "renders/RoL-shaded-aligned.png", Width: 1024, Height: 1024}},
+		{MapID: 389, Name: "Ragefire Chasm", Renders: &wowMapManualRender{Path: "renders/RFC-shaded.png", Width: 1774, Height: 2400}},
+	}})
+	writeMapLayerTest(t, model3d, wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{
+		{MapID: 389, Name: "Ragefire Chasm", Model3D: &wowMap3DAsset{Path: "3d/ragefire-chasm-open-top.glb"}},
+		{MapID: 2999, Name: "Ruins of Lordaeron", Model3D: &wowMap3DAsset{Path: "3d/ruins-of-lordaeron-open-top.glb"}},
+	}})
+	for _, tc := range []struct {
+		name, renderFile, modelFile string
+	}{
+		{"renders alone", renders, ""},
+		{"3d alone", "", model3d},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			file := filepath.Join(t.TempDir(), "manifest.json")
+			require.NoError(t, mergeWowdataMapsWithManual(original, "", "", tc.renderFile, tc.modelFile, file))
+			data, err := os.ReadFile(file)
+			require.NoError(t, err)
+			var independent wowMapManifest
+			require.NoError(t, json.Unmarshal(data, &independent))
+			require.Len(t, independent.Instances, 3)
+			require.Equal(t, "Ragefire Chasm", independent.Instances[1].Name)
+			require.NotNil(t, independent.Instances[1].Floors)
+		})
+	}
+	require.NoError(t, mergeWowdataMapsWithManual(original, "", "", renders, model3d, out))
+	data, err := os.ReadFile(out)
+	require.NoError(t, err)
+	var merged wowMapManifest
+	require.NoError(t, json.Unmarshal(data, &merged))
+	require.Equal(t, []int32{43, 389, 2999}, []int32{merged.Instances[0].MapID, merged.Instances[1].MapID, merged.Instances[2].MapID})
+	require.Equal(t, "Wailing Caverns", merged.Instances[0].Name) // Native metadata wins.
+	require.Len(t, merged.Instances[0].Floors, 1)
+	require.Equal(t, "renders/WC-shaded-water.png", merged.Instances[0].Renders.Path)
+	require.Equal(t, "Ragefire Chasm", merged.Instances[1].Name)
+	require.Empty(t, merged.Instances[1].Floors)
+	require.Equal(t, "renders/RFC-shaded.png", merged.Instances[1].Renders.Path)
+	require.Equal(t, "3d/ragefire-chasm-open-top.glb", merged.Instances[1].Model3D.Path)
+	require.Equal(t, "Ruins of Lordaeron", merged.Instances[2].Name)
+	require.Equal(t, "3d/ruins-of-lordaeron-open-top.glb", merged.Instances[2].Model3D.Path)
+	require.Equal(t, "renders/RoL-shaded-aligned.png", merged.Instances[2].Renders.Path)
+	// An invalid replacement layer cannot overwrite an existing public manifest.
+	for _, tc := range []struct {
+		name  string
+		layer wowMapLayer
+		file  string
+	}{
+		{"unknown mapID", wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{{MapID: 999, Renders: &wowMapManualRender{Path: "renders/999.png", Width: 1, Height: 1}}}}, renders},
+		{"mixed fields", wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{{MapID: 43, Renders: &wowMapManualRender{Path: "renders/43.png", Width: 1, Height: 1}, Model3D: &wowMap3DAsset{Path: "3d/43.glb"}}}}, renders},
+		{"wrong prefix", wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{{MapID: 389, Model3D: &wowMap3DAsset{Path: "renders/389.glb"}}}}, model3d},
+		{"duplicate mapID", wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{{MapID: 43, Model3D: &wowMap3DAsset{Path: "3d/43.glb"}}, {MapID: 43, Model3D: &wowMap3DAsset{Path: "3d/43.glb"}}}}, model3d},
+		{"traversal", wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{{MapID: 43, Model3D: &wowMap3DAsset{Path: "3d/../other.glb"}}}}, model3d},
+		{"bad dimensions", wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{{MapID: 43, Renders: &wowMapManualRender{Path: "renders/43.png", Width: 0, Height: 1}}}}, renders},
+		{"wrong extension", wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{{MapID: 43, Renders: &wowMapManualRender{Path: "renders/43.jpg", Width: 1, Height: 1}}}}, renders},
+		{"unnamed new instance", wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{{MapID: 999, Model3D: &wowMap3DAsset{Path: "3d/999.glb"}}}}, model3d},
+		{"conflicting names", wowMapLayer{Format: wowMapManifestFormat, Target: manualTarget, Instances: []wowMapLayerInstance{{MapID: 389, Name: "Wrong dungeon", Model3D: &wowMap3DAsset{Path: "3d/389.glb"}}}}, model3d},
+		{"wrong target", wowMapLayer{Format: wowMapManifestFormat, Target: target}, model3d},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			file := filepath.Join(t.TempDir(), "invalid.json")
+			writeMapLayerTest(t, file, tc.layer)
+			renderFile, modelFile := renders, model3d
+			if tc.file == renders {
+				renderFile = file
+			} else {
+				modelFile = file
+			}
+			err := mergeWowdataMapsWithManual(original, "", "", renderFile, modelFile, out)
+			require.Error(t, err)
+			current, readErr := os.ReadFile(out)
+			require.NoError(t, readErr)
+			require.Equal(t, data, current)
+		})
+	}
+}
+
 func writeMapLayerTest(t *testing.T, file string, layer wowMapLayer) {
 	t.Helper()
 	data, err := json.Marshal(layer)

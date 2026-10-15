@@ -56,6 +56,21 @@ JSON
 MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh >/dev/null
 jq -e '.instances[0].rendered.path == "render/43.png" and .instances[0].styled.path == "render-styled/43-wailing-caverns-v2.jpeg"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 
+# Hand-uploaded assets are already remote; publishing either source only merges JSON.
+mkdir -p "$MOCK_MAP_REMOTE/renders" "$MOCK_MAP_REMOTE/3d"
+printf 'png' > "$MOCK_MAP_REMOTE/renders/RFC-shaded.png"
+printf 'glb' > "$MOCK_MAP_REMOTE/3d/ragefire-chasm-open-top.glb"
+MAPS_UPLOAD_MODE=renders ./upload-maps-r2.sh >/dev/null
+jq -e '([.instances[].renders.path] | sort) == (["renders/RFC-shaded.png", "renders/RoL-shaded-aligned.png", "renders/WC-shaded-water.png"] | sort) and .instances[0].rendered.path == "render/43.png"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+jq -e '([.instances[].mapID] | sort) == [43,389,2999] and (.instances[] | select(.mapID == 389) | .name == "Ragefire Chasm" and .floors == [] and ."3d" == null)' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+MAPS_UPLOAD_MODE=3d ./upload-maps-r2.sh >/dev/null
+jq -e '([.instances[]."3d".path] | sort) == (["3d/ragefire-chasm-open-top.glb", "3d/ruins-of-lordaeron-open-top.glb", "3d/wailing-caverns-open-top.glb"] | sort) and .instances[0].renders.path == "renders/WC-shaded-water.png" and .instances[0].styled != null' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+[[ -f "$MOCK_MAP_REMOTE/manifest.renders.json" && -f "$MOCK_MAP_REMOTE/manifest.3d.json" ]]
+
+# Regenerating native art must not drop floorless instances from manual layers.
+MAPS_UPLOAD_MODE=original ./upload-maps-r2.sh >/dev/null
+jq -e '([.instances[].mapID] | sort) == [43,389,2999] and (.instances[] | select(.mapID == 2999) | .floors == [] and .renders.path == "renders/RoL-shaded-aligned.png" and ."3d".path == "3d/ruins-of-lordaeron-open-top.glb")' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+
 before="$(sha256sum "$MOCK_MAP_REMOTE/manifest.json")"
 printf '{broken' > "${MAPS_DIR}/manifest.rendered.json"
 if MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh >"${tmp}/failure.log" 2>&1; then
@@ -64,6 +79,11 @@ if MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh >"${tmp}/failure.log" 2>&1; the
 fi
 [[ "$before" == "$(sha256sum "$MOCK_MAP_REMOTE/manifest.json")" ]]
 jq -e '.instances[0].rendered.path == "render/43.png"' "$MOCK_MAP_REMOTE/manifest.rendered.json" >/dev/null
+# A manifest-only upload also works after generated map files are cleaned locally.
+rm -rf "$MAPS_DIR"
+MAPS_UPLOAD_MODE=3d ./upload-maps-r2.sh >/dev/null
+jq -e '.instances[0].renders.path == "renders/WC-shaded-water.png" and .instances[0]."3d".path == "3d/wailing-caverns-open-top.glb"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+
 export R2_PATH=turtle/maps SERVER=turtle MAPS_DIR="${tmp}/turtle-maps" MOCK_MAP_REMOTE="${tmp}/remote-turtle"
 mkdir -p "${MAPS_DIR}/original"
 printf 'legacy tile' > "${MAPS_DIR}/original/2.webp"
