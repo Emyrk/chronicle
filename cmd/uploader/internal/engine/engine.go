@@ -57,9 +57,17 @@ type Config struct {
 	// Token reads the bearer token from the keychain. It is cached; call
 	// Engine.TokenChanged after storing or removing one.
 	Token func() string
-	// Upload sends size bytes of path. fast asks for the cheapest compression;
-	// it is set while WoW is running so the game never competes for CPU.
-	Upload func(ctx context.Context, token, path string, size int64, fast bool) (upload.Result, error)
+	// Upload sends size bytes of path under sourceID. fast asks for the
+	// cheapest compression; it is set while WoW is running so the game never
+	// competes for CPU.
+	Upload func(ctx context.Context, token, path, sourceID string, size int64, fast bool) (upload.Result, error)
+	// Lookup asks the server what it has of sourceID, before any body is sent.
+	// It is only called for a log the ledger has never seen (fresh install,
+	// wiped state file, second machine). nil disables the pre-flight check,
+	// which is the case today: the API has no such route (see #1112), so an
+	// unknown log is uploaded and the server's duplicate answer recovers the
+	// report link.
+	Lookup func(ctx context.Context, token, sourceID string) (upload.Have, error)
 	// Running reports whether WoW is running.
 	Running func(ctx context.Context, installDirs []string) bool
 	// Notify shows a native notification.
@@ -509,6 +517,14 @@ func (e *Engine) worker(ctx context.Context) {
 // and then marked failed. Any other 4xx fails at once.
 func (e *Engine) uploadOne(ctx context.Context, j job) (rejected bool) {
 	log := e.cfg.Logger.With("file", j.path, "size", j.size)
+	src, err := upload.Identify(j.path)
+	if err != nil {
+		// Without an id there is no ledger to consult; upload as before.
+		log.Debug("could not identify log", "err", err)
+	}
+	if src != "" && e.alreadyUploaded(ctx, log, j, src) {
+		return false
+	}
 	delay := e.cfg.RetryBase
 	var serverWaited time.Duration
 	log.Info("uploading", "file", j.path, "size", formatSize(j.size))
@@ -523,11 +539,11 @@ func (e *Engine) uploadOne(ctx context.Context, j job) (rejected bool) {
 		e.setStatus(Status{State: StateUploading, Detail: "Uploading your log…", ReportURL: e.status.ReportURL})
 		e.mu.Unlock()
 
-		res, err := e.cfg.Upload(ctx, token, j.path, j.size, fast)
+		res, err := e.cfg.Upload(ctx, token, j.path, src, j.size, fast)
 		var serverErr *upload.Error
 		switch {
 		case err == nil:
-			e.finish(j, res)
+			e.finish(j, src, res)
 			return false
 		case ctx.Err() != nil:
 			return false
@@ -561,6 +577,69 @@ func (e *Engine) uploadOne(ctx context.Context, j job) (rejected bool) {
 	}
 }
 
+// alreadyUploaded reports whether Chronicle already has j's bytes, recording
+// the skip when it does. The ledger answers first; a source id it has never
+// seen is asked of the server, when a pre-flight lookup is configured.
+func (e *Engine) alreadyUploaded(ctx context.Context, log *slog.Logger, j job, src string) bool {
+	if ent, ok := e.cfg.Store.Get().Logs[src]; ok {
+		// A grown log (ent.Size < j.size) is sent again in full under the same
+		// source id, which is how the server replaces the group it parsed.
+		if ent.Size >= j.size {
+			e.skip(j, src, ent.Size, ent.ReportURL)
+			return true
+		}
+		return false
+	}
+	if e.cfg.Lookup == nil {
+		return false
+	}
+	e.mu.Lock()
+	token := e.token
+	e.mu.Unlock()
+	have, err := e.cfg.Lookup(ctx, token, src)
+	if err != nil {
+		// Offline, or a server without the route: upload and let its duplicate
+		// answer sort it out.
+		log.Debug("source lookup failed", "err", err)
+		return false
+	}
+	if have.Size < j.size {
+		return false
+	}
+	e.skip(j, src, have.Size, have.ReportURL)
+	return true
+}
+
+// skip records a log the server already has without sending it. It is not a
+// failure: the tracker marks it uploaded so it is neither retried nor queued
+// again, and the tray keeps pointing at the report that exists.
+func (e *Engine) skip(j job, src string, size int64, reportURL string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.tracker.MarkUploaded(j.path, j.size)
+	err := e.cfg.Store.Update(func(s *store.State) {
+		if s.Uploaded == nil {
+			s.Uploaded = map[string]int64{}
+		}
+		s.Uploaded[j.path] = j.size
+		s.RecordLog(src, store.Log{Size: max(size, j.size), ReportURL: reportURL, At: e.now})
+		if reportURL != "" {
+			s.LastReportURL = reportURL
+		}
+	})
+	if err != nil {
+		e.cfg.Logger.Warn("saving state", "err", err)
+	}
+	url := reportURL
+	if url == "" {
+		url = e.status.ReportURL
+	}
+	e.cfg.Logger.Info("already on Chronicle, not uploading", "file", j.path, "size", formatSize(j.size), "url", url)
+	e.lastUploaded = Status{State: StateUploaded, Detail: "This log is already on Chronicle.", ReportURL: url}
+	e.uploadedUntil = e.now.Add(uploadedStickiness)
+	e.setStatus(e.lastUploaded)
+}
+
 func (e *Engine) retryStatus(detail string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -575,7 +654,7 @@ func (e *Engine) fail(j job, err error) {
 	e.cfg.Notify("Chronicle upload failed", err.Error())
 }
 
-func (e *Engine) finish(f job, res upload.Result) {
+func (e *Engine) finish(f job, src string, res upload.Result) {
 	e.mu.Lock()
 	e.tracker.MarkUploaded(f.path, f.size)
 	err := e.cfg.Store.Update(func(s *store.State) {
@@ -583,6 +662,9 @@ func (e *Engine) finish(f job, res upload.Result) {
 			s.Uploaded = map[string]int64{}
 		}
 		s.Uploaded[f.path] = f.size
+		if src != "" {
+			s.RecordLog(src, store.Log{Size: f.size, ReportURL: res.ReportURL, At: e.now})
+		}
 		if res.ReportURL != "" {
 			s.LastReportURL = res.ReportURL
 		}

@@ -112,7 +112,21 @@ The stone is the app; the colour of its swirl is the state.
 - **Also upload when the log goes quiet** uploads after 5 minutes without new combat, instead of only when you quit WoW.
 - **Start at login** launches the uploader when you log in to your computer.
 
-Uploading the same log twice is harmless: Chronicle tells you it already has it.
+**Logs it has already sent**
+
+The uploader keeps a ledger of the logs Chronicle has, so it never sends the same bytes twice. A log is
+identified by its contents — the hash of its first 64 KiB, which stays the same as the file grows — and not
+by its path, so renaming it, copying it, restoring the archived copy or moving it to another folder does not
+make the uploader send it again. Next to each id the ledger records how many bytes reached Chronicle and the
+report link, in `logs` in the uploader's `state.json`. A log the ledger already covers is skipped before any
+of it is sent: that is not an error, and the menu keeps pointing at the report that exists. A log that has
+grown since it was sent goes up again in full, under the same id, and Chronicle replaces the report it
+parsed instead of making a second one.
+
+The ledger only knows what this computer uploaded. On a fresh install, after a reset state file, or on a
+second PC sharing the same Logs folder, the uploader sends a log it has not seen before and Chronicle tells
+it that it already has it — harmless, but it costs the upload. A pre-flight check that would save that round
+trip needs an API that can answer "do you have this?" before the body ([#1112](https://github.com/Emyrk/chronicle/issues/1112)).
 
 **Building it**
 

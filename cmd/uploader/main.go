@@ -107,10 +107,13 @@ func run() error {
 		Store:    st,
 		Installs: a.installs,
 		Token:    store.Token,
-		Upload: func(ctx context.Context, token, path string, size int64, fast bool) (upload.Result, error) {
+		Upload: func(ctx context.Context, token, path, sourceID string, size int64, fast bool) (upload.Result, error) {
 			c := upload.Client{BaseURL: tn.BaseURL, Format: tn.Format, Flavor: tn.Flavor, Token: token, Fast: fast}
-			return c.Upload(ctx, path, size)
+			return c.Upload(ctx, path, sourceID, size)
 		},
+		// Lookup stays unset: there is no cheap "do you have this source id?"
+		// route yet (#1112). A log the ledger does not know is uploaded, and
+		// the server's duplicate answer recovers the report link.
 		Running:  watch.NewGame(tn.Layout, nil).Running,
 		Notify:   notify,
 		OnStatus: a.onStatus,
