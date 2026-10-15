@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
 import { kreshReal } from "./fixtures/kreshReal";
 import { loadMapFixture, type LoadedMapFixture } from "./fixtures/mapFixture";
@@ -8,7 +8,7 @@ import type { InstanceUnit, KillType, WoWHeroClasses } from "@/api/typesGenerate
 import type { WoWSpell } from "@/api/wowdb";
 import type { WowMapInstance, WowMapManifest, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import type { PanelContext } from "../types";
-import { BOSS_MINI_SLUGS, bossMiniUrl } from "./bossMinis";
+import { BOSS_MINI_SLUGS, fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import type { MapHealthSample, MapPositionSample, MapResult } from "./map.processor";
 import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
@@ -677,10 +677,18 @@ function HealReplay({ playbackSpeed }: { playbackSpeed: number }) {
 
 // Every Wailing Caverns boss on a ring with a health bar, each walking a small
 // circle so its facing turns; they take turns being hit and one dies at 20 s.
-// Bosses whose model is missing from public/boss-minis show the box marker.
+// Models come from the shared manifest, with bundled boss files as fallbacks.
 const BOSS_ENTRIES = [...BOSS_MINI_SLUGS.keys()];
-const STORY_MINIATURE_URLS: ReadonlyMap<number, string> = new Map(BOSS_ENTRIES.map((entry) => [entry, bossMiniUrl(entry)!]));
 const BOSS_MINI_VIEW = { viewport: { centerX: 0.5, centerY: 0.5, zoom: 3 }, key: "boss-minis" };
+
+function useStoryMiniatureUrls(): ReadonlyMap<number, string> | undefined {
+  return useQuery({
+    queryKey: ["unit-miniatures"],
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+    queryFn: () => fetchMiniatureUrls(),
+  }).data;
+}
 
 function bossMiniMarkers(cursorMs: number, fx: EncounterEffects): MapSceneMarker[] {
   return BOSS_ENTRIES.flatMap((entry, index): MapSceneMarker[] => {
@@ -719,6 +727,7 @@ function bossMiniEffects(): EncounterEffects {
 }
 
 function BossMiniReplay({ playbackSpeed }: { playbackSpeed: number }) {
+  const miniatureUrls = useStoryMiniatureUrls();
   const [fx] = useState(bossMiniEffects);
   const [cursorMs, setCursorMs] = useState(0);
 
@@ -738,7 +747,7 @@ function BossMiniReplay({ playbackSpeed }: { playbackSpeed: number }) {
         playbackSpeed={playbackSpeed}
         view={BOSS_MINI_VIEW}
         effects={fx}
-        miniatureUrls={STORY_MINIATURE_URLS}
+        miniatureUrls={miniatureUrls}
         onUnavailable={() => console.warn("WebGL unavailable")}
       />
     </div>
@@ -817,6 +826,7 @@ const KRESH_LOOP_PAUSE_MS = 1_000;
 // Replays a loaded fixture (the real Kresh kill, or a synthetic encounter
 // built in its shape) through the production useMapScene, looping.
 function FixturePlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture; mesh?: boolean }) {
+  const miniatureUrls = useStoryMiniatureUrls();
   const { instance } = fixture.props.context;
   const sync = useSyncModeContext();
   const { enabled, isPlaying, currentTimestamp, enable, setEncounterBounds, setTimestamp, play } = sync;
@@ -874,7 +884,7 @@ function FixturePlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture; m
           effects={scene.effects}
           bossGuids={scene.bossGuids}
           tankGuids={scene.tankGuids}
-          miniatureUrls={STORY_MINIATURE_URLS}
+          miniatureUrls={miniatureUrls}
           onUnavailable={() => console.warn("WebGL unavailable")}
           dungeonMesh={dungeonMesh}
           onDungeonMeshState={setMeshState}
