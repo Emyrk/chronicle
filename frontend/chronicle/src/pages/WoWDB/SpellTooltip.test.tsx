@@ -8,6 +8,7 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 vi.mock("@/hooks/useDatasetId", () => ({
+  useDatasetId: () => undefined,
   useIconBaseUrl: () => undefined,
 }));
 

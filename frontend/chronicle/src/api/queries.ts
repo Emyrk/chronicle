@@ -1799,21 +1799,27 @@ export function useDeleteUserGrant() {
 }
 // WoWDB queries
 
+export function spellQueryOptions(spellId: string, datasetId?: string) {
+  const ds = datasetId ? `?dataset_id=${datasetId}` : "";
+  return {
+    queryKey: ["wowdb", "spell", spellId, datasetId ?? "default"] as const,
+    queryFn: async (): Promise<WoWSpell> => {
+      const response = await fetch(`/api/v1/wowdb/spell/${spellId}${ds}`);
+      if (!response.ok) throw new Error("Spell not found");
+      return response.json() as Promise<WoWSpell>;
+    },
+    staleTime: 24 * 60 * 60 * 1000,
+    retry: false,
+  };
+}
+
 export function useSpell(
   spellId: string,
   datasetId?: string,
   options?: Omit<UseQueryOptions<WoWSpell>, "queryKey" | "queryFn">,
 ) {
-  const ds = datasetId ? `?dataset_id=${datasetId}` : "";
   return useQuery({
-    queryKey: ["wowdb", "spell", spellId, datasetId ?? "default"],
-    queryFn: async () => {
-      const response = await fetch(`/api/v1/wowdb/spell/${spellId}${ds}`);
-      if (!response.ok) throw new Error("Spell not found");
-      return response.json() as Promise<WoWSpell>;
-    },
-    staleTime: 24 * 60 * 60 * 1000, // 24 hours
-    retry: false, // Don't retry on 404
+    ...spellQueryOptions(spellId, datasetId),
     ...options,
   });
 }

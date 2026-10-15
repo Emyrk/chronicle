@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { iconUrl as buildIconUrl } from "@/config/iconUrl";
-import { useIconBaseUrl } from "@/hooks/useDatasetId";
+import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useQueries } from "@tanstack/react-query";
 import type { ItemTooltip as ItemTooltipData, ItemSpell } from "@/api/typesGenerated";
 import { fetchGemTooltip } from "@/api/gamedata";
-import { useSpell } from "@/api/queries";
+import { spellQueryOptions, useSpell } from "@/api/queries";
 import {
   type WoWSpell,
   extractReferencedSpellIds,
@@ -361,7 +361,8 @@ export function ItemTooltip({ item, className, includeReferenceLinks = false, sh
  * the description templates with full placeholder substitution ($s1, $d, $53202s1, etc).
  */
 function useResolvedSpellText(spellId: number): string {
-  const { data: spellData } = useSpell(String(spellId), undefined, {
+  const datasetId = useDatasetId();
+  const { data: spellData } = useSpell(String(spellId), datasetId, {
     enabled: spellId > 0,
   });
 
@@ -380,14 +381,8 @@ function useResolvedSpellText(spellId: number): string {
   // Fetch all referenced spells in parallel
   const refQueries = useQueries({
     queries: referencedIds.map((id) => ({
-      queryKey: ["wowdb", "spell", id.toString()],
-      queryFn: async () => {
-        const response = await fetch(`/api/v1/wowdb/spell/${id}`);
-        if (!response.ok) return null;
-        return response.json() as Promise<WoWSpell>;
-      },
+      ...spellQueryOptions(id.toString(), datasetId),
       staleTime: Infinity,
-      retry: false,
     })),
   });
 

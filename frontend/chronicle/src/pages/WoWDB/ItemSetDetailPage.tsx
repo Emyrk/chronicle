@@ -2,12 +2,13 @@ import { useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Loader2, Shield, ArrowLeft } from "lucide-react";
 import { useItemSetDetail, useItemTooltip } from "@/api/gamedata";
-import { useSpell } from "@/api/queries";
+import { spellQueryOptions, useSpell } from "@/api/queries";
 import { ItemTooltip } from "@/components/ui/ItemTooltip";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
 import { useQueries } from "@tanstack/react-query";
 import { iconUrl } from "@/config/iconUrl";
 import { cn } from "@/lib/utils";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import type { ItemSetPieceInfo, ItemSetBonus } from "@/api/typesGenerated";
 import {
   type WoWSpell,
@@ -57,7 +58,8 @@ const SKILL_LABELS: Record<number, string> = {
 // --- Spell text resolution (same pattern as ItemTooltip.tsx) ---
 
 function useResolvedSpellText(spellId: number): string {
-  const { data: spellData } = useSpell(String(spellId), undefined, {
+  const datasetId = useDatasetId();
+  const { data: spellData } = useSpell(String(spellId), datasetId, {
     enabled: spellId > 0,
   });
 
@@ -73,16 +75,7 @@ function useResolvedSpellText(spellId: number): string {
   }, [descTemplate, auraTemplate]);
 
   const refQueries = useQueries({
-    queries: referencedIds.map((id) => ({
-      queryKey: ["wowdb", "spell", id.toString()],
-      queryFn: async () => {
-        const response = await fetch(`/api/v1/wowdb/spell/${id}`);
-        if (!response.ok) return null;
-        return response.json() as Promise<WoWSpell>;
-      },
-      staleTime: 24 * 60 * 60 * 1000,
-      retry: false,
-    })),
+    queries: referencedIds.map((id) => spellQueryOptions(id.toString(), datasetId)),
   });
 
   const referencedSpells = useMemo(() => {

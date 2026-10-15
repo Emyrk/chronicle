@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
+import { spellQueryOptions } from "@/api/queries";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { AbilityBreakout, type AbilityData, type TargetData, type BreakoutTab } from "@/components/ui/AbilityBreakout";
 import type { DamageDoneResult } from "./damageDone.processor";
 import type { PanelContext } from "../types";
@@ -161,6 +163,7 @@ export function useDamageDoneBreakout({
   spellDataOverride,
 }: UseDamageDoneBreakoutOptions) {
   // Track tab selection per player so it persists across reloads
+  const datasetId = useDatasetId();
   const [tabByPlayer, setTabByPlayer] = useState<Map<string, BreakoutTab>>(new Map());
   
   // Collect all spell IDs for fetching spell data when showRanks is enabled
@@ -172,14 +175,8 @@ export function useDamageDoneBreakout({
   // Fetch spell data for all spell IDs (only when showRanks is true and no override)
   const spellQueries = useQueries({
     queries: spellIds.map((id) => ({
-      queryKey: ["wowdb", "spell", id.toString()],
-      queryFn: async (): Promise<WoWSpell> => {
-        const response = await fetch(`/api/v1/wowdb/spell/${id}`);
-        if (!response.ok) throw new Error("Spell not found");
-        return response.json();
-      },
-      staleTime: Infinity, // DBC data never changes
-      retry: false,
+      ...spellQueryOptions(id.toString(), datasetId),
+      staleTime: Infinity,
       enabled: showRanks && !spellDataOverride,
     })),
   });

@@ -2,7 +2,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { SpellContextPanel } from "./SpellContextPanel";
 
-vi.mock("@/hooks/useDatasetId", () => ({ useIconBaseUrl: () => "" }));
+vi.mock("@/hooks/useDatasetId", () => ({
+  useDatasetId: () => undefined,
+  useIconBaseUrl: () => "",
+}));
 
 vi.mock("@tanstack/react-query", () => ({
   useQueries: () => [

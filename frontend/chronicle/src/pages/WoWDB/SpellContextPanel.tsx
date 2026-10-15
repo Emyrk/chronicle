@@ -1,4 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
+import { spellQueryOptions } from "@/api/queries";
 import {
   getLocalizedText,
   getSpellIconUrl,
@@ -6,9 +7,8 @@ import {
   type SpellTooltipContext,
   type SpellTooltipNumericContextField,
   type SpellTooltipRequirements,
-  type WoWSpell,
 } from "@/api/wowdb";
-import { useIconBaseUrl } from "@/hooks/useDatasetId";
+import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 
 interface NumericFieldMeta {
   label: string;
@@ -63,17 +63,12 @@ export function SpellContextPanel({
   onGenderChange,
   onKnownSpellChange,
 }: SpellContextPanelProps) {
+  const datasetId = useDatasetId();
   const iconBaseUrl = useIconBaseUrl();
   const spellQueries = useQueries({
     queries: requirements.conditionalSpellIds.map((id) => ({
-      queryKey: ["wowdb", "spell", id.toString()],
-      queryFn: async () => {
-        const response = await fetch(`/api/v1/wowdb/spell/${id}`);
-        if (!response.ok) return null;
-        return response.json() as Promise<WoWSpell>;
-      },
+      ...spellQueryOptions(id.toString(), datasetId),
       staleTime: Infinity,
-      retry: false,
     })),
   });
 
