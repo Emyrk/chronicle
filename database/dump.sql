@@ -1403,6 +1403,7 @@ CREATE TABLE oauth_device_sessions (
     user_signature text NOT NULL,
     request jsonb NOT NULL,
     invalidated boolean DEFAULT false NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -1431,6 +1432,7 @@ CREATE TABLE oauth_token_sessions (
     request_id text NOT NULL,
     access_signature text DEFAULT ''::text NOT NULL,
     request jsonb NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT oauth_token_sessions_token_type_check CHECK ((token_type = ANY (ARRAY['access'::text, 'refresh'::text, 'authorize'::text])))
 );
@@ -2939,7 +2941,11 @@ CREATE UNIQUE INDEX log_instance_youtube_timestamped_slug_idx ON log_instance_yo
 
 CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
 
+CREATE INDEX oauth_device_sessions_expires_at_idx ON oauth_device_sessions USING btree (expires_at);
+
 CREATE INDEX oauth_relay_codes_expires_at_idx ON oauth_relay_codes USING btree (expires_at);
+
+CREATE INDEX oauth_token_sessions_expires_at_idx ON oauth_token_sessions USING btree (expires_at);
 
 CREATE INDEX oauth_token_sessions_request_id_idx ON oauth_token_sessions USING btree (request_id, token_type);
 

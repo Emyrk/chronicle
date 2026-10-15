@@ -1852,6 +1852,7 @@ type OauthDeviceSession struct {
 	UserSignature   string             `db:"user_signature" json:"user_signature"`
 	Request         []byte             `db:"request" json:"request"`
 	Invalidated     bool               `db:"invalidated" json:"invalidated"`
+	ExpiresAt       pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
@@ -1878,6 +1879,7 @@ type OauthTokenSession struct {
 	RequestID       string             `db:"request_id" json:"request_id"`
 	AccessSignature string             `db:"access_signature" json:"access_signature"`
 	Request         []byte             `db:"request" json:"request"`
+	ExpiresAt       pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 

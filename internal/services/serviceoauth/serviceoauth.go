@@ -56,6 +56,7 @@ type Service struct {
 	deviceStrategy  rfc8628.RFC8628CodeStrategy
 	router          chi.Router
 	browserApproval http.Handler
+	deviceLimiter   *deviceAuthorizationLimiter
 }
 
 func New(broker *services.Services) *Service { return &Service{broker: broker} }
@@ -99,7 +100,15 @@ func (s *Service) configure(ctx context.Context, db oauthStore, accessURL string
 		DeviceVerificationURL:          verificationURL,
 		ScopeStrategy:                  fosite.ExactScopeStrategy,
 	}
-	s.store = &storage{db: db}
+	s.store = &storage{
+		db:                   db,
+		deviceCodeLifespan:   config.DeviceAndUserCodeLifespan,
+		accessTokenLifespan:  config.AccessTokenLifespan,
+		refreshTokenLifespan: config.RefreshTokenLifespan,
+	}
+	if err := s.store.cleanupExpired(ctx); err != nil {
+		return fmt.Errorf("cleanup expired oauth sessions: %w", err)
+	}
 	coreStrategy := compose.NewOAuth2HMACStrategy(config)
 	deviceStrategy := compose.NewDeviceStrategy(config)
 	s.deviceStrategy = deviceStrategy
@@ -116,7 +125,8 @@ func (s *Service) configure(ctx context.Context, db oauthStore, accessURL string
 	)
 
 	s.router = chi.NewRouter()
-	s.router.Post("/device/authorize", s.deviceAuthorization)
+	s.deviceLimiter = newDeviceAuthorizationLimiter()
+	s.router.With(s.deviceLimiter.middleware).Post("/device/authorize", s.deviceAuthorization)
 	s.router.Handle("/device", http.HandlerFunc(s.serveBrowserApproval))
 	s.router.Post("/token", s.token)
 	s.router.Post("/revoke", s.revoke)

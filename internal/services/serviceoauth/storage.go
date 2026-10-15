@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/ory/fosite"
 )
 
@@ -22,16 +24,113 @@ type oauthStore interface {
 	CreateOAuthDeviceSession(context.Context, database.CreateOAuthDeviceSessionParams) error
 	GetOAuthDeviceSession(context.Context, string) (database.GetOAuthDeviceSessionRow, error)
 	UpdateOAuthDeviceSessionByUserSignature(context.Context, database.UpdateOAuthDeviceSessionByUserSignatureParams) (string, error)
-	InvalidateOAuthDeviceSession(context.Context, string) error
+	InvalidateOAuthDeviceSession(context.Context, string) (int64, error)
+	DeleteExpiredOAuthDeviceSessions(context.Context) (int64, error)
 	CreateOAuthTokenSession(context.Context, database.CreateOAuthTokenSessionParams) error
 	GetOAuthTokenSession(context.Context, database.GetOAuthTokenSessionParams) ([]byte, error)
-	DeleteOAuthTokenSession(context.Context, database.DeleteOAuthTokenSessionParams) error
+	DeleteOAuthTokenSession(context.Context, database.DeleteOAuthTokenSessionParams) (int64, error)
+	DeleteExpiredOAuthTokenSessions(context.Context) (int64, error)
 	RevokeOAuthTokenSessions(context.Context, database.RevokeOAuthTokenSessionsParams) (int64, error)
-	RotateOAuthRefreshToken(context.Context, database.RotateOAuthRefreshTokenParams) error
+	RotateOAuthRefreshToken(context.Context, database.RotateOAuthRefreshTokenParams) (int64, error)
+	InTx(context.Context, func(database.Store) error, *pgx.TxOptions) error
 }
 
 type storage struct {
-	db oauthStore
+	db                   oauthStore
+	deviceCodeLifespan   time.Duration
+	accessTokenLifespan  time.Duration
+	refreshTokenLifespan time.Duration
+}
+
+type transactionContextKey struct{}
+
+type transactionState struct {
+	db     oauthStore
+	finish chan error
+	result chan error
+
+	mu        sync.Mutex
+	completed bool
+}
+
+var errTransactionRollback = errors.New("serviceoauth: transaction rollback")
+
+func (s *storage) dbFor(ctx context.Context) oauthStore {
+	if tx, ok := ctx.Value(transactionContextKey{}).(*transactionState); ok {
+		return tx.db
+	}
+	return s.db
+}
+
+func (s *storage) BeginTX(ctx context.Context) (context.Context, error) {
+	ready := make(chan oauthStore, 1)
+	finish := make(chan error, 1)
+	result := make(chan error, 1)
+	go func() {
+		result <- s.db.InTx(ctx, func(tx database.Store) error {
+			ready <- tx
+			select {
+			case err := <-finish:
+				return err
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}, &pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	}()
+
+	select {
+	case tx := <-ready:
+		return context.WithValue(ctx, transactionContextKey{}, &transactionState{
+			db: tx, finish: finish, result: result,
+		}), nil
+	case err := <-result:
+		return ctx, err
+	case <-ctx.Done():
+		return ctx, ctx.Err()
+	}
+}
+
+func (s *storage) Commit(ctx context.Context) error {
+	tx, ok := ctx.Value(transactionContextKey{}).(*transactionState)
+	if !ok {
+		return errors.New("serviceoauth: transaction missing from context")
+	}
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	if tx.completed {
+		return nil
+	}
+	tx.finish <- nil
+	err := <-tx.result
+	tx.completed = true
+	return err
+}
+
+func (s *storage) Rollback(ctx context.Context) error {
+	tx, ok := ctx.Value(transactionContextKey{}).(*transactionState)
+	if !ok {
+		return errors.New("serviceoauth: transaction missing from context")
+	}
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	if tx.completed {
+		return nil
+	}
+	tx.finish <- errTransactionRollback
+	err := <-tx.result
+	tx.completed = true
+	if errors.Is(err, errTransactionRollback) {
+		return nil
+	}
+	return err
+}
+
+func (s *storage) cleanupExpired(ctx context.Context) error {
+	if _, err := s.db.DeleteExpiredOAuthDeviceSessions(ctx); err != nil {
+		return err
+	}
+	_, err := s.db.DeleteExpiredOAuthTokenSessions(ctx)
+	return err
 }
 
 type storedRequest struct {
@@ -121,15 +220,20 @@ func (s *storage) CreateDeviceAuthSession(ctx context.Context, deviceSignature, 
 	if err != nil {
 		return err
 	}
-	return s.db.CreateOAuthDeviceSession(ctx, database.CreateOAuthDeviceSessionParams{
+	expiresAt := request.GetSession().GetExpiresAt(fosite.DeviceCode)
+	if expiresAt.IsZero() {
+		expiresAt = request.GetRequestedAt().Add(s.deviceCodeLifespan)
+	}
+	return s.dbFor(ctx).CreateOAuthDeviceSession(ctx, database.CreateOAuthDeviceSessionParams{
 		DeviceSignature: deviceSignature,
 		UserSignature:   userSignature,
 		Request:         encoded,
+		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	})
 }
 
 func (s *storage) GetDeviceCodeSession(ctx context.Context, signature string, session fosite.Session) (fosite.DeviceRequester, error) {
-	row, err := s.db.GetOAuthDeviceSession(ctx, signature)
+	row, err := s.dbFor(ctx).GetOAuthDeviceSession(ctx, signature)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fosite.ErrNotFound
 	}
@@ -148,11 +252,18 @@ func (s *storage) GetDeviceCodeSession(ctx context.Context, signature string, se
 }
 
 func (s *storage) InvalidateDeviceCodeSession(ctx context.Context, signature string) error {
-	return s.db.InvalidateOAuthDeviceSession(ctx, signature)
+	rows, err := s.dbFor(ctx).InvalidateOAuthDeviceSession(ctx, signature)
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return fosite.ErrInvalidatedDeviceCode
+	}
+	return nil
 }
 
 func (s *storage) approveDevice(ctx context.Context, userSignature, subject string, state fosite.UserCodeState) error {
-	row, err := s.db.GetOAuthDeviceSession(ctx, userSignature)
+	row, err := s.dbFor(ctx).GetOAuthDeviceSession(ctx, userSignature)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fosite.ErrNotFound
 	}
@@ -172,7 +283,7 @@ func (s *storage) approveDevice(ctx context.Context, userSignature, subject stri
 	if err != nil {
 		return err
 	}
-	_, err = s.db.UpdateOAuthDeviceSessionByUserSignature(ctx, database.UpdateOAuthDeviceSessionByUserSignatureParams{
+	_, err = s.dbFor(ctx).UpdateOAuthDeviceSessionByUserSignature(ctx, database.UpdateOAuthDeviceSessionByUserSignatureParams{
 		Request: encoded, UserSignature: userSignature,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -186,14 +297,32 @@ func (s *storage) createToken(ctx context.Context, tokenType, signature, accessS
 	if err != nil {
 		return err
 	}
-	return s.db.CreateOAuthTokenSession(ctx, database.CreateOAuthTokenSessionParams{
+
+	var (
+		fositeType fosite.TokenType
+		lifespan   time.Duration
+	)
+	switch tokenType {
+	case tokenTypeAccess:
+		fositeType, lifespan = fosite.AccessToken, s.accessTokenLifespan
+	case tokenTypeRefresh:
+		fositeType, lifespan = fosite.RefreshToken, s.refreshTokenLifespan
+	default:
+		fositeType, lifespan = fosite.AuthorizeCode, s.deviceCodeLifespan
+	}
+	expiresAt := request.GetSession().GetExpiresAt(fositeType)
+	if expiresAt.IsZero() {
+		expiresAt = request.GetRequestedAt().Add(lifespan)
+	}
+	return s.dbFor(ctx).CreateOAuthTokenSession(ctx, database.CreateOAuthTokenSessionParams{
 		TokenType: tokenType, Signature: signature, RequestID: request.GetID(),
 		AccessSignature: accessSignature, Request: encoded,
+		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	})
 }
 
 func (s *storage) getToken(ctx context.Context, tokenType, signature string, session fosite.Session) (fosite.Requester, error) {
-	encoded, err := s.db.GetOAuthTokenSession(ctx, database.GetOAuthTokenSessionParams{TokenType: tokenType, Signature: signature})
+	encoded, err := s.dbFor(ctx).GetOAuthTokenSession(ctx, database.GetOAuthTokenSessionParams{TokenType: tokenType, Signature: signature})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fosite.ErrNotFound
 	}
@@ -204,7 +333,8 @@ func (s *storage) getToken(ctx context.Context, tokenType, signature string, ses
 }
 
 func (s *storage) deleteToken(ctx context.Context, tokenType, signature string) error {
-	return s.db.DeleteOAuthTokenSession(ctx, database.DeleteOAuthTokenSessionParams{TokenType: tokenType, Signature: signature})
+	_, err := s.dbFor(ctx).DeleteOAuthTokenSession(ctx, database.DeleteOAuthTokenSessionParams{TokenType: tokenType, Signature: signature})
+	return err
 }
 
 func (s *storage) CreateAccessTokenSession(ctx context.Context, signature string, request fosite.Requester) error {
@@ -226,14 +356,21 @@ func (s *storage) DeleteRefreshTokenSession(ctx context.Context, signature strin
 	return s.deleteToken(ctx, tokenTypeRefresh, signature)
 }
 func (s *storage) RotateRefreshToken(ctx context.Context, requestID, signature string) error {
-	return s.db.RotateOAuthRefreshToken(ctx, database.RotateOAuthRefreshTokenParams{RequestID: requestID, RefreshSignature: signature})
+	rows, err := s.dbFor(ctx).RotateOAuthRefreshToken(ctx, database.RotateOAuthRefreshTokenParams{RequestID: requestID, RefreshSignature: signature})
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return fosite.ErrSerializationFailure
+	}
+	return nil
 }
 func (s *storage) RevokeRefreshToken(ctx context.Context, requestID string) error {
-	_, err := s.db.RevokeOAuthTokenSessions(ctx, database.RevokeOAuthTokenSessionsParams{RequestID: requestID, TokenType: tokenTypeRefresh})
+	_, err := s.dbFor(ctx).RevokeOAuthTokenSessions(ctx, database.RevokeOAuthTokenSessionsParams{RequestID: requestID, TokenType: tokenTypeRefresh})
 	return err
 }
 func (s *storage) RevokeAccessToken(ctx context.Context, requestID string) error {
-	_, err := s.db.RevokeOAuthTokenSessions(ctx, database.RevokeOAuthTokenSessionsParams{RequestID: requestID, TokenType: tokenTypeAccess})
+	_, err := s.dbFor(ctx).RevokeOAuthTokenSessions(ctx, database.RevokeOAuthTokenSessionsParams{RequestID: requestID, TokenType: tokenTypeAccess})
 	return err
 }
 func (s *storage) CreateAuthorizeCodeSession(ctx context.Context, signature string, request fosite.Requester) error {
