@@ -30,11 +30,6 @@ case "${MAPS_UPLOAD_MODE}" in
       echo "Error: original map manifest or assets are missing from ${MAPS_DIR}" >&2; exit 1;
     }
     ;;
-  rendered)
-    [[ -s "${MAPS_DIR}/manifest.rendered.json" && -d "${MAPS_DIR}/render" ]] || {
-      echo "Error: render manifest or assets are missing from ${MAPS_DIR}" >&2; exit 1;
-    }
-    ;;
   styled)
     [[ -s "${styled_source}" ]] || { echo "Error: styled manifest is missing: ${styled_source}" >&2; exit 1; }
     ;;
@@ -49,38 +44,31 @@ case "${MAPS_UPLOAD_MODE}" in
       done < <(grep -o '"path" *: *"3d/[^"]*"' "${meshes_source}" | sed -E 's/.*"(3d\/[^"]*)"$/\1/')
     fi
     ;;
-  renders|3d)
-    [[ -s "${manual_dir}/manifest.${MAPS_UPLOAD_MODE}.json" ]] || {
-      echo "Error: manual map manifest is missing: ${manual_dir}/manifest.${MAPS_UPLOAD_MODE}.json" >&2; exit 1;
+  renders)
+    [[ -s "${manual_dir}/manifest.renders.json" ]] || {
+      echo "Error: render manifest is missing: ${manual_dir}/manifest.renders.json" >&2; exit 1;
     }
     ;;
-  *) echo "Error: MAPS_UPLOAD_MODE must be all, original, rendered, styled, meshes, meshes-manifest, renders or 3d" >&2; exit 1 ;;
+  *) echo "Error: MAPS_UPLOAD_MODE must be all, original, styled, meshes, meshes-manifest or renders" >&2; exit 1 ;;
 esac
 if ! command -v rclone >/dev/null 2>&1; then
   echo "Error: rclone not found. Install it first." >&2
   exit 1
 fi
-if [[ "${MAPS_UPLOAD_MODE}" == "all" ]]; then
-  [[ -s "${MAPS_DIR}/manifest.rendered.json" && -d "${MAPS_DIR}/render" ]] || {
-    echo "Error: full map upload requires a render manifest and assets" >&2; exit 1;
-  }
-fi
-
 # Validate and merge all source manifests before modifying remote objects.
 # A transport/auth failure cannot masquerade as an absent optional layer.
 listing="$(rclone lsf "${remote}/" --files-only)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
-for layer in original rendered styled meshes renders 3d; do
+for layer in original styled meshes renders; do
   local_source="${MAPS_DIR}/manifest.${layer}.json"
   if [[ "${MAPS_UPLOAD_MODE}" == "styled" && "${layer}" == "styled" ]]; then
     cp "${styled_source}" "${tmp}/manifest.${layer}.json"
   elif [[ "${MAPS_UPLOAD_MODE}" == meshes* && "${layer}" == "meshes" ]]; then
     cp "${meshes_source}" "${tmp}/manifest.${layer}.json"
-  elif [[ "${MAPS_UPLOAD_MODE}" == "${layer}" && ( "${layer}" == "renders" || "${layer}" == "3d" ) ]]; then
+  elif [[ "${MAPS_UPLOAD_MODE}" == "renders" && "${layer}" == "renders" ]]; then
     cp "${manual_dir}/manifest.${layer}.json" "${tmp}/manifest.${layer}.json"
-  elif [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "original" ) && "${layer}" == "original" ]] ||
-       [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "rendered" ) && "${layer}" == "rendered" ]]; then
+  elif [[ ( "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "original" ) && "${layer}" == "original" ]]; then
     cp "${local_source}" "${tmp}/manifest.${layer}.json"
   elif printf '%s\n' "${listing}" | grep -Fxq "manifest.${layer}.json"; then
     rclone copyto "${remote}/manifest.${layer}.json" "${tmp}/manifest.${layer}.json"
@@ -92,11 +80,9 @@ done
 mkdir -p "${MAPS_DIR}"
 go run ../../scripts/dbcdata merge-wowdata-maps \
   --original="${tmp}/manifest.original.json" \
-  --render="${tmp}/manifest.rendered.json" \
   --styled="${tmp}/manifest.styled.json" \
   --meshes="${tmp}/manifest.meshes.json" \
   --renders="${tmp}/manifest.renders.json" \
-  --3d="${tmp}/manifest.3d.json" \
   --out="${MAPS_DIR}/manifest.json"
 
 if [[ "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "original" ]]; then
@@ -105,16 +91,6 @@ if [[ "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "original" ]]; 
     --header-upload "Cache-Control: public, max-age=31536000, immutable" \
     --header-upload "Content-Type: image/webp" --transfers 32 --checkers 16 --progress --verbose
   rclone copyto "${MAPS_DIR}/manifest.original.json" "${remote}/manifest.original.json" \
-    --header-upload "Cache-Control: public, max-age=3600" \
-    --header-upload "Content-Type: application/json" --verbose
-fi
-
-if [[ "${MAPS_UPLOAD_MODE}" == "all" || "${MAPS_UPLOAD_MODE}" == "rendered" ]]; then
-  rclone copy "${MAPS_DIR}/render" "${remote}/render/" \
-    --include '*.png' \
-    --header-upload "Cache-Control: public, max-age=31536000, immutable" \
-    --header-upload "Content-Type: image/png" --transfers 8 --checkers 8 --progress --verbose
-  rclone copyto "${MAPS_DIR}/manifest.rendered.json" "${remote}/manifest.rendered.json" \
     --header-upload "Cache-Control: public, max-age=3600" \
     --header-upload "Content-Type: application/json" --verbose
 fi
@@ -141,9 +117,9 @@ if [[ "${MAPS_UPLOAD_MODE}" == meshes* ]]; then
     --header-upload "Content-Type: application/json" --verbose
 fi
 
-if [[ "${MAPS_UPLOAD_MODE}" == "renders" || "${MAPS_UPLOAD_MODE}" == "3d" ]]; then
+if [[ "${MAPS_UPLOAD_MODE}" == "renders" ]]; then
   # These assets were uploaded by hand; publish only their source manifest.
-  rclone copyto "${manual_dir}/manifest.${MAPS_UPLOAD_MODE}.json" "${remote}/manifest.${MAPS_UPLOAD_MODE}.json" \
+  rclone copyto "${manual_dir}/manifest.renders.json" "${remote}/manifest.renders.json" \
     --header-upload "Cache-Control: public, max-age=3600" \
     --header-upload "Content-Type: application/json" --verbose
 fi

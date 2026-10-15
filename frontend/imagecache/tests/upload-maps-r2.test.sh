@@ -4,7 +4,7 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
-mkdir -p "${tmp}/bin" "${tmp}/maps/original" "${tmp}/maps/render" "${tmp}/remote" "${tmp}/remote-turtle"
+mkdir -p "${tmp}/bin" "${tmp}/maps/original" "${tmp}/remote" "${tmp}/remote-turtle"
 cat > "${tmp}/bin/rclone" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -44,7 +44,7 @@ cat > "${MAPS_DIR}/manifest.original.json" <<'JSON'
 JSON
 cd "$repo/frontend/imagecache"
 MAPS_UPLOAD_MODE=original ./upload-maps-r2.sh >/dev/null
-jq -e '.instances[0].rendered == null and .instances[0].styled == null' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+jq -e '.instances[0].renders == null and .instances[0].styled == null' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 
 MAPS_UPLOAD_MODE=styled ./upload-maps-r2.sh >/dev/null
 jq -e '.instances[0].styled.path == "render-styled/43-wailing-caverns-v2.jpeg"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
@@ -70,40 +70,30 @@ MESHES_DIR="${tmp}/meshes" MAPS_UPLOAD_MODE=meshes-manifest ./upload-maps-r2.sh 
 [[ ! -e "$MOCK_MAP_REMOTE/3d/wailing-caverns-open-top.glb" ]]
 jq -e '.instances[0].mesh.path == "3d/wailing-caverns-open-top.glb"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 
-printf 'png' > "${MAPS_DIR}/render/43.png"
-cat > "${MAPS_DIR}/manifest.rendered.json" <<'JSON'
-{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta","build":"1.0","region":"us","locale":"enUS"},"instances":[{"mapID":43,"rendered":{"path":"render/43.png","width":1200,"height":800,"source":"wmo","bounds":{"minX":0,"maxX":1,"minY":0,"maxY":1}}}]}
-JSON
-MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh >/dev/null
-jq -e '.instances[0].rendered.path == "render/43.png" and .instances[0].styled.path == "render-styled/43-wailing-caverns-v2.jpeg" and .instances[0].mesh.path == "3d/wailing-caverns-open-top.glb"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
-
-# Hand-uploaded assets are already remote; publishing either source only merges JSON.
-mkdir -p "$MOCK_MAP_REMOTE/renders" "$MOCK_MAP_REMOTE/3d"
-printf 'png' > "$MOCK_MAP_REMOTE/renders/RFC-shaded.png"
-printf 'glb' > "$MOCK_MAP_REMOTE/3d/ragefire-chasm-open-top.glb"
+# Hand-uploaded PNGs are already remote; only their source manifest is published.
 MAPS_UPLOAD_MODE=renders ./upload-maps-r2.sh >/dev/null
-jq -e '([.instances[].renders.path] | sort) == (["renders/RFC-shaded.png", "renders/RoL-shaded-aligned.png", "renders/WC-shaded-water.png"] | sort) and .instances[0].rendered.path == "render/43.png"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
-jq -e '([.instances[].mapID] | sort) == [43,389,2999] and (.instances[] | select(.mapID == 389) | .name == "Ragefire Chasm" and .floors == [] and ."3d" == null)' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
-MAPS_UPLOAD_MODE=3d ./upload-maps-r2.sh >/dev/null
-jq -e '([.instances[]."3d".path] | sort) == (["3d/ragefire-chasm-open-top.glb", "3d/ruins-of-lordaeron-open-top.glb", "3d/wailing-caverns-open-top.glb"] | sort) and .instances[0].renders.path == "renders/WC-shaded-water.png" and .instances[0].styled != null and .instances[0].mesh.path == "3d/wailing-caverns-open-top.glb"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
-[[ -f "$MOCK_MAP_REMOTE/manifest.renders.json" && -f "$MOCK_MAP_REMOTE/manifest.3d.json" ]]
+jq -e '([.instances[].renders.path] | sort) == (["renders/RFC-shaded.png", "renders/RoL-shaded-aligned.png", "renders/WC-shaded-water.png"] | sort) and .instances[0].mesh.path == "3d/wailing-caverns-open-top.glb" and .instances[0].styled != null and .instances[0].rendered == null and .instances[0]."3d" == null' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+jq -e '([.instances[].mapID] | sort) == [43,389,2999] and (.instances[] | select(.mapID == 389) | .name == "Ragefire Chasm" and .floors == [])' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+[[ -f "$MOCK_MAP_REMOTE/manifest.renders.json" && ! -e "$MOCK_MAP_REMOTE/manifest.rendered.json" && ! -e "$MOCK_MAP_REMOTE/manifest.3d.json" ]]
 
-# Regenerating native art must not drop floorless instances from manual layers.
+# Native refresh retains floorless manual instances and independent mesh metadata.
 MAPS_UPLOAD_MODE=original ./upload-maps-r2.sh >/dev/null
-jq -e '([.instances[].mapID] | sort) == [43,389,2999] and (.instances[] | select(.mapID == 2999) | .floors == [] and .renders.path == "renders/RoL-shaded-aligned.png" and ."3d".path == "3d/ruins-of-lordaeron-open-top.glb")' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+jq -e '([.instances[].mapID] | sort) == [43,389,2999] and (.instances[] | select(.mapID == 2999) | .floors == [] and .renders.path == "renders/RoL-shaded-aligned.png")' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 
 before="$(sha256sum "$MOCK_MAP_REMOTE/manifest.json")"
-printf '{broken' > "${MAPS_DIR}/manifest.rendered.json"
-if MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh >"${tmp}/failure.log" 2>&1; then
-  echo "invalid rendered layer unexpectedly published" >&2
+# An incompatible unchanged source layer aborts before remote writes.
+cp "$MOCK_MAP_REMOTE/manifest.styled.json" "${tmp}/styled-good.json"
+printf '{broken' > "$MOCK_MAP_REMOTE/manifest.styled.json"
+if MAPS_UPLOAD_MODE=renders ./upload-maps-r2.sh >"${tmp}/failure.log" 2>&1; then
+  echo "invalid styled layer unexpectedly published" >&2
   exit 1
 fi
 [[ "$before" == "$(sha256sum "$MOCK_MAP_REMOTE/manifest.json")" ]]
-jq -e '.instances[0].rendered.path == "render/43.png"' "$MOCK_MAP_REMOTE/manifest.rendered.json" >/dev/null
-# A manifest-only upload also works after generated map files are cleaned locally.
+cp "${tmp}/styled-good.json" "$MOCK_MAP_REMOTE/manifest.styled.json"
+# Manual publication works after generated native files are cleaned locally.
 rm -rf "$MAPS_DIR"
-MAPS_UPLOAD_MODE=3d ./upload-maps-r2.sh >/dev/null
-jq -e '.instances[0].renders.path == "renders/WC-shaded-water.png" and .instances[0]."3d".path == "3d/wailing-caverns-open-top.glb"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+MAPS_UPLOAD_MODE=renders ./upload-maps-r2.sh >/dev/null
+jq -e '.instances[0].renders.path == "renders/WC-shaded-water.png" and .instances[0].mesh.path == "3d/wailing-caverns-open-top.glb"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 
 export R2_PATH=turtle/maps SERVER=turtle MAPS_DIR="${tmp}/turtle-maps" MOCK_MAP_REMOTE="${tmp}/remote-turtle"
 mkdir -p "${MAPS_DIR}/original"

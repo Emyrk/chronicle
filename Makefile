@@ -265,42 +265,15 @@ maps/forever-extract:
 		$(if $(WOWDATA_MAP_REUSE_MANIFEST),--reuse-manifest-url="$(WOWDATA_MAP_REUSE_MANIFEST)") \
 		--workers="$(WOWDATA_MAP_WORKERS)"
 
-define render-forever-maps
-	go run ./scripts/dbcdata render-wowdata-maps \
-		--server=forever \
-		--manifest=frontend/imagecache/forever/maps/manifest.original.json \
-		$(if $(WOWDATA_BIN),--wowdata="$(WOWDATA_BIN)") \
-		$(if $(WOWDATA_CACHE),--cache="$(WOWDATA_CACHE)") \
-		--workers="$(WOWDATA_MAP_WORKERS)"
-endef
-
-# Re-render generated instance maps using the existing manifest without
-# re-extracting UI artwork and its thousands of tiles.
-.PHONY: maps/forever-render
-maps/forever-render:
-	$(render-forever-maps)
-
-# Re-render and publish only generated instance maps plus the updated manifest.
-.PHONY: maps/forever-render-upload
-maps/forever-render-upload: maps/forever-render
-	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh)
-
-# Source layers are independently uploadable for every SERVER; the upload
-# script refreshes the merged public manifest after each layer publication.
-.PHONY: maps/render-upload maps/styled-upload
-maps/render-upload:
-	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh)
-
+# Source layers publish independently; full Forever imports refresh native art only.
+.PHONY: maps/styled-upload
 maps/styled-upload:
 	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=styled ./upload-maps-r2.sh)
 
-# Register manually uploaded artwork and GLBs without regenerating or uploading assets.
-.PHONY: maps/renders-upload maps/3d-upload
+# Register hand-uploaded 2D artwork without uploading its image files.
+.PHONY: maps/renders-upload
 maps/renders-upload:
 	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=renders ./upload-maps-r2.sh)
-
-maps/3d-upload:
-	$(call run-imagecache,MAPS_DIR=$(SERVER)/maps R2_PATH=$(SERVER)/maps MAPS_UPLOAD_MODE=3d ./upload-maps-r2.sh)
 
 # Hand-authored styled maps are checked into Git and published independently.
 .PHONY: maps/forever-styled-upload
@@ -325,16 +298,11 @@ maps/forever-meshes-manifest-upload: maps/meshes-manifest-upload
 maps/forever-original-upload: maps/forever-extract
 	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps MAPS_UPLOAD_MODE=original ./upload-maps-r2.sh)
 
-# The full publishing pipeline refreshes artwork before rendering instances.
-.PHONY: maps/forever-build
+# Full Forever imports refresh native artwork; independent manual layers stay intact.
+.PHONY: maps/forever-build maps/forever-upload maps/forever
 maps/forever-build: maps/forever-extract
-	$(render-forever-maps)
-
-.PHONY: maps/forever-upload
 maps/forever-upload: maps/forever-build
 	$(call run-imagecache,MAPS_DIR=forever/maps R2_PATH=forever/maps MAPS_UPLOAD_MODE=all ./upload-maps-r2.sh)
-
-.PHONY: maps/forever
 maps/forever: maps/forever-upload
 
 .PHONY: maps/legacy-extract
