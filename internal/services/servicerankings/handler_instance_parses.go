@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -244,10 +243,9 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			TenantID: tid, InstanceID: instanceID,
 		})
 		if receiptErr == nil {
-			receiptMode := cohortMode
+			receiptMode := parsepolicy.CohortMode(receipt.CohortMode)
 			receiptCutoff := cutoff
 			receiptSnapshotID := uuid.Nil
-			receiptMode = parsepolicy.CohortMode(receipt.CohortMode)
 			if receipt.Cutoff.Valid {
 				receiptCutoff = receipt.Cutoff.Time
 			}
@@ -601,26 +599,4 @@ func buildPersistedInstanceParsePlayers(
 	}
 
 	return response, true
-}
-
-// toFloat64 converts an interface{} (typically from a SQL aggregate) to float64.
-func toFloat64(v interface{}) (float64, bool) {
-	switch val := v.(type) {
-	case float64:
-		return val, true
-	case float32:
-		return float64(val), true
-	case int64:
-		return float64(val), true
-	case int32:
-		return float64(val), true
-	case int:
-		return float64(val), true
-	case string:
-		// pgx sometimes returns numeric as string
-		f, err := strconv.ParseFloat(val, 64)
-		return f, err == nil
-	default:
-		return 0, false
-	}
 }
