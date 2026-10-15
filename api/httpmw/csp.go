@@ -27,7 +27,7 @@ func ContentSecurityPolicy(adsEnabled func(*http.Request) bool) func(next http.H
 				"font-src 'self' https://fonts.gstatic.com",
 				"img-src 'self' data: blob: https://cdn.brandfetch.io https://icons.chronicleclassic.com https://cdn.discordapp.com https://i.imgur.com https://avatars.githubusercontent.com" + httpsSource,
 				mediaSources,
-				"connect-src 'self' https://raw.githubusercontent.com https://www.google-analytics.com https://region1.google-analytics.com https://icons.chronicleclassic.com https://models.chronicleclassic.com" + httpsSource,
+				"connect-src 'self' blob: https://raw.githubusercontent.com https://www.google-analytics.com https://region1.google-analytics.com https://icons.chronicleclassic.com https://models.chronicleclassic.com" + httpsSource,
 				"worker-src 'self' blob:",
 				"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com" + httpsSource,
 				"frame-ancestors 'none'",
