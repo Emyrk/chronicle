@@ -1,12 +1,7 @@
 import { ICON_CDN } from "@/config/iconUrl";
 
-/**
- * Shared unit miniatures for the 3D Replay Map. Published models from the
- * root-level registry take priority; the bundled Wailing Caverns models remain
- * a fallback while deployments populate that registry.
- */
+/** Shared unit miniatures for the 3D Replay Map, published in the root-level registry. */
 export const MINIATURE_MANIFEST_FORMAT = "chronicle-unit-miniatures-v1";
-export const BOSS_MINIS_BASE_URL = `${import.meta.env.BASE_URL}boss-minis`;
 
 export interface MiniatureManifest {
   format: typeof MINIATURE_MANIFEST_FORMAT;
@@ -16,19 +11,6 @@ export interface MiniatureManifest {
     entry_ids: number[];
   }[];
 }
-
-/** NPC entry -> bundled model file name. */
-export const BOSS_MINI_SLUGS: ReadonlyMap<number, string> = new Map([
-  [3671, "lady-anacondra"],
-  [3670, "lord-pythas"],
-  [3669, "lord-cobrahn"],
-  [3653, "kresh"],
-  [3674, "skum"],
-  [3673, "lord-serpentis"],
-  [5775, "verdan-the-everliving"],
-  [3654, "mutanus-the-devourer"],
-  [5912, "deviate-faerie-dragon"],
-]);
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
@@ -86,22 +68,6 @@ export async function fetchMiniatureUrls(baseUrl = ICON_CDN): Promise<ReadonlyMa
   ));
 }
 
-export function bossMiniSlug(entry: number | undefined): string | undefined {
-  return entry === undefined ? undefined : BOSS_MINI_SLUGS.get(entry);
-}
-
-export function bossMiniUrl(entry: number | undefined, baseUrl = BOSS_MINIS_BASE_URL): string | undefined {
-  const slug = bossMiniSlug(entry);
-  return slug ? `${stripTrailingSlash(baseUrl)}/${slug}.glb` : undefined;
-}
-
-/** Published model first, bundled compatibility model second. */
-export function miniatureUrlCandidates(
-  entry: number | undefined,
-  published: ReadonlyMap<number, string> | undefined,
-  fallbackBaseUrl = BOSS_MINIS_BASE_URL,
-): string[] {
-  if (entry === undefined) return [];
-  const urls = [published?.get(entry), bossMiniUrl(entry, fallbackBaseUrl)].filter((url): url is string => Boolean(url));
-  return [...new Set(urls)];
+export function miniatureUrl(entry: number | undefined, published: ReadonlyMap<number, string> | undefined): string | undefined {
+  return entry === undefined ? undefined : published?.get(entry);
 }
