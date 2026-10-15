@@ -1,8 +1,10 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Crosshair, Focus, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
+import { fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
 import { MapOverview2D } from "./MapOverview2D";
@@ -26,12 +28,17 @@ const MapView3D = lazy(() => import("./MapView3D"));
 
 const MESH_STORAGE_KEY = "chronicle.map.mesh";
 
-function readStoredMesh(): boolean {
+function readStoredMesh(): boolean | null {
   try {
-    return localStorage.getItem(MESH_STORAGE_KEY) === "true";
+    const stored = localStorage.getItem(MESH_STORAGE_KEY);
+    return stored === null ? null : stored === "true";
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function preferredMeshState(stored: boolean | null): boolean {
+  return stored ?? true;
 }
 
 function storeMesh(on: boolean) {
@@ -52,13 +59,20 @@ interface ReplayMapProps extends PanelRenderProps<MapResult> {
 
 function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }: ReplayMapProps) {
   const sync = useSyncModeContextOptional();
+  const miniatureQuery = useQuery({
+    queryKey: ["unit-miniatures"],
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+    queryFn: () => fetchMiniatureUrls(),
+  });
   const [webglUnavailable, setWebglUnavailable] = useState(false);
   const show3D = !webglUnavailable;
   // "3D map": the real dungeon mesh as the ground. Units project onto it with
   // the mesh entry's bounds only once it has loaded; until then (and when the
   // load fails) the tiles and their calibration stay.
-  const [meshOn, setMeshOn] = useState(readStoredMesh);
+  const [storedMesh, setStoredMesh] = useState(readStoredMesh);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
+  const meshOn = preferredMeshState(storedMesh);
   const scene = useMapScene(props, { rawDungeonProjection: show3D && meshOn && meshState === "ready", wholeRun });
   const ready = scene.status === "ready" ? scene : null;
   // A mesh-only instance (no map artwork) has nothing but the mesh to show:
@@ -113,7 +127,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const jumpTo = (timestampMs: number) => sync?.setTimestamp(new Date(timestampMs));
   const toggleMesh = () => {
     const next = !meshOn;
-    setMeshOn(next);
+    setStoredMesh(next);
     storeMesh(next);
   };
   const view2D = <MapView2D ground={scene.ground} markers={scene.markers} view={view} onUserViewport={handleUserViewport} />;
@@ -209,6 +223,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               effects={scene.effects}
               bossGuids={scene.bossGuids}
               tankGuids={scene.tankGuids}
+              miniatureUrls={miniatureQuery.data}
               onUnavailable={() => setWebglUnavailable(true)}
               dungeonMesh={dungeonMesh}
               onDungeonMeshState={setMeshState}
