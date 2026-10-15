@@ -157,7 +157,7 @@ The public manifest contract is:
 
 One model may own many positive creature entry IDs, but each entry ID may appear in only one model. Paths are unique, clean `miniatures/*.glb` paths. The editor validates GLB 2.0 uploads, previews models interactively, detects duplicate assignments, and supports the same R2 draft, ETag, lock, explicit publish, and one-hour public-manifest cache workflow as the Map Foundry.
 
-This establishes the asset registry and editor only. The Chronicle replay client still uses its existing hard-coded boss-miniature mapping until a separate consumer change switches it to `miniatures/manifest.json`.
+The Chronicle replay Map panel fetches this root-level manifest once per cached frontend session and resolves models by creature entry ID for hostiles, pets, totems, and other units. Published models take priority; the bundled Wailing Caverns boss models and ordinary unit markers remain fallbacks when the manifest, an entry, or a GLB is unavailable.
 
 ## Validation and deployment
 
