@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -27,4 +28,24 @@ func TestEncodeDeterministicAndDecodable(t *testing.T) {
 	nrgba, ok := got.(*image.NRGBA)
 	require.True(t, ok)
 	require.Equal(t, img.Pix, nrgba.Pix)
+}
+
+func TestSwirlMaskAndBodyAreSeparate(t *testing.T) {
+	t.Parallel()
+	svg, err := os.ReadFile("../../cmd/uploader/packaging/stone.svg")
+	require.NoError(t, err)
+	s := parseStone(string(svg))
+	mask := s.swirlMask(36)
+	body := s.body(36, nil)
+	spiral := 0
+	for y := 0; y < 36; y++ {
+		for x := 0; x < 36; x++ {
+			if mask.NRGBAAt(x, y).A == 255 {
+				spiral++
+				// The body never carries the spiral's blue.
+				require.NotEqual(t, s.spiralColor, rgb{float64(body.NRGBAAt(x, y).R), float64(body.NRGBAAt(x, y).G), float64(body.NRGBAAt(x, y).B)})
+			}
+		}
+	}
+	require.NotZero(t, spiral)
 }

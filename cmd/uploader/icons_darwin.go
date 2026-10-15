@@ -10,7 +10,7 @@ import (
 )
 
 // monoGlyph: on macOS the glyph is black or white to match the menu bar. It is
-// not a template image, because a template would flatten the coloured dot.
+// not a template image, because a template would flatten the coloured spiral.
 const monoGlyph = true
 
 // menuBarDark reports whether the system appearance is dark. The key is absent

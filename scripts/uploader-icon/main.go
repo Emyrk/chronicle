@@ -1,6 +1,8 @@
 // Command uploader-icon renders the Chronicle Uploader stone glyph from its
 // SVG master (cmd/uploader/packaging/stone.svg) into the committed tray PNGs
-// and the app icon (.icns: the stone on a gold-to-brown gradient square).
+// and the app icon (.icns: the stone on a gold-to-brown gradient square). The
+// tray set is the stone body without its spiral plus a swirl-only alpha mask
+// per size; the uploader tints the mask with the state colour.
 //
 // It is a tiny rasteriser, not a general SVG renderer: it reads the <ellipse>,
 // <polyline> and the group's rotate() transform and stroke-width, which is all
@@ -133,20 +135,32 @@ func (e ellipse) paint(x, y float64) (c rgb, ok, stroke bool) {
 	return rgb{}, false, false
 }
 
-// at returns the paint at viewBox point (x, y). With mono set, the top face's
-// fill is transparent (so only its outline and the spiral show) and the side
-// face is solid; callers recolour the result.
-func (s *stone) at(x, y float64, mono bool) (rgb, bool) {
-	// Into the ellipses' frame.
-	dx, dy := x-s.rcx, y-s.rcy
-	x, y = s.rcx+dx*s.cos-dy*s.sin, s.rcy+dx*s.sin+dy*s.cos
-	if math.Hypot(x-s.top.cx, y-s.top.cy) < 20 {
-		for i := 1; i < len(s.spiral); i++ {
-			if segDist(x, y, s.spiral[i-1], s.spiral[i]) <= s.spiralHalf {
-				return s.spiralColor, true
-			}
+// spiralAt reports whether viewBox point (x, y) is on the spiral stroke of
+// half-width half. Points are given in the rotated group's outer frame.
+func (s *stone) spiralAt(x, y, half float64) bool {
+	x, y = s.unrotate(x, y)
+	if math.Hypot(x-s.top.cx, y-s.top.cy) >= 20 {
+		return false
+	}
+	for i := 1; i < len(s.spiral); i++ {
+		if segDist(x, y, s.spiral[i-1], s.spiral[i]) <= half {
+			return true
 		}
 	}
+	return false
+}
+
+// unrotate maps a viewBox point into the ellipses' frame.
+func (s *stone) unrotate(x, y float64) (float64, float64) {
+	dx, dy := x-s.rcx, y-s.rcy
+	return s.rcx + dx*s.cos - dy*s.sin, s.rcy + dx*s.sin + dy*s.cos
+}
+
+// bodyAt returns the stone body (no spiral) paint at viewBox point (x, y). With
+// mono set, the top face's fill is transparent (so only its outline shows) and
+// the side face is solid; callers recolour the result.
+func (s *stone) bodyAt(x, y float64, mono bool) (rgb, bool) {
+	x, y = s.unrotate(x, y)
 	if c, ok, stroke := s.top.paint(x, y); ok && (stroke || !mono) {
 		return c, true
 	} else if ok {
@@ -156,11 +170,23 @@ func (s *stone) at(x, y float64, mono bool) (rgb, bool) {
 	return c, ok
 }
 
+// at returns the full stone (body and spiral at the master's stroke width).
+func (s *stone) at(x, y float64) (rgb, bool) {
+	if s.spiralAt(x, y, s.spiralHalf) {
+		return s.spiralColor, true
+	}
+	return s.bodyAt(x, y, false)
+}
+
 const ss = 4
 
-// glyph renders the stone alone at size x size. A non-nil mono renders it in
-// that single colour, with alpha only.
-func (s *stone) glyph(size int, mono *rgb) *image.NRGBA {
+// trayStroke is the spiral stroke width in the tray renders, in pixels at
+// 36 px; it scales with the icon size. The SVG master keeps its own width.
+const trayStroke = 3.5
+
+// render samples paint over a size x size canvas covering the 64-unit viewBox.
+// A non-nil mono makes the result that single colour, with alpha only.
+func render(size int, mono *rgb, paint func(u, v float64) (rgb, bool)) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
@@ -170,7 +196,7 @@ func (s *stone) glyph(size int, mono *rgb) *image.NRGBA {
 				for sx := 0; sx < ss; sx++ {
 					u := (float64(x) + (float64(sx)+0.5)/ss) * 64 / float64(size)
 					v := (float64(y) + (float64(sy)+0.5)/ss) * 64 / float64(size)
-					p, ok := s.at(u, v, mono != nil)
+					p, ok := paint(u, v)
 					if !ok {
 						continue
 					}
@@ -190,6 +216,20 @@ func (s *stone) glyph(size int, mono *rgb) *image.NRGBA {
 		}
 	}
 	return img
+}
+
+// body renders the stone without its spiral. A non-nil mono renders it in that
+// single colour, with alpha only.
+func (s *stone) body(size int, mono *rgb) *image.NRGBA {
+	return render(size, mono, func(u, v float64) (rgb, bool) { return s.bodyAt(u, v, mono != nil) })
+}
+
+// swirlMask renders the spiral alone, at the tray stroke width, as white with
+// alpha. The uploader tints it with the state colour at runtime.
+func (s *stone) swirlMask(size int) *image.NRGBA {
+	half := trayStroke / 2 * 64 / 36
+	white := rgb{255, 255, 255}
+	return render(size, &white, func(u, v float64) (rgb, bool) { return white, s.spiralAt(u, v, half) })
 }
 
 // appIcon draws the stone on the gold gradient rounded square.
@@ -215,7 +255,7 @@ func (s *stone) appIcon(size int) *image.NRGBA {
 					for i := range p {
 						p[i] = gold[i]*(1-t) + brown[i]*t
 					}
-					if q, ok := s.at(32+(u-0.5)/span*64, 32+(v-0.5)/span*64, false); ok {
+					if q, ok := s.at(32+(u-0.5)/span*64, 32+(v-0.5)/span*64); ok {
 						p = q
 					}
 					for i := range c {
@@ -290,10 +330,13 @@ func main() {
 
 	trayDir := os.Args[2]
 	outputs := map[string][]byte{
-		"stone_black_36.png": encode(s.glyph(36, &rgb{0, 0, 0})),       // macOS, light menu bar (18 pt @2x)
-		"stone_white_36.png": encode(s.glyph(36, &rgb{255, 255, 255})), // macOS, dark menu bar
-		"stone_color_16.png": encode(s.glyph(16, nil)),
-		"stone_color_32.png": encode(s.glyph(32, nil)),
+		"stone_black_36.png": encode(s.body(36, &rgb{0, 0, 0})),       // macOS, light menu bar (18 pt @2x)
+		"stone_white_36.png": encode(s.body(36, &rgb{255, 255, 255})), // macOS, dark menu bar
+		"stone_color_16.png": encode(s.body(16, nil)),
+		"stone_color_32.png": encode(s.body(32, nil)),
+		"swirl_mask_16.png":  encode(s.swirlMask(16)),
+		"swirl_mask_32.png":  encode(s.swirlMask(32)),
+		"swirl_mask_36.png":  encode(s.swirlMask(36)),
 	}
 	for name, data := range outputs {
 		if err := os.WriteFile(filepath.Join(trayDir, name), data, 0o644); err != nil {

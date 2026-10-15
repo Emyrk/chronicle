@@ -84,17 +84,17 @@ configure for most people.
 
 **Setting it up**
 
-1. Start the uploader. A coloured dot appears in your menu bar / system tray.
-2. If the dot is yellow, choose **Connect to Chronicle…** and sign in.
+1. Start the uploader. A stone with a coloured swirl appears in your menu bar / system tray.
+2. If the swirl is yellow, choose **Connect to Chronicle…** and sign in.
 3. In game, type `/combatlog` once before you pull. The uploader cannot see your fights until you do.
 4. Play. When you quit WoW, the uploader sends your log and shows a notification. Choose **Open last report**
    from the menu to see it.
 
 **What the icon means**
 
-The stone glyph is the app; the small dot in its corner is the state.
+The stone is the app; the colour of its swirl is the state.
 
-| Dot            | Meaning                                                                    |
+| Swirl          | Meaning                                                                    |
 | -------------- | -------------------------------------------------------------------------- |
 | Grey           | Waiting for WoW                                                            |
 | Red            | Not logging yet. Type `/combatlog` in game, then fight something           |

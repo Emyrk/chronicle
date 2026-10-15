@@ -9,22 +9,29 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
-	"math"
 	"sync"
 
 	"github.com/Emyrk/chronicle/cmd/uploader/internal/engine"
 )
 
-// The glyphs are rendered from packaging/stone.svg (make uploader/icons).
+// The stone bodies (no spiral) and the spiral masks are rendered from
+// packaging/stone.svg (make uploader/icons). The mask is white with alpha; it
+// is tinted with the state colour and composited over the body.
 var (
 	//go:embed icons/stone_black_36.png
-	stoneBlack []byte // macOS glyph for a light menu bar, 36 px = 18 pt @2x
+	stoneBlack []byte // macOS body for a light menu bar, 36 px = 18 pt @2x
 	//go:embed icons/stone_white_36.png
-	stoneWhite []byte // macOS glyph for a dark menu bar
+	stoneWhite []byte // macOS body for a dark menu bar
 	//go:embed icons/stone_color_16.png
 	stoneColor16 []byte
 	//go:embed icons/stone_color_32.png
 	stoneColor32 []byte
+	//go:embed icons/swirl_mask_16.png
+	swirlMask16 []byte
+	//go:embed icons/swirl_mask_32.png
+	swirlMask32 []byte
+	//go:embed icons/swirl_mask_36.png
+	swirlMask36 []byte
 )
 
 var stateColors = map[engine.State]color.NRGBA{
@@ -47,8 +54,8 @@ var (
 	iconCache = map[iconKey][]byte{}
 )
 
-// trayIcon returns the stone glyph with the state's coloured dot in the
-// bottom-right corner, in the platform's icon format.
+// trayIcon returns the stone with its spiral in the state's colour, in the
+// platform's icon format.
 func trayIcon(s engine.State) []byte {
 	dark := menuBarDark()
 	iconMu.Lock()
@@ -67,69 +74,40 @@ type sizedPNG struct {
 	size int
 }
 
-// buildIcons composites the dot onto the glyph(s) this platform uses.
+// buildIcons composites the tinted spiral onto the body(ies) this platform uses.
 func buildIcons(s engine.State, dark bool) []sizedPNG {
-	srcs := [][]byte{stoneColor16, stoneColor32}
+	type pair struct{ body, mask []byte }
+	pairs := []pair{{stoneColor16, swirlMask16}, {stoneColor32, swirlMask32}}
 	if monoGlyph {
-		srcs = [][]byte{stoneBlack}
+		pairs = []pair{{stoneBlack, swirlMask36}}
 		if dark {
-			srcs = [][]byte{stoneWhite}
+			pairs = []pair{{stoneWhite, swirlMask36}}
 		}
 	}
-	out := make([]sizedPNG, 0, len(srcs))
-	for _, src := range srcs {
-		img, err := png.Decode(bytes.NewReader(src))
-		if err != nil {
-			panic(err) // embedded asset
-		}
-		dst := image.NewNRGBA(img.Bounds())
-		draw.Draw(dst, dst.Bounds(), img, image.Point{}, draw.Src)
-		size := dst.Bounds().Dx()
-		drawDot(dst, stateColors[s])
+	out := make([]sizedPNG, 0, len(pairs))
+	for _, p := range pairs {
+		img := swirlOnBody(p.body, p.mask, stateColors[s])
 		var buf bytes.Buffer
-		_ = png.Encode(&buf, dst)
-		out = append(out, sizedPNG{buf.Bytes(), size})
+		_ = png.Encode(&buf, img)
+		out = append(out, sizedPNG{buf.Bytes(), img.Bounds().Dx()})
 	}
 	return out
 }
 
-// drawDot paints the state dot (7/36 of the icon wide, 14 px at 36 px) in the
-// bottom-right corner, with a transparent ring around it so it separates from
-// the glyph on light and dark bars.
-func drawDot(img *image.NRGBA, c color.NRGBA) {
-	size := float64(img.Bounds().Dx())
-	r := size * 7 / 36
-	ring := size / 18
-	cx, cy := size-r-size/36, size-r-size/36
-	const ss = 4
-	for y := 0; y < img.Bounds().Dy(); y++ {
-		for x := 0; x < img.Bounds().Dx(); x++ {
-			var dot, clear float64
-			for sy := 0; sy < ss; sy++ {
-				for sx := 0; sx < ss; sx++ {
-					d := math.Hypot(float64(x)+(float64(sx)+0.5)/ss-cx, float64(y)+(float64(sy)+0.5)/ss-cy)
-					if d <= r {
-						dot++
-					} else if d <= r+ring {
-						clear++
-					}
-				}
-			}
-			if dot+clear == 0 {
-				continue
-			}
-			p := img.NRGBAAt(x, y)
-			// Ring and dot both punch out the glyph; the dot then paints over it.
-			keep := 1 - (dot+clear)/(ss*ss)
-			a := float64(p.A) * keep
-			da := dot / (ss * ss)
-			outA := a + 255*da
-			if outA == 0 {
-				img.SetNRGBA(x, y, color.NRGBA{})
-				continue
-			}
-			mix := func(g, d uint8) uint8 { return uint8((float64(g)*a + float64(d)*255*da) / outA) }
-			img.SetNRGBA(x, y, color.NRGBA{mix(p.R, c.R), mix(p.G, c.G), mix(p.B, c.B), uint8(outA + 0.5)})
-		}
+// swirlOnBody paints the mask tinted with c over the body.
+func swirlOnBody(bodyPNG, maskPNG []byte, c color.NRGBA) *image.NRGBA {
+	body := decodePNG(bodyPNG)
+	mask := decodePNG(maskPNG)
+	dst := image.NewNRGBA(body.Bounds())
+	draw.Draw(dst, dst.Bounds(), body, image.Point{}, draw.Src)
+	draw.DrawMask(dst, dst.Bounds(), image.NewUniform(c), image.Point{}, mask, image.Point{}, draw.Over)
+	return dst
+}
+
+func decodePNG(b []byte) image.Image {
+	img, err := png.Decode(bytes.NewReader(b))
+	if err != nil {
+		panic(err) // embedded asset
 	}
+	return img
 }
