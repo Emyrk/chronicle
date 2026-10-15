@@ -124,9 +124,10 @@ grown since it was sent goes up again in full, under the same id, and Chronicle 
 parsed instead of making a second one.
 
 The ledger only knows what this computer uploaded. On a fresh install, after a reset state file, or on a
-second PC sharing the same Logs folder, the uploader sends a log it has not seen before and Chronicle tells
-it that it already has it — harmless, but it costs the upload. A pre-flight check that would save that round
-trip needs an API that can answer "do you have this?" before the body ([#1112](https://github.com/Emyrk/chronicle/issues/1112)).
+second PC sharing the same Logs folder, the uploader has no entry for a log it is about to send, so it first
+asks Chronicle what it already holds under that id — one small request, no body. If Chronicle has at least as
+many bytes as the uploader was about to send, the log is skipped and the menu points at the report that
+already exists. If Chronicle has nothing (or is too old to answer), the log goes up as before.
 
 **Building it**
 

@@ -53,4 +53,37 @@ func TestLogGroupSourceAndOwnerHashLookup(t *testing.T) {
 
 	_, err = store.GetLogGroupIDBySource(ctx, database.GetLogGroupIDBySourceParams{Owner: uuid.New(), SourceID: "src-1"})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	// The pre-flight lookup also reports how many bytes the group holds.
+	row, err := store.GetLogGroupBySource(ctx, database.GetLogGroupBySourceParams{Owner: userID, SourceID: "src-1"})
+	require.NoError(t, err)
+	require.Equal(t, groupID, row.LogGroupID)
+	require.Equal(t, int64(10), row.SizeBytes)
+
+	// It follows the file as the log grows and is replaced in place.
+	require.NoError(t, store.UpdateLogFileAfterAppend(ctx, database.UpdateLogFileAfterAppendParams{
+		ID: file.ID, Hash: "def", SizeBytes: 4096,
+	}))
+	row, err = store.GetLogGroupBySource(ctx, database.GetLogGroupBySourceParams{Owner: userID, SourceID: "src-1"})
+	require.NoError(t, err)
+	require.Equal(t, int64(4096), row.SizeBytes)
+
+	_, err = store.GetLogGroupBySource(ctx, database.GetLogGroupBySourceParams{Owner: uuid.New(), SourceID: "src-1"})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = store.GetLogGroupBySource(ctx, database.GetLogGroupBySourceParams{Owner: userID, SourceID: "src-nope"})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	// A source whose group has no files at all is still found, holding nothing.
+	emptyGroup := uuid.New()
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: emptyGroup, Owner: userID, LogType: database.LogTypeV2, CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertLogGroupSource(ctx, database.InsertLogGroupSourceParams{
+		LogGroupID: emptyGroup, Owner: userID, SourceID: "src-2",
+	}))
+	row, err = store.GetLogGroupBySource(ctx, database.GetLogGroupBySourceParams{Owner: userID, SourceID: "src-2"})
+	require.NoError(t, err)
+	require.Equal(t, emptyGroup, row.LogGroupID)
+	require.Zero(t, row.SizeBytes)
 }

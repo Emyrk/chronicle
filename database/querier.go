@@ -306,6 +306,11 @@ type sqlcQuerier interface {
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
 	GetLogFileByOwnerHash(ctx context.Context, arg GetLogFileByOwnerHashParams) (LogFile, error)
+	// Answers "do you already have this source id?" before a client sends a body:
+	// the owner's group for the source id plus the largest file the server holds
+	// for it. A source-keyed group has exactly one file, replaced in place as the
+	// log grows (see UpdateLogFileAfterAppend), so the max is that file's size.
+	GetLogGroupBySource(ctx context.Context, arg GetLogGroupBySourceParams) (GetLogGroupBySourceRow, error)
 	GetLogGroupIDBySource(ctx context.Context, arg GetLogGroupIDBySourceParams) (uuid.UUID, error)
 	GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg GetLogGroupInstanceIDByOrdinalParams) (uuid.UUID, error)
 	GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error)

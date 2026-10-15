@@ -33,3 +33,15 @@ type LogUploadResponse struct {
 	// LogID and Files then refer to the existing upload.
 	Duplicate bool `json:"duplicate,omitempty"`
 }
+
+// LogSourceResponse answers a client's pre-flight "do you already have this
+// source id?" check (see X-Chronicle-Source-Id on upload-v2). It describes what
+// the caller has uploaded under that id, so a client can skip sending bytes the
+// server already holds.
+type LogSourceResponse struct {
+	LogID uuid.UUID `json:"log_id"`
+	// Size is how many bytes of the source the server holds.
+	Size int64 `json:"size"`
+	// URL is the absolute link to the parsed report.
+	URL string `json:"url,omitempty"`
+}

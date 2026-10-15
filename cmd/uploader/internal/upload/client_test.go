@@ -170,3 +170,75 @@ func TestPing(t *testing.T) {
 		require.ErrorAs(t, err, &nc, "HTTP %d", status)
 	}
 }
+
+func TestHave(t *testing.T) {
+	t.Parallel()
+
+	respond := func(status int, body string) (*upload.Client, *http.Request) {
+		var gotReq http.Request
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotReq = *r.Clone(context.Background())
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(body))
+		}))
+		t.Cleanup(srv.Close)
+		return &upload.Client{BaseURL: srv.URL, Token: "tok"}, &gotReq
+	}
+
+	t.Run("found", func(t *testing.T) {
+		t.Parallel()
+		c, req := respond(200, `{"log_id":"abc","size":4096,"url":"/logs/abc"}`)
+		have, err := c.Have(context.Background(), "chr1-11-abcd")
+		require.NoError(t, err)
+		require.Equal(t, int64(4096), have.Size)
+		require.Equal(t, c.BaseURL+"/logs/abc", have.ReportURL)
+		require.Equal(t, "/api/v1/raidlogs/logs/by-source-id/chr1-11-abcd", req.URL.Path)
+		require.Equal(t, "Bearer tok", req.Header.Get("Authorization"))
+	})
+
+	t.Run("server has nothing", func(t *testing.T) {
+		t.Parallel()
+		c, _ := respond(404, `{"message":"No log has been uploaded under that source id."}`)
+		have, err := c.Have(context.Background(), "chr1-11-abcd")
+		require.NoError(t, err)
+		require.Zero(t, have.Size)
+		require.Empty(t, have.ReportURL)
+	})
+
+	t.Run("server without the route", func(t *testing.T) {
+		t.Parallel()
+		c, _ := respond(405, ``)
+		have, err := c.Have(context.Background(), "chr1-11-abcd")
+		require.NoError(t, err)
+		require.Zero(t, have.Size)
+	})
+
+	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+		c, _ := respond(401, `{"message":"nope"}`)
+		_, err := c.Have(context.Background(), "chr1-11-abcd")
+		require.ErrorIs(t, err, upload.ErrUnauthorized)
+	})
+
+	t.Run("server error", func(t *testing.T) {
+		t.Parallel()
+		c, _ := respond(503, ``)
+		_, err := c.Have(context.Background(), "chr1-11-abcd")
+		require.Error(t, err)
+		require.True(t, upload.Retryable(err))
+	})
+
+	t.Run("no token, no source id", func(t *testing.T) {
+		t.Parallel()
+		c, req := respond(200, `{"size":1}`)
+		c.Token = ""
+		_, err := c.Have(context.Background(), "chr1-11-abcd")
+		require.ErrorIs(t, err, upload.ErrUnauthorized)
+
+		c.Token = "tok"
+		have, err := c.Have(context.Background(), "")
+		require.NoError(t, err)
+		require.Zero(t, have.Size)
+		require.Empty(t, req.URL, "neither case reaches the server")
+	})
+}

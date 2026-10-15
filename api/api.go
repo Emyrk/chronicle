@@ -534,6 +534,10 @@ func (api *API) Routes() chi.Router {
 								httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanUpload_log_User),
 							)
 							r.Post("/upload-v2", api.WoWLogUploadV2)
+							// The pre-flight check for upload-v2: what the
+							// caller already has under a source id, so a
+							// client can skip sending the body.
+							r.Get("/by-source-id/{source-id}", api.WoWLogGroupBySource)
 						})
 						r.Group(func(r chi.Router) {
 							r.Use(

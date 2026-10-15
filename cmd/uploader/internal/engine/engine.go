@@ -63,10 +63,9 @@ type Config struct {
 	Upload func(ctx context.Context, token, path, sourceID string, size int64, fast bool) (upload.Result, error)
 	// Lookup asks the server what it has of sourceID, before any body is sent.
 	// It is only called for a log the ledger has never seen (fresh install,
-	// wiped state file, second machine). nil disables the pre-flight check,
-	// which is the case today: the API has no such route (see #1112), so an
-	// unknown log is uploaded and the server's duplicate answer recovers the
-	// report link.
+	// wiped state file, second machine). nil disables the pre-flight check: an
+	// unknown log is then uploaded and the server's duplicate answer recovers
+	// the report link.
 	Lookup func(ctx context.Context, token, sourceID string) (upload.Have, error)
 	// Running reports whether WoW is running.
 	Running func(ctx context.Context, installDirs []string) bool

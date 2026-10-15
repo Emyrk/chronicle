@@ -22,6 +22,10 @@ import (
 
 const MaxLogFileSize = 250 * 1024 * 1024 // 250 MB
 
+// maxSourceIDLen bounds the client-chosen X-Chronicle-Source-Id, both on upload
+// and on the by-source-id lookup.
+const maxSourceIDLen = 256
+
 // parseFlavorParam parses a comma-separated flavor query param into a WoWFlavor,
 // trimming whitespace and dropping empties.
 func parseFlavorParam(raw string) database.WoWFlavor {
@@ -410,7 +414,7 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	}
 
 	meta.SourceID = r.Header.Get("X-Chronicle-Source-Id")
-	if len(meta.SourceID) > 256 {
+	if len(meta.SourceID) > maxSourceIDLen {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: "X-Chronicle-Source-Id is too long, maximum is 256 characters",
 		})
