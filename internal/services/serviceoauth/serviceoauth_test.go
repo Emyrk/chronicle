@@ -1,6 +1,7 @@
 package serviceoauth
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -34,6 +35,12 @@ type tokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 	Scope        string `json:"scope"`
 	TokenType    string `json:"token_type"`
+}
+
+type concurrentTokenResult struct {
+	status int
+	token  tokenResponse
+	err    error
 }
 
 type oauthErrorResponse struct {
@@ -140,36 +147,35 @@ func TestConcurrentDeviceCodeRedemptionIsSingleUse(t *testing.T) {
 	require.Equal(t, http.StatusOK, approval.Code, approval.Body.String())
 
 	const attempts = 8
-	statuses := make(chan int, attempts)
-	responses := make(chan tokenResponse, attempts)
+	results := make(chan concurrentTokenResult, attempts)
 	var wg sync.WaitGroup
 	for range attempts {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rec := postFormRaw(t, service, "/token", url.Values{
+			rec := postFormRawContext(ctx, service, "/token", url.Values{
 				"grant_type": {deviceGrantType}, "device_code": {device.DeviceCode}, "client_id": {ClientID},
 			})
-			statuses <- rec.Code
+			result := concurrentTokenResult{status: rec.Code}
 			if rec.Code == http.StatusOK {
-				var token tokenResponse
-				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &token))
-				responses <- token
+				result.err = json.Unmarshal(rec.Body.Bytes(), &result.token)
 			}
+			results <- result
 		}()
 	}
-	wg.Wait()
-	close(statuses)
-	close(responses)
+	waitGroupWithContext(t, ctx, &wg)
+	close(results)
 
 	successes := 0
-	for status := range statuses {
-		if status == http.StatusOK {
+	var winner tokenResponse
+	for result := range results {
+		if result.status == http.StatusOK {
+			require.NoError(t, result.err)
 			successes++
+			winner = result.token
 		}
 	}
 	require.Equal(t, 1, successes)
-	winner := <-responses
 	assertBearerIdentity(t, service, winner.AccessToken, userID, http.StatusNoContent)
 }
 
@@ -198,36 +204,35 @@ func TestConcurrentRefreshIsSingleUse(t *testing.T) {
 	}, http.StatusOK)
 
 	const attempts = 8
-	statuses := make(chan int, attempts)
-	responses := make(chan tokenResponse, attempts)
+	results := make(chan concurrentTokenResult, attempts)
 	var wg sync.WaitGroup
 	for range attempts {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rec := postFormRaw(t, service, "/token", url.Values{
+			rec := postFormRawContext(ctx, service, "/token", url.Values{
 				"grant_type": {"refresh_token"}, "refresh_token": {initial.RefreshToken}, "client_id": {ClientID},
 			})
-			statuses <- rec.Code
+			result := concurrentTokenResult{status: rec.Code}
 			if rec.Code == http.StatusOK {
-				var token tokenResponse
-				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &token))
-				responses <- token
+				result.err = json.Unmarshal(rec.Body.Bytes(), &result.token)
 			}
+			results <- result
 		}()
 	}
-	wg.Wait()
-	close(statuses)
-	close(responses)
+	waitGroupWithContext(t, ctx, &wg)
+	close(results)
 
 	successes := 0
-	for status := range statuses {
-		if status == http.StatusOK {
+	var winner tokenResponse
+	for result := range results {
+		if result.status == http.StatusOK {
+			require.NoError(t, result.err)
 			successes++
+			winner = result.token
 		}
 	}
 	require.Equal(t, 1, successes)
-	winner := <-responses
 	assertBearerIdentity(t, service, initial.AccessToken, userID, http.StatusUnauthorized)
 	assertBearerIdentity(t, service, winner.AccessToken, userID, http.StatusNoContent)
 }
@@ -387,10 +392,30 @@ func postForm[T any](t *testing.T, handler http.Handler, path string, values url
 
 func postFormRaw(t *testing.T, handler http.Handler, path string, values url.Values) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(values.Encode()))
+	return postFormRawContext(context.Background(), handler, path, values)
+}
+
+func postFormRawContext(ctx context.Context, handler http.Handler, path string, values url.Values) *httptest.ResponseRecorder {
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, path, strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	_, _ = io.Copy(io.Discard, rec.Result().Body)
+	result := rec.Result()
+	_, _ = io.Copy(io.Discard, result.Body)
+	_ = result.Body.Close()
 	return rec
+}
+
+func waitGroupWithContext(t *testing.T, ctx context.Context, wg *sync.WaitGroup) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatalf("concurrent requests did not finish: %v", ctx.Err())
+	}
 }

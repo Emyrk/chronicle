@@ -101,10 +101,12 @@ func (s *Service) configure(ctx context.Context, db oauthStore, accessURL string
 		ScopeStrategy:                  fosite.ExactScopeStrategy,
 	}
 	s.store = &storage{
-		db:                   db,
-		deviceCodeLifespan:   config.DeviceAndUserCodeLifespan,
-		accessTokenLifespan:  config.AccessTokenLifespan,
-		refreshTokenLifespan: config.RefreshTokenLifespan,
+		db:                         db,
+		deviceCodeLifespan:         config.DeviceAndUserCodeLifespan,
+		accessTokenLifespan:        config.AccessTokenLifespan,
+		refreshTokenLifespan:       config.RefreshTokenLifespan,
+		transactionLifetime:        defaultTransactionLifetime,
+		transactionFinalizeTimeout: defaultTransactionFinalizeTimeout,
 	}
 	if err := s.store.cleanupExpired(ctx); err != nil {
 		return fmt.Errorf("cleanup expired oauth sessions: %w", err)

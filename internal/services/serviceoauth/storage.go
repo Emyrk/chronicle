@@ -17,6 +17,9 @@ const (
 	tokenTypeAccess    = "access"
 	tokenTypeRefresh   = "refresh"
 	tokenTypeAuthorize = "authorize"
+
+	defaultTransactionLifetime        = 15 * time.Second
+	defaultTransactionFinalizeTimeout = 5 * time.Second
 )
 
 type oauthStore interface {
@@ -36,24 +39,31 @@ type oauthStore interface {
 }
 
 type storage struct {
-	db                   oauthStore
-	deviceCodeLifespan   time.Duration
-	accessTokenLifespan  time.Duration
-	refreshTokenLifespan time.Duration
+	db                         oauthStore
+	deviceCodeLifespan         time.Duration
+	accessTokenLifespan        time.Duration
+	refreshTokenLifespan       time.Duration
+	transactionLifetime        time.Duration
+	transactionFinalizeTimeout time.Duration
 }
 
 type transactionContextKey struct{}
 
 type transactionState struct {
-	db     oauthStore
-	finish chan error
-	result chan error
+	db              oauthStore
+	finish          chan error
+	result          chan error
+	cancel          context.CancelFunc
+	finalizeTimeout time.Duration
 
 	mu        sync.Mutex
 	completed bool
 }
 
-var errTransactionRollback = errors.New("serviceoauth: transaction rollback")
+var (
+	errTransactionRollback      = errors.New("serviceoauth: transaction rollback")
+	errTransactionFinishTimeout = errors.New("serviceoauth: transaction completion timed out")
+)
 
 func (s *storage) dbFor(ctx context.Context) oauthStore {
 	if tx, ok := ctx.Value(transactionContextKey{}).(*transactionState); ok {
@@ -63,50 +73,72 @@ func (s *storage) dbFor(ctx context.Context) oauthStore {
 }
 
 func (s *storage) BeginTX(ctx context.Context) (context.Context, error) {
+	lifetime := s.transactionLifetime
+	if lifetime <= 0 {
+		lifetime = defaultTransactionLifetime
+	}
+	finalizeTimeout := s.transactionFinalizeTimeout
+	if finalizeTimeout <= 0 {
+		finalizeTimeout = defaultTransactionFinalizeTimeout
+	}
+
+	txCtx, cancel := context.WithTimeout(ctx, lifetime)
+	txCtx = database.WithTransactionFinalizeTimeout(txCtx, finalizeTimeout)
 	ready := make(chan oauthStore, 1)
+	accepted := make(chan struct{})
 	finish := make(chan error, 1)
 	result := make(chan error, 1)
 	go func() {
-		result <- s.db.InTx(ctx, func(tx database.Store) error {
+		defer cancel()
+		err := s.db.InTx(txCtx, func(tx database.Store) error {
 			ready <- tx
+			select {
+			case <-accepted:
+			case <-txCtx.Done():
+				return txCtx.Err()
+			}
 			select {
 			case err := <-finish:
 				return err
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-txCtx.Done():
+				return txCtx.Err()
 			}
 		}, &pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+		result <- err
 	}()
 
 	select {
 	case tx := <-ready:
-		return context.WithValue(ctx, transactionContextKey{}, &transactionState{
-			db: tx, finish: finish, result: result,
+		if err := ctx.Err(); err != nil {
+			cancel()
+			return ctx, err
+		}
+		close(accepted)
+		return context.WithValue(txCtx, transactionContextKey{}, &transactionState{
+			db: tx, finish: finish, result: result, cancel: cancel, finalizeTimeout: finalizeTimeout,
 		}), nil
 	case err := <-result:
+		cancel()
 		return ctx, err
 	case <-ctx.Done():
+		cancel()
 		return ctx, ctx.Err()
 	}
 }
 
 func (s *storage) Commit(ctx context.Context) error {
-	tx, ok := ctx.Value(transactionContextKey{}).(*transactionState)
-	if !ok {
-		return errors.New("serviceoauth: transaction missing from context")
-	}
-	tx.mu.Lock()
-	defer tx.mu.Unlock()
-	if tx.completed {
-		return nil
-	}
-	tx.finish <- nil
-	err := <-tx.result
-	tx.completed = true
-	return err
+	return completeTransaction(ctx, nil)
 }
 
 func (s *storage) Rollback(ctx context.Context) error {
+	err := completeTransaction(ctx, errTransactionRollback)
+	if errors.Is(err, errTransactionRollback) {
+		return nil
+	}
+	return err
+}
+
+func completeTransaction(ctx context.Context, completion error) error {
 	tx, ok := ctx.Value(transactionContextKey{}).(*transactionState)
 	if !ok {
 		return errors.New("serviceoauth: transaction missing from context")
@@ -116,12 +148,17 @@ func (s *storage) Rollback(ctx context.Context) error {
 	if tx.completed {
 		return nil
 	}
-	tx.finish <- errTransactionRollback
-	err := <-tx.result
-	tx.completed = true
-	if errors.Is(err, errTransactionRollback) {
-		return nil
+	tx.finish <- completion
+	timer := time.NewTimer(tx.finalizeTimeout)
+	defer timer.Stop()
+	var err error
+	select {
+	case err = <-tx.result:
+	case <-timer.C:
+		err = errTransactionFinishTimeout
 	}
+	tx.completed = true
+	tx.cancel()
 	return err
 }
 
