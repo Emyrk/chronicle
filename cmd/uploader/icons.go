@@ -17,8 +17,10 @@ import (
 
 // The glyphs are rendered from packaging/stone.svg (make uploader/icons).
 var (
-	//go:embed icons/stone_template_18.png
-	stoneTemplate []byte // black + alpha, 36 px = 18 pt @2x
+	//go:embed icons/stone_black_36.png
+	stoneBlack []byte // macOS glyph for a light menu bar, 36 px = 18 pt @2x
+	//go:embed icons/stone_white_36.png
+	stoneWhite []byte // macOS glyph for a dark menu bar
 	//go:embed icons/stone_color_16.png
 	stoneColor16 []byte
 	//go:embed icons/stone_color_32.png
@@ -35,21 +37,28 @@ var stateColors = map[engine.State]color.NRGBA{
 	engine.StateReconnect: {0xf2, 0xc1, 0x2e, 0xff}, // yellow: not connected
 }
 
+type iconKey struct {
+	state engine.State
+	dark  bool
+}
+
 var (
 	iconMu    sync.Mutex
-	iconCache = map[engine.State][]byte{}
+	iconCache = map[iconKey][]byte{}
 )
 
 // trayIcon returns the stone glyph with the state's coloured dot in the
 // bottom-right corner, in the platform's icon format.
 func trayIcon(s engine.State) []byte {
+	dark := menuBarDark()
 	iconMu.Lock()
 	defer iconMu.Unlock()
-	if b, ok := iconCache[s]; ok {
+	key := iconKey{s, dark}
+	if b, ok := iconCache[key]; ok {
 		return b
 	}
-	b := platformIcon(buildIcons(s))
-	iconCache[s] = b
+	b := platformIcon(buildIcons(s, dark))
+	iconCache[key] = b
 	return b
 }
 
@@ -59,10 +68,13 @@ type sizedPNG struct {
 }
 
 // buildIcons composites the dot onto the glyph(s) this platform uses.
-func buildIcons(s engine.State) []sizedPNG {
+func buildIcons(s engine.State, dark bool) []sizedPNG {
 	srcs := [][]byte{stoneColor16, stoneColor32}
-	if useTemplateIcon {
-		srcs = [][]byte{stoneTemplate}
+	if monoGlyph {
+		srcs = [][]byte{stoneBlack}
+		if dark {
+			srcs = [][]byte{stoneWhite}
+		}
 	}
 	out := make([]sizedPNG, 0, len(srcs))
 	for _, src := range srcs {

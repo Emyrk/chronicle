@@ -4,6 +4,8 @@ package main
 
 import "fyne.io/systray"
 
-const useTemplateIcon = false
+const monoGlyph = false
+
+func menuBarDark() bool { return false }
 
 func setTrayIcon(b []byte) { systray.SetIcon(b) }

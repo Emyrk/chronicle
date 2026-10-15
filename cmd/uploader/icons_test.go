@@ -19,7 +19,7 @@ func TestTrayIconStateDot(t *testing.T) {
 		want, ok := stateColors[s]
 		require.True(t, ok, "state %v has no colour", s)
 		require.NotEmpty(t, trayIcon(s), "state %v", s)
-		for _, i := range buildIcons(s) {
+		for _, i := range buildIcons(s, false) {
 			img, err := png.Decode(bytes.NewReader(i.data))
 			require.NoError(t, err)
 			c := i.size * 28 / 36 // dot centre

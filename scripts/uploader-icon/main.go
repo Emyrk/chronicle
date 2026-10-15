@@ -32,16 +32,23 @@ var (
 
 type rgb = [3]float64
 
-// stone is the parsed SVG: an ellipse and a spiral polyline in a group that is
-// rotated by angle around (rcx, rcy). All coordinates are in the 64x64 viewBox.
-type stone struct {
+// ellipse is one face of the stone.
+type ellipse struct {
 	cx, cy, rx, ry float64
-	rcx, rcy       float64
-	cos, sin       float64 // inverse rotation
 	half           float64 // half stroke width
 	fill, edge     rgb
-	spiralColor    rgb
-	spiral         [][2]float64
+}
+
+// stone is the parsed SVG: a side-face ellipse, a top-face ellipse and a spiral
+// polyline in a group rotated around (rcx, rcy). Coordinates are in the 64x64
+// viewBox.
+type stone struct {
+	side, top   ellipse
+	rcx, rcy    float64
+	cos, sin    float64 // inverse rotation
+	spiralHalf  float64
+	spiralColor rgb
+	spiral      [][2]float64
 }
 
 func attr(s, name string) string {
@@ -68,22 +75,32 @@ func hex(s string) rgb {
 	return rgb{float64(r), float64(g), float64(b)}
 }
 
+func parseEllipse(e string) ellipse {
+	return ellipse{
+		cx: num(attr(e, "cx")), cy: num(attr(e, "cy")),
+		rx: num(attr(e, "rx")), ry: num(attr(e, "ry")),
+		half: num(attr(e, "stroke-width")) / 2,
+		fill: hex(attr(e, "fill")), edge: hex(attr(e, "stroke")),
+	}
+}
+
 func parseStone(svg string) *stone {
 	g := regexp.MustCompile(`<g [^>]*>`).FindString(svg)
-	ell := regexp.MustCompile(`<ellipse [^>]*>`).FindString(svg)
+	ells := regexp.MustCompile(`<ellipse [^>]*>`).FindAllString(svg, -1)
 	pol := regexp.MustCompile(`<polyline [^>]*>`).FindString(svg)
+	if len(ells) != 2 {
+		log.Fatal("stone.svg: want exactly two ellipses (side, top)")
+	}
 	rot := strings.Fields(strings.NewReplacer("rotate(", "", ")", "").Replace(attr(g, "transform")))
 	if len(rot) != 3 {
 		log.Fatal("stone.svg: transform must be rotate(angle cx cy)")
 	}
 	a := num(rot[0]) * math.Pi / 180
 	s := &stone{
-		cx: num(attr(ell, "cx")), cy: num(attr(ell, "cy")),
-		rx: num(attr(ell, "rx")), ry: num(attr(ell, "ry")),
+		side: parseEllipse(ells[0]), top: parseEllipse(ells[1]),
 		rcx: num(rot[1]), rcy: num(rot[2]),
 		cos: math.Cos(-a), sin: math.Sin(-a),
-		half: num(attr(g, "stroke-width")) / 2,
-		fill: hex(attr(ell, "fill")), edge: hex(attr(ell, "stroke")),
+		spiralHalf:  num(attr(pol, "stroke-width")) / 2,
 		spiralColor: hex(attr(pol, "stroke")),
 	}
 	for _, p := range strings.Fields(attr(pol, "points")) {
@@ -100,34 +117,49 @@ func segDist(px, py float64, a, b [2]float64) float64 {
 	return math.Hypot(px-a[0]-t*dx, py-a[1]-t*dy)
 }
 
-// at returns the paint at viewBox point (x, y). In template mode the glyph is
-// outline + spiral only (fill is transparent so the spiral stays readable).
-func (s *stone) at(x, y float64, template bool) (rgb, bool) {
-	// Into the ellipse's frame.
+// paint returns the ellipse's stroke or fill colour at (x, y), and whether the
+// point is on the stroke.
+func (e ellipse) paint(x, y float64) (c rgb, ok, stroke bool) {
+	ex, ey := x-e.cx, y-e.cy
+	f := ex*ex/(e.rx*e.rx) + ey*ey/(e.ry*e.ry)
+	grad := math.Hypot(2*ex/(e.rx*e.rx), 2*ey/(e.ry*e.ry))
+	if grad > 0 && math.Abs(f-1)/grad <= e.half {
+		return e.edge, true, true
+	}
+	if f < 1 {
+		return e.fill, true, false
+	}
+	return rgb{}, false, false
+}
+
+// at returns the paint at viewBox point (x, y). With mono set, the top face's
+// fill is transparent (so only its outline and the spiral show) and the side
+// face is solid; callers recolour the result.
+func (s *stone) at(x, y float64, mono bool) (rgb, bool) {
+	// Into the ellipses' frame.
 	dx, dy := x-s.rcx, y-s.rcy
 	x, y = s.rcx+dx*s.cos-dy*s.sin, s.rcy+dx*s.sin+dy*s.cos
-	for i := 1; i < len(s.spiral) && math.Hypot(x-s.cx, y-s.cy) < 18; i++ {
-		if segDist(x, y, s.spiral[i-1], s.spiral[i]) <= s.half {
-			return s.spiralColor, true
+	if math.Hypot(x-s.top.cx, y-s.top.cy) < 20 {
+		for i := 1; i < len(s.spiral); i++ {
+			if segDist(x, y, s.spiral[i-1], s.spiral[i]) <= s.spiralHalf {
+				return s.spiralColor, true
+			}
 		}
 	}
-	ex, ey := x-s.cx, y-s.cy
-	f := ex*ex/(s.rx*s.rx) + ey*ey/(s.ry*s.ry)
-	grad := math.Hypot(2*ex/(s.rx*s.rx), 2*ey/(s.ry*s.ry))
-	if grad > 0 && math.Abs(f-1)/grad <= s.half {
-		return s.edge, true
+	if c, ok, stroke := s.top.paint(x, y); ok && (stroke || !mono) {
+		return c, true
+	} else if ok {
+		return rgb{}, false // mono: the top face hides the side face behind it
 	}
-	if f < 1 && !template {
-		return s.fill, true
-	}
-	return rgb{}, false
+	c, ok, _ := s.side.paint(x, y)
+	return c, ok
 }
 
 const ss = 4
 
-// glyph renders the stone alone at size x size. Template glyphs are black with
-// alpha only.
-func (s *stone) glyph(size int, template bool) *image.NRGBA {
+// glyph renders the stone alone at size x size. A non-nil mono renders it in
+// that single colour, with alpha only.
+func (s *stone) glyph(size int, mono *rgb) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
@@ -137,12 +169,12 @@ func (s *stone) glyph(size int, template bool) *image.NRGBA {
 				for sx := 0; sx < ss; sx++ {
 					u := (float64(x) + (float64(sx)+0.5)/ss) * 64 / float64(size)
 					v := (float64(y) + (float64(sy)+0.5)/ss) * 64 / float64(size)
-					p, ok := s.at(u, v, template)
+					p, ok := s.at(u, v, mono != nil)
 					if !ok {
 						continue
 					}
-					if template {
-						p = rgb{}
+					if mono != nil {
+						p = *mono
 					}
 					for i := range c {
 						c[i] += p[i]
@@ -219,9 +251,10 @@ func main() {
 
 	trayDir := os.Args[2]
 	outputs := map[string][]byte{
-		"stone_template_18.png": encode(s.glyph(36, true)), // 18 pt @2x
-		"stone_color_16.png":    encode(s.glyph(16, false)),
-		"stone_color_32.png":    encode(s.glyph(32, false)),
+		"stone_black_36.png": encode(s.glyph(36, &rgb{0, 0, 0})),       // macOS, light menu bar (18 pt @2x)
+		"stone_white_36.png": encode(s.glyph(36, &rgb{255, 255, 255})), // macOS, dark menu bar
+		"stone_color_16.png": encode(s.glyph(16, nil)),
+		"stone_color_32.png": encode(s.glyph(32, nil)),
 	}
 	for name, data := range outputs {
 		if err := os.WriteFile(filepath.Join(trayDir, name), data, 0o644); err != nil {
