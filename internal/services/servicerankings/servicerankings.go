@@ -182,6 +182,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/stats", s.handleStats)
 	s.router.Get("/realms", s.handleRealms)
 	s.router.Get("/kill-times", s.handleKillTimes)
+	s.router.Get("/clear-times", s.handleClearTimes)
 	s.router.Get("/kill-time-leaderboard", s.handleKillTimeLeaderboard)
 	s.router.Get("/success-rates", s.handleSuccessRates)
 
@@ -658,6 +659,66 @@ func (s *Service) handleKillTimes(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, chroniclesdk.RankingsKillTimeStats{
 			EncounterName: row.EncounterName,
+			MinSecs:       row.MinSecs,
+			Q1Secs:        row.Q1Secs,
+			MedianSecs:    row.MedianSecs,
+			Q3Secs:        row.Q3Secs,
+			MaxSecs:       row.MaxSecs,
+			Count:         row.Count,
+		})
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+// handleClearTimes returns box plot stats on qualified full-clear durations,
+// as a single-entry list in the kill-times shape (encounter "Full clear"), or
+// an empty list when the instance has no clears.
+//
+//	GET /clear-times?instance_name=Molten+Core&period=90d
+func (s *Service) handleClearTimes(w http.ResponseWriter, r *http.Request) {
+	handleClearTimesWithStore(s.store, w, r)
+}
+
+type clearTimeStatsQuerier interface {
+	RankingsClearTimeStats(context.Context, database.RankingsClearTimeStatsParams) ([]database.RankingsClearTimeStatsRow, error)
+}
+
+func handleClearTimesWithStore(store clearTimeStatsQuerier, w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := r.URL.Query()
+
+	instanceName := q.Get("instance_name")
+	if instanceName == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "instance_name query parameter is required",
+		})
+		return
+	}
+
+	var sinceDays int64
+	if v := q.Get("period"); v != "" {
+		sinceDays = periodToDays(v)
+	}
+
+	rows, err := store.RankingsClearTimeStats(ctx, database.RankingsClearTimeStatsParams{
+		InstanceName: instanceName,
+		SinceDays:    sinceDays,
+	})
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch clear time stats",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	out := make([]chroniclesdk.RankingsKillTimeStats, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, chroniclesdk.RankingsKillTimeStats{
+			EncounterName: "Full clear",
 			MinSecs:       row.MinSecs,
 			Q1Secs:        row.Q1Secs,
 			MedianSecs:    row.MedianSecs,

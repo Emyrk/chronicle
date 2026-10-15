@@ -13506,6 +13506,79 @@ func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPl
 	return items, nil
 }
 
+const rankingsClearTimeStats = `-- name: RankingsClearTimeStats :many
+WITH deduped AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        COALESCE(sr.ranked_duration_ms, sr.duration_ms) / 1000.0 AS duration_secs
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.instance_name = $1
+      AND sr.qualified = true
+      AND CASE
+          WHEN $2 :: bigint > 0 THEN
+              COALESCE(sr.ranked_completion_time, sr.completion_time) >= now() - make_interval(days => $2::int)
+          ELSE true
+      END
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), COALESCE(sr.ranked_duration_ms, sr.duration_ms)
+)
+SELECT
+    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs)::double precision AS q1_secs,
+    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.duration_secs)::double precision AS median_secs,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs)::double precision AS q3_secs,
+    MIN(d.duration_secs)::double precision AS min_secs,
+    MAX(d.duration_secs)::double precision AS max_secs,
+    COUNT(*)::bigint AS count
+FROM deduped d
+WHERE d.duration_secs > 0
+HAVING COUNT(*) > 0
+`
+
+type RankingsClearTimeStatsParams struct {
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	SinceDays    int64  `db:"since_days" json:"since_days"`
+}
+
+type RankingsClearTimeStatsRow struct {
+	Q1Secs     float64 `db:"q1_secs" json:"q1_secs"`
+	MedianSecs float64 `db:"median_secs" json:"median_secs"`
+	Q3Secs     float64 `db:"q3_secs" json:"q3_secs"`
+	MinSecs    float64 `db:"min_secs" json:"min_secs"`
+	MaxSecs    float64 `db:"max_secs" json:"max_secs"`
+	Count      int64   `db:"count" json:"count"`
+}
+
+// Box plot stats on qualified full-clear durations (seconds) for one
+// instance, the clear-time counterpart of RankingsKillTimeStats. Uses ranked
+// clear timing like the speedrun board and keeps the fastest run per
+// duplicate group. Returns no row when there are no clears.
+func (q *sqlQuerier) RankingsClearTimeStats(ctx context.Context, arg RankingsClearTimeStatsParams) ([]RankingsClearTimeStatsRow, error) {
+	rows, err := q.db.Query(ctx, rankingsClearTimeStats, arg.InstanceName, arg.SinceDays)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsClearTimeStatsRow
+	for rows.Next() {
+		var i RankingsClearTimeStatsRow
+		if err := rows.Scan(
+			&i.Q1Secs,
+			&i.MedianSecs,
+			&i.Q3Secs,
+			&i.MinSecs,
+			&i.MaxSecs,
+			&i.Count,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rankingsDistinctSummaryKeys = `-- name: RankingsDistinctSummaryKeys :many
 SELECT DISTINCT instance_name, difficulty_name, max_players
 FROM encounter_dps_rankings

@@ -873,6 +873,37 @@ FROM (
 ) s
 ORDER BY (s.encounter_name = 'Trash'), s.encounter_name;
 
+-- name: RankingsClearTimeStats :many
+-- Box plot stats on qualified full-clear durations (seconds) for one
+-- instance, the clear-time counterpart of RankingsKillTimeStats. Uses ranked
+-- clear timing like the speedrun board and keeps the fastest run per
+-- duplicate group. Returns no row when there are no clears.
+WITH deduped AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        COALESCE(sr.ranked_duration_ms, sr.duration_ms) / 1000.0 AS duration_secs
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.instance_name = @instance_name
+      AND sr.qualified = true
+      AND CASE
+          WHEN @since_days :: bigint > 0 THEN
+              COALESCE(sr.ranked_completion_time, sr.completion_time) >= now() - make_interval(days => @since_days::int)
+          ELSE true
+      END
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), COALESCE(sr.ranked_duration_ms, sr.duration_ms)
+)
+SELECT
+    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs)::double precision AS q1_secs,
+    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.duration_secs)::double precision AS median_secs,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs)::double precision AS q3_secs,
+    MIN(d.duration_secs)::double precision AS min_secs,
+    MAX(d.duration_secs)::double precision AS max_secs,
+    COUNT(*)::bigint AS count
+FROM deduped d
+WHERE d.duration_secs > 0
+HAVING COUNT(*) > 0;
+
 -- name: RankingsKillTimeLeaderboard :many
 -- Paginated leaderboard of fastest encounter kills, ordered by duration.
 -- Deduplicates encounters across duplicate log groups (keeps fastest per group).

@@ -73,3 +73,8 @@ func (ts *TestableService) HandleParseScoreSpreads(w http.ResponseWriter, r *htt
 func (ts *TestableService) HandleTimeParseSpreads(w http.ResponseWriter, r *http.Request) {
 	handleTimeParseSpreadsWithStore(ts.store, w, r)
 }
+
+// HandleClearTimes exposes the full-clear box plot handler for tests.
+func (ts *TestableService) HandleClearTimes(w http.ResponseWriter, r *http.Request) {
+	handleClearTimesWithStore(ts.store, w, r)
+}

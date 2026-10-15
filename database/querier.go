@@ -642,6 +642,11 @@ type sqlcQuerier interface {
 	// Each run becomes one data point for percentile computation.
 	// Only include runs where the player completed ALL encounters as the same spec.
 	RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPlotStatsParams) ([]RankingsBoxPlotStatsRow, error)
+	// Box plot stats on qualified full-clear durations (seconds) for one
+	// instance, the clear-time counterpart of RankingsKillTimeStats. Uses ranked
+	// clear timing like the speedrun board and keeps the fastest run per
+	// duplicate group. Returns no row when there are no clears.
+	RankingsClearTimeStats(ctx context.Context, arg RankingsClearTimeStatsParams) ([]RankingsClearTimeStatsRow, error)
 	// Returns distinct (instance, difficulty, max_players) combos visible to the
 	// current tenant context (RLS on encounter_dps_rankings does the filtering).
 	RankingsDistinctSummaryKeys(ctx context.Context) ([]RankingsDistinctSummaryKeysRow, error)
