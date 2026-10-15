@@ -98,7 +98,7 @@ Common live failures:
 
 ## Map foundry
 
-The Access-protected map dashboard at `/internal/maps` manages manual PNG render and GLB model registrations for these R2 namespaces:
+The Access-protected map dashboard at `/internal/maps` manages manual PNG render and calibrated GLB mesh registrations for these R2 namespaces:
 
 ```text
 forever, kronos, octowow, turtle, tbc, vanillaplus, warmane, azerothcore
@@ -112,16 +112,14 @@ Each namespace must already contain `<namespace>/maps/manifest.original.json`. T
 
 Selecting a map opens a draft-aware preview workbench:
 
-- **Original** assembles the native `manifest.original.json` floor tiles into the complete client map and provides a floor selector. Both current `original/` paths and migrated legacy `tiles/` paths are supported.
-- **Rendered** switches between the manual PNG, generated render, and styled artwork when those layers exist.
-- **3D model** loads the draft or published GLB in an orbit, pan, and zoom viewer powered by Google's pinned `<model-viewer>` web component.
+- **Original** assembles native floor tiles (including published legacy `tiles/` paths) with a floor selector.
+- **Rendered** switches between draft or published manual PNG and styled artwork.
+- **3D model** loads draft or published GLBs in an orbit, pan and zoom viewer.
 
-Preview assets are streamed through Access-protected Worker routes instead of directly from the public bucket. This keeps GLB loading same-origin and avoids relying on bucket CORS settings.
-
-Saving a draft does not change public map metadata. Publishing:
+Preview assets stream through Access-protected Worker routes rather than directly from the public bucket. Mesh entries require explicit calibrated XY bounds, zMin/zMax and the `wow-yup-mirrored-x` frame; uploading a GLB does not infer coordinates. Saving a draft does not change public metadata. Publishing:
 
 1. verifies that every draft asset exists in R2,
-2. writes `manifest.renders.json` and `manifest.3d.json`,
+2. writes `manifest.renders.json` and `manifest.meshes.json`,
 3. writes the merged reader-facing `manifest.json` last,
 4. removes the draft only after all writes succeed.
 

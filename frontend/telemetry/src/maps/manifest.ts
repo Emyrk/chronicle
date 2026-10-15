@@ -113,8 +113,13 @@ export interface MapManualRender {
   bounds?: MapFloorBounds;
 }
 
-export interface Map3DAsset {
+export interface MapPlaceableMesh {
   path: string;
+  bounds: MapFloorBounds;
+  zMin: number;
+  zMax: number;
+  frame: string;
+  liquid?: { color: string; opacity: number };
 }
 
 export interface MapInstance {
@@ -123,10 +128,9 @@ export interface MapInstance {
   instanceType: number;
   directory: string;
   floors: MapInstanceFloor[];
-  rendered?: MapRenderedArtwork;
   styled?: MapRenderedArtwork;
   renders?: MapManualRender;
-  "3d"?: Map3DAsset;
+  mesh?: MapPlaceableMesh;
 }
 
 export interface MapManifest {
@@ -139,10 +143,9 @@ export interface MapManifest {
 export interface MapLayerInstance {
   mapID: number;
   name?: string;
-  rendered?: MapRenderedArtwork;
   styled?: MapRenderedArtwork;
   renders?: MapManualRender;
-  "3d"?: Map3DAsset;
+  mesh?: MapPlaceableMesh;
 }
 
 export interface MapLayerManifest {
@@ -152,10 +155,9 @@ export interface MapLayerManifest {
 }
 
 export interface MapManifestLayers {
-  render?: unknown;
   styled?: unknown;
   renders?: unknown;
-  "3d"?: unknown;
+  meshes?: unknown;
 }
 
 type JSONObject = Record<string, unknown>;
@@ -369,14 +371,35 @@ function parseManualRender(value: unknown, context: string): MapManualRender {
   return result;
 }
 
-function parse3D(value: unknown, context: string): Map3DAsset {
-  const input = object(value, context, ["path"]);
-  return { path: string(input.path, `${context}.path`, "") };
+function parseMesh(value: unknown, context: string): MapPlaceableMesh {
+  const input = object(value, context, ["path", "bounds", "zMin", "zMax", "frame", "liquid"]);
+  const boundsInput = object(input.bounds, `${context}.bounds`, ["minX", "maxX", "minY", "maxY"]);
+  for (const key of ["minX", "maxX", "minY", "maxY"]) {
+    if (!hasOwn(boundsInput, key)) throw new TypeError(`${context}.bounds.${key} is required`);
+  }
+  const bounds = parseBounds(boundsInput, `${context}.bounds`);
+  const zMin = number(input.zMin, `${context}.zMin`);
+  const zMax = number(input.zMax, `${context}.zMax`);
+  const frame = string(input.frame, `${context}.frame`);
+  if (bounds.minX >= bounds.maxX || bounds.minY >= bounds.maxY || zMin >= zMax || frame !== "wow-yup-mirrored-x") {
+    throw new TypeError(`${context} requires calibrated bounds, zMin < zMax, and a coordinate frame`);
+  }
+  const mesh: MapPlaceableMesh = { path: string(input.path, `${context}.path`), bounds, zMin, zMax, frame };
+  if (input.liquid !== undefined) {
+    const liquid = object(input.liquid, `${context}.liquid`, ["color", "opacity"]);
+    const color = string(liquid.color, `${context}.liquid.color`);
+    const opacity = number(liquid.opacity, `${context}.liquid.opacity`);
+    if (!/^#[0-9a-fA-F]{6}$/.test(color) || opacity <= 0 || opacity > 1) {
+      throw new TypeError(`${context}.liquid requires a hex color and opacity in (0, 1]`);
+    }
+    mesh.liquid = { color, opacity };
+  }
+  return mesh;
 }
 
 function parseInstance(value: unknown, context: string): MapInstance {
   const input = object(value, context, [
-    "mapID", "name", "instanceType", "directory", "floors", "rendered", "styled", "renders", "3d",
+    "mapID", "name", "instanceType", "directory", "floors", "styled", "renders", "mesh",
   ]);
   const result: MapInstance = {
     mapID: integer(input.mapID, `${context}.mapID`, 0),
@@ -385,14 +408,12 @@ function parseInstance(value: unknown, context: string): MapInstance {
     directory: string(input.directory, `${context}.directory`, ""),
     floors: array(input.floors ?? [], `${context}.floors`).map((entry, index) => parseFloor(entry, `${context}.floors[${index}]`)),
   };
-  const rendered = optional(input.rendered, (entry) => parseRendered(entry, `${context}.rendered`));
   const styled = optional(input.styled, (entry) => parseRendered(entry, `${context}.styled`));
   const renders = optional(input.renders, (entry) => parseManualRender(entry, `${context}.renders`));
-  const model3d = optional(input["3d"], (entry) => parse3D(entry, `${context}.3d`));
-  if (rendered) result.rendered = rendered;
+  const meshes = optional(input.mesh, (entry) => parseMesh(entry, `${context}.mesh`));
   if (styled) result.styled = styled;
   if (renders) result.renders = renders;
-  if (model3d) result["3d"] = model3d;
+  if (meshes) result.mesh = meshes;
   return result;
 }
 
@@ -420,34 +441,28 @@ export function parseMapLayer(value: unknown): MapLayerManifest {
     target: parseTarget(input.target, "map layer.target"),
     instances: array(input.instances ?? [], "map layer.instances").map((entry, index) => {
       const context = `map layer.instances[${index}]`;
-      const item = object(entry, context, ["mapID", "name", "rendered", "styled", "renders", "3d"]);
+      const item = object(entry, context, ["mapID", "name", "styled", "renders", "mesh"]);
       const result: MapLayerInstance = { mapID: integer(item.mapID, `${context}.mapID`, 0) };
       if (hasOwn(item, "name")) result.name = string(item.name, `${context}.name`);
-      const rendered = optional(item.rendered, (art) => parseRendered(art, `${context}.rendered`));
       const styled = optional(item.styled, (art) => parseRendered(art, `${context}.styled`));
       const renders = optional(item.renders, (art) => parseManualRender(art, `${context}.renders`));
-      const model3d = optional(item["3d"], (art) => parse3D(art, `${context}.3d`));
-      if (rendered) result.rendered = rendered;
+      const meshes = optional(item.mesh, (art) => parseMesh(art, `${context}.mesh`));
       if (styled) result.styled = styled;
       if (renders) result.renders = renders;
-      if (model3d) result["3d"] = model3d;
+      if (meshes) result.mesh = meshes;
       return result;
     }),
   };
 }
 
 export function isPreviewableMapAssetPath(assetPath: string): boolean {
-  return ["original/", "tiles/", "render/", "render-styled/", "renders/", "3d/"].some((prefix) => validAssetPath(assetPath, prefix));
+  return ["original/", "tiles/", "render-styled/", "renders/", "3d/"].some((prefix) => validAssetPath(assetPath, prefix));
 }
 
 function validAssetPath(assetPath: string, prefix: string): boolean {
   if (!assetPath.startsWith(prefix) || assetPath.length === prefix.length || assetPath.includes("\\")) return false;
   const parts = assetPath.split("/");
   return parts.every((part) => part !== "" && part !== "." && part !== "..");
-}
-
-function targetsEqual(left: MapTarget, right: MapTarget): boolean {
-  return left.product === right.product && left.build === right.build && left.region === right.region && left.locale === right.locale;
 }
 
 function mergeLayer(
@@ -459,7 +474,7 @@ function mergeLayer(
 ): void {
   const layer = parseMapLayer(rawLayer);
   const portableTarget = layer.target.product === target.product && layer.target.build === "" && layer.target.region === "" && layer.target.locale === "";
-  if ((kind === "render" && !targetsEqual(layer.target, target)) || (kind !== "render" && !portableTarget)) {
+  if (!portableTarget) {
     throw new TypeError(`${kind} map layer target does not match original`);
   }
 
@@ -470,7 +485,7 @@ function mergeLayer(
 
     let instance = instances.get(entry.mapID);
     if (!instance) {
-      if (kind !== "renders" && kind !== "3d") throw new TypeError(`unknown ${kind} map layer mapID ${entry.mapID}`);
+      if (kind !== "renders" && kind !== "meshes") throw new TypeError(`unknown ${kind} map layer mapID ${entry.mapID}`);
       if (entry.mapID <= 0 || (entry.name ?? "").trim() === "") {
         throw new TypeError(`${kind} map layer mapID ${entry.mapID} needs a positive mapID and name to create an instance`);
       }
@@ -481,16 +496,16 @@ function mergeLayer(
       throw new TypeError(`conflicting names for manually created instance mapID ${entry.mapID}`);
     }
 
-    const fields = [entry.rendered, entry.styled, entry.renders, entry["3d"]].filter((field) => field !== undefined).length;
+    const fields = [entry.styled, entry.renders, entry.mesh].filter((field) => field !== undefined).length;
     if (fields !== 1) throw new TypeError(`${kind} map layer mapID ${entry.mapID} must contain only its own artwork`);
 
-    if (kind === "render" || kind === "styled") {
-      const artwork = kind === "render" ? entry.rendered : entry.styled;
-      const prefix = kind === "render" ? "render/" : "render-styled/";
+    if (kind === "styled") {
+      const artwork = entry.styled;
+      const prefix = "render-styled/";
       if (!artwork || !validAssetPath(artwork.path, prefix) || artwork.width <= 0 || artwork.height <= 0) {
         throw new TypeError(`invalid ${kind} map layer artwork for mapID ${entry.mapID}`);
       }
-      instance[kind === "render" ? "rendered" : "styled"] = artwork;
+      instance.styled = artwork;
     } else if (kind === "renders") {
       const artwork = entry.renders;
       if (!artwork || !validAssetPath(artwork.path, "renders/") || !artwork.path.endsWith(".png") || artwork.width <= 0 || artwork.height <= 0) {
@@ -498,11 +513,11 @@ function mergeLayer(
       }
       instance.renders = artwork;
     } else {
-      const artwork = entry["3d"];
+      const artwork = entry.mesh;
       if (!artwork || !validAssetPath(artwork.path, "3d/") || !artwork.path.endsWith(".glb")) {
-        throw new TypeError(`invalid 3d map layer artwork for mapID ${entry.mapID}`);
+        throw new TypeError(`invalid meshes map layer artwork for mapID ${entry.mapID}`);
       }
-      instance["3d"] = artwork;
+      instance.mesh = artwork;
     }
   }
 }
@@ -518,14 +533,14 @@ export function mergeMapManifests(original: unknown, layers: MapManifestLayers =
   const instances = new Map<number, MapInstance>();
   for (const source of manifest.instances) {
     if (instances.has(source.mapID)) throw new TypeError(`duplicate original instance mapID ${source.mapID}`);
-    const { rendered: _rendered, styled: _styled, renders: _renders, "3d": _model3d, ...metadata } = source;
+    const { styled: _styled, renders: _renders, mesh: _mesh, ...metadata } = source;
     const instance: MapInstance = metadata;
     instances.set(instance.mapID, instance);
   }
   manifest.instances = [...instances.values()];
 
   const created = new Map<number, MapInstance>();
-  for (const kind of ["render", "styled", "renders", "3d"] as const) {
+  for (const kind of ["styled", "renders", "meshes"] as const) {
     if (layers[kind] !== undefined) mergeLayer(kind, layers[kind], manifest.target, instances, created);
   }
   for (const mapID of [...created.keys()].sort((left, right) => left - right)) {

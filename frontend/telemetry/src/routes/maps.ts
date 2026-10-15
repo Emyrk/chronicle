@@ -42,13 +42,13 @@ const DRAFT_HEADERS = {
 
 interface ManualDraft {
   renders: MapLayerManifest;
-  "3d": MapLayerManifest;
+  meshes: MapLayerManifest;
 }
 
 interface DraftInput {
   version?: string | null;
   renders?: unknown;
-  "3d"?: unknown;
+  meshes?: unknown;
 }
 
 function isNamespace(value: string): value is MapManifestNamespace {
@@ -101,26 +101,25 @@ function parseDraft(value: unknown, product: string): ManualDraft {
   }
   const input = value as Record<string, unknown>;
   for (const key of Object.keys(input)) {
-    if (key !== "renders" && key !== "3d") throw new TypeError(`map draft has unknown field ${JSON.stringify(key)}`);
+    if (key !== "renders" && key !== "meshes") throw new TypeError(`map draft has unknown field ${JSON.stringify(key)}`);
   }
   const renders = parseMapLayer(input.renders ?? manualLayer(product));
-  const model3d = parseMapLayer(input["3d"] ?? manualLayer(product));
-  for (const [kind, layer] of [["renders", renders], ["3d", model3d]] as const) {
+  const meshes = parseMapLayer(input.meshes ?? manualLayer(product));
+  for (const [kind, layer] of [["renders", renders], ["meshes", meshes]] as const) {
     if (layer.target.product !== product || layer.target.build !== "" || layer.target.region !== "" || layer.target.locale !== "") {
       throw new TypeError(`${kind} map layer target does not match original`);
     }
   }
-  return { renders, "3d": model3d };
+  return { renders, meshes };
 }
 
 async function loadOptionalLayers(bucket: R2Bucket, namespace: MapManifestNamespace): Promise<MapManifestLayers> {
-  const [render, styled, renders, model3d] = await Promise.all([
-    readJSON(bucket, manifestKey(namespace, "rendered")),
+  const [styled, renders, meshes] = await Promise.all([
     readJSON(bucket, manifestKey(namespace, "styled")),
     readJSON(bucket, manifestKey(namespace, "renders")),
-    readJSON(bucket, manifestKey(namespace, "3d")),
+    readJSON(bucket, manifestKey(namespace, "meshes")),
   ]);
-  return { render, styled, renders, "3d": model3d };
+  return { styled, renders, meshes };
 }
 
 async function loadState(bucket: R2Bucket, namespace: MapManifestNamespace) {
@@ -129,7 +128,7 @@ async function loadState(bucket: R2Bucket, namespace: MapManifestNamespace) {
   const liveLayers = await loadOptionalLayers(bucket, namespace);
   const published: ManualDraft = {
     renders: (liveLayers.renders as MapLayerManifest | undefined) ?? manualLayer(original.target.product),
-    "3d": (liveLayers["3d"] as MapLayerManifest | undefined) ?? manualLayer(original.target.product),
+    meshes: (liveLayers.meshes as MapLayerManifest | undefined) ?? manualLayer(original.target.product),
   };
   const draftObject = await bucket.get(draftKey(namespace));
   let draft = published;
@@ -145,7 +144,7 @@ async function loadState(bucket: R2Bucket, namespace: MapManifestNamespace) {
   const preview = mergeMapManifests(originalRaw, {
     ...liveLayers,
     renders: draft.renders,
-    "3d": draft["3d"],
+    meshes: draft.meshes,
   });
   return { original, originalRaw, liveLayers, published, draft, draftObject, preview };
 }
@@ -158,7 +157,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected map manifest error";
 }
 
-function manualEntries(value: unknown, field: "renders" | "3d"): MapLayerInstance[] {
+function manualEntries(value: unknown, field: "renders" | "meshes"): MapLayerInstance[] {
   if (!Array.isArray(value)) throw new TypeError(`${field} must be an array`);
   return value as MapLayerInstance[];
 }
@@ -166,7 +165,7 @@ function manualEntries(value: unknown, field: "renders" | "3d"): MapLayerInstanc
 async function verifyDraftAssets(bucket: R2Bucket, namespace: MapManifestNamespace, draft: ManualDraft): Promise<void> {
   const paths = [
     ...draft.renders.instances.map((entry) => entry.renders?.path),
-    ...draft["3d"].instances.map((entry) => entry["3d"]?.path),
+    ...draft.meshes.instances.map((entry) => entry.mesh?.path),
   ].filter((path): path is string => Boolean(path));
   const missing: string[] = [];
   await Promise.all(paths.map(async (path) => {
@@ -291,10 +290,9 @@ maps.get("/internal/api/v1/maps/:namespace", async (c) => {
         directory: instance.directory,
         original: originalInstanceIDs.has(instance.mapID),
         floor_count: instance.floors.length,
-        rendered: instance.rendered,
         styled: instance.styled,
         renders: instance.renders,
-        "3d": instance["3d"],
+        mesh: instance.mesh,
       })),
     }, 200, { "Cache-Control": "private, no-store" });
   } catch (error) {
@@ -317,12 +315,11 @@ maps.get("/internal/api/v1/maps/:namespace/instances/:mapID/preview", async (c) 
       name: instance.name,
       directory: instance.directory,
       floors: instance.floors,
-      rendered: instance.rendered,
       styled: instance.styled,
       renders: instance.renders,
-      "3d": instance["3d"],
+      mesh: instance.mesh,
       published_renders: state.published.renders.instances.find((entry) => entry.mapID === mapID)?.renders,
-      published_3d: state.published["3d"].instances.find((entry) => entry.mapID === mapID)?.["3d"],
+      published_mesh: state.published.meshes.instances.find((entry) => entry.mapID === mapID)?.mesh,
     }, 200, { "Cache-Control": "private, no-store" });
   } catch (error) {
     return c.json({ error: errorMessage(error) }, 500);
@@ -359,12 +356,12 @@ maps.put("/internal/api/v1/maps/:namespace/draft", async (c) => {
     }
     const draft: ManualDraft = {
       renders: manualLayer(state.original.target.product, manualEntries(input.renders ?? [], "renders")),
-      "3d": manualLayer(state.original.target.product, manualEntries(input["3d"] ?? [], "3d")),
+      meshes: manualLayer(state.original.target.product, manualEntries(input.meshes ?? [], "meshes")),
     };
     mergeMapManifests(state.originalRaw, {
       ...state.liveLayers,
       renders: draft.renders,
-      "3d": draft["3d"],
+      meshes: draft.meshes,
     });
     const object = await c.env.MAPS.put(draftKey(namespace), jsonText(draft), {
       ...DRAFT_HEADERS,
@@ -405,7 +402,7 @@ maps.post("/internal/api/v1/maps/:namespace/assets/:kind", async (c) => {
   const namespace = c.req.param("namespace");
   const kind = c.req.param("kind");
   if (!isNamespace(namespace)) return c.json({ error: "Unsupported map namespace" }, 404);
-  if (kind !== "renders" && kind !== "3d") return c.json({ error: "Asset kind must be renders or 3d" }, 400);
+  if (kind !== "renders" && kind !== "meshes") return c.json({ error: "Asset kind must be renders or meshes" }, 400);
   try {
     const contentLength = Number(c.req.header("Content-Length") ?? "0");
     if (Number.isFinite(contentLength) && contentLength > 100 * 1024 * 1024) {
@@ -431,7 +428,7 @@ maps.post("/internal/api/v1/maps/:namespace/assets/:kind", async (c) => {
       contentType = "model/gltf-binary";
     }
     const filename = safeFilename(file.name, extension);
-    const path = `${kind}/${mapID}-${await digest(bytes)}-${filename}`;
+    const path = `${kind === "meshes" ? "3d" : kind}/${mapID}-${await digest(bytes)}-${filename}`;
     await c.env.MAPS.put(`${root(namespace)}/${path}`, bytes, {
       httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
     });
@@ -458,10 +455,10 @@ maps.post("/internal/api/v1/maps/:namespace/publish", async (c) => {
     const merged = mergeMapManifests(state.originalRaw, {
       ...state.liveLayers,
       renders: state.draft.renders,
-      "3d": state.draft["3d"],
+      meshes: state.draft.meshes,
     });
     await c.env.MAPS.put(manifestKey(namespace, "renders"), jsonText(state.draft.renders), JSON_HEADERS);
-    await c.env.MAPS.put(manifestKey(namespace, "3d"), jsonText(state.draft["3d"]), JSON_HEADERS);
+    await c.env.MAPS.put(manifestKey(namespace, "meshes"), jsonText(state.draft.meshes), JSON_HEADERS);
     // Publish the merged reader-facing manifest last. If an earlier write fails,
     // the draft remains available and a retry reconciles all source manifests.
     await c.env.MAPS.put(`${root(namespace)}/manifest.json`, jsonText(merged), JSON_HEADERS);

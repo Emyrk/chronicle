@@ -23,10 +23,13 @@ function original() {
       instanceType: 1,
       directory: "WailingCaverns",
       floors: [],
-      rendered: { path: "render/stale.png", width: 1, height: 1 },
       renders: { path: "renders/stale.png", width: 1, height: 1 },
     }],
   };
+}
+
+function mesh(path: string) {
+  return { path, bounds: { minX: -10, maxX: 20, minY: 30, maxY: 40 }, zMin: -5, zMax: 15, frame: "wow-yup-mirrored-x" };
 }
 
 function layer(instance: Record<string, unknown>, layerTarget: Record<string, unknown> = portableTarget) {
@@ -41,17 +44,15 @@ test("exports the supported namespaces", () => {
 
 test("merges layers in deterministic order and strips original artwork", () => {
   const merged = mergeMapManifests(original(), {
-    "3d": layer({ mapID: 43, "3d": { path: "3d/wailing-caverns.glb" } }),
+    meshes: layer({ mapID: 43, mesh: mesh("3d/wailing-caverns.glb") }),
     renders: layer({ mapID: 43, renders: { path: "renders/wailing-caverns.png", width: 1600, height: 1000 } }),
     styled: layer({ mapID: 43, styled: { path: "render-styled/wailing-caverns.jpeg", width: 1600, height: 1000 } }),
-    render: layer({ mapID: 43, rendered: { path: "render/wailing-caverns.png", width: 1200, height: 800 } }, target),
   });
 
   assert.deepEqual(Object.keys(merged.instances[0]!), [
-    "mapID", "name", "instanceType", "directory", "floors", "rendered", "styled", "renders", "3d",
+    "mapID", "name", "instanceType", "directory", "floors", "styled", "renders", "mesh",
   ]);
-  assert.equal(merged.instances[0]?.rendered?.source, "");
-  assert.deepEqual(merged.instances[0]?.rendered?.bounds, { minX: 0, maxX: 0, minY: 0, maxY: 0 });
+  assert.equal(merged.instances[0]?.mesh?.frame, "wow-yup-mirrored-x");
   assert.doesNotThrow(() => JSON.stringify(merged));
 });
 
@@ -64,8 +65,8 @@ test("rejects an incompatible target", () => {
 
 test("rejects unsafe asset paths", () => {
   assert.throws(
-    () => mergeMapManifests(original(), { "3d": layer({ mapID: 43, "3d": { path: "3d\/../other.glb" } }) }),
-    /invalid 3d/,
+    () => mergeMapManifests(original(), { meshes: layer({ mapID: 43, mesh: mesh("3d/../other.glb") }) }),
+    /invalid meshes/,
   );
 });
 
@@ -75,14 +76,14 @@ test("rejects invalid manual dimensions and extensions", () => {
     /invalid renders/,
   );
   assert.throws(
-    () => mergeMapManifests(original(), { "3d": layer({ mapID: 43, "3d": { path: "3d/a.gltf" } }) }),
-    /invalid 3d/,
+    () => mergeMapManifests(original(), { meshes: layer({ mapID: 43, mesh: mesh("3d/a.gltf") }) }),
+    /invalid meshes/,
   );
 });
 
 test("rejects duplicate IDs", () => {
   const duplicate = original();
-  duplicate.instances.push({ ...duplicate.instances[0]!, rendered: undefined, renders: undefined });
+  duplicate.instances.push({ ...duplicate.instances[0]!, renders: undefined });
   assert.throws(() => mergeMapManifests(duplicate), /duplicate original instance/);
 
   assert.throws(
@@ -100,7 +101,7 @@ test("creates and sorts manual-only instances", () => {
       { mapID: 2999, name: "Ruins of Lordaeron", renders: { path: "renders/rol.png", width: 1024, height: 1024 } },
       { mapID: 389, name: "Ragefire Chasm", renders: { path: "renders/rfc.png", width: 1774, height: 2400 } },
     ] },
-    "3d": layer({ mapID: 389, name: "Ragefire Chasm", "3d": { path: "3d/rfc.glb" } }),
+    meshes: layer({ mapID: 389, name: "Ragefire Chasm", mesh: mesh("3d/rfc.glb") }),
   });
 
   assert.deepEqual(merged.instances.map((instance) => instance.mapID), [43, 389, 2999]);
@@ -111,7 +112,7 @@ test("creates and sorts manual-only instances", () => {
 test("rejects conflicting manual instance names", () => {
   assert.throws(() => mergeMapManifests(original(), {
     renders: layer({ mapID: 389, name: "Ragefire Chasm", renders: { path: "renders/rfc.png", width: 1, height: 1 } }),
-    "3d": layer({ mapID: 389, name: "Wrong", "3d": { path: "3d/rfc.glb" } }),
+    meshes: layer({ mapID: 389, name: "Wrong", mesh: mesh("3d/rfc.glb") }),
   }), /conflicting names/);
 });
 
@@ -120,12 +121,12 @@ test("requires exactly the artwork field belonging to the layer", () => {
     renders: layer({
       mapID: 43,
       renders: { path: "renders/a.png", width: 1, height: 1 },
-      "3d": { path: "3d/a.glb" },
+      mesh: mesh("3d/a.glb"),
     }),
   }), /only its own artwork/);
 
   assert.throws(() => mergeMapManifests(original(), {
-    styled: layer({ mapID: 43, rendered: { path: "render/a.png", width: 1, height: 1 } }),
+    styled: layer({ mapID: 43, renders: { path: "renders/a.png", width: 1, height: 1 } }),
   }), /styled/);
 });
 
@@ -133,16 +134,30 @@ test("allows only clean preview asset paths from known map layers", () => {
   for (const path of [
     "original/123.webp",
     "tiles/7474519.webp",
-    "render/43-build-digest.png",
     "render-styled/wailing-caverns.jpeg",
     "renders/wailing-caverns.png",
     "3d/wailing-caverns.glb",
   ]) {
     assert.equal(isPreviewableMapAssetPath(path), true, path);
   }
-  for (const path of ["", "manifest.json", "3d/../secret.glb", "original//123.webp", "other/map.png", "3d\\map.glb"]) {
+  for (const path of ["", "manifest.json", "3d/../secret.glb", "original//123.webp", "other/map.png", "3d\\map.glb", "render/old.png"]) {
     assert.equal(isPreviewableMapAssetPath(path), false, path);
   }
+});
+
+test("requires explicit calibrated mesh metadata and rejects legacy layers", () => {
+  for (const bad of [
+    { path: "3d/old.glb" },
+    { ...mesh("3d/a.glb"), bounds: { maxX: 1, minY: 1, maxY: 2 } },
+    { ...mesh("3d/a.glb"), bounds: { minX: 0, maxX: 0, minY: 1, maxY: 2 } },
+    { ...mesh("3d/a.glb"), zMax: -5 },
+    { ...mesh("3d/a.glb"), frame: "unknown" },
+    { ...mesh("3d/a.glb"), liquid: { color: "red", opacity: 0 } },
+  ]) {
+    assert.throws(() => mergeMapManifests(original(), { meshes: layer({ mapID: 43, mesh: bad }) }));
+  }
+  assert.throws(() => parseMapManifest({ ...original(), instances: [{ ...original().instances[0], "3d": { path: "3d/a.glb" } }] }), /unknown field/);
+  assert.deepEqual(mergeMapManifests(original(), { meshes: layer({ mapID: 43, mesh: { ...mesh("3d/a.glb"), liquid: { color: "#aabbcc", opacity: 0.5 } } }) }).instances[0]?.mesh?.liquid, { color: "#aabbcc", opacity: 0.5 });
 });
 
 test("rejects unknown fields recursively", () => {

@@ -114,7 +114,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           <div>
             <div class="eyebrow">R2 asset registry</div>
             <h1>Map foundry</h1>
-            <p>Stage manual PNG renders and GLB models, inspect the manifests, then publish the reader manifest last.</p>
+            <p>Stage manual PNG renders and calibrated GLB meshes, inspect the manifests, then publish the reader manifest last.</p>
           </div>
           <div class="header-actions"><a class="back" href="/internal">← Telemetry</a></div>
         </header>
@@ -174,7 +174,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           if (!state) return [];
           const byID = new Map(state.instances.filter(item => item.original).map(item => [item.mapID, item]));
           for (const [mapID,item] of addedMaps) byID.set(mapID,item);
-          for (const kind of ['renders','3d']) for (const entry of state.draft[kind].instances) {
+          for (const kind of ['renders','meshes']) for (const entry of state.draft[kind].instances) {
             if (!byID.has(entry.mapID)) byID.set(entry.mapID, { mapID:entry.mapID, name:entry.name || 'Unnamed map', directory:'', floor_count:0 });
           }
           return [...byID.values()].sort((a,b) => a.name.localeCompare(b.name) || a.mapID - b.mapID);
@@ -185,8 +185,8 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           const rows = allInstances().filter(item => (item.name + ' ' + item.mapID + ' ' + (item.directory || '')).toLowerCase().includes(query));
           els.count.textContent = rows.length + ' maps';
           els['map-list'].innerHTML = rows.map(item => {
-            const render = layerEntry('renders', item.mapID)?.renders || item.renders || item.rendered || item.styled;
-            const model = layerEntry('3d', item.mapID)?.['3d'] || item['3d'];
+            const render = layerEntry('renders', item.mapID)?.renders || item.renders || item.styled;
+            const model = layerEntry('meshes', item.mapID)?.mesh || item.mesh;
             return '<button class="map-row ' + (item.mapID === selectedID ? 'active' : '') + '" data-map-id="' + item.mapID + '">' +
               '<span class="map-id">#' + item.mapID + '</span><span class="map-name">' + escapeHTML(item.name) + '</span>' +
               '<span class="badges"><span class="badge original ' + (item.floor_count ? 'on' : '') + '">ORG</span><span class="badge render ' + (render ? 'on' : '') + '">PNG</span><span class="badge model ' + (model ? 'on' : '') + '">GLB</span></span></button>';
@@ -202,13 +202,13 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           }
           return entry;
         }
-        function selectedName() { return baseInstance(selectedID)?.name || addedMaps.get(selectedID)?.name || layerEntry('renders', selectedID)?.name || layerEntry('3d', selectedID)?.name || ''; }
-        function fieldNumber(id) { const value = Number(document.getElementById(id)?.value); return Number.isFinite(value) ? value : 0; }
+        function selectedName() { return baseInstance(selectedID)?.name || addedMaps.get(selectedID)?.name || layerEntry('renders', selectedID)?.name || layerEntry('meshes', selectedID)?.name || ''; }
+        function fieldNumber(id) { const raw = document.getElementById(id)?.value; return raw === '' ? null : Number(raw); }
         function syncEditor() {
           if (!state || !selectedID || !document.getElementById('map-name')) return;
           const name = document.getElementById('map-name').value.trim();
           const renderEntry = layerEntry('renders', selectedID);
-          const modelEntry = layerEntry('3d', selectedID);
+          const modelEntry = layerEntry('meshes', selectedID);
           if (renderEntry) {
             renderEntry.name = name;
             if (renderEntry.renders) {
@@ -218,21 +218,30 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
               else delete renderEntry.renders.bounds;
             }
           }
-          if (modelEntry) modelEntry.name = name;
+          if (modelEntry) {
+            modelEntry.name = name;
+            if (modelEntry.mesh) {
+              modelEntry.mesh.bounds = { minX:fieldNumber('mesh-min-x'), maxX:fieldNumber('mesh-max-x'), minY:fieldNumber('mesh-min-y'), maxY:fieldNumber('mesh-max-y') };
+              modelEntry.mesh.zMin = fieldNumber('mesh-z-min');
+              modelEntry.mesh.zMax = fieldNumber('mesh-z-max');
+              modelEntry.mesh.frame = document.getElementById('mesh-frame').value.trim();
+              if (document.getElementById('mesh-liquid').checked) modelEntry.mesh.liquid = { color:document.getElementById('liquid-color').value, opacity:fieldNumber('liquid-opacity') };
+              else delete modelEntry.mesh.liquid;
+            }
+          }
         }
         function assetURL(path) { return '/internal/api/v1/maps/' + encodeURIComponent(state.namespace) + '/preview-assets/' + path.split('/').map(encodeURIComponent).join('/'); }
         function previewSources() {
           if (!previewData) return { floors:[], images:[], models:[] };
           const draftRender = state.has_draft ? layerEntry('renders', selectedID)?.renders : null;
-          const draftModel = state.has_draft ? layerEntry('3d', selectedID)?.['3d'] : null;
+          const draftModel = state.has_draft ? layerEntry('meshes', selectedID)?.mesh : null;
           const publishedRender = previewData.published_renders || (!state.has_draft ? previewData.renders : null);
-          const publishedModel = previewData.published_3d || (!state.has_draft ? previewData['3d'] : null);
+          const publishedModel = previewData.published_mesh || (!state.has_draft ? previewData.mesh : null);
           return {
             floors:previewData.floors || [],
             images:[
               draftRender ? { label:'Draft manual', artwork:draftRender } : null,
               publishedRender && publishedRender.path !== draftRender?.path ? { label:'Published manual', artwork:publishedRender } : null,
-              previewData.rendered ? { label:'Generated', artwork:previewData.rendered } : null,
               previewData.styled ? { label:'Styled', artwork:previewData.styled } : null,
             ].filter(Boolean),
             models:[
@@ -269,7 +278,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
             meta.innerHTML = '<span>Original · ' + floor.width + '×' + floor.height + ' · ' + columns + '×' + rows + ' tiles</span><span>' + escapeHTML(floor.bounds ? 'calibrated bounds' : 'no world bounds') + '</span>';
           } else if (previewMode === 'rendered') {
             const image = sources.images[previewChoice];
-            if (!image) { stage.innerHTML = '<div class="preview-empty"><strong>No rendered artwork</strong>Upload a manual PNG or publish a generated or styled render.</div>'; meta.innerHTML = ''; return; }
+            if (!image) { stage.innerHTML = '<div class="preview-empty"><strong>No rendered artwork</strong>Upload a manual PNG or publish styled artwork.</div>'; meta.innerHTML = ''; return; }
             const url = assetURL(image.artwork.path);
             stage.innerHTML = '<img class="image-preview" src="' + url + '" alt="' + escapeHTML(image.label + ' preview') + '" />';
             meta.innerHTML = '<span>' + escapeHTML(image.label) + ' · ' + image.artwork.width + '×' + image.artwork.height + '</span><a href="' + url + '" target="_blank" rel="noreferrer">Open asset ↗</a>';
@@ -306,9 +315,9 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           if (!state || !selectedID) { els.editor.innerHTML = '<div class="empty-editor"><div><strong>No map selected</strong>Select a map from the inventory.</div></div>'; return; }
           const base = baseInstance(selectedID);
           const renderEntry = layerEntry('renders', selectedID);
-          const modelEntry = layerEntry('3d', selectedID);
+          const modelEntry = layerEntry('meshes', selectedID);
           const render = renderEntry?.renders;
-          const model = modelEntry?.['3d'];
+          const model = modelEntry?.mesh;
           const bounds = render?.bounds;
           els.editor.innerHTML = '<div class="panel-head"><h2>Map asset editor</h2><span class="count">' + escapeHTML(state.namespace) + '/maps</span></div><div class="editor-body">' +
             '<div class="map-title"><div><h2>' + escapeHTML(selectedName() || 'Manual map') + '</h2><p>mapID ' + selectedID + (base?.directory ? ' · ' + escapeHTML(base.directory) : ' · manual-only instance') + '</p>' +
@@ -321,28 +330,34 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
                 '<label class="bounds-toggle"><input id="has-bounds" type="checkbox" ' + (bounds ? 'checked' : '') + ' /> Calibrated world bounds</label>' +
                 '<div class="bounds" id="bounds" ' + (!bounds ? 'hidden' : '') + '><label>Min X<input id="min-x" type="number" step="any" value="' + (bounds?.minX ?? 0) + '" /></label><label>Max X<input id="max-x" type="number" step="any" value="' + (bounds?.maxX ?? 0) + '" /></label><label>Min Y<input id="min-y" type="number" step="any" value="' + (bounds?.minY ?? 0) + '" /></label><label>Max Y<input id="max-y" type="number" step="any" value="' + (bounds?.maxY ?? 0) + '" /></label></div>' +
                 '<div class="card-actions"><button id="remove-render" class="danger" ' + (!render ? 'disabled' : '') + '>Remove render</button></div></article>' +
-              '<article class="layer-card"><h3>Open-top model <span class="layer-tag">GLB 2.0</span></h3><p>Binary glTF scene. The file header and declared length are checked before R2 upload.</p>' +
-                '<div class="path ' + (!model ? 'empty-path' : '') + '">' + escapeHTML(model?.path || 'No 3D model registered') + '</div>' +
+              '<article class="layer-card"><h3>Placeable mesh <span class="layer-tag">GLB 2.0</span></h3><p>Binary glTF scene. Enter measured world bounds and vertical extent before saving. No coordinates are inferred from the file.</p>' +
+                '<div class="path ' + (!model ? 'empty-path' : '') + '">' + escapeHTML(model?.path || 'No mesh registered') + '</div>' +
                 '<label class="upload">Upload or replace GLB<input id="model-file" type="file" accept="model/gltf-binary,.glb" /></label>' +
+                '<div class="bounds"><label>Min X<input id="mesh-min-x" type="number" step="any" value="' + (model?.bounds?.minX ?? '') + '" /></label><label>Max X<input id="mesh-max-x" type="number" step="any" value="' + (model?.bounds?.maxX ?? '') + '" /></label><label>Min Y<input id="mesh-min-y" type="number" step="any" value="' + (model?.bounds?.minY ?? '') + '" /></label><label>Max Y<input id="mesh-max-y" type="number" step="any" value="' + (model?.bounds?.maxY ?? '') + '" /></label></div>' +
+                '<div class="dimensions"><label>Z min<input id="mesh-z-min" type="number" step="any" value="' + (model?.zMin ?? '') + '" /></label><label>Z max<input id="mesh-z-max" type="number" step="any" value="' + (model?.zMax ?? '') + '" /></label></div>' +
+                '<label>Coordinate frame<input id="mesh-frame" type="text" value="' + escapeHTML(model?.frame || 'wow-yup-mirrored-x') + '" /></label>' +
+                '<label class="bounds-toggle"><input id="mesh-liquid" type="checkbox" ' + (model?.liquid ? 'checked' : '') + ' /> Liquid overlay</label>' +
+                '<div class="dimensions" id="liquid-fields" ' + (!model?.liquid ? 'hidden' : '') + '><label>Color (#rrggbb)<input id="liquid-color" type="text" value="' + escapeHTML(model?.liquid?.color || '#000000') + '" /></label><label>Opacity<input id="liquid-opacity" type="number" min="0" max="1" step="any" value="' + (model?.liquid?.opacity ?? 1) + '" /></label></div>' +
                 '<div class="card-actions"><button id="remove-model" class="danger" ' + (!model ? 'disabled' : '') + '>Remove model</button></div></article>' +
             '</div>' +
             '<section class="preview-workbench"><div class="preview-head"><h3>Artwork preview</h3><div class="preview-tabs"><button class="preview-tab active" data-mode="original">Original</button><button class="preview-tab" data-mode="rendered">Rendered</button><button class="preview-tab" data-mode="3d">3D model</button></div></div>' +
             '<div class="preview-head"><div class="preview-options" id="preview-options"></div><span class="count">draft-aware</span></div><div class="preview-stage" id="preview-stage"><div class="preview-loading">Loading preview…</div></div><div class="preview-meta" id="preview-meta"></div></section>' +
             '<div class="json-panel"><details><summary>Draft source manifests</summary><pre id="json-preview"></pre></details></div></div>';
+          document.getElementById('mesh-liquid').addEventListener('change', event => { document.getElementById('liquid-fields').hidden = !event.target.checked; syncEditor(); markDirty(); });
           document.getElementById('has-bounds').addEventListener('change', event => { document.getElementById('bounds').hidden = !event.target.checked; syncEditor(); markDirty(); });
-          document.querySelectorAll('#editor input').forEach(input => { if (input.type !== 'file' && input.id !== 'has-bounds') input.addEventListener('input', () => { syncEditor(); markDirty(); renderList(); }); });
+          document.querySelectorAll('#editor input').forEach(input => { if (input.type !== 'file' && input.id !== 'has-bounds' && input.id !== 'mesh-liquid') input.addEventListener('input', () => { syncEditor(); markDirty(); renderList(); }); });
           document.getElementById('render-file').addEventListener('change', event => uploadAsset('renders', event.target.files[0]));
-          document.getElementById('model-file').addEventListener('change', event => uploadAsset('3d', event.target.files[0]));
+          document.getElementById('model-file').addEventListener('change', event => uploadAsset('meshes', event.target.files[0]));
           document.getElementById('remove-render').addEventListener('click', () => removeLayer('renders'));
-          document.getElementById('remove-model').addEventListener('click', () => removeLayer('3d'));
+          document.getElementById('remove-model').addEventListener('click', () => removeLayer('meshes'));
           document.querySelectorAll('.preview-tab').forEach(button => button.addEventListener('click', () => { previewMode = button.dataset.mode; previewChoice = 0; renderPreview(); }));
           renderJSON();
           loadPreview();
         }
-        function renderJSON() { const pre = document.getElementById('json-preview'); if (pre && state) pre.textContent = JSON.stringify({ renders:state.draft.renders, '3d':state.draft['3d'] }, null, 2); }
+        function renderJSON() { const pre = document.getElementById('json-preview'); if (pre && state) pre.textContent = JSON.stringify({ renders:state.draft.renders, meshes:state.draft.meshes }, null, 2); }
         function removeLayer(kind) {
           state.draft[kind].instances = state.draft[kind].instances.filter(item => item.mapID !== selectedID);
-          if (!baseInstance(selectedID) && !layerEntry('renders', selectedID) && !layerEntry('3d', selectedID)) {
+          if (!baseInstance(selectedID) && !layerEntry('renders', selectedID) && !layerEntry('meshes', selectedID)) {
             addedMaps.delete(selectedID);
             selectedID = allInstances()[0]?.mapID || null;
           }
@@ -361,8 +376,8 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
             const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Upload failed');
             if (!state || state.namespace !== namespace || selectedID !== mapID) return;
             const entry = ensureEntry(kind, mapID); entry.name = name;
-            if (kind === 'renders') entry.renders = { path:result.path, width:result.width, height:result.height };
-            else entry['3d'] = { path:result.path };
+            if (kind === 'renders') entry.renders = { ...(entry.renders || {}), path:result.path, width:result.width, height:result.height };
+            else entry.mesh = { ...(entry.mesh || {}), path:result.path };
             dirty = true; setStatus('Asset uploaded. Save the draft to register it.'); renderList(); renderEditor();
           } catch (error) {
             if (state?.namespace === namespace && selectedID === mapID) setStatus(error.message, true);
@@ -388,7 +403,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
         async function saveDraft() {
           syncEditor(); setBusy(true); setStatus('Validating and saving draft…');
           try {
-            const response = await fetch('/internal/api/v1/maps/' + state.namespace + '/draft', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ version:state.draft_version, renders:state.draft.renders.instances, '3d':state.draft['3d'].instances }) });
+            const response = await fetch('/internal/api/v1/maps/' + state.namespace + '/draft', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ version:state.draft_version, renders:state.draft.renders.instances, meshes:state.draft.meshes.instances }) });
             const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Save failed');
             state.draft_version = result.draft_version; state.has_draft = true; state.draft = result.draft; dirty = false;
             setStatus('Draft saved to R2. The public manifest is unchanged.'); renderList(); renderEditor();
@@ -401,7 +416,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           catch (error) { setStatus(error.message, true); setBusy(false); }
         }
         async function publish() {
-          if (!confirm('Publish this draft? This replaces manifest.renders.json and manifest.3d.json, then updates the merged manifest.json.')) return;
+          if (!confirm('Publish this draft? This replaces manifest.renders.json and manifest.meshes.json, then updates the merged manifest.json.')) return;
           setBusy(true); setStatus('Checking assets and publishing source manifests…');
           try { const response = await fetch('/internal/api/v1/maps/' + state.namespace + '/publish', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({version:state.draft_version})}); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Publish failed'); await load(); setStatus('Published ' + result.manifest + '. CDN caches may take up to one hour to refresh.'); }
           catch (error) { setStatus(error.message, true); setBusy(false); }
