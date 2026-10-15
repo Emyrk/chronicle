@@ -9,6 +9,8 @@ import noticesDashboard from "./dashboard/notices";
 import analytics from "./routes/analytics";
 import analyticsDashboard from "./dashboard/analytics";
 import analyticsExplore from "./dashboard/analyticsExplore";
+import maps from "./routes/maps";
+import mapsDashboard from "./dashboard/maps";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -34,6 +36,8 @@ app.route("/", dashboard);
 app.route("/", noticesDashboard);
 app.route("/", analyticsDashboard);
 app.route("/", analyticsExplore);
+app.route("/", maps);
+app.route("/", mapsDashboard);
 
 // Public root — friendly landing page matching Chronicle's brand.
 app.get("/", (c) => {

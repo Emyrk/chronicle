@@ -155,6 +155,7 @@ dashboard.get("/internal", async (c) => {
       <body>
         <h1>Chronicle <span>Telemetry</span></h1>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:-52px;margin-bottom:28px;">
+          <a href="/internal/maps" style="border:1px solid #56613d;border-radius:6px;padding:8px 12px;background:#24281e;font-size:12px;font-weight:600;color:#a8c46a;">Map foundry</a>
           <a href="/internal/analytics" style="border:1px solid #3b4c54;border-radius:6px;padding:8px 12px;background:#20282c;font-size:12px;font-weight:600;">Web analytics</a>
           <a href="/internal/notices" style="border:1px solid #3b4c54;border-radius:6px;padding:8px 12px;background:#20282c;font-size:12px;font-weight:600;">Manage notices</a>
         </div>

@@ -96,6 +96,37 @@ Common live failures:
 - `400 Field dateRange is not a dimension`: standard GA4 reports cannot request `dateRange` as a dimension. Query the current and comparison periods as separate reports and combine them in the Worker.
 - A successful response with missing overview data should be treated as an application error. The client validates that both overview reports contain all expected metrics instead of displaying fabricated zeros.
 
+## Map foundry
+
+The Access-protected map dashboard at `/internal/maps` manages manual PNG render and GLB model registrations for these R2 namespaces:
+
+```text
+forever, kronos, octowow, turtle, tbc, vanillaplus, warmane, azerothcore
+```
+
+The Worker uses the `MAPS` R2 binding configured in `wrangler.toml`. The production S3-compatible endpoint
+`https://70f93c8cfa460e9932953b7fa0c9ec04.r2.cloudflarestorage.com/icons`
+identifies the Cloudflare account endpoint and the `icons` bucket, so the binding uses `bucket_name = "icons"`.
+
+Each namespace must already contain `<namespace>/maps/manifest.original.json`. The dashboard reads the existing optional layer manifests, uploads immutable assets beneath `renders/` or `3d/`, and stores private draft metadata at `<namespace>/maps/drafts/manual.json`.
+
+Saving a draft does not change public map metadata. Publishing:
+
+1. verifies that every draft asset exists in R2,
+2. writes `manifest.renders.json` and `manifest.3d.json`,
+3. writes the merged reader-facing `manifest.json` last,
+4. removes the draft only after all writes succeed.
+
+A per-namespace R2 lock and draft ETag prevent concurrent dashboard publications from overwriting each other. If publication fails before `manifest.json` is written, the draft remains available for a reconciliation retry. Public manifests keep the existing one-hour cache policy, so clients can continue to see an older complete manifest for up to one hour after publication.
+
+Cloudflare Access must cover all `/internal/*` routes. Mutating map APIs also reject cross-site browser requests. Uploaded assets are content-addressed and intentionally retained when replaced or when a draft is discarded, matching the existing map publisher's no-delete policy.
+
+For local preview, create or populate a local Wrangler R2 bucket with at least one namespace's original manifest, then open:
+
+```text
+http://localhost:8787/internal/maps
+```
+
 ## Validation and deployment
 
 ```sh
