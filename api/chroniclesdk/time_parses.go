@@ -144,3 +144,35 @@ type TimeParseCohortResponse struct {
 	Status         string                 `json:"status"`
 	Entries        []TimeParseCohortEntry `json:"entries"`
 }
+
+// TimeParseTierCutoff is the slowest duration that still reaches a parse
+// tier. DurationMs is nil when no run in the cohort reaches the tier.
+type TimeParseTierCutoff struct {
+	Floor      int    `json:"floor"`
+	DurationMs *int64 `json:"duration_ms"`
+}
+
+// TimeParseSpread summarizes one boss-kill or clear-time cohort for public
+// parse pages. Faster is better, so MinMs is the best run.
+type TimeParseSpread struct {
+	Kind           TimeParseCohortKind   `json:"kind"`
+	EncounterName  string                `json:"encounter_name,omitempty"`
+	DifficultyName string                `json:"difficulty_name"`
+	MaxPlayers     int16                 `json:"max_players"`
+	SampleSize     int                   `json:"sample_size"`
+	Status         string                `json:"status"`
+	MinMs          int64                 `json:"min_ms"`
+	MedianMs       int64                 `json:"median_ms"`
+	MaxMs          int64                 `json:"max_ms"`
+	Cutoffs        []TimeParseTierCutoff `json:"cutoffs"`
+}
+
+// TimeParseSpreadsResponse lists every kill-time and clear-time cohort
+// spread for one instance.
+type TimeParseSpreadsResponse struct {
+	Cutoff       time.Time         `json:"cutoff"`
+	WindowStart  *time.Time        `json:"window_start,omitempty"`
+	LookbackDays int32             `json:"lookback_days"`
+	InstanceName string            `json:"instance_name"`
+	Spreads      []TimeParseSpread `json:"spreads"`
+}

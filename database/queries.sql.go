@@ -13506,6 +13506,79 @@ func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPl
 	return items, nil
 }
 
+const rankingsClearTimeStats = `-- name: RankingsClearTimeStats :many
+WITH deduped AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        COALESCE(sr.ranked_duration_ms, sr.duration_ms) / 1000.0 AS duration_secs
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.instance_name = $1
+      AND sr.qualified = true
+      AND CASE
+          WHEN $2 :: bigint > 0 THEN
+              COALESCE(sr.ranked_completion_time, sr.completion_time) >= now() - make_interval(days => $2::int)
+          ELSE true
+      END
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), COALESCE(sr.ranked_duration_ms, sr.duration_ms)
+)
+SELECT
+    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs)::double precision AS q1_secs,
+    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.duration_secs)::double precision AS median_secs,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs)::double precision AS q3_secs,
+    MIN(d.duration_secs)::double precision AS min_secs,
+    MAX(d.duration_secs)::double precision AS max_secs,
+    COUNT(*)::bigint AS count
+FROM deduped d
+WHERE d.duration_secs > 0
+HAVING COUNT(*) > 0
+`
+
+type RankingsClearTimeStatsParams struct {
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	SinceDays    int64  `db:"since_days" json:"since_days"`
+}
+
+type RankingsClearTimeStatsRow struct {
+	Q1Secs     float64 `db:"q1_secs" json:"q1_secs"`
+	MedianSecs float64 `db:"median_secs" json:"median_secs"`
+	Q3Secs     float64 `db:"q3_secs" json:"q3_secs"`
+	MinSecs    float64 `db:"min_secs" json:"min_secs"`
+	MaxSecs    float64 `db:"max_secs" json:"max_secs"`
+	Count      int64   `db:"count" json:"count"`
+}
+
+// Box plot stats on qualified full-clear durations (seconds) for one
+// instance, the clear-time counterpart of RankingsKillTimeStats. Uses ranked
+// clear timing like the speedrun board and keeps the fastest run per
+// duplicate group. Returns no row when there are no clears.
+func (q *sqlQuerier) RankingsClearTimeStats(ctx context.Context, arg RankingsClearTimeStatsParams) ([]RankingsClearTimeStatsRow, error) {
+	rows, err := q.db.Query(ctx, rankingsClearTimeStats, arg.InstanceName, arg.SinceDays)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsClearTimeStatsRow
+	for rows.Next() {
+		var i RankingsClearTimeStatsRow
+		if err := rows.Scan(
+			&i.Q1Secs,
+			&i.MedianSecs,
+			&i.Q3Secs,
+			&i.MinSecs,
+			&i.MaxSecs,
+			&i.Count,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rankingsDistinctSummaryKeys = `-- name: RankingsDistinctSummaryKeys :many
 SELECT DISTINCT instance_name, difficulty_name, max_players
 FROM encounter_dps_rankings
@@ -18651,6 +18724,71 @@ func (q *sqlQuerier) ListTimeParseBossKillMemberships(ctx context.Context, arg L
 	return items, nil
 }
 
+const listTimeParseBossKillSpreadValues = `-- name: ListTimeParseBossKillSpreadValues :many
+SELECT
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    membership.duration_ms
+FROM time_parse_boss_kill_memberships membership
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.instance_name = $4
+  AND membership.killed_at < $5
+  AND ($6::timestamptz IS NULL OR membership.killed_at >= $6)
+`
+
+type ListTimeParseBossKillSpreadValuesParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+}
+
+type ListTimeParseBossKillSpreadValuesRow struct {
+	EncounterName  string `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	DurationMs     int64  `db:"duration_ms" json:"duration_ms"`
+}
+
+// Kill durations for every boss-kill cohort in one instance, used to
+// summarize kill-time parse spreads without per-kill guild lookups.
+func (q *sqlQuerier) ListTimeParseBossKillSpreadValues(ctx context.Context, arg ListTimeParseBossKillSpreadValuesParams) ([]ListTimeParseBossKillSpreadValuesRow, error) {
+	rows, err := q.db.Query(ctx, listTimeParseBossKillSpreadValues,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.InstanceName,
+		arg.Cutoff,
+		arg.WindowStart,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTimeParseBossKillSpreadValuesRow
+	for rows.Next() {
+		var i ListTimeParseBossKillSpreadValuesRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTimeParseClearTimeCohortBuckets = `-- name: ListTimeParseClearTimeCohortBuckets :many
 SELECT
     membership.instance_name,
@@ -18750,6 +18888,63 @@ func (q *sqlQuerier) ListTimeParseClearTimeMemberships(ctx context.Context, arg 
 			&i.DurationMs,
 			&i.StartTime,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseClearTimeSpreadValues = `-- name: ListTimeParseClearTimeSpreadValues :many
+SELECT
+    membership.difficulty_name,
+    membership.max_players,
+    membership.duration_ms
+FROM time_parse_clear_time_memberships membership
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.instance_name = $4
+  AND membership.start_time < $5
+  AND ($6::timestamptz IS NULL OR membership.start_time >= $6)
+`
+
+type ListTimeParseClearTimeSpreadValuesParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+}
+
+type ListTimeParseClearTimeSpreadValuesRow struct {
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	DurationMs     int64  `db:"duration_ms" json:"duration_ms"`
+}
+
+// Full-clear durations for every clear-time cohort in one instance.
+func (q *sqlQuerier) ListTimeParseClearTimeSpreadValues(ctx context.Context, arg ListTimeParseClearTimeSpreadValuesParams) ([]ListTimeParseClearTimeSpreadValuesRow, error) {
+	rows, err := q.db.Query(ctx, listTimeParseClearTimeSpreadValues,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.InstanceName,
+		arg.Cutoff,
+		arg.WindowStart,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTimeParseClearTimeSpreadValuesRow
+	for rows.Next() {
+		var i ListTimeParseClearTimeSpreadValuesRow
+		if err := rows.Scan(&i.DifficultyName, &i.MaxPlayers, &i.DurationMs); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

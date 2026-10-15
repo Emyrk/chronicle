@@ -593,9 +593,14 @@ type sqlcQuerier interface {
 	ListTenantsByDataset(ctx context.Context, defaultDatasetID uuid.NullUUID) ([]ListTenantsByDatasetRow, error)
 	ListTimeParseBossKillCohortBuckets(ctx context.Context, arg ListTimeParseBossKillCohortBucketsParams) ([]ListTimeParseBossKillCohortBucketsRow, error)
 	ListTimeParseBossKillMemberships(ctx context.Context, arg ListTimeParseBossKillMembershipsParams) ([]TimeParseBossKillMembership, error)
+	// Kill durations for every boss-kill cohort in one instance, used to
+	// summarize kill-time parse spreads without per-kill guild lookups.
+	ListTimeParseBossKillSpreadValues(ctx context.Context, arg ListTimeParseBossKillSpreadValuesParams) ([]ListTimeParseBossKillSpreadValuesRow, error)
 	ListTimeParseBossScoresForScore(ctx context.Context, timeParseScoreID uuid.UUID) ([]TimeParseBossScore, error)
 	ListTimeParseClearTimeCohortBuckets(ctx context.Context, arg ListTimeParseClearTimeCohortBucketsParams) ([]ListTimeParseClearTimeCohortBucketsRow, error)
 	ListTimeParseClearTimeMemberships(ctx context.Context, arg ListTimeParseClearTimeMembershipsParams) ([]TimeParseClearTimeMembership, error)
+	// Full-clear durations for every clear-time cohort in one instance.
+	ListTimeParseClearTimeSpreadValues(ctx context.Context, arg ListTimeParseClearTimeSpreadValuesParams) ([]ListTimeParseClearTimeSpreadValuesRow, error)
 	// Locate surviving uploads for a logical run before deleting one instance so
 	// compact memberships can elect a new representative afterward.
 	ListTimeParseReplacementLogGroups(ctx context.Context, arg ListTimeParseReplacementLogGroupsParams) ([]uuid.UUID, error)
@@ -637,6 +642,11 @@ type sqlcQuerier interface {
 	// Each run becomes one data point for percentile computation.
 	// Only include runs where the player completed ALL encounters as the same spec.
 	RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPlotStatsParams) ([]RankingsBoxPlotStatsRow, error)
+	// Box plot stats on qualified full-clear durations (seconds) for one
+	// instance, the clear-time counterpart of RankingsKillTimeStats. Uses ranked
+	// clear timing like the speedrun board and keeps the fastest run per
+	// duplicate group. Returns no row when there are no clears.
+	RankingsClearTimeStats(ctx context.Context, arg RankingsClearTimeStatsParams) ([]RankingsClearTimeStatsRow, error)
 	// Returns distinct (instance, difficulty, max_players) combos visible to the
 	// current tenant context (RLS on encounter_dps_rankings does the filtering).
 	RankingsDistinctSummaryKeys(ctx context.Context) ([]RankingsDistinctSummaryKeysRow, error)

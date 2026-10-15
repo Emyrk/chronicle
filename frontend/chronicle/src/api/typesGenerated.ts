@@ -4017,6 +4017,47 @@ export interface TimeParseScore {
     readonly status: string;
 }
 
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseSpread summarizes one boss-kill or clear-time cohort for public
+ * parse pages. Faster is better, so MinMs is the best run.
+ */
+export interface TimeParseSpread {
+    readonly kind: TimeParseCohortKind;
+    readonly encounter_name?: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly sample_size: number;
+    readonly status: string;
+    readonly min_ms: number;
+    readonly median_ms: number;
+    readonly max_ms: number;
+    readonly cutoffs: readonly TimeParseTierCutoff[];
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseSpreadsResponse lists every kill-time and clear-time cohort
+ * spread for one instance.
+ */
+export interface TimeParseSpreadsResponse {
+    readonly cutoff: string;
+    readonly window_start?: string;
+    readonly lookback_days: number;
+    readonly instance_name: string;
+    readonly spreads: readonly TimeParseSpread[];
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseTierCutoff is the slowest duration that still reaches a parse
+ * tier. DurationMs is nil when no run in the cohort reaches the tier.
+ */
+export interface TimeParseTierCutoff {
+    readonly floor: number;
+    readonly duration_ms: number | null;
+}
+
 // From chroniclesdk/user.go
 /**
  * TokenDumpResponse carries the caller's raw session JWT for CLI use.

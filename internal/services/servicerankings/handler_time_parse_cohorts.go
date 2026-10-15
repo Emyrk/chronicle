@@ -20,6 +20,8 @@ type timeParseCohortQuerier interface {
 	ListTimeParseClearTimeCohortBuckets(context.Context, database.ListTimeParseClearTimeCohortBucketsParams) ([]database.ListTimeParseClearTimeCohortBucketsRow, error)
 	GetTimeParseBossKillCohortEntries(context.Context, database.GetTimeParseBossKillCohortEntriesParams) ([]database.GetTimeParseBossKillCohortEntriesRow, error)
 	GetTimeParseClearTimeCohortEntries(context.Context, database.GetTimeParseClearTimeCohortEntriesParams) ([]database.GetTimeParseClearTimeCohortEntriesRow, error)
+	ListTimeParseBossKillSpreadValues(context.Context, database.ListTimeParseBossKillSpreadValuesParams) ([]database.ListTimeParseBossKillSpreadValuesRow, error)
+	ListTimeParseClearTimeSpreadValues(context.Context, database.ListTimeParseClearTimeSpreadValuesParams) ([]database.ListTimeParseClearTimeSpreadValuesRow, error)
 }
 
 func liveCohortQueryWindow(w http.ResponseWriter, r *http.Request) (liveTimeParseWindow, bool) {
