@@ -28,7 +28,7 @@ func TestContentSecurityPolicy(t *testing.T) {
 
 	assert.Contains(t, csp, "default-src 'self'")
 	assert.Contains(t, csp, "script-src 'self' 'unsafe-inline' blob:")
-	assert.Contains(t, csp, "connect-src 'self' https://raw.githubusercontent.com")
+	assert.Contains(t, csp, "connect-src 'self' blob: https://raw.githubusercontent.com")
 	assert.Contains(t, csp, "frame-ancestors 'none'")
 	assert.Contains(t, csp, "worker-src 'self' blob:")
 }
@@ -62,6 +62,7 @@ func TestContentSecurityPolicyAllowsAdResourcesOnlyWhenEnabled(t *testing.T) {
 			assert.Equal(t, test.allowsHTTPS, strings.HasSuffix(scriptPolicy, " https:"))
 			assert.Equal(t, test.allowsHTTPS, strings.Contains(scriptPolicy, "'unsafe-eval'"))
 			assert.Equal(t, test.allowsHTTPS, strings.Contains(csp, "media-src 'self' data: blob: https:"))
+			assert.Contains(t, csp, "connect-src 'self' blob: ")
 		})
 	}
 }
