@@ -80,7 +80,7 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
   },
   {
     title: "Miniature Registry",
-    description: "Interactive previews of every unit model published in the shared miniature manifest",
+    description: "Rendered previews of every unit model published in the shared miniature manifest",
     href: "/technical/miniatures",
     icon: <Box className="h-4 w-4" />,
   },
