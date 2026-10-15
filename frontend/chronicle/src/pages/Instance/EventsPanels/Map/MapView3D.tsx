@@ -5,6 +5,7 @@ import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
+import { miniatureUrlCandidates } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
 import { interpolatedPositionAt, prefersReducedMotion, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import {
@@ -36,6 +37,8 @@ export interface MapView3DProps {
   bossGuids?: ReadonlySet<string>;
   /** Tanks: their heals are kept when effects are capped and float numbers. */
   tankGuids?: ReadonlySet<string>;
+  /** Published entry-ID miniature URLs. Bundled boss models remain fallbacks. */
+  miniatureUrls?: ReadonlyMap<number, string>;
   /** Called when WebGL cannot be created or the context is lost. */
   onUnavailable: () => void;
   /** The real dungeon mesh to stand the units on instead of the tiles ("3D map"), or null for the tiles. */
@@ -153,6 +156,7 @@ export default function MapView3D({
   effects,
   bossGuids,
   tankGuids,
+  miniatureUrls,
   onUnavailable,
   dungeonMesh = null,
   onDungeonMeshState,
@@ -249,11 +253,11 @@ export default function MapView3D({
         muted: marker.muted,
         name: marker.name,
         health: showBars ? marker.health : null,
-        entry: marker.entry,
+        miniatureUrls: miniatureUrlCandidates(marker.entry, miniatureUrls),
       }];
     });
     scene.setUnits(units);
-  }, [markers, projectSample, showBars, smooth, smoothMs]);
+  }, [markers, miniatureUrls, projectSample, showBars, smooth, smoothMs]);
 
   // Selected players (the unmuted ones while a selection mutes the rest),
   // bosses and tanks; keyed by string so replay ticks don't rebuild the options.
