@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import { useQueries } from "@tanstack/react-query";
+import { spellQueryOptions } from "@/api/queries";
 import type {
   WoWSpell,
   LocaleIndex,
@@ -17,7 +18,7 @@ import {
   getDefaultPower,
 } from "@/api/wowdb";
 import { SpellSchoolText } from "@/components/SpellSchoolBadge";
-import { useIconBaseUrl } from "@/hooks/useDatasetId";
+import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 
 interface SpellTooltipProps {
   spell: WoWSpell;
@@ -40,6 +41,7 @@ export function SpellTooltip({
   context,
   footer,
 }: SpellTooltipProps) {
+  const datasetId = useDatasetId();
   const iconBaseUrl = useIconBaseUrl();
   const name = getLocalizedText(spell.name, locale);
   const rank = getLocalizedText(spell.subtext, locale);
@@ -63,14 +65,8 @@ export function SpellTooltip({
   // Fetch all referenced spells in parallel
   const refQueries = useQueries({
     queries: referencedIds.map((id) => ({
-      queryKey: ["wowdb", "spell", id.toString()],
-      queryFn: async () => {
-        const response = await fetch(`/api/v1/wowdb/spell/${id}`);
-        if (!response.ok) return null;
-        return response.json() as Promise<WoWSpell>;
-      },
+      ...spellQueryOptions(id.toString(), datasetId),
       staleTime: Infinity,
-      retry: false,
     })),
   });
 

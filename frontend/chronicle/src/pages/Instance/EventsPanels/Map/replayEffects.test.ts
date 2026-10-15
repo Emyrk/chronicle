@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   effectiveCastIconGuids,
   addEffectEvent,
+  collectCastSpellIds,
+  iconPreloadUrls,
+  MAX_PRELOAD_ICONS,
   BEAM_MS,
   CAST_ICON_MS,
   COMBAT_TEXT_MS,
@@ -620,5 +623,41 @@ describe("castIconGuidSet", () => {
   });
   it("Off shows nothing", () => {
     expect(effectiveCastIconGuids("off", players, null, bosses)).toBeNull();
+  });
+});
+
+describe("collectCastSpellIds", () => {
+  const cast = (ms: number, kind: "cast_start" | "cast_go", source: string, spellId: number | null, spellName = "Spell") =>
+    event(ms, kind, source, "t", { spellId, spellName });
+
+  it("includes every caster, orders by first cast, dedupes, and drops basic attacks", () => {
+    const ids = collectCastSpellIds([
+      cast(500, "cast_go", "boss", 20),
+      cast(100, "cast_start", "p1", 10),
+      cast(200, "cast_go", "p2", 10),
+      cast(300, "cast_go", "p1", 6603, "Auto Attack"),
+      cast(400, "cast_go", "p1", null, ""),
+      event(50, "damage", "p1", "t", { spellId: 30, spellName: "Dmg" }),
+    ]);
+    expect(ids).toEqual([10, 20]);
+  });
+
+  it("is independent of mode and selection (takes events only)", () => {
+    expect(collectCastSpellIds([])).toEqual([]);
+  });
+});
+
+describe("iconPreloadUrls", () => {
+  it("keeps spell order, dedupes urls and skips excluded ones", () => {
+    const urls = iconPreloadUrls([1, 2, 3, 4], (id) => (id === 3 ? "q" : id === 4 ? "a" : `i${id % 2}`), new Set(["q"]));
+    expect(urls).toEqual(["i1", "i0", "a"]);
+  });
+
+  it("caps below the icon cache size", () => {
+    const ids = Array.from({ length: 300 }, (_, i) => i + 1);
+    const urls = iconPreloadUrls(ids, (id) => `u${id}`);
+    expect(urls).toHaveLength(MAX_PRELOAD_ICONS);
+    expect(MAX_PRELOAD_ICONS).toBeLessThanOrEqual(96);
+    expect(urls[0]).toBe("u1");
   });
 });

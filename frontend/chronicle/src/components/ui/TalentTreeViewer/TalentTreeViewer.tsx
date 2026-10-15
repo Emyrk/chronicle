@@ -5,6 +5,7 @@ import { ImageDown, Lock, LockOpen, Share2 } from "lucide-react";
 import { toCanvas } from "html-to-image";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { spellQueryOptions } from "@/api/queries";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import {
   DropdownMenu,
@@ -18,7 +19,7 @@ import {
   CLASS_NAMES,
   specializationIconUrlForClassID,
 } from "@/config/specializationIcon";
-import { useIconBaseUrl } from "@/hooks/useDatasetId";
+import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import type { WoWSpell } from "@emyrk/wow-tooltip-renderer";
@@ -90,6 +91,8 @@ export interface TalentTreeViewerProps {
   /** Numeric WoW class ID. Required when API talent data omits data.id. */
   classId?: number;
   data: ClassTalentData;
+  /** Dataset used for spell metadata; defaults to the nearest DatasetProvider. */
+  datasetId?: string;
   /** Pre-set talent allocations (from combat log). Converted to TalentRanks. */
   allocations?: TalentAllocation[];
   /** When true, spending in one tab disables every other tab. */
@@ -279,7 +282,7 @@ function TalentPrereqArrows({ arrows, ranks, height, talents, buttonSize }: { ar
 
 // ─── Talent button ────────────────────────────────────────────────
 
-function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, pointsPerRow, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate, popularity, diff }: {
+function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, pointsPerRow, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate, popularity, diff, datasetId }: {
   talent: TalentEntry;
   rank: number;
   locked: boolean;
@@ -303,6 +306,7 @@ function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, poi
   popularity?: TalentPopularity;
   /** Diff badge for the compare overlay. */
   diff?: TalentDiff;
+  datasetId?: string;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const maxed = rank >= talent.maxRank;
@@ -318,16 +322,10 @@ function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, poi
   // Fetch ALL rank spells
   const rankSpellQueries = useQueries({
     queries: talent.spellRanks.map((spellId) => ({
-      queryKey: ["wowdb", "spell", String(spellId)],
-      queryFn: async () => {
-        const res = await fetch(`/api/v1/wowdb/spell/${spellId}`);
-        if (!res.ok) throw new Error("Spell not found");
-        return res.json() as Promise<WoWSpell>;
-      },
+      ...spellQueryOptions(String(spellId), datasetId),
       enabled: Boolean(tooltipPosition && spellId),
       staleTime: Infinity,
       gcTime: 30 * 60 * 1000,
-      retry: false,
     })),
   });
 
@@ -347,14 +345,8 @@ function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, poi
   // Fetch referenced spells
   const refQueries = useQueries({
     queries: referencedIds.map((id) => ({
-      queryKey: ["wowdb", "spell", String(id)],
-      queryFn: async () => {
-        const res = await fetch(`/api/v1/wowdb/spell/${id}`);
-        if (!res.ok) return null;
-        return res.json() as Promise<WoWSpell>;
-      },
+      ...spellQueryOptions(String(id), datasetId),
       staleTime: Infinity,
-      retry: false,
     })),
   });
 
@@ -424,12 +416,7 @@ function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, poi
     for (const spellId of talent.spellRanks) {
       if (!spellId) continue;
       void queryClient.prefetchQuery({
-        queryKey: ["wowdb", "spell", String(spellId)],
-        queryFn: async () => {
-          const res = await fetch(`/api/v1/wowdb/spell/${spellId}`);
-          if (!res.ok) throw new Error("Spell not found");
-          return res.json();
-        },
+        ...spellQueryOptions(String(spellId), datasetId),
         staleTime: Infinity,
       });
     }
@@ -687,6 +674,7 @@ function TalentTab({
   onQuickActivate,
   popularity,
   diff,
+  datasetId,
 }: {
   classID: number;
   tab: TalentTabData;
@@ -713,6 +701,7 @@ function TalentTab({
   popularity?: Record<number, TalentPopularity> | null;
   /** Per-talent diff badges (compare overlay). */
   diff?: Record<number, TalentDiff> | null;
+  datasetId?: string;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const points = useMemo(() => talentTabPoints(tab, ranks), [tab, ranks]);
@@ -875,6 +864,7 @@ function TalentTab({
                           onActivate={mobile && onQuickActivate ? () => onQuickActivate(t.id) : undefined}
                           popularity={popularity?.[t.id]}
                           diff={diff?.[t.id]}
+                          datasetId={datasetId}
                           onChange={(rank) => onRankChange(t, rank)}
                         />
                       )}
@@ -993,6 +983,7 @@ async function drawExportWatermark(canvas: HTMLCanvasElement, pixelRatio: number
 export function TalentTreeViewer({
   data,
   classId,
+  datasetId: datasetIdProp,
   allocations,
   exclusiveTabs = false,
   pointsPerRow = 5,
@@ -1007,6 +998,8 @@ export function TalentTreeViewer({
   diff,
   className,
 }: TalentTreeViewerProps) {
+  const contextDatasetId = useDatasetId();
+  const datasetId = datasetIdProp ?? contextDatasetId;
   const resolvedClassId = classId ?? data.id;
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1424,6 +1417,7 @@ export function TalentTreeViewer({
             onQuickActivate={setQuickActiveTalentId}
             popularity={popularity}
             diff={diff}
+            datasetId={datasetId}
             // A locked build is frozen: no points may be added or removed.
             onRankChange={(talent, rank) => {
               if (manuallyLocked) {
@@ -1508,6 +1502,7 @@ export function TalentTreeViewerLegacy({
     <TalentTreeViewer
       classId={classId}
       data={classData}
+      datasetId={datasetId}
       allocations={allocations}
       readOnly
       compact={compact}

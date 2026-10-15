@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
+import { spellQueryOptions } from "@/api/queries";
 import type { WoWSpell } from "@/api/wowdb";
 import { getSpellIconUrl } from "@/api/wowdb";
 import { iconUrl } from "@/config/iconUrl";
@@ -26,17 +27,7 @@ export function useSpellMeta(spellIds: readonly number[]) {
   const ids = useMemo(() => Array.from(new Set(spellIds)).filter((id) => id > 0).sort((a, b) => a - b), [spellIds]);
 
   const results = useQueries({
-    queries: ids.map((id) => ({
-      queryKey: ["wowdb", "spell", String(id), datasetId ?? "default"],
-      queryFn: async (): Promise<WoWSpell> => {
-        const ds = datasetId ? `?dataset_id=${datasetId}` : "";
-        const response = await fetch(`/api/v1/wowdb/spell/${id}${ds}`);
-        if (!response.ok) throw new Error("Spell not found");
-        return response.json() as Promise<WoWSpell>;
-      },
-      staleTime: 24 * 60 * 60 * 1000,
-      retry: false,
-    })),
+    queries: ids.map((id) => spellQueryOptions(String(id), datasetId)),
   });
 
   const dataKey = results.map((r) => (r.data ? 1 : 0)).join("");
