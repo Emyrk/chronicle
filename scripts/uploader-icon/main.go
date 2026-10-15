@@ -232,8 +232,11 @@ func (s *stone) appIcon(size int) *image.NRGBA {
 }
 
 func encode(img image.Image) []byte {
+	// Stored (uncompressed) zlib blocks: deflate output differs between Go
+	// versions, which would make regeneration a non-no-op.
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	enc := png.Encoder{CompressionLevel: png.NoCompression}
+	if err := enc.Encode(&buf, img); err != nil {
 		log.Fatal(err)
 	}
 	return buf.Bytes()
